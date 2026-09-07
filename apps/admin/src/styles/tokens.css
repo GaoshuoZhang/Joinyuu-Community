@@ -1,0 +1,252 @@
+/* ============================================================
+   聚屿社区 · 管理后台 — 全局补充样式（Design Contract 冻结）
+   色彩/组件形态一律使用 TDesign 默认 token，此处只补充：
+   布局骨架尺寸、页面通用类、动效、登录页品牌区
+   ============================================================ */
+
+:root {
+  --app-sidebar-w: 232px;
+  --app-sidebar-w-collapsed: 64px;
+  --app-topbar-h: 48px;
+  --app-tabbar-h: 40px;
+}
+
+html,
+body,
+#app {
+  height: 100%;
+  margin: 0;
+  padding: 0;
+}
+
+/* ---------- 页面通用 ---------- */
+
+.page-header {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 16px;
+}
+
+.page-title {
+  margin: 0;
+  font-size: 20px;
+  font-weight: 600;
+  line-height: 28px;
+  color: var(--td-text-color-primary);
+}
+
+.page-desc {
+  margin: 4px 0 0;
+  font-size: 13px;
+  color: var(--td-text-color-secondary);
+}
+
+.page-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+/* 筛选区统一包裹 */
+.page-filter-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 12px;
+  padding: 12px 16px;
+  margin-bottom: 16px;
+  background: var(--td-bg-color-container);
+  border: 1px solid var(--td-component-border);
+  border-radius: 6px;
+}
+
+/* 内容卡片 */
+.page-card {
+  background: var(--td-bg-color-container);
+  border: 1px solid var(--td-component-border);
+  border-radius: 6px;
+  padding: 16px;
+}
+
+/* 页面载入动效：淡入上移
+ * 注意 fill-mode 必须用 backwards，禁止 both/forwards：
+ * 动画结束后残留的 transform 会让页面根元素成为 Dialog/Drawer 等固定定位
+ * 弹层的包含块，弹层高度被页面内容高度裁切（短页面尤为明显） */
+.page-fade-in {
+  animation: pageFadeIn 240ms ease-out backwards;
+}
+
+@keyframes pageFadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* 卡片交错载入 */
+.stagger > * {
+  animation: pageFadeIn 240ms ease-out backwards;
+}
+.stagger > *:nth-child(1) { animation-delay: 0ms; }
+.stagger > *:nth-child(2) { animation-delay: 60ms; }
+.stagger > *:nth-child(3) { animation-delay: 120ms; }
+.stagger > *:nth-child(4) { animation-delay: 180ms; }
+.stagger > *:nth-child(5) { animation-delay: 240ms; }
+
+@media (prefers-reduced-motion: reduce) {
+  .page-fade-in,
+  .stagger > * {
+    animation: none;
+  }
+}
+
+/* 路由切换过渡 */
+.page-enter-active,
+.page-leave-active {
+  transition: opacity 160ms ease, transform 160ms ease;
+}
+.page-enter-from {
+  opacity: 0;
+  transform: translateY(6px);
+}
+.page-leave-to {
+  opacity: 0;
+}
+
+/* ---------- 统计卡片（工作台） ---------- */
+
+.stat-card {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 16px;
+  background: var(--td-bg-color-container);
+  border: 1px solid var(--td-component-border);
+  border-radius: 6px;
+  transition: box-shadow 160ms ease, transform 160ms ease;
+}
+
+.stat-card:hover {
+  box-shadow: var(--td-shadow-1);
+  transform: translateY(-2px);
+}
+
+.stat-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+  border-radius: 6px;
+  font-size: 20px;
+  color: var(--td-brand-color);
+  background: var(--td-brand-color-1);
+  flex-shrink: 0;
+}
+
+.stat-value {
+  font-size: 20px;
+  font-weight: 600;
+  line-height: 26px;
+  color: var(--td-text-color-primary);
+  font-variant-numeric: tabular-nums;
+}
+
+.stat-label {
+  margin-top: 2px;
+  font-size: 12px;
+  color: var(--td-text-color-secondary);
+}
+
+/* ---------- 登录页品牌区 ---------- */
+
+.login-page {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  min-height: 100vh;
+}
+
+.login-brand {
+  position: relative;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  padding: 64px;
+  color: #fff;
+  background: linear-gradient(152deg, #062a56 0%, #0052d9 58%, #0080c9 100%);
+}
+
+.login-brand::before,
+.login-brand::after {
+  content: '';
+  position: absolute;
+  border-radius: 50%;
+  border: 1px solid rgba(255, 255, 255, 0.16);
+}
+
+.login-brand::before {
+  width: 420px;
+  height: 420px;
+  right: -140px;
+  bottom: -160px;
+}
+
+.login-brand::after {
+  width: 260px;
+  height: 260px;
+  right: 40px;
+  bottom: -80px;
+  border-style: dashed;
+}
+
+.login-brand .island {
+  position: absolute;
+  border-radius: 50%;
+  background: rgba(123, 216, 245, 0.22);
+}
+
+.login-brand-wave {
+  position: absolute;
+  left: -10%;
+  right: -10%;
+  bottom: 56px;
+  height: 2px;
+  background: rgba(255, 255, 255, 0.28);
+  border-radius: 2px;
+}
+
+.login-form-side {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 32px;
+  background: var(--td-bg-color-page);
+}
+
+.login-form-card {
+  width: 380px;
+  max-width: 100%;
+  padding: 40px 36px;
+  background: var(--td-bg-color-container);
+  border: 1px solid var(--td-component-border);
+  border-radius: 8px;
+  box-shadow: var(--td-shadow-1);
+}
+
+@media (max-width: 900px) {
+  .login-page {
+    grid-template-columns: 1fr;
+  }
+  .login-brand {
+    padding: 40px 32px;
+    min-height: 220px;
+  }
+}

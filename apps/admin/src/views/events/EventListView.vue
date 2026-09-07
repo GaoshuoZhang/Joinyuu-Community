@@ -1,0 +1,430 @@
+<script setup lang="ts">
+import { computed, onMounted, reactive, ref, watch } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
+import { MessagePlugin } from 'tdesign-vue-next'
+import { AddIcon, RefreshIcon, SearchIcon } from 'tdesign-icons-vue-next'
+import PageHeader from '@/components/PageHeader.vue'
+import StatusTag from '@/components/StatusTag.vue'
+import EventFormDialog from '@/components/EventFormDialog.vue'
+import EventScheduleDialog from '@/components/EventScheduleDialog.vue'
+import { cancelEvent, cancelEventSchedule, fetchEvents, publishEventNow, toggleEventEnrollment } from '@/api/events'
+import { fetchUser } from '@/api/users'
+import type { CommunityEvent } from '@/types'
+
+const route = useRoute()
+const router = useRouter()
+const loading = ref(false)
+const list = ref<CommunityEvent[]>([])
+const total = ref(0)
+/* 当前执行中的行操作标识：`${id}:publish-now | cancel | cancel-schedule | enrollment` */
+const acting = ref('')
+/* 用户详情「数据概览」跳转带入的报名人筛选 */
+const participantName = ref('')
+
+const query = reactive({
+  page: 1,
+  pageSize: 10,
+  keyword: '',
+  type: '',
+  status: '',
+  participant: '',
+})
+
+const typeOptions = [
+  { label: '全部', value: '' },
+  { label: '沙龙', value: '沙龙' },
+  { label: '培训', value: '培训' },
+  { label: '路演', value: '路演' },
+  { label: '社交', value: '社交' },
+  { label: '赛事', value: '赛事' },
+]
+
+const statusOptions = [
+  { label: '全部', value: '' },
+  { label: '待发布', value: 'pending_release' },
+  { label: '定时发布中', value: 'scheduled' },
+  { label: '已发布', value: 'published' },
+  { label: '已结束', value: 'ended' },
+  { label: '已取消', value: 'cancelled' },
+]
+
+/* 排序：默认 ID 倒序（最新在前），支持开始时间/创建时间正/倒序 */
+const sortBy = ref<'id' | 'startTime' | 'createdAt'>('id')
+const sortOrder = ref<'ascend' | 'descend'>('descend')
+
+const columns = computed(() => [
+  { colKey: 'title', title: '活动', cell: 'title', minWidth: 220, resizable: true },
+  { colKey: 'type', title: '类型', cell: 'type', width: 84, resizable: true },
+  {
+    colKey: 'startTime',
+    title: '活动开始时间',
+    ellipsis: true,
+    width: 150,
+    resizable: true,
+    sorter: true,
+    sortType: 'all',
+  },
+  {
+    colKey: 'createdAt',
+    title: '创建时间',
+    cell: 'createdAt',
+    width: 150,
+    resizable: true,
+    sorter: true,
+    sortType: 'all',
+  },
+  { colKey: 'location', title: '地点', ellipsis: true, width: 130, resizable: true },
+  { colKey: 'enrolled', title: '报名', cell: 'enrolled', width: 88, resizable: true },
+  { colKey: 'checked', title: '签到', cell: 'checked', width: 88, resizable: true },
+  { colKey: 'status', title: '状态', cell: 'status', width: 150, resizable: true },
+  { colKey: 'op', title: '操作', cell: 'op', width: 230 },
+])
+
+const pagination = computed(() => ({
+  current: query.page,
+  pageSize: query.pageSize,
+  total: total.value,
+  showJumper: true,
+}))
+
+async function load() {
+  loading.value = true
+  try {
+    const res = await fetchEvents({ ...query, sortBy: sortBy.value, sortOrder: sortOrder.value })
+    list.value = res.list
+    total.value = res.total
+  } finally {
+    loading.value = false
+  }
+}
+
+/* 远程排序：表头点击 → 更新排序状态 → 重新加载（受控 :sort 保证表头指示器正确） */
+function onSortChange(sort: { sortBy: string; descending: boolean }) {
+  if (sort.sortBy !== 'startTime' && sort.sortBy !== 'createdAt') return
+  sortBy.value = sort.sortBy as 'startTime' | 'createdAt'
+  sortOrder.value = sort.descending ? 'descend' : 'ascend'
+  query.page = 1
+  load()
+}
+
+const tableSort = computed(() => ({
+  sortBy: sortBy.value,
+  descending: sortOrder.value === 'descend',
+}))
+
+function onSearch() {
+  query.page = 1
+  load()
+}
+
+function onReset() {
+  query.keyword = ''
+  query.type = ''
+  query.status = ''
+  query.participant = ''
+  participantName.value = ''
+  query.page = 1
+  load()
+}
+
+function onPageChange(p: { current: number; pageSize: number }) {
+  query.page = p.current
+  query.pageSize = p.pageSize
+  load()
+}
+
+function goDetail(row: CommunityEvent) {
+  router.push(`/events/${row.id}`)
+}
+
+function onRowClick({ row }: { row: CommunityEvent }) {
+  goDetail(row)
+}
+
+function approvedCount(row: CommunityEvent) {
+  return row.enrollments.filter((e) => e.status === 'approved').length
+}
+
+function checkedCount(row: CommunityEvent) {
+  return row.enrollments.filter((e) => e.checkedIn).length
+}
+
+function isActing(row: CommunityEvent, action: 'publish-now' | 'cancel' | 'cancel-schedule' | 'enrollment') {
+  return acting.value === `${row.id}:${action}`
+}
+
+/* 待发布 → 立即发布（开放报名） */
+async function onPublishNow(row: CommunityEvent) {
+  acting.value = `${row.id}:publish-now`
+  try {
+    await publishEventNow(row.id)
+    MessagePlugin.success('活动已发布，开放报名')
+    await load()
+  } catch (e) {
+    MessagePlugin.error(e instanceof Error ? e.message : '操作失败')
+  } finally {
+    acting.value = ''
+  }
+}
+
+/* 定时发布中 → 取消定时发布，转回待发布 */
+async function onCancelSchedule(row: CommunityEvent) {
+  acting.value = `${row.id}:cancel-schedule`
+  try {
+    await cancelEventSchedule(row.id)
+    MessagePlugin.success('已取消定时发布，活动转入待发布')
+    await load()
+  } catch (e) {
+    MessagePlugin.error(e instanceof Error ? e.message : '操作失败')
+  } finally {
+    acting.value = ''
+  }
+}
+
+/* 已发布 → 暂停报名 / 开放报名 */
+async function onToggleEnrollment(row: CommunityEvent) {
+  acting.value = `${row.id}:enrollment`
+  try {
+    await toggleEventEnrollment(row.id)
+    MessagePlugin.success(row.enrollmentOpen ? '已暂停报名' : '已开放报名')
+    await load()
+  } catch (e) {
+    MessagePlugin.error(e instanceof Error ? e.message : '操作失败')
+  } finally {
+    acting.value = ''
+  }
+}
+
+/* 待发布 / 已发布 → 取消活动 */
+async function onCancel(row: CommunityEvent) {
+  acting.value = `${row.id}:cancel`
+  try {
+    await cancelEvent(row.id)
+    MessagePlugin.success('活动已取消')
+    await load()
+  } catch (e) {
+    MessagePlugin.error(e instanceof Error ? e.message : '操作失败')
+  } finally {
+    acting.value = ''
+  }
+}
+
+/* 创建 / 编辑活动 */
+const formVisible = ref(false)
+const formMode = ref<'create' | 'edit'>('create')
+const currentEvent = ref<CommunityEvent | null>(null)
+
+function openCreate() {
+  formMode.value = 'create'
+  currentEvent.value = null
+  formVisible.value = true
+}
+
+function openEdit(row: CommunityEvent) {
+  formMode.value = 'edit'
+  currentEvent.value = row
+  formVisible.value = true
+}
+
+/* 待发布 → 定时发布对话框 */
+const scheduleVisible = ref(false)
+
+function openSchedule(row: CommunityEvent) {
+  currentEvent.value = row
+  scheduleVisible.value = true
+}
+
+/* 用户详情「数据概览」跳转带入报名人 ID（query: participant），按 ID 过滤避免同名歧义；
+ * 筛选标签姓名经 fetchUser 解析展示 */
+async function applyRouteFilter() {
+  query.participant = (route.query.participant as string) || ''
+  participantName.value = ''
+  if (query.participant) {
+    try {
+      const u = await fetchUser(query.participant)
+      participantName.value = u.name
+    } catch {
+      /* 用户不存在时标签回退显示 ID */
+    }
+  }
+}
+
+function clearParticipant() {
+  query.participant = ''
+  participantName.value = ''
+  query.page = 1
+  load()
+}
+
+watch(
+  () => route.query,
+  () => {
+    applyRouteFilter()
+    load()
+  },
+)
+
+onMounted(() => {
+  applyRouteFilter()
+  load()
+})
+</script>
+
+<template>
+  <div class="event-list page-fade-in">
+    <PageHeader title="活动管理" description="社区活动的创建、发布、报名与签到管理">
+      <template #actions>
+        <t-button theme="primary" @click="openCreate">
+          <template #icon><AddIcon /></template>
+          创建活动
+        </t-button>
+      </template>
+    </PageHeader>
+
+    <div class="page-filter-bar">
+      <t-input
+        v-model="query.keyword"
+        placeholder="搜索活动标题/编号"
+        clearable
+        style="width: 220px"
+        @enter="onSearch"
+      />
+      <t-select
+        v-model="query.type"
+        label="类型"
+        :options="typeOptions"
+        clearable
+        style="width: 150px"
+        @change="onSearch"
+      />
+      <t-select
+        v-model="query.status"
+        label="状态"
+        :options="statusOptions"
+        clearable
+        style="width: 160px"
+        @change="onSearch"
+      />
+      <t-button @click="onSearch">
+        <template #icon><SearchIcon /></template>
+        查询
+      </t-button>
+      <t-button variant="outline" @click="onReset">
+        <template #icon><RefreshIcon /></template>
+        重置
+      </t-button>
+      <t-tag
+        v-if="query.participant"
+        closable
+        variant="light"
+        theme="primary"
+        @close="clearParticipant"
+      >
+        报名人：{{ participantName || query.participant }}
+      </t-tag>
+    </div>
+
+    <div class="page-card">
+      <t-table
+        row-key="id"
+        table-layout="auto"
+        hover
+        resizable
+        :data="list"
+        :columns="columns"
+        :sort="tableSort"
+        :loading="loading"
+        :pagination="pagination"
+        @page-change="onPageChange"
+        @sort-change="onSortChange"
+        @row-click="onRowClick"
+      >
+        <template #title="{ row }">
+          <div class="cell-title">{{ row.title }}</div>
+          <div class="cell-sub">{{ row.id }}</div>
+        </template>
+        <template #type="{ row }">
+          <t-tag variant="light">{{ row.type }}</t-tag>
+        </template>
+        <template #createdAt="{ row }">{{ row.createdAt ?? '—' }}</template>
+        <template #enrolled="{ row }">{{ approvedCount(row) }}/{{ row.capacity }}</template>
+        <template #checked="{ row }">{{ checkedCount(row) }}/{{ approvedCount(row) }}</template>
+        <template #status="{ row }">
+          <StatusTag entity="event" :value="row.status" :scheduled-at="row.scheduledAt" :enrollment-open="row.enrollmentOpen" />
+        </template>
+        <template #op="{ row }">
+          <div class="op-cell" @click.stop>
+            <!-- 待发布：编辑 / 立即发布 / 定时发布 / 取消活动 -->
+            <template v-if="row.status === 'pending_release'">
+              <t-button variant="text" size="small" @click="openEdit(row)">编辑</t-button>
+              <t-popconfirm content="确认立即发布该活动？发布后成员即可报名" @confirm="onPublishNow(row)">
+                <t-button variant="text" size="small" theme="primary" :loading="isActing(row, 'publish-now')">
+                  立即发布
+                </t-button>
+              </t-popconfirm>
+              <t-button variant="text" size="small" @click="openSchedule(row)">定时发布</t-button>
+              <t-popconfirm content="确认取消该活动？取消后不可恢复" @confirm="onCancel(row)">
+                <t-button variant="text" size="small" theme="danger" :loading="isActing(row, 'cancel')">取消活动</t-button>
+              </t-popconfirm>
+            </template>
+
+            <!-- 定时发布中：取消定时发布（状态标签直接显示定时发布时间） -->
+            <t-popconfirm
+              v-if="row.status === 'scheduled'"
+              content="确认取消定时发布？该活动将转为「待发布」"
+              @confirm="onCancelSchedule(row)"
+            >
+              <t-button variant="text" size="small" theme="warning" :loading="isActing(row, 'cancel-schedule')">
+                取消定时发布
+              </t-button>
+            </t-popconfirm>
+
+            <!-- 已发布：暂停报名 / 开放报名、取消活动 -->
+            <template v-if="row.status === 'published'">
+              <t-button
+                variant="text"
+                size="small"
+                :loading="isActing(row, 'enrollment')"
+                @click="onToggleEnrollment(row)"
+              >
+                {{ row.enrollmentOpen ? '暂停报名' : '开放报名' }}
+              </t-button>
+              <t-popconfirm content="确认取消该活动？取消后不可恢复" @confirm="onCancel(row)">
+                <t-button variant="text" size="small" theme="danger" :loading="isActing(row, 'cancel')">取消活动</t-button>
+              </t-popconfirm>
+            </template>
+          </div>
+        </template>
+        <template #empty>
+          <t-empty description="暂无活动数据" />
+        </template>
+      </t-table>
+    </div>
+
+    <!-- 创建 / 编辑活动弹窗 -->
+    <EventFormDialog v-model:visible="formVisible" :mode="formMode" :event="currentEvent" @success="load" />
+
+    <!-- 待发布：定时发布对话框 -->
+    <EventScheduleDialog v-model:visible="scheduleVisible" :event="currentEvent" @success="load" />
+  </div>
+</template>
+
+<style scoped>
+.cell-title {
+  font-weight: 500;
+  color: var(--td-text-color-primary);
+}
+
+.cell-sub {
+  margin-top: 2px;
+  font-size: 12px;
+  color: var(--td-text-color-secondary);
+}
+
+.op-cell {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex-wrap: nowrap;
+}
+</style>

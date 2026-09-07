@@ -1,0 +1,44 @@
+<script setup lang="ts">
+import type { UserIdentity } from '@/types'
+
+/* 统一身份标签：个人用户/外部企业=灰、社区身份=品牌蓝
+ * 所有需要展示用户身份的位置（列表/详情/卡片）一律复用此组件 */
+const props = defineProps<{
+  identities: UserIdentity[]
+}>()
+
+function tagText(identity: UserIdentity): string {
+  if (identity.type === 'individual') return '个人用户'
+  if (identity.type === 'community_individual') return `社区个人·${identity.title}`
+  return `${identity.enterpriseName}·${identity.title}`
+}
+
+function tagTheme(identity: UserIdentity): 'default' | 'primary' {
+  return identity.type === 'individual' || identity.type === 'external_enterprise' ? 'default' : 'primary'
+}
+</script>
+
+<template>
+  <span class="identity-tags">
+    <t-tag v-if="props.identities.length === 0" variant="light" size="small">个人用户</t-tag>
+    <template v-else>
+      <t-tag
+        v-for="(identity, i) in props.identities"
+        :key="i"
+        size="small"
+        :variant="identity.type === 'external_enterprise' ? 'outline' : 'light'"
+        :theme="tagTheme(identity)"
+      >
+        {{ tagText(identity) }}
+      </t-tag>
+    </template>
+  </span>
+</template>
+
+<style scoped>
+.identity-tags {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+</style>

@@ -1,0 +1,10 @@
+{
+  "name": "joinyuu-community",
+  "private": true,
+  "version": "0.1.0",
+  "description": "聚屿社区 Joinyuu Community — 创业社区数字化运营平台",
+  "scripts": {
+    "dev:admin": "pnpm --filter @joinyuu/admin dev",
+    "build:admin": "pnpm --filter @joinyuu/admin build"
+  }
+}
