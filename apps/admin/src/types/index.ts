@@ -1,6 +1,6 @@
 /* 聚屿社区 · 实体类型定义（M0 原型冻结，M1 后端以此为基础建表） */
 
-export type UserStatus = 'active' | 'frozen' | 'pending'
+export type UserStatus = 'active' | 'frozen'
 
 /* 身份类型：individual 个人用户为注册默认身份，人手一份，关联其他身份时保留（积分挂靠） */
 export type IdentityType =
@@ -30,12 +30,25 @@ export interface UserActivity {
 }
 
 export interface User {
-  id: string
-  name: string
+  /** 用户唯一标识（微信登录预备：预留 uid 命名） */
+  uid: string
+  /** 昵称（微信登录预备：不再作为真实姓名使用） */
+  nickname: string
   phone: string
   email: string
   gender: '男' | '女'
   status: UserStatus
+  /** 实名信息（真实姓名与身份证号均填写即视为已实名；实名状态由二者派生） */
+  realName?: string
+  citizenId?: string
+  /** 微信登录信息（可空，未绑定微信时缺省） */
+  wechatOpenid?: string
+  wechatUnionid?: string
+  /** 是否完成微信实名认证流程（默认 false） */
+  wechatVerified?: boolean
+  /** 冻结信息（frozen 时存在；frozenUntil 空表示长期冻结） */
+  frozenUntil?: string
+  frozenReason?: string
   /** 积分（挂靠个人用户身份；参加活动、承接项目获取，可在积分商城兑换） */
   points: number
   registeredAt: string
@@ -65,11 +78,15 @@ export interface Enterprise {
   experience?: number
   contactName: string
   contactPhone: string
+  /** 联系邮箱（需求提交人自动填充用；非必填） */
+  contactEmail?: string
   description: string
   tags: string[]
 }
 
-export type ApplicationType = 'settle' | 'showcase' | 'space' | 'identity'
+/* 申请类型（迁移后仅保留入驻与身份绑定；空间预约→公共空间模块、展示页发布→资讯内容模块）
+ * 申请实体仍由 applications 维护，仅类型收窄 */
+export type ApplicationType = 'settle' | 'identity'
 export type ApplicationStatus = 'pending' | 'approved' | 'rejected'
 
 export interface ApprovalRecord {
@@ -94,7 +111,6 @@ export interface Application {
 }
 
 export type DemandStatus =
-  | 'draft'
   | 'pending'
   | 'pending_release'
   | 'scheduled'
@@ -102,22 +118,6 @@ export type DemandStatus =
   | 'rejected'
   | 'projected'
   | 'closed'
-
-export interface DemandDraftPayload {
-  title: string
-  category: string
-  budget: string
-  period: string
-  description: string
-  visibilityIdentities: string[]
-  visibilityLevels: string[]
-  enrollmentIdentities: string[]
-  enrollmentLevels: string[]
-  deadline: string
-  publisherId: string
-  publisherIdentity: UserIdentity | null
-  scheduledAt?: string
-}
 
 export interface DemandRespondent {
   name: string
@@ -131,11 +131,15 @@ export interface Demand {
   id: string
   title: string
   category: string
-  /** 提交人（任何注册并填写手机号的用户） */
+  /** 提交人（注册用户/企业，或未注册的自建条目） */
   publisherId: string
   publisherName: string
-  /** 提交时所选身份快照 */
+  /** 提交时所选身份快照（企业/未注册提交人无身份快照） */
   publisherIdentity: UserIdentity | null
+  /** 提交人联系电话（创建/编辑表单必填；历史数据可能缺省） */
+  contactPhone?: string
+  /** 提交人联系邮箱（选填） */
+  contactEmail?: string
   budget: string
   /** 项目周期，如「4 周」 */
   period: string
@@ -153,7 +157,7 @@ export interface Demand {
   enrollmentLevels: string[]
   status: DemandStatus
   createdAt: string
-  /** 发布时间（实际发布/到点自动发布时写入，待发布/定时发布中/草稿无此字段） */
+  /** 发布时间（实际发布/到点自动发布时写入，待发布/定时发布中无此字段） */
   publishedAt?: string
   description: string
   tags: string[]
@@ -331,4 +335,248 @@ export interface ExternalEnterprise {
   cooperationCount: number
   firstCooperationAt: string
   members: ExternalEnterpriseMember[]
+}
+
+/* ============================================================
+   M0-D 运营设施域 — 实体类型（M0 原型冻结，M1 后端以此为基础建表）
+   命名前缀：商品 G1001+ / 兑换订单 RO2001+ / 积分规则 R01+
+   工位 WS1001+ / 租约 LS2001+ / 空间 S1001+ / 空间预约 SR2001+
+   文章 A1001+ / 栏目 CL2001+ / 展示页发布申请 SC1001+
+   ============================================================ */
+
+/* ---------- 积分商城 ---------- */
+
+export type GoodsCategory = 'physical' | 'virtual' | 'voucher'
+export type GoodsStatus = 'on' | 'off'
+
+export interface MallGoods {
+  id: string
+  name: string
+  /** 实物商品 / 虚拟服务 / 权益券 */
+  category: GoodsCategory
+  /** 兑换所需积分 */
+  points: number
+  /** 库存（虚拟/权益券可设较大值） */
+  stock: number
+  status: GoodsStatus
+  description: string
+  /** 累计兑换次数 */
+  redeemedCount: number
+  createdAt: string
+}
+
+export type RedemptionOrderStatus = 'pending_shipment' | 'shipped' | 'finished' | 'cancelled'
+
+export interface RedemptionOrder {
+  id: string
+  userId: string
+  userName: string
+  goodsId: string
+  goodsName: string
+  /** 兑换扣减积分（负值记录于积分流水） */
+  points: number
+  status: RedemptionOrderStatus
+  createdAt: string
+  /** 发货时间（shipped/finished 时存在） */
+  shippedAt?: string
+  /** 完成时间（finished 时存在，模拟层标记完成） */
+  finishedAt?: string
+  /** 收件信息（实物商品） */
+  recipientName?: string
+  recipientPhone?: string
+  address?: string
+  note?: string
+  /** 取消原因（cancelled 时存在，积分原路退回） */
+  cancelReason?: string
+}
+
+export type RuleStatus = 'enabled' | 'disabled'
+
+export interface PointsRule {
+  id: string
+  name: string
+  /** 场景说明，如「活动签到」「项目里程碑达成」 */
+  scene: string
+  /** 该场景发放的积分（正数） */
+  points: number
+  status: RuleStatus
+  description?: string
+  updatedAt: string
+}
+
+/* ---------- 办公位管理 ---------- */
+
+export type WorkstationType = 'open' | 'office' | 'semi'
+export type WorkstationStatus = 'idle' | 'assigned' | 'maintenance'
+
+export interface Workstation {
+  id: string
+  /** 工位编号，如 A-01、B-201 */
+  seatNo: string
+  /** 所在区域，如 A 区·开放工位、B 区·独立办公室 */
+  area: string
+  type: WorkstationType
+  /** 容量（独立办公室可多人，开放工位 1） */
+  capacity: number
+  status: WorkstationStatus
+  /** 当前分配企业（assigned 时存在） */
+  enterpriseId?: string
+  enterpriseName?: string
+  /** 关联租约 ID（assigned 时存在） */
+  leaseId?: string
+  /** 默认月租（元）：创建租约选"月租"周期时自动累加进租金；非必填 */
+  defaultMonthlyRent?: number
+  /** 面积（㎡）：仅独立办公室有意义的非必填项 */
+  areaSqm?: number
+  /** 备注（自由文本，如维护原因、使用注意事项；非必填） */
+  note?: string
+}
+
+export type LeaseBaseStatus = 'active' | 'terminated'
+
+/** 租赁方类型：enterprise=注册企业 / individual=注册个人用户 / custom=未注册（弹窗内自建条目） */
+export type LeaseRenterType = 'enterprise' | 'individual' | 'custom'
+
+/** 租赁周期：day=日租 / week=周租 / month=月租 / year=年租（缺省按月租处理） */
+export type RentPeriod = 'day' | 'week' | 'month' | 'year'
+
+/** 工位区域（区域规划）：工位以区域名称字符串关联（M1 建议改为 areaId 外键） */
+export interface WorkstationArea {
+  id: string
+  /** 区域名称，如 A 区 · 开放工位（工位.area 直接存该名称） */
+  name: string
+  /** 区域主类型：open=开放工位 / office=独立办公室 / semi=半开放工位 */
+  type: WorkstationType
+  description: string
+  createdAt: string
+}
+
+export interface Lease {
+  id: string
+  /** 租赁方 ID：enterprise=企业 ID / individual=用户 ID / custom=空 */
+  enterpriseId: string
+  /** 租赁方名称（企业名 / 用户名 / 自建条目名称） */
+  enterpriseName: string
+  /** 租赁方类型（旧数据缺省时按 enterpriseId 前缀推断：E 开头=企业，其余=custom） */
+  renterType?: LeaseRenterType
+  /** 关联工位 ID 列表 */
+  workstationIds: string[]
+  /** 工位编号展示文本 */
+  workstationLabels: string[]
+  startDate: string
+  endDate: string
+  /** 长期租约：无结束日期（endDate 为空串），不参与到期派生 */
+  longTerm?: boolean
+  /** 原始状态：active=生效中 / terminated=已终止（到期临期/已到期由读取时派生） */
+  status: LeaseBaseStatus
+  /** 月租金（元） */
+  monthlyRent: number
+  /** 租赁周期（缺省按月租处理） */
+  rentPeriod?: RentPeriod
+  contactName: string
+  contactPhone: string
+  /** 终止时间（terminated 时存在） */
+  terminatedAt?: string
+}
+
+/* ---------- 公共空间 ---------- */
+
+export type SpaceType = 'meeting' | 'roadshow' | 'meeting_room' | 'multi' | 'study'
+export type SpaceStatus = 'available' | 'maintenance' | 'disabled'
+
+export interface Space {
+  id: string
+  name: string
+  type: SpaceType
+  capacity: number
+  location: string
+  /** 开放时段（HH:mm）；allDay 时存 00:00/23:59 */
+  openTime: string
+  closeTime: string
+  /** 全天开放：不设时段限制，展示"全天开放" */
+  allDay?: boolean
+  /** 是否需要预约（默认关闭） */
+  needReservation?: boolean
+  /** 是否需要审批（仅 needReservation 开启时有效） */
+  needApproval?: boolean
+  /** 配备设备 */
+  equipment: string[]
+  status: SpaceStatus
+  description: string
+}
+
+export type ReservationStatus = 'pending' | 'approved' | 'rejected' | 'cancelled'
+
+export interface SpaceReservation {
+  id: string
+  userId: string
+  userName: string
+  phone: string
+  spaceId: string
+  spaceName: string
+  /** 预约日期（YYYY-MM-DD） */
+  date: string
+  /** 使用时段（HH:mm） */
+  startTime: string
+  endTime: string
+  purpose: string
+  attendees: number
+  status: ReservationStatus
+  submittedAt: string
+  records: ApprovalRecord[]
+  rejectReason?: string
+}
+
+/* ---------- 资讯内容 ---------- */
+
+export type ArticleStatus = 'draft' | 'pending' | 'published' | 'withdrawn' | 'rejected'
+
+export interface Article {
+  id: string
+  title: string
+  columnId: string
+  columnName: string
+  authorId: string
+  authorName: string
+  /** 提交身份快照（复用需求提交身份概念） */
+  authorIdentity: UserIdentity | null
+  status: ArticleStatus
+  /** 发布时间（published/withdrawn 时存在） */
+  publishedAt?: string
+  /** 阅读量 */
+  views: number
+  summary: string
+  tags: string[]
+  createdAt: string
+  /** 驳回原因（rejected 时存在） */
+  rejectedReason?: string
+}
+
+export type ColumnStatus = 'enabled' | 'disabled'
+
+export interface ArticleColumn {
+  id: string
+  name: string
+  description: string
+  /** 排序权重（数字越小越靠前） */
+  sort: number
+  status: ColumnStatus
+  createdAt: string
+}
+
+export type ShowcaseTargetType = 'enterprise' | 'individual'
+
+export interface ShowcaseRequest {
+  id: string
+  targetType: ShowcaseTargetType
+  /** 企业 ID（targetType=enterprise 时存在） */
+  targetId?: string
+  targetName: string
+  contentSummary: string
+  submitterName: string
+  submitterPhone: string
+  submittedAt: string
+  status: ReservationStatus
+  records: ApprovalRecord[]
+  rejectReason?: string
 }

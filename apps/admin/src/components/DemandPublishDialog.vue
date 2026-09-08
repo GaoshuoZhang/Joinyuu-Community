@@ -2,25 +2,19 @@
 import { computed, nextTick, reactive, ref, watch } from 'vue'
 import { MessagePlugin } from 'tdesign-vue-next'
 import type { FormProps } from 'tdesign-vue-next'
-import {
-  createDemand,
-  publishDemand,
-  saveDemandDraft,
-  updateDemand,
-  type DemandPublishPayload,
-} from '@/api/demands'
-import { fetchUser, fetchUserOptions } from '@/api/users'
+import { createDemand, fetchPublisherOptions, updateDemand, type DemandPublishPayload } from '@/api/demands'
+import { fetchUser } from '@/api/users'
 import { userLevelOptions, visibilityIdentityOptions } from '@/constants/identity'
 import type { Demand, User, UserIdentity } from '@/types'
 
-/* 需求弹窗（三模式共用）：
- * - create：后台直接创建需求（选择提交人 + 提交身份），创建即立即上架；可存草稿（定时发布选项已移除）
- * - publish：草稿完成并发布（可再编辑内容，可设定时发布）
+/* 需求弹窗（双模式共用）：
+ * - create：后台直接创建需求，提交人可选已注册个人用户/企业（自动填充联系方式），
+ *   或直接输入未注册提交人创建条目；创建即立即上架，无草稿与定时发布
  * - edit：待发布 / 已发布需求再编辑（不改状态）
  * 可报名范围默认与可见范围一致，可单独调整（提供一键同步） */
 const props = defineProps<{
   visible: boolean
-  mode: 'create' | 'publish' | 'edit'
+  mode: 'create' | 'edit'
   demand: Demand | null
 }>()
 
@@ -31,13 +25,11 @@ const emit = defineEmits<{
 
 const headerMap = {
   create: '创建需求',
-  publish: '完成并发布',
   edit: '编辑需求',
 } as const
 
 const confirmTextMap = {
   create: '确认创建',
-  publish: '确认发布',
   edit: '保存',
 } as const
 
@@ -49,45 +41,79 @@ const categoryOptions = ['供应链', '设计', '法务财务', '技术开发', 
 const submitting = ref(false)
 const formRef = ref()
 
-/* create 模式：提交人与提交身份 */
-const userOptions = ref<{ label: string; value: string }[]>([])
+/* create 模式：提交人（可创建新条目）与提交身份 */
+const publisherUsers = ref<{ uid: string; nickname: string; phone: string; email: string }[]>([])
+const publisherEnterprises = ref<{ id: string; name: string; contactPhone: string; contactEmail?: string }[]>([])
+const publisherValue = ref('')
 const publisherId = ref('')
+const publisherName = ref('')
+const publisherType = ref<'individual' | 'enterprise' | 'custom'>('individual')
 const identityOptions = ref<{ label: string; value: string }[]>([])
 const identityIdx = ref('0')
 const publisherUser = ref<User | null>(null)
 
-/* create / 草稿完成（publish+draft）模式：定时发布 */
-const scheduledOn = ref(false)
-const scheduledAt = ref('')
+loadPublisherOptions()
 
-loadUserOptions()
-
-async function loadUserOptions() {
-  userOptions.value = await fetchUserOptions()
+async function loadPublisherOptions() {
+  try {
+    const opts = await fetchPublisherOptions()
+    publisherUsers.value = opts.users
+    publisherEnterprises.value = opts.enterprises
+  } catch {
+    MessagePlugin.error('提交人选项加载失败')
+  }
 }
 
+/* 提交人选项：全部企业 + 全部个人用户；配合 creatable 支持直接输入未注册提交人 */
+const publisherOptions = computed(() => [
+  ...publisherEnterprises.value.map((e) => ({ label: `${e.name}（企业 · ${e.id}）`, value: `E:${e.id}` })),
+  ...publisherUsers.value.map((u) => ({ label: `${u.nickname}（个人用户 · ${u.uid}）`, value: `U:${u.uid}` })),
+])
+
+/* 提交身份文案 */
 function identityText(identity: UserIdentity): string {
   if (identity.type === 'individual') return '个人用户'
   if (identity.type === 'community_individual') return `社区个人 · ${identity.title}`
   return `${identity.enterpriseName} · ${identity.title}`
 }
 
-/* 选择提交人 → 拉取其身份列表，默认选第一个（个人用户） */
-watch(publisherId, async (id) => {
-  if (!id) {
-    identityOptions.value = []
-    identityIdx.value = '0'
-    publisherUser.value = null
-    return
-  }
-  try {
-    const user = await fetchUser(id)
-    publisherUser.value = user
-    identityOptions.value = user.identities.map((i, idx) => ({ label: identityText(i), value: String(idx) }))
-    identityIdx.value = '0'
-  } catch {
-    publisherUser.value = null
-    identityOptions.value = []
+/* 选择提交人 → 解析类型并自动填充联系方式（未注册条目不填充）；
+ * 注册个人用户 → 拉取身份列表供选择提交身份 */
+watch(publisherValue, async (v) => {
+  identityOptions.value = []
+  identityIdx.value = '0'
+  publisherUser.value = null
+  if (v.startsWith('E:')) {
+    const e = publisherEnterprises.value.find((x) => `E:${x.id}` === v)
+    if (!e) return
+    publisherId.value = e.id
+    publisherName.value = e.name
+    publisherType.value = 'enterprise'
+    form.contactPhone = e.contactPhone
+    form.contactEmail = e.contactEmail ?? ''
+  } else if (v.startsWith('U:')) {
+    const u = publisherUsers.value.find((x) => `U:${x.uid}` === v)
+    if (!u) return
+    publisherId.value = u.uid
+    publisherName.value = u.nickname
+    publisherType.value = 'individual'
+    form.contactPhone = u.phone
+    form.contactEmail = u.email
+    try {
+      const user = await fetchUser(u.uid)
+      publisherUser.value = user
+      identityOptions.value = user.identities.map((i, idx) => ({ label: identityText(i), value: String(idx) }))
+      identityIdx.value = '0'
+    } catch {
+      publisherUser.value = null
+    }
+  } else if (v) {
+    /* creatable 自建条目：值即名称 */
+    publisherId.value = ''
+    publisherName.value = v
+    publisherType.value = 'custom'
+    form.contactPhone = ''
+    form.contactEmail = ''
   }
 })
 
@@ -102,15 +128,14 @@ const form = reactive<DemandPublishPayload>({
   enrollmentIdentities: [],
   enrollmentLevels: [],
   deadline: '',
+  contactPhone: '',
+  contactEmail: '',
 })
 
 watch(
   () => props.visible,
-  (v) => {
+  async (v) => {
     if (!v) return
-    /* 定时开关默认关闭（schedule 模式已移除，草稿完成时按需开启） */
-    scheduledOn.value = false
-    scheduledAt.value = props.demand?.scheduledAt ?? ''
     if (props.mode === 'create' || !props.demand) {
       form.title = ''
       form.category = ''
@@ -122,7 +147,15 @@ watch(
       form.enrollmentIdentities = []
       form.enrollmentLevels = []
       form.deadline = ''
+      form.contactPhone = ''
+      form.contactEmail = ''
+      publisherValue.value = ''
       publisherId.value = ''
+      publisherName.value = ''
+      publisherType.value = 'individual'
+      identityOptions.value = []
+      identityIdx.value = '0'
+      publisherUser.value = null
     } else {
       form.title = props.demand.title
       form.category = props.demand.category
@@ -137,6 +170,41 @@ watch(
       form.deadline = /^\d{4}-\d{2}-\d{2}$/.test(props.demand.deadline)
         ? `${props.demand.deadline} 23:59`
         : props.demand.deadline
+      form.contactPhone = props.demand.contactPhone ?? ''
+      form.contactEmail = props.demand.contactEmail ?? ''
+      publisherId.value = props.demand.publisherId
+      publisherName.value = props.demand.publisherName
+      publisherValue.value = props.demand.publisherId.startsWith('E')
+        ? `E:${props.demand.publisherId}`
+        : props.demand.publisherId.startsWith('U')
+          ? `U:${props.demand.publisherId}`
+          : props.demand.publisherName
+      publisherType.value = props.demand.publisherId.startsWith('E')
+        ? 'enterprise'
+        : props.demand.publisherId.startsWith('U')
+          ? 'individual'
+          : 'custom'
+      if (publisherType.value === 'individual') {
+        try {
+          const user = await fetchUser(props.demand.publisherId)
+          publisherUser.value = user
+          identityOptions.value = user.identities.map((i, idx) => ({ label: identityText(i), value: String(idx) }))
+          identityIdx.value = String(
+            Math.max(
+              0,
+              user.identities.findIndex(
+                (i) => JSON.stringify(i) === JSON.stringify(props.demand?.publisherIdentity),
+              ),
+            ),
+          )
+        } catch {
+          publisherUser.value = null
+        }
+      } else {
+        identityOptions.value = []
+        identityIdx.value = '0'
+        publisherUser.value = null
+      }
     }
     /* 清除上次会话残留的校验红框（仅清状态，不动表单值） */
     nextTick(() => formRef.value?.clearValidate())
@@ -156,47 +224,36 @@ const rules = computed<FormProps['rules']>(() => ({
   title: [{ required: true, message: '请输入需求标题', trigger: 'submit' }],
   category: [{ required: true, message: '请选择类别', trigger: 'submit' }],
   deadline: [{ required: true, message: '请选择报名截止时间', trigger: 'submit' }],
+  publisherValue: [{ required: true, message: '请选择或输入提交人', trigger: 'submit' }],
+  contactPhone: [{ required: true, message: '请输入联系电话', trigger: 'submit' }],
   ...(props.mode === 'create'
-    ? { publisherId: [{ required: true, message: '请选择提交人', trigger: 'submit' }] }
+    ? {}
     : {}),
 }))
-
-/* create / 草稿完成（publish+draft）模式：可设置定时发布 */
-const canSchedule = computed(
-  () => props.mode === 'publish' && props.demand?.status === 'draft',
-)
 
 async function onConfirm() {
   const valid = await formRef.value.validate()
   if (valid !== true) return
-  if (canSchedule.value && scheduledOn.value && !scheduledAt.value) {
-    MessagePlugin.warning('已开启定时发布，请选择发布时间')
-    return
-  }
   submitting.value = true
   try {
     if (props.mode === 'create') {
-      /* 创建需求：不再提供定时发布选项，创建即立即上架 */
-      const identity = publisherUser.value?.identities[Number(identityIdx.value)] ?? null
+      /* 创建需求：创建即立即上架（无草稿、无定时发布）；
+       * 提交身份快照仅注册个人用户存在 */
+      const identity =
+        publisherType.value === 'individual'
+          ? publisherUser.value?.identities[Number(identityIdx.value)] ?? null
+          : null
       const demand = await createDemand({
         ...form,
         publisherId: publisherId.value,
+        publisherName: publisherName.value,
+        publisherType: publisherType.value,
         publisherIdentity: identity,
       })
       MessagePlugin.success(`需求已创建并发布（${demand.id}）`)
     } else if (props.demand) {
-      if (props.mode === 'publish') {
-        /* 草稿：可设置定时发布（设置后转为定时发布中），关闭则立即发布 */
-        const willSchedule = props.demand.status === 'draft' && scheduledOn.value
-        await publishDemand(props.demand.id, {
-          ...form,
-          scheduledAt: willSchedule ? scheduledAt.value : undefined,
-        })
-        MessagePlugin.success(willSchedule ? `已保存，将于 ${scheduledAt.value} 自动发布` : '需求已发布')
-      } else {
-        await updateDemand(props.demand.id, { ...form })
-        MessagePlugin.success('修改已保存')
-      }
+      await updateDemand(props.demand.id, { ...form })
+      MessagePlugin.success('修改已保存')
     }
     emit('update:visible', false)
     emit('success')
@@ -204,44 +261,6 @@ async function onConfirm() {
     MessagePlugin.error(e instanceof Error ? e.message : '操作失败')
   } finally {
     submitting.value = false
-  }
-}
-
-/* 可保存草稿：创建模式，或草稿状态完成发布时（publish 模式 + 状态 draft） */
-const canSaveDraft = computed(
-  () => props.mode === 'create' || (props.mode === 'publish' && props.demand?.status === 'draft'),
-)
-
-/* 保存草稿：不校验必填项，不定时发布；草稿再编辑保存草稿 = 仅更新内容，保持草稿状态 */
-const draftSaving = ref(false)
-
-async function onSaveDraft() {
-  if (!canSaveDraft.value) return
-  if (props.mode === 'create' && !publisherId.value) {
-    MessagePlugin.warning('保存草稿前请先选择提交人')
-    return
-  }
-  draftSaving.value = true
-  try {
-    if (props.mode === 'create') {
-      const identity = publisherUser.value?.identities[Number(identityIdx.value)] ?? null
-      const demand = await saveDemandDraft({
-        ...form,
-        publisherId: publisherId.value,
-        publisherIdentity: identity,
-      })
-      MessagePlugin.success(`草稿已保存（${demand.id}），可在需求列表「草稿」状态下继续编辑`)
-    } else if (props.demand?.status === 'draft') {
-      /* 草稿再编辑：保存草稿仅更新内容，不定时发布、保持草稿状态 */
-      await updateDemand(props.demand.id, { ...form })
-      MessagePlugin.success('草稿修改已保存，仍可在「草稿」状态下继续编辑')
-    }
-    emit('update:visible', false)
-    emit('success')
-  } catch (e) {
-    MessagePlugin.error(e instanceof Error ? e.message : '草稿保存失败')
-  } finally {
-    draftSaving.value = false
   }
 }
 
@@ -259,15 +278,6 @@ function onClose() {
   >
     <template #footer>
       <div class="dialog-footer">
-        <t-button
-          v-if="canSaveDraft"
-          variant="outline"
-          theme="default"
-          :loading="draftSaving"
-          @click="onSaveDraft"
-        >
-          存草稿
-        </t-button>
         <t-button variant="text" theme="default" @click="onClose">取消</t-button>
         <t-button theme="primary" :loading="submitting" @click="onConfirm">
           {{ confirmTextMap[mode] }}
@@ -275,43 +285,53 @@ function onClose() {
       </div>
     </template>
     <t-form ref="formRef" :data="{ ...form, publisherId: publisherId }" :rules="rules" label-align="top">
-      <!-- create 模式：提交人与提交身份 -->
+      <!-- create 模式：提交人（可创建新条目）与提交身份 -->
       <template v-if="mode === 'create'">
-        <div class="form-row">
-          <t-form-item label="提交人" name="publisherId">
-            <t-select
-              v-model="publisherId"
-              :options="userOptions"
-              filterable
-              clearable
-              placeholder="搜索或选择提交用户"
-            />
-          </t-form-item>
-          <t-form-item label="提交身份" name="publisherIdentity">
-            <t-select
-              v-model="identityIdx"
-              :options="identityOptions"
-              :disabled="!publisherId"
-              placeholder="先选择提交人"
-            />
-          </t-form-item>
-        </div>
+        <t-form-item label="提交人" name="publisherValue">
+          <t-select
+            v-model="publisherValue"
+            :options="publisherOptions"
+            filterable
+            creatable
+            placeholder="选择已注册的个人用户/企业，或直接输入新提交人"
+            tips="未注册的提交人可直接输入名称创建；选中已注册企业/个人用户将自动填充联系方式"
+          />
+        </t-form-item>
+        <t-form-item v-if="publisherType === 'individual'" label="提交身份" name="publisherIdentity">
+          <t-select
+            v-model="identityIdx"
+            :options="identityOptions"
+            placeholder="选择提交身份"
+          />
+        </t-form-item>
       </template>
+      <t-form-item v-else label="提交人" name="publisherValue">
+        <t-input :value="publisherName" disabled placeholder="提交人不可变更" />
+      </t-form-item>
+
+      <div class="form-row">
+        <t-form-item label="联系电话" name="contactPhone">
+          <t-input clearable v-model="form.contactPhone" placeholder="选已注册提交人后自动填充" />
+        </t-form-item>
+        <t-form-item label="联系邮箱" name="contactEmail">
+          <t-input clearable v-model="form.contactEmail" placeholder="选填" />
+        </t-form-item>
+      </div>
 
       <t-form-item label="需求标题" name="title">
-        <t-input v-model="form.title" placeholder="请输入需求标题" />
+        <t-input clearable v-model="form.title" placeholder="请输入需求标题" />
       </t-form-item>
       <div class="form-row">
         <t-form-item label="类别" name="category">
           <t-select v-model="form.category" :options="categoryOptions" clearable />
         </t-form-item>
         <t-form-item label="预算" name="budget">
-          <t-input v-model="form.budget" placeholder="如 ¥10,000 - 30,000 / 面议" />
+          <t-input clearable v-model="form.budget" placeholder="如 ¥10,000 - 30,000 / 面议" />
         </t-form-item>
       </div>
       <div class="form-row">
         <t-form-item label="项目周期" name="period">
-          <t-input v-model="form.period" placeholder="如 4 周" />
+          <t-input clearable v-model="form.period" placeholder="如 4 周" />
         </t-form-item>
         <t-form-item label="报名截止时间" name="deadline">
           <t-date-picker
@@ -322,22 +342,6 @@ function onClose() {
           />
         </t-form-item>
       </div>
-
-      <!-- 草稿完成（publish+draft）模式：定时发布 -->
-      <t-form-item v-if="canSchedule" label="定时发布">
-        <div class="schedule-cell">
-          <t-switch v-model="scheduledOn" />
-          <t-date-picker
-            v-if="scheduledOn"
-            v-model="scheduledAt"
-            valueType="YYYY-MM-DD HH:mm"
-            enable-time-picker
-            placeholder="到点自动发布"
-            style="flex: 1"
-          />
-          <span v-else class="schedule-tip">关闭并保存将立即发布</span>
-        </div>
-      </t-form-item>
 
       <div class="scope-head">
         <span class="scope-title">可见范围</span>
@@ -392,18 +396,6 @@ function onClose() {
   display: grid;
   grid-template-columns: 1fr 1fr;
   gap: 0 16px;
-}
-
-.schedule-cell {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  width: 100%;
-}
-
-.schedule-tip {
-  font-size: 12px;
-  color: var(--td-text-color-secondary);
 }
 
 .scope-head {

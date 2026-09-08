@@ -28,7 +28,7 @@ export async function fetchDashboard(): Promise<DashboardData> {
   return {
     stats: {
       pendingApplications: pendingApplications.length,
-      totalUsers: users.filter((u) => u.status !== 'pending').length,
+      totalUsers: users.length,
       activeEnterprises: enterprises.filter((e) => e.status === 'active').length,
       runningProjects: projects.filter((p) => p.status === 'running' || p.status === 'recruiting').length,
       upcomingEvents: events.filter((e) => e.status === 'published').length,

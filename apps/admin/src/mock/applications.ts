@@ -1,6 +1,9 @@
 import type { Application } from '@/types'
 
-/* 申请审批数据 — 命名前缀 AP3001+；通用审批流：提交 →（通过/驳回），全部带审批记录时间线 */
+/* 申请审批数据 — 命名前缀 AP3001+；通用审批流：提交 →（通过/驳回），全部带审批记录时间线
+ * 迁移后仅保留入驻申请（settle）与身份绑定（identity）：
+ *   空间预约（space）→ 公共空间模块 reservations（SR2001+）
+ *   展示页发布（showcase）→ 资讯内容模块 showcaseRequests（SC1001+） */
 export const applications: Application[] = [
   {
     id: 'AP3001',
@@ -26,46 +29,6 @@ export const applications: Application[] = [
     ],
   },
   {
-    id: 'AP3002',
-    type: 'showcase',
-    applicantName: '陈屿',
-    applicantPhone: '13801210001',
-    targetName: '星澜智能科技',
-    submittedAt: '2026-08-25 14:30',
-    status: 'approved',
-    summary: '企业展示页更新发布：新增 A 轮融资信息与客户案例',
-    details: [
-      { label: '企业名称', value: '星澜智能科技' },
-      { label: '更新内容', value: '新增 A 轮融资披露、3 个客户案例' },
-      { label: '数据来源', value: '公开新闻稿' },
-      { label: '提交版本', value: 'v3（历史 v2）' },
-    ],
-    records: [
-      { step: '提交申请', operator: '陈屿', action: 'submit', comment: '展示页 v3 提交审核', at: '2026-08-25 14:30' },
-      { step: '内容审核', operator: '社区管理员', action: 'approve', comment: '信息真实准确，予以发布', at: '2026-08-28 09:15' },
-    ],
-  },
-  {
-    id: 'AP3003',
-    type: 'space',
-    applicantName: '秦朗',
-    applicantPhone: '13801210012',
-    targetName: '聚屿路演厅',
-    submittedAt: '2026-08-18 09:00',
-    status: 'approved',
-    summary: '预约 8 月 20 日 14:00-18:00 路演厅，用于产品发布会彩排',
-    details: [
-      { label: '申请空间', value: '聚屿路演厅' },
-      { label: '使用时段', value: '2026-08-20 14:00 - 18:00' },
-      { label: '参与人数', value: '约 35 人' },
-      { label: '用途说明', value: '卫星数据产品发布会彩排' },
-    ],
-    records: [
-      { step: '提交申请', operator: '秦朗', action: 'submit', comment: '', at: '2026-08-18 09:00' },
-      { step: '空间审批', operator: '社区管理员', action: 'approve', comment: '时段可用，注意设备复位', at: '2026-08-18 16:24' },
-    ],
-  },
-  {
     id: 'AP3004',
     type: 'identity',
     applicantName: '韩梓萌',
@@ -83,25 +46,6 @@ export const applications: Application[] = [
     records: [
       { step: '提交申请', operator: '韩梓萌', action: 'submit', comment: '绑定企业身份', at: '2025-05-09 11:10' },
       { step: '运营审核', operator: '社区管理员', action: 'approve', comment: '企业方已确认，通过', at: '2025-05-10 10:02' },
-    ],
-  },
-  {
-    id: 'AP3005',
-    type: 'showcase',
-    applicantName: '何雨桐',
-    applicantPhone: '13801210013',
-    targetName: '青柠健康',
-    submittedAt: '2026-07-30 17:26',
-    status: 'approved',
-    summary: '首次发布企业展示页',
-    details: [
-      { label: '企业名称', value: '青柠健康' },
-      { label: '展示内容', value: '品牌介绍、服务说明、团队展示' },
-      { label: '提交版本', value: 'v1' },
-    ],
-    records: [
-      { step: '提交申请', operator: '何雨桐', action: 'submit', comment: '', at: '2026-07-30 17:26' },
-      { step: '内容审核', operator: '社区管理员', action: 'approve', comment: '首次发布通过', at: '2026-08-01 09:48' },
     ],
   },
   {
@@ -123,26 +67,6 @@ export const applications: Application[] = [
       { step: '提交申请', operator: '孟繁星', action: 'submit', comment: '', at: '2025-05-10 16:40' },
       { step: '运营初审', operator: '社区管理员', action: 'approve', comment: '设计类企业符合社区业态规划', at: '2025-05-13 14:20' },
       { step: '正式入驻', operator: '社区管理员', action: 'approve', comment: '分配工位 A-05/06', at: '2025-05-15 10:00' },
-    ],
-  },
-  {
-    id: 'AP3007',
-    type: 'space',
-    applicantName: '沈嘉禾',
-    applicantPhone: '13801210006',
-    targetName: '共享会议室 A',
-    submittedAt: '2026-09-01 10:12',
-    status: 'rejected',
-    summary: '预约 9 月 2 日全天共享会议室 A，用于选品会',
-    details: [
-      { label: '申请空间', value: '共享会议室 A' },
-      { label: '使用时段', value: '2026-09-02 09:00 - 18:00' },
-      { label: '参与人数', value: '约 15 人' },
-      { label: '备注', value: '非入驻企业（审核中）' },
-    ],
-    records: [
-      { step: '提交申请', operator: '沈嘉禾', action: 'submit', comment: '', at: '2026-09-01 10:12' },
-      { step: '空间审批', operator: '社区管理员', action: 'reject', comment: '该时段已被社区活动占用，且入驻审批尚未完成，建议改期', at: '2026-09-01 11:30' },
     ],
   },
   {
@@ -185,44 +109,6 @@ export const applications: Application[] = [
     ],
   },
   {
-    id: 'AP3010',
-    type: 'space',
-    applicantName: '方致远',
-    applicantPhone: '13801210014',
-    targetName: '聚屿路演厅',
-    submittedAt: '2026-09-04 21:18',
-    status: 'pending',
-    summary: '预约 9 月 15 日 19:00-21:00 路演厅，举办个人产品分享会',
-    details: [
-      { label: '申请空间', value: '聚屿路演厅' },
-      { label: '使用时段', value: '2026-09-15 19:00 - 21:00' },
-      { label: '参与人数', value: '约 40 人' },
-      { label: '备注', value: '申请人账号当前处于冻结状态' },
-    ],
-    records: [
-      { step: '提交申请', operator: '方致远', action: 'submit', comment: '', at: '2026-09-04 21:18' },
-    ],
-  },
-  {
-    id: 'AP3011',
-    type: 'showcase',
-    applicantName: '陆则铭',
-    applicantPhone: '13801210008',
-    targetName: '云径网络',
-    submittedAt: '2026-09-06 15:36',
-    status: 'pending',
-    summary: '首次发布企业展示页：含产品介绍与增长数据',
-    details: [
-      { label: '企业名称', value: '云径网络' },
-      { label: '展示内容', value: '品牌介绍、产品截图、增长里程碑' },
-      { label: '数据声明', value: '「注册团队 12,000+」来自后台统计' },
-      { label: '提交版本', value: 'v1' },
-    ],
-    records: [
-      { step: '提交申请', operator: '陆则铭', action: 'submit', comment: '', at: '2026-09-06 15:36' },
-    ],
-  },
-  {
     id: 'AP3012',
     type: 'settle',
     applicantName: '沈嘉禾',
@@ -241,6 +127,90 @@ export const applications: Application[] = [
     ],
     records: [
       { step: '提交申请', operator: '沈嘉禾', action: 'submit', comment: '文创企业，希望对接社区渠道资源', at: '2026-09-06 10:18' },
+    ],
+  },
+  {
+    id: 'AP3013',
+    type: 'settle',
+    applicantName: '苏明远',
+    applicantPhone: '13901219002',
+    targetName: '光年半导体',
+    submittedAt: '2026-09-07 14:08',
+    status: 'pending',
+    summary: '申请入驻独立办公室，团队 8 人，从事光通信芯片设计',
+    details: [
+      { label: '企业名称', value: '光年半导体' },
+      { label: '发展阶段', value: '天使轮' },
+      { label: '申请空间', value: '独立办公室 B 区（8 工位）' },
+      { label: '团队规模', value: '10-50 人（入驻 8 人）' },
+      { label: '营业执照', value: '已上传 lightyear-license.pdf' },
+      { label: '期望入驻', value: '2026-10-15 前' },
+    ],
+    records: [
+      { step: '提交申请', operator: '苏明远', action: 'submit', comment: '光通信芯片设计团队，希望对接社区硬科技资源', at: '2026-09-07 14:08' },
+    ],
+  },
+  {
+    id: 'AP3014',
+    type: 'identity',
+    applicantName: '白若溪',
+    applicantPhone: '13801210009',
+    targetName: '芯启半导体 · 研发工程师',
+    submittedAt: '2026-09-07 16:20',
+    status: 'pending',
+    summary: '补充材料重新申请变更企业身份：沧岚新材料 → 芯启半导体',
+    details: [
+      { label: '申请人', value: '白若溪' },
+      { label: '当前身份', value: '沧岚新材料 · 研发工程师' },
+      { label: '目标身份', value: '芯启半导体 · 研发工程师' },
+      { label: '证明材料', value: '芯启半导体在职证明（已补充）' },
+      { label: '企业确认', value: '周慕深 已确认' },
+    ],
+    records: [
+      { step: '提交申请', operator: '白若溪', action: 'submit', comment: '已补充目标企业在职证明与企业方确认', at: '2026-09-07 16:20' },
+    ],
+  },
+  {
+    id: 'AP3015',
+    type: 'settle',
+    applicantName: '林知夏',
+    applicantPhone: '13901219003',
+    targetName: '星河文创社',
+    submittedAt: '2026-08-28 11:00',
+    status: 'approved',
+    summary: '申请入驻开放工位区（C 区 2 工位），非遗手工艺品牌',
+    details: [
+      { label: '企业名称', value: '星河文创社' },
+      { label: '发展阶段', value: '种子轮' },
+      { label: '申请空间', value: '半开放工位 C-301、C-302' },
+      { label: '团队规模', value: '10 人以下（入驻 2 人）' },
+      { label: '营业执照', value: '已上传 xinghe-license.pdf' },
+      { label: '期望入驻', value: '2026-09-05' },
+    ],
+    records: [
+      { step: '提交申请', operator: '林知夏', action: 'submit', comment: '非遗手工艺品牌，主理人入驻', at: '2026-08-28 11:00' },
+      { step: '运营初审', operator: '社区管理员', action: 'approve', comment: '文创类企业符合社区业态', at: '2026-09-01 10:30' },
+      { step: '正式入驻', operator: '社区管理员', action: 'approve', comment: '分配工位 C-301/302', at: '2026-09-04 09:15' },
+    ],
+  },
+  {
+    id: 'AP3016',
+    type: 'identity',
+    applicantName: '许新言',
+    applicantPhone: '13801210015',
+    targetName: '社区个人 · 社群运营自由职业者',
+    submittedAt: '2026-09-07 09:30',
+    status: 'approved',
+    summary: '申请绑定社区个人身份：社群运营自由职业者',
+    details: [
+      { label: '申请人', value: '许新言' },
+      { label: '当前身份', value: '个人用户' },
+      { label: '目标身份', value: '社区个人 · 社群运营自由职业者' },
+      { label: '证明材料', value: '过往社群运营案例 3 份' },
+    ],
+    records: [
+      { step: '提交申请', operator: '许新言', action: 'submit', comment: '希望以社区个人身份承接运营类需求', at: '2026-09-07 09:30' },
+      { step: '运营审核', operator: '社区管理员', action: 'approve', comment: '案例齐全，符合社区个人入驻标准', at: '2026-09-07 18:00' },
     ],
   },
 ]

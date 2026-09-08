@@ -29,7 +29,7 @@ body,
   margin-bottom: 16px;
 }
 
-.page-title {
+.page-header .page-title {
   margin: 0;
   font-size: 20px;
   font-weight: 600;
@@ -37,7 +37,7 @@ body,
   color: var(--td-text-color-primary);
 }
 
-.page-desc {
+.page-header .page-desc {
   margin: 4px 0 0;
   font-size: 13px;
   color: var(--td-text-color-secondary);
@@ -60,14 +60,14 @@ body,
   margin-bottom: 16px;
   background: var(--td-bg-color-container);
   border: 1px solid var(--td-component-border);
-  border-radius: 6px;
+  border-radius: var(--td-radius-medium);
 }
 
 /* 内容卡片 */
 .page-card {
   background: var(--td-bg-color-container);
   border: 1px solid var(--td-component-border);
-  border-radius: 6px;
+  border-radius: var(--td-radius-medium);
   padding: 16px;
 }
 
@@ -129,7 +129,7 @@ body,
   padding: 16px;
   background: var(--td-bg-color-container);
   border: 1px solid var(--td-component-border);
-  border-radius: 6px;
+  border-radius: var(--td-radius-medium);
   transition: box-shadow 160ms ease, transform 160ms ease;
 }
 
@@ -138,31 +138,37 @@ body,
   transform: translateY(-2px);
 }
 
+/* 可点击的筛选卡片（调用方传 class="stat-clickable"） */
+.stat-clickable {
+  cursor: pointer;
+}
+
+/* 筛选激活态 */
+.stat-card.is-active {
+  border-color: var(--td-brand-color);
+  box-shadow: var(--td-shadow-1);
+}
+
+.stat-card.is-active .stat-icon {
+  background: var(--td-brand-color-2);
+}
+
 .stat-icon {
   display: flex;
   align-items: center;
   justify-content: center;
   width: 40px;
   height: 40px;
-  border-radius: 6px;
+  border-radius: var(--td-radius-medium);
   font-size: 20px;
   color: var(--td-brand-color);
   background: var(--td-brand-color-1);
   flex-shrink: 0;
 }
 
-.stat-value {
-  font-size: 20px;
-  font-weight: 600;
-  line-height: 26px;
-  color: var(--td-text-color-primary);
-  font-variant-numeric: tabular-nums;
-}
-
-.stat-label {
-  margin-top: 2px;
-  font-size: 12px;
-  color: var(--td-text-color-secondary);
+/* StatCard 内的 TDesign 统计数值：标题（指标名）与数值的间距微调 */
+.stat-body .t-statistic-title {
+  margin-bottom: 0;
 }
 
 /* ---------- 登录页品牌区 ---------- */
@@ -220,7 +226,7 @@ body,
   bottom: 56px;
   height: 2px;
   background: rgba(255, 255, 255, 0.28);
-  border-radius: 2px;
+  border-radius: var(--td-radius-small);
 }
 
 .login-form-side {
@@ -237,7 +243,7 @@ body,
   padding: 40px 36px;
   background: var(--td-bg-color-container);
   border: 1px solid var(--td-component-border);
-  border-radius: 8px;
+  border-radius: var(--td-radius-large);
   box-shadow: var(--td-shadow-1);
 }
 

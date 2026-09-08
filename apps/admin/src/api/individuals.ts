@@ -18,7 +18,7 @@ export async function fetchIndividuals(query: IndividualQuery): Promise<PageResu
   if (query.keyword) {
     const kw = query.keyword.trim().toLowerCase()
     list = list.filter(
-      (u) => u.name.toLowerCase().includes(kw) || u.id.toLowerCase().includes(kw) || u.phone.includes(kw),
+      (u) => u.nickname.toLowerCase().includes(kw) || u.uid.toLowerCase().includes(kw) || u.phone.includes(kw),
     )
   }
   if (query.status) list = list.filter((u) => u.status === query.status)

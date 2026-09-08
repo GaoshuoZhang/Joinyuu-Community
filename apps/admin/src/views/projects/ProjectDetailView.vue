@@ -219,7 +219,7 @@ onMounted(load)
   gap: 24px;
   padding: 10px 16px;
   border: 1px solid var(--td-component-border);
-  border-radius: 6px;
+  border-radius: var(--td-radius-medium);
 }
 
 .ut-info {
@@ -279,7 +279,7 @@ onMounted(load)
   gap: 16px;
   padding: 10px 12px;
   border: 1px solid var(--td-component-border);
-  border-radius: 6px;
+  border-radius: var(--td-radius-medium);
 }
 
 .ms-main {

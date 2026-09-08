@@ -148,7 +148,7 @@ onMounted(load)
 
       <t-table
         row-key="id"
-        table-layout="auto"
+        table-layout="fixed"
         hover
         resizable
         :data="list"

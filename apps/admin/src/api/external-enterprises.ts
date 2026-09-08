@@ -19,8 +19,8 @@ function aggregate(profile: (typeof externalEnterpriseProfiles)[number]): Extern
     for (const identity of u.identities) {
       if (identity.type === 'external_enterprise' && identity.enterpriseName === profile.name) {
         members.push({
-          userId: u.id,
-          name: u.name,
+          userId: u.uid,
+          name: u.nickname,
           title: identity.title,
           phone: u.phone,
           status: u.status,
@@ -90,7 +90,7 @@ export async function fetchExternalEnterpriseStats(id: string): Promise<External
   ).length
   const memberIds = users
     .filter((u) => u.identities.some((i) => i.type === 'external_enterprise' && i.enterpriseName === profile.name))
-    .map((u) => u.id)
+    .map((u) => u.uid)
   const projectCount = projects.filter((p) =>
     p.undertakers.some((t) => t.type === 'individual' && memberIds.includes(t.id)),
   ).length

@@ -38,8 +38,8 @@ const quickEntries = [
   { label: '需求管理', path: '/demands', icon: ViewListIcon },
   { label: '项目管理', path: '/projects', icon: AppIcon },
   { label: '活动管理', path: '/events', icon: CalendarIcon },
-  { label: '积分商城', path: '/mall', icon: CartIcon },
-  { label: '公共空间', path: '/spaces', icon: MapIcon },
+  { label: '商品管理', path: '/mall/goods', icon: CartIcon },
+  { label: '公共空间管理', path: '/spaces', icon: MapIcon },
 ]
 </script>
 
@@ -176,7 +176,7 @@ const quickEntries = [
 .event-item {
   padding: 10px 12px;
   border: 1px solid var(--td-component-border);
-  border-radius: 6px;
+  border-radius: var(--td-radius-medium);
   cursor: pointer;
   transition: border-color 120ms ease, background 120ms ease;
 }
@@ -233,7 +233,7 @@ const quickEntries = [
   gap: 8px;
   padding: 14px 8px;
   border: 1px solid var(--td-component-border);
-  border-radius: 6px;
+  border-radius: var(--td-radius-medium);
   font-size: 13px;
   color: var(--td-text-color-secondary);
   cursor: pointer;

@@ -242,7 +242,7 @@ async function applyRouteFilter() {
   if (query.participant) {
     try {
       const u = await fetchUser(query.participant)
-      participantName.value = u.name
+      participantName.value = u.nickname
     } catch {
       /* 用户不存在时标签回退显示 ID */
     }
@@ -327,7 +327,7 @@ onMounted(() => {
     <div class="page-card">
       <t-table
         row-key="id"
-        table-layout="auto"
+        table-layout="fixed"
         hover
         resizable
         :data="list"

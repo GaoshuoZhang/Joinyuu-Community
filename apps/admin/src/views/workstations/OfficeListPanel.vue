@@ -1,0 +1,336 @@
+<script setup lang="ts">
+import { computed, onMounted, ref } from 'vue'
+import { AddIcon, BuildingIcon, CheckCircleIcon, MapIcon, SettingIcon } from 'tdesign-icons-vue-next'
+import PageHeader from '@/components/PageHeader.vue'
+import StatCard from '@/components/StatCard.vue'
+import StatusTag from '@/components/StatusTag.vue'
+import AreaPlanDialog from '@/components/AreaPlanDialog.vue'
+import WorkstationFormDialog from '@/components/WorkstationFormDialog.vue'
+import { fetchLeases, fetchWorkstationAreas, fetchWorkstations } from '@/api/workstations'
+import { workstationTypeMap } from '@/constants/status'
+import type { Lease, Workstation, WorkstationArea, WorkstationStatus } from '@/types'
+
+/* 办公室管理页（独立路由页）：独立办公室（type=office）的占用、租期与维护管理；
+ * 状态卡片点击筛选（点击「办公室总数」取消）、区域下拉筛选，两者可叠加；
+ * 区域规划/创建办公位在页头操作区；点击卡片可编辑资料（含维护中开关）；
+ * 租约全生命周期操作在「租赁管理」页 */
+const loading = ref(false)
+const workstations = ref<Workstation[]>([])
+const leases = ref<Lease[]>([])
+const areas = ref<WorkstationArea[]>([])
+/* 状态筛选：'' = 全部（由「办公室总数」卡片设置）；区域筛选：'' = 全部 */
+const statusFilter = ref<WorkstationStatus | ''>('')
+const areaFilter = ref('')
+
+/* 全量独立办公室——汇总卡片始终统计全量 */
+const offices = computed(() => workstations.value.filter((w) => w.type === 'office'))
+const assignedCount = computed(() => offices.value.filter((w) => w.status === 'assigned').length)
+const idleCount = computed(() => offices.value.filter((w) => w.status === 'idle').length)
+const maintenanceCount = computed(() => offices.value.filter((w) => w.status === 'maintenance').length)
+
+/* 筛选后的办公室：状态卡片 + 区域下拉组合过滤 */
+const filteredOffices = computed(() =>
+  offices.value.filter(
+    (w) =>
+      (!statusFilter.value || w.status === statusFilter.value) &&
+      (!areaFilter.value || w.area === areaFilter.value),
+  ),
+)
+
+/* 区域筛选选项：仅独立办公室区域，含"全部" */
+const areaOptions = computed(() => [
+  { label: '全部区域', value: '' },
+  ...areas.value.filter((a) => a.type === 'office').map((a) => ({ label: a.name, value: a.name })),
+])
+
+const statusOptions = [
+  { label: '全部状态', value: '' },
+  { label: '空闲', value: 'idle' },
+  { label: '已分配', value: 'assigned' },
+  { label: '维护中', value: 'maintenance' },
+]
+
+function leaseOf(ws: Workstation): Lease | undefined {
+  return leases.value.find((l) => l.id === ws.leaseId)
+}
+
+/* 租赁周期单位展示（缺省按月） */
+const rentPeriodMap: Record<string, string> = { day: '日', week: '周', month: '月', year: '年' }
+function rentPeriodLabel(lease: Lease) {
+  return rentPeriodMap[lease.rentPeriod ?? 'month']
+}
+
+/* 状态卡片筛选：点击对应状态卡片筛选，点击「办公室总数」卡片取消（与状态下拉双向同步） */
+function setStatFilter(status: WorkstationStatus | '') {
+  statusFilter.value = status
+}
+
+/* silent=true 静默刷新：区域规划保存后仅更新分组名称与区域选项，不触发加载遮罩（避免卡片板块闪烁） */
+async function load(silent = false) {
+  if (!silent) loading.value = true
+  try {
+    const [ws, ls, areaList] = await Promise.all([fetchWorkstations(), fetchLeases(), fetchWorkstationAreas()])
+    workstations.value = ws
+    leases.value = ls
+    areas.value = areaList
+  } finally {
+    if (!silent) loading.value = false
+  }
+}
+
+onMounted(load)
+
+/* 区域规划弹窗 */
+const areaPlanVisible = ref(false)
+
+/* 创建 / 编辑办公室（点击卡片编辑） */
+const formVisible = ref(false)
+const formMode = ref<'create' | 'edit'>('create')
+const currentOffice = ref<Workstation | null>(null)
+
+function openCreate() {
+  formMode.value = 'create'
+  currentOffice.value = null
+  formVisible.value = true
+}
+
+function openEdit(row: Workstation) {
+  formMode.value = 'edit'
+  currentOffice.value = row
+  formVisible.value = true
+}
+</script>
+
+<template>
+  <div class="office-panel page-fade-in">
+    <PageHeader title="办公室管理" description="独立办公室的占用企业与维护状态（点击卡片编辑）；租约创建/续期/终止在「租赁管理」页操作">
+      <template #actions>
+        <t-button variant="outline" @click="areaPlanVisible = true">
+          <template #icon><MapIcon /></template>
+          区域规划
+        </t-button>
+        <t-button theme="primary" @click="openCreate">
+          <template #icon><AddIcon /></template>
+          创建办公位
+        </t-button>
+      </template>
+    </PageHeader>
+
+    <div class="stat-row">
+      <StatCard
+        class="stat-clickable"
+        label="办公室总数"
+        :value="offices.length"
+        :icon="BuildingIcon"
+        @click="setStatFilter('')"
+      />
+      <StatCard
+        class="stat-clickable"
+        label="已分配"
+        :value="assignedCount"
+        :icon="CheckCircleIcon"
+        :active="statusFilter === 'assigned'"
+        @click="setStatFilter('assigned')"
+      />
+      <StatCard
+        class="stat-clickable"
+        label="空闲中"
+        :value="idleCount"
+        :icon="MapIcon"
+        :active="statusFilter === 'idle'"
+        @click="setStatFilter('idle')"
+      />
+      <StatCard
+        class="stat-clickable"
+        label="维护中"
+        :value="maintenanceCount"
+        :icon="SettingIcon"
+        :active="statusFilter === 'maintenance'"
+        @click="setStatFilter('maintenance')"
+      />
+    </div>
+
+    <div class="page-filter-bar">
+      <t-select clearable v-model="areaFilter" label="区域" :options="areaOptions" style="width: 220px" />
+      <t-select clearable v-model="statusFilter" label="状态" :options="statusOptions" style="width: 180px" />
+    </div>
+
+    <div class="legend-row">
+      <span class="legend-item"><i class="legend-dot is-idle" />空闲</span>
+      <span class="legend-item"><i class="legend-dot is-assigned" />已分配</span>
+      <span class="legend-item"><i class="legend-dot is-maintenance" />维护中</span>
+      <span class="legend-tip">点击卡片可编辑办公室信息</span>
+    </div>
+
+    <t-loading :loading="loading" size="small">
+      <div class="office-grid">
+      <t-card
+        v-for="w in filteredOffices"
+        :key="w.id"
+        class="office-card"
+        :class="`is-${w.status}`"
+        size="small"
+        hover-shadow
+        @click="openEdit(w)"
+      >
+        <div class="office-head">
+          <div>
+            <div class="office-seat">{{ w.seatNo }}</div>
+            <div class="office-area">{{ w.area }} · {{ workstationTypeMap[w.type] ?? w.type }}</div>
+          </div>
+          <StatusTag entity="workstation" :value="w.status" />
+        </div>
+        <div class="office-capacity">容纳 {{ w.capacity }} 人</div>
+
+        <template v-if="w.enterpriseName">
+          <div class="office-enterprise">{{ w.enterpriseName }}</div>
+          <div v-if="leaseOf(w)" class="office-lease">
+            {{ leaseOf(w)!.id }} · {{ leaseOf(w)!.longTerm ? `${leaseOf(w)!.startDate} ~ 长期` : `${leaseOf(w)!.startDate} ~ ${leaseOf(w)!.endDate}` }} · ¥{{ leaseOf(w)!.monthlyRent }}/{{ rentPeriodLabel(leaseOf(w)!) }}
+          </div>
+        </template>
+        <div v-else class="office-enterprise office-enterprise-empty">暂未分配</div>
+      </t-card>
+      </div>
+      </t-loading>
+
+    <t-empty v-if="filteredOffices.length === 0" class="grid-empty" description="暂无符合条件的办公室" />
+
+    <!-- 区域规划弹窗（保存后静默刷新分组名称，避免卡片板块闪烁） -->
+    <AreaPlanDialog v-model:visible="areaPlanVisible" @success="load(true)" />
+
+    <!-- 创建 / 编辑办公室弹窗 -->
+    <WorkstationFormDialog
+      v-model:visible="formVisible"
+      :mode="formMode"
+      :workstation="currentOffice"
+      default-type="office"
+      @success="load"
+    />
+  </div>
+</template>
+
+<style scoped>
+.stat-row {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 16px;
+  margin-bottom: 16px;
+}
+
+.legend-row {
+  display: flex;
+  align-items: center;
+  gap: 20px;
+  margin-bottom: 16px;
+}
+
+.legend-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  color: var(--td-text-color-secondary);
+}
+
+.legend-tip {
+  margin-left: auto;
+  font-size: 12px;
+  color: var(--td-text-color-placeholder);
+}
+
+.grid-empty {
+  padding: 32px 0;
+}
+
+.legend-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: var(--td-radius-default);
+  display: inline-block;
+}
+
+.legend-dot.is-idle {
+  background: var(--td-success-color);
+}
+
+.legend-dot.is-assigned {
+  background: var(--td-brand-color);
+}
+
+.legend-dot.is-maintenance {
+  background: var(--td-warning-color);
+}
+
+.office-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+  gap: 16px;
+}
+
+/* 办公室卡片：t-card 为内核（边框/圆角/悬浮阴影来自 TDesign），状态底色覆盖容器背景 */
+.office-card {
+  cursor: pointer;
+  display: flex;
+  flex-direction: column;
+}
+
+.office-card :deep(.t-card__body) {
+  flex: 1;
+  padding: 14px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.office-card.is-idle {
+  background: var(--td-success-color-1);
+}
+
+.office-card.is-assigned {
+  background: var(--td-brand-color-1);
+}
+
+.office-card.is-maintenance {
+  background: var(--td-warning-color-1);
+}
+
+.office-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.office-seat {
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--td-text-color-primary);
+}
+
+.office-area {
+  margin-top: 2px;
+  font-size: 12px;
+  color: var(--td-text-color-secondary);
+}
+
+.office-capacity {
+  font-size: 12px;
+  color: var(--td-text-color-secondary);
+}
+
+.office-enterprise {
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--td-text-color-primary);
+}
+
+.office-enterprise-empty {
+  font-weight: 400;
+  color: var(--td-text-color-placeholder);
+}
+
+.office-lease {
+  font-size: 12px;
+  color: var(--td-text-color-secondary);
+}
+</style>

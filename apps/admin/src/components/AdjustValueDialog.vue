@@ -97,7 +97,7 @@ function onClose() {
   padding: 10px 12px;
   margin-bottom: 16px;
   background: var(--td-bg-color-page);
-  border-radius: 6px;
+  border-radius: var(--td-radius-medium);
 }
 
 .balance-label {

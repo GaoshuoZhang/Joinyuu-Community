@@ -214,7 +214,7 @@ function onClose() {
 
     <t-form ref="formRef" :data="form" :rules="rules" label-align="top">
       <t-form-item label="项目名称" name="projectName">
-        <t-input v-model="form.projectName" placeholder="需求立项默认取需求标题，可修改" />
+        <t-input clearable v-model="form.projectName" placeholder="需求立项默认取需求标题，可修改" />
       </t-form-item>
       <t-form-item label="承接方（可多选：社区企业 / 社区个人）" name="undertakers">
         <t-select
@@ -251,10 +251,10 @@ function onClose() {
 
       <div class="form-row">
         <t-form-item label="开始日期" name="startDate">
-          <t-date-picker v-model="form.startDate" style="width: 100%" />
+          <t-date-picker clearable v-model="form.startDate" style="width: 100%" />
         </t-form-item>
         <t-form-item label="结束日期" name="endDate">
-          <t-date-picker v-model="form.endDate" style="width: 100%" />
+          <t-date-picker clearable v-model="form.endDate" style="width: 100%" />
         </t-form-item>
       </div>
       <t-form-item label="项目说明" name="description">
@@ -270,8 +270,8 @@ function onClose() {
           </t-button>
         </div>
         <div v-for="(m, i) in milestones" :key="i" class="milestone-row">
-          <t-input v-model="m.name" placeholder="节点名称，如「方案设计」" />
-          <t-date-picker v-model="m.date" placeholder="日期" />
+          <t-input clearable v-model="m.name" placeholder="节点名称，如「方案设计」" />
+          <t-date-picker clearable v-model="m.date" placeholder="日期" />
           <t-button variant="text" theme="danger" size="small" @click="removeMilestone(i)">
             <template #icon><DeleteIcon /></template>
           </t-button>
@@ -296,7 +296,7 @@ function onClose() {
   font-size: 13px;
   color: var(--td-text-color-secondary);
   background: var(--td-bg-color-page);
-  border-radius: 6px;
+  border-radius: var(--td-radius-medium);
 }
 
 .dialog-footer {
@@ -315,7 +315,7 @@ function onClose() {
   margin-bottom: 16px;
   padding: 12px 16px;
   border: 1px solid var(--td-component-border);
-  border-radius: 6px;
+  border-radius: var(--td-radius-medium);
 }
 
 .share-head {

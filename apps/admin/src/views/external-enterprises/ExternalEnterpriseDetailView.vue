@@ -242,7 +242,7 @@ function goProjects() {
   gap: 8px;
   padding: 20px;
   border: 1px solid var(--td-component-border);
-  border-radius: 6px;
+  border-radius: var(--td-radius-medium);
 }
 
 .stat-item.clickable {

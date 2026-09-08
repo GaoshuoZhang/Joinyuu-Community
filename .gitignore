@@ -7,3 +7,4 @@ dist/
 .idea/
 .vscode/
 start-admin-web.bat
+.workbuddy/

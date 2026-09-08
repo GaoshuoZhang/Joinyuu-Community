@@ -25,6 +25,12 @@ export async function fetchEnterprises(query: EnterpriseQuery): Promise<PageResu
   return { list: list.slice(start, start + query.pageSize), total }
 }
 
+/* TODO: 替换为 GET /api/admin/enterprises/options — 企业下拉选项（办公位租约等场景使用） */
+export async function fetchEnterpriseOptions(): Promise<{ label: string; value: string }[]> {
+  await delay(200)
+  return enterprises.map((e) => ({ label: `${e.name}（${e.id}）`, value: e.id }))
+}
+
 /* TODO: 替换为 GET /api/admin/enterprises/:id
  * 返回企业详情 + 成员列表（成员 = 持有该企业 community_enterprise 身份的用户）
  */

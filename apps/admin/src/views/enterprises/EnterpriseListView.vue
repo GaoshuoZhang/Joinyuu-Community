@@ -128,7 +128,7 @@ onMounted(load)
     <div class="page-card">
       <t-table
         row-key="id"
-        table-layout="auto"
+        table-layout="fixed"
         hover
         resizable
         :data="list"

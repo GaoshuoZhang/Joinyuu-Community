@@ -4,7 +4,7 @@ import type { Demand } from '@/types'
  * 提交规则：任何注册并填写手机号的用户均可提交；多身份用户选择提交身份（publisherIdentity 快照）
  * 范围规则：可见范围（身份+等级）决定谁能看到；可报名范围默认与可见范围一致，可单独调整
  * 状态流：pending 待审核 →（审核通过）→ pending_release 待发布 →（立即/定时发布）→ scheduled 定时发布中 / published 已发布；
- * 已发布可立项 projected / 撤回发布（转待发布）/ 关闭 closed；draft 草稿 / rejected 已驳回（驳回必填原因） */
+ * 已发布可立项 projected / 撤回发布（转待发布）/ 关闭 closed；rejected 已驳回（驳回必填原因）；草稿状态已移除 */
 export const demands: Demand[] = [
   {
     id: 'D4001',

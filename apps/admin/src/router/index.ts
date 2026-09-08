@@ -98,39 +98,62 @@ const router = createRouter({
         },
         {
           path: 'mall',
-          component: () => import('@/views/coming-soon/ComingSoonView.vue'),
-          meta: {
-            title: '积分商城',
-            group: '运营设施',
-            planned: ['积分规则配置', '商品上下架', '兑换订单管理', '积分流水查询'],
-          },
+          redirect: '/mall/goods',
+        },
+        {
+          path: 'mall/goods',
+          component: () => import('@/views/mall/MallGoodsPanel.vue'),
+          meta: { title: '商品管理', group: '积分管理' },
+        },
+        {
+          path: 'mall/orders',
+          component: () => import('@/views/mall/MallOrdersPanel.vue'),
+          meta: { title: '订单管理', group: '积分管理' },
+        },
+        {
+          path: 'mall/rules',
+          component: () => import('@/views/mall/MallRulesPanel.vue'),
+          meta: { title: '积分规则', group: '积分管理' },
+        },
+        {
+          path: 'mall/ledger',
+          component: () => import('@/views/mall/MallLedgerPanel.vue'),
+          meta: { title: '积分账单', group: '积分管理' },
         },
         {
           path: 'workstations',
-          component: () => import('@/views/coming-soon/ComingSoonView.vue'),
-          meta: {
-            title: '办公位管理',
-            group: '运营设施',
-            planned: ['工位平面图', '工位分配与回收', '租约管理', '续约提醒'],
-          },
+          component: () => import('@/views/workstations/WorkstationMapPanel.vue'),
+          meta: { title: '办公位管理', group: '空间管理' },
+        },
+        {
+          path: 'workstations/offices',
+          component: () => import('@/views/workstations/OfficeListPanel.vue'),
+          meta: { title: '办公室管理', group: '空间管理' },
+        },
+        {
+          path: 'workstations/leases',
+          component: () => import('@/views/workstations/LeasePanel.vue'),
+          meta: { title: '租赁管理', group: '空间管理' },
         },
         {
           path: 'spaces',
-          component: () => import('@/views/coming-soon/ComingSoonView.vue'),
-          meta: {
-            title: '公共空间',
-            group: '运营设施',
-            planned: ['空间与时段管理', '空间预约申请审批', '使用情况看板', '设备管理'],
-          },
+          component: () => import('@/views/spaces/SpaceListPanel.vue'),
+          meta: { title: '公共空间管理', group: '空间管理' },
+        },
+        {
+          path: 'spaces/reservations',
+          component: () => import('@/views/spaces/ReservationPanel.vue'),
+          meta: { title: '公共空间预约', group: '空间管理' },
+        },
+        {
+          path: 'spaces/:id',
+          component: () => import('@/views/spaces/SpaceDetailView.vue'),
+          meta: { title: '空间详情', group: '空间管理' },
         },
         {
           path: 'contents',
-          component: () => import('@/views/coming-soon/ComingSoonView.vue'),
-          meta: {
-            title: '资讯内容',
-            group: '运营设施',
-            planned: ['文章管理', '栏目管理', '展示页发布（企业/个人）', '发布审核', '阅读数据统计'],
-          },
+          component: () => import('@/views/contents/ContentsView.vue'),
+          meta: { title: '资讯内容', group: '运营设施' },
         },
       ],
     },

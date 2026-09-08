@@ -1,4 +1,4 @@
-import type { Demand, DemandDraftPayload, PageResult, Project, ProjectInitPayload, UserIdentity } from '@/types'
+import type { Demand, PageResult, Project, ProjectInitPayload, UserIdentity } from '@/types'
 import { demands, enterprises, externalEnterpriseProfiles, users } from '@/mock'
 import { delay } from './utils'
 import { createProject } from './projects'
@@ -93,6 +93,10 @@ export interface DemandPublishPayload {
   enrollmentIdentities: string[]
   enrollmentLevels: string[]
   deadline: string
+  /** 提交人联系电话（必填） */
+  contactPhone: string
+  /** 提交人联系邮箱（选填） */
+  contactEmail?: string
 }
 
 function applyPayload(demand: Demand, payload: DemandPublishPayload) {
@@ -106,28 +110,8 @@ function applyPayload(demand: Demand, payload: DemandPublishPayload) {
   demand.enrollmentIdentities = payload.enrollmentIdentities as Demand['enrollmentIdentities']
   demand.enrollmentLevels = payload.enrollmentLevels
   demand.deadline = payload.deadline
-}
-
-/* TODO: 替换为 POST /api/admin/demands/:id/publish
- * 草稿完成发布：草稿可再编辑后一键上架；携带 scheduledAt 时转为定时发布中，到点自动发布
- */
-export async function publishDemand(
-  id: string,
-  payload: DemandPublishPayload & { scheduledAt?: string },
-): Promise<{ code: number }> {
-  await delay(400)
-  const demand = demands.find((d) => d.id === id)
-  if (!demand) throw new Error('需求不存在')
-  applyPayload(demand, payload)
-  if (payload.scheduledAt) {
-    /* 草稿完成并设置定时发布：转为定时发布中 */
-    demand.status = 'scheduled'
-    demand.scheduledAt = payload.scheduledAt
-  } else {
-    demand.status = 'published'
-    demand.scheduledAt = undefined
-  }
-  return { code: 0 }
+  demand.contactPhone = payload.contactPhone
+  demand.contactEmail = payload.contactEmail || undefined
 }
 
 /* TODO: 替换为 POST /api/admin/demands/:id/approve — 待审核需求仅读审核通过，转为待发布 */
@@ -232,7 +216,7 @@ export async function fetchUndertakerOptions(): Promise<UndertakerOption[]> {
       .filter((u) => u.identities.some((i) => i.type === 'community_individual'))
       .map((u) => {
         const identity = u.identities.find((i) => i.type === 'community_individual')!
-        return { group: '社区个人', label: `${u.name} · ${identity.title}`, value: `individual:${u.id}` }
+        return { group: '社区个人', label: `${u.nickname} · ${identity.title}`, value: `individual:${u.uid}` }
       }),
   ]
 }
@@ -252,11 +236,36 @@ export async function initiateProject(demandId: string, payload: ProjectInitPayl
 
 /* ---------- 后台直接创建需求 ---------- */
 
+/* TODO: 替换为 GET /api/admin/publisher-options — 提交人选项（全部个人用户 + 全部企业，含联系方式用于自动填充） */
+export async function fetchPublisherOptions(): Promise<{
+  users: { uid: string; nickname: string; phone: string; email: string }[]
+  enterprises: { id: string; name: string; contactPhone: string; contactEmail?: string }[]
+}> {
+  await delay(200)
+  return {
+    users: users.map((u) => ({ uid: u.uid, nickname: u.nickname, phone: u.phone, email: u.email })),
+    enterprises: enterprises.map((e) => ({
+      id: e.id,
+      name: e.name,
+      contactPhone: e.contactPhone,
+      contactEmail: e.contactEmail,
+    })),
+  }
+}
+
 export interface DemandCreatePayload extends DemandPublishPayload {
+  /** 提交人 ID：individual=用户 ID / enterprise=企业 ID / custom=空串 */
   publisherId: string
-  /** 提交身份（所选用户的某个身份快照） */
+  /** 自定义提交人名称（publisherType=custom 时使用） */
+  publisherName?: string
+  /** 提交人类型（决定联系方式自动填充与身份快照来源） */
+  publisherType: 'individual' | 'enterprise' | 'custom'
+  /** 提交身份快照（仅 individual 时存在） */
   publisherIdentity: UserIdentity | null
-  /** 定时发布时间（设置后进入定时发布中状态，到点自动发布） */
+  /** 提交人联系电话（必填） */
+  contactPhone: string
+  /** 提交人联系邮箱（选填） */
+  contactEmail?: string
   scheduledAt?: string
 }
 
@@ -266,52 +275,37 @@ function formatNow(): string {
   return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}`
 }
 
-/* TODO: 替换为 POST /api/admin/demands/draft — 保存需求草稿（不校验必填，不定时发布） */
-export async function saveDemandDraft(payload: DemandDraftPayload): Promise<Demand> {
-  await delay(300)
-  const user = users.find((u) => u.id === payload.publisherId)
-  if (!user) throw new Error('提交用户不存在')
-
-  const maxNum = demands.reduce((m, d) => Math.max(m, Number(d.id.replace('D', ''))), 0)
-  const demand: Demand = {
-    id: `D${maxNum + 1}`,
-    title: payload.title,
-    category: payload.category,
-    publisherId: user.id,
-    publisherName: user.name,
-    publisherIdentity: payload.publisherIdentity,
-    budget: payload.budget,
-    period: payload.period,
-    deadline: payload.deadline,
-    visibilityIdentities: [],
-    visibilityLevels: [],
-    enrollmentIdentities: [],
-    enrollmentLevels: [],
-    status: 'draft',
-    createdAt: formatNow(),
-    description: payload.description,
-    tags: [],
-    respondents: [],
-  }
-  demands.push(demand)
-  return demand
-}
-
 /* TODO: 替换为 POST /api/admin/demands — 后台直接创建需求（选定提交用户与其提交身份）
  * 设置 scheduledAt 时进入定时发布中状态，到点自动发布；否则立即发布 */
 export async function createDemand(payload: DemandCreatePayload): Promise<Demand> {
   await delay(500)
-  const user = users.find((u) => u.id === payload.publisherId)
-  if (!user) throw new Error('提交用户不存在')
+  /* 提交人三类来源：注册个人用户 / 注册企业 / 未注册自建条目 */
+  const user =
+    payload.publisherType === 'individual' ? users.find((u) => u.uid === payload.publisherId) : undefined
+  const enterprise =
+    payload.publisherType === 'enterprise' ? enterprises.find((e) => e.id === payload.publisherId) : undefined
+  if (payload.publisherType === 'individual' && !user) throw new Error('提交用户不存在')
+  if (payload.publisherType === 'enterprise' && !enterprise) throw new Error('提交企业不存在')
+  if (payload.publisherType === 'custom' && !payload.publisherName?.trim())
+    throw new Error('请输入提交人名称')
+
+  const publisherName =
+    payload.publisherType === 'enterprise'
+      ? enterprise!.name
+      : payload.publisherType === 'individual'
+        ? user!.nickname
+        : payload.publisherName!.trim()
 
   const maxNum = demands.reduce((m, d) => Math.max(m, Number(d.id.replace('D', ''))), 0)
   const demand: Demand = {
     id: `D${maxNum + 1}`,
     title: '',
     category: '',
-    publisherId: user.id,
-    publisherName: user.name,
-    publisherIdentity: payload.publisherIdentity,
+    publisherId: payload.publisherId,
+    publisherName,
+    publisherIdentity: payload.publisherType === 'individual' ? payload.publisherIdentity : null,
+    contactPhone: payload.contactPhone,
+    contactEmail: payload.contactEmail || undefined,
     budget: '',
     period: '',
     deadline: '',

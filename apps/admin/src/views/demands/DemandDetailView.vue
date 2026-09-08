@@ -44,14 +44,9 @@ async function load() {
   }
 }
 
-/* 完成并发布（草稿）/ 编辑（待发布/已发布） */
+/* 编辑（待发布/已发布） */
 const publishVisible = ref(false)
-const publishMode = ref<'publish' | 'edit'>('publish')
-
-function openPublish() {
-  publishMode.value = 'publish'
-  publishVisible.value = true
-}
+const publishMode = ref<'edit'>('edit')
 
 function openEdit() {
   publishMode.value = 'edit'
@@ -213,10 +208,6 @@ onMounted(load)
           <div class="head-actions">
             <template v-if="demand.status === 'pending'">
               <t-button theme="primary" @click="openReview">审核</t-button>
-            </template>
-            <template v-else-if="demand.status === 'draft'">
-              <t-button theme="primary" @click="openPublish">完成并发布</t-button>
-              <t-button variant="outline" theme="danger" :loading="closing" @click="onCloseDemand">关闭</t-button>
             </template>
             <template v-else-if="demand.status === 'pending_release'">
               <t-button theme="primary" :loading="publishing" @click="onPublishNow">立即发布</t-button>

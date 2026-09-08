@@ -38,6 +38,8 @@ const activePath = computed(() => {
   if (p.startsWith('/external-enterprises')) return '/external-enterprises'
   if (p === '/demands/review') return '/demands/review'
   if (p.startsWith('/demands')) return '/demands'
+  if (p === '/spaces/reservations') return '/spaces/reservations'
+  if (p.startsWith('/spaces/')) return '/spaces'
   if (p.startsWith('/projects')) return '/projects'
   if (p.startsWith('/events')) return '/events'
   return p
@@ -151,27 +153,55 @@ async function handleDropdown(item: { value?: string | number }) {
             </t-menu-item>
           </t-submenu>
 
-          <t-submenu value="group-facility" title="运营设施">
-            <template #icon><MapIcon /></template>
-            <t-menu-item value="/mall">
+          <t-submenu value="group-points" title="积分管理">
+            <template #icon><CartIcon /></template>
+            <t-menu-item value="/mall/goods">
               <template #icon><CartIcon /></template>
-              <span class="menu-label">积分商城</span>
-              <t-tag size="small" variant="outline">二期</t-tag>
+              商品管理
             </t-menu-item>
+            <t-menu-item value="/mall/orders">
+              <template #icon><ViewListIcon /></template>
+              订单管理
+            </t-menu-item>
+            <t-menu-item value="/mall/rules">
+              <template #icon><Edit2Icon /></template>
+              积分规则
+            </t-menu-item>
+            <t-menu-item value="/mall/ledger">
+              <template #icon><AppIcon /></template>
+              积分账单
+            </t-menu-item>
+          </t-submenu>
+
+          <t-submenu value="group-space" title="空间管理">
+            <template #icon><MapIcon /></template>
             <t-menu-item value="/workstations">
               <template #icon><ViewModuleIcon /></template>
-              <span class="menu-label">办公位管理</span>
-              <t-tag size="small" variant="outline">二期</t-tag>
+              办公位管理
+            </t-menu-item>
+            <t-menu-item value="/workstations/offices">
+              <template #icon><BuildingIcon /></template>
+              办公室管理
+            </t-menu-item>
+            <t-menu-item value="/workstations/leases">
+              <template #icon><ViewListIcon /></template>
+              租赁管理
             </t-menu-item>
             <t-menu-item value="/spaces">
               <template #icon><MapIcon /></template>
-              <span class="menu-label">公共空间</span>
-              <t-tag size="small" variant="outline">二期</t-tag>
+              公共空间管理
             </t-menu-item>
+            <t-menu-item value="/spaces/reservations">
+              <template #icon><CalendarIcon /></template>
+              公共空间预约
+            </t-menu-item>
+          </t-submenu>
+
+          <t-submenu value="group-facility" title="运营设施">
+            <template #icon><MapIcon /></template>
             <t-menu-item value="/contents">
               <template #icon><Edit2Icon /></template>
-              <span class="menu-label">资讯内容</span>
-              <t-tag size="small" variant="outline">二期</t-tag>
+              资讯内容
             </t-menu-item>
           </t-submenu>
         </t-menu>
@@ -305,10 +335,6 @@ async function handleDropdown(item: { value?: string | number }) {
   transform: rotate(180deg);
 }
 
-.menu-label {
-  flex: 1;
-}
-
 /* ---------- 顶栏 ---------- */
 .main-col {
   display: flex;
@@ -339,7 +365,7 @@ async function handleDropdown(item: { value?: string | number }) {
   gap: 8px;
   cursor: pointer;
   padding: 4px 6px;
-  border-radius: 6px;
+  border-radius: var(--td-radius-medium);
 }
 
 .admin-chip:hover {
@@ -371,7 +397,7 @@ async function handleDropdown(item: { value?: string | number }) {
   height: 28px;
   padding: 0 10px;
   border: 1px solid var(--td-component-border);
-  border-radius: 4px;
+  border-radius: var(--td-radius-default);
   font-size: 12px;
   color: var(--td-text-color-secondary);
   cursor: pointer;
@@ -400,7 +426,7 @@ async function handleDropdown(item: { value?: string | number }) {
   justify-content: center;
   width: 16px;
   height: 16px;
-  border-radius: 3px;
+  border-radius: var(--td-radius-default);
   color: var(--td-text-color-secondary);
   cursor: pointer;
 }

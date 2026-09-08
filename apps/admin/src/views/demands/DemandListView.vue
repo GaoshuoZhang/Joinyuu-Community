@@ -48,7 +48,6 @@ const categoryOptions = [
 
 const statusOptions = [
   { label: '全部', value: '' },
-  { label: '草稿', value: 'draft' },
   { label: '待审核', value: 'pending' },
   { label: '待发布', value: 'pending_release' },
   { label: '定时发布中', value: 'scheduled' },
@@ -151,16 +150,10 @@ function openCreate() {
   publishVisible.value = true
 }
 
-function openPublish(row: Demand) {
-  current.value = row
-  publishMode.value = 'publish'
-  publishVisible.value = true
-}
-
 function openEdit(row: Demand) {
   current.value = row
-  /* 草稿走完成并发布流程；待发布/已发布走普通编辑（不改状态） */
-  publishMode.value = row.status === 'draft' ? 'publish' : 'edit'
+  /* 待发布/已发布走普通编辑（不改状态） */
+  publishMode.value = 'edit'
   publishVisible.value = true
 }
 
@@ -270,7 +263,7 @@ async function applyRouteFilter() {
   if (query.publisherId) {
     try {
       const u = await fetchUser(query.publisherId)
-      publisherName.value = u.name
+      publisherName.value = u.nickname
     } catch {
       /* 用户不存在时标签回退显示 ID */
     }
@@ -385,7 +378,7 @@ onMounted(() => {
     <div class="page-card">
       <t-table
         row-key="id"
-        table-layout="auto"
+        table-layout="fixed"
         hover
         resizable
         :data="list"
@@ -436,16 +429,6 @@ onMounted(() => {
             >
               审核
             </t-button>
-            <!-- 草稿：完成并发布 / 关闭 -->
-            <t-button
-              v-if="row.status === 'draft'"
-              variant="text"
-              size="small"
-              theme="primary"
-              @click="openPublish(row)"
-            >
-              完成并发布
-            </t-button>
             <!-- 待发布：编辑 / 立即发布 / 定时发布 / 关闭 -->
             <template v-if="row.status === 'pending_release'">
               <t-button variant="text" size="small" @click="openEdit(row)">编辑</t-button>
@@ -495,7 +478,7 @@ onMounted(() => {
               查看关联项目
             </t-button>
             <t-popconfirm
-              v-if="row.status === 'published' || row.status === 'draft' || row.status === 'pending_release'"
+              v-if="row.status === 'published' || row.status === 'pending_release'"
               content="确认关闭该需求？"
               @confirm="onCloseDemand(row)"
             >

@@ -27,7 +27,7 @@ export async function fetchProjects(query: ProjectQuery): Promise<PageResult<Pro
   }
   if (query.status) list = list.filter((p) => p.status === query.status)
   if (query.participant) {
-    const participant = users.find((u) => u.id === query.participant)
+    const participant = users.find((u) => u.uid === query.participant)
     const enterpriseIds =
       participant?.identities.filter((i) => i.type === 'community_enterprise').map((i) => i.enterpriseId) ?? []
     list = list.filter((p) =>
@@ -50,7 +50,7 @@ export async function fetchProjects(query: ProjectQuery): Promise<PageResult<Pro
         .filter(
           (u) => u.identities.some((i) => i.type === 'external_enterprise' && i.enterpriseName === extProfile?.name),
         )
-        .map((u) => u.id)
+        .map((u) => u.uid)
       list = list.filter((p) => p.undertakers.some((t) => t.type === 'individual' && memberIds.includes(t.id)))
     }
   }
@@ -84,10 +84,10 @@ function undertakerName(type: 'enterprise' | 'individual', id: string): string {
     if (!enterprise) throw new Error('承接企业不存在')
     return enterprise.name
   }
-  const user = users.find((u) => u.id === id)
+  const user = users.find((u) => u.uid === id)
   if (!user) throw new Error('承接人不存在')
   const identity = user.identities.find((i) => i.type === 'community_individual')
-  return `${user.name} · ${identity?.title ?? ''}`
+  return `${user.nickname} · ${identity?.title ?? ''}`
 }
 
 function formatDate(): string {

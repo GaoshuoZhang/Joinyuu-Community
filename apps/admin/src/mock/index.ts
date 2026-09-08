@@ -7,6 +7,10 @@ import { projects } from './projects'
 import { events } from './events'
 import { externalEnterpriseProfiles } from './externalEnterpriseProfiles'
 import { experienceRecords, pointsRecords } from './ledgers'
+import { goods, pointsRules, redemptionOrders } from './mall'
+import { leases, workstationAreas, workstations } from './workstations'
+import { reservations, spaces } from './spaces'
+import { articles, columns, showcaseRequests } from './contents'
 
 export const DB = {
   users,
@@ -18,6 +22,38 @@ export const DB = {
   externalEnterpriseProfiles,
   experienceRecords,
   pointsRecords,
+  goods,
+  redemptionOrders,
+  pointsRules,
+  workstations,
+  workstationAreas,
+  leases,
+  spaces,
+  reservations,
+  articles,
+  columns,
+  showcaseRequests,
 }
 
-export { users, enterprises, applications, demands, projects, events, externalEnterpriseProfiles, experienceRecords, pointsRecords }
+export {
+  users,
+  enterprises,
+  applications,
+  demands,
+  projects,
+  events,
+  externalEnterpriseProfiles,
+  experienceRecords,
+  pointsRecords,
+  goods,
+  redemptionOrders,
+  pointsRules,
+  workstations,
+  workstationAreas,
+  leases,
+  spaces,
+  reservations,
+  articles,
+  columns,
+  showcaseRequests,
+}

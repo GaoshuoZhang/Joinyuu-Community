@@ -173,7 +173,7 @@ const highlights = ['企业与需求双向连接', '活动运营与签到管理'
   font-size: 13px;
   color: var(--td-text-color-secondary);
   background: var(--td-bg-color-page);
-  border-radius: 6px;
+  border-radius: var(--td-radius-medium);
   text-align: center;
 }
 

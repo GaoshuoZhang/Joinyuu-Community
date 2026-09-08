@@ -8,13 +8,16 @@ import IdentityTags from '@/components/IdentityTags.vue'
 import AdjustValueDialog from '@/components/AdjustValueDialog.vue'
 import { identityTypeMap, roleLabelMap } from '@/constants/identity'
 import { fetchUser } from '@/api/users'
+import { fetchExternalEnterprises } from '@/api/external-enterprises'
 import { adjustExperience, adjustPoints, fetchExperienceRecords, fetchPointsRecords } from '@/api/ledgers'
-import type { ExperienceRecord, PointsRecord, User, UserIdentity } from '@/types'
+import type { ExperienceRecord, PointsRecord, User, UserIdentity, ExternalEnterprise } from '@/types'
 
 const route = useRoute()
 const router = useRouter()
 const loading = ref(true)
 const user = ref<User | null>(null)
+/** 外部企业档案缓存：external_enterprise 身份经"档案名 + 成员 uid"反查档案 ID */
+const externalArchives = ref<ExternalEnterprise[]>([])
 const activeTab = ref('identities')
 
 /* 头部身份标签行：个人用户为默认身份，不展示 */
@@ -33,14 +36,26 @@ const communityIndividualIdentity = computed(() =>
   user.value?.identities.find((i) => i.type === 'community_individual'),
 )
 
-/* 社区企业身份卡可跳转企业详情 */
+/* 社区企业身份卡可跳入驻企业详情；外部企业身份卡可跳外部企业详情（档案名 + 成员 uid 反查） */
+function externalArchiveId(identity: UserIdentity): string | undefined {
+  if (identity.type !== 'external_enterprise') return undefined
+  const uid = user.value?.uid
+  return externalArchives.value.find(
+    (a) => a.name === identity.enterpriseName && a.members.some((m) => m.userId === uid),
+  )?.id
+}
+
 function canGoEnterprise(identity: UserIdentity): boolean {
-  return identity.type === 'community_enterprise' && !!identity.enterpriseId
+  if (identity.type === 'community_enterprise') return !!identity.enterpriseId
+  return identity.type === 'external_enterprise' && !!externalArchiveId(identity)
 }
 
 function goEnterprise(identity: UserIdentity) {
-  if (canGoEnterprise(identity) && identity.enterpriseId) {
+  if (identity.type === 'community_enterprise' && identity.enterpriseId) {
     router.push(`/enterprises/${identity.enterpriseId}`)
+  } else if (identity.type === 'external_enterprise') {
+    const archiveId = externalArchiveId(identity)
+    if (archiveId) router.push(`/external-enterprises/${archiveId}`)
   }
 }
 
@@ -48,17 +63,17 @@ function goEnterprise(identity: UserIdentity) {
  * 跳转参数仅携带用户 ID，列表按 ID 过滤，避免同名用户歧义 */
 function goDemands() {
   if (!user.value || user.value.stats.demands === 0) return
-  router.push({ path: '/demands', query: { publisher: user.value.id } })
+  router.push({ path: '/demands', query: { publisher: user.value.uid } })
 }
 
 function goProjects() {
   if (!user.value || user.value.stats.projects === 0) return
-  router.push({ path: '/projects', query: { participant: user.value.id } })
+  router.push({ path: '/projects', query: { participant: user.value.uid } })
 }
 
 function goEvents() {
   if (!user.value || user.value.stats.events === 0) return
-  router.push({ path: '/events', query: { participant: user.value.id } })
+  router.push({ path: '/events', query: { participant: user.value.uid } })
 }
 
 /* ---------- 经验值 / 积分流水 ---------- */
@@ -83,7 +98,7 @@ async function onAdjustExperience(delta: number, reason: string) {
   if (!user.value) return
   expAdjusting.value = true
   try {
-    const res = await adjustExperience('individual', user.value.id, delta, reason)
+    const res = await adjustExperience('individual', user.value.uid, delta, reason)
     MessagePlugin.success(`已${delta > 0 ? '增加' : '扣减'} ${Math.abs(delta)} 经验值，当前余额 ${res.balance}`)
     expAdjustVisible.value = false
     await loadDetail()
@@ -98,7 +113,7 @@ async function onAdjustPoints(delta: number, reason: string) {
   if (!user.value) return
   pointsAdjusting.value = true
   try {
-    const res = await adjustPoints(user.value.id, delta, reason)
+    const res = await adjustPoints(user.value.uid, delta, reason)
     MessagePlugin.success(`已${delta > 0 ? '增加' : '扣减'} ${Math.abs(delta)} 积分，当前余额 ${res.balance}`)
     pointsAdjustVisible.value = false
     await loadDetail()
@@ -111,7 +126,12 @@ async function onAdjustPoints(delta: number, reason: string) {
 
 async function loadDetail() {
   const id = route.params.id as string
-  user.value = await fetchUser(id)
+  const [u, archives] = await Promise.all([
+    fetchUser(id),
+    fetchExternalEnterprises({ page: 1, pageSize: 100 }),
+  ])
+  user.value = u
+  externalArchives.value = archives.list
   if (user.value.identities.some((i) => i.type === 'community_individual')) {
     experienceRecords.value = await fetchExperienceRecords('individual', id)
   }
@@ -148,13 +168,13 @@ onMounted(async () => {
       <!-- 用户信息头卡片 -->
       <div class="page-card profile-card">
         <div class="profile-head">
-          <t-avatar size="56px">{{ user.name.slice(0, 1) }}</t-avatar>
+          <t-avatar size="56px">{{ user.nickname.slice(0, 1) }}</t-avatar>
           <div class="profile-title">
             <div class="profile-name-row">
-              <span class="profile-name">{{ user.name }}</span>
+              <span class="profile-name">{{ user.nickname }}</span>
               <StatusTag entity="user" :value="user.status" />
             </div>
-            <span class="profile-id">ID：{{ user.id }}</span>
+            <span class="profile-id">UID：{{ user.uid }}</span>
             <IdentityTags v-if="headerIdentities.length" :identities="headerIdentities" />
           </div>
         </div>
@@ -163,6 +183,20 @@ onMounted(async () => {
           <t-descriptions-item label="手机号">{{ user.phone }}</t-descriptions-item>
           <t-descriptions-item label="邮箱">{{ user.email }}</t-descriptions-item>
           <t-descriptions-item label="性别">{{ user.gender }}</t-descriptions-item>
+          <t-descriptions-item label="实名状态">
+            <t-tag v-if="user.realName && user.citizenId" theme="success" variant="light" size="small">已实名</t-tag>
+            <t-tag v-else theme="default" variant="light" size="small">未实名</t-tag>
+          </t-descriptions-item>
+          <t-descriptions-item label="真实姓名">{{ user.realName ?? '—' }}</t-descriptions-item>
+          <t-descriptions-item label="身份证号">{{ user.citizenId ?? '—' }}</t-descriptions-item>
+          <t-descriptions-item label="微信绑定">
+            {{ user.wechatOpenid ? (user.wechatVerified ? '已绑定 · 已微信实名' : '已绑定 · 未微信实名') : '未绑定' }}
+          </t-descriptions-item>
+          <t-descriptions-item label="微信 OpenID">{{ user.wechatOpenid ?? '—' }}</t-descriptions-item>
+          <t-descriptions-item label="微信 UnionID">{{ user.wechatUnionid ?? '—' }}</t-descriptions-item>
+          <t-descriptions-item v-if="user.status === 'frozen'" label="冻结信息" :span="3">
+            {{ user.frozenUntil ? `冻结至 ${user.frozenUntil}` : '长期冻结' }} · 原因：{{ user.frozenReason ?? '—' }}
+          </t-descriptions-item>
           <t-descriptions-item label="积分（个人用户）">{{ user.points }}</t-descriptions-item>
           <t-descriptions-item label="注册时间">{{ user.registeredAt }}</t-descriptions-item>
           <t-descriptions-item label="最后活跃时间">{{ user.lastActiveAt }}</t-descriptions-item>
@@ -390,7 +424,7 @@ onMounted(async () => {
 .identity-card {
   padding: 12px 16px;
   border: 1px solid var(--td-component-border);
-  border-radius: 6px;
+  border-radius: var(--td-radius-medium);
 }
 
 .identity-card.clickable {
@@ -467,7 +501,7 @@ onMounted(async () => {
   gap: 8px;
   padding: 20px;
   border: 1px solid var(--td-component-border);
-  border-radius: 6px;
+  border-radius: var(--td-radius-medium);
 }
 
 .stat-item.clickable {

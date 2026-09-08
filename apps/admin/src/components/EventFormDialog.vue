@@ -178,11 +178,11 @@ function onClose() {
     </template>
     <t-form ref="formRef" :data="form" :rules="rules" label-align="top">
       <t-form-item label="活动标题" name="title">
-        <t-input v-model="form.title" placeholder="请输入活动标题" />
+        <t-input clearable v-model="form.title" placeholder="请输入活动标题" />
       </t-form-item>
       <div class="form-row">
         <t-form-item label="活动类型" name="type">
-          <t-select v-model="form.type" :options="typeOptions" />
+          <t-select clearable v-model="form.type" :options="typeOptions" />
         </t-form-item>
         <t-form-item label="容量" name="capacity">
           <t-input-number v-model="form.capacity" :min="1" theme="column" style="width: 100%" />
@@ -218,18 +218,18 @@ function onClose() {
       </t-form-item>
       <div class="form-row">
         <t-form-item label="地点" name="location">
-          <t-input v-model="form.location" placeholder="如 聚屿路演厅" />
+          <t-input clearable v-model="form.location" placeholder="如 聚屿路演厅" />
         </t-form-item>
         <t-form-item label="主办方" name="host">
-          <t-input v-model="form.host" placeholder="如 聚屿社区" />
+          <t-input clearable v-model="form.host" placeholder="如 聚屿社区" />
         </t-form-item>
       </div>
       <div class="form-row">
         <t-form-item label="主讲嘉宾" name="speaker">
-          <t-input v-model="form.speaker" placeholder="无则留空" />
+          <t-input clearable v-model="form.speaker" placeholder="无则留空" />
         </t-form-item>
         <t-form-item label="标签" name="tags">
-          <t-input v-model="tagsText" placeholder="多个标签用逗号分隔" />
+          <t-input clearable v-model="tagsText" placeholder="多个标签用逗号分隔" />
         </t-form-item>
       </div>
 

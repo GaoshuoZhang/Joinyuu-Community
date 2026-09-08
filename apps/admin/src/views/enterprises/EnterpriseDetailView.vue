@@ -254,12 +254,12 @@ onMounted(load)
                 :data="members"
                 :columns="memberColumns"
                 empty="暂无企业成员"
-                @row-click="({ row }) => router.push('/users/' + row.id)"
+                @row-click="({ row }) => router.push('/users/' + row.uid)"
               >
                 <template #member="{ row }">
                   <div class="member-cell">
-                    <span class="member-name">{{ row.name }}</span>
-                    <span class="member-id">{{ row.id }}</span>
+                    <span class="member-name">{{ row.realName || row.nickname }}</span>
+                    <span class="member-id">{{ row.uid }}</span>
                   </div>
                 </template>
                 <template #title="{ row }">{{ memberTitle(row) }}</template>
@@ -474,7 +474,7 @@ onMounted(load)
   gap: 8px;
   padding: 20px;
   border: 1px solid var(--td-component-border);
-  border-radius: 6px;
+  border-radius: var(--td-radius-medium);
 }
 
 .stat-item.clickable {

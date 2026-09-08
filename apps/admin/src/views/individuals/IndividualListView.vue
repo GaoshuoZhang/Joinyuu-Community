@@ -23,7 +23,6 @@ const query = reactive({
 const statusOptions = [
   { label: '全部', value: '' },
   { label: '正常', value: 'active' },
-  { label: '待激活', value: 'pending' },
   { label: '已冻结', value: 'frozen' },
 ]
 
@@ -89,7 +88,7 @@ function otherIdentities(row: User): UserIdentity[] {
 }
 
 function goDetail(row: User) {
-  router.push(`/users/${row.id}`)
+  router.push(`/users/${row.uid}`)
 }
 
 onMounted(load)
@@ -128,7 +127,7 @@ onMounted(load)
     <div class="page-card">
       <t-table
         row-key="id"
-        table-layout="auto"
+        table-layout="fixed"
         hover
         resizable
         :data="list"
@@ -141,10 +140,10 @@ onMounted(load)
       >
         <template #user="{ row }">
           <div class="user-cell">
-            <t-avatar size="36px">{{ row.name.slice(0, 1) }}</t-avatar>
+            <t-avatar size="36px">{{ row.nickname.slice(0, 1) }}</t-avatar>
             <div class="user-cell-info">
-              <span class="user-name">{{ row.name }}</span>
-              <span class="user-id">{{ row.id }}</span>
+              <span class="user-name">{{ row.nickname }}</span>
+              <span class="user-id">{{ row.uid }}</span>
             </div>
           </div>
         </template>

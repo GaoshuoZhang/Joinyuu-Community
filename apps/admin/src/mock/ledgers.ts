@@ -71,7 +71,7 @@ export const pointsRecords: PointsRecord[] = [
   { id: 'PT9005', userId: 'U1002', delta: 650, balance: 1250, reason: '里程碑评审通过', at: '2026-08-30 09:40', operator: '社区管理员' },
   { id: 'PT9006', userId: 'U1002', delta: -300, balance: 950, reason: '兑换「会议室优先预约卡」', at: '2026-08-25 09:40', operator: '系统' },
   { id: 'PT9007', userId: 'U1002', delta: 1000, balance: 1950, reason: '知识库共建奖励', at: '2026-09-01 11:26', operator: '社区管理员' },
-  /* U1005 顾北辰（当前 980） */
+  /* U1005 顾北辰（当前 600） */
   { id: 'PT9008', userId: 'U1005', delta: 400, balance: 400, reason: '响应需求奖励', at: '2026-09-02 17:44', operator: '社区管理员' },
   { id: 'PT9009', userId: 'U1005', delta: 380, balance: 780, reason: '设计协作积分', at: '2026-08-15 19:20', operator: '社区管理员' },
   { id: 'PT9010', userId: 'U1005', delta: 200, balance: 980, reason: '活动签到积分', at: '2026-08-30 19:03', operator: '系统' },
@@ -83,5 +83,15 @@ export const pointsRecords: PointsRecord[] = [
   /* U1014 方致远（当前 320） */
   { id: 'PT9015', userId: 'U1014', delta: 400, balance: 400, reason: '活动参与积分', at: '2026-08-01 20:00', operator: '系统' },
   { id: 'PT9016', userId: 'U1014', delta: -80, balance: 320, reason: '违规扣减积分', at: '2026-08-12 22:10', operator: '社区管理员' },
+  /* 积分商城兑换扣减流水（与 mock/mall.ts 兑换订单一一对应）
+   * RO2003 → U1005 兑换周边礼包 -380，余额 980→600（末笔） */
+  { id: 'PT9017', userId: 'U1005', delta: -380, balance: 600, reason: '兑换「社区文创周边礼包」', at: '2026-09-07 15:40', operator: '系统' },
+  /* RO2004 → U1001 兑换咖啡月卡 -150，余额 2860→2710（末笔） */
+  { id: 'PT9018', userId: 'U1001', delta: -150, balance: 2710, reason: '兑换「精品咖啡月卡」', at: '2026-09-06 20:15', operator: '系统' },
+  /* RO2005 → U1002 兑换路演彩排时长券 -260，余额 1950→1690（末笔） */
+  { id: 'PT9019', userId: 'U1002', delta: -260, balance: 1690, reason: '兑换「路演彩排时长券」', at: '2026-09-06 11:05', operator: '系统' },
+  /* RO2006 → U1014 兑换后取消，-120 后 +120 退回，余额 320 不变（末笔 PT9021） */
+  { id: 'PT9020', userId: 'U1014', delta: -120, balance: 200, reason: '兑换「精品咖啡券」', at: '2026-09-02 10:00', operator: '系统' },
+  { id: 'PT9021', userId: 'U1014', delta: 120, balance: 320, reason: '订单取消退回积分（RO2006）', at: '2026-09-02 18:30', operator: '系统' },
   /* U1006 沈嘉禾（当前 0）— 暂无流水 */
 ]

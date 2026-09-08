@@ -37,7 +37,7 @@ export async function adjustExperience(
     if (balance < 0) throw new Error('扣减后经验值不能为负')
     enterprise.experience = balance
   } else {
-    const user = users.find((u) => u.id === targetId)
+    const user = users.find((u) => u.uid === targetId)
     const identity = user?.identities.find((i) => i.type === 'community_individual')
     if (!user || !identity) throw new Error('该用户的社区个人身份不存在')
     balance = (identity.experience ?? 0) + delta
@@ -73,7 +73,7 @@ export async function adjustPoints(
 ): Promise<{ code: number; balance: number }> {
   await delay(400)
   if (!Number.isInteger(delta) || delta === 0) throw new Error('变动值须为非零整数')
-  const user = users.find((u) => u.id === userId)
+  const user = users.find((u) => u.uid === userId)
   if (!user) throw new Error('用户不存在')
   const balance = user.points + delta
   if (balance < 0) throw new Error('扣减后积分不能为负')
