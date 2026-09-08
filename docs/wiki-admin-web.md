@@ -1,6 +1,7 @@
-# 聚屿社区 · 管理后台原型 — Design Contract
+# 聚屿社区 · 管理后台 Web — 开发 Wiki
 
-> 本契约是所有页面/子代理的唯一视觉与结构依据。冻结后不得私自发明颜色、字号、圆角、间距；不得重写导航。
+> 本文档沉淀管理后台（admin web）开发的细致描述与全部工程契约，是所有页面/子代理的唯一视觉与结构依据。
+> 冻结后不得私自发明颜色、字号、圆角、间距；不得重写导航。
 > 技术栈由用户指定：Vue 3 + Vite + TypeScript + TDesign Vue Next + Pinia + Vue Router（build 型交付，Mock 数据）。
 
 ## 1. Style Tier & Aesthetic Direction
@@ -12,6 +13,7 @@
 
 ## 2. Design Tokens
 
+- TDesign 提供长期维护的 MCP 工具：tdesign-mcp-server，TDesign MCP 目前内置了四个 tools，分别是 get-component-docs、get-component-list、get-component-changelog 和 get-component-dom，用于辅助解决使用 TDesign 过程中的各种实际需求，包括但不限于辅助代码生成、解决 API 使用问题、升级组件库版本和辅助代码迁移等场景。
 - 色彩：**全盘采用 TDesign 默认主题**（brand `#0052D9`），不自造色板。语义色走 TDesign token：
   - 成功/正常 `--td-success-color`、警示/待处理 `--td-warning-color`、危险/冻结/驳回 `--td-error-color`
   - 文本 `--td-text-color-primary / secondary`；边框 `--td-component-border`；页面底 `--td-bg-color-page`、容器底 `--td-bg-color-container`
