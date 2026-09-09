@@ -35,9 +35,11 @@ async function load() {
 /* 启用 / 停用（停用后该行为不再累积经验） */
 async function onToggle(row: ExperienceRule) {
   acting.value = row.code
+  /* 先取旧状态再调接口：接口原地更新了 row.status，后再判断会拿到新值导致提示反转（2026-09-10 修） */
+  const wasEnabled = row.status === 'enabled'
   try {
     await toggleExperienceRuleStatus(row.code)
-    MessagePlugin.success(row.status === 'enabled' ? '规则已停用' : '规则已启用')
+    MessagePlugin.success(wasEnabled ? '规则已停用' : '规则已启用')
     await load()
   } catch (e) {
     MessagePlugin.error(e instanceof Error ? e.message : '操作失败')

@@ -9,8 +9,8 @@ import { userLevelOptions, visibilityIdentityOptions } from '@/constants/identit
 import type { Demand, User, UserIdentity } from '@/types'
 
 /* 需求弹窗（双模式共用）：
- * - create：后台直接创建需求，提交人可选已注册个人用户/企业（自动填充联系方式），
- *   或直接输入未注册提交人创建条目；创建即立即上架，无草稿与定时发布
+ * - create：后台直接创建需求，需求方可选已注册个人用户/企业（自动填充联系方式），
+ *   或直接输入未注册需求方创建条目；创建即保存为「待发布」，由列表操作触发发布
  * - edit：待发布 / 已发布需求再编辑（不改状态）
  * 可报名范围默认与可见范围一致，可单独调整（提供一键同步） */
 const props = defineProps<{
@@ -42,15 +42,13 @@ const categoryOptions = ['供应链', '设计', '法务财务', '技术开发', 
 const submitting = ref(false)
 const formRef = ref()
 
-/* create 模式：提交人（可创建新条目）与提交身份 */
+/* create 模式：需求方（可创建新条目）与提交身份 */
 const publisherUsers = ref<{ uid: string; nickname: string; realName: string; phone: string; email: string; tag: '社区个体' | '个人用户' }[]>([])
 const publisherEnterprises = ref<{ id: string; name: string; contactName: string; contactPhone: string; contactEmail?: string; tag: '社区企业' | '外部企业' }[]>([])
 const publisherId = ref('')
 const publisherName = ref('')
 const publisherType = ref<'individual' | 'enterprise' | 'custom'>('individual')
 const publisherUser = ref<User | null>(null)
-
-loadPublisherOptions()
 
 async function loadPublisherOptions() {
   try {
@@ -141,6 +139,9 @@ const form = reactive<DemandPublishPayload>({
 const customVisibility = ref(false)
 const customEnrollment = ref(false)
 const customRespond = ref(false)
+
+/* 选项加载放在 form 声明之后（避免引用 form 的时序隐患） */
+loadPublisherOptions()
 
 /* 积分规则默认分值：响应需求奖励 */
 const rulePoints = reactive({ respond: 20 })
@@ -253,9 +254,6 @@ const rules = computed<FormProps['rules']>(() => ({
   publisherValue: [{ required: true, message: '请选择或输入提交人', trigger: 'submit' }],
   contactName: [{ required: true, message: '请输入联系人', trigger: 'submit' }],
   contactPhone: [{ required: true, message: '请输入联系电话', trigger: 'submit' }],
-  ...(props.mode === 'create'
-    ? {}
-    : {}),
 }))
 
 async function onConfirm() {
@@ -274,7 +272,7 @@ async function onConfirm() {
   submitting.value = true
   try {
     if (props.mode === 'create') {
-      /* 创建需求：创建即立即上架（无草稿、无定时发布）；
+      /* 创建需求：创建即保存为「待发布」（无草稿、无定时发布），由列表操作决定立即/定时发布；
        * 提交身份快照仅注册个人用户存在 */
       const identity =
         publisherType.value === 'individual'

@@ -247,19 +247,6 @@ async function onConfirm() {
     }
     if (m.fixed === 'start' && m.owners.length > 0) m.owners = []
   }
-  /* 里程碑节点必填：节点描述/日期/责任方（固定节点责任方=全部承接方视为已填） */
-  for (let i = 0; i < milestones.value.length; i++) {
-    const m = milestones.value[i]
-    if (!m.name.trim() || !m.date.trim()) {
-      MessagePlugin.warning('里程碑节点（第 ' + (i + 1) + ' 个）需填写节点描述与日期')
-      return
-    }
-    if (!m.fixed && m.owners.length === 0) {
-      MessagePlugin.warning('里程碑节点（第 ' + (i + 1) + ' 个）责任方至少选择一项')
-      return
-    }
-    if (m.fixed === 'start' && m.owners.length > 0) m.owners = []
-  }
   submitting.value = true
   try {
     const missingContact = customRows.value.find((v) => {

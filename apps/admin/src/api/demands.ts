@@ -78,10 +78,13 @@ export async function fetchDemand(id: string): Promise<Demand> {
   simulateScheduledPublish()
   const demand = demands.find((d) => d.id === id)
   if (!demand) throw new Error('需求不存在')
-  return demand
+  /* 返回快照副本：修复详情页 load 后因引用不变导致表格不刷新的问题（M1 为真实 HTTP 序列化新对象） */
+  return { ...demand, respondents: demand.respondents.map((r) => ({ ...r })) }
 }
 
 export interface DemandPublishPayload {
+  /** 表单内部字段：需求方选择器值（U:uid / E:id / 自定义名称），仅前端表单使用，不随 payload 提交 */
+  publisherValue?: string
   title: string
   category: string
   budget: string
@@ -265,6 +268,8 @@ export async function initiateProject(demandId: string, payload: ProjectInitPayl
   if (!demand) throw new Error('需求不存在')
 
   const project = await createProject(payload)
+  /* 双向关联：demand.projectId ↔ project.sourceDemandId（createProject 返回对象即数组内引用，直接回写） */
+  project.sourceDemandId = demand.id
   demand.status = 'projected'
   demand.projectId = project.id
   return project

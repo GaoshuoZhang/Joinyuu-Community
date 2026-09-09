@@ -52,6 +52,10 @@ function grantIdentity(app: Application) {
       }
       enterprises.push(newEnt)
       ent = newEnt
+    } else if (ent.status !== 'active') {
+      /* 企业已存在（如处于入驻审核中）：审批通过即正式入驻，联动企业状态与入驻时间 */
+      ent.status = 'active'
+      ent.settledAt = ent.settledAt ?? formatToday()
     }
     const dup = user.identities.some(
       (i) => i.type === 'community_enterprise' && i.enterpriseId === ent!.id,
@@ -121,4 +125,10 @@ function formatNow(): string {
   const d = new Date()
   const p = (n: number) => String(n).padStart(2, '0')
   return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}`
+}
+
+function formatToday(): string {
+  const d = new Date()
+  const p = (n: number) => String(n).padStart(2, '0')
+  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`
 }

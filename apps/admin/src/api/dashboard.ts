@@ -21,19 +21,26 @@ export async function fetchDashboard(): Promise<DashboardData> {
   const pendingApplications = applications.filter(
     (a) => a.status === 'pending' && (a.type === 'settle' || a.type === 'identity'),
   )
-  const upcomingEvents = events
-    .filter((e) => e.status === 'published')
+  /* 近期活动仅展示未结束的已发布活动（结束时间已过的活动视为已结束，与活动列表口径一致） */
+  const now = formatNow()
+  const publishedNotEnded = events
+    .filter((e) => e.status === 'published' && e.endTime >= now)
     .sort((a, b) => a.startTime.localeCompare(b.startTime))
-    .slice(0, 4)
   return {
     stats: {
       pendingApplications: pendingApplications.length,
       totalUsers: users.length,
       activeEnterprises: enterprises.filter((e) => e.status === 'active').length,
       runningProjects: projects.filter((p) => p.status === "running").length,
-      upcomingEvents: events.filter((e) => e.status === 'published').length,
+      upcomingEvents: publishedNotEnded.length,
     },
     pendingApplications: pendingApplications.slice(0, 5),
-    upcomingEvents,
+    upcomingEvents: publishedNotEnded.slice(0, 4),
   }
+}
+
+function formatNow(): string {
+  const d = new Date()
+  const p = (n: number) => String(n).padStart(2, '0')
+  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}`
 }

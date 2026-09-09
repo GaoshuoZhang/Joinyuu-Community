@@ -120,7 +120,7 @@ export const users: User[] = [
   {
     uid: 'U1005',
     nickname: '顾北辰',
-    realName: '沈嘉禾',
+    realName: '顾北辰',
     citizenId: '1101011990011018515X',
 
     phone: '13801210005',
@@ -144,7 +144,7 @@ export const users: User[] = [
   {
     uid: 'U1006',
     nickname: '沈嘉禾',
-    realName: '顾星辞',
+    realName: '沈嘉禾',
     citizenId: '1101011990011022216X',
 
     phone: '13801210006',
@@ -157,7 +157,6 @@ export const users: User[] = [
     identities: [
       { type: 'individual', title: '个人用户' },
       { type: 'community_individual', title: '文创品牌主理人', level: 1, experience: 200 },
-      { type: 'external_enterprise', enterpriseName: '拾光文创', title: '创始人' },
     ],
     bio: '文创品牌主理人，正在申请入驻聚屿社区，期待对接渠道与供应链资源。',
     stats: { demands: 1, projects: 0, events: 0 },
@@ -323,7 +322,7 @@ export const users: User[] = [
   {
     uid: 'U1014',
     nickname: '方致远',
-    realName: '柳拂堤',
+    realName: '方致远',
     citizenId: '33010619940725552X',
     phone: '13801210014',
     email: 'fangzhiyuan@dev.io',

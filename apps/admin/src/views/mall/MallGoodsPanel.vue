@@ -85,9 +85,11 @@ function onPageChange(p: { current: number; pageSize: number }) {
 /* 上架 / 下架 */
 async function onToggle(row: MallGoods) {
   acting.value = row.id
+  /* 先取旧状态再调接口：接口原地更新了 row.status，后再判断会拿到新值导致提示反转（2026-09-10 修） */
+  const wasOn = row.status === 'on'
   try {
     await toggleGoodsStatus(row.id)
-    MessagePlugin.success(row.status === 'on' ? '商品已下架，成员端不再可见' : '商品已重新上架')
+    MessagePlugin.success(wasOn ? '商品已下架，成员端不再可见' : '商品已重新上架')
     await load()
   } catch (e) {
     MessagePlugin.error(e instanceof Error ? e.message : '操作失败')

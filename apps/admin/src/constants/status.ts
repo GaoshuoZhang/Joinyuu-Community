@@ -29,6 +29,7 @@ export const statusMap = {
   demand: {
     pending: { label: '待审核', theme: 'warning' },
     pending_release: { label: '待发布', theme: 'primary' },
+    scheduled: { label: '定时发布中', theme: 'primary' },
     published: { label: '已发布', theme: 'success' },
     rejected: { label: '已驳回', theme: 'danger' },
     projected: { label: '已立项', theme: 'success' },

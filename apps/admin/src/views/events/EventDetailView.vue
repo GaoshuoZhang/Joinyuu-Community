@@ -71,9 +71,11 @@ async function onCancelSchedule() {
 async function onToggleEnrollment() {
   if (!event.value) return
   acting.value = 'enrollment'
+  /* 先取旧状态再调接口：接口原地翻转了 enrollmentOpen，后再判断会拿到新值导致提示反转（2026-09-10 修） */
+  const wasOpen = event.value.enrollmentOpen
   try {
     await toggleEventEnrollment(event.value.id)
-    MessagePlugin.success(event.value.enrollmentOpen ? '已暂停报名' : '已开放报名')
+    MessagePlugin.success(wasOpen ? '已暂停报名' : '已开放报名')
     await load(true)
   } catch (e) {
     MessagePlugin.error(e instanceof Error ? e.message : '操作失败')
@@ -198,7 +200,12 @@ onMounted(() => load())
             <div class="head-title-row">
               <h3 class="head-title">{{ event.title }}</h3>
               <t-tag variant="light">{{ event.type }}</t-tag>
-              <StatusTag entity="event" :value="event.status" :scheduled-at="event.scheduledAt" />
+              <StatusTag
+                entity="event"
+                :value="event.status"
+                :scheduled-at="event.scheduledAt"
+                :enrollment-open="event.enrollmentOpen"
+              />
             </div>
             <!-- 可见范围与可报名范围同行展示 -->
             <div class="scope-row">

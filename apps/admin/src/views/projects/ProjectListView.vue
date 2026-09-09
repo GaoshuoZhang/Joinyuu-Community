@@ -1,6 +1,8 @@
 <script setup lang="ts">
-import { computed, onMounted, reactive, ref, watch } from 'vue'
+import { computed, nextTick, onMounted, reactive, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
+import { MessagePlugin } from 'tdesign-vue-next'
+import type { FormProps } from 'tdesign-vue-next'
 import { AddIcon, RefreshIcon, SearchIcon } from 'tdesign-icons-vue-next'
 import PageHeader from '@/components/PageHeader.vue'
 import StatusTag from '@/components/StatusTag.vue'
@@ -198,6 +200,13 @@ function goDetail(row: Project) {
   router.push(`/projects/${row.id}`)
 }
 
+/* 起止时间展示：字段为空时回退到固定里程碑「项目立项/预期交付」日期（与详情页口径一致） */
+function durationOf(row: Project): string {
+  const start = row.startDate || row.milestones.find((m) => m.name === '项目立项')?.date || ''
+  const end = row.endDate || [...row.milestones].reverse().find((m) => m.name === '预期交付')?.date || ''
+  return `${start || '—'} ~ ${end || '—'}`
+}
+
 function onRowClick({ row }: { row: Project }) {
   goDetail(row)
 }
@@ -359,17 +368,11 @@ onMounted(() => {
             v-if="row.status === 'closed' && row.closeReason"
             :content="'关闭原因：' + row.closeReason"
           >
-            <t-tooltip
-            v-if="row.status === 'closed' && row.closeReason"
-            :content="'关闭原因：' + row.closeReason"
-          >
             <StatusTag entity="project" :value="row.status" />
           </t-tooltip>
           <StatusTag v-else entity="project" :value="row.status" />
-          </t-tooltip>
-          <StatusTag v-else entity="project" :value="row.status" />
         </template>
-        <template #duration="{ row }">{{ row.startDate }} ~ {{ row.endDate }}</template>
+        <template #duration="{ row }">{{ durationOf(row) }}</template>
         <template #op="{ row }">
           <div class="op-cell" @click.stop>
             <t-button v-if="row.status !== 'finished'" variant="text" size="small" @click="openEdit(row)">编辑</t-button>

@@ -74,7 +74,12 @@ export async function fetchProject(id: string): Promise<Project> {
   await delay(300)
   const project = projects.find((p) => p.id === id)
   if (!project) throw new Error('项目不存在')
-  return project
+  /* 返回快照副本：修复详情页 load 后因引用不变导致表格不刷新的问题（M1 为真实 HTTP 序列化新对象） */
+  return {
+    ...project,
+    undertakers: project.undertakers.map((t) => ({ ...t })),
+    milestones: project.milestones.map((m) => ({ ...m, owners: m.owners ? [...m.owners] : [] })),
+  }
 }
 
 /* 承接方展示名：企业用企业名；个人用「姓名 · 头衔」（与下拉选项 label 一致） */

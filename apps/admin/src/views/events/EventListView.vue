@@ -202,9 +202,11 @@ async function onCancelSchedule(row: CommunityEvent) {
 /* 已发布 → 暂停报名 / 开放报名 */
 async function onToggleEnrollment(row: CommunityEvent) {
   acting.value = `${row.id}:enrollment`
+  /* 先取旧状态再调接口：接口原地翻转了 row.enrollmentOpen，后再判断会拿到新值导致提示反转（2026-09-10 修） */
+  const wasOpen = row.enrollmentOpen
   try {
     await toggleEventEnrollment(row.id)
-    MessagePlugin.success(row.enrollmentOpen ? '已暂停报名' : '已开放报名')
+    MessagePlugin.success(wasOpen ? '已暂停报名' : '已开放报名')
     await load()
   } catch (e) {
     MessagePlugin.error(e instanceof Error ? e.message : '操作失败')

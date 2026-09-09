@@ -50,7 +50,7 @@ export async function fetchUser(id: string): Promise<User> {
   const enterpriseIds = user.identities
     .filter((i) => i.type === 'community_enterprise')
     .map((i) => i.enterpriseId)
-  user.stats = {
+  const stats = {
     demands: demands.filter((d) => d.publisherId === user.uid).length,
     projects: projects.filter((p) =>
       p.undertakers.some(
@@ -61,7 +61,8 @@ export async function fetchUser(id: string): Promise<User> {
     ).length,
     events: events.filter((e) => e.enrollments.some((en) => en.userId === user.uid)).length,
   }
-  return user
+  /* 返回快照副本：修复详情页 load 后因引用不变导致数据不刷新的问题（M1 为真实 HTTP 序列化新对象） */
+  return { ...user, stats, identities: user.identities.map((i) => ({ ...i })) }
 }
 
 /* TODO: 替换为 PATCH /api/admin/users/:id/status，入参 { status } */

@@ -35,12 +35,4 @@ export const externalEnterpriseProfiles: ExternalEnterpriseProfile[] = [
     cooperationCount: 2,
     firstCooperationAt: '2026-01',
   },
-  {
-    id: 'XE7004',
-    name: '拾光文创',
-    industry: '文化创意',
-    description: '城市文旅纪念品原创设计品牌，创始人已提交社区入驻申请，目前在合作过渡期。',
-    cooperationCount: 1,
-    firstCooperationAt: '2026-08',
-  },
 ]

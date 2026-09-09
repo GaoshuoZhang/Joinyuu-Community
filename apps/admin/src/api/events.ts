@@ -75,7 +75,8 @@ export async function fetchEvent(id: string): Promise<CommunityEvent> {
   simulateEnded()
   const event = events.find((e) => e.id === id)
   if (!event) throw new Error('活动不存在')
-  return event
+  /* 返回快照副本：修复详情页 load 后因引用不变导致表格不刷新的问题（M1 为真实 HTTP 序列化新对象） */
+  return { ...event, enrollments: event.enrollments.map((en) => ({ ...en })) }
 }
 
 /* TODO: 替换为 POST /api/admin/events/:id/enrollments/:userId/review，入参 { status: approved | rejected } */

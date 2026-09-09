@@ -33,7 +33,8 @@ export async function fetchSpace(id: string): Promise<Space> {
   await delay(300)
   const space = spaces.find((s) => s.id === id)
   if (!space) throw new Error('空间不存在')
-  return space
+  /* 返回快照副本：修复详情页 load 后因引用不变导致不刷新的问题（M1 为真实 HTTP 序列化新对象） */
+  return { ...space, equipment: [...space.equipment] }
 }
 
 export interface SpacePayload {
