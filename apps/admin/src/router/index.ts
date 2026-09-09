@@ -34,7 +34,7 @@ const router = createRouter({
         {
           path: 'individuals',
           component: () => import('@/views/individuals/IndividualListView.vue'),
-          meta: { title: '社区个人', group: '社区成员' },
+          meta: { title: '社区个体', group: '社区成员' },
         },
         {
           path: 'enterprises',
@@ -111,14 +111,29 @@ const router = createRouter({
           meta: { title: '订单管理', group: '积分管理' },
         },
         {
-          path: 'mall/rules',
-          component: () => import('@/views/mall/MallRulesPanel.vue'),
-          meta: { title: '积分规则', group: '积分管理' },
+          path: 'rules/ledger',
+          component: () => import('@/views/mall/MallLedgerPanel.vue'),
+          meta: { title: '积分发放记录', group: '规则管理' },
         },
         {
-          path: 'mall/ledger',
-          component: () => import('@/views/mall/MallLedgerPanel.vue'),
-          meta: { title: '积分账单', group: '积分管理' },
+          path: 'rules/experience-records',
+          component: () => import('@/views/rules/ExperienceRecordsPanel.vue'),
+          meta: { title: '经验值发放记录', group: '规则管理' },
+        },
+        {
+          path: 'rules/points',
+          component: () => import('@/views/mall/MallRulesPanel.vue'),
+          meta: { title: '积分规则', group: '规则管理' },
+        },
+        {
+          path: 'rules/experience',
+          component: () => import('@/views/rules/ExperienceRulesPanel.vue'),
+          meta: { title: '经验值规则', group: '规则管理' },
+        },
+        {
+          path: 'rules/levels',
+          component: () => import('@/views/rules/LevelTiersPanel.vue'),
+          meta: { title: '等级规则', group: '规则管理' },
         },
         {
           path: 'workstations',
@@ -153,7 +168,12 @@ const router = createRouter({
         {
           path: 'contents',
           component: () => import('@/views/contents/ContentsView.vue'),
-          meta: { title: '资讯内容', group: '运营设施' },
+          meta: { title: '资讯内容', group: '内容管理' },
+        },
+        {
+          path: 'contents/showcase',
+          component: () => import('@/views/contents/ShowcaseView.vue'),
+          meta: { title: '展示页发布', group: '内容管理' },
         },
       ],
     },

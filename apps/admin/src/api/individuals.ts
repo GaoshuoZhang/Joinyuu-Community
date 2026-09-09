@@ -10,7 +10,7 @@ export interface IndividualQuery {
 }
 
 /* TODO: 替换为 GET /api/admin/individuals?page&pageSize&keyword&status
- * 社区个人 = 持有 community_individual 身份的用户（该身份每人至多一个）
+ * 社区个体 = 持有 community_individual 身份的用户（该身份每人至多一个）
  */
 export async function fetchIndividuals(query: IndividualQuery): Promise<PageResult<User>> {
   await delay(400)

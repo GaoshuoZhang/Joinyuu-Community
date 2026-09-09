@@ -111,14 +111,12 @@ function scopeItems(identities: string[]): string[] {
 
     <template v-if="demand">
       <template v-if="phase === 'review'">
-        <t-alert theme="warning" title="只读审核" message="该需求为只读展示，不支持编辑；通过后转入「待发布」，由运营决定发布时间。" />
+        <t-alert theme="warning" title="只读审核" message="需求审核阶段不支持编辑；通过后转为「待发布」，由运营决定发布时间。" />
 
         <div class="review-title">{{ demand.title }}</div>
         <div class="review-meta">
           <span class="meta-item">编号：{{ demand.id }}</span>
           <span class="meta-item">类别：{{ demand.category || '—' }}</span>
-          <span class="meta-item">预算：{{ demand.budget || '—' }}</span>
-          <span class="meta-item">周期：{{ demand.period || '—' }}</span>
         </div>
 
         <t-descriptions :column="2" bordered class="review-desc">
@@ -126,23 +124,17 @@ function scopeItems(identities: string[]): string[] {
           <t-descriptions-item label="提交身份">
             <IdentityTags :identities="demand.publisherIdentity ? [demand.publisherIdentity] : []" />
           </t-descriptions-item>
+          <t-descriptions-item label="联系人">{{ demand.contactName ?? '—' }}</t-descriptions-item>
+          <t-descriptions-item label="联系电话">{{ demand.contactPhone ?? '—' }}</t-descriptions-item>
+          <t-descriptions-item label="联系邮箱">{{ demand.contactEmail ?? '—' }}</t-descriptions-item>
+          <t-descriptions-item label="预算">{{ demand.budget || '—' }}</t-descriptions-item>
+          <t-descriptions-item label="预期交付截止日">{{ demand.period || '—' }}</t-descriptions-item>
           <t-descriptions-item label="报名截止时间">{{ demand.deadline || '—' }}</t-descriptions-item>
           <t-descriptions-item label="创建时间">{{ demand.createdAt }}</t-descriptions-item>
-          <t-descriptions-item label="可见范围">
-            {{ scopeItems(demand.visibilityIdentities).join('、') || '身份不限' }}
-            <template v-if="demand.visibilityLevels.length"> · {{ levelItems(demand.visibilityLevels).join('/') }}</template>
-          </t-descriptions-item>
-          <t-descriptions-item label="可报名范围">
-            {{ scopeItems(demand.enrollmentIdentities).join('、') || '身份不限' }}
-            <template v-if="demand.enrollmentLevels.length"> · {{ levelItems(demand.enrollmentLevels).join('/') }}</template>
-          </t-descriptions-item>
         </t-descriptions>
 
         <h4 class="block-title">需求内容</h4>
         <p class="desc-text">{{ demand.description || '—' }}</p>
-        <div v-if="demand.tags.length" class="tags-row">
-          <t-tag v-for="tag in demand.tags" :key="tag" variant="outline" size="small">{{ tag }}</t-tag>
-        </div>
       </template>
 
       <template v-else>

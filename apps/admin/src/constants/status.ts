@@ -35,9 +35,9 @@ export const statusMap = {
     closed: { label: '已关闭', theme: 'default' },
   },
   project: {
-    recruiting: { label: '招募中', theme: 'primary' },
     running: { label: '进行中', theme: 'success' },
     paused: { label: '已暂停', theme: 'warning' },
+    closed: { label: '已关闭', theme: 'danger' },
     finished: { label: '已结项', theme: 'default' },
   },
   event: {

@@ -4,9 +4,9 @@ import type { User } from '@/types'
  * 身份模型：identities 数组，一人多身份
  *   - individual 个人用户：注册默认身份，人手一份，关联其他身份时保留（积分挂靠此身份）
  *   - community_enterprise 社区企业：可多个，关联入驻企业，持有经验等级（level 1-5）
- *   - community_individual 社区个人：至多一个，持有经验等级（level 1-5）
+ *   - community_individual 社区个体：至多一个，持有经验等级（level 1-5）
  *   - external_enterprise 外部企业：可多个，自由填写企业名
- * 经验值：仅社区个人/社区企业身份持有，通过参加活动、承接项目累积升级
+ * 经验值：仅社区个体/社区企业身份持有，通过参加活动、承接项目累积升级
  * 积分：挂靠个人用户身份，通过参加活动、承接项目获取，可在积分商城兑换 */
 export const users: User[] = [
   {

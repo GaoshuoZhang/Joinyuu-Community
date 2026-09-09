@@ -5,7 +5,7 @@ import { AddIcon, RefreshIcon, SearchIcon } from 'tdesign-icons-vue-next'
 import PageHeader from '@/components/PageHeader.vue'
 import StatusTag from '@/components/StatusTag.vue'
 import ProjectFormDialog from '@/components/ProjectFormDialog.vue'
-import { fetchProjects } from '@/api/projects'
+import { fetchProjects, pauseProject, resumeProject, closeProject } from '@/api/projects'
 import { fetchEnterprise } from '@/api/enterprises'
 import { fetchExternalEnterprise } from '@/api/external-enterprises'
 import { fetchUser } from '@/api/users'
@@ -14,6 +14,8 @@ import type { Project } from '@/types'
 const route = useRoute()
 const router = useRouter()
 const loading = ref(false)
+/* 当前执行中的行操作标识：`${id}:pause | resume | close` */
+const acting = ref('')
 const list = ref<Project[]>([])
 const total = ref(0)
 /* 用户详情「数据概览」跳转带入的参与人筛选 */
@@ -36,9 +38,9 @@ const sortOrder = ref<'ascend' | 'descend'>('descend')
 
 const statusOptions = [
   { label: '全部', value: '' },
-  { label: '招募中', value: 'recruiting' },
   { label: '进行中', value: 'running' },
   { label: '已暂停', value: 'paused' },
+  { label: '已关闭', value: 'closed' },
   { label: '已结项', value: 'finished' },
 ]
 
@@ -57,7 +59,7 @@ const columns = [
   { colKey: 'progress', title: '进度', cell: 'progress', width: 150, resizable: true },
   { colKey: 'status', title: '状态', cell: 'status', width: 96, resizable: true },
   { colKey: 'duration', title: '起止时间', cell: 'duration', width: 190, resizable: true },
-  { colKey: 'op', title: '操作', cell: 'op', width: 72 },
+  { colKey: 'op', title: '操作', cell: 'op', width: 110 },
 ]
 
 const pagination = computed(() => ({
@@ -115,7 +117,82 @@ function onPageChange(p: { current: number; pageSize: number }) {
 }
 
 /* 创建项目 */
-const createVisible = ref(false)
+const formVisible = ref(false)
+const formMode = ref<'create' | 'edit'>('create')
+const formProject = ref<Project | null>(null)
+
+function openCreate() {
+  formMode.value = 'create'
+  formProject.value = null
+  formVisible.value = true
+}
+
+/* 编辑项目：除已结项外均可编辑（不改状态/编号） */
+function openEdit(row: Project) {
+  formMode.value = 'edit'
+  formProject.value = row
+  formVisible.value = true
+}
+
+/* 已关闭 → 重新创建（以该项目为模板预填，保存为新项目） */
+function openRecreate(row: Project) {
+  formMode.value = 'create'
+  formProject.value = row
+  formVisible.value = true
+}
+
+async function onStatusChange(row: Project, action: 'pause' | 'resume') {
+  acting.value = row.id + ':' + action
+  try {
+    if (action === 'pause') {
+      await pauseProject(row.id)
+      MessagePlugin.success('项目已暂停')
+    } else {
+      await resumeProject(row.id)
+      MessagePlugin.success('项目已恢复进行中')
+    }
+    await load()
+  } catch (e) {
+    console.error('[status-change]', e)
+    MessagePlugin.error(e instanceof Error ? e.message : '操作失败')
+  } finally {
+    acting.value = ''
+  }
+}
+
+/* 关闭弹窗：关闭原因必填 */
+const closeVisible = ref(false)
+const closeTarget = ref<Project | null>(null)
+const closeSaving = ref(false)
+const closeFormRef = ref()
+const closeForm = reactive({ reason: '' })
+const closeRules: FormProps['rules'] = {
+  reason: [{ required: true, message: '请填写关闭原因', trigger: 'submit' }],
+}
+
+function openCloseDialog(row: Project) {
+  closeTarget.value = row
+  closeForm.reason = ''
+  closeVisible.value = true
+  nextTick(() => closeFormRef.value?.clearValidate())
+}
+
+async function onConfirmClose() {
+  if (!closeTarget.value) return
+  const valid = await closeFormRef.value.validate()
+  if (valid !== true) return
+  closeSaving.value = true
+  try {
+    await closeProject(closeTarget.value.id, closeForm.reason)
+    MessagePlugin.success('项目已关闭')
+    closeVisible.value = false
+    await load()
+  } catch (e) {
+    MessagePlugin.error(e instanceof Error ? e.message : '操作失败')
+  } finally {
+    closeSaving.value = false
+  }
+}
 
 function goDetail(row: Project) {
   router.push(`/projects/${row.id}`)
@@ -189,7 +266,7 @@ onMounted(() => {
   <div class="project-list page-fade-in">
     <PageHeader title="项目管理" description="跨企业协作项目的创建、承接方与进度管理">
       <template #actions>
-        <t-button theme="primary" @click="createVisible = true">
+        <t-button theme="primary" @click="openCreate">
           <template #icon><AddIcon /></template>
           创建项目
         </t-button>
@@ -278,11 +355,50 @@ onMounted(() => {
           <t-progress :percentage="row.progress" />
         </template>
         <template #status="{ row }">
-          <StatusTag entity="project" :value="row.status" />
+          <t-tooltip
+            v-if="row.status === 'closed' && row.closeReason"
+            :content="'关闭原因：' + row.closeReason"
+          >
+            <t-tooltip
+            v-if="row.status === 'closed' && row.closeReason"
+            :content="'关闭原因：' + row.closeReason"
+          >
+            <StatusTag entity="project" :value="row.status" />
+          </t-tooltip>
+          <StatusTag v-else entity="project" :value="row.status" />
+          </t-tooltip>
+          <StatusTag v-else entity="project" :value="row.status" />
         </template>
         <template #duration="{ row }">{{ row.startDate }} ~ {{ row.endDate }}</template>
         <template #op="{ row }">
-          <t-button variant="text" @click.stop="goDetail(row)">详情</t-button>
+          <div class="op-cell" @click.stop>
+            <t-button v-if="row.status !== 'finished'" variant="text" size="small" @click="openEdit(row)">编辑</t-button>
+            <template v-if="row.status === 'running'">
+              <t-button
+                variant="text"
+                size="small"
+                theme="warning"
+                :loading="acting === row.id + ':pause'"
+                @click="onStatusChange(row, 'pause')"
+              >
+                暂停
+              </t-button>
+            </template>
+            <template v-if="row.status === 'paused'">
+              <t-button
+                variant="text"
+                size="small"
+                theme="primary"
+                :loading="acting === row.id + ':resume'"
+                @click="onStatusChange(row, 'resume')"
+              >
+                恢复
+              </t-button>
+              <t-button variant="text" size="small" theme="danger" @click="openCloseDialog(row)">关闭</t-button>
+            </template>
+            <t-button v-if="row.status === 'closed'" variant="text" size="small" theme="primary" @click="openRecreate(row)">重新创建</t-button>
+            <t-button variant="text" size="small" @click="goDetail(row)">详情</t-button>
+          </div>
         </template>
         <template #empty>
           <t-empty description="暂无项目数据" />
@@ -291,7 +407,36 @@ onMounted(() => {
     </div>
 
     <!-- 创建项目弹窗 -->
-    <ProjectFormDialog v-model:visible="createVisible" :demand="null" @success="load" />
+    <ProjectFormDialog
+      v-model:visible="formVisible"
+      :mode="formMode"
+      :demand="null"
+      :project="formProject"
+      @success="load"
+    />
+    <!-- 关闭弹窗：关闭原因必填 -->
+    <t-dialog
+      :visible="closeVisible"
+      :header="closeTarget ? `关闭项目 · ${closeTarget.name}` : '关闭项目'"
+      width="460px"
+      @close="closeVisible = false"
+    >
+      <template #footer>
+        <div class="dialog-footer">
+          <t-button variant="text" theme="default" @click="closeVisible = false">取消</t-button>
+          <t-button theme="danger" :loading="closeSaving" @click="onConfirmClose">确认关闭</t-button>
+        </div>
+      </template>
+      <t-form ref="closeFormRef" :data="closeForm" :rules="closeRules" label-align="top">
+        <t-form-item label="关闭原因" name="reason">
+          <t-textarea
+            v-model="closeForm.reason"
+            :autosize="{ minRows: 3, maxRows: 5 }"
+            placeholder="请填写关闭原因（必填），将记录在项目信息中"
+          />
+        </t-form-item>
+      </t-form>
+    </t-dialog>
   </div>
 </template>
 
@@ -317,5 +462,10 @@ onMounted(() => {
 .ent-more {
   font-size: 12px;
   color: var(--td-text-color-secondary);
+}
+.dialog-footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
 }
 </style>

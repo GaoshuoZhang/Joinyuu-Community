@@ -191,53 +191,31 @@ export async function cancelRedemptionOrder(id: string): Promise<{ code: number 
 
 /* ---------- 积分规则 ---------- */
 
-/* TODO: 替换为 GET /api/admin/mall/points-rules — 积分规则列表（按规则 ID 升序） */
+/* TODO: 替换为 GET /api/admin/mall/points-rules — 积分规则列表（触发项写死，按 code 排序） */
 export async function fetchPointsRules(): Promise<PointsRule[]> {
   await delay(300)
-  return [...pointsRules].sort((a, b) => a.id.localeCompare(b.id))
+  return [...pointsRules].sort((a, b) => a.code.localeCompare(b.code))
 }
 
-export interface RulePayload {
-  name: string
-  scene: string
-  points: number
-  description?: string
-}
-
-/* TODO: 替换为 POST /api/admin/mall/points-rules — 创建积分规则（创建即启用） */
-export async function createPointsRule(payload: RulePayload): Promise<PointsRule> {
-  await delay(450)
-  const maxNum = pointsRules.reduce((m, r) => Math.max(m, Number(r.id.replace('R', ''))), 0)
-  const rule: PointsRule = {
-    id: `R${String(maxNum + 1).padStart(2, '0')}`,
-    name: payload.name,
-    scene: payload.scene,
-    points: payload.points,
-    status: 'enabled',
-    description: payload.description,
-    updatedAt: formatNow(),
-  }
-  pointsRules.push(rule)
-  return rule
-}
-
-/* TODO: 替换为 PUT /api/admin/mall/points-rules/:id — 编辑积分规则 */
-export async function updatePointsRule(id: string, payload: RulePayload): Promise<{ code: number }> {
+/* TODO: 替换为 PUT /api/admin/mall/points-rules/:code — 编辑积分值（触发项/方向/名称写死不可改） */
+export async function updatePointsRule(
+  code: string,
+  payload: { points: number },
+): Promise<{ code: number }> {
   await delay(400)
-  const rule = pointsRules.find((r) => r.id === id)
+  const rule = pointsRules.find((r) => r.code === code)
   if (!rule) throw new Error('积分规则不存在')
-  rule.name = payload.name
-  rule.scene = payload.scene
+  if (!Number.isInteger(payload.points) || payload.points <= 0)
+    throw new Error('积分值必须为正整数')
   rule.points = payload.points
-  rule.description = payload.description
   rule.updatedAt = formatNow()
   return { code: 0 }
 }
 
-/* TODO: 替换为 POST /api/admin/mall/points-rules/:id/toggle-status — 启用/停用规则 */
-export async function togglePointsRuleStatus(id: string): Promise<{ code: number }> {
+/* TODO: 替换为 POST /api/admin/mall/points-rules/:code/toggle-status — 启用/停用规则 */
+export async function togglePointsRuleStatus(code: string): Promise<{ code: number }> {
   await delay(350)
-  const rule = pointsRules.find((r) => r.id === id)
+  const rule = pointsRules.find((r) => r.code === code)
   if (!rule) throw new Error('积分规则不存在')
   rule.status = rule.status === 'enabled' ? 'disabled' : 'enabled'
   rule.updatedAt = formatNow()
@@ -246,8 +224,11 @@ export async function togglePointsRuleStatus(id: string): Promise<{ code: number
 
 /* ---------- 积分流水（商城侧全量视图） ---------- */
 
-/* TODO: 替换为 GET /api/admin/mall/points-records — 全量积分流水（最新在前），与用户详情积分流水同源 */
-export async function fetchMallPointsRecords(): Promise<PointsRecord[]> {
+/* TODO: 替换为 GET /api/admin/mall/points-issuance — 积分发放记录（仅规则自动发放，最新在前）；
+ * 手动调整/兑换扣减不属于发放记录（分别见用户详情积分流水与订单） */
+export async function fetchPointsIssuanceRecords(): Promise<PointsRecord[]> {
   await delay(300)
-  return [...pointsRecords].sort((a, b) => b.at.localeCompare(a.at))
+  return pointsRecords
+    .filter((r) => r.source === 'rule')
+    .sort((a, b) => b.at.localeCompare(a.at))
 }

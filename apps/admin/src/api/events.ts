@@ -155,6 +155,16 @@ export async function toggleEventEnrollment(id: string): Promise<{ code: number 
 }
 
 /* TODO: 替换为 POST /api/admin/events/:id/cancel — 取消活动（待发布/已发布 → 已取消） */
+/* TODO: 替换为 POST /api/admin/events/:id/restore — 已取消活动转为待发布 */
+export async function restoreCancelledEvent(id: string): Promise<{ code: number }> {
+  await delay(400)
+  const event = events.find((x) => x.id === id)
+  if (!event) throw new Error('活动不存在')
+  if (event.status !== 'cancelled') throw new Error('仅已取消的活动可转为待发布')
+  event.status = 'pending_release'
+  return { code: 0 }
+}
+
 export async function cancelEvent(id: string): Promise<{ code: number }> {
   await delay(350)
   const event = events.find((e) => e.id === id)
@@ -184,6 +194,10 @@ export interface EventPayload {
   requireReview: boolean
   /** 报名截止时间（空 = 不限，活动开始前均可报名） */
   enrollmentDeadline?: string
+  /** 自定义报名奖励积分（缺省 = 按积分规则发放） */
+  enrollPoints?: number
+  /** 自定义签到奖励积分（缺省 = 按积分规则发放） */
+  checkinPoints?: number
 }
 
 /* TODO: 替换为 POST /api/admin/events — 创建活动（无定时发布选项，创建即进入待发布） */
@@ -208,6 +222,8 @@ export async function createEvent(payload: EventPayload): Promise<CommunityEvent
     enrollmentLevels: payload.enrollmentLevels,
     requireReview: payload.requireReview,
     enrollmentDeadline: payload.enrollmentDeadline ?? '',
+    enrollPoints: payload.enrollPoints,
+    checkinPoints: payload.checkinPoints,
     description: payload.description,
     tags: payload.tags,
     enrollments: [],
@@ -232,6 +248,8 @@ export async function updateEvent(id: string, payload: EventPayload): Promise<{ 
   event.host = payload.host
   event.description = payload.description
   event.tags = payload.tags
+  event.enrollPoints = payload.enrollPoints
+  event.checkinPoints = payload.checkinPoints
   event.visibilityIdentities = payload.visibilityIdentities as CommunityEvent['visibilityIdentities']
   event.visibilityLevels = payload.visibilityLevels
   event.enrollmentIdentities = payload.enrollmentIdentities as CommunityEvent['enrollmentIdentities']

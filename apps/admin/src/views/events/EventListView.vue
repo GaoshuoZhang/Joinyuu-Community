@@ -6,8 +6,9 @@ import { AddIcon, RefreshIcon, SearchIcon } from 'tdesign-icons-vue-next'
 import PageHeader from '@/components/PageHeader.vue'
 import StatusTag from '@/components/StatusTag.vue'
 import EventFormDialog from '@/components/EventFormDialog.vue'
+import { fetchPointsRules } from '@/api/mall'
 import EventScheduleDialog from '@/components/EventScheduleDialog.vue'
-import { cancelEvent, cancelEventSchedule, fetchEvents, publishEventNow, toggleEventEnrollment } from '@/api/events'
+import { cancelEvent, cancelEventSchedule, fetchEvents, publishEventNow, toggleEventEnrollment, restoreCancelledEvent } from '@/api/events'
 import { fetchUser } from '@/api/users'
 import type { CommunityEvent } from '@/types'
 
@@ -74,8 +75,8 @@ const columns = computed(() => [
     sortType: 'all',
   },
   { colKey: 'location', title: '地点', ellipsis: true, width: 130, resizable: true },
-  { colKey: 'enrolled', title: '报名', cell: 'enrolled', width: 88, resizable: true },
-  { colKey: 'checked', title: '签到', cell: 'checked', width: 88, resizable: true },
+  { colKey: 'enrolled', title: '报名', cell: 'enrolled', width: 108, resizable: true },
+  { colKey: 'checked', title: '签到', cell: 'checked', width: 108, resizable: true },
   { colKey: 'status', title: '状态', cell: 'status', width: 150, resizable: true },
   { colKey: 'op', title: '操作', cell: 'op', width: 230 },
 ])
@@ -141,6 +142,9 @@ function onRowClick({ row }: { row: CommunityEvent }) {
   goDetail(row)
 }
 
+/* 积分规则默认分值：活动未自定义时展示规则配置值 */
+const rulePoints = ref({ enroll: 5, checkin: 10 })
+
 function approvedCount(row: CommunityEvent) {
   return row.enrollments.filter((e) => e.status === 'approved').length
 }
@@ -149,8 +153,22 @@ function checkedCount(row: CommunityEvent) {
   return row.enrollments.filter((e) => e.checkedIn).length
 }
 
-function isActing(row: CommunityEvent, action: 'publish-now' | 'cancel' | 'cancel-schedule' | 'enrollment') {
+function isActing(row: CommunityEvent, action: 'publish-now' | 'cancel' | 'cancel-schedule' | 'enrollment' | 'restore') {
   return acting.value === `${row.id}:${action}`
+}
+
+/* 已取消 → 转为待发布 */
+async function onRestore(row: CommunityEvent) {
+  acting.value = `${row.id}:restore`
+  try {
+    await restoreCancelledEvent(row.id)
+    MessagePlugin.success('活动已转为待发布')
+    await load()
+  } catch (e) {
+    MessagePlugin.error(e instanceof Error ? e.message : '操作失败')
+  } finally {
+    acting.value = ''
+  }
 }
 
 /* 待发布 → 立即发布（开放报名） */
@@ -347,8 +365,32 @@ onMounted(() => {
           <t-tag variant="light">{{ row.type }}</t-tag>
         </template>
         <template #createdAt="{ row }">{{ row.createdAt ?? '—' }}</template>
-        <template #enrolled="{ row }">{{ approvedCount(row) }}/{{ row.capacity }}</template>
-        <template #checked="{ row }">{{ checkedCount(row) }}/{{ approvedCount(row) }}</template>
+        <template #enrolled="{ row }">
+          <div class="stack-cell">
+            <span>{{ approvedCount(row) }}/{{ row.capacity }}</span>
+            <t-tag
+              :theme="row.enrollPoints != null ? 'warning' : 'success'"
+              variant="light"
+              size="small"
+              class="pts-tag"
+            >
+              {{ row.enrollPoints ?? rulePoints.enroll }}积分
+            </t-tag>
+          </div>
+        </template>
+        <template #checked="{ row }">
+          <div class="stack-cell">
+            <span>{{ checkedCount(row) }}/{{ approvedCount(row) }}</span>
+            <t-tag
+              :theme="row.checkinPoints != null ? 'warning' : 'success'"
+              variant="light"
+              size="small"
+              class="pts-tag"
+            >
+              {{ row.checkinPoints ?? rulePoints.checkin }}积分
+            </t-tag>
+          </div>
+        </template>
         <template #status="{ row }">
           <StatusTag entity="event" :value="row.status" :scheduled-at="row.scheduledAt" :enrollment-open="row.enrollmentOpen" />
         </template>
@@ -368,6 +410,17 @@ onMounted(() => {
               </t-popconfirm>
             </template>
 
+            <!-- 已取消：转为待发布 -->
+            <t-popconfirm
+              v-if="row.status === 'cancelled'"
+              content="确认将该活动转为「待发布」？"
+              @confirm="onRestore(row)"
+            >
+              <t-button variant="text" size="small" theme="primary" :loading="isActing(row, 'restore')">
+                转为待发布
+              </t-button>
+            </t-popconfirm>
+
             <!-- 定时发布中：取消定时发布（状态标签直接显示定时发布时间） -->
             <t-popconfirm
               v-if="row.status === 'scheduled'"
@@ -379,8 +432,9 @@ onMounted(() => {
               </t-button>
             </t-popconfirm>
 
-            <!-- 已发布：暂停报名 / 开放报名、取消活动 -->
+            <!-- 已发布：编辑 / 暂停报名 / 开放报名、取消活动 -->
             <template v-if="row.status === 'published'">
+              <t-button variant="text" size="small" @click="openEdit(row)">编辑</t-button>
               <t-button
                 variant="text"
                 size="small"
@@ -426,5 +480,15 @@ onMounted(() => {
   align-items: center;
   gap: 4px;
   flex-wrap: nowrap;
+}
+.stack-cell {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 3px;
+}
+
+.pts-tag {
+  font-size: 11px;
 }
 </style>

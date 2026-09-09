@@ -19,7 +19,7 @@ export async function fetchExperienceRecords(
     .sort((a, b) => b.at.localeCompare(a.at))
 }
 
-/* TODO: 替换为 POST /api/admin/experience-records — 为社区企业/社区个人增减经验值，入参 { delta, reason }
+/* TODO: 替换为 POST /api/admin/experience-records — 为社区企业/社区个体增减经验值，入参 { delta, reason }
  * delta 正=增加、负=扣减；余额不足扣减时报错 */
 export async function adjustExperience(
   targetType: 'enterprise' | 'individual',
@@ -39,7 +39,7 @@ export async function adjustExperience(
   } else {
     const user = users.find((u) => u.uid === targetId)
     const identity = user?.identities.find((i) => i.type === 'community_individual')
-    if (!user || !identity) throw new Error('该用户的社区个人身份不存在')
+    if (!user || !identity) throw new Error('该用户的社区个体身份不存在')
     balance = (identity.experience ?? 0) + delta
     if (balance < 0) throw new Error('扣减后经验值不能为负')
     identity.experience = balance
@@ -54,6 +54,7 @@ export async function adjustExperience(
     reason,
     at: formatNow(),
     operator: '社区管理员',
+    source: 'manual',
   })
   return { code: 0, balance }
 }
@@ -87,6 +88,7 @@ export async function adjustPoints(
     reason,
     at: formatNow(),
     operator: '社区管理员',
+    source: 'manual',
   })
   return { code: 0, balance }
 }

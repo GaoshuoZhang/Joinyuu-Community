@@ -24,14 +24,14 @@ const activeTab = ref('identities')
 const headerIdentities = computed(() => user.value?.identities.filter((i) => i.type !== 'individual') ?? [])
 
 function identityName(identity: UserIdentity): string {
-  if (identity.type === 'community_individual') return '社区个人'
+  if (identity.type === 'community_individual') return '社区个体'
   return identity.enterpriseName ?? '—'
 }
 
 /* 个人用户为注册默认身份，身份信息中不单独展示 */
 const displayIdentities = computed(() => user.value?.identities.filter((i) => i.type !== 'individual') ?? [])
 
-/* 社区个人身份（至多一个）；经验值选项卡仅对持有该身份的用户展示 */
+/* 社区个体身份（至多一个）；经验值选项卡仅对持有该身份的用户展示 */
 const communityIndividualIdentity = computed(() =>
   user.value?.identities.find((i) => i.type === 'community_individual'),
 )
@@ -225,7 +225,7 @@ onMounted(async () => {
                   <span class="identity-name">{{ identityName(identity) }}</span>
                   <div class="identity-card-tags">
                     <t-tag v-if="identity.type === 'community_individual'" variant="light" size="small">
-                      {{ identity.level ? `${identity.level} 级` : '社区个人' }}
+                      {{ identity.level ? `${identity.level} 级` : '社区个体' }}
                     </t-tag>
                     <template v-else>
                       <t-tag variant="outline" size="small">{{ identityTypeMap[identity.type] }}</t-tag>
@@ -275,12 +275,12 @@ onMounted(async () => {
             </div>
           </t-tab-panel>
 
-          <!-- 经验值：仅持有社区个人身份的用户展示 -->
+          <!-- 经验值：仅持有社区个体身份的用户展示 -->
           <t-tab-panel v-if="communityIndividualIdentity" value="experience" label="经验值">
             <div class="tab-body">
               <div class="exp-head">
                 <div class="exp-balance">
-                  <span class="exp-label">社区个人 · 当前经验值</span>
+                  <span class="exp-label">社区个体 · 当前经验值</span>
                   <span class="exp-num">{{ communityIndividualIdentity.experience ?? 0 }}</span>
                   <t-tag v-if="communityIndividualIdentity.level" variant="light" size="small">
                     {{ communityIndividualIdentity.level }} 级
@@ -341,11 +341,11 @@ onMounted(async () => {
       </div>
     </template>
 
-    <!-- 经验值调整（社区个人） -->
+    <!-- 经验值调整（社区个体） -->
     <AdjustValueDialog
       v-model:visible="expAdjustVisible"
       :header="`调整经验值 · ${user?.name ?? ''}`"
-      balance-label="当前经验值（社区个人）"
+      balance-label="当前经验值（社区个体）"
       :balance="communityIndividualIdentity?.experience ?? 0"
       :loading="expAdjusting"
       @submit="onAdjustExperience"

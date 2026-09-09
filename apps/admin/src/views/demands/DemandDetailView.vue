@@ -138,6 +138,17 @@ async function onCloseDemand() {
 /* 立项 */
 const projectVisible = ref(false)
 
+/* 提交人跳转：个人/社区个体 → 用户详情；社区企业 → 入驻企业详情；外部企业 → 外部企业详情；自定义不跳 */
+function publisherLinkTarget(d: Demand): string | null {
+  if (d.publisherId.startsWith('U')) return '/users/' + d.publisherId
+  if (d.publisherId.startsWith('XE')) return '/external-enterprises/' + d.publisherId
+  if (d.publisherId.startsWith('E')) return '/enterprises/' + d.publisherId
+  return null
+}
+function goPublisher(d: Demand) {
+  const to = publisherLinkTarget(d)
+  if (to) router.push(to)
+}
 function goProject() {
   if (demand.value?.projectId) router.push(`/projects/${demand.value.projectId}`)
 }
@@ -239,13 +250,22 @@ onMounted(load)
         <t-descriptions :column="2" bordered class="head-desc">
           <t-descriptions-item label="编号">{{ demand.id }}</t-descriptions-item>
           <t-descriptions-item label="提交人">
-            {{ demand.publisherName }}（{{ demand.publisherId }}）
+            <span
+              class="publisher-link"
+              :class="{ clickable: publisherLinkTarget(demand) }"
+              @click="goPublisher(demand)"
+            >
+              {{ demand.publisherName }}（{{ demand.publisherId }}）
+            </span>
           </t-descriptions-item>
           <t-descriptions-item label="提交身份">
             <IdentityTags :identities="demand.publisherIdentity ? [demand.publisherIdentity] : []" />
           </t-descriptions-item>
+          <t-descriptions-item label="联系人">{{ demand.contactName ?? '—' }}</t-descriptions-item>
+          <t-descriptions-item label="联系电话">{{ demand.contactPhone ?? '—' }}</t-descriptions-item>
+          <t-descriptions-item label="联系邮箱">{{ demand.contactEmail ?? '—' }}</t-descriptions-item>
           <t-descriptions-item label="预算">{{ demand.budget }}</t-descriptions-item>
-          <t-descriptions-item label="项目周期">{{ demand.period }}</t-descriptions-item>
+          <t-descriptions-item label="预期交付截止日">{{ demand.period }}</t-descriptions-item>
           <t-descriptions-item label="报名截止时间">{{ demand.deadline }}</t-descriptions-item>
           <t-descriptions-item v-if="demand.status === 'scheduled' && demand.scheduledAt" label="定时发布时间">
             {{ demand.scheduledAt }}（到点自动发布）
@@ -418,5 +438,13 @@ onMounted(load)
   gap: 8px;
   flex-wrap: wrap;
   margin-top: 16px;
+}
+.publisher-link.clickable {
+  cursor: pointer;
+  color: var(--td-brand-color);
+}
+
+.publisher-link.clickable:hover {
+  text-decoration: underline;
 }
 </style>

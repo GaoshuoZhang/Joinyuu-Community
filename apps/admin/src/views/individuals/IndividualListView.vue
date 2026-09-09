@@ -28,7 +28,7 @@ const statusOptions = [
 
 const columns = [
   { colKey: 'user', title: '成员', cell: 'user', width: 190 },
-  { colKey: 'title', title: '社区个人头衔', cell: 'title', width: 200 },
+  { colKey: 'title', title: '社区个体头衔', cell: 'title', width: 200 },
   { colKey: 'level', title: '经验等级', cell: 'level', width: 90 },
   { colKey: 'others', title: '其他关联身份', cell: 'others' },
   { colKey: 'points', title: '积分', width: 85 },
@@ -96,7 +96,7 @@ onMounted(load)
 
 <template>
   <div class="individual-list page-fade-in">
-    <PageHeader title="社区个人" description="持有社区个人身份的成员（该身份每人至多一个）" />
+    <PageHeader title="社区个体" description="持有社区个体身份的成员（该身份每人至多一个）" />
 
     <div class="page-filter-bar">
       <t-input
@@ -134,7 +134,7 @@ onMounted(load)
         :columns="columns"
         :loading="loading"
         :pagination="pagination"
-        empty="暂无符合条件的社区个人"
+        empty="暂无符合条件的社区个体"
         @page-change="onPageChange"
         @row-click="({ row }) => goDetail(row)"
       >

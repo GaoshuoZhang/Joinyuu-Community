@@ -9,7 +9,7 @@ const props = defineProps<{
 
 function tagText(identity: UserIdentity): string {
   if (identity.type === 'individual') return '个人用户'
-  if (identity.type === 'community_individual') return `社区个人·${identity.title}`
+  if (identity.type === 'community_individual') return `社区个体·${identity.title}`
   return `${identity.enterpriseName}·${identity.title}`
 }
 

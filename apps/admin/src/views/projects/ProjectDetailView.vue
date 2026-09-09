@@ -21,7 +21,25 @@ const milestoneTagMap: Record<Milestone['status'], { label: string; theme: 'succ
 
 const undertakerTypeMap: Record<ProjectUndertaker['type'], string> = {
   enterprise: '社区企业',
-  individual: '社区个人',
+  individual: '社区个体',
+  custom: '自定义',
+}
+
+/* 承接方卡片跳转：社区企业 → 入驻企业详情；外部企业（XE 前缀）→ 外部企业详情；用户 → 用户详情；自定义不跳转 */
+function canGoUndertaker(u: ProjectUndertaker): boolean {
+  if (u.type === 'custom') return false
+  return !!u.id
+}
+
+function goUndertaker(u: ProjectUndertaker) {
+  if (u.type === 'custom' || !u.id) return
+  if (u.id.startsWith('XE')) {
+    router.push(`/external-enterprises/${u.id}`)
+  } else if (u.type === 'enterprise') {
+    router.push(`/enterprises/${u.id}`)
+  } else {
+    router.push(`/users/${u.id}`)
+  }
 }
 
 async function load() {
@@ -36,6 +54,18 @@ async function load() {
 }
 
 /* current：有 active 节点取其索引，否则取 done 数量（下一待办节点） */
+/* 起止日期：项目字段缺省时取固定里程碑「项目立项 / 预期交付」的日期 */
+const displayStartDate = computed(() => {
+  if (project.value?.startDate) return project.value.startDate
+  const first = project.value?.milestones.find((m) => m.name === '项目立项')
+  return first?.date || '—'
+})
+const displayEndDate = computed(() => {
+  if (project.value?.endDate) return project.value.endDate
+  const last = project.value?.milestones.find((m) => m.name === '预期交付')
+  return last?.date || '—'
+})
+
 const milestoneCurrent = computed(() => {
   const ms = project.value?.milestones ?? []
   const activeIndex = ms.findIndex((m) => m.status === 'active')
@@ -75,8 +105,8 @@ onMounted(load)
         </div>
         <t-descriptions :column="3" bordered>
           <t-descriptions-item label="立项日期">{{ project.initiatedAt }}</t-descriptions-item>
-          <t-descriptions-item label="开始日期">{{ project.startDate }}</t-descriptions-item>
-          <t-descriptions-item label="结束日期">{{ project.endDate }}</t-descriptions-item>
+          <t-descriptions-item label="开始日期">{{ displayStartDate }}</t-descriptions-item>
+          <t-descriptions-item label="结束日期">{{ displayEndDate }}</t-descriptions-item>
           <t-descriptions-item label="成员数">{{ project.memberCount }} 人</t-descriptions-item>
           <t-descriptions-item label="当前进度">
             <t-progress :percentage="project.progress" />
@@ -98,7 +128,13 @@ onMounted(load)
               <div class="block">
                 <h4 class="block-title">承接方与占比</h4>
                 <div class="undertaker-list">
-                  <div v-for="u in project.undertakers" :key="u.id + u.type" class="undertaker-row">
+                  <div
+                    v-for="u in project.undertakers"
+                    :key="u.id + u.type"
+                    class="undertaker-row"
+                    :class="{ clickable: canGoUndertaker(u) }"
+                    @click="goUndertaker(u)"
+                  >
                     <div class="ut-info">
                       <span class="ut-name">{{ u.name }}</span>
                       <t-tag variant="outline" size="small">{{ undertakerTypeMap[u.type] }}</t-tag>
@@ -141,6 +177,12 @@ onMounted(load)
                     <div v-if="m.owners?.length" class="ms-owners">
                       <t-tag v-for="owner in m.owners" :key="owner" variant="light" size="small">
                         {{ owner }}
+                      </t-tag>
+                    </div>
+                    <div v-else-if="project.undertakers?.length" class="ms-owners">
+                      <!-- owners 为空 = 全部承接方：按承接方逐一出标签，与显式责任方视觉一致 -->
+                      <t-tag v-for="ut in project.undertakers" :key="ut.id + ut.type" variant="light" size="small">
+                        {{ ut.name }}
                       </t-tag>
                     </div>
                     <span v-else class="ms-none">负责方待定</span>
@@ -210,6 +252,15 @@ onMounted(load)
 .undertaker-list {
   display: grid;
   gap: 8px;
+}
+
+.undertaker-row.clickable {
+  cursor: pointer;
+}
+
+.undertaker-row.clickable:hover {
+  background: var(--td-bg-color-container-hover);
+  border-radius: 6px;
 }
 
 .undertaker-row {

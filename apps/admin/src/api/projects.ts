@@ -96,38 +96,55 @@ function formatDate(): string {
   return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`
 }
 
-/* TODO: 替换为 POST /api/admin/projects/draft — 保存项目草稿（不校验必填，承接占比可为空） */
-export async function saveProjectDraft(payload: ProjectInitPayload): Promise<Project> {
-  await delay(300)
-  const maxNum = projects.reduce((m, p) => Math.max(m, Number(p.id.replace('P', ''))), 0)
-  const yearCount = projects.filter((p) => p.code.startsWith('JY-2026')).length + 1
-  const undertakers = payload.undertakers.map((u) => {
-    let name = u.id
-    try {
-      name = undertakerName(u.type, u.id)
-    } catch {
-      /* 草稿允许承接方信息不全 */
-    }
-    return { ...u, name }
-  })
-  const project: Project = {
-    id: `P${maxNum + 1}`,
-    code: `JY-2026-${String(yearCount).padStart(2, '0')}`,
-    name: payload.projectName,
-    undertakers,
-    status: 'recruiting',
-    progress: 0,
-    startDate: payload.startDate,
-    endDate: payload.endDate,
-    initiatedAt: formatDate(),
-    description: payload.description,
-    milestones: payload.milestones
-      .filter((m) => m.name.trim())
-      .map((m) => ({ name: m.name.trim(), status: 'todo' as const, date: m.date, owners: m.owners })),
-    memberCount: undertakers.length,
-  }
-  projects.push(project)
-  return project
+/* TODO: 替换为 PUT /api/admin/projects/:id — 编辑项目（不改状态/编号/已有里程碑完成态） */
+export async function updateProject(id: string, payload: ProjectInitPayload): Promise<{ code: number }> {
+  await delay(400)
+  const project = projects.find((x) => x.id === id)
+  if (!project) throw new Error('项目不存在')
+  const undertakers = payload.undertakers.map((u) => ({
+    ...u,
+    name: u.type === 'custom' ? u.name || u.id : undertakerName(u.type as 'enterprise' | 'individual', u.id),
+  }))
+  project.name = payload.projectName
+  project.undertakers = undertakers
+  project.memberCount = undertakers.length
+  if (payload.startDate != null) project.startDate = payload.startDate
+  if (payload.endDate != null) project.endDate = payload.endDate
+  project.description = payload.description
+  project.milestones = payload.milestones
+    .filter((m) => m.name.trim())
+    .map((m) => ({ name: m.name.trim(), status: 'todo' as const, date: m.date, owners: m.owners }))
+  return { code: 0 }
+}
+
+/* 项目状态流转（冻结，2026-09-09）：进行中 ↔ 已暂停；进行中/已暂停 → 已关闭；已关闭可重新创建（复制） */
+export async function pauseProject(id: string): Promise<{ code: number }> {
+  await delay(350)
+  const project = projects.find((x) => x.id === id)
+  if (!project) throw new Error('项目不存在')
+  if (project.status !== 'running') throw new Error('仅进行中的项目可暂停')
+  project.status = 'paused'
+  return { code: 0 }
+}
+
+export async function resumeProject(id: string): Promise<{ code: number }> {
+  await delay(350)
+  const project = projects.find((x) => x.id === id)
+  if (!project) throw new Error('项目不存在')
+  if (project.status !== 'paused') throw new Error('仅已暂停的项目可恢复')
+  project.status = 'running'
+  return { code: 0 }
+}
+
+export async function closeProject(id: string, reason: string): Promise<{ code: number }> {
+  await delay(350)
+  const project = projects.find((x) => x.id === id)
+  if (!project) throw new Error('项目不存在')
+  if (project.status !== 'paused') throw new Error('仅已暂停的项目可关闭')
+  if (!reason.trim()) throw new Error('请填写关闭原因')
+  project.status = 'closed'
+  project.closeReason = reason.trim()
+  return { code: 0 }
 }
 
 /* TODO: 替换为 POST /api/admin/projects — 直接创建项目（无来源需求）
@@ -137,7 +154,10 @@ export async function createProject(payload: ProjectInitPayload): Promise<Projec
   await delay(500)
   if (payload.undertakers.length === 0) throw new Error('请至少选择一个承接方')
 
-  const undertakers = payload.undertakers.map((u) => ({ ...u, name: undertakerName(u.type, u.id) }))
+  const undertakers = payload.undertakers.map((u) => ({
+    ...u,
+    name: u.type === 'custom' ? u.name || u.id : undertakerName(u.type as 'enterprise' | 'individual', u.id),
+  }))
   const shareSum = undertakers.reduce((s, u) => s + u.share, 0)
   if (shareSum !== 100) throw new Error('承接占比合计须为 100%')
 
@@ -150,14 +170,15 @@ export async function createProject(payload: ProjectInitPayload): Promise<Projec
     undertakers,
     status: 'running',
     progress: 0,
-    startDate: payload.startDate,
-    endDate: payload.endDate,
+    startDate: payload.startDate ?? '',
+    endDate: payload.endDate ?? '',
     initiatedAt: formatDate(),
     description: payload.description,
     milestones: payload.milestones
       .filter((m) => m.name.trim())
       .map((m) => ({ name: m.name.trim(), status: 'todo' as const, date: m.date, owners: m.owners })),
     memberCount: undertakers.length,
+    expReward: payload.expReward,
   }
   projects.push(project)
   return project

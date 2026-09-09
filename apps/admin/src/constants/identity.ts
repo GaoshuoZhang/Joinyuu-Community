@@ -4,7 +4,7 @@ import type { IdentityType } from '@/types'
 
 export const identityTypeMap: Record<IdentityType, string> = {
   individual: '个人用户',
-  community_individual: '社区个人',
+  community_individual: '社区个体',
   community_enterprise: '社区企业',
   external_enterprise: '外部企业',
 }
@@ -19,12 +19,12 @@ export const roleLabelMap: Record<'founder' | 'admin' | 'member', string> = {
 export const userCategoryOptions = [
   { label: '全部', value: '' },
   { label: '个人用户', value: 'individual' },
-  { label: '社区个人', value: 'community_individual' },
+  { label: '社区个体', value: 'community_individual' },
   { label: '社区企业', value: 'community_enterprise' },
   { label: '外部企业', value: 'external_enterprise' },
 ]
 
-/* 经验等级 1-5 级（仅社区个人/社区企业身份拥有经验值，参加活动、承接项目累积） */
+/* 经验等级 1-5 级（仅社区个体/社区企业身份拥有经验值，参加活动、承接项目累积） */
 export const userLevelMap: Record<string, string> = {
   '1': '1 级',
   '2': '2 级',
@@ -45,7 +45,7 @@ export const userLevelOptions = [
  * 个人用户与外部企业均无经验等级，故标注不受等级约束 */
 export const visibilityIdentityOptions = [
   { label: '个人用户（不受等级约束）', value: 'individual' },
-  { label: '社区个人', value: 'community_individual' },
+  { label: '社区个体', value: 'community_individual' },
   { label: '社区企业', value: 'community_enterprise' },
   { label: '外部企业（不受等级约束）', value: 'external_enterprise' },
 ]

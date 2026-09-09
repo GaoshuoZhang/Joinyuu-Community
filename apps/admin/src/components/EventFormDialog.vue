@@ -1,8 +1,9 @@
 <script setup lang="ts">
-import { nextTick, reactive, ref, watch } from 'vue'
+import { nextTick, onMounted, reactive, ref, watch } from 'vue'
 import { MessagePlugin } from 'tdesign-vue-next'
 import type { FormProps } from 'tdesign-vue-next'
 import { createEvent, updateEvent, type EventPayload } from '@/api/events'
+import { fetchPointsRules } from '@/api/mall'
 import { userLevelOptions, visibilityIdentityOptions } from '@/constants/identity'
 import type { CommunityEvent } from '@/types'
 
@@ -47,7 +48,42 @@ const form = reactive({
   enrollmentIdentities: [] as string[],
   enrollmentLevels: [] as string[],
   requireReview: 1,
+  customEnrollPoints: false,
+  enrollPoints: 5,
+  customCheckinPoints: false,
+  checkinPoints: 10,
 })
+
+/* 积分规则默认分值：报名奖励 / 签到奖励（关闭自定义时按此发放） */
+const rulePoints = reactive({ enroll: 5, checkin: 10 })
+
+/* 范围开关：可见范围/可报名范围（关=不限，提交空数组） */
+const customVisibility = ref(false)
+const customEnrollment = ref(false)
+
+onMounted(async () => {
+  try {
+    const rules = await fetchPointsRules()
+    rulePoints.enroll = rules.find((r) => r.code === 'activity_enroll_approved')?.points ?? 5
+    rulePoints.checkin = rules.find((r) => r.code === 'activity_checkin')?.points ?? 10
+  } catch {
+    /* 规则加载失败时保留默认值 */
+  }
+})
+
+/* 打开自定义开关时，输入框默认填入积分规则设定值 */
+watch(
+  () => form.customEnrollPoints,
+  (v) => {
+    if (v) form.enrollPoints = rulePoints.enroll
+  },
+)
+watch(
+  () => form.customCheckinPoints,
+  (v) => {
+    if (v) form.checkinPoints = rulePoints.checkin
+  },
+)
 
 watch(
   () => props.visible,
@@ -69,6 +105,12 @@ watch(
       form.enrollmentIdentities = [...props.event.enrollmentIdentities]
       form.enrollmentLevels = [...props.event.enrollmentLevels]
       form.requireReview = props.event.requireReview ? 1 : 0
+      form.customEnrollPoints = props.event.enrollPoints != null
+      form.enrollPoints = props.event.enrollPoints ?? rulePoints.enroll
+      form.customCheckinPoints = props.event.checkinPoints != null
+      form.checkinPoints = props.event.checkinPoints ?? rulePoints.checkin
+      customVisibility.value = props.event.visibilityIdentities.length > 0 || props.event.visibilityLevels.length > 0
+      customEnrollment.value = props.event.enrollmentIdentities.length > 0 || props.event.enrollmentLevels.length > 0
       tagsText.value = props.event.tags.join('，')
     } else {
       form.title = ''
@@ -86,6 +128,12 @@ watch(
       form.enrollmentIdentities = []
       form.enrollmentLevels = []
       form.requireReview = 1
+      form.customEnrollPoints = false
+      form.enrollPoints = rulePoints.enroll
+      form.customCheckinPoints = false
+      form.checkinPoints = rulePoints.checkin
+      customVisibility.value = false
+      customEnrollment.value = false
       tagsText.value = ''
     }
     /* 清除上次会话残留的校验红框（仅清状态，不动表单值） */
@@ -133,12 +181,14 @@ async function onConfirm() {
       host: form.host,
       description: form.description,
       tags: parseTags(),
-      visibilityIdentities: form.visibilityIdentities,
-      visibilityLevels: form.visibilityLevels,
-      enrollmentIdentities: form.enrollmentIdentities,
-      enrollmentLevels: form.enrollmentLevels,
+      visibilityIdentities: customVisibility.value ? form.visibilityIdentities : [],
+      visibilityLevels: customVisibility.value ? form.visibilityLevels : [],
+      enrollmentIdentities: customEnrollment.value ? form.enrollmentIdentities : [],
+      enrollmentLevels: customEnrollment.value ? form.enrollmentLevels : [],
       requireReview: form.requireReview === 1,
       enrollmentDeadline: form.enrollmentDeadline || undefined,
+      enrollPoints: form.customEnrollPoints ? form.enrollPoints : undefined,
+      checkinPoints: form.customCheckinPoints ? form.checkinPoints : undefined,
     }
     if (props.mode === 'create') {
       const event = await createEvent(payload)
@@ -234,10 +284,11 @@ function onClose() {
       </div>
 
       <div class="scope-head">
-        <span class="scope-title">可见范围</span>
-        <span class="scope-tip">决定哪些身份、等级的用户能看到该活动</span>
+        <span class="scope-title">自定义可见范围</span>
+        <t-switch v-model="customVisibility" />
       </div>
-      <div class="form-row">
+      <span class="scope-tip-block">默认关闭 = 所有身份、等级均可见；开启后可限定可见的身份与等级</span>
+      <div v-if="customVisibility" class="form-row">
         <t-form-item label="身份" name="visibilityIdentities">
           <t-select
             v-model="form.visibilityIdentities"
@@ -253,13 +304,14 @@ function onClose() {
       </div>
 
       <div class="scope-head">
-        <span class="scope-title">可报名范围</span>
+        <span class="scope-title">自定义可报名范围</span>
         <div class="scope-right">
-          <span class="scope-tip">默认与可见范围一致</span>
-          <t-button variant="text" size="small" @click="syncEnrollment">同步可见范围</t-button>
+          <t-switch v-model="customEnrollment" />
+          <t-button v-if="customEnrollment && customVisibility" variant="text" size="small" @click="syncEnrollment">同步可见范围</t-button>
         </div>
       </div>
-      <div class="form-row">
+      <span class="scope-tip-block">默认关闭 = 所有身份、等级均可报名；开启后可限定可报名的身份与等级</span>
+      <div v-if="customEnrollment" class="form-row">
         <t-form-item label="身份" name="enrollmentIdentities">
           <t-select
             v-model="form.enrollmentIdentities"
@@ -277,6 +329,27 @@ function onClose() {
       <t-form-item label="报名是否需审核" name="requireReview">
         <t-radio-group v-model="form.requireReview" :options="reviewOptions" />
       </t-form-item>
+
+      <div class="scope-head">
+        <span class="scope-title">积分奖励</span>
+        <span class="scope-tip">默认按「积分规则」配置发放（报名 {{ rulePoints.enroll }} / 签到 {{ rulePoints.checkin }}）；开启自定义后可按活动单独调整</span>
+      </div>
+      <div class="form-row">
+        <t-form-item label="自定义报名奖励积分" name="customEnrollPoints">
+          <t-switch v-model="form.customEnrollPoints" />
+        </t-form-item>
+        <t-form-item v-if="form.customEnrollPoints" label="报名奖励积分" name="enrollPoints">
+          <t-input-number v-model="form.enrollPoints" :min="0" theme="column" style="width: 100%" />
+        </t-form-item>
+      </div>
+      <div class="form-row">
+        <t-form-item label="自定义签到奖励积分" name="customCheckinPoints">
+          <t-switch v-model="form.customCheckinPoints" />
+        </t-form-item>
+        <t-form-item v-if="form.customCheckinPoints" label="签到奖励积分" name="checkinPoints">
+          <t-input-number v-model="form.checkinPoints" :min="0" theme="column" style="width: 100%" />
+        </t-form-item>
+      </div>
 
       <t-form-item label="活动简介" name="description">
         <t-textarea v-model="form.description" :autosize="{ minRows: 3, maxRows: 6 }" placeholder="活动详细说明" />
@@ -296,6 +369,13 @@ function onClose() {
   display: flex;
   justify-content: flex-end;
   gap: 8px;
+}
+
+.scope-tip-block {
+  display: block;
+  margin: -6px 0 12px;
+  font-size: 12px;
+  color: var(--td-text-color-secondary);
 }
 
 .scope-head {

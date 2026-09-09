@@ -9,7 +9,7 @@ import type { Article, ArticleColumn } from '@/types'
 
 /* 文章创建/编辑弹窗：创建即草稿（status=draft），提交审核/审批走列表操作；
  * 编辑仅草稿/已驳回/已下架可用（列表侧控制入口）；
- * 作者身份快照取自所选用户当前身份（社区个人优先，其次个人用户） */
+ * 作者身份快照取自所选用户当前身份（社区个体优先，其次个人用户） */
 const props = defineProps<{
   visible: boolean
   mode: 'create' | 'edit'

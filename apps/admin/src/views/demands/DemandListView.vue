@@ -2,20 +2,172 @@
 import { computed, onMounted, reactive, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { MessagePlugin } from 'tdesign-vue-next'
+import type { FormProps } from 'tdesign-vue-next'
 import { AddIcon, RefreshIcon, SearchIcon } from 'tdesign-icons-vue-next'
 import PageHeader from '@/components/PageHeader.vue'
 import StatusTag from '@/components/StatusTag.vue'
-import IdentityTags from '@/components/IdentityTags.vue'
 import DemandPublishDialog from '@/components/DemandPublishDialog.vue'
 import DemandReviewDialog from '@/components/DemandReviewDialog.vue'
 import DemandScheduleDialog from '@/components/DemandScheduleDialog.vue'
 import ProjectFormDialog from '@/components/ProjectFormDialog.vue'
-import { cancelDemandSchedule, closeDemand, fetchDemands, publishDemandNow, retractDemand } from '@/api/demands'
+import { cancelDemandSchedule, closeDemand, fetchDemands, publishDemandNow, retractDemand, proxyRespondDemand, fetchPublisherOptions } from '@/api/demands'
+import { fetchPointsRules } from '@/api/mall'
 import { fetchEnterprise } from '@/api/enterprises'
 import { fetchExternalEnterprise } from '@/api/external-enterprises'
 import { fetchUser } from '@/api/users'
-import type { Demand } from '@/types'
+import type { Demand, UserIdentity } from '@/types'
 
+/* 发布方身份兜底：历史数据无快照时按编号前缀推导（E→社区企业 / XE→外部企业 / U→仅个人用户标「个人用户」） */
+/* 需求方标签映射（2026-09-09 口径）：
+ * 企业 → 社区企业/外部企业；社区个体 → 社区个体；仅个人用户 → 个人用户；自定义 → 未录入 */
+function publisherTagOf(row: Demand): { text: string; theme: 'default' | 'primary'; variant: 'light' | 'outline' } | null {
+  const id = publisherIdentityOf(row)
+  if (id) {
+    if (id.type === 'community_enterprise') return { text: '社区企业', theme: 'primary', variant: 'light' }
+    if (id.type === 'external_enterprise') return { text: '外部企业', theme: 'default', variant: 'outline' }
+    if (id.type === 'community_individual') return { text: '社区个体', theme: 'primary', variant: 'light' }
+    return { text: '个人用户', theme: 'default', variant: 'light' }
+  }
+  /* 无身份快照：注册个人（U 前缀）兜底个人用户；其余（自定义/未注册）→ 未录入 */
+  if (row.publisherId && !row.publisherId.startsWith('custom')) {
+    return { text: '个人用户', theme: 'default', variant: 'light' }
+  }
+  return { text: '未录入', theme: 'default', variant: 'outline' }
+}
+
+/* 需求方显示名：企业=企业名；个人/社区个体=昵称（mock 即真实姓名）；自定义=联系人 */
+function publisherNameOf(row: Demand): string {
+  if (!row.publisherId) return row.contactName || row.publisherName || '—'
+  return row.publisherName || '—'
+}
+function publisherIdentityOf(row: Demand): UserIdentity | null {
+  if (row.publisherIdentity) return row.publisherIdentity
+  if (!row.publisherId) return null
+  if (row.publisherId.startsWith('E')) {
+    return { type: 'community_enterprise', enterpriseId: row.publisherId, enterpriseName: row.publisherName, title: '入驻企业成员' } as UserIdentity
+  }
+  if (row.publisherId.startsWith('XE')) {
+    return { type: 'external_enterprise', enterpriseName: row.publisherName, title: '合作企业' } as UserIdentity
+  }
+  return null
+}
+/* 积分规则默认分值：需求未自定义时展示规则配置值 */
+const rulePoints = ref({ respond: 20 })
+
+onMounted(async () => {
+  try {
+    const rules = await fetchPointsRules()
+    rulePoints.value.respond = rules.find((r) => r.code === 'demand_responded')?.points ?? 20
+  } catch {
+    /* 规则加载失败时保留默认值 */
+  }
+})
+
+/* 代报名弹窗：管理员代成员响应需求（published / projected 可用）。
+ * 报名方选择器 = 注册个人用户/企业 + 未注册自建（creatable），选中已注册自动填充联系方式 */
+const proxyVisible = ref(false)
+const proxyTarget = ref<Demand | null>(null)
+const proxySaving = ref(false)
+const proxyFormRef = ref()
+const proxyForm = reactive({
+  memberValue: '',
+  phone: '',
+  email: '',
+  quote: '',
+  message: '',
+})
+
+/* 规则 trigger 一律 submit：确认时 validate 才红框提示；required 自动显示红色 * */
+const proxyRules: FormProps['rules'] = {
+  memberValue: [{ required: true, message: '请选择或输入报名方', trigger: 'submit' }],
+  phone: [{ required: true, message: '请填写联系电话', trigger: 'submit' }],
+}
+const userProxyOptions = ref<{ label: string; value: string }[]>([])
+const enterpriseProxyOptions = ref<{ label: string; value: string }[]>([])
+const proxyOptions = computed(() => [...userProxyOptions.value, ...enterpriseProxyOptions.value])
+/* 报名方信息：U:/E: 前缀 = 已注册（自动填充联系方式），其余 = 自建条目 */
+const proxyContact = ref<{ userName: string; enterprise: string; phone: string; email: string } | null>(null)
+
+async function loadProxyOptions() {
+  try {
+    const opts = await (publisherOptionsCache ? Promise.resolve(publisherOptionsCache) : fetchPublisherOptions().then((o) => (publisherOptionsCache = o)))
+    userProxyOptions.value = opts.users.map((u) => ({
+      label: u.nickname + '\uff08' + u.tag + ' · ' + u.uid + '\uff09',
+      value: 'U:' + u.uid,
+    }))
+    enterpriseProxyOptions.value = opts.enterprises.map((e) => ({
+      label: e.name + '\uff08' + e.tag + ' · ' + e.id + '\uff09',
+      value: 'E:' + e.id,
+    }))
+  } catch {
+    /* 选项加载失败时下拉为空 */
+  }
+}
+
+watch(
+  () => proxyForm.memberValue,
+  (v) => {
+    if (v.startsWith('U:')) {
+      const u = fetchPublisherOptionsUsers().find((x) => x.uid === v.slice(2))
+      proxyContact.value = u
+        ? { userName: u.nickname, enterprise: '个人', phone: u.phone, email: u.email }
+        : null
+    } else if (v.startsWith('E:')) {
+      const e = fetchPublisherOptionsEnterprises().find((x) => x.id === v.slice(2))
+      proxyContact.value = e
+        ? { userName: e.name, enterprise: e.name, phone: e.contactPhone, email: e.contactEmail ?? '' }
+        : null
+    } else {
+      proxyContact.value = v.trim() ? { userName: v.trim(), enterprise: v.trim(), phone: '', email: '' } : null
+    }
+    proxyForm.phone = proxyContact.value?.phone ?? ''
+    proxyForm.email = proxyContact.value?.email ?? ''
+  },
+)
+
+function openProxy(row: Demand) {
+  proxyTarget.value = row
+  proxyForm.memberValue = ''
+  proxyForm.phone = ''
+  proxyForm.email = ''
+  proxyForm.quote = ''
+  proxyForm.message = ''
+  proxyVisible.value = true
+  loadProxyOptions()
+}
+
+async function onProxyConfirm() {
+  if (!proxyTarget.value) return
+  const valid = await proxyFormRef.value.validate()
+  if (valid !== true) return
+  proxySaving.value = true
+  try {
+    await proxyRespondDemand(proxyTarget.value.id, {
+      userName: proxyContact.value?.userName ?? proxyForm.memberValue.trim(),
+      enterprise: proxyContact.value?.enterprise ?? proxyForm.memberValue.trim(),
+      phone: proxyForm.phone,
+      email: proxyForm.email,
+      quote: proxyForm.quote,
+      message: proxyForm.message,
+    })
+    MessagePlugin.success(`已代「${proxyContact.value?.userName ?? proxyForm.memberValue}」完成响应报名`)
+    proxyVisible.value = false
+    await load()
+  } catch (e) {
+    MessagePlugin.error(e instanceof Error ? e.message : '代报名失败')
+  } finally {
+    proxySaving.value = false
+  }
+}
+
+/* 代报名联系方式自动填充的数据源（fetchPublisherOptions 结果缓存） */
+let publisherOptionsCache: { users: { uid: string; nickname: string; phone: string; email: string }[]; enterprises: { id: string; name: string; contactPhone: string; contactEmail?: string }[] } | null = null
+function fetchPublisherOptionsUsers() {
+  return publisherOptionsCache?.users ?? []
+}
+function fetchPublisherOptionsEnterprises() {
+  return publisherOptionsCache?.enterprises ?? []
+}
 const route = useRoute()
 const router = useRouter()
 const loading = ref(true)
@@ -60,9 +212,9 @@ const statusOptions = [
 const columns = [
   { colKey: 'title', title: '需求', cell: 'title', width: 210, resizable: true },
   { colKey: 'category', title: '类别', cell: 'category', width: 95, resizable: true },
-  { colKey: 'publisher', title: '发布方', cell: 'publisher', width: 200, resizable: true },
+  { colKey: 'publisher', title: '需求方', cell: 'publisher', width: 200, resizable: true },
   { colKey: 'budget', title: '预算', width: 125, resizable: true },
-  { colKey: 'respondents', title: '响应', cell: 'respondents', width: 70, resizable: true },
+  { colKey: 'respondents', title: '响应', cell: 'respondents', width: 92, resizable: true },
   {
     colKey: 'createdAt',
     title: '创建时间',
@@ -404,12 +556,31 @@ onMounted(() => {
 
         <template #publisher="{ row }">
           <div class="publisher-cell">
-            <span class="publisher-name">{{ row.publisherName }}</span>
-            <IdentityTags :identities="row.publisherIdentity ? [row.publisherIdentity] : []" />
+            <span class="publisher-name">{{ publisherNameOf(row) }}</span>
+            <t-tag
+              v-if="publisherTagOf(row)"
+              size="small"
+              :theme="publisherTagOf(row)!.theme"
+              :variant="publisherTagOf(row)!.variant"
+            >
+              {{ publisherTagOf(row)!.text }}
+            </t-tag>
           </div>
         </template>
 
-        <template #respondents="{ row }">{{ row.respondents.length }}</template>
+        <template #respondents="{ row }">
+          <div class="stack-cell">
+            <span>{{ row.respondents.length }}</span>
+            <t-tag
+              :theme="row.respondPoints != null ? 'warning' : 'success'"
+              variant="light"
+              size="small"
+              class="pts-tag"
+            >
+              {{ row.respondPoints ?? rulePoints.respond }}积分
+            </t-tag>
+          </div>
+        </template>
 
         <template #publishedAt="{ row }">{{ row.publishedAt ?? '—' }}</template>
 
@@ -444,7 +615,7 @@ onMounted(() => {
               </t-popconfirm>
               <t-button variant="text" size="small" @click="openSchedule(row)">定时发布</t-button>
             </template>
-            <!-- 已发布：立项 / 撤回发布 / 关闭 -->
+            <!-- 已发布：立项 / 撤回发布 / 关闭 / 代报名（关闭后） -->
             <template v-if="row.status === 'published'">
               <t-button variant="text" size="small" theme="primary" @click="openProject(row)">立项</t-button>
               <t-popconfirm content="确认撤回发布？需求将转为「待发布」" @confirm="onRetract(row)">
@@ -478,12 +649,21 @@ onMounted(() => {
               查看关联项目
             </t-button>
             <t-popconfirm
-              v-if="row.status === 'published' || row.status === 'pending_release'"
+              v-if="row.status === 'pending_release'"
               content="确认关闭该需求？"
               @confirm="onCloseDemand(row)"
             >
               <t-button variant="text" size="small" theme="danger" :loading="closingId === row.id">关闭</t-button>
             </t-popconfirm>
+            <!-- 代报名：置于关闭之后（published / projected 可用） -->
+            <t-button
+              v-if="row.status === 'published' || row.status === 'projected'"
+              variant="text"
+              size="small"
+              @click="openProxy(row)"
+            >
+              代报名
+            </t-button>
           </div>
         </template>
       </t-table>
@@ -500,6 +680,55 @@ onMounted(() => {
 
     <!-- 立项弹窗 -->
     <ProjectFormDialog v-model:visible="projectVisible" :demand="current" @success="load" />
+    <!-- 代报名弹窗：代成员响应需求 -->
+    <t-dialog
+      :visible="proxyVisible"
+      :header="proxyTarget ? `代报名 · ${proxyTarget.title}` : '代报名'"
+      width="480px"
+      @close="proxyVisible = false"
+    >
+      <t-form
+        ref="proxyFormRef"
+        :data="proxyForm"
+        :rules="proxyRules"
+        label-align="top"
+      >
+        <t-form-item label="报名方" name="memberValue">
+          <t-select
+            v-model="proxyForm.memberValue"
+            filterable
+            creatable
+            :options="proxyOptions"
+            placeholder="选择已注册的个人用户/企业，或直接输入新报名方"
+            tips="未注册的报名方可直接输入名称创建；选中已注册将自动填充联系方式"
+          />
+        </t-form-item>
+        <div class="form-row">
+          <t-form-item label="联系电话" name="phone">
+            <t-input clearable v-model="proxyForm.phone" placeholder="必填" />
+          </t-form-item>
+          <t-form-item label="联系邮箱" name="email">
+            <t-input clearable v-model="proxyForm.email" placeholder="选填" />
+          </t-form-item>
+        </div>
+        <t-form-item label="报价" name="quote">
+          <t-input clearable v-model="proxyForm.quote" placeholder="如 ¥8,000" />
+        </t-form-item>
+        <t-form-item label="响应留言" name="message">
+          <t-textarea
+            v-model="proxyForm.message"
+            :autosize="{ minRows: 2, maxRows: 4 }"
+            placeholder="代报名备注，留空默认记录「管理员代报名」"
+          />
+        </t-form-item>
+      </t-form>
+      <template #footer>
+        <div class="dialog-footer">
+          <t-button variant="text" theme="default" @click="proxyVisible = false">取消</t-button>
+          <t-button theme="primary" :loading="proxySaving" @click="onProxyConfirm">确认代报名</t-button>
+        </div>
+      </template>
+    </t-dialog>
   </div>
 </template>
 
@@ -548,5 +777,15 @@ onMounted(() => {
   align-items: center;
   gap: 4px;
   flex-wrap: nowrap;
+}
+.stack-cell {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 3px;
+}
+
+.pts-tag {
+  font-size: 11px;
 }
 </style>

@@ -93,10 +93,14 @@ export interface DemandPublishPayload {
   enrollmentIdentities: string[]
   enrollmentLevels: string[]
   deadline: string
+  /** 联系人姓名（企业提交=企业联系人 / 个人提交=真实姓名 / 自定义手填，必填） */
+  contactName: string
   /** 提交人联系电话（必填） */
   contactPhone: string
   /** 提交人联系邮箱（选填） */
   contactEmail?: string
+  /** 自定义响应需求奖励积分（缺省 = 按积分规则发放） */
+  respondPoints?: number
 }
 
 function applyPayload(demand: Demand, payload: DemandPublishPayload) {
@@ -110,8 +114,41 @@ function applyPayload(demand: Demand, payload: DemandPublishPayload) {
   demand.enrollmentIdentities = payload.enrollmentIdentities as Demand['enrollmentIdentities']
   demand.enrollmentLevels = payload.enrollmentLevels
   demand.deadline = payload.deadline
+  demand.contactName = payload.contactName
   demand.contactPhone = payload.contactPhone
   demand.contactEmail = payload.contactEmail || undefined
+  demand.respondPoints = payload.respondPoints
+}
+
+/* TODO: 替换为 POST /api/admin/demands/:id/proxy-respond — 管理员代成员响应需求（记录 operator 信息） */
+export async function proxyRespondDemand(
+  id: string,
+  payload: {
+    userName: string
+    enterprise: string
+    phone: string
+    email?: string
+    quote?: string
+    message: string
+  },
+): Promise<{ code: number }> {
+  await delay(450)
+  const demand = demands.find((x) => x.id === id)
+  if (!demand) throw new Error('需求不存在')
+  if (demand.status !== 'published' && demand.status !== 'projected')
+    throw new Error('仅已发布/已立项的需求可代报名')
+  if (!payload.phone.trim()) throw new Error('请填写联系电话')
+  demand.respondents.push({
+    name: payload.userName.trim(),
+    enterprise: payload.enterprise.trim(),
+    phone: payload.phone.trim(),
+    email: payload.email?.trim() || undefined,
+    quote: payload.quote?.trim() || undefined,
+    message: payload.message.trim() || '管理员代报名',
+    at: formatNow(),
+    status: 'pending',
+  })
+  return { code: 0 }
 }
 
 /* TODO: 替换为 POST /api/admin/demands/:id/approve — 待审核需求仅读审核通过，转为待发布 */
@@ -207,17 +244,16 @@ export interface UndertakerOption {
   value: string
 }
 
-/* TODO: 替换为 GET /api/admin/demands/undertaker-options — 立项承接方候选（社区企业 + 社区个人） */
+/* TODO: 替换为 GET /api/admin/demands/undertaker-options — 立项承接方候选（社区企业 + 社区个体） */
 export async function fetchUndertakerOptions(): Promise<UndertakerOption[]> {
   await delay(200)
   return [
-    ...enterprises.map((e) => ({ group: '社区企业', label: e.name, value: `enterprise:${e.id}` })),
-    ...users
-      .filter((u) => u.identities.some((i) => i.type === 'community_individual'))
-      .map((u) => {
-        const identity = u.identities.find((i) => i.type === 'community_individual')!
-        return { group: '社区个人', label: `${u.nickname} · ${identity.title}`, value: `individual:${u.uid}` }
-      }),
+    ...enterprises.map((e) => ({ group: '社区企业', label: e.name + '（社区企业 · ' + e.id + '）', value: `enterprise:${e.id}` })),
+    ...externalEnterpriseProfiles.map((x) => ({ group: '外部企业', label: x.name + '（外部企业 · ' + x.id + '）', value: `enterprise:${x.id}` })),
+    ...users.map((u) => {
+      var tag = u.identities.some((i) => i.type === 'community_individual') ? '社区个体' : '个人用户'
+      return { group: tag, label: u.nickname + '（' + tag + ' · ' + u.uid + '）', value: `individual:${u.uid}` }
+    }),
   ]
 }
 
@@ -238,18 +274,37 @@ export async function initiateProject(demandId: string, payload: ProjectInitPayl
 
 /* TODO: 替换为 GET /api/admin/publisher-options — 提交人选项（全部个人用户 + 全部企业，含联系方式用于自动填充） */
 export async function fetchPublisherOptions(): Promise<{
-  users: { uid: string; nickname: string; phone: string; email: string }[]
-  enterprises: { id: string; name: string; contactPhone: string; contactEmail?: string }[]
+  users: { uid: string; nickname: string; realName: string; phone: string; email: string; tag: '社区个体' | '个人用户' }[]
+  enterprises: { id: string; name: string; contactName: string; contactPhone: string; contactEmail?: string; tag: '社区企业' | '外部企业' }[]
 }> {
   await delay(200)
   return {
-    users: users.map((u) => ({ uid: u.uid, nickname: u.nickname, phone: u.phone, email: u.email })),
-    enterprises: enterprises.map((e) => ({
-      id: e.id,
-      name: e.name,
-      contactPhone: e.contactPhone,
-      contactEmail: e.contactEmail,
+    users: users.map((u) => ({
+      uid: u.uid,
+      nickname: u.nickname,
+      realName: u.realName ?? u.nickname,
+      phone: u.phone,
+      email: u.email,
+      tag: u.identities.some((i) => i.type === 'community_individual') ? '社区个体' : '个人用户',
     })),
+    enterprises: [
+      ...enterprises.map((e) => ({
+        id: e.id,
+        name: e.name,
+        contactName: e.contactName,
+        contactPhone: e.contactPhone,
+        contactEmail: e.contactEmail,
+        tag: '社区企业' as const,
+      })),
+      ...externalEnterpriseProfiles.map((x) => ({
+        id: x.id,
+        name: x.name,
+        contactName: '',
+        contactPhone: '',
+        contactEmail: undefined,
+        tag: '外部企业' as const,
+      })),
+    ],
   }
 }
 
@@ -277,6 +332,38 @@ function formatNow(): string {
 
 /* TODO: 替换为 POST /api/admin/demands — 后台直接创建需求（选定提交用户与其提交身份）
  * 设置 scheduledAt 时进入定时发布中状态，到点自动发布；否则立即发布 */
+/* 发布方身份快照解析：企业提交 → 社区企业/外部企业身份；个人提交 → 非 individual 首个身份（仅个人用户则 individual）。
+ * 保证需求列表「发布方」标签按主体真实身份展示（2026-09-09 口径） */
+function resolvePublisherIdentity(payload: DemandCreatePayload): UserIdentity | null {
+  if (payload.publisherType === 'enterprise') {
+    const ent = enterprises.find((e) => e.id === payload.publisherId)
+    if (ent) {
+      return {
+        type: 'community_enterprise',
+        enterpriseId: ent.id,
+        enterpriseName: ent.name,
+        role: 'member',
+        title: '入驻企业成员',
+      } as UserIdentity
+    }
+    const ext = externalEnterpriseProfiles.find((x) => x.id === payload.publisherId)
+    if (ext) {
+      return { type: 'external_enterprise', enterpriseName: ext.name, title: '合作企业' } as UserIdentity
+    }
+    return null
+  }
+  if (payload.publisherType === 'individual') {
+    const user = users.find((u) => u.uid === payload.publisherId)
+    if (!user) return null
+    /* 以个人账号提交：持「社区个体」身份 → 标社区个体；否则一律「个人用户」——
+     * 不因用户同时持有社区企业/外部企业身份而自动归入企业身份 */
+    const attached = user.identities.find((i) => i.type === 'community_individual')
+    if (attached) return attached
+    return { type: 'individual' as const, title: '个人用户' }
+  }
+  return payload.publisherIdentity ?? null
+}
+
 export async function createDemand(payload: DemandCreatePayload): Promise<Demand> {
   await delay(500)
   /* 提交人三类来源：注册个人用户 / 注册企业 / 未注册自建条目 */
@@ -284,7 +371,8 @@ export async function createDemand(payload: DemandCreatePayload): Promise<Demand
     payload.publisherType === 'individual' ? users.find((u) => u.uid === payload.publisherId) : undefined
   const enterprise =
     payload.publisherType === 'enterprise' ? enterprises.find((e) => e.id === payload.publisherId) : undefined
-  if (payload.publisherType === 'individual' && !user) throw new Error('提交用户不存在')
+  if (payload.publisherType === 'individual' && !user)
+    throw new Error('提交用户不存在（uid=' + payload.publisherId + '）')
   if (payload.publisherType === 'enterprise' && !enterprise) throw new Error('提交企业不存在')
   if (payload.publisherType === 'custom' && !payload.publisherName?.trim())
     throw new Error('请输入提交人名称')
@@ -303,7 +391,7 @@ export async function createDemand(payload: DemandCreatePayload): Promise<Demand
     category: '',
     publisherId: payload.publisherId,
     publisherName,
-    publisherIdentity: payload.publisherType === 'individual' ? payload.publisherIdentity : null,
+    publisherIdentity: resolvePublisherIdentity(payload),
     contactPhone: payload.contactPhone,
     contactEmail: payload.contactEmail || undefined,
     budget: '',
@@ -313,9 +401,10 @@ export async function createDemand(payload: DemandCreatePayload): Promise<Demand
     visibilityLevels: [],
     enrollmentIdentities: [],
     enrollmentLevels: [],
-    status: payload.scheduledAt ? 'scheduled' : 'published',
-    scheduledAt: payload.scheduledAt,
-    publishedAt: payload.scheduledAt ? undefined : formatNow(),
+    /* 创建即保存为「待发布」，由列表操作决定立即发布/定时发布（无定时发布入参） */
+    status: 'pending_release',
+    scheduledAt: undefined,
+    publishedAt: undefined,
     createdAt: formatNow(),
     description: '',
     tags: [],

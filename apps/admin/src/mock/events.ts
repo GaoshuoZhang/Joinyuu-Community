@@ -6,6 +6,8 @@ import type { CommunityEvent } from '@/types'
 export const events: CommunityEvent[] = [
   {
     id: 'EV6001',
+    enrollPoints: 50,
+    checkinPoints: 200,
     createdAt: '2026-08-20 10:00',
     title: '第 12 期创业夜话 · AI 应用的落地时刻',
     type: '沙龙',
@@ -40,6 +42,7 @@ export const events: CommunityEvent[] = [
   },
   {
     id: 'EV6002',
+    checkinPoints: 100,
     createdAt: '2026-08-18 14:30',
     title: '初创企业股权设计讲座',
     type: '培训',

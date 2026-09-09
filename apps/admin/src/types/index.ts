@@ -18,9 +18,9 @@ export interface UserIdentity {
   role?: 'founder' | 'admin' | 'member'
   /** 职位 / 头衔 */
   title: string
-  /** 经验等级 1-5（仅社区个人/社区企业身份持有；参加活动、承接项目累积经验值升级） */
+  /** 经验等级 1-5（仅社区个体/社区企业身份持有；参加活动、承接项目累积经验值升级） */
   level?: number
-  /** 经验值余额（仅社区个人/社区企业身份持有，社区企业的经验值挂靠企业实体） */
+  /** 经验值余额（仅社区个体/社区企业身份持有，社区企业的经验值挂靠企业实体） */
   experience?: number
 }
 
@@ -122,6 +122,12 @@ export type DemandStatus =
 export interface DemandRespondent {
   name: string
   enterprise: string
+  /** 联系电话（代报名必填；成员自行响应可能缺省） */
+  phone?: string
+  /** 联系邮箱（选填） */
+  email?: string
+  /** 报价（选填，如 ¥8,000） */
+  quote?: string
   message: string
   at: string
   status: 'pending' | 'contacted' | 'closed'
@@ -136,6 +142,8 @@ export interface Demand {
   publisherName: string
   /** 提交时所选身份快照（企业/未注册提交人无身份快照） */
   publisherIdentity: UserIdentity | null
+  /** 联系人姓名（企业提交=企业联系人 / 个人提交=个人真实姓名 / 自定义手填；创建/编辑表单必填） */
+  contactName?: string
   /** 提交人联系电话（创建/编辑表单必填；历史数据可能缺省） */
   contactPhone?: string
   /** 提交人联系邮箱（选填） */
@@ -167,20 +175,31 @@ export interface Demand {
   matchedRespondent?: string
   /** 立项后关联的项目 ID（status = projected 时存在） */
   projectId?: string
+  /** 自定义响应需求奖励积分（缺省 = 按积分规则 demand_responded 发放） */
+  respondPoints?: number
   respondents: DemandRespondent[]
 }
 
-export type ProjectStatus = 'recruiting' | 'running' | 'paused' | 'finished'
+/* 项目状态四态：进行中 / 已暂停 / 已关闭 / 已结项 */
+export type ProjectStatus = 'running' | 'paused' | 'closed' | 'finished'
 
 export interface ProjectUndertaker {
-  type: 'enterprise' | 'individual'
-  /** 企业 ID 或用户 ID */
+  /** enterprise=社区企业（经验参与）/ individual=用户（结项时持社区个体身份者参与经验）/ custom=自定义添加（不参与经验） */
+  type: 'enterprise' | 'individual' | 'custom'
+  /** 企业 ID / 用户 ID / 自定义项为空串 */
   id: string
-  /** 展示名：企业名 或 「姓名 · 头衔」 */
+  /** 展示名：企业名 或 「姓名 · 头衔」 或 自定义名称 */
   name: string
   /** 承接占比（百分比整数，合计 100；均分除不尽时首个承接方取余数） */
   share: number
+  /** 自定义承接方：联系人 */
+  contactName?: string
+  /** 自定义承接方：联系电话 */
+  phone?: string
 }
+/* 经验值分配口径（项目结项）：项目经验值 × 承接占比%，仅社区企业（type=enterprise 且 E 前缀）
+ * 与结项时持社区个体身份的用户参与；外部企业 / 个人用户（无社区个体身份）/ 自定义承接方不参与，
+ * 其份额丢弃不转移 */
 
 export interface Milestone {
   name: string
@@ -207,6 +226,10 @@ export interface Project {
   memberCount: number
   /** 来源需求 ID（由需求立项创建时存在） */
   sourceDemandId?: string
+  /** 自定义项目经验值（缺省 = 按经验值规则 project_completed；结项时按承接占比分配） */
+  expReward?: number
+  /** 关闭原因（status = closed 时存在） */
+  closeReason?: string
 }
 
 export type EventStatus = 'pending_release' | 'scheduled' | 'published' | 'ended' | 'cancelled'
@@ -251,6 +274,10 @@ export interface CommunityEvent {
   enrollmentDeadline?: string
   /** 定时发布时间（设置后进入定时发布中状态，到点自动发布） */
   scheduledAt?: string
+  /** 自定义报名奖励积分（缺省 = 按积分规则 activity_enroll_approved 发放） */
+  enrollPoints?: number
+  /** 自定义签到奖励积分（缺省 = 按积分规则 activity_checkin 发放） */
+  checkinPoints?: number
   description: string
   tags: string[]
   enrollments: EventEnrollment[]
@@ -259,10 +286,17 @@ export interface CommunityEvent {
 /* ---------- 创建项目 Payload（需求立项 / 后台直接创建共用） ---------- */
 
 export interface UndertakerInput {
-  type: 'enterprise' | 'individual'
+  type: 'enterprise' | 'individual' | 'custom'
+  /** 企业 ID / 用户 ID / 自定义项为空串 */
   id: string
   /** 承接占比（整数百分比，合计须为 100） */
   share: number
+  /** 自定义承接方：展示名（type=custom 时必填） */
+  name?: string
+  /** 自定义承接方：联系人 */
+  contactName?: string
+  /** 自定义承接方：联系电话 */
+  phone?: string
 }
 
 export interface MilestoneInput {
@@ -275,10 +309,13 @@ export interface MilestoneInput {
 export interface ProjectInitPayload {
   undertakers: UndertakerInput[]
   projectName: string
-  startDate: string
-  endDate: string
+  /** 起止日期（表单已移除填写项：编辑保留原值，新建为空串） */
+  startDate?: string
+  endDate?: string
   description: string
   milestones: MilestoneInput[]
+  /** 自定义项目经验值（缺省 = 按经验值规则 project_completed 发放；结项时按承接占比分配） */
+  expReward?: number
 }
 
 /* API 返回形状 */
@@ -291,7 +328,7 @@ export interface PageResult<T> {
 
 export interface ExperienceRecord {
   id: string
-  /** 归属：enterprise=社区企业 | individual=社区个人身份 */
+  /** 归属：enterprise=社区企业 | individual=社区个体身份 */
   targetType: 'enterprise' | 'individual'
   /** 企业 ID 或用户 ID */
   targetId: string
@@ -302,6 +339,8 @@ export interface ExperienceRecord {
   reason: string
   at: string
   operator: string
+  /** 记录来源：rule=规则自动发放 / manual=管理员手动调整（含扣减） */
+  source: 'rule' | 'manual'
 }
 
 export interface PointsRecord {
@@ -314,6 +353,8 @@ export interface PointsRecord {
   reason: string
   at: string
   operator: string
+  /** 记录来源：rule=规则自动发放 / manual=管理员手动调整 / redemption=商城兑换扣减 */
+  source: 'rule' | 'manual' | 'redemption'
 }
 
 /* 外部企业聚合视图（由用户 external_enterprise 身份派生 + 档案补充，非独立入驻实体，无展示页） */
@@ -393,15 +434,42 @@ export interface RedemptionOrder {
 export type RuleStatus = 'enabled' | 'disabled'
 
 export interface PointsRule {
-  id: string
+  /** 规则编码（触发项写死，后端按 code 关联积分发放逻辑；如 activity_checkin） */
+  code: string
+  /** 触发项名称（写死不可编辑） */
   name: string
-  /** 场景说明，如「活动签到」「项目里程碑达成」 */
+  /** 行为场景说明（写死不可编辑） */
   scene: string
-  /** 该场景发放的积分（正数） */
+  /** 发放积分（正数），仅此项与启停可编辑 */
   points: number
   status: RuleStatus
   description?: string
   updatedAt: string
+}
+
+/* ---------- 规则管理：经验值规则 / 等级规则 ---------- */
+
+export interface ExperienceRule {
+  /** 规则编码（触发项写死，后端按 code 关联经验发放逻辑；如 activity_checkin） */
+  code: string
+  /** 触发项名称（写死不可编辑） */
+  name: string
+  /** 行为场景说明（写死不可编辑） */
+  scene: string
+  /** 发放经验值（正数），仅此项与启停可编辑 */
+  exp: number
+  status: RuleStatus
+  description?: string
+  updatedAt: string
+}
+
+export interface LevelTier {
+  /** 等级序号（1 起连续递增，梯度设定后自动编排） */
+  level: number
+  /** 等级标签（如：青铜、白银、黄金、铂金、钻石） */
+  label: string
+  /** 达到该等级所需累计经验值门槛 */
+  threshold: number
 }
 
 /* ---------- 办公位管理 ---------- */

@@ -13,6 +13,7 @@ import {
   DashboardIcon,
   Edit2Icon,
   MapIcon,
+  SettingIcon,
   UserCircleIcon,
   UserIcon,
   UserListIcon,
@@ -117,7 +118,7 @@ async function handleDropdown(item: { value?: string | number }) {
             </t-menu-item>
             <t-menu-item value="/individuals">
               <template #icon><UserIcon /></template>
-              社区个人
+              社区个体
             </t-menu-item>
             <t-menu-item value="/enterprises">
               <template #icon><BuildingIcon /></template>
@@ -153,7 +154,7 @@ async function handleDropdown(item: { value?: string | number }) {
             </t-menu-item>
           </t-submenu>
 
-          <t-submenu value="group-points" title="积分管理">
+          <t-submenu value="group-points" title="积分商城">
             <template #icon><CartIcon /></template>
             <t-menu-item value="/mall/goods">
               <template #icon><CartIcon /></template>
@@ -163,13 +164,29 @@ async function handleDropdown(item: { value?: string | number }) {
               <template #icon><ViewListIcon /></template>
               订单管理
             </t-menu-item>
-            <t-menu-item value="/mall/rules">
+          </t-submenu>
+
+          <t-submenu value="group-rules" title="规则管理">
+            <template #icon><SettingIcon /></template>
+            <t-menu-item value="/rules/points">
               <template #icon><Edit2Icon /></template>
               积分规则
             </t-menu-item>
-            <t-menu-item value="/mall/ledger">
+            <t-menu-item value="/rules/experience">
+              <template #icon><ViewListIcon /></template>
+              经验值规则
+            </t-menu-item>
+            <t-menu-item value="/rules/levels">
+              <template #icon><ViewModuleIcon /></template>
+              等级规则
+            </t-menu-item>
+            <t-menu-item value="/rules/ledger">
               <template #icon><AppIcon /></template>
-              积分账单
+              积分发放记录
+            </t-menu-item>
+            <t-menu-item value="/rules/experience-records">
+              <template #icon><ViewListIcon /></template>
+              经验值发放记录
             </t-menu-item>
           </t-submenu>
 
@@ -197,11 +214,15 @@ async function handleDropdown(item: { value?: string | number }) {
             </t-menu-item>
           </t-submenu>
 
-          <t-submenu value="group-facility" title="运营设施">
-            <template #icon><MapIcon /></template>
+          <t-submenu value="group-contents" title="内容管理">
+            <template #icon><Edit2Icon /></template>
             <t-menu-item value="/contents">
               <template #icon><Edit2Icon /></template>
               资讯内容
+            </t-menu-item>
+            <t-menu-item value="/contents/showcase">
+              <template #icon><ViewListIcon /></template>
+              展示页发布
             </t-menu-item>
           </t-submenu>
         </t-menu>
