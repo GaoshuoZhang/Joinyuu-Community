@@ -246,9 +246,10 @@ async function handleDropdown(item: { value?: string | number }) {
       </div>
 
       <main class="page-scroll">
-        <router-view v-slot="{ Component }">
+        <router-view v-slot="{ Component, route: viewRoute }">
           <transition name="page" mode="out-in">
-            <component :is="Component" />
+            <!-- key 绑定 fullPath：同路由不同参数（如 users/U1003 → users/U1001）强制重挂载，避免详情页显示旧数据 -->
+            <component :is="Component" :key="viewRoute.fullPath" />
           </transition>
         </router-view>
       </main>
