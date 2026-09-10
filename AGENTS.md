@@ -16,7 +16,7 @@ pnpm install
 pnpm dev:admin
 pnpm build:admin
 pnpm db:up          # PostgreSQL 17 + Redis 7.4 via Docker Compose (waits for health)
-pnpm dev:api        # NestJS dev server on port 7759
+pnpm dev:api        # NestJS dev server on port 7757
 pnpm build:api
 pnpm db:reset       # drop + migrate + full seed (idempotent)
 ```

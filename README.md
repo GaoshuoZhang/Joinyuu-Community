@@ -15,7 +15,7 @@
 | 层 | 选型 |
 |---|---|
 | 仓库 | pnpm Monorepo（`apps/` + `packages/`） |
-| 后端（M1 实施中） | NestJS 11 + Prisma 6 + RESTful API（`apps/api`，端口 7759） |
+| 后端（M1 实施中） | NestJS 11 + Prisma 6 + RESTful API（`apps/api`，端口 7757） |
 | 数据库（M1 实施中） | PostgreSQL 17 + Redis 7.4（Docker Compose 本地开发） |
 | 管理后台 Web（当前） | Vue 3 + Vite + TypeScript + TDesign Vue Next + Pinia + Vue Router |
 | 客户端 Web（M2 规划） | 同上（TDesign Vue Next） |
@@ -55,10 +55,10 @@ docs/
 
 ```bash
 pnpm install              # 安装依赖
-pnpm dev:admin            # 启动管理后台开发服务器（7758，代理 /api → 7759）
+pnpm dev:admin            # 启动管理后台开发服务器（7758，代理 /api → 7757）
 pnpm build:admin          # 构建管理后台
 pnpm db:up                # 启动 PostgreSQL + Redis（Docker Compose，等待健康检查）
-pnpm dev:api              # 启动后端服务（NestJS，7759）
+pnpm dev:api              # 启动后端服务（NestJS，7757）
 pnpm build:api            # 构建后端
 pnpm db:reset             # 重建数据库（drop + migrate + 全量种子）
 ```

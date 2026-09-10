@@ -1,6 +1,6 @@
 /* HTTP 封装（M1 真实接口）
  * 统一 fetch + Bearer token + 包络解包（body.data）；开发经 vite proxy 转发到
- * http://127.0.0.1:7759，生产由部署期网关统一转发 /api。
+ * http://127.0.0.1:7757，生产由部署期网关统一转发 /api。
  */
 
 const TOKEN_KEY = 'joinyuu_admin_token'

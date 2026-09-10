@@ -106,7 +106,7 @@
 - 数据概览联动（冻结）：用户详情数据概览（需求发布/参与项目/活动报名）由需求/项目/活动数据实时汇总，卡片有数据时可点击跳转对应列表并按该用户自动筛选——query **仅携带用户 ID**（`publisher`/`participant`），按 ID 过滤避免同名歧义；社区企业/外部企业详情也有数据概览选项卡（需求发布=以该企业身份发布的需求量、参与项目=该企业承接的项目量），跳转 query 携带 `enterprise`——**一律传企业 ID**：社区企业 E2001（按 publisherIdentity.enterpriseId / 承接方 t.id 匹配）、外部企业 XE7001（按 ID 解析档案名后以 enterpriseName / 成员个人承接匹配）；列表以可关闭标签展示该筛选，名称解析：社区企业经 fetchEnterprise、外部企业经 fetchExternalEnterprise 由 ID 解析（均失败回退显示原值），重置时一并清除
 - 经验值与积分账本（冻结）：`mock/ledgers.ts` 双流水（ExperienceRecord 前缀 EX8001+ / PointsRecord 前缀 PT9001+），每笔含 delta/balance（变动后余额）/reason/at/operator，末笔 balance 与实体当前值一致；经验值归属=社区企业（Enterprise.experience）或社区个体身份（UserIdentity.experience），积分归属=用户（User.points，挂靠个人用户身份人人可有）；账本选项卡——企业详情「经验值」（可增减）、用户详情「经验值」（**仅持有社区个体身份的用户显示**，可增减）、用户详情「积分」（所有用户，可增减）；调整经共享 `AdjustValueDialog`（方向+数量+必填事由，扣减不超余额、余额不可为负），API：`GET/POST /api/admin/experience-records`（入参 targetType+targetId）、`GET/POST /api/admin/points-records`
 - 组件标准化审计结论（2026-09-08，全库扫描）：依赖仅 vue 全家桶 + tdesign-vue-next/icons + pinia，无任何第三方 UI 库；非 TDesign 指令 0（v-loading 已清理）；17 个共享组件**全部**为 t-* 内核封装（PageHeader 已改为 t-typography-title/paragraph 内核，字号间距仍由 tokens.css 的 .page-header .page-title/.page-desc 控制，选择器已提升权重防 TDesign 默认值覆盖）；视图层自绘 DOM 已收敛：工位/办公室卡片改为 **t-card（size="small" + hover-shadow）内核**，边框/圆角/阴影来自 TDesign，状态底色经类覆盖容器背景，内容排布用 :deep(.t-card__body) 控制；剩余自绘 DOM（图例色点、board 卡片、.page-card 容器）为装饰/布局元素，保留现状
-- 开发环境约定（2026-09-09，冻结；2026-09-10 M1 修订）：**admin-web dev 端口统一 7758**（package.json dev 脚本已固化 `vite --port 7758`），浏览器访问 `http://localhost:7758`；**M1 起登录态为真实 JWT**——localStorage `joinyuu_admin_token` 必须来自 `POST /api/admin/auth/login`（admin/admin123），任意旧 mock 值会触发 401 清 token 跳登录；dev 需同时运行后端（7759，vite 已配 `/api` proxy）；不要使用其他端口（如 5199）起 dev server
+- 开发环境约定（2026-09-09，冻结；2026-09-10 M1 修订）：**admin-web dev 端口统一 7758**（package.json dev 脚本已固化 `vite --port 7758`），浏览器访问 `http://localhost:7758`；**M1 起登录态为真实 JWT**——localStorage `joinyuu_admin_token` 必须来自 `POST /api/admin/auth/login`（admin/admin123），任意旧 mock 值会触发 401 清 token 跳登录；dev 需同时运行后端（7757，vite 已配 `/api` proxy）；不要使用其他端口（如 5199）起 dev server
 
 - 表格布局约定（2026-09-09）：凡开启 `resizable` 的 t-table 必须用 **`table-layout="fixed"`**（TDesign 警告 auto+resizable 组合；控制台刷屏）；列宽全部显式声明 width/minWidth，fixed 下按声明生效；无 resizable 的表格可保留 auto（如空间详情预约明细）
 
@@ -226,7 +226,7 @@
 
 ## 10. M1 后端接入状态（2026-09-10）
 
-- 后端 `apps/api`（NestJS 11，端口 7759）已实现 115 个 `/api/admin/**` 端点；admin dev（7758）经 vite proxy 转发 `/api` → `http://127.0.0.1:7759`
+- 后端 `apps/api`（NestJS 11，端口 7757）已实现 115 个 `/api/admin/**` 端点；admin dev（7758）经 vite proxy 转发 `/api` → `http://127.0.0.1:7757`
 - 本地启动顺序：`pnpm db:up` → `pnpm db:reset` → `pnpm dev:api` → `pnpm dev:admin`；登录 token 为真实 JWT（admin/admin123），旧 mock token 会触发 401 → 清 token 跳登录
 - 已接入真实接口的域（16 文件）：auth / 用户 / 社区个体 / 社区企业 / 外部企业 / 申请审批 / 账本 / 需求 / 项目 / 活动 / 商城 / 规则 / 工位 / 空间 / 内容 / 公告
 - 仍走 mock 的域（M1-E 切换，6 文件）：通知中心 / 审计日志 / 系统配置 / 数据字典 / 工作台聚合 / 待办

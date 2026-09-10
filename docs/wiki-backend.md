@@ -72,7 +72,7 @@ apps/api/
 ```bash
 pnpm db:up          # docker compose -f apps/api/docker-compose.dev.yml up -d --wait（等待健康检查）
 pnpm db:down        # 停止并删除容器（保留数据卷）
-pnpm dev:api        # 启动 NestJS dev（端口 7759）
+pnpm dev:api        # 启动 NestJS dev（端口 7757）
 pnpm build:api      # Nest 生产构建
 pnpm db:migrate     # prisma migrate deploy（非交互应用已有迁移）
 pnpm db:migrate:dev # prisma migrate dev --name xxx（开发者创建新迁移时手动执行，交互式）
@@ -123,11 +123,11 @@ volumes:
 DATABASE_URL="postgresql://joinyuu:joinyuu@127.0.0.1:5432/joinyuu?schema=public"
 REDIS_URL="redis://127.0.0.1:6379"
 JWT_SECRET="dev-only-change-me"
-PORT=7759
+PORT=7757
 TZ=Asia/Shanghai
 ```
 
-- **端口约定**：admin dev 7758（既有）、API dev **7759**；admin 通过 Vite dev proxy 访问 API（`apps/admin/vite.config.ts` 增 `server.proxy: { '/api': 'http://localhost:7759' }`），开发期无 CORS 问题；API 侧仍开启 CORS 以备直连调试。
+- **端口约定**：admin dev **7758**、API dev **7757**；两者均监听 `0.0.0.0`，同一局域网内其他设备可通过 `http://<本机局域网IP>:7758`（admin）与 `http://<本机局域网IP>:7757`（API 直连）访问；admin 通过 Vite dev proxy 访问 API（`apps/admin/vite.config.ts` 的 `server.proxy: { '/api': 'http://127.0.0.1:7757' }`），开发期无 CORS 问题；API 侧仍开启 CORS 以备直连调试。
 - Windows 注意：Prisma generate/migrate 在 PowerShell 下直接可用；换行符遵循仓库现状（git autocrlf）；禁止在命令行里内嵌多行 TS 模板字符串（历史上多次转义事故，见 `.workbuddy/memory`）。
 
 ## 4. 全局架构约定
@@ -629,3 +629,4 @@ TZ=Asia/Shanghai
 | 2026-09-10 | M1-C 实施修订：`@nestjs/schedule` 锁定 ^6（v12 为纯 ESM 包，jest/nest CJS 链不兼容）；e2e 套件隔离机制（`test/helpers/reseed.ts`，每套件 beforeAll 全量重种子——状态机套件的跨运行污染根治）；demands 新增 4 条状态机守卫 409（reject/close/update/initiate-project，M0 无防重入守卫，按 §8.1 服务端强制原则补齐）；§8.4 积分默认值为示意（实际以种子规则数据为准，如报名通过 mock 实际值）；活动自定义积分（enrollPoints/checkinPoints）走服务内直写事务（引擎仅支持规则值发放） |
 | 2026-09-10 | M1-D 实施修订：§7.12 工位 POST/PUT body 的 `areaId` 订正为 `area`（区域名称字符串，M0 WorkstationPayload 契约，服务端按名解析）；§7.11 levels PUT body 明确 `{tiers: [...]}` 包裹；§7.10 goods 列表补 sortBy(id/points/createdAt)；订单取消退款流水 source='redemption'（M0 mock 复用手动调整为 manual，按 wiki 语义修正）；e2e 套件执行顺序非字母序（jest 默认排序），轮末 DB 为最后执行套件的测试后状态属预期，冒烟前需重种子 |
 | 2026-09-10 | M1-A~D 全部完成（提交 a31df09 / b8d7470 / 489cc11 / c4e97fe）：115 个管理端端点、e2e 15 套件 72 用例两轮幂等、admin 16/22 文件接入真实接口；§12/§13 同步勾选 |
+| 2026-09-10 | 开发端口统一：后端 API 7759 → **7757**（`.env`/`.env.example`/main.ts 默认值/vite proxy/http.ts 注释/文档全量替换）；确认后端 `0.0.0.0` 绑定 + vite `host: 0.0.0.0`，支持局域网设备访问（admin 7758 / api 7757） |
