@@ -16,5 +16,11 @@ export default defineConfig({
     port: 7758,
     strictPort: true, // 端口被占用时直接报错，不悄悄换端口
     open: false,
+    proxy: {
+      '/api': {
+        target: 'http://127.0.0.1:7759',
+        changeOrigin: true,
+      },
+    },
   },
 })

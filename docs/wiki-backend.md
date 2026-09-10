@@ -239,7 +239,7 @@ TZ=Asia/Shanghai
 | 方法 | 路径 | 说明 |
 |---|---|---|
 | GET | /api/admin/enterprises | query：page/pageSize/keyword(名称/ID)/industry/status |
-| GET | /api/admin/enterprises/options | `[{ id, name }]`（租约等候选） |
+| GET | /api/admin/enterprises/options | `[{ label, value }]`（与 M0 fetchEnterpriseOptions 一致） |
 | GET | /api/admin/enterprises/:id | 详情含成员列表（由 identities 派生：type=community_enterprise 且 enterpriseId 匹配，展示 realName‖nickname） |
 | PATCH | /api/admin/enterprises/:id/showcase-status | `{ status: pending/published/rejected, comment? }`（展示页审核；rejected 必填 comment） |
 | GET | /api/admin/enterprises/:id/stats | 数据概览：需求发布量（publisherIdentity.enterpriseId 匹配）/项目承接量（undertaker 匹配） |
@@ -316,9 +316,9 @@ TZ=Asia/Shanghai
 | 方法 | 路径 | 说明 |
 |---|---|---|
 | GET | /api/admin/experience-records | query：targetType(enterprise/individual)/targetId；最新在前 |
-| POST | /api/admin/experience-records | `{ delta, reason }`：非零整数；扣减不致负；写流水（source=manual、operator=登录管理员）；返回 `{ code: 0, balance }` |
+| POST | /api/admin/experience-records | body `{ targetType, targetId, delta, reason }`：非零整数；扣减不致负；写流水（source=manual、operator=登录管理员）；返回 `{ code: 0, balance }` |
 | GET | /api/admin/points-records | query：userId；最新在前 |
-| POST | /api/admin/points-records | `{ delta, reason }`：同上；积分挂靠用户（个人身份）；返回 `{ code: 0, balance }` |
+| POST | /api/admin/points-records | body `{ userId, delta, reason }`：同上；积分挂靠用户（个人身份）；返回 `{ code: 0, balance }` |
 
 ### 7.10 商城 mall（12）
 
@@ -624,3 +624,4 @@ TZ=Asia/Shanghai
 |---|---|
 | 2026-09-10 | 初版：M1 全量契约冻结（Prisma/范围/主键三项决策经用户确认） |
 | 2026-09-10 | M1-A 实施修订：时间字段统一 String 存储（废弃 timestamptz 方案，理由见 §4.1）；`db:migrate` 改为非交互 `prisma migrate deploy` 并新增 `db:migrate:dev`（交互式创建迁移）；连接地址统一 127.0.0.1（Docker Desktop IPv6 loopback 不可靠）；模型数订正为 35 |
+| 2026-09-10 | M1-B 实施修订：全部 `@db.Char` 主键/外键列改 `VarChar`（PostgreSQL CHAR(n) 读取保留尾部填充，破坏 ID 契约）——迁移 `20260910140000_char_to_varchar`；§7.9 账本 POST body 补全完整形状（`{targetType,targetId,delta,reason}` / `{userId,delta,reason}`）；§7.3 企业 options 形状订正为 `[{label,value}]`；admin 路由守卫改读 localStorage（401 清 token 后守卫需立即感知，读 Pinia 快照会把 /login 误重定向回 /dashboard） |

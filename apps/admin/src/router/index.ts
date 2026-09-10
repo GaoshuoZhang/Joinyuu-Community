@@ -1,5 +1,4 @@
 import { createRouter, createWebHashHistory } from 'vue-router'
-import { useAuthStore } from '@/stores/auth'
 
 /* 路由表（冻结）：所有页面路由预注册，页面组件仅填充 AdminLayout 的 router-view */
 const router = createRouter({
@@ -201,13 +200,15 @@ const router = createRouter({
   ],
 })
 
-/* 路由守卫：未登录一律回登录页 */
+/* 路由守卫：未登录一律回登录页
+ * 直接读 localStorage（token 唯一持久化事实源）：http.ts 收到 401 时会先清 token 再跳登录，
+ * Pinia state 是启动快照无法感知，读 store 会把 /login 误重定向回 /dashboard */
 router.beforeEach((to) => {
-  const auth = useAuthStore()
-  if (to.path !== '/login' && !auth.isLogged) {
+  const logged = !!localStorage.getItem('joinyuu_admin_token')
+  if (to.path !== '/login' && !logged) {
     return { path: '/login', query: to.fullPath === '/' ? {} : { redirect: to.fullPath } }
   }
-  if (to.path === '/login' && auth.isLogged) {
+  if (to.path === '/login' && logged) {
     return '/dashboard'
   }
   return true

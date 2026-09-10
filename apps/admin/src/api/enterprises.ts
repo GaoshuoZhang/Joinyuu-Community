@@ -1,6 +1,5 @@
 import type { Enterprise, PageResult, User } from '@/types'
-import { demands, enterprises, projects, users } from '@/mock'
-import { delay } from './utils'
+import { httpGet, httpPatch } from './http'
 
 export interface EnterpriseQuery {
   page: number
@@ -10,41 +9,30 @@ export interface EnterpriseQuery {
   status?: string
 }
 
-/* TODO: 替换为 GET /api/admin/enterprises?page&pageSize&keyword&industry&status */
+/* 已接入 M1 真实接口：GET /api/admin/enterprises?page&pageSize&keyword&industry&status */
 export async function fetchEnterprises(query: EnterpriseQuery): Promise<PageResult<Enterprise>> {
-  await delay(400)
-  let list = [...enterprises]
-  if (query.keyword) {
-    const kw = query.keyword.trim().toLowerCase()
-    list = list.filter((e) => e.name.toLowerCase().includes(kw) || e.id.toLowerCase().includes(kw))
-  }
-  if (query.industry) list = list.filter((e) => e.industry === query.industry)
-  if (query.status) list = list.filter((e) => e.status === query.status)
-  const total = list.length
-  const start = (query.page - 1) * query.pageSize
-  return { list: list.slice(start, start + query.pageSize), total }
+  const qs = new URLSearchParams()
+  qs.set('page', String(query.page))
+  qs.set('pageSize', String(query.pageSize))
+  if (query.keyword) qs.set('keyword', query.keyword)
+  if (query.industry) qs.set('industry', query.industry)
+  if (query.status) qs.set('status', query.status)
+  return httpGet<PageResult<Enterprise>>(`/enterprises?${qs}`)
 }
 
-/* TODO: 替换为 GET /api/admin/enterprises/options — 企业下拉选项（办公位租约等场景使用） */
+/* 已接入 M1 真实接口：GET /api/admin/enterprises/options — 企业下拉选项（办公位租约等场景使用） */
 export async function fetchEnterpriseOptions(): Promise<{ label: string; value: string }[]> {
-  await delay(200)
-  return enterprises.map((e) => ({ label: `${e.name}（${e.id}）`, value: e.id }))
+  return httpGet<{ label: string; value: string }[]>('/enterprises/options')
 }
 
-/* TODO: 替换为 GET /api/admin/enterprises/:id
+/* 已接入 M1 真实接口：GET /api/admin/enterprises/:id
  * 返回企业详情 + 成员列表（成员 = 持有该企业 community_enterprise 身份的用户）
  */
 export async function fetchEnterprise(id: string): Promise<{ enterprise: Enterprise; members: User[] }> {
-  await delay(300)
-  const enterprise = enterprises.find((e) => e.id === id)
-  if (!enterprise) throw new Error('企业不存在')
-  const members = users.filter((u) =>
-    u.identities.some((i) => i.type === 'community_enterprise' && i.enterpriseId === id),
-  )
-  return { enterprise, members }
+  return httpGet<{ enterprise: Enterprise; members: User[] }>(`/enterprises/${id}`)
 }
 
-/* TODO: 替换为 PATCH /api/admin/enterprises/:id/showcase-status，入参 { status, comment }
+/* 已接入 M1 真实接口：PATCH /api/admin/enterprises/:id/showcase-status，入参 { status, comment }
  * 展示页审核：published / rejected / pending
  */
 export async function reviewShowcase(
@@ -52,12 +40,7 @@ export async function reviewShowcase(
   status: Enterprise['showcaseStatus'],
   comment?: string,
 ): Promise<{ code: number }> {
-  await delay(350)
-  const enterprise = enterprises.find((e) => e.id === id)
-  if (!enterprise) throw new Error('企业不存在')
-  enterprise.showcaseStatus = status
-  if (status === 'rejected' && comment) enterprise.showcaseComment = comment
-  return { code: 0 }
+  return httpPatch<{ code: number }>(`/enterprises/${id}/showcase-status`, { status, comment })
 }
 
 export interface EnterpriseStats {
@@ -67,14 +50,7 @@ export interface EnterpriseStats {
   projectCount: number
 }
 
-/* TODO: 替换为 GET /api/admin/enterprises/:id/stats — 企业数据概览 */
+/* 已接入 M1 真实接口：GET /api/admin/enterprises/:id/stats — 企业数据概览 */
 export async function fetchEnterpriseStats(id: string): Promise<EnterpriseStats> {
-  await delay(300)
-  const demandCount = demands.filter(
-    (d) => d.publisherIdentity?.type === 'community_enterprise' && d.publisherIdentity.enterpriseId === id,
-  ).length
-  const projectCount = projects.filter((p) =>
-    p.undertakers.some((t) => t.type === 'enterprise' && t.id === id),
-  ).length
-  return { demandCount, projectCount }
+  return httpGet<EnterpriseStats>(`/enterprises/${id}/stats`)
 }
