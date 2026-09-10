@@ -6,7 +6,7 @@
 
 ## 当前状态（2026-09-10）
 
-**M1 后端服务进行中** — M0 后台原型（M0-A~E）全部完成；M1 已落地 M1-A~D：`apps/api`（NestJS 11 + Prisma 6 + PostgreSQL 17 + Redis 7.4）实现 115 个 `/api/admin/**` 端点（社区成员域 21 / 业务运营域 34 / 运营设施域 60），含 JWT 认证、状态机服务端校验、定时任务、积分/经验发放引擎与全量种子迁移；admin web 16/22 个 API 文件已接入真实接口（e2e 15 套件 72 用例全绿）。剩余 M1-E：系统管理域（通知/审计/配置/字典/工作台聚合）+ 删除 mock + `/api/app/**` 设计。详细进度见 [docs/full-spec-check.md](./docs/full-spec-check.md)。
+**M1 后端服务已完成** — M0 后台原型（M0-A~E）与 M1（M1-A~E）全部落地：`apps/api`（NestJS 11 + Prisma 6 + PostgreSQL 17 + Redis 7.4）实现 129 个端点（认证 2 / 管理端 127，含系统管理域 12），含 JWT 认证、状态机服务端校验、定时任务、积分/经验发放引擎、审计 before/after 快照、Redis 缓存（降级回源）与全量种子迁移（`prisma/seed-data/`）；admin web 22/22 个 API 文件已接入真实接口，`src/mock/` 已删除（e2e 16 套件 78 用例全绿）。下一步 M2 客户端 Web：端点设计见 [docs/api-app-design.md](./docs/api-app-design.md)，整体进度见 [docs/full-spec-check.md](./docs/full-spec-check.md)。
 
 开发策略：**以管理后台 Web 作为初始驱动**——先在后台原型中冻结实体模型、状态流与 API 接口形状，再据此实现后端与客户端（当前已进入后端实施与前端接入阶段）。
 
@@ -25,30 +25,31 @@
 
 ```
 apps/
-  admin/            # 管理后台 Web（M0 原型完成；16/22 个 API 文件已接入真实接口）
+  admin/            # 管理后台 Web（M1 全量接入真实接口；mock 已删除）
     src/
-      api/          # API 层 —— http.ts 封装 + 已 HTTP 化域文件；6 个系统域文件仍为 Mock（M1-E 切换）
+      api/          # API 层 —— http.ts 封装 + 22 个域文件全部 HTTP 化
       components/   # 共享组件（PageHeader/StatusTag/IdentityTags/...）
       constants/    # 状态映射与身份词汇表（冻结）
       layouts/      # AdminLayout（唯一 App Shell）
-      mock/         # Mock 数据单一出口（剩余系统域消费 + 后端种子来源）
       router/       # 路由表（冻结）
       stores/       # Pinia（auth/tabs）
       types/        # 实体类型定义（M1 建表依据）
       views/        # 页面（按领域分目录）
-  api/              # 后端服务（M1：NestJS 11 + Prisma 6 + PostgreSQL 17 + Redis 7.4）
-    prisma/         # schema.prisma（35 模型）+ migrations + seed.ts（M0 mock 全量迁移）
+  api/              # 后端服务（NestJS 11 + Prisma 6 + PostgreSQL 17 + Redis 7.4）
+    prisma/         # schema.prisma（35 模型）+ migrations + seed.ts + seed-data/（种子数据单一来源）
     src/
-      common/       # 底座：Prisma/Redis/响应包络/异常过滤/JWT Guard/审计/前缀 ID 发号器/积分引擎
-      modules/      # 按域模块：auth/users/enterprises/applications/demands/projects/events/mall/rules/workstations/spaces/contents
+      common/       # 底座：Prisma/Redis（缓存+黑名单，降级回源）/响应包络/异常过滤/JWT Guard/审计（含快照）/前缀 ID 发号器/积分引擎
+      modules/      # 按域模块：auth/users/enterprises/applications/demands/projects/events/mall/rules/workstations/spaces/contents/system
       scheduler/    # 定时任务（定时发布/活动结束/租约临期）
-    test/           # e2e 套件（15 套件 72 用例，每套件重种子隔离）
+    test/           # e2e 套件（16 套件 78 用例，每套件重种子隔离）
     docker-compose.dev.yml
 packages/           # 预留（共享包）
 docs/
   full-spec-check.md    # 整体项目开发规划与进度核对表（进度唯一事实来源）
   wiki-admin-web.md     # 管理后台开发 Wiki（设计契约/组件规范/状态机/API 约定）
   wiki-backend.md       # 后端开发 Wiki（数据模型/端点契约/业务规则/里程碑）
+  api-app-design.md     # M2 客户端 /api/app/** 端点设计（M1-E 产出）
+  entity-fields.md      # 35 模型分域字段清单（M1-E 沉淀）
 ```
 
 ## 开发命令
