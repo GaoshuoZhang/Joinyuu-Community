@@ -625,3 +625,4 @@ TZ=Asia/Shanghai
 | 2026-09-10 | 初版：M1 全量契约冻结（Prisma/范围/主键三项决策经用户确认） |
 | 2026-09-10 | M1-A 实施修订：时间字段统一 String 存储（废弃 timestamptz 方案，理由见 §4.1）；`db:migrate` 改为非交互 `prisma migrate deploy` 并新增 `db:migrate:dev`（交互式创建迁移）；连接地址统一 127.0.0.1（Docker Desktop IPv6 loopback 不可靠）；模型数订正为 35 |
 | 2026-09-10 | M1-B 实施修订：全部 `@db.Char` 主键/外键列改 `VarChar`（PostgreSQL CHAR(n) 读取保留尾部填充，破坏 ID 契约）——迁移 `20260910140000_char_to_varchar`；§7.9 账本 POST body 补全完整形状（`{targetType,targetId,delta,reason}` / `{userId,delta,reason}`）；§7.3 企业 options 形状订正为 `[{label,value}]`；admin 路由守卫改读 localStorage（401 清 token 后守卫需立即感知，读 Pinia 快照会把 /login 误重定向回 /dashboard） |
+| 2026-09-10 | M1-C 实施修订：`@nestjs/schedule` 锁定 ^6（v12 为纯 ESM 包，jest/nest CJS 链不兼容）；e2e 套件隔离机制（`test/helpers/reseed.ts`，每套件 beforeAll 全量重种子——状态机套件的跨运行污染根治）；demands 新增 4 条状态机守卫 409（reject/close/update/initiate-project，M0 无防重入守卫，按 §8.1 服务端强制原则补齐）；§8.4 积分默认值为示意（实际以种子规则数据为准，如报名通过 mock 实际值）；活动自定义积分（enrollPoints/checkinPoints）走服务内直写事务（引擎仅支持规则值发放） |

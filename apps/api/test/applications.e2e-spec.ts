@@ -6,12 +6,14 @@ import { INestApplication } from '@nestjs/common'
 import { Test } from '@nestjs/testing'
 import request from 'supertest'
 import { AppModule } from '../src/app.module'
+import { reseed } from './helpers/reseed'
 
 describe('M1-B applications 审批（approve 授予身份）', () => {
   let app: INestApplication
   let token: string
 
   beforeAll(async () => {
+    reseed()
     const moduleRef = await Test.createTestingModule({ imports: [AppModule] }).compile()
     app = moduleRef.createNestApplication()
     await app.init()

@@ -1,0 +1,565 @@
+import {
+  BadRequestException,
+  ConflictException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common'
+import { Prisma } from '@prisma/client'
+import type { Demand, DemandRespondent } from '@prisma/client'
+import { PrismaService } from '../../common/prisma/prisma.service'
+import { IdGeneratorService } from '../../common/id-generator/id-generator.service'
+import { AuditService } from '../../common/audit/audit.service'
+import { formatNow } from '../../common/utils/time'
+import { toIdentityDto } from '../users/user.mapper'
+import { ProjectsService } from '../projects/projects.service'
+import type { QueryDemandsDto } from './dto/query-demands.dto'
+import type { CreateDemandDto } from './dto/create-demand.dto'
+import type { UpdateDemandDto } from './dto/update-demand.dto'
+import type { RejectDemandDto } from './dto/reject-demand.dto'
+import type { ScheduleDemandDto } from './dto/schedule-demand.dto'
+import type { ProxyRespondDemandDto } from './dto/proxy-respond-demand.dto'
+import type { InitiateProjectDto } from './dto/initiate-project.dto'
+
+type DemandWithRespondents = Demand & { respondents: DemandRespondent[] }
+
+export interface RespondentDto {
+  name: string
+  enterprise: string
+  phone?: string
+  email?: string
+  quote?: string
+  message: string
+  at: string
+  status: string
+}
+
+export interface DemandDto {
+  id: string
+  title: string
+  category: string
+  publisherId: string
+  publisherName: string
+  publisherIdentity: unknown
+  contactName?: string
+  contactPhone?: string
+  contactEmail?: string
+  budget: string
+  period: string
+  deadline: string
+  scheduledAt?: string
+  visibilityIdentities: string[]
+  visibilityLevels: string[]
+  enrollmentIdentities: string[]
+  enrollmentLevels: string[]
+  status: string
+  createdAt: string
+  publishedAt?: string
+  description: string
+  tags: string[]
+  rejectedReason?: string
+  matchedRespondent?: string
+  projectId?: string
+  respondPoints?: number
+  respondents: RespondentDto[]
+}
+
+export interface UndertakerOptionDto {
+  group: string
+  label: string
+  value: string
+}
+
+export interface PublisherOptionsDto {
+  users: Array<{
+    uid: string
+    nickname: string
+    realName: string
+    phone: string
+    email: string
+    tag: '社区个体' | '个人用户'
+  }>
+  enterprises: Array<{
+    id: string
+    name: string
+    contactName: string
+    contactPhone: string
+    contactEmail?: string
+    tag: '社区企业' | '外部企业'
+  }>
+}
+
+function toRespondentDto(r: DemandRespondent): RespondentDto {
+  const dto: RespondentDto = {
+    name: r.name,
+    enterprise: r.enterprise,
+    message: r.message,
+    at: r.at,
+    status: r.status,
+  }
+  if (r.phone != null) dto.phone = r.phone
+  if (r.email != null) dto.email = r.email
+  if (r.quote != null) dto.quote = r.quote
+  return dto
+}
+
+/* Prisma 行 → M0 Demand 形状：publisherIdentity Json 透传、可选字段缺失时省略（对齐 mock undefined） */
+function toDemandDto(d: DemandWithRespondents): DemandDto {
+  const dto: DemandDto = {
+    id: d.id,
+    title: d.title,
+    category: d.category,
+    publisherId: d.publisherId,
+    publisherName: d.publisherName,
+    publisherIdentity: d.publisherIdentity,
+    budget: d.budget,
+    period: d.period,
+    deadline: d.deadline,
+    visibilityIdentities: d.visibilityIdentities,
+    visibilityLevels: d.visibilityLevels,
+    enrollmentIdentities: d.enrollmentIdentities,
+    enrollmentLevels: d.enrollmentLevels,
+    status: d.status,
+    createdAt: d.createdAt,
+    description: d.description,
+    tags: d.tags,
+    respondents: d.respondents.map(toRespondentDto),
+  }
+  if (d.contactName != null) dto.contactName = d.contactName
+  if (d.contactPhone != null) dto.contactPhone = d.contactPhone
+  if (d.contactEmail != null) dto.contactEmail = d.contactEmail
+  if (d.scheduledAt != null) dto.scheduledAt = d.scheduledAt
+  if (d.publishedAt != null) dto.publishedAt = d.publishedAt
+  if (d.rejectedReason != null) dto.rejectedReason = d.rejectedReason
+  if (d.matchedRespondent != null) dto.matchedRespondent = d.matchedRespondent
+  if (d.projectId != null) dto.projectId = d.projectId
+  if (d.respondPoints != null) dto.respondPoints = d.respondPoints
+  return dto
+}
+
+/* 需求域（wiki-backend.md §7.6/§8.1/§8.7）：
+ * 状态机 pending → pending_release → published|scheduled → projected/closed/rejected 等服务端 409 强制；
+ * 发布方身份快照 resolvePublisherIdentity 服务端化；代报名写 DemandRespondent；
+ * 立项复用 ProjectsService.createProject 后双向关联 demand.projectId ↔ project.sourceDemandId。 */
+@Injectable()
+export class DemandsService {
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly ids: IdGeneratorService,
+    private readonly audit: AuditService,
+    private readonly projects: ProjectsService,
+  ) {}
+
+  async findAll(query: QueryDemandsDto): Promise<{ list: DemandDto[]; total: number }> {
+    const where: Prisma.DemandWhereInput = {}
+    if (query.keyword) {
+      const kw = query.keyword.trim()
+      where.OR = [
+        { title: { contains: kw, mode: 'insensitive' } },
+        { id: { contains: kw, mode: 'insensitive' } },
+      ]
+    }
+    if (query.category) where.category = query.category
+    if (query.status) where.status = query.status
+    if (query.publisherId) where.publisherId = query.publisherId
+
+    const rows = await this.prisma.demand.findMany({
+      where,
+      include: { respondents: { orderBy: { id: 'asc' } } },
+    })
+
+    let list = rows
+
+    /* 企业筛选：社区企业按 publisherIdentity.enterpriseId；外部企业按档案名匹配 enterpriseName */
+    if (query.enterprise) {
+      const community = await this.prisma.enterprise.findUnique({ where: { id: query.enterprise } })
+      if (community) {
+        list = list.filter(
+          (d) => (d.publisherIdentity as { enterpriseId?: string } | null)?.enterpriseId === query.enterprise,
+        )
+      } else {
+        const profile = await this.prisma.externalEnterpriseProfile.findUnique({
+          where: { id: query.enterprise },
+        })
+        list = list.filter(
+          (d) => (d.publisherIdentity as { enterpriseName?: string } | null)?.enterpriseName === profile?.name,
+        )
+      }
+    }
+
+    /* 排序：默认 createdAt 倒序；publishedAt 空值排最后（双向）；id 按编号数值比较 */
+    const field = query.sortBy ?? 'createdAt'
+    const dir = query.sortOrder === 'ascend' ? 1 : -1
+    list.sort((a, b) => {
+      if (field === 'id') {
+        const av = Number(a.id.replace('D', ''))
+        const bv = Number(b.id.replace('D', ''))
+        return av < bv ? -1 * dir : av > bv ? 1 * dir : 0
+      }
+      if (field === 'publishedAt') {
+        const av = a.publishedAt
+        const bv = b.publishedAt
+        if (av == null && bv == null) return 0
+        if (av == null) return 1
+        if (bv == null) return -1
+        return av < bv ? -1 * dir : av > bv ? 1 * dir : 0
+      }
+      const av = a.createdAt
+      const bv = b.createdAt
+      return av < bv ? -1 * dir : av > bv ? 1 * dir : 0
+    })
+
+    const total = list.length
+    const start = (query.page - 1) * query.pageSize
+    return { list: list.slice(start, start + query.pageSize).map(toDemandDto), total }
+  }
+
+  async findOne(id: string): Promise<DemandDto> {
+    const demand = await this.prisma.demand.findUnique({
+      where: { id },
+      include: { respondents: { orderBy: { id: 'asc' } } },
+    })
+    if (!demand) throw new NotFoundException('需求不存在')
+    return toDemandDto(demand)
+  }
+
+  async create(dto: CreateDemandDto, operator: string): Promise<DemandDto> {
+    const publisherName = await this.resolvePublisherName(dto)
+    const publisherIdentity = await this.resolvePublisherIdentity(
+      dto.publisherType,
+      dto.publisherId,
+      dto.publisherIdentity,
+    )
+
+    const id = await this.ids.next('D')
+    const demand = await this.prisma.demand.create({
+      data: {
+        ...this.editableData(dto),
+        id,
+        publisherId: dto.publisherId,
+        publisherName,
+        publisherIdentity: publisherIdentity ?? Prisma.DbNull,
+        status: 'pending_release',
+        createdAt: formatNow(),
+        tags: [],
+      },
+      include: { respondents: true },
+    })
+
+    await this.audit.record({
+      module: '需求管理',
+      action: '创建需求',
+      target: `${demand.id} · ${demand.title}`,
+      detail: `需求方：${demand.publisherName}`,
+      operator,
+    })
+
+    return toDemandDto(demand)
+  }
+
+  async update(id: string, dto: UpdateDemandDto): Promise<{ code: number }> {
+    const demand = await this.prisma.demand.findUnique({ where: { id } })
+    if (!demand) throw new NotFoundException('需求不存在')
+    if (demand.status !== 'pending_release' && demand.status !== 'published') {
+      throw new ConflictException('仅待发布/已发布的需求可编辑')
+    }
+
+    await this.prisma.demand.update({ where: { id }, data: this.editableData(dto) })
+    return { code: 0 }
+  }
+
+  async approve(id: string, operator: string): Promise<{ code: number }> {
+    const demand = await this.prisma.demand.findUnique({ where: { id } })
+    if (!demand) throw new NotFoundException('需求不存在')
+    if (demand.status !== 'pending') throw new ConflictException('仅待审核的需求可审核')
+
+    await this.prisma.demand.update({ where: { id }, data: { status: 'pending_release' } })
+
+    await this.audit.record({
+      module: '需求管理',
+      action: '需求审核通过',
+      target: `${demand.id} · ${demand.title}`,
+      operator,
+    })
+    return { code: 0 }
+  }
+
+  async reject(id: string, dto: RejectDemandDto, operator: string): Promise<{ code: number }> {
+    const demand = await this.prisma.demand.findUnique({ where: { id } })
+    if (!demand) throw new NotFoundException('需求不存在')
+    if (demand.status !== 'pending') throw new ConflictException('仅待审核的需求可驳回')
+    const reason = (dto.reason ?? '').trim()
+    if (!reason) throw new BadRequestException('请填写驳回原因')
+
+    await this.prisma.demand.update({ where: { id }, data: { status: 'rejected', rejectedReason: reason } })
+
+    await this.audit.record({
+      module: '需求管理',
+      action: '需求驳回',
+      target: `${demand.id} · ${demand.title}`,
+      detail: reason,
+      operator,
+    })
+    return { code: 0 }
+  }
+
+  async publishNow(id: string, operator: string): Promise<{ code: number }> {
+    const demand = await this.prisma.demand.findUnique({ where: { id } })
+    if (!demand) throw new NotFoundException('需求不存在')
+    if (demand.status !== 'pending_release') throw new ConflictException('仅待发布的需求可立即发布')
+
+    await this.prisma.demand.update({
+      where: { id },
+      data: { status: 'published', scheduledAt: null, publishedAt: formatNow() },
+    })
+
+    await this.audit.record({
+      module: '需求管理',
+      action: '需求发布',
+      target: `${demand.id} · ${demand.title}`,
+      operator,
+    })
+    return { code: 0 }
+  }
+
+  async schedule(id: string, dto: ScheduleDemandDto): Promise<{ code: number }> {
+    const demand = await this.prisma.demand.findUnique({ where: { id } })
+    if (!demand) throw new NotFoundException('需求不存在')
+    if (demand.status !== 'pending_release') throw new ConflictException('仅待发布的需求可设定时发布')
+
+    await this.prisma.demand.update({
+      where: { id },
+      data: { status: 'scheduled', scheduledAt: dto.scheduledAt },
+    })
+    return { code: 0 }
+  }
+
+  async cancelSchedule(id: string): Promise<{ code: number }> {
+    const demand = await this.prisma.demand.findUnique({ where: { id } })
+    if (!demand) throw new NotFoundException('需求不存在')
+    if (demand.status !== 'scheduled') throw new ConflictException('仅定时发布中的需求可取消定时')
+
+    await this.prisma.demand.update({
+      where: { id },
+      data: { status: 'pending_release', scheduledAt: null, publishedAt: null },
+    })
+    return { code: 0 }
+  }
+
+  async retract(id: string): Promise<{ code: number }> {
+    const demand = await this.prisma.demand.findUnique({ where: { id } })
+    if (!demand) throw new NotFoundException('需求不存在')
+    if (demand.status !== 'published') throw new ConflictException('仅已发布的需求可撤回发布')
+
+    await this.prisma.demand.update({
+      where: { id },
+      data: { status: 'pending_release', scheduledAt: null, publishedAt: null },
+    })
+    return { code: 0 }
+  }
+
+  async close(id: string, operator: string): Promise<{ code: number }> {
+    const demand = await this.prisma.demand.findUnique({ where: { id } })
+    if (!demand) throw new NotFoundException('需求不存在')
+    if (demand.status !== 'pending_release') throw new ConflictException('仅待发布的需求可关闭')
+
+    await this.prisma.demand.update({ where: { id }, data: { status: 'closed' } })
+
+    await this.audit.record({
+      module: '需求管理',
+      action: '需求关闭',
+      target: `${demand.id} · ${demand.title}`,
+      operator,
+    })
+    return { code: 0 }
+  }
+
+  async proxyRespond(id: string, dto: ProxyRespondDemandDto): Promise<{ code: number }> {
+    const demand = await this.prisma.demand.findUnique({ where: { id } })
+    if (!demand) throw new NotFoundException('需求不存在')
+    if (demand.status !== 'published' && demand.status !== 'projected') {
+      throw new ConflictException('仅已发布/已立项的需求可代报名')
+    }
+    const phone = dto.phone.trim()
+    if (!phone) throw new BadRequestException('请填写联系电话')
+
+    await this.prisma.demandRespondent.create({
+      data: {
+        demandId: id,
+        name: dto.userName.trim(),
+        enterprise: dto.enterprise.trim(),
+        phone,
+        email: (dto.email ?? '').trim() || null,
+        quote: (dto.quote ?? '').trim() || null,
+        message: (dto.message ?? '').trim() || '管理员代报名',
+        at: formatNow(),
+        status: 'pending',
+      },
+    })
+    return { code: 0 }
+  }
+
+  /* 立项：published → projected；createProject 先行，双向关联（demand.projectId ↔ project.sourceDemandId）事务更新 */
+  async initiateProject(id: string, dto: InitiateProjectDto, operator: string) {
+    const demand = await this.prisma.demand.findUnique({ where: { id } })
+    if (!demand) throw new NotFoundException('需求不存在')
+    if (demand.status !== 'published') throw new ConflictException('仅已发布的需求可立项')
+
+    const project = await this.projects.createProject(dto, operator)
+
+    await this.prisma.$transaction(async (tx) => {
+      await tx.project.update({ where: { id: project.id }, data: { sourceDemandId: demand.id } })
+      await tx.demand.update({
+        where: { id: demand.id },
+        data: { status: 'projected', projectId: project.id },
+      })
+    })
+
+    await this.audit.record({
+      module: '需求管理',
+      action: '需求立项',
+      target: `${demand.id} · ${demand.title}`,
+      detail: `生成项目 ${project.code}`,
+      operator,
+    })
+
+    return { ...project, sourceDemandId: demand.id }
+  }
+
+  async undertakerOptions(): Promise<UndertakerOptionDto[]> {
+    const [enterprises, externalProfiles, users] = await Promise.all([
+      this.prisma.enterprise.findMany({ orderBy: { id: 'asc' } }),
+      this.prisma.externalEnterpriseProfile.findMany({ orderBy: { id: 'asc' } }),
+      this.prisma.user.findMany({ orderBy: { uid: 'asc' }, include: { identities: true } }),
+    ])
+
+    return [
+      ...enterprises.map((e) => ({
+        group: '社区企业',
+        label: `${e.name}（社区企业 · ${e.id}）`,
+        value: `enterprise:${e.id}`,
+      })),
+      ...externalProfiles.map((x) => ({
+        group: '外部企业',
+        label: `${x.name}（外部企业 · ${x.id}）`,
+        value: `enterprise:${x.id}`,
+      })),
+      ...users.map((u) => {
+        const tag = u.identities.some((i) => i.type === 'community_individual') ? '社区个体' : '个人用户'
+        return { group: tag, label: `${u.nickname}（${tag} · ${u.uid}）`, value: `individual:${u.uid}` }
+      }),
+    ]
+  }
+
+  async publisherOptions(): Promise<PublisherOptionsDto> {
+    const [users, enterprises, externalProfiles] = await Promise.all([
+      this.prisma.user.findMany({ orderBy: { uid: 'asc' }, include: { identities: true } }),
+      this.prisma.enterprise.findMany({ orderBy: { id: 'asc' } }),
+      this.prisma.externalEnterpriseProfile.findMany({ orderBy: { id: 'asc' } }),
+    ])
+
+    return {
+      users: users.map((u) => ({
+        uid: u.uid,
+        nickname: u.nickname,
+        realName: u.realName ?? u.nickname,
+        phone: u.phone,
+        email: u.email,
+        tag: (u.identities.some((i) => i.type === 'community_individual')
+          ? '社区个体'
+          : '个人用户') as '社区个体' | '个人用户',
+      })),
+      enterprises: [
+        ...enterprises.map((e) => ({
+          id: e.id,
+          name: e.name,
+          contactName: e.contactName,
+          contactPhone: e.contactPhone,
+          contactEmail: e.contactEmail ?? undefined,
+          tag: '社区企业' as const,
+        })),
+        ...externalProfiles.map((x) => ({
+          id: x.id,
+          name: x.name,
+          contactName: '',
+          contactPhone: '',
+          contactEmail: undefined,
+          tag: '外部企业' as const,
+        })),
+      ],
+    }
+  }
+
+  /* 提交人三类来源存在性校验与名称解析（对照 M0 createDemand 逐条迁移） */
+  private async resolvePublisherName(dto: CreateDemandDto): Promise<string> {
+    if (dto.publisherType === 'individual') {
+      const user = await this.prisma.user.findUnique({ where: { uid: dto.publisherId } })
+      if (!user) throw new BadRequestException(`提交用户不存在（uid=${dto.publisherId}）`)
+      return user.nickname
+    }
+    if (dto.publisherType === 'enterprise') {
+      const enterprise = await this.prisma.enterprise.findUnique({ where: { id: dto.publisherId } })
+      if (!enterprise) throw new BadRequestException('提交企业不存在')
+      return enterprise.name
+    }
+    const name = (dto.publisherName ?? '').trim()
+    if (!name) throw new BadRequestException('请输入提交人名称')
+    return name
+  }
+
+  /* 发布方身份快照（对照 M0 resolvePublisherIdentity 逐条迁移）：
+   * enterprise → 社区企业/外部企业；individual → 持社区个体身份则标社区个体，否则个人用户；custom → 传入快照或 null */
+  private async resolvePublisherIdentity(
+    publisherType: string,
+    publisherId: string,
+    payloadIdentity: unknown,
+  ): Promise<Prisma.InputJsonValue | null> {
+    if (publisherType === 'enterprise') {
+      const ent = await this.prisma.enterprise.findUnique({ where: { id: publisherId } })
+      if (ent) {
+        return {
+          type: 'community_enterprise',
+          enterpriseId: ent.id,
+          enterpriseName: ent.name,
+          role: 'member',
+          title: '入驻企业成员',
+        }
+      }
+      const ext = await this.prisma.externalEnterpriseProfile.findUnique({ where: { id: publisherId } })
+      if (ext) {
+        return { type: 'external_enterprise', enterpriseName: ext.name, title: '合作企业' }
+      }
+      return null
+    }
+    if (publisherType === 'individual') {
+      const user = await this.prisma.user.findUnique({
+        where: { uid: publisherId },
+        include: { identities: true },
+      })
+      if (!user) return null
+      const attached = user.identities.find((i) => i.type === 'community_individual')
+      if (attached) return toIdentityDto(attached) as unknown as Prisma.InputJsonValue
+      return { type: 'individual', title: '个人用户' }
+    }
+    return (payloadIdentity as Prisma.InputJsonValue) ?? null
+  }
+
+  /* 可编辑字段（创建/编辑共用）：预算空 → 面议；contactEmail/respondPoints 空 → 清空 */
+  private editableData(dto: CreateDemandDto | UpdateDemandDto) {
+    return {
+      title: dto.title,
+      category: dto.category,
+      budget: (dto.budget ?? '').trim() || '面议',
+      period: dto.period,
+      deadline: dto.deadline,
+      description: dto.description,
+      visibilityIdentities: dto.visibilityIdentities,
+      visibilityLevels: dto.visibilityLevels,
+      enrollmentIdentities: dto.enrollmentIdentities,
+      enrollmentLevels: dto.enrollmentLevels,
+      contactName: dto.contactName ?? null,
+      contactPhone: dto.contactPhone ?? null,
+      contactEmail: dto.contactEmail || null,
+      respondPoints: dto.respondPoints ?? null,
+    }
+  }
+}

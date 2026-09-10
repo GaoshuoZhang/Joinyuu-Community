@@ -1,8 +1,5 @@
-import type { PageResult, Project } from '@/types'
-import type { ProjectInitPayload } from '@/types'
-import { enterprises, externalEnterpriseProfiles, projects, users } from '@/mock'
-import { delay } from './utils'
-import { recordAudit } from './auditLogs'
+import type { PageResult, Project, ProjectInitPayload } from '@/types'
+import { httpGet, httpPost, httpPut } from './http'
 
 export interface ProjectQuery {
   page: number
@@ -18,176 +15,49 @@ export interface ProjectQuery {
   sortOrder?: 'ascend' | 'descend'
 }
 
-/* TODO: 替换为 GET /api/admin/projects?page&pageSize&keyword&status */
+/* 已接入 M1 真实接口：GET /api/admin/projects?page&pageSize&keyword&status&participant&enterprise&sortBy&sortOrder */
 export async function fetchProjects(query: ProjectQuery): Promise<PageResult<Project>> {
-  await delay(400)
-  let list = [...projects]
-  if (query.keyword) {
-    const kw = query.keyword.trim().toLowerCase()
-    list = list.filter((p) => p.name.toLowerCase().includes(kw) || p.code.toLowerCase().includes(kw))
-  }
-  if (query.status) list = list.filter((p) => p.status === query.status)
-  if (query.participant) {
-    const participant = users.find((u) => u.uid === query.participant)
-    const enterpriseIds =
-      participant?.identities.filter((i) => i.type === 'community_enterprise').map((i) => i.enterpriseId) ?? []
-    list = list.filter((p) =>
-      p.undertakers.some(
-        (t) =>
-          (t.type === 'individual' && t.id === query.participant) ||
-          (t.type === 'enterprise' && enterpriseIds.includes(t.id)),
-      ),
-    )
-  }
-  if (query.enterprise) {
-    const isCommunity = enterprises.some((e) => e.id === query.enterprise)
-    if (isCommunity) {
-      /* 社区企业：按承接方企业 ID 匹配 */
-      list = list.filter((p) => p.undertakers.some((t) => t.type === 'enterprise' && t.id === query.enterprise))
-    } else {
-      /* 外部企业：按 ID（XE*）解析档案名，匹配其成员以个人身份承接的项目 */
-      const extProfile = externalEnterpriseProfiles.find((p) => p.id === query.enterprise)
-      const memberIds = users
-        .filter(
-          (u) => u.identities.some((i) => i.type === 'external_enterprise' && i.enterpriseName === extProfile?.name),
-        )
-        .map((u) => u.uid)
-      list = list.filter((p) => p.undertakers.some((t) => t.type === 'individual' && memberIds.includes(t.id)))
-    }
-  }
-  /* 排序：默认立项日期倒序（最新立项在前），可按立项日期/编号正倒序 */
-  const field = query.sortBy ?? 'initiatedAt'
-  const dir = query.sortOrder === 'ascend' ? 1 : -1
-  list.sort((a, b) => {
-    const av = field === 'id' ? Number(a.id.replace('P', '')) : a.initiatedAt
-    const bv = field === 'id' ? Number(b.id.replace('P', '')) : b.initiatedAt
-    if (av < bv) return -1 * dir
-    if (av > bv) return 1 * dir
-    return 0
-  })
-  const total = list.length
-  const start = (query.page - 1) * query.pageSize
-  return { list: list.slice(start, start + query.pageSize), total }
+  const qs = new URLSearchParams()
+  qs.set('page', String(query.page))
+  qs.set('pageSize', String(query.pageSize))
+  if (query.keyword) qs.set('keyword', query.keyword)
+  if (query.status) qs.set('status', query.status)
+  if (query.participant) qs.set('participant', query.participant)
+  if (query.enterprise) qs.set('enterprise', query.enterprise)
+  if (query.sortBy) qs.set('sortBy', query.sortBy)
+  if (query.sortOrder) qs.set('sortOrder', query.sortOrder)
+  return httpGet<PageResult<Project>>(`/projects?${qs}`)
 }
 
-/* TODO: 替换为 GET /api/admin/projects/:id */
+/* 已接入 M1 真实接口：GET /api/admin/projects/:id */
 export async function fetchProject(id: string): Promise<Project> {
-  await delay(300)
-  const project = projects.find((p) => p.id === id)
-  if (!project) throw new Error('项目不存在')
-  /* 返回快照副本：修复详情页 load 后因引用不变导致表格不刷新的问题（M1 为真实 HTTP 序列化新对象） */
-  return {
-    ...project,
-    undertakers: project.undertakers.map((t) => ({ ...t })),
-    milestones: project.milestones.map((m) => ({ ...m, owners: m.owners ? [...m.owners] : [] })),
-  }
+  return httpGet<Project>(`/projects/${id}`)
 }
 
-/* 承接方展示名：企业用企业名；个人用「姓名 · 头衔」（与下拉选项 label 一致） */
-function undertakerName(type: 'enterprise' | 'individual', id: string): string {
-  if (type === 'enterprise') {
-    const enterprise = enterprises.find((e) => e.id === id)
-    if (!enterprise) throw new Error('承接企业不存在')
-    return enterprise.name
-  }
-  const user = users.find((u) => u.uid === id)
-  if (!user) throw new Error('承接人不存在')
-  const identity = user.identities.find((i) => i.type === 'community_individual')
-  return `${user.nickname} · ${identity?.title ?? ''}`
-}
-
-function formatDate(): string {
-  const d = new Date()
-  const p = (n: number) => String(n).padStart(2, '0')
-  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`
-}
-
-/* TODO: 替换为 PUT /api/admin/projects/:id — 编辑项目（不改状态/编号/已有里程碑完成态） */
+/* 已接入 M1 真实接口：PUT /api/admin/projects/:id — 编辑项目（不改状态/编号/已有里程碑完成态） */
 export async function updateProject(id: string, payload: ProjectInitPayload): Promise<{ code: number }> {
-  await delay(400)
-  const project = projects.find((x) => x.id === id)
-  if (!project) throw new Error('项目不存在')
-  const undertakers = payload.undertakers.map((u) => ({
-    ...u,
-    name: u.type === 'custom' ? u.name || u.id : undertakerName(u.type as 'enterprise' | 'individual', u.id),
-  }))
-  project.name = payload.projectName
-  project.undertakers = undertakers
-  project.memberCount = undertakers.length
-  if (payload.startDate != null) project.startDate = payload.startDate
-  if (payload.endDate != null) project.endDate = payload.endDate
-  project.description = payload.description
-  project.milestones = payload.milestones
-    .filter((m) => m.name.trim())
-    .map((m) => ({ name: m.name.trim(), status: 'todo' as const, date: m.date, owners: m.owners }))
-  return { code: 0 }
+  return httpPut<{ code: number }>(`/projects/${id}`, payload)
 }
 
-/* 项目状态流转（冻结，2026-09-09）：进行中 ↔ 已暂停；进行中/已暂停 → 已关闭；已关闭可重新创建（复制） */
+/* 项目状态流转（冻结，2026-09-09）：进行中 ↔ 已暂停；进行中/已暂停 → 已关闭；已关闭可重新创建（复制）
+ * 已接入 M1 真实接口：POST /api/admin/projects/:id/pause */
 export async function pauseProject(id: string): Promise<{ code: number }> {
-  await delay(350)
-  const project = projects.find((x) => x.id === id)
-  if (!project) throw new Error('项目不存在')
-  if (project.status !== 'running') throw new Error('仅进行中的项目可暂停')
-  project.status = 'paused'
-  return { code: 0 }
+  return httpPost<{ code: number }>(`/projects/${id}/pause`)
 }
 
+/* 已接入 M1 真实接口：POST /api/admin/projects/:id/resume */
 export async function resumeProject(id: string): Promise<{ code: number }> {
-  await delay(350)
-  const project = projects.find((x) => x.id === id)
-  if (!project) throw new Error('项目不存在')
-  if (project.status !== 'paused') throw new Error('仅已暂停的项目可恢复')
-  project.status = 'running'
-  return { code: 0 }
+  return httpPost<{ code: number }>(`/projects/${id}/resume`)
 }
 
+/* 已接入 M1 真实接口：POST /api/admin/projects/:id/close，入参 { reason }（必填） */
 export async function closeProject(id: string, reason: string): Promise<{ code: number }> {
-  await delay(350)
-  const project = projects.find((x) => x.id === id)
-  if (!project) throw new Error('项目不存在')
-  if (project.status !== 'paused') throw new Error('仅已暂停的项目可关闭')
-  if (!reason.trim()) throw new Error('请填写关闭原因')
-  project.status = 'closed'
-  project.closeReason = reason.trim()
-  recordAudit('项目管理', '项目关闭', `${project.id} · ${project.name}`, reason.trim())
-  return { code: 0 }
+  return httpPost<{ code: number }>(`/projects/${id}/close`, { reason })
 }
 
-/* TODO: 替换为 POST /api/admin/projects — 直接创建项目（无来源需求）
+/* 已接入 M1 真实接口：POST /api/admin/projects — 直接创建项目（无来源需求）
  * 承接方可多个，占比整数百分比合计 100；里程碑可多选负责承接方
  */
 export async function createProject(payload: ProjectInitPayload): Promise<Project> {
-  await delay(500)
-  if (payload.undertakers.length === 0) throw new Error('请至少选择一个承接方')
-
-  const undertakers = payload.undertakers.map((u) => ({
-    ...u,
-    name: u.type === 'custom' ? u.name || u.id : undertakerName(u.type as 'enterprise' | 'individual', u.id),
-  }))
-  const shareSum = undertakers.reduce((s, u) => s + u.share, 0)
-  if (shareSum !== 100) throw new Error('承接占比合计须为 100%')
-
-  const maxNum = projects.reduce((m, p) => Math.max(m, Number(p.id.replace('P', ''))), 0)
-  const yearCount = projects.filter((p) => p.code.startsWith('JY-2026')).length + 1
-  const project: Project = {
-    id: `P${maxNum + 1}`,
-    code: `JY-2026-${String(yearCount).padStart(2, '0')}`,
-    name: payload.projectName,
-    undertakers,
-    status: 'running',
-    progress: 0,
-    startDate: payload.startDate ?? '',
-    endDate: payload.endDate ?? '',
-    initiatedAt: formatDate(),
-    description: payload.description,
-    milestones: payload.milestones
-      .filter((m) => m.name.trim())
-      .map((m) => ({ name: m.name.trim(), status: 'todo' as const, date: m.date, owners: m.owners })),
-    memberCount: undertakers.length,
-    expReward: payload.expReward,
-  }
-  projects.push(project)
-  recordAudit('项目管理', '创建项目', `${project.id} · ${project.name}`, project.code)
-  return project
+  return httpPost<Project>('/projects', payload)
 }

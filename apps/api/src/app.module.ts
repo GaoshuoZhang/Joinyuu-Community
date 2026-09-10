@@ -1,5 +1,6 @@
 import { Module, ValidationPipe } from '@nestjs/common'
 import { APP_FILTER, APP_GUARD, APP_INTERCEPTOR, APP_PIPE } from '@nestjs/core'
+import { ScheduleModule } from '@nestjs/schedule'
 import { PrismaModule } from './common/prisma/prisma.module'
 import { RedisModule } from './common/redis/redis.module'
 import { IdGeneratorModule } from './common/id-generator/id-generator.module'
@@ -11,6 +12,10 @@ import { EnterprisesModule } from './modules/enterprises/enterprises.module'
 import { ExternalEnterprisesModule } from './modules/external-enterprises/external-enterprises.module'
 import { ApplicationsModule } from './modules/applications/applications.module'
 import { LedgersModule } from './modules/ledgers/ledgers.module'
+import { DemandsModule } from './modules/demands/demands.module'
+import { ProjectsModule } from './modules/projects/projects.module'
+import { EventsModule } from './modules/events/events.module'
+import { SchedulerModule } from './scheduler/scheduler.module'
 import { HealthController } from './health/health.controller'
 import { JwtAuthGuard } from './common/guards/jwt-auth.guard'
 import { EnvelopeInterceptor } from './common/interceptors/envelope.interceptor'
@@ -19,6 +24,7 @@ import { HttpExceptionFilter } from './common/filters/http-exception.filter'
 
 @Module({
   imports: [
+    ScheduleModule.forRoot(),
     PrismaModule,
     RedisModule,
     IdGeneratorModule,
@@ -30,6 +36,10 @@ import { HttpExceptionFilter } from './common/filters/http-exception.filter'
     ExternalEnterprisesModule,
     ApplicationsModule,
     LedgersModule,
+    DemandsModule,
+    ProjectsModule,
+    EventsModule,
+    SchedulerModule,
   ],
   controllers: [HealthController],
   providers: [
