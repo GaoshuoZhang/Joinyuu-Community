@@ -92,6 +92,8 @@ export class ApplicationsService {
       action: '审批通过',
       target: `${app.id} · ${app.targetName}`,
       detail: app.type === 'settle' ? '入驻申请' : '身份绑定',
+      before: { status: app.status, targetName: app.targetName },
+      after: { status: 'approved', grantedUserId: grant.userId, grantedEnterpriseId: grant.enterpriseId },
       operator,
     })
 
@@ -117,6 +119,8 @@ export class ApplicationsService {
       action: '审批驳回',
       target: `${app.id} · ${app.targetName}`,
       detail: comment || undefined,
+      before: { status: app.status },
+      after: { status: 'rejected' },
       operator,
     })
 

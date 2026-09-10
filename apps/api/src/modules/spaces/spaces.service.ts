@@ -227,6 +227,8 @@ export class SpacesService {
       action: status === 'approved' ? '预约审批通过' : '预约审批驳回',
       target: `${reservation.id} · ${reservation.spaceName}`,
       detail: comment,
+      before: { status: reservation.status },
+      after: { status },
       operator,
     })
     return { code: 0 }

@@ -74,6 +74,7 @@ export class AnnouncementsService {
       action: '发布公告',
       target: `${announcement.id} · ${announcement.title}`,
       detail: announcement.pinned ? '置顶' : undefined,
+      after: { status: announcement.status, pinned: announcement.pinned },
       operator,
     })
     return toAnnouncementDto(announcement)
@@ -98,6 +99,8 @@ export class AnnouncementsService {
       module: '内容管理',
       action: '编辑公告',
       target: `${item.id} · ${title}`,
+      before: { title: item.title, content: item.content, pinned: item.pinned },
+      after: { title, content: payload.content.trim(), pinned: payload.pinned },
       operator,
     })
     return { code: 0 }
@@ -117,6 +120,8 @@ export class AnnouncementsService {
       module: '内容管理',
       action: '下架公告',
       target: `${item.id} · ${item.title}`,
+      before: { status: item.status },
+      after: { status: 'withdrawn' },
       operator,
     })
     return { code: 0 }
@@ -136,6 +141,8 @@ export class AnnouncementsService {
       module: '内容管理',
       action: '重新发布公告',
       target: `${item.id} · ${item.title}`,
+      before: { status: item.status },
+      after: { status: 'published' },
       operator,
     })
     return { code: 0 }
@@ -155,6 +162,8 @@ export class AnnouncementsService {
       module: '内容管理',
       action: pinned ? '公告置顶' : '取消公告置顶',
       target: `${item.id} · ${item.title}`,
+      before: { pinned: item.pinned },
+      after: { pinned },
       operator,
     })
     return { code: 0 }
@@ -170,6 +179,7 @@ export class AnnouncementsService {
       module: '内容管理',
       action: '删除公告',
       target: `${item.id} · ${item.title}`,
+      before: { title: item.title, status: item.status },
       operator,
     })
     return { code: 0 }

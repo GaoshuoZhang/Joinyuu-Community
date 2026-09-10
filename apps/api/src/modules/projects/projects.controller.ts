@@ -31,14 +31,14 @@ export class ProjectsController {
 
   @HttpCode(200)
   @Post(':id/pause')
-  pause(@Param('id') id: string) {
-    return this.projects.pause(id)
+  pause(@Param('id') id: string, @Req() req: AuthenticatedRequest) {
+    return this.projects.pause(id, req.user?.name ?? '社区管理员')
   }
 
   @HttpCode(200)
   @Post(':id/resume')
-  resume(@Param('id') id: string) {
-    return this.projects.resume(id)
+  resume(@Param('id') id: string, @Req() req: AuthenticatedRequest) {
+    return this.projects.resume(id, req.user?.name ?? '社区管理员')
   }
 
   @HttpCode(200)

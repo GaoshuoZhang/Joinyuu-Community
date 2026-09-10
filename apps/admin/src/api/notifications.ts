@@ -1,24 +1,18 @@
 import type { AdminNotification } from '@/types'
-import { notifications } from '@/mock'
-import { delay } from './utils'
+import { httpGet, httpPost } from './http'
 
-/* TODO: 替换为 GET /api/admin/notifications — 通知中心列表（最新在前） */
+/* 已接入 M1 真实接口：GET /api/admin/notifications — 通知中心列表（最新在前）
+ * 业务通知由后端各域服务与定时任务写入（审批提交/租约临期/定时发布等） */
 export async function fetchNotifications(): Promise<AdminNotification[]> {
-  await delay(200)
-  return [...notifications].sort((a, b) => b.at.localeCompare(a.at))
+  return httpGet<AdminNotification[]>('/notifications')
 }
 
-/* TODO: 替换为 POST /api/admin/notifications/:id/read — 标记单条已读 */
+/* 已接入 M1 真实接口：POST /api/admin/notifications/:id/read — 标记单条已读（幂等） */
 export async function markNotificationRead(id: string): Promise<{ code: number }> {
-  await delay(150)
-  const item = notifications.find((n) => n.id === id)
-  if (item) item.read = true
-  return { code: 0 }
+  return httpPost<{ code: number }>(`/notifications/${id}/read`)
 }
 
-/* TODO: 替换为 POST /api/admin/notifications/read-all — 全部已读 */
+/* 已接入 M1 真实接口：POST /api/admin/notifications/read-all — 全部已读 */
 export async function markAllNotificationsRead(): Promise<{ code: number }> {
-  await delay(200)
-  for (const n of notifications) n.read = true
-  return { code: 0 }
+  return httpPost<{ code: number }>('/notifications/read-all')
 }

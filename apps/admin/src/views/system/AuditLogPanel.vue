@@ -6,7 +6,7 @@ import { fetchAuditLogs } from '@/api/auditLogs'
 import type { AuditLog, AuditModule } from '@/types'
 
 /* 审计日志：后台管理员的全部写操作记录（谁在何时对什么做了什么）。
- * 各域关键写接口已通过 recordAudit 埋点；M1 由服务端中间件统一记录并补充 IP/变更快照 */
+ * 各域关键写操作由后端统一留痕（AuditInterceptor + AuditService，含 IP 与 before/after 快照） */
 const loading = ref(true)
 const list = ref<AuditLog[]>([])
 const total = ref(0)

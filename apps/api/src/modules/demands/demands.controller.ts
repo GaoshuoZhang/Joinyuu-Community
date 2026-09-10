@@ -64,20 +64,24 @@ export class DemandsController {
 
   @HttpCode(200)
   @Post(':id/schedule')
-  schedule(@Param('id') id: string, @Body() dto: ScheduleDemandDto): Promise<{ code: number }> {
-    return this.demands.schedule(id, dto)
+  schedule(
+    @Param('id') id: string,
+    @Body() dto: ScheduleDemandDto,
+    @Req() req: AuthenticatedRequest,
+  ): Promise<{ code: number }> {
+    return this.demands.schedule(id, dto, req.user?.name ?? '社区管理员')
   }
 
   @HttpCode(200)
   @Post(':id/cancel-schedule')
-  cancelSchedule(@Param('id') id: string): Promise<{ code: number }> {
-    return this.demands.cancelSchedule(id)
+  cancelSchedule(@Param('id') id: string, @Req() req: AuthenticatedRequest): Promise<{ code: number }> {
+    return this.demands.cancelSchedule(id, req.user?.name ?? '社区管理员')
   }
 
   @HttpCode(200)
   @Post(':id/retract')
-  retract(@Param('id') id: string): Promise<{ code: number }> {
-    return this.demands.retract(id)
+  retract(@Param('id') id: string, @Req() req: AuthenticatedRequest): Promise<{ code: number }> {
+    return this.demands.retract(id, req.user?.name ?? '社区管理员')
   }
 
   @Patch(':id/status')

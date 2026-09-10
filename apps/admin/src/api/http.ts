@@ -5,6 +5,8 @@
 
 const TOKEN_KEY = 'joinyuu_admin_token'
 const BASE_PATH = '/api/admin'
+/* 请求超时（ms）：后端挂起时主动中止，避免无限挂载 */
+const REQUEST_TIMEOUT = 30_000
 
 type HttpMethod = 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE'
 
@@ -14,17 +16,32 @@ interface Envelope<T> {
   message?: string
 }
 
-/* 核心请求：成功返回 body.data；401 清 token 跳登录；非 0 业务码抛 body.message */
+/* 核心请求：成功返回 body.data；401 清 token 跳登录；非 0 业务码抛 body.message；
+ * 超过 REQUEST_TIMEOUT 主动 Abort 抛"请求超时" */
 export async function http<T>(method: HttpMethod, path: string, body?: unknown): Promise<T> {
   const headers: Record<string, string> = { 'Content-Type': 'application/json' }
   const token = localStorage.getItem(TOKEN_KEY)
   if (token) headers.Authorization = `Bearer ${token}`
 
-  const res = await fetch(`${BASE_PATH}${path}`, {
-    method,
-    headers,
-    body: body === undefined ? undefined : JSON.stringify(body),
-  })
+  const controller = new AbortController()
+  const timer = setTimeout(() => controller.abort(), REQUEST_TIMEOUT)
+
+  let res: Response
+  try {
+    res = await fetch(`${BASE_PATH}${path}`, {
+      method,
+      headers,
+      body: body === undefined ? undefined : JSON.stringify(body),
+      signal: controller.signal,
+    })
+  } catch (error) {
+    if (error instanceof DOMException && error.name === 'AbortError') {
+      throw new Error('请求超时，请稍后重试')
+    }
+    throw new Error('网络异常，请检查网络后重试')
+  } finally {
+    clearTimeout(timer)
+  }
 
   let payload: Envelope<T> | null = null
   try {

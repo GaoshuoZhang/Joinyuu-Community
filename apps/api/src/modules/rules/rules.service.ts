@@ -1,6 +1,8 @@
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common'
 import type { ExperienceRecord, ExperienceRule, LevelTier } from '@prisma/client'
 import { PrismaService } from '../../common/prisma/prisma.service'
+import { RedisService } from '../../common/redis/redis.service'
+import { CACHE_KEYS, CACHE_TTL } from '../../common/redis/cache-keys'
 import { formatNow } from '../../common/utils/time'
 import type { SaveLevelTiersDto } from './dto/save-level-tiers.dto'
 import type { UpdateExperienceRuleDto } from './dto/update-experience-rule.dto'
@@ -16,17 +18,24 @@ export interface ExperienceRuleDto {
   updatedAt: string
 }
 
-/* 规则管理（wiki-backend.md §7.11）：
+/* 规则管理（wiki-backend.md §7.11/§10）：
  * 经验值规则（5 条固定项仅编辑经验值与启停）、经验发放记录（source=rule）、
- * 等级梯度整组保存（1-10 级、门槛逐级递增，事务内整体替换） */
+ * 等级梯度整组保存（1-10 级、门槛逐级递增，事务内整体替换）。
+ * rules:experience / rules:levels 走缓存（10min，与积分引擎共用同一键），写操作主动失效。 */
 @Injectable()
 export class RulesService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly redis: RedisService,
+  ) {}
 
   /* ---------- 经验值规则 ---------- */
 
   async listExperienceRules(): Promise<ExperienceRuleDto[]> {
-    const rules = await this.prisma.experienceRule.findMany({ orderBy: { code: 'asc' } })
+    /* 与积分引擎共用 rules:experience（存原始行，按 code 升序，保证两边缓存内容一致） */
+    const rules = await this.redis.remember(CACHE_KEYS.experienceRules, CACHE_TTL.stable, () =>
+      this.prisma.experienceRule.findMany({ orderBy: { code: 'asc' } }),
+    )
     return rules.map(toExperienceRuleDto)
   }
 
@@ -41,6 +50,8 @@ export class RulesService {
       where: { code },
       data: { exp: dto.exp, updatedAt: formatNow() },
     })
+
+    await this.redis.delCache(CACHE_KEYS.experienceRules)
     return { code: 0 }
   }
 
@@ -52,10 +63,12 @@ export class RulesService {
       where: { code },
       data: { status: rule.status === 'enabled' ? 'disabled' : 'enabled', updatedAt: formatNow() },
     })
+
+    await this.redis.delCache(CACHE_KEYS.experienceRules)
     return { code: 0 }
   }
 
-  /* ---------- 经验发放记录 ---------- */
+  /* ---------- 经验发放记录（流水，不缓存） ---------- */
 
   async listExperienceIssuance(): Promise<ExperienceRecord[]> {
     return this.prisma.experienceRecord.findMany({
@@ -67,7 +80,10 @@ export class RulesService {
   /* ---------- 等级梯度 ---------- */
 
   async listLevelTiers(): Promise<LevelTier[]> {
-    return this.prisma.levelTier.findMany({ orderBy: { level: 'asc' } })
+    /* 与积分引擎共用 rules:levels（按 level 升序；引擎内部再按 threshold 降序解析等级） */
+    return this.redis.remember(CACHE_KEYS.levelTiers, CACHE_TTL.stable, () =>
+      this.prisma.levelTier.findMany({ orderBy: { level: 'asc' } }),
+    )
   }
 
   async saveLevelTiers(dto: SaveLevelTiersDto): Promise<{ code: number }> {
@@ -95,6 +111,7 @@ export class RulesService {
       })
     })
 
+    await this.redis.delCache(CACHE_KEYS.levelTiers)
     return { code: 0 }
   }
 }

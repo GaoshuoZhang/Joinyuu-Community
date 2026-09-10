@@ -9,3 +9,11 @@ export function formatNow(): string {
 export function formatToday(): string {
   return formatNow().slice(0, 10)
 }
+
+/** 日期字符串加天数（YYYY-MM-DD），对齐 M0 addDays 语义（服务器本地时区） */
+export function addDays(dateStr: string, days: number): string {
+  const d = new Date(`${dateStr}T00:00:00`)
+  d.setDate(d.getDate() + days)
+  const p = (n: number): string => String(n).padStart(2, '0')
+  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`
+}

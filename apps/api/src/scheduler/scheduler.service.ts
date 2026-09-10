@@ -30,56 +30,58 @@ export class SchedulerService {
     await this.scanLeaseExpiring()
   }
 
-  /** 到点发布扫描：先取受影响行（构造通知），再 updateMany；活动发布时同时开放报名 */
+  /** 到点发布扫描：状态迁移与通知写入置于同一事务，避免"已发布但通知缺失"的部分失败 */
   async scanScheduledPublish(): Promise<void> {
     const now = formatNow()
 
-    const demands = await this.prisma.demand.findMany({
-      where: { status: 'scheduled', scheduledAt: { lte: now } },
-    })
-    const events = await this.prisma.communityEvent.findMany({
-      where: { status: 'scheduled', scheduledAt: { lte: now } },
-    })
-
-    if (demands.length > 0) {
-      await this.prisma.demand.updateMany({
+    await this.prisma.$transaction(async (tx) => {
+      const demands = await tx.demand.findMany({
         where: { status: 'scheduled', scheduledAt: { lte: now } },
-        data: { status: 'published', publishedAt: now },
       })
-    }
-    if (events.length > 0) {
-      await this.prisma.communityEvent.updateMany({
+      const events = await tx.communityEvent.findMany({
         where: { status: 'scheduled', scheduledAt: { lte: now } },
-        data: { status: 'published', enrollmentOpen: true },
       })
-    }
 
-    for (const d of demands) {
-      await this.prisma.adminNotification.create({
-        data: {
-          id: await this.ids.next('N'),
-          type: 'schedule',
-          title: '需求已定时发布',
-          content: `「${d.title}」已到点自动发布。`,
-          at: now,
-          read: false,
-          link: '/demands',
-        },
-      })
-    }
-    for (const e of events) {
-      await this.prisma.adminNotification.create({
-        data: {
-          id: await this.ids.next('N'),
-          type: 'schedule',
-          title: '活动已定时发布',
-          content: `「${e.title}」已到点自动发布，报名已开放。`,
-          at: now,
-          read: false,
-          link: '/events',
-        },
-      })
-    }
+      if (demands.length > 0) {
+        await tx.demand.updateMany({
+          where: { status: 'scheduled', scheduledAt: { lte: now } },
+          data: { status: 'published', publishedAt: now },
+        })
+      }
+      if (events.length > 0) {
+        await tx.communityEvent.updateMany({
+          where: { status: 'scheduled', scheduledAt: { lte: now } },
+          data: { status: 'published', enrollmentOpen: true },
+        })
+      }
+
+      for (const d of demands) {
+        await tx.adminNotification.create({
+          data: {
+            id: await this.ids.next('N'),
+            type: 'schedule',
+            title: '需求已定时发布',
+            content: `「${d.title}」已到点自动发布。`,
+            at: now,
+            read: false,
+            link: '/demands',
+          },
+        })
+      }
+      for (const e of events) {
+        await tx.adminNotification.create({
+          data: {
+            id: await this.ids.next('N'),
+            type: 'schedule',
+            title: '活动已定时发布',
+            content: `「${e.title}」已到点自动发布，报名已开放。`,
+            at: now,
+            read: false,
+            link: '/events',
+          },
+        })
+      }
+    })
   }
 
   /** 活动自动结束：published 且 endTime 到点 → ended（无通知） */
@@ -104,29 +106,35 @@ export class SchedulerService {
     const leases = await this.prisma.lease.findMany({
       where: { status: 'active', longTerm: false, endDate: { gte: today, lte: windowEnd } },
     })
+    if (leases.length === 0) return
 
-    for (const lease of leases) {
-      const already = await this.prisma.adminNotification.findFirst({
-        where: {
-          type: 'lease',
-          content: { contains: lease.id },
-          at: { startsWith: today },
-        },
-      })
-      if (already) continue
-
-      await this.prisma.adminNotification.create({
-        data: {
-          id: await this.ids.next('N'),
-          type: 'lease',
-          title: `租约 ${lease.id}（${lease.renterName}）即将到期`,
-          content: `租约 ${lease.id}（${lease.renterName}）即将到期，请及时处理续期。`,
-          at: now,
-          read: false,
-          link: '/workstations/leases',
-        },
-      })
+    /* 一次性取出今日已发的所有租约通知，内存去重（替代逐租约 findFirst 的 N+1） */
+    const notifiedContents = await this.prisma.adminNotification.findMany({
+      where: { type: 'lease', at: { startsWith: today } },
+      select: { content: true },
+    })
+    const notifiedIds = new Set<string>()
+    for (const n of notifiedContents) {
+      const m = /租约 ([A-Z]+\d+)/.exec(n.content)
+      if (m) notifiedIds.add(m[1])
     }
+
+    const toCreate = leases.filter((lease) => !notifiedIds.has(lease.id))
+    await this.prisma.$transaction(async (tx) => {
+      for (const lease of toCreate) {
+        await tx.adminNotification.create({
+          data: {
+            id: await this.ids.next('N'),
+            type: 'lease',
+            title: `租约 ${lease.id}（${lease.renterName}）即将到期`,
+            content: `租约 ${lease.id}（${lease.renterName}）即将到期，请及时处理续期。`,
+            at: now,
+            read: false,
+            link: '/workstations/leases',
+          },
+        })
+      }
+    })
   }
 
   /** 日期字符串加天数（YYYY-MM-DD），对齐 M0 addDays 语义 */

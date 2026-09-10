@@ -554,7 +554,7 @@ TZ=Asia/Shanghai
   2. 每域逐文件替换：函数体 mock 读写 → `http.get/post/...`；Query 接口语义不变（参数名即 query 参数）。
   3. mock 引用清零的域删除对应 mock import；全部域完成后删除 `src/mock/`（保留一个 release 分支节点）。
 - **切换顺序**（与里程碑绑定，每步验证 = `tsc --noEmit` + `pnpm build:admin` + 浏览器冒烟登录后走查该域页面）：auth →（M1-A ✅）→ 成员/审批/账本（M1-B ✅）→ 需求/项目/活动（M1-C ✅）→ 商城/规则/工位/空间/内容/公告（M1-D ✅）→ 通知/审计/配置/字典/工作台（M1-E，待做）。
-- **进度（2026-09-10）**：16/22 个 api 文件已 HTTP 化；剩余 6 文件 = `auditLogs` / `dashboard` / `dicts` / `notifications` / `systemConfig` / `todos`（M1-E）。
+- **进度（2026-09-10，M1-E 完成）**：22/22 个 api 文件已 HTTP 化（函数签名不变，视图层零改动）；`apps/admin/src/mock/` 已删除，种子数据内化至 `apps/api/prisma/seed-data/`（seed 唯一数据源，api tsconfig 已 exclude）。
 - 字典消费点（七处表单/列表）在 M1-E 前仍走 mock/fallback，M1-E 切真实 `/api/admin/dicts/*`。
 - vite.config 增 proxy（见第 3 节）；生产构建由部署期网关统一转发 `/api`。
 
@@ -601,14 +601,15 @@ TZ=Asia/Shanghai
 - [x] admin 接入：积分商城/规则管理/空间管理/内容管理四组页面
 - **验证**：e2e 15 套件 72/72 两轮幂等；预约冲突 409；订单取消→积分流水/库存一致；栏目改名→columnName 刷新
 
-### M1-E 系统管理域与收尾 — ⏳ 待做
+### M1-E 系统管理域与收尾 — ✅ 完成（2026-09-10）
 
-- [ ] notifications / audit-logs 查询 / system config / dicts / dashboard / todos 全端点（12 个）
-- [ ] 审计 before/after 快照补全；Redis 缓存全量接入（第 10 节）+ 降级验证
-- [ ] admin 接入：通知中心/审计日志/系统配置/数据字典/工作台；删除 `src/mock/`（6 文件切换）
-- [ ] `/api/app/**` 设计文档（`docs/api-app-design.md`：M2 客户端端点清单——注册登录/多身份、需求浏览提交响应、活动报名、商城兑换下单、空间预约提交、文章投递、展示页申请、个人中心）
-- [ ] 全站回归：29 页面走查 + 129 端点冒烟 + full-spec-check 勾选 + 本 wiki 修订记录
-- **验证**：mock 全删后 build:admin 通过；演示流程（登录→工作台待办→审批→发布→立项→兑换→审计留痕）全链路 e2e
+- [x] notifications / audit-logs 查询 / system config / dicts / dashboard / todos 全端点（12 个，`modules/system`）
+- [x] 审计 before/after 快照补全（12 处埋点：状态流转含前后状态、配置/公告含字段级快照、积分调整含余额、审批含授予结果）；Redis 缓存全量接入（第 10 节五键：`config:system` / `dicts:{type}` / `rules:points|experience|levels`（与积分引擎共用同键、同查询口径）/ `dashboard:summary` 60s；写操作主动失效；seed 重种子后清理应用缓存键防跨套件污染）。降级 = 全部 Redis 调用点 try-catch fail-open 回源 DB（沿用 JWT 黑名单先例）；Redis 停机实测因环境限制未执行，降级保障为代码级兜底
+- [x] admin 接入：通知中心/审计日志/系统配置/数据字典/工作台（6 文件切换，函数签名不变、视图层零改动；前端 recordAudit 移除）；删除 `src/mock/`
+- [x] `/api/app/**` 设计文档（`docs/api-app-design.md`：M2 客户端端点清单——注册登录/多身份、需求浏览提交响应、活动报名、商城兑换下单、空间预约提交、文章投递、展示页申请、个人中心）
+- [x] 实体字段文档沉淀（`docs/entity-fields.md`：35 模型分域字段清单）
+- [x] 回归与文档：admin/api `tsc --noEmit` + `build:api` + `build:admin`（mock 全删后）+ e2e 16 套件 78 用例两轮全绿；127 个管理端端点经 e2e 主干覆盖（系统域 12 端点新增 system 套件）；**29 页面浏览器走查已完成**（2026-09-10 以 agent-browser + 本地 Chrome 有头模式实测：23 张截图存档、控制台零错误零警告、全域核心交互链路逐项验证、发现 0 缺陷）；full-spec-check 勾选 + 本 wiki 修订记录
+- **验证**：mock 全删后 build:admin 通过 ✓；e2e 78/78（system 套件 6 用例：通知已读流转 / 审计筛选 / 字典唯一性与 sort 重排 / 配置校验文案逐字比对 / 工作台聚合与各域列表口径交叉校验）
 
 ## 14. 工程约定
 
@@ -630,3 +631,5 @@ TZ=Asia/Shanghai
 | 2026-09-10 | M1-D 实施修订：§7.12 工位 POST/PUT body 的 `areaId` 订正为 `area`（区域名称字符串，M0 WorkstationPayload 契约，服务端按名解析）；§7.11 levels PUT body 明确 `{tiers: [...]}` 包裹；§7.10 goods 列表补 sortBy(id/points/createdAt)；订单取消退款流水 source='redemption'（M0 mock 复用手动调整为 manual，按 wiki 语义修正）；e2e 套件执行顺序非字母序（jest 默认排序），轮末 DB 为最后执行套件的测试后状态属预期，冒烟前需重种子 |
 | 2026-09-10 | M1-A~D 全部完成（提交 a31df09 / b8d7470 / 489cc11 / c4e97fe）：115 个管理端端点、e2e 15 套件 72 用例两轮幂等、admin 16/22 文件接入真实接口；§12/§13 同步勾选 |
 | 2026-09-10 | 开发端口统一：后端 API 7759 → **7757**（`.env`/`.env.example`/main.ts 默认值/vite proxy/http.ts 注释/文档全量替换）；确认后端 `0.0.0.0` 绑定 + vite `host: 0.0.0.0`，支持局域网设备访问（admin 7758 / api 7757） |
+| 2026-09-10 | **M1-E 实施修订（M1 收官）**：系统管理域 12 端点落地（`modules/system`，e2e 新增 system 套件 6 用例，总计 16 套件 78 用例）；审计 before/after 快照全量补全（12 处埋点）；Redis 缓存全量接入——`rules:points/experience/levels` 与积分引擎共用同键且查询口径一致（orderBy 对齐，避免两处缓存内容漂移），`dashboard:summary` 60s 短 TTL，seed 重种子后清理应用缓存键（Redis 不可用时静默跳过，防挂起参数已配）；admin 22/22 文件接入 + 删除 `src/mock/`，种子数据内化至 `prisma/seed-data/`（api tsconfig exclude，seed 为唯一数据源）；事件 DTO 映射抽取为 `modules/events/event-dto.ts` 共享（工作台 upcomingEvents 与活动域形状不漂移）；工作台临期租约窗口改取 `SystemConfig.leaseExpireRemindDays`（默认 15，与租约临期通知任务同源，保存即生效）；字典管理页返回全量（含 disabled），下拉由消费方按 enabled 过滤（M0 口径，§7.15 表述据此澄清） |
+| 2026-09-10 | **M1-E 浏览器全站走查（M1 收官验证）**：以 agent-browser + 本地 Chrome 有头模式对 29 页面/全部域核心交互实测（23 张截图存档），控制台零错误零警告，发现 0 缺陷。实测链路：登录→工作台聚合→通知已读与跳转→审批（通过/驳回/批量）→需求（审核通过/驳回必填拦截/立即发布，定时发布因其 DatePicker 组件对程序化输入不响应而转由 e2e 保障）→立项对话框表单→项目详情（占比/来源需求）→活动（报名开关切换/手动签到并触发发放）→商品上下架→订单发货→积分规则编辑（缓存失效）→空间（平面图/租约/预约审批通过）→内容（文章审核通过/已驳回重提/公告发布/栏目）→系统配置保存（含留痕）→数据字典新增与唯一性拦截→删除→审计日志（本次全部操作按时间倒序留痕，operator 取 JWT）→关键词搜索→导出 CSV。遗留说明：TDesign DatePicker 无法被 agent-browser 程序化赋值（fill/键盘/面板点选均不写入组件状态），涉日期选择流程（定时发布/租约定时/里程碑日期）由 e2e 覆盖 |

@@ -1,0 +1,41 @@
+import type { CommunityEvent, EventEnrollment } from '@prisma/client'
+
+/* DB 行 → M0 契约形状（CommunityEvent，内嵌 enrollments 去除 id/eventId；可空字段 null → undefined）。
+ * events 域与工作台聚合（dashboard.upcomingEvents）共用，保证两处形状不漂移。 */
+export function toEventDto(event: CommunityEvent, enrollments: EventEnrollment[]): Record<string, unknown> {
+  return {
+    id: event.id,
+    createdAt: event.createdAt,
+    title: event.title,
+    type: event.type,
+    startTime: event.startTime,
+    endTime: event.endTime,
+    location: event.location,
+    capacity: event.capacity,
+    speaker: event.speaker,
+    host: event.host,
+    status: event.status,
+    enrollmentOpen: event.enrollmentOpen,
+    visibilityIdentities: event.visibilityIdentities,
+    visibilityLevels: event.visibilityLevels,
+    enrollmentIdentities: event.enrollmentIdentities,
+    enrollmentLevels: event.enrollmentLevels,
+    requireReview: event.requireReview,
+    enrollmentDeadline: event.enrollmentDeadline ?? undefined,
+    scheduledAt: event.scheduledAt ?? undefined,
+    enrollPoints: event.enrollPoints ?? undefined,
+    checkinPoints: event.checkinPoints ?? undefined,
+    description: event.description,
+    tags: event.tags,
+    enrollments: enrollments.map((en) => ({
+      userId: en.userId,
+      name: en.name,
+      enterprise: en.enterprise,
+      phone: en.phone,
+      appliedAt: en.appliedAt,
+      status: en.status,
+      checkedIn: en.checkedIn,
+      checkInAt: en.checkInAt,
+    })),
+  }
+}

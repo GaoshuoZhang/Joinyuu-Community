@@ -1,8 +1,10 @@
 import { Injectable, OnModuleDestroy } from '@nestjs/common'
 import Redis from 'ioredis'
 
-/* Redis 服务：M1-A 用途 = JWT 登出黑名单；后续按 wiki-backend.md §10 扩展缓存
- * 降级策略：连接错误仅记录日志；黑名单查询失败时 fail-open（放行请求）由调用方决定 */
+/* Redis 服务（wiki-backend.md §10）：
+ * - JWT 登出黑名单（auth:blacklist:{jti}）
+ * - 通用 JSON 缓存：config:system / dicts:{type} / rules:points|experience|levels / dashboard:summary
+ * 降级策略：连接/读写异常仅记录日志，缓存读取返回 null（调用方回源 DB），写操作正常完成——不中断主流程。 */
 @Injectable()
 export class RedisService implements OnModuleDestroy {
   private readonly client: Redis
@@ -32,6 +34,46 @@ export class RedisService implements OnModuleDestroy {
       console.error('[redis] 黑名单查询失败，降级放行:', e instanceof Error ? e.message : e)
       return false
     }
+  }
+
+  /** 读取 JSON 缓存；未命中或 Redis 异常返回 null（调用方回源 DB） */
+  async getCache<T>(key: string): Promise<T | null> {
+    try {
+      const raw = await this.client.get(key)
+      if (raw == null) return null
+      return JSON.parse(raw) as T
+    } catch (e) {
+      console.error('[redis] 缓存读取失败，降级回源:', e instanceof Error ? e.message : e)
+      return null
+    }
+  }
+
+  /** 写入 JSON 缓存（TTL 秒）；失败仅告警 */
+  async setCache(key: string, value: unknown, ttlSeconds: number): Promise<void> {
+    try {
+      await this.client.set(key, JSON.stringify(value), 'EX', ttlSeconds)
+    } catch (e) {
+      console.error('[redis] 缓存写入失败:', e instanceof Error ? e.message : e)
+    }
+  }
+
+  /** 删除缓存键（写操作后失效）；失败仅告警 */
+  async delCache(...keys: string[]): Promise<void> {
+    if (keys.length === 0) return
+    try {
+      await this.client.del(...keys)
+    } catch (e) {
+      console.error('[redis] 缓存失效失败:', e instanceof Error ? e.message : e)
+    }
+  }
+
+  /** 读缓存未命中则回源并写入（只缓存非空集合/单例，列表分页不缓存） */
+  async remember<T>(key: string, ttlSeconds: number, loader: () => Promise<T>): Promise<T> {
+    const hit = await this.getCache<T>(key)
+    if (hit !== null) return hit
+    const value = await loader()
+    await this.setCache(key, value, ttlSeconds)
+    return value
   }
 
   async onModuleDestroy(): Promise<void> {

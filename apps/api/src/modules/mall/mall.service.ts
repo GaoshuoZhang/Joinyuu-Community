@@ -8,6 +8,8 @@ import type { MallGoods, PointsRecord, PointsRule, Prisma, RedemptionOrder } fro
 import { PrismaService } from '../../common/prisma/prisma.service'
 import { IdGeneratorService } from '../../common/id-generator/id-generator.service'
 import { AuditService } from '../../common/audit/audit.service'
+import { RedisService } from '../../common/redis/redis.service'
+import { CACHE_KEYS, CACHE_TTL } from '../../common/redis/cache-keys'
 import { formatNow } from '../../common/utils/time'
 import type { GoodsPayloadDto } from './dto/goods-payload.dto'
 import type { QueryGoodsDto } from './dto/query-goods.dto'
@@ -55,6 +57,7 @@ export class MallService {
     private readonly prisma: PrismaService,
     private readonly ids: IdGeneratorService,
     private readonly audit: AuditService,
+    private readonly redis: RedisService,
   ) {}
 
   /* ---------- 商品管理 ---------- */
@@ -134,6 +137,8 @@ export class MallService {
       module: '积分商城',
       action: nextStatus === 'on' ? '商品上架' : '商品下架',
       target: `${goods.id} · ${goods.name}`,
+      before: { status: goods.status },
+      after: { status: nextStatus },
       operator,
     })
     return { code: 0 }
@@ -188,6 +193,8 @@ export class MallService {
       module: '积分商城',
       action: '订单发货',
       target: `${order.id} · ${order.goodsName}`,
+      before: { status: order.status },
+      after: { status: 'shipped' },
       operator,
     })
     return { code: 0 }
@@ -251,7 +258,10 @@ export class MallService {
   /* ---------- 积分规则 ---------- */
 
   async listPointsRules(): Promise<PointsRuleDto[]> {
-    const rules = await this.prisma.pointsRule.findMany({ orderBy: { code: 'asc' } })
+    /* 与积分引擎共用 rules:points（存原始行，按 code 升序，保证两边缓存内容一致） */
+    const rules = await this.redis.remember(CACHE_KEYS.pointsRules, CACHE_TTL.stable, () =>
+      this.prisma.pointsRule.findMany({ orderBy: { code: 'asc' } }),
+    )
     return rules.map(toPointsRuleDto)
   }
 
@@ -266,6 +276,8 @@ export class MallService {
       where: { code },
       data: { points: dto.points, updatedAt: formatNow() },
     })
+
+    await this.redis.delCache(CACHE_KEYS.pointsRules)
     return { code: 0 }
   }
 
@@ -277,6 +289,8 @@ export class MallService {
       where: { code },
       data: { status: rule.status === 'enabled' ? 'disabled' : 'enabled', updatedAt: formatNow() },
     })
+
+    await this.redis.delCache(CACHE_KEYS.pointsRules)
     return { code: 0 }
   }
 

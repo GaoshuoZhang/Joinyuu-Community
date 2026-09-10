@@ -78,12 +78,15 @@ export class UsersService {
   async updateStatus(id: string, status: 'active' | 'frozen'): Promise<{ code: number }> {
     const user = await this.prisma.user.findUnique({ where: { uid: id } })
     if (!user) throw new NotFoundException('用户不存在')
+
+    if (status !== 'active') {
+      /* 冻结必须走 freeze 接口（校验冻结期限/长期开关与原因），防止绕过校验直接置 frozen */
+      throw new BadRequestException('冻结账号请使用冻结功能，并提供冻结期限与原因')
+    }
+
     await this.prisma.user.update({
       where: { uid: id },
-      data:
-        status === 'active'
-          ? { status, frozenUntil: null, frozenReason: null }
-          : { status },
+      data: { status: 'active', frozenUntil: null, frozenReason: null },
     })
     return { code: 0 }
   }
@@ -110,6 +113,13 @@ export class UsersService {
       action: '冻结账号',
       target: `${user.uid} · ${user.nickname}`,
       detail: reason,
+      before: { status: user.status },
+      after: {
+        status: 'frozen',
+        permanent: dto.permanent,
+        frozenUntil: dto.permanent ? null : (dto.until ?? null),
+        frozenReason: reason,
+      },
       operator,
     })
     return { code: 0 }

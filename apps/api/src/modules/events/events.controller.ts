@@ -41,20 +41,24 @@ export class EventsController {
 
   @HttpCode(200)
   @Post(':id/schedule')
-  schedule(@Param('id') id: string, @Body() dto: ScheduleEventDto) {
-    return this.events.schedule(id, dto.scheduledAt)
+  schedule(
+    @Param('id') id: string,
+    @Body() dto: ScheduleEventDto,
+    @Req() req: AuthenticatedRequest,
+  ) {
+    return this.events.schedule(id, dto.scheduledAt, req.user?.name ?? '社区管理员')
   }
 
   @HttpCode(200)
   @Post(':id/cancel-schedule')
-  cancelSchedule(@Param('id') id: string) {
-    return this.events.cancelSchedule(id)
+  cancelSchedule(@Param('id') id: string, @Req() req: AuthenticatedRequest) {
+    return this.events.cancelSchedule(id, req.user?.name ?? '社区管理员')
   }
 
   @HttpCode(200)
   @Patch(':id/enrollment')
-  toggleEnrollment(@Param('id') id: string) {
-    return this.events.toggleEnrollment(id)
+  toggleEnrollment(@Param('id') id: string, @Req() req: AuthenticatedRequest) {
+    return this.events.toggleEnrollment(id, req.user?.name ?? '社区管理员')
   }
 
   @HttpCode(200)
@@ -65,8 +69,8 @@ export class EventsController {
 
   @HttpCode(200)
   @Post(':id/restore')
-  restore(@Param('id') id: string) {
-    return this.events.restore(id)
+  restore(@Param('id') id: string, @Req() req: AuthenticatedRequest) {
+    return this.events.restore(id, req.user?.name ?? '社区管理员')
   }
 
   @HttpCode(200)

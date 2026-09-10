@@ -2,7 +2,7 @@
 
 > 本文档展示整体项目的里程碑规划与模块进度，是跨会话/跨 agent 的进度唯一事实来源。
 > 每完成一个模块，同步更新本文档勾选状态，并按约定在 `docs/` 沉淀对应文档。
-> 最后更新：2026-09-10（M1-A~D 全部落地：115 管理端端点 / 状态机 / 定时任务 / 积分引擎 / admin 16 文件接入；e2e 15 套件 72 用例）
+> 最后更新：2026-09-10（**M1 全部落地**：M1-E 系统管理域 12 端点 + 审计快照 + Redis 缓存 + admin 22/22 文件接入 + mock 删除；e2e 16 套件 78 用例）
 
 ## 0. 项目定位
 
@@ -33,7 +33,7 @@
 | 里程碑 | 名称 | 状态 |
 |---|---|---|
 | **M0** | 后台原型（admin web，Mock 驱动） | **已完成** — M0-A/B/C/D/E 全部完成（M0-E 系统管理域 2026-09-10 落地） |
-| M1 | 后端服务（NestJS + PostgreSQL + Redis） | **进行中** — M1-A/B/C/D 已完成（115 端点 + admin 16 文件接入，e2e 72/72）；M1-E 待做 |
+| M1 | 后端服务（NestJS + PostgreSQL + Redis） | **已完成** — M1-A~E 全部完成（129 端点 = 认证 2 + 管理端 127；admin 22/22 文件接入、mock 已删除；e2e 16 套件 78 用例） |
 | M2 | 客户端 Web（居民端） | 未开始 |
 | M3 | 微信小程序 | 未开始 |
 
@@ -169,15 +169,15 @@
 - [x] admin 接入：积分商城/规则管理/空间管理/内容管理四组页面（6 文件 HTTP 化）
 - **验证**：e2e 15 套件 72/72 两轮幂等；订单取消退款三表一致 + 预约冲突 409 + 栏目改名联动实测；浏览器走查零错误
 
-### M1-E 系统管理域与收尾 — ⏳ 待做
+### M1-E 系统管理域与收尾 — ✅ 完成（2026-09-10）
 
-- [ ] notifications / audit-logs 查询 / system config / dicts / dashboard / todos 全端点（12 个）
-- [ ] 审计 before/after 快照补全；Redis 缓存全量接入（wiki-backend §10）+ 降级验证
-- [ ] admin 接入：通知中心/审计日志/系统配置/数据字典/工作台；删除 `apps/admin/src/mock/`（6 文件切换）
-- [ ] `/api/app/**` 设计文档（`docs/api-app-design.md`：M2 客户端端点清单——注册登录/多身份、需求浏览提交响应、活动报名、商城兑换下单、空间预约提交、文章投递、展示页申请、个人中心）
-- [ ] 实体字段文档沉淀（每模块字段列表；wiki-backend §5 已含全量模型）
-- [ ] 全站回归：29 页面走查 + 129 端点冒烟 + full-spec-check 勾选 + wiki 修订记录
-- **验证**：mock 全删后 build:admin 通过；演示流程（登录→工作台待办→审批→发布→立项→兑换→审计留痕）全链路 e2e
+- [x] notifications / audit-logs 查询 / system config / dicts / dashboard / todos 全端点（12 个，`modules/system`）
+- [x] 审计 before/after 快照补全（12 处埋点：状态流转含前后状态、配置/公告含字段级快照、积分调整含余额、审批含授予结果）；Redis 缓存全量接入（wiki-backend §10 五键：`config:system` / `dicts:{type}` / `rules:points|experience|levels`（与积分引擎共用同键同查询口径）/ `dashboard:summary` 60s；写操作主动失效；seed 重种子后清理缓存键防跨套件污染；降级 = Redis 调用点 try-catch fail-open 回源 DB，停机实测因环境限制未执行）
+- [x] admin 接入：通知中心/审计日志/系统配置/数据字典/工作台（6 文件切换，函数签名不变、视图层零改动；前端 recordAudit 移除）；删除 `apps/admin/src/mock/`（种子数据内化至 `apps/api/prisma/seed-data/`）
+- [x] `/api/app/**` 设计文档（`docs/api-app-design.md`：M2 客户端端点清单——注册登录/多身份、需求浏览提交响应、活动报名、商城兑换下单、空间预约提交、文章投递、展示页申请、个人中心）
+- [x] 实体字段文档沉淀（`docs/entity-fields.md`：35 模型分域字段清单）
+- [x] 回归与文档：admin/api tsc + `build:api` + `build:admin`（mock 全删后）+ e2e 16 套件 78 用例两轮全绿；管理端 127 端点经 e2e 主干覆盖（系统域 12 端点新增 system 套件）；**29 页面浏览器走查已完成**（2026-09-10 以 agent-browser + 本地 Chrome 有头模式实测：23 张截图存档、控制台零错误零警告、全域核心交互链路逐项验证、发现 0 缺陷）；full-spec-check 勾选 + wiki 修订记录
+- **验证**：mock 全删后 build:admin 通过 ✓；e2e 78/78（system 套件 6 用例：通知已读流转 / 审计筛选 / 字典唯一性与 sort 重排 / 配置校验文案逐字比对 / 工作台聚合与各域列表口径交叉校验）
 
 ## 5. M2 — 客户端 Web（居民端，规划，未开始）
 
@@ -200,6 +200,6 @@
 ## 7. 横切约定（全里程碑生效）
 
 - [x] 设计契约冻结机制（M0 已建立，见 wiki-admin-web.md）
-- [ ] 实体字段文档沉淀：每完成一个后端模块，同步在 `docs/` 沉淀实体字段列表（wiki-backend §5 已含全量 35 模型；分模块字段清单待 M1-E 补）
+- [x] 实体字段文档沉淀：`docs/entity-fields.md`（35 模型分域字段清单，2026-09-10 M1-E 沉淀；schema.prisma 为事实来源）
 - [ ] CI/CD 与部署方案
 - [x] 测试策略（后端）— e2e 套件已建立：15 套件 72 用例，每套件经 `test/helpers/reseed.ts` 重种子隔离，`pnpm --filter @joinyuu/api test:e2e`；单元测试待补

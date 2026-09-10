@@ -1,34 +1,57 @@
 /* M1-B 种子 — M0 mock 全量迁移（编号与跨模块引用一致，见 docs/wiki-backend.md §11）
  * 在 M1-A 骨架（AdminUser + SystemConfig + DictEntry）之上扩展其余全部实体。
  * 幂等：按 FK 逆序清空后重建。
- * 数据来源：apps/admin/src/mock/*（tsx 运行时加载；mock 的 `import type ... from '@/types'`
+ * 数据来源：prisma/seed-data/*（M1-E 自 admin mock 内化的种子数据；`import type ... from '@/types'`
  * 为类型导入，运行时被 esbuild 剥离，故 require 可直接命中具名导出）。
  * 注意：api tsconfig 无 '@/*' 路径映射，若用静态 import 会连带解析 '@/types' 导致 tsc 报错，
- * 因此这里用 require（返回 any，tsc 不追踪 mock 文件），运行时由 tsx 正确加载。 */
+ * 因此这里用 require（返回 any，tsc 不追踪数据文件），运行时由 tsx 正确加载；
+ * seed-data 目录已在 tsconfig exclude 中排除（M1-E 起 admin mock 已删除，此处为唯一数据源）。 */
 import { PrismaClient } from '@prisma/client'
 import { hash } from 'bcryptjs'
+import Redis from 'ioredis'
+import { APP_CACHE_KEYS } from '../src/common/redis/cache-keys'
 
 const prisma = new PrismaClient()
 
+/* 清理应用缓存键（wiki-backend.md §10）：重种子后避免读到旧缓存；Redis 不可用时静默跳过，不阻断种子 */
+async function clearAppCache(): Promise<void> {
+  const redis = new Redis(process.env.REDIS_URL ?? 'redis://localhost:6379', {
+    lazyConnect: true,
+    maxRetriesPerRequest: 1,
+    enableOfflineQueue: false,
+    retryStrategy: () => null,
+    connectTimeout: 2000,
+  })
+  try {
+    await redis.connect()
+    await redis.del(...APP_CACHE_KEYS)
+    console.log(`[seed] 应用缓存已清理（${APP_CACHE_KEYS.length} 键）`)
+  } catch (e) {
+    console.warn('[seed] 缓存清理跳过（Redis 不可用）:', e instanceof Error ? e.message : e)
+  } finally {
+    redis.disconnect()
+  }
+}
+
 /* eslint-disable @typescript-eslint/no-var-requires */
-const { users } = require('../../admin/src/mock/users')
-const { enterprises } = require('../../admin/src/mock/enterprises')
-const { applications } = require('../../admin/src/mock/applications')
-const { demands } = require('../../admin/src/mock/demands')
-const { projects } = require('../../admin/src/mock/projects')
-const { events } = require('../../admin/src/mock/events')
-const { externalEnterpriseProfiles } = require('../../admin/src/mock/externalEnterpriseProfiles')
-const { experienceRecords, pointsRecords } = require('../../admin/src/mock/ledgers')
-const { goods, pointsRules, redemptionOrders } = require('../../admin/src/mock/mall')
-const { experienceRules, levelTiers } = require('../../admin/src/mock/rules')
-const { leases, workstationAreas, workstations } = require('../../admin/src/mock/workstations')
-const { reservations, spaces } = require('../../admin/src/mock/spaces')
-const { articles, columns, showcaseRequests } = require('../../admin/src/mock/contents')
-const { notifications } = require('../../admin/src/mock/notifications')
-const { auditLogs } = require('../../admin/src/mock/auditLogs')
-const { systemConfig } = require('../../admin/src/mock/systemConfig')
-const { dicts } = require('../../admin/src/mock/dict')
-const { announcements } = require('../../admin/src/mock/announcements')
+const { users } = require('./seed-data/users')
+const { enterprises } = require('./seed-data/enterprises')
+const { applications } = require('./seed-data/applications')
+const { demands } = require('./seed-data/demands')
+const { projects } = require('./seed-data/projects')
+const { events } = require('./seed-data/events')
+const { externalEnterpriseProfiles } = require('./seed-data/externalEnterpriseProfiles')
+const { experienceRecords, pointsRecords } = require('./seed-data/ledgers')
+const { goods, pointsRules, redemptionOrders } = require('./seed-data/mall')
+const { experienceRules, levelTiers } = require('./seed-data/rules')
+const { leases, workstationAreas, workstations } = require('./seed-data/workstations')
+const { reservations, spaces } = require('./seed-data/spaces')
+const { articles, columns, showcaseRequests } = require('./seed-data/contents')
+const { notifications } = require('./seed-data/notifications')
+const { auditLogs } = require('./seed-data/auditLogs')
+const { systemConfig } = require('./seed-data/systemConfig')
+const { dicts } = require('./seed-data/dict')
+const { announcements } = require('./seed-data/announcements')
 /* eslint-enable @typescript-eslint/no-var-requires */
 
 /** 取 ID 末尾数字，如 'U1015' -> 1015、'AP3016' -> 3016 */
@@ -720,7 +743,25 @@ async function main() {
       update: { nextNumber },
     })
   }
+
+  // 项目编号序列 CODE-<year>（JY-YYYY-NN 与项目 ID 序列 P 分离，按年独立发号）
+  const codeYearMax = new Map<string, number>()
+  for (const p of projects) {
+    const m = /^JY-(\d{4})-(\d+)$/.exec(p.code)
+    if (m) codeYearMax.set(m[1], Math.max(codeYearMax.get(m[1]) ?? 0, Number(m[2])))
+  }
+  for (const [year, max] of codeYearMax) {
+    const key = `CODE-${year}`
+    await prisma.idSequence.upsert({
+      where: { entityType: key },
+      create: { entityType: key, nextNumber: max },
+      update: { nextNumber: max },
+    })
+  }
   counts.IdSequence = idSeeds.length
+
+  // ---------- 应用缓存清理（wiki-backend.md §10） ----------
+  await clearAppCache()
 
   // ---------- 汇总 ----------
   console.log('[seed] 写入完成，实体计数：')

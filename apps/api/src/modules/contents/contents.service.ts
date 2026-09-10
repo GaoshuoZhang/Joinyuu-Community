@@ -219,6 +219,11 @@ export class ContentsService {
       action: dto.status === 'approved' ? '文章审核通过' : '文章驳回',
       target: `${article.id} · ${article.title}`,
       detail: comment || undefined,
+      before: { status: article.status },
+      after:
+        dto.status === 'approved'
+          ? { status: 'published' }
+          : { status: 'rejected', rejectedReason: comment },
       operator,
     })
     return { code: 0 }

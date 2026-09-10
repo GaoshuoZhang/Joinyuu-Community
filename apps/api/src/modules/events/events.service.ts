@@ -1,11 +1,12 @@
 import { ConflictException, Injectable, NotFoundException } from '@nestjs/common'
-import type { CommunityEvent, EventEnrollment, Prisma } from '@prisma/client'
+import type { Prisma } from '@prisma/client'
 import { PrismaService } from '../../common/prisma/prisma.service'
 import { IdGeneratorService } from '../../common/id-generator/id-generator.service'
 import { AuditService } from '../../common/audit/audit.service'
 import { PointsEngineService } from '../../common/engine/points-engine/points-engine.service'
 import { formatNow } from '../../common/utils/time'
 import type { EventPayloadDto } from './dto/event-payload.dto'
+import { toEventDto } from './event-dto'
 
 /* 活动模块（wiki-backend.md §7.8/§8.1/§8.4）：
  * 状态机 pending_release →(publish-now|schedule)→ published|scheduled →(到点定时任务)→ published
@@ -67,7 +68,7 @@ export class EventsService {
       }),
       this.prisma.communityEvent.count({ where }),
     ])
-    return { list: list.map((e) => this.toEventDto(e, e.enrollments)), total }
+    return { list: list.map((e) => toEventDto(e, e.enrollments)), total }
   }
 
   async findOne(id: string): Promise<unknown> {
@@ -76,7 +77,7 @@ export class EventsService {
       include: { enrollments: { orderBy: { id: 'asc' } } },
     })
     if (!event) throw new NotFoundException('活动不存在')
-    return this.toEventDto(event, event.enrollments)
+    return toEventDto(event, event.enrollments)
   }
 
   async create(payload: EventPayloadDto): Promise<unknown> {
@@ -107,7 +108,7 @@ export class EventsService {
         tags: payload.tags,
       },
     })
-    return this.toEventDto(event, [])
+    return toEventDto(event, [])
   }
 
   async update(id: string, payload: EventPayloadDto): Promise<{ code: number }> {
@@ -157,12 +158,14 @@ export class EventsService {
       module: '活动管理',
       action: '活动发布',
       target: `${event.id} · ${event.title}`,
+      before: { status: event.status },
+      after: { status: 'published', enrollmentOpen: true },
       operator,
     })
     return { code: 0 }
   }
 
-  async schedule(id: string, scheduledAt: string): Promise<{ code: number }> {
+  async schedule(id: string, scheduledAt: string, operator: string): Promise<{ code: number }> {
     const event = await this.prisma.communityEvent.findUnique({ where: { id } })
     if (!event) throw new NotFoundException('活动不存在')
     if (event.status !== 'pending_release') throw new ConflictException('仅待发布的活动可设定时发布')
@@ -171,10 +174,20 @@ export class EventsService {
       where: { id },
       data: { status: 'scheduled', scheduledAt },
     })
+
+    await this.audit.record({
+      module: '活动管理',
+      action: '活动定时发布',
+      target: `${event.id} · ${event.title}`,
+      detail: `定时时间 ${scheduledAt}`,
+      before: { status: event.status },
+      after: { status: 'scheduled', scheduledAt },
+      operator,
+    })
     return { code: 0 }
   }
 
-  async cancelSchedule(id: string): Promise<{ code: number }> {
+  async cancelSchedule(id: string, operator: string): Promise<{ code: number }> {
     const event = await this.prisma.communityEvent.findUnique({ where: { id } })
     if (!event) throw new NotFoundException('活动不存在')
     if (event.status !== 'scheduled') throw new ConflictException('仅定时发布中的活动可取消定时')
@@ -183,10 +196,19 @@ export class EventsService {
       where: { id },
       data: { status: 'pending_release', scheduledAt: null },
     })
+
+    await this.audit.record({
+      module: '活动管理',
+      action: '取消定时发布',
+      target: `${event.id} · ${event.title}`,
+      before: { status: event.status },
+      after: { status: 'pending_release' },
+      operator,
+    })
     return { code: 0 }
   }
 
-  async toggleEnrollment(id: string): Promise<{ code: number }> {
+  async toggleEnrollment(id: string, operator: string): Promise<{ code: number }> {
     const event = await this.prisma.communityEvent.findUnique({ where: { id } })
     if (!event) throw new NotFoundException('活动不存在')
     if (event.status !== 'published') throw new ConflictException('仅已发布的活动可调整报名')
@@ -194,6 +216,15 @@ export class EventsService {
     await this.prisma.communityEvent.update({
       where: { id },
       data: { enrollmentOpen: !event.enrollmentOpen },
+    })
+
+    await this.audit.record({
+      module: '活动管理',
+      action: event.enrollmentOpen ? '暂停报名' : '开放报名',
+      target: `${event.id} · ${event.title}`,
+      before: { enrollmentOpen: event.enrollmentOpen },
+      after: { enrollmentOpen: !event.enrollmentOpen },
+      operator,
     })
     return { code: 0 }
   }
@@ -211,12 +242,14 @@ export class EventsService {
       module: '活动管理',
       action: '活动取消',
       target: `${event.id} · ${event.title}`,
+      before: { status: event.status },
+      after: { status: 'cancelled' },
       operator,
     })
     return { code: 0 }
   }
 
-  async restore(id: string): Promise<{ code: number }> {
+  async restore(id: string, operator: string): Promise<{ code: number }> {
     const event = await this.prisma.communityEvent.findUnique({ where: { id } })
     if (!event) throw new NotFoundException('活动不存在')
     if (event.status !== 'cancelled') throw new ConflictException('仅已取消的活动可转为待发布')
@@ -224,6 +257,15 @@ export class EventsService {
     await this.prisma.communityEvent.update({
       where: { id },
       data: { status: 'pending_release' },
+    })
+
+    await this.audit.record({
+      module: '活动管理',
+      action: '恢复活动',
+      target: `${event.id} · ${event.title}`,
+      before: { status: event.status },
+      after: { status: 'pending_release' },
+      operator,
     })
     return { code: 0 }
   }
@@ -239,11 +281,16 @@ export class EventsService {
       where: { eventId_userId: { eventId, userId } },
     })
     if (!enrollment) throw new NotFoundException('报名记录不存在')
+    if (enrollment.status !== 'pending') {
+      throw new ConflictException('该报名已审核，请勿重复操作')
+    }
 
-    await this.prisma.eventEnrollment.update({
-      where: { eventId_userId: { eventId, userId } },
+    /* 条件更新做幂等守卫：并发/重复调用只会命中一次状态迁移 */
+    const updated = await this.prisma.eventEnrollment.updateMany({
+      where: { eventId, userId, status: 'pending' },
       data: { status },
     })
+    if (updated.count === 0) throw new ConflictException('该报名已审核，请勿重复操作')
 
     if (status === 'approved') {
       /* 报名积分 = enrollPoints ?? 规则值；custom 值直写事务（引擎仅读规则值，此处内联其事务模式） */
@@ -265,10 +312,12 @@ export class EventsService {
     if (!enrollment) throw new NotFoundException('报名记录不存在')
 
     if (!enrollment.checkedIn) {
-      await this.prisma.eventEnrollment.update({
-        where: { eventId_userId: { eventId, userId } },
+      /* 条件更新防并发重复签到与重复发奖 */
+      const updated = await this.prisma.eventEnrollment.updateMany({
+        where: { eventId, userId, checkedIn: false },
         data: { checkedIn: true, checkInAt: formatNow() },
       })
+      if (updated.count === 0) throw new ConflictException('该报名已签到，请勿重复操作')
 
       /* 签到积分 = checkinPoints ?? 规则值 */
       if (event.checkinPoints != null) {
@@ -304,42 +353,4 @@ export class EventsService {
     })
   }
 
-  /* DB 行 → M0 契约形状：内嵌 enrollments 去除 id/eventId；可空字段 null → undefined */
-  private toEventDto(event: CommunityEvent, enrollments: EventEnrollment[]): unknown {
-    return {
-      id: event.id,
-      createdAt: event.createdAt,
-      title: event.title,
-      type: event.type,
-      startTime: event.startTime,
-      endTime: event.endTime,
-      location: event.location,
-      capacity: event.capacity,
-      speaker: event.speaker,
-      host: event.host,
-      status: event.status,
-      enrollmentOpen: event.enrollmentOpen,
-      visibilityIdentities: event.visibilityIdentities,
-      visibilityLevels: event.visibilityLevels,
-      enrollmentIdentities: event.enrollmentIdentities,
-      enrollmentLevels: event.enrollmentLevels,
-      requireReview: event.requireReview,
-      enrollmentDeadline: event.enrollmentDeadline ?? undefined,
-      scheduledAt: event.scheduledAt ?? undefined,
-      enrollPoints: event.enrollPoints ?? undefined,
-      checkinPoints: event.checkinPoints ?? undefined,
-      description: event.description,
-      tags: event.tags,
-      enrollments: enrollments.map((en) => ({
-        userId: en.userId,
-        name: en.name,
-        enterprise: en.enterprise,
-        phone: en.phone,
-        appliedAt: en.appliedAt,
-        status: en.status,
-        checkedIn: en.checkedIn,
-        checkInAt: en.checkInAt,
-      })),
-    }
-  }
 }

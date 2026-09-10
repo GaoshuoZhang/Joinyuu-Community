@@ -115,6 +115,8 @@ export class LedgersService {
       action: '积分调整',
       target: `${userId} · ${nickname}`,
       detail: `${delta > 0 ? '+' : ''}${delta} ${reason}`,
+      before: { points: balance - delta },
+      after: { points: balance },
       operator,
     })
 

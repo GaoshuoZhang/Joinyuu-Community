@@ -11,8 +11,8 @@ export class AuthController {
   @Public()
   @HttpCode(200)
   @Post('login')
-  login(@Body() dto: LoginDto): Promise<{ token: string; name: string }> {
-    return this.auth.login(dto.username, dto.password)
+  login(@Body() dto: LoginDto, @Req() req: AuthenticatedRequest): Promise<{ token: string; name: string }> {
+    return this.auth.login(dto.username, dto.password, req.ip ?? '')
   }
 
   @HttpCode(200)

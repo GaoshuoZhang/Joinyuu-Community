@@ -20,6 +20,7 @@ import { RulesModule } from './modules/rules/rules.module'
 import { WorkstationsModule } from './modules/workstations/workstations.module'
 import { SpacesModule } from './modules/spaces/spaces.module'
 import { ContentsModule } from './modules/contents/contents.module'
+import { SystemModule } from './modules/system/system.module'
 import { SchedulerModule } from './scheduler/scheduler.module'
 import { HealthController } from './health/health.controller'
 import { JwtAuthGuard } from './common/guards/jwt-auth.guard'
@@ -49,6 +50,7 @@ import { HttpExceptionFilter } from './common/filters/http-exception.filter'
     WorkstationsModule,
     SpacesModule,
     ContentsModule,
+    SystemModule,
     SchedulerModule,
   ],
   controllers: [HealthController],

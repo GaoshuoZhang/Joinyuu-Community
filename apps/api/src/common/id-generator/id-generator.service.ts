@@ -9,11 +9,17 @@ export class IdGeneratorService {
 
   /** 取下一号，如 next('AL') → 'AL1002' */
   async next(prefix: string): Promise<string> {
+    const number = await this.nextNumber(prefix)
+    return `${prefix}${number}`
+  }
+
+  /** 取纯序号（不拼前缀），供需要自定义格式化（如 JY-2026-01）的编号使用 */
+  async nextNumber(prefix: string): Promise<number> {
     const rows = await this.prisma.$queryRaw<Array<{ nextNumber: number }>>`
       INSERT INTO "IdSequence" ("entityType", "nextNumber")
       VALUES (${prefix}, 1)
       ON CONFLICT ("entityType") DO UPDATE SET "nextNumber" = "IdSequence"."nextNumber" + 1
       RETURNING "nextNumber"`
-    return `${prefix}${rows[0].nextNumber}`
+    return rows[0].nextNumber
   }
 }

@@ -22,6 +22,8 @@ import type { InitiateProjectDto } from './dto/initiate-project.dto'
 
 type DemandWithRespondents = Demand & { respondents: DemandRespondent[] }
 
+type DemandRow = Omit<DemandWithRespondents, 'respondents'>
+
 export interface RespondentDto {
   name: string
   enterprise: string
@@ -162,12 +164,10 @@ export class DemandsService {
     if (query.status) where.status = query.status
     if (query.publisherId) where.publisherId = query.publisherId
 
-    const rows = await this.prisma.demand.findMany({
-      where,
-      include: { respondents: { orderBy: { id: 'asc' } } },
-    })
+    /* 主行查询不含关联（避免全量载入响应记录）；企业筛选/排序/分页在内存完成，仅当页补查关联 */
+    const rows = await this.prisma.demand.findMany({ where })
 
-    let list = rows
+    let list: DemandRow[] = rows
 
     /* 企业筛选：社区企业按 publisherIdentity.enterpriseId；外部企业按档案名匹配 enterpriseName */
     if (query.enterprise) {
@@ -210,7 +210,26 @@ export class DemandsService {
 
     const total = list.length
     const start = (query.page - 1) * query.pageSize
-    return { list: list.slice(start, start + query.pageSize).map(toDemandDto), total }
+    const page = list.slice(start, start + query.pageSize)
+
+    /* 仅当页批量补取响应记录（替代全量 include，随分页收缩载入量） */
+    const respondents = page.length
+      ? await this.prisma.demandRespondent.findMany({
+          where: { demandId: { in: page.map((d) => d.id) } },
+          orderBy: { id: 'asc' },
+        })
+      : []
+    const byDemand = new Map<string, DemandRespondent[]>()
+    for (const r of respondents) {
+      const arr = byDemand.get(r.demandId) ?? []
+      arr.push(r)
+      byDemand.set(r.demandId, arr)
+    }
+
+    return {
+      list: page.map((d) => toDemandDto({ ...d, respondents: byDemand.get(d.id) ?? [] })),
+      total,
+    }
   }
 
   async findOne(id: string): Promise<DemandDto> {
@@ -250,6 +269,7 @@ export class DemandsService {
       action: '创建需求',
       target: `${demand.id} · ${demand.title}`,
       detail: `需求方：${demand.publisherName}`,
+      after: { status: demand.status },
       operator,
     })
 
@@ -278,6 +298,8 @@ export class DemandsService {
       module: '需求管理',
       action: '需求审核通过',
       target: `${demand.id} · ${demand.title}`,
+      before: { status: demand.status },
+      after: { status: 'pending_release' },
       operator,
     })
     return { code: 0 }
@@ -297,6 +319,8 @@ export class DemandsService {
       action: '需求驳回',
       target: `${demand.id} · ${demand.title}`,
       detail: reason,
+      before: { status: demand.status },
+      after: { status: 'rejected', rejectedReason: reason },
       operator,
     })
     return { code: 0 }
@@ -316,12 +340,14 @@ export class DemandsService {
       module: '需求管理',
       action: '需求发布',
       target: `${demand.id} · ${demand.title}`,
+      before: { status: demand.status },
+      after: { status: 'published' },
       operator,
     })
     return { code: 0 }
   }
 
-  async schedule(id: string, dto: ScheduleDemandDto): Promise<{ code: number }> {
+  async schedule(id: string, dto: ScheduleDemandDto, operator: string): Promise<{ code: number }> {
     const demand = await this.prisma.demand.findUnique({ where: { id } })
     if (!demand) throw new NotFoundException('需求不存在')
     if (demand.status !== 'pending_release') throw new ConflictException('仅待发布的需求可设定时发布')
@@ -330,10 +356,20 @@ export class DemandsService {
       where: { id },
       data: { status: 'scheduled', scheduledAt: dto.scheduledAt },
     })
+
+    await this.audit.record({
+      module: '需求管理',
+      action: '需求定时发布',
+      target: `${demand.id} · ${demand.title}`,
+      detail: `定时时间 ${dto.scheduledAt}`,
+      before: { status: demand.status },
+      after: { status: 'scheduled', scheduledAt: dto.scheduledAt },
+      operator,
+    })
     return { code: 0 }
   }
 
-  async cancelSchedule(id: string): Promise<{ code: number }> {
+  async cancelSchedule(id: string, operator: string): Promise<{ code: number }> {
     const demand = await this.prisma.demand.findUnique({ where: { id } })
     if (!demand) throw new NotFoundException('需求不存在')
     if (demand.status !== 'scheduled') throw new ConflictException('仅定时发布中的需求可取消定时')
@@ -342,10 +378,19 @@ export class DemandsService {
       where: { id },
       data: { status: 'pending_release', scheduledAt: null, publishedAt: null },
     })
+
+    await this.audit.record({
+      module: '需求管理',
+      action: '取消定时发布',
+      target: `${demand.id} · ${demand.title}`,
+      before: { status: demand.status },
+      after: { status: 'pending_release' },
+      operator,
+    })
     return { code: 0 }
   }
 
-  async retract(id: string): Promise<{ code: number }> {
+  async retract(id: string, operator: string): Promise<{ code: number }> {
     const demand = await this.prisma.demand.findUnique({ where: { id } })
     if (!demand) throw new NotFoundException('需求不存在')
     if (demand.status !== 'published') throw new ConflictException('仅已发布的需求可撤回发布')
@@ -354,13 +399,24 @@ export class DemandsService {
       where: { id },
       data: { status: 'pending_release', scheduledAt: null, publishedAt: null },
     })
+
+    await this.audit.record({
+      module: '需求管理',
+      action: '撤回发布',
+      target: `${demand.id} · ${demand.title}`,
+      before: { status: demand.status, publishedAt: demand.publishedAt },
+      after: { status: 'pending_release' },
+      operator,
+    })
     return { code: 0 }
   }
 
   async close(id: string, operator: string): Promise<{ code: number }> {
     const demand = await this.prisma.demand.findUnique({ where: { id } })
     if (!demand) throw new NotFoundException('需求不存在')
-    if (demand.status !== 'pending_release') throw new ConflictException('仅待发布的需求可关闭')
+    if (demand.status !== 'pending_release' && demand.status !== 'published') {
+      throw new ConflictException('仅待发布/已发布的需求可关闭')
+    }
 
     await this.prisma.demand.update({ where: { id }, data: { status: 'closed' } })
 
@@ -368,6 +424,8 @@ export class DemandsService {
       module: '需求管理',
       action: '需求关闭',
       target: `${demand.id} · ${demand.title}`,
+      before: { status: demand.status },
+      after: { status: 'closed' },
       operator,
     })
     return { code: 0 }
@@ -398,20 +456,20 @@ export class DemandsService {
     return { code: 0 }
   }
 
-  /* 立项：published → projected；createProject 先行，双向关联（demand.projectId ↔ project.sourceDemandId）事务更新 */
+  /* 立项：published → projected；项目创建与双向关联（demand.projectId ↔ project.sourceDemandId）置于同一事务 */
   async initiateProject(id: string, dto: InitiateProjectDto, operator: string) {
     const demand = await this.prisma.demand.findUnique({ where: { id } })
     if (!demand) throw new NotFoundException('需求不存在')
     if (demand.status !== 'published') throw new ConflictException('仅已发布的需求可立项')
 
-    const project = await this.projects.createProject(dto, operator)
-
-    await this.prisma.$transaction(async (tx) => {
-      await tx.project.update({ where: { id: project.id }, data: { sourceDemandId: demand.id } })
+    const project = await this.prisma.$transaction(async (tx) => {
+      const created = await this.projects.createProjectInHostTx(tx, dto)
+      await tx.project.update({ where: { id: created.id }, data: { sourceDemandId: demand.id } })
       await tx.demand.update({
         where: { id: demand.id },
-        data: { status: 'projected', projectId: project.id },
+        data: { status: 'projected', projectId: created.id },
       })
+      return created
     })
 
     await this.audit.record({
@@ -419,6 +477,8 @@ export class DemandsService {
       action: '需求立项',
       target: `${demand.id} · ${demand.title}`,
       detail: `生成项目 ${project.code}`,
+      before: { status: demand.status },
+      after: { status: 'projected', projectId: project.id },
       operator,
     })
 
