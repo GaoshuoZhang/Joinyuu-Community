@@ -8,5 +8,7 @@ dist/
 .idea/
 .vscode/
 start-admin-web.bat
+start-backend.bat
 .workbuddy/
 .playwright-cli/
+.logs/
