@@ -553,7 +553,8 @@ TZ=Asia/Shanghai
   1. 新增 `src/api/http.ts`：fetch 封装（baseURL `/api/admin`、Bearer token、包络解包 `body.data`、错误 `throw new Error(body.message)`、401 清 token 跳登录）——**函数签名与返回类型全部不变，视图层零改动**。
   2. 每域逐文件替换：函数体 mock 读写 → `http.get/post/...`；Query 接口语义不变（参数名即 query 参数）。
   3. mock 引用清零的域删除对应 mock import；全部域完成后删除 `src/mock/`（保留一个 release 分支节点）。
-- **切换顺序**（与里程碑绑定，每步验证 = `tsc --noEmit` + `pnpm build:admin` + 浏览器冒烟登录后走查该域页面）：auth →（M1-A）→ 成员/审批/账本（M1-B）→ 需求/项目/活动（M1-C）→ 商城/规则/工位/空间/内容/公告（M1-D）→ 通知/审计/配置/字典/工作台（M1-E）。
+- **切换顺序**（与里程碑绑定，每步验证 = `tsc --noEmit` + `pnpm build:admin` + 浏览器冒烟登录后走查该域页面）：auth →（M1-A ✅）→ 成员/审批/账本（M1-B ✅）→ 需求/项目/活动（M1-C ✅）→ 商城/规则/工位/空间/内容/公告（M1-D ✅）→ 通知/审计/配置/字典/工作台（M1-E，待做）。
+- **进度（2026-09-10）**：16/22 个 api 文件已 HTTP 化；剩余 6 文件 = `auditLogs` / `dashboard` / `dicts` / `notifications` / `systemConfig` / `todos`（M1-E）。
 - 字典消费点（七处表单/列表）在 M1-E 前仍走 mock/fallback，M1-E 切真实 `/api/admin/dicts/*`。
 - vite.config 增 proxy（见第 3 节）；生产构建由部署期网关统一转发 `/api`。
 
@@ -561,57 +562,57 @@ TZ=Asia/Shanghai
 
 > 每阶段完成即更新 [full-spec-check.md](./full-spec-check.md) §4 勾选，并按约定在 `docs/` 沉淀对应实体字段文档（page as documentation）。
 
-### M1-A 基础设施与骨架
+### M1-A 基础设施与骨架 — ✅ 完成（2026-09-10，提交 a31df09）
 
-- [ ] `apps/api` NestJS 11 工程搭建 + 根命令（dev:api/build:api/db:*）
-- [ ] docker-compose.dev.yml（postgres/redis + healthcheck）+ .env.example
-- [ ] Prisma 全量 schema（33 模型，第 5 节）+ 首版 migration
-- [ ] IdGeneratorService（id_sequences 发号）
-- [ ] 全局底座：包络/异常过滤器/ValidationPipe/JWT Guard/AuditInterceptor 骨架/健康检查 `GET /api/health`
-- [ ] auth 模块（login/logout）+ AdminUser 种子（admin/admin123）
-- [ ] seed.ts 骨架（AdminUser + SystemConfig + 字典）
-- [ ] e2e 冒烟：login → 携带 token 访问 health；登出后 401
-- **验证**：`pnpm db:reset` 一键跑通；e2e 全绿
+- [x] `apps/api` NestJS 11 工程搭建 + 根命令（dev:api/build:api/db:*）
+- [x] docker-compose.dev.yml（postgres/redis + healthcheck）+ .env.example
+- [x] Prisma 全量 schema（35 模型，第 5 节）+ 首版 migration
+- [x] IdGeneratorService（id_sequences 发号）
+- [x] 全局底座：包络/异常过滤器/ValidationPipe/JWT Guard/AuditInterceptor 骨架/健康检查 `GET /api/health`
+- [x] auth 模块（login/logout）+ AdminUser 种子（admin/admin123）
+- [x] seed.ts 骨架（AdminUser + SystemConfig + 字典）
+- [x] e2e 冒烟：login → 携带 token 访问 health；登出后 401
+- **验证**：`pnpm db:reset` 一键跑通；e2e 5/5
 
-### M1-B 社区成员域
+### M1-B 社区成员域 — ✅ 完成（2026-09-10，提交 b8d7470）
 
-- [ ] users / individuals / enterprises / external-enterprises / applications / ledgers 全端点
-- [ ] grantIdentity 联动（企业创建/激活、身份授予、首绑积分经验）
-- [ ] 手动积分/经验调整（事务+流水）+ 用户/企业 stats 派生
-- [ ] admin 接入：用户/社区个体/社区企业/外部企业/申请审批五组页面 + 详情账本
-- **验证**：审批通过→身份落库→列表可见；调整积分→流水 balance 连续；e2e 覆盖身份授予与调整负余额拦截
+- [x] users / individuals / enterprises / external-enterprises / applications / ledgers 全端点（21 个）
+- [x] grantIdentity 联动（企业创建/激活、身份授予、首绑积分经验）
+- [x] 手动积分/经验调整（事务+流水）+ 用户/企业 stats 派生
+- [x] admin 接入：用户/社区个体/社区企业/外部企业/申请审批五组页面 + 详情账本
+- **验证**：e2e 33/33；审批通过→身份落库→列表可见；调整积分→流水 balance 连续
 
-### M1-C 业务运营域
+### M1-C 业务运营域 — ✅ 完成（2026-09-10，提交 489cc11）
 
-- [ ] demands / projects / events 全端点 + 状态机校验矩阵
-- [ ] 定时任务（定时发布/活动结束）+ schedule 通知
-- [ ] 积分/经验引擎接入触发点（报名审核通过/签到/首绑）
-- [ ] 立项双向关联 + 承接方校验（share=100）+ 代报名
-- [ ] admin 接入：需求/需求审核/项目/活动四组页面
-- **验证**：状态机非法流转 409 文案比对 M0；定时发布到点自动 published；e2e 覆盖审核通过/驳回/立项
+- [x] demands / projects / events 全端点（34 个）+ 状态机校验矩阵
+- [x] 定时任务（定时发布/活动结束）+ schedule 通知
+- [x] 积分/经验引擎接入触发点（报名审核通过/签到/首绑）
+- [x] 立项双向关联 + 承接方校验（share=100）+ 代报名
+- [x] admin 接入：需求/需求审核/项目/活动四组页面
+- **验证**：e2e 48/48 两轮幂等；状态机非法流转 409 文案比对 M0；定时发布到点自动 published 实测
 
-### M1-D 运营设施域
+### M1-D 运营设施域 — ✅ 完成（2026-09-10，提交 c4e97fe）
 
-- [ ] mall（商品/订单/积分规则）/ rules（经验值规则/等级梯度/发放记录）全端点
-- [ ] workstations（区域/工位/租约）+ 租约事务与派生 + 临期通知任务
-- [ ] spaces（空间/预约审批/冲突校验/使用看板）
-- [ ] contents（文章/栏目/展示页申请联动企业）+ announcements
-- [ ] 订单取消退款事务；等级结算
-- [ ] admin 接入：积分商城/规则管理/空间管理/内容管理四组页面
-- **验证**：预约冲突 409；订单取消→积分流水/库存一致；栏目改名→columnName 刷新；e2e 覆盖取消退款与冲突
+- [x] mall（商品/订单/积分规则）/ rules（经验值规则/等级梯度/发放记录）全端点
+- [x] workstations（区域/工位/租约）+ 租约事务与派生 + 临期通知任务
+- [x] spaces（空间/预约审批/冲突校验/使用看板）
+- [x] contents（文章/栏目/展示页申请联动企业）+ announcements
+- [x] 订单取消退款事务；等级结算
+- [x] admin 接入：积分商城/规则管理/空间管理/内容管理四组页面
+- **验证**：e2e 15 套件 72/72 两轮幂等；预约冲突 409；订单取消→积分流水/库存一致；栏目改名→columnName 刷新
 
-### M1-E 系统管理域与收尾
+### M1-E 系统管理域与收尾 — ⏳ 待做
 
-- [ ] notifications / audit-logs 查询 / system config / dicts / dashboard / todos 全端点
+- [ ] notifications / audit-logs 查询 / system config / dicts / dashboard / todos 全端点（12 个）
 - [ ] 审计 before/after 快照补全；Redis 缓存全量接入（第 10 节）+ 降级验证
-- [ ] admin 接入：通知中心/审计日志/系统配置/数据字典/工作台；删除 `src/mock/`
+- [ ] admin 接入：通知中心/审计日志/系统配置/数据字典/工作台；删除 `src/mock/`（6 文件切换）
 - [ ] `/api/app/**` 设计文档（`docs/api-app-design.md`：M2 客户端端点清单——注册登录/多身份、需求浏览提交响应、活动报名、商城兑换下单、空间预约提交、文章投递、展示页申请、个人中心）
 - [ ] 全站回归：29 页面走查 + 129 端点冒烟 + full-spec-check 勾选 + 本 wiki 修订记录
 - **验证**：mock 全删后 build:admin 通过；演示流程（登录→工作台待办→审批→发布→立项→兑换→审计留痕）全链路 e2e
 
 ## 14. 工程约定
 
-- **验证底线**：每模块 PR 级改动跑 `pnpm --filter @joinyuu/admin exec tsc -p tsconfig.json --noEmit`（admin 侧）、`pnpm build:api` + `pnpm --filter @joinyuu/api test`（api 侧）；不虚报测试结论（无测试即说明仅构建验证）。
+- **验证底线**：每模块 PR 级改动跑 `pnpm --filter @joinyuu/admin exec tsc -p tsconfig.json --noEmit`（admin 侧）、`pnpm --filter @joinyuu/api exec tsc -p tsconfig.json --noEmit` + `pnpm build:api` + `pnpm --filter @joinyuu/api test:e2e`（api 侧，需 Docker 服务运行）；不虚报测试结论（无测试即说明仅构建验证）。
 - **测试策略**：单测覆盖纯逻辑（状态机矩阵/冲突算法/经验分配/ID 发号）；e2e 每域至少覆盖"列表-详情-一次状态流转"主干；不追求覆盖率数字，主干链路优先。
 - **契约变更流程**：任何端点/字段/状态机变更 = 先改本文档（标注日期）→ 再改代码 → 同步 full-spec-check；禁止只改代码。
 - **提交规范**：沿用 `<type>: <描述>`；后端模块建议 `feat(api): xxx` 前缀区分 admin 改动。
@@ -627,3 +628,4 @@ TZ=Asia/Shanghai
 | 2026-09-10 | M1-B 实施修订：全部 `@db.Char` 主键/外键列改 `VarChar`（PostgreSQL CHAR(n) 读取保留尾部填充，破坏 ID 契约）——迁移 `20260910140000_char_to_varchar`；§7.9 账本 POST body 补全完整形状（`{targetType,targetId,delta,reason}` / `{userId,delta,reason}`）；§7.3 企业 options 形状订正为 `[{label,value}]`；admin 路由守卫改读 localStorage（401 清 token 后守卫需立即感知，读 Pinia 快照会把 /login 误重定向回 /dashboard） |
 | 2026-09-10 | M1-C 实施修订：`@nestjs/schedule` 锁定 ^6（v12 为纯 ESM 包，jest/nest CJS 链不兼容）；e2e 套件隔离机制（`test/helpers/reseed.ts`，每套件 beforeAll 全量重种子——状态机套件的跨运行污染根治）；demands 新增 4 条状态机守卫 409（reject/close/update/initiate-project，M0 无防重入守卫，按 §8.1 服务端强制原则补齐）；§8.4 积分默认值为示意（实际以种子规则数据为准，如报名通过 mock 实际值）；活动自定义积分（enrollPoints/checkinPoints）走服务内直写事务（引擎仅支持规则值发放） |
 | 2026-09-10 | M1-D 实施修订：§7.12 工位 POST/PUT body 的 `areaId` 订正为 `area`（区域名称字符串，M0 WorkstationPayload 契约，服务端按名解析）；§7.11 levels PUT body 明确 `{tiers: [...]}` 包裹；§7.10 goods 列表补 sortBy(id/points/createdAt)；订单取消退款流水 source='redemption'（M0 mock 复用手动调整为 manual，按 wiki 语义修正）；e2e 套件执行顺序非字母序（jest 默认排序），轮末 DB 为最后执行套件的测试后状态属预期，冒烟前需重种子 |
+| 2026-09-10 | M1-A~D 全部完成（提交 a31df09 / b8d7470 / 489cc11 / c4e97fe）：115 个管理端端点、e2e 15 套件 72 用例两轮幂等、admin 16/22 文件接入真实接口；§12/§13 同步勾选 |

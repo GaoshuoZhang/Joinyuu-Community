@@ -3,9 +3,9 @@
 ## Repository Overview
 
 - This repository is a pnpm workspace. Workspace packages are under `apps/*` and `packages/*`.
-- The active application is `apps/admin`, a Vue 3 + TypeScript + Vite admin prototype for the Joinyuu Community.
-- The current product stage is M0. The NestJS/PostgreSQL/Redis backend (M1), client web app (M2), and mini program (M3) are not implemented yet.
-- Read `README.md`, `docs/wiki-admin-web.md`, and `docs/full-spec-check.md` before making broad UI or product changes. The wiki is the visual and interaction contract; `full-spec-check.md` is the progress reference.
+- The active applications are `apps/admin` (Vue 3 + TypeScript + Vite + TDesign admin web) and `apps/api` (NestJS 11 + Prisma 6 + PostgreSQL 17 + Redis 7.4 backend).
+- The current stage is M1 (backend). M0 (admin prototype) is complete; M1-A~D (115 admin endpoints + admin integration for 16/22 api files) are done; M1-E (system domain + mock removal) remains. Client web (M2) and mini program (M3) are not started.
+- Read `README.md`, `docs/wiki-backend.md`, `docs/wiki-admin-web.md`, and `docs/full-spec-check.md` before making broad changes. The wikis are the frozen contracts; `full-spec-check.md` is the progress reference.
 
 ## Commands
 
@@ -15,12 +15,16 @@ Run these from the repository root unless noted otherwise:
 pnpm install
 pnpm dev:admin
 pnpm build:admin
+pnpm db:up          # PostgreSQL 17 + Redis 7.4 via Docker Compose (waits for health)
+pnpm dev:api        # NestJS dev server on port 7759
+pnpm build:api
+pnpm db:reset       # drop + migrate + full seed (idempotent)
 ```
 
-- The admin dev server uses port `7758` and binds to `0.0.0.0`.
+- The admin dev server uses port `7758` (binds `0.0.0.0`) and proxies `/api` to the backend at `http://127.0.0.1:7757`; the API dev server uses port `7757`.
 - `pnpm build:admin` runs the Vite production build. It does not type-check Vue SFC templates.
-- For TypeScript-only checks, run `pnpm --filter @joinyuu/admin exec tsc -p tsconfig.json --noEmit` from the repository root (or `pnpm exec tsc -p tsconfig.json --noEmit` from `apps/admin`; plain `pnpm exec tsc` at the root fails because TypeScript is a dependency of `apps/admin`, not the workspace root). This still cannot catch every template error, such as an unregistered component or a wrong template variable.
-- There is currently no repository test suite or ESLint configuration. Do not claim tests passed when only the Vite build was run.
+- TypeScript-only checks: `pnpm --filter @joinyuu/admin exec tsc -p tsconfig.json --noEmit` (admin) and `pnpm --filter @joinyuu/api exec tsc -p tsconfig.json --noEmit` (api). From `apps/admin`/`apps/api` you can also run `pnpm exec tsc -p tsconfig.json --noEmit`; plain `pnpm exec tsc` at the repo root fails because TypeScript is a dependency of the apps, not the workspace root. Neither check validates Vue templates fully (unregistered components or wrong template variables can still slip through).
+- Backend e2e suite: `pnpm --filter @joinyuu/api test:e2e` (15 suites / 72 cases; requires Docker services up; each suite reseeds via `test/helpers/reseed.ts`). There is no ESLint configuration and no unit test suite yet. Do not claim more was verified than actually ran.
 
 ## Application Structure
 
@@ -28,15 +32,16 @@ pnpm build:admin
 - `apps/admin/src/layouts/AdminLayout.vue` is the single admin shell. Keep menu order, active-route normalization, tab behavior, notifications, breadcrumbs, and group expansion behavior consistent there.
 - `apps/admin/src/router/index.ts` is the route table. Use named existing routes/paths and preserve the hash-router setup when adding navigation.
 - `apps/admin/src/views/` contains page-level views; `apps/admin/src/components/` contains reusable UI; `apps/admin/src/stores/` contains Pinia state.
-- `apps/admin/src/types/index.ts` contains the M0 domain types and is the basis for the planned M1 database model.
+- `apps/admin/src/types/index.ts` contains the M0 domain types; the frozen M1 database model lives in `apps/api/prisma/schema.prisma` (35 models).
+- `apps/api` is the backend: `prisma/seed.ts` (M0 mock → DB migration, idempotent), `src/modules/<domain>/` per-domain Nest modules, `src/common/` infrastructure (envelope interceptor, exception filter, JWT guard, audit service, id generator, points engine), `src/scheduler/` cron jobs.
 
 ## Data And API Pattern
 
-- `apps/admin/src/mock/` is the shared in-memory data source. Do not create page-local copies when behavior must remain consistent across views.
-- `apps/admin/src/api/` is the service layer. Current functions simulate latency and mutate/read the shared mock data; UI code should call this layer instead of importing mock arrays directly.
-- API files include TODO comments with the intended M1 REST endpoints. Preserve those comments when implementing the mock behavior and replace them with real requests during the backend migration.
-- Successful write operations should record an audit entry through `recordAudit` when the domain already supports audit logging.
-- Mock state is process-local and resets on reload. This is expected for M0 and must not be described as persistence.
+- `apps/admin/src/mock/` is the shared in-memory data source. It still backs the 6 system-domain api files (M1-E switch) and is the source data for the backend seed. Do not create page-local copies when behavior must remain consistent across views.
+- `apps/admin/src/api/` is the service layer. 16/22 domain files are already HTTP (via `src/api/http.ts`); the remaining 6 still read/write the shared mock. UI code should call this layer instead of importing mock arrays directly.
+- Backend endpoints return the exact M0 stub shapes; the global envelope interceptor wraps them into `{ code: 0, data }`. Errors use 400/404/409 with the exact M0 Chinese messages. See `docs/wiki-backend.md` §4.
+- Successful write operations on the backend record an audit entry through `AuditService` (`@Audit` decorator or direct call) when the M0 domain had `recordAudit`. The frontend no longer records audit entries for HTTP-ized domains.
+- Mock state is process-local and resets on reload; backend state is PostgreSQL (seedable via `pnpm db:reset`). Do not describe mock state as persistence.
 
 ## UI Conventions
 
@@ -51,6 +56,6 @@ pnpm build:admin
 
 - Keep changes minimal and preserve existing visual language and route behavior.
 - Before editing a page, inspect its API, types, mock data, and related shared components. Update all consumers when changing a domain field or status.
-- After edits, run `pnpm exec tsc -p apps/admin/tsconfig.json --noEmit` and `pnpm build:admin` when applicable. Also grep for declarations/usages when doing scripted or cross-file changes, because TypeScript does not validate Vue templates completely.
+- After admin edits, run `pnpm --filter @joinyuu/admin exec tsc -p tsconfig.json --noEmit` and `pnpm build:admin` when applicable. After api edits, run `pnpm --filter @joinyuu/api exec tsc -p tsconfig.json --noEmit` and `pnpm build:api`; run the e2e suite when behavior changed (requires `pnpm db:up`; each suite reseeds itself). Also grep for declarations/usages when doing scripted or cross-file changes, because TypeScript does not validate Vue templates completely.
 - Use browser automation only when explicitly requested or when a runtime-only issue cannot be verified statically. If browser testing is used, do not commit `.playwright-cli/` artifacts.
 - Do not commit build output, secrets, local environment files, `node_modules/`, `dist/`, `.workbuddy/`, or `.playwright-cli/`.

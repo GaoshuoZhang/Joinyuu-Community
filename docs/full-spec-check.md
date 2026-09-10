@@ -2,7 +2,7 @@
 
 > 本文档展示整体项目的里程碑规划与模块进度，是跨会话/跨 agent 的进度唯一事实来源。
 > 每完成一个模块，同步更新本文档勾选状态，并按约定在 `docs/` 沉淀对应文档。
-> 最后更新：2026-09-10（M1-A 后端基础设施落地：NestJS 骨架 / Prisma 全量 schema / Docker / 认证 / 种子 / e2e 冒烟）
+> 最后更新：2026-09-10（M1-A~D 全部落地：115 管理端端点 / 状态机 / 定时任务 / 积分引擎 / admin 16 文件接入；e2e 15 套件 72 用例）
 
 ## 0. 项目定位
 
@@ -33,13 +33,13 @@
 | 里程碑 | 名称 | 状态 |
 |---|---|---|
 | **M0** | 后台原型（admin web，Mock 驱动） | **已完成** — M0-A/B/C/D/E 全部完成（M0-E 系统管理域 2026-09-10 落地） |
-| M1 | 后端服务（NestJS + PostgreSQL + Redis） | 未开始 |
+| M1 | 后端服务（NestJS + PostgreSQL + Redis） | **进行中** — M1-A/B/C/D 已完成（115 端点 + admin 16 文件接入，e2e 72/72）；M1-E 待做 |
 | M2 | 客户端 Web（居民端） | 未开始 |
 | M3 | 微信小程序 | 未开始 |
 
 ---
 
-## 3. M0 — 后台原型（当前阶段）
+## 3. M0 — 后台原型（已完成）
 
 > 目标：以可交互原型冻结实体模型、状态流、页面结构与 API 接口形状（`src/api/` stub 即未来真实接口契约）。
 > 细致开发描述见 [wiki-admin-web.md](./wiki-admin-web.md)。
@@ -127,20 +127,57 @@
 
 ---
 
-## 4. M1 — 后端服务（规划，未开始）
+## 4. M1 — 后端服务（进行中）
 
 > 依据：M0 冻结的 `apps/admin/src/types/index.ts` 实体模型 + `apps/admin/src/api/` stub 接口形状。
+> 契约文档：[wiki-backend.md](./wiki-backend.md)（§7 端点清单 / §8 业务规则 / §13 里程碑）。
 
-- [x] NestJS 项目搭建（`apps/api`，Monorepo 内）— M1-A 完成（2026-09-10）：NestJS 11 + 全局底座（包络/异常过滤/JWT Guard/审计拦截器骨架/前缀 ID 发号器）+ Docker Compose（PG17/Redis7.4）+ 认证（JWT + Redis 登出黑名单）+ e2e 冒烟 5/5
-- [x] PostgreSQL 实体建模：users / identities / enterprises / external_enterprise_profiles / applications / demands / projects / milestones / events / enrollments / experience_records / points_records / mall_goods / redemption_orders / points_rules / workstation_areas / workstations / leases / spaces / space_reservations / articles / article_columns / showcase_requests — M1-A 完成（2026-09-10）：35 模型首版 migration + 种子（AdminUser/SystemConfig/DictEntry），详见 docs/wiki-backend.md §5
-- [ ] 管理端 RESTful API：`/api/admin/**`（与 admin stub 一一对应：成员/审批/需求/项目/活动/账本/商城/办公位/空间/内容/工作台聚合；M0-E 新增 notifications / audit-logs / system/config / dicts / todos）— **M1-B 完成（2026-09-10）**：成员域 21 端点（users/individuals/enterprises/external-enterprises/applications/ledgers）+ grantIdentity 联动 + PointsEngine + 全量种子迁移 + admin 成员域七组页面接入真实接口（e2e 33/33、浏览器走查零错误）；**M1-C 完成（2026-09-10）**：业务运营域 34 端点（demands 15/projects 7/events 12）+ 状态机服务端校验 + 定时任务（定时发布/活动结束）+ 报名/签到积分经验触发 + admin 需求/项目/活动页面接入（e2e 48/48 两轮幂等、浏览器走查零错误）；**M1-D 完成（2026-09-10）**：运营设施域 60 端点（mall 12/rules 6/workstations 14/spaces 9/contents 12/announcements 7）+ 订单取消退款事务 + 租约事务与临期通知 + 预约冲突校验 + 栏目/展示页联动 + admin 商城/规则/空间/工位/内容/公告接入（e2e 15 套件 72/72 两轮幂等、浏览器走查零错误）；剩余 M1-E：notifications/audit-logs/system/config/dicts/dashboard/todos + 删除 mock
-- [ ] 审计日志服务端化：中间件统一记录（含 IP、变更前后快照），替换 M0 的 recordAudit 前端埋点
-- [ ] 客户端 API 设计：`/api/app/**`（与 admin 共享实体；含积分商城兑换下单、空间预约提交、文章投递、展示页申请）
-- [ ] 认证与权限（管理端登录、多身份用户鉴权）
-- [ ] Redis 缓存层
-- [ ] 定时任务：需求/活动定时发布、活动到点自动结束、租约临期/到期状态派生
-- [ ] 状态机服务端校验（需求/活动状态流转规则与 M0 契约一致）
-- [ ] 每模块完成后在 `docs/` 沉淀实体字段列表（page as documentation）
+### M1-A 基础设施与骨架 — ✅ 已完成（2026-09-10，提交 a31df09）
+
+- [x] NestJS 项目搭建（`apps/api`，Monorepo 内）：NestJS 11 + 全局底座（响应包络/异常过滤/JWT Guard/审计拦截器/前缀 ID 发号器）+ 健康检查 `GET /api/health`
+- [x] Docker Compose（PostgreSQL 17 + Redis 7.4，healthcheck）+ `.env.example`
+- [x] Prisma 全量 schema（35 模型）首版 migration + `prisma/seed.ts` 骨架（AdminUser/SystemConfig/DictEntry）
+- [x] 认证与权限（管理端）：JWT 登录 + Redis 登出黑名单（多身份用户鉴权随 M2 客户端）
+- [x] e2e 冒烟：login → 受保护端点 → 登出后 401
+- **验证**：`pnpm db:reset` 一键跑通；e2e 5/5
+
+### M1-B 社区成员域 — ✅ 已完成（2026-09-10，提交 b8d7470）
+
+- [x] users / individuals / enterprises / external-enterprises / applications / ledgers 全端点（21 个）
+- [x] grantIdentity 联动（企业创建/激活、身份授予、首绑积分经验）
+- [x] 手动积分/经验调整（事务+流水）+ 用户/企业 stats 实时派生
+- [x] 审计埋点迁移（审批/冻结/积分调整，operator 取登录态 + IP）
+- [x] admin 接入：用户/社区个体/社区企业/外部企业/申请审批五组页面 + 详情账本（7 文件 HTTP 化）
+- **验证**：e2e 33/33；API 冒烟（审批→身份落库→列表可见；调整积分→流水 balance 连续）；浏览器走查零错误
+
+### M1-C 业务运营域 — ✅ 已完成（2026-09-10，提交 489cc11）
+
+- [x] demands / projects / events 全端点（34 个）+ 状态机服务端校验（409 文案与 M0 逐字一致）
+- [x] 定时任务（30s 定时发布扫描 + 5min 活动自动结束）+ schedule 通知写入
+- [x] 积分/经验引擎接入触发点（报名审核通过/签到/首绑身份）
+- [x] 立项双向关联 + 承接方校验（share=100）+ 代报名
+- [x] admin 接入：需求/需求审核/项目/活动四组页面（3 文件 HTTP 化）
+- **验证**：e2e 48/48 两轮幂等；定时发布到点自动 published 实测；浏览器走查零错误
+
+### M1-D 运营设施域 — ✅ 已完成（2026-09-10，提交 c4e97fe）
+
+- [x] mall（商品/订单/积分规则）/ rules（经验值规则/等级梯度/发放记录）全端点
+- [x] workstations（区域/工位/租约）+ 租约事务与派生 + 临期通知任务（每日 09:00，同日去重）
+- [x] spaces（空间/预约审批/冲突校验/使用看板）
+- [x] contents（文章/栏目/展示页申请联动企业）+ announcements
+- [x] 订单取消退款事务（积分回退 source=redemption + 库存回补）；等级结算（引擎内按 LevelTier 重算）
+- [x] admin 接入：积分商城/规则管理/空间管理/内容管理四组页面（6 文件 HTTP 化）
+- **验证**：e2e 15 套件 72/72 两轮幂等；订单取消退款三表一致 + 预约冲突 409 + 栏目改名联动实测；浏览器走查零错误
+
+### M1-E 系统管理域与收尾 — ⏳ 待做
+
+- [ ] notifications / audit-logs 查询 / system config / dicts / dashboard / todos 全端点（12 个）
+- [ ] 审计 before/after 快照补全；Redis 缓存全量接入（wiki-backend §10）+ 降级验证
+- [ ] admin 接入：通知中心/审计日志/系统配置/数据字典/工作台；删除 `apps/admin/src/mock/`（6 文件切换）
+- [ ] `/api/app/**` 设计文档（`docs/api-app-design.md`：M2 客户端端点清单——注册登录/多身份、需求浏览提交响应、活动报名、商城兑换下单、空间预约提交、文章投递、展示页申请、个人中心）
+- [ ] 实体字段文档沉淀（每模块字段列表；wiki-backend §5 已含全量模型）
+- [ ] 全站回归：29 页面走查 + 129 端点冒烟 + full-spec-check 勾选 + wiki 修订记录
+- **验证**：mock 全删后 build:admin 通过；演示流程（登录→工作台待办→审批→发布→立项→兑换→审计留痕）全链路 e2e
 
 ## 5. M2 — 客户端 Web（居民端，规划，未开始）
 
@@ -163,6 +200,6 @@
 ## 7. 横切约定（全里程碑生效）
 
 - [x] 设计契约冻结机制（M0 已建立，见 wiki-admin-web.md）
-- [ ] 实体字段文档沉淀：每完成一个后端模块，同步在 `docs/` 沉淀实体字段列表（当前仅 admin wiki）
+- [ ] 实体字段文档沉淀：每完成一个后端模块，同步在 `docs/` 沉淀实体字段列表（wiki-backend §5 已含全量 35 模型；分模块字段清单待 M1-E 补）
 - [ ] CI/CD 与部署方案
-- [ ] 测试策略（后端单测/接口测试）
+- [x] 测试策略（后端）— e2e 套件已建立：15 套件 72 用例，每套件经 `test/helpers/reseed.ts` 重种子隔离，`pnpm --filter @joinyuu/api test:e2e`；单元测试待补

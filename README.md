@@ -6,17 +6,17 @@
 
 ## 当前状态（2026-09-10）
 
-**M0 后台原型已完成** — M0-A（基础骨架）/ M0-B（社区成员域）/ M0-C（业务运营域）/ M0-D（运营设施域）/ M0-E（系统管理域：通知中心、审计日志、系统配置、数据字典、工作台待办卡片、列表导出、批量操作、面包屑可点击）全部完成并通过构建验证。下一阶段为 M1 后端服务（NestJS + PostgreSQL + Redis），依据 `apps/admin/src/types/index.ts` 实体模型与 `apps/admin/src/api/` stub 接口形状实现。详细进度见 [docs/full-spec-check.md](./docs/full-spec-check.md)。
+**M1 后端服务进行中** — M0 后台原型（M0-A~E）全部完成；M1 已落地 M1-A~D：`apps/api`（NestJS 11 + Prisma 6 + PostgreSQL 17 + Redis 7.4）实现 115 个 `/api/admin/**` 端点（社区成员域 21 / 业务运营域 34 / 运营设施域 60），含 JWT 认证、状态机服务端校验、定时任务、积分/经验发放引擎与全量种子迁移；admin web 16/22 个 API 文件已接入真实接口（e2e 15 套件 72 用例全绿）。剩余 M1-E：系统管理域（通知/审计/配置/字典/工作台聚合）+ 删除 mock + `/api/app/**` 设计。详细进度见 [docs/full-spec-check.md](./docs/full-spec-check.md)。
 
-开发策略：**以管理后台 Web 作为初始驱动**——先在后台原型中冻结实体模型、状态流与 API 接口形状，再据此实现后端与客户端。
+开发策略：**以管理后台 Web 作为初始驱动**——先在后台原型中冻结实体模型、状态流与 API 接口形状，再据此实现后端与客户端（当前已进入后端实施与前端接入阶段）。
 
 ## 技术栈
 
 | 层 | 选型 |
 |---|---|
 | 仓库 | pnpm Monorepo（`apps/` + `packages/`） |
-| 后端（M1 规划） | Node.js + NestJS + RESTful API |
-| 数据库（M1 规划） | PostgreSQL + Redis |
+| 后端（M1 实施中） | NestJS 11 + Prisma 6 + RESTful API（`apps/api`，端口 7759） |
+| 数据库（M1 实施中） | PostgreSQL 17 + Redis 7.4（Docker Compose 本地开发） |
 | 管理后台 Web（当前） | Vue 3 + Vite + TypeScript + TDesign Vue Next + Pinia + Vue Router |
 | 客户端 Web（M2 规划） | 同上（TDesign Vue Next） |
 | 微信小程序（M3 规划） | TDesign WeChat MiniProgram |
@@ -25,46 +25,60 @@
 
 ```
 apps/
-  admin/            # 管理后台 Web（M0 原型，当前开发重点）
+  admin/            # 管理后台 Web（M0 原型完成；16/22 个 API 文件已接入真实接口）
     src/
-      api/          # API Stub —— 未来真实接口的形状（含 TODO 注释）
+      api/          # API 层 —— http.ts 封装 + 已 HTTP 化域文件；6 个系统域文件仍为 Mock（M1-E 切换）
       components/   # 共享组件（PageHeader/StatusTag/IdentityTags/...）
       constants/    # 状态映射与身份词汇表（冻结）
       layouts/      # AdminLayout（唯一 App Shell）
-      mock/         # Mock 数据单一出口（跨页一致）
+      mock/         # Mock 数据单一出口（剩余系统域消费 + 后端种子来源）
       router/       # 路由表（冻结）
       stores/       # Pinia（auth/tabs）
       types/        # 实体类型定义（M1 建表依据）
       views/        # 页面（按领域分目录）
-packages/           # 预留（后端/共享包）
+  api/              # 后端服务（M1：NestJS 11 + Prisma 6 + PostgreSQL 17 + Redis 7.4）
+    prisma/         # schema.prisma（35 模型）+ migrations + seed.ts（M0 mock 全量迁移）
+    src/
+      common/       # 底座：Prisma/Redis/响应包络/异常过滤/JWT Guard/审计/前缀 ID 发号器/积分引擎
+      modules/      # 按域模块：auth/users/enterprises/applications/demands/projects/events/mall/rules/workstations/spaces/contents
+      scheduler/    # 定时任务（定时发布/活动结束/租约临期）
+    test/           # e2e 套件（15 套件 72 用例，每套件重种子隔离）
+    docker-compose.dev.yml
+packages/           # 预留（共享包）
 docs/
   full-spec-check.md    # 整体项目开发规划与进度核对表（进度唯一事实来源）
   wiki-admin-web.md     # 管理后台开发 Wiki（设计契约/组件规范/状态机/API 约定）
+  wiki-backend.md       # 后端开发 Wiki（数据模型/端点契约/业务规则/里程碑）
 ```
 
 ## 开发命令
 
 ```bash
 pnpm install              # 安装依赖
-pnpm dev:admin            # 启动管理后台开发服务器
-pnpm build:admin          # 构建管理后台（当前通过 6096 模块编译验证）
+pnpm dev:admin            # 启动管理后台开发服务器（7758，代理 /api → 7759）
+pnpm build:admin          # 构建管理后台
+pnpm db:up                # 启动 PostgreSQL + Redis（Docker Compose，等待健康检查）
+pnpm dev:api              # 启动后端服务（NestJS，7759）
+pnpm build:api            # 构建后端
+pnpm db:reset             # 重建数据库（drop + migrate + 全量种子）
 ```
 
-演示账号：`admin / admin123`（Mock 登录）。
+演示账号：`admin / admin123`（真实 JWT 登录；需先 `pnpm db:up` + `pnpm db:reset` + `pnpm dev:api`）。
 
 ## 文档索引（AI agent 必读）
 
 | 文档 | 用途 |
 |---|---|
 | [docs/full-spec-check.md](./docs/full-spec-check.md) | 整体里程碑规划与模块进度勾选——**接手任务前先看这里**，完成后同步勾选 |
-| [docs/wiki-admin-web.md](./docs/wiki-admin-web.md) | 管理后台开发 Wiki：设计 tokens、布局骨架、组件规范、状态机、Mock 与 API Stub 约定——**改 admin 代码前必读** |
+| [docs/wiki-admin-web.md](./docs/wiki-admin-web.md) | 管理后台开发 Wiki：设计 tokens、布局骨架、组件规范、状态机、API 约定——**改 admin 代码前必读** |
+| [docs/wiki-backend.md](./docs/wiki-backend.md) | 后端开发 Wiki：数据模型（35 模型）、端点契约清单、业务规则、里程碑——**改后端代码前必读** |
 
-## 关键工程约定（摘要，详见 wiki-admin-web.md）
+## 关键工程约定（摘要，详见 wiki-admin-web.md / wiki-backend.md）
 
 1. **契约冻结**：菜单/路由/状态映射/身份词汇表已冻结，不得私自重写导航、发明颜色字号或自造状态文案。
 2. **共享组件强制**：状态标签用 `StatusTag`、身份标签用 `IdentityTags`，禁止页面自造。
-3. **Mock 单一数据源**：所有页面从 `src/mock/` 取数；ID 命名前缀：用户 U1001+ / 企业 E2001+ / 审批 AP3001+ / 需求 D4001+ / 项目 P5001+ / 活动 EV6001+ / 外部企业 XE7001+。
-4. **API Stub 即接口契约**：`src/api/` 中每个函数的 `TODO: 替换为 GET/POST /api/admin/xxx` 注释即 M1 后端的接口形状，管理端前缀 `/api/admin/**`，客户端未来为 `/api/app/**`。
+3. **Mock 单一数据源**：所有页面从 `src/mock/` 取数（HTTP 化域除外）；ID 命名前缀：用户 U1001+ / 企业 E2001+ / 审批 AP3001+ / 需求 D4001+ / 项目 P5001+ / 活动 EV6001+ / 外部企业 XE7001+。
+4. **API 契约以 M0 stub 为准**：`src/api/` 的 TODO 注释即接口形状（管理端 `/api/admin/**`，客户端未来为 `/api/app/**`）；M1-B~D 已把 16 个域文件切换为真实 HTTP（函数签名不变），剩余系统域 6 文件在 M1-E 切换。
 5. **表单校验时机**：弹窗规则 `trigger: 'submit'`，打开时 `clearValidate()`，避免 DatePicker 交互提前红框。
 6. **表格规范**：`table-layout="auto"` + `hover` + `resizable`；服务端排序用受控 `:sort` + `@sort-change`。
 7. **文档沉淀**：每完成一个模块，同步更新 full-spec-check.md 勾选状态；后端模块完成后在 `docs/` 沉淀实体字段列表（page as documentation）。
