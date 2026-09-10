@@ -70,13 +70,14 @@ apps/api/
 **Monorepo 命令**（根 `package.json` 新增）：
 
 ```bash
-pnpm db:up          # docker compose -f apps/api/docker-compose.dev.yml up -d
+pnpm db:up          # docker compose -f apps/api/docker-compose.dev.yml up -d --wait（等待健康检查）
 pnpm db:down        # 停止并删除容器（保留数据卷）
 pnpm dev:api        # 启动 NestJS dev（端口 7759）
 pnpm build:api      # Nest 生产构建
-pnpm db:migrate     # prisma migrate dev
-pnpm db:seed        # tsx prisma/seed.ts（幂等：truncate 后全量重建）
-pnpm db:reset       # prisma migrate reset（drop + migrate + seed）
+pnpm db:migrate     # prisma migrate deploy（非交互应用已有迁移）
+pnpm db:migrate:dev # prisma migrate dev --name xxx（开发者创建新迁移时手动执行，交互式）
+pnpm db:seed        # tsx prisma/seed.ts（幂等：清空后全量重建）
+pnpm db:reset       # prisma migrate reset --force（drop + migrate + seed，一键验证）
 ```
 
 ## 3. 开发环境（Windows 11 + Docker Desktop）
@@ -118,8 +119,9 @@ volumes:
 - `apps/api/.env`（不入库，提供 `.env.example`）：
 
 ```
-DATABASE_URL="postgresql://joinyuu:joinyuu@localhost:5432/joinyuu?schema=public"
-REDIS_URL="redis://localhost:6379"
+# 注意：Windows + Docker Desktop 下 IPv6 loopback（::1）端口转发不可靠（Prisma Rust 引擎解析 localhost 优先 IPv6 会 P1001），一律用 127.0.0.1
+DATABASE_URL="postgresql://joinyuu:joinyuu@127.0.0.1:5432/joinyuu?schema=public"
+REDIS_URL="redis://127.0.0.1:6379"
 JWT_SECRET="dev-only-change-me"
 PORT=7759
 TZ=Asia/Shanghai
@@ -135,7 +137,7 @@ TZ=Asia/Shanghai
 - 成功：HTTP 200/201，body `{ code: 0, data: T, message?: string }`；`data` 形状与 M0 stub 返回值完全一致（列表为 `{ list, total }`，写操作为 `{ code: 0 }` 或带附加字段，如积分调整 `{ code: 0, balance }`）。
 - 失败：HTTP 状态码（400 校验/业务规则、401 未登录、404 资源不存在、409 状态机冲突、500 未知），body `{ code: <业务码，默认同 HTTP 状态>, message: '中文错误提示' }`。
 - **`message` 必须直接可展示**——admin 视图层统一 `catch (e) → MessagePlugin.error(e.message)`，错误文案口径与 M0 mock 抛出的中文 Error 一一迁移（如"仅待发布的需求可立即发布"）。
-- 时间序列化：数据库 `timestamptz`（UTC 存储），API 输出 `YYYY-MM-DD HH:mm`（Asia/Shanghai）；纯日期字段（租约起止、预约日期）输出 `YYYY-MM-DD`。与 M0 mock 字符串格式完全一致，前端零适配。
+- 时间字段统一 **String 存储**（M0 原生三种格式：`YYYY-MM-DD HH:mm` 时刻 / `YYYY-MM-DD` 日期 / `YYYY-MM` 年月，VarChar(16)）：单时区运营、字符串字典序即时间序（比较/排序/定时扫描均安全）、与 M0 契约逐字节一致、种子迁移零转换；`timestamptz` 推迟到出现真实跨时区需求时再迁移。系统内部字段（AdminUser.createdAt/updatedAt）不受此约束，仍用数据库原生 DateTime。
 
 ### 4.2 Nest 模块约定
 
@@ -160,7 +162,7 @@ TZ=Asia/Shanghai
 - **派生值不落列**（M0 明确口径）：用户实名状态（realName+citizenId 均填）、用户 stats（详情接口实时 COUNT）、租约 expiring/expired（读取派生）、"个人用户"筛选（仅持 individual 身份）。
 - 金额/积分为整数（分或元按 M0 现状：租金/预算为元字符串或整数、积分为整数）；枚举一律 String + 应用层枚举校验（保持与前端字符串契约一致，不用 PG enum，降低迁移摩擦）。
 
-### 5.2 表清单（33 模型）
+### 5.2 表清单（35 模型）
 
 | 分组 | Prisma 模型 | 主键前缀 | 要点 |
 |---|---|---|---|
@@ -621,3 +623,4 @@ TZ=Asia/Shanghai
 | 日期 | 摘要 |
 |---|---|
 | 2026-09-10 | 初版：M1 全量契约冻结（Prisma/范围/主键三项决策经用户确认） |
+| 2026-09-10 | M1-A 实施修订：时间字段统一 String 存储（废弃 timestamptz 方案，理由见 §4.1）；`db:migrate` 改为非交互 `prisma migrate deploy` 并新增 `db:migrate:dev`（交互式创建迁移）；连接地址统一 127.0.0.1（Docker Desktop IPv6 loopback 不可靠）；模型数订正为 35 |

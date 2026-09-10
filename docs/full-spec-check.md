@@ -2,7 +2,7 @@
 
 > 本文档展示整体项目的里程碑规划与模块进度，是跨会话/跨 agent 的进度唯一事实来源。
 > 每完成一个模块，同步更新本文档勾选状态，并按约定在 `docs/` 沉淀对应文档。
-> 最后更新：2026-09-08（M0 后台原型全部完成；M0-D 运营设施域落地，积分商城拆分为"积分管理"一级菜单）
+> 最后更新：2026-09-10（M1-A 后端基础设施落地：NestJS 骨架 / Prisma 全量 schema / Docker / 认证 / 种子 / e2e 冒烟）
 
 ## 0. 项目定位
 
@@ -131,8 +131,8 @@
 
 > 依据：M0 冻结的 `apps/admin/src/types/index.ts` 实体模型 + `apps/admin/src/api/` stub 接口形状。
 
-- [ ] NestJS 项目搭建（`apps/api` 或 `packages/`，Monorepo 内）
-- [ ] PostgreSQL 实体建模：users / identities / enterprises / external_enterprise_profiles / applications / demands / projects / milestones / events / enrollments / experience_records / points_records / mall_goods / redemption_orders / points_rules / workstation_areas / workstations / leases / spaces / space_reservations / articles / article_columns / showcase_requests
+- [x] NestJS 项目搭建（`apps/api`，Monorepo 内）— M1-A 完成（2026-09-10）：NestJS 11 + 全局底座（包络/异常过滤/JWT Guard/审计拦截器骨架/前缀 ID 发号器）+ Docker Compose（PG17/Redis7.4）+ 认证（JWT + Redis 登出黑名单）+ e2e 冒烟 5/5
+- [x] PostgreSQL 实体建模：users / identities / enterprises / external_enterprise_profiles / applications / demands / projects / milestones / events / enrollments / experience_records / points_records / mall_goods / redemption_orders / points_rules / workstation_areas / workstations / leases / spaces / space_reservations / articles / article_columns / showcase_requests — M1-A 完成（2026-09-10）：35 模型首版 migration + 种子（AdminUser/SystemConfig/DictEntry），详见 docs/wiki-backend.md §5
 - [ ] 管理端 RESTful API：`/api/admin/**`（与 admin stub 一一对应：成员/审批/需求/项目/活动/账本/商城/办公位/空间/内容/工作台聚合；M0-E 新增 notifications / audit-logs / system/config / dicts / todos）
 - [ ] 审计日志服务端化：中间件统一记录（含 IP、变更前后快照），替换 M0 的 recordAudit 前端埋点
 - [ ] 客户端 API 设计：`/api/app/**`（与 admin 共享实体；含积分商城兑换下单、空间预约提交、文章投递、展示页申请）

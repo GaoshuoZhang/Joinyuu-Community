@@ -5,6 +5,13 @@
   "description": "聚屿社区 Joinyuu Community — 创业社区数字化运营平台",
   "scripts": {
     "dev:admin": "pnpm --filter @joinyuu/admin dev",
-    "build:admin": "pnpm --filter @joinyuu/admin build"
+    "build:admin": "pnpm --filter @joinyuu/admin build",
+    "dev:api": "pnpm --filter @joinyuu/api dev",
+    "build:api": "pnpm --filter @joinyuu/api build",
+    "db:up": "docker compose -f apps/api/docker-compose.dev.yml up -d --wait",
+    "db:down": "docker compose -f apps/api/docker-compose.dev.yml down",
+    "db:migrate": "pnpm --filter @joinyuu/api db:migrate",
+    "db:seed": "pnpm --filter @joinyuu/api db:seed",
+    "db:reset": "pnpm --filter @joinyuu/api db:reset"
   }
 }

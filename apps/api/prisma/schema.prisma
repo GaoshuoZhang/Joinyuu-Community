@@ -1,0 +1,589 @@
+// 聚屿社区 M1 数据模型 — 契约来源：apps/admin/src/types/index.ts（M0 冻结）+ docs/wiki-backend.md §5
+// 建模总则：
+//   1. 主键 = 前缀字符串（U1001/E2001/D4001/...），由 IdGeneratorService 经 IdSequence 表原子发号
+//   2. 展示快照字段保留为列（publisherName/spaceName/goodsName/columnName 等），不外键化
+//   3. 时间字段统一 String（'YYYY-MM-DD HH:mm' / 'YYYY-MM-DD' / 'YYYY-MM'）——与 M0 契约逐字节一致；
+//      单时区运营，字符串字典序即时间序（比较/排序/定时扫描安全）
+//   4. 内嵌数组拆表（identities/respondents/undertakers/milestones/enrollments/lease-workstations）
+//   5. 半结构数据用 Json（审批时间线/身份快照/活跃记录）；标签与身份筛选数组用 String[]
+//   6. 枚举用 String + 应用层校验（保持与前端字符串契约一致）
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ---------- 认证与基础设施 ----------
+
+model AdminUser {
+  id           Int      @id @default(autoincrement())
+  username     String   @unique @db.VarChar(64)
+  passwordHash String
+  name         String   @db.VarChar(64)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+}
+
+// 前缀 ID 发号器：entityType = 前缀（'U'/'E'/'D'...），发号即 UPDATE..RETURNING 原子自增
+model IdSequence {
+  entityType String @id @db.VarChar(32)
+  nextNumber Int    @default(1)
+}
+
+// ---------- 社区成员域 ----------
+
+model User {
+  uid            String   @id @db.Char(16)
+  nickname       String   @db.VarChar(64)
+  phone          String   @db.VarChar(32)
+  email          String   @db.VarChar(128)
+  gender         String   @db.VarChar(8)
+  status         String   @default("active") @db.VarChar(16)
+  realName       String?  @db.VarChar(64)
+  citizenId      String?  @db.VarChar(32)
+  wechatOpenid   String?  @db.VarChar(64)
+  wechatUnionid  String?  @db.VarChar(64)
+  wechatVerified Boolean  @default(false)
+  frozenUntil    String?  @db.VarChar(16)
+  frozenReason   String?  @db.VarChar(255)
+  points         Int      @default(0)
+  registeredAt   String   @db.VarChar(16)
+  lastActiveAt   String   @db.VarChar(16)
+  bio            String   @db.Text
+  activities     Json     @default("[]")
+  identities     UserIdentity[]
+  pointsRecords  PointsRecord[]
+  enrollments    EventEnrollment[]
+  reservations   SpaceReservation[]
+  orders         RedemptionOrder[]
+  articles       Article[]
+
+  @@index([phone])
+  @@index([status])
+}
+
+model UserIdentity {
+  id             Int     @id @default(autoincrement())
+  userId         String  @db.Char(16)
+  type           String  @db.VarChar(32)
+  enterpriseId   String? @db.Char(16)
+  enterpriseName String? @db.VarChar(128)
+  role           String? @db.VarChar(16)
+  title          String  @db.VarChar(64)
+  level          Int?
+  experience     Int?
+  user           User    @relation(fields: [userId], references: [uid], onDelete: Cascade)
+
+  @@unique([userId, type, enterpriseId])
+  @@index([type, enterpriseId])
+  @@index([type, enterpriseName])
+}
+
+model Enterprise {
+  id              String  @id @db.Char(16)
+  name            String  @db.VarChar(128)
+  industry        String  @db.VarChar(64)
+  stage           String  @db.VarChar(32)
+  size            String  @db.VarChar(32)
+  foundedAt       String  @db.VarChar(16)
+  settledAt       String? @db.VarChar(16)
+  leaseType       String  @db.VarChar(32)
+  status          String  @default("pending") @db.VarChar(16)
+  showcaseStatus  String  @default("none") @db.VarChar(16)
+  showcaseComment String? @db.VarChar(255)
+  experience      Int     @default(0)
+  contactName     String  @db.VarChar(64)
+  contactPhone    String  @db.VarChar(32)
+  contactEmail    String? @db.VarChar(128)
+  description     String  @db.Text
+  tags            String[]
+
+  @@index([status])
+  @@index([industry])
+}
+
+// 外部企业档案；ExternalEnterprise 聚合视图 = 档案 + identities(type=external_enterprise) 派生成员，不建独立实体表
+model ExternalEnterpriseProfile {
+  id                 String @id @db.Char(16)
+  name               String @db.VarChar(128)
+  industry           String @db.VarChar(64)
+  description        String @db.Text
+  cooperationCount   Int    @default(0)
+  firstCooperationAt String @db.VarChar(16)
+
+  @@index([name])
+}
+
+model Application {
+  id             String @id @db.Char(16)
+  type           String @db.VarChar(16) // settle | identity
+  applicantName  String @db.VarChar(64)
+  applicantPhone String @db.VarChar(32)
+  targetName     String @db.VarChar(128)
+  submittedAt    String @db.VarChar(16)
+  status         String @db.VarChar(16) // pending | approved | rejected
+  summary        String @db.VarChar(255)
+  details        Json    @default("[]")
+  records        Json    @default("[]")
+
+  @@index([status, type])
+}
+
+// ---------- 业务运营域 ----------
+
+model Demand {
+  id                   String   @id @db.Char(16)
+  title                String   @db.VarChar(128)
+  category             String   @db.VarChar(64)
+  publisherId          String   @default("") @db.VarChar(16)
+  publisherName        String   @db.VarChar(128)
+  publisherIdentity    Json?
+  contactName          String?  @db.VarChar(64)
+  contactPhone         String?  @db.VarChar(32)
+  contactEmail         String?  @db.VarChar(128)
+  budget               String   @db.VarChar(64)
+  period               String   @db.VarChar(32)
+  deadline             String   @db.VarChar(16)
+  scheduledAt          String?  @db.VarChar(16)
+  visibilityIdentities String[]
+  visibilityLevels     String[]
+  enrollmentIdentities String[]
+  enrollmentLevels     String[]
+  status               String   @db.VarChar(24)
+  createdAt            String   @db.VarChar(16)
+  publishedAt          String?  @db.VarChar(16)
+  description          String   @db.Text
+  tags                 String[]
+  rejectedReason       String?  @db.VarChar(255)
+  matchedRespondent    String?  @db.VarChar(128)
+  projectId            String?  @db.Char(16)
+  respondPoints        Int?
+  respondents          DemandRespondent[]
+
+  @@index([status])
+  @@index([publisherId])
+  @@index([category])
+}
+
+model DemandRespondent {
+  id         Int    @id @default(autoincrement())
+  demandId   String @db.Char(16)
+  name       String @db.VarChar(64)
+  enterprise String @db.VarChar(128)
+  phone      String? @db.VarChar(32)
+  email      String? @db.VarChar(128)
+  quote      String? @db.VarChar(64)
+  message    String @db.Text
+  at         String @db.VarChar(16)
+  status     String @default("pending") @db.VarChar(16)
+  demand     Demand @relation(fields: [demandId], references: [id], onDelete: Cascade)
+
+  @@index([demandId])
+}
+
+model Project {
+  id             String  @id @db.Char(16)
+  name           String  @db.VarChar(128)
+  code           String  @unique @db.VarChar(32)
+  status         String  @db.VarChar(16) // running | paused | closed | finished
+  progress       Int     @default(0)
+  startDate      String  @default("") @db.VarChar(16)
+  endDate        String  @default("") @db.VarChar(16)
+  initiatedAt    String  @db.VarChar(16)
+  description    String  @db.Text
+  memberCount    Int
+  sourceDemandId String? @db.Char(16)
+  expReward      Int?
+  closeReason    String? @db.VarChar(255)
+  undertakers    ProjectUndertaker[]
+  milestones     Milestone[]
+
+  @@index([status])
+}
+
+model ProjectUndertaker {
+  id          Int    @id @default(autoincrement())
+  projectId   String @db.Char(16)
+  type        String @db.VarChar(16) // enterprise | individual | custom
+  refId       String @default("") @db.Char(16)
+  name        String @db.VarChar(128)
+  share       Int
+  contactName String? @db.VarChar(64)
+  phone       String? @db.VarChar(32)
+  project     Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  @@index([projectId])
+}
+
+model Milestone {
+  id        Int      @id @default(autoincrement())
+  projectId String   @db.Char(16)
+  name      String   @db.VarChar(128)
+  status    String   @default("todo") @db.VarChar(8) // done | active | todo
+  date      String   @db.VarChar(16)
+  owners    String[]
+  project   Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  @@index([projectId])
+}
+
+model CommunityEvent {
+  id                   String   @id @db.Char(16)
+  createdAt            String   @db.VarChar(16)
+  title                String   @db.VarChar(128)
+  type                 String   @db.VarChar(32)
+  startTime            String   @db.VarChar(16)
+  endTime              String   @db.VarChar(16)
+  location             String   @db.VarChar(128)
+  capacity             Int
+  speaker              String   @db.VarChar(64)
+  host                 String   @db.VarChar(64)
+  status               String   @db.VarChar(24) // pending_release | scheduled | published | ended | cancelled
+  enrollmentOpen       Boolean  @default(false)
+  visibilityIdentities String[]
+  visibilityLevels     String[]
+  enrollmentIdentities String[]
+  enrollmentLevels     String[]
+  requireReview        Boolean  @default(false)
+  enrollmentDeadline   String?  @db.VarChar(16)
+  scheduledAt          String?  @db.VarChar(16)
+  enrollPoints         Int?
+  checkinPoints        Int?
+  description          String   @db.Text
+  tags                 String[]
+  enrollments          EventEnrollment[]
+
+  @@index([status])
+  @@index([startTime])
+}
+
+model EventEnrollment {
+  id         Int            @id @default(autoincrement())
+  eventId    String         @db.Char(16)
+  userId     String         @db.Char(16)
+  name       String         @db.VarChar(64)
+  enterprise String         @db.VarChar(128)
+  phone      String         @db.VarChar(32)
+  appliedAt  String         @db.VarChar(16)
+  status     String         @default("pending") @db.VarChar(16)
+  checkedIn  Boolean        @default(false)
+  checkInAt  String?        @db.VarChar(16)
+  event      CommunityEvent @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  user       User           @relation(fields: [userId], references: [uid])
+
+  @@unique([eventId, userId])
+  @@index([userId])
+}
+
+// ---------- 经验值 / 积分账本 ----------
+
+model ExperienceRecord {
+  id         String @id @db.Char(16)
+  targetType String @db.VarChar(16) // enterprise | individual
+  targetId   String @db.VarChar(16)
+  delta      Int
+  balance    Int
+  reason     String @db.VarChar(255)
+  at         String @db.VarChar(16)
+  operator   String @db.VarChar(64)
+  source     String @db.VarChar(16) // rule | manual
+
+  @@index([targetType, targetId])
+}
+
+model PointsRecord {
+  id       String @id @db.Char(16)
+  userId   String @db.Char(16)
+  delta    Int
+  balance  Int
+  reason   String @db.VarChar(255)
+  at       String @db.VarChar(16)
+  operator String @db.VarChar(64)
+  source   String @db.VarChar(16) // rule | manual | redemption
+  user     User   @relation(fields: [userId], references: [uid])
+
+  @@index([userId])
+  @@index([source])
+}
+
+// ---------- 积分商城与规则 ----------
+
+model MallGoods {
+  id            String @id @db.Char(16)
+  name          String @db.VarChar(128)
+  category      String @db.VarChar(16) // physical | virtual | voucher
+  points        Int
+  stock         Int
+  status        String @default("on") @db.VarChar(8)
+  description   String @db.Text
+  redeemedCount Int    @default(0)
+  createdAt     String @db.VarChar(16)
+
+  @@index([status])
+}
+
+model RedemptionOrder {
+  id             String   @id @db.Char(16)
+  userId         String   @db.Char(16)
+  userName       String   @db.VarChar(64)
+  goodsId        String   @db.Char(16)
+  goodsName      String   @db.VarChar(128)
+  points         Int
+  status         String   @db.VarChar(24) // pending_shipment | shipped | finished | cancelled
+  createdAt      String   @db.VarChar(16)
+  shippedAt      String?  @db.VarChar(16)
+  finishedAt     String?  @db.VarChar(16)
+  recipientName  String?  @db.VarChar(64)
+  recipientPhone String?  @db.VarChar(32)
+  address        String?  @db.VarChar(255)
+  note           String?  @db.VarChar(255)
+  cancelReason   String?  @db.VarChar(255)
+  user           User     @relation(fields: [userId], references: [uid])
+
+  @@index([status])
+  @@index([userId])
+}
+
+// 积分规则：8 条固定触发项（code 为 PK），发放自动、扣除手动（不设扣分规则）
+model PointsRule {
+  code        String @id @db.VarChar(32)
+  name        String @db.VarChar(64)
+  scene       String @db.VarChar(255)
+  points      Int
+  status      String @default("enabled") @db.VarChar(8)
+  description String? @db.VarChar(255)
+  updatedAt   String @db.VarChar(16)
+}
+
+// 经验值规则：5 条固定触发项
+model ExperienceRule {
+  code        String @id @db.VarChar(32)
+  name        String @db.VarChar(64)
+  scene       String @db.VarChar(255)
+  exp         Int
+  status      String @default("enabled") @db.VarChar(8)
+  description String? @db.VarChar(255)
+  updatedAt   String @db.VarChar(16)
+}
+
+model LevelTier {
+  level     Int    @id
+  label     String @db.VarChar(32)
+  threshold Int
+}
+
+// ---------- 空间管理 ----------
+
+model WorkstationArea {
+  id          String       @id @db.Char(16)
+  name        String       @unique @db.VarChar(64)
+  type        String       @db.VarChar(8) // open | office | semi
+  description String       @db.VarChar(255)
+  createdAt   String       @db.VarChar(16)
+  workstations Workstation[]
+}
+
+model Workstation {
+  id                 String          @id @db.Char(16)
+  seatNo             String          @unique @db.VarChar(32)
+  areaId             String          @db.Char(16)
+  type               String          @db.VarChar(8)
+  capacity           Int
+  status             String          @default("idle") @db.VarChar(16) // idle | assigned | maintenance
+  enterpriseId       String?         @db.Char(16)
+  enterpriseName     String?         @db.VarChar(128)
+  leaseId            String?         @db.Char(16)
+  defaultMonthlyRent Int?
+  areaSqm            Int?
+  note               String?         @db.VarChar(255)
+  area               WorkstationArea @relation(fields: [areaId], references: [id])
+  leaseWorkstations  LeaseWorkstation[]
+
+  @@index([status])
+  @@index([areaId])
+}
+
+model Lease {
+  id           String   @id @db.Char(16)
+  renterId     String   @default("") @db.Char(16)
+  renterName   String   @db.VarChar(128)
+  renterType   String   @default("custom") @db.VarChar(16) // enterprise | individual | custom
+  startDate    String   @db.VarChar(16)
+  endDate      String   @default("") @db.VarChar(16) // longTerm=true 时空串
+  longTerm     Boolean  @default(false)
+  status       String   @db.VarChar(16) // active | terminated（expiring/expired 读取派生）
+  monthlyRent  Int
+  rentPeriod   String   @default("month") @db.VarChar(8) // day | week | month | year
+  contactName  String   @db.VarChar(64)
+  contactPhone String   @db.VarChar(32)
+  terminatedAt String?  @db.VarChar(16)
+  workstations LeaseWorkstation[]
+
+  @@index([status])
+}
+
+// 租约-工位关联（保留终止后的历史归属）；当前占用由 Workstation.leaseId 表达
+model LeaseWorkstation {
+  leaseId       String      @db.Char(16)
+  workstationId String      @db.Char(16)
+  lease         Lease       @relation(fields: [leaseId], references: [id], onDelete: Cascade)
+  workstation   Workstation @relation(fields: [workstationId], references: [id], onDelete: Cascade)
+
+  @@id([leaseId, workstationId])
+  @@index([workstationId])
+}
+
+model Space {
+  id              String @id @db.Char(16)
+  name            String @db.VarChar(64)
+  type            String @db.VarChar(16) // meeting | roadshow | meeting_room | multi | study
+  capacity        Int
+  location        String @db.VarChar(128)
+  openTime        String @db.VarChar(8)
+  closeTime       String @db.VarChar(8)
+  allDay          Boolean @default(false)
+  needReservation Boolean @default(false)
+  needApproval    Boolean @default(false)
+  equipment       String[]
+  status          String @default("available") @db.VarChar(16)
+  description     String @db.Text
+}
+
+model SpaceReservation {
+  id           String @id @db.Char(16)
+  userId       String @db.Char(16)
+  userName     String @db.VarChar(64)
+  phone        String @db.VarChar(32)
+  spaceId      String @db.Char(16)
+  spaceName    String @db.VarChar(64)
+  date         String @db.VarChar(16)
+  startTime    String @db.VarChar(8)
+  endTime      String @db.VarChar(8)
+  purpose      String @db.VarChar(255)
+  attendees    Int
+  status       String @db.VarChar(16) // pending | approved | rejected | cancelled
+  submittedAt  String @db.VarChar(16)
+  records      Json    @default("[]")
+  rejectReason String? @db.VarChar(255)
+  user         User   @relation(fields: [userId], references: [uid])
+
+  @@index([spaceId, date, status])
+  @@index([userId])
+}
+
+// ---------- 内容管理 ----------
+
+model Article {
+  id             String    @id @db.Char(16)
+  title          String    @db.VarChar(128)
+  columnId       String    @db.Char(16)
+  columnName     String    @db.VarChar(64)
+  authorId       String    @db.Char(16)
+  authorName     String    @db.VarChar(64)
+  authorIdentity Json?
+  status         String    @db.VarChar(16) // draft | pending | published | withdrawn | rejected
+  publishedAt    String?   @db.VarChar(16)
+  views          Int       @default(0)
+  summary        String    @db.VarChar(255)
+  tags           String[]
+  createdAt      String    @db.VarChar(16)
+  rejectedReason String?   @db.VarChar(255)
+  author         User      @relation(fields: [authorId], references: [uid])
+
+  @@index([status])
+  @@index([columnId])
+}
+
+model ArticleColumn {
+  id          String @id @db.Char(16)
+  name        String @db.VarChar(64)
+  description String @db.VarChar(255)
+  sort        Int
+  status      String @default("enabled") @db.VarChar(8)
+  createdAt   String @db.VarChar(16)
+}
+
+model ShowcaseRequest {
+  id             String @id @db.Char(16)
+  targetType     String @db.VarChar(16) // enterprise | individual
+  targetId       String? @db.Char(16)
+  targetName     String @db.VarChar(128)
+  contentSummary String @db.VarChar(255)
+  submitterName  String @db.VarChar(64)
+  submitterPhone String @db.VarChar(32)
+  submittedAt    String @db.VarChar(16)
+  status         String @db.VarChar(16) // pending | approved | rejected | cancelled
+  records        Json    @default("[]")
+  rejectReason   String? @db.VarChar(255)
+}
+
+model Announcement {
+  id          String   @id @db.Char(16)
+  title       String   @db.VarChar(128)
+  content     String   @db.Text
+  pinned      Boolean  @default(false)
+  status      String   @default("published") @db.VarChar(16) // published | withdrawn
+  publishedAt String   @db.VarChar(16)
+  createdAt   String   @db.VarChar(16)
+  updatedAt   String?  @db.VarChar(16)
+}
+
+// ---------- 系统管理域 ----------
+
+model AdminNotification {
+  id      String  @id @db.Char(16)
+  type    String  @db.VarChar(32) // approval | demand_review | reservation | showcase | article | lease | schedule
+  title   String  @db.VarChar(128)
+  content String  @db.VarChar(255)
+  at      String  @db.VarChar(16)
+  read    Boolean @default(false)
+  link    String? @db.VarChar(128)
+
+  @@index([read])
+}
+
+model AuditLog {
+  id       String @id @db.Char(16)
+  operator String @db.VarChar(64)
+  module   String @db.VarChar(16)
+  action   String @db.VarChar(32)
+  target   String @db.VarChar(255)
+  detail   String? @db.VarChar(255)
+  at       String @db.VarChar(16)
+  ip       String? @db.VarChar(64)
+  before   Json?
+  after    Json?
+
+  @@index([at])
+  @@index([module])
+}
+
+model SystemConfig {
+  id                    Int    @id @default(1)
+  siteName              String @db.VarChar(64)
+  siteSlogan            String @db.VarChar(128)
+  registrationOpen      Boolean @default(true)
+  mallOpen              Boolean @default(true)
+  demandOpen            Boolean @default(true)
+  reservationOpen       Boolean @default(true)
+  dailyLoginPoints      Boolean @default(false)
+  leaseExpireRemindDays Int    @default(15)
+  updatedAt             String @db.VarChar(16)
+  updatedBy             String @db.VarChar(64)
+}
+
+model DictEntry {
+  type   String @db.VarChar(32) // demand_category | industry | event_type
+  code   String @db.VarChar(16)
+  label  String @db.VarChar(64)
+  sort   Int
+  status String @default("enabled") @db.VarChar(8)
+
+  @@id([type, code])
+  @@unique([label])
+  @@index([type, sort])
+}
