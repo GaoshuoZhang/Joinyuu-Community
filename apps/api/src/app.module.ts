@@ -15,6 +15,11 @@ import { LedgersModule } from './modules/ledgers/ledgers.module'
 import { DemandsModule } from './modules/demands/demands.module'
 import { ProjectsModule } from './modules/projects/projects.module'
 import { EventsModule } from './modules/events/events.module'
+import { MallModule } from './modules/mall/mall.module'
+import { RulesModule } from './modules/rules/rules.module'
+import { WorkstationsModule } from './modules/workstations/workstations.module'
+import { SpacesModule } from './modules/spaces/spaces.module'
+import { ContentsModule } from './modules/contents/contents.module'
 import { SchedulerModule } from './scheduler/scheduler.module'
 import { HealthController } from './health/health.controller'
 import { JwtAuthGuard } from './common/guards/jwt-auth.guard'
@@ -39,6 +44,11 @@ import { HttpExceptionFilter } from './common/filters/http-exception.filter'
     DemandsModule,
     ProjectsModule,
     EventsModule,
+    MallModule,
+    RulesModule,
+    WorkstationsModule,
+    SpacesModule,
+    ContentsModule,
     SchedulerModule,
   ],
   controllers: [HealthController],

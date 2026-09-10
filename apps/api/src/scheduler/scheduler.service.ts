@@ -2,7 +2,7 @@ import { Injectable } from '@nestjs/common'
 import { Cron, CronExpression } from '@nestjs/schedule'
 import { PrismaService } from '../common/prisma/prisma.service'
 import { IdGeneratorService } from '../common/id-generator/id-generator.service'
-import { formatNow } from '../common/utils/time'
+import { formatNow, formatToday } from '../common/utils/time'
 
 /* 定时任务（wiki-backend.md §8.2）：
  * (1) 定时发布扫描：demands/events 中 scheduled 且到点 → published（活动同时开放报名）+ 写 schedule 通知；
@@ -23,6 +23,11 @@ export class SchedulerService {
   @Cron(CronExpression.EVERY_5_MINUTES, { name: 'events-auto-end' })
   async handleAutoEnd(): Promise<void> {
     await this.scanAutoEnd()
+  }
+
+  @Cron('0 9 * * *', { name: 'lease-expiring-notify' })
+  async handleLeaseExpiring(): Promise<void> {
+    await this.scanLeaseExpiring()
   }
 
   /** 到点发布扫描：先取受影响行（构造通知），再 updateMany；活动发布时同时开放报名 */
@@ -84,5 +89,51 @@ export class SchedulerService {
       where: { status: 'published', endTime: { lte: now } },
       data: { status: 'ended' },
     })
+  }
+
+  /** 租约临期通知（wiki-backend.md §8.2）：active 且非长期租约 endDate 落在临期窗口
+   * （SystemConfig.leaseExpireRemindDays，默认 15）→ 写 lease 通知；同一租约同日去重
+   * （匹配 type=lease 且 content 含租约 ID 且 at 日期前缀为今日）。 */
+  async scanLeaseExpiring(): Promise<void> {
+    const config = await this.prisma.systemConfig.findUnique({ where: { id: 1 } })
+    const days = config?.leaseExpireRemindDays ?? 15
+    const today = formatToday()
+    const windowEnd = this.addDays(today, days)
+    const now = formatNow()
+
+    const leases = await this.prisma.lease.findMany({
+      where: { status: 'active', longTerm: false, endDate: { gte: today, lte: windowEnd } },
+    })
+
+    for (const lease of leases) {
+      const already = await this.prisma.adminNotification.findFirst({
+        where: {
+          type: 'lease',
+          content: { contains: lease.id },
+          at: { startsWith: today },
+        },
+      })
+      if (already) continue
+
+      await this.prisma.adminNotification.create({
+        data: {
+          id: await this.ids.next('N'),
+          type: 'lease',
+          title: `租约 ${lease.id}（${lease.renterName}）即将到期`,
+          content: `租约 ${lease.id}（${lease.renterName}）即将到期，请及时处理续期。`,
+          at: now,
+          read: false,
+          link: '/workstations/leases',
+        },
+      })
+    }
+  }
+
+  /** 日期字符串加天数（YYYY-MM-DD），对齐 M0 addDays 语义 */
+  private addDays(dateStr: string, days: number): string {
+    const d = new Date(`${dateStr}T00:00:00`)
+    d.setDate(d.getDate() + days)
+    const p = (n: number): string => String(n).padStart(2, '0')
+    return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`
   }
 }

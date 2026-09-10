@@ -324,7 +324,7 @@ TZ=Asia/Shanghai
 
 | 方法 | 路径 | 说明 |
 |---|---|---|
-| GET | /api/admin/mall/goods | query：page/pageSize/keyword(名称/ID)/category/status |
+| GET | /api/admin/mall/goods | query：page/pageSize/keyword(名称/ID)/category/status/sortBy(id 默认倒序、points、createdAt)/sortOrder |
 | POST | /api/admin/mall/goods | 创建即上架（on）、redeemedCount=0 |
 | PUT | /api/admin/mall/goods/:id | 编辑（不影响已有订单） |
 | POST | /api/admin/mall/goods/:id/toggle-status | 上架↔下架 |
@@ -346,7 +346,7 @@ TZ=Asia/Shanghai
 | POST | /api/admin/rules/experience/:code/toggle-status | 启用↔停用 |
 | GET | /api/admin/rules/experience-issuance | 仅 source=rule 的经验流水 |
 | GET | /api/admin/rules/levels | 等级梯度 level 升序 |
-| PUT | /api/admin/rules/levels | 整组保存 `{ tiers: [{ level, label, threshold }] }`；1-10 级、门槛逐级递增；梯度变更仅影响后续结算 |
+| PUT | /api/admin/rules/levels | 整组保存 body `{ tiers: [{ level, label, threshold }] }`（前端函数签名收数组、请求时包一层）；1-10 级、门槛逐级递增；梯度变更仅影响后续结算 |
 
 ### 7.12 工位与租约 workstations（14）
 
@@ -357,8 +357,8 @@ TZ=Asia/Shanghai
 | POST | /api/admin/workstation-areas | `{ name, type, description }`；name 唯一 |
 | PUT | /api/admin/workstation-areas/:id | 编辑；改名无需级联（M1 外键化） |
 | DELETE | /api/admin/workstation-areas/:id | 仅区域下无工位时可删 |
-| POST | /api/admin/workstations | `{ areaId, seatNo, type, capacity, note?, defaultMonthlyRent?, areaSqm? }`；seatNo 全岛唯一；创建即 idle |
-| PUT | /api/admin/workstations/:id | 资料编辑（不改分配/维护状态） |
+| POST | /api/admin/workstations | `{ area, seatNo, type, capacity, note?, defaultMonthlyRent?, areaSqm? }`——**area 为区域名称字符串**（M0 WorkstationPayload 契约，服务端按名解析 areaId，不存在报"所属区域不存在"）；seatNo 全岛唯一；创建即 idle |
+| PUT | /api/admin/workstations/:id | 资料编辑（不改分配/维护状态；body 同 POST，area 为区域名） |
 | DELETE | /api/admin/workstations/:id | assigned 不可删；删除后同步清理 lease 关联 |
 | POST | /api/admin/workstations/:id/status | `{ status: idle/maintenance }`；assigned 不可直接标记 |
 | GET | /api/admin/workstation-leases | 全量租约最新在前；expiring/expired 读取派生（15 天窗口，longTerm 不参与） |
@@ -626,3 +626,4 @@ TZ=Asia/Shanghai
 | 2026-09-10 | M1-A 实施修订：时间字段统一 String 存储（废弃 timestamptz 方案，理由见 §4.1）；`db:migrate` 改为非交互 `prisma migrate deploy` 并新增 `db:migrate:dev`（交互式创建迁移）；连接地址统一 127.0.0.1（Docker Desktop IPv6 loopback 不可靠）；模型数订正为 35 |
 | 2026-09-10 | M1-B 实施修订：全部 `@db.Char` 主键/外键列改 `VarChar`（PostgreSQL CHAR(n) 读取保留尾部填充，破坏 ID 契约）——迁移 `20260910140000_char_to_varchar`；§7.9 账本 POST body 补全完整形状（`{targetType,targetId,delta,reason}` / `{userId,delta,reason}`）；§7.3 企业 options 形状订正为 `[{label,value}]`；admin 路由守卫改读 localStorage（401 清 token 后守卫需立即感知，读 Pinia 快照会把 /login 误重定向回 /dashboard） |
 | 2026-09-10 | M1-C 实施修订：`@nestjs/schedule` 锁定 ^6（v12 为纯 ESM 包，jest/nest CJS 链不兼容）；e2e 套件隔离机制（`test/helpers/reseed.ts`，每套件 beforeAll 全量重种子——状态机套件的跨运行污染根治）；demands 新增 4 条状态机守卫 409（reject/close/update/initiate-project，M0 无防重入守卫，按 §8.1 服务端强制原则补齐）；§8.4 积分默认值为示意（实际以种子规则数据为准，如报名通过 mock 实际值）；活动自定义积分（enrollPoints/checkinPoints）走服务内直写事务（引擎仅支持规则值发放） |
+| 2026-09-10 | M1-D 实施修订：§7.12 工位 POST/PUT body 的 `areaId` 订正为 `area`（区域名称字符串，M0 WorkstationPayload 契约，服务端按名解析）；§7.11 levels PUT body 明确 `{tiers: [...]}` 包裹；§7.10 goods 列表补 sortBy(id/points/createdAt)；订单取消退款流水 source='redemption'（M0 mock 复用手动调整为 manual，按 wiki 语义修正）；e2e 套件执行顺序非字母序（jest 默认排序），轮末 DB 为最后执行套件的测试后状态属预期，冒烟前需重种子 |
