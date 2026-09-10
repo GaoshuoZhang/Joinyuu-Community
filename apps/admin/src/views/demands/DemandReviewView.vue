@@ -6,6 +6,7 @@ import PageHeader from '@/components/PageHeader.vue'
 import IdentityTags from '@/components/IdentityTags.vue'
 import DemandReviewDialog from '@/components/DemandReviewDialog.vue'
 import { fetchDemands } from '@/api/demands'
+import { dictFallback, fetchDictEntries } from '@/api/dicts'
 import type { Demand } from '@/types'
 
 /* 需求审核：固定筛选「待审核」状态的需求集中审核。
@@ -27,10 +28,11 @@ const query = reactive({
 const sortBy = ref<'createdAt' | 'id'>('createdAt')
 const sortOrder = ref<'ascend' | 'descend'>('descend')
 
-const categoryOptions = [
+/* 类别选项来自数据字典（M0-E 起统一取用），加载失败回退默认词表 */
+const categoryOptions = ref([
   { label: '全部', value: '' },
-  ...['供应链', '设计', '法务财务', '技术开发', '市场', '人力资源'].map((label) => ({ label, value: label })),
-]
+  ...dictFallback.demand_category.map((label) => ({ label, value: label })),
+])
 
 const columns = [
   { colKey: 'title', title: '需求', cell: 'title', width: 210, resizable: true },
@@ -111,7 +113,17 @@ function openReview(row: Demand) {
   reviewVisible.value = true
 }
 
-onMounted(load)
+onMounted(() => {
+  load()
+  fetchDictEntries('demand_category')
+    .then((entries) => {
+      const labels = entries.filter((e) => e.status === 'enabled').map((e) => ({ label: e.label, value: e.label }))
+      if (labels.length) categoryOptions.value = [{ label: '全部', value: '' }, ...labels]
+    })
+    .catch(() => {
+      /* 字典加载失败保留回退词表 */
+    })
+})
 </script>
 
 <template>

@@ -1,9 +1,12 @@
 <script setup lang="ts">
 import { computed, onMounted, reactive, ref } from 'vue'
 import { useRouter } from 'vue-router'
-import { RefreshIcon, SearchIcon } from 'tdesign-icons-vue-next'
+import { RefreshIcon, SearchIcon, DownloadIcon } from 'tdesign-icons-vue-next'
+import { MessagePlugin } from 'tdesign-vue-next'
 import PageHeader from '@/components/PageHeader.vue'
 import { fetchExternalEnterprises } from '@/api/external-enterprises'
+import { dictFallback, fetchDictEntries } from '@/api/dicts'
+import { exportCsv } from '@/utils/exportCsv'
 import type { ExternalEnterprise } from '@/types'
 
 const router = useRouter()
@@ -18,11 +21,11 @@ const query = reactive({
   industry: '',
 })
 
-/* 行业选项（与 mock 档案行业保持一致） */
-const industryOptions = [
+/* 行业选项来自数据字典（M0-E 起与社区企业共用 industry 字典），加载失败回退默认词表 */
+const industryOptions = ref([
   { label: '全部', value: '' },
-  ...['风险投资', '财务咨询', '文化传播', '文化创意'].map((label) => ({ label, value: label })),
-]
+  ...dictFallback.industry.map((label) => ({ label, value: label })),
+])
 
 /* 排序：默认累计合作倒序（合作最多在前），支持累计合作/首次合作正倒序 */
 const sortBy = ref<'cooperationCount' | 'firstCooperationAt'>('cooperationCount')
@@ -103,12 +106,39 @@ function goDetail(row: ExternalEnterprise) {
   router.push(`/external-enterprises/${row.id}`)
 }
 
-onMounted(load)
+/* 导出当前页外部企业列表为 CSV */
+function onExport() {
+  exportCsv(
+    '外部企业列表',
+    ['编号', '企业名称', '行业', '累计合作', '首次合作', '关联成员数'],
+    list.value.map((e) => [e.id, e.name, e.industry, e.cooperationCount, e.firstCooperationAt, e.members.length]),
+  )
+  MessagePlugin.success(`已导出当前页 ${list.value.length} 条数据`)
+}
+
+onMounted(() => {
+  load()
+  fetchDictEntries('industry')
+    .then((entries) => {
+      const labels = entries.filter((e) => e.status === 'enabled').map((e) => ({ label: e.label, value: e.label }))
+      if (labels.length) industryOptions.value = [{ label: '全部', value: '' }, ...labels]
+    })
+    .catch(() => {
+      /* 字典加载失败保留回退词表 */
+    })
+})
 </script>
 
 <template>
   <div class="external-list page-fade-in">
-    <PageHeader title="外部企业" description="由成员外部企业身份聚合的合作企业（未入驻社区，无展示页）" />
+    <PageHeader title="外部企业" description="由成员外部企业身份聚合的合作企业（未入驻社区，无展示页）">
+      <template #actions>
+        <t-button variant="outline" @click="onExport">
+          <template #icon><DownloadIcon /></template>
+          导出
+        </t-button>
+      </template>
+    </PageHeader>
 
     <div class="page-filter-bar">
       <t-input

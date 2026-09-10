@@ -8,6 +8,7 @@ import type {
 } from '@/types'
 import { spaces, reservations, events } from '@/mock'
 import { delay } from './utils'
+import { recordAudit } from './auditLogs'
 
 /* 数据一致性约定：
  * - 空间名称被社区活动 location 引用（聚屿路演厅、共享会议室 A），重命名需同步活动数据（M1 服务端强约束）
@@ -183,6 +184,7 @@ export async function reviewReservation(
     at: formatNow(),
   }
   reservation.records.push(record)
+  recordAudit('空间管理', status === 'approved' ? '预约审批通过' : '预约审批驳回', `${reservation.id} · ${reservation.spaceName}`, comment)
   return { code: 0 }
 }
 

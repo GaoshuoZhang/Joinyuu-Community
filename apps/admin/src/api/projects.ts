@@ -2,6 +2,7 @@ import type { PageResult, Project } from '@/types'
 import type { ProjectInitPayload } from '@/types'
 import { enterprises, externalEnterpriseProfiles, projects, users } from '@/mock'
 import { delay } from './utils'
+import { recordAudit } from './auditLogs'
 
 export interface ProjectQuery {
   page: number
@@ -149,6 +150,7 @@ export async function closeProject(id: string, reason: string): Promise<{ code: 
   if (!reason.trim()) throw new Error('请填写关闭原因')
   project.status = 'closed'
   project.closeReason = reason.trim()
+  recordAudit('项目管理', '项目关闭', `${project.id} · ${project.name}`, reason.trim())
   return { code: 0 }
 }
 
@@ -186,5 +188,6 @@ export async function createProject(payload: ProjectInitPayload): Promise<Projec
     expReward: payload.expReward,
   }
   projects.push(project)
+  recordAudit('项目管理', '创建项目', `${project.id} · ${project.name}`, project.code)
   return project
 }

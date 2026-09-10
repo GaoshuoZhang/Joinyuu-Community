@@ -2,6 +2,7 @@ import type { Demand, PageResult, Project, ProjectInitPayload, UserIdentity } fr
 import { demands, enterprises, externalEnterpriseProfiles, users } from '@/mock'
 import { delay } from './utils'
 import { createProject } from './projects'
+import { recordAudit } from './auditLogs'
 
 export interface DemandQuery {
   page: number
@@ -161,6 +162,7 @@ export async function approveDemand(id: string): Promise<{ code: number }> {
   if (!demand) throw new Error('需求不存在')
   if (demand.status !== 'pending') throw new Error('仅待审核的需求可审核')
   demand.status = 'pending_release'
+  recordAudit('需求管理', '需求审核通过', `${demand.id} · ${demand.title}`)
   return { code: 0 }
 }
 
@@ -173,6 +175,7 @@ export async function publishDemandNow(id: string): Promise<{ code: number }> {
   demand.status = 'published'
   demand.scheduledAt = undefined
   demand.publishedAt = formatNow()
+  recordAudit('需求管理', '需求发布', `${demand.id} · ${demand.title}`)
   return { code: 0 }
 }
 
@@ -227,6 +230,7 @@ export async function rejectDemand(id: string, reason: string): Promise<{ code: 
   if (!demand) throw new Error('需求不存在')
   demand.status = 'rejected'
   demand.rejectedReason = reason
+  recordAudit('需求管理', '需求驳回', `${demand.id} · ${demand.title}`, reason)
   return { code: 0 }
 }
 
@@ -236,6 +240,7 @@ export async function closeDemand(id: string): Promise<{ code: number }> {
   const demand = demands.find((d) => d.id === id)
   if (!demand) throw new Error('需求不存在')
   demand.status = 'closed'
+  recordAudit('需求管理', '需求关闭', `${demand.id} · ${demand.title}`)
   return { code: 0 }
 }
 
@@ -272,6 +277,7 @@ export async function initiateProject(demandId: string, payload: ProjectInitPayl
   project.sourceDemandId = demand.id
   demand.status = 'projected'
   demand.projectId = project.id
+  recordAudit('需求管理', '需求立项', `${demand.id} · ${demand.title}`, `生成项目 ${project.code}`)
   return project
 }
 
@@ -417,5 +423,6 @@ export async function createDemand(payload: DemandCreatePayload): Promise<Demand
   }
   applyPayload(demand, payload)
   demands.push(demand)
+  recordAudit('需求管理', '创建需求', `${demand.id} · ${demand.title}`, `需求方：${demand.publisherName}`)
   return demand
 }

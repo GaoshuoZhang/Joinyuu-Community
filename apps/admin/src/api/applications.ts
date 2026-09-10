@@ -1,6 +1,7 @@
 import type { Application, Enterprise, PageResult } from '@/types'
 import { applications, users, enterprises } from '@/mock'
 import { delay } from './utils'
+import { recordAudit } from './auditLogs'
 
 export interface ApplicationQuery {
   page: number
@@ -102,6 +103,7 @@ export async function approveApplication(id: string, comment: string): Promise<{
     at: formatNow(),
   })
   grantIdentity(app)
+  recordAudit('审批中心', '审批通过', `${app.id} · ${app.targetName}`, app.type === 'settle' ? '入驻申请' : '身份绑定')
   return { code: 0 }
 }
 
@@ -118,6 +120,7 @@ export async function rejectApplication(id: string, comment: string): Promise<{ 
     comment: comment || '不同意',
     at: formatNow(),
   })
+  recordAudit('审批中心', '审批驳回', `${app.id} · ${app.targetName}`, comment || undefined)
   return { code: 0 }
 }
 

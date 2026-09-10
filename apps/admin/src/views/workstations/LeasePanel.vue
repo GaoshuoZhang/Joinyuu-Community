@@ -1,12 +1,13 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
 import { MessagePlugin } from 'tdesign-vue-next'
-import { AddIcon, RefreshIcon } from 'tdesign-icons-vue-next'
+import { AddIcon, RefreshIcon, DownloadIcon } from 'tdesign-icons-vue-next'
 import PageHeader from '@/components/PageHeader.vue'
 import StatusTag from '@/components/StatusTag.vue'
 import StatCard from '@/components/StatCard.vue'
 import LeaseFormDialog from '@/components/LeaseFormDialog.vue'
 import { deriveLeaseStatus, fetchLeases, fetchWorkstations, terminateLease, type LeaseViewStatus } from '@/api/workstations'
+import { exportCsv, statusLabel } from '@/utils/exportCsv'
 import type { Lease, Workstation } from '@/types'
 
 /* 租约管理面板：创建租约（=分配办公位）/ 续期编辑 / 终止释放工位；
@@ -78,12 +79,38 @@ function openEdit(row: Lease) {
   formVisible.value = true
 }
 
+/* 导出当前页租约列表为 CSV */
+function onExport() {
+  exportCsv(
+    '租约列表',
+    ['租约编号', '租赁方', '工位', '租期', '租金', '联系人', '联系电话', '状态'],
+    leases.value.map((l) => [
+      l.id,
+      `${l.enterpriseName}（${l.enterpriseId || '未注册'}）`,
+      l.workstationLabels.join('、'),
+      l.longTerm ? `${l.startDate} ~ 长期` : `${l.startDate} ~ ${l.endDate}`,
+      `${l.monthlyRent} / ${rentPeriodLabel(l)}`,
+      l.contactName,
+      l.contactPhone,
+      statusLabel('lease', deriveLeaseStatus(l)),
+    ]),
+  )
+  MessagePlugin.success(`已导出当前页 ${leases.value.length} 条数据`)
+}
+
 onMounted(load)
 </script>
 
 <template>
   <div class="lease-panel page-fade-in">
-    <PageHeader title="租赁管理" description="办公位与办公室租约的创建、续期与终止；创建租约即完成工位/办公室分配" />
+    <PageHeader title="租赁管理" description="办公位与办公室租约的创建、续期与终止；创建租约即完成工位/办公室分配">
+      <template #actions>
+        <t-button variant="outline" @click="onExport">
+          <template #icon><DownloadIcon /></template>
+          导出
+        </t-button>
+      </template>
+    </PageHeader>
 
     <div class="stat-row">
       <StatCard label="生效中" :value="statusCount('active')" />

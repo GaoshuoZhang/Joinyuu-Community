@@ -7,6 +7,7 @@ import {
   CalendarIcon,
   CartIcon,
   CheckCircleIcon,
+  Edit2Icon,
   MapIcon,
   TimeIcon,
   LocationIcon,
@@ -30,6 +31,16 @@ onMounted(async () => {
     loading.value = false
   }
 })
+
+/* 六域待办卡片的图标与跳转路由（数据来自 fetchDashboard().todos，原待办中心 2026-09-10 迁入） */
+const todoCardIcons: Record<string, unknown> = {
+  settle: CheckCircleIcon,
+  demand: ViewListIcon,
+  reservation: MapIcon,
+  showcase: BuildingIcon,
+  article: Edit2Icon,
+  lease: TimeIcon,
+}
 
 const quickEntries = [
   { label: '用户管理', path: '/users', icon: UserIcon },
@@ -57,13 +68,18 @@ const quickEntries = [
     <t-skeleton v-if="loading" :row-col="[{ width: '100%', height: '88px' }, [{ width: '48%', height: '260px' }, { width: '48%', height: '260px' }]]" animation="gradient" />
 
     <template v-else-if="data">
-      <!-- 统计卡片 -->
+      <!-- 六域待办卡片（点击直达处理入口；有待办时高亮，沿用 tokens.css 的 stat-clickable/is-active 惯例） -->
       <div class="stat-grid stagger">
-        <StatCard label="待审批申请" :value="data.stats.pendingApplications" :icon="CheckCircleIcon" />
-        <StatCard label="社区用户" :value="data.stats.totalUsers" :icon="UserIcon" />
-        <StatCard label="入驻企业" :value="data.stats.activeEnterprises" :icon="BuildingIcon" />
-        <StatCard label="进行中项目" :value="data.stats.runningProjects" :icon="AppIcon" />
-        <StatCard label="近期活动" :value="data.stats.upcomingEvents" :icon="CalendarIcon" />
+        <StatCard
+          v-for="todo in data.todos"
+          :key="todo.key"
+          class="stat-clickable"
+          :class="{ 'is-active': todo.count > 0 }"
+          :label="todo.title"
+          :value="todo.count"
+          :icon="todoCardIcons[todo.key]"
+          @click="router.push(todo.route)"
+        />
       </div>
 
       <div class="panel-grid">
@@ -140,7 +156,7 @@ const quickEntries = [
 <style scoped>
 .stat-grid {
   display: grid;
-  grid-template-columns: repeat(5, 1fr);
+  grid-template-columns: repeat(6, 1fr);
   gap: 16px;
   margin-bottom: 16px;
 }

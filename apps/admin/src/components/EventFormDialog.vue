@@ -4,6 +4,7 @@ import { MessagePlugin } from 'tdesign-vue-next'
 import type { FormProps } from 'tdesign-vue-next'
 import { createEvent, updateEvent, type EventPayload } from '@/api/events'
 import { fetchPointsRules } from '@/api/mall'
+import { dictFallback, fetchDictEntries } from '@/api/dicts'
 import { userLevelOptions, visibilityIdentityOptions } from '@/constants/identity'
 import type { CommunityEvent } from '@/types'
 
@@ -21,7 +22,8 @@ const emit = defineEmits<{
   (e: 'success'): void
 }>()
 
-const typeOptions = ['沙龙', '培训', '路演', '社交', '赛事'].map((t) => ({ label: t, value: t }))
+/* 活动类型选项来自数据字典（M0-E 起统一取用），加载失败回退默认词表 */
+const typeOptions = ref(dictFallback.event_type.map((t) => ({ label: t, value: t })))
 
 const reviewOptions = [
   { label: '需审核', value: 1 },
@@ -69,6 +71,14 @@ onMounted(async () => {
   } catch {
     /* 规则加载失败时保留默认值 */
   }
+  fetchDictEntries('event_type')
+    .then((entries) => {
+      const labels = entries.filter((e) => e.status === 'enabled').map((e) => ({ label: e.label, value: e.label }))
+      if (labels.length) typeOptions.value = labels
+    })
+    .catch(() => {
+      /* 字典加载失败保留回退词表 */
+    })
 })
 
 /* 打开自定义开关时，输入框默认填入积分规则设定值 */

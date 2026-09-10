@@ -9,6 +9,7 @@ import type {
 import { articles, columns, showcaseRequests, users } from '@/mock'
 import { delay } from './utils'
 import { reviewShowcase } from './enterprises'
+import { recordAudit } from './auditLogs'
 
 /* 数据一致性约定：
  * - 展示页申请审批通过/驳回 → 联动企业 showcaseStatus（published/rejected），复用 enterprises.reviewShowcase
@@ -151,6 +152,7 @@ export async function reviewArticle(
     article.status = 'rejected'
     article.rejectedReason = comment ?? ''
   }
+  recordAudit('内容管理', status === 'approved' ? '文章审核通过' : '文章驳回', `${article.id} · ${article.title}`, comment)
   return { code: 0 }
 }
 

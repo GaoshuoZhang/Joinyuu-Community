@@ -36,6 +36,7 @@ const actionTextMap: Record<string, string> = {
 }
 
 const columns = [
+  { colKey: 'row-select', type: 'multiple', width: 46 },
   { colKey: 'id', title: '预约编号', width: 110 },
   { colKey: 'user', title: '预约人', cell: 'user', width: 140 },
   { colKey: 'spaceName', title: '空间', width: 130, ellipsis: true },
@@ -45,6 +46,48 @@ const columns = [
   { colKey: 'status', title: '状态', cell: 'status', width: 100, resizable: true },
   { colKey: 'op', title: '操作', cell: 'op', width: 170 },
 ]
+
+/* ---------- 批量通过（仅待审批项；逐条执行以保留时段冲突校验） ---------- */
+const selectedKeys = ref<(string | number)[]>([])
+const batchApproving = ref(false)
+
+const approvableCount = computed(
+  () => list.value.filter((r) => selectedKeys.value.includes(r.id) && r.status === 'pending').length,
+)
+
+function onSelectChange(keys: unknown) {
+  selectedKeys.value = keys as (string | number)[]
+}
+
+async function onBatchApprove() {
+  const targets = list.value.filter((r) => selectedKeys.value.includes(r.id) && r.status === 'pending')
+  if (!targets.length) {
+    MessagePlugin.warning('请选择待审批的预约')
+    return
+  }
+  batchApproving.value = true
+  let passed = 0
+  const failed: string[] = []
+  try {
+    for (const r of targets) {
+      try {
+        await reviewReservation(r.id, 'approved', '')
+        passed += 1
+      } catch (e) {
+        failed.push(`${r.id}（${e instanceof Error ? e.message : '失败'}）`)
+      }
+    }
+    if (failed.length) {
+      MessagePlugin.warning(`已通过 ${passed} 条，${failed.length} 条未通过：${failed.join('；')}`)
+    } else {
+      MessagePlugin.success(`已批量通过 ${passed} 条预约`)
+    }
+    selectedKeys.value = []
+    await load()
+  } finally {
+    batchApproving.value = false
+  }
+}
 
 const pagination = computed(() => ({
   current: query.page,
@@ -178,6 +221,11 @@ onMounted(() => {
         style="width: 180px"
         @change="onDateChange"
       />
+      <div v-if="approvableCount > 0" class="batch-bar">
+        <span class="batch-tip">已选 {{ approvableCount }} 条待审批</span>
+        <t-button theme="primary" size="small" :loading="batchApproving" @click="onBatchApprove">批量通过</t-button>
+        <t-button variant="text" size="small" @click="selectedKeys = []">清空选择</t-button>
+      </div>
     </div>
 
     <div class="page-card">
@@ -198,7 +246,9 @@ onMounted(() => {
         :columns="columns"
         :loading="loading"
         :pagination="pagination"
+        :selected-row-keys="selectedKeys"
         empty="暂无符合条件的预约"
+        @select-change="onSelectChange"
         @page-change="onPageChange"
         @row-click="({ row }) => openDetail(row)"
       >
@@ -308,6 +358,18 @@ onMounted(() => {
 </template>
 
 <style scoped>
+.batch-bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-left: auto;
+}
+
+.batch-tip {
+  font-size: 13px;
+  color: var(--td-brand-color);
+}
+
 .status-tabs {
   margin-bottom: 16px;
 }

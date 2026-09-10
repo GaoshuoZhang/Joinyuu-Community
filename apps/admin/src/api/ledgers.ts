@@ -1,6 +1,7 @@
 import type { ExperienceRecord, PointsRecord } from '@/types'
 import { enterprises, experienceRecords, pointsRecords, users } from '@/mock'
 import { delay } from './utils'
+import { recordAudit } from './auditLogs'
 
 function formatNow(): string {
   const d = new Date()
@@ -90,5 +91,6 @@ export async function adjustPoints(
     operator: '社区管理员',
     source: 'manual',
   })
+  recordAudit('积分商城', '积分调整', `${user.uid} · ${user.nickname}`, `${delta > 0 ? '+' : ''}${delta} ${reason}`)
   return { code: 0, balance }
 }

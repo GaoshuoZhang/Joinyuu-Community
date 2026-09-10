@@ -33,6 +33,7 @@ const actionTextMap: Record<string, string> = {
 }
 
 const columns = [
+  { colKey: 'row-select', type: 'multiple', width: 46 },
   { colKey: 'id', title: '申请编号', width: 110 },
   { colKey: 'type', title: '类型', cell: 'type', width: 110 },
   { colKey: 'applicant', title: '申请人', cell: 'applicant', width: 140 },
@@ -42,6 +43,38 @@ const columns = [
   { colKey: 'status', title: '状态', cell: 'status', width: 100 },
   { colKey: 'op', title: '操作', cell: 'op', width: 180 },
 ]
+
+/* ---------- 批量审批（仅待审批项可操作） ---------- */
+const selectedKeys = ref<(string | number)[]>([])
+const batchApproving = ref(false)
+
+const selectableCount = computed(
+  () => list.value.filter((a) => selectedKeys.value.includes(a.id) && a.status === 'pending').length,
+)
+
+function onSelectChange(keys: unknown) {
+  selectedKeys.value = keys as (string | number)[]
+}
+
+async function onBatchApprove() {
+  const targets = list.value.filter((a) => selectedKeys.value.includes(a.id) && a.status === 'pending')
+  if (!targets.length) {
+    MessagePlugin.warning('请选择待审批的申请')
+    return
+  }
+  batchApproving.value = true
+  try {
+    await Promise.all(targets.map((a) => approveApplication(a.id, '')))
+    MessagePlugin.success(`已批量通过 ${targets.length} 条申请`)
+    selectedKeys.value = []
+    await load()
+  } catch (e) {
+    MessagePlugin.error(e instanceof Error ? e.message : '批量操作失败')
+    await load()
+  } finally {
+    batchApproving.value = false
+  }
+}
 
 const pagination = computed(() => ({
   current: query.page,
@@ -136,6 +169,11 @@ onMounted(load)
         style="width: 150px"
         @change="onTypeChange"
       />
+      <div v-if="selectableCount > 0" class="batch-bar">
+        <span class="batch-tip">已选 {{ selectableCount }} 条待审批</span>
+        <t-button theme="primary" size="small" :loading="batchApproving" @click="onBatchApprove">批量通过</t-button>
+        <t-button variant="text" size="small" @click="selectedKeys = []">清空选择</t-button>
+      </div>
     </div>
 
     <div class="page-card">
@@ -155,7 +193,9 @@ onMounted(load)
         :columns="columns"
         :loading="loading"
         :pagination="pagination"
+        :selected-row-keys="selectedKeys"
         empty="暂无符合条件的申请"
+        @select-change="onSelectChange"
         @page-change="onPageChange"
         @row-click="({ row }) => openDetail(row)"
       >
@@ -257,6 +297,18 @@ onMounted(load)
 </template>
 
 <style scoped>
+.batch-bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-left: auto;
+}
+
+.batch-tip {
+  font-size: 13px;
+  color: var(--td-brand-color);
+}
+
 .status-tabs {
   margin-bottom: 16px;
 }

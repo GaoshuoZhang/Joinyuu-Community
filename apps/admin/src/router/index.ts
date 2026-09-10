@@ -175,6 +175,26 @@ const router = createRouter({
           component: () => import('@/views/contents/ShowcaseView.vue'),
           meta: { title: '展示页发布', group: '内容管理' },
         },
+        {
+          path: 'contents/announcements',
+          component: () => import('@/views/contents/AnnouncementsPanel.vue'),
+          meta: { title: '公告栏', group: '内容管理' },
+        },
+        {
+          path: 'system/dicts',
+          component: () => import('@/views/system/DictPanel.vue'),
+          meta: { title: '数据字典', group: '系统管理' },
+        },
+        {
+          path: 'system/config',
+          component: () => import('@/views/system/SystemConfigPanel.vue'),
+          meta: { title: '系统配置', group: '系统管理' },
+        },
+        {
+          path: 'logs/audit',
+          component: () => import('@/views/system/AuditLogPanel.vue'),
+          meta: { title: '审计日志', group: '系统管理' },
+        },
       ],
     },
     { path: '/:pathMatch(.*)*', redirect: '/dashboard' },

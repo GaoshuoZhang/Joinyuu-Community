@@ -1,6 +1,7 @@
 import type { PageResult, CommunityEvent } from '@/types'
 import { events } from '@/mock'
 import { delay } from './utils'
+import { recordAudit } from './auditLogs'
 
 export interface EventQuery {
   page: number
@@ -120,6 +121,7 @@ export async function publishEventNow(id: string): Promise<{ code: number }> {
   if (event.status !== 'pending_release') throw new Error('仅待发布的活动可立即发布')
   event.status = 'published'
   event.enrollmentOpen = true
+  recordAudit('活动管理', '活动发布', `${event.id} · ${event.title}`)
   return { code: 0 }
 }
 
@@ -172,6 +174,7 @@ export async function cancelEvent(id: string): Promise<{ code: number }> {
   if (!event) throw new Error('活动不存在')
   if (event.status !== 'pending_release' && event.status !== 'published') throw new Error('该状态下不可取消活动')
   event.status = 'cancelled'
+  recordAudit('活动管理', '活动取消', `${event.id} · ${event.title}`)
   return { code: 0 }
 }
 

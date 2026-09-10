@@ -3,7 +3,7 @@ import { computed, nextTick, onMounted, reactive, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { MessagePlugin } from 'tdesign-vue-next'
 import type { FormProps } from 'tdesign-vue-next'
-import { AddIcon, RefreshIcon, SearchIcon } from 'tdesign-icons-vue-next'
+import { AddIcon, RefreshIcon, SearchIcon, DownloadIcon } from 'tdesign-icons-vue-next'
 import PageHeader from '@/components/PageHeader.vue'
 import StatusTag from '@/components/StatusTag.vue'
 import ProjectFormDialog from '@/components/ProjectFormDialog.vue'
@@ -11,6 +11,7 @@ import { fetchProjects, pauseProject, resumeProject, closeProject } from '@/api/
 import { fetchEnterprise } from '@/api/enterprises'
 import { fetchExternalEnterprise } from '@/api/external-enterprises'
 import { fetchUser } from '@/api/users'
+import { exportCsv, statusLabel } from '@/utils/exportCsv'
 import type { Project } from '@/types'
 
 const route = useRoute()
@@ -207,6 +208,25 @@ function durationOf(row: Project): string {
   return `${start || '—'} ~ ${end || '—'}`
 }
 
+/* 导出当前页项目列表为 CSV */
+function onExport() {
+  exportCsv(
+    '项目列表',
+    ['编号', '项目编号', '项目名称', '承接方（占比）', '进度', '状态', '立项日期', '起止时间'],
+    list.value.map((p) => [
+      p.id,
+      p.code,
+      p.name,
+      p.undertakers.map((t) => `${t.name} ${t.share}%`).join('、'),
+      `${p.progress}%`,
+      statusLabel('project', p.status),
+      p.initiatedAt,
+      durationOf(p),
+    ]),
+  )
+  MessagePlugin.success(`已导出当前页 ${list.value.length} 条数据`)
+}
+
 function onRowClick({ row }: { row: Project }) {
   goDetail(row)
 }
@@ -275,6 +295,10 @@ onMounted(() => {
   <div class="project-list page-fade-in">
     <PageHeader title="项目管理" description="跨企业协作项目的创建、承接方与进度管理">
       <template #actions>
+        <t-button variant="outline" @click="onExport">
+          <template #icon><DownloadIcon /></template>
+          导出
+        </t-button>
         <t-button theme="primary" @click="openCreate">
           <template #icon><AddIcon /></template>
           创建项目

@@ -1,6 +1,7 @@
 import type { PageResult, User } from '@/types'
 import { demands, events, projects, users } from '@/mock'
 import { delay } from './utils'
+import { recordAudit } from './auditLogs'
 
 export interface UserQuery {
   page: number
@@ -100,6 +101,7 @@ export async function freezeUser(id: string, payload: UserFreezePayload): Promis
   user.status = 'frozen'
   user.frozenUntil = payload.permanent ? undefined : payload.until
   user.frozenReason = payload.reason.trim()
+  recordAudit('社区成员', '冻结账号', `${user.uid} · ${user.nickname}`, payload.reason.trim())
   return { code: 0 }
 }
 

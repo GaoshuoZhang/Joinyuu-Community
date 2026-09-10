@@ -1,6 +1,7 @@
 import type { Application, CommunityEvent } from '@/types'
 import { applications, enterprises, events, projects, users } from '@/mock'
 import { delay } from './utils'
+import { fetchTodos, type TodoSummary } from './todos'
 
 export interface DashboardData {
   stats: {
@@ -10,6 +11,8 @@ export interface DashboardData {
     runningProjects: number
     upcomingEvents: number
   }
+  /** 六域待办聚合（工作台顶部卡片，2026-09-10 自待办中心迁入） */
+  todos: TodoSummary[]
   pendingApplications: Application[]
   upcomingEvents: CommunityEvent[]
 }
@@ -26,6 +29,7 @@ export async function fetchDashboard(): Promise<DashboardData> {
   const publishedNotEnded = events
     .filter((e) => e.status === 'published' && e.endTime >= now)
     .sort((a, b) => a.startTime.localeCompare(b.startTime))
+  const todos = await fetchTodos()
   return {
     stats: {
       pendingApplications: pendingApplications.length,
@@ -34,6 +38,7 @@ export async function fetchDashboard(): Promise<DashboardData> {
       runningProjects: projects.filter((p) => p.status === "running").length,
       upcomingEvents: publishedNotEnded.length,
     },
+    todos,
     pendingApplications: pendingApplications.slice(0, 5),
     upcomingEvents: publishedNotEnded.slice(0, 4),
   }

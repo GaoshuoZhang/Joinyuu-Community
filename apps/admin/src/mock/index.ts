@@ -11,6 +11,11 @@ import { goods, pointsRules, redemptionOrders } from './mall'
 import { leases, workstationAreas, workstations } from './workstations'
 import { reservations, spaces } from './spaces'
 import { articles, columns, showcaseRequests } from './contents'
+import { notifications } from './notifications'
+import { auditLogs } from './auditLogs'
+import { systemConfig } from './systemConfig'
+import { dicts } from './dict'
+import { announcements } from './announcements'
 
 export const DB = {
   users,
@@ -33,6 +38,11 @@ export const DB = {
   articles,
   columns,
   showcaseRequests,
+  notifications,
+  auditLogs,
+  systemConfig,
+  dicts,
+  announcements,
 }
 
 export {
@@ -56,4 +66,9 @@ export {
   articles,
   columns,
   showcaseRequests,
+  notifications,
+  auditLogs,
+  systemConfig,
+  dicts,
+  announcements,
 }

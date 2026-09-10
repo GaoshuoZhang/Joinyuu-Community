@@ -3,12 +3,13 @@ import { computed, nextTick, onMounted, reactive, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { MessagePlugin } from 'tdesign-vue-next'
 import type { FormProps } from 'tdesign-vue-next'
-import { RefreshIcon, SearchIcon } from 'tdesign-icons-vue-next'
+import { RefreshIcon, SearchIcon, DownloadIcon } from 'tdesign-icons-vue-next'
 import PageHeader from '@/components/PageHeader.vue'
 import StatusTag from '@/components/StatusTag.vue'
 import IdentityTags from '@/components/IdentityTags.vue'
-import { userCategoryOptions } from '@/constants/identity'
+import { userCategoryOptions, identityTypeMap } from '@/constants/identity'
 import { fetchUsers, freezeUser, updateUserStatus, type UserFreezePayload } from '@/api/users'
+import { exportCsv, statusLabel } from '@/utils/exportCsv'
 import type { User } from '@/types'
 
 const router = useRouter()
@@ -79,6 +80,28 @@ function onReset() {
   query.realStatus = ''
   query.page = 1
   load()
+}
+
+/* 导出当前页用户列表为 CSV */
+function onExport() {
+  exportCsv(
+    '用户列表',
+    ['编号', '昵称', '手机号', '关联身份', '实名状态', '积分', '状态', '注册时间'],
+    list.value.map((u) => [
+      u.uid,
+      u.nickname,
+      u.phone,
+      u.identities
+        .filter((i) => i.type !== 'individual')
+        .map((i) => identityTypeMap[i.type])
+        .join('、'),
+      u.realName && u.citizenId ? '已实名' : '未实名',
+      u.points,
+      statusLabel('user', u.status),
+      u.registeredAt,
+    ]),
+  )
+  MessagePlugin.success(`已导出当前页 ${list.value.length} 条数据`)
 }
 
 function onPageChange(p: { current: number; pageSize: number }) {
@@ -182,7 +205,14 @@ onMounted(load)
 
 <template>
   <div class="user-list page-fade-in">
-    <PageHeader title="用户管理" description="社区成员账号与关联身份管理" />
+    <PageHeader title="用户管理" description="社区成员账号与关联身份管理">
+      <template #actions>
+        <t-button variant="outline" @click="onExport">
+          <template #icon><DownloadIcon /></template>
+          导出
+        </t-button>
+      </template>
+    </PageHeader>
 
     <div class="page-filter-bar">
       <t-input

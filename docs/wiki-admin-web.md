@@ -28,10 +28,10 @@
 
 ```
 .admin-shell            grid: [auto 1fr]，height: 100vh
-├── .side-col           侧栏列（Logo 区 + t-menu + 折叠按钮）
+├── .side-col           侧栏列（Logo 区 + t-menu + 底部操作区：全部展开/折叠 + 收起菜单）
 └── .main-col           flex column，height: 100vh，overflow hidden
     ├── .top-bar        高 48px：左面包屑 / 右侧通知铃铛(t-badge) + 管理员头像 t-dropdown(退出登录)
-    ├── .tab-bar        高 40px：多标签页（tabs store 驱动，点击切换、可关闭，"工作台"常驻不可关）
+    ├── .tab-bar-wrap   高 40px：多标签页横向滚动区（tabs store 驱动，点击切换、可关闭，"工作台"常驻不可关）+ 右侧「全部关闭」按钮（弱化灰、仅一个标签时禁用，点击清空仅留工作台）
     └── .page-scroll    flex:1，overflow-y:auto，padding 16px 20px，底色 --td-bg-color-page
                           └── <router-view />（页面只写这里面的内容）
 ```
@@ -52,13 +52,6 @@
 | 业务运营 | 需求审核 | /demands/review | `CheckCircleIcon` |
 | 业务运营 | 项目管理 | /projects | `AppIcon` |
 | 业务运营 | 活动管理 | /events | `CalendarIcon` |
-| 积分商城 | 商品管理 | /mall/goods | `CartIcon` |
-| 积分商城 | 订单管理 | /mall/orders | `ViewListIcon` |
-| 规则管理 | 积分规则 | /rules/points | `Edit2Icon` |
-| 规则管理 | 经验值规则 | /rules/experience | `ViewListIcon` |
-| 规则管理 | 等级规则 | /rules/levels | `ViewModuleIcon` |
-| 规则管理 | 积分发放记录 | /rules/ledger | `AppIcon` |
-| 规则管理 | 经验值发放记录 | /rules/experience-records | `ViewListIcon` |
 | 空间管理 | 办公位管理 | /workstations | `ViewModuleIcon` |
 | 空间管理 | 办公室管理 | /workstations/offices | `BuildingIcon` |
 | 空间管理 | 租赁管理 | /workstations/leases | `ViewListIcon` |
@@ -66,9 +59,22 @@
 | 空间管理 | 公共空间预约 | /spaces/reservations | `CalendarIcon` |
 | 内容管理 | 资讯内容 | /contents | `Edit2Icon` |
 | 内容管理 | 展示页发布 | /contents/showcase | `ViewListIcon` |
+| 内容管理 | 公告栏 | /contents/announcements | `NotificationIcon` |
+| 积分商城 | 商品管理 | /mall/goods | `CartIcon` |
+| 积分商城 | 订单管理 | /mall/orders | `ViewListIcon` |
+| 规则管理 | 积分规则 | /rules/points | `Edit2Icon` |
+| 规则管理 | 经验值规则 | /rules/experience | `ViewListIcon` |
+| 规则管理 | 等级规则 | /rules/levels | `ViewModuleIcon` |
+| 规则管理 | 积分发放记录 | /rules/ledger | `AppIcon` |
+| 规则管理 | 经验值发放记录 | /rules/experience-records | `ViewListIcon` |
+| 系统管理 | 数据字典 | /system/dicts | `AppIcon` |
+| 系统管理 | 系统配置 | /system/config | `SettingIcon` |
+| 系统管理 | 审计日志 | /logs/audit | `ViewListIcon` |
 
 - 运营设施四模块已全部落地（M0-D，2026-09-08）：原 ComingSoonView 占位已删除，「二期」菜单标签已移除
-- 内容管理为一级菜单（2026-09-09 新增，替代原「运营设施」分组）：资讯内容（/contents，文章/栏目/阅读统计三 tab）+ 展示页发布（/contents/showcase，自资讯内容 tab 拆分独立）；
+- 内容管理为一级菜单（2026-09-09 新增，替代原「运营设施」分组）：资讯内容（/contents，文章/栏目/阅读统计三 tab）+ 展示页发布（/contents/showcase，自资讯内容 tab 拆分独立）+ 公告栏（/contents/announcements，2026-09-10 新增）；
+- **菜单顺序（2026-09-10 用户调整，新契约）**：工作台 → 社区成员 → 业务运营 → 空间管理 → 内容管理 → 积分商城 → 规则管理 → 系统管理（积分商城/规则管理为低频功能后移至内容管理之后）；**默认折叠**积分商城/规则管理/系统管理三组（expandedMenus 受控初始值，"全部展开"按钮可一键展开）；**跳转自动展开**：路由 meta.group 变化时（含刷新直达/通知跳转/面包屑/标签切换）自动展开页面所属分组，仅追加不收起其他组（GROUP_KEY_BY_META 映射，immediate）；
+- 系统管理为一级菜单（2026-09-10 新增，M0-E）：数据字典（/system/dicts）+ 系统配置（/system/config）+ 审计日志（/logs/audit）；通知中心为顶栏铃铛（NotificationIcon + t-badge 未读数，点击跳转关联页面）；六域待办卡片并入工作台顶部（2026-09-10，原独立"待办中心"页移除）
 - 规则管理为一级菜单（2026-09-09 新增）：积分规则（/rules/points，由 /mall/rules 迁移）+ 经验值规则（/rules/experience）+ 等级规则（/rules/levels）；
 - 积分管理为一级菜单（2026-09-08 由"积分商城"Tab 壳拆分）：/mall 重定向至 /mall/goods，四个二级页面直接以面板组件作为路由页面（各含 PageHeader）
 - 空间管理为一级菜单（2026-09-08 由"办公位管理/公共空间"Tab 壳拆分）：办公位管理=开放/半开放工位平面图（独立办公室移出）、办公室管理=独立办公室卡片视图（占用企业+租期+租金）、租赁管理=原租约面板；公共空间管理=原空间管理面板，公共空间预约=预约审批+当日使用看板板块；运营设施仅余资讯内容
@@ -148,7 +154,7 @@
 | 页面 | 路由 | 职责 | 关键交互 |
 |---|---|---|---|
 | 登录 | /login | 品牌区 + Mock 登录 | 演示账号 admin/admin123，校验/加载/错误反馈 |
-| 工作台 | /dashboard | 数据卡片 + 待办审批 + 近期活动 + 快捷入口 | 点击待办跳审批页、活动跳活动详情 |
+| 工作台 | /dashboard | 六域待办卡片（点击直达处理入口，有待办高亮）+ 待办审批 + 近期活动 + 快捷入口 | 待办卡片点击跳对应页面；待办审批跳审批页、活动跳活动详情 |
 | 用户列表 | /users | 筛选（关键词/身份/状态）+ 表格 + 分页 | 冻结/解冻 popconfirm，行点击进详情 |
 | 用户详情 | /users/:id | 资料 / 身份信息 / 活跃记录（tabs） | 社区企业身份卡点击跳转企业详情 |
 | 社区个体 | /individuals | 社区个体身份成员列表（关键词/状态筛选） | 行点击进用户详情 |
@@ -178,6 +184,10 @@
 | 公共空间预约 | /spaces/reservations | 预约审批（状态 Tab+空间/日期筛选+时间线抽屉）+ 当日使用看板板块 | 通过/驳回（意见对话框，通过前校验时段冲突）、取消；看板=当日已通过预约+同名空间已发布活动合并占用 |
 | 资讯内容 | /contents | 文章管理 / 栏目管理 / 阅读统计 三 tab（展示页发布已拆出） | 见各面板 |
 | 展示页发布 | /contents/showcase | 社区企业展示页申请的审核与发布（ShowcasePanel） | 见面板 |
+| 公告栏 | /contents/announcements | 站点公告管理：创建即发布，置顶优先排序（AN1001+） | 发布/编辑/下架/重新发布/置顶/删除（AnnouncementFormDialog 双模式）；状态映射 announcement（published/withdrawn）；写操作均 recordAudit |
+| 数据字典 | /system/dicts | 需求类别/行业/活动类型三类字典项管理（新增/启停/删除） | 字典项 label 即业务存储值，暂不支持改名；各业务下拉选项统一从字典拉取（失败回退 dictFallback 词表） |
+| 系统配置 | /system/config | 站点信息 + 功能开关（注册/商城/需求广场/空间预约/每日登录积分）+ 运营参数（临期提醒窗口） | 保存即生效，记录更新时间与操作人 |
+| 审计日志 | /logs/audit | 后台写操作留痕（操作时间/操作人/模块/动作/对象/详情），模块筛选 + 关键词搜索 | 各域关键写接口已通过 recordAudit 埋点（17 处）；M1 服务端中间件统一记录 |
 
 ## 6. Mock 数据模式（单一数据源 `src/mock/`，跨页一致）
 
@@ -200,3 +210,14 @@
 - hover/过渡走 TDesign 组件默认；自定义过渡 ≤200ms
 - 空态用 t-empty + 业务化文案（如"暂无待审批申请"），不用 lorem/示例文案
 - 演示数据全部为创业社区业务语境的中文文案
+
+## 9. M0-E 系统管理域约定（2026-09-10 新增）
+
+- **通知中心**：顶栏铃铛（t-popup + t-badge），通知数据 `mock/notifications.ts`（N9001+），API `api/notifications.ts`；点击未读项标记已读并跳转 link 路由；全部已读一键操作。M1 由业务事件驱动写入
+- **审计日志**：`recordAudit(module, action, target, detail?)`（api/auditLogs.ts）在写操作成功后调用，已埋点 17 处（审批通过/驳回、需求创建/审核/发布/驳回/关闭/立项、项目创建/关闭、活动发布/取消、冻结账号、积分调整、商品上下架、订单发货、预约审批、文章审核）；operator 固定"社区管理员"，M1 取登录态
+- **数据字典**：`mock/dict.ts`（demand_category/industry/event_type 三类），API `api/dicts.ts`；消费端模式 = ref 初始值用 `dictFallback` 词表 + onMounted 拉字典覆盖（DemandListView/DemandReviewView/DemandPublishDialog/EnterpriseListView/ExternalEnterpriseListView/EventListView/EventFormDialog 七处，原三处硬编码重复已消灭）
+- **列表导出**：`utils/exportCsv.ts` 的 `exportCsv(filename, headers, rows)` 前端直出 CSV（带 BOM 防乱码）+ `statusLabel(entity, value)` 状态转文案；导出按钮统一放 PageHeader #actions（DownloadIcon），导出当前页数据并 toast 提示条数；已接入 10 页（用户/社区个体/社区企业/外部企业/需求/项目/活动/商品/订单/租约）
+- **批量操作**：表格首列 `{ colKey: 'row-select', type: 'multiple' }` + 受控 `:selected-row-keys` + `@select-change`；批量条显示已选数 + 操作按钮（仅满足条件的行计入，如待审批/待发货）；已接入申请审批（批量通过）、商品管理（批量上架/下架）、订单管理（批量发货）、空间预约（批量通过，逐条执行保留冲突校验并汇报失败明细）
+- **面包屑可点击**：详情路由（/users|enterprises|external-enterprises|demands|projects|events|spaces /:id）第二级面包屑可点击返回列表（detailListPath 正则匹配 + router.push）
+- **系统配置**：`mock/systemConfig.ts` 单例 + `api/systemConfig.ts` fetch/save；leaseExpireRemindDays 校验 1-90；保存后 recordAudit
+- **待办卡片（并入工作台）**：`api/todos.ts` fetchTodos 聚合六域待办数（入驻审批/需求审核/空间预约/展示页发布/文章审核/临期租约 deriveLeaseStatus），由 `fetchDashboard().todos` 携带；工作台顶部以 StatCard 渲染（stat-clickable 可点击直达 + is-active 有待办高亮，沿 tokens.css 惯例），stat-grid 6 列；原独立"待办中心"页已于 2026-09-10 移除

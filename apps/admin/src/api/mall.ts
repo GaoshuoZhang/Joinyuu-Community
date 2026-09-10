@@ -9,6 +9,7 @@ import type {
 import { goods, redemptionOrders, pointsRules, pointsRecords } from '@/mock'
 import { delay } from './utils'
 import { adjustPoints } from './ledgers'
+import { recordAudit } from './auditLogs'
 
 /* 数据一致性约定：
  * - 兑换订单取消 → 通过 adjustPoints 退回积分（写 PT 流水），并回补商品库存
@@ -104,6 +105,7 @@ export async function toggleGoodsStatus(id: string): Promise<{ code: number }> {
   const item = goods.find((g) => g.id === id)
   if (!item) throw new Error('商品不存在')
   item.status = item.status === 'on' ? 'off' : 'on'
+  recordAudit('积分商城', item.status === 'on' ? '商品上架' : '商品下架', `${item.id} · ${item.name}`)
   return { code: 0 }
 }
 
@@ -158,6 +160,7 @@ export async function shipRedemptionOrder(id: string): Promise<{ code: number }>
   if (order.status !== 'pending_shipment') throw new Error('仅待发货订单可发货')
   order.status = 'shipped'
   order.shippedAt = formatNow()
+  recordAudit('积分商城', '订单发货', `${order.id} · ${order.goodsName}`)
   return { code: 0 }
 }
 

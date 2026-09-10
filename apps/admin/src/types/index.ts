@@ -634,6 +634,93 @@ export interface ArticleColumn {
 
 export type ShowcaseTargetType = 'enterprise' | 'individual'
 
+/* ============================================================
+   M0-E 系统管理域 — 实体类型（通知 / 审计日志 / 系统配置 / 数据字典）
+   命名前缀：通知 N9001+ / 审计日志 AL1001+
+   ============================================================ */
+
+export interface AdminNotification {
+  id: string
+  /** 业务类型：approval 入驻/身份审批 | demand_review 需求审核 | reservation 空间预约 | showcase 展示页发布 | article 文章审核 | lease 租约临期 | schedule 定时发布 */
+  type: string
+  title: string
+  content: string
+  at: string
+  read: boolean
+  /** 点击跳转路由 */
+  link?: string
+}
+
+/** 后台操作涉及的模块（审计日志统计口径） */
+export type AuditModule =
+  | '社区成员'
+  | '审批中心'
+  | '需求管理'
+  | '项目管理'
+  | '活动管理'
+  | '积分商城'
+  | '规则管理'
+  | '空间管理'
+  | '内容管理'
+  | '系统管理'
+
+export interface AuditLog {
+  id: string
+  operator: string
+  module: AuditModule
+  /** 动作，如 审批通过 / 发布 / 冻结账号 */
+  action: string
+  /** 操作对象（编号 · 名称） */
+  target: string
+  detail?: string
+  at: string
+}
+
+export interface SystemConfig {
+  siteName: string
+  siteSlogan: string
+  /** 客户端注册开关 */
+  registrationOpen: boolean
+  /** 积分商城开放开关 */
+  mallOpen: boolean
+  /** 需求广场开放开关 */
+  demandOpen: boolean
+  /** 空间预约开关 */
+  reservationOpen: boolean
+  /** 每日登录积分奖励开关（联动积分规则 daily_login，M1 生效） */
+  dailyLoginPoints: boolean
+  /** 租约临期提醒窗口（天，M0 仅配置展示；派生逻辑见 api/workstations EXPIRING_WINDOW_DAYS） */
+  leaseExpireRemindDays: number
+  updatedAt: string
+  updatedBy: string
+}
+
+export type DictType = 'demand_category' | 'industry' | 'event_type'
+
+export interface DictEntry {
+  code: string
+  label: string
+  sort: number
+  status: 'enabled' | 'disabled'
+}
+
+/* ---------- 公告栏（内容管理） ---------- */
+
+export type AnnouncementStatus = 'published' | 'withdrawn'
+
+export interface Announcement {
+  id: string
+  title: string
+  content: string
+  /** 置顶：置顶公告在列表与客户端公告位优先展示 */
+  pinned: boolean
+  status: AnnouncementStatus
+  /** 发布时间（创建即发布 / 重新发布时写入） */
+  publishedAt: string
+  createdAt: string
+  updatedAt?: string
+}
+
 export interface ShowcaseRequest {
   id: string
   targetType: ShowcaseTargetType

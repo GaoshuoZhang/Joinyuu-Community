@@ -14,6 +14,7 @@
 - **运营设施**：资讯内容（原二期规划，已于 M0-D 提前落地原型）
 - **积分管理**：商品管理、订单管理、积分规则、积分账单（2026-09-08 由"积分商城"拆分为独立一级菜单）
 - **空间管理**：办公位管理、办公室管理、租赁管理、公共空间管理、公共空间预约（2026-09-08 由"办公位管理/公共空间"拆分为独立一级菜单）
+- **系统管理**：数据字典、系统配置、审计日志 + 顶栏通知中心；六域待办卡片并入工作台顶部（2026-09-10 新增，M0-E）
 
 开发策略（用户指定）：**以管理后台 Web 作为初始驱动**——先在后台原型中确定实体字段、状态流、API 接口形状与客户端功能边界，再据此实现后端服务与客户端。
 
@@ -31,7 +32,7 @@
 
 | 里程碑 | 名称 | 状态 |
 |---|---|---|
-| **M0** | 后台原型（admin web，Mock 驱动） | **已完成** — M0-A/B/C/D 全部完成 |
+| **M0** | 后台原型（admin web，Mock 驱动） | **已完成** — M0-A/B/C/D/E 全部完成（M0-E 系统管理域 2026-09-10 落地） |
 | M1 | 后端服务（NestJS + PostgreSQL + Redis） | 未开始 |
 | M2 | 客户端 Web（居民端） | 未开始 |
 | M3 | 微信小程序 | 未开始 |
@@ -110,13 +111,30 @@
 
 ---
 
+## 3.5 M0-E 系统管理域 — ✅ 已完成（2026-09-10）
+
+> 面向"后台面板完整性"的横向能力补齐，全部 Mock 驱动 + API Stub 即契约（`/api/admin/notifications|audit-logs|system/config|dicts|todos`）。
+
+- [x] 通知中心：顶栏铃铛（NotificationIcon + t-badge 未读数）+ 弹出面板（未读高亮/单条已读跳转/全部已读），N9001+ 种子数据
+- [x] 操作审计日志：recordAudit 埋点 17 处（审批/需求/项目/活动/成员/积分/商品/订单/预约/文章），AL1001+ 种子，模块筛选 + 关键词搜索
+- [x] 系统配置：站点信息 + 功能开关（注册/商城/需求广场/空间预约/每日登录积分）+ 租约临期提醒窗口，保存即生效并留痕
+- [x] 数据字典：demand_category/industry/event_type 三类统一管理（新增/启停/删除），七处消费点接入（原需求类别 3 处硬编码重复消灭），失败回退 dictFallback
+- [x] 统一待办：六域待办聚合（入驻审批/需求审核/空间预约/展示页发布/文章审核/临期租约）以 StatCard 卡片并入工作台顶部（点击直达、有待办高亮；原独立"待办中心"页迁入后移除）
+- [x] 列表导出：exportCsv 前端直出 CSV（BOM）+ statusLabel 状态转文案，10 个列表页接入（导出当前页）
+- [x] 批量操作：row-select 多选 + 批量条，申请审批批量通过 / 商品批量上下架 / 订单批量发货 / 空间预约批量通过（逐条保留冲突校验）
+- [x] 面包屑可点击：详情页第二级面包屑点击返回列表
+- [x] 文档同步：wiki 菜单表/页面清单/新增第 9 节约定、本文件 M0-E 段落
+
+---
+
 ## 4. M1 — 后端服务（规划，未开始）
 
 > 依据：M0 冻结的 `apps/admin/src/types/index.ts` 实体模型 + `apps/admin/src/api/` stub 接口形状。
 
 - [ ] NestJS 项目搭建（`apps/api` 或 `packages/`，Monorepo 内）
 - [ ] PostgreSQL 实体建模：users / identities / enterprises / external_enterprise_profiles / applications / demands / projects / milestones / events / enrollments / experience_records / points_records / mall_goods / redemption_orders / points_rules / workstation_areas / workstations / leases / spaces / space_reservations / articles / article_columns / showcase_requests
-- [ ] 管理端 RESTful API：`/api/admin/**`（与 admin stub 一一对应：成员/审批/需求/项目/活动/账本/商城/办公位/空间/内容/工作台聚合）
+- [ ] 管理端 RESTful API：`/api/admin/**`（与 admin stub 一一对应：成员/审批/需求/项目/活动/账本/商城/办公位/空间/内容/工作台聚合；M0-E 新增 notifications / audit-logs / system/config / dicts / todos）
+- [ ] 审计日志服务端化：中间件统一记录（含 IP、变更前后快照），替换 M0 的 recordAudit 前端埋点
 - [ ] 客户端 API 设计：`/api/app/**`（与 admin 共享实体；含积分商城兑换下单、空间预约提交、文章投递、展示页申请）
 - [ ] 认证与权限（管理端登录、多身份用户鉴权）
 - [ ] Redis 缓存层

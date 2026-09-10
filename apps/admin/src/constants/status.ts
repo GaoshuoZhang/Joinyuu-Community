@@ -100,6 +100,10 @@ export const statusMap = {
     enabled: { label: '启用', theme: 'success' },
     disabled: { label: '停用', theme: 'default' },
   },
+  announcement: {
+    published: { label: '已发布', theme: 'success' },
+    withdrawn: { label: '已下架', theme: 'default' },
+  },
 } as const
 
 export type StatusEntity = keyof typeof statusMap

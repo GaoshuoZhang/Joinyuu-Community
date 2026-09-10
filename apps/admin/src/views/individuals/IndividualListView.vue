@@ -1,11 +1,13 @@
 <script setup lang="ts">
 import { computed, onMounted, reactive, ref } from 'vue'
 import { useRouter } from 'vue-router'
-import { RefreshIcon, SearchIcon } from 'tdesign-icons-vue-next'
+import { RefreshIcon, SearchIcon, DownloadIcon } from 'tdesign-icons-vue-next'
+import { MessagePlugin } from 'tdesign-vue-next'
 import PageHeader from '@/components/PageHeader.vue'
 import StatusTag from '@/components/StatusTag.vue'
 import IdentityTags from '@/components/IdentityTags.vue'
 import { fetchIndividuals } from '@/api/individuals'
+import { exportCsv, statusLabel } from '@/utils/exportCsv'
 import type { User, UserIdentity } from '@/types'
 
 const router = useRouter()
@@ -91,12 +93,38 @@ function goDetail(row: User) {
   router.push(`/users/${row.uid}`)
 }
 
+/* 导出当前页社区个体列表为 CSV */
+function onExport() {
+  exportCsv(
+    '社区个体列表',
+    ['编号', '昵称', '手机号', '社区个体头衔', '经验等级', '积分', '状态', '注册时间'],
+    list.value.map((u) => [
+      u.uid,
+      u.nickname,
+      u.phone,
+      individualTitle(u),
+      individualLevel(u),
+      u.points,
+      statusLabel('user', u.status),
+      u.registeredAt,
+    ]),
+  )
+  MessagePlugin.success(`已导出当前页 ${list.value.length} 条数据`)
+}
+
 onMounted(load)
 </script>
 
 <template>
   <div class="individual-list page-fade-in">
-    <PageHeader title="社区个体" description="持有社区个体身份的成员（该身份每人至多一个）" />
+    <PageHeader title="社区个体" description="持有社区个体身份的成员（该身份每人至多一个）">
+      <template #actions>
+        <t-button variant="outline" @click="onExport">
+          <template #icon><DownloadIcon /></template>
+          导出
+        </t-button>
+      </template>
+    </PageHeader>
 
     <div class="page-filter-bar">
       <t-input

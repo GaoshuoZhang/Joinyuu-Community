@@ -3,7 +3,7 @@ import { computed, onMounted, reactive, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { MessagePlugin } from 'tdesign-vue-next'
 import type { FormProps } from 'tdesign-vue-next'
-import { AddIcon, RefreshIcon, SearchIcon } from 'tdesign-icons-vue-next'
+import { AddIcon, RefreshIcon, SearchIcon, DownloadIcon } from 'tdesign-icons-vue-next'
 import PageHeader from '@/components/PageHeader.vue'
 import StatusTag from '@/components/StatusTag.vue'
 import DemandPublishDialog from '@/components/DemandPublishDialog.vue'
@@ -11,6 +11,8 @@ import DemandReviewDialog from '@/components/DemandReviewDialog.vue'
 import DemandScheduleDialog from '@/components/DemandScheduleDialog.vue'
 import ProjectFormDialog from '@/components/ProjectFormDialog.vue'
 import { cancelDemandSchedule, closeDemand, fetchDemands, publishDemandNow, retractDemand, proxyRespondDemand, fetchPublisherOptions } from '@/api/demands'
+import { dictFallback, fetchDictEntries } from '@/api/dicts'
+import { exportCsv, statusLabel } from '@/utils/exportCsv'
 import { fetchPointsRules } from '@/api/mall'
 import { fetchEnterprise } from '@/api/enterprises'
 import { fetchExternalEnterprise } from '@/api/external-enterprises'
@@ -193,10 +195,11 @@ const query = reactive({
 const sortBy = ref<'createdAt' | 'id'>('createdAt')
 const sortOrder = ref<'ascend' | 'descend'>('descend')
 
-const categoryOptions = [
+/* 类别选项来自数据字典（M0-E 起统一取用），加载失败回退默认词表 */
+const categoryOptions = ref([
   { label: '全部', value: '' },
-  ...['供应链', '设计', '法务财务', '技术开发', '市场', '人力资源'].map((label) => ({ label, value: label })),
-]
+  ...dictFallback.demand_category.map((label) => ({ label, value: label })),
+])
 
 const statusOptions = [
   { label: '全部', value: '' },
@@ -252,6 +255,26 @@ async function load() {
   } finally {
     loading.value = false
   }
+}
+
+/* 导出当前页需求列表为 CSV */
+function onExport() {
+  exportCsv(
+    '需求列表',
+    ['编号', '标题', '类别', '需求方', '预算', '响应数', '状态', '创建时间', '发布时间'],
+    list.value.map((d) => [
+      d.id,
+      d.title,
+      d.category,
+      d.publisherName,
+      d.budget,
+      d.respondents.length,
+      statusLabel('demand', d.status),
+      d.createdAt,
+      d.publishedAt ?? '—',
+    ]),
+  )
+  MessagePlugin.success(`已导出当前页 ${list.value.length} 条数据`)
 }
 
 /* 远程排序：表头点击 → 更新排序状态 → 重新加载（受控 :sort 保证表头指示器正确） */
@@ -461,6 +484,14 @@ watch(
 onMounted(() => {
   applyRouteFilter()
   load()
+  fetchDictEntries('demand_category')
+    .then((entries) => {
+      const labels = entries.filter((e) => e.status === 'enabled').map((e) => ({ label: e.label, value: e.label }))
+      if (labels.length) categoryOptions.value = [{ label: '全部', value: '' }, ...labels]
+    })
+    .catch(() => {
+      /* 字典加载失败保留回退词表 */
+    })
 })
 </script>
 
@@ -468,6 +499,10 @@ onMounted(() => {
   <div class="demand-list page-fade-in">
     <PageHeader title="需求管理" description="需求广场的创建、审核、发布编辑与立项管理">
       <template #actions>
+        <t-button variant="outline" @click="onExport">
+          <template #icon><DownloadIcon /></template>
+          导出
+        </t-button>
         <t-button theme="primary" @click="openCreate">
           <template #icon><AddIcon /></template>
           创建需求
@@ -679,7 +714,7 @@ onMounted(() => {
     <DemandScheduleDialog v-model:visible="scheduleVisible" :demand="current" @success="load" />
 
     <!-- 立项弹窗 -->
-    <ProjectFormDialog v-model:visible="projectVisible" :demand="current" @success="load" />
+    <ProjectFormDialog v-model:visible="projectVisible" mode="create" :demand="current" :project="null" @success="load" />
     <!-- 代报名弹窗：代成员响应需求 -->
     <t-dialog
       :visible="proxyVisible"

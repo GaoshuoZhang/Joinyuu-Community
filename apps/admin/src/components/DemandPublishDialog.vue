@@ -3,6 +3,7 @@ import { computed, nextTick, onMounted, reactive, ref, watch } from 'vue'
 import { MessagePlugin } from 'tdesign-vue-next'
 import type { FormProps } from 'tdesign-vue-next'
 import { createDemand, fetchPublisherOptions, updateDemand, type DemandPublishPayload } from '@/api/demands'
+import { dictFallback, fetchDictEntries } from '@/api/dicts'
 import { fetchUser } from '@/api/users'
 import { fetchPointsRules } from '@/api/mall'
 import { userLevelOptions, visibilityIdentityOptions } from '@/constants/identity'
@@ -34,10 +35,8 @@ const confirmTextMap = {
   edit: '保存',
 } as const
 
-const categoryOptions = ['供应链', '设计', '法务财务', '技术开发', '市场', '人力资源'].map((c) => ({
-  label: c,
-  value: c,
-}))
+/* 类别选项来自数据字典（M0-E 起统一取用），加载失败回退默认词表 */
+const categoryOptions = ref(dictFallback.demand_category.map((c) => ({ label: c, value: c })))
 
 const submitting = ref(false)
 const formRef = ref()
@@ -64,10 +63,7 @@ async function loadPublisherOptions() {
 
 /* 选择需求方 → 解析类型并自动填充联系方式（未注册条目不填充）；
  * 注册个人用户 → 拉取身份列表供选择提交身份 */
-watch(
-  () => form.publisherValue,
-  (v) => applyPublisherContact(v),
-)
+/* 注：watch 须在 form 声明之后（getter 立即求值，置于 form 之前会 TDZ 报错：Cannot access 'form' before initialization） */
 
 function applyPublisherContact(v: string) {
   publisherUser.value = null
@@ -140,6 +136,12 @@ const customVisibility = ref(false)
 const customEnrollment = ref(false)
 const customRespond = ref(false)
 
+/* watch 在 form 声明之后注册：getter 立即求值 form.publisherValue，置于 form 之前会 TDZ 报错 */
+watch(
+  () => form.publisherValue,
+  (v) => applyPublisherContact(v),
+)
+
 /* 选项加载放在 form 声明之后（避免引用 form 的时序隐患） */
 loadPublisherOptions()
 
@@ -153,6 +155,14 @@ onMounted(async () => {
   } catch {
     /* 规则加载失败时保留默认值 */
   }
+  fetchDictEntries('demand_category')
+    .then((entries) => {
+      const labels = entries.filter((e) => e.status === 'enabled').map((e) => ({ label: e.label, value: e.label }))
+      if (labels.length) categoryOptions.value = labels
+    })
+    .catch(() => {
+      /* 字典加载失败保留回退词表 */
+    })
 })
 
 /* 打开自定义奖励开关时，输入框默认填入积分规则设定值 */

@@ -2,11 +2,13 @@
 import { computed, onMounted, reactive, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { MessagePlugin } from 'tdesign-vue-next'
-import { AddIcon, RefreshIcon, SearchIcon } from 'tdesign-icons-vue-next'
+import { AddIcon, RefreshIcon, SearchIcon, DownloadIcon } from 'tdesign-icons-vue-next'
 import PageHeader from '@/components/PageHeader.vue'
 import StatusTag from '@/components/StatusTag.vue'
 import EventFormDialog from '@/components/EventFormDialog.vue'
 import { fetchPointsRules } from '@/api/mall'
+import { dictFallback, fetchDictEntries } from '@/api/dicts'
+import { exportCsv, statusLabel } from '@/utils/exportCsv'
 import EventScheduleDialog from '@/components/EventScheduleDialog.vue'
 import { cancelEvent, cancelEventSchedule, fetchEvents, publishEventNow, toggleEventEnrollment, restoreCancelledEvent } from '@/api/events'
 import { fetchUser } from '@/api/users'
@@ -31,14 +33,8 @@ const query = reactive({
   participant: '',
 })
 
-const typeOptions = [
-  { label: '全部', value: '' },
-  { label: '沙龙', value: '沙龙' },
-  { label: '培训', value: '培训' },
-  { label: '路演', value: '路演' },
-  { label: '社交', value: '社交' },
-  { label: '赛事', value: '赛事' },
-]
+/* 活动类型选项来自数据字典（M0-E 起统一取用），加载失败回退默认词表 */
+const typeOptions = ref([{ label: '全部', value: '' }, ...dictFallback.event_type.map((t) => ({ label: t, value: t }))])
 
 const statusOptions = [
   { label: '全部', value: '' },
@@ -287,13 +283,44 @@ watch(
 onMounted(() => {
   applyRouteFilter()
   load()
+  fetchDictEntries('event_type')
+    .then((entries) => {
+      const labels = entries.filter((e) => e.status === 'enabled').map((e) => ({ label: e.label, value: e.label }))
+      if (labels.length) typeOptions.value = [{ label: '全部', value: '' }, ...labels]
+    })
+    .catch(() => {
+      /* 字典加载失败保留回退词表 */
+    })
 })
+
+/* 导出当前页活动列表为 CSV */
+function onExport() {
+  exportCsv(
+    '活动列表',
+    ['编号', '活动标题', '类型', '开始时间', '结束时间', '地点', '报名（已通过/容量）', '状态'],
+    list.value.map((e) => [
+      e.id,
+      e.title,
+      e.type,
+      e.startTime,
+      e.endTime,
+      e.location,
+      `${e.enrollments.filter((en) => en.status === 'approved').length}/${e.capacity}`,
+      statusLabel('event', e.status),
+    ]),
+  )
+  MessagePlugin.success(`已导出当前页 ${list.value.length} 条数据`)
+}
 </script>
 
 <template>
   <div class="event-list page-fade-in">
     <PageHeader title="活动管理" description="社区活动的创建、发布、报名与签到管理">
       <template #actions>
+        <t-button variant="outline" @click="onExport">
+          <template #icon><DownloadIcon /></template>
+          导出
+        </t-button>
         <t-button theme="primary" @click="openCreate">
           <template #icon><AddIcon /></template>
           创建活动
