@@ -5,15 +5,17 @@ import { PrismaService } from '../../common/prisma/prisma.service'
 import { IdGeneratorService } from '../../common/id-generator/id-generator.service'
 import { AuditService } from '../../common/audit/audit.service'
 import { formatNow, formatToday } from '../../common/utils/time'
+import { sanitizeHtml } from '../../common/utils/sanitize-html'
 import { toIdentityDto } from '../users/user.mapper'
 import type { ArticlePayloadDto } from './dto/article-payload.dto'
 import type { ReviewArticleDto } from './dto/review-article.dto'
+import type { ScheduleArticleDto } from './dto/schedule-article.dto'
 import type { ColumnPayloadDto } from './dto/column-payload.dto'
 import type { QueryArticlesDto } from './dto/query-articles.dto'
 import type { QueryShowcaseRequestsDto } from './dto/query-showcase-requests.dto'
 import type { ReviewShowcaseRequestDto } from './dto/review-showcase-request.dto'
 
-/* 展示页申请审批时间线（ApprovalRecord） */
+/* 展示页申请审核时间线（ApprovalRecord） */
 interface ApprovalRecord {
   step: string
   operator: string
@@ -28,10 +30,16 @@ interface ColumnDto {
   name: string
   description: string
   sort: number
+  submissionOpen: boolean
+  system: boolean
   status: string
   createdAt: string
   articleCount: number
 }
+
+/** 系统保留栏目「未指定」：删除栏目时文章转移目标；不可编辑/停用/删除，成员端不可见 */
+const RESERVED_COLUMN_ID = 'COL_NONE'
+const RESERVED_COLUMN_NAME = '未指定'
 
 /** 取 ID 末尾数字，如 'A1010' -> 1010 */
 function numericSuffix(id: string): number {
@@ -39,11 +47,14 @@ function numericSuffix(id: string): number {
   return m ? parseInt(m[1], 10) : 0
 }
 
-/* Prisma 行 → M0 Article 形状：authorIdentity Json 透传；可空字段缺失时省略（对齐 mock undefined） */
+/* Prisma 行 → Article 形状：栏目以数组契约承载单选；可空字段缺失时省略（对齐 undefined） */
 function toArticleDto(a: Article): Record<string, unknown> {
   const dto: Record<string, unknown> = {
     id: a.id,
     title: a.title,
+    channel: a.channel,
+    columnIds: [a.columnId],
+    columnNames: [a.columnName],
     columnId: a.columnId,
     columnName: a.columnName,
     authorId: a.authorId,
@@ -52,9 +63,11 @@ function toArticleDto(a: Article): Record<string, unknown> {
     status: a.status,
     views: a.views,
     summary: a.summary,
+    content: a.content,
     tags: a.tags,
     createdAt: a.createdAt,
   }
+  if (a.scheduledAt != null) dto.scheduledAt = a.scheduledAt
   if (a.publishedAt != null) dto.publishedAt = a.publishedAt
   if (a.rejectedReason != null) dto.rejectedReason = a.rejectedReason
   return dto
@@ -78,8 +91,11 @@ function toShowcaseRequestDto(s: ShowcaseRequest): Record<string, unknown> {
 }
 
 /* 内容管理（wiki-backend.md §7.14/§8.1/§8.9）：
- * 文章状态机 draft/rejected/withdrawn →(submit)→ pending →(review)→ published | rejected；published →(withdraw)→ withdrawn；
- * 栏目改名 → 级联刷新文章 columnName 快照；展示页审批 → 企业目标联动 Enterprise.showcaseStatus。 */
+ * 文章分来源 channel：official 社区自行发布（新增即待发布）/ submitted 用户投稿（新增即待审核）；
+ * 状态机 pending →(review approved)→ pending_release | (rejected)→ rejected；
+ *   pending_release →(publish)→ published | (schedule)→ scheduled；scheduled →(cancel)→ pending_release | (publish)→ published；
+ *   published →(withdraw)→ pending_release；pending/rejected/pending_release →(delete)→ 软删；
+ * 栏目改名 → 级联刷新文章 columnName 快照；展示页审核 → 企业目标联动 Enterprise.showcaseStatus。 */
 @Injectable()
 export class ContentsService {
   constructor(
@@ -91,7 +107,7 @@ export class ContentsService {
   /* ---------- 文章管理 ---------- */
 
   async articles(query: QueryArticlesDto): Promise<{ list: Record<string, unknown>[]; total: number }> {
-    const where: Prisma.ArticleWhereInput = {}
+    const where: Prisma.ArticleWhereInput = { deletedAt: null }
     if (query.keyword) {
       const kw = query.keyword.trim()
       where.OR = [
@@ -102,10 +118,11 @@ export class ContentsService {
     }
     if (query.columnId) where.columnId = query.columnId
     if (query.status) where.status = query.status
+    if (query.channel) where.channel = query.channel
 
     const rows = await this.prisma.article.findMany({ where })
 
-    /* 排序：id 按编号数值、views 按数值、createdAt 按字典序（M0 fetchArticles 口径） */
+    /* 排序：id 按编号数值、views 按数值、createdAt 按字典序 */
     const field = query.sortBy ?? 'id'
     const dir = query.sortOrder === 'ascend' ? 1 : -1
     rows.sort((a, b) => {
@@ -126,33 +143,28 @@ export class ContentsService {
   }
 
   async createArticle(payload: ArticlePayloadDto): Promise<Record<string, unknown>> {
-    const column = await this.prisma.articleColumn.findUnique({ where: { id: payload.columnId } })
+    const channel = payload.channel ?? 'official'
+    const columnId = payload.columnIds?.[0]
+    if (!columnId) throw new BadRequestException('请选择所属栏目')
+    const column = await this.prisma.articleColumn.findUnique({ where: { id: columnId } })
     if (!column) throw new NotFoundException('所属栏目不存在')
-    const author = await this.prisma.user.findUnique({
-      where: { uid: payload.authorId },
-      include: { identities: { orderBy: { id: 'asc' } } },
-    })
-    if (!author) throw new NotFoundException('作者用户不存在')
 
-    /* 身份快照：社区个体优先，其次个人用户，否则 null（M0 createArticle 口径） */
-    const identity =
-      author.identities.find((i) => i.type === 'community_individual') ??
-      author.identities.find((i) => i.type === 'individual') ??
-      null
-    const authorIdentity = identity
-      ? (toIdentityDto(identity) as unknown as Prisma.InputJsonValue)
-      : Prisma.DbNull
+    const { authorId, authorName, authorIdentity } = await this.resolveAuthor(payload, channel)
 
     const article = await this.prisma.article.create({
       data: {
-        id: await this.ids.next('A'),
+        id: await this.ids.next(channel === 'submitted' ? 'SU' : 'A'),
         title: payload.title,
+        channel,
         columnId: column.id,
         columnName: column.name,
-        authorId: author.uid,
-        authorName: author.nickname,
+        authorId,
+        authorName,
         authorIdentity,
-        status: 'draft',
+        status: channel === 'official' ? 'pending_release' : 'pending',
+        ...(channel === 'official' ? { archivableAt: formatNow() } : {}),
+        content: sanitizeHtml(payload.content),
+        scheduledAt: null,
         publishedAt: null,
         views: 0,
         summary: payload.summary,
@@ -161,17 +173,25 @@ export class ContentsService {
         rejectedReason: null,
       },
     })
+    await this.bindAssets(article.content, channel, article.id)
     return toArticleDto(article)
   }
 
   async updateArticle(id: string, payload: ArticlePayloadDto): Promise<{ code: number }> {
     const article = await this.prisma.article.findUnique({ where: { id } })
-    if (!article) throw new NotFoundException('文章不存在')
-    if (article.status !== 'draft' && article.status !== 'rejected' && article.status !== 'withdrawn') {
-      throw new ConflictException('仅草稿、已驳回或已下架的文章可编辑')
+    if (!article || article.deletedAt) throw new NotFoundException('文章不存在')
+    if (article.status !== 'pending_release' && article.status !== 'scheduled' && article.status !== 'rejected') {
+      throw new ConflictException('仅待发布、定时发布中或已驳回的文章可编辑')
     }
-    const column = await this.prisma.articleColumn.findUnique({ where: { id: payload.columnId } })
+
+    const columnId = payload.columnIds?.[0]
+    if (!columnId) throw new BadRequestException('请选择所属栏目')
+    const column = await this.prisma.articleColumn.findUnique({ where: { id: columnId } })
     if (!column) throw new NotFoundException('所属栏目不存在')
+
+    /* 被驳回的投稿允许修改后重新进入待审核；待发布/定时发布中的自主文章保持原状态 */
+    const nextStatus = article.status === 'rejected' ? 'pending' : article.status
+    const content = sanitizeHtml(payload.content)
 
     await this.prisma.article.update({
       where: { id },
@@ -180,39 +200,45 @@ export class ContentsService {
         columnId: column.id,
         columnName: column.name,
         summary: payload.summary,
+        content,
         tags: payload.tags,
+        status: nextStatus,
+        rejectedReason: null,
+        ...(nextStatus !== 'scheduled' ? { scheduledAt: null } : {}),
       },
     })
+    await this.bindAssets(content, article.channel, article.id)
     return { code: 0 }
   }
 
-  async submitArticle(id: string): Promise<{ code: number }> {
-    const article = await this.prisma.article.findUnique({ where: { id } })
-    if (!article) throw new NotFoundException('文章不存在')
-    if (article.status !== 'draft' && article.status !== 'rejected' && article.status !== 'withdrawn') {
-      throw new ConflictException('仅草稿、已驳回或已下架的文章可提交审核')
-    }
-    await this.prisma.article.update({
-      where: { id },
-      data: { status: 'pending', rejectedReason: null },
+  /** 将正文引用的素材绑定到当前文章（素材库来源标签/筛选；绑定后替换素材即对引用页面生效） */
+  private async bindAssets(content: string, channel: string, articleId: string): Promise<void> {
+    const keys = [...content.matchAll(/\/api\/public\/files\/([A-Za-z0-9._-]+)/g)].map((m) => m[1])
+    if (!keys.length) return
+    await this.prisma.mallAsset.updateMany({
+      where: { storeKey: { in: [...new Set(keys)] } },
+      data: { sourceType: channel === 'submitted' ? 'submission' : 'article', sourceId: articleId },
     })
-    return { code: 0 }
   }
 
+  /** 审核投稿：approved → 待发布；rejected → 已驳回并记录原因 */
   async reviewArticle(id: string, dto: ReviewArticleDto, operator: string): Promise<{ code: number }> {
     const article = await this.prisma.article.findUnique({ where: { id } })
-    if (!article) throw new NotFoundException('文章不存在')
-    if (article.status !== 'pending') throw new ConflictException('仅待审核文章可审批')
+    if (!article || article.deletedAt) throw new NotFoundException('文章不存在')
+    if (article.status !== 'pending') throw new ConflictException('仅待审核的文章可审核')
     const comment = (dto.comment ?? '').trim()
     if (dto.status === 'rejected' && !comment) throw new BadRequestException('请填写驳回原因')
 
-    await this.prisma.article.update({
-      where: { id },
-      data:
-        dto.status === 'approved'
-          ? { status: 'published', publishedAt: formatNow() }
-          : { status: 'rejected', rejectedReason: comment },
-    })
+    const after =
+      dto.status === 'approved'
+        ? {
+            status: 'pending_release',
+            rejectedReason: null,
+            archivableAt: formatNow(),
+          }
+        : { status: 'rejected', rejectedReason: comment, archivableAt: formatNow() }
+
+    await this.prisma.article.update({ where: { id }, data: after })
 
     await this.audit.record({
       module: '内容管理',
@@ -220,21 +246,153 @@ export class ContentsService {
       target: `${article.id} · ${article.title}`,
       detail: comment || undefined,
       before: { status: article.status },
-      after:
-        dto.status === 'approved'
-          ? { status: 'published' }
-          : { status: 'rejected', rejectedReason: comment },
+      after,
       operator,
     })
     return { code: 0 }
   }
 
-  async withdrawArticle(id: string): Promise<{ code: number }> {
+  /** 立即发布：待发布 / 定时发布中 → 已发布 */
+  async publishArticle(id: string, operator: string): Promise<{ code: number }> {
     const article = await this.prisma.article.findUnique({ where: { id } })
-    if (!article) throw new NotFoundException('文章不存在')
-    if (article.status !== 'published') throw new ConflictException('仅已发布文章可下架')
-    await this.prisma.article.update({ where: { id }, data: { status: 'withdrawn' } })
+    if (!article || article.deletedAt) throw new NotFoundException('文章不存在')
+    if (article.status !== 'pending_release' && article.status !== 'scheduled') {
+      throw new ConflictException('仅待发布或定时发布中的文章可发布')
+    }
+    await this.prisma.article.update({
+      where: { id },
+      data: { status: 'published', scheduledAt: null, publishedAt: formatNow() },
+    })
+    await this.audit.record({
+      module: '内容管理',
+      action: '文章发布',
+      target: `${article.id} · ${article.title}`,
+      before: { status: article.status },
+      after: { status: 'published' },
+      operator,
+    })
     return { code: 0 }
+  }
+
+  /** 设置定时发布：待发布 → 定时发布中 */
+  async scheduleArticle(id: string, dto: ScheduleArticleDto, operator: string): Promise<{ code: number }> {
+    const article = await this.prisma.article.findUnique({ where: { id } })
+    if (!article || article.deletedAt) throw new NotFoundException('文章不存在')
+    if (article.status !== 'pending_release') throw new ConflictException('仅待发布的文章可设置定时发布')
+    const scheduledAt = dto.scheduledAt.trim()
+    if (scheduledAt <= formatNow()) throw new BadRequestException('定时发布时间需晚于当前时间')
+
+    await this.prisma.article.update({ where: { id }, data: { status: 'scheduled', scheduledAt } })
+    await this.audit.record({
+      module: '内容管理',
+      action: '文章定时发布',
+      target: `${article.id} · ${article.title}`,
+      detail: `计划发布时间 ${scheduledAt}`,
+      before: { status: article.status },
+      after: { status: 'scheduled', scheduledAt },
+      operator,
+    })
+    return { code: 0 }
+  }
+
+  /** 取消定时发布：定时发布中 → 待发布 */
+  async cancelSchedule(id: string, operator: string): Promise<{ code: number }> {
+    const article = await this.prisma.article.findUnique({ where: { id } })
+    if (!article || article.deletedAt) throw new NotFoundException('文章不存在')
+    if (article.status !== 'scheduled') throw new ConflictException('仅定时发布中的文章可取消定时')
+    await this.prisma.article.update({ where: { id }, data: { status: 'pending_release', scheduledAt: null } })
+    await this.audit.record({
+      module: '内容管理',
+      action: '取消文章定时发布',
+      target: `${article.id} · ${article.title}`,
+      before: { status: article.status },
+      after: { status: 'pending_release' },
+      operator,
+    })
+    return { code: 0 }
+  }
+
+  /** 下架：已发布 → 待发布 */
+  async withdrawArticle(id: string, operator: string): Promise<{ code: number }> {
+    const article = await this.prisma.article.findUnique({ where: { id } })
+    if (!article || article.deletedAt) throw new NotFoundException('文章不存在')
+    if (article.status !== 'published') throw new ConflictException('仅已发布的文章可下架')
+    await this.prisma.article.update({
+      where: { id },
+      data: { status: 'pending_release', publishedAt: null, scheduledAt: null },
+    })
+    await this.audit.record({
+      module: '内容管理',
+      action: '文章下架',
+      target: `${article.id} · ${article.title}`,
+      before: { status: article.status },
+      after: { status: 'pending_release' },
+      operator,
+    })
+    return { code: 0 }
+  }
+
+  /** 删除文章（软删）：投稿允许已驳回 / 待审核；官方资讯允许待发布 */
+  async deleteArticle(id: string, operator: string): Promise<{ code: number }> {
+    const article = await this.prisma.article.findUnique({ where: { id } })
+    if (!article || article.deletedAt) throw new NotFoundException('文章不存在')
+    if (!['pending', 'rejected', 'pending_release'].includes(article.status)) {
+      throw new ConflictException('仅待审核、已驳回或待发布的文章可删除')
+    }
+    await this.prisma.article.update({
+      where: { id },
+      data: { deletedAt: formatNow(), deletedBy: operator },
+    })
+    await this.audit.record({
+      module: '内容管理',
+      action: '删除文章',
+      target: `${article.id} · ${article.title}`,
+      before: { status: article.status },
+      after: { deleted: true },
+      operator,
+    })
+    return { code: 0 }
+  }
+
+  /** 作者解析（authorId 可空）：U 前缀 → 用户 + 身份快照；E / XE 前缀 → 企业名；未提供名称时回退默认展示名 */
+  private async resolveAuthor(
+    payload: ArticlePayloadDto,
+    channel: 'official' | 'submitted',
+  ): Promise<{
+    authorId: string | null
+    authorName: string
+    authorIdentity: Prisma.InputJsonValue | typeof Prisma.DbNull
+  }> {
+    const authorId = payload.authorId?.trim() || null
+    let authorName = (payload.authorName ?? '').trim()
+    let authorIdentity: Prisma.InputJsonValue | typeof Prisma.DbNull = Prisma.DbNull
+
+    if (authorId) {
+      if (authorId.startsWith('U')) {
+        const user = await this.prisma.user.findUnique({
+          where: { uid: authorId },
+          include: { identities: { orderBy: { id: 'asc' } } },
+        })
+        if (!user) throw new NotFoundException('作者用户不存在')
+        if (!authorName) authorName = user.nickname
+        const identity =
+          user.identities.find((i) => i.type === 'community_individual') ??
+          user.identities.find((i) => i.type === 'individual') ??
+          null
+        if (identity) authorIdentity = toIdentityDto(identity) as unknown as Prisma.InputJsonValue
+      } else if (authorId.startsWith('XE')) {
+        const external = await this.prisma.externalEnterpriseProfile.findUnique({ where: { id: authorId } })
+        if (!external) throw new NotFoundException('作者企业不存在')
+        if (!authorName) authorName = external.name
+      } else {
+        const enterprise = await this.prisma.enterprise.findUnique({ where: { id: authorId } })
+        if (!enterprise) throw new NotFoundException('作者企业不存在')
+        if (!authorName) authorName = enterprise.name
+      }
+    }
+
+    if (!authorName) authorName = channel === 'official' ? '社区运营' : '投稿用户'
+    return { authorId, authorName, authorIdentity }
   }
 
   /* ---------- 栏目管理 ---------- */
@@ -242,7 +400,11 @@ export class ContentsService {
   async columns(): Promise<ColumnDto[]> {
     const [columns, counts] = await Promise.all([
       this.prisma.articleColumn.findMany({ orderBy: { sort: 'asc' } }),
-      this.prisma.article.groupBy({ by: ['columnId'], _count: { _all: true } }),
+      this.prisma.article.groupBy({
+        by: ['columnId'],
+        where: { deletedAt: null },
+        _count: { _all: true },
+      }),
     ])
     const countMap = new Map(counts.map((c) => [c.columnId, c._count._all]))
     return columns.map((c) => ({
@@ -250,6 +412,8 @@ export class ContentsService {
       name: c.name,
       description: c.description,
       sort: c.sort,
+      submissionOpen: c.submissionOpen,
+      system: c.system,
       status: c.status,
       createdAt: c.createdAt,
       articleCount: countMap.get(c.id) ?? 0,
@@ -257,8 +421,7 @@ export class ContentsService {
   }
 
   async createColumn(payload: ColumnPayloadDto): Promise<Record<string, unknown>> {
-    const name = payload.name.trim()
-    const dup = await this.prisma.articleColumn.findFirst({ where: { name } })
+    const dup = await this.prisma.articleColumn.findFirst({ where: { name: payload.name.trim() } })
     if (dup) throw new ConflictException('栏目名称已存在')
     const column = await this.prisma.articleColumn.create({
       data: {
@@ -266,6 +429,8 @@ export class ContentsService {
         name: payload.name,
         description: payload.description,
         sort: payload.sort,
+        submissionOpen: payload.submissionOpen,
+        system: false,
         status: 'enabled',
         createdAt: formatToday(),
       },
@@ -275,6 +440,8 @@ export class ContentsService {
       name: column.name,
       description: column.description,
       sort: column.sort,
+      submissionOpen: column.submissionOpen,
+      system: column.system,
       status: column.status,
       createdAt: column.createdAt,
     }
@@ -283,15 +450,19 @@ export class ContentsService {
   async updateColumn(id: string, payload: ColumnPayloadDto): Promise<{ code: number }> {
     const column = await this.prisma.articleColumn.findUnique({ where: { id } })
     if (!column) throw new NotFoundException('栏目不存在')
+    if (column.system) throw new ConflictException('系统保留栏目不可编辑')
     const name = payload.name.trim()
-    const dup = await this.prisma.articleColumn.findFirst({
-      where: { name, id: { not: id } },
-    })
+    const dup = await this.prisma.articleColumn.findFirst({ where: { name, id: { not: id } } })
     if (dup) throw new ConflictException('栏目名称已存在')
 
     await this.prisma.articleColumn.update({
       where: { id },
-      data: { name: payload.name, description: payload.description, sort: payload.sort },
+      data: {
+        name: payload.name,
+        description: payload.description,
+        sort: payload.sort,
+        submissionOpen: payload.submissionOpen,
+      },
     })
 
     /* 改名 → 级联刷新文章 columnName 快照 */
@@ -307,9 +478,41 @@ export class ContentsService {
   async toggleColumnStatus(id: string): Promise<{ code: number }> {
     const column = await this.prisma.articleColumn.findUnique({ where: { id } })
     if (!column) throw new NotFoundException('栏目不存在')
+    if (column.system) throw new ConflictException('系统保留栏目不可停用')
     await this.prisma.articleColumn.update({
       where: { id },
       data: { status: column.status === 'enabled' ? 'disabled' : 'enabled' },
+    })
+    return { code: 0 }
+  }
+
+  /** 开放/关闭投稿开关 */
+  async toggleColumnSubmission(id: string): Promise<{ code: number }> {
+    const column = await this.prisma.articleColumn.findUnique({ where: { id } })
+    if (!column) throw new NotFoundException('栏目不存在')
+    if (column.system) throw new ConflictException('系统保留栏目不可变更')
+    await this.prisma.articleColumn.update({
+      where: { id },
+      data: { submissionOpen: !column.submissionOpen },
+    })
+    return { code: 0 }
+  }
+
+  /** 删除栏目：其文章自动转移至「未指定」保留栏目 */
+  async deleteColumn(id: string): Promise<{ code: number }> {
+    const column = await this.prisma.articleColumn.findUnique({ where: { id } })
+    if (!column) throw new NotFoundException('栏目不存在')
+    if (column.system) throw new ConflictException('系统保留栏目不可删除')
+
+    await this.prisma.$transaction(async (tx) => {
+      const reserved = await tx.articleColumn.findUnique({ where: { id: RESERVED_COLUMN_ID } })
+      if (reserved) {
+        await tx.article.updateMany({
+          where: { columnId: id },
+          data: { columnId: RESERVED_COLUMN_ID, columnName: RESERVED_COLUMN_NAME },
+        })
+      }
+      await tx.articleColumn.delete({ where: { id } })
     })
     return { code: 0 }
   }
@@ -340,7 +543,7 @@ export class ContentsService {
   ): Promise<{ code: number }> {
     const request = await this.prisma.showcaseRequest.findUnique({ where: { id } })
     if (!request) throw new NotFoundException('展示页申请不存在')
-    if (request.status !== 'pending') throw new ConflictException('该申请已处理，请勿重复审批')
+    if (request.status !== 'pending') throw new ConflictException('该申请已处理，请勿重复审核')
 
     const comment = (dto.comment ?? '').trim()
 
@@ -351,7 +554,7 @@ export class ContentsService {
     }
 
     const record: ApprovalRecord = {
-      step: '管理员审批',
+      step: '管理员审核',
       operator,
       action: dto.status === 'approved' ? 'approve' : 'reject',
       comment: comment || (dto.status === 'approved' ? '审核通过' : ''),

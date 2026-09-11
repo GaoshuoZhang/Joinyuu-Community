@@ -3,7 +3,7 @@ import type { Project } from '@/types'
 /* 项目数据 — 命名前缀 P5001+
  * 模型：undertakers 承接方数组（可多个，各含承接占比，整数百分比合计 100）
  * 里程碑 owners = 负责该节点的承接方（存展示名，可多选）
- * initiatedAt = 立项日期（项目创建/立项时间） */
+ * initiatedAt = 立项日期（项目新增/立项时间） */
 export const projects: Project[] = [
   {
     id: 'P5001',
@@ -20,7 +20,7 @@ export const projects: Project[] = [
     endDate: '2026-10-31',
     initiatedAt: '2026-06-25',
     description:
-      '社区自运营项目：为聚屿社区开发成员端小程序，涵盖活动报名、需求广场与积分商城入口。三家入驻企业联合共研，社区提供场景与种子用户。',
+      '社区自运营项目：为聚屿社区开发成员端小程序，涵盖活动报名、需求广场与积分商城入口。三家社区企业联合共研，社区提供场景与种子用户。',
     milestones: [
     { name: '项目立项', status: 'done', date: '2026-07-01', owners: [] },
 
@@ -132,7 +132,7 @@ export const projects: Project[] = [
     endDate: '2026-12-20',
     initiatedAt: '2026-07-28',
     description:
-      '社区一周年联名周边企划：帆布袋、徽章与笔记本三件套。因拾光文创入驻审批未完成，打样环节暂停，等待入驻后恢复。',
+      '社区一周年联名周边企划：帆布袋、徽章与笔记本三件套。因拾光文创内部排期调整，打样环节暂停，等待恢复。',
     milestones: [
     { name: '项目立项', status: 'done', date: '2026-08-01', owners: [] },
 

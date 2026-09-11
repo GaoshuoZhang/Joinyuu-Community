@@ -23,6 +23,10 @@ export class QueryExternalEnterprisesDto {
   industry?: string
 
   @IsOptional()
+  @IsIn(['active', 'disabled'])
+  status?: string
+
+  @IsOptional()
   @IsIn(['cooperationCount', 'firstCooperationAt'])
   sortBy?: 'cooperationCount' | 'firstCooperationAt'
 

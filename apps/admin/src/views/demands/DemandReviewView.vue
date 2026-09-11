@@ -1,12 +1,13 @@
 <script setup lang="ts">
 import { computed, onMounted, reactive, ref } from 'vue'
 import { useRouter } from 'vue-router'
-import { RefreshIcon, SearchIcon } from 'tdesign-icons-vue-next'
+import { SearchIcon } from 'tdesign-icons-vue-next'
 import PageHeader from '@/components/PageHeader.vue'
-import IdentityTags from '@/components/IdentityTags.vue'
 import DemandReviewDialog from '@/components/DemandReviewDialog.vue'
+import ColumnController from '@/components/ColumnController.vue'
 import { fetchDemands } from '@/api/demands'
 import { dictFallback, fetchDictEntries } from '@/api/dicts'
+import { identityTypeMap } from '@/constants/identity'
 import type { Demand } from '@/types'
 
 /* 需求审核：固定筛选「待审核」状态的需求集中审核。
@@ -28,17 +29,17 @@ const query = reactive({
 const sortBy = ref<'createdAt' | 'id'>('createdAt')
 const sortOrder = ref<'ascend' | 'descend'>('descend')
 
-/* 类别选项来自数据字典（M0-E 起统一取用），加载失败回退默认词表 */
+/* 类别选项来自数据字典，加载失败回退默认词表 */
 const categoryOptions = ref([
   { label: '全部', value: '' },
   ...dictFallback.demand_category.map((label) => ({ label, value: label })),
 ])
 
 const columns = [
-  { colKey: 'title', title: '需求', cell: 'title', width: 210, resizable: true },
-  { colKey: 'category', title: '类别', cell: 'category', width: 95, resizable: true },
-  { colKey: 'publisher', title: '发布方', cell: 'publisher', width: 200, resizable: true },
-  { colKey: 'budget', title: '预算', width: 125, resizable: true },
+  { colKey: 'title', title: '需求', cell: 'title', width: 210, resizable: true , ellipsis: true},
+  { colKey: 'category', title: '类别', cell: 'category', width: 95, resizable: true , ellipsis: true},
+  { colKey: 'publisher', title: '需求方', cell: 'publisher', width: 200, resizable: true , ellipsis: true},
+  { colKey: 'budget', title: '预算', width: 125, resizable: true , ellipsis: true},
   {
     colKey: 'createdAt',
     title: '创建时间',
@@ -46,9 +47,18 @@ const columns = [
     resizable: true,
     sorter: true,
     sortType: 'all',
+  ellipsis: true,
   },
   { colKey: 'op', title: '操作', cell: 'op', width: 160 },
 ]
+
+/* 列配置：本地持久化显隐/顺序 */
+const visibleColKeys = ref<string[]>(columns.map((c) => c.colKey))
+
+const visibleColumns = computed(() => {
+  const byKey = new Map(columns.map((c) => [c.colKey, c]))
+  return visibleColKeys.value.map((k) => byKey.get(k)).filter(Boolean)
+})
 
 const pagination = computed(() => ({
   current: query.page,
@@ -104,6 +114,13 @@ function goDetail(row: Demand) {
   router.push(`/demands/${row.id}`)
 }
 
+/* 需求方身份快照 → 纯文本标签（企业仅显示 社区企业/合作企业，不追加成员标题） */
+function publisherIdentityLabel(row: Demand): string {
+  const type = row.publisherIdentity?.type
+  if (!type) return '—'
+  return identityTypeMap[type] ?? '—'
+}
+
 /* 只读审核对话框（通过 = 转待发布；驳回需填原因） */
 const reviewVisible = ref(false)
 const current = ref<Demand | null>(null)
@@ -128,7 +145,15 @@ onMounted(() => {
 
 <template>
   <div class="demand-review page-fade-in">
-    <PageHeader title="需求审核" description="集中处理需求广场提交的待审核需求：只读审核，通过后转入「待发布」或驳回" />
+    <PageHeader title="需求审核" description="集中处理需求广场提交的待审核需求：只读审核，通过后转入「待发布」或驳回">
+      <template #actions>
+        <ColumnController
+          v-model="visibleColKeys"
+          storage-key="demand-review"
+          :columns="columns.map((c) => ({ key: c.colKey, title: c.title }))"
+        />
+      </template>
+    </PageHeader>
 
     <div class="page-filter-bar">
       <t-input
@@ -151,7 +176,6 @@ onMounted(() => {
         查询
       </t-button>
       <t-button variant="outline" theme="default" @click="onReset">
-        <template #icon><RefreshIcon /></template>
         重置
       </t-button>
     </div>
@@ -163,7 +187,7 @@ onMounted(() => {
         hover
         resizable
         :data="list"
-        :columns="columns"
+        :columns="visibleColumns"
         :sort="tableSort"
         :loading="loading"
         :pagination="pagination"
@@ -186,14 +210,16 @@ onMounted(() => {
         <template #publisher="{ row }">
           <div class="publisher-cell">
             <span class="publisher-name">{{ row.publisherName }}</span>
-            <IdentityTags :identities="row.publisherIdentity ? [row.publisherIdentity] : []" />
+            <div class="tag-row">
+              <t-tag v-if="row.publisherId" size="small" variant="light">{{ row.publisherId }}</t-tag>
+              <span class="publisher-identity">{{ publisherIdentityLabel(row) }}</span>
+            </div>
           </div>
         </template>
 
         <template #op="{ row }">
           <div class="op-cell" @click.stop>
             <t-button variant="text" size="small" theme="primary" @click="openReview(row)">审核</t-button>
-            <t-button variant="text" size="small" @click="goDetail(row)">详情</t-button>
           </div>
         </template>
       </t-table>
@@ -242,6 +268,19 @@ onMounted(() => {
   font-size: 14px;
   line-height: 20px;
   color: var(--td-text-color-primary);
+}
+
+.publisher-identity {
+  font-size: 12px;
+  line-height: 18px;
+  color: var(--td-text-color-secondary);
+}
+
+.tag-row {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex-wrap: wrap;
 }
 
 .op-cell {

@@ -3,30 +3,32 @@ import { computed, onMounted, reactive, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { MessagePlugin } from 'tdesign-vue-next'
 import type { FormProps } from 'tdesign-vue-next'
-import { AddIcon, RefreshIcon, SearchIcon, DownloadIcon } from 'tdesign-icons-vue-next'
+import { AddIcon, SearchIcon, DownloadIcon } from 'tdesign-icons-vue-next'
 import PageHeader from '@/components/PageHeader.vue'
 import StatusTag from '@/components/StatusTag.vue'
+import ColumnController from '@/components/ColumnController.vue'
+import BulkArchiveDialog from '@/components/BulkArchiveDialog.vue'
 import DemandPublishDialog from '@/components/DemandPublishDialog.vue'
 import DemandReviewDialog from '@/components/DemandReviewDialog.vue'
 import DemandScheduleDialog from '@/components/DemandScheduleDialog.vue'
 import ProjectFormDialog from '@/components/ProjectFormDialog.vue'
-import { cancelDemandSchedule, closeDemand, fetchDemands, publishDemandNow, retractDemand, proxyRespondDemand, fetchPublisherOptions } from '@/api/demands'
+import { archiveDemand, cancelDemandSchedule, closeDemand, fetchDemands, publishDemandNow, retractDemand, proxyRespondDemand, fetchPublisherOptions } from '@/api/demands'
 import { dictFallback, fetchDictEntries } from '@/api/dicts'
-import { exportCsv, statusLabel } from '@/utils/exportCsv'
+import { exportAllRows, exportCsv, statusLabel } from '@/utils/exportCsv'
 import { fetchPointsRules } from '@/api/mall'
 import { fetchEnterprise } from '@/api/enterprises'
 import { fetchExternalEnterprise } from '@/api/external-enterprises'
 import { fetchUser } from '@/api/users'
 import type { Demand, UserIdentity } from '@/types'
 
-/* 发布方身份兜底：历史数据无快照时按编号前缀推导（E→社区企业 / XE→外部企业 / U→仅个人用户标「个人用户」） */
-/* 需求方标签映射（2026-09-09 口径）：
- * 企业 → 社区企业/外部企业；社区个体 → 社区个体；仅个人用户 → 个人用户；自定义 → 未录入 */
+/* 发布方身份兜底：历史数据无快照时按编号前缀推导（E→社区企业 / XE→合作企业 / U→仅个人用户标「个人用户」） */
+/* 需求方标签映射：
+ * 企业 → 社区企业/合作企业；社区个体 → 社区个体；仅个人用户 → 个人用户；自定义 → 未录入 */
 function publisherTagOf(row: Demand): { text: string; theme: 'default' | 'primary'; variant: 'light' | 'outline' } | null {
   const id = publisherIdentityOf(row)
   if (id) {
     if (id.type === 'community_enterprise') return { text: '社区企业', theme: 'primary', variant: 'light' }
-    if (id.type === 'external_enterprise') return { text: '外部企业', theme: 'default', variant: 'outline' }
+    if (id.type === 'external_enterprise') return { text: '合作企业', theme: 'default', variant: 'outline' }
     if (id.type === 'community_individual') return { text: '社区个体', theme: 'primary', variant: 'light' }
     return { text: '个人用户', theme: 'default', variant: 'light' }
   }
@@ -37,7 +39,7 @@ function publisherTagOf(row: Demand): { text: string; theme: 'default' | 'primar
   return { text: '未录入', theme: 'default', variant: 'outline' }
 }
 
-/* 需求方显示名：企业=企业名；个人/社区个体=昵称（mock 即真实姓名）；自定义=联系人 */
+/* 需求方显示名：企业=企业名；个人/社区个体=昵称（即真实姓名）；自定义=联系人 */
 function publisherNameOf(row: Demand): string {
   if (!row.publisherId) return row.contactName || row.publisherName || '—'
   return row.publisherName || '—'
@@ -46,7 +48,7 @@ function publisherIdentityOf(row: Demand): UserIdentity | null {
   if (row.publisherIdentity) return row.publisherIdentity
   if (!row.publisherId) return null
   if (row.publisherId.startsWith('E')) {
-    return { type: 'community_enterprise', enterpriseId: row.publisherId, enterpriseName: row.publisherName, title: '入驻企业成员' } as UserIdentity
+    return { type: 'community_enterprise', enterpriseId: row.publisherId, enterpriseName: row.publisherName, title: '社区企业成员' } as UserIdentity
   }
   if (row.publisherId.startsWith('XE')) {
     return { type: 'external_enterprise', enterpriseName: row.publisherName, title: '合作企业' } as UserIdentity
@@ -66,7 +68,7 @@ onMounted(async () => {
 })
 
 /* 代报名弹窗：管理员代成员响应需求（published / projected 可用）。
- * 报名方选择器 = 注册个人用户/企业 + 未注册自建（creatable），选中已注册自动填充联系方式 */
+ * 报名方选择器 = 注册个人用户/企业 + 未注册自建（creatable），选中已注册自动填充联系电话 */
 const proxyVisible = ref(false)
 const proxyTarget = ref<Demand | null>(null)
 const proxySaving = ref(false)
@@ -87,7 +89,7 @@ const proxyRules: FormProps['rules'] = {
 const userProxyOptions = ref<{ label: string; value: string }[]>([])
 const enterpriseProxyOptions = ref<{ label: string; value: string }[]>([])
 const proxyOptions = computed(() => [...userProxyOptions.value, ...enterpriseProxyOptions.value])
-/* 报名方信息：U:/E: 前缀 = 已注册（自动填充联系方式），其余 = 自建条目 */
+/* 报名方信息：U:/E: 前缀 = 已注册（自动填充联系电话），其余 = 自建条目 */
 const proxyContact = ref<{ userName: string; enterprise: string; phone: string; email: string } | null>(null)
 
 async function loadProxyOptions() {
@@ -162,7 +164,7 @@ async function onProxyConfirm() {
   }
 }
 
-/* 代报名联系方式自动填充的数据源（fetchPublisherOptions 结果缓存） */
+/* 代报名联系电话自动填充的数据源（fetchPublisherOptions 结果缓存） */
 let publisherOptionsCache: { users: { uid: string; nickname: string; phone: string; email: string }[]; enterprises: { id: string; name: string; contactPhone: string; contactEmail?: string }[] } | null = null
 function fetchPublisherOptionsUsers() {
   return publisherOptionsCache?.users ?? []
@@ -178,7 +180,7 @@ const total = ref(0)
 const closingId = ref('')
 /* 用户详情「数据概览」跳转带入的提交人筛选 */
 const publisherName = ref('')
-/* 企业详情「数据概览」跳转带入的企业筛选（值为社区企业 ID 或外部企业 ID，标签显示名称） */
+/* 企业详情「数据概览」跳转带入的企业筛选（值为社区企业 ID 或合作企业 ID，标签显示名称） */
 const enterpriseName = ref('')
 
 const query = reactive({
@@ -195,7 +197,7 @@ const query = reactive({
 const sortBy = ref<'createdAt' | 'id'>('createdAt')
 const sortOrder = ref<'ascend' | 'descend'>('descend')
 
-/* 类别选项来自数据字典（M0-E 起统一取用），加载失败回退默认词表 */
+/* 类别选项来自数据字典，加载失败回退默认词表 */
 const categoryOptions = ref([
   { label: '全部', value: '' },
   ...dictFallback.demand_category.map((label) => ({ label, value: label })),
@@ -213,11 +215,11 @@ const statusOptions = [
 ]
 
 const columns = [
-  { colKey: 'title', title: '需求', cell: 'title', width: 210, resizable: true },
-  { colKey: 'category', title: '类别', cell: 'category', width: 95, resizable: true },
-  { colKey: 'publisher', title: '需求方', cell: 'publisher', width: 200, resizable: true },
-  { colKey: 'budget', title: '预算', width: 125, resizable: true },
-  { colKey: 'respondents', title: '响应', cell: 'respondents', width: 92, resizable: true },
+  { colKey: 'title', title: '需求', cell: 'title', width: 210, resizable: true , ellipsis: true},
+  { colKey: 'category', title: '类别', cell: 'category', width: 95, resizable: true , ellipsis: true},
+  { colKey: 'publisher', title: '需求方', cell: 'publisher', width: 200, resizable: true , ellipsis: true},
+  { colKey: 'budget', title: '预算', width: 125, resizable: true , ellipsis: true},
+  { colKey: 'respondents', title: '响应', cell: 'respondents', width: 92, resizable: true , ellipsis: true},
   {
     colKey: 'createdAt',
     title: '创建时间',
@@ -225,6 +227,7 @@ const columns = [
     resizable: true,
     sorter: true,
     sortType: 'all',
+  ellipsis: true,
   },
   {
     colKey: 'publishedAt',
@@ -234,10 +237,19 @@ const columns = [
     resizable: true,
     sorter: true,
     sortType: 'all',
+  ellipsis: true,
   },
-  { colKey: 'status', title: '状态', cell: 'status', width: 150, resizable: true },
-  { colKey: 'op', title: '操作', cell: 'op', width: 230 },
+  { colKey: 'status', title: '状态', cell: 'status', width: 150, resizable: true , ellipsis: true},
+  { colKey: 'op', title: '操作', cell: 'op', width: 270 },
 ]
+
+/* 列配置：本地持久化显隐/顺序 */
+const visibleColKeys = ref<string[]>(columns.map((c) => c.colKey))
+
+const visibleColumns = computed(() => {
+  const byKey = new Map(columns.map((c) => [c.colKey, c]))
+  return visibleColKeys.value.map((k) => byKey.get(k)).filter(Boolean)
+})
 
 const pagination = computed(() => ({
   current: query.page,
@@ -277,6 +289,37 @@ function onExport() {
   MessagePlugin.success(`已导出当前页 ${list.value.length} 条数据`)
 }
 
+/* 全量导出：按现有筛选条件拉取全部页后导出；服务端导出落地后切换 */
+const exportingAll = ref(false)
+
+async function onExportAll() {
+  exportingAll.value = true
+  try {
+    const count = await exportAllRows<Demand>(
+      '需求列表全量',
+      ['编号', '标题', '类别', '需求方', '预算', '响应数', '状态', '创建时间', '发布时间'],
+      (d) => [
+        d.id,
+        d.title,
+        d.category,
+        d.publisherName,
+        d.budget,
+        d.respondents.length,
+        statusLabel('demand', d.status),
+        d.createdAt,
+        d.publishedAt ?? '—',
+      ],
+      (page, pageSize) =>
+        fetchDemands({ ...query, page, pageSize, sortBy: sortBy.value, sortOrder: sortOrder.value }),
+    )
+    MessagePlugin.success(`已导出全部 ${count} 条需求数据`)
+  } catch (e) {
+    MessagePlugin.error(e instanceof Error ? e.message : '导出失败')
+  } finally {
+    exportingAll.value = false
+  }
+}
+
 /* 远程排序：表头点击 → 更新排序状态 → 重新加载（受控 :sort 保证表头指示器正确） */
 function onSortChange(sort: { sortBy: string; descending: boolean }) {
   if (sort.sortBy !== 'createdAt' && sort.sortBy !== 'publishedAt') return
@@ -314,7 +357,7 @@ function onPageChange(p: { current: number; pageSize: number }) {
   load()
 }
 
-/* 创建 / 完成并发布 / 编辑（同一弹窗组件，mode 区分） */
+/* 新增 / 完成并发布 / 编辑（同一弹窗组件，mode 区分） */
 const publishVisible = ref(false)
 const publishMode = ref<'create' | 'publish' | 'edit'>('publish')
 const current = ref<Demand | null>(null)
@@ -410,6 +453,72 @@ async function onCloseDemand(row: Demand) {
   }
 }
 
+/* 已驳回 / 已关闭 / 已立项 → 归档（可在归档管理中恢复） */
+const archivingId = ref('')
+
+async function onArchiveDemand(row: Demand) {
+  archivingId.value = row.id
+  try {
+    await archiveDemand(row.id)
+    MessagePlugin.success('需求已归档')
+    await load()
+  } catch (e) {
+    MessagePlugin.error(e instanceof Error ? e.message : '操作失败')
+  } finally {
+    archivingId.value = ''
+  }
+}
+
+/* 一键归档：按当前筛选全量拉取，归档所选状态的已驳回 / 已关闭 / 已立项需求 */
+const archivingAll = ref(false)
+const bulkVisible = ref(false)
+const bulkStatuses = [
+  { label: '已驳回', value: 'rejected' },
+  { label: '已关闭', value: 'closed' },
+  { label: '已立项', value: 'projected' },
+]
+
+async function doBulkArchive(values: string[]) {
+  const targets: Demand[] = []
+  for (let page = 1; page <= 20; page++) {
+    const res = await fetchDemands({ ...query, page, pageSize: 100 })
+    targets.push(...res.list)
+    if (targets.length >= res.total || res.list.length < 100) break
+  }
+  const pending = targets.filter((d) => values.includes(d.status))
+  if (!pending.length) {
+    MessagePlugin.info('没有符合所选状态的可归档需求')
+    return
+  }
+  let failed = 0
+  for (const d of pending) {
+    try {
+      await archiveDemand(d.id)
+    } catch {
+      failed++
+    }
+  }
+  if (pending.length - failed > 0) MessagePlugin.success(`已归档 ${pending.length - failed} 条需求`)
+  if (failed > 0) MessagePlugin.warning(`${failed} 条需求归档失败，请重试`)
+  await load()
+}
+
+function onBulkArchive() {
+  bulkVisible.value = true
+}
+
+async function onBulkConfirm(values: string[]) {
+  archivingAll.value = true
+  try {
+    await doBulkArchive(values)
+    bulkVisible.value = false
+  } catch (e) {
+    MessagePlugin.error(e instanceof Error ? e.message : '一键归档失败')
+  } finally {
+    archivingAll.value = false
+  }
+}
+
 /* 立项 */
 const projectVisible = ref(false)
 
@@ -428,8 +537,8 @@ function goProject(row: Demand) {
 }
 
 /* 用户详情「数据概览」跳转带入提交人 ID（query: publisher），按 ID 过滤避免同名歧义；
- * 企业详情「数据概览」跳转带入企业 ID（query: enterprise，社区企业 E* / 外部企业 XE*），
- * 标签显示名称：社区企业经 fetchEnterprise、外部企业经 fetchExternalEnterprise 由 ID 解析 */
+ * 企业详情「数据概览」跳转带入企业 ID（query: enterprise，社区企业 E* / 合作企业 XE*），
+ * 标签显示名称：社区企业经 fetchEnterprise、合作企业经 fetchExternalEnterprise 由 ID 解析 */
 async function applyRouteFilter() {
   query.publisherId = (route.query.publisher as string) || ''
   query.enterprise = (route.query.enterprise as string) || ''
@@ -448,7 +557,7 @@ async function applyRouteFilter() {
       const res = await fetchEnterprise(query.enterprise)
       enterpriseName.value = res.enterprise.name
     } catch {
-      /* 非社区企业 ID：尝试按外部企业 ID 解析名称 */
+      /* 非社区企业 ID：尝试按合作企业 ID 解析名称 */
       try {
         const ext = await fetchExternalEnterprise(query.enterprise)
         enterpriseName.value = ext.name
@@ -497,15 +606,27 @@ onMounted(() => {
 
 <template>
   <div class="demand-list page-fade-in">
-    <PageHeader title="需求管理" description="需求广场的创建、审核、发布编辑与立项管理">
+    <PageHeader title="需求管理" description="需求广场的新增、审核、发布编辑与立项管理">
       <template #actions>
+        <ColumnController
+          v-model="visibleColKeys"
+          storage-key="demands"
+          :columns="columns.map((c) => ({ key: c.colKey, title: c.title }))"
+        />
+        <t-button variant="outline" :loading="archivingAll" :disabled="archivingAll" @click="onBulkArchive">
+          一键归档
+        </t-button>
+        <t-button variant="outline" :loading="exportingAll" @click="onExportAll">
+          <template #icon><DownloadIcon /></template>
+          导出全部
+        </t-button>
         <t-button variant="outline" @click="onExport">
           <template #icon><DownloadIcon /></template>
           导出
         </t-button>
         <t-button theme="primary" @click="openCreate">
           <template #icon><AddIcon /></template>
-          创建需求
+          新增需求
         </t-button>
       </template>
     </PageHeader>
@@ -539,7 +660,6 @@ onMounted(() => {
         查询
       </t-button>
       <t-button variant="outline" theme="default" @click="onReset">
-        <template #icon><RefreshIcon /></template>
         重置
       </t-button>
       <t-tag
@@ -569,7 +689,7 @@ onMounted(() => {
         hover
         resizable
         :data="list"
-        :columns="columns"
+        :columns="visibleColumns"
         :sort="tableSort"
         :loading="loading"
         :pagination="pagination"
@@ -592,14 +712,17 @@ onMounted(() => {
         <template #publisher="{ row }">
           <div class="publisher-cell">
             <span class="publisher-name">{{ publisherNameOf(row) }}</span>
-            <t-tag
-              v-if="publisherTagOf(row)"
-              size="small"
-              :theme="publisherTagOf(row)!.theme"
-              :variant="publisherTagOf(row)!.variant"
-            >
-              {{ publisherTagOf(row)!.text }}
-            </t-tag>
+            <div class="tag-row">
+              <t-tag v-if="row.publisherId" size="small" variant="light">{{ row.publisherId }}</t-tag>
+              <t-tag
+                v-if="publisherTagOf(row)"
+                size="small"
+                :theme="publisherTagOf(row)!.theme"
+                :variant="publisherTagOf(row)!.variant"
+              >
+                {{ publisherTagOf(row)!.text }}
+              </t-tag>
+            </div>
           </div>
         </template>
 
@@ -699,12 +822,20 @@ onMounted(() => {
             >
               代报名
             </t-button>
+            <!-- 已驳回 / 已关闭 / 已立项：归档（可在归档管理中恢复） -->
+            <t-popconfirm
+              v-if="row.status === 'rejected' || row.status === 'closed' || row.status === 'projected'"
+              content="确认归档该需求？归档后可在归档管理中恢复"
+              @confirm="onArchiveDemand(row)"
+            >
+              <t-button variant="text" size="small" theme="warning" :loading="archivingId === row.id">归档</t-button>
+            </t-popconfirm>
           </div>
         </template>
       </t-table>
     </div>
 
-    <!-- 创建 / 完成并发布 / 编辑弹窗 -->
+    <!-- 新增 / 完成并发布 / 编辑弹窗 -->
     <DemandPublishDialog v-model:visible="publishVisible" :mode="publishMode" :demand="current" @success="load" />
 
     <!-- 待审核：只读审核对话框 -->
@@ -735,7 +866,7 @@ onMounted(() => {
             creatable
             :options="proxyOptions"
             placeholder="选择已注册的个人用户/企业，或直接输入新报名方"
-            tips="未注册的报名方可直接输入名称创建；选中已注册将自动填充联系方式"
+            tips="未注册的报名方可直接输入名称新增；选中已注册将自动填充联系电话"
           />
         </t-form-item>
         <div class="form-row">
@@ -764,6 +895,15 @@ onMounted(() => {
         </div>
       </template>
     </t-dialog>
+
+    <!-- 一键归档：状态选择二次确认对话框 -->
+    <BulkArchiveDialog
+      v-model:visible="bulkVisible"
+      title="一键归档 · 需求"
+      :statuses="bulkStatuses"
+      :loading="archivingAll"
+      @confirm="onBulkConfirm"
+    />
   </div>
 </template>
 
@@ -805,6 +945,13 @@ onMounted(() => {
   font-size: 14px;
   line-height: 20px;
   color: var(--td-text-color-primary);
+}
+
+.tag-row {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex-wrap: wrap;
 }
 
 .op-cell {

@@ -1,6 +1,5 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
-import { RefreshIcon } from 'tdesign-icons-vue-next'
 import PageHeader from '@/components/PageHeader.vue'
 import StatCard from '@/components/StatCard.vue'
 import { fetchPointsIssuanceRecords } from '@/api/mall'
@@ -12,13 +11,20 @@ const loading = ref(false)
 const list = ref<PointsRecord[]>([])
 const userLabels = ref<Record<string, string>>({})
 
+/* 选项 label 形如「昵称（UID）」，展示时拆出名称，ID 以标签单独呈现 */
+function displayName(id: string): string {
+  const label = userLabels.value[id]
+  if (!label) return id
+  return label.replace(/（[^）]*）\s*$/, '')
+}
+
 const columns = [
-  { colKey: 'id', title: '流水号', width: 110 },
-  { colKey: 'user', title: '用户', cell: 'user', width: 160 },
-  { colKey: 'delta', title: '变动', cell: 'delta', width: 90, resizable: true },
-  { colKey: 'balance', title: '变动后余额', width: 110, resizable: true },
+  { colKey: 'id', title: '流水号', width: 110 , ellipsis: true},
+  { colKey: 'user', title: '用户', cell: 'user', width: 160 , ellipsis: true},
+  { colKey: 'delta', title: '变动', cell: 'delta', width: 90, resizable: true , ellipsis: true},
+  { colKey: 'balance', title: '变动后余额', width: 110, resizable: true , ellipsis: true},
   { colKey: 'reason', title: '事由', ellipsis: true },
-  { colKey: 'at', title: '时间', width: 160, resizable: true },
+  { colKey: 'at', title: '时间', width: 160, resizable: true , ellipsis: true},
 ]
 
 const totalGranted = computed(() =>
@@ -53,10 +59,6 @@ onMounted(load)
 
     <div class="page-filter-bar">
       <span class="panel-tip">仅记录规则自动发放；管理员手动调整与商城兑换扣减不在此列。</span>
-      <t-button variant="outline" style="margin-left: auto" @click="load">
-        <template #icon><RefreshIcon /></template>
-        刷新
-      </t-button>
     </div>
 
     <div class="page-card">
@@ -70,7 +72,9 @@ onMounted(load)
         :loading="loading"
         empty="暂无发放记录"
       >
-        <template #user="{ row }">{{ userLabels[row.userId] ?? row.userId }}</template>
+        <template #user="{ row }">
+          {{ displayName(row.userId) }}<t-tag v-if="row.userId" class="id-tag" size="small" variant="light">{{ row.userId }}</t-tag>
+        </template>
         <template #delta="{ row }">
           <span :class="row.delta > 0 ? 'delta-add' : 'delta-sub'">
             {{ row.delta > 0 ? `+${row.delta}` : row.delta }}

@@ -1,5 +1,6 @@
 import { Body, Controller, Get, HttpCode, Post, Query, Req } from '@nestjs/common'
 import type { AuthenticatedRequest } from '../../common/interfaces/authenticated-request'
+import { RequirePermission } from '../../common/decorators/require-permission.decorator'
 import { LedgersService } from './ledgers.service'
 import { AdjustExperienceDto } from './dto/adjust-experience.dto'
 import { AdjustPointsDto } from './dto/adjust-points.dto'
@@ -10,11 +11,13 @@ import { QueryPointsRecordsDto } from './dto/query-points-records.dto'
 export class LedgersController {
   constructor(private readonly ledgers: LedgersService) {}
 
+  @RequirePermission('/rules/experience-records')
   @Get('experience-records')
   findExperienceRecords(@Query() query: QueryExperienceRecordsDto) {
     return this.ledgers.findExperienceRecords(query.targetType, query.targetId)
   }
 
+  @RequirePermission('/rules/experience-records')
   @HttpCode(200)
   @Post('experience-records')
   adjustExperience(@Body() dto: AdjustExperienceDto, @Req() req: AuthenticatedRequest) {
@@ -27,11 +30,13 @@ export class LedgersController {
     )
   }
 
+  @RequirePermission('/rules/ledger')
   @Get('points-records')
   findPointsRecords(@Query() query: QueryPointsRecordsDto) {
     return this.ledgers.findPointsRecords(query.userId)
   }
 
+  @RequirePermission('/rules/ledger')
   @HttpCode(200)
   @Post('points-records')
   adjustPoints(@Body() dto: AdjustPointsDto, @Req() req: AuthenticatedRequest) {

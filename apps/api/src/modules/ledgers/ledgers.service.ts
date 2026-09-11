@@ -6,7 +6,7 @@ import { formatNow } from '../../common/utils/time'
 
 /* 经验值/积分账本（wiki-backend.md §7.9）：
  * 手动调整走事务（余额更新 + 流水写入 source=manual、operator=登录管理员）。
- * 经验调整无审计（M0 口径）；积分调整写审计（积分商城/积分调整）。 */
+ * 经验值调整无审计；积分调整写审计（积分商城/积分调整）。 */
 @Injectable()
 export class LedgersService {
   constructor(

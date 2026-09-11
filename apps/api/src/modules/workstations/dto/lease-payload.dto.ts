@@ -1,7 +1,7 @@
 import { Type } from 'class-transformer'
 import { IsArray, IsBoolean, IsIn, IsInt, IsOptional, IsString, Min } from 'class-validator'
 
-/* 租约创建载荷（对照 apps/admin/src/api/workstations.ts LeasePayload） */
+/* 租约新增载荷（对照 apps/admin/src/api/workstations.ts LeasePayload） */
 export class LeasePayloadDto {
   @IsString()
   enterpriseId!: string

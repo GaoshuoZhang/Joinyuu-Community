@@ -1,11 +1,12 @@
 <script setup lang="ts">
 import { computed, onMounted, reactive, ref } from 'vue'
 import { useRouter } from 'vue-router'
-import { RefreshIcon, SearchIcon, DownloadIcon } from 'tdesign-icons-vue-next'
+import { SearchIcon, DownloadIcon } from 'tdesign-icons-vue-next'
 import { MessagePlugin } from 'tdesign-vue-next'
 import PageHeader from '@/components/PageHeader.vue'
 import StatusTag from '@/components/StatusTag.vue'
 import IdentityTags from '@/components/IdentityTags.vue'
+import ColumnController from '@/components/ColumnController.vue'
 import { fetchIndividuals } from '@/api/individuals'
 import { exportCsv, statusLabel } from '@/utils/exportCsv'
 import type { User, UserIdentity } from '@/types'
@@ -29,15 +30,23 @@ const statusOptions = [
 ]
 
 const columns = [
-  { colKey: 'user', title: '成员', cell: 'user', width: 190 },
-  { colKey: 'title', title: '社区个体头衔', cell: 'title', width: 200 },
-  { colKey: 'level', title: '经验等级', cell: 'level', width: 90 },
-  { colKey: 'others', title: '其他关联身份', cell: 'others' },
-  { colKey: 'points', title: '积分', width: 85 },
-  { colKey: 'status', title: '状态', cell: 'status', width: 95 },
-  { colKey: 'registeredAt', title: '注册时间', width: 115 },
+  { colKey: 'user', title: '成员', cell: 'user', width: 190 , ellipsis: true},
+  { colKey: 'title', title: '社区个体头衔', cell: 'title', width: 200 , ellipsis: true},
+  { colKey: 'level', title: '经验值等级', cell: 'level', width: 90 , ellipsis: true},
+  { colKey: 'others', title: '其他关联身份', cell: 'others' , ellipsis: true},
+  { colKey: 'points', title: '积分', width: 85 , ellipsis: true},
+  { colKey: 'status', title: '状态', cell: 'status', width: 95 , ellipsis: true},
+  { colKey: 'registeredAt', title: '注册时间', width: 115 , ellipsis: true},
   { colKey: 'op', title: '操作', cell: 'op', width: 90 },
 ]
+
+/* 列配置：本地持久化显隐/顺序 */
+const visibleColKeys = ref<string[]>(columns.map((c) => c.colKey))
+
+const visibleColumns = computed(() => {
+  const byKey = new Map(columns.map((c) => [c.colKey, c]))
+  return visibleColKeys.value.map((k) => byKey.get(k)).filter(Boolean)
+})
 
 const pagination = computed(() => ({
   current: query.page,
@@ -97,10 +106,10 @@ function goDetail(row: User) {
 function onExport() {
   exportCsv(
     '社区个体列表',
-    ['编号', '昵称', '手机号', '社区个体头衔', '经验等级', '积分', '状态', '注册时间'],
+    ['编号', '昵称', '联系电话', '社区个体头衔', '经验值等级', '积分', '状态', '注册时间'],
     list.value.map((u) => [
       u.uid,
-      u.nickname,
+      `${u.nickname} [${u.uid}]`,
       u.phone,
       individualTitle(u),
       individualLevel(u),
@@ -119,6 +128,11 @@ onMounted(load)
   <div class="individual-list page-fade-in">
     <PageHeader title="社区个体" description="持有社区个体身份的成员（该身份每人至多一个）">
       <template #actions>
+        <ColumnController
+          v-model="visibleColKeys"
+          storage-key="individuals"
+          :columns="columns.map((c) => ({ key: c.colKey, title: c.title }))"
+        />
         <t-button variant="outline" @click="onExport">
           <template #icon><DownloadIcon /></template>
           导出
@@ -130,7 +144,7 @@ onMounted(load)
       <t-input
         v-model="query.keyword"
         class="filter-keyword"
-        placeholder="搜索姓名/ID/手机号"
+        placeholder="搜索姓名/ID/联系电话"
         clearable
         @enter="onSearch"
       />
@@ -147,7 +161,6 @@ onMounted(load)
         查询
       </t-button>
       <t-button variant="outline" theme="default" @click="onReset">
-        <template #icon><RefreshIcon /></template>
         重置
       </t-button>
     </div>
@@ -159,7 +172,7 @@ onMounted(load)
         hover
         resizable
         :data="list"
-        :columns="columns"
+        :columns="visibleColumns"
         :loading="loading"
         :pagination="pagination"
         empty="暂无符合条件的社区个体"
@@ -171,7 +184,7 @@ onMounted(load)
             <t-avatar size="36px">{{ row.nickname.slice(0, 1) }}</t-avatar>
             <div class="user-cell-info">
               <span class="user-name">{{ row.nickname }}</span>
-              <span class="user-id">{{ row.uid }}</span>
+              <t-tag class="id-tag-block" size="small" variant="light">{{ row.uid }}</t-tag>
             </div>
           </div>
         </template>
@@ -220,12 +233,6 @@ onMounted(load)
   font-size: 14px;
   line-height: 22px;
   color: var(--td-text-color-primary);
-}
-
-.user-id {
-  font-size: 12px;
-  line-height: 18px;
-  color: var(--td-text-color-secondary);
 }
 
 .muted-dash {

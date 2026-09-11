@@ -1,9 +1,10 @@
 import type { Application } from '@/types'
 
-/* 申请审批数据 — 命名前缀 AP3001+；通用审批流：提交 →（通过/驳回），全部带审批记录时间线
- * 迁移后仅保留入驻申请（settle）与身份绑定（identity）：
- *   空间预约（space）→ 公共空间模块 reservations（SR2001+）
- *   展示页发布（showcase）→ 资讯内容模块 showcaseRequests（SC1001+） */
+/* 申请审核数据 — 命名前缀 AP3001+；通用审核流：提交 →（通过/驳回），全部带审核记录时间线
+ * 四类申请（2026-09-11 扩展）：企业入驻（settle）/ 个体入驻（individual）/
+ * 企业合作（cooperation）/ 身份绑定（identity）
+ * 迁移说明：空间预约（space）→ 公共空间模块 reservations（SR2001+）
+ *           展示页发布（showcase）→ 资讯内容模块 showcaseRequests（SC1001+） */
 export const applications: Application[] = [
   {
     id: 'AP3001',
@@ -16,8 +17,7 @@ export const applications: Application[] = [
     summary: '申请入驻独立办公室（B 区 201），团队 12 人',
     details: [
       { label: '企业名称', value: '芯启半导体' },
-      { label: '发展阶段', value: 'B 轮' },
-      { label: '申请空间', value: '独立办公室 B-201（12 工位）' },
+      { label: '申请空间', value: '独立办公室 B-201（12 办公位）' },
       { label: '团队规模', value: '50-100 人（入驻 12 人）' },
       { label: '营业执照', value: '已上传 chipseed-license.pdf' },
       { label: '期望入驻', value: '2025-03-20' },
@@ -56,17 +56,17 @@ export const applications: Application[] = [
     targetName: '木白设计工作室',
     submittedAt: '2025-05-10 16:40',
     status: 'approved',
-    summary: '申请入驻开放工位区（A 区 05-06）',
+    summary: '申请入驻开放办公位区（A 区 05-06）',
     details: [
       { label: '企业名称', value: '木白设计工作室' },
-      { label: '申请空间', value: '开放工位 A-05、A-06' },
+      { label: '申请空间', value: '开放办公位 A-05、A-06' },
       { label: '团队规模', value: '4 人（入驻 1 人）' },
       { label: '期望入驻', value: '2025-05-16' },
     ],
     records: [
       { step: '提交申请', operator: '孟繁星', action: 'submit', comment: '', at: '2025-05-10 16:40' },
       { step: '运营初审', operator: '社区管理员', action: 'approve', comment: '设计类企业符合社区业态规划', at: '2025-05-13 14:20' },
-      { step: '正式入驻', operator: '社区管理员', action: 'approve', comment: '分配工位 A-05/06', at: '2025-05-15 10:00' },
+      { step: '正式入驻', operator: '社区管理员', action: 'approve', comment: '分配办公位 A-05/06', at: '2025-05-15 10:00' },
     ],
   },
   {
@@ -113,16 +113,15 @@ export const applications: Application[] = [
     type: 'settle',
     applicantName: '沈嘉禾',
     applicantPhone: '13801210006',
-    targetName: '拾光文创',
+    targetName: '木棉文创社',
     submittedAt: '2026-09-06 10:18',
     status: 'pending',
-    summary: '申请入驻开放工位区，团队 5 人，期望 9 月内入驻',
+    summary: '申请入驻开放办公位区，团队 5 人，期望 9 月内入驻',
     details: [
-      { label: '企业名称', value: '拾光文创' },
-      { label: '发展阶段', value: '天使轮' },
-      { label: '申请空间', value: '开放工位 A 区（3 个工位）' },
+      { label: '企业名称', value: '木棉文创社' },
+      { label: '申请空间', value: '开放办公位 A 区（3 个办公位）' },
       { label: '团队规模', value: '10 人以下（入驻 3 人）' },
-      { label: '营业执照', value: '已上传 shiguang-license.pdf' },
+      { label: '营业执照', value: '已上传 mumian-license.pdf' },
       { label: '期望入驻', value: '2026-09-30 前' },
     ],
     records: [
@@ -140,8 +139,7 @@ export const applications: Application[] = [
     summary: '申请入驻独立办公室，团队 8 人，从事光通信芯片设计',
     details: [
       { label: '企业名称', value: '光年半导体' },
-      { label: '发展阶段', value: '天使轮' },
-      { label: '申请空间', value: '独立办公室 B 区（8 工位）' },
+      { label: '申请空间', value: '独立办公室 B 区（8 办公位）' },
       { label: '团队规模', value: '10-50 人（入驻 8 人）' },
       { label: '营业执照', value: '已上传 lightyear-license.pdf' },
       { label: '期望入驻', value: '2026-10-15 前' },
@@ -178,11 +176,10 @@ export const applications: Application[] = [
     targetName: '星河文创社',
     submittedAt: '2026-08-28 11:00',
     status: 'approved',
-    summary: '申请入驻开放工位区（C 区 2 工位），非遗手工艺品牌',
+    summary: '申请入驻开放办公位区（C 区 2 办公位），非遗手工艺品牌',
     details: [
       { label: '企业名称', value: '星河文创社' },
-      { label: '发展阶段', value: '种子轮' },
-      { label: '申请空间', value: '半开放工位 C-301、C-302' },
+      { label: '申请空间', value: '半开放办公位 C-301、C-302' },
       { label: '团队规模', value: '10 人以下（入驻 2 人）' },
       { label: '营业执照', value: '已上传 xinghe-license.pdf' },
       { label: '期望入驻', value: '2026-09-05' },
@@ -190,18 +187,18 @@ export const applications: Application[] = [
     records: [
       { step: '提交申请', operator: '林知夏', action: 'submit', comment: '非遗手工艺品牌，主理人入驻', at: '2026-08-28 11:00' },
       { step: '运营初审', operator: '社区管理员', action: 'approve', comment: '文创类企业符合社区业态', at: '2026-09-01 10:30' },
-      { step: '正式入驻', operator: '社区管理员', action: 'approve', comment: '分配工位 C-301/302', at: '2026-09-04 09:15' },
+      { step: '正式入驻', operator: '社区管理员', action: 'approve', comment: '分配办公位 C-301/302', at: '2026-09-04 09:15' },
     ],
   },
   {
     id: 'AP3016',
-    type: 'identity',
+    type: 'individual',
     applicantName: '许新言',
     applicantPhone: '13801210015',
     targetName: '社区个体 · 社群运营自由职业者',
     submittedAt: '2026-09-07 09:30',
     status: 'approved',
-    summary: '申请绑定社区个体身份：社群运营自由职业者',
+    summary: '申请入驻成为社区个体：社群运营自由职业者',
     details: [
       { label: '申请人', value: '许新言' },
       { label: '当前身份', value: '个人用户' },
@@ -211,6 +208,64 @@ export const applications: Application[] = [
     records: [
       { step: '提交申请', operator: '许新言', action: 'submit', comment: '希望以社区个体身份承接运营类需求', at: '2026-09-07 09:30' },
       { step: '运营审核', operator: '社区管理员', action: 'approve', comment: '案例齐全，符合社区个体入驻标准', at: '2026-09-07 18:00' },
+    ],
+  },
+  {
+    id: 'AP3017',
+    type: 'cooperation',
+    applicantName: '周慕深',
+    applicantPhone: '13801210004',
+    targetName: '云图数据 · 战略合作',
+    submittedAt: '2026-09-08 10:12',
+    status: 'pending',
+    summary: '申请与社区建立企业合作关系（数据服务方向）',
+    details: [
+      { label: '企业名称', value: '云图数据' },
+      { label: '行业', value: '大数据' },
+      { label: '团队规模', value: '50-100 人' },
+      { label: '合作方向', value: '社区数据中台共建' },
+      { label: '企业简介', value: '云图数据专注城市数据资产化运营，服务多家产业园区。' },
+    ],
+    records: [
+      { step: '提交申请', operator: '周慕深', action: 'submit', comment: '希望以合作企业身份参与社区数据共建', at: '2026-09-08 10:12' },
+    ],
+  },
+  {
+    id: 'AP3018',
+    type: 'individual',
+    applicantName: '白若溪',
+    applicantPhone: '13801210009',
+    targetName: '社区个体 · 独立策展人',
+    submittedAt: '2026-09-08 15:40',
+    status: 'pending',
+    summary: '申请入驻成为社区个体：独立策展人',
+    details: [
+      { label: '申请人', value: '白若溪' },
+      { label: '目标身份', value: '社区个体 · 独立策展人' },
+      { label: '专业领域', value: '艺术策展' },
+      { label: '证明材料', value: '过往策展项目 4 个' },
+    ],
+    records: [
+      { step: '提交申请', operator: '白若溪', action: 'submit', comment: '希望以社区个体身份承接策展类项目', at: '2026-09-08 15:40' },
+    ],
+  },
+  {
+    id: 'AP3019',
+    type: 'identity',
+    applicantName: '何雨桐',
+    applicantPhone: '13801210013',
+    targetName: '星环科技 · 产品负责人',
+    submittedAt: '2026-09-09 09:20',
+    status: 'pending',
+    summary: '申请绑定企业身份：星环科技 · 产品负责人',
+    details: [
+      { label: '申请人', value: '何雨桐' },
+      { label: '目标身份', value: '星环科技 · 产品负责人' },
+      { label: '证明材料', value: '在职证明扫描件' },
+      { label: '企业确认', value: '待企业确认' },
+    ],
+    records: [
+      { step: '提交申请', operator: '何雨桐', action: 'submit', comment: '绑定合作企业身份', at: '2026-09-09 09:20' },
     ],
   },
 ]

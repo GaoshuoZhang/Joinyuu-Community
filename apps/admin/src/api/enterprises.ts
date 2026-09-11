@@ -1,5 +1,5 @@
 import type { Enterprise, PageResult, User } from '@/types'
-import { httpGet, httpPatch } from './http'
+import { httpDelete, httpGet, httpPatch, httpPost, httpPut } from './http'
 
 export interface EnterpriseQuery {
   page: number
@@ -9,7 +9,25 @@ export interface EnterpriseQuery {
   status?: string
 }
 
-/* 已接入 M1 真实接口：GET /api/admin/enterprises?page&pageSize&keyword&industry&status */
+export interface EnterprisePayload {
+  name: string
+  industry: string
+  size: string
+  leaseType: string
+  /** 关联用户 UID（必填；联系人姓名/联系电话/邮箱由服务端按该用户解析） */
+  contactUserId: string
+  /** 联系人职位（展示于成员管理） */
+  contactTitle?: string
+  contactName?: string
+  contactPhone?: string
+  foundedAt?: string
+  settledAt?: string
+  contactEmail?: string
+  description?: string
+  tags?: string[]
+}
+
+/* GET /api/admin/enterprises?page&pageSize&keyword&industry&status */
 export async function fetchEnterprises(query: EnterpriseQuery): Promise<PageResult<Enterprise>> {
   const qs = new URLSearchParams()
   qs.set('page', String(query.page))
@@ -20,19 +38,19 @@ export async function fetchEnterprises(query: EnterpriseQuery): Promise<PageResu
   return httpGet<PageResult<Enterprise>>(`/enterprises?${qs}`)
 }
 
-/* 已接入 M1 真实接口：GET /api/admin/enterprises/options — 企业下拉选项（办公位租约等场景使用） */
+/* GET /api/admin/enterprises/options — 企业下拉选项（办公位租约等场景使用） */
 export async function fetchEnterpriseOptions(): Promise<{ label: string; value: string }[]> {
   return httpGet<{ label: string; value: string }[]>('/enterprises/options')
 }
 
-/* 已接入 M1 真实接口：GET /api/admin/enterprises/:id
+/* GET /api/admin/enterprises/:id
  * 返回企业详情 + 成员列表（成员 = 持有该企业 community_enterprise 身份的用户）
  */
 export async function fetchEnterprise(id: string): Promise<{ enterprise: Enterprise; members: User[] }> {
   return httpGet<{ enterprise: Enterprise; members: User[] }>(`/enterprises/${id}`)
 }
 
-/* 已接入 M1 真实接口：PATCH /api/admin/enterprises/:id/showcase-status，入参 { status, comment }
+/* PATCH /api/admin/enterprises/:id/showcase-status，入参 { status, comment }
  * 展示页审核：published / rejected / pending
  */
 export async function reviewShowcase(
@@ -50,7 +68,33 @@ export interface EnterpriseStats {
   projectCount: number
 }
 
-/* 已接入 M1 真实接口：GET /api/admin/enterprises/:id/stats — 企业数据概览 */
+/* GET /api/admin/enterprises/:id/stats — 企业数据概览 */
 export async function fetchEnterpriseStats(id: string): Promise<EnterpriseStats> {
   return httpGet<EnterpriseStats>(`/enterprises/${id}/stats`)
+}
+
+/* 社区企业 CRUD：新增 / 编辑 / 停用 / 删除 */
+/* POST /api/admin/enterprises — 管理员手动新增企业（新增即正常态） */
+export async function createEnterprise(payload: EnterprisePayload): Promise<{ id: string }> {
+  return httpPost<{ id: string }>('/enterprises', payload)
+}
+
+/* PUT /api/admin/enterprises/:id — 编辑企业基本信息 */
+export async function updateEnterprise(id: string, payload: EnterprisePayload): Promise<{ code: number }> {
+  return httpPut<{ code: number }>(`/enterprises/${id}`, payload)
+}
+
+/* POST /api/admin/enterprises/:id/disable — 停用企业（停用后不可新增新租约） */
+export async function disableEnterprise(id: string): Promise<{ code: number }> {
+  return httpPost<{ code: number }>(`/enterprises/${id}/disable`)
+}
+
+/* POST /api/admin/enterprises/:id/enable — 启用企业（停用态恢复为正常） */
+export async function enableEnterprise(id: string): Promise<{ code: number }> {
+  return httpPost<{ code: number }>(`/enterprises/${id}/enable`)
+}
+
+/* DELETE /api/admin/enterprises/:id — 物理删除（存在成员/租约/需求/项目引用时后端拒绝） */
+export async function deleteEnterprise(id: string): Promise<{ code: number }> {
+  return httpDelete<{ code: number }>(`/enterprises/${id}`)
 }

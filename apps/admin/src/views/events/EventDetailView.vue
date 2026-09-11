@@ -8,11 +8,13 @@ import EventFormDialog from '@/components/EventFormDialog.vue'
 import EventScheduleDialog from '@/components/EventScheduleDialog.vue'
 import { identityTypeMap, userLevelMap } from '@/constants/identity'
 import {
+  archiveEvent,
   cancelEvent,
   cancelEventSchedule,
   checkInEvent,
   fetchEvent,
   publishEventNow,
+  restoreCancelledEvent,
   reviewEventEnrollment,
   toggleEventEnrollment,
 } from '@/api/events'
@@ -23,6 +25,8 @@ const router = useRouter()
 const loading = ref(true)
 const event = ref<CommunityEvent | null>(null)
 const tab = ref('info')
+/* 已归档条目：隐藏全部写操作（含报名审核/签到），仅保留只读内容 */
+const isArchived = computed(() => !!event.value?.deletedAt)
 /* 当前审核中的记录标识：`${userId}:${approved | rejected}` */
 const reviewing = ref('')
 /* 当前手动签到中的用户标识 */
@@ -33,7 +37,7 @@ const editVisible = ref(false)
 /* 操作中的标识 */
 const acting = ref('')
 
-function isActing(action: 'publish-now' | 'cancel' | 'cancel-schedule' | 'enrollment') {
+function isActing(action: 'publish-now' | 'cancel' | 'cancel-schedule' | 'enrollment' | 'restore' | 'archive') {
   return acting.value === action
 }
 
@@ -71,7 +75,7 @@ async function onCancelSchedule() {
 async function onToggleEnrollment() {
   if (!event.value) return
   acting.value = 'enrollment'
-  /* 先取旧状态再调接口：接口原地翻转了 enrollmentOpen，后再判断会拿到新值导致提示反转（2026-09-10 修） */
+  /* 先取旧状态再调接口：接口原地翻转了 enrollmentOpen，后再判断会拿到新值导致提示反转 */
   const wasOpen = event.value.enrollmentOpen
   try {
     await toggleEventEnrollment(event.value.id)
@@ -106,19 +110,49 @@ function openSchedule() {
   scheduleVisible.value = true
 }
 
+/* 已取消 → 转为待发布（同步列表页操作） */
+async function onRestore() {
+  if (!event.value) return
+  acting.value = 'restore'
+  try {
+    await restoreCancelledEvent(event.value.id)
+    MessagePlugin.success('活动已转为待发布')
+    await load(true)
+  } catch (e) {
+    MessagePlugin.error(e instanceof Error ? e.message : '操作失败')
+  } finally {
+    acting.value = ''
+  }
+}
+
+/* 已结束 / 已取消 → 归档（同步列表页操作） */
+async function onArchive() {
+  if (!event.value) return
+  acting.value = 'archive'
+  try {
+    await archiveEvent(event.value.id)
+    MessagePlugin.success('活动已归档')
+    await load(true)
+  } catch (e) {
+    MessagePlugin.error(e instanceof Error ? e.message : '操作失败')
+  } finally {
+    acting.value = ''
+  }
+}
+
 const enrollmentColumns = [
-  { colKey: 'name', title: '报名人', width: 100 },
+  { colKey: 'name', title: '报名人', width: 100 , ellipsis: true},
   { colKey: 'enterprise', title: '所属企业', width: 150, ellipsis: true },
-  { colKey: 'phone', title: '手机号', width: 130 },
-  { colKey: 'appliedAt', title: '报名时间', width: 150 },
-  { colKey: 'status', title: '状态', cell: 'status', width: 96 },
+  { colKey: 'phone', title: '联系电话', width: 130 , ellipsis: true},
+  { colKey: 'appliedAt', title: '报名时间', width: 150 , ellipsis: true},
+  { colKey: 'status', title: '状态', cell: 'status', width: 96 , ellipsis: true},
   { colKey: 'op', title: '操作', cell: 'op', width: 120 },
 ]
 
 const checkInColumns = [
-  { colKey: 'name', title: '报名人', width: 120 },
+  { colKey: 'name', title: '报名人', width: 120 , ellipsis: true},
   { colKey: 'enterprise', title: '所属企业', width: 180, ellipsis: true },
-  { colKey: 'checkedIn', title: '签到状态', cell: 'checkState', width: 140 },
+  { colKey: 'checkedIn', title: '签到状态', cell: 'checkState', width: 140 , ellipsis: true},
   { colKey: 'op', title: '操作', cell: 'op', width: 120 },
 ]
 
@@ -206,6 +240,7 @@ onMounted(() => load())
                 :scheduled-at="event.scheduledAt"
                 :enrollment-open="event.enrollmentOpen"
               />
+              <t-tag v-if="isArchived" theme="default" variant="light">已归档</t-tag>
             </div>
             <!-- 可见范围与可报名范围同行展示 -->
             <div class="scope-row">
@@ -243,33 +278,51 @@ onMounted(() => load())
             </div>
           </div>
           <div class="head-actions">
-            <template v-if="event.status === 'pending_release'">
-              <t-button theme="primary" :loading="acting === 'publish-now'" @click="onPublishNow">立即发布</t-button>
-              <t-button variant="outline" @click="openSchedule">定时发布</t-button>
-              <t-button variant="outline" @click="editVisible = true">编辑</t-button>
-              <t-popconfirm content="确认取消该活动？取消后不可恢复" @confirm="onCancel">
-                <t-button variant="outline" theme="danger" :loading="acting === 'cancel'">取消活动</t-button>
-              </t-popconfirm>
-            </template>
-            <template v-else-if="event.status === 'scheduled'">
-              <t-popconfirm content="确认取消定时发布？该活动将转为「待发布」" @confirm="onCancelSchedule">
-                <t-button variant="outline" theme="warning" :loading="acting === 'cancel-schedule'">
-                  取消定时发布
+            <template v-if="!isArchived">
+              <template v-if="event.status === 'pending_release'">
+                <t-button variant="outline" @click="editVisible = true">编辑</t-button>
+                <t-button theme="primary" :loading="acting === 'publish-now'" @click="onPublishNow">立即发布</t-button>
+                <t-button variant="outline" @click="openSchedule">定时发布</t-button>
+                <t-popconfirm content="确认取消该活动？取消后不可恢复" @confirm="onCancel">
+                  <t-button variant="outline" theme="danger" :loading="acting === 'cancel'">取消活动</t-button>
+                </t-popconfirm>
+              </template>
+              <template v-else-if="event.status === 'cancelled'">
+                <t-popconfirm content="确认将该活动转为「待发布」？" @confirm="onRestore">
+                  <t-button variant="outline" theme="primary" :loading="acting === 'restore'">转为待发布</t-button>
+                </t-popconfirm>
+                <t-popconfirm content="确认归档该活动？归档后可在归档管理中恢复" @confirm="onArchive">
+                  <t-button variant="outline" theme="warning" :loading="acting === 'archive'">归档</t-button>
+                </t-popconfirm>
+              </template>
+              <template v-else-if="event.status === 'scheduled'">
+                <t-popconfirm content="确认取消定时发布？该活动将转为「待发布」" @confirm="onCancelSchedule">
+                  <t-button variant="outline" theme="warning" :loading="acting === 'cancel-schedule'">
+                    取消定时发布
+                  </t-button>
+                </t-popconfirm>
+              </template>
+              <template v-else-if="event.status === 'published'">
+                <t-button variant="outline" @click="editVisible = true">编辑</t-button>
+                <t-button variant="outline" :loading="acting === 'enrollment'" @click="onToggleEnrollment">
+                  {{ event.enrollmentOpen ? '暂停报名' : '开放报名' }}
                 </t-button>
-              </t-popconfirm>
-            </template>
-            <template v-else-if="event.status === 'published'">
-              <t-button variant="outline" :loading="acting === 'enrollment'" @click="onToggleEnrollment">
-                {{ event.enrollmentOpen ? '暂停报名' : '开放报名' }}
-              </t-button>
-              <t-popconfirm content="确认取消该活动？取消后不可恢复" @confirm="onCancel">
-                <t-button
-                  variant="outline"
-                  theme="danger"
-                  :loading="acting === 'cancel'"
-                >
-                  取消活动
-                </t-button>
+                <t-popconfirm content="确认取消该活动？取消后不可恢复" @confirm="onCancel">
+                  <t-button
+                    variant="outline"
+                    theme="danger"
+                    :loading="acting === 'cancel'"
+                  >
+                    取消活动
+                  </t-button>
+                </t-popconfirm>
+              </template>
+              <t-popconfirm
+                v-else-if="event.status === 'ended'"
+                content="确认归档该活动？归档后可在归档管理中恢复"
+                @confirm="onArchive"
+              >
+                <t-button variant="outline" theme="warning" :loading="acting === 'archive'">归档</t-button>
               </t-popconfirm>
             </template>
           </div>
@@ -303,7 +356,7 @@ onMounted(() => load())
         <t-tabs v-model="tab">
           <t-tab-panel value="info" label="活动信息">
             <div class="tab-body">
-              <p class="desc">{{ event.description }}</p>
+              <div class="desc rich-text" v-html="event.description"></div>
               <div class="tag-wrap">
                 <t-tag v-for="tag in event.tags" :key="tag" variant="outline" size="small">
                   {{ tag }}
@@ -320,11 +373,14 @@ onMounted(() => load())
                 :data="event.enrollments"
                 :columns="enrollmentColumns"
               >
+                <template #name="{ row }">
+                  {{ row.name }}<t-tag class="id-tag" size="small" variant="light">{{ row.userId }}</t-tag>
+                </template>
                 <template #status="{ row }">
                   <StatusTag entity="enrollment" :value="row.status" />
                 </template>
                 <template #op="{ row }">
-                  <template v-if="row.status === 'pending'">
+                  <template v-if="!isArchived && row.status === 'pending'">
                     <t-popconfirm content="确认通过该报名？" @confirm="onReview(row, 'approved')">
                       <t-button variant="text" :loading="isReviewing(row, 'approved')">通过</t-button>
                     </t-popconfirm>
@@ -351,6 +407,9 @@ onMounted(() => load())
                 :data="approvedList"
                 :columns="checkInColumns"
               >
+                <template #name="{ row }">
+                  {{ row.name }}<t-tag class="id-tag" size="small" variant="light">{{ row.userId }}</t-tag>
+                </template>
                 <template #checkState="{ row }">
                   <t-tag v-if="row.checkedIn" theme="success" variant="light">
                     已签到 {{ checkInTime(row) }}
@@ -359,7 +418,7 @@ onMounted(() => load())
                 </template>
                 <template #op="{ row }">
                   <t-button
-                    v-if="!row.checkedIn"
+                    v-if="!isArchived && !row.checkedIn"
                     variant="text"
                     :loading="checkingIn === row.userId"
                     @click="onCheckIn(row)"

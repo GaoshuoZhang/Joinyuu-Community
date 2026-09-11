@@ -5,18 +5,19 @@ import { IdGeneratorService } from '../../common/id-generator/id-generator.servi
 import { AuditService } from '../../common/audit/audit.service'
 import { PointsEngineService } from '../../common/engine/points-engine/points-engine.service'
 import { formatNow } from '../../common/utils/time'
+import { sanitizeHtml } from '../../common/utils/sanitize-html'
 import type { EventPayloadDto } from './dto/event-payload.dto'
 import { toEventDto } from './event-dto'
 
 /* 活动模块（wiki-backend.md §7.8/§8.1/§8.4）：
  * 状态机 pending_release →(publish-now|schedule)→ published|scheduled →(到点定时任务)→ published
  * published →(endTime 到点定时任务)→ ended；pending_release/published →(cancel)→ cancelled；cancelled →(restore)→ pending_release。
- * 报名审核通过/签到触发积分/经验发放（custom 值直写事务，缺省走 PointsEngineService 规则值）。 */
+ * 报名审核通过/签到触发积分/经验值发放（custom 值直写事务，缺省走 PointsEngineService 规则值）。 */
 
-/* 触发项积分/经验流水 reason —— 沿用 M0 mock/ledgers.ts 规则流水文案风格（如「活动签到积分」） */
+/* 触发项积分/经验值流水 reason —— 沿用规则流水文案风格（如「活动签到积分」） */
 const ENROLL_APPROVED_POINTS_REASON = '活动报名奖励'
 const CHECKIN_POINTS_REASON = '活动签到积分'
-const CHECKIN_EXP_REASON = '活动签到经验'
+const CHECKIN_EXP_REASON = '活动签到经验值'
 
 interface EventQuery {
   page: number
@@ -39,7 +40,7 @@ export class EventsService {
   ) {}
 
   async findAll(query: EventQuery): Promise<{ list: unknown[]; total: number }> {
-    const where: Prisma.CommunityEventWhereInput = {}
+    const where: Prisma.CommunityEventWhereInput = { deletedAt: null }
     if (query.keyword) {
       where.OR = [
         { title: { contains: query.keyword, mode: 'insensitive' } },
@@ -104,7 +105,7 @@ export class EventsService {
         scheduledAt: null,
         enrollPoints: payload.enrollPoints ?? null,
         checkinPoints: payload.checkinPoints ?? null,
-        description: payload.description,
+        description: sanitizeHtml(payload.description),
         tags: payload.tags,
       },
     })
@@ -129,7 +130,7 @@ export class EventsService {
         capacity: payload.capacity,
         speaker: payload.speaker,
         host: payload.host,
-        description: payload.description,
+        description: sanitizeHtml(payload.description),
         tags: payload.tags,
         enrollPoints: payload.enrollPoints ?? null,
         checkinPoints: payload.checkinPoints ?? null,
@@ -236,7 +237,10 @@ export class EventsService {
       throw new ConflictException('该状态下不可取消活动')
     }
 
-    await this.prisma.communityEvent.update({ where: { id }, data: { status: 'cancelled' } })
+    await this.prisma.communityEvent.update({
+      where: { id },
+      data: { status: 'cancelled', archivableAt: formatNow() },
+    })
 
     await this.audit.record({
       module: '活动管理',
@@ -265,6 +269,29 @@ export class EventsService {
       target: `${event.id} · ${event.title}`,
       before: { status: event.status },
       after: { status: 'pending_release' },
+      operator,
+    })
+    return { code: 0 }
+  }
+
+  async archive(id: string, operator: string): Promise<{ code: number }> {
+    const event = await this.prisma.communityEvent.findFirst({ where: { id, deletedAt: null } })
+    if (!event) throw new NotFoundException('活动不存在')
+    if (event.status !== 'ended' && event.status !== 'cancelled') {
+      throw new ConflictException('仅已结束或已取消的活动可归档')
+    }
+
+    await this.prisma.communityEvent.update({
+      where: { id },
+      data: { deletedAt: formatNow(), deletedBy: operator },
+    })
+
+    await this.audit.record({
+      module: '活动管理',
+      action: '归档活动',
+      target: `${event.id} · ${event.title}`,
+      before: { status: event.status },
+      after: { deleted: true },
       operator,
     })
     return { code: 0 }
@@ -325,7 +352,7 @@ export class EventsService {
       } else {
         await this.engine.issuePoints(userId, 'activity_checkin', CHECKIN_POINTS_REASON)
       }
-      /* 签到经验：归属社区个体身份（引擎内按 LevelTier 重算 level） */
+      /* 签到经验值：归属社区个体身份（引擎内按 LevelTier 重算 level） */
       await this.engine.issueExperience('individual', userId, 'activity_checkin', CHECKIN_EXP_REASON)
     }
     return { code: 0 }

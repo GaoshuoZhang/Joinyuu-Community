@@ -7,16 +7,16 @@ import {
 import type { Lease, LeaseWorkstation, Workstation, WorkstationArea } from '@prisma/client'
 import { PrismaService } from '../../common/prisma/prisma.service'
 import { IdGeneratorService } from '../../common/id-generator/id-generator.service'
+import { AuditService } from '../../common/audit/audit.service'
 import { formatNow, formatToday } from '../../common/utils/time'
 import type { WorkstationAreaPayloadDto } from './dto/workstation-area.dto'
 import type { WorkstationPayloadDto } from './dto/workstation-payload.dto'
 import type { LeasePayloadDto } from './dto/lease-payload.dto'
 import type { LeaseUpdateDto } from './dto/lease-update.dto'
 
-/* 工位与租约模块（wiki-backend.md §7.12/§8.1/§8.3）：
- * 区域外键化（工位存 areaId，读取 join 出 area 名，改名无需级联）；
- * 租约创建/终止事务锁定/释放工位；expiring/expired 由前端读取派生（服务端仅存 active/terminated）。
- * 注意：M0 workstations 模块无 recordAudit 埋点，本模块同样不写审计。 */
+/* 办公位与租约模块（wiki-backend.md §7.12/§8.1/§8.3）：
+ * 区域外键化（办公位存 areaId，读取 join 出 area 名，改名无需级联）；
+ * 租约新增/终止事务锁定/释放办公位；expiring/expired 由前端读取派生（服务端仅存 active/terminated）。 */
 
 type WorkstationWithArea = Workstation & { area: WorkstationArea }
 type LeaseWithWorkstations = Lease & {
@@ -54,6 +54,7 @@ export interface LeaseDto {
   contactName: string
   contactPhone: string
   terminatedAt?: string
+  deletedAt?: string
 }
 
 export interface RenterOptionsDto {
@@ -80,7 +81,7 @@ function toWorkstationDto(w: WorkstationWithArea): WorkstationDto {
 }
 
 function toLeaseDto(l: LeaseWithWorkstations): LeaseDto {
-  /* 关联表无序号列，按 workstationId 升序重建（与 seed/mock 的 seatNo 序一致） */
+  /* 关联表无序号列，按 workstationId 升序重建（与办公位编号 seatNo 序一致） */
   const sorted = [...l.workstations].sort((a, b) => a.workstationId.localeCompare(b.workstationId))
   const dto: LeaseDto = {
     id: l.id,
@@ -99,6 +100,7 @@ function toLeaseDto(l: LeaseWithWorkstations): LeaseDto {
     contactPhone: l.contactPhone,
   }
   if (l.terminatedAt != null) dto.terminatedAt = l.terminatedAt
+  if (l.deletedAt != null) dto.deletedAt = l.deletedAt
   return dto
 }
 
@@ -107,9 +109,10 @@ export class WorkstationsService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly ids: IdGeneratorService,
+    private readonly audit: AuditService,
   ) {}
 
-  /* ---------- 工位 ---------- */
+  /* ---------- 办公位 ---------- */
 
   async findAll(): Promise<WorkstationDto[]> {
     const rows = await this.prisma.workstation.findMany({
@@ -162,22 +165,22 @@ export class WorkstationsService {
 
     const count = await this.prisma.workstation.count({ where: { areaId: id } })
     if (count > 0) {
-      throw new ConflictException('该区域下仍有工位，无法删除；请先移出或删除区域内全部工位')
+      throw new ConflictException('该区域下仍有办公位，无法删除；请先移出或删除区域内全部办公位')
     }
 
     await this.prisma.workstationArea.delete({ where: { id } })
     return { code: 0 }
   }
 
-  /* ---------- 工位创建 / 资料编辑 ---------- */
+  /* ---------- 办公位新增 / 资料编辑 ---------- */
 
   async createWorkstation(payload: WorkstationPayloadDto): Promise<WorkstationDto> {
     const area = await this.prisma.workstationArea.findUnique({ where: { name: payload.area } })
-    if (!area) throw new NotFoundException('所属区域不存在，请先在区域规划中添加')
+    if (!area) throw new NotFoundException('所属区域不存在，请先在区域规划中新增')
 
     const seatNo = payload.seatNo.trim()
     const dup = await this.prisma.workstation.findUnique({ where: { seatNo } })
-    if (dup) throw new BadRequestException('工位编号已存在')
+    if (dup) throw new BadRequestException('办公位编号已存在')
 
     const created = await this.prisma.workstation.create({
       data: {
@@ -198,14 +201,14 @@ export class WorkstationsService {
 
   async updateWorkstation(id: string, payload: WorkstationPayloadDto): Promise<{ code: number }> {
     const ws = await this.prisma.workstation.findUnique({ where: { id } })
-    if (!ws) throw new NotFoundException('工位不存在')
+    if (!ws) throw new NotFoundException('办公位不存在')
 
     const area = await this.prisma.workstationArea.findUnique({ where: { name: payload.area } })
-    if (!area) throw new NotFoundException('所属区域不存在，请先在区域规划中添加')
+    if (!area) throw new NotFoundException('所属区域不存在，请先在区域规划中新增')
 
     const seatNo = payload.seatNo.trim()
     const dup = await this.prisma.workstation.findUnique({ where: { seatNo } })
-    if (dup && dup.id !== id) throw new BadRequestException('工位编号已存在')
+    if (dup && dup.id !== id) throw new BadRequestException('办公位编号已存在')
 
     await this.prisma.workstation.update({
       where: { id },
@@ -224,9 +227,9 @@ export class WorkstationsService {
 
   async deleteWorkstation(id: string): Promise<{ code: number }> {
     const ws = await this.prisma.workstation.findUnique({ where: { id } })
-    if (!ws) throw new NotFoundException('工位不存在')
+    if (!ws) throw new NotFoundException('办公位不存在')
     if (ws.status === 'assigned') {
-      throw new ConflictException('该工位已分配企业，请先终止对应租约后再删除')
+      throw new ConflictException('该办公位已分配企业，请先终止对应租约后再删除')
     }
 
     /* LeaseWorkstation 关联由 FK onDelete: Cascade 清理（含终止租约的历史归属） */
@@ -236,9 +239,9 @@ export class WorkstationsService {
 
   async setWorkstationStatus(id: string, status: string): Promise<{ code: number }> {
     const ws = await this.prisma.workstation.findUnique({ where: { id } })
-    if (!ws) throw new NotFoundException('工位不存在')
+    if (!ws) throw new NotFoundException('办公位不存在')
     if (ws.status === 'assigned') {
-      throw new ConflictException('该工位已分配企业，请先终止对应租约释放工位')
+      throw new ConflictException('该办公位已分配企业，请先终止对应租约释放办公位')
     }
 
     await this.prisma.workstation.update({ where: { id }, data: { status } })
@@ -249,16 +252,46 @@ export class WorkstationsService {
 
   async findLeases(): Promise<LeaseDto[]> {
     const rows = await this.prisma.lease.findMany({
+      where: { deletedAt: null },
       include: { workstations: { include: { workstation: true } } },
       orderBy: { id: 'desc' },
     })
     return rows.map(toLeaseDto)
   }
 
+  /** 租约详情（不过滤已归档，供用户记录等入口查看历史租约） */
+  async leaseDetail(id: string): Promise<LeaseDto> {
+    const row = await this.prisma.lease.findUnique({
+      where: { id },
+      include: { workstations: { include: { workstation: true } } },
+    })
+    if (!row) throw new NotFoundException('租约不存在')
+    return toLeaseDto(row)
+  }
+
+  /** 租约打印单（复用租约详情数据，无新表） */
+  async leasePrint(id: string): Promise<Record<string, unknown>> {
+    const row = await this.prisma.lease.findFirst({
+      where: { id, deletedAt: null },
+      include: { workstations: { include: { workstation: true } } },
+    })
+    if (!row) throw new NotFoundException('租约不存在')
+    return {
+      title: '聚屿社区 · 办公位租约确认单',
+      generatedAt: formatNow(),
+      lease: toLeaseDto(row),
+      clauses: [
+        '本确认单为租赁双方就办公位使用权达成的书面约定，自办公位交付之日起生效。',
+        '租金按租赁周期支付，逾期未缴将按社区《办公位管理办法》处理。',
+        '如需终止租约，请与空间运营联系办理交接手续，终止后办公位即时释放。',
+      ],
+    }
+  }
+
   async renterOptions(): Promise<RenterOptionsDto> {
     const [users, enterprises] = await Promise.all([
       this.prisma.user.findMany({ orderBy: { uid: 'asc' } }),
-      this.prisma.enterprise.findMany({ orderBy: { id: 'asc' } }),
+      this.prisma.enterprise.findMany({ where: { deletedAt: null }, orderBy: { id: 'asc' } }),
     ])
     return {
       users: users.map((u) => ({ uid: u.uid, nickname: u.nickname, phone: u.phone })),
@@ -276,22 +309,25 @@ export class WorkstationsService {
     if (!renterName) throw new BadRequestException('请选择或输入租赁方')
 
     if (payload.renterType === 'enterprise') {
-      const enterprise = await this.prisma.enterprise.findUnique({ where: { id: payload.enterpriseId } })
+      const enterprise = await this.prisma.enterprise.findFirst({
+        where: { id: payload.enterpriseId, deletedAt: null },
+      })
       if (!enterprise) throw new BadRequestException('企业不存在')
+      if (enterprise.status === 'disabled') throw new BadRequestException('企业已停用不可新增租约')
     }
     if (payload.renterType === 'individual') {
       const user = await this.prisma.user.findUnique({ where: { uid: payload.enterpriseId } })
       if (!user) throw new BadRequestException('用户不存在')
     }
 
-    if (payload.workstationIds.length === 0) throw new BadRequestException('请至少选择一个工位')
+    if (payload.workstationIds.length === 0) throw new BadRequestException('请至少选择一个办公位')
 
     const targets = await this.prisma.workstation.findMany({
       where: { id: { in: payload.workstationIds } },
     })
-    if (targets.length !== payload.workstationIds.length) throw new BadRequestException('存在无效工位')
+    if (targets.length !== payload.workstationIds.length) throw new BadRequestException('存在无效办公位')
     if (targets.some((t) => t.status !== 'idle')) {
-      throw new ConflictException('所选工位中存在已分配或维护中的工位')
+      throw new ConflictException('所选办公位中存在已分配或维护中的办公位')
     }
 
     const id = await this.ids.next('LS')
@@ -365,19 +401,41 @@ export class WorkstationsService {
   }
 
   async terminateLease(id: string): Promise<{ code: number }> {
-    const lease = await this.prisma.lease.findUnique({ where: { id } })
+    const lease = await this.prisma.lease.findFirst({ where: { id, deletedAt: null } })
     if (!lease) throw new NotFoundException('租约不存在')
     if (lease.status === 'terminated') throw new ConflictException('租约已终止')
 
+    const now = formatNow()
     await this.prisma.$transaction(async (tx) => {
       await tx.lease.update({
         where: { id },
-        data: { status: 'terminated', terminatedAt: formatNow() },
+        data: { status: 'terminated', terminatedAt: now, archivableAt: now },
       })
       await tx.workstation.updateMany({
         where: { leaseId: id },
         data: { status: 'idle', enterpriseId: null, enterpriseName: null, leaseId: null },
       })
+    })
+    return { code: 0 }
+  }
+
+  async archive(id: string, operator: string): Promise<{ code: number }> {
+    const lease = await this.prisma.lease.findFirst({ where: { id, deletedAt: null } })
+    if (!lease) throw new NotFoundException('租约不存在')
+    if (lease.status !== 'terminated') throw new ConflictException('仅已终止的租约可归档')
+
+    await this.prisma.lease.update({
+      where: { id },
+      data: { deletedAt: formatNow(), deletedBy: operator },
+    })
+
+    await this.audit.record({
+      module: '空间管理',
+      action: '归档租约',
+      target: `${lease.id} · ${lease.renterName}`,
+      before: { status: lease.status },
+      after: { deleted: true },
+      operator,
     })
     return { code: 0 }
   }

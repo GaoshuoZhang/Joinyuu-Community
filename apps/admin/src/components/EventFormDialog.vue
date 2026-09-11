@@ -6,11 +6,12 @@ import { createEvent, updateEvent, type EventPayload } from '@/api/events'
 import { fetchPointsRules } from '@/api/mall'
 import { dictFallback, fetchDictEntries } from '@/api/dicts'
 import { userLevelOptions, visibilityIdentityOptions } from '@/constants/identity'
+import RichEditor from '@/components/RichEditor.vue'
 import type { CommunityEvent } from '@/types'
 
-/* 活动创建/编辑弹窗：基本信息 + 报名截止时间
+/* 活动新增/编辑弹窗：基本信息 + 报名截止时间
  * + 可见范围/等级 + 可报名范围/等级（默认与可见一致，可单独调整）+ 报名是否需审核
- * 创建无定时发布选项：新活动统一进入「待发布」，由列表操作决定立即发布/定时发布 */
+ * 新增无定时发布选项：新活动统一进入「待发布」，由列表操作决定立即发布/定时发布 */
 const props = defineProps<{
   visible: boolean
   mode: 'create' | 'edit'
@@ -22,7 +23,7 @@ const emit = defineEmits<{
   (e: 'success'): void
 }>()
 
-/* 活动类型选项来自数据字典（M0-E 起统一取用），加载失败回退默认词表 */
+/* 活动类型选项来自数据字典，加载失败回退默认词表 */
 const typeOptions = ref(dictFallback.event_type.map((t) => ({ label: t, value: t })))
 
 const reviewOptions = [
@@ -202,7 +203,7 @@ async function onConfirm() {
     }
     if (props.mode === 'create') {
       const event = await createEvent(payload)
-      MessagePlugin.success(`活动已创建，进入待发布状态（${event.id}）`)
+      MessagePlugin.success(`活动已新增，进入待发布状态（${event.id}）`)
     } else if (props.event) {
       await updateEvent(props.event.id, payload)
       MessagePlugin.success('活动修改已保存')
@@ -224,15 +225,16 @@ function onClose() {
 <template>
   <t-dialog
     :visible="visible"
-    :header="mode === 'create' ? '创建活动' : '编辑活动'"
-    width="680px"
+    :header="mode === 'create' ? '新增活动' : '编辑活动'"
+    width="880px"
+    lazy
     @close="onClose"
   >
     <template #footer>
       <div class="dialog-footer">
         <t-button variant="text" theme="default" @click="onClose">取消</t-button>
         <t-button theme="primary" :loading="submitting" @click="onConfirm">
-          {{ mode === 'create' ? '确认创建' : '保存修改' }}
+          {{ mode === 'create' ? '确认新增' : '保存修改' }}
         </t-button>
       </div>
     </template>
@@ -362,7 +364,7 @@ function onClose() {
       </div>
 
       <t-form-item label="活动简介" name="description">
-        <t-textarea v-model="form.description" :autosize="{ minRows: 3, maxRows: 6 }" placeholder="活动详细说明" />
+        <RichEditor v-model="form.description" placeholder="活动详细说明，支持图文排版" :min-height="320" />
       </t-form-item>
     </t-form>
   </t-dialog>

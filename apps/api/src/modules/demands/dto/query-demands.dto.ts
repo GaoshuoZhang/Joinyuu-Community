@@ -1,7 +1,7 @@
 import { Type } from 'class-transformer'
 import { IsIn, IsInt, IsOptional, IsString, Min } from 'class-validator'
 
-/* GET /api/admin/demands 查询参数（与 M0 fetchDemands 筛选/排序口径一致）
+/* GET /api/admin/demands 查询参数（与列表筛选/排序口径一致）
  * 排序：默认 createdAt 倒序（最新在前）；publishedAt 空值排最后；id 按编号数值比较 */
 export class QueryDemandsDto {
   @Type(() => Number)

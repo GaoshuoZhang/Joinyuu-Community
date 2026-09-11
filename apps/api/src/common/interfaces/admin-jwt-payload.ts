@@ -3,7 +3,7 @@ export interface AdminJwtPayload {
   sub: string
   /** 展示名（如"社区管理员"） */
   name: string
-  /** 令牌唯一标识（登出黑名单键） */
+  /** 令牌唯一标识（登出/强踢黑名单键） */
   jti: string
   iat?: number
   exp?: number

@@ -2,10 +2,10 @@ import type { Space, SpaceReservation } from '@/types'
 
 /* 公共空间数据 — 命名前缀：空间 S1001+ / 空间预约 SR2001+
  * 空间名称与活动/申请记录一致：聚屿路演厅、共享会议室 A 等被活动与预约引用
- * 预约审批流复用 ApprovalRecord 时间线；迁移自 applications 的 space 类型申请
+ * 预约审核流复用 ApprovalRecord 时间线；迁移自 applications 的 space 类型申请
  *   SR2001 ← AP3003（秦朗 路演厅 8/20 彩排，已通过）
  *   SR2002 ← AP3007（沈嘉禾 会议室 A 9/2 全天，已驳回：时段被社区活动占用）
- *   SR2003 ← AP3010（方致远 路演厅 9/15 晚，待审批：账号冻结中）
+ *   SR2003 ← AP3010（方致远 路演厅 9/15 晚，待审核：账号冻结中）
  * 使用看板：当日（2026-09-08）已通过预约 + 同名空间的已发布活动合并展示占用情况 */
 
 export const spaces: Space[] = [
@@ -101,7 +101,7 @@ export const reservations: SpaceReservation[] = [
     submittedAt: '2026-08-18 09:00',
     records: [
       { step: '提交申请', operator: '秦朗', action: 'submit', comment: '', at: '2026-08-18 09:00' },
-      { step: '空间审批', operator: '社区管理员', action: 'approve', comment: '时段可用，注意设备复位', at: '2026-08-18 16:24' },
+      { step: '空间审核', operator: '社区管理员', action: 'approve', comment: '时段可用，注意设备复位', at: '2026-08-18 16:24' },
     ],
   },
   {
@@ -120,9 +120,9 @@ export const reservations: SpaceReservation[] = [
     submittedAt: '2026-09-01 10:12',
     records: [
       { step: '提交申请', operator: '沈嘉禾', action: 'submit', comment: '', at: '2026-09-01 10:12' },
-      { step: '空间审批', operator: '社区管理员', action: 'reject', comment: '该时段已被社区活动占用，且入驻审批尚未完成，建议改期', at: '2026-09-01 11:30' },
+      { step: '空间审核', operator: '社区管理员', action: 'reject', comment: '该时段已被社区活动占用，且入驻审核尚未完成，建议改期', at: '2026-09-01 11:30' },
     ],
-    rejectReason: '该时段已被社区活动占用，且入驻审批尚未完成，建议改期',
+    rejectReason: '该时段已被社区活动占用，且入驻审核尚未完成，建议改期',
   },
   {
     id: 'SR2003',
@@ -158,7 +158,7 @@ export const reservations: SpaceReservation[] = [
     submittedAt: '2026-09-06 11:30',
     records: [
       { step: '提交申请', operator: '秦朗', action: 'submit', comment: '路演日全天彩排与直播设备联调', at: '2026-09-06 11:30' },
-      { step: '空间审批', operator: '社区管理员', action: 'approve', comment: '配合年度路演日筹备，优先安排', at: '2026-09-06 14:02' },
+      { step: '空间审核', operator: '社区管理员', action: 'approve', comment: '配合年度路演日筹备，优先安排', at: '2026-09-06 14:02' },
     ],
   },
   {
@@ -177,7 +177,7 @@ export const reservations: SpaceReservation[] = [
     submittedAt: '2026-09-04 09:30',
     records: [
       { step: '提交申请', operator: '周慕深', action: 'submit', comment: '', at: '2026-09-04 09:30' },
-      { step: '空间审批', operator: '社区管理员', action: 'approve', comment: '通过', at: '2026-09-04 10:10' },
+      { step: '空间审核', operator: '社区管理员', action: 'approve', comment: '通过', at: '2026-09-04 10:10' },
     ],
   },
   {
@@ -196,7 +196,7 @@ export const reservations: SpaceReservation[] = [
     submittedAt: '2026-09-06 20:12',
     records: [
       { step: '提交申请', operator: '韩梓萌', action: 'submit', comment: '', at: '2026-09-06 20:12' },
-      { step: '空间审批', operator: '社区管理员', action: 'approve', comment: '通过', at: '2026-09-07 09:20' },
+      { step: '空间审核', operator: '社区管理员', action: 'approve', comment: '通过', at: '2026-09-07 09:20' },
     ],
   },
   {
@@ -215,7 +215,7 @@ export const reservations: SpaceReservation[] = [
     submittedAt: '2026-09-07 10:40',
     records: [
       { step: '提交申请', operator: '孟繁星', action: 'submit', comment: '', at: '2026-09-07 10:40' },
-      { step: '空间审批', operator: '社区管理员', action: 'approve', comment: '通过', at: '2026-09-07 11:05' },
+      { step: '空间审核', operator: '社区管理员', action: 'approve', comment: '通过', at: '2026-09-07 11:05' },
     ],
   },
   {
@@ -252,7 +252,7 @@ export const reservations: SpaceReservation[] = [
     submittedAt: '2026-09-05 09:20',
     records: [
       { step: '提交申请', operator: '程一诺', action: 'submit', comment: '准备天使轮融资路演，需投影与计时器', at: '2026-09-05 09:20' },
-      { step: '空间审批', operator: '社区管理员', action: 'approve', comment: '通过，注意与 14:00 讲座衔接', at: '2026-09-05 16:00' },
+      { step: '空间审核', operator: '社区管理员', action: 'approve', comment: '通过，注意与 14:00 讲座衔接', at: '2026-09-05 16:00' },
     ],
   },
   {
@@ -307,7 +307,7 @@ export const reservations: SpaceReservation[] = [
     submittedAt: '2026-09-06 18:00',
     records: [
       { step: '提交申请', operator: '陈屿', action: 'submit', comment: 'A 轮投资人尽调，需保密', at: '2026-09-06 18:00' },
-      { step: '空间审批', operator: '社区管理员', action: 'approve', comment: '已协调，注意门禁权限', at: '2026-09-06 18:40' },
+      { step: '空间审核', operator: '社区管理员', action: 'approve', comment: '已协调，注意门禁权限', at: '2026-09-06 18:40' },
     ],
   },
 ]

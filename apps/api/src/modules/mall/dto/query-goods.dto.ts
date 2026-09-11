@@ -19,12 +19,12 @@ export class QueryGoodsDto {
   keyword?: string
 
   @IsOptional()
-  @IsIn(['physical', 'virtual', 'voucher'])
-  category?: 'physical' | 'virtual' | 'voucher'
+  @IsString()
+  category?: string
 
   @IsOptional()
-  @IsIn(['on', 'off'])
-  status?: 'on' | 'off'
+  @IsIn(['on', 'off', 'restock'])
+  status?: 'on' | 'off' | 'restock'
 
   @IsOptional()
   @IsIn(['id', 'points', 'createdAt'])

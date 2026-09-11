@@ -1,24 +1,27 @@
-/* 聚屿社区 · 实体类型定义（M0 原型冻结，M1 后端以此为基础建表） */
+/* 聚屿社区 · 实体类型定义 */
 
 export type UserStatus = 'active' | 'frozen'
 
-/* 身份类型：individual 个人用户为注册默认身份，人手一份，关联其他身份时保留（积分挂靠） */
+/* 身份类型：individual 个人用户为注册默认身份，人手一份，关联其他身份时保留（积分挂靠）
+ * external_individual / external_company 仅用于社区代录需求的「需求方身份」快照（外部个人/外部企业） */
 export type IdentityType =
   | 'individual'
   | 'community_individual'
   | 'community_enterprise'
   | 'external_enterprise'
+  | 'external_individual'
+  | 'external_company'
 
 export interface UserIdentity {
   type: IdentityType
-  /** 企业身份：关联企业；社区企业为入驻企业 ID，外部企业为自由填写名称 */
+  /** 企业身份：关联企业；社区企业为社区企业 ID，合作企业为自由填写名称 */
   enterpriseId?: string
   enterpriseName?: string
-  /** 社区企业身份的企业角色（外部企业无此字段） */
+  /** 社区企业身份的企业角色（合作企业无此字段） */
   role?: 'founder' | 'admin' | 'member'
   /** 职位 / 头衔 */
   title: string
-  /** 经验等级 1-5（仅社区个体/社区企业身份持有；参加活动、承接项目累积经验值升级） */
+  /** 经验值等级 1-5（仅社区个体/社区企业身份持有；参加活动、承接项目累积经验值升级） */
   level?: number
   /** 经验值余额（仅社区个体/社区企业身份持有，社区企业的经验值挂靠企业实体） */
   experience?: number
@@ -59,14 +62,13 @@ export interface User {
   activities: UserActivity[]
 }
 
-export type EnterpriseStatus = 'active' | 'pending' | 'exited'
+export type EnterpriseStatus = 'active' | 'exited' | 'disabled'
 export type ShowcaseStatus = 'none' | 'pending' | 'published' | 'rejected'
 
 export interface Enterprise {
   id: string
   name: string
   industry: string
-  stage: string
   size: string
   foundedAt: string
   settledAt: string | null
@@ -76,6 +78,10 @@ export interface Enterprise {
   showcaseComment?: string
   /** 经验值余额（社区企业持有；参加活动、承接项目累积） */
   experience?: number
+  /** 关联用户 UID（社区企业必须关联一个个人用户，作为企业联系人） */
+  contactUserId?: string
+  /** 联系人职位（展示于成员管理） */
+  contactTitle: string
   contactName: string
   contactPhone: string
   /** 联系邮箱（需求提交人自动填充用；非必填） */
@@ -84,9 +90,9 @@ export interface Enterprise {
   tags: string[]
 }
 
-/* 申请类型（迁移后仅保留入驻与身份绑定；空间预约→公共空间模块、展示页发布→资讯内容模块）
- * 申请实体仍由 applications 维护，仅类型收窄 */
-export type ApplicationType = 'settle' | 'identity'
+/* 申请类型（四类：企业入驻 / 个体入驻 / 企业合作 / 身份绑定）
+ * 申请实体仍由 applications 维护 */
+export type ApplicationType = 'settle' | 'individual' | 'cooperation' | 'identity'
 export type ApplicationStatus = 'pending' | 'approved' | 'rejected'
 
 export interface ApprovalRecord {
@@ -102,6 +108,8 @@ export interface Application {
   type: ApplicationType
   applicantName: string
   applicantPhone: string
+  /** 申请人用户 ID（按手机号关联注册用户派生；无匹配为 null） */
+  applicantId?: string | null
   targetName: string
   submittedAt: string
   status: ApplicationStatus
@@ -142,9 +150,13 @@ export interface Demand {
   publisherName: string
   /** 提交时所选身份快照（企业/未注册提交人无身份快照） */
   publisherIdentity: UserIdentity | null
-  /** 联系人姓名（企业提交=企业联系人 / 个人提交=个人真实姓名 / 自定义手填；创建/编辑表单必填） */
+  /** 创建人（后台代创建时记录操作管理员名；与需求方可能不同） */
+  creatorName?: string | null
+  /** 创建人 ID（创建人为系统用户时记录其 UID；管理员代建时为空，不展示标签/跳转） */
+  creatorId?: string | null
+  /** 联系人姓名（企业提交=企业联系人 / 个人提交=个人真实姓名 / 自定义手填；新增/编辑表单必填） */
   contactName?: string
-  /** 提交人联系电话（创建/编辑表单必填；历史数据可能缺省） */
+  /** 提交人联系电话（新增/编辑表单必填；历史数据可能缺省） */
   contactPhone?: string
   /** 提交人联系邮箱（选填） */
   contactEmail?: string
@@ -178,13 +190,15 @@ export interface Demand {
   /** 自定义响应需求奖励积分（缺省 = 按积分规则 demand_responded 发放） */
   respondPoints?: number
   respondents: DemandRespondent[]
+  /** 归档时间（非空表示已归档，详情页写操作隐藏） */
+  deletedAt?: string | null
 }
 
 /* 项目状态四态：进行中 / 已暂停 / 已关闭 / 已结项 */
 export type ProjectStatus = 'running' | 'paused' | 'closed' | 'finished'
 
 export interface ProjectUndertaker {
-  /** enterprise=社区企业（经验参与）/ individual=用户（结项时持社区个体身份者参与经验）/ custom=自定义添加（不参与经验） */
+  /** enterprise=社区企业（经验值参与）/ individual=用户（结项时持社区个体身份者参与经验值）/ custom=自定义新增（不参与经验值） */
   type: 'enterprise' | 'individual' | 'custom'
   /** 企业 ID / 用户 ID / 自定义项为空串 */
   id: string
@@ -198,7 +212,7 @@ export interface ProjectUndertaker {
   phone?: string
 }
 /* 经验值分配口径（项目结项）：项目经验值 × 承接占比%，仅社区企业（type=enterprise 且 E 前缀）
- * 与结项时持社区个体身份的用户参与；外部企业 / 个人用户（无社区个体身份）/ 自定义承接方不参与，
+ * 与结项时持社区个体身份的用户参与；合作企业 / 个人用户（无社区个体身份）/ 自定义承接方不参与，
  * 其份额丢弃不转移 */
 
 export interface Milestone {
@@ -219,17 +233,19 @@ export interface Project {
   progress: number
   startDate: string
   endDate: string
-  /** 立项日期（项目创建/立项时间） */
+  /** 立项日期（项目新增/立项时间） */
   initiatedAt: string
   description: string
   milestones: Milestone[]
   memberCount: number
-  /** 来源需求 ID（由需求立项创建时存在） */
+  /** 来源需求 ID（由需求立项新增时存在） */
   sourceDemandId?: string
   /** 自定义项目经验值（缺省 = 按经验值规则 project_completed；结项时按承接占比分配） */
   expReward?: number
   /** 关闭原因（status = closed 时存在） */
   closeReason?: string
+  /** 归档时间（非空表示已归档，详情页写操作隐藏） */
+  deletedAt?: string | null
 }
 
 export type EventStatus = 'pending_release' | 'scheduled' | 'published' | 'ended' | 'cancelled'
@@ -247,7 +263,7 @@ export interface EventEnrollment {
 
 export interface CommunityEvent {
   id: string
-  /** 创建时间（后台创建活动时写入，列表可按创建时间排序） */
+  /** 创建时间（后台新增活动时写入，列表可按创建时间排序） */
   createdAt?: string
   title: string
   type: string
@@ -281,9 +297,11 @@ export interface CommunityEvent {
   description: string
   tags: string[]
   enrollments: EventEnrollment[]
+  /** 归档时间（非空表示已归档，详情页写操作隐藏） */
+  deletedAt?: string | null
 }
 
-/* ---------- 创建项目 Payload（需求立项 / 后台直接创建共用） ---------- */
+/* ---------- 新增项目 Payload（需求立项 / 后台直接新增共用） ---------- */
 
 export interface UndertakerInput {
   type: 'enterprise' | 'individual' | 'custom'
@@ -309,7 +327,7 @@ export interface MilestoneInput {
 export interface ProjectInitPayload {
   undertakers: UndertakerInput[]
   projectName: string
-  /** 起止日期（表单已移除填写项：编辑保留原值，新建为空串） */
+  /** 起止日期（表单已删除填写项：编辑保留原值，新增为空串） */
   startDate?: string
   endDate?: string
   description: string
@@ -357,7 +375,7 @@ export interface PointsRecord {
   source: 'rule' | 'manual' | 'redemption'
 }
 
-/* 外部企业聚合视图（由用户 external_enterprise 身份派生 + 档案补充，非独立入驻实体，无展示页） */
+/* 合作企业聚合视图（由用户 external_enterprise 身份派生 + 档案补充，非独立入驻实体，无展示页） */
 export interface ExternalEnterpriseMember {
   userId: string
   name: string
@@ -367,10 +385,14 @@ export interface ExternalEnterpriseMember {
 }
 
 export interface ExternalEnterprise {
-  /** 外部企业 ID（唯一标识，XE7001+） */
+  /** 合作企业 ID（唯一标识，XE7001+） */
   id: string
   name: string
   industry: string
+  /** 状态：active 正常 / disabled 已停用 */
+  status: 'active' | 'disabled'
+  size: string
+  foundedAt: string
   description: string
   /** 累计合作次数 */
   cooperationCount: number
@@ -379,16 +401,16 @@ export interface ExternalEnterprise {
 }
 
 /* ============================================================
-   M0-D 运营设施域 — 实体类型（M0 原型冻结，M1 后端以此为基础建表）
+   运营设施域 — 实体类型
    命名前缀：商品 G1001+ / 兑换订单 RO2001+ / 积分规则 R01+
-   工位 WS1001+ / 租约 LS2001+ / 空间 S1001+ / 空间预约 SR2001+
-   文章 A1001+ / 栏目 CL2001+ / 展示页发布申请 SC1001+
+   办公位 WS1001+ / 租约 LS2001+ / 空间 S1001+ / 空间预约 SR2001+
+   文章 A1001+（投稿内容 SU1001+） / 栏目 CL2001+ / 展示页发布申请 SC1001+
    ============================================================ */
 
 /* ---------- 积分商城 ---------- */
 
-export type GoodsCategory = 'physical' | 'virtual' | 'voucher'
-export type GoodsStatus = 'on' | 'off'
+export type GoodsCategory = string
+export type GoodsStatus = 'on' | 'off' | 'restock'
 
 export interface MallGoods {
   id: string
@@ -404,6 +426,18 @@ export interface MallGoods {
   /** 累计兑换次数 */
   redeemedCount: number
   createdAt: string
+  /** 发货方式（仅实物商品）：pickup 自提 / delivery 邮寄 */
+  shippingMethods?: Array<'pickup' | 'delivery'>
+  /** 自提地址（选择自提时必填） */
+  pickupAddress?: string
+  /** 运费（元，0=包邮；选择邮寄时有效） */
+  shippingFee?: number
+  /** 自定义可见范围：身份与等级（空数组=不限） */
+  visibilityIdentities?: IdentityType[]
+  visibilityLevels?: string[]
+  /** 自定义可下单范围：身份与等级（空数组=不限） */
+  orderIdentities?: IdentityType[]
+  orderLevels?: string[]
 }
 
 export type RedemptionOrderStatus = 'pending_shipment' | 'shipped' | 'finished' | 'cancelled'
@@ -450,7 +484,7 @@ export interface PointsRule {
 /* ---------- 规则管理：经验值规则 / 等级规则 ---------- */
 
 export interface ExperienceRule {
-  /** 规则编码（触发项写死，后端按 code 关联经验发放逻辑；如 activity_checkin） */
+  /** 规则编码（触发项写死，后端按 code 关联经验值发放逻辑；如 activity_checkin） */
   code: string
   /** 触发项名称（写死不可编辑） */
   name: string
@@ -479,12 +513,12 @@ export type WorkstationStatus = 'idle' | 'assigned' | 'maintenance'
 
 export interface Workstation {
   id: string
-  /** 工位编号，如 A-01、B-201 */
+  /** 办公位编号，如 A-01、B-201 */
   seatNo: string
-  /** 所在区域，如 A 区·开放工位、B 区·独立办公室 */
+  /** 所在区域，如 A 区·开放办公位、B 区·独立办公室 */
   area: string
   type: WorkstationType
-  /** 容量（独立办公室可多人，开放工位 1） */
+  /** 容量（独立办公室可多人，开放办公位 1） */
   capacity: number
   status: WorkstationStatus
   /** 当前分配企业（assigned 时存在） */
@@ -492,7 +526,7 @@ export interface Workstation {
   enterpriseName?: string
   /** 关联租约 ID（assigned 时存在） */
   leaseId?: string
-  /** 默认月租（元）：创建租约选"月租"周期时自动累加进租金；非必填 */
+  /** 默认月租（元）：新增租约选"月租"周期时自动累加进租金；非必填 */
   defaultMonthlyRent?: number
   /** 面积（㎡）：仅独立办公室有意义的非必填项 */
   areaSqm?: number
@@ -508,12 +542,12 @@ export type LeaseRenterType = 'enterprise' | 'individual' | 'custom'
 /** 租赁周期：day=日租 / week=周租 / month=月租 / year=年租（缺省按月租处理） */
 export type RentPeriod = 'day' | 'week' | 'month' | 'year'
 
-/** 工位区域（区域规划）：工位以区域名称字符串关联（M1 建议改为 areaId 外键） */
+/** 办公位区域（区域规划）：办公位以区域名称字符串关联（建议改为 areaId 外键） */
 export interface WorkstationArea {
   id: string
-  /** 区域名称，如 A 区 · 开放工位（工位.area 直接存该名称） */
+  /** 区域名称，如 A 区 · 开放办公位（办公位.area 直接存该名称） */
   name: string
-  /** 区域主类型：open=开放工位 / office=独立办公室 / semi=半开放工位 */
+  /** 区域主类型：open=开放办公位 / office=独立办公室 / semi=半开放办公位 */
   type: WorkstationType
   description: string
   createdAt: string
@@ -527,9 +561,9 @@ export interface Lease {
   enterpriseName: string
   /** 租赁方类型（旧数据缺省时按 enterpriseId 前缀推断：E 开头=企业，其余=custom） */
   renterType?: LeaseRenterType
-  /** 关联工位 ID 列表 */
+  /** 关联办公位 ID 列表 */
   workstationIds: string[]
-  /** 工位编号展示文本 */
+  /** 办公位编号展示文本 */
   workstationLabels: string[]
   startDate: string
   endDate: string
@@ -545,6 +579,8 @@ export interface Lease {
   contactPhone: string
   /** 终止时间（terminated 时存在） */
   terminatedAt?: string
+  /** 归档时间（非空表示已归档，详情页写操作隐藏） */
+  deletedAt?: string | null
 }
 
 /* ---------- 公共空间 ---------- */
@@ -565,12 +601,14 @@ export interface Space {
   allDay?: boolean
   /** 是否需要预约（默认关闭） */
   needReservation?: boolean
-  /** 是否需要审批（仅 needReservation 开启时有效） */
+  /** 是否需要审核（仅 needReservation 开启时有效） */
   needApproval?: boolean
   /** 配备设备 */
   equipment: string[]
   status: SpaceStatus
   description: string
+  /** 归档时间（非空表示已归档，详情页写操作隐藏） */
+  deletedAt?: string | null
 }
 
 export type ReservationStatus = 'pending' | 'approved' | 'rejected' | 'cancelled'
@@ -597,24 +635,38 @@ export interface SpaceReservation {
 
 /* ---------- 资讯内容 ---------- */
 
-export type ArticleStatus = 'draft' | 'pending' | 'published' | 'withdrawn' | 'rejected'
+/** 文章状态：
+ * 投稿内容：pending=待审核 / rejected=已驳回 / pending_release=待发布 / scheduled=定时发布中 / published=已发布
+ * 资讯发布：pending_release / scheduled / published（无需审核） */
+export type ArticleStatus = 'pending' | 'rejected' | 'pending_release' | 'scheduled' | 'published'
+
+/** 文章来源：official=社区自行发布（资讯发布）/ submitted=用户投稿（投稿内容） */
+export type ArticleChannel = 'official' | 'submitted'
 
 export interface Article {
   id: string
   title: string
-  columnId: string
-  columnName: string
-  authorId: string
+  channel: ArticleChannel
+  /** 所属栏目（多选） */
+  columnIds: string[]
+  columnNames: string[]
+  /** 投稿作者 ID（资讯发布为社区官方，可空） */
+  authorId?: string
   authorName: string
-  /** 提交身份快照（复用需求提交身份概念） */
+  /** 投稿身份快照（复用需求提交身份概念；资讯发布为 null） */
   authorIdentity: UserIdentity | null
   status: ArticleStatus
-  /** 发布时间（published/withdrawn 时存在） */
+  /** 摘要 */
+  summary: string
+  /** 正文（富文本 HTML） */
+  content: string
+  tags: string[]
+  /** 定时发布时间（scheduled 时存在） */
+  scheduledAt?: string
+  /** 发布时间（published 时存在） */
   publishedAt?: string
   /** 阅读量 */
   views: number
-  summary: string
-  tags: string[]
   createdAt: string
   /** 驳回原因（rejected 时存在） */
   rejectedReason?: string
@@ -628,6 +680,10 @@ export interface ArticleColumn {
   description: string
   /** 排序权重（数字越小越靠前） */
   sort: number
+  /** 是否开放用户投稿（关闭后成员端该栏目不可投稿） */
+  submissionOpen: boolean
+  /** 系统保留栏目（如「未指定」）：不可编辑/停用/删除，成员端不可见 */
+  system?: boolean
   status: ColumnStatus
   createdAt: string
 }
@@ -635,13 +691,13 @@ export interface ArticleColumn {
 export type ShowcaseTargetType = 'enterprise' | 'individual'
 
 /* ============================================================
-   M0-E 系统管理域 — 实体类型（通知 / 审计日志 / 系统配置 / 数据字典）
+   系统管理域 — 实体类型（通知 / 审计日志 / 系统配置 / 数据字典）
    命名前缀：通知 N9001+ / 审计日志 AL1001+
    ============================================================ */
 
 export interface AdminNotification {
   id: string
-  /** 业务类型：approval 入驻/身份审批 | demand_review 需求审核 | reservation 空间预约 | showcase 展示页发布 | article 文章审核 | lease 租约临期 | schedule 定时发布 */
+  /** 业务类型：approval 入驻/身份审核 | demand_review 需求审核 | reservation 空间预约 | showcase 展示页发布 | article 文章审核 | lease 租约临期 | schedule 定时发布 */
   type: string
   title: string
   content: string
@@ -654,7 +710,7 @@ export interface AdminNotification {
 /** 后台操作涉及的模块（审计日志统计口径） */
 export type AuditModule =
   | '社区成员'
-  | '审批中心'
+  | '审核中心'
   | '需求管理'
   | '项目管理'
   | '活动管理'
@@ -668,7 +724,7 @@ export interface AuditLog {
   id: string
   operator: string
   module: AuditModule
-  /** 动作，如 审批通过 / 发布 / 冻结账号 */
+  /** 动作，如 审核通过 / 发布 / 冻结账号 */
   action: string
   /** 操作对象（编号 · 名称） */
   target: string
@@ -687,15 +743,15 @@ export interface SystemConfig {
   demandOpen: boolean
   /** 空间预约开关 */
   reservationOpen: boolean
-  /** 每日登录积分奖励开关（联动积分规则 daily_login，M1 生效） */
-  dailyLoginPoints: boolean
-  /** 租约临期提醒窗口（天，M0 仅配置展示；派生逻辑见 api/workstations EXPIRING_WINDOW_DAYS） */
+  /** 租约临期提醒窗口（天；派生逻辑见 api/workstations EXPIRING_WINDOW_DAYS） */
   leaseExpireRemindDays: number
+  /** 上传文件大小限制（MB，素材库/富文本图片上传共用） */
+  uploadMaxSizeMb: number
   updatedAt: string
   updatedBy: string
 }
 
-export type DictType = 'demand_category' | 'industry' | 'event_type'
+export type DictType = 'demand_category' | 'industry' | 'event_type' | 'goods_category'
 
 export interface DictEntry {
   code: string
@@ -715,7 +771,7 @@ export interface Announcement {
   /** 置顶：置顶公告在列表与客户端公告位优先展示 */
   pinned: boolean
   status: AnnouncementStatus
-  /** 发布时间（创建即发布 / 重新发布时写入） */
+  /** 发布时间（新增即发布 / 重新发布时写入） */
   publishedAt: string
   createdAt: string
   updatedAt?: string

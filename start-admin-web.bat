@@ -30,6 +30,20 @@ if not exist "node_modules" (
     )
 )
 
+echo [检查] 端口 7758 占用情况...
+set "PORT_BUSY="
+for /f "tokens=5" %%p in ('netstat -ano ^| findstr ":7758 " ^| findstr "LISTENING"') do (
+    set "PORT_BUSY=1"
+    echo [占用] 端口 7758 被 PID %%p 占用，强制结束...
+    taskkill /F /PID %%p >nul 2>&1
+)
+if defined PORT_BUSY (
+    echo [等待] 端口释放中...
+    ping -n 2 127.0.0.1 >nul
+)
+
+echo [启动] 管理后台（端口 7758，Vite 开发服务器）...
+echo.
 call pnpm dev:admin
 
 echo.

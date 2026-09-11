@@ -3,11 +3,13 @@ import { computed, nextTick, onMounted, reactive, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { MessagePlugin } from 'tdesign-vue-next'
 import type { FormProps } from 'tdesign-vue-next'
-import { AddIcon, RefreshIcon, SearchIcon, DownloadIcon } from 'tdesign-icons-vue-next'
+import { AddIcon, SearchIcon, DownloadIcon } from 'tdesign-icons-vue-next'
 import PageHeader from '@/components/PageHeader.vue'
 import StatusTag from '@/components/StatusTag.vue'
+import ColumnController from '@/components/ColumnController.vue'
+import BulkArchiveDialog from '@/components/BulkArchiveDialog.vue'
 import ProjectFormDialog from '@/components/ProjectFormDialog.vue'
-import { fetchProjects, pauseProject, resumeProject, closeProject } from '@/api/projects'
+import { fetchProjects, pauseProject, resumeProject, closeProject, archiveProject } from '@/api/projects'
 import { fetchEnterprise } from '@/api/enterprises'
 import { fetchExternalEnterprise } from '@/api/external-enterprises'
 import { fetchUser } from '@/api/users'
@@ -17,13 +19,13 @@ import type { Project } from '@/types'
 const route = useRoute()
 const router = useRouter()
 const loading = ref(false)
-/* 当前执行中的行操作标识：`${id}:pause | resume | close` */
+/* 当前执行中的行操作标识：`${id}:pause | resume | close | archive` */
 const acting = ref('')
 const list = ref<Project[]>([])
 const total = ref(0)
 /* 用户详情「数据概览」跳转带入的参与人筛选 */
 const participantName = ref('')
-/* 企业详情「数据概览」跳转带入的企业筛选（值为社区企业 ID 或外部企业 ID，标签显示名称） */
+/* 企业详情「数据概览」跳转带入的企业筛选（值为社区企业 ID 或合作企业 ID，标签显示名称） */
 const enterpriseName = ref('')
 
 const query = reactive({
@@ -48,22 +50,31 @@ const statusOptions = [
 ]
 
 const columns = [
-  { colKey: 'name', title: '项目', cell: 'name', minWidth: 200, resizable: true },
-  { colKey: 'undertakers', title: '承接方', cell: 'undertakers', minWidth: 240, resizable: true },
+  { colKey: 'name', title: '项目', cell: 'name', width: 140, ellipsis: true, resizable: true },
+  { colKey: 'undertakers', title: '承接方', cell: 'undertakers', width: 140, ellipsis: true, resizable: true },
   {
     colKey: 'initiatedAt',
     title: '立项日期',
-    width: 120,
+    width: 110,
     resizable: true,
     sorter: true,
     sortType: 'all',
+  ellipsis: true,
   },
-  { colKey: 'memberCount', title: '成员数', width: 84, resizable: true },
-  { colKey: 'progress', title: '进度', cell: 'progress', width: 150, resizable: true },
-  { colKey: 'status', title: '状态', cell: 'status', width: 96, resizable: true },
-  { colKey: 'duration', title: '起止时间', cell: 'duration', width: 190, resizable: true },
-  { colKey: 'op', title: '操作', cell: 'op', width: 110 },
+  { colKey: 'memberCount', title: '成员数', width: 72, resizable: true , ellipsis: true},
+  { colKey: 'progress', title: '进度', cell: 'progress', width: 120, resizable: true , ellipsis: true},
+  { colKey: 'status', title: '状态', cell: 'status', width: 86, resizable: true , ellipsis: true},
+  { colKey: 'duration', title: '起止时间', cell: 'duration', width: 150, resizable: true , ellipsis: true},
+  { colKey: 'op', title: '操作', cell: 'op', width: 140 },
 ]
+
+/* 列配置：本地持久化显隐/顺序 */
+const visibleColKeys = ref<string[]>(columns.map((c) => c.colKey))
+
+const visibleColumns = computed(() => {
+  const byKey = new Map(columns.map((c) => [c.colKey, c]))
+  return visibleColKeys.value.map((k) => byKey.get(k)).filter(Boolean)
+})
 
 const pagination = computed(() => ({
   current: query.page,
@@ -119,7 +130,7 @@ function onPageChange(p: { current: number; pageSize: number }) {
   load()
 }
 
-/* 创建项目 */
+/* 新增项目 */
 const formVisible = ref(false)
 const formMode = ref<'create' | 'edit'>('create')
 const formProject = ref<Project | null>(null)
@@ -130,14 +141,14 @@ function openCreate() {
   formVisible.value = true
 }
 
-/* 编辑项目：除已结项外均可编辑（不改状态/编号） */
+/* 编辑项目：除已结项/已关闭外均可编辑（不改状态/编号） */
 function openEdit(row: Project) {
   formMode.value = 'edit'
   formProject.value = row
   formVisible.value = true
 }
 
-/* 已关闭 → 重新创建（以该项目为模板预填，保存为新项目） */
+/* 已关闭 → 重新新增（以该项目为模板预填，保存为新项目） */
 function openRecreate(row: Project) {
   formMode.value = 'create'
   formProject.value = row
@@ -156,7 +167,6 @@ async function onStatusChange(row: Project, action: 'pause' | 'resume') {
     }
     await load()
   } catch (e) {
-    console.error('[status-change]', e)
     MessagePlugin.error(e instanceof Error ? e.message : '操作失败')
   } finally {
     acting.value = ''
@@ -197,6 +207,69 @@ async function onConfirmClose() {
   }
 }
 
+/* 已结项/已关闭 → 归档（可在归档管理中恢复） */
+async function onArchive(row: Project) {
+  acting.value = row.id + ':archive'
+  try {
+    await archiveProject(row.id)
+    MessagePlugin.success('项目已归档')
+    await load()
+  } catch (e) {
+    MessagePlugin.error(e instanceof Error ? e.message : '操作失败')
+  } finally {
+    acting.value = ''
+  }
+}
+
+/* 一键归档：按当前筛选全量拉取，归档所选状态的已结项 / 已关闭项目 */
+const archivingAll = ref(false)
+const bulkVisible = ref(false)
+const bulkStatuses = [
+  { label: '已结项', value: 'finished' },
+  { label: '已关闭', value: 'closed' },
+]
+
+async function doBulkArchive(values: string[]) {
+  const targets: Project[] = []
+  for (let page = 1; page <= 20; page++) {
+    const res = await fetchProjects({ ...query, page, pageSize: 100 })
+    targets.push(...res.list)
+    if (targets.length >= res.total || res.list.length < 100) break
+  }
+  const pending = targets.filter((p) => values.includes(p.status))
+  if (!pending.length) {
+    MessagePlugin.info('没有符合所选状态的可归档项目')
+    return
+  }
+  let failed = 0
+  for (const p of pending) {
+    try {
+      await archiveProject(p.id)
+    } catch {
+      failed++
+    }
+  }
+  if (pending.length - failed > 0) MessagePlugin.success(`已归档 ${pending.length - failed} 条项目`)
+  if (failed > 0) MessagePlugin.warning(`${failed} 条项目归档失败，请重试`)
+  await load()
+}
+
+function onBulkArchive() {
+  bulkVisible.value = true
+}
+
+async function onBulkConfirm(values: string[]) {
+  archivingAll.value = true
+  try {
+    await doBulkArchive(values)
+    bulkVisible.value = false
+  } catch (e) {
+    MessagePlugin.error(e instanceof Error ? e.message : '一键归档失败')
+  } finally {
+    archivingAll.value = false
+  }
+}
+
 function goDetail(row: Project) {
   router.push(`/projects/${row.id}`)
 }
@@ -232,8 +305,8 @@ function onRowClick({ row }: { row: Project }) {
 }
 
 /* 用户详情「数据概览」跳转带入参与人 ID（query: participant），按 ID 过滤避免同名歧义；
- * 企业详情「数据概览」跳转带入企业 ID（query: enterprise，社区企业 E* / 外部企业 XE*），
- * 标签显示名称：社区企业经 fetchEnterprise、外部企业经 fetchExternalEnterprise 由 ID 解析 */
+ * 企业详情「数据概览」跳转带入企业 ID（query: enterprise，社区企业 E* / 合作企业 XE*），
+ * 标签显示名称：社区企业经 fetchEnterprise、合作企业经 fetchExternalEnterprise 由 ID 解析 */
 async function applyRouteFilter() {
   query.participant = (route.query.participant as string) || ''
   query.enterprise = (route.query.enterprise as string) || ''
@@ -252,7 +325,7 @@ async function applyRouteFilter() {
       const res = await fetchEnterprise(query.enterprise)
       enterpriseName.value = res.enterprise.name
     } catch {
-      /* 非社区企业 ID：尝试按外部企业 ID 解析名称 */
+      /* 非社区企业 ID：尝试按合作企业 ID 解析名称 */
       try {
         const ext = await fetchExternalEnterprise(query.enterprise)
         enterpriseName.value = ext.name
@@ -293,15 +366,23 @@ onMounted(() => {
 
 <template>
   <div class="project-list page-fade-in">
-    <PageHeader title="项目管理" description="跨企业协作项目的创建、承接方与进度管理">
+    <PageHeader title="项目管理" description="跨企业协作项目的新增、承接方与进度管理">
       <template #actions>
+        <ColumnController
+          v-model="visibleColKeys"
+          storage-key="projects"
+          :columns="columns.map((c) => ({ key: c.colKey, title: c.title }))"
+        />
+        <t-button variant="outline" :loading="archivingAll" :disabled="archivingAll" @click="onBulkArchive">
+          一键归档
+        </t-button>
         <t-button variant="outline" @click="onExport">
           <template #icon><DownloadIcon /></template>
           导出
         </t-button>
         <t-button theme="primary" @click="openCreate">
           <template #icon><AddIcon /></template>
-          创建项目
+          新增项目
         </t-button>
       </template>
     </PageHeader>
@@ -327,7 +408,6 @@ onMounted(() => {
         查询
       </t-button>
       <t-button variant="outline" @click="onReset">
-        <template #icon><RefreshIcon /></template>
         重置
       </t-button>
       <t-tag
@@ -357,7 +437,7 @@ onMounted(() => {
         hover
         resizable
         :data="list"
-        :columns="columns"
+        :columns="visibleColumns"
         :sort="tableSort"
         :loading="loading"
         :pagination="pagination"
@@ -377,7 +457,7 @@ onMounted(() => {
               variant="light"
               size="small"
             >
-              {{ u.name }} {{ u.share }}%
+              {{ u.name }}<template v-if="u.id"> [{{ u.id }}]</template> {{ u.share }}%
             </t-tag>
             <span v-if="row.undertakers.length > 2" class="ent-more">
               +{{ row.undertakers.length - 2 }}
@@ -399,7 +479,14 @@ onMounted(() => {
         <template #duration="{ row }">{{ durationOf(row) }}</template>
         <template #op="{ row }">
           <div class="op-cell" @click.stop>
-            <t-button v-if="row.status !== 'finished'" variant="text" size="small" @click="openEdit(row)">编辑</t-button>
+            <t-button
+              v-if="row.status !== 'finished' && row.status !== 'closed'"
+              variant="text"
+              size="small"
+              @click="openEdit(row)"
+            >
+              编辑
+            </t-button>
             <template v-if="row.status === 'running'">
               <t-button
                 variant="text"
@@ -423,8 +510,14 @@ onMounted(() => {
               </t-button>
               <t-button variant="text" size="small" theme="danger" @click="openCloseDialog(row)">关闭</t-button>
             </template>
-            <t-button v-if="row.status === 'closed'" variant="text" size="small" theme="primary" @click="openRecreate(row)">重新创建</t-button>
-            <t-button variant="text" size="small" @click="goDetail(row)">详情</t-button>
+            <t-button v-if="row.status === 'closed'" variant="text" size="small" theme="primary" @click="openRecreate(row)">重新新增</t-button>
+            <t-popconfirm
+              v-if="row.status === 'finished' || row.status === 'closed'"
+              content="确认归档该项目？归档后可在归档管理中恢复"
+              @confirm="onArchive(row)"
+            >
+              <t-button variant="text" size="small" theme="warning" :loading="acting === row.id + ':archive'">归档</t-button>
+            </t-popconfirm>
           </div>
         </template>
         <template #empty>
@@ -433,7 +526,7 @@ onMounted(() => {
       </t-table>
     </div>
 
-    <!-- 创建项目弹窗 -->
+    <!-- 新增项目弹窗 -->
     <ProjectFormDialog
       v-model:visible="formVisible"
       :mode="formMode"
@@ -464,13 +557,33 @@ onMounted(() => {
         </t-form-item>
       </t-form>
     </t-dialog>
+
+    <!-- 一键归档：状态选择二次确认对话框 -->
+    <BulkArchiveDialog
+      v-model:visible="bulkVisible"
+      title="一键归档 · 项目"
+      :statuses="bulkStatuses"
+      :loading="archivingAll"
+      @confirm="onBulkConfirm"
+    />
   </div>
 </template>
 
 <style scoped>
+.op-cell {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  flex-wrap: nowrap;
+  white-space: nowrap;
+}
+
 .cell-title {
   font-weight: 500;
   color: var(--td-text-color-primary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .cell-sub {

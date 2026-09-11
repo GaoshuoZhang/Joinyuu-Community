@@ -9,14 +9,14 @@ export interface DemandQuery {
   status?: string
   /** 按提交人筛选（用户详情数据概览跳转） */
   publisherId?: string
-  /** 按发布企业筛选（企业详情数据概览跳转；值为社区企业 ID 或外部企业 ID） */
+  /** 按发布企业筛选（企业详情数据概览跳转；值为社区企业 ID 或合作企业 ID） */
   enterprise?: string
   /** 排序字段：createdAt（默认，倒序=最新在前）| publishedAt（发布时间） */
   sortBy?: 'createdAt' | 'id' | 'publishedAt'
   sortOrder?: 'ascend' | 'descend'
 }
 
-/* 已接入 M1 真实接口：GET /api/admin/demands?page&pageSize&keyword&category&status&publisherId&enterprise&sortBy&sortOrder */
+/* GET /api/admin/demands?page&pageSize&keyword&category&status&publisherId&enterprise&sortBy&sortOrder */
 export async function fetchDemands(query: DemandQuery): Promise<PageResult<Demand>> {
   const qs = new URLSearchParams()
   qs.set('page', String(query.page))
@@ -31,7 +31,7 @@ export async function fetchDemands(query: DemandQuery): Promise<PageResult<Deman
   return httpGet<PageResult<Demand>>(`/demands?${qs}`)
 }
 
-/* 已接入 M1 真实接口：GET /api/admin/demands/:id */
+/* GET /api/admin/demands/:id */
 export async function fetchDemand(id: string): Promise<Demand> {
   return httpGet<Demand>(`/demands/${id}`)
 }
@@ -60,7 +60,7 @@ export interface DemandPublishPayload {
   respondPoints?: number
 }
 
-/* 已接入 M1 真实接口：POST /api/admin/demands/:id/proxy-respond — 管理员代成员响应需求（记录 operator 信息） */
+/* POST /api/admin/demands/:id/proxy-respond — 管理员代成员响应需求（记录 operator 信息） */
 export async function proxyRespondDemand(
   id: string,
   payload: {
@@ -75,44 +75,49 @@ export async function proxyRespondDemand(
   return httpPost<{ code: number }>(`/demands/${id}/proxy-respond`, payload)
 }
 
-/* 已接入 M1 真实接口：POST /api/admin/demands/:id/approve — 待审核需求仅读审核通过，转为待发布 */
+/* POST /api/admin/demands/:id/approve — 待审核需求仅读审核通过，转为待发布 */
 export async function approveDemand(id: string): Promise<{ code: number }> {
   return httpPost<{ code: number }>(`/demands/${id}/approve`)
 }
 
-/* 已接入 M1 真实接口：POST /api/admin/demands/:id/publish-now — 待发布需求立即发布 */
+/* POST /api/admin/demands/:id/publish-now — 待发布需求立即发布 */
 export async function publishDemandNow(id: string): Promise<{ code: number }> {
   return httpPost<{ code: number }>(`/demands/${id}/publish-now`)
 }
 
-/* 已接入 M1 真实接口：POST /api/admin/demands/:id/retract — 撤回发布：已发布 → 待发布 */
+/* POST /api/admin/demands/:id/retract — 撤回发布：已发布 → 待发布 */
 export async function retractDemand(id: string): Promise<{ code: number }> {
   return httpPost<{ code: number }>(`/demands/${id}/retract`)
 }
 
-/* 已接入 M1 真实接口：POST /api/admin/demands/:id/schedule — 待发布需求设定定时发布时间，转为定时发布中 */
+/* POST /api/admin/demands/:id/schedule — 待发布需求设定定时发布时间，转为定时发布中 */
 export async function scheduleDemand(id: string, scheduledAt: string): Promise<{ code: number }> {
   return httpPost<{ code: number }>(`/demands/${id}/schedule`, { scheduledAt })
 }
 
-/* 已接入 M1 真实接口：POST /api/admin/demands/:id/cancel-schedule — 取消定时发布，转为待发布 */
+/* POST /api/admin/demands/:id/cancel-schedule — 取消定时发布，转为待发布 */
 export async function cancelDemandSchedule(id: string): Promise<{ code: number }> {
   return httpPost<{ code: number }>(`/demands/${id}/cancel-schedule`)
 }
 
-/* 已接入 M1 真实接口：PUT /api/admin/demands/:id — 需求再编辑（待发布/已发布，不改状态） */
+/* PUT /api/admin/demands/:id — 需求再编辑（待发布/已发布，不改状态） */
 export async function updateDemand(id: string, payload: DemandPublishPayload): Promise<{ code: number }> {
   return httpPut<{ code: number }>(`/demands/${id}`, payload)
 }
 
-/* 已接入 M1 真实接口：POST /api/admin/demands/:id/reject，入参 { reason }（必填） */
+/* POST /api/admin/demands/:id/reject，入参 { reason }（必填） */
 export async function rejectDemand(id: string, reason: string): Promise<{ code: number }> {
   return httpPost<{ code: number }>(`/demands/${id}/reject`, { reason })
 }
 
-/* 已接入 M1 真实接口：PATCH /api/admin/demands/:id/status，入参 { status: 'closed' } */
+/* PATCH /api/admin/demands/:id/status，入参 { status: 'closed' } */
 export async function closeDemand(id: string): Promise<{ code: number }> {
   return httpPatch<{ code: number }>(`/demands/${id}/status`, { status: 'closed' })
+}
+
+/* POST /api/admin/demands/:id/archive — 归档已驳回需求（可在归档管理中恢复） */
+export async function archiveDemand(id: string): Promise<{ code: number }> {
+  return httpPost<{ code: number }>(`/demands/${id}/archive`)
 }
 
 /* ---------- 立项 ---------- */
@@ -123,27 +128,27 @@ export interface UndertakerOption {
   value: string
 }
 
-/* 已接入 M1 真实接口：GET /api/admin/demands/undertaker-options — 立项承接方候选（社区企业 + 社区个体） */
+/* GET /api/admin/demands/undertaker-options — 立项承接方候选（社区企业 + 社区个体） */
 export async function fetchUndertakerOptions(): Promise<UndertakerOption[]> {
   return httpGet<UndertakerOption[]>('/demands/undertaker-options')
 }
 
-/* 已接入 M1 真实接口：POST /api/admin/demands/:id/initiate-project — 需求立项（可多承接方）
- * 服务端创建项目 + 需求↔项目双向关联（demand.projectId ↔ project.sourceDemandId） */
+/* POST /api/admin/demands/:id/initiate-project — 需求立项（可多承接方）
+ * 服务端新增项目 + 需求↔项目双向关联（demand.projectId ↔ project.sourceDemandId） */
 export async function initiateProject(demandId: string, payload: ProjectInitPayload): Promise<Project> {
   return httpPost<Project>(`/demands/${demandId}/initiate-project`, payload)
 }
 
-/* ---------- 后台直接创建需求 ---------- */
+/* ---------- 后台直接新增需求 ---------- */
 
-/* 已接入 M1 真实接口：GET /api/admin/publisher-options — 提交人选项（全部个人用户 + 全部企业，含联系方式用于自动填充） */
+/* GET /api/admin/publisher-options — 提交人选项（全部个人用户 + 全部企业，含联系电话用于自动填充） */
 export async function fetchPublisherOptions(): Promise<{
   users: { uid: string; nickname: string; realName: string; phone: string; email: string; tag: '社区个体' | '个人用户' }[]
-  enterprises: { id: string; name: string; contactName: string; contactPhone: string; contactEmail?: string; tag: '社区企业' | '外部企业' }[]
+  enterprises: { id: string; name: string; contactName: string; contactPhone: string; contactEmail?: string; tag: '社区企业' | '合作企业' }[]
 }> {
   return httpGet<{
     users: { uid: string; nickname: string; realName: string; phone: string; email: string; tag: '社区个体' | '个人用户' }[]
-    enterprises: { id: string; name: string; contactName: string; contactPhone: string; contactEmail?: string; tag: '社区企业' | '外部企业' }[]
+    enterprises: { id: string; name: string; contactName: string; contactPhone: string; contactEmail?: string; tag: '社区企业' | '合作企业' }[]
   }>('/publisher-options')
 }
 
@@ -152,7 +157,7 @@ export interface DemandCreatePayload extends DemandPublishPayload {
   publisherId: string
   /** 自定义提交人名称（publisherType=custom 时使用） */
   publisherName?: string
-  /** 提交人类型（决定联系方式自动填充与身份快照来源） */
+  /** 提交人类型（决定联系电话自动填充与身份快照来源） */
   publisherType: 'individual' | 'enterprise' | 'custom'
   /** 提交身份快照（仅 individual 时存在） */
   publisherIdentity: UserIdentity | null
@@ -163,7 +168,7 @@ export interface DemandCreatePayload extends DemandPublishPayload {
   scheduledAt?: string
 }
 
-/* 已接入 M1 真实接口：POST /api/admin/demands — 后台直接创建需求（选定提交用户与其提交身份）
+/* POST /api/admin/demands — 后台直接新增需求（选定提交用户与其提交身份）
  * 设置 scheduledAt 时进入定时发布中状态，到点自动发布；否则立即发布
  * publisherValue 为前端表单内部字段（需求方选择器），不随 payload 提交 */
 export async function createDemand(payload: DemandCreatePayload): Promise<Demand> {

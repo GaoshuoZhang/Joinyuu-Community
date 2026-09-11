@@ -13,8 +13,8 @@ export class QueryApplicationsDto {
   pageSize!: number
 
   @IsOptional()
-  @IsIn(['settle', 'identity'])
-  type?: 'settle' | 'identity'
+  @IsIn(['settle', 'individual', 'cooperation', 'identity'])
+  type?: 'settle' | 'individual' | 'cooperation' | 'identity'
 
   @IsOptional()
   @IsIn(['pending', 'approved', 'rejected'])

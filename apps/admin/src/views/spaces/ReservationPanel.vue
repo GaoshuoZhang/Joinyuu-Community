@@ -3,12 +3,14 @@ import { computed, onMounted, reactive, ref } from 'vue'
 import { MessagePlugin } from 'tdesign-vue-next'
 import PageHeader from '@/components/PageHeader.vue'
 import StatusTag from '@/components/StatusTag.vue'
-import UsageBoardPanel from './UsageBoardPanel.vue'
-import { cancelReservation, fetchReservations, fetchSpaces, reviewReservation } from '@/api/spaces'
+import BulkArchiveDialog from '@/components/BulkArchiveDialog.vue'
+import ColumnController from '@/components/ColumnController.vue'
+import { archiveReservation, cancelReservation, fetchReservations, fetchSpaces, reviewReservation } from '@/api/spaces'
+import { deriveReservationStatus } from '@/utils/reservation'
 import type { Space, SpaceReservation } from '@/types'
 
-/* 公共空间预约页（独立路由页）：预约审批 + 当日使用看板（原公共空间 Tab 壳的两个板块合并）；
- * 状态 Tab + 空间/日期筛选 + 详情抽屉（审批时间线）+ 通过/驳回意见对话框；
+/* 公共空间预约页（独立路由页）：预约审核；
+ * 状态 Tab + 空间/日期筛选 + 详情抽屉（审核时间线）+ 通过/驳回意见对话框；
  * 通过时服务端校验时段冲突（已通过预约 / 已发布活动占用） */
 const loading = ref(false)
 const list = ref<SpaceReservation[]>([])
@@ -36,58 +38,23 @@ const actionTextMap: Record<string, string> = {
 }
 
 const columns = [
-  { colKey: 'row-select', type: 'multiple', width: 46 },
-  { colKey: 'id', title: '预约编号', width: 110 },
-  { colKey: 'user', title: '预约人', cell: 'user', width: 140 },
-  { colKey: 'spaceName', title: '空间', width: 130, ellipsis: true },
-  { colKey: 'slot', title: '日期 / 时段', cell: 'slot', width: 190, resizable: true },
+  { colKey: 'id', title: '预约编号', width: 110 , ellipsis: true},
+  { colKey: 'user', title: '预约人', cell: 'user', width: 120 , ellipsis: true},
+  { colKey: 'spaceName', title: '空间', width: 120, ellipsis: true },
+  { colKey: 'slot', title: '日期 / 时段', cell: 'slot', width: 170, resizable: true , ellipsis: true},
   { colKey: 'purpose', title: '用途', ellipsis: true },
-  { colKey: 'attendees', title: '人数', width: 70, resizable: true },
-  { colKey: 'status', title: '状态', cell: 'status', width: 100, resizable: true },
-  { colKey: 'op', title: '操作', cell: 'op', width: 170 },
+  { colKey: 'attendees', title: '人数', width: 70, resizable: true , ellipsis: true},
+  { colKey: 'status', title: '状态', cell: 'status', width: 100, resizable: true , ellipsis: true},
+  { colKey: 'op', title: '操作', cell: 'op', width: 190 },
 ]
 
-/* ---------- 批量通过（仅待审批项；逐条执行以保留时段冲突校验） ---------- */
-const selectedKeys = ref<(string | number)[]>([])
-const batchApproving = ref(false)
+/* 列配置：本地持久化显隐/顺序 */
+const visibleColKeys = ref<string[]>(columns.map((c) => c.colKey))
 
-const approvableCount = computed(
-  () => list.value.filter((r) => selectedKeys.value.includes(r.id) && r.status === 'pending').length,
-)
-
-function onSelectChange(keys: unknown) {
-  selectedKeys.value = keys as (string | number)[]
-}
-
-async function onBatchApprove() {
-  const targets = list.value.filter((r) => selectedKeys.value.includes(r.id) && r.status === 'pending')
-  if (!targets.length) {
-    MessagePlugin.warning('请选择待审批的预约')
-    return
-  }
-  batchApproving.value = true
-  let passed = 0
-  const failed: string[] = []
-  try {
-    for (const r of targets) {
-      try {
-        await reviewReservation(r.id, 'approved', '')
-        passed += 1
-      } catch (e) {
-        failed.push(`${r.id}（${e instanceof Error ? e.message : '失败'}）`)
-      }
-    }
-    if (failed.length) {
-      MessagePlugin.warning(`已通过 ${passed} 条，${failed.length} 条未通过：${failed.join('；')}`)
-    } else {
-      MessagePlugin.success(`已批量通过 ${passed} 条预约`)
-    }
-    selectedKeys.value = []
-    await load()
-  } finally {
-    batchApproving.value = false
-  }
-}
+const visibleColumns = computed(() => {
+  const byKey = new Map(columns.map((c) => [c.colKey, c]))
+  return visibleColKeys.value.map((k) => byKey.get(k)).filter(Boolean)
+})
 
 const pagination = computed(() => ({
   current: query.page,
@@ -96,11 +63,18 @@ const pagination = computed(() => ({
   showJumper: true,
 }))
 
+/* 六态筛选：待使用/使用中/已结束共用 API status=approved，返回后按派生状态客户端过滤；
+ * 分页保持服务端口径（客户端过滤仅作用于当前页，为既定取舍） */
+const DERIVED_STATUSES = ['approved', 'using', 'ended']
+
 async function load() {
   loading.value = true
   try {
-    const res = await fetchReservations({ ...query })
-    list.value = res.list
+    const apiStatus = DERIVED_STATUSES.includes(query.status) ? 'approved' : query.status
+    const res = await fetchReservations({ ...query, status: apiStatus })
+    list.value = DERIVED_STATUSES.includes(query.status)
+      ? res.list.filter((r) => deriveReservationStatus(r) === query.status)
+      : res.list
     total.value = res.total
   } finally {
     loading.value = false
@@ -180,7 +154,7 @@ async function onConfirm() {
   }
 }
 
-/* 管理端取消（待审批/已通过） */
+/* 管理端取消（待审核/已通过） */
 async function onCancel(row: SpaceReservation) {
   acting.value = row.id
   try {
@@ -194,6 +168,70 @@ async function onCancel(row: SpaceReservation) {
   }
 }
 
+/* 归档已结束/已驳回/已取消预约：移入归档管理，可恢复 */
+async function onArchive(row: SpaceReservation) {
+  acting.value = row.id + ':archive'
+  try {
+    await archiveReservation(row.id)
+    MessagePlugin.success('预约已归档')
+    await load()
+  } catch (e) {
+    MessagePlugin.error(e instanceof Error ? e.message : '操作失败')
+  } finally {
+    acting.value = ''
+  }
+}
+
+/* 一键归档：按当前空间/日期筛选全量拉取，归档所选派生状态的已结束 / 已驳回 / 已取消预约 */
+const archivingAll = ref(false)
+const bulkVisible = ref(false)
+const bulkStatuses = [
+  { label: '已结束', value: 'ended' },
+  { label: '已驳回', value: 'rejected' },
+  { label: '已取消', value: 'cancelled' },
+]
+
+async function doBulkArchive(values: string[]) {
+  const targets: SpaceReservation[] = []
+  for (let page = 1; page <= 20; page++) {
+    const res = await fetchReservations({ page, pageSize: 100, spaceId: query.spaceId, date: query.date })
+    targets.push(...res.list)
+    if (targets.length >= res.total || res.list.length < 100) break
+  }
+  const pending = targets.filter((r) => values.includes(deriveReservationStatus(r)))
+  if (!pending.length) {
+    MessagePlugin.info('没有符合所选状态的可归档预约')
+    return
+  }
+  let failed = 0
+  for (const r of pending) {
+    try {
+      await archiveReservation(r.id)
+    } catch {
+      failed++
+    }
+  }
+  if (pending.length - failed > 0) MessagePlugin.success(`已归档 ${pending.length - failed} 条预约`)
+  if (failed > 0) MessagePlugin.warning(`${failed} 条预约归档失败，请重试`)
+  await load()
+}
+
+function onBulkArchive() {
+  bulkVisible.value = true
+}
+
+async function onBulkConfirm(values: string[]) {
+  archivingAll.value = true
+  try {
+    await doBulkArchive(values)
+    bulkVisible.value = false
+  } catch (e) {
+    MessagePlugin.error(e instanceof Error ? e.message : '一键归档失败')
+  } finally {
+    archivingAll.value = false
+  }
+}
+
 onMounted(() => {
   loadSpaces()
   load()
@@ -202,40 +240,47 @@ onMounted(() => {
 
 <template>
   <div class="reservation-panel page-fade-in">
-    <PageHeader title="公共空间预约" description="空间预约的审批处理与当日使用看板" />
-
-    <div class="page-filter-bar">
-      <t-select
-        v-model="query.spaceId"
-        label="空间"
-        :options="spaceOptions"
-        clearable
-        style="width: 170px"
-        @change="onSpaceChange"
-      />
-      <t-date-picker
-        v-model="query.date"
-        valueType="YYYY-MM-DD"
-        clearable
-        placeholder="按预约日期筛选"
-        style="width: 180px"
-        @change="onDateChange"
-      />
-      <div v-if="approvableCount > 0" class="batch-bar">
-        <span class="batch-tip">已选 {{ approvableCount }} 条待审批</span>
-        <t-button theme="primary" size="small" :loading="batchApproving" @click="onBatchApprove">批量通过</t-button>
-        <t-button variant="text" size="small" @click="selectedKeys = []">清空选择</t-button>
-      </div>
-    </div>
+    <PageHeader title="公共空间预约" description="空间预约的审核处理">
+      <template #actions>
+        <ColumnController
+          v-model="visibleColKeys"
+          storage-key="reservations"
+          :columns="columns.map((c) => ({ key: c.colKey, title: c.title }))"
+        />
+      </template>
+    </PageHeader>
 
     <div class="page-card">
-      <t-tabs :value="query.status" class="status-tabs" @change="onStatusChange">
-        <t-tab-panel value="" label="全部" />
-        <t-tab-panel value="pending" label="待审批" />
-        <t-tab-panel value="approved" label="已通过" />
-        <t-tab-panel value="rejected" label="已驳回" />
-        <t-tab-panel value="cancelled" label="已取消" />
-      </t-tabs>
+      <div class="tabs-row">
+        <t-tabs :value="query.status" class="status-tabs" @change="onStatusChange">
+          <t-tab-panel value="" label="全部" />
+          <t-tab-panel value="pending" label="待审核" />
+          <t-tab-panel value="approved" label="待使用" />
+          <t-tab-panel value="using" label="使用中" />
+          <t-tab-panel value="ended" label="已结束" />
+          <t-tab-panel value="rejected" label="已驳回" />
+          <t-tab-panel value="cancelled" label="已取消" />
+        </t-tabs>
+        <t-select
+          v-model="query.spaceId"
+          label="空间"
+          :options="spaceOptions"
+          clearable
+          style="width: 170px; margin-left: 24px"
+          @change="onSpaceChange"
+        />
+        <t-date-picker
+          v-model="query.date"
+          valueType="YYYY-MM-DD"
+          clearable
+          placeholder="按预约日期筛选"
+          style="width: 180px; margin-left: 24px"
+          @change="onDateChange"
+        />
+        <t-button class="bulk-archive-btn" variant="outline" :disabled="archivingAll" @click="onBulkArchive">
+          一键归档
+        </t-button>
+      </div>
 
       <t-table
         row-key="id"
@@ -243,18 +288,17 @@ onMounted(() => {
         hover
         resizable
         :data="list"
-        :columns="columns"
+        :columns="visibleColumns"
         :loading="loading"
         :pagination="pagination"
-        :selected-row-keys="selectedKeys"
         empty="暂无符合条件的预约"
-        @select-change="onSelectChange"
         @page-change="onPageChange"
         @row-click="({ row }) => openDetail(row)"
       >
         <template #user="{ row }">
           <div class="user-cell">
             <span class="user-name">{{ row.userName }}</span>
+            <t-tag class="id-tag-block" size="small" variant="light">{{ row.userId }}</t-tag>
             <span class="user-phone">{{ row.phone }}</span>
           </div>
         </template>
@@ -262,7 +306,7 @@ onMounted(() => {
           {{ row.date }} {{ row.startTime }} ~ {{ row.endTime }}
         </template>
         <template #status="{ row }">
-          <StatusTag entity="reservation" :value="row.status" />
+          <StatusTag entity="reservation" :value="deriveReservationStatus(row)" />
         </template>
         <template #op="{ row }">
           <div class="op-cell" @click.stop>
@@ -281,29 +325,32 @@ onMounted(() => {
             >
               <t-button variant="text" size="small" :loading="acting === row.id">取消</t-button>
             </t-popconfirm>
+            <t-popconfirm
+              v-if="['ended', 'rejected', 'cancelled'].includes(deriveReservationStatus(row))"
+              content="确认归档该预约？归档后可在归档管理中恢复"
+              @confirm="onArchive(row)"
+            >
+              <t-button variant="text" size="small" theme="danger" :loading="acting === row.id + ':archive'">
+                归档
+              </t-button>
+            </t-popconfirm>
             <t-button variant="text" size="small" @click="openDetail(row)">详情</t-button>
           </div>
         </template>
       </t-table>
     </div>
 
-    <!-- 当日使用看板（原公共空间·使用看板板块） -->
-    <div class="board-section">
-      <h4 class="board-section-title">当日使用看板</h4>
-      <UsageBoardPanel />
-    </div>
-
     <!-- 预约详情抽屉 -->
-    <t-drawer v-model:visible="drawerVisible" header="预约详情" size="560px" :footer="false">
+    <t-drawer v-model:visible="drawerVisible" header="预约详情" size="560px" :footer="false" :close-btn="true" :close-on-esc-keydown="true">
       <template v-if="current">
         <div class="drawer-head">
           <span class="drawer-id">{{ current.id }}</span>
-          <StatusTag entity="reservation" :value="current.status" />
+          <StatusTag entity="reservation" :value="deriveReservationStatus(current)" />
         </div>
 
         <t-descriptions :column="2" bordered>
-          <t-descriptions-item label="预约人">{{ current.userName }}</t-descriptions-item>
-          <t-descriptions-item label="手机号">{{ current.phone }}</t-descriptions-item>
+          <t-descriptions-item label="预约人">{{ current.userName }}<t-tag class="id-tag" size="small" variant="light">{{ current.userId }}</t-tag></t-descriptions-item>
+          <t-descriptions-item label="联系电话">{{ current.phone }}</t-descriptions-item>
           <t-descriptions-item label="空间">{{ current.spaceName }}</t-descriptions-item>
           <t-descriptions-item label="人数">{{ current.attendees }}</t-descriptions-item>
           <t-descriptions-item label="日期">{{ current.date }}</t-descriptions-item>
@@ -313,7 +360,7 @@ onMounted(() => {
         <p class="drawer-summary">{{ current.purpose }}</p>
         <p v-if="current.rejectReason" class="drawer-reject">驳回原因：{{ current.rejectReason }}</p>
 
-        <h4 class="drawer-section-title">审批记录</h4>
+        <h4 class="drawer-section-title">审核记录</h4>
         <!-- mode="same"：TDesign 默认 alternate + 恒生效的 label 类会给圆点列加 margin-left:100px，导致内容整体缩进居中 -->
         <t-timeline class="record-timeline" mode="same">
           <t-timeline-item v-for="(r, i) in current.records" :key="i">
@@ -332,7 +379,7 @@ onMounted(() => {
       </template>
     </t-drawer>
 
-    <!-- 审批意见对话框 -->
+    <!-- 审核意见对话框 -->
     <t-dialog
       v-model:visible="dialogVisible"
       :header="dialogAction === 'approve' ? '通过预约' : '驳回预约'"
@@ -350,28 +397,31 @@ onMounted(() => {
       </p>
       <t-textarea
         v-model="comment"
-        placeholder="审批意见（驳回时建议填写原因）"
+        placeholder="审核意见（驳回时建议填写原因）"
         :autosize="{ minRows: 3, maxRows: 5 }"
       />
     </t-dialog>
+
+    <!-- 一键归档：状态选择二次确认对话框 -->
+    <BulkArchiveDialog
+      v-model:visible="bulkVisible"
+      title="一键归档 · 预约"
+      :statuses="bulkStatuses"
+      :loading="archivingAll"
+      @confirm="onBulkConfirm"
+    />
   </div>
 </template>
 
 <style scoped>
-.batch-bar {
+.tabs-row {
   display: flex;
   align-items: center;
-  gap: 8px;
-  margin-left: auto;
-}
-
-.batch-tip {
-  font-size: 13px;
-  color: var(--td-brand-color);
-}
-
-.status-tabs {
   margin-bottom: 16px;
+}
+
+.bulk-archive-btn {
+  margin-left: auto;
 }
 
 .user-cell {
@@ -484,16 +534,5 @@ onMounted(() => {
   margin: 0 0 12px;
   font-size: 12px;
   color: var(--td-text-color-secondary);
-}
-
-.board-section {
-  margin-top: 24px;
-}
-
-.board-section-title {
-  margin: 0 0 12px;
-  font-size: 14px;
-  font-weight: 600;
-  color: var(--td-text-color-primary);
 }
 </style>

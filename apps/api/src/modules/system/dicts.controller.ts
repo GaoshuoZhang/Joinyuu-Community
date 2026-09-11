@@ -1,8 +1,10 @@
 import { Body, Controller, Delete, Get, HttpCode, Param, Post, Req } from '@nestjs/common'
 import type { AuthenticatedRequest } from '../../common/interfaces/authenticated-request'
+import { RequirePermission } from '../../common/decorators/require-permission.decorator'
 import { DictsService } from './dicts.service'
 import { DictEntryPayloadDto } from './dto/dict-entry-payload.dto'
 
+@RequirePermission('/system/dicts')
 @Controller('api/admin/dicts')
 export class DictsController {
   constructor(private readonly dicts: DictsService) {}

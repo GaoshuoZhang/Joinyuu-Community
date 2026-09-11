@@ -1,7 +1,7 @@
 import { Type } from 'class-transformer'
 import { IsArray, IsBoolean, IsInt, IsNotEmpty, IsOptional, IsString, Min } from 'class-validator'
 
-/* 活动创建/编辑载荷（对照 apps/admin/src/api/events.ts EventPayload） */
+/* 活动新增/编辑载荷（对照 apps/admin/src/api/events.ts EventPayload） */
 export class EventPayloadDto {
   @IsString()
   @IsNotEmpty()

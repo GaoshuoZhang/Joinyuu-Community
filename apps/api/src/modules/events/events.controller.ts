@@ -1,5 +1,6 @@
 import { Body, Controller, Get, HttpCode, Param, Patch, Post, Put, Query, Req } from '@nestjs/common'
 import type { AuthenticatedRequest } from '../../common/interfaces/authenticated-request'
+import { RequirePermission } from '../../common/decorators/require-permission.decorator'
 import { EventsService } from './events.service'
 import { QueryEventsDto } from './dto/query-events.dto'
 import { EventPayloadDto } from './dto/event-payload.dto'
@@ -7,6 +8,7 @@ import { ScheduleEventDto } from './dto/schedule-event.dto'
 import { ReviewEnrollmentDto } from './dto/review-enrollment.dto'
 import { CheckinEventDto } from './dto/checkin-event.dto'
 
+@RequirePermission('/events')
 @Controller('api/admin/events')
 export class EventsController {
   constructor(private readonly events: EventsService) {}
@@ -71,6 +73,12 @@ export class EventsController {
   @Post(':id/restore')
   restore(@Param('id') id: string, @Req() req: AuthenticatedRequest) {
     return this.events.restore(id, req.user?.name ?? '社区管理员')
+  }
+
+  @HttpCode(200)
+  @Post(':id/archive')
+  archive(@Param('id') id: string, @Req() req: AuthenticatedRequest) {
+    return this.events.archive(id, req.user?.name ?? '社区管理员')
   }
 
   @HttpCode(200)

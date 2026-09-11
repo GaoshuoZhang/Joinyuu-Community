@@ -1,16 +1,15 @@
 <script setup lang="ts">
-import { onMounted, ref } from 'vue'
+import { computed, onMounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { MessagePlugin } from 'tdesign-vue-next'
 import { ArrowLeftIcon } from 'tdesign-icons-vue-next'
 import StatusTag from '@/components/StatusTag.vue'
-import IdentityTags from '@/components/IdentityTags.vue'
 import DemandPublishDialog from '@/components/DemandPublishDialog.vue'
 import DemandReviewDialog from '@/components/DemandReviewDialog.vue'
 import DemandScheduleDialog from '@/components/DemandScheduleDialog.vue'
 import ProjectFormDialog from '@/components/ProjectFormDialog.vue'
 import { identityTypeMap, userLevelMap } from '@/constants/identity'
-import { cancelDemandSchedule, closeDemand, fetchDemand, publishDemandNow } from '@/api/demands'
+import { cancelDemandSchedule, closeDemand, fetchDemand, publishDemandNow, retractDemand } from '@/api/demands'
 import type { Demand, DemandRespondent } from '@/types'
 
 const route = useRoute()
@@ -18,6 +17,8 @@ const router = useRouter()
 const loading = ref(true)
 const demand = ref<Demand | null>(null)
 const tab = ref('info')
+/* 已归档条目：隐藏全部写操作，仅保留只读内容与「查看关联项目」跳转 */
+const isArchived = computed(() => !!demand.value?.deletedAt)
 
 const respondentStatusMap: Record<DemandRespondent['status'], { label: string; theme: 'warning' | 'success' | 'default' }> = {
   pending: { label: '待回应', theme: 'warning' },
@@ -26,11 +27,11 @@ const respondentStatusMap: Record<DemandRespondent['status'], { label: string; t
 }
 
 const respondentColumns = [
-  { colKey: 'name', title: '响应人', width: 120 },
+  { colKey: 'name', title: '响应人', width: 120 , ellipsis: true},
   { colKey: 'enterprise', title: '所属', width: 160, ellipsis: true },
   { colKey: 'message', title: '留言', ellipsis: true },
-  { colKey: 'at', title: '时间', width: 150 },
-  { colKey: 'status', title: '状态', cell: 'status', width: 100 },
+  { colKey: 'at', title: '时间', width: 150 , ellipsis: true},
+  { colKey: 'status', title: '状态', cell: 'status', width: 100 , ellipsis: true},
 ]
 
 async function load() {
@@ -138,7 +139,7 @@ async function onCloseDemand() {
 /* 立项 */
 const projectVisible = ref(false)
 
-/* 提交人跳转：个人/社区个体 → 用户详情；社区企业 → 入驻企业详情；外部企业 → 外部企业详情；自定义不跳 */
+/* 提交人跳转：个人/社区个体 → 用户详情；社区企业 → 社区企业详情；合作企业 → 合作企业详情；自定义不跳 */
 function publisherLinkTarget(d: Demand): string | null {
   if (d.publisherId.startsWith('U')) return '/users/' + d.publisherId
   if (d.publisherId.startsWith('XE')) return '/external-enterprises/' + d.publisherId
@@ -148,6 +149,24 @@ function publisherLinkTarget(d: Demand): string | null {
 function goPublisher(d: Demand) {
   const to = publisherLinkTarget(d)
   if (to) router.push(to)
+}
+
+/* 创建人跳转：创建人为注册用户（U 前缀）时 → 用户详情，其余（管理员代建等）不跳 */
+function creatorLinkTarget(d: Demand): string | null {
+  if (d.creatorId && d.creatorId.startsWith('U')) return `/users/${d.creatorId}`
+  return null
+}
+
+function goCreator(d: Demand) {
+  const to = creatorLinkTarget(d)
+  if (to) router.push(to)
+}
+
+/* 需求方身份快照 → 纯文本标签（企业仅显示 社区企业/合作企业，不追加成员标题） */
+function publisherIdentityLabel(d: Demand): string {
+  const type = d.publisherIdentity?.type
+  if (!type) return '—'
+  return identityTypeMap[type] ?? '—'
 }
 function goProject() {
   if (demand.value?.projectId) router.push(`/projects/${demand.value.projectId}`)
@@ -179,6 +198,7 @@ onMounted(load)
             <div class="head-title">
               <span class="head-name">{{ demand.title }}</span>
               <StatusTag entity="demand" :value="demand.status" :scheduled-at="demand.scheduledAt" />
+              <t-tag v-if="isArchived" theme="default" variant="light">已归档</t-tag>
               <t-tag variant="light">{{ demand.category }}</t-tag>
             </div>
             <!-- 可见范围与可报名范围同行展示 -->
@@ -217,31 +237,33 @@ onMounted(load)
             </div>
           </div>
           <div class="head-actions">
-            <template v-if="demand.status === 'pending'">
-              <t-button theme="primary" @click="openReview">审核</t-button>
+            <template v-if="!isArchived">
+              <template v-if="demand.status === 'pending'">
+                <t-button theme="primary" @click="openReview">审核</t-button>
+              </template>
+              <template v-else-if="demand.status === 'pending_release'">
+                <t-button theme="primary" :loading="publishing" @click="onPublishNow">立即发布</t-button>
+                <t-button variant="outline" @click="openSchedule">定时发布</t-button>
+                <t-button variant="outline" @click="openEdit">编辑</t-button>
+                <t-button variant="outline" theme="danger" :loading="closing" @click="onCloseDemand">关闭</t-button>
+              </template>
+              <template v-else-if="demand.status === 'scheduled'">
+                <t-popconfirm
+                  content="确认取消定时发布？该需求将转为「待发布」"
+                  @confirm="onCancelSchedule"
+                >
+                  <t-button variant="outline" theme="warning" :loading="cancelScheduling">取消定时发布</t-button>
+                </t-popconfirm>
+              </template>
+              <template v-else-if="demand.status === 'published'">
+                <t-button theme="primary" @click="projectVisible = true">立项</t-button>
+                <t-popconfirm content="确认撤回发布？需求将转为「待发布」" @confirm="onRetract">
+                  <t-button variant="outline" theme="warning" :loading="retracting">撤回发布</t-button>
+                </t-popconfirm>
+                <t-button variant="outline" theme="danger" :loading="closing" @click="onCloseDemand">关闭</t-button>
+              </template>
             </template>
-            <template v-else-if="demand.status === 'pending_release'">
-              <t-button theme="primary" :loading="publishing" @click="onPublishNow">立即发布</t-button>
-              <t-button variant="outline" @click="openSchedule">定时发布</t-button>
-              <t-button variant="outline" @click="openEdit">编辑</t-button>
-              <t-button variant="outline" theme="danger" :loading="closing" @click="onCloseDemand">关闭</t-button>
-            </template>
-            <template v-else-if="demand.status === 'scheduled'">
-              <t-popconfirm
-                content="确认取消定时发布？该需求将转为「待发布」"
-                @confirm="onCancelSchedule"
-              >
-                <t-button variant="outline" theme="warning" :loading="cancelScheduling">取消定时发布</t-button>
-              </t-popconfirm>
-            </template>
-            <template v-else-if="demand.status === 'published'">
-              <t-button theme="primary" @click="projectVisible = true">立项</t-button>
-              <t-popconfirm content="确认撤回发布？需求将转为「待发布」" @confirm="onRetract">
-                <t-button variant="outline" theme="warning" :loading="retracting">撤回发布</t-button>
-              </t-popconfirm>
-              <t-button variant="outline" theme="danger" :loading="closing" @click="onCloseDemand">关闭</t-button>
-            </template>
-            <t-button v-else-if="demand.status === 'projected'" variant="outline" @click="goProject">
+            <t-button v-if="demand.status === 'projected'" variant="outline" @click="goProject">
               查看关联项目
             </t-button>
           </div>
@@ -249,17 +271,26 @@ onMounted(load)
 
         <t-descriptions :column="2" bordered class="head-desc">
           <t-descriptions-item label="编号">{{ demand.id }}</t-descriptions-item>
-          <t-descriptions-item label="提交人">
+          <t-descriptions-item label="需求方">
             <span
               class="publisher-link"
               :class="{ clickable: publisherLinkTarget(demand) }"
               @click="goPublisher(demand)"
             >
-              {{ demand.publisherName }}（{{ demand.publisherId }}）
+              {{ demand.publisherName }}<t-tag v-if="demand.publisherId" class="id-tag" size="small" variant="light">{{ demand.publisherId }}</t-tag>
             </span>
           </t-descriptions-item>
-          <t-descriptions-item label="提交身份">
-            <IdentityTags :identities="demand.publisherIdentity ? [demand.publisherIdentity] : []" />
+          <t-descriptions-item label="创建人">
+            <span
+              class="publisher-link"
+              :class="{ clickable: creatorLinkTarget(demand) }"
+              @click="goCreator(demand)"
+            >
+              {{ demand.creatorName || '—' }}<t-tag v-if="demand.creatorId" class="id-tag" size="small" variant="light">{{ demand.creatorId }}</t-tag>
+            </span>
+          </t-descriptions-item>
+          <t-descriptions-item label="需求方身份">
+            <span>{{ publisherIdentityLabel(demand) }}</span>
           </t-descriptions-item>
           <t-descriptions-item label="联系人">{{ demand.contactName ?? '—' }}</t-descriptions-item>
           <t-descriptions-item label="联系电话">{{ demand.contactPhone ?? '—' }}</t-descriptions-item>
@@ -299,7 +330,7 @@ onMounted(load)
                 title="审核提示"
                 message="该需求为只读审核，审核通过后转入「待发布」，由运营决定发布时间；如需修改内容请联系提交人重新提交。"
               />
-              <p class="desc-text">{{ demand.description }}</p>
+              <div class="desc-text rich-text" v-html="demand.description"></div>
               <div v-if="demand.tags.length" class="tags-row">
                 <t-tag v-for="tag in demand.tags" :key="tag" variant="outline" size="small">{{ tag }}</t-tag>
               </div>
@@ -336,7 +367,7 @@ onMounted(load)
     <DemandScheduleDialog v-model:visible="scheduleVisible" :demand="demand" @success="load" />
 
     <!-- 立项弹窗 -->
-    <ProjectFormDialog v-model:visible="projectVisible" :demand="demand" @success="load" />
+    <ProjectFormDialog v-model:visible="projectVisible" mode="create" :demand="demand" :project="null" @success="load" />
   </div>
 </template>
 

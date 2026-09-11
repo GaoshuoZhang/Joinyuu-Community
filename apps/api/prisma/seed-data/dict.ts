@@ -33,4 +33,9 @@ export const dicts: Record<DictType, DictEntry[]> = {
     { code: 'ET004', label: '社交', sort: 4, status: 'enabled' },
     { code: 'ET005', label: '赛事', sort: 5, status: 'enabled' },
   ],
+  goods_category: [
+    { code: 'GC001', label: '实物商品', sort: 1, status: 'enabled' },
+    { code: 'GC002', label: '虚拟服务', sort: 2, status: 'enabled' },
+    { code: 'GC003', label: '权益券', sort: 3, status: 'enabled' },
+  ],
 }

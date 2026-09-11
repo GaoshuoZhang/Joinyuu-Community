@@ -4,7 +4,7 @@ import { PrismaService } from '../../common/prisma/prisma.service'
 import type { QueryAuditLogsDto } from './dto/query-audit-logs.dto'
 
 /* 审计日志查询（wiki-backend.md §7.15/§9.1）：module 精确筛选 + keyword 跨 target/action/detail/operator
- * 模糊匹配，最新在前（M0 口径）。写入由各域服务 / AuditInterceptor 完成，本服务只读。 */
+ * 模糊匹配，最新在前。写入由各域服务 / AuditInterceptor 完成，本服务只读。 */
 @Injectable()
 export class AuditLogsService {
   constructor(private readonly prisma: PrismaService) {}
@@ -36,7 +36,7 @@ export class AuditLogsService {
   }
 }
 
-/* M0 契约形状（apps/admin/src/types/index.ts AuditLog）：不含 ip/before/after（M1 扩展列） */
+/* apps/admin/src/types/index.ts AuditLog 形状：不含 ip/before/after（扩展列） */
 function toAuditLogDto(l: AuditLog): Record<string, unknown> {
   const dto: Record<string, unknown> = {
     id: l.id,

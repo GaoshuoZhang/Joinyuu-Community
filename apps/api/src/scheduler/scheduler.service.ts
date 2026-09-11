@@ -1,56 +1,157 @@
-import { Injectable } from '@nestjs/common'
+import { Injectable, InternalServerErrorException, NotFoundException } from '@nestjs/common'
 import { Cron, CronExpression } from '@nestjs/schedule'
 import { PrismaService } from '../common/prisma/prisma.service'
 import { IdGeneratorService } from '../common/id-generator/id-generator.service'
-import { formatNow, formatToday } from '../common/utils/time'
+import { TrashService } from '../modules/system/trash/trash.service'
+import { formatNow, formatNowSec, formatToday } from '../common/utils/time'
 
-/* 定时任务（wiki-backend.md §8.2）：
- * (1) 定时发布扫描：demands/events 中 scheduled 且到点 → published（活动同时开放报名）+ 写 schedule 通知；
- * (2) 活动自动结束：published 且 endTime 到点 → ended。
- * 单实例部署，无需分布式锁。@Cron 方法仅转发到公开方法，e2e 直接调用公开方法免等待。 */
+export interface SchedulerJobInfo {
+  name: string
+  /** 周期展示文案 */
+  cron: string
+  enabled: boolean
+}
+
+interface JobDefinition extends SchedulerJobInfo {
+  run: () => Promise<number>
+}
+
+/* 定时任务（wiki-backend.md §8.2，含执行日志）：
+ * (1) 定时发布扫描：demands/events/articles 中 scheduled 且到点 → published（活动同时开放报名）+ 写 schedule 通知；
+ * (2) 活动自动结束：published 且 endTime 到点 → ended；
+ * (3) 租约临期通知。
+ * 每次执行写入 SchedulerLog（监控页数据源）；@Cron 方法转发到 runJob，e2e 可直接调用 scanXxx/runJob。 */
 @Injectable()
 export class SchedulerService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly ids: IdGeneratorService,
+    private readonly trash: TrashService,
   ) {}
+
+  /** 任务注册表（监控页展示 + 手动触发入口） */
+  private get jobs(): JobDefinition[] {
+    return [
+      {
+        name: 'demands-events-scheduled-publish',
+        cron: '每 30 秒',
+        enabled: true,
+        run: () => this.scanScheduledPublish(),
+      },
+      {
+        name: 'articles-scheduled-publish',
+        cron: '每 30 秒',
+        enabled: true,
+        run: () => this.scanArticleScheduledPublish(),
+      },
+      { name: 'events-auto-end', cron: '每 5 分钟', enabled: true, run: () => this.scanAutoEnd() },
+      { name: 'lease-expiring-notify', cron: '每天 09:00', enabled: true, run: () => this.scanLeaseExpiring() },
+      { name: 'archive-auto-archive', cron: '每 5 分钟', enabled: true, run: () => this.trash.runAutoArchive() },
+      { name: 'archive-auto-purge', cron: '每 5 分钟', enabled: true, run: () => this.trash.runAutoPurge() },
+    ]
+  }
+
+  listJobs(): SchedulerJobInfo[] {
+    return this.jobs.map((j) => ({ name: j.name, cron: j.cron, enabled: j.enabled }))
+  }
+
+  /** 执行任务并记录 SchedulerLog（手动触发与 @Cron 共用） */
+  async runJob(name: string): Promise<{ code: number }> {
+    const job = this.jobs.find((j) => j.name === name)
+    if (!job) throw new NotFoundException('任务不存在')
+
+    const startedAt = formatNowSec()
+    const t0 = Date.now()
+    try {
+      const rows = await job.run()
+      await this.writeLog(name, startedAt, Date.now() - t0, 'ok', rows > 0 ? `影响 ${rows} 行` : '无待处理数据', rows)
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e)
+      await this.writeLog(name, startedAt, Date.now() - t0, 'error', msg, 0)
+      console.error(`[scheduler] 任务 ${name} 执行失败:`, msg)
+      /* 手动触发时向前端透出失败（@Cron 场景由调度器兜底记录） */
+      throw new InternalServerErrorException(`任务执行失败：${msg}`)
+    }
+    return { code: 0 }
+  }
+
+  private async writeLog(
+    jobName: string,
+    startedAt: string,
+    durationMs: number,
+    status: 'ok' | 'error',
+    detail: string,
+    rowsAffected: number,
+  ): Promise<void> {
+    try {
+      await this.prisma.schedulerLog.create({
+        data: {
+          id: await this.ids.next('SL'),
+          jobName,
+          startedAt,
+          finishedAt: formatNowSec(),
+          durationMs,
+          status,
+          detail: detail.slice(0, 255),
+          rowsAffected,
+        },
+      })
+    } catch (e) {
+      console.error('[scheduler] 执行日志写入失败:', e instanceof Error ? e.message : e)
+    }
+  }
 
   @Cron(CronExpression.EVERY_30_SECONDS, { name: 'demands-events-scheduled-publish' })
   async handleScheduledPublish(): Promise<void> {
-    await this.scanScheduledPublish()
+    await this.runJob('demands-events-scheduled-publish')
+  }
+
+  @Cron(CronExpression.EVERY_30_SECONDS, { name: 'articles-scheduled-publish' })
+  async handleArticleScheduledPublish(): Promise<void> {
+    await this.runJob('articles-scheduled-publish')
   }
 
   @Cron(CronExpression.EVERY_5_MINUTES, { name: 'events-auto-end' })
   async handleAutoEnd(): Promise<void> {
-    await this.scanAutoEnd()
+    await this.runJob('events-auto-end')
   }
 
   @Cron('0 9 * * *', { name: 'lease-expiring-notify' })
   async handleLeaseExpiring(): Promise<void> {
-    await this.scanLeaseExpiring()
+    await this.runJob('lease-expiring-notify')
+  }
+
+  @Cron(CronExpression.EVERY_5_MINUTES, { name: 'archive-auto-archive' })
+  async handleAutoArchive(): Promise<void> {
+    await this.runJob('archive-auto-archive')
+  }
+
+  @Cron(CronExpression.EVERY_5_MINUTES, { name: 'archive-auto-purge' })
+  async handleAutoPurge(): Promise<void> {
+    await this.runJob('archive-auto-purge')
   }
 
   /** 到点发布扫描：状态迁移与通知写入置于同一事务，避免"已发布但通知缺失"的部分失败 */
-  async scanScheduledPublish(): Promise<void> {
+  async scanScheduledPublish(): Promise<number> {
     const now = formatNow()
 
-    await this.prisma.$transaction(async (tx) => {
+    return this.prisma.$transaction(async (tx) => {
       const demands = await tx.demand.findMany({
-        where: { status: 'scheduled', scheduledAt: { lte: now } },
+        where: { status: 'scheduled', scheduledAt: { lte: now }, deletedAt: null },
       })
       const events = await tx.communityEvent.findMany({
-        where: { status: 'scheduled', scheduledAt: { lte: now } },
+        where: { status: 'scheduled', scheduledAt: { lte: now }, deletedAt: null },
       })
 
       if (demands.length > 0) {
         await tx.demand.updateMany({
-          where: { status: 'scheduled', scheduledAt: { lte: now } },
+          where: { status: 'scheduled', scheduledAt: { lte: now }, deletedAt: null },
           data: { status: 'published', publishedAt: now },
         })
       }
       if (events.length > 0) {
         await tx.communityEvent.updateMany({
-          where: { status: 'scheduled', scheduledAt: { lte: now } },
+          where: { status: 'scheduled', scheduledAt: { lte: now }, deletedAt: null },
           data: { status: 'published', enrollmentOpen: true },
         })
       }
@@ -81,22 +182,54 @@ export class SchedulerService {
           },
         })
       }
+      return demands.length + events.length
     })
   }
 
-  /** 活动自动结束：published 且 endTime 到点 → ended（无通知） */
-  async scanAutoEnd(): Promise<void> {
+  /** 文章定时发布：scheduled 且到点 → published */
+  async scanArticleScheduledPublish(): Promise<number> {
     const now = formatNow()
-    await this.prisma.communityEvent.updateMany({
-      where: { status: 'published', endTime: { lte: now } },
-      data: { status: 'ended' },
+    const articles = await this.prisma.article.findMany({
+      where: { status: 'scheduled', scheduledAt: { lte: now }, deletedAt: null },
     })
+    if (articles.length === 0) return 0
+
+    await this.prisma.$transaction(async (tx) => {
+      await tx.article.updateMany({
+        where: { status: 'scheduled', scheduledAt: { lte: now }, deletedAt: null },
+        data: { status: 'published', publishedAt: now },
+      })
+      for (const a of articles) {
+        await tx.adminNotification.create({
+          data: {
+            id: await this.ids.next('N'),
+            type: 'schedule',
+            title: '文章已定时发布',
+            content: `「${a.title}」已到点自动发布。`,
+            at: now,
+            read: false,
+            link: '/contents/publish',
+          },
+        })
+      }
+    })
+    return articles.length
+  }
+
+  /** 活动自动结束：published 且 endTime 到点 → ended（无通知） */
+  async scanAutoEnd(): Promise<number> {
+    const now = formatNow()
+    const res = await this.prisma.communityEvent.updateMany({
+      where: { status: 'published', endTime: { lte: now }, deletedAt: null },
+      data: { status: 'ended', archivableAt: now },
+    })
+    return res.count
   }
 
   /** 租约临期通知（wiki-backend.md §8.2）：active 且非长期租约 endDate 落在临期窗口
    * （SystemConfig.leaseExpireRemindDays，默认 15）→ 写 lease 通知；同一租约同日去重
    * （匹配 type=lease 且 content 含租约 ID 且 at 日期前缀为今日）。 */
-  async scanLeaseExpiring(): Promise<void> {
+  async scanLeaseExpiring(): Promise<number> {
     const config = await this.prisma.systemConfig.findUnique({ where: { id: 1 } })
     const days = config?.leaseExpireRemindDays ?? 15
     const today = formatToday()
@@ -106,7 +239,7 @@ export class SchedulerService {
     const leases = await this.prisma.lease.findMany({
       where: { status: 'active', longTerm: false, endDate: { gte: today, lte: windowEnd } },
     })
-    if (leases.length === 0) return
+    if (leases.length === 0) return 0
 
     /* 一次性取出今日已发的所有租约通知，内存去重（替代逐租约 findFirst 的 N+1） */
     const notifiedContents = await this.prisma.adminNotification.findMany({
@@ -135,9 +268,10 @@ export class SchedulerService {
         })
       }
     })
+    return toCreate.length
   }
 
-  /** 日期字符串加天数（YYYY-MM-DD），对齐 M0 addDays 语义 */
+  /** 日期字符串加天数（YYYY-MM-DD），对齐 addDays 语义 */
   private addDays(dateStr: string, days: number): string {
     const d = new Date(`${dateStr}T00:00:00`)
     d.setDate(d.getDate() + days)

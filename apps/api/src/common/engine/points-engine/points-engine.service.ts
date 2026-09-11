@@ -6,11 +6,11 @@ import { RedisService } from '../../redis/redis.service'
 import { CACHE_KEYS, CACHE_TTL } from '../../redis/cache-keys'
 import { formatNow } from '../../utils/time'
 
-/* 积分/经验发放引擎（wiki-backend.md §8.4/§8.5/§10）：
+/* 积分/经验值发放引擎（wiki-backend.md §8.4/§8.5/§10）：
  * 规则触发项 code 写死，仅 points/exp 值与启停可编辑；规则缺失或停用 → 直接 no-op。
  * 规则与等级梯度读取走缓存（与规则管理页共用 rules:* 键，查询口径一致），写操作由规则/商城服务主动失效。
  * 发放走事务：余额 += 规则值 + 写流水（source=rule、operator=系统、balance=新余额）。
- * 经验发放后按 LevelTier 门槛重算 level（仅社区个体/社区企业身份持有 level）。 */
+ * 经验值发放后按 LevelTier 门槛重算 level（仅社区个体/社区企业身份持有 level）。 */
 @Injectable()
 export class PointsEngineService {
   constructor(

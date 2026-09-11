@@ -5,6 +5,8 @@ import { PrismaModule } from './common/prisma/prisma.module'
 import { RedisModule } from './common/redis/redis.module'
 import { IdGeneratorModule } from './common/id-generator/id-generator.module'
 import { AuditModule } from './common/audit/audit.module'
+import { RbacModule } from './common/rbac/rbac.module'
+import { StorageModule } from './common/storage/storage.module'
 import { PointsEngineModule } from './common/engine/points-engine/points-engine.module'
 import { AuthModule } from './modules/auth/auth.module'
 import { UsersModule } from './modules/users/users.module'
@@ -21,9 +23,17 @@ import { WorkstationsModule } from './modules/workstations/workstations.module'
 import { SpacesModule } from './modules/spaces/spaces.module'
 import { ContentsModule } from './modules/contents/contents.module'
 import { SystemModule } from './modules/system/system.module'
+import { RolesModule } from './modules/system/roles/roles.module'
+import { AdminsModule } from './modules/system/admins/admins.module'
+import { LoginLogsModule } from './modules/system/login-logs/login-logs.module'
+import { MonitorModule } from './modules/system/monitor/monitor.module'
+import { TrashModule } from './modules/system/trash/trash.module'
+import { ExportModule } from './modules/system/export/export.module'
+import { AssetsModule } from './modules/assets/assets.module'
 import { SchedulerModule } from './scheduler/scheduler.module'
 import { HealthController } from './health/health.controller'
 import { JwtAuthGuard } from './common/guards/jwt-auth.guard'
+import { PermissionGuard } from './common/guards/permission.guard'
 import { EnvelopeInterceptor } from './common/interceptors/envelope.interceptor'
 import { AuditInterceptor } from './common/interceptors/audit.interceptor'
 import { HttpExceptionFilter } from './common/filters/http-exception.filter'
@@ -35,6 +45,8 @@ import { HttpExceptionFilter } from './common/filters/http-exception.filter'
     RedisModule,
     IdGeneratorModule,
     AuditModule,
+    RbacModule,
+    StorageModule,
     PointsEngineModule,
     AuthModule,
     UsersModule,
@@ -51,12 +63,20 @@ import { HttpExceptionFilter } from './common/filters/http-exception.filter'
     SpacesModule,
     ContentsModule,
     SystemModule,
+    RolesModule,
+    AdminsModule,
+    LoginLogsModule,
+    MonitorModule,
+    TrashModule,
+    ExportModule,
+    AssetsModule,
     SchedulerModule,
   ],
   controllers: [HealthController],
   providers: [
     { provide: APP_PIPE, useValue: new ValidationPipe({ transform: true, whitelist: true }) },
     { provide: APP_GUARD, useClass: JwtAuthGuard },
+    { provide: APP_GUARD, useClass: PermissionGuard },
     { provide: APP_INTERCEPTOR, useClass: EnvelopeInterceptor },
     { provide: APP_INTERCEPTOR, useClass: AuditInterceptor },
     { provide: APP_FILTER, useClass: HttpExceptionFilter },

@@ -1,8 +1,10 @@
 import { Body, Controller, Delete, Get, HttpCode, Param, Post, Put } from '@nestjs/common'
+import { RequirePermission } from '../../common/decorators/require-permission.decorator'
 import { WorkstationsService, type WorkstationDto } from './workstations.service'
 import { WorkstationPayloadDto } from './dto/workstation-payload.dto'
 import { WorkstationStatusDto } from './dto/workstation-status.dto'
 
+@RequirePermission('/workstations')
 @Controller('api/admin/workstations')
 export class WorkstationsController {
   constructor(private readonly workstations: WorkstationsService) {}

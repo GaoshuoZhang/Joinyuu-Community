@@ -13,8 +13,8 @@ import { workstationTypeMap } from '@/constants/status'
 import type { Workstation, WorkstationArea, WorkstationType } from '@/types'
 
 /* 区域规划弹窗（办公位管理/办公室管理两页共用）：
- * 区域列表（含各区域工位数）+ 新增/编辑/删除；工位.area 存区域名称，
- * 改名由 API 层级联刷新（M1 改存 areaId 后无需级联）；区域下仍有工位时禁止删除 */
+ * 区域列表（含各区域办公位数）+ 新增/编辑/删除；办公位.area 存区域名称，
+ * 改名由 API 层级联刷新（改存 areaId 后无需级联）；区域下仍有办公位时禁止删除 */
 const props = defineProps<{
   visible: boolean
 }>()
@@ -95,10 +95,10 @@ async function onConfirm() {
     const payload = { name: form.name.trim(), type: form.type, description: form.description }
     if (editingId.value) {
       await updateWorkstationArea(editingId.value, payload)
-      MessagePlugin.success('区域已保存，区域内工位的所属区域已同步更新')
+      MessagePlugin.success('区域已保存，区域内办公位的所属区域已同步更新')
     } else {
       const area = await createWorkstationArea(payload)
-      MessagePlugin.success(`区域已创建（${area.id}），可通过「创建办公位」向区域内添加工位`)
+      MessagePlugin.success(`区域已新增（${area.id}），可通过「新增办公位」向区域内新增办公位`)
     }
     emit('success')
     await load()
@@ -133,7 +133,7 @@ function onClose() {
       <div class="dialog-footer">
         <t-button variant="text" theme="default" @click="onClose">关闭</t-button>
         <t-button theme="primary" :loading="submitting" @click="onConfirm">
-          {{ editingId ? '保存修改' : '创建区域' }}
+          {{ editingId ? '保存修改' : '新增区域' }}
         </t-button>
       </div>
     </template>
@@ -145,7 +145,7 @@ function onClose() {
       </div>
       <div class="form-row">
         <t-form-item label="区域名称" name="name">
-          <t-input v-model="form.name" placeholder="如 D 区 · 创客工位" />
+          <t-input v-model="form.name" placeholder="如 D 区 · 创客办公位" />
         </t-form-item>
         <t-form-item label="区域主类型" name="type">
           <t-select v-model="form.type" :options="typeOptions" />
@@ -172,7 +172,7 @@ function onClose() {
             <div class="area-name">
               {{ area.name }}
               <t-tag variant="light" size="small">{{ workstationTypeMap[area.type] ?? area.type }}</t-tag>
-              <t-tag variant="outline" size="small">{{ countByArea(area.name) }} 个工位</t-tag>
+              <t-tag variant="outline" size="small">{{ countByArea(area.name) }} 个办公位</t-tag>
             </div>
             <div class="area-desc">{{ area.description || '暂无说明' }}</div>
           </div>
@@ -180,7 +180,7 @@ function onClose() {
             <div class="area-op">
               <t-button variant="text" size="small" @click="openEdit(area)">编辑</t-button>
               <t-popconfirm
-                content="确认删除该区域？区域下仍有工位时将无法删除"
+                content="确认删除该区域？区域下仍有办公位时将无法删除"
                 @confirm="onDelete(area)"
               >
                 <t-button variant="text" size="small" theme="danger">删除</t-button>
@@ -190,7 +190,7 @@ function onClose() {
         </t-list-item>
       </t-list>
       <div v-if="areas.length === 0" class="area-empty">
-        暂无区域，请先在上方创建区域，再通过「创建办公位」添加工位。
+        暂无区域，请先在上方新增区域，再通过「新增办公位」新增办公位。
       </div>
     </div>
   </t-dialog>

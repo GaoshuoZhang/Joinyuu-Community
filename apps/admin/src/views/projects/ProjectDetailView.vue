@@ -1,10 +1,12 @@
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue'
+import { computed, nextTick, onMounted, reactive, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { MessagePlugin } from 'tdesign-vue-next'
+import type { FormProps } from 'tdesign-vue-next'
 import { ArrowLeftIcon } from 'tdesign-icons-vue-next'
 import StatusTag from '@/components/StatusTag.vue'
-import { fetchProject } from '@/api/projects'
+import ProjectFormDialog from '@/components/ProjectFormDialog.vue'
+import { fetchProject, pauseProject, resumeProject, closeProject, archiveProject } from '@/api/projects'
 import type { Milestone, Project, ProjectUndertaker } from '@/types'
 
 const route = useRoute()
@@ -12,6 +14,8 @@ const router = useRouter()
 const loading = ref(true)
 const project = ref<Project | null>(null)
 const tab = ref('info')
+/* 已归档条目：隐藏全部写操作，仅保留只读内容 */
+const isArchived = computed(() => !!project.value?.deletedAt)
 
 const milestoneTagMap: Record<Milestone['status'], { label: string; theme: 'success' | 'primary' | 'default' }> = {
   done: { label: '已完成', theme: 'success' },
@@ -25,7 +29,7 @@ const undertakerTypeMap: Record<ProjectUndertaker['type'], string> = {
   custom: '自定义',
 }
 
-/* 承接方卡片跳转：社区企业 → 入驻企业详情；外部企业（XE 前缀）→ 外部企业详情；用户 → 用户详情；自定义不跳转 */
+/* 承接方卡片跳转：社区企业 → 社区企业详情；合作企业（XE 前缀）→ 合作企业详情；用户 → 用户详情；自定义不跳转 */
 function canGoUndertaker(u: ProjectUndertaker): boolean {
   if (u.type === 'custom') return false
   return !!u.id
@@ -77,6 +81,91 @@ function goSourceDemand() {
   if (project.value?.sourceDemandId) router.push(`/demands/${project.value.sourceDemandId}`)
 }
 
+const formVisible = ref(false)
+const formMode = ref<'create' | 'edit'>('create')
+const formProject = ref<Project | null>(null)
+const acting = ref('')
+
+function openEdit() {
+  if (!project.value) return
+  formMode.value = 'edit'
+  formProject.value = project.value
+  formVisible.value = true
+}
+
+function openRecreate() {
+  if (!project.value) return
+  formMode.value = 'create'
+  formProject.value = project.value
+  formVisible.value = true
+}
+
+async function onStatusChange(action: 'pause' | 'resume') {
+  if (!project.value) return
+  const id = project.value.id
+  acting.value = id + ':' + action
+  try {
+    if (action === 'pause') {
+      await pauseProject(id)
+      MessagePlugin.success('项目已暂停')
+    } else {
+      await resumeProject(id)
+      MessagePlugin.success('项目已恢复进行中')
+    }
+    await load()
+  } catch (e) {
+    MessagePlugin.error(e instanceof Error ? e.message : '操作失败')
+  } finally {
+    acting.value = ''
+  }
+}
+
+const closeVisible = ref(false)
+const closeSaving = ref(false)
+const closeFormRef = ref()
+const closeForm = reactive({ reason: '' })
+const closeRules: FormProps['rules'] = {
+  reason: [{ required: true, message: '请填写关闭原因', trigger: 'submit' }],
+}
+
+function openCloseDialog() {
+  closeForm.reason = ''
+  closeVisible.value = true
+  nextTick(() => closeFormRef.value?.clearValidate())
+}
+
+async function onConfirmClose() {
+  if (!project.value) return
+  const valid = await closeFormRef.value.validate()
+  if (valid !== true) return
+  closeSaving.value = true
+  try {
+    await closeProject(project.value.id, closeForm.reason)
+    MessagePlugin.success('项目已关闭')
+    closeVisible.value = false
+    await load()
+  } catch (e) {
+    MessagePlugin.error(e instanceof Error ? e.message : '操作失败')
+  } finally {
+    closeSaving.value = false
+  }
+}
+
+async function onArchive() {
+  if (!project.value) return
+  const id = project.value.id
+  acting.value = id + ':archive'
+  try {
+    await archiveProject(id)
+    MessagePlugin.success('项目已归档')
+    await load()
+  } catch (e) {
+    MessagePlugin.error(e instanceof Error ? e.message : '操作失败')
+  } finally {
+    acting.value = ''
+  }
+}
+
 onMounted(load)
 </script>
 
@@ -98,10 +187,59 @@ onMounted(load)
     <template v-else-if="project">
       <!-- 项目头部 -->
       <div class="page-card head-card">
-        <div class="head-main">
-          <h3 class="head-title">{{ project.name }}</h3>
-          <span class="head-code">{{ project.code }}</span>
-          <StatusTag entity="project" :value="project.status" />
+        <div class="head-top">
+          <div class="head-main">
+            <h3 class="head-title">{{ project.name }}</h3>
+            <span class="head-code">{{ project.code }}</span>
+            <StatusTag entity="project" :value="project.status" />
+            <t-tag v-if="isArchived" theme="default" variant="light">已归档</t-tag>
+          </div>
+          <div class="head-actions">
+            <template v-if="!isArchived">
+              <t-button
+                v-if="project.status !== 'finished' && project.status !== 'closed'"
+                variant="outline"
+                @click="openEdit"
+              >
+                编辑
+              </t-button>
+              <template v-if="project.status === 'running'">
+                <t-popconfirm content="确认暂停该项目？" @confirm="onStatusChange('pause')">
+                  <t-button variant="outline" theme="warning" :loading="acting === project.id + ':pause'">
+                    暂停
+                  </t-button>
+                </t-popconfirm>
+              </template>
+              <template v-else-if="project.status === 'paused'">
+                <t-button
+                  variant="outline"
+                  theme="primary"
+                  :loading="acting === project.id + ':resume'"
+                  @click="onStatusChange('resume')"
+                >
+                  恢复
+                </t-button>
+                <t-button variant="outline" theme="danger" @click="openCloseDialog">关闭</t-button>
+              </template>
+              <template v-else-if="project.status === 'closed'">
+                <t-button variant="outline" theme="primary" @click="openRecreate">重新新增</t-button>
+                <t-popconfirm content="确认归档该项目？归档后可在归档管理中恢复" @confirm="onArchive">
+                  <t-button variant="outline" theme="warning" :loading="acting === project.id + ':archive'">
+                    归档
+                  </t-button>
+                </t-popconfirm>
+              </template>
+              <t-popconfirm
+                v-else-if="project.status === 'finished'"
+                content="确认归档该项目？归档后可在归档管理中恢复"
+                @confirm="onArchive"
+              >
+                <t-button variant="outline" theme="warning" :loading="acting === project.id + ':archive'">
+                  归档
+                </t-button>
+              </t-popconfirm>
+            </template>
+          </div>
         </div>
         <t-descriptions :column="3" bordered>
           <t-descriptions-item label="立项日期">{{ project.initiatedAt }}</t-descriptions-item>
@@ -113,7 +251,7 @@ onMounted(load)
           </t-descriptions-item>
           <t-descriptions-item label="来源需求">
             <t-link v-if="project.sourceDemandId" theme="primary" hover="color" @click="goSourceDemand">
-              {{ project.sourceDemandId }} · 查看
+              {{ project.sourceDemandId }} · 详情
             </t-link>
             <span v-else class="muted">社区自建</span>
           </t-descriptions-item>
@@ -136,7 +274,7 @@ onMounted(load)
                     @click="goUndertaker(u)"
                   >
                     <div class="ut-info">
-                      <span class="ut-name">{{ u.name }}</span>
+                      <span class="ut-name">{{ u.name }}<t-tag v-if="u.id" class="id-tag" size="small" variant="light">{{ u.id }}</t-tag></span>
                       <t-tag variant="outline" size="small">{{ undertakerTypeMap[u.type] }}</t-tag>
                     </div>
                     <div class="ut-share">
@@ -149,7 +287,7 @@ onMounted(load)
 
               <div class="block">
                 <h4 class="block-title">项目说明</h4>
-                <p class="desc">{{ project.description }}</p>
+                <div class="desc rich-text" v-html="project.description"></div>
               </div>
             </div>
           </t-tab-panel>
@@ -182,7 +320,7 @@ onMounted(load)
                     <div v-else-if="project.undertakers?.length" class="ms-owners">
                       <!-- owners 为空 = 全部承接方：按承接方逐一出标签，与显式责任方视觉一致 -->
                       <t-tag v-for="ut in project.undertakers" :key="ut.id + ut.type" variant="light" size="small">
-                        {{ ut.name }}
+                        {{ ut.name }}<template v-if="ut.id"> [{{ ut.id }}]</template>
                       </t-tag>
                     </div>
                     <span v-else class="ms-none">负责方待定</span>
@@ -194,6 +332,37 @@ onMounted(load)
           </t-tab-panel>
         </t-tabs>
       </div>
+
+      <ProjectFormDialog
+        v-model:visible="formVisible"
+        :mode="formMode"
+        :demand="null"
+        :project="formProject"
+        @success="load"
+      />
+
+      <t-dialog
+        :visible="closeVisible"
+        :header="project ? `关闭项目 · ${project.name}` : '关闭项目'"
+        width="460px"
+        @close="closeVisible = false"
+      >
+        <template #footer>
+          <div class="dialog-footer">
+            <t-button variant="text" theme="default" @click="closeVisible = false">取消</t-button>
+            <t-button theme="danger" :loading="closeSaving" @click="onConfirmClose">确认关闭</t-button>
+          </div>
+        </template>
+        <t-form ref="closeFormRef" :data="closeForm" :rules="closeRules" label-align="top">
+          <t-form-item label="关闭原因" name="reason">
+            <t-textarea
+              v-model="closeForm.reason"
+              :autosize="{ minRows: 3, maxRows: 5 }"
+              placeholder="请填写关闭原因（必填），将记录在项目信息中"
+            />
+          </t-form-item>
+        </t-form>
+      </t-dialog>
     </template>
 
     <t-empty v-else description="项目不存在或已被删除" />
@@ -210,12 +379,26 @@ onMounted(load)
   margin-bottom: 16px;
 }
 
+.head-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 16px;
+}
+
 .head-main {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
   gap: 12px;
-  margin-bottom: 16px;
+}
+
+.head-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
 }
 
 .head-title {
@@ -365,5 +548,11 @@ onMounted(load)
 .ms-date {
   font-size: 12px;
   color: var(--td-text-color-secondary);
+}
+
+.dialog-footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
 }
 </style>

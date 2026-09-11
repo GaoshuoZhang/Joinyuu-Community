@@ -12,16 +12,16 @@ import {
 import { workstationTypeMap } from '@/constants/status'
 import type { Workstation, WorkstationType } from '@/types'
 
-/* 工位创建/编辑弹窗（办公位管理/办公室管理两页共用）：
- * 创建 = 选区域 + 编号 + 类型 + 容纳人数 + 备注（创建即空闲，分配走「租赁管理」）；
+/* 办公位新增/编辑弹窗（办公位管理/办公室管理两页共用）：
+ * 新增 = 选区域 + 编号 + 类型 + 容纳人数 + 备注（新增即空闲，分配走「租赁管理」）；
  * 编辑 = 区域/编号/类型/容纳人数/备注 + 维护中开关（替代原卡片上的维修登记/恢复按钮；
- *        已分配工位不可维护，需先在「租赁管理」终止租约）+ 删除工位（已分配时禁用）；
+ *        已分配办公位不可维护，需先在「租赁管理」终止租约）+ 删除办公位（已分配时禁用）；
  * 区域选项每次打开都重新拉取——区域规划新增/改名后立即可见，无需切换页面 */
 const props = defineProps<{
   visible: boolean
   mode: 'create' | 'edit'
   workstation: Workstation | null
-  /** 创建时的默认类型（办公位管理页传 open、办公室管理页传 office） */
+  /** 新增时的默认类型（办公位管理页传 open、办公室管理页传 office） */
   defaultType?: WorkstationType
 }>()
 
@@ -54,12 +54,12 @@ const seatNoTip = computed(() =>
   props.mode === 'create' ? '不可重复，建议「区域前缀-序号」' : '',
 )
 
-/* 已分配工位不可删除（需先终止租约）；维护中/空闲可直接删除 */
+/* 已分配办公位不可删除（需先终止租约）；维护中/空闲可直接删除 */
 const canDelete = computed(() => props.mode === 'edit' && props.workstation?.status !== 'assigned')
 
 const maintenanceTip = computed(() => {
   if (props.mode === 'edit' && props.workstation?.status === 'assigned')
-    return '已分配的工位/办公室不可设为维护中，请先在「租赁管理」终止租约'
+    return '已分配的办公位/办公室不可设为维护中，请先在「租赁管理」终止租约'
   return form.maintenance
     ? '当前维护中：暂停分配，关闭开关即可恢复空闲'
     : '开启后进入维护中状态，暂停分配'
@@ -105,8 +105,8 @@ watch(
 /* 规则 trigger 一律 submit：确认时 formRef.validate() 才触发红框提示 */
 const rules: FormProps['rules'] = {
   area: [{ required: true, message: '请选择所属区域', trigger: 'submit' }],
-  seatNo: [{ required: true, message: '请输入工位编号', trigger: 'submit' }],
-  type: [{ required: true, message: '请选择工位类型', trigger: 'submit' }],
+  seatNo: [{ required: true, message: '请输入办公位编号', trigger: 'submit' }],
+  type: [{ required: true, message: '请选择办公位类型', trigger: 'submit' }],
 }
 
 async function onConfirm() {
@@ -125,14 +125,14 @@ async function onConfirm() {
     }
     if (props.mode === 'create') {
       const ws = await createWorkstation(payload)
-      MessagePlugin.success(`工位已创建并置为空闲（${ws.id}），可在平面图中查看`)
+      MessagePlugin.success(`办公位已新增并置为空闲（${ws.id}），可在平面图中查看`)
     } else if (props.workstation) {
       await updateWorkstation(props.workstation.id, payload)
-      /* 维护状态开关与打开时不一致时同步状态（已分配工位开关已禁用，不会走到被拦分支） */
+      /* 维护状态开关与打开时不一致时同步状态（已分配办公位开关已禁用，不会走到被拦分支） */
       if (form.maintenance !== initialMaintenance.value) {
         await setWorkstationStatus(props.workstation.id, form.maintenance ? 'maintenance' : 'idle')
       }
-      MessagePlugin.success('工位资料已保存')
+      MessagePlugin.success('办公位资料已保存')
     }
     emit('update:visible', false)
     emit('success')
@@ -147,13 +147,13 @@ function onClose() {
   emit('update:visible', false)
 }
 
-/* 删除工位（编辑模式专用）：成功后关闭弹窗并通知父级刷新 */
+/* 删除办公位（编辑模式专用）：成功后关闭弹窗并通知父级刷新 */
 async function onDelete() {
   if (!props.workstation) return
   submitting.value = true
   try {
     await deleteWorkstation(props.workstation.id)
-    MessagePlugin.success(`工位 ${props.workstation.seatNo} 已删除`)
+    MessagePlugin.success(`办公位 ${props.workstation.seatNo} 已删除`)
     emit('update:visible', false)
     emit('success')
   } catch (e) {
@@ -167,23 +167,23 @@ async function onDelete() {
 <template>
   <t-dialog
     :visible="visible"
-    :header="mode === 'create' ? '创建办公位' : '编辑工位信息'"
+    :header="mode === 'create' ? '新增办公位' : '编辑办公位信息'"
     width="560px"
     @close="onClose"
   >
     <template #footer>
       <div class="dialog-footer">
-        <!-- 编辑模式：删除工位（已分配时禁用，悬浮提示原因） -->
-        <t-tooltip v-if="mode === 'edit' && !canDelete" content="已分配的工位不可删除，请先在「租赁管理」终止租约">
-          <t-button theme="danger" variant="outline" disabled>删除工位</t-button>
+        <!-- 编辑模式：删除办公位（已分配时禁用，悬浮提示原因） -->
+        <t-tooltip v-if="mode === 'edit' && !canDelete" content="已分配的办公位不可删除，请先在「租赁管理」终止租约">
+          <t-button theme="danger" variant="outline" disabled>删除办公位</t-button>
         </t-tooltip>
-        <t-popconfirm v-else-if="mode === 'edit'" content="确认删除该工位？删除后不可恢复" @confirm="onDelete">
-          <t-button theme="danger" variant="outline" :loading="submitting">删除工位</t-button>
+        <t-popconfirm v-else-if="mode === 'edit'" content="确认删除该办公位？删除后不可恢复" @confirm="onDelete">
+          <t-button theme="danger" variant="outline" :loading="submitting">删除办公位</t-button>
         </t-popconfirm>
         <span class="footer-spacer" />
         <t-button variant="text" theme="default" @click="onClose">取消</t-button>
         <t-button theme="primary" :loading="submitting" @click="onConfirm">
-          {{ mode === 'create' ? '确认创建' : '保存修改' }}
+          {{ mode === 'create' ? '确认新增' : '保存修改' }}
         </t-button>
       </div>
     </template>
@@ -192,14 +192,14 @@ async function onDelete() {
         <t-select clearable v-model="form.area" :options="areaOptions" placeholder="区域在「区域规划」中维护" />
       </t-form-item>
       <div class="form-row">
-        <t-form-item label="工位编号" name="seatNo">
+        <t-form-item label="办公位编号" name="seatNo">
           <t-input clearable v-model="form.seatNo" :placeholder="seatNoTip" />
         </t-form-item>
         <t-form-item label="容纳人数" name="capacity">
           <t-input-number v-model="form.capacity" :min="1" theme="column" style="width: 100%" />
         </t-form-item>
       </div>
-      <t-form-item label="工位类型" name="type">
+      <t-form-item label="办公位类型" name="type">
         <t-radio-group v-model="form.type" :options="typeOptions" />
       </t-form-item>
       <div class="form-row">

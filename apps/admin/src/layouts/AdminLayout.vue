@@ -16,8 +16,10 @@ import {
   Edit2Icon,
   LayersIcon,
   MapIcon,
+  MoonIcon,
   NotificationIcon,
   SettingIcon,
+  SunnyIcon,
   UserCircleIcon,
   UserIcon,
   UserListIcon,
@@ -27,6 +29,7 @@ import {
 import { MessagePlugin } from 'tdesign-vue-next'
 import { useAuthStore } from '@/stores/auth'
 import { useTabsStore } from '@/stores/tabs'
+import { useThemeStore } from '@/stores/theme'
 import {
   fetchNotifications,
   markAllNotificationsRead,
@@ -38,6 +41,12 @@ const route = useRoute()
 const router = useRouter()
 const auth = useAuthStore()
 const tabs = useTabsStore()
+const theme = useThemeStore()
+
+/* RBAC：分组至少含一个可见菜单项才渲染（避免空分组标题） */
+function canSee(codes: string[]): boolean {
+  return codes.some((code) => auth.hasPerm(code))
+}
 
 const collapsed = ref(false)
 
@@ -85,10 +94,12 @@ const activePath = computed(() => {
   if (p.startsWith('/demands')) return '/demands'
   if (p === '/spaces/reservations') return '/spaces/reservations'
   if (p.startsWith('/spaces/')) return '/spaces'
+  if (p.startsWith('/workstations/leases/')) return '/workstations/leases'
   if (p.startsWith('/projects')) return '/projects'
   if (p.startsWith('/events')) return '/events'
+  if (p.startsWith('/assets')) return '/assets/library'
   if (p.startsWith('/system')) return p
-  if (p.startsWith('/logs')) return '/logs/audit'
+  if (p.startsWith('/logs')) return p
   return p
 })
 
@@ -122,12 +133,6 @@ async function onReadAll() {
 
 onMounted(loadNotifications)
 
-/* ---------- 面包屑：详情页第二级可点击返回列表 ---------- */
-const detailListPath = computed(() => {
-  const m = route.path.match(/^\/(users|enterprises|external-enterprises|demands|projects|events|spaces)\/[^/]+$/)
-  return m ? `/${m[1]}` : ''
-})
-
 /* 路由变化 → 同步多标签页 */
 watch(
   () => route.path,
@@ -152,17 +157,21 @@ function closeTab(path: string) {
   if (route.path === path && next) router.push(next)
 }
 
-/* 全部关闭：清空标签仅保留工作台，并回到工作台 */
+/* 全部关闭：关闭除当前页外的所有标签（工作台始终保留），保持在当前页 */
 function closeAllTabs() {
-  tabs.clear()
-  router.push('/dashboard')
+  tabs.closeOthers(route.path)
 }
 
 const dropdownOptions = [
+  { content: '修改密码', value: 'change-password' },
   { content: '退出登录', value: 'logout' },
 ]
 
 async function handleDropdown(item: { value?: string | number }) {
+  if (item.value === 'change-password') {
+    router.push('/system/change-password')
+    return
+  }
   if (item.value === 'logout') {
     await auth.logout()
     tabs.clear()
@@ -198,139 +207,195 @@ async function handleDropdown(item: { value?: string | number }) {
             工作台
           </t-menu-item>
 
-          <t-submenu value="group-members" title="社区成员">
+          <t-submenu v-if="canSee(['/users', '/individuals', '/enterprises', '/external-enterprises', '/approvals'])" value="group-members" title="社区成员">
             <template #icon><UserCircleIcon /></template>
-            <t-menu-item value="/users">
+            <t-menu-item value="/users" v-permission="'/users'">
               <template #icon><UserListIcon /></template>
               用户管理
             </t-menu-item>
-            <t-menu-item value="/individuals">
+            <t-menu-item value="/individuals" v-permission="'/individuals'">
               <template #icon><UserIcon /></template>
               社区个体
             </t-menu-item>
-            <t-menu-item value="/enterprises">
+            <t-menu-item value="/enterprises" v-permission="'/enterprises'">
               <template #icon><BuildingIcon /></template>
               社区企业
             </t-menu-item>
-            <t-menu-item value="/external-enterprises">
+            <t-menu-item value="/external-enterprises" v-permission="'/external-enterprises'">
               <template #icon><Building1Icon /></template>
-              外部企业
+              合作企业
             </t-menu-item>
-            <t-menu-item value="/approvals">
+            <t-menu-item value="/approvals" v-permission="'/approvals'">
               <template #icon><CheckCircleIcon /></template>
-              申请审批
+              申请审核
             </t-menu-item>
           </t-submenu>
 
-          <t-submenu value="group-biz" title="业务运营">
+          <t-submenu v-if="canSee(['/demands', '/demands/review', '/projects', '/events'])" value="group-biz" title="业务运营">
             <template #icon><ViewListIcon /></template>
-            <t-menu-item value="/demands">
+            <t-menu-item value="/demands" v-permission="'/demands'">
               <template #icon><ViewListIcon /></template>
               需求管理
             </t-menu-item>
-            <t-menu-item value="/demands/review">
+            <t-menu-item value="/demands/review" v-permission="'/demands/review'">
               <template #icon><CheckCircleIcon /></template>
               需求审核
             </t-menu-item>
-            <t-menu-item value="/projects">
+            <t-menu-item value="/projects" v-permission="'/projects'">
               <template #icon><AppIcon /></template>
               项目管理
             </t-menu-item>
-            <t-menu-item value="/events">
+            <t-menu-item value="/events" v-permission="'/events'">
               <template #icon><CalendarIcon /></template>
               活动管理
             </t-menu-item>
           </t-submenu>
 
-          <t-submenu value="group-space" title="空间管理">
+          <t-submenu
+            v-if="canSee(['/workstations', '/workstations/offices', '/workstations/leases', '/spaces', '/spaces/reservations'])"
+            value="group-space"
+            title="空间管理"
+          >
             <template #icon><MapIcon /></template>
-            <t-menu-item value="/workstations">
+            <t-menu-item value="/workstations" v-permission="'/workstations'">
               <template #icon><ViewModuleIcon /></template>
               办公位管理
             </t-menu-item>
-            <t-menu-item value="/workstations/offices">
+            <t-menu-item value="/workstations/offices" v-permission="'/workstations/offices'">
               <template #icon><BuildingIcon /></template>
               办公室管理
             </t-menu-item>
-            <t-menu-item value="/workstations/leases">
+            <t-menu-item value="/workstations/leases" v-permission="'/workstations/leases'">
               <template #icon><ViewListIcon /></template>
               租赁管理
             </t-menu-item>
-            <t-menu-item value="/spaces">
+            <t-menu-item value="/spaces" v-permission="'/spaces'">
               <template #icon><MapIcon /></template>
               公共空间管理
             </t-menu-item>
-            <t-menu-item value="/spaces/reservations">
+            <t-menu-item value="/spaces/reservations" v-permission="'/spaces/reservations'">
               <template #icon><CalendarIcon /></template>
               公共空间预约
             </t-menu-item>
           </t-submenu>
 
-          <t-submenu value="group-contents" title="内容管理">
+          <t-submenu
+            v-if="canSee(['/contents/publish', '/contents/submissions', '/contents/columns', '/contents/stats', '/contents/showcase', '/contents/announcements'])"
+            value="group-contents"
+            title="内容管理"
+          >
             <template #icon><Edit2Icon /></template>
-            <t-menu-item value="/contents">
+            <t-menu-item value="/contents/publish" v-permission="'/contents/publish'">
               <template #icon><Edit2Icon /></template>
-              资讯内容
+              资讯发布
             </t-menu-item>
-            <t-menu-item value="/contents/showcase">
+            <t-menu-item value="/contents/submissions" v-permission="'/contents/submissions'">
+              <template #icon><ViewListIcon /></template>
+              投稿内容
+            </t-menu-item>
+            <t-menu-item value="/contents/columns" v-permission="'/contents/columns'">
+              <template #icon><ViewModuleIcon /></template>
+              栏目管理
+            </t-menu-item>
+            <t-menu-item value="/contents/stats" v-permission="'/contents/stats'">
+              <template #icon><AppIcon /></template>
+              阅读统计
+            </t-menu-item>
+            <t-menu-item value="/contents/showcase" v-permission="'/contents/showcase'">
               <template #icon><ViewListIcon /></template>
               展示页发布
             </t-menu-item>
-            <t-menu-item value="/contents/announcements">
+            <t-menu-item value="/contents/announcements" v-permission="'/contents/announcements'">
               <template #icon><NotificationIcon /></template>
               公告栏
             </t-menu-item>
           </t-submenu>
 
-          <t-submenu value="group-points" title="积分商城">
+          <t-submenu v-if="canSee(['/mall/goods', '/mall/orders'])" value="group-points" title="积分商城">
             <template #icon><CartIcon /></template>
-            <t-menu-item value="/mall/goods">
+            <t-menu-item value="/mall/goods" v-permission="'/mall/goods'">
               <template #icon><CartIcon /></template>
               商品管理
             </t-menu-item>
-            <t-menu-item value="/mall/orders">
+            <t-menu-item value="/mall/orders" v-permission="'/mall/orders'">
               <template #icon><ViewListIcon /></template>
               订单管理
             </t-menu-item>
           </t-submenu>
 
-          <t-submenu value="group-rules" title="规则管理">
+          <t-submenu
+            v-if="canSee(['/rules/points', '/rules/experience', '/rules/levels', '/rules/ledger', '/rules/experience-records'])"
+            value="group-rules"
+            title="规则管理"
+          >
             <template #icon><SettingIcon /></template>
-            <t-menu-item value="/rules/points">
+            <t-menu-item value="/rules/points" v-permission="'/rules/points'">
               <template #icon><Edit2Icon /></template>
               积分规则
             </t-menu-item>
-            <t-menu-item value="/rules/experience">
+            <t-menu-item value="/rules/experience" v-permission="'/rules/experience'">
               <template #icon><ViewListIcon /></template>
               经验值规则
             </t-menu-item>
-            <t-menu-item value="/rules/levels">
+            <t-menu-item value="/rules/levels" v-permission="'/rules/levels'">
               <template #icon><ViewModuleIcon /></template>
               等级规则
             </t-menu-item>
-            <t-menu-item value="/rules/ledger">
+            <t-menu-item value="/rules/ledger" v-permission="'/rules/ledger'">
               <template #icon><AppIcon /></template>
               积分发放记录
             </t-menu-item>
-            <t-menu-item value="/rules/experience-records">
+            <t-menu-item value="/rules/experience-records" v-permission="'/rules/experience-records'">
               <template #icon><ViewListIcon /></template>
               经验值发放记录
             </t-menu-item>
           </t-submenu>
 
-          <t-submenu value="group-system" title="系统管理">
+          <t-submenu
+            v-if="canSee(['/system/dicts', '/system/config', '/logs/audit', '/logs/login', '/system/roles', '/system/admins', '/system/sessions', '/system/assets', '/system/monitor', '/system/trash'])"
+            value="group-system"
+            title="系统管理"
+          >
             <template #icon><LayersIcon /></template>
-            <t-menu-item value="/system/dicts">
+            <t-menu-item value="/system/dicts" v-permission="'/system/dicts'">
               <template #icon><AppIcon /></template>
               数据字典
             </t-menu-item>
-            <t-menu-item value="/system/config">
+            <t-menu-item value="/system/config" v-permission="'/system/config'">
               <template #icon><SettingIcon /></template>
               系统配置
             </t-menu-item>
-            <t-menu-item value="/logs/audit">
+            <t-menu-item value="/logs/audit" v-permission="'/logs/audit'">
               <template #icon><ViewListIcon /></template>
               审计日志
+            </t-menu-item>
+            <t-menu-item value="/logs/login" v-permission="'/logs/login'">
+              <template #icon><UserListIcon /></template>
+              登录日志
+            </t-menu-item>
+            <t-menu-item value="/system/roles" v-permission="'/system/roles'">
+              <template #icon><CheckCircleIcon /></template>
+              角色权限
+            </t-menu-item>
+            <t-menu-item value="/system/admins" v-permission="'/system/admins'">
+              <template #icon><UserListIcon /></template>
+              管理员账号
+            </t-menu-item>
+            <t-menu-item value="/system/sessions" v-permission="'/system/sessions'">
+              <template #icon><CheckCircleIcon /></template>
+              在线会话
+            </t-menu-item>
+            <t-menu-item value="/assets/library" v-permission="'/system/assets'">
+              <template #icon><ViewModuleIcon /></template>
+              素材库
+            </t-menu-item>
+            <t-menu-item value="/system/monitor" v-permission="'/system/monitor'">
+              <template #icon><DashboardIcon /></template>
+              系统监控
+            </t-menu-item>
+            <t-menu-item value="/system/trash" v-permission="'/system/trash'">
+              <template #icon><Edit2Icon /></template>
+              归档管理
             </t-menu-item>
           </t-submenu>
         </t-menu>
@@ -352,23 +417,49 @@ async function handleDropdown(item: { value?: string | number }) {
     <!-- 主区 -->
     <div class="main-col">
       <header class="top-bar">
-        <t-breadcrumb max-item-width="160">
-          <t-breadcrumb-item>{{ (route.meta.group as string) || '聚屿社区' }}</t-breadcrumb-item>
-          <t-breadcrumb-item
-            :class="{ 'crumb-link': !!detailListPath }"
-            @click="detailListPath && router.push(detailListPath)"
+        <t-button
+          variant="text"
+          size="small"
+          class="tab-close-all"
+          :disabled="tabs.tabs.length <= 1"
+          @click="closeAllTabs"
+        >
+          <template #icon><CloseIcon /></template>
+          全部关闭
+        </t-button>
+        <div class="tab-bar">
+          <div
+            v-for="tab in tabs.tabs"
+            :key="tab.path"
+            class="tab-item"
+            :class="{ active: tab.path === route.path }"
+            @click="router.push(tab.path)"
           >
-            {{ route.meta.title as string }}
-          </t-breadcrumb-item>
-        </t-breadcrumb>
+            <span class="tab-title">{{ tab.title }}</span>
+            <span v-if="tab.closable" class="tab-close" @click.stop="closeTab(tab.path)">
+              <CloseIcon />
+            </span>
+          </div>
+        </div>
         <div class="top-right">
+          <t-button
+            variant="text"
+            shape="square"
+            class="theme-btn"
+            :title="theme.mode === 'dark' ? '切换浅色模式' : '切换暗色模式'"
+            @click="theme.toggle()"
+          >
+            <template #icon>
+              <component :is="theme.mode === 'dark' ? SunnyIcon : MoonIcon" />
+            </template>
+          </t-button>
           <t-popup
             v-model:popupVisible="noticeVisible"
             trigger="click"
             placement="bottom-right"
             :show-arrow="false"
           >
-            <t-badge :count="unreadCount" :offset="[4, 2]">
+            <t-badge :count="unreadCount" :offset="[4, 8]">
               <t-button variant="text" shape="square" class="notice-btn">
                 <template #icon><NotificationIcon /></template>
               </t-button>
@@ -407,33 +498,6 @@ async function handleDropdown(item: { value?: string | number }) {
           </t-dropdown>
         </div>
       </header>
-
-      <div class="tab-bar-wrap">
-        <div class="tab-bar">
-          <div
-            v-for="tab in tabs.tabs"
-            :key="tab.path"
-            class="tab-item"
-            :class="{ active: tab.path === route.path }"
-            @click="router.push(tab.path)"
-          >
-            <span class="tab-title">{{ tab.title }}</span>
-            <span v-if="tab.closable" class="tab-close" @click.stop="closeTab(tab.path)">
-              <CloseIcon />
-            </span>
-          </div>
-        </div>
-        <t-button
-          variant="text"
-          size="small"
-          class="tab-close-all"
-          :disabled="tabs.tabs.length <= 1"
-          @click="closeAllTabs"
-        >
-          <template #icon><CloseIcon /></template>
-          全部关闭
-        </t-button>
-      </div>
 
       <main class="page-scroll">
         <router-view v-slot="{ Component, route: viewRoute }">
@@ -560,9 +624,9 @@ async function handleDropdown(item: { value?: string | number }) {
 .top-bar {
   display: flex;
   align-items: center;
-  justify-content: space-between;
+  gap: 4px;
   height: var(--app-topbar-h);
-  padding: 0 20px;
+  padding: 0 8px;
   background: var(--td-bg-color-container);
   border-bottom: 1px solid var(--td-component-border);
   flex-shrink: 0;
@@ -572,11 +636,19 @@ async function handleDropdown(item: { value?: string | number }) {
   display: flex;
   align-items: center;
   gap: 8px;
+  flex-shrink: 0;
+  padding-left: 4px;
 }
 
 /* ---------- 通知中心 ---------- */
 .notice-btn {
   font-size: 18px;
+  color: var(--td-text-color-secondary);
+}
+
+.theme-btn {
+  font-size: 18px;
+  color: var(--td-text-color-secondary);
 }
 
 .notice-panel {
@@ -654,15 +726,7 @@ async function handleDropdown(item: { value?: string | number }) {
   color: var(--td-text-color-placeholder);
 }
 
-/* ---------- 面包屑可点击 ---------- */
-.crumb-link {
-  cursor: pointer;
-}
-
-.crumb-link:hover {
-  color: var(--td-brand-color);
-}
-
+/* ---------- 管理员入口 ---------- */
 .admin-chip {
   display: flex;
   align-items: center;
@@ -681,23 +745,15 @@ async function handleDropdown(item: { value?: string | number }) {
   color: var(--td-text-color-primary);
 }
 
-/* ---------- 多标签栏（wrap 容器固定样式，内部滚动 + 右侧全部关闭） ---------- */
-.tab-bar-wrap {
-  display: flex;
-  align-items: center;
-  height: var(--app-tabbar-h);
-  background: var(--td-bg-color-container);
-  border-bottom: 1px solid var(--td-component-border);
-  flex-shrink: 0;
-}
-
+/* ---------- 多标签栏（随顶栏布局，内部滚动 + 右侧全部关闭） ---------- */
 .tab-bar {
   display: flex;
   align-items: center;
   gap: 4px;
   flex: 1;
+  min-width: 0;
   height: 100%;
-  padding: 0 12px;
+  padding: 0 8px;
   overflow-x: auto;
 }
 

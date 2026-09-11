@@ -24,6 +24,15 @@ export const experienceRules: ExperienceRule[] = [
     updatedAt: '2026-08-01 10:00',
   },
   {
+    code: 'article_accepted',
+    name: '投稿采纳',
+    scene: '投稿审核通过并发布',
+    exp: 20,
+    status: 'enabled',
+    description: '用户投稿经审核通过并发布后，向投稿方发放。',
+    updatedAt: '2026-09-11 10:00',
+  },
+  {
     code: 'project_undertaken',
     name: '项目承接',
     scene: '项目立项并承接',

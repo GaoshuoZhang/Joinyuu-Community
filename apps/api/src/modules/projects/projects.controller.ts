@@ -1,10 +1,12 @@
 import { Body, Controller, Get, HttpCode, Param, Post, Put, Query, Req } from '@nestjs/common'
 import type { AuthenticatedRequest } from '../../common/interfaces/authenticated-request'
+import { RequirePermission } from '../../common/decorators/require-permission.decorator'
 import { ProjectsService } from './projects.service'
 import { QueryProjectsDto } from './dto/query-projects.dto'
 import { CreateProjectDto } from './dto/create-project.dto'
 import { CloseProjectDto } from './dto/close-project.dto'
 
+@RequirePermission('/projects')
 @Controller('api/admin/projects')
 export class ProjectsController {
   constructor(private readonly projects: ProjectsService) {}
@@ -45,5 +47,11 @@ export class ProjectsController {
   @Post(':id/close')
   close(@Param('id') id: string, @Body() dto: CloseProjectDto, @Req() req: AuthenticatedRequest) {
     return this.projects.close(id, dto.reason, req.user?.name ?? '社区管理员')
+  }
+
+  @HttpCode(200)
+  @Post(':id/archive')
+  archive(@Param('id') id: string, @Req() req: AuthenticatedRequest) {
+    return this.projects.archive(id, req.user?.name ?? '社区管理员')
   }
 }

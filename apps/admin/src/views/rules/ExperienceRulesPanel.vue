@@ -2,7 +2,6 @@
 import { nextTick, onMounted, reactive, ref } from 'vue'
 import { MessagePlugin } from 'tdesign-vue-next'
 import type { FormProps } from 'tdesign-vue-next'
-import { RefreshIcon } from 'tdesign-icons-vue-next'
 import PageHeader from '@/components/PageHeader.vue'
 import StatusTag from '@/components/StatusTag.vue'
 import { fetchExperienceRules, toggleExperienceRuleStatus, updateExperienceRule } from '@/api/rules'
@@ -14,12 +13,12 @@ const list = ref<ExperienceRule[]>([])
 const acting = ref('')
 
 const columns = [
-  { colKey: 'name', title: '触发项', cell: 'name', minWidth: 180, resizable: true },
-  { colKey: 'scene', title: '行为场景', ellipsis: true, minWidth: 170 },
-  { colKey: 'exp', title: '经验值', cell: 'exp', width: 100, resizable: true },
+  { colKey: 'name', title: '触发项', cell: 'name', width: 180, resizable: true , ellipsis: true},
+  { colKey: 'scene', title: '行为场景', ellipsis: true, width: 170 },
+  { colKey: 'exp', title: '经验值', cell: 'exp', width: 100, resizable: true , ellipsis: true},
   { colKey: 'description', title: '说明', ellipsis: true, width: 260, resizable: true },
-  { colKey: 'status', title: '状态', cell: 'status', width: 95 },
-  { colKey: 'updatedAt', title: '更新时间', width: 145, resizable: true },
+  { colKey: 'status', title: '状态', cell: 'status', width: 95 , ellipsis: true},
+  { colKey: 'updatedAt', title: '更新时间', width: 145, resizable: true , ellipsis: true},
   { colKey: 'op', title: '操作', cell: 'op', width: 130 },
 ]
 
@@ -32,10 +31,10 @@ async function load() {
   }
 }
 
-/* 启用 / 停用（停用后该行为不再累积经验） */
+/* 启用 / 停用（停用后该行为不再累积经验值） */
 async function onToggle(row: ExperienceRule) {
   acting.value = row.code
-  /* 先取旧状态再调接口：接口原地更新了 row.status，后再判断会拿到新值导致提示反转（2026-09-10 修） */
+  /* 先取旧状态再调接口：接口原地更新了 row.status，后再判断会拿到新值导致提示反转 */
   const wasEnabled = row.status === 'enabled'
   try {
     await toggleExperienceRuleStatus(row.code)
@@ -95,12 +94,8 @@ onMounted(load)
 
     <div class="page-filter-bar">
       <span class="panel-tip">
-        触发项为固定制度（不可新增/删除），完成对应行为时自动累积经验值（仅社区个体/社区企业身份持有经验）；停用规则不影响已发放经验。
+        触发项为固定制度（不可新增/删除），完成对应行为时自动累积经验值（仅社区个体/社区企业身份持有经验值）；停用规则不影响已发放经验值。
       </span>
-      <t-button variant="outline" style="margin-left: auto">
-        <template #icon><RefreshIcon /></template>
-        刷新
-      </t-button>
     </div>
 
     <div class="page-card">
@@ -126,10 +121,10 @@ onMounted(load)
         </template>
         <template #op="{ row }">
           <div class="op-cell">
-            <t-button variant="text" size="small" @click="openEdit(row)">编辑经验</t-button>
+            <t-button variant="text" size="small" @click="openEdit(row)">编辑经验值</t-button>
             <t-popconfirm
               v-if="row.status === 'enabled'"
-              content="确认停用该规则？停用后该行为不再累积经验"
+              content="确认停用该规则？停用后该行为不再累积经验值"
               @confirm="onToggle(row)"
             >
               <t-button variant="text" size="small" theme="danger" :loading="acting === row.code">

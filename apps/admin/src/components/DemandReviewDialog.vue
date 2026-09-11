@@ -1,7 +1,6 @@
 <script setup lang="ts">
 import { nextTick, ref, watch } from 'vue'
 import { MessagePlugin } from 'tdesign-vue-next'
-import IdentityTags from '@/components/IdentityTags.vue'
 import { identityTypeMap, userLevelMap } from '@/constants/identity'
 import { approveDemand, rejectDemand } from '@/api/demands'
 import type { Demand } from '@/types'
@@ -86,6 +85,13 @@ function scopeItems(identities: string[]): string[] {
   const names = identities.map((t) => identityTypeMap[t as keyof typeof identityTypeMap] ?? t)
   return names
 }
+
+/* 需求方身份快照 → 纯文本标签（企业仅显示 社区企业/合作企业，不追加成员标题） */
+function publisherIdentityLabel(d: Demand): string {
+  const type = d.publisherIdentity?.type
+  if (!type) return '—'
+  return identityTypeMap[type] ?? '—'
+}
 </script>
 
 <template>
@@ -120,9 +126,9 @@ function scopeItems(identities: string[]): string[] {
         </div>
 
         <t-descriptions :column="2" bordered class="review-desc">
-          <t-descriptions-item label="提交人">{{ demand.publisherName }}（{{ demand.publisherId }}）</t-descriptions-item>
-          <t-descriptions-item label="提交身份">
-            <IdentityTags :identities="demand.publisherIdentity ? [demand.publisherIdentity] : []" />
+          <t-descriptions-item label="需求方">{{ demand.publisherName }}<t-tag v-if="demand.publisherId" class="id-tag" size="small" variant="light">{{ demand.publisherId }}</t-tag></t-descriptions-item>
+          <t-descriptions-item label="需求方身份">
+            <span>{{ publisherIdentityLabel(demand) }}</span>
           </t-descriptions-item>
           <t-descriptions-item label="联系人">{{ demand.contactName ?? '—' }}</t-descriptions-item>
           <t-descriptions-item label="联系电话">{{ demand.contactPhone ?? '—' }}</t-descriptions-item>
@@ -134,7 +140,7 @@ function scopeItems(identities: string[]): string[] {
         </t-descriptions>
 
         <h4 class="block-title">需求内容</h4>
-        <p class="desc-text">{{ demand.description || '—' }}</p>
+        <div class="desc-text rich-text" v-html="demand.description || '—'"></div>
       </template>
 
       <template v-else>

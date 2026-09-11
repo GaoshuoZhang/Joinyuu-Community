@@ -1,6 +1,5 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
-import { RefreshIcon } from 'tdesign-icons-vue-next'
 import PageHeader from '@/components/PageHeader.vue'
 import StatCard from '@/components/StatCard.vue'
 import { fetchExperienceIssuanceRecords } from '@/api/rules'
@@ -13,12 +12,19 @@ const loading = ref(false)
 const list = ref<ExperienceRecord[]>([])
 const nameLabels = ref<Record<string, string>>({})
 
+/* 选项 label 形如「名称（ID）」，展示时拆出名称，ID 以标签单独呈现 */
+function displayName(id: string): string {
+  const label = nameLabels.value[id]
+  if (!label) return id
+  return label.replace(/（[^）]*）\s*$/, '')
+}
+
 const columns = [
-  { colKey: 'id', title: '流水号', width: 110 },
-  { colKey: 'target', title: '归属', cell: 'target', minWidth: 200, resizable: true },
-  { colKey: 'exp', title: '经验值', cell: 'exp', width: 100, resizable: true },
+  { colKey: 'id', title: '流水号', width: 110 , ellipsis: true},
+  { colKey: 'target', title: '归属', cell: 'target', width: 200, resizable: true , ellipsis: true},
+  { colKey: 'exp', title: '经验值', cell: 'exp', width: 100, resizable: true , ellipsis: true},
   { colKey: 'reason', title: '事由', ellipsis: true },
-  { colKey: 'at', title: '时间', width: 160, resizable: true },
+  { colKey: 'at', title: '时间', width: 160, resizable: true , ellipsis: true},
 ]
 
 const totalGranted = computed(() =>
@@ -57,11 +63,7 @@ onMounted(load)
     </div>
 
     <div class="page-filter-bar">
-      <span class="panel-tip">仅记录规则自动发放（企业经验挂靠社区企业身份，个人经验挂靠社区个体身份）；管理员手动调整与扣减不在此列。</span>
-      <t-button variant="outline" style="margin-left: auto" @click="load">
-        <template #icon><RefreshIcon /></template>
-        刷新
-      </t-button>
+      <span class="panel-tip">仅记录规则自动发放（企业经验值挂靠社区企业身份，个人经验值挂靠社区个体身份）；管理员手动调整与扣减不在此列。</span>
     </div>
 
     <div class="page-card">
@@ -84,7 +86,7 @@ onMounted(load)
             >
               {{ row.targetType === 'enterprise' ? '企业' : '个人' }}
             </t-tag>
-            <span class="target-name">{{ nameLabels[row.targetId] ?? row.targetId }}</span>
+            <span class="target-name">{{ displayName(row.targetId) }}<t-tag v-if="row.targetId" class="id-tag" size="small" variant="light">{{ row.targetId }}</t-tag></span>
           </div>
         </template>
         <template #exp="{ row }">

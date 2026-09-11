@@ -8,18 +8,20 @@ import type { DictEntryPayloadDto } from './dto/dict-entry-payload.dto'
 
 /* 数据字典（wiki-backend.md §7.15/§10）：站点选项词汇的单一来源。
  * label 即业务存储值（全类型唯一，不可改名）；新增/启停/删除；删除后重排 sort 保持连续。
- * 管理页返回全量（含 disabled），下拉消费方自行按 status=enabled 过滤（M0 口径）。
+ * 管理页返回全量（含 disabled），下拉消费方自行按 status=enabled 过滤。
  * 读走 dicts:{type} 缓存（10min），写操作主动失效并留痕（含 before/after 快照）。 */
 export const DICT_TYPE_LABELS: Record<string, string> = {
   demand_category: '需求类别',
   industry: '行业',
   event_type: '活动类型',
+  goods_category: '商品类型',
 }
 
 const DICT_TYPE_PREFIXES: Record<string, string> = {
   demand_category: 'DC',
   industry: 'IN',
   event_type: 'ET',
+  goods_category: 'GC',
 }
 
 @Injectable()
@@ -92,7 +94,7 @@ export class DictsService {
     const entry = await this.prisma.dictEntry.findUnique({ where: { type_code: { type, code } } })
     if (!entry) throw new NotFoundException('字典项不存在')
 
-    /* 删除 + 同类型剩余项 sort 重排（保持 1..n 连续，M0 口径） */
+    /* 删除 + 同类型剩余项 sort 重排（保持 1..n 连续） */
     await this.prisma.$transaction(async (tx) => {
       await tx.dictEntry.delete({ where: { type_code: { type, code } } })
       const rest = await tx.dictEntry.findMany({ where: { type }, orderBy: { sort: 'asc' } })

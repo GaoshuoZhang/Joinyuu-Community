@@ -22,7 +22,11 @@ export class QueryArticlesDto {
   columnId?: string
 
   @IsOptional()
-  @IsIn(['draft', 'pending', 'published', 'withdrawn', 'rejected'])
+  @IsIn(['official', 'submitted'])
+  channel?: 'official' | 'submitted'
+
+  @IsOptional()
+  @IsIn(['pending', 'rejected', 'pending_release', 'scheduled', 'published'])
   status?: string
 
   @IsOptional()

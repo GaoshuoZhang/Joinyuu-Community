@@ -1,14 +1,22 @@
 <script setup lang="ts">
 import { computed, onMounted, reactive, ref } from 'vue'
 import { MessagePlugin } from 'tdesign-vue-next'
-import { RefreshIcon, SearchIcon, DownloadIcon } from 'tdesign-icons-vue-next'
+import { SearchIcon, DownloadIcon } from 'tdesign-icons-vue-next'
 import PageHeader from '@/components/PageHeader.vue'
 import StatusTag from '@/components/StatusTag.vue'
-import { cancelRedemptionOrder, fetchRedemptionOrders, finishRedemptionOrder, shipRedemptionOrder } from '@/api/mall'
+import BulkArchiveDialog from '@/components/BulkArchiveDialog.vue'
+import ColumnController from '@/components/ColumnController.vue'
+import {
+  archiveOrder,
+  cancelRedemptionOrder,
+  fetchRedemptionOrders,
+  finishRedemptionOrder,
+  shipRedemptionOrder,
+} from '@/api/mall'
 import { exportCsv, statusLabel } from '@/utils/exportCsv'
 import type { RedemptionOrder } from '@/types'
 
-/* 兑换订单面板：发货 / 标记完成 / 取消（退积分回库存）+ 收件信息详情抽屉 */
+/* 兑换订单面板：发货 / 标记完成 / 取消（退积分回库存）/ 归档 + 收件信息详情抽屉 */
 const loading = ref(false)
 const list = ref<RedemptionOrder[]>([])
 const total = ref(0)
@@ -29,48 +37,23 @@ const statusOptions = [
   { label: '已取消', value: 'cancelled' },
 ]
 
-const columns = [
-  { colKey: 'row-select', type: 'multiple', width: 46 },
-  { colKey: 'id', title: '订单编号', width: 110 },
-  { colKey: 'user', title: '兑换用户', cell: 'user', width: 130 },
+const dataColumns = [
+  { colKey: 'id', title: '订单编号', width: 110 , ellipsis: true},
+  { colKey: 'user', title: '兑换用户', cell: 'user', width: 130 , ellipsis: true},
   { colKey: 'goodsName', title: '商品', ellipsis: true },
-  { colKey: 'points', title: '兑换积分', width: 100, resizable: true },
-  { colKey: 'status', title: '状态', cell: 'status', width: 100, resizable: true },
-  { colKey: 'createdAt', title: '下单时间', width: 150, resizable: true },
+  { colKey: 'points', title: '兑换积分', width: 100, resizable: true , ellipsis: true},
+  { colKey: 'status', title: '状态', cell: 'status', width: 100, resizable: true , ellipsis: true},
+  { colKey: 'createdAt', title: '下单时间', width: 150, resizable: true , ellipsis: true},
   { colKey: 'op', title: '操作', cell: 'op', width: 190 },
 ]
 
-/* ---------- 批量发货（仅待发货订单可操作） ---------- */
-const selectedKeys = ref<(string | number)[]>([])
-const batchShipping = ref(false)
+/* 列配置：本地持久化显隐/顺序 */
+const visibleColKeys = ref<string[]>(dataColumns.map((c) => c.colKey))
 
-const shippableCount = computed(
-  () => list.value.filter((o) => selectedKeys.value.includes(o.id) && o.status === 'pending_shipment').length,
-)
-
-function onSelectChange(keys: unknown) {
-  selectedKeys.value = keys as (string | number)[]
-}
-
-async function onBatchShip() {
-  const targets = list.value.filter((o) => selectedKeys.value.includes(o.id) && o.status === 'pending_shipment')
-  if (!targets.length) {
-    MessagePlugin.warning('请选择待发货的订单')
-    return
-  }
-  batchShipping.value = true
-  try {
-    await Promise.all(targets.map((o) => shipRedemptionOrder(o.id)))
-    MessagePlugin.success(`已批量发货 ${targets.length} 个订单`)
-    selectedKeys.value = []
-    await load()
-  } catch (e) {
-    MessagePlugin.error(e instanceof Error ? e.message : '批量操作失败')
-    await load()
-  } finally {
-    batchShipping.value = false
-  }
-}
+const visibleColumns = computed(() => {
+  const byKey = new Map(dataColumns.map((c) => [c.colKey, c]))
+  return visibleColKeys.value.map((k) => byKey.get(k)).filter(Boolean)
+})
 
 const pagination = computed(() => ({
   current: query.page,
@@ -150,6 +133,66 @@ async function onCancel(row: RedemptionOrder) {
   }
 }
 
+/* 已完成 → 归档 */
+async function onArchive(row: RedemptionOrder) {
+  acting.value = `${row.id}:archive`
+  try {
+    await archiveOrder(row.id)
+    MessagePlugin.success('订单已归档，可在归档管理中恢复')
+    await load()
+  } catch (e) {
+    MessagePlugin.error(e instanceof Error ? e.message : '操作失败')
+  } finally {
+    acting.value = ''
+  }
+}
+
+/* 一键归档：按当前筛选全量拉取，归档所选状态的已完成订单 */
+const archivingAll = ref(false)
+const bulkVisible = ref(false)
+const bulkStatuses = [{ label: '已完成', value: 'finished' }]
+
+async function doBulkArchive(values: string[]) {
+  const targets: RedemptionOrder[] = []
+  for (let page = 1; page <= 20; page++) {
+    const res = await fetchRedemptionOrders({ ...query, page, pageSize: 100 })
+    targets.push(...res.list)
+    if (targets.length >= res.total || res.list.length < 100) break
+  }
+  const pending = targets.filter((o) => values.includes(o.status))
+  if (!pending.length) {
+    MessagePlugin.info('没有符合所选状态的可归档订单')
+    return
+  }
+  let failed = 0
+  for (const o of pending) {
+    try {
+      await archiveOrder(o.id)
+    } catch {
+      failed++
+    }
+  }
+  if (pending.length - failed > 0) MessagePlugin.success(`已归档 ${pending.length - failed} 条订单`)
+  if (failed > 0) MessagePlugin.warning(`${failed} 条订单归档失败，请重试`)
+  await load()
+}
+
+function onBulkArchive() {
+  bulkVisible.value = true
+}
+
+async function onBulkConfirm(values: string[]) {
+  archivingAll.value = true
+  try {
+    await doBulkArchive(values)
+    bulkVisible.value = false
+  } catch (e) {
+    MessagePlugin.error(e instanceof Error ? e.message : '一键归档失败')
+  } finally {
+    archivingAll.value = false
+  }
+}
+
 /* 订单详情抽屉 */
 const drawerVisible = ref(false)
 const current = ref<RedemptionOrder | null>(null)
@@ -170,7 +213,7 @@ function onExport() {
     ['编号', '用户', '商品', '积分', '状态', '创建时间', '发货时间'],
     list.value.map((o) => [
       o.id,
-      `${o.userName}（${o.userId}）`,
+      `${o.userName} [${o.userId}]`,
       o.goodsName,
       o.points,
       statusLabel('redemption', o.status),
@@ -186,20 +229,22 @@ onMounted(load)
 
 <template>
   <div class="orders-panel page-fade-in">
-    <PageHeader title="订单管理" description="积分兑换订单的发货、完成与取消处理（原积分商城·兑换订单）">
+    <PageHeader title="订单管理" description="积分兑换订单的发货、完成与取消处理">
       <template #actions>
+        <ColumnController
+          v-model="visibleColKeys"
+          storage-key="mall-orders"
+          :columns="dataColumns.map((c) => ({ key: c.colKey, title: c.title }))"
+        />
+        <t-button variant="outline" :loading="archivingAll" :disabled="archivingAll" @click="onBulkArchive">
+          一键归档
+        </t-button>
         <t-button variant="outline" @click="onExport">
           <template #icon><DownloadIcon /></template>
           导出
         </t-button>
       </template>
     </PageHeader>
-
-    <div v-if="selectedKeys.length > 0" class="batch-bar">
-      <span class="batch-tip">已选 {{ shippableCount }} 个待发货订单</span>
-      <t-button theme="primary" size="small" :loading="batchShipping" @click="onBatchShip">批量发货</t-button>
-      <t-button variant="text" size="small" @click="selectedKeys = []">清空选择</t-button>
-    </div>
 
     <div class="page-filter-bar">
       <t-input
@@ -222,7 +267,6 @@ onMounted(load)
         查询
       </t-button>
       <t-button variant="outline" @click="onReset">
-        <template #icon><RefreshIcon /></template>
         重置
       </t-button>
     </div>
@@ -234,18 +278,16 @@ onMounted(load)
   hover
   resizable
   :data="list"
-  :columns="columns"
+  :columns="visibleColumns"
   :loading="loading"
   :pagination="pagination"
-  :selected-row-keys="selectedKeys"
   empty="暂无兑换订单"
-  @select-change="onSelectChange"
   @page-change="onPageChange"
   @row-click="({ row }) => openDetail(row)"
   >
         <template #user="{ row }">
           <div class="cell-title">{{ row.userName }}</div>
-          <div class="cell-sub">{{ row.userId }}</div>
+          <t-tag class="id-tag-block" size="small" variant="light">{{ row.userId }}</t-tag>
         </template>
         <template #points="{ row }">
           <span class="delta-sub">{{ -row.points }}</span>
@@ -278,6 +320,16 @@ onMounted(load)
                 标记完成
               </t-button>
             </t-popconfirm>
+            <!-- 已完成：归档 -->
+            <t-popconfirm
+              v-if="row.status === 'finished'"
+              content="确认归档该订单？归档后可在归档管理中恢复"
+              @confirm="onArchive(row)"
+            >
+              <t-button variant="text" size="small" theme="warning" :loading="isActing(row, 'archive')">
+                归档
+              </t-button>
+            </t-popconfirm>
             <t-button variant="text" size="small" @click="openDetail(row)">详情</t-button>
           </div>
         </template>
@@ -285,14 +337,14 @@ onMounted(load)
     </div>
 
     <!-- 订单详情抽屉 -->
-    <t-drawer v-model:visible="drawerVisible" header="兑换订单详情" size="480px" :footer="false">
+    <t-drawer v-model:visible="drawerVisible" header="兑换订单详情" size="480px" :footer="false" :close-btn="true" :close-on-esc-keydown="true">
       <template v-if="current">
         <div class="drawer-head">
           <span class="drawer-id">{{ current.id }}</span>
           <StatusTag entity="redemption" :value="current.status" />
         </div>
         <t-descriptions :column="1" bordered>
-          <t-descriptions-item label="兑换用户">{{ current.userName }}（{{ current.userId }}）</t-descriptions-item>
+          <t-descriptions-item label="兑换用户">{{ current.userName }}<t-tag class="id-tag" size="small" variant="light">{{ current.userId }}</t-tag></t-descriptions-item>
           <t-descriptions-item label="兑换商品">{{ current.goodsName }}</t-descriptions-item>
           <t-descriptions-item label="消耗积分">{{ current.points }}</t-descriptions-item>
           <t-descriptions-item label="下单时间">{{ current.createdAt }}</t-descriptions-item>
@@ -309,35 +361,22 @@ onMounted(load)
         </p>
       </template>
     </t-drawer>
+
+    <!-- 一键归档：状态选择二次确认对话框 -->
+    <BulkArchiveDialog
+      v-model:visible="bulkVisible"
+      title="一键归档 · 订单"
+      :statuses="bulkStatuses"
+      :loading="archivingAll"
+      @confirm="onBulkConfirm"
+    />
   </div>
 </template>
 
 <style scoped>
-.batch-bar {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  margin-bottom: 12px;
-  padding: 8px 16px;
-  background: var(--td-brand-color-1);
-  border: 1px solid var(--td-brand-color);
-  border-radius: var(--td-radius-medium);
-}
-
-.batch-tip {
-  font-size: 13px;
-  color: var(--td-brand-color);
-}
-
 .cell-title {
   font-weight: 500;
   color: var(--td-text-color-primary);
-}
-
-.cell-sub {
-  margin-top: 2px;
-  font-size: 12px;
-  color: var(--td-text-color-secondary);
 }
 
 .delta-sub {

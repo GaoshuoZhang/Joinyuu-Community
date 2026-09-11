@@ -34,6 +34,11 @@ export class SystemConfigService {
       throw new BadRequestException('租约临期提醒窗口须为 1-90 的整数')
     }
 
+    const uploadMaxSizeMb = payload.uploadMaxSizeMb
+    if (!Number.isInteger(uploadMaxSizeMb) || uploadMaxSizeMb < 1 || uploadMaxSizeMb > 100) {
+      throw new BadRequestException('上传文件大小限制须为 1-100 的整数')
+    }
+
     const previous = await this.prisma.systemConfig.findUnique({ where: { id: 1 } })
 
     const next = {
@@ -43,8 +48,8 @@ export class SystemConfigService {
       mallOpen: payload.mallOpen,
       demandOpen: payload.demandOpen,
       reservationOpen: payload.reservationOpen,
-      dailyLoginPoints: payload.dailyLoginPoints,
       leaseExpireRemindDays: days,
+      uploadMaxSizeMb,
     }
 
     await this.prisma.systemConfig.update({
@@ -56,7 +61,7 @@ export class SystemConfigService {
       module: '系统管理',
       action: '保存系统配置',
       target: '系统配置',
-      detail: `临期提醒 ${days} 天`,
+      detail: `临期提醒 ${days} 天 · 上传上限 ${uploadMaxSizeMb} MB`,
       before: previous
         ? {
             siteName: previous.siteName,
@@ -65,8 +70,8 @@ export class SystemConfigService {
             mallOpen: previous.mallOpen,
             demandOpen: previous.demandOpen,
             reservationOpen: previous.reservationOpen,
-            dailyLoginPoints: previous.dailyLoginPoints,
             leaseExpireRemindDays: previous.leaseExpireRemindDays,
+            uploadMaxSizeMb: previous.uploadMaxSizeMb,
           }
         : undefined,
       after: next,
@@ -86,8 +91,8 @@ function toSystemConfigDto(config: SystemConfig): Record<string, unknown> {
     mallOpen: config.mallOpen,
     demandOpen: config.demandOpen,
     reservationOpen: config.reservationOpen,
-    dailyLoginPoints: config.dailyLoginPoints,
     leaseExpireRemindDays: config.leaseExpireRemindDays,
+    uploadMaxSizeMb: config.uploadMaxSizeMb,
     updatedAt: config.updatedAt,
     updatedBy: config.updatedBy,
   }

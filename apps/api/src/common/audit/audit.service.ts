@@ -13,13 +13,13 @@ export interface AuditInput {
   /** 操作人（默认取 JWT；系统触发传"系统"） */
   operator?: string
   ip?: string
-  /** 变更前后快照（M1 起补全） */
+  /** 变更前后快照 */
   before?: Prisma.InputJsonValue
   after?: Prisma.InputJsonValue
 }
 
 /* 审计服务：写操作留痕（wiki-backend.md §9.1）
- * M0 前端 recordAudit 17 处埋点在 M1-B~E 逐步迁移为 @Audit 装饰器声明 */
+ * 各域写操作通过 @Audit 装饰器声明记录审计 */
 @Injectable()
 export class AuditService {
   constructor(

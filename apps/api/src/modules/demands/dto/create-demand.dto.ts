@@ -1,7 +1,7 @@
 import { Type } from 'class-transformer'
 import { IsArray, IsIn, IsInt, IsOptional, IsString, Min } from 'class-validator'
 
-/* POST /api/admin/demands 入参（DemandCreatePayload，与 M0 一致）
+/* POST /api/admin/demands 入参（DemandCreatePayload）
  * publisherIdentity 为提交身份快照（Json 透传），仅 custom 时使用；
  * individual/enterprise 由服务端 resolvePublisherIdentity 重解析，忽略客户端传入值 */
 export class CreateDemandDto {

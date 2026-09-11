@@ -1,13 +1,14 @@
 /* M1-C 活动模块 e2e（wiki-backend.md §13 M1-C）：
- * 覆盖：发布成功 + 非法流转 409；报名审核通过 → 积分流水；签到 → 积分 + 经验流水；定时发布扫描 + 自动结束。
+ * 覆盖：发布成功 + 非法流转 409；报名审核通过 → 积分流水；签到 → 积分 + 经验值流水；定时发布扫描 + 自动结束。
  * 前置：docker compose up + prisma migrate + seed（EV6006 待发布 / EV6004 已结束 / EV6001 已发布 enrollPoints=50 含 U1005 待审核 /
- *       EV6002 已发布 checkinPoints=100 含 U1006 待审核 / EV6009 定时发布中 / U1005 顾北辰积分 600 / U1006 沈嘉禾社区个体经验 200）。
+ *       EV6002 已发布 checkinPoints=100 含 U1006 待审核 / EV6009 定时发布中 / U1005 顾北辰积分 600 / U1006 沈嘉禾社区个体经验值 200）。
  * 定时任务直接调用 SchedulerService 公开方法（免等 cron），@Cron 仅转发到这些方法。 */
 import { INestApplication } from '@nestjs/common'
 import { Test } from '@nestjs/testing'
 import request from 'supertest'
 import { AppModule } from '../src/app.module'
 import { reseed } from './helpers/reseed'
+import { loginAs } from './helpers/login'
 import { PrismaService } from '../src/common/prisma/prisma.service'
 import { SchedulerService } from '../src/scheduler/scheduler.service'
 
@@ -21,10 +22,7 @@ describe('M1-C events 活动（发布/编辑/审核/签到/定时任务）', () 
     app = moduleRef.createNestApplication()
     await app.init()
 
-    const login = await request(app.getHttpServer())
-      .post('/api/admin/auth/login')
-      .send({ username: 'admin', password: 'admin123' })
-    token = login.body.data.token
+    token = await loginAs(app)
   })
 
   afterAll(async () => {
@@ -110,8 +108,8 @@ describe('M1-C events 活动（发布/编辑/审核/签到/定时任务）', () 
     expect(record!.balance).toBe(beforeBalance + 50)
   })
 
-  it('签到 → 发放签到积分 + 签到经验', async () => {
-    // EV6002 checkinPoints=100，U1006（持社区个体身份，经验 200）
+  it('签到 → 发放签到积分 + 签到经验值', async () => {
+    // EV6002 checkinPoints=100，U1006（持社区个体身份，经验值 200）
     const checkin = await request(app.getHttpServer())
       .post('/api/admin/events/EV6002/checkin')
       .set('Authorization', `Bearer ${token}`)
@@ -130,7 +128,7 @@ describe('M1-C events 活动（发布/编辑/审核/签到/定时任务）', () 
       ),
     ).toBe(true)
 
-    // 经验流水（community_individual，delta=5，source=rule）
+    // 经验值流水（community_individual，delta=5，source=rule）
     const exp = await request(app.getHttpServer())
       .get('/api/admin/experience-records')
       .set('Authorization', `Bearer ${token}`)

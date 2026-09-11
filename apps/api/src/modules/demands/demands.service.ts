@@ -10,6 +10,7 @@ import { PrismaService } from '../../common/prisma/prisma.service'
 import { IdGeneratorService } from '../../common/id-generator/id-generator.service'
 import { AuditService } from '../../common/audit/audit.service'
 import { formatNow } from '../../common/utils/time'
+import { sanitizeHtml } from '../../common/utils/sanitize-html'
 import { toIdentityDto } from '../users/user.mapper'
 import { ProjectsService } from '../projects/projects.service'
 import type { QueryDemandsDto } from './dto/query-demands.dto'
@@ -54,6 +55,8 @@ export interface DemandDto {
   enrollmentIdentities: string[]
   enrollmentLevels: string[]
   status: string
+  creatorName?: string
+  creatorId?: string
   createdAt: string
   publishedAt?: string
   description: string
@@ -62,6 +65,7 @@ export interface DemandDto {
   matchedRespondent?: string
   projectId?: string
   respondPoints?: number
+  deletedAt?: string
   respondents: RespondentDto[]
 }
 
@@ -86,7 +90,7 @@ export interface PublisherOptionsDto {
     contactName: string
     contactPhone: string
     contactEmail?: string
-    tag: '社区企业' | '外部企业'
+    tag: '社区企业' | '合作企业'
   }>
 }
 
@@ -104,7 +108,7 @@ function toRespondentDto(r: DemandRespondent): RespondentDto {
   return dto
 }
 
-/* Prisma 行 → M0 Demand 形状：publisherIdentity Json 透传、可选字段缺失时省略（对齐 mock undefined） */
+/* Prisma 行 → Demand 形状：publisherIdentity Json 透传、可选字段缺失时省略（对齐 undefined） */
 function toDemandDto(d: DemandWithRespondents): DemandDto {
   const dto: DemandDto = {
     id: d.id,
@@ -126,11 +130,14 @@ function toDemandDto(d: DemandWithRespondents): DemandDto {
     tags: d.tags,
     respondents: d.respondents.map(toRespondentDto),
   }
+  if (d.creatorName != null) dto.creatorName = d.creatorName
+  if (d.creatorId != null) dto.creatorId = d.creatorId
   if (d.contactName != null) dto.contactName = d.contactName
   if (d.contactPhone != null) dto.contactPhone = d.contactPhone
   if (d.contactEmail != null) dto.contactEmail = d.contactEmail
   if (d.scheduledAt != null) dto.scheduledAt = d.scheduledAt
   if (d.publishedAt != null) dto.publishedAt = d.publishedAt
+  if (d.deletedAt != null) dto.deletedAt = d.deletedAt
   if (d.rejectedReason != null) dto.rejectedReason = d.rejectedReason
   if (d.matchedRespondent != null) dto.matchedRespondent = d.matchedRespondent
   if (d.projectId != null) dto.projectId = d.projectId
@@ -152,7 +159,7 @@ export class DemandsService {
   ) {}
 
   async findAll(query: QueryDemandsDto): Promise<{ list: DemandDto[]; total: number }> {
-    const where: Prisma.DemandWhereInput = {}
+    const where: Prisma.DemandWhereInput = { deletedAt: null }
     if (query.keyword) {
       const kw = query.keyword.trim()
       where.OR = [
@@ -169,7 +176,7 @@ export class DemandsService {
 
     let list: DemandRow[] = rows
 
-    /* 企业筛选：社区企业按 publisherIdentity.enterpriseId；外部企业按档案名匹配 enterpriseName */
+    /* 企业筛选：社区企业按 publisherIdentity.enterpriseId；合作企业按档案名匹配 enterpriseName */
     if (query.enterprise) {
       const community = await this.prisma.enterprise.findUnique({ where: { id: query.enterprise } })
       if (community) {
@@ -258,6 +265,7 @@ export class DemandsService {
         publisherName,
         publisherIdentity: publisherIdentity ?? Prisma.DbNull,
         status: 'pending_release',
+        creatorName: operator,
         createdAt: formatNow(),
         tags: [],
       },
@@ -266,7 +274,7 @@ export class DemandsService {
 
     await this.audit.record({
       module: '需求管理',
-      action: '创建需求',
+      action: '新增需求',
       target: `${demand.id} · ${demand.title}`,
       detail: `需求方：${demand.publisherName}`,
       after: { status: demand.status },
@@ -312,7 +320,10 @@ export class DemandsService {
     const reason = (dto.reason ?? '').trim()
     if (!reason) throw new BadRequestException('请填写驳回原因')
 
-    await this.prisma.demand.update({ where: { id }, data: { status: 'rejected', rejectedReason: reason } })
+    await this.prisma.demand.update({
+      where: { id },
+      data: { status: 'rejected', rejectedReason: reason, archivableAt: formatNow() },
+    })
 
     await this.audit.record({
       module: '需求管理',
@@ -321,6 +332,29 @@ export class DemandsService {
       detail: reason,
       before: { status: demand.status },
       after: { status: 'rejected', rejectedReason: reason },
+      operator,
+    })
+    return { code: 0 }
+  }
+
+  async archive(id: string, operator: string): Promise<{ code: number }> {
+    const demand = await this.prisma.demand.findFirst({ where: { id, deletedAt: null } })
+    if (!demand) throw new NotFoundException('需求不存在')
+    if (demand.status !== 'rejected' && demand.status !== 'closed' && demand.status !== 'projected') {
+      throw new ConflictException('仅已驳回、已关闭或已立项的需求可归档')
+    }
+
+    await this.prisma.demand.update({
+      where: { id },
+      data: { deletedAt: formatNow(), deletedBy: operator },
+    })
+
+    await this.audit.record({
+      module: '需求管理',
+      action: '归档需求',
+      target: `${demand.id} · ${demand.title}`,
+      before: { status: demand.status },
+      after: { deleted: true },
       operator,
     })
     return { code: 0 }
@@ -418,7 +452,10 @@ export class DemandsService {
       throw new ConflictException('仅待发布/已发布的需求可关闭')
     }
 
-    await this.prisma.demand.update({ where: { id }, data: { status: 'closed' } })
+    await this.prisma.demand.update({
+      where: { id },
+      data: { status: 'closed', archivableAt: formatNow() },
+    })
 
     await this.audit.record({
       module: '需求管理',
@@ -456,7 +493,7 @@ export class DemandsService {
     return { code: 0 }
   }
 
-  /* 立项：published → projected；项目创建与双向关联（demand.projectId ↔ project.sourceDemandId）置于同一事务 */
+  /* 立项：published → projected；项目新增与双向关联（demand.projectId ↔ project.sourceDemandId）置于同一事务 */
   async initiateProject(id: string, dto: InitiateProjectDto, operator: string) {
     const demand = await this.prisma.demand.findUnique({ where: { id } })
     if (!demand) throw new NotFoundException('需求不存在')
@@ -467,7 +504,7 @@ export class DemandsService {
       await tx.project.update({ where: { id: created.id }, data: { sourceDemandId: demand.id } })
       await tx.demand.update({
         where: { id: demand.id },
-        data: { status: 'projected', projectId: created.id },
+        data: { status: 'projected', archivableAt: formatNow(), projectId: created.id },
       })
       return created
     })
@@ -499,8 +536,8 @@ export class DemandsService {
         value: `enterprise:${e.id}`,
       })),
       ...externalProfiles.map((x) => ({
-        group: '外部企业',
-        label: `${x.name}（外部企业 · ${x.id}）`,
+        group: '合作企业',
+        label: `${x.name}（合作企业 · ${x.id}）`,
         value: `enterprise:${x.id}`,
       })),
       ...users.map((u) => {
@@ -543,13 +580,13 @@ export class DemandsService {
           contactName: '',
           contactPhone: '',
           contactEmail: undefined,
-          tag: '外部企业' as const,
+          tag: '合作企业' as const,
         })),
       ],
     }
   }
 
-  /* 提交人三类来源存在性校验与名称解析（对照 M0 createDemand 逐条迁移） */
+  /* 提交人三类来源存在性校验与名称解析 */
   private async resolvePublisherName(dto: CreateDemandDto): Promise<string> {
     if (dto.publisherType === 'individual') {
       const user = await this.prisma.user.findUnique({ where: { uid: dto.publisherId } })
@@ -566,8 +603,8 @@ export class DemandsService {
     return name
   }
 
-  /* 发布方身份快照（对照 M0 resolvePublisherIdentity 逐条迁移）：
-   * enterprise → 社区企业/外部企业；individual → 持社区个体身份则标社区个体，否则个人用户；custom → 传入快照或 null */
+  /* 发布方身份快照：
+   * enterprise → 社区企业/合作企业；individual → 持社区个体身份则标社区个体，否则个人用户；custom → 传入快照或 null */
   private async resolvePublisherIdentity(
     publisherType: string,
     publisherId: string,
@@ -581,7 +618,7 @@ export class DemandsService {
           enterpriseId: ent.id,
           enterpriseName: ent.name,
           role: 'member',
-          title: '入驻企业成员',
+          title: '社区企业成员',
         }
       }
       const ext = await this.prisma.externalEnterpriseProfile.findUnique({ where: { id: publisherId } })
@@ -603,7 +640,7 @@ export class DemandsService {
     return (payloadIdentity as Prisma.InputJsonValue) ?? null
   }
 
-  /* 可编辑字段（创建/编辑共用）：预算空 → 面议；contactEmail/respondPoints 空 → 清空 */
+  /* 可编辑字段（新增/编辑共用）：预算空 → 面议；contactEmail/respondPoints 空 → 清空 */
   private editableData(dto: CreateDemandDto | UpdateDemandDto) {
     return {
       title: dto.title,
@@ -611,7 +648,7 @@ export class DemandsService {
       budget: (dto.budget ?? '').trim() || '面议',
       period: dto.period,
       deadline: dto.deadline,
-      description: dto.description,
+      description: sanitizeHtml(dto.description),
       visibilityIdentities: dto.visibilityIdentities,
       visibilityLevels: dto.visibilityLevels,
       enrollmentIdentities: dto.enrollmentIdentities,

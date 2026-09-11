@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
+import { useRouter } from 'vue-router'
 import { AddIcon, BuildingIcon, CheckCircleIcon, MapIcon, SettingIcon } from 'tdesign-icons-vue-next'
 import PageHeader from '@/components/PageHeader.vue'
 import StatCard from '@/components/StatCard.vue'
@@ -12,7 +13,7 @@ import type { Lease, Workstation, WorkstationArea, WorkstationStatus } from '@/t
 
 /* 办公室管理页（独立路由页）：独立办公室（type=office）的占用、租期与维护管理；
  * 状态卡片点击筛选（点击「办公室总数」取消）、区域下拉筛选，两者可叠加；
- * 区域规划/创建办公位在页头操作区；点击卡片可编辑资料（含维护中开关）；
+ * 区域规划/新增办公位在页头操作区；卡片提供「编辑」（含维护中开关）与「关联租赁」（跳转租赁管理并预选）操作；
  * 租约全生命周期操作在「租赁管理」页 */
 const loading = ref(false)
 const workstations = ref<Workstation[]>([])
@@ -54,10 +55,15 @@ function leaseOf(ws: Workstation): Lease | undefined {
   return leases.value.find((l) => l.id === ws.leaseId)
 }
 
-/* 租赁周期单位展示（缺省按月） */
-const rentPeriodMap: Record<string, string> = { day: '日', week: '周', month: '月', year: '年' }
-function rentPeriodLabel(lease: Lease) {
-  return rentPeriodMap[lease.rentPeriod ?? 'month']
+function leaseEndText(lease: Lease): string {
+  if (lease.longTerm || !lease.endDate) return '长期租约'
+  const [y, m, d] = lease.endDate.split('-').map(Number)
+  const end = new Date(y, m - 1, d)
+  const today = new Date()
+  today.setHours(0, 0, 0, 0)
+  const days = Math.floor((end.getTime() - today.getTime()) / 86400000)
+  const suffix = days > 0 ? `${days}天后到期` : days === 0 ? '今天到期' : `已过期${-days}天`
+  return `${lease.endDate} | ${suffix}`
 }
 
 /* 状态卡片筛选：点击对应状态卡片筛选，点击「办公室总数」卡片取消（与状态下拉双向同步） */
@@ -83,7 +89,7 @@ onMounted(load)
 /* 区域规划弹窗 */
 const areaPlanVisible = ref(false)
 
-/* 创建 / 编辑办公室（点击卡片编辑） */
+/* 新增 / 编辑办公室 */
 const formVisible = ref(false)
 const formMode = ref<'create' | 'edit'>('create')
 const currentOffice = ref<Workstation | null>(null)
@@ -99,11 +105,30 @@ function openEdit(row: Workstation) {
   currentOffice.value = row
   formVisible.value = true
 }
+
+/* 关联租赁：跳转租赁管理并自动打开新增租约弹窗、预选该办公室 */
+const router = useRouter()
+function goLease(row: Workstation) {
+  router.push({ path: '/workstations/leases', query: { create: '1', workstationId: row.id } })
+}
+
+/* 查看租赁（已分配）：跳转该办公室当前租约详情页 */
+function goLeaseDetail(row: Workstation) {
+  const id = row.leaseId ?? leaseOf(row)?.id
+  if (id) router.push(`/workstations/leases/${id}`)
+}
+
+function goEnterprise(w: Workstation) {
+  if (!w.enterpriseId) return
+  if (w.enterpriseId.startsWith('U')) router.push(`/users/${w.enterpriseId}`)
+  else if (w.enterpriseId.startsWith('XE')) router.push(`/external-enterprises/${w.enterpriseId}`)
+  else if (w.enterpriseId.startsWith('E')) router.push(`/enterprises/${w.enterpriseId}`)
+}
 </script>
 
 <template>
   <div class="office-panel page-fade-in">
-    <PageHeader title="办公室管理" description="独立办公室的占用企业与维护状态（点击卡片编辑）；租约创建/续期/终止在「租赁管理」页操作">
+    <PageHeader title="办公室管理" description="独立办公室的占用企业与维护状态（卡片可编辑资料或关联租赁）；租约新增/续期/终止在「租赁管理」页操作">
       <template #actions>
         <t-button variant="outline" @click="areaPlanVisible = true">
           <template #icon><MapIcon /></template>
@@ -111,7 +136,7 @@ function openEdit(row: Workstation) {
         </t-button>
         <t-button theme="primary" @click="openCreate">
           <template #icon><AddIcon /></template>
-          创建办公位
+          新增办公位
         </t-button>
       </template>
     </PageHeader>
@@ -159,7 +184,7 @@ function openEdit(row: Workstation) {
       <span class="legend-item"><i class="legend-dot is-idle" />空闲</span>
       <span class="legend-item"><i class="legend-dot is-assigned" />已分配</span>
       <span class="legend-item"><i class="legend-dot is-maintenance" />维护中</span>
-      <span class="legend-tip">点击卡片可编辑办公室信息</span>
+      <span class="legend-tip">卡片可「编辑」资料或「关联租赁」</span>
     </div>
 
     <t-loading :loading="loading" size="small">
@@ -171,7 +196,6 @@ function openEdit(row: Workstation) {
         :class="`is-${w.status}`"
         size="small"
         hover-shadow
-        @click="openEdit(w)"
       >
         <div class="office-head">
           <div>
@@ -183,12 +207,39 @@ function openEdit(row: Workstation) {
         <div class="office-capacity">容纳 {{ w.capacity }} 人</div>
 
         <template v-if="w.enterpriseName">
-          <div class="office-enterprise">{{ w.enterpriseName }}</div>
-          <div v-if="leaseOf(w)" class="office-lease">
-            {{ leaseOf(w)!.id }} · {{ leaseOf(w)!.longTerm ? `${leaseOf(w)!.startDate} ~ 长期` : `${leaseOf(w)!.startDate} ~ ${leaseOf(w)!.endDate}` }} · ¥{{ leaseOf(w)!.monthlyRent }}/{{ rentPeriodLabel(leaseOf(w)!) }}
+          <div class="office-enterprise-row">
+            <span class="office-enterprise clickable" :title="w.enterpriseName" @click="goEnterprise(w)">{{ w.enterpriseName }}</span>
+            <t-tag v-if="w.enterpriseId" size="small" variant="light">{{ w.enterpriseId }}</t-tag>
           </div>
+          <div v-if="leaseOf(w)" class="office-lease">{{ leaseEndText(leaseOf(w)!) }}</div>
         </template>
         <div v-else class="office-enterprise office-enterprise-empty">暂未分配</div>
+
+        <div class="office-actions">
+          <t-button variant="text" size="small" @click="openEdit(w)">编辑</t-button>
+          <t-button
+            v-if="w.status === 'assigned'"
+            variant="text"
+            size="small"
+            theme="primary"
+            :disabled="!(w.leaseId ?? leaseOf(w)?.id)"
+            :title="w.leaseId ?? leaseOf(w)?.id ? '查看该办公室当前关联的租赁详情' : '未找到关联租约'"
+            @click="goLeaseDetail(w)"
+          >
+            查看租赁
+          </t-button>
+          <t-button
+            v-else
+            variant="text"
+            size="small"
+            theme="primary"
+            :disabled="w.status !== 'idle'"
+            :title="w.status !== 'idle' ? '仅空闲办公室可关联租赁' : '前往租赁管理为该办公室新增租约'"
+            @click="goLease(w)"
+          >
+            关联租赁
+          </t-button>
+        </div>
       </t-card>
       </div>
       </t-loading>
@@ -198,7 +249,7 @@ function openEdit(row: Workstation) {
     <!-- 区域规划弹窗（保存后静默刷新分组名称，避免卡片板块闪烁） -->
     <AreaPlanDialog v-model:visible="areaPlanVisible" @success="load(true)" />
 
-    <!-- 创建 / 编辑办公室弹窗 -->
+    <!-- 新增 / 编辑办公室弹窗 -->
     <WorkstationFormDialog
       v-model:visible="formVisible"
       :mode="formMode"
@@ -269,7 +320,13 @@ function openEdit(row: Workstation) {
 
 /* 办公室卡片：t-card 为内核（边框/圆角/悬浮阴影来自 TDesign），状态底色覆盖容器背景 */
 .office-card {
-  cursor: pointer;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+}
+
+.office-card :deep(.t-loading__parent) {
+  flex: 1;
   display: flex;
   flex-direction: column;
 }
@@ -318,10 +375,33 @@ function openEdit(row: Workstation) {
   color: var(--td-text-color-secondary);
 }
 
+.office-enterprise-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+
+.office-enterprise-row .office-enterprise {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .office-enterprise {
   font-size: 14px;
   font-weight: 500;
   color: var(--td-text-color-primary);
+}
+
+.office-enterprise.clickable {
+  cursor: pointer;
+  color: var(--td-brand-color);
+}
+
+.office-enterprise.clickable:hover {
+  text-decoration: underline;
 }
 
 .office-enterprise-empty {
@@ -332,5 +412,14 @@ function openEdit(row: Workstation) {
 .office-lease {
   font-size: 12px;
   color: var(--td-text-color-secondary);
+}
+
+.office-actions {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  margin-top: auto;
+  padding-top: 8px;
+  border-top: 1px dashed var(--td-component-border);
 }
 </style>

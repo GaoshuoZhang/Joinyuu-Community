@@ -2,9 +2,13 @@
 import { onMounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { MessagePlugin } from 'tdesign-vue-next'
-import { ArrowLeftIcon } from 'tdesign-icons-vue-next'
+import { ArrowLeftIcon, EditIcon } from 'tdesign-icons-vue-next'
 import StatusTag from '@/components/StatusTag.vue'
+import ExternalEnterpriseFormDialog from '@/components/ExternalEnterpriseFormDialog.vue'
 import {
+  deleteExternalEnterprise,
+  disableExternalEnterprise,
+  enableExternalEnterprise,
   fetchExternalEnterprise,
   fetchExternalEnterpriseStats,
   type ExternalEnterpriseStats,
@@ -16,31 +20,39 @@ const router = useRouter()
 const loading = ref(true)
 const enterprise = ref<ExternalEnterprise | null>(null)
 const tab = ref('info')
+const acting = ref('')
 
 /* 数据概览 */
 const stats = ref<ExternalEnterpriseStats | null>(null)
 
+/* 编辑弹窗 */
+const editVisible = ref(false)
+
 const memberColumns = [
-  { colKey: 'name', title: '成员', cell: 'member' },
-  { colKey: 'title', title: '职位' },
-  { colKey: 'phone', title: '手机号', width: 140 },
-  { colKey: 'status', title: '账号状态', cell: 'status', width: 110 },
+  { colKey: 'name', title: '成员', cell: 'member' , ellipsis: true},
+  { colKey: 'title', title: '职位' , ellipsis: true},
+  { colKey: 'phone', title: '联系电话', width: 140 , ellipsis: true},
+  { colKey: 'status', title: '账号状态', cell: 'status', width: 110 , ellipsis: true},
 ]
+
+async function load() {
+  const id = route.params.id as string
+  enterprise.value = await fetchExternalEnterprise(id)
+  stats.value = await fetchExternalEnterpriseStats(id)
+}
 
 onMounted(async () => {
   try {
-    const id = route.params.id as string
-    enterprise.value = await fetchExternalEnterprise(id)
-    stats.value = await fetchExternalEnterpriseStats(id)
+    await load()
   } catch (e) {
-    MessagePlugin.error(e instanceof Error ? e.message : '外部企业加载失败')
+    MessagePlugin.error(e instanceof Error ? e.message : '合作企业加载失败')
   } finally {
     loading.value = false
   }
 })
 
 /* 数据概览卡片 → 跳转对应列表并自动筛选（有数据时可点击）
- * 以外部企业 ID（XE*）传参，列表按 ID 解析档案名后过滤，避免企业名歧义 */
+ * 以合作企业 ID（XE*）传参，列表按 ID 解析档案名后过滤，避免企业名歧义 */
 function goDemands() {
   if (!enterprise.value || !stats.value || stats.value.demandCount === 0) return
   router.push({ path: '/demands', query: { enterprise: enterprise.value.id } })
@@ -49,6 +61,53 @@ function goDemands() {
 function goProjects() {
   if (!enterprise.value || !stats.value || stats.value.projectCount === 0) return
   router.push({ path: '/projects', query: { enterprise: enterprise.value.id } })
+}
+
+/* 编辑 / 停用 / 归档 */
+function openEdit() {
+  editVisible.value = true
+}
+
+async function onDisable() {
+  if (!enterprise.value) return
+  acting.value = 'disable'
+  try {
+    await disableExternalEnterprise(enterprise.value.id)
+    MessagePlugin.success('合作企业已停用')
+    await load()
+  } catch (e) {
+    MessagePlugin.error(e instanceof Error ? e.message : '操作失败')
+  } finally {
+    acting.value = ''
+  }
+}
+
+async function onDelete() {
+  if (!enterprise.value) return
+  acting.value = 'delete'
+  try {
+    await deleteExternalEnterprise(enterprise.value.id)
+    MessagePlugin.success('合作企业已归档')
+    router.back()
+  } catch (e) {
+    MessagePlugin.error(e instanceof Error ? e.message : '归档失败')
+  } finally {
+    acting.value = ''
+  }
+}
+
+async function onEnable() {
+  if (!enterprise.value) return
+  acting.value = 'enable'
+  try {
+    await enableExternalEnterprise(enterprise.value.id)
+    MessagePlugin.success('合作企业已启用')
+    await load()
+  } catch (e) {
+    MessagePlugin.error(e instanceof Error ? e.message : '操作失败')
+  } finally {
+    acting.value = ''
+  }
 }
 </script>
 
@@ -65,7 +124,7 @@ function goProjects() {
       animation="gradient"
     />
 
-    <t-empty v-else-if="!enterprise" description="外部企业不存在" />
+    <t-empty v-else-if="!enterprise" description="合作企业不存在" />
 
     <template v-else>
       <!-- 企业头部 -->
@@ -75,11 +134,58 @@ function goProjects() {
           <div class="head-info">
             <div class="head-title">
               <span class="head-name">{{ enterprise.name }}</span>
+              <StatusTag entity="enterprise" :value="enterprise.status" />
               <t-tag variant="light">{{ enterprise.industry }}</t-tag>
-              <t-tag variant="outline" size="small">外部企业 · 未入驻</t-tag>
             </div>
-            <t-tag variant="outline" size="small">企业ID: {{ enterprise.id }}</t-tag>
+            <div class="head-id">企业ID: <t-tag class="id-tag" size="small" variant="light">{{ enterprise.id }}</t-tag></div>
           </div>
+        </div>
+        <div class="head-actions">
+          <t-button variant="outline" v-permission="'perm:external-enterprise:update'" @click="openEdit">
+            <template #icon><EditIcon /></template>
+            编辑
+          </t-button>
+          <t-popconfirm
+            v-if="enterprise.status === 'disabled'"
+            content="确认启用该合作企业？启用后恢复为正常状态"
+            @confirm="onEnable"
+          >
+            <t-button
+              variant="outline"
+              theme="success"
+              v-permission="'perm:external-enterprise:enable'"
+              :loading="acting === 'enable'"
+            >
+              启用
+            </t-button>
+          </t-popconfirm>
+          <t-popconfirm
+            v-else
+            content="确认停用该合作企业？"
+            @confirm="onDisable"
+          >
+            <t-button
+              variant="outline"
+              v-permission="'perm:external-enterprise:disable'"
+              :loading="acting === 'disable'"
+            >
+              停用
+            </t-button>
+          </t-popconfirm>
+          <t-popconfirm
+            v-if="enterprise.status === 'disabled'"
+            content="确认归档该合作企业？归档后可在归档管理中恢复"
+            @confirm="onDelete"
+          >
+            <t-button
+              variant="outline"
+              theme="danger"
+              v-permission="'perm:external-enterprise:delete'"
+              :loading="acting === 'delete'"
+            >
+              归档
+            </t-button>
+          </t-popconfirm>
         </div>
       </div>
 
@@ -90,6 +196,8 @@ function goProjects() {
             <div class="tab-body">
               <t-descriptions :column="2" bordered>
                 <t-descriptions-item label="行业">{{ enterprise.industry }}</t-descriptions-item>
+                <t-descriptions-item label="规模">{{ enterprise.size || '—' }}</t-descriptions-item>
+                <t-descriptions-item label="成立时间">{{ enterprise.foundedAt || '—' }}</t-descriptions-item>
                 <t-descriptions-item label="首次合作时间">{{ enterprise.firstCooperationAt }}</t-descriptions-item>
                 <t-descriptions-item label="累计合作次数">{{ enterprise.cooperationCount }} 次</t-descriptions-item>
                 <t-descriptions-item label="关联成员数">{{ enterprise.members.length }} 人</t-descriptions-item>
@@ -97,7 +205,7 @@ function goProjects() {
 
               <div class="desc-block">
                 <h4 class="block-title">企业简介</h4>
-                <p class="desc-text">{{ enterprise.description }}</p>
+                <p class="desc-text">{{ enterprise.description || '—' }}</p>
               </div>
             </div>
           </t-tab-panel>
@@ -139,7 +247,7 @@ function goProjects() {
                 <template #member="{ row }">
                   <div class="member-cell">
                     <span class="member-name">{{ row.name }}</span>
-                    <span class="member-id">{{ row.userId }}</span>
+                    <t-tag class="id-tag-block" size="small" variant="light">{{ row.userId }}</t-tag>
                   </div>
                 </template>
                 <template #status="{ row }">
@@ -151,6 +259,14 @@ function goProjects() {
         </t-tabs>
       </div>
     </template>
+
+    <!-- 编辑合作企业（含成员增删） -->
+    <ExternalEnterpriseFormDialog
+      v-model:visible="editVisible"
+      mode="edit"
+      :enterprise="enterprise"
+      @success="load"
+    />
   </div>
 </template>
 
@@ -160,6 +276,10 @@ function goProjects() {
 }
 
 .head-card {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
   margin-bottom: 16px;
 }
 
@@ -167,6 +287,7 @@ function goProjects() {
   display: flex;
   align-items: center;
   gap: 16px;
+  min-width: 0;
 }
 
 .head-avatar {
@@ -175,6 +296,13 @@ function goProjects() {
   font-weight: 600;
   color: var(--td-text-color-secondary);
   background: var(--td-bg-color-page);
+}
+
+.head-info {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 0;
 }
 
 .head-title {
@@ -188,6 +316,18 @@ function goProjects() {
   font-size: 18px;
   font-weight: 600;
   color: var(--td-text-color-primary);
+}
+
+.head-id {
+  font-size: 12px;
+  color: var(--td-text-color-secondary);
+}
+
+.head-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
 }
 
 .tab-body {
@@ -221,11 +361,6 @@ function goProjects() {
 .member-name {
   font-size: 14px;
   color: var(--td-text-color-primary);
-}
-
-.member-id {
-  font-size: 12px;
-  color: var(--td-text-color-secondary);
 }
 
 .stats-grid {

@@ -1,12 +1,12 @@
 import type { AdminNotification } from '@/types'
 
 /* 通知中心数据 — 命名前缀 N9001+
- * M0 为静态种子 + 手动已读；真实系统由业务事件驱动写入（审批提交、进入临期、定时发布前提醒等，M1 服务端事件） */
+ * M0 为静态种子 + 手动已读；真实系统由业务事件驱动写入（审核提交、进入临期、定时发布前提醒等，M1 服务端事件） */
 export const notifications: AdminNotification[] = [
   {
     id: 'N9001',
     type: 'approval',
-    title: '新入驻申请待审批',
+    title: '新入驻申请待审核',
     content: '光年半导体 · 苏明远 提交了入驻申请（独立办公室 · 8 人），请及时处理。',
     at: '2026-09-07 14:08',
     read: false,
@@ -25,7 +25,7 @@ export const notifications: AdminNotification[] = [
     id: 'N9003',
     type: 'lease',
     title: '租约即将到期',
-    content: '沧岚新材料（E2005）的租约 LS2007（A-07、A-08）即将到期，请跟进续期或释放工位。',
+    content: '沧岚新材料（E2005）的租约 LS2007（A-07、A-08）即将到期，请跟进续期或释放办公位。',
     at: '2026-09-06 10:00',
     read: false,
     link: '/workstations/leases',
@@ -33,7 +33,7 @@ export const notifications: AdminNotification[] = [
   {
     id: 'N9004',
     type: 'reservation',
-    title: '空间预约待审批',
+    title: '空间预约待审核',
     content: '白若溪申请 2026-09-10 14:00-17:00 使用聚屿多功能厅（新材料样品展示会）。',
     at: '2026-09-06 09:12',
     read: false,
@@ -60,8 +60,8 @@ export const notifications: AdminNotification[] = [
   {
     id: 'N9007',
     type: 'showcase',
-    title: '展示页发布申请待审批',
-    content: '木白设计工作室提交了企业展示页发布申请，审批结果将联动企业展示页状态。',
+    title: '展示页发布申请待审核',
+    content: '木白设计工作室提交了企业展示页发布申请，审核结果将联动企业展示页状态。',
     at: '2026-09-04 11:00',
     read: true,
     link: '/contents/showcase',
@@ -69,7 +69,7 @@ export const notifications: AdminNotification[] = [
   {
     id: 'N9008',
     type: 'approval',
-    title: '身份绑定申请待审批',
+    title: '身份绑定申请待审核',
     content: '何雨桐申请变更青柠健康身份角色（成员 → 企业管理员），请核实后处理。',
     at: '2026-09-03 19:44',
     read: true,
@@ -79,7 +79,7 @@ export const notifications: AdminNotification[] = [
     id: 'N9009',
     type: 'lease',
     title: '租约已到期',
-    content: '鹿岛文化的租约 LS2008（C-301、C-302）已到期终止，工位已释放，可重新分配。',
+    content: '鹿岛文化的租约 LS2008（C-301、C-302）已到期终止，办公位已释放，可重新分配。',
     at: '2026-09-02 09:30',
     read: true,
     link: '/workstations/leases',

@@ -1,16 +1,17 @@
 /* M1-D 公共空间 e2e（wiki-backend.md §13 M1-D）：
- * 覆盖：审批通过前时段冲突校验两条分支（同空间已通过预约 / 同名空间已发布活动）+ 使用看板合并占用。
- * 前置：docker compose up + prisma migrate + seed（SR2003 待审批 S1001 2026-09-15 19:00-21:00 /
- *       SR2010 待审批 S1004 洽谈室 01 2026-09-09 11:00-12:00 / EV6002 已发布 2026-09-08 聚屿路演厅）。
+ * 覆盖：审核通过前时段冲突校验两条分支（同空间已通过预约 / 同名空间已发布活动）+ 使用看板合并占用。
+ * 前置：docker compose up + prisma migrate + seed（SR2003 待审核 S1001 2026-09-15 19:00-21:00 /
+ *       SR2010 待审核 S1004 洽谈室 01 2026-09-09 11:00-12:00 / EV6002 已发布 2026-09-08 聚屿路演厅）。
  * 通过 PrismaService 直插重叠的已通过预约/已发布活动来构造冲突场景。 */
 import { INestApplication } from '@nestjs/common'
 import { Test } from '@nestjs/testing'
 import request from 'supertest'
 import { AppModule } from '../src/app.module'
 import { reseed } from './helpers/reseed'
+import { loginAs } from './helpers/login'
 import { PrismaService } from '../src/common/prisma/prisma.service'
 
-describe('M1-D spaces 公共空间（预约审批冲突 + 使用看板）', () => {
+describe('M1-D spaces 公共空间（预约审核冲突 + 使用看板）', () => {
   let app: INestApplication
   let token: string
 
@@ -20,17 +21,14 @@ describe('M1-D spaces 公共空间（预约审批冲突 + 使用看板）', () =
     app = moduleRef.createNestApplication()
     await app.init()
 
-    const login = await request(app.getHttpServer())
-      .post('/api/admin/auth/login')
-      .send({ username: 'admin', password: 'admin123' })
-    token = login.body.data.token
+    token = await loginAs(app)
   })
 
   afterAll(async () => {
     await app.close()
   })
 
-  it('审批通过前：同空间同时段已通过预约 → 409', async () => {
+  it('审核通过前：同空间同时段已通过预约 → 409', async () => {
     const prisma = app.get(PrismaService)
     await prisma.spaceReservation.create({
       data: {
@@ -59,7 +57,7 @@ describe('M1-D spaces 公共空间（预约审批冲突 + 使用看板）', () =
     expect(res.body.message).toBe('该时段已有已通过的预约，无法重复占用')
   })
 
-  it('审批通过前：同名空间当日已发布活动 → 409', async () => {
+  it('审核通过前：同名空间当日已发布活动 → 409', async () => {
     const prisma = app.get(PrismaService)
     await prisma.communityEvent.create({
       data: {

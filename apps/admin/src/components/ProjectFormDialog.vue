@@ -6,11 +6,12 @@ import { AddIcon, DeleteIcon } from 'tdesign-icons-vue-next'
 import { fetchUndertakerOptions, initiateProject, type UndertakerOption } from '@/api/demands'
 import { createProject, updateProject } from '@/api/projects'
 import { fetchExperienceRules } from '@/api/rules'
+import RichEditor from '@/components/RichEditor.vue'
 import type { Demand, MilestoneInput, Project } from '@/types'
 
-/* 项目表单弹窗（创建 / 需求立项共用）：
- * - demand 为 null：后台直接创建项目
- * - demand 非空：需求立项，创建后与需求双向关联
+/* 项目表单弹窗（新增 / 需求立项共用）：
+ * - demand 为 null：后台直接新增项目
+ * - demand 非空：需求立项，新增后与需求双向关联
  * 多承接方 + 承接占比（默认均分，除不尽时首个取余数）+ 里程碑（每节点可多选负责承接方） */
 const props = defineProps<{
   visible: boolean
@@ -38,7 +39,7 @@ const form = reactive({
 /* 经验值规则默认值：项目结项奖励（关闭自定义时按此分配） */
 const ruleExp = ref(100)
 
-/* 自定义添加承接方的联系人信息（key = 表单值） */
+/* 自定义新增承接方的联系人信息（key = 表单值） */
 const customContacts = reactive<Record<string, { contactName: string; phone: string }>>({})
 
 onMounted(async () => {
@@ -51,7 +52,7 @@ onMounted(async () => {
 })
 
 
-/* 自定义添加的承接方（不在预设选项内的值） */
+/* 自定义新增的承接方（不在预设选项内的值） */
 const customRows = computed(() =>
   form.undertakers.filter((v) => !undertakerOptions.value.some((o) => o.value === v)),
 )
@@ -144,7 +145,7 @@ watch(
       return
     }
     if (v && props.mode === 'create' && props.project) {
-      /* 重新创建：以已关闭项目为模板预填（保存时生成新项目编号与状态） */
+      /* 重新新增：以已关闭项目为模板预填（保存时生成新项目编号与状态） */
       form.projectName = props.project.name
       form.undertakers = props.project.undertakers.map((t) => t.type + ':' + t.id)
       form.description = props.project.description
@@ -281,7 +282,7 @@ async function onConfirm() {
       MessagePlugin.success(`立项成功，项目编号 ${project.code}`)
     } else {
       project = await createProject(payload)
-      MessagePlugin.success(`项目已创建，编号 ${project.code}`)
+      MessagePlugin.success(`项目已新增，编号 ${project.code}`)
     }
     emit('update:visible', false)
     emit('success')
@@ -300,15 +301,16 @@ function onClose() {
 <template>
   <t-dialog
     :visible="visible"
-    :header="mode === 'edit' ? '编辑项目' : demand ? '需求立项' : '创建项目'"
-    width="680px"
+    :header="mode === 'edit' ? '编辑项目' : demand ? '需求立项' : '新增项目'"
+    width="880px"
+    lazy
     @close="onClose"
   >
     <template #footer>
       <div class="dialog-footer">
         <t-button variant="text" theme="default" @click="onClose">取消</t-button>
         <t-button theme="primary" :loading="submitting" @click="onConfirm">
-          {{ mode === 'edit' ? '保存修改' : demand ? '确认立项' : '确认创建' }}
+          {{ mode === 'edit' ? '保存修改' : demand ? '确认立项' : '确认新增' }}
         </t-button>
       </div>
     </template>
@@ -325,14 +327,14 @@ function onClose() {
           filterable
           creatable
           :options="undertakerOptions"
-          placeholder="搜索或选择承接方（社区企业/外部企业/用户），可输入名称自定义添加"
+          placeholder="搜索或选择承接方（社区企业/合作企业/用户），可输入名称自定义新增"
         />
       </t-form-item>
 
-      <!-- 自定义添加承接方的联系人信息 -->
+      <!-- 自定义新增承接方的联系人信息 -->
       <div v-if="customRows.length" class="scope-head">
         <span class="scope-title">自定义承接方联系人</span>
-        <span class="scope-tip">自定义添加的主体需补充联系人与联系电话（不参与经验值分配）</span>
+        <span class="scope-tip">自定义新增的主体需补充联系人与联系电话（不参与经验值分配）</span>
       </div>
       <div v-for="v in customRows" :key="v" class="form-row">
         <t-form-item :label="v + ' · 联系人'">
@@ -361,7 +363,7 @@ function onClose() {
       <div v-if="form.undertakers.length" class="share-block">
         <div class="share-head">
           <span class="share-title">承接占比</span>
-          <span class="share-tip">社区企业与社区个体，将按以下占比进行经验分成。</span>
+          <span class="share-tip">社区企业与社区个体，将按以下占比进行经验值分成。</span>
         </div>
         <div v-for="(v, i) in form.undertakers" :key="v" class="share-row">
           <span class="share-name">{{ undertakerNameOf(v) }}</span>
@@ -381,7 +383,7 @@ function onClose() {
       </div>
 
       <t-form-item label="项目说明" name="description">
-        <t-textarea v-model="form.description" :autosize="{ minRows: 3, maxRows: 6 }" placeholder="项目说明" />
+        <RichEditor v-model="form.description" placeholder="项目说明" :min-height="320" />
       </t-form-item>
 
       <div class="milestone-block">
@@ -389,7 +391,7 @@ function onClose() {
           <span class="milestone-label">里程碑节点</span>
           <t-button variant="dashed" size="small" @click="addMilestone">
             <template #icon><AddIcon /></template>
-            添加节点
+            新增节点
           </t-button>
         </div>
         <div v-for="(m, i) in milestones" :key="i" class="milestone-row">

@@ -2,15 +2,17 @@
 import { computed, onMounted, reactive, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { MessagePlugin } from 'tdesign-vue-next'
-import { AddIcon, RefreshIcon, SearchIcon, DownloadIcon } from 'tdesign-icons-vue-next'
+import { AddIcon, SearchIcon, DownloadIcon } from 'tdesign-icons-vue-next'
 import PageHeader from '@/components/PageHeader.vue'
 import StatusTag from '@/components/StatusTag.vue'
+import ColumnController from '@/components/ColumnController.vue'
+import BulkArchiveDialog from '@/components/BulkArchiveDialog.vue'
 import EventFormDialog from '@/components/EventFormDialog.vue'
 import { fetchPointsRules } from '@/api/mall'
 import { dictFallback, fetchDictEntries } from '@/api/dicts'
 import { exportCsv, statusLabel } from '@/utils/exportCsv'
 import EventScheduleDialog from '@/components/EventScheduleDialog.vue'
-import { cancelEvent, cancelEventSchedule, fetchEvents, publishEventNow, toggleEventEnrollment, restoreCancelledEvent } from '@/api/events'
+import { archiveEvent, cancelEvent, cancelEventSchedule, fetchEvents, publishEventNow, toggleEventEnrollment, restoreCancelledEvent } from '@/api/events'
 import { fetchUser } from '@/api/users'
 import type { CommunityEvent } from '@/types'
 
@@ -19,7 +21,7 @@ const router = useRouter()
 const loading = ref(false)
 const list = ref<CommunityEvent[]>([])
 const total = ref(0)
-/* 当前执行中的行操作标识：`${id}:publish-now | cancel | cancel-schedule | enrollment` */
+/* 当前执行中的行操作标识：`${id}:publish-now | cancel | cancel-schedule | enrollment | restore | archive` */
 const acting = ref('')
 /* 用户详情「数据概览」跳转带入的报名人筛选 */
 const participantName = ref('')
@@ -33,7 +35,7 @@ const query = reactive({
   participant: '',
 })
 
-/* 活动类型选项来自数据字典（M0-E 起统一取用），加载失败回退默认词表 */
+/* 活动类型选项来自数据字典，加载失败回退默认词表 */
 const typeOptions = ref([{ label: '全部', value: '' }, ...dictFallback.event_type.map((t) => ({ label: t, value: t }))])
 
 const statusOptions = [
@@ -50,8 +52,8 @@ const sortBy = ref<'id' | 'startTime' | 'createdAt'>('id')
 const sortOrder = ref<'ascend' | 'descend'>('descend')
 
 const columns = computed(() => [
-  { colKey: 'title', title: '活动', cell: 'title', minWidth: 220, resizable: true },
-  { colKey: 'type', title: '类型', cell: 'type', width: 84, resizable: true },
+  { colKey: 'title', title: '活动', cell: 'title', width: 220, resizable: true , ellipsis: true},
+  { colKey: 'type', title: '类型', cell: 'type', width: 84, resizable: true , ellipsis: true},
   {
     colKey: 'startTime',
     title: '活动开始时间',
@@ -69,13 +71,22 @@ const columns = computed(() => [
     resizable: true,
     sorter: true,
     sortType: 'all',
+  ellipsis: true,
   },
   { colKey: 'location', title: '地点', ellipsis: true, width: 130, resizable: true },
-  { colKey: 'enrolled', title: '报名', cell: 'enrolled', width: 108, resizable: true },
-  { colKey: 'checked', title: '签到', cell: 'checked', width: 108, resizable: true },
-  { colKey: 'status', title: '状态', cell: 'status', width: 150, resizable: true },
+  { colKey: 'enrolled', title: '报名', cell: 'enrolled', width: 108, resizable: true , ellipsis: true},
+  { colKey: 'checked', title: '签到', cell: 'checked', width: 108, resizable: true , ellipsis: true},
+  { colKey: 'status', title: '状态', cell: 'status', width: 150, resizable: true , ellipsis: true},
   { colKey: 'op', title: '操作', cell: 'op', width: 230 },
 ])
+
+/* 列配置：本地持久化显隐/顺序（columns 为 computed，脚本内需 .value 解包） */
+const visibleColKeys = ref<string[]>(columns.value.map((c) => c.colKey))
+
+const visibleColumns = computed(() => {
+  const byKey = new Map(columns.value.map((c) => [c.colKey, c]))
+  return visibleColKeys.value.map((k) => byKey.get(k)).filter(Boolean)
+})
 
 const pagination = computed(() => ({
   current: query.page,
@@ -149,8 +160,71 @@ function checkedCount(row: CommunityEvent) {
   return row.enrollments.filter((e) => e.checkedIn).length
 }
 
-function isActing(row: CommunityEvent, action: 'publish-now' | 'cancel' | 'cancel-schedule' | 'enrollment' | 'restore') {
+function isActing(row: CommunityEvent, action: 'publish-now' | 'cancel' | 'cancel-schedule' | 'enrollment' | 'restore' | 'archive') {
   return acting.value === `${row.id}:${action}`
+}
+
+/* 已结束 / 已取消 → 归档（可在归档管理中恢复） */
+async function onArchive(row: CommunityEvent) {
+  acting.value = `${row.id}:archive`
+  try {
+    await archiveEvent(row.id)
+    MessagePlugin.success('活动已归档')
+    await load()
+  } catch (e) {
+    MessagePlugin.error(e instanceof Error ? e.message : '操作失败')
+  } finally {
+    acting.value = ''
+  }
+}
+
+/* 一键归档：按当前筛选全量拉取，归档所选状态的已结束 / 已取消活动 */
+const archivingAll = ref(false)
+const bulkVisible = ref(false)
+const bulkStatuses = [
+  { label: '已结束', value: 'ended' },
+  { label: '已取消', value: 'cancelled' },
+]
+
+async function doBulkArchive(values: string[]) {
+  const targets: CommunityEvent[] = []
+  for (let page = 1; page <= 20; page++) {
+    const res = await fetchEvents({ ...query, page, pageSize: 100 })
+    targets.push(...res.list)
+    if (targets.length >= res.total || res.list.length < 100) break
+  }
+  const pending = targets.filter((e) => values.includes(e.status))
+  if (!pending.length) {
+    MessagePlugin.info('没有符合所选状态的可归档活动')
+    return
+  }
+  let failed = 0
+  for (const e of pending) {
+    try {
+      await archiveEvent(e.id)
+    } catch {
+      failed++
+    }
+  }
+  if (pending.length - failed > 0) MessagePlugin.success(`已归档 ${pending.length - failed} 条活动`)
+  if (failed > 0) MessagePlugin.warning(`${failed} 条活动归档失败，请重试`)
+  await load()
+}
+
+function onBulkArchive() {
+  bulkVisible.value = true
+}
+
+async function onBulkConfirm(values: string[]) {
+  archivingAll.value = true
+  try {
+    await doBulkArchive(values)
+    bulkVisible.value = false
+  } catch (e) {
+    MessagePlugin.error(e instanceof Error ? e.message : '一键归档失败')
+  } finally {
+    archivingAll.value = false
+  }
 }
 
 /* 已取消 → 转为待发布 */
@@ -198,7 +272,7 @@ async function onCancelSchedule(row: CommunityEvent) {
 /* 已发布 → 暂停报名 / 开放报名 */
 async function onToggleEnrollment(row: CommunityEvent) {
   acting.value = `${row.id}:enrollment`
-  /* 先取旧状态再调接口：接口原地翻转了 row.enrollmentOpen，后再判断会拿到新值导致提示反转（2026-09-10 修） */
+  /* 先取旧状态再调接口：接口原地翻转了 row.enrollmentOpen，后再判断会拿到新值导致提示反转 */
   const wasOpen = row.enrollmentOpen
   try {
     await toggleEventEnrollment(row.id)
@@ -225,7 +299,7 @@ async function onCancel(row: CommunityEvent) {
   }
 }
 
-/* 创建 / 编辑活动 */
+/* 新增 / 编辑活动 */
 const formVisible = ref(false)
 const formMode = ref<'create' | 'edit'>('create')
 const currentEvent = ref<CommunityEvent | null>(null)
@@ -315,15 +389,23 @@ function onExport() {
 
 <template>
   <div class="event-list page-fade-in">
-    <PageHeader title="活动管理" description="社区活动的创建、发布、报名与签到管理">
+    <PageHeader title="活动管理" description="社区活动的新增、发布、报名与签到管理">
       <template #actions>
+        <ColumnController
+          v-model="visibleColKeys"
+          storage-key="events"
+          :columns="columns.map((c) => ({ key: c.colKey, title: c.title }))"
+        />
+        <t-button variant="outline" :loading="archivingAll" :disabled="archivingAll" @click="onBulkArchive">
+          一键归档
+        </t-button>
         <t-button variant="outline" @click="onExport">
           <template #icon><DownloadIcon /></template>
           导出
         </t-button>
         <t-button theme="primary" @click="openCreate">
           <template #icon><AddIcon /></template>
-          创建活动
+          新增活动
         </t-button>
       </template>
     </PageHeader>
@@ -357,7 +439,6 @@ function onExport() {
         查询
       </t-button>
       <t-button variant="outline" @click="onReset">
-        <template #icon><RefreshIcon /></template>
         重置
       </t-button>
       <t-tag
@@ -378,7 +459,7 @@ function onExport() {
         hover
         resizable
         :data="list"
-        :columns="columns"
+        :columns="visibleColumns"
         :sort="tableSort"
         :loading="loading"
         :pagination="pagination"
@@ -476,6 +557,15 @@ function onExport() {
                 <t-button variant="text" size="small" theme="danger" :loading="isActing(row, 'cancel')">取消活动</t-button>
               </t-popconfirm>
             </template>
+
+            <!-- 已结束 / 已取消：归档（可在归档管理中恢复） -->
+            <t-popconfirm
+              v-if="row.status === 'ended' || row.status === 'cancelled'"
+              content="确认归档该活动？归档后可在归档管理中恢复"
+              @confirm="onArchive(row)"
+            >
+              <t-button variant="text" size="small" theme="warning" :loading="isActing(row, 'archive')">归档</t-button>
+            </t-popconfirm>
           </div>
         </template>
         <template #empty>
@@ -484,11 +574,20 @@ function onExport() {
       </t-table>
     </div>
 
-    <!-- 创建 / 编辑活动弹窗 -->
+    <!-- 新增 / 编辑活动弹窗 -->
     <EventFormDialog v-model:visible="formVisible" :mode="formMode" :event="currentEvent" @success="load" />
 
     <!-- 待发布：定时发布对话框 -->
     <EventScheduleDialog v-model:visible="scheduleVisible" :event="currentEvent" @success="load" />
+
+    <!-- 一键归档：状态选择二次确认对话框 -->
+    <BulkArchiveDialog
+      v-model:visible="bulkVisible"
+      title="一键归档 · 活动"
+      :statuses="bulkStatuses"
+      :loading="archivingAll"
+      @confirm="onBulkConfirm"
+    />
   </div>
 </template>
 

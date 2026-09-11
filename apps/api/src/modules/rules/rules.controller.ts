@@ -1,4 +1,5 @@
 import { Body, Controller, Get, HttpCode, Param, Post, Put } from '@nestjs/common'
+import { RequirePermission } from '../../common/decorators/require-permission.decorator'
 import { RulesService } from './rules.service'
 import { SaveLevelTiersDto } from './dto/save-level-tiers.dto'
 import { UpdateExperienceRuleDto } from './dto/update-experience-rule.dto'
@@ -9,25 +10,29 @@ export class RulesController {
 
   /* ---------- 经验值规则 ---------- */
 
+  @RequirePermission('/rules/experience')
   @Get('experience')
   listExperienceRules() {
     return this.rules.listExperienceRules()
   }
 
+  @RequirePermission('/rules/experience')
   @HttpCode(200)
   @Put('experience/:code')
   updateExperienceRule(@Param('code') code: string, @Body() dto: UpdateExperienceRuleDto) {
     return this.rules.updateExperienceRule(code, dto)
   }
 
+  @RequirePermission('/rules/experience')
   @HttpCode(200)
   @Post('experience/:code/toggle-status')
   toggleExperienceRuleStatus(@Param('code') code: string) {
     return this.rules.toggleExperienceRuleStatus(code)
   }
 
-  /* ---------- 经验发放记录 ---------- */
+  /* ---------- 经验值发放记录 ---------- */
 
+  @RequirePermission('/rules/experience-records')
   @Get('experience-issuance')
   listExperienceIssuance() {
     return this.rules.listExperienceIssuance()
@@ -35,11 +40,13 @@ export class RulesController {
 
   /* ---------- 等级梯度 ---------- */
 
+  @RequirePermission('/rules/levels')
   @Get('levels')
   listLevelTiers() {
     return this.rules.listLevelTiers()
   }
 
+  @RequirePermission('/rules/levels')
   @HttpCode(200)
   @Put('levels')
   saveLevelTiers(@Body() dto: SaveLevelTiersDto) {

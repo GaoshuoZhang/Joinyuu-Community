@@ -15,7 +15,7 @@ export class NotificationsService {
     return list.map(toNotificationDto)
   }
 
-  /** 标记单条已读：不存在的 id 静默返回（M0 幂等口径） */
+  /** 标记单条已读：不存在的 id 静默返回（幂等） */
   async markRead(id: string): Promise<{ code: number }> {
     await this.prisma.adminNotification.updateMany({ where: { id }, data: { read: true } })
     return { code: 0 }

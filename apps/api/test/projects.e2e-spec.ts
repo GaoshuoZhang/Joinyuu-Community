@@ -1,5 +1,5 @@
 /* M1-C 项目域验收（wiki-backend.md §13 M1-C）：
- * 创建（share 合计 != 100 → 400；成功 → code=JY-YYYY-NN）+ 暂停/恢复/关闭状态机链
+ * 新增（share 合计 != 100 → 400；成功 → code=JY-YYYY-NN）+ 暂停/恢复/关闭状态机链
  * + 关闭缺 reason → 400 + 非法流转 → 409。
  * 前置：docker compose up + prisma migrate + seed（P5001 running / P5005 paused / P5002 running、
  *       E2001 星澜智能科技 / U1002 持 community_individual 身份、ExperienceRule project_completed enabled） */
@@ -8,8 +8,9 @@ import { Test } from '@nestjs/testing'
 import request from 'supertest'
 import { AppModule } from '../src/app.module'
 import { reseed } from './helpers/reseed'
+import { loginAs } from './helpers/login'
 
-describe('M1-C projects（创建/编辑/状态机）', () => {
+describe('M1-C projects（新增/编辑/状态机）', () => {
   let app: INestApplication
   let token: string
 
@@ -19,17 +20,14 @@ describe('M1-C projects（创建/编辑/状态机）', () => {
     app = moduleRef.createNestApplication()
     await app.init()
 
-    const login = await request(app.getHttpServer())
-      .post('/api/admin/auth/login')
-      .send({ username: 'admin', password: 'admin123' })
-    token = login.body.data.token
+    token = await loginAs(app)
   })
 
   afterAll(async () => {
     await app.close()
   })
 
-  it('创建项目：承接占比合计 != 100 → 400', async () => {
+  it('新增项目：承接占比合计 != 100 → 400', async () => {
     const res = await request(app.getHttpServer())
       .post('/api/admin/projects')
       .set('Authorization', `Bearer ${token}`)
@@ -44,7 +42,7 @@ describe('M1-C projects（创建/编辑/状态机）', () => {
     expect(res.body.message).toBe('承接占比合计须为 100%')
   })
 
-  it('创建项目：无承接方 → 400', async () => {
+  it('新增项目：无承接方 → 400', async () => {
     const res = await request(app.getHttpServer())
       .post('/api/admin/projects')
       .set('Authorization', `Bearer ${token}`)
@@ -54,7 +52,7 @@ describe('M1-C projects（创建/编辑/状态机）', () => {
     expect(res.body.message).toBe('请至少选择一个承接方')
   })
 
-  it('创建项目：成功 → code=JY-YYYY-NN、running、承接方解析', async () => {
+  it('新增项目：成功 → code=JY-YYYY-NN、running、承接方解析', async () => {
     const res = await request(app.getHttpServer())
       .post('/api/admin/projects')
       .set('Authorization', `Bearer ${token}`)
@@ -64,7 +62,7 @@ describe('M1-C projects（创建/编辑/状态机）', () => {
           { type: 'enterprise', id: 'E2001', share: 60 },
           { type: 'individual', id: 'U1002', share: 40 },
         ],
-        description: 'e2e 创建的项目',
+        description: 'e2e 新增的项目',
         milestones: [{ name: '立项', date: '2026-10-01', owners: ['星澜智能科技'] }],
       })
 

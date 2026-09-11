@@ -1,12 +1,16 @@
 <script setup lang="ts">
-import { nextTick, reactive, ref, watch } from 'vue'
+import { nextTick, onMounted, reactive, ref, watch } from 'vue'
 import { MessagePlugin } from 'tdesign-vue-next'
 import type { FormProps } from 'tdesign-vue-next'
 import { createGoods, updateGoods } from '@/api/mall'
-import { goodsCategoryMap } from '@/constants/status'
+import { fetchDictEntries } from '@/api/dicts'
+import { goodsCategoryMap, isPhysicalCategory } from '@/constants/status'
+import { userLevelOptions, visibilityIdentityOptions } from '@/constants/identity'
+import RichEditor from '@/components/RichEditor.vue'
 import type { MallGoods, GoodsCategory } from '@/types'
 
-/* 商品创建/编辑弹窗：创建即上架（status=on，累计兑换次数从 0 起）；编辑不影响已有兑换订单 */
+/* 商品新增/编辑弹窗：新增即下架（status=off，由列表操作上架）；编辑不影响已有兑换订单；
+ * 实物商品配置发货方式（自提/邮寄），并可自定义可见范围与可下单范围 */
 const props = defineProps<{
   visible: boolean
   mode: 'create' | 'edit'
@@ -18,17 +22,44 @@ const emit = defineEmits<{
   (e: 'success'): void
 }>()
 
-const categoryOptions = Object.entries(goodsCategoryMap).map(([value, label]) => ({ label, value }))
+const categoryOptions = ref(Object.values(goodsCategoryMap).map((label) => ({ label, value: label })))
+
+onMounted(() => {
+  fetchDictEntries('goods_category')
+    .then((entries) => {
+      const mapped = entries
+        .filter((e) => e.status === 'enabled')
+        .map((e) => ({ label: e.label, value: e.label }))
+      if (mapped.length) categoryOptions.value = mapped
+    })
+    .catch(() => undefined)
+})
+
+const shippingMethodOptions = [
+  { label: '自提', value: 'pickup' },
+  { label: '邮寄', value: 'delivery' },
+]
 
 const submitting = ref(false)
 const formRef = ref()
 
+/* 自定义开关：可见范围/可下单范围（关=不限） */
+const customVisibility = ref(false)
+const customOrdering = ref(false)
+
 const form = reactive({
   name: '',
-  category: 'physical' as GoodsCategory,
+  category: '实物商品' as GoodsCategory,
   points: 100,
   stock: 50,
   description: '',
+  shippingMethods: [] as Array<'pickup' | 'delivery'>,
+  pickupAddress: '',
+  shippingFee: 0,
+  visibilityIdentities: [] as string[],
+  visibilityLevels: [] as string[],
+  orderIdentities: [] as string[],
+  orderLevels: [] as string[],
 })
 
 watch(
@@ -41,17 +72,41 @@ watch(
       form.points = props.goods.points
       form.stock = props.goods.stock
       form.description = props.goods.description
+      form.shippingMethods = [...(props.goods.shippingMethods ?? [])]
+      form.pickupAddress = props.goods.pickupAddress ?? ''
+      form.shippingFee = props.goods.shippingFee ?? 0
+      form.visibilityIdentities = [...(props.goods.visibilityIdentities ?? [])]
+      form.visibilityLevels = [...(props.goods.visibilityLevels ?? [])]
+      form.orderIdentities = [...(props.goods.orderIdentities ?? [])]
+      form.orderLevels = [...(props.goods.orderLevels ?? [])]
+      customVisibility.value = form.visibilityIdentities.length > 0 || form.visibilityLevels.length > 0
+      customOrdering.value = form.orderIdentities.length > 0 || form.orderLevels.length > 0
     } else {
       form.name = ''
-      form.category = 'physical'
+      form.category = '实物商品'
       form.points = 100
       form.stock = 50
       form.description = ''
+      form.shippingMethods = []
+      form.pickupAddress = ''
+      form.shippingFee = 0
+      form.visibilityIdentities = []
+      form.visibilityLevels = []
+      form.orderIdentities = []
+      form.orderLevels = []
+      customVisibility.value = false
+      customOrdering.value = false
     }
     /* 清除上次会话残留的校验红框（仅清状态，不动表单值） */
     nextTick(() => formRef.value?.clearValidate())
   },
 )
+
+/* 一键同步：可下单范围 ← 可见范围 */
+function syncOrdering() {
+  form.orderIdentities = [...form.visibilityIdentities]
+  form.orderLevels = [...form.visibilityLevels]
+}
 
 /* 规则 trigger 一律 submit：确认时 formRef.validate() 才触发红框提示 */
 const rules: FormProps['rules'] = {
@@ -63,6 +118,11 @@ const rules: FormProps['rules'] = {
 async function onConfirm() {
   const valid = await formRef.value.validate()
   if (valid !== true) return
+  const physical = isPhysicalCategory(form.category)
+  if (physical && form.shippingMethods.includes('pickup') && !form.pickupAddress.trim()) {
+    MessagePlugin.warning('请填写自提地址')
+    return
+  }
   submitting.value = true
   try {
     const payload = {
@@ -71,13 +131,20 @@ async function onConfirm() {
       points: form.points,
       stock: form.stock,
       description: form.description,
+      shippingMethods: physical ? form.shippingMethods : [],
+      pickupAddress: physical && form.shippingMethods.includes('pickup') ? form.pickupAddress : undefined,
+      shippingFee: physical && form.shippingMethods.includes('delivery') ? form.shippingFee : undefined,
+      visibilityIdentities: customVisibility.value ? form.visibilityIdentities : [],
+      visibilityLevels: customVisibility.value ? form.visibilityLevels : [],
+      orderIdentities: customOrdering.value ? form.orderIdentities : [],
+      orderLevels: customOrdering.value ? form.orderLevels : [],
     }
     if (props.mode === 'create') {
-      const item = await createGoods(payload)
-      MessagePlugin.success(`商品已创建并上架（${item.id}）`)
+      await createGoods(payload)
+      MessagePlugin.success('商品已新增（默认已下架）')
     } else if (props.goods) {
       await updateGoods(props.goods.id, payload)
-      MessagePlugin.success('商品修改已保存')
+      MessagePlugin.success('商品信息已保存')
     }
     emit('update:visible', false)
     emit('success')
@@ -96,7 +163,7 @@ function onClose() {
 <template>
   <t-dialog
     :visible="visible"
-    :header="mode === 'create' ? '上架商品' : '编辑商品'"
+    :header="mode === 'create' ? '新增商品' : '编辑商品'"
     width="560px"
     @close="onClose"
   >
@@ -104,7 +171,7 @@ function onClose() {
       <div class="dialog-footer">
         <t-button variant="text" theme="default" @click="onClose">取消</t-button>
         <t-button theme="primary" :loading="submitting" @click="onConfirm">
-          {{ mode === 'create' ? '确认上架' : '保存修改' }}
+          {{ mode === 'create' ? '确认新增' : '保存修改' }}
         </t-button>
       </div>
     </template>
@@ -123,12 +190,88 @@ function onClose() {
       <t-form-item label="库存" name="stock">
         <t-input-number v-model="form.stock" :min="0" theme="column" style="width: 100%" />
       </t-form-item>
+
+      <!-- 实物商品：发货方式（自提/邮寄），按选择显示自提地址或邮费 -->
+      <template v-if="isPhysicalCategory(form.category)">
+        <t-form-item label="发货方式" name="shippingMethods">
+          <t-select
+            v-model="form.shippingMethods"
+            multiple
+            clearable
+            :options="shippingMethodOptions"
+            placeholder="请选择发货方式"
+          />
+        </t-form-item>
+        <t-form-item
+          v-if="form.shippingMethods.includes('pickup')"
+          label="自提地址"
+          name="pickupAddress"
+        >
+          <t-input clearable v-model="form.pickupAddress" placeholder="请输入自提地址" />
+        </t-form-item>
+        <t-form-item
+          v-if="form.shippingMethods.includes('delivery')"
+          label="邮费"
+          name="shippingFee"
+          help="0 = 包邮"
+        >
+          <t-input-number v-model="form.shippingFee" :min="0" theme="column" style="width: 100%" />
+        </t-form-item>
+      </template>
+
+      <!-- 自定义范围：关闭 = 不限身份、等级 -->
+      <div class="scope-head">
+        <span class="scope-title">自定义可见范围</span>
+        <t-switch v-model="customVisibility" />
+      </div>
+      <span class="scope-tip-block">默认关闭 = 所有身份、等级均可见；开启后可限定可见的身份与等级</span>
+      <div v-if="customVisibility" class="form-row">
+        <t-form-item label="身份" name="visibilityIdentities">
+          <t-select
+            v-model="form.visibilityIdentities"
+            multiple
+            clearable
+            :options="visibilityIdentityOptions"
+            placeholder="不限"
+          />
+        </t-form-item>
+        <t-form-item label="等级" name="visibilityLevels">
+          <t-select v-model="form.visibilityLevels" multiple clearable :options="userLevelOptions" placeholder="不限" />
+        </t-form-item>
+      </div>
+
+      <div class="scope-head">
+        <span class="scope-title">自定义可下单范围</span>
+        <div class="scope-right">
+          <t-switch v-model="customOrdering" />
+          <t-button
+            v-if="customOrdering && customVisibility"
+            variant="text"
+            size="small"
+            @click="syncOrdering"
+          >
+            同步可见范围
+          </t-button>
+        </div>
+      </div>
+      <span class="scope-tip-block">默认关闭 = 所有身份、等级均可下单；开启后可限定可下单的身份与等级</span>
+      <div v-if="customOrdering" class="form-row">
+        <t-form-item label="身份" name="orderIdentities">
+          <t-select
+            v-model="form.orderIdentities"
+            multiple
+            clearable
+            :options="visibilityIdentityOptions"
+            placeholder="不限"
+          />
+        </t-form-item>
+        <t-form-item label="等级" name="orderLevels">
+          <t-select v-model="form.orderLevels" multiple clearable :options="userLevelOptions" placeholder="不限" />
+        </t-form-item>
+      </div>
+
       <t-form-item label="商品说明" name="description">
-        <t-textarea
-          v-model="form.description"
-          :autosize="{ minRows: 3, maxRows: 6 }"
-          placeholder="兑换说明、领取方式等"
-        />
+        <RichEditor v-model="form.description" placeholder="兑换说明、领取方式等" :min-height="320" />
       </t-form-item>
     </t-form>
   </t-dialog>
@@ -139,6 +282,32 @@ function onClose() {
   display: grid;
   grid-template-columns: 1fr 1fr;
   gap: 0 16px;
+}
+
+.scope-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 8px;
+}
+
+.scope-right {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.scope-title {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--td-text-color-primary);
+}
+
+.scope-tip-block {
+  display: block;
+  margin: -6px 0 12px;
+  font-size: 12px;
+  color: var(--td-text-color-secondary);
 }
 
 .dialog-footer {

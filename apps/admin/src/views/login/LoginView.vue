@@ -1,9 +1,10 @@
 <script setup lang="ts">
-import { reactive, ref } from 'vue'
+import { onMounted, reactive, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { MessagePlugin } from 'tdesign-vue-next'
-import { CheckCircleIcon } from 'tdesign-icons-vue-next'
+import { CheckCircleIcon, RefreshIcon } from 'tdesign-icons-vue-next'
 import { useAuthStore } from '@/stores/auth'
+import { fetchCaptcha, type CaptchaResult } from '@/api/auth'
 import type { FormProps } from 'tdesign-vue-next'
 
 const router = useRouter()
@@ -13,28 +14,53 @@ const auth = useAuthStore()
 const form = reactive({
   username: '',
   password: '',
+  captcha: '',
 })
 
 const rules: FormProps['rules'] = {
   username: [{ required: true, message: '请输入用户名', trigger: 'blur' }],
   password: [{ required: true, message: '请输入密码', trigger: 'blur' }],
+  captcha: [{ required: true, message: '请输入验证码', trigger: 'blur' }],
 }
 
 const submitting = ref(false)
+
+const captcha = ref<CaptchaResult | null>(null)
+
+async function loadCaptcha() {
+  try {
+    captcha.value = await fetchCaptcha()
+  } catch (e) {
+    captcha.value = null
+    MessagePlugin.error(e instanceof Error ? e.message : '验证码加载失败，请点击刷新重试')
+  }
+}
+
+onMounted(loadCaptcha)
 
 const onSubmit: FormProps['onSubmit'] = async ({ validateResult, firstError }) => {
   if (validateResult !== true) {
     MessagePlugin.warning(firstError as string)
     return
   }
+  if (!captcha.value) {
+    MessagePlugin.warning('验证码未加载，请点击刷新后重试')
+    loadCaptcha()
+    return
+  }
   submitting.value = true
   try {
-    await auth.login(form.username, form.password)
+    await auth.login(form.username, form.password, {
+      captchaId: captcha.value?.captchaId ?? '',
+      captchaCode: form.captcha,
+    })
     MessagePlugin.success('登录成功，欢迎回来')
     const redirect = (route.query.redirect as string) || '/dashboard'
     router.push(redirect)
   } catch (err) {
     MessagePlugin.error(err instanceof Error ? err.message : '登录失败，请稍后重试')
+    form.captcha = ''
+    loadCaptcha()
   } finally {
     submitting.value = false
   }
@@ -92,6 +118,29 @@ const highlights = ['企业与需求双向连接', '活动运营与签到管理'
               clearable
               placeholder="请输入密码"
             />
+          </t-form-item>
+          <t-form-item name="captcha">
+            <div class="captcha-row">
+              <t-input
+                v-model="form.captcha"
+                size="large"
+                clearable
+                maxlength="4"
+                placeholder="验证码"
+                style="flex: 1"
+              />
+              <img
+                v-if="captcha"
+                :src="captcha.image"
+                class="captcha-img"
+                alt="验证码"
+                title="点击刷新"
+                @click="loadCaptcha"
+              />
+              <t-button variant="text" shape="square" size="large" @click="loadCaptcha">
+                <template #icon><RefreshIcon /></template>
+              </t-button>
+            </div>
           </t-form-item>
           <t-form-item>
             <t-button theme="primary" type="submit" size="large" block :loading="submitting">
@@ -181,5 +230,21 @@ const highlights = ['企业与需求双向连接', '活动运营与签到管理'
   font-family: var(--td-font-family);
   color: var(--td-brand-color);
   font-weight: 600;
+}
+
+.captcha-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+}
+
+.captcha-img {
+  width: 110px;
+  height: 40px;
+  border: 1px solid var(--td-component-border);
+  border-radius: var(--td-radius-medium);
+  cursor: pointer;
+  flex-shrink: 0;
 }
 </style>

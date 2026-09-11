@@ -4,6 +4,7 @@ import { PrismaService } from '../../common/prisma/prisma.service'
 import { IdGeneratorService } from '../../common/id-generator/id-generator.service'
 import { AuditService } from '../../common/audit/audit.service'
 import { formatNow, formatToday } from '../../common/utils/time'
+import { sanitizeHtml } from '../../common/utils/sanitize-html'
 import type { QueryProjectsDto } from './dto/query-projects.dto'
 
 /* 承接方输入（ProjectInitPayload.undertakers，锁定签名）：enterprise=社区企业 / individual=用户 / custom=自定义 */
@@ -35,7 +36,7 @@ export interface ProjectCreatePayload {
   expReward?: number
 }
 
-/* M0 Project 形状（apps/admin/src/types/index.ts）——返回与 M0 stub 逐字段一致 */
+/* 返回形状与 apps/admin/src/types/index.ts 逐字段一致 */
 export interface ProjectUndertakerDto {
   type: string
   /** 承接方 ID（DB 列 refId 映射为响应字段 id） */
@@ -69,6 +70,7 @@ export interface ProjectDto {
   sourceDemandId?: string
   expReward?: number
   closeReason?: string
+  deletedAt?: string
 }
 
 type ProjectWithRelations = Project & { undertakers: ProjectUndertaker[]; milestones: Milestone[] }
@@ -84,7 +86,7 @@ interface ResolvedUndertaker {
 }
 
 /* 项目域（wiki-backend.md §7.7/§8.5）：
- * 列表筛选/排序/分页、详情、创建（含锁定 createProject 供 demands 复用）、编辑、暂停/恢复/关闭状态机、
+ * 列表筛选/排序/分页、详情、新增（含锁定 createProject 供 demands 复用）、编辑、暂停/恢复/关闭状态机、
  * 结项 finishProject（里程碑全 done → finished 并按承接占比分配经验值） */
 @Injectable()
 export class ProjectsService {
@@ -95,7 +97,7 @@ export class ProjectsService {
   ) {}
 
   async findAll(query: QueryProjectsDto): Promise<{ list: ProjectDto[]; total: number }> {
-    const where: Prisma.ProjectWhereInput = {}
+    const where: Prisma.ProjectWhereInput = { deletedAt: null }
     if (query.keyword) {
       const kw = query.keyword.trim()
       where.OR = [
@@ -105,8 +107,8 @@ export class ProjectsService {
     }
     if (query.status) where.status = query.status
 
-    /* 主行查询不含关联；参与人/企业筛选在内存完成，仅当页批量补取承接方与里程碑 */
-    const rows = await this.prisma.project.findMany({ where })
+    /* 主行查询含承接方（参与人/企业筛选需用）；里程碑与承接方映射在分页后批量补取 */
+    const rows = await this.prisma.project.findMany({ where, include: { undertakers: true } })
 
     let list = rows as ProjectWithRelations[]
 
@@ -210,14 +212,14 @@ export class ProjectsService {
     return toProjectDto(project)
   }
 
-  /* 锁定签名（demands-api 复用）：创建项目（无来源需求）
+  /* 锁定签名（demands-api 复用）：新增项目（无来源需求）
    * 承接方非空、share 合计 100、名称解析（404 承接企业/承接人不存在）、code=JY-YYYY-NN 按年原子发号 */
   async createProject(payload: ProjectCreatePayload, operator: string): Promise<ProjectDto> {
     const project = await this.prisma.$transaction((tx) => this.createProjectInHostTx(tx, payload))
 
     await this.audit.record({
       module: '项目管理',
-      action: '创建项目',
+      action: '新增项目',
       target: `${project.id} · ${project.name}`,
       detail: project.code,
       after: { status: project.status, code: project.code },
@@ -227,7 +229,7 @@ export class ProjectsService {
     return toProjectDto(project)
   }
 
-  /** 在宿主事务内创建项目（校验/名称解析/编号全部走事务连接）——供需求立项与直接创建复用 */
+  /** 在宿主事务内新增项目（校验/名称解析/编号全部走事务连接）——供需求立项与直接新增复用 */
   async createProjectInHostTx(
     tx: Prisma.TransactionClient,
     payload: ProjectCreatePayload,
@@ -246,7 +248,7 @@ export class ProjectsService {
     return this.createProjectInTx(tx, payload, undertakers, code)
   }
 
-  /** 事务内创建项目主体（输入校验与名称解析在事务外完成）——供需求立项在单一事务中复用 */
+  /** 事务内新增项目主体（输入校验与名称解析在事务外完成）——供需求立项在单一事务中复用 */
   async createProjectInTx(
     tx: Prisma.TransactionClient,
     payload: ProjectCreatePayload,
@@ -268,7 +270,7 @@ export class ProjectsService {
         startDate: payload.startDate ?? '',
         endDate: payload.endDate ?? '',
         initiatedAt: formatToday(),
-        description: payload.description,
+        description: sanitizeHtml(payload.description),
         memberCount: undertakers.length,
         expReward: payload.expReward ?? null,
       },
@@ -332,7 +334,7 @@ export class ProjectsService {
           memberCount: undertakers.length,
           ...(payload.startDate != null ? { startDate: payload.startDate } : {}),
           ...(payload.endDate != null ? { endDate: payload.endDate } : {}),
-          description: payload.description,
+          description: sanitizeHtml(payload.description),
         },
       })
 
@@ -403,7 +405,10 @@ export class ProjectsService {
     const trimmed = (reason ?? '').trim()
     if (!trimmed) throw new BadRequestException('请填写关闭原因')
 
-    await this.prisma.project.update({ where: { id }, data: { status: 'closed', closeReason: trimmed } })
+    await this.prisma.project.update({
+      where: { id },
+      data: { status: 'closed', closeReason: trimmed, archivableAt: formatNow() },
+    })
 
     await this.audit.record({
       module: '项目管理',
@@ -419,9 +424,9 @@ export class ProjectsService {
   }
 
   /* 项目结项（wiki-backend.md §8.5）——非端点，供后续触发接线：
-   * 里程碑全 done → finished；总经验 = expReward ?? project_completed 规则值（启用时）；
+   * 里程碑全 done → finished；总经验值 = expReward ?? project_completed 规则值（启用时）；
    * 按承接占比向下取整分配（余数给首个参与方），仅社区企业与持社区个体身份的用户参与，
-   * 外部企业/无社区个体身份个人/自定义承接方份额丢弃；事务写经验流水 + 等级重算 */
+   * 合作企业/无社区个体身份个人/自定义承接方份额丢弃；事务写经验值流水 + 等级重算 */
   async finishProject(id: string, operator: string): Promise<void> {
     const project = await this.prisma.project.findUnique({
       where: { id },
@@ -438,7 +443,10 @@ export class ProjectsService {
     }
 
     await this.prisma.$transaction(async (tx) => {
-      await tx.project.update({ where: { id }, data: { status: 'finished', progress: 100 } })
+      await tx.project.update({
+        where: { id },
+        data: { status: 'finished', progress: 100, archivableAt: formatNow() },
+      })
       if (totalExp == null || totalExp <= 0) return
 
       const individualRefIds = project.undertakers
@@ -487,7 +495,7 @@ export class ProjectsService {
               targetId: p.refId,
               delta: amount,
               balance,
-              reason: `「${project.name}」结项经验`,
+              reason: `「${project.name}」结项经验值`,
               at: formatNow(),
               operator: '系统',
               source: 'rule',
@@ -511,7 +519,7 @@ export class ProjectsService {
               targetId: p.refId,
               delta: amount,
               balance,
-              reason: `「${project.name}」结项经验`,
+              reason: `「${project.name}」结项经验值`,
               at: formatNow(),
               operator: '系统',
               source: 'rule',
@@ -523,8 +531,31 @@ export class ProjectsService {
     void operator
   }
 
-  /* 承接方展示名：企业→企业名；个人→「昵称 · 社区个体头衔」；自定义→name||id（对照 M0 undertakerName）
-   * db 为 PrismaService 或事务客户端，供列表校验与事务内创建复用 */
+  async archive(id: string, operator: string): Promise<{ code: number }> {
+    const project = await this.prisma.project.findFirst({ where: { id, deletedAt: null } })
+    if (!project) throw new NotFoundException('项目不存在')
+    if (project.status !== 'finished' && project.status !== 'closed') {
+      throw new ConflictException('仅已结项或已关闭的项目可归档')
+    }
+
+    await this.prisma.project.update({
+      where: { id },
+      data: { deletedAt: formatNow(), deletedBy: operator },
+    })
+
+    await this.audit.record({
+      module: '项目管理',
+      action: '归档项目',
+      target: `${project.id} · ${project.name}`,
+      before: { status: project.status },
+      after: { deleted: true },
+      operator,
+    })
+    return { code: 0 }
+  }
+
+  /* 承接方展示名：企业→企业名；个人→「昵称 · 社区个体头衔」；自定义→name||id
+   * db 为 PrismaService 或事务客户端，供列表校验与事务内新增复用 */
   private async resolveUndertakers(
     db: Prisma.TransactionClient | PrismaService,
     input: UndertakerInput[],
@@ -561,7 +592,7 @@ export class ProjectsService {
   }
 }
 
-/* Prisma 行 → M0 Project 形状（refId → id；可选字段缺失省略） */
+/* Prisma 行 → Project 形状（refId → id；可选字段缺失省略） */
 function toProjectDto(project: ProjectWithRelations): ProjectDto {
   const dto: ProjectDto = {
     id: project.id,
@@ -590,5 +621,6 @@ function toProjectDto(project: ProjectWithRelations): ProjectDto {
   if (project.sourceDemandId != null) dto.sourceDemandId = project.sourceDemandId
   if (project.expReward != null) dto.expReward = project.expReward
   if (project.closeReason != null) dto.closeReason = project.closeReason
+  if (project.deletedAt != null) dto.deletedAt = project.deletedAt
   return dto
 }

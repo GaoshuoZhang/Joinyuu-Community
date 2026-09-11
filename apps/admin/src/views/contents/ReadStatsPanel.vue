@@ -1,6 +1,8 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
 import StatCard from '@/components/StatCard.vue'
+import PageHeader from '@/components/PageHeader.vue'
+import ColumnController from '@/components/ColumnController.vue'
 import { fetchArticles } from '@/api/contents'
 import type { Article } from '@/types'
 
@@ -17,13 +19,21 @@ const topViews = computed(() => (published.value.length === 0 ? 0 : Math.max(...
 const ranked = computed(() => [...list.value].sort((a, b) => b.views - a.views))
 
 const columns = [
-  { colKey: 'rank', title: '排名', cell: 'rank', width: 80 },
-  { colKey: 'title', title: '文章', cell: 'title', minWidth: 260, resizable: true },
-  { colKey: 'columnName', title: '栏目', width: 110, resizable: true },
-  { colKey: 'authorName', title: '作者', width: 120, resizable: true },
-  { colKey: 'views', title: '阅读量', cell: 'views', width: 100, resizable: true },
-  { colKey: 'publishedAt', title: '发布时间', cell: 'publishedAt', width: 160, resizable: true },
+  { colKey: 'rank', title: '排名', cell: 'rank', width: 80 , ellipsis: true},
+  { colKey: 'title', title: '文章', cell: 'title', width: 260, resizable: true , ellipsis: true},
+  { colKey: 'columnNames', title: '栏目', cell: 'columnNames', width: 120, resizable: true , ellipsis: true},
+  { colKey: 'authorName', title: '作者', width: 120, resizable: true , ellipsis: true},
+  { colKey: 'views', title: '阅读量', cell: 'views', width: 100, resizable: true , ellipsis: true},
+  { colKey: 'publishedAt', title: '发布时间', cell: 'publishedAt', width: 160, resizable: true , ellipsis: true},
 ]
+
+/* 列配置：本地持久化显隐/顺序 */
+const visibleColKeys = ref<string[]>(columns.map((c) => c.colKey))
+
+const visibleColumns = computed(() => {
+  const byKey = new Map(columns.map((c) => [c.colKey, c]))
+  return visibleColKeys.value.map((k) => byKey.get(k)).filter(Boolean)
+})
 
 async function load() {
   loading.value = true
@@ -39,7 +49,16 @@ onMounted(load)
 </script>
 
 <template>
-  <div class="read-stats-panel">
+  <div class="read-stats-panel page-fade-in">
+    <PageHeader title="阅读统计" description="文章阅读量汇总与排行">
+      <template #actions>
+        <ColumnController
+          v-model="visibleColKeys"
+          storage-key="read-stats"
+          :columns="columns.map((c) => ({ key: c.colKey, title: c.title }))"
+        />
+      </template>
+    </PageHeader>
     <div class="stat-row">
       <StatCard label="总阅读量" :value="totalViews" />
       <StatCard label="已发布文章" :value="published.length" />
@@ -54,7 +73,7 @@ onMounted(load)
         hover
         resizable
         :data="ranked"
-        :columns="columns"
+        :columns="visibleColumns"
         :loading="loading"
         empty="暂无文章数据"
       >
@@ -66,6 +85,14 @@ onMounted(load)
         <template #title="{ row }">
           <div class="cell-title">{{ row.title }}</div>
           <div class="cell-sub">{{ row.id }}</div>
+        </template>
+        <template #columnNames="{ row }">
+          <div class="col-tags">
+            <t-tag v-for="c in row.columnNames" :key="c" variant="light" size="small">{{ c }}</t-tag>
+          </div>
+        </template>
+        <template #authorName="{ row }">
+          <span>{{ row.authorName || '—' }}<t-tag v-if="row.authorId" class="id-tag" size="small" variant="light">{{ row.authorId }}</t-tag></span>
         </template>
         <template #views="{ row }">
           <span class="views-num">{{ row.views }}</span>
@@ -113,6 +140,12 @@ onMounted(load)
   margin-top: 2px;
   font-size: 12px;
   color: var(--td-text-color-secondary);
+}
+
+.col-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
 }
 
 .views-num {

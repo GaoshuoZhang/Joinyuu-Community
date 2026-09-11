@@ -11,12 +11,13 @@ import { AuditService } from '../../common/audit/audit.service'
 import { RedisService } from '../../common/redis/redis.service'
 import { CACHE_KEYS, CACHE_TTL } from '../../common/redis/cache-keys'
 import { formatNow } from '../../common/utils/time'
+import { sanitizeHtml } from '../../common/utils/sanitize-html'
 import type { GoodsPayloadDto } from './dto/goods-payload.dto'
 import type { QueryGoodsDto } from './dto/query-goods.dto'
 import type { QueryRedemptionOrdersDto } from './dto/query-redemption-orders.dto'
 import type { UpdatePointsRuleDto } from './dto/update-points-rule.dto'
 
-/* M0 形状（apps/admin/src/types/index.ts）——返回与 M0 stub 逐字段一致（可空字段 null → undefined） */
+/* 返回形状与 apps/admin/src/types/index.ts 逐字段一致（可空字段 null → undefined） */
 export interface RedemptionOrderDto {
   id: string
   userId: string
@@ -45,12 +46,12 @@ export interface PointsRuleDto {
   updatedAt: string
 }
 
-/* 取消订单无取消原因入参（M0 stub 仅传 id），服务端固定文案落 cancelReason */
+/* 取消订单无取消原因入参（仅传 id），服务端固定文案落 cancelReason */
 const ORDER_CANCEL_REASON = '管理员取消订单，积分已原路退回'
 
 /* 积分商城（wiki-backend.md §7.10/§8.1/§8.3）：
- * 商品列表/创建/编辑/上下架（上架/下架写审计）、兑换订单发货/完成/取消（取消走事务退积分+回库存）、
- * 积分规则（8 条固定项仅编辑积分值与启停）、积分发放记录（source=rule） */
+ * 商品列表/新增/编辑/上下架（上架/下架写审计）、兑换订单发货/完成/取消（取消走事务退积分+回库存）、
+ * 积分规则（9 条固定项仅编辑积分值与启停）、积分发放记录（source=rule） */
 @Injectable()
 export class MallService {
   constructor(
@@ -63,7 +64,7 @@ export class MallService {
   /* ---------- 商品管理 ---------- */
 
   async listGoods(query: QueryGoodsDto): Promise<{ list: MallGoods[]; total: number }> {
-    const where: Prisma.MallGoodsWhereInput = {}
+    const where: Prisma.MallGoodsWhereInput = { deletedAt: null }
     if (query.keyword) {
       const kw = query.keyword.trim()
       where.OR = [
@@ -101,17 +102,25 @@ export class MallService {
         category: dto.category,
         points: dto.points,
         stock: dto.stock,
-        status: 'on',
-        description: dto.description,
+        status: dto.stock === 0 ? 'restock' : 'off',
+        description: sanitizeHtml(dto.description),
         redeemedCount: 0,
+        ...this.resolveShipping(dto),
+        visibilityIdentities: dto.visibilityIdentities ?? [],
+        visibilityLevels: dto.visibilityLevels ?? [],
+        orderIdentities: dto.orderIdentities ?? [],
+        orderLevels: dto.orderLevels ?? [],
         createdAt: formatNow(),
       },
     })
   }
 
   async updateGoods(id: string, dto: GoodsPayloadDto): Promise<{ code: number }> {
-    const goods = await this.prisma.mallGoods.findUnique({ where: { id } })
+    const goods = await this.prisma.mallGoods.findFirst({ where: { id, deletedAt: null } })
     if (!goods) throw new NotFoundException('商品不存在')
+
+    /* 库存归零 → 待补货；补货后由待补货回落为下架，其余状态不变 */
+    const status = dto.stock === 0 ? 'restock' : goods.status === 'restock' ? 'off' : goods.status
 
     await this.prisma.mallGoods.update({
       where: { id },
@@ -120,18 +129,26 @@ export class MallService {
         category: dto.category,
         points: dto.points,
         stock: dto.stock,
-        description: dto.description,
+        status,
+        description: sanitizeHtml(dto.description),
+        ...this.resolveShipping(dto),
+        visibilityIdentities: dto.visibilityIdentities ?? [],
+        visibilityLevels: dto.visibilityLevels ?? [],
+        orderIdentities: dto.orderIdentities ?? [],
+        orderLevels: dto.orderLevels ?? [],
       },
     })
     return { code: 0 }
   }
 
   async toggleGoodsStatus(id: string, operator: string): Promise<{ code: number }> {
-    const goods = await this.prisma.mallGoods.findUnique({ where: { id } })
+    const goods = await this.prisma.mallGoods.findFirst({ where: { id, deletedAt: null } })
     if (!goods) throw new NotFoundException('商品不存在')
 
+    /* 下架即进入可归档计时（archivableAt）；重新上架清除计时 */
     const nextStatus = goods.status === 'on' ? 'off' : 'on'
-    await this.prisma.mallGoods.update({ where: { id }, data: { status: nextStatus } })
+    const archivableAt = nextStatus === 'off' ? formatNow() : null
+    await this.prisma.mallGoods.update({ where: { id }, data: { status: nextStatus, archivableAt } })
 
     await this.audit.record({
       module: '积分商城',
@@ -144,12 +161,54 @@ export class MallService {
     return { code: 0 }
   }
 
+  async archiveGoods(id: string, operator: string): Promise<{ code: number }> {
+    const goods = await this.prisma.mallGoods.findFirst({ where: { id, deletedAt: null } })
+    if (!goods) throw new NotFoundException('商品不存在')
+    if (goods.status !== 'off') throw new ConflictException('仅已下架的商品可归档')
+
+    await this.prisma.mallGoods.update({
+      where: { id },
+      data: { deletedAt: formatNow(), deletedBy: operator },
+    })
+
+    await this.audit.record({
+      module: '积分商城',
+      action: '归档商品',
+      target: `${goods.id} · ${goods.name}`,
+      before: { status: goods.status },
+      after: { deleted: true },
+      operator,
+    })
+    return { code: 0 }
+  }
+
+  /* 实物发货字段归一化：非实物强制清空；自提必填地址；邮寄运费缺省 0（包邮） */
+  private resolveShipping(dto: GoodsPayloadDto): {
+    shippingMethods: string[]
+    pickupAddress: string | null
+    shippingFee: number | null
+  } {
+    if (dto.category !== 'physical' && dto.category !== '实物商品') {
+      return { shippingMethods: [], pickupAddress: null, shippingFee: null }
+    }
+
+    const shippingMethods = dto.shippingMethods ?? []
+    let pickupAddress: string | null = null
+    if (shippingMethods.includes('pickup')) {
+      const address = dto.pickupAddress?.trim()
+      if (!address) throw new BadRequestException('请填写自提地址')
+      pickupAddress = address
+    }
+    const shippingFee = shippingMethods.includes('delivery') ? dto.shippingFee ?? 0 : null
+    return { shippingMethods, pickupAddress, shippingFee }
+  }
+
   /* ---------- 兑换订单 ---------- */
 
   async listRedemptionOrders(
     query: QueryRedemptionOrdersDto,
   ): Promise<{ list: RedemptionOrderDto[]; total: number }> {
-    const where: Prisma.RedemptionOrderWhereInput = {}
+    const where: Prisma.RedemptionOrderWhereInput = { deletedAt: null }
     if (query.keyword) {
       const kw = query.keyword.trim()
       where.OR = [
@@ -205,9 +264,31 @@ export class MallService {
     if (!order) throw new NotFoundException('兑换订单不存在')
     if (order.status !== 'shipped') throw new ConflictException('仅已发货订单可标记完成')
 
+    const now = formatNow()
     await this.prisma.redemptionOrder.update({
       where: { id },
-      data: { status: 'finished', finishedAt: formatNow() },
+      data: { status: 'finished', finishedAt: now, archivableAt: now },
+    })
+    return { code: 0 }
+  }
+
+  async archiveOrder(id: string, operator: string): Promise<{ code: number }> {
+    const order = await this.prisma.redemptionOrder.findFirst({ where: { id, deletedAt: null } })
+    if (!order) throw new NotFoundException('订单不存在')
+    if (order.status !== 'finished') throw new ConflictException('仅已完成的订单可归档')
+
+    await this.prisma.redemptionOrder.update({
+      where: { id },
+      data: { deletedAt: formatNow(), deletedBy: operator },
+    })
+
+    await this.audit.record({
+      module: '积分商城',
+      action: '归档订单',
+      target: `${order.id} · ${order.goodsName}`,
+      before: { status: order.status },
+      after: { deleted: true },
+      operator,
     })
     return { code: 0 }
   }
@@ -219,7 +300,7 @@ export class MallService {
       if (order.status !== 'pending_shipment') throw new ConflictException('仅待发货订单可取消')
 
       /* 退回积分：直接写 source=redemption 流水（wiki §7.10 冻结口径）。
-       * 注：M0 mock 复用手动调整（source=manual/operator=管理员），语义上 redemption 更正确，按 wiki 实现 */
+       * 注：复用手动调整（source=manual/operator=管理员），语义上 redemption 更正确，按 wiki 实现 */
       const user = await tx.user.findUnique({ where: { uid: order.userId } })
       if (!user) throw new NotFoundException('用户不存在')
       const newBalance = user.points + order.points
@@ -237,12 +318,18 @@ export class MallService {
         },
       })
 
-      /* 回补库存（stock+1、redeemedCount 不小于 0 递减） */
+      /* 回补库存（stock+1、redeemedCount 不小于 0 递减）；待补货商品补货后回落为下架 */
       const goods = await tx.mallGoods.findUnique({ where: { id: order.goodsId } })
       if (goods) {
+        const newStock = goods.stock + 1
+        const restoreStatus = goods.status === 'restock' && newStock > 0 ? { status: 'off' } : {}
         await tx.mallGoods.update({
           where: { id: order.goodsId },
-          data: { stock: goods.stock + 1, redeemedCount: Math.max(0, goods.redeemedCount - 1) },
+          data: {
+            stock: newStock,
+            redeemedCount: Math.max(0, goods.redeemedCount - 1),
+            ...restoreStatus,
+          },
         })
       }
 
@@ -304,7 +391,7 @@ export class MallService {
   }
 }
 
-/* Prisma 行 → M0 形状（可空字段 null → undefined） */
+/* Prisma 行 → 返回形状（可空字段 null → undefined） */
 function toOrderDto(order: RedemptionOrder): RedemptionOrderDto {
   const dto: RedemptionOrderDto = {
     id: order.id,

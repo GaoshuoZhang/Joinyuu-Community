@@ -3,9 +3,9 @@ import type { User } from '@/types'
 /* 用户数据 — 命名前缀 U1001+
  * 身份模型：identities 数组，一人多身份
  *   - individual 个人用户：注册默认身份，人手一份，关联其他身份时保留（积分挂靠此身份）
- *   - community_enterprise 社区企业：可多个，关联入驻企业，持有经验等级（level 1-5）
- *   - community_individual 社区个体：至多一个，持有经验等级（level 1-5）
- *   - external_enterprise 外部企业：可多个，自由填写企业名
+ *   - community_enterprise 社区企业：可多个，关联社区企业，持有经验值等级（level 1-5）
+ *   - community_individual 社区个体：至多一个，持有经验值等级（level 1-5）
+ *   - external_enterprise 合作企业：可多个，自由填写企业名
  * 经验值：仅社区个体/社区企业身份持有，通过参加活动、承接项目累积升级
  * 积分：挂靠个人用户身份，通过参加活动、承接项目获取，可在积分商城兑换 */
 export const users: User[] = [
@@ -86,7 +86,7 @@ export const users: User[] = [
       { type: 'community_enterprise', enterpriseId: 'E2002', enterpriseName: '芯启半导体', role: 'member', title: '财务负责人', level: 5 },
       { type: 'external_enterprise', enterpriseName: '启衡咨询', title: '签约财务顾问' },
     ],
-    bio: '半导体行业财务老兵，擅长创业公司股权与融资财务规划。',
+    bio: '半导体行业财务老兵，擅长创业企业股权与融资财务规划。',
     stats: { demands: 2, projects: 0, events: 6 },
     activities: [
       { time: '2026-09-05 15:47', content: '发布需求「寻找柔性电路板打样供应商」' },
@@ -227,7 +227,7 @@ export const users: User[] = [
     bio: '高分子材料研发工程师，关注气凝胶在消费电子领域的应用。',
     stats: { demands: 1, projects: 0, events: 4 },
     activities: [
-      { time: '2026-09-05 16:49', content: '发布需求「新材料检测设备租用」' },
+      { time: '2026-09-05 16:49', content: '发布需求「新材料检测设备租赁」' },
       { time: '2026-08-19 10:00', content: '申请变更企业身份为「芯启半导体」被驳回' },
     ],
   },

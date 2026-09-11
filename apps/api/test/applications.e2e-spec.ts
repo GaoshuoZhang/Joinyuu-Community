@@ -1,14 +1,18 @@
-/* M1-B 验收（wiki-backend.md §13 M1-B）：
- * 审批通过入驻申请 → 200 + 企业/身份经后续列表与账本可见（首绑积分/经验发放）。
- * 前置：docker compose up + prisma migrate + seed（含 AP3012 拾光文创 待审批 / U1006 沈嘉禾 / E2003 拾光文创 pending
- *       与积分/经验规则 identity_first_bind enabled） */
+/* M1.5 验收（四类申请审核，2026-09-11 扩展）：
+ *   settle      企业入驻申请 → 新增社区企业 + 申请人社区企业身份
+ *   individual  个体入驻申请 → 新增社区个体（community_individual 身份）
+ *   cooperation 企业合作申请 → 新增合作企业档案 + 申请人合作企业身份
+ *   identity    身份绑定申请 → 目标企业属社区企业/合作企业则挂成员；否则自动新增合作企业
+ * 首绑均触发 identity_first_bind 积分/经验值发放。
+ * 前置：docker compose up + prisma migrate + seed（AP3012/AP3017/AP3018/AP3019/AP3014 等待审核） */
 import { INestApplication } from '@nestjs/common'
 import { Test } from '@nestjs/testing'
 import request from 'supertest'
 import { AppModule } from '../src/app.module'
 import { reseed } from './helpers/reseed'
+import { loginAs } from './helpers/login'
 
-describe('M1-B applications 审批（approve 授予身份）', () => {
+describe('M1.5 applications 四类申请审核', () => {
   let app: INestApplication
   let token: string
 
@@ -18,53 +22,110 @@ describe('M1-B applications 审批（approve 授予身份）', () => {
     app = moduleRef.createNestApplication()
     await app.init()
 
-    const login = await request(app.getHttpServer())
-      .post('/api/admin/auth/login')
-      .send({ username: 'admin', password: 'admin123' })
-    token = login.body.data.token
+    token = await loginAs(app)
   })
 
   afterAll(async () => {
     await app.close()
   })
 
-  it('审批通过入驻申请 → 200 且企业/身份经账本可见', async () => {
-    // AP3012 拾光文创：申请人沈嘉禾（U1006），企业 E2003 已存在且 status=pending
-    const res = await request(app.getHttpServer())
-      .post('/api/admin/applications/AP3012/approve')
-      .set('Authorization', `Bearer ${token}`)
-      .send({ comment: '材料齐全' })
+  const auth = () => ({ Authorization: `Bearer ${token}` })
 
+  async function approve(id: string) {
+    const res = await request(app.getHttpServer())
+      .post(`/api/admin/applications/${id}/approve`)
+      .set(auth())
+      .send({ comment: '材料齐全' })
     expect(res.status).toBe(200)
     expect(res.body.code).toBe(0)
-    expect(res.body.data).toEqual({ code: 0 })
+  }
 
-    // 申请列表按 status=approved 可见
+  it('企业入驻：通过后按申请表单新增社区企业 + 申请人身份与经验值', async () => {
+    await approve('AP3012')
+
     const list = await request(app.getHttpServer())
       .get('/api/admin/applications')
-      .set('Authorization', `Bearer ${token}`)
+      .set(auth())
       .query({ page: 1, pageSize: 50, status: 'approved' })
     expect(list.status).toBe(200)
-    expect(list.body.code).toBe(0)
-    const appRow = list.body.data.list.find((a: { id: string }) => a.id === 'AP3012')
-    expect(appRow.status).toBe('approved')
+    expect(list.body.data.list.find((a: { id: string }) => a.id === 'AP3012').status).toBe('approved')
 
-    // 身份绑定触发企业经验账本（E2003 新增 rule 流水）
+    const entList = await request(app.getHttpServer())
+      .get('/api/admin/enterprises')
+      .set(auth())
+      .query({ page: 1, pageSize: 50, keyword: '木棉文创社' })
+    expect(entList.status).toBe(200)
+    const ent = entList.body.data.list[0]
+    expect(ent?.name).toBe('木棉文创社')
+    expect(ent.status).toBe('active')
+
     const exp = await request(app.getHttpServer())
       .get('/api/admin/experience-records')
-      .set('Authorization', `Bearer ${token}`)
-      .query({ targetType: 'enterprise', targetId: 'E2003' })
+      .set(auth())
+      .query({ targetType: 'enterprise', targetId: ent.id })
     expect(exp.status).toBe(200)
-    expect(exp.body.code).toBe(0)
     expect(exp.body.data.some((r: { source: string }) => r.source === 'rule')).toBe(true)
 
-    // 身份绑定触发用户积分账本（U1006 新增 rule 流水）
     const pts = await request(app.getHttpServer())
       .get('/api/admin/points-records')
-      .set('Authorization', `Bearer ${token}`)
+      .set(auth())
       .query({ userId: 'U1006' })
     expect(pts.status).toBe(200)
-    expect(pts.body.code).toBe(0)
     expect(pts.body.data.some((r: { source: string }) => r.source === 'rule')).toBe(true)
+  })
+
+  it('个体入驻：通过后新增社区个体（community_individual 身份）', async () => {
+    await approve('AP3018')
+
+    const res = await request(app.getHttpServer())
+      .get('/api/admin/individuals')
+      .set(auth())
+      .query({ page: 1, pageSize: 50 })
+    expect(res.status).toBe(200)
+    expect(res.body.data.list.some((u: { uid: string }) => u.uid === 'U1009')).toBe(true)
+  })
+
+  it('企业合作：通过后新增合作企业档案 + 申请人挂靠为成员', async () => {
+    await approve('AP3017')
+
+    const list = await request(app.getHttpServer())
+      .get('/api/admin/external-enterprises')
+      .set(auth())
+      .query({ page: 1, pageSize: 50, keyword: '云图数据' })
+    expect(list.status).toBe(200)
+    const profile = list.body.data.list.find((p: { name: string }) => p.name === '云图数据')
+    expect(profile).toBeTruthy()
+
+    const detail = await request(app.getHttpServer())
+      .get(`/api/admin/external-enterprises/${profile.id}`)
+      .set(auth())
+    expect(detail.status).toBe(200)
+    expect(detail.body.data.members.some((m: { userId: string }) => m.userId === 'U1004')).toBe(true)
+  })
+
+  it('身份绑定（目标为社区企业）：挂到该社区企业成员名单', async () => {
+    await approve('AP3014')
+
+    const detail = await request(app.getHttpServer()).get('/api/admin/enterprises/E2002').set(auth())
+    expect(detail.status).toBe(200)
+    expect(detail.body.data.members.some((m: { uid: string }) => m.uid === 'U1009')).toBe(true)
+  })
+
+  it('身份绑定（目标不在社区企业/合作企业名单）：自动新增合作企业并挂靠成员', async () => {
+    await approve('AP3019')
+
+    const list = await request(app.getHttpServer())
+      .get('/api/admin/external-enterprises')
+      .set(auth())
+      .query({ page: 1, pageSize: 50, keyword: '星环科技' })
+    expect(list.status).toBe(200)
+    const profile = list.body.data.list.find((p: { name: string }) => p.name === '星环科技')
+    expect(profile).toBeTruthy()
+
+    const detail = await request(app.getHttpServer())
+      .get(`/api/admin/external-enterprises/${profile.id}`)
+      .set(auth())
+    expect(detail.status).toBe(200)
+    expect(detail.body.data.members.some((m: { userId: string }) => m.userId === 'U1013')).toBe(true)
   })
 })

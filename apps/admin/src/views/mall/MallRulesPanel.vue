@@ -2,7 +2,6 @@
 import { nextTick, onMounted, reactive, ref } from 'vue'
 import { MessagePlugin } from 'tdesign-vue-next'
 import type { FormProps } from 'tdesign-vue-next'
-import { RefreshIcon } from 'tdesign-icons-vue-next'
 import PageHeader from '@/components/PageHeader.vue'
 import StatusTag from '@/components/StatusTag.vue'
 import { fetchPointsRules, togglePointsRuleStatus, updatePointsRule } from '@/api/mall'
@@ -14,12 +13,12 @@ const list = ref<PointsRule[]>([])
 const acting = ref('')
 
 const columns = [
-  { colKey: 'name', title: '触发项', cell: 'name', minWidth: 180, resizable: true },
-  { colKey: 'scene', title: '行为场景', ellipsis: true, minWidth: 150 },
-  { colKey: 'points', title: '积分', cell: 'points', width: 90, resizable: true },
+  { colKey: 'name', title: '触发项', cell: 'name', width: 180, resizable: true , ellipsis: true},
+  { colKey: 'scene', title: '行为场景', ellipsis: true, width: 150 },
+  { colKey: 'points', title: '积分', cell: 'points', width: 90, resizable: true , ellipsis: true},
   { colKey: 'description', title: '说明', ellipsis: true, width: 260, resizable: true },
-  { colKey: 'status', title: '状态', cell: 'status', width: 95 },
-  { colKey: 'updatedAt', title: '更新时间', width: 145, resizable: true },
+  { colKey: 'status', title: '状态', cell: 'status', width: 95 , ellipsis: true},
+  { colKey: 'updatedAt', title: '更新时间', width: 145, resizable: true , ellipsis: true},
   { colKey: 'op', title: '操作', cell: 'op', width: 120 },
 ]
 
@@ -35,7 +34,7 @@ async function load() {
 /* 启用 / 停用（停用后该行为不再发放/扣减积分） */
 async function onToggle(row: PointsRule) {
   acting.value = row.code
-  /* 先取旧状态再调接口：接口原地更新了 row.status，后再判断会拿到新值导致提示反转（2026-09-10 修） */
+  /* 先取旧状态再调接口：接口原地更新了 row.status，后再判断会拿到新值导致提示反转 */
   const wasEnabled = row.status === 'enabled'
   try {
     await togglePointsRuleStatus(row.code)
@@ -97,10 +96,6 @@ onMounted(load)
       <span class="panel-tip">
         触发项为固定制度（不可新增/删除），完成对应行为时自动发放积分；扣除积分不设自动规则，由管理员在积分流水手动调整；停用规则不影响已发放积分。
       </span>
-      <t-button variant="outline" style="margin-left: auto">
-        <template #icon><RefreshIcon /></template>
-        刷新
-      </t-button>
     </div>
 
     <div class="page-card">

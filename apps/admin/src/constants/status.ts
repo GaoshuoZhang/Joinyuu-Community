@@ -11,9 +11,9 @@ export const statusMap = {
     frozen: { label: '已冻结', theme: 'danger' },
   },
   enterprise: {
-    active: { label: '已入驻', theme: 'success' },
-    pending: { label: '入驻审核中', theme: 'warning' },
+    active: { label: '正常', theme: 'success' },
     exited: { label: '已退出', theme: 'default' },
+    disabled: { label: '已停用', theme: 'default' },
   },
   showcase: {
     published: { label: '已发布', theme: 'success' },
@@ -22,7 +22,7 @@ export const statusMap = {
     none: { label: '未提交', theme: 'default' },
   },
   application: {
-    pending: { label: '待审批', theme: 'warning' },
+    pending: { label: '待审核', theme: 'warning' },
     approved: { label: '已通过', theme: 'success' },
     rejected: { label: '已驳回', theme: 'danger' },
   },
@@ -56,6 +56,7 @@ export const statusMap = {
   goods: {
     on: { label: '已上架', theme: 'success' },
     off: { label: '已下架', theme: 'default' },
+    restock: { label: '待补货', theme: 'warning' },
   },
   redemption: {
     pending_shipment: { label: '待发货', theme: 'warning' },
@@ -84,17 +85,19 @@ export const statusMap = {
     disabled: { label: '已停用', theme: 'default' },
   },
   reservation: {
-    pending: { label: '待审批', theme: 'warning' },
-    approved: { label: '已通过', theme: 'success' },
+    pending: { label: '待审核', theme: 'warning' },
+    approved: { label: '待使用', theme: 'success' },
+    using: { label: '使用中', theme: 'primary' },
+    ended: { label: '已结束', theme: 'default' },
     rejected: { label: '已驳回', theme: 'danger' },
     cancelled: { label: '已取消', theme: 'default' },
   },
   article: {
-    draft: { label: '草稿', theme: 'default' },
     pending: { label: '待审核', theme: 'warning' },
-    published: { label: '已发布', theme: 'success' },
-    withdrawn: { label: '已下架', theme: 'default' },
     rejected: { label: '已驳回', theme: 'danger' },
+    pending_release: { label: '待发布', theme: 'primary' },
+    scheduled: { label: '定时发布中', theme: 'primary' },
+    published: { label: '已发布', theme: 'success' },
   },
   column: {
     enabled: { label: '启用', theme: 'success' },
@@ -108,9 +111,11 @@ export const statusMap = {
 
 export type StatusEntity = keyof typeof statusMap
 
-/* 申请类型映射（迁移后仅入驻与身份绑定；空间预约/展示页发布迁移至各自模块） */
+/* 申请类型映射（四类：企业入驻 / 个体入驻 / 企业合作 / 身份绑定） */
 export const applicationTypeMap: Record<string, { label: string; theme: 'default' | 'primary' | 'success' | 'warning' | 'danger' }> = {
-  settle: { label: '入驻申请', theme: 'primary' },
+  settle: { label: '企业入驻', theme: 'primary' },
+  individual: { label: '个体入驻', theme: 'primary' },
+  cooperation: { label: '企业合作', theme: 'primary' },
   identity: { label: '身份绑定', theme: 'primary' },
 }
 
@@ -120,7 +125,7 @@ export const showcaseTargetTypeMap: Record<string, { label: string; theme: 'defa
   individual: { label: '个人主页', theme: 'primary' },
 }
 
-/* M0-D 选项词汇表（页面统一取用，禁止自造文案） */
+/* 选项词汇表（页面统一取用，禁止自造文案） */
 
 export const goodsCategoryMap: Record<string, string> = {
   physical: '实物商品',
@@ -128,10 +133,15 @@ export const goodsCategoryMap: Record<string, string> = {
   voucher: '权益券',
 }
 
+/* 商品类型字典化后值为中文标签；兼容历史英文值判定实物商品 */
+export function isPhysicalCategory(category: string): boolean {
+  return category === 'physical' || category === '实物商品'
+}
+
 export const workstationTypeMap: Record<string, string> = {
-  open: '开放工位',
+  open: '开放办公位',
   office: '独立办公室',
-  semi: '半开放工位',
+  semi: '半开放办公位',
 }
 
 export const spaceTypeMap: Record<string, string> = {

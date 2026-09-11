@@ -2,13 +2,23 @@
 import { computed, onMounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { MessagePlugin } from 'tdesign-vue-next'
-import { ArrowLeftIcon } from 'tdesign-icons-vue-next'
+import { ArrowLeftIcon, EditIcon } from 'tdesign-icons-vue-next'
 import StatusTag from '@/components/StatusTag.vue'
 import AdjustValueDialog from '@/components/AdjustValueDialog.vue'
+import EnterpriseFormDialog from '@/components/EnterpriseFormDialog.vue'
 import { roleLabelMap } from '@/constants/identity'
-import { fetchEnterprise, fetchEnterpriseStats, reviewShowcase, type EnterpriseStats } from '@/api/enterprises'
+import {
+  deleteEnterprise,
+  disableEnterprise,
+  enableEnterprise,
+  fetchEnterprise,
+  fetchEnterpriseStats,
+  reviewShowcase,
+  type EnterpriseStats,
+} from '@/api/enterprises'
 import { adjustExperience, fetchExperienceRecords } from '@/api/ledgers'
-import type { Enterprise, ExperienceRecord, User, UserIdentity } from '@/types'
+import { deriveLeaseStatus, fetchLeases, type LeaseViewStatus } from '@/api/workstations'
+import type { Enterprise, ExperienceRecord, Lease, User, UserIdentity } from '@/types'
 
 const route = useRoute()
 const router = useRouter()
@@ -21,6 +31,10 @@ const rejectVisible = ref(false)
 const rejectComment = ref('')
 const submitting = ref(false)
 
+/* 编辑弹窗 */
+const editVisible = ref(false)
+const acting = ref('')
+
 /* 数据概览 */
 const stats = ref<EnterpriseStats | null>(null)
 
@@ -30,12 +44,29 @@ const recordsLoading = ref(false)
 const adjustVisible = ref(false)
 const adjusting = ref(false)
 
+/* 关联租赁 */
+const leases = ref<Lease[]>([])
+const leasesLoading = ref(false)
+
+const enterpriseLeases = computed(() =>
+  leases.value.filter((l) => l.renterType === 'enterprise' && l.enterpriseId === enterprise.value?.id),
+)
+
+const leaseColumns = [
+  { colKey: 'id', title: '租约编号', width: 110 , ellipsis: true},
+  { colKey: 'workstationLabels', title: '办公位', cell: 'workstations', width: 150, resizable: true , ellipsis: true},
+  { colKey: 'term', title: '租期', cell: 'term', width: 180, resizable: true , ellipsis: true},
+  { colKey: 'monthlyRent', title: '租金（元）', cell: 'rent', width: 110, resizable: true , ellipsis: true},
+  { colKey: 'contactName', title: '联系人', cell: 'contact', width: 140, resizable: true , ellipsis: true},
+  { colKey: 'status', title: '状态', cell: 'status', width: 110, resizable: true , ellipsis: true},
+]
+
 const experienceColumns = [
-  { colKey: 'at', title: '时间', width: 150 },
-  { colKey: 'delta', title: '变动', cell: 'delta', width: 90 },
-  { colKey: 'balance', title: '余额', width: 90 },
+  { colKey: 'at', title: '时间', width: 150 , ellipsis: true},
+  { colKey: 'delta', title: '变动', cell: 'delta', width: 90 , ellipsis: true},
+  { colKey: 'balance', title: '余额', width: 90 , ellipsis: true},
   { colKey: 'reason', title: '事由', ellipsis: true },
-  { colKey: 'operator', title: '操作人', width: 100 },
+  { colKey: 'operator', title: '操作人', width: 100 , ellipsis: true},
 ]
 
 const stepCurrent = computed(() => {
@@ -51,11 +82,11 @@ const stepCurrent = computed(() => {
 })
 
 const memberColumns = [
-  { colKey: 'name', title: '成员', cell: 'member' },
-  { colKey: 'title', title: '职位', cell: 'title' },
-  { colKey: 'role', title: '角色', cell: 'role', width: 110 },
-  { colKey: 'phone', title: '手机号', width: 140 },
-  { colKey: 'status', title: '账号状态', cell: 'status', width: 110 },
+  { colKey: 'name', title: '成员', cell: 'member' , ellipsis: true},
+  { colKey: 'title', title: '职位', cell: 'title' , ellipsis: true},
+  { colKey: 'role', title: '角色', cell: 'role', width: 110 , ellipsis: true},
+  { colKey: 'phone', title: '联系电话', width: 140 , ellipsis: true},
+  { colKey: 'status', title: '账号状态', cell: 'status', width: 110 , ellipsis: true},
 ]
 
 async function load() {
@@ -74,6 +105,77 @@ async function load() {
   }
 }
 
+/* 关联租赁：全量租约后按 renterType=enterprise + renterId 过滤（与租约管理页口径一致） */
+async function loadLeases() {
+  leasesLoading.value = true
+  try {
+    leases.value = await fetchLeases()
+  } finally {
+    leasesLoading.value = false
+  }
+}
+
+function leaseRentLabel(row: Lease) {
+  const map: Record<string, string> = { day: '日', week: '周', month: '月', year: '年' }
+  return `${row.monthlyRent} / ${map[row.rentPeriod ?? 'month']}`
+}
+
+function showLeaseStatus(row: Lease): LeaseViewStatus {
+  return deriveLeaseStatus(row)
+}
+
+function goLeaseList() {
+  if (!enterprise.value) return
+  router.push(`/workstations/leases?renterId=${enterprise.value.id}&renterType=enterprise`)
+}
+
+/* 编辑 / 停用 / 归档 */
+function openEdit() {
+  editVisible.value = true
+}
+
+async function onDisable() {
+  if (!enterprise.value) return
+  acting.value = 'disable'
+  try {
+    await disableEnterprise(enterprise.value.id)
+    MessagePlugin.success('企业已停用')
+    await load()
+  } catch (e) {
+    MessagePlugin.error(e instanceof Error ? e.message : '操作失败')
+  } finally {
+    acting.value = ''
+  }
+}
+
+async function onEnable() {
+  if (!enterprise.value) return
+  acting.value = 'enable'
+  try {
+    await enableEnterprise(enterprise.value.id)
+    MessagePlugin.success('企业已启用')
+    await load()
+  } catch (e) {
+    MessagePlugin.error(e instanceof Error ? e.message : '操作失败')
+  } finally {
+    acting.value = ''
+  }
+}
+
+async function onDelete() {
+  if (!enterprise.value) return
+  acting.value = 'delete'
+  try {
+    await deleteEnterprise(enterprise.value.id)
+    MessagePlugin.success('企业已归档')
+    router.back()
+  } catch (e) {
+    MessagePlugin.error(e instanceof Error ? e.message : '归档失败')
+  } finally {
+    acting.value = ''
+  }
+}
+
 /* 成员在该企业下的社区企业身份 */
 function memberIdentity(member: User): UserIdentity | undefined {
   return member.identities.find((i) => i.type === 'community_enterprise' && i.enterpriseId === enterprise.value?.id)
@@ -89,7 +191,7 @@ function memberRoleText(member: User) {
 }
 
 /* 数据概览卡片 → 跳转对应列表并按企业 ID 自动筛选（有数据时可点击）
- * 跳转参数携带企业 ID（外部企业以名称为唯一标识），避免同名歧义 */
+ * 跳转参数携带企业 ID（合作企业以名称为唯一标识），避免同名歧义 */
 function goDemands() {
   if (!enterprise.value || !stats.value || stats.value.demandCount === 0) return
   router.push({ path: '/demands', query: { enterprise: enterprise.value.id } })
@@ -150,7 +252,10 @@ async function onConfirmReject() {
   }
 }
 
-onMounted(load)
+onMounted(() => {
+  load()
+  loadLeases()
+})
 </script>
 
 <template>
@@ -179,8 +284,8 @@ onMounted(load)
               <StatusTag entity="enterprise" :value="enterprise.status" />
               <StatusTag entity="showcase" :value="enterprise.showcaseStatus" />
             </div>
+            <div class="head-id">企业ID: <t-tag class="id-tag" size="small" variant="light">{{ enterprise.id }}</t-tag></div>
             <div class="head-tags">
-              <t-tag variant="outline" size="small">企业ID: {{ enterprise.id }}</t-tag>
               <t-tag v-for="tag in enterprise.tags" :key="tag" variant="outline" size="small">{{ tag }}</t-tag>
             </div>
           </div>
@@ -188,6 +293,53 @@ onMounted(load)
         <div v-if="enterprise.showcaseStatus === 'pending'" class="head-actions">
           <t-button theme="primary" :loading="submitting" @click="onApprove">通过发布</t-button>
           <t-button variant="outline" :loading="submitting" @click="openReject">驳回</t-button>
+        </div>
+        <div v-else class="head-actions">
+          <t-button variant="outline" v-permission="'perm:enterprise:update'" @click="openEdit">
+            <template #icon><EditIcon /></template>
+            编辑
+          </t-button>
+          <t-popconfirm
+            v-if="enterprise.status === 'disabled'"
+            content="确认启用该企业？启用后恢复为正常状态"
+            @confirm="onEnable"
+          >
+            <t-button
+              variant="outline"
+              theme="success"
+              v-permission="'perm:enterprise:enable'"
+              :loading="acting === 'enable'"
+            >
+              启用
+            </t-button>
+          </t-popconfirm>
+          <t-popconfirm
+            v-else
+            content="确认停用该企业？停用后不可新增新租约"
+            @confirm="onDisable"
+          >
+            <t-button
+              variant="outline"
+              v-permission="'perm:enterprise:disable'"
+              :loading="acting === 'disable'"
+            >
+              停用
+            </t-button>
+          </t-popconfirm>
+          <t-popconfirm
+            v-if="enterprise.status === 'disabled'"
+            content="确认归档该企业？归档后可在归档管理中恢复"
+            @confirm="onDelete"
+          >
+            <t-button
+              variant="outline"
+              theme="danger"
+              v-permission="'perm:enterprise:delete'"
+              :loading="acting === 'delete'"
+            >
+              归档
+            </t-button>
+          </t-popconfirm>
         </div>
       </div>
 
@@ -198,7 +350,6 @@ onMounted(load)
             <div class="tab-body">
               <t-descriptions :column="2" bordered>
                 <t-descriptions-item label="行业">{{ enterprise.industry }}</t-descriptions-item>
-                <t-descriptions-item label="发展阶段">{{ enterprise.stage }}</t-descriptions-item>
                 <t-descriptions-item label="团队规模">{{ enterprise.size }}</t-descriptions-item>
                 <t-descriptions-item label="成立时间">{{ enterprise.foundedAt }}</t-descriptions-item>
                 <t-descriptions-item label="入驻时间">{{ enterprise.settledAt ?? '—' }}</t-descriptions-item>
@@ -219,6 +370,43 @@ onMounted(load)
                 <h4 class="block-title">企业简介</h4>
                 <p class="desc-text">{{ enterprise.description }}</p>
               </div>
+            </div>
+          </t-tab-panel>
+
+          <!-- 关联租赁 -->
+          <t-tab-panel value="leases" label="关联租赁">
+            <div class="tab-body">
+              <div class="lease-head">
+                <span class="panel-tip">该企业名下的办公位/办公室租约；点击条目跳转租约管理并自动筛选。</span>
+                <t-button variant="text" size="small" @click="goLeaseList">前往租约管理</t-button>
+              </div>
+              <t-table
+                row-key="id"
+                :data="enterpriseLeases"
+                :columns="leaseColumns"
+                :loading="leasesLoading"
+                empty="该企业暂无关联租约"
+                @row-click="goLeaseList"
+              >
+                <template #workstations="{ row }">
+                  <t-tag v-for="label in row.workstationLabels" :key="label" variant="light" class="ws-tag">
+                    {{ label }}
+                  </t-tag>
+                </template>
+                <template #term="{ row }">
+                  {{ row.longTerm ? `${row.startDate} ~ 长期` : `${row.startDate} ~ ${row.endDate}` }}
+                </template>
+                <template #rent="{ row }">
+                  {{ leaseRentLabel(row) }}
+                </template>
+                <template #contact="{ row }">
+                  <div class="cell-title">{{ row.contactName }}</div>
+                  <div class="cell-sub">{{ row.contactPhone }}</div>
+                </template>
+                <template #status="{ row }">
+                  <StatusTag entity="lease" :value="showLeaseStatus(row)" />
+                </template>
+              </t-table>
             </div>
           </t-tab-panel>
 
@@ -259,7 +447,7 @@ onMounted(load)
                 <template #member="{ row }">
                   <div class="member-cell">
                     <span class="member-name">{{ row.realName || row.nickname }}</span>
-                    <span class="member-id">{{ row.uid }}</span>
+                    <t-tag class="id-tag-block" size="small" variant="light">{{ row.uid }}</t-tag>
                   </div>
                 </template>
                 <template #title="{ row }">{{ memberTitle(row) }}</template>
@@ -330,7 +518,7 @@ onMounted(load)
       </div>
     </template>
 
-    <t-empty v-else description="企业不存在或已被删除" />
+    <t-empty v-else description="企业不存在或已归档" />
 
     <!-- 驳回原因 -->
     <t-dialog
@@ -357,6 +545,9 @@ onMounted(load)
       :loading="adjusting"
       @submit="onAdjustExperience"
     />
+
+    <!-- 编辑企业 -->
+    <EnterpriseFormDialog v-model:visible="editVisible" mode="edit" :enterprise="enterprise" @success="load" />
   </div>
 </template>
 
@@ -366,6 +557,10 @@ onMounted(load)
 }
 
 .head-card {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
   margin-bottom: 16px;
 }
 
@@ -402,6 +597,11 @@ onMounted(load)
   font-size: 18px;
   font-weight: 600;
   color: var(--td-text-color-primary);
+}
+
+.head-id {
+  font-size: 12px;
+  color: var(--td-text-color-secondary);
 }
 
 .head-tags {
@@ -453,11 +653,6 @@ onMounted(load)
 .member-name {
   font-size: 14px;
   color: var(--td-text-color-primary);
-}
-
-.member-id {
-  font-size: 12px;
-  color: var(--td-text-color-secondary);
 }
 
 .stats-grid {
@@ -548,6 +743,33 @@ onMounted(load)
 .step-tip {
   margin: 24px 0 0;
   font-size: 13px;
+  color: var(--td-text-color-secondary);
+}
+
+.lease-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 12px;
+}
+
+.panel-tip {
+  font-size: 12px;
+  color: var(--td-text-color-secondary);
+}
+
+.ws-tag {
+  margin: 2px 4px 2px 0;
+}
+
+.cell-title {
+  font-weight: 500;
+  color: var(--td-text-color-primary);
+}
+
+.cell-sub {
+  margin-top: 2px;
+  font-size: 12px;
   color: var(--td-text-color-secondary);
 }
 </style>

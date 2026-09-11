@@ -7,7 +7,7 @@ import { statusMap, type StatusEntity } from '@/constants/status'
 const props = defineProps<{
   entity: StatusEntity
   value: string
-  /** 定时发布时间（entity 为 demand/event 且 value 为 scheduled 时展示） */
+  /** 定时发布时间（entity 为 demand/event/article 且 value 为 scheduled 时展示） */
   scheduledAt?: string
   /** 报名开关（entity 为 event 且 value 为 published 时，label 拼接 报名中/暂停报名） */
   enrollmentOpen?: boolean
@@ -15,7 +15,7 @@ const props = defineProps<{
 
 const isScheduled = computed(
   () =>
-    (props.entity === 'demand' || props.entity === 'event') &&
+    (props.entity === 'demand' || props.entity === 'event' || props.entity === 'article') &&
     props.value === 'scheduled' &&
     !!props.scheduledAt,
 )

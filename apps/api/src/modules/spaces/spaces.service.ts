@@ -12,9 +12,9 @@ import type { SpacePayloadDto } from './dto/space-payload.dto'
 import type { QueryReservationsDto } from './dto/query-reservations.dto'
 
 /* 公共空间模块（wiki-backend.md §7.13/§8.8）：
- * 预约审批通过前做时段冲突校验（同空间已通过预约 + 同名空间已发布社区活动）；
- * 审批流复用 ApprovalRecord 时间线；使用看板 = 当日已通过预约 + 同名空间已发布活动合并。
- * 审计仅审批埋点（空间管理 预约审批通过/驳回，M0 spaces 模块仅有此一处 recordAudit）。 */
+ * 预约审核通过前做时段冲突校验（同空间已通过预约 + 同名空间已发布社区活动）；
+ * 审核流复用 ApprovalRecord 时间线；使用看板 = 当日已通过预约 + 同名空间已发布活动合并。
+ * 审计仅审核埋点（空间管理 预约审核通过/驳回）。 */
 
 export interface ApprovalRecord {
   step: string
@@ -38,6 +38,7 @@ export interface SpaceDto {
   equipment: string[]
   status: string
   description: string
+  deletedAt?: string
 }
 
 export interface ReservationDto {
@@ -83,6 +84,7 @@ function toSpaceDto(s: Space): SpaceDto {
     equipment: s.equipment,
     status: s.status,
     description: s.description,
+    deletedAt: s.deletedAt ?? undefined,
   }
 }
 
@@ -118,7 +120,7 @@ export class SpacesService {
   /* ---------- 空间管理 ---------- */
 
   async findAll(): Promise<SpaceDto[]> {
-    const rows = await this.prisma.space.findMany({ orderBy: { id: 'asc' } })
+    const rows = await this.prisma.space.findMany({ where: { deletedAt: null }, orderBy: { id: 'asc' } })
     return rows.map(toSpaceDto)
   }
 
@@ -127,7 +129,7 @@ export class SpacesService {
     if (!space) throw new NotFoundException('空间不存在')
 
     const reservations = await this.prisma.spaceReservation.findMany({
-      where: { spaceId: id },
+      where: { spaceId: id, deletedAt: null },
       orderBy: { id: 'asc' },
     })
     return { ...toSpaceDto(space), reservations: reservations.map(toReservationDto) }
@@ -157,12 +159,12 @@ export class SpacesService {
     return { code: 0 }
   }
 
-  /* ---------- 空间预约（含审批流） ---------- */
+  /* ---------- 空间预约（含审核流） ---------- */
 
   async findReservations(
     query: QueryReservationsDto,
   ): Promise<{ list: ReservationDto[]; total: number }> {
-    const where: Prisma.SpaceReservationWhereInput = {}
+    const where: Prisma.SpaceReservationWhereInput = { deletedAt: null }
     if (query.keyword) {
       const kw = query.keyword.trim()
       where.OR = [
@@ -196,7 +198,7 @@ export class SpacesService {
     const reservation = await this.prisma.spaceReservation.findUnique({ where: { id } })
     if (!reservation) throw new NotFoundException('空间预约不存在')
     if (reservation.status !== 'pending') {
-      throw new ConflictException('该预约已处理，请勿重复审批')
+      throw new ConflictException('该预约已处理，请勿重复审核')
     }
 
     if (status === 'approved') {
@@ -205,7 +207,7 @@ export class SpacesService {
 
     const records = (reservation.records as unknown as ApprovalRecord[]) ?? []
     const record: ApprovalRecord = {
-      step: '管理员审批',
+      step: '管理员审核',
       operator,
       action: status === 'approved' ? 'approve' : 'reject',
       comment: comment ?? (status === 'approved' ? '同意预约' : ''),
@@ -218,13 +220,15 @@ export class SpacesService {
       data: {
         status,
         records: records as unknown as Prisma.InputJsonValue,
-        ...(status === 'rejected' ? { rejectReason: comment ?? '' } : {}),
+        ...(status === 'rejected'
+          ? { rejectReason: comment ?? '', archivableAt: formatNow() }
+          : {}),
       },
     })
 
     await this.audit.record({
       module: '空间管理',
-      action: status === 'approved' ? '预约审批通过' : '预约审批驳回',
+      action: status === 'approved' ? '预约审核通过' : '预约审核驳回',
       target: `${reservation.id} · ${reservation.spaceName}`,
       detail: comment,
       before: { status: reservation.status },
@@ -235,13 +239,45 @@ export class SpacesService {
   }
 
   async cancelReservation(id: string): Promise<{ code: number }> {
-    const reservation = await this.prisma.spaceReservation.findUnique({ where: { id } })
+    const reservation = await this.prisma.spaceReservation.findFirst({
+      where: { id, deletedAt: null },
+    })
     if (!reservation) throw new NotFoundException('空间预约不存在')
     if (reservation.status !== 'pending' && reservation.status !== 'approved') {
-      throw new ConflictException('仅待审批或已通过的预约可取消')
+      throw new ConflictException('仅待审核或已通过的预约可取消')
     }
 
-    await this.prisma.spaceReservation.update({ where: { id }, data: { status: 'cancelled' } })
+    await this.prisma.spaceReservation.update({
+      where: { id },
+      data: { status: 'cancelled', archivableAt: formatNow() },
+    })
+    return { code: 0 }
+  }
+
+  async archive(id: string, operator: string): Promise<{ code: number }> {
+    const reservation = await this.prisma.spaceReservation.findFirst({
+      where: { id, deletedAt: null },
+    })
+    if (!reservation) throw new NotFoundException('预约不存在')
+
+    const ended = reservation.status === 'approved' && `${reservation.date} ${reservation.endTime}` <= formatNow()
+    if (!['rejected', 'cancelled'].includes(reservation.status) && !ended) {
+      throw new ConflictException('仅已结束、已驳回或已取消的预约可归档')
+    }
+
+    await this.prisma.spaceReservation.update({
+      where: { id },
+      data: { deletedAt: formatNow(), deletedBy: operator },
+    })
+
+    await this.audit.record({
+      module: '空间管理',
+      action: '归档空间预约',
+      target: `${reservation.id} · ${reservation.spaceName}`,
+      before: { status: reservation.status },
+      after: { deleted: true },
+      operator,
+    })
     return { code: 0 }
   }
 
@@ -249,7 +285,7 @@ export class SpacesService {
 
   async usageBoard(date: string): Promise<SpaceOccupancy[]> {
     const reservations = await this.prisma.spaceReservation.findMany({
-      where: { status: 'approved', date },
+      where: { status: 'approved', date, deletedAt: null },
     })
     const list: SpaceOccupancy[] = reservations.map((r) => ({
       spaceId: r.spaceId,
@@ -286,7 +322,7 @@ export class SpacesService {
     return list
   }
 
-  /* 审批通过前时段冲突校验（对照 M0 reviewReservation 两条分支） */
+  /* 审核通过前时段冲突校验（两条分支） */
   private async assertNoConflict(reservation: SpaceReservation): Promise<void> {
     const clash = await this.prisma.spaceReservation.findFirst({
       where: {
@@ -294,6 +330,7 @@ export class SpacesService {
         spaceId: reservation.spaceId,
         date: reservation.date,
         status: 'approved',
+        deletedAt: null,
         startTime: { lt: reservation.endTime },
         endTime: { gt: reservation.startTime },
       },
@@ -317,7 +354,7 @@ export class SpacesService {
     if (eventClash) throw new ConflictException('该时段被社区活动占用，无法通过')
   }
 
-  /* 创建/编辑共用字段（allDay 存 00:00/23:59；needApproval 联动 needReservation） */
+  /* 新增/编辑共用字段（allDay 存 00:00/23:59；needApproval 联动 needReservation） */
   private spaceData(payload: SpacePayloadDto) {
     const allDay = payload.allDay
     return {

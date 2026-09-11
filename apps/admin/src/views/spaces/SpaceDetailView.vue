@@ -2,20 +2,27 @@
 import { computed, onMounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { MessagePlugin } from 'tdesign-vue-next'
-import { ArrowLeftIcon } from 'tdesign-icons-vue-next'
+import { ArrowLeftIcon, EditIcon } from 'tdesign-icons-vue-next'
 import PageHeader from '@/components/PageHeader.vue'
 import StatusTag from '@/components/StatusTag.vue'
-import { fetchReservations, fetchSpace } from '@/api/spaces'
-import { spaceTypeMap } from '@/constants/status'
+import SpaceFormDialog from '@/components/SpaceFormDialog.vue'
+import { fetchReservations, fetchSpace, setSpaceStatus } from '@/api/spaces'
+import { spaceTypeMap, statusMap } from '@/constants/status'
+import { deriveReservationStatus } from '@/utils/reservation'
 import type { Space, SpaceReservation } from '@/types'
 
-/* 空间详情页：空间信息 + Calendar 日历（cellAppend 追加当日预约详情）+ 预约明细表 */
+/* 空间详情页：空间信息 + Calendar 日历（cellAppend 追加当日预约详情）+ 预约明细表。
+ * 头部操作与公共空间列表 op 同步（可用：编辑/维护/停用；维护或停用：恢复可用）。 */
 const route = useRoute()
 const router = useRouter()
 
 const loading = ref(false)
 const space = ref<Space | null>(null)
 const reservations = ref<SpaceReservation[]>([])
+const acting = ref('')
+const formVisible = ref(false)
+/* 已归档条目：隐藏写操作（编辑/状态变更），只读内容保留 */
+const isArchived = computed(() => !!space.value?.deletedAt)
 
 /* 预约按日期分组：日历 cellAppend 按 formattedDate 直接取数 */
 const byDate = computed(() => {
@@ -32,18 +39,23 @@ function reservationsOn(formattedDate: string): SpaceReservation[] {
   return byDate.value[formattedDate] ?? []
 }
 
+/* 预约状态文案：统一走六态派生（与 StatusTag / 列表页口径一致） */
+function reservationStatusLabel(r: SpaceReservation): string {
+  return statusMap.reservation[deriveReservationStatus(r)].label
+}
+
 const reservationModeText = computed(() =>
   space.value?.needReservation
     ? space.value.needApproval
-      ? '需预约 · 需审批'
-      : '需预约 · 免审批'
+      ? '需预约 · 需审核'
+      : '需预约 · 免审核'
     : '免预约',
 )
 
 const detailColumns = [
-  { colKey: 'user', title: '预约人', cell: 'user', width: 110 },
-  { colKey: 'slot', title: '日期时段', cell: 'slot' },
-  { colKey: 'status', title: '状态', cell: 'status', width: 84 },
+  { colKey: 'user', title: '预约人', cell: 'user', width: 110 , ellipsis: true},
+  { colKey: 'slot', title: '日期时段', cell: 'slot' , ellipsis: true},
+  { colKey: 'status', title: '状态', cell: 'status', width: 84 , ellipsis: true},
 ]
 
 /* 预约日历：禁用"月/年"视图切换（controllerConfig.mode.visible=false），保留年份/月份下拉与今天按钮 */
@@ -88,6 +100,28 @@ async function load() {
   }
 }
 
+/* 编辑空间（复用列表页弹窗：基础信息编辑，状态走独立操作） */
+function openEdit() {
+  if (!space.value) return
+  formVisible.value = true
+}
+
+/* 维护 / 停用 / 恢复可用（同步列表页操作，确认由模板 popconfirm 承担） */
+async function onSetStatus(status: Space['status']) {
+  if (!space.value) return
+  acting.value = status
+  try {
+    await setSpaceStatus(space.value.id, status)
+    const text = status === 'available' ? '已恢复可用' : status === 'maintenance' ? '已登记维护' : '已停用'
+    MessagePlugin.success(`空间「${space.value.name}」${text}`)
+    await load()
+  } catch (e) {
+    MessagePlugin.error(e instanceof Error ? e.message : '操作失败')
+  } finally {
+    acting.value = ''
+  }
+}
+
 onMounted(load)
 </script>
 
@@ -95,10 +129,34 @@ onMounted(load)
   <div class="space-detail page-fade-in">
     <PageHeader :title="space?.name ?? '空间详情'" :description="`${spaceTypeMap[space?.type ?? 'meeting'] ?? ''} · ${space?.location ?? ''}`">
       <template #actions>
+        <t-tag v-if="isArchived" theme="default" variant="light">已归档</t-tag>
         <t-button variant="outline" @click="router.push('/spaces')">
           <template #icon><ArrowLeftIcon /></template>
           返回列表
         </t-button>
+        <template v-if="space && !isArchived">
+          <t-button variant="outline" @click="openEdit">
+            <template #icon><EditIcon /></template>
+            编辑
+          </t-button>
+          <template v-if="space.status === 'available'">
+            <t-popconfirm content="确认登记维护？维护期间不可预约" @confirm="onSetStatus('maintenance')">
+              <t-button variant="outline" theme="warning" :loading="acting === 'maintenance'">维护</t-button>
+            </t-popconfirm>
+            <t-popconfirm content="确认停用该空间？停用后不再开放预约" @confirm="onSetStatus('disabled')">
+              <t-button variant="outline" theme="danger" :loading="acting === 'disabled'">停用</t-button>
+            </t-popconfirm>
+          </template>
+          <t-button
+            v-else
+            variant="outline"
+            theme="primary"
+            :loading="acting === 'available'"
+            @click="onSetStatus('available')"
+          >
+            恢复可用
+          </t-button>
+        </template>
       </template>
     </PageHeader>
 
@@ -135,8 +193,8 @@ onMounted(load)
                     v-for="r in reservationsOn(cell.formattedDate).slice(0, 3)"
                     :key="r.id"
                     class="cal-item"
-                    :class="`is-${r.status}`"
-                    :title="`${r.date} ${r.startTime} ~ ${r.endTime} ${r.userName}（${r.purpose}）`"
+                    :class="`is-${deriveReservationStatus(r)}`"
+                    :title="`${r.date} ${r.startTime} ~ ${r.endTime} ${r.userName}（${r.purpose}）· ${reservationStatusLabel(r)}`"
                   >
                     {{ r.startTime }} {{ r.userName }}
                   </div>
@@ -147,8 +205,10 @@ onMounted(load)
               </template>
             </t-calendar>
             <div class="cal-legend">
-              <span class="cal-legend-item is-approved">已通过</span>
-              <span class="cal-legend-item is-pending">待审批</span>
+              <span class="cal-legend-item is-approved">待使用</span>
+              <span class="cal-legend-item is-using">使用中</span>
+              <span class="cal-legend-item is-pending">待审核</span>
+              <span class="cal-legend-item is-ended">已结束</span>
               <span class="cal-legend-item is-muted">已驳回/已取消</span>
             </div>
           </div>
@@ -163,7 +223,7 @@ onMounted(load)
               empty="该月暂无预约"
             >
               <template #user="{ row }">
-                {{ row.userName }}
+                {{ row.userName }}<t-tag class="id-tag" size="small" variant="light">{{ row.userId }}</t-tag>
               </template>
               <template #slot="{ row }">
                 <div class="slot-cell">
@@ -172,13 +232,15 @@ onMounted(load)
                 </div>
               </template>
               <template #status="{ row }">
-                <StatusTag entity="reservation" :value="row.status" />
+                <StatusTag entity="reservation" :value="deriveReservationStatus(row)" />
               </template>
             </t-table>
           </div>
         </div>
       </div>
     </t-loading>
+
+    <SpaceFormDialog v-model:visible="formVisible" mode="edit" :space="space" @success="load" />
   </div>
 </template>
 
@@ -246,8 +308,16 @@ onMounted(load)
   color: var(--td-success-color);
 }
 
+.space-detail :deep(.cal-item.is-using) {
+  color: var(--td-brand-color);
+}
+
 .space-detail :deep(.cal-item.is-pending) {
   color: var(--td-warning-color);
+}
+
+.space-detail :deep(.cal-item.is-ended) {
+  color: var(--td-text-color-placeholder);
 }
 
 .space-detail :deep(.cal-item.is-rejected),
@@ -275,8 +345,16 @@ onMounted(load)
   color: var(--td-success-color);
 }
 
+.cal-legend-item.is-using {
+  color: var(--td-brand-color);
+}
+
 .cal-legend-item.is-pending {
   color: var(--td-warning-color);
+}
+
+.cal-legend-item.is-ended {
+  color: var(--td-text-color-placeholder);
 }
 
 .cal-legend-item.is-muted {

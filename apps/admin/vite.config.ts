@@ -23,4 +23,16 @@ export default defineConfig({
       },
     },
   },
+  build: {
+    rollupOptions: {
+      output: {
+        /* 拆分体积大户，避免单 chunk 过大（index 主包 / TDesign / 富文本编辑器） */
+        manualChunks: {
+          'vendor-vue': ['vue', 'vue-router', 'pinia'],
+          'vendor-tdesign': ['tdesign-vue-next', 'tdesign-icons-vue-next'],
+          'vendor-editor': ['@wangeditor/editor', '@wangeditor/editor-for-vue'],
+        },
+      },
+    },
+  },
 })

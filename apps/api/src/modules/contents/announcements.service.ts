@@ -4,6 +4,7 @@ import { PrismaService } from '../../common/prisma/prisma.service'
 import { IdGeneratorService } from '../../common/id-generator/id-generator.service'
 import { AuditService } from '../../common/audit/audit.service'
 import { formatNow } from '../../common/utils/time'
+import { sanitizeHtml } from '../../common/utils/sanitize-html'
 import type { QueryAnnouncementsDto } from './dto/query-announcements.dto'
 import type { AnnouncementPayloadDto } from './dto/announcement-payload.dto'
 
@@ -21,7 +22,7 @@ function toAnnouncementDto(a: Announcement): Record<string, unknown> {
   return dto
 }
 
-/* 公告栏（wiki-backend.md §7.14）：创建即发布，支持下架/重新发布/置顶/删除；全部写操作留痕（内容管理）。 */
+/* 公告栏（wiki-backend.md §7.14）：新增即发布，支持下架/重新发布/置顶/删除；全部写操作留痕（内容管理）。 */
 @Injectable()
 export class AnnouncementsService {
   constructor(
@@ -31,7 +32,7 @@ export class AnnouncementsService {
   ) {}
 
   async findAll(query: QueryAnnouncementsDto): Promise<{ list: Record<string, unknown>[]; total: number }> {
-    const where: Prisma.AnnouncementWhereInput = {}
+    const where: Prisma.AnnouncementWhereInput = { deletedAt: null }
     if (query.keyword) {
       const kw = query.keyword.trim()
       where.OR = [
@@ -44,7 +45,7 @@ export class AnnouncementsService {
     const [rows, total] = await Promise.all([
       this.prisma.announcement.findMany({
         where,
-        /* 置顶优先，其余按发布时间倒序（M0 fetchAnnouncements 口径） */
+        /* 置顶优先，其余按发布时间倒序 */
         orderBy: [{ pinned: 'desc' }, { publishedAt: 'desc' }, { id: 'desc' }],
         skip: (query.page - 1) * query.pageSize,
         take: query.pageSize,
@@ -60,7 +61,7 @@ export class AnnouncementsService {
       data: {
         id: await this.ids.next('AN'),
         title: payload.title.trim(),
-        content: payload.content.trim(),
+        content: sanitizeHtml(payload.content).trim(),
         pinned: payload.pinned,
         status: 'published',
         publishedAt: now,
@@ -82,14 +83,15 @@ export class AnnouncementsService {
 
   async update(id: string, payload: AnnouncementPayloadDto, operator: string): Promise<{ code: number }> {
     const item = await this.prisma.announcement.findUnique({ where: { id } })
-    if (!item) throw new NotFoundException('公告不存在')
+    if (!item || item.deletedAt) throw new NotFoundException('公告不存在')
     const title = payload.title.trim()
+    const content = sanitizeHtml(payload.content).trim()
 
     await this.prisma.announcement.update({
       where: { id },
       data: {
         title,
-        content: payload.content.trim(),
+        content,
         pinned: payload.pinned,
         updatedAt: formatNow(),
       },
@@ -100,7 +102,7 @@ export class AnnouncementsService {
       action: '编辑公告',
       target: `${item.id} · ${title}`,
       before: { title: item.title, content: item.content, pinned: item.pinned },
-      after: { title, content: payload.content.trim(), pinned: payload.pinned },
+      after: { title, content, pinned: payload.pinned },
       operator,
     })
     return { code: 0 }
@@ -108,12 +110,13 @@ export class AnnouncementsService {
 
   async withdraw(id: string, operator: string): Promise<{ code: number }> {
     const item = await this.prisma.announcement.findUnique({ where: { id } })
-    if (!item) throw new NotFoundException('公告不存在')
+    if (!item || item.deletedAt) throw new NotFoundException('公告不存在')
     if (item.status !== 'published') throw new ConflictException('仅已发布公告可下架')
 
+    const now = formatNow()
     await this.prisma.announcement.update({
       where: { id },
-      data: { status: 'withdrawn', updatedAt: formatNow() },
+      data: { status: 'withdrawn', updatedAt: now, archivableAt: now },
     })
 
     await this.audit.record({
@@ -129,7 +132,7 @@ export class AnnouncementsService {
 
   async publish(id: string, operator: string): Promise<{ code: number }> {
     const item = await this.prisma.announcement.findUnique({ where: { id } })
-    if (!item) throw new NotFoundException('公告不存在')
+    if (!item || item.deletedAt) throw new NotFoundException('公告不存在')
     if (item.status !== 'withdrawn') throw new ConflictException('仅已下架公告可重新发布')
 
     await this.prisma.announcement.update({
@@ -150,7 +153,7 @@ export class AnnouncementsService {
 
   async togglePin(id: string, operator: string): Promise<{ code: number }> {
     const item = await this.prisma.announcement.findUnique({ where: { id } })
-    if (!item) throw new NotFoundException('公告不存在')
+    if (!item || item.deletedAt) throw new NotFoundException('公告不存在')
     const pinned = !item.pinned
 
     await this.prisma.announcement.update({
@@ -171,9 +174,14 @@ export class AnnouncementsService {
 
   async remove(id: string, operator: string): Promise<{ code: number }> {
     const item = await this.prisma.announcement.findUnique({ where: { id } })
-    if (!item) throw new NotFoundException('公告不存在')
+    if (!item || item.deletedAt) throw new NotFoundException('公告不存在')
+    if (item.status !== 'withdrawn') throw new ConflictException('仅已下架的公告可归档')
 
-    await this.prisma.announcement.delete({ where: { id } })
+    /* 软删除：移入回收站，可在回收站恢复或彻底删除 */
+    await this.prisma.announcement.update({
+      where: { id },
+      data: { deletedAt: formatNow(), deletedBy: operator },
+    })
 
     await this.audit.record({
       module: '内容管理',

@@ -1,22 +1,41 @@
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue'
+import { computed, nextTick, onMounted, reactive, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { MessagePlugin } from 'tdesign-vue-next'
+import type { FormProps } from 'tdesign-vue-next'
 import { ArrowLeftIcon } from 'tdesign-icons-vue-next'
 import StatusTag from '@/components/StatusTag.vue'
 import IdentityTags from '@/components/IdentityTags.vue'
 import AdjustValueDialog from '@/components/AdjustValueDialog.vue'
 import { identityTypeMap, roleLabelMap } from '@/constants/identity'
-import { fetchUser } from '@/api/users'
+import { applicationTypeMap } from '@/constants/status'
+import {
+  fetchUser,
+  fetchUserRecords,
+  freezeUser,
+  updateUser,
+  updateUserStatus,
+  type UserApplicationRecord,
+  type UserDemandRecord,
+  type UserEventRecord,
+  type UserFreezePayload,
+  type UserLeaseRecord,
+  type UserProfilePayload,
+  type UserProjectRecord,
+  type UserReservationRecord,
+  type UserRecords,
+  type UserSubmissionRecord,
+} from '@/api/users'
 import { fetchExternalEnterprises } from '@/api/external-enterprises'
 import { adjustExperience, adjustPoints, fetchExperienceRecords, fetchPointsRecords } from '@/api/ledgers'
+import { deriveReservationStatus } from '@/utils/reservation'
 import type { ExperienceRecord, PointsRecord, User, UserIdentity, ExternalEnterprise } from '@/types'
 
 const route = useRoute()
 const router = useRouter()
 const loading = ref(true)
 const user = ref<User | null>(null)
-/** 外部企业档案缓存：external_enterprise 身份经"档案名 + 成员 uid"反查档案 ID */
+/** 合作企业档案缓存：external_enterprise 身份经"档案名 + 成员 uid"反查档案 ID */
 const externalArchives = ref<ExternalEnterprise[]>([])
 const activeTab = ref('identities')
 
@@ -36,7 +55,7 @@ const communityIndividualIdentity = computed(() =>
   user.value?.identities.find((i) => i.type === 'community_individual'),
 )
 
-/* 社区企业身份卡可跳入驻企业详情；外部企业身份卡可跳外部企业详情（档案名 + 成员 uid 反查） */
+/* 社区企业身份卡可跳社区企业详情；合作企业身份卡可跳合作企业详情（档案名 + 成员 uid 反查） */
 function externalArchiveId(identity: UserIdentity): string | undefined {
   if (identity.type !== 'external_enterprise') return undefined
   const uid = user.value?.uid
@@ -59,21 +78,139 @@ function goEnterprise(identity: UserIdentity) {
   }
 }
 
-/* 数据概览卡片 → 跳转对应列表并按该用户自动筛选（有数据时可点击）
- * 跳转参数仅携带用户 ID，列表按 ID 过滤，避免同名用户歧义 */
-function goDemands() {
-  if (!user.value || user.value.stats.demands === 0) return
-  router.push({ path: '/demands', query: { publisher: user.value.uid } })
+/* ---------- 账号编辑 / 冻结 / 恢复 ---------- */
+
+const editVisible = ref(false)
+const editSaving = ref(false)
+const editFormRef = ref()
+const editForm = reactive({
+  nickname: '',
+  phone: '',
+  email: '',
+  gender: '男' as User['gender'],
+  realName: '',
+  citizenId: '',
+  bio: '',
+})
+
+const genderOptions = [
+  { label: '男', value: '男' },
+  { label: '女', value: '女' },
+]
+
+const editRules: FormProps['rules'] = {
+  nickname: [{ required: true, message: '请填写昵称', trigger: 'blur' }],
 }
 
-function goProjects() {
-  if (!user.value || user.value.stats.projects === 0) return
-  router.push({ path: '/projects', query: { participant: user.value.uid } })
+function openEdit() {
+  if (!user.value) return
+  editForm.nickname = user.value.nickname
+  editForm.phone = user.value.phone
+  editForm.email = user.value.email
+  editForm.gender = user.value.gender
+  editForm.realName = user.value.realName ?? ''
+  editForm.citizenId = user.value.citizenId ?? ''
+  editForm.bio = user.value.bio
+  editVisible.value = true
+  nextTick(() => editFormRef.value?.clearValidate())
 }
 
-function goEvents() {
-  if (!user.value || user.value.stats.events === 0) return
-  router.push({ path: '/events', query: { participant: user.value.uid } })
+async function onConfirmEdit() {
+  const valid = await editFormRef.value.validate()
+  if (valid !== true) return
+  if (!user.value) return
+  editSaving.value = true
+  try {
+    const payload: UserProfilePayload = {
+      nickname: editForm.nickname,
+      phone: editForm.phone,
+      email: editForm.email,
+      gender: editForm.gender,
+      realName: editForm.realName,
+      citizenId: editForm.citizenId,
+      bio: editForm.bio,
+    }
+    await updateUser(user.value.uid, payload)
+    MessagePlugin.success('用户资料已更新')
+    editVisible.value = false
+    await loadDetail()
+  } catch (e) {
+    MessagePlugin.error(e instanceof Error ? e.message : '保存失败')
+  } finally {
+    editSaving.value = false
+  }
+}
+
+const freezeVisible = ref(false)
+const freezeSaving = ref(false)
+const freezeForm = reactive({
+  permanent: false,
+  until: '',
+  reason: '',
+})
+
+/* 长期开关：开启后清空冻结期限（期限项随之隐藏） */
+watch(
+  () => freezeForm.permanent,
+  (v) => {
+    if (v) freezeForm.until = ''
+  },
+)
+
+function openFreeze() {
+  freezeForm.permanent = false
+  freezeForm.until = ''
+  freezeForm.reason = ''
+  freezeVisible.value = true
+}
+
+async function onConfirmFreeze() {
+  if (!user.value) return
+  if (!freezeForm.reason.trim()) {
+    MessagePlugin.warning('请填写冻结原因')
+    return
+  }
+  if (!freezeForm.permanent && !freezeForm.until) {
+    MessagePlugin.warning('请选择冻结期限或开启长期冻结')
+    return
+  }
+  freezeSaving.value = true
+  try {
+    const payload: UserFreezePayload = {
+      permanent: freezeForm.permanent,
+      until: freezeForm.permanent ? undefined : freezeForm.until,
+      reason: freezeForm.reason.trim(),
+    }
+    await freezeUser(user.value.uid, payload)
+    MessagePlugin.success(
+      payload.permanent
+        ? `已长期冻结账号「${user.value.nickname}」`
+        : `已冻结账号「${user.value.nickname}」至 ${payload.until}`,
+    )
+    freezeVisible.value = false
+    await loadDetail()
+  } catch (e) {
+    MessagePlugin.error(e instanceof Error ? e.message : '冻结失败')
+  } finally {
+    freezeSaving.value = false
+  }
+}
+
+/* 恢复：确认后直接执行并清理冻结信息 */
+const restoring = ref(false)
+
+async function onRestore() {
+  if (!user.value) return
+  restoring.value = true
+  try {
+    await updateUserStatus(user.value.uid, 'active')
+    MessagePlugin.success(`已恢复账号「${user.value.nickname}」`)
+    await loadDetail()
+  } catch (e) {
+    MessagePlugin.error(e instanceof Error ? e.message : '操作失败')
+  } finally {
+    restoring.value = false
+  }
 }
 
 /* ---------- 经验值 / 积分流水 ---------- */
@@ -87,12 +224,166 @@ const pointsAdjustVisible = ref(false)
 const pointsAdjusting = ref(false)
 
 const ledgerColumns = [
-  { colKey: 'at', title: '时间', width: 150 },
-  { colKey: 'delta', title: '变动', cell: 'delta', width: 90 },
-  { colKey: 'balance', title: '余额', width: 90 },
+  { colKey: 'at', title: '时间', width: 150 , ellipsis: true},
+  { colKey: 'delta', title: '变动', cell: 'delta', width: 90 , ellipsis: true},
+  { colKey: 'balance', title: '余额', width: 90 , ellipsis: true},
   { colKey: 'reason', title: '事由', ellipsis: true },
-  { colKey: 'operator', title: '操作人', width: 100 },
+  { colKey: 'operator', title: '操作人', width: 100 , ellipsis: true},
 ]
+
+/* ---------- 用户记录（申请 / 需求 / 项目 / 活动 / 租赁 / 投稿 / 预约） ---------- */
+
+const records = ref<UserRecords | null>(null)
+const recordsLoading = ref(false)
+
+/* 历史（终态）状态集合：条目落入终态或已归档（deletedAt 非空）即归入「历史记录」段，其余为进行中的当前记录 */
+const APPLICATION_HISTORY = new Set(['approved', 'rejected'])
+const DEMAND_HISTORY = new Set(['rejected', 'closed', 'projected'])
+const PROJECT_HISTORY = new Set(['finished', 'closed'])
+const EVENT_HISTORY = new Set(['ended', 'cancelled'])
+const LEASE_HISTORY = new Set(['terminated'])
+const SUBMISSION_HISTORY = new Set(['pending_release', 'rejected'])
+const RESERVATION_HISTORY = new Set(['ended', 'rejected', 'cancelled'])
+
+const isApplicationHistory = (row: UserApplicationRecord) => APPLICATION_HISTORY.has(row.status)
+const isDemandHistory = (row: UserDemandRecord) => DEMAND_HISTORY.has(row.status)
+const isProjectHistory = (row: UserProjectRecord) => PROJECT_HISTORY.has(row.status)
+const isEventHistory = (row: UserEventRecord) => EVENT_HISTORY.has(row.status)
+const isLeaseHistory = (row: UserLeaseRecord) => LEASE_HISTORY.has(row.status)
+const isSubmissionHistory = (row: UserSubmissionRecord) => SUBMISSION_HISTORY.has(row.status)
+const isReservationHistory = (row: UserReservationRecord) =>
+  RESERVATION_HISTORY.has(deriveReservationStatus(row))
+
+/* 已归档条目（deletedAt 非空）一律归入「历史记录」段 */
+function isArchived(row: { deletedAt: string | null }): boolean {
+  return !!row.deletedAt
+}
+
+function currentOf<T extends { deletedAt: string | null }>(
+  list: T[] | undefined,
+  isHistory: (row: T) => boolean,
+): T[] {
+  return (list ?? []).filter((row) => !isArchived(row) && !isHistory(row))
+}
+
+function historyOf<T extends { deletedAt: string | null }>(
+  list: T[] | undefined,
+  isHistory: (row: T) => boolean,
+): T[] {
+  return (list ?? []).filter((row) => isArchived(row) || isHistory(row))
+}
+
+const currentApplications = computed(() => currentOf(records.value?.applications, isApplicationHistory))
+const historyApplications = computed(() => historyOf(records.value?.applications, isApplicationHistory))
+const currentDemands = computed(() => currentOf(records.value?.demands, isDemandHistory))
+const historyDemands = computed(() => historyOf(records.value?.demands, isDemandHistory))
+const currentProjects = computed(() => currentOf(records.value?.projects, isProjectHistory))
+const historyProjects = computed(() => historyOf(records.value?.projects, isProjectHistory))
+const currentEvents = computed(() => currentOf(records.value?.events, isEventHistory))
+const historyEvents = computed(() => historyOf(records.value?.events, isEventHistory))
+const currentLeases = computed(() => currentOf(records.value?.leases, isLeaseHistory))
+const historyLeases = computed(() => historyOf(records.value?.leases, isLeaseHistory))
+const currentSubmissions = computed(() => currentOf(records.value?.submissions, isSubmissionHistory))
+const historySubmissions = computed(() => historyOf(records.value?.submissions, isSubmissionHistory))
+const currentReservations = computed(() => currentOf(records.value?.reservations, isReservationHistory))
+const historyReservations = computed(() => historyOf(records.value?.reservations, isReservationHistory))
+
+const applicationColumns = [
+  { colKey: 'id', title: '申请编号', width: 110, ellipsis: true },
+  { colKey: 'type', title: '申请类型', width: 110, cell: 'appType' },
+  { colKey: 'targetName', title: '申请对象', ellipsis: true },
+  { colKey: 'status', title: '状态', width: 100, cell: 'status' },
+  { colKey: 'submittedAt', title: '提交时间', width: 150, ellipsis: true },
+]
+
+const demandColumns = [
+  { colKey: 'id', title: '需求编号', width: 110, ellipsis: true },
+  { colKey: 'title', title: '需求标题', ellipsis: true },
+  { colKey: 'status', title: '状态', width: 100, cell: 'status' },
+  { colKey: 'createdAt', title: '创建时间', width: 150, ellipsis: true },
+]
+
+const projectColumns = [
+  { colKey: 'id', title: '项目编号', width: 110, ellipsis: true },
+  { colKey: 'name', title: '项目名称', ellipsis: true },
+  { colKey: 'code', title: '项目代号', width: 120, ellipsis: true },
+  { colKey: 'status', title: '状态', width: 100, cell: 'status' },
+  { colKey: 'initiatedAt', title: '立项时间', width: 150, ellipsis: true },
+]
+
+const eventColumns = [
+  { colKey: 'id', title: '活动编号', width: 110, ellipsis: true },
+  { colKey: 'title', title: '活动标题', ellipsis: true },
+  { colKey: 'status', title: '状态', width: 100, cell: 'status' },
+  { colKey: 'time', title: '活动时间', width: 320, cell: 'time' },
+]
+
+const recordLeaseColumns = [
+  { colKey: 'id', title: '租约编号', width: 110, ellipsis: true },
+  { colKey: 'renterName', title: '租赁方', ellipsis: true },
+  { colKey: 'term', title: '租期', width: 210, cell: 'term' },
+  { colKey: 'status', title: '状态', width: 100, cell: 'status' },
+  { colKey: 'terminatedAt', title: '终止时间', width: 150, ellipsis: true, cell: 'terminatedAt' },
+]
+
+const submissionColumns = [
+  { colKey: 'id', title: '投稿编号', width: 110, ellipsis: true },
+  { colKey: 'title', title: '稿件标题', ellipsis: true },
+  { colKey: 'status', title: '状态', width: 100, cell: 'status' },
+  { colKey: 'createdAt', title: '投稿时间', width: 150, ellipsis: true },
+]
+
+const reservationColumns = [
+  { colKey: 'id', title: '预约编号', width: 110, ellipsis: true },
+  { colKey: 'spaceName', title: '空间名称', ellipsis: true },
+  { colKey: 'date', title: '预约日期', width: 120 },
+  { colKey: 'time', title: '使用时段', width: 150, cell: 'time' },
+  { colKey: 'status', title: '状态', width: 100, cell: 'status' },
+]
+
+function eventTime(row: UserEventRecord): string {
+  return `${row.startTime} ~ ${row.endTime}`
+}
+
+function recordLeaseTerm(row: UserLeaseRecord): string {
+  return row.longTerm ? `${row.startDate} ~ 长期` : `${row.startDate} ~ ${row.endDate}`
+}
+
+function reservationTime(row: UserReservationRecord): string {
+  return `${row.startTime} ~ ${row.endTime}`
+}
+
+function reservationStatus(row: UserReservationRecord): string {
+  return deriveReservationStatus(row)
+}
+
+/* 行点击跳转（仅存在详情页的记录域） */
+function goDemandRecord(row: UserDemandRecord) {
+  router.push(`/demands/${row.id}`)
+}
+
+function goProjectRecord(row: UserProjectRecord) {
+  router.push(`/projects/${row.id}`)
+}
+
+function goEventRecord(row: UserEventRecord) {
+  router.push(`/events/${row.id}`)
+}
+
+function goLeaseRecord(row: UserLeaseRecord) {
+  router.push(`/workstations/leases/${row.id}`)
+}
+
+async function loadRecords() {
+  recordsLoading.value = true
+  try {
+    records.value = await fetchUserRecords(route.params.id as string)
+  } catch {
+    MessagePlugin.error('记录加载失败')
+  } finally {
+    recordsLoading.value = false
+  }
+}
 
 async function onAdjustExperience(delta: number, reason: string) {
   if (!user.value) return
@@ -141,6 +432,7 @@ async function loadDetail() {
 onMounted(async () => {
   try {
     await loadDetail()
+    loadRecords()
   } catch (e) {
     MessagePlugin.error(e instanceof Error ? e.message : '用户加载失败')
   } finally {
@@ -174,13 +466,24 @@ onMounted(async () => {
               <span class="profile-name">{{ user.nickname }}</span>
               <StatusTag entity="user" :value="user.status" />
             </div>
-            <span class="profile-id">UID：{{ user.uid }}</span>
-            <IdentityTags v-if="headerIdentities.length" :identities="headerIdentities" />
+            <span class="profile-id">用户ID: <t-tag class="id-tag" size="small" variant="light">{{ user.uid }}</t-tag></span>
+            <IdentityTags v-if="headerIdentities.length" :identities="headerIdentities" :show-id="false" />
+          </div>
+          <div class="profile-actions">
+            <t-button variant="outline" @click="openEdit">编辑</t-button>
+            <t-popconfirm
+              v-if="user.status === 'frozen'"
+              content="确认恢复该账号？恢复后冻结信息将被清除"
+              @confirm="onRestore"
+            >
+              <t-button theme="primary" :loading="restoring">恢复</t-button>
+            </t-popconfirm>
+            <t-button v-else theme="danger" @click="openFreeze">冻结</t-button>
           </div>
         </div>
 
-        <t-descriptions :column="3" bordered class="profile-desc">
-          <t-descriptions-item label="手机号">{{ user.phone }}</t-descriptions-item>
+        <t-descriptions :column="3" bordered table-layout="auto" class="profile-desc">
+          <t-descriptions-item label="联系电话">{{ user.phone }}</t-descriptions-item>
           <t-descriptions-item label="邮箱">{{ user.email }}</t-descriptions-item>
           <t-descriptions-item label="性别">{{ user.gender }}</t-descriptions-item>
           <t-descriptions-item label="实名状态">
@@ -205,7 +508,7 @@ onMounted(async () => {
         <p class="profile-bio">{{ user.bio }}</p>
       </div>
 
-      <!-- 身份信息 / 数据概览 / 经验值 / 积分 / 活跃记录 -->
+      <!-- 身份信息 / 记录 / 经验值 / 积分 / 活跃记录 -->
       <div class="page-card">
         <t-tabs v-model="activeTab">
           <t-tab-panel value="identities" label="身份信息">
@@ -222,7 +525,7 @@ onMounted(async () => {
                 @click="goEnterprise(identity)"
               >
                 <div class="identity-card-head">
-                  <span class="identity-name">{{ identityName(identity) }}</span>
+                  <span class="identity-name">{{ identityName(identity) }}<t-tag v-if="identity.enterpriseId" class="id-tag" size="small" variant="light">{{ identity.enterpriseId }}</t-tag></span>
                   <div class="identity-card-tags">
                     <t-tag v-if="identity.type === 'community_individual'" variant="light" size="small">
                       {{ identity.level ? `${identity.level} 级` : '社区个体' }}
@@ -238,40 +541,403 @@ onMounted(async () => {
                 <div class="identity-card-meta">
                   <span>职位/头衔：{{ identity.title }}</span>
                   <span v-if="identity.type !== 'community_individual' && identity.level">
-                    经验等级：{{ identity.level }} 级
+                    经验值等级：{{ identity.level }} 级
                   </span>
-                  <span v-if="identity.enterpriseId">企业 ID：{{ identity.enterpriseId }}</span>
                 </div>
               </div>
             </div>
           </t-tab-panel>
 
-          <t-tab-panel value="stats" label="数据概览">
-            <div class="stats-grid stats-grid-3">
+          <!-- 申请记录 -->
+          <t-tab-panel value="applications" label="申请记录">
+            <div class="tab-body">
               <div
-                class="stat-item"
-                :class="{ clickable: user.stats.demands > 0 }"
-                @click="goDemands"
+                v-if="recordsLoading && !currentApplications.length && !historyApplications.length"
+                class="record-loading"
               >
-                <span class="stat-num">{{ user.stats.demands }}</span>
-                <span class="stat-label">需求发布</span>
+                <t-loading size="small" />
               </div>
+              <template v-else-if="currentApplications.length || historyApplications.length">
+                <template v-if="currentApplications.length">
+                  <div class="record-section-title">进行中（{{ currentApplications.length }}）</div>
+                  <t-table
+                    row-key="id"
+                    table-layout="fixed"
+                    hover
+                    size="small"
+                    :data="currentApplications"
+                    :columns="applicationColumns"
+                    :loading="recordsLoading"
+                  >
+                    <template #appType="{ row }">
+                      {{ applicationTypeMap[row.type]?.label ?? row.type }}
+                    </template>
+                    <template #status="{ row }">
+                      <t-tag v-if="row.deletedAt" theme="default" variant="light">已归档</t-tag>
+                      <StatusTag v-else entity="application" :value="row.status" />
+                    </template>
+                  </t-table>
+                </template>
+                <t-divider
+                  v-if="currentApplications.length && historyApplications.length"
+                  class="record-divider"
+                />
+                <template v-if="historyApplications.length">
+                  <div class="record-section-title">历史记录（{{ historyApplications.length }}）</div>
+                  <t-table
+                    row-key="id"
+                    table-layout="fixed"
+                    hover
+                    size="small"
+                    :data="historyApplications"
+                    :columns="applicationColumns"
+                    :loading="recordsLoading"
+                  >
+                    <template #appType="{ row }">
+                      {{ applicationTypeMap[row.type]?.label ?? row.type }}
+                    </template>
+                    <template #status="{ row }">
+                      <t-tag v-if="row.deletedAt" theme="default" variant="light">已归档</t-tag>
+                      <StatusTag v-else entity="application" :value="row.status" />
+                    </template>
+                  </t-table>
+                </template>
+              </template>
+              <t-empty v-else description="暂无记录" />
+            </div>
+          </t-tab-panel>
+
+          <!-- 需求记录 -->
+          <t-tab-panel value="demands" label="需求记录">
+            <div class="tab-body">
               <div
-                class="stat-item"
-                :class="{ clickable: user.stats.projects > 0 }"
-                @click="goProjects"
+                v-if="recordsLoading && !currentDemands.length && !historyDemands.length"
+                class="record-loading"
               >
-                <span class="stat-num">{{ user.stats.projects }}</span>
-                <span class="stat-label">参与项目</span>
+                <t-loading size="small" />
               </div>
+              <template v-else-if="currentDemands.length || historyDemands.length">
+                <template v-if="currentDemands.length">
+                  <div class="record-section-title">进行中（{{ currentDemands.length }}）</div>
+                  <t-table
+                    row-key="id"
+                    table-layout="fixed"
+                    hover
+                    size="small"
+                    :data="currentDemands"
+                    :columns="demandColumns"
+                    :loading="recordsLoading"
+                    @row-click="({ row }) => goDemandRecord(row)"
+                  >
+                    <template #status="{ row }">
+                      <t-tag v-if="row.deletedAt" theme="default" variant="light">已归档</t-tag>
+                      <StatusTag v-else entity="demand" :value="row.status" />
+                    </template>
+                  </t-table>
+                </template>
+                <t-divider
+                  v-if="currentDemands.length && historyDemands.length"
+                  class="record-divider"
+                />
+                <template v-if="historyDemands.length">
+                  <div class="record-section-title">历史记录（{{ historyDemands.length }}）</div>
+                  <t-table
+                    row-key="id"
+                    table-layout="fixed"
+                    hover
+                    size="small"
+                    :data="historyDemands"
+                    :columns="demandColumns"
+                    :loading="recordsLoading"
+                    @row-click="({ row }) => goDemandRecord(row)"
+                  >
+                    <template #status="{ row }">
+                      <t-tag v-if="row.deletedAt" theme="default" variant="light">已归档</t-tag>
+                      <StatusTag v-else entity="demand" :value="row.status" />
+                    </template>
+                  </t-table>
+                </template>
+              </template>
+              <t-empty v-else description="暂无记录" />
+            </div>
+          </t-tab-panel>
+
+          <!-- 项目记录 -->
+          <t-tab-panel value="projects" label="项目记录">
+            <div class="tab-body">
               <div
-                class="stat-item"
-                :class="{ clickable: user.stats.events > 0 }"
-                @click="goEvents"
+                v-if="recordsLoading && !currentProjects.length && !historyProjects.length"
+                class="record-loading"
               >
-                <span class="stat-num">{{ user.stats.events }}</span>
-                <span class="stat-label">活动报名</span>
+                <t-loading size="small" />
               </div>
+              <template v-else-if="currentProjects.length || historyProjects.length">
+                <template v-if="currentProjects.length">
+                  <div class="record-section-title">进行中（{{ currentProjects.length }}）</div>
+                  <t-table
+                    row-key="id"
+                    table-layout="fixed"
+                    hover
+                    size="small"
+                    :data="currentProjects"
+                    :columns="projectColumns"
+                    :loading="recordsLoading"
+                    @row-click="({ row }) => goProjectRecord(row)"
+                  >
+                    <template #status="{ row }">
+                      <t-tag v-if="row.deletedAt" theme="default" variant="light">已归档</t-tag>
+                      <StatusTag v-else entity="project" :value="row.status" />
+                    </template>
+                  </t-table>
+                </template>
+                <t-divider
+                  v-if="currentProjects.length && historyProjects.length"
+                  class="record-divider"
+                />
+                <template v-if="historyProjects.length">
+                  <div class="record-section-title">历史记录（{{ historyProjects.length }}）</div>
+                  <t-table
+                    row-key="id"
+                    table-layout="fixed"
+                    hover
+                    size="small"
+                    :data="historyProjects"
+                    :columns="projectColumns"
+                    :loading="recordsLoading"
+                    @row-click="({ row }) => goProjectRecord(row)"
+                  >
+                    <template #status="{ row }">
+                      <t-tag v-if="row.deletedAt" theme="default" variant="light">已归档</t-tag>
+                      <StatusTag v-else entity="project" :value="row.status" />
+                    </template>
+                  </t-table>
+                </template>
+              </template>
+              <t-empty v-else description="暂无记录" />
+            </div>
+          </t-tab-panel>
+
+          <!-- 活动记录 -->
+          <t-tab-panel value="events" label="活动记录">
+            <div class="tab-body">
+              <div
+                v-if="recordsLoading && !currentEvents.length && !historyEvents.length"
+                class="record-loading"
+              >
+                <t-loading size="small" />
+              </div>
+              <template v-else-if="currentEvents.length || historyEvents.length">
+                <template v-if="currentEvents.length">
+                  <div class="record-section-title">进行中（{{ currentEvents.length }}）</div>
+                  <t-table
+                    row-key="id"
+                    table-layout="fixed"
+                    hover
+                    size="small"
+                    :data="currentEvents"
+                    :columns="eventColumns"
+                    :loading="recordsLoading"
+                    @row-click="({ row }) => goEventRecord(row)"
+                  >
+                    <template #status="{ row }">
+                      <t-tag v-if="row.deletedAt" theme="default" variant="light">已归档</t-tag>
+                      <StatusTag v-else entity="event" :value="row.status" />
+                    </template>
+                    <template #time="{ row }">{{ eventTime(row) }}</template>
+                  </t-table>
+                </template>
+                <t-divider
+                  v-if="currentEvents.length && historyEvents.length"
+                  class="record-divider"
+                />
+                <template v-if="historyEvents.length">
+                  <div class="record-section-title">历史记录（{{ historyEvents.length }}）</div>
+                  <t-table
+                    row-key="id"
+                    table-layout="fixed"
+                    hover
+                    size="small"
+                    :data="historyEvents"
+                    :columns="eventColumns"
+                    :loading="recordsLoading"
+                    @row-click="({ row }) => goEventRecord(row)"
+                  >
+                    <template #status="{ row }">
+                      <t-tag v-if="row.deletedAt" theme="default" variant="light">已归档</t-tag>
+                      <StatusTag v-else entity="event" :value="row.status" />
+                    </template>
+                    <template #time="{ row }">{{ eventTime(row) }}</template>
+                  </t-table>
+                </template>
+              </template>
+              <t-empty v-else description="暂无记录" />
+            </div>
+          </t-tab-panel>
+
+          <!-- 租赁记录 -->
+          <t-tab-panel value="leases" label="租赁记录">
+            <div class="tab-body">
+              <div
+                v-if="recordsLoading && !currentLeases.length && !historyLeases.length"
+                class="record-loading"
+              >
+                <t-loading size="small" />
+              </div>
+              <template v-else-if="currentLeases.length || historyLeases.length">
+                <template v-if="currentLeases.length">
+                  <div class="record-section-title">进行中（{{ currentLeases.length }}）</div>
+                  <t-table
+                    row-key="id"
+                    table-layout="fixed"
+                    hover
+                    size="small"
+                    :data="currentLeases"
+                    :columns="recordLeaseColumns"
+                    :loading="recordsLoading"
+                    @row-click="({ row }) => goLeaseRecord(row)"
+                  >
+                    <template #term="{ row }">{{ recordLeaseTerm(row) }}</template>
+                    <template #status="{ row }">
+                      <t-tag v-if="row.deletedAt" theme="default" variant="light">已归档</t-tag>
+                      <StatusTag v-else entity="lease" :value="row.status" />
+                    </template>
+                    <template #terminatedAt="{ row }">{{ row.terminatedAt ?? '—' }}</template>
+                  </t-table>
+                </template>
+                <t-divider
+                  v-if="currentLeases.length && historyLeases.length"
+                  class="record-divider"
+                />
+                <template v-if="historyLeases.length">
+                  <div class="record-section-title">历史记录（{{ historyLeases.length }}）</div>
+                  <t-table
+                    row-key="id"
+                    table-layout="fixed"
+                    hover
+                    size="small"
+                    :data="historyLeases"
+                    :columns="recordLeaseColumns"
+                    :loading="recordsLoading"
+                    @row-click="({ row }) => goLeaseRecord(row)"
+                  >
+                    <template #term="{ row }">{{ recordLeaseTerm(row) }}</template>
+                    <template #status="{ row }">
+                      <t-tag v-if="row.deletedAt" theme="default" variant="light">已归档</t-tag>
+                      <StatusTag v-else entity="lease" :value="row.status" />
+                    </template>
+                    <template #terminatedAt="{ row }">{{ row.terminatedAt ?? '—' }}</template>
+                  </t-table>
+                </template>
+              </template>
+              <t-empty v-else description="暂无记录" />
+            </div>
+          </t-tab-panel>
+
+          <!-- 投稿记录 -->
+          <t-tab-panel value="submissions" label="投稿记录">
+            <div class="tab-body">
+              <div
+                v-if="recordsLoading && !currentSubmissions.length && !historySubmissions.length"
+                class="record-loading"
+              >
+                <t-loading size="small" />
+              </div>
+              <template v-else-if="currentSubmissions.length || historySubmissions.length">
+                <template v-if="currentSubmissions.length">
+                  <div class="record-section-title">进行中（{{ currentSubmissions.length }}）</div>
+                  <t-table
+                    row-key="id"
+                    table-layout="fixed"
+                    hover
+                    size="small"
+                    :data="currentSubmissions"
+                    :columns="submissionColumns"
+                    :loading="recordsLoading"
+                  >
+                    <template #status="{ row }">
+                      <t-tag v-if="row.deletedAt" theme="default" variant="light">已归档</t-tag>
+                      <StatusTag v-else entity="article" :value="row.status" />
+                    </template>
+                  </t-table>
+                </template>
+                <t-divider
+                  v-if="currentSubmissions.length && historySubmissions.length"
+                  class="record-divider"
+                />
+                <template v-if="historySubmissions.length">
+                  <div class="record-section-title">历史记录（{{ historySubmissions.length }}）</div>
+                  <t-table
+                    row-key="id"
+                    table-layout="fixed"
+                    hover
+                    size="small"
+                    :data="historySubmissions"
+                    :columns="submissionColumns"
+                    :loading="recordsLoading"
+                  >
+                    <template #status="{ row }">
+                      <t-tag v-if="row.deletedAt" theme="default" variant="light">已归档</t-tag>
+                      <StatusTag v-else entity="article" :value="row.status" />
+                    </template>
+                  </t-table>
+                </template>
+              </template>
+              <t-empty v-else description="暂无记录" />
+            </div>
+          </t-tab-panel>
+
+          <!-- 预约记录 -->
+          <t-tab-panel value="reservations" label="预约记录">
+            <div class="tab-body">
+              <div
+                v-if="recordsLoading && !currentReservations.length && !historyReservations.length"
+                class="record-loading"
+              >
+                <t-loading size="small" />
+              </div>
+              <template v-else-if="currentReservations.length || historyReservations.length">
+                <template v-if="currentReservations.length">
+                  <div class="record-section-title">进行中（{{ currentReservations.length }}）</div>
+                  <t-table
+                    row-key="id"
+                    table-layout="fixed"
+                    hover
+                    size="small"
+                    :data="currentReservations"
+                    :columns="reservationColumns"
+                    :loading="recordsLoading"
+                  >
+                    <template #time="{ row }">{{ reservationTime(row) }}</template>
+                    <template #status="{ row }">
+                      <t-tag v-if="row.deletedAt" theme="default" variant="light">已归档</t-tag>
+                      <StatusTag v-else entity="reservation" :value="reservationStatus(row)" />
+                    </template>
+                  </t-table>
+                </template>
+                <t-divider
+                  v-if="currentReservations.length && historyReservations.length"
+                  class="record-divider"
+                />
+                <template v-if="historyReservations.length">
+                  <div class="record-section-title">历史记录（{{ historyReservations.length }}）</div>
+                  <t-table
+                    row-key="id"
+                    table-layout="fixed"
+                    hover
+                    size="small"
+                    :data="historyReservations"
+                    :columns="reservationColumns"
+                    :loading="recordsLoading"
+                  >
+                    <template #time="{ row }">{{ reservationTime(row) }}</template>
+                    <template #status="{ row }">
+                      <t-tag v-if="row.deletedAt" theme="default" variant="light">已归档</t-tag>
+                      <StatusTag v-else entity="reservation" :value="reservationStatus(row)" />
+                    </template>
+                  </t-table>
+                </template>
+              </template>
+              <t-empty v-else description="暂无记录" />
             </div>
           </t-tab-panel>
 
@@ -341,6 +1007,84 @@ onMounted(async () => {
       </div>
     </template>
 
+    <!-- 编辑用户资料 -->
+    <t-dialog
+      v-model:visible="editVisible"
+      header="编辑用户资料"
+      width="520px"
+      @close="editVisible = false"
+    >
+      <template #footer>
+        <div class="dialog-footer">
+          <t-button variant="text" theme="default" @click="editVisible = false">取消</t-button>
+          <t-button theme="primary" :loading="editSaving" @click="onConfirmEdit">保存</t-button>
+        </div>
+      </template>
+      <t-form ref="editFormRef" :data="editForm" :rules="editRules" label-align="top">
+        <t-form-item label="昵称" name="nickname">
+          <t-input v-model="editForm.nickname" placeholder="请输入昵称" />
+        </t-form-item>
+        <t-form-item label="手机号" name="phone">
+          <t-input v-model="editForm.phone" placeholder="请输入手机号" />
+        </t-form-item>
+        <t-form-item label="邮箱" name="email">
+          <t-input v-model="editForm.email" placeholder="请输入邮箱" />
+        </t-form-item>
+        <t-form-item label="性别" name="gender">
+          <t-select v-model="editForm.gender" :options="genderOptions" placeholder="请选择性别" />
+        </t-form-item>
+        <t-form-item label="真实姓名" name="realName">
+          <t-input v-model="editForm.realName" placeholder="请输入真实姓名" />
+        </t-form-item>
+        <t-form-item label="身份证号" name="citizenId">
+          <t-input v-model="editForm.citizenId" placeholder="请输入身份证号" />
+        </t-form-item>
+        <t-form-item label="简介" name="bio">
+          <t-textarea v-model="editForm.bio" :autosize="{ minRows: 3, maxRows: 5 }" placeholder="请输入简介" />
+        </t-form-item>
+      </t-form>
+    </t-dialog>
+
+    <!-- 冻结账号：冻结期限（日期+时间）或长期（开关，默认关）+ 冻结原因（必填） -->
+    <t-dialog
+      v-model:visible="freezeVisible"
+      :header="user ? `冻结账号 · ${user.nickname} [${user.uid}]` : '冻结账号'"
+      width="480px"
+      @close="freezeVisible = false"
+    >
+      <template #footer>
+        <div class="dialog-footer">
+          <t-button variant="text" theme="default" @click="freezeVisible = false">取消</t-button>
+          <t-button theme="danger" :loading="freezeSaving" @click="onConfirmFreeze">确认冻结</t-button>
+        </div>
+      </template>
+      <t-form :data="freezeForm" label-align="top">
+        <t-form-item label="冻结原因" name="reason">
+          <t-textarea
+            v-model="freezeForm.reason"
+            :autosize="{ minRows: 3, maxRows: 5 }"
+            placeholder="请填写冻结原因（必填），将记录在账号信息中"
+          />
+        </t-form-item>
+        <t-form-item label="长期冻结" name="permanent">
+          <div class="freeze-permanent">
+            <t-switch v-model="freezeForm.permanent" />
+            <span class="freeze-tip">开启后不设解冻时间，需手动解冻</span>
+          </div>
+        </t-form-item>
+        <t-form-item v-if="!freezeForm.permanent" label="冻结期限" name="until">
+          <t-date-picker
+            v-model="freezeForm.until"
+            valueType="YYYY-MM-DD HH:mm"
+            enable-time-picker
+            clearable
+            placeholder="选择冻结截止时间"
+            style="width: 100%"
+          />
+        </t-form-item>
+      </t-form>
+    </t-dialog>
+
     <!-- 经验值调整（社区个体） -->
     <AdjustValueDialog
       v-model:visible="expAdjustVisible"
@@ -384,6 +1128,13 @@ onMounted(async () => {
   flex-direction: column;
   align-items: flex-start;
   gap: 8px;
+}
+
+.profile-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-left: auto;
 }
 
 .profile-name-row {
@@ -481,49 +1232,24 @@ onMounted(async () => {
 }
 
 .tab-body {
-  padding-top: 16px;
+  padding: 16px 0 8px;
 }
 
-.stats-grid {
-  display: grid;
-  gap: 16px;
-  padding-top: 8px;
-}
-
-.stats-grid-3 {
-  grid-template-columns: repeat(3, 1fr);
-}
-
-.stat-item {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 8px;
-  padding: 20px;
-  border: 1px solid var(--td-component-border);
-  border-radius: var(--td-radius-medium);
-}
-
-.stat-item.clickable {
-  cursor: pointer;
-  transition: border-color 120ms ease;
-}
-
-.stat-item.clickable:hover {
-  border-color: var(--td-brand-color);
-}
-
-.stat-num {
-  font-size: 24px;
-  font-weight: 600;
-  line-height: 32px;
-  color: var(--td-brand-color);
-  font-variant-numeric: tabular-nums;
-}
-
-.stat-label {
+.record-section-title {
+  margin-bottom: 8px;
   font-size: 13px;
+  font-weight: 600;
   color: var(--td-text-color-secondary);
+}
+
+.record-divider {
+  margin: 16px 0;
+}
+
+.record-loading {
+  display: flex;
+  justify-content: center;
+  padding: 32px 0;
 }
 
 .exp-head {
@@ -559,5 +1285,22 @@ onMounted(async () => {
 .delta-sub {
   color: var(--td-error-color);
   font-weight: 600;
+}
+
+.dialog-footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.freeze-permanent {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.freeze-tip {
+  font-size: 12px;
+  color: var(--td-text-color-secondary);
 }
 </style>

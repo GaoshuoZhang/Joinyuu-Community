@@ -13,7 +13,7 @@ export const goods: MallGoods[] = [
   {
     id: 'G1001',
     name: '社区定制帆布包',
-    category: 'physical',
+    category: '实物商品',
     points: 260,
     stock: 45,
     status: 'on',
@@ -24,7 +24,7 @@ export const goods: MallGoods[] = [
   {
     id: 'G1002',
     name: '社区文创周边礼包',
-    category: 'physical',
+    category: '实物商品',
     points: 380,
     stock: 18,
     status: 'on',
@@ -35,7 +35,7 @@ export const goods: MallGoods[] = [
   {
     id: 'G1003',
     name: '社区定制马克杯',
-    category: 'physical',
+    category: '实物商品',
     points: 180,
     stock: 60,
     status: 'on',
@@ -46,7 +46,7 @@ export const goods: MallGoods[] = [
   {
     id: 'G1004',
     name: '会议室优先预约卡',
-    category: 'voucher',
+    category: '权益券',
     points: 300,
     stock: 99,
     status: 'on',
@@ -57,7 +57,7 @@ export const goods: MallGoods[] = [
   {
     id: 'G1005',
     name: '精品咖啡月卡',
-    category: 'virtual',
+    category: '虚拟服务',
     points: 150,
     stock: 30,
     status: 'on',
@@ -68,7 +68,7 @@ export const goods: MallGoods[] = [
   {
     id: 'G1006',
     name: '路演彩排时长券（2 小时）',
-    category: 'voucher',
+    category: '权益券',
     points: 260,
     stock: 40,
     status: 'on',
@@ -79,7 +79,7 @@ export const goods: MallGoods[] = [
   {
     id: 'G1007',
     name: '精品咖啡券（单杯）',
-    category: 'virtual',
+    category: '虚拟服务',
     points: 120,
     stock: 200,
     status: 'on',
@@ -90,7 +90,7 @@ export const goods: MallGoods[] = [
   {
     id: 'G1008',
     name: '创业导师 1v1 咨询（45 分钟）',
-    category: 'virtual',
+    category: '虚拟服务',
     points: 500,
     stock: 10,
     status: 'on',
@@ -101,7 +101,7 @@ export const goods: MallGoods[] = [
   {
     id: 'G1009',
     name: '社区联名机械键盘',
-    category: 'physical',
+    category: '实物商品',
     points: 1200,
     stock: 5,
     status: 'off',
@@ -152,7 +152,7 @@ export const redemptionOrders: RedemptionOrder[] = [
     createdAt: '2026-09-07 15:40',
     recipientName: '顾北辰',
     recipientPhone: '13801210005',
-    address: '聚屿社区 A 区 05 工位（暂存前台）',
+    address: '聚屿社区 A 区 05 办公位（暂存前台）',
     note: '请到货后通知',
   },
   {
@@ -212,6 +212,15 @@ export const pointsRules: PointsRule[] = [
     status: 'enabled',
     description: '报名审核通过后发放，未签到不回收。',
     updatedAt: '2026-08-01 10:00',
+  },
+  {
+    code: 'article_accepted',
+    name: '投稿采纳',
+    scene: '投稿审核通过并发布',
+    points: 30,
+    status: 'enabled',
+    description: '用户投稿经审核通过并发布后，向投稿方发放。',
+    updatedAt: '2026-09-11 10:00',
   },
   {
     code: 'demand_published',

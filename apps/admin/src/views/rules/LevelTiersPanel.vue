@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { onMounted, reactive, ref } from 'vue'
 import { MessagePlugin } from 'tdesign-vue-next'
-import { AddIcon, DeleteIcon, RefreshIcon } from 'tdesign-icons-vue-next'
+import { AddIcon, DeleteIcon } from 'tdesign-icons-vue-next'
 import PageHeader from '@/components/PageHeader.vue'
 import { fetchLevelTiers, saveLevelTiers } from '@/api/rules'
 import type { LevelTier } from '@/types'
@@ -73,16 +73,12 @@ onMounted(load)
 
 <template>
   <div class="level-rules-panel page-fade-in">
-    <PageHeader title="等级规则" description="设定经验等级梯度：等级数、每级标签与门槛经验值" />
+    <PageHeader title="等级规则" description="设定经验值等级梯度：等级数、每级标签与门槛经验值" />
 
     <div class="page-filter-bar">
       <span class="panel-tip">
         门槛为累计经验值，须逐级递增；等级顺序按列表自动编排（1 起连续递增）；梯度变更仅影响后续结算，历史身份数据不迁移。
       </span>
-      <t-button variant="outline" style="margin-left: auto">
-        <template #icon><RefreshIcon /></template>
-        刷新
-      </t-button>
     </div>
 
     <div class="page-card">
@@ -127,7 +123,7 @@ onMounted(load)
             @click="addLevel"
           >
             <template #icon><AddIcon /></template>
-            添加等级（{{ tiers.rows.length }}/{{ MAX_LEVELS }}）
+            新增等级（{{ tiers.rows.length }}/{{ MAX_LEVELS }}）
           </t-button>
         </div>
       </t-loading>
@@ -135,7 +131,7 @@ onMounted(load)
 
     <div class="page-card save-card">
       <span class="panel-tip">
-        保存后梯度立即生效；历史身份的等级显示按新梯度由后端重算（原型阶段不迁移数据）。
+        保存后梯度立即生效；历史身份的等级显示按新梯度由后端重算。
       </span>
       <t-button theme="primary" :loading="saving" @click="onSave">保存梯度</t-button>
     </div>

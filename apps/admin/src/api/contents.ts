@@ -1,31 +1,55 @@
 import type {
   PageResult,
   Article,
+  ArticleChannel,
+  ArticleStatus,
   ArticleColumn,
   ShowcaseRequest,
 } from '@/types'
-import { httpGet, httpPost, httpPut } from './http'
+import { httpDelete, httpGet, httpPost, httpPut } from './http'
 
-/* ---------- 文章管理 ---------- */
+/* ---------- 文章管理（/api/admin/contents/articles）
+ * 要点：
+ * - 文章分来源：channel=official 社区自行发布（资讯发布）/ submitted 用户投稿（投稿内容）
+ * - 状态机：pending 待审核 / rejected 已驳回 / pending_release 待发布 / scheduled 定时发布中 / published 已发布
+ * - 栏目单选（契约仍以 columnIds 数组承载，取首项）
+ * - 正文 content 富文本 HTML（写入时后端统一 sanitize）
+ * - 定时发布 scheduledAt（后端定时任务到点自动发布） ---------- */
 
 export interface ArticleQuery {
   page: number
   pageSize: number
   keyword?: string
+  channel?: ArticleChannel
   columnId?: string
-  status?: string
+  status?: ArticleStatus
   /** 排序字段：id | views | createdAt */
   sortBy?: 'id' | 'views' | 'createdAt'
   /** 排序方向：descend 默认 | ascend */
   sortOrder?: 'ascend' | 'descend'
 }
 
-/* 已接入 M1 真实接口：GET /api/admin/contents/articles?page&pageSize&keyword&columnId&status&sortBy&sortOrder */
+export interface ArticlePayload {
+  title: string
+  /** 所属栏目（单选；契约仍以数组承载） */
+  columnIds: string[]
+  /** 投稿作者 ID（资讯发布可空） */
+  authorId?: string
+  /** 作者展示名（资讯发布未选作者默认「社区运营」） */
+  authorName?: string
+  summary: string
+  /** 正文（富文本 HTML） */
+  content: string
+  tags: string[]
+}
+
+/** GET /api/admin/contents/articles */
 export async function fetchArticles(query: ArticleQuery): Promise<PageResult<Article>> {
   const qs = new URLSearchParams()
   qs.set('page', String(query.page))
   qs.set('pageSize', String(query.pageSize))
   if (query.keyword) qs.set('keyword', query.keyword)
+  if (query.channel) qs.set('channel', query.channel)
   if (query.columnId) qs.set('columnId', query.columnId)
   if (query.status) qs.set('status', query.status)
   if (query.sortBy) qs.set('sortBy', query.sortBy)
@@ -33,72 +57,99 @@ export async function fetchArticles(query: ArticleQuery): Promise<PageResult<Art
   return httpGet<PageResult<Article>>(`/contents/articles?${qs}`)
 }
 
-export interface ArticlePayload {
-  title: string
-  columnId: string
-  authorId: string
-  summary: string
-  tags: string[]
+/** POST /api/admin/contents/articles（资讯发布新增即「待发布」，投稿新增即「待审核」） */
+export async function createArticle(payload: ArticlePayload, channel: ArticleChannel): Promise<Article> {
+  return httpPost<Article>('/contents/articles', { ...payload, channel })
 }
 
-/* 已接入 M1 真实接口：POST /api/admin/contents/articles — 创建文章（创建即草稿；作者身份快照取自用户当前身份） */
-export async function createArticle(payload: ArticlePayload): Promise<Article> {
-  return httpPost<Article>('/contents/articles', payload)
-}
-
-/* 已接入 M1 真实接口：PUT /api/admin/contents/articles/:id — 编辑文章（仅草稿/已驳回/已下架可编辑；已发布改稿 M1 支持） */
+/** PUT /api/admin/contents/articles/:id — 编辑（待发布/定时发布中/已驳回可编辑） */
 export async function updateArticle(id: string, payload: ArticlePayload): Promise<{ code: number }> {
   return httpPut<{ code: number }>(`/contents/articles/${id}`, payload)
 }
 
-/* 已接入 M1 真实接口：POST /api/admin/contents/articles/:id/submit — 提交审核：草稿/已驳回/已下架 → 待审核 */
-export async function submitArticle(id: string): Promise<{ code: number }> {
-  return httpPost<{ code: number }>(`/contents/articles/${id}/submit`)
-}
-
-/* 已接入 M1 真实接口：POST /api/admin/contents/articles/:id/review，入参 { status: approved | rejected, comment? } */
+/** POST /api/admin/contents/articles/:id/review，入参 { approved | rejected, comment? }
+ * 通过 → 待发布（pending_release）；驳回 → 已驳回（rejected）并记录原因 */
 export async function reviewArticle(
   id: string,
-  status: 'approved' | 'rejected',
+  verdict: 'approved' | 'rejected',
   comment?: string,
 ): Promise<{ code: number }> {
-  return httpPost<{ code: number }>(`/contents/articles/${id}/review`, { status, comment })
+  return httpPost<{ code: number }>(`/contents/articles/${id}/review`, { status: verdict, comment })
 }
 
-/* 已接入 M1 真实接口：POST /api/admin/contents/articles/:id/withdraw — 已发布 → 已下架 */
+/** POST /api/admin/contents/articles/:id/publish — 待发布/定时发布中 → 已发布 */
+export async function publishArticleNow(id: string): Promise<{ code: number }> {
+  return httpPost<{ code: number }>(`/contents/articles/${id}/publish`)
+}
+
+/** POST /api/admin/contents/articles/:id/schedule，入参 { scheduledAt } — 待发布 → 定时发布中 */
+export async function scheduleArticle(id: string, scheduledAt: string): Promise<{ code: number }> {
+  return httpPost<{ code: number }>(`/contents/articles/${id}/schedule`, { scheduledAt })
+}
+
+/** POST /api/admin/contents/articles/:id/cancel-schedule — 定时发布中 → 待发布 */
+export async function cancelArticleSchedule(id: string): Promise<{ code: number }> {
+  return httpPost<{ code: number }>(`/contents/articles/${id}/cancel-schedule`)
+}
+
+/** POST /api/admin/contents/articles/:id/withdraw — 已发布 → 待发布（下架转待发布） */
 export async function withdrawArticle(id: string): Promise<{ code: number }> {
   return httpPost<{ code: number }>(`/contents/articles/${id}/withdraw`)
 }
 
-/* ---------- 栏目管理 ---------- */
+/** DELETE /api/admin/contents/articles/:id（仅待审核/已驳回投稿可删） */
+export async function deleteArticle(id: string): Promise<{ code: number }> {
+  return httpDelete<{ code: number }>(`/contents/articles/${id}`)
+}
+
+/** 文章编辑弹窗的栏目选项（单选；系统保留栏目「未指定」不出现在发布/投稿选择中） */
+export async function fetchArticleColumns(): Promise<ArticleColumn[]> {
+  const columns = await httpGet<ArticleColumn[]>('/contents/columns')
+  return columns.filter((c) => c.status === 'enabled' && !c.system)
+}
+
+/* ---------- 栏目管理（/api/admin/contents/columns）
+ * 「开放投稿」开关 submissionOpen：控制成员端该栏目是否可投稿 ---------- */
 
 export interface ColumnPayload {
   name: string
   description: string
   sort: number
+  /** 是否开放用户投稿 */
+  submissionOpen: boolean
 }
 
-/* 已接入 M1 真实接口：GET /api/admin/contents/columns — 栏目列表（按 sort 升序，含文章数聚合） */
+/** GET /api/admin/contents/columns — 栏目列表（按 sort 升序） */
 export async function fetchColumns(): Promise<ArticleColumn[]> {
   return httpGet<ArticleColumn[]>('/contents/columns')
 }
 
-/* 已接入 M1 真实接口：POST /api/admin/contents/columns — 创建栏目（创建即启用） */
+/** POST /api/admin/contents/columns — 新增栏目（新增即启用） */
 export async function createColumn(payload: ColumnPayload): Promise<ArticleColumn> {
   return httpPost<ArticleColumn>('/contents/columns', payload)
 }
 
-/* 已接入 M1 真实接口：PUT /api/admin/contents/columns/:id — 编辑栏目（改名时同步刷新文章冗余 columnName） */
+/** PUT /api/admin/contents/columns/:id — 编辑栏目（改名时后端同步刷新文章冗余 columnName） */
 export async function updateColumn(id: string, payload: ColumnPayload): Promise<{ code: number }> {
   return httpPut<{ code: number }>(`/contents/columns/${id}`, payload)
 }
 
-/* 已接入 M1 真实接口：POST /api/admin/contents/columns/:id/toggle-status — 启用/停用（停用后新文章不可选择该栏目） */
+/** POST /api/admin/contents/columns/:id/toggle-status — 启用/停用 */
 export async function toggleColumnStatus(id: string): Promise<{ code: number }> {
   return httpPost<{ code: number }>(`/contents/columns/${id}/toggle-status`)
 }
 
-/* ---------- 展示页发布申请（迁移自申请审批） ---------- */
+/** POST /api/admin/contents/columns/:id/toggle-submission — 开放/关闭投稿 */
+export async function toggleColumnSubmission(id: string): Promise<{ code: number }> {
+  return httpPost<{ code: number }>(`/contents/columns/${id}/toggle-submission`)
+}
+
+/** DELETE /api/admin/contents/columns/:id — 删除栏目，其文章自动转移到「未指定」栏目 */
+export async function deleteColumn(id: string): Promise<{ code: number }> {
+  return httpDelete<{ code: number }>(`/contents/columns/${id}`)
+}
+
+/* ---------- 展示页发布申请（迁移自申请审核） ---------- */
 
 export interface ShowcaseQuery {
   page: number
@@ -107,7 +158,7 @@ export interface ShowcaseQuery {
   status?: string
 }
 
-/* 已接入 M1 真实接口：GET /api/admin/contents/showcase-requests?page&pageSize&targetType&status */
+/** GET /api/admin/contents/showcase-requests?page&pageSize&targetType&status */
 export async function fetchShowcaseRequests(query: ShowcaseQuery): Promise<PageResult<ShowcaseRequest>> {
   const qs = new URLSearchParams()
   qs.set('page', String(query.page))
@@ -117,9 +168,8 @@ export async function fetchShowcaseRequests(query: ShowcaseQuery): Promise<PageR
   return httpGet<PageResult<ShowcaseRequest>>(`/contents/showcase-requests?${qs}`)
 }
 
-/* 已接入 M1 真实接口：POST /api/admin/contents/showcase-requests/:id/review，入参 { status: approved | rejected, comment? }
- * 企业目标：审批结果联动企业展示页状态（复用 POST /api/admin/enterprises/:id/showcase-review）；
- * 个人目标：M0 仅记录审批结果，M1 接入个人主页实体 */
+/** POST /api/admin/contents/showcase-requests/:id/review，入参 { status: approved | rejected, comment? }
+ * 企业目标：审核结果联动企业展示页状态；个人目标：仅记录审核结果 */
 export async function reviewShowcaseRequest(
   id: string,
   status: 'approved' | 'rejected',

@@ -9,8 +9,8 @@ export interface TodoSummary {
   route: string
 }
 
-/* 已接入 M1 真实接口：GET /api/admin/todos — 统一待办聚合
- * 六域待办：入驻审批 / 需求审核 / 空间预约 / 展示页发布 / 文章审核 / 临期租约（窗口取系统配置） */
+/* GET /api/admin/todos — 统一待办聚合
+ * 六域待办：入驻审核 / 需求审核 / 空间预约 / 展示页发布 / 文章审核 / 临期租约（窗口取系统配置） */
 export async function fetchTodos(): Promise<TodoSummary[]> {
   return httpGet<TodoSummary[]>('/todos')
 }

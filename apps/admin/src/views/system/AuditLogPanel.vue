@@ -20,14 +20,14 @@ const query = reactive({
 
 const moduleOptions = [
   { label: '全部模块', value: '' },
-  ...['社区成员', '审批中心', '需求管理', '项目管理', '活动管理', '积分商城', '规则管理', '空间管理', '内容管理', '系统管理'].map(
+  ...['社区成员', '审核中心', '需求管理', '项目管理', '活动管理', '积分商城', '规则管理', '空间管理', '内容管理', '系统管理'].map(
     (m) => ({ label: m, value: m }),
   ),
 ]
 
 const moduleThemeMap: Record<string, 'default' | 'primary' | 'success' | 'warning' | 'danger'> = {
   社区成员: 'primary',
-  审批中心: 'warning',
+  审核中心: 'warning',
   需求管理: 'primary',
   项目管理: 'success',
   活动管理: 'success',
@@ -39,12 +39,12 @@ const moduleThemeMap: Record<string, 'default' | 'primary' | 'success' | 'warnin
 }
 
 const columns = [
-  { colKey: 'at', title: '操作时间', width: 170 },
-  { colKey: 'operator', title: '操作人', width: 110 },
-  { colKey: 'module', title: '模块', cell: 'module', width: 110 },
-  { colKey: 'action', title: '动作', width: 130 },
-  { colKey: 'target', title: '操作对象', cell: 'target', minWidth: 220, resizable: true },
-  { colKey: 'detail', title: '详情', cell: 'detail', minWidth: 180, resizable: true },
+  { colKey: 'at', title: '操作时间', width: 170 , ellipsis: true},
+  { colKey: 'operator', title: '操作人', width: 110 , ellipsis: true},
+  { colKey: 'module', title: '模块', cell: 'module', width: 110 , ellipsis: true},
+  { colKey: 'action', title: '动作', width: 130 , ellipsis: true},
+  { colKey: 'target', title: '操作对象', cell: 'target', width: 220, resizable: true , ellipsis: true},
+  { colKey: 'detail', title: '详情', cell: 'detail', width: 180, resizable: true , ellipsis: true},
 ]
 
 const pagination = computed(() => ({
@@ -92,7 +92,7 @@ onMounted(load)
 
 <template>
   <div class="audit-panel page-fade-in">
-    <PageHeader title="审计日志" description="后台管理操作的完整留痕：谁在何时对什么做了什么（M1 起含 IP 与变更快照）" />
+    <PageHeader title="审计日志" description="后台管理操作的完整留痕：谁在何时对什么做了什么" />
 
     <div class="filter-bar">
       <t-input v-model="query.keyword" clearable placeholder="搜索操作对象/动作/详情/操作人" style="width: 260px" @enter="onSearch" />

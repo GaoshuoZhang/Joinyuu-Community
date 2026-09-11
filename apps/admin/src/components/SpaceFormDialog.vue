@@ -6,7 +6,7 @@ import { createSpace, updateSpace } from '@/api/spaces'
 import { spaceTypeMap } from '@/constants/status'
 import type { Space, SpaceType } from '@/types'
 
-/* 空间创建/编辑弹窗：基础信息编辑（状态走列表上的独立操作）；
+/* 空间新增/编辑弹窗：基础信息编辑（状态走列表上的独立操作）；
  * 命名提示：空间名会被社区活动 location 引用，重命名需同步活动数据 */
 const props = defineProps<{
   visible: boolean
@@ -23,7 +23,7 @@ const typeOptions = Object.entries(spaceTypeMap).map(([value, label]) => ({ labe
 
 const submitting = ref(false)
 const formRef = ref()
-/* 配备设备：t-tag-input 标签数组（回车添加，可整体清空） */
+/* 配备设备：t-tag-input 标签数组（回车新增，可整体清空） */
 const equipmentTags = ref<string[]>([])
 
 const form = reactive({
@@ -39,7 +39,7 @@ const form = reactive({
   description: '',
 })
 
-/* 关闭"需预约"时联动关闭"需审批" */
+/* 关闭"需预约"时联动关闭"需审核" */
 watch(
   () => form.needReservation,
   (v) => {
@@ -114,7 +114,7 @@ async function onConfirm() {
     }
     if (props.mode === 'create') {
       const space = await createSpace(payload)
-      MessagePlugin.success(`空间已创建（${space.id}）`)
+      MessagePlugin.success(`空间已新增（${space.id}）`)
     } else if (props.space) {
       await updateSpace(props.space.id, payload)
       MessagePlugin.success('空间修改已保存')
@@ -188,10 +188,10 @@ function onClose() {
             <span class="all-day-tip">开启后成员需先预约方可使用该空间</span>
           </div>
         </t-form-item>
-        <t-form-item v-if="form.needReservation" label="需审批" name="needApproval">
+        <t-form-item v-if="form.needReservation" label="需审核" name="needApproval">
           <div class="all-day-row">
             <t-switch v-model="form.needApproval" />
-            <span class="all-day-tip">开启后预约需管理员审批通过方可使用</span>
+            <span class="all-day-tip">开启后预约需管理员审核通过方可使用</span>
           </div>
         </t-form-item>
       </div>
@@ -199,7 +199,7 @@ function onClose() {
         <t-tag-input
           v-model="equipmentTags"
           clearable
-          placeholder="输入设备名后回车添加，如 投影仪、白板"
+          placeholder="输入设备名后回车新增，如 投影仪、白板"
         />
       </t-form-item>
       <t-form-item label="空间说明" name="description">

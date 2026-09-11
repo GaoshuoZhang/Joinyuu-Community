@@ -39,7 +39,7 @@ export class MilestoneInputDto {
 }
 
 /* POST /api/admin/demands/:id/initiate-project 入参（ProjectInitPayload）
- * 复用 ProjectsService.createProject 校验（承接方≥1、share 合计 100、custom 联系方式） */
+ * 复用 ProjectsService.createProject 校验（承接方≥1、share 合计 100、custom 联系电话） */
 export class InitiateProjectDto {
   @IsString()
   projectName!: string

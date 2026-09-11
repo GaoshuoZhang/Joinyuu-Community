@@ -1,9 +1,11 @@
 import { Body, Controller, Delete, Get, HttpCode, Param, Post, Put, Query, Req } from '@nestjs/common'
 import type { AuthenticatedRequest } from '../../common/interfaces/authenticated-request'
+import { RequirePermission } from '../../common/decorators/require-permission.decorator'
 import { AnnouncementsService } from './announcements.service'
 import { QueryAnnouncementsDto } from './dto/query-announcements.dto'
 import { AnnouncementPayloadDto } from './dto/announcement-payload.dto'
 
+@RequirePermission('/contents/announcements')
 @Controller('api/admin/announcements')
 export class AnnouncementsController {
   constructor(private readonly announcements: AnnouncementsService) {}

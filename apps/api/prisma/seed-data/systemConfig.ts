@@ -9,8 +9,8 @@ export const systemConfig: SystemConfig = {
   mallOpen: true,
   demandOpen: true,
   reservationOpen: true,
-  dailyLoginPoints: false,
   leaseExpireRemindDays: 15,
+  uploadMaxSizeMb: 10,
   updatedAt: '2026-09-01 09:00',
   updatedBy: '系统初始化',
 }

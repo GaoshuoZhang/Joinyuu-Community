@@ -3,9 +3,10 @@ import { nextTick, reactive, ref, watch } from 'vue'
 import { MessagePlugin } from 'tdesign-vue-next'
 import type { FormProps } from 'tdesign-vue-next'
 import { createAnnouncement, updateAnnouncement } from '@/api/announcements'
+import RichEditor from '@/components/RichEditor.vue'
 import type { Announcement } from '@/types'
 
-/* 公告表单弹窗（创建即发布 / 编辑双模式共用）：
+/* 公告表单弹窗（新增即发布 / 编辑双模式共用）：
  * - create：标题 + 内容 + 置顶，确认后立即发布
  * - edit：编辑已有公告（不改状态与发布时间） */
 const props = defineProps<{
@@ -80,7 +81,8 @@ function onClose() {
   <t-dialog
     :visible="visible"
     :header="mode === 'edit' ? '编辑公告' : '发布公告'"
-    width="640px"
+    width="760px"
+    lazy
     @close="onClose"
   >
     <template #footer>
@@ -97,11 +99,7 @@ function onClose() {
         <t-input v-model="form.title" clearable placeholder="请输入公告标题" />
       </t-form-item>
       <t-form-item label="公告内容" name="content">
-        <t-textarea
-          v-model="form.content"
-          :autosize="{ minRows: 6, maxRows: 12 }"
-          placeholder="请输入公告内容（客户端公告位将完整展示）"
-        />
+        <RichEditor v-model="form.content" placeholder="请输入公告内容（客户端公告位将完整展示）" :min-height="320" />
       </t-form-item>
       <t-form-item label="置顶" name="pinned">
         <div class="pin-row">

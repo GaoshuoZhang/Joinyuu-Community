@@ -1,7 +1,7 @@
 import { Type } from 'class-transformer'
 import { IsArray, IsBoolean, IsIn, IsInt, IsNotEmpty, IsString, Min } from 'class-validator'
 
-/* 空间创建/编辑载荷（对照 apps/admin/src/api/spaces.ts SpacePayload） */
+/* 空间新增/编辑载荷（对照 apps/admin/src/api/spaces.ts SpacePayload） */
 export class SpacePayloadDto {
   @IsString()
   @IsNotEmpty()

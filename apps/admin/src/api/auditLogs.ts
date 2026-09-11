@@ -8,7 +8,7 @@ export interface AuditLogQuery {
   module?: string
 }
 
-/* 已接入 M1 真实接口：GET /api/admin/audit-logs?page&pageSize&keyword&module — 审计日志（最新在前）
+/* GET /api/admin/audit-logs?page&pageSize&keyword&module — 审计日志（最新在前）
  * keyword 跨 target/action/detail/operator 模糊匹配；写操作留痕由后端
  * AuditInterceptor（@Audit 装饰器）与各域服务 AuditService.record 统一完成（含 IP 与 before/after 快照），
  * 前端不再记录审计条目 */

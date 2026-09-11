@@ -8,6 +8,7 @@ import { Test } from '@nestjs/testing'
 import request from 'supertest'
 import { AppModule } from '../src/app.module'
 import { reseed } from './helpers/reseed'
+import { loginAs } from './helpers/login'
 
 describe('M1-E system 系统管理域', () => {
   let app: INestApplication
@@ -19,10 +20,7 @@ describe('M1-E system 系统管理域', () => {
     app = moduleRef.createNestApplication()
     await app.init()
 
-    const login = await request(app.getHttpServer())
-      .post('/api/admin/auth/login')
-      .send({ username: 'admin', password: 'admin123' })
-    token = login.body.data.token
+    token = await loginAs(app)
   })
 
   afterAll(async () => {
@@ -147,7 +145,7 @@ describe('M1-E system 系统管理域', () => {
     expect(delMissing.body).toEqual({ code: 404, message: '字典项不存在' })
   })
 
-  it('工作台聚合：stats 计数 + 六域待办 + 待办审批前 5 + 近期活动前 4', async () => {
+  it('工作台聚合：stats 计数 + 六域待办 + 待办审核前 5 + 近期活动前 4', async () => {
     const [dashboard, todos, users, enterprises, projects] = await Promise.all([
       get('/api/admin/dashboard'),
       get('/api/admin/todos'),
@@ -165,7 +163,7 @@ describe('M1-E system 系统管理域', () => {
     expect(typeof data.stats.pendingApplications).toBe('number')
     expect(typeof data.stats.upcomingEvents).toBe('number')
 
-    /* 待办审批前 5 */
+    /* 待办审核前 5 */
     expect(Array.isArray(data.pendingApplications)).toBe(true)
     expect(data.pendingApplications.length).toBeLessThanOrEqual(5)
 
@@ -182,6 +180,12 @@ describe('M1-E system 系统管理域', () => {
     expect(keys).toEqual(['settle', 'demand', 'reservation', 'showcase', 'article', 'lease'])
     expect(data.todos.map((t: { key: string }) => t.key)).toEqual(keys)
     expect(data.todos.every((t: { count: number }) => typeof t.count === 'number')).toBe(true)
+
+    /* 文章待办路由指向投稿内容（M1.5 内容改造：/contents → /contents/submissions） */
+    const articleTodo = (todos.body.data as Array<{ key: string; route: string }>).find(
+      (t) => t.key === 'article',
+    )
+    expect(articleTodo?.route).toBe('/contents/submissions')
   })
 
   it('系统配置：读取 + 保存即生效 + 校验文案（M0 逐字）', async () => {
@@ -197,8 +201,8 @@ describe('M1-E system 系统管理域', () => {
       mallOpen: false,
       demandOpen: true,
       reservationOpen: true,
-      dailyLoginPoints: true,
       leaseExpireRemindDays: 20,
+      uploadMaxSizeMb: 30,
     })
     expect(saved.status).toBe(200)
     expect(saved.body).toEqual({ code: 0, data: { code: 0 } })
@@ -206,14 +210,14 @@ describe('M1-E system 系统管理域', () => {
     const after = await get('/api/admin/system/config')
     expect(after.body.data.siteName).toBe('聚屿社区（测试）')
     expect(after.body.data.mallOpen).toBe(false)
-    expect(after.body.data.dailyLoginPoints).toBe(true)
     expect(after.body.data.leaseExpireRemindDays).toBe(20)
+    expect(after.body.data.uploadMaxSizeMb).toBe(30)
     expect(after.body.data.updatedBy).toBe('社区管理员')
 
     /* 保存留痕（系统管理） */
     const logs = await get('/api/admin/audit-logs').query({ page: 1, pageSize: 50, keyword: '保存系统配置' })
     expect(logs.body.data.total).toBe(1)
-    expect(logs.body.data.list[0].detail).toBe('临期提醒 20 天')
+    expect(logs.body.data.list[0].detail).toBe('临期提醒 20 天 · 上传上限 30 MB')
 
     const emptyName = await put('/api/admin/system/config').send({
       siteName: '   ',
@@ -222,8 +226,8 @@ describe('M1-E system 系统管理域', () => {
       mallOpen: true,
       demandOpen: true,
       reservationOpen: true,
-      dailyLoginPoints: false,
       leaseExpireRemindDays: 15,
+      uploadMaxSizeMb: 10,
     })
     expect(emptyName.status).toBe(400)
     expect(emptyName.body).toEqual({ code: 400, message: '站点名称不能为空' })
@@ -235,10 +239,23 @@ describe('M1-E system 系统管理域', () => {
       mallOpen: true,
       demandOpen: true,
       reservationOpen: true,
-      dailyLoginPoints: false,
       leaseExpireRemindDays: 0,
+      uploadMaxSizeMb: 10,
     })
     expect(badWindow.status).toBe(400)
     expect(badWindow.body).toEqual({ code: 400, message: '租约临期提醒窗口须为 1-90 的整数' })
+
+    const badUploadLimit = await put('/api/admin/system/config').send({
+      siteName: '聚屿社区',
+      siteSlogan: '',
+      registrationOpen: true,
+      mallOpen: true,
+      demandOpen: true,
+      reservationOpen: true,
+      leaseExpireRemindDays: 15,
+      uploadMaxSizeMb: 0,
+    })
+    expect(badUploadLimit.status).toBe(400)
+    expect(badUploadLimit.body).toEqual({ code: 400, message: '上传文件大小限制须为 1-100 的整数' })
   })
 })

@@ -174,7 +174,7 @@ export const events: CommunityEvent[] = [
     enrollmentIdentities: [],
     enrollmentLevels: [],
     requireReview: false,
-    description: '48 小时组队开发一款社区主题小程序，提供 API 与云资源额度，冠军队伍可获得社区年度路演直通名额。（新建活动，待发布）',
+    description: '48 小时组队开发一款社区主题小程序，提供 API 与云资源额度，冠军队伍可获得社区年度路演直通名额。（新增活动，待发布）',
     tags: ['黑客马拉松', '组队', '奖金'],
     enrollments: [],
   },

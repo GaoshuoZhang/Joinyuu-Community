@@ -1,8 +1,10 @@
 import { Body, Controller, Get, HttpCode, Param, Post, Put, Query } from '@nestjs/common'
+import { RequirePermission } from '../../common/decorators/require-permission.decorator'
 import { SpacesService, type SpaceDto, type SpaceOccupancy, type ReservationDto } from './spaces.service'
 import { SpacePayloadDto } from './dto/space-payload.dto'
 import { SpaceStatusDto } from './dto/space-status.dto'
 
+@RequirePermission('/spaces')
 @Controller('api/admin/spaces')
 export class SpacesController {
   constructor(private readonly spaces: SpacesService) {}

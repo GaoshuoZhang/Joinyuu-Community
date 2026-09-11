@@ -6,6 +6,7 @@ import { Test } from '@nestjs/testing'
 import request from 'supertest'
 import { AppModule } from '../src/app.module'
 import { reseed } from './helpers/reseed'
+import { loginAs } from './helpers/login'
 
 describe('M1-B 用户与社区个体（users / individuals）', () => {
   let app: INestApplication
@@ -17,10 +18,7 @@ describe('M1-B 用户与社区个体（users / individuals）', () => {
     app = moduleRef.createNestApplication()
     await app.init()
 
-    const login = await request(app.getHttpServer())
-      .post('/api/admin/auth/login')
-      .send({ username: 'admin', password: 'admin123' })
-    token = login.body.data.token
+    token = await loginAs(app)
   })
 
   afterAll(async () => {

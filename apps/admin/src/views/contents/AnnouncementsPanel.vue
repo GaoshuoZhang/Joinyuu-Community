@@ -1,10 +1,11 @@
 <script setup lang="ts">
 import { computed, onMounted, reactive, ref } from 'vue'
 import { MessagePlugin } from 'tdesign-vue-next'
-import { AddIcon, PinIcon, RefreshIcon, SearchIcon } from 'tdesign-icons-vue-next'
+import { AddIcon, PinIcon, SearchIcon } from 'tdesign-icons-vue-next'
 import PageHeader from '@/components/PageHeader.vue'
 import StatusTag from '@/components/StatusTag.vue'
 import AnnouncementFormDialog from '@/components/AnnouncementFormDialog.vue'
+import ColumnController from '@/components/ColumnController.vue'
 import {
   deleteAnnouncement,
   fetchAnnouncements,
@@ -14,7 +15,7 @@ import {
 } from '@/api/announcements'
 import type { Announcement } from '@/types'
 
-/* 公告栏：站点公告的发布/编辑/下架/置顶管理（创建即发布，客户端公告位仅消费已发布公告） */
+/* 公告栏：站点公告的发布/编辑/下架/置顶管理（新增即发布，客户端公告位仅消费已发布公告） */
 const loading = ref(false)
 const acting = ref('')
 const list = ref<Announcement[]>([])
@@ -34,13 +35,21 @@ const statusOptions = [
 ]
 
 const columns = [
-  { colKey: 'title', title: '公告', cell: 'title', minWidth: 300, resizable: true },
-  { colKey: 'status', title: '状态', cell: 'status', width: 100, resizable: true },
-  { colKey: 'pinned', title: '置顶', cell: 'pinned', width: 90 },
-  { colKey: 'publishedAt', title: '发布时间', width: 160, resizable: true },
-  { colKey: 'updatedAt', title: '最近编辑', cell: 'updatedAt', width: 160, resizable: true },
-  { colKey: 'op', title: '操作', cell: 'op', width: 210 },
+  { colKey: 'title', title: '公告', cell: 'title', width: 200, ellipsis: true, resizable: true },
+  { colKey: 'status', title: '状态', cell: 'status', width: 100, resizable: true , ellipsis: true},
+  { colKey: 'pinned', title: '置顶', cell: 'pinned', width: 90 , ellipsis: true},
+  { colKey: 'publishedAt', title: '发布时间', width: 140, resizable: true , ellipsis: true},
+  { colKey: 'updatedAt', title: '最近编辑', cell: 'updatedAt', width: 140, resizable: true , ellipsis: true},
+  { colKey: 'op', title: '操作', cell: 'op', width: 230 },
 ]
+
+/* 列配置：本地持久化显隐/顺序 */
+const visibleColKeys = ref<string[]>(columns.map((c) => c.colKey))
+
+const visibleColumns = computed(() => {
+  const byKey = new Map(columns.map((c) => [c.colKey, c]))
+  return visibleColKeys.value.map((k) => byKey.get(k)).filter(Boolean)
+})
 
 const pagination = computed(() => ({
   current: query.page,
@@ -78,7 +87,7 @@ function onPageChange(p: { current: number; pageSize: number }) {
   load()
 }
 
-/* ---------- 新建 / 编辑 ---------- */
+/* ---------- 新增 / 编辑 ---------- */
 const formVisible = ref(false)
 const formMode = ref<'create' | 'edit'>('create')
 const current = ref<Announcement | null>(null)
@@ -139,10 +148,10 @@ async function onDelete(row: Announcement) {
   acting.value = row.id + ':delete'
   try {
     await deleteAnnouncement(row.id)
-    MessagePlugin.success('公告已删除')
+    MessagePlugin.success('公告已归档，可在归档管理中恢复')
     await load()
   } catch (e) {
-    MessagePlugin.error(e instanceof Error ? e.message : '删除失败')
+    MessagePlugin.error(e instanceof Error ? e.message : '归档失败')
   } finally {
     acting.value = ''
   }
@@ -155,10 +164,11 @@ onMounted(load)
   <div class="announcements-panel page-fade-in">
     <PageHeader title="公告栏" description="站点公告的发布、置顶与下架管理（客户端公告位仅展示已发布公告）">
       <template #actions>
-        <t-button variant="outline" @click="load">
-          <template #icon><RefreshIcon /></template>
-          刷新
-        </t-button>
+        <ColumnController
+          v-model="visibleColKeys"
+          storage-key="announcements"
+          :columns="columns.map((c) => ({ key: c.colKey, title: c.title }))"
+        />
         <t-button theme="primary" @click="openCreate">
           <template #icon><AddIcon /></template>
           发布公告
@@ -188,7 +198,7 @@ onMounted(load)
       hover
       resizable
       :data="list"
-      :columns="columns"
+      :columns="visibleColumns"
       :loading="loading"
       :pagination="pagination"
       empty="暂无公告"
@@ -230,8 +240,8 @@ onMounted(load)
           >
             重新发布
           </t-button>
-          <t-popconfirm content="确认删除该公告？删除后不可恢复。" @confirm="onDelete(row)">
-            <t-button variant="text" size="small" theme="danger" :loading="acting === row.id + ':delete'">删除</t-button>
+          <t-popconfirm v-if="row.status === 'withdrawn'" content="确认将该公告归档？归档后可在归档管理中恢复。" @confirm="onDelete(row)">
+            <t-button variant="text" size="small" theme="danger" :loading="acting === row.id + ':delete'">归档</t-button>
           </t-popconfirm>
         </div>
       </template>

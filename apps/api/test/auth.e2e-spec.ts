@@ -6,6 +6,7 @@ import { Test } from '@nestjs/testing'
 import request from 'supertest'
 import { AppModule } from '../src/app.module'
 import { reseed } from './helpers/reseed'
+import { loginRequest } from './helpers/login'
 
 describe('M1-A 冒烟（auth + health）', () => {
   let app: INestApplication
@@ -35,9 +36,7 @@ describe('M1-A 冒烟（auth + health）', () => {
   })
 
   it('错误密码登录返回 401 与可展示文案', async () => {
-    const res = await request(app.getHttpServer())
-      .post('/api/admin/auth/login')
-      .send({ username: 'admin', password: 'wrong-password' })
+    const res = await loginRequest(app, 'admin', 'wrong-password')
     expect(res.status).toBe(401)
     expect(res.body).toEqual({ code: 401, message: '账号或密码错误，请重新输入' })
   })
@@ -46,13 +45,11 @@ describe('M1-A 冒烟（auth + health）', () => {
     const res = await request(app.getHttpServer()).post('/api/admin/auth/login').send({ username: 'admin' })
     expect(res.status).toBe(400)
     expect(res.body.code).toBe(400)
-    expect(res.body.message).toBe('请输入密码')
+    expect(res.body.message).toContain('请输入密码')
   })
 
   it('正确登录 → 登出 → 原 token 失效 401（黑名单生效）', async () => {
-    const login = await request(app.getHttpServer())
-      .post('/api/admin/auth/login')
-      .send({ username: 'admin', password: 'admin123' })
+    const login = await loginRequest(app, 'admin', 'admin123')
     expect(login.status).toBe(200)
     expect(login.body.code).toBe(0)
     expect(typeof login.body.data.token).toBe('string')

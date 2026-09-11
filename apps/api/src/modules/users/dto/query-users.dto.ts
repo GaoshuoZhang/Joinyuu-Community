@@ -1,7 +1,7 @@
 import { Type } from 'class-transformer'
 import { IsIn, IsInt, IsOptional, IsString, Min } from 'class-validator'
 
-/* GET /api/admin/users 查询参数（与 M0 fetchUsers 内联筛选口径一致） */
+/* GET /api/admin/users 查询参数（与列表筛选口径一致） */
 export class QueryUsersDto {
   @Type(() => Number)
   @IsInt()

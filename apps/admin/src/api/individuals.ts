@@ -8,7 +8,7 @@ export interface IndividualQuery {
   status?: string
 }
 
-/* 已接入 M1 真实接口：GET /api/admin/individuals?page&pageSize&keyword&status
+/* GET /api/admin/individuals?page&pageSize&keyword&status
  * 社区个体 = 持有 community_individual 身份的用户（该身份每人至多一个）
  */
 export async function fetchIndividuals(query: IndividualQuery): Promise<PageResult<User>> {

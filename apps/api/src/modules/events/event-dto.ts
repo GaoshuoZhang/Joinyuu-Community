@@ -1,6 +1,6 @@
 import type { CommunityEvent, EventEnrollment } from '@prisma/client'
 
-/* DB 行 → M0 契约形状（CommunityEvent，内嵌 enrollments 去除 id/eventId；可空字段 null → undefined）。
+/* DB 行 → CommunityEvent 形状（内嵌 enrollments 去除 id/eventId；可空字段 null → undefined）。
  * events 域与工作台聚合（dashboard.upcomingEvents）共用，保证两处形状不漂移。 */
 export function toEventDto(event: CommunityEvent, enrollments: EventEnrollment[]): Record<string, unknown> {
   return {
@@ -27,6 +27,7 @@ export function toEventDto(event: CommunityEvent, enrollments: EventEnrollment[]
     checkinPoints: event.checkinPoints ?? undefined,
     description: event.description,
     tags: event.tags,
+    deletedAt: event.deletedAt ?? undefined,
     enrollments: enrollments.map((en) => ({
       userId: en.userId,
       name: en.name,

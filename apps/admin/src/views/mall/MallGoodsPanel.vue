@@ -1,16 +1,18 @@
 <script setup lang="ts">
 import { computed, onMounted, reactive, ref } from 'vue'
 import { MessagePlugin } from 'tdesign-vue-next'
-import { AddIcon, RefreshIcon, SearchIcon, DownloadIcon } from 'tdesign-icons-vue-next'
+import { AddIcon, SearchIcon, DownloadIcon } from 'tdesign-icons-vue-next'
 import PageHeader from '@/components/PageHeader.vue'
 import StatusTag from '@/components/StatusTag.vue'
 import GoodsFormDialog from '@/components/GoodsFormDialog.vue'
-import { fetchGoods, toggleGoodsStatus } from '@/api/mall'
+import ColumnController from '@/components/ColumnController.vue'
+import { fetchGoods, toggleGoodsStatus, archiveGoods } from '@/api/mall'
 import { goodsCategoryMap } from '@/constants/status'
+import { fetchDictEntries } from '@/api/dicts'
 import { exportCsv, statusLabel } from '@/utils/exportCsv'
 import type { MallGoods } from '@/types'
 
-/* 商品管理面板：列表 + 上架/下架 + 创建/编辑（创建即上架） */
+/* 商品管理面板：列表 + 上架/下架/归档 + 新增/编辑（新增商品默认下架） */
 const loading = ref(false)
 const list = ref<MallGoods[]>([])
 const total = ref(0)
@@ -24,56 +26,36 @@ const query = reactive({
   status: '',
 })
 
-const categoryOptions = [
+const categoryOptions = ref([
   { label: '全部', value: '' },
-  ...Object.entries(goodsCategoryMap).map(([value, label]) => ({ label, value })),
-]
+  ...Object.values(goodsCategoryMap).map((label) => ({ label, value: label })),
+])
 
 const statusOptions = [
   { label: '全部', value: '' },
   { label: '已上架', value: 'on' },
   { label: '已下架', value: 'off' },
+  { label: '待补货', value: 'restock' },
 ]
 
-const columns = [
-  { colKey: 'row-select', type: 'multiple', width: 46 },
-  { colKey: 'name', title: '商品', cell: 'name', minWidth: 220, resizable: true },
-  { colKey: 'category', title: '类型', cell: 'category', width: 100, resizable: true },
-  { colKey: 'points', title: '兑换积分', width: 100, resizable: true },
-  { colKey: 'stock', title: '库存', cell: 'stock', width: 90, resizable: true },
-  { colKey: 'redeemedCount', title: '累计兑换', width: 100, resizable: true },
-  { colKey: 'status', title: '状态', cell: 'status', width: 100, resizable: true },
-  { colKey: 'createdAt', title: '创建时间', width: 150, resizable: true },
-  { colKey: 'op', title: '操作', cell: 'op', width: 130 },
+const dataColumns = [
+  { colKey: 'name', title: '商品', cell: 'name', width: 220, resizable: true , ellipsis: true},
+  { colKey: 'category', title: '类型', cell: 'category', width: 100, resizable: true , ellipsis: true},
+  { colKey: 'points', title: '兑换积分', width: 100, resizable: true , ellipsis: true},
+  { colKey: 'stock', title: '库存', cell: 'stock', width: 90, resizable: true , ellipsis: true},
+  { colKey: 'redeemedCount', title: '累计兑换', width: 100, resizable: true , ellipsis: true},
+  { colKey: 'status', title: '状态', cell: 'status', width: 100, resizable: true , ellipsis: true},
+  { colKey: 'createdAt', title: '创建时间', width: 150, resizable: true , ellipsis: true},
+  { colKey: 'op', title: '操作', cell: 'op', width: 170 },
 ]
 
-/* ---------- 批量上架 / 下架 ---------- */
-const selectedKeys = ref<(string | number)[]>([])
-const batchActing = ref(false)
+/* 列配置：本地持久化显隐/顺序 */
+const visibleColKeys = ref<string[]>(dataColumns.map((c) => c.colKey))
 
-function onSelectChange(keys: unknown) {
-  selectedKeys.value = keys as (string | number)[]
-}
-
-async function onBatchToggle(target: 'on' | 'off') {
-  const targets = list.value.filter((g) => selectedKeys.value.includes(g.id) && g.status !== target)
-  if (!targets.length) {
-    MessagePlugin.warning(target === 'on' ? '选中商品均已上架' : '选中商品均已下架')
-    return
-  }
-  batchActing.value = true
-  try {
-    await Promise.all(targets.map((g) => toggleGoodsStatus(g.id)))
-    MessagePlugin.success(`已批量${target === 'on' ? '上架' : '下架'} ${targets.length} 个商品`)
-    selectedKeys.value = []
-    await load()
-  } catch (e) {
-    MessagePlugin.error(e instanceof Error ? e.message : '批量操作失败')
-    await load()
-  } finally {
-    batchActing.value = false
-  }
-}
+const visibleColumns = computed(() => {
+  const byKey = new Map(dataColumns.map((c) => [c.colKey, c]))
+  return visibleColKeys.value.map((k) => byKey.get(k)).filter(Boolean)
+})
 
 const pagination = computed(() => ({
   current: query.page,
@@ -115,7 +97,7 @@ function onPageChange(p: { current: number; pageSize: number }) {
 /* 上架 / 下架 */
 async function onToggle(row: MallGoods) {
   acting.value = row.id
-  /* 先取旧状态再调接口：接口原地更新了 row.status，后再判断会拿到新值导致提示反转（2026-09-10 修） */
+  /* 先取旧状态再调接口：接口原地更新了 row.status，后再判断会拿到新值导致提示反转 */
   const wasOn = row.status === 'on'
   try {
     await toggleGoodsStatus(row.id)
@@ -128,7 +110,21 @@ async function onToggle(row: MallGoods) {
   }
 }
 
-/* 创建 / 编辑商品 */
+/* 归档：仅已下架商品 */
+async function onArchive(row: MallGoods) {
+  acting.value = `${row.id}:archive`
+  try {
+    await archiveGoods(row.id)
+    MessagePlugin.success('商品已归档，可在归档管理中恢复')
+    await load()
+  } catch (e) {
+    MessagePlugin.error(e instanceof Error ? e.message : '操作失败')
+  } finally {
+    acting.value = ''
+  }
+}
+
+/* 新增 / 编辑商品 */
 const formVisible = ref(false)
 const formMode = ref<'create' | 'edit'>('create')
 const currentGoods = ref<MallGoods | null>(null)
@@ -164,26 +160,38 @@ function onExport() {
   MessagePlugin.success(`已导出当前页 ${list.value.length} 条数据`)
 }
 
-onMounted(load)
+onMounted(() => {
+  load()
+  fetchDictEntries('goods_category')
+    .then((entries) => {
+      const options = entries
+        .filter((e) => e.status === 'enabled')
+        .map((e) => ({ label: e.label, value: e.label }))
+      if (options.length) categoryOptions.value = [{ label: '全部', value: '' }, ...options]
+    })
+    .catch(() => undefined)
+})
 </script>
 
 <template>
   <div class="goods-panel page-fade-in">
-    <PageHeader title="商品管理" description="积分商品的创建、上下架与库存维护（原积分商城·商品管理）">
+    <PageHeader title="商品管理" description="积分商品的新增、上下架与库存维护（原积分商城·商品管理）">
       <template #actions>
+        <ColumnController
+          v-model="visibleColKeys"
+          storage-key="mall-goods"
+          :columns="dataColumns.map((c) => ({ key: c.colKey, title: c.title }))"
+        />
         <t-button variant="outline" @click="onExport">
           <template #icon><DownloadIcon /></template>
           导出
         </t-button>
+        <t-button theme="primary" @click="openCreate">
+          <template #icon><AddIcon /></template>
+          新增商品
+        </t-button>
       </template>
     </PageHeader>
-
-    <div v-if="selectedKeys.length > 0" class="batch-bar">
-      <span class="batch-tip">已选 {{ selectedKeys.length }} 个商品</span>
-      <t-button theme="primary" size="small" :loading="batchActing" @click="onBatchToggle('on')">批量上架</t-button>
-      <t-button variant="outline" size="small" :loading="batchActing" @click="onBatchToggle('off')">批量下架</t-button>
-      <t-button variant="text" size="small" @click="selectedKeys = []">清空选择</t-button>
-    </div>
 
     <div class="page-filter-bar">
       <t-input
@@ -214,12 +222,7 @@ onMounted(load)
         查询
       </t-button>
       <t-button variant="outline" @click="onReset">
-        <template #icon><RefreshIcon /></template>
         重置
-      </t-button>
-      <t-button theme="primary" class="filter-tail" @click="openCreate">
-        <template #icon><AddIcon /></template>
-        上架商品
       </t-button>
     </div>
 
@@ -230,12 +233,10 @@ onMounted(load)
   hover
   resizable
   :data="list"
-  :columns="columns"
+  :columns="visibleColumns"
   :loading="loading"
   :pagination="pagination"
-  :selected-row-keys="selectedKeys"
   empty="暂无符合条件的商品"
-  @select-change="onSelectChange"
   @page-change="onPageChange"
   >
         <template #name="{ row }">
@@ -259,7 +260,7 @@ onMounted(load)
               content="确认下架该商品？下架后成员端不可兑换"
               @confirm="onToggle(row)"
             >
-              <t-button variant="text" size="small" theme="danger" :loading="acting === row.id">
+              <t-button variant="text" size="small" theme="warning" :loading="acting === row.id">
                 下架
               </t-button>
             </t-popconfirm>
@@ -273,6 +274,20 @@ onMounted(load)
             >
               上架
             </t-button>
+            <t-popconfirm
+              v-if="row.status === 'off'"
+              content="确认归档该商品？归档后可在归档管理中恢复"
+              @confirm="onArchive(row)"
+            >
+              <t-button
+                variant="text"
+                size="small"
+                theme="danger"
+                :loading="acting === row.id + ':archive'"
+              >
+                归档
+              </t-button>
+            </t-popconfirm>
           </div>
         </template>
       </t-table>
@@ -283,26 +298,6 @@ onMounted(load)
 </template>
 
 <style scoped>
-.batch-bar {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  margin-bottom: 12px;
-  padding: 8px 16px;
-  background: var(--td-brand-color-1);
-  border: 1px solid var(--td-brand-color);
-  border-radius: var(--td-radius-medium);
-}
-
-.batch-tip {
-  font-size: 13px;
-  color: var(--td-brand-color);
-}
-
-.filter-tail {
-  margin-left: auto;
-}
-
 .cell-title {
   font-weight: 500;
   color: var(--td-text-color-primary);

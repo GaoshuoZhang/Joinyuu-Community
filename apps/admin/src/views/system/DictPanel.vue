@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, onMounted, reactive, ref } from 'vue'
 import { MessagePlugin } from 'tdesign-vue-next'
-import { AddIcon, DeleteIcon, RefreshIcon } from 'tdesign-icons-vue-next'
+import { AddIcon, DeleteIcon } from 'tdesign-icons-vue-next'
 import PageHeader from '@/components/PageHeader.vue'
 import {
   createDictEntry,
@@ -28,10 +28,10 @@ const typeOptions = (Object.keys(dictTypeMap) as DictType[]).map((t) => ({
 const query = reactive({})
 
 const columns = [
-  { colKey: 'sort', title: '排序', width: 80 },
-  { colKey: 'label', title: '名称', width: 220 },
-  { colKey: 'code', title: '编码', width: 120 },
-  { colKey: 'status', title: '状态', cell: 'status', width: 110 },
+  { colKey: 'sort', title: '排序', width: 80 , ellipsis: true},
+  { colKey: 'label', title: '名称', width: 220 , ellipsis: true},
+  { colKey: 'code', title: '编码', width: 120 , ellipsis: true},
+  { colKey: 'status', title: '状态', cell: 'status', width: 110 , ellipsis: true},
   { colKey: 'op', title: '操作', cell: 'op', width: 140 },
 ]
 
@@ -58,11 +58,11 @@ async function onCreate() {
   }
   try {
     await createDictEntry(activeType.value, { label: newLabel.value })
-    MessagePlugin.success(`字典项「${newLabel.value.trim()}」已创建并启用`)
+    MessagePlugin.success(`字典项「${newLabel.value.trim()}」已新增并启用`)
     newLabel.value = ''
     await load(true)
   } catch (e) {
-    MessagePlugin.error(e instanceof Error ? e.message : '创建失败')
+    MessagePlugin.error(e instanceof Error ? e.message : '新增失败')
   }
 }
 
@@ -98,12 +98,6 @@ onMounted(load)
 <template>
   <div class="dict-panel page-fade-in">
     <PageHeader title="数据字典" description="站点选项词汇的统一配置入口，各业务页面的下拉选项均从字典取用">
-      <template #actions>
-        <t-button variant="outline" @click="load()">
-          <template #icon><RefreshIcon /></template>
-          刷新
-        </t-button>
-      </template>
     </PageHeader>
 
     <div class="filter-bar">
@@ -111,7 +105,7 @@ onMounted(load)
       <t-input
         v-model="newLabel"
         clearable
-        :placeholder="`新增${dictTypeMap[activeType]}项（创建即启用）`"
+        :placeholder="`新增${dictTypeMap[activeType]}项（新增即启用）`"
         style="width: 280px"
         @enter="onCreate"
       />

@@ -6,7 +6,9 @@ export const identityTypeMap: Record<IdentityType, string> = {
   individual: '个人用户',
   community_individual: '社区个体',
   community_enterprise: '社区企业',
-  external_enterprise: '外部企业',
+  external_enterprise: '合作企业',
+  external_individual: '外部个人',
+  external_company: '外部企业',
 }
 
 export const roleLabelMap: Record<'founder' | 'admin' | 'member', string> = {
@@ -21,10 +23,10 @@ export const userCategoryOptions = [
   { label: '个人用户', value: 'individual' },
   { label: '社区个体', value: 'community_individual' },
   { label: '社区企业', value: 'community_enterprise' },
-  { label: '外部企业', value: 'external_enterprise' },
+  { label: '合作企业', value: 'external_enterprise' },
 ]
 
-/* 经验等级 1-5 级（仅社区个体/社区企业身份拥有经验值，参加活动、承接项目累积） */
+/* 经验值等级 1-5 级（仅社区个体/社区企业身份拥有经验值，参加活动、承接项目累积） */
 export const userLevelMap: Record<string, string> = {
   '1': '1 级',
   '2': '2 级',
@@ -42,10 +44,10 @@ export const userLevelOptions = [
 ]
 
 /* 需求/活动可见与可报名范围 - 身份筛选项（空选择 = 不限）
- * 个人用户与外部企业均无经验等级，故标注不受等级约束 */
+ * 个人用户与合作企业均无经验值等级，故标注不受等级约束 */
 export const visibilityIdentityOptions = [
   { label: '个人用户（不受等级约束）', value: 'individual' },
   { label: '社区个体', value: 'community_individual' },
   { label: '社区企业', value: 'community_enterprise' },
-  { label: '外部企业（不受等级约束）', value: 'external_enterprise' },
+  { label: '合作企业（不受等级约束）', value: 'external_enterprise' },
 ]

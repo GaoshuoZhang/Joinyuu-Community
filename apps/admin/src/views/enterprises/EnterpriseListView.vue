@@ -1,10 +1,12 @@
 <script setup lang="ts">
 import { computed, onMounted, reactive, ref } from 'vue'
 import { useRouter } from 'vue-router'
-import { SearchIcon, RefreshIcon, DownloadIcon } from 'tdesign-icons-vue-next'
+import { AddIcon, SearchIcon, DownloadIcon } from 'tdesign-icons-vue-next'
 import { MessagePlugin } from 'tdesign-vue-next'
 import PageHeader from '@/components/PageHeader.vue'
 import StatusTag from '@/components/StatusTag.vue'
+import EnterpriseFormDialog from '@/components/EnterpriseFormDialog.vue'
+import ColumnController from '@/components/ColumnController.vue'
 import { fetchEnterprises } from '@/api/enterprises'
 import { dictFallback, fetchDictEntries } from '@/api/dicts'
 import { exportCsv, statusLabel } from '@/utils/exportCsv'
@@ -23,7 +25,7 @@ const query = reactive({
   status: '',
 })
 
-/* 行业选项来自数据字典（M0-E 起统一取用），加载失败回退默认词表 */
+/* 行业选项来自数据字典，加载失败回退默认词表 */
 const industryOptions = ref([
   { label: '全部', value: '' },
   ...dictFallback.industry.map((label) => ({ label, value: label })),
@@ -31,20 +33,29 @@ const industryOptions = ref([
 
 const statusOptions = [
   { label: '全部', value: '' },
-  { label: '已入驻', value: 'active' },
-  { label: '入驻审核中', value: 'pending' },
+  { label: '正常', value: 'active' },
   { label: '已退出', value: 'exited' },
+  { label: '已停用', value: 'disabled' },
 ]
 
 const columns = [
-  { colKey: 'name', title: '企业', cell: 'name', width: 230 },
-  { colKey: 'size', title: '规模', width: 110 },
-  { colKey: 'leaseType', title: '入驻类型', width: 120 },
-  { colKey: 'settledAt', title: '入驻时间', width: 120, cell: 'settledAt' },
-  { colKey: 'showcaseStatus', title: '展示页状态', width: 110, cell: 'showcase' },
-  { colKey: 'status', title: '状态', width: 100, cell: 'status' },
+  { colKey: 'name', title: '企业', cell: 'name', width: 230 , ellipsis: true},
+  { colKey: 'industry', title: '行业', width: 130 , ellipsis: true},
+  { colKey: 'size', title: '规模', width: 110 , ellipsis: true},
+  { colKey: 'leaseType', title: '入驻类型', width: 120 , ellipsis: true},
+  { colKey: 'settledAt', title: '入驻时间', width: 120, cell: 'settledAt' , ellipsis: true},
+  { colKey: 'showcaseStatus', title: '展示页状态', width: 110, cell: 'showcase' , ellipsis: true},
+  { colKey: 'status', title: '状态', width: 100, cell: 'status' , ellipsis: true},
   { colKey: 'op', title: '操作', width: 80, cell: 'op' },
 ]
+
+/* 列配置：本地持久化显隐/顺序 */
+const visibleColKeys = ref<string[]>(columns.map((c) => c.colKey))
+
+const visibleColumns = computed(() => {
+  const byKey = new Map(columns.map((c) => [c.colKey, c]))
+  return visibleColKeys.value.map((k) => byKey.get(k)).filter(Boolean)
+})
 
 const pagination = computed(() => ({
   current: query.page,
@@ -86,6 +97,15 @@ function goDetail(row: Enterprise) {
   router.push(`/enterprises/${row.id}`)
 }
 
+/* 新增企业弹窗 */
+const formVisible = ref(false)
+const formMode = ref<'create' | 'edit'>('create')
+
+function openCreate() {
+  formMode.value = 'create'
+  formVisible.value = true
+}
+
 /* 导出当前页社区企业列表为 CSV */
 function onExport() {
   exportCsv(
@@ -93,7 +113,7 @@ function onExport() {
     ['编号', '企业名称', '行业', '规模', '入驻类型', '展示页状态', '企业状态', '入驻时间'],
     list.value.map((e) => [
       e.id,
-      e.name,
+      `${e.name} [${e.id}]`,
       e.industry,
       e.size,
       e.leaseType,
@@ -122,9 +142,18 @@ onMounted(() => {
   <div class="enterprise-list page-fade-in">
     <PageHeader title="社区企业" description="入驻社区的企业信息、成员与展示页管理">
       <template #actions>
+        <ColumnController
+          v-model="visibleColKeys"
+          storage-key="enterprises"
+          :columns="columns.map((c) => ({ key: c.colKey, title: c.title }))"
+        />
         <t-button variant="outline" @click="onExport">
           <template #icon><DownloadIcon /></template>
           导出
+        </t-button>
+        <t-button theme="primary" v-permission="'perm:enterprise:create'" @click="openCreate">
+          <template #icon><AddIcon /></template>
+          新增企业
         </t-button>
       </template>
     </PageHeader>
@@ -158,7 +187,6 @@ onMounted(() => {
         查询
       </t-button>
       <t-button variant="outline" @click="onReset">
-        <template #icon><RefreshIcon /></template>
         重置
       </t-button>
     </div>
@@ -170,7 +198,7 @@ onMounted(() => {
         hover
         resizable
         :data="list"
-        :columns="columns"
+        :columns="visibleColumns"
         :loading="loading"
         :pagination="pagination"
         empty="暂无符合条件的企业"
@@ -182,7 +210,7 @@ onMounted(() => {
             <t-avatar class="ent-avatar" size="36px">{{ row.name.slice(0, 1) }}</t-avatar>
             <div class="ent-meta">
               <span class="ent-name">{{ row.name }}</span>
-              <span class="ent-sub">{{ row.industry }}</span>
+              <t-tag class="id-tag-block" size="small" variant="light">{{ row.id }}</t-tag>
             </div>
           </div>
         </template>
@@ -200,6 +228,8 @@ onMounted(() => {
         </template>
       </t-table>
     </div>
+
+    <EnterpriseFormDialog v-model:visible="formVisible" :mode="formMode" :enterprise="null" @success="load" />
   </div>
 </template>
 
@@ -231,11 +261,6 @@ onMounted(() => {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-}
-
-.ent-sub {
-  font-size: 12px;
-  color: var(--td-text-color-secondary);
 }
 
 :deep(.t-table__row) {

@@ -1,13 +1,14 @@
 /* M1-C 验收（wiki-backend.md §13 M1-C）：
  * 需求状态机主干：审核通过 / 立即发布 / 驳回 + 一条非法流转 409 + 立项双向关联断言。
  * 前置：docker compose up + prisma migrate + seed（种子需求：D4001 已发布 / D4005 待审核 /
- *       D4006 待发布 / D4008 待审核 / D4012 已驳回；积分/经验规则与承接方种子齐备）。
+ *       D4006 待发布 / D4008 待审核 / D4012 已驳回；积分/经验值规则与承接方种子齐备）。
  * 立项用例依赖 projects 模块 createProject 已实现并接入（demands 与 projects 并行开发，集成后运行）。 */
 import { INestApplication } from '@nestjs/common'
 import { Test } from '@nestjs/testing'
 import request from 'supertest'
 import { AppModule } from '../src/app.module'
 import { reseed } from './helpers/reseed'
+import { loginAs } from './helpers/login'
 
 describe('M1-C demands（状态机 + 立项联动）', () => {
   let app: INestApplication
@@ -19,10 +20,7 @@ describe('M1-C demands（状态机 + 立项联动）', () => {
     app = moduleRef.createNestApplication()
     await app.init()
 
-    const login = await request(app.getHttpServer())
-      .post('/api/admin/auth/login')
-      .send({ username: 'admin', password: 'admin123' })
-    token = login.body.data.token
+    token = await loginAs(app)
   })
 
   afterAll(async () => {

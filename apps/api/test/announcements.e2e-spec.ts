@@ -1,11 +1,12 @@
 /* M1-D 公告栏 e2e（wiki-backend.md §13 M1-D / §7.14）：
- * 覆盖：创建即发布 → 下架 → 重新发布 → 置顶全链路；置顶优先排序；非法流转 409；删除。
+ * 覆盖：新增即发布 → 下架 → 重新发布 → 置顶全链路；置顶优先排序；非法流转 409；删除。
  * 前置：docker compose up + prisma migrate + seed（AN1001/AN1002 置顶已发布 / AN1005 已下架 / AN1006 已下架）。 */
 import { INestApplication } from '@nestjs/common'
 import { Test } from '@nestjs/testing'
 import request from 'supertest'
 import { AppModule } from '../src/app.module'
 import { reseed } from './helpers/reseed'
+import { loginAs } from './helpers/login'
 
 describe('M1-D announcements 公告栏', () => {
   let app: INestApplication
@@ -17,17 +18,14 @@ describe('M1-D announcements 公告栏', () => {
     app = moduleRef.createNestApplication()
     await app.init()
 
-    const login = await request(app.getHttpServer())
-      .post('/api/admin/auth/login')
-      .send({ username: 'admin', password: 'admin123' })
-    token = login.body.data.token
+    token = await loginAs(app)
   })
 
   afterAll(async () => {
     await app.close()
   })
 
-  it('创建即发布 → 下架 → 重新发布 → 置顶', async () => {
+  it('新增即发布 → 下架 → 重新发布 → 置顶', async () => {
     const create = await request(app.getHttpServer())
       .post('/api/admin/announcements')
       .set('Authorization', `Bearer ${token}`)

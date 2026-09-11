@@ -6,15 +6,17 @@ import { createLease, fetchRenterOptions, updateLease } from '@/api/workstations
 import { workstationTypeMap } from '@/constants/status'
 import type { Lease, LeaseRenterType, RentPeriod, Workstation } from '@/types'
 
-/* 租约创建/编辑弹窗（办公位分配入口）：
- * 创建 = 选择租赁方（可创建新条目：已注册企业/个人用户自动填充联系方式，未注册可直接输入）
- *        + 锁定空闲工位 + 租期/租金/联系人，创建成功后工位转为已分配；
- * 编辑 = 仅调整租期/租金/联系人（换工位/换租赁方需终止原租约后重建，原型约定） */
+/* 租约新增/编辑弹窗（办公位分配入口）：
+ * 新增 = 选择租赁方（可新增新条目：已注册企业/个人用户自动填充联系电话，未注册可直接输入）
+ *        + 锁定空闲办公位 + 租期/租金/联系人，新增成功后办公位转为已分配；
+ * 编辑 = 仅调整租期/租金/联系人（换办公位/换租赁方需终止原租约后重建） */
 const props = defineProps<{
   visible: boolean
   mode: 'create' | 'edit'
   lease: Lease | null
   workstations: Workstation[]
+  /** 新增模式预选办公位（「关联租赁」从办公位/办公室卡片跳转带入） */
+  presetWorkstationIds?: string[]
 }>()
 
 const emit = defineEmits<{
@@ -24,7 +26,7 @@ const emit = defineEmits<{
 
 const submitting = ref(false)
 const formRef = ref()
-/* 租赁方原始数据（用于选项渲染与联系方式自动填充） */
+/* 租赁方原始数据（用于选项渲染与联系电话自动填充） */
 const renterUsers = ref<{ uid: string; nickname: string; phone: string }[]>([])
 const renterEnterprises = ref<{ id: string; name: string; contactName: string; contactPhone: string }[]>([])
 
@@ -54,7 +56,7 @@ const rentPeriodOptions = [
 const rentPeriodLabelMap: Record<RentPeriod, string> = { day: '日', week: '周', month: '月', year: '年' }
 const rentPeriodLabel = computed(() => rentPeriodLabelMap[form.rentPeriod])
 
-/* 工位树选择：一级=已有区域，二级=该区域下的空闲工位编号 */
+/* 办公位树选择：一级=已有区域，二级=该区域下的空闲办公位编号 */
 const workstationTree = computed(() => {
   const groups: { label: string; value: string; children: { label: string; value: string }[] }[] = []
   for (const w of props.workstations) {
@@ -75,7 +77,7 @@ const renterOptions = computed(() => [
   ...renterUsers.value.map((u) => ({ label: `${u.nickname}（个人用户 · ${u.uid}）`, value: `U:${u.uid}` })),
 ])
 
-/* 选择值变化 → 解析租赁方并自动填充联系方式（未注册条目不填充，联系人手动输入） */
+/* 选择值变化 → 解析租赁方并自动填充联系电话（未注册条目不填充，联系人手动输入） */
 watch(
   () => form.renterValue,
   (v) => {
@@ -104,7 +106,7 @@ watch(
   },
 )
 
-/* 租金联动：非"月租"周期清除租金输入框；"月租"且所选工位存在默认月租时自动累加求和填入（仅创建模式） */
+/* 租金联动：非"月租"周期清除租金输入框；"月租"且所选办公位存在默认月租时自动累加求和填入（仅新增模式） */
 watch([() => form.workstationIds, () => form.rentPeriod], () => {
   if (props.mode !== 'create') return
   if (form.rentPeriod !== 'month') {
@@ -154,7 +156,7 @@ watch(
       form.enterpriseId = ''
       form.enterpriseName = ''
       form.renterType = 'enterprise'
-      form.workstationIds = []
+      form.workstationIds = props.presetWorkstationIds?.length ? [...props.presetWorkstationIds] : []
       form.startDate = ''
       form.endDate = ''
       form.longTerm = false
@@ -171,7 +173,7 @@ watch(
 /* 规则 trigger 一律 submit：确认时 formRef.validate() 才触发红框提示 */
 const rules: FormProps['rules'] = {
   renterValue: [{ required: true, message: '请选择或输入租赁方', trigger: 'submit' }],
-  workstationIds: [{ required: true, message: '请选择至少一个空闲工位', trigger: 'submit' }],
+  workstationIds: [{ required: true, message: '请选择至少一个空闲办公位', trigger: 'submit' }],
   startDate: [{ required: true, message: '请选择租赁开始日期', trigger: 'submit' }],
   contactName: [{ required: true, message: '请输入联系人', trigger: 'submit' }],
   contactPhone: [{ required: true, message: '请输入联系电话', trigger: 'submit' }],
@@ -211,7 +213,7 @@ async function onConfirm() {
         contactName: form.contactName,
         contactPhone: form.contactPhone,
       })
-      MessagePlugin.success(`租约已创建，所选工位已分配（${lease.id}）`)
+      MessagePlugin.success(`租约已新增，所选办公位已分配（${lease.id}）`)
     } else if (props.lease) {
       await updateLease(props.lease.id, {
         startDate: form.startDate,
@@ -241,7 +243,7 @@ function onClose() {
 <template>
   <t-dialog
     :visible="visible"
-    :header="mode === 'create' ? '创建租约 · 分配办公位' : '编辑租约'"
+    :header="mode === 'create' ? '新增租约 · 分配办公位' : '编辑租约'"
     width="620px"
     @close="onClose"
   >
@@ -249,7 +251,7 @@ function onClose() {
       <div class="dialog-footer">
         <t-button variant="text" theme="default" @click="onClose">取消</t-button>
         <t-button theme="primary" :loading="submitting" @click="onConfirm">
-          {{ mode === 'create' ? '确认创建' : '保存修改' }}
+          {{ mode === 'create' ? '确认新增' : '保存修改' }}
         </t-button>
       </div>
     </template>
@@ -269,10 +271,10 @@ function onClose() {
           filterable
           creatable
           style="width: 100%"
-          tips="未注册的租赁方可直接输入名称创建；选中已注册企业/个人用户将自动填充联系方式"
+          tips="未注册的租赁方可直接输入名称新增；选中已注册企业/个人用户将自动填充联系电话"
         />
       </t-form-item>
-      <t-form-item v-if="mode === 'create'" label="选择工位（仅空闲）" name="workstationIds">
+      <t-form-item v-if="mode === 'create'" label="选择办公位（仅空闲）" name="workstationIds">
         <t-tree-select
           v-model="form.workstationIds"
           :data="workstationTree"
@@ -283,7 +285,7 @@ function onClose() {
           placeholder="按区域分组；可多选，独立办公室支持整间分配"
         />
       </t-form-item>
-      <div v-else class="edit-tip">换工位需终止原租约后重新创建（编辑仅支持租期/租金/联系人）</div>
+      <div v-else class="edit-tip">换办公位需终止原租约后重新新增（编辑仅支持租期/租金/联系人）</div>
       <div class="form-row">
         <t-form-item label="租赁开始日期" name="startDate">
           <t-date-picker clearable v-model="form.startDate" valueType="YYYY-MM-DD" style="width: 100%" />
@@ -313,7 +315,7 @@ function onClose() {
           />
         </t-form-item>
         <t-form-item :label="`租金（元）/ ${rentPeriodLabel}`" name="monthlyRent">
-          <t-input-number v-model="form.monthlyRent" :min="0" theme="column" style="width: 100%" placeholder="月租周期选工位后可自动累加" />
+          <t-input-number v-model="form.monthlyRent" :min="0" theme="column" style="width: 100%" placeholder="月租周期选办公位后可自动累加" />
         </t-form-item>
       </div>
       <div class="form-row">

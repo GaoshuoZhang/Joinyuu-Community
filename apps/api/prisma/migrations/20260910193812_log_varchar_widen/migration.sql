@@ -1,0 +1,6 @@
+-- AlterTable
+ALTER TABLE "LoginLog" ALTER COLUMN "loginAt" SET DATA TYPE VARCHAR(19);
+
+-- AlterTable
+ALTER TABLE "SchedulerLog" ALTER COLUMN "startedAt" SET DATA TYPE VARCHAR(19),
+ALTER COLUMN "finishedAt" SET DATA TYPE VARCHAR(19);

@@ -5,6 +5,7 @@ export const dictTypeMap: Record<DictType, string> = {
   demand_category: '需求类别',
   industry: '行业',
   event_type: '活动类型',
+  goods_category: '商品类型',
 }
 
 /* 字典加载失败的回退词表（与种子数据初始值一致；页面兜底用，正常不会触发） */
@@ -24,9 +25,10 @@ export const dictFallback: Record<DictType, string[]> = {
     '财务咨询',
   ],
   event_type: ['沙龙', '培训', '路演', '社交', '赛事'],
+  goods_category: ['实物商品', '虚拟服务', '权益券'],
 }
 
-/* 已接入 M1 真实接口：GET /api/admin/dicts/:type — 字典项列表（按 sort 升序，管理页返回全量，
+/* GET /api/admin/dicts/:type — 字典项列表（按 sort 升序，管理页返回全量，
  * 下拉消费方按 status=enabled 过滤；服务端 10min 缓存，写操作主动失效） */
 export async function fetchDictEntries(type: DictType): Promise<DictEntry[]> {
   return httpGet<DictEntry[]>(`/dicts/${type}`)
@@ -36,17 +38,17 @@ export interface DictEntryPayload {
   label: string
 }
 
-/* 已接入 M1 真实接口：POST /api/admin/dicts/:type — 新增字典项（label 全类型唯一，创建即启用） */
+/* POST /api/admin/dicts/:type — 新增字典项（label 全类型唯一，新增即启用） */
 export async function createDictEntry(type: DictType, payload: DictEntryPayload): Promise<DictEntry> {
   return httpPost<DictEntry>(`/dicts/${type}`, payload)
 }
 
-/* 已接入 M1 真实接口：POST /api/admin/dicts/:type/:code/toggle-status — 启用/停用（停用后选项不再下发） */
+/* POST /api/admin/dicts/:type/:code/toggle-status — 启用/停用（停用后选项不再下发） */
 export async function toggleDictEntry(type: DictType, code: string): Promise<{ code: number }> {
   return httpPost<{ code: number }>(`/dicts/${type}/${code}/toggle-status`)
 }
 
-/* 已接入 M1 真实接口：DELETE /api/admin/dicts/:type/:code — 删除字典项（历史数据已引用的值不受影响） */
+/* DELETE /api/admin/dicts/:type/:code — 删除字典项（历史数据已引用的值不受影响） */
 export async function deleteDictEntry(type: DictType, code: string): Promise<{ code: number }> {
   return httpDelete<{ code: number }>(`/dicts/${type}/${code}`)
 }

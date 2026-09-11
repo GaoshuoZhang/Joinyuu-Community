@@ -25,7 +25,14 @@ async function clearAppCache(): Promise<void> {
   try {
     await redis.connect()
     await redis.del(...APP_CACHE_KEYS)
-    console.log(`[seed] 应用缓存已清理（${APP_CACHE_KEYS.length} 键）`)
+    /* 动态鉴权缓存（按用户名/验证码分片）一并清理，避免重种子后读到旧权限 */
+    const dynamicKeys = [
+      ...(await redis.keys('auth:admin:perms:*')),
+      ...(await redis.keys('captcha:*')),
+      'auth:admin:sessions',
+    ]
+    if (dynamicKeys.length > 0) await redis.del(...dynamicKeys)
+    console.log(`[seed] 应用缓存已清理（${APP_CACHE_KEYS.length + dynamicKeys.length} 键）`)
   } catch (e) {
     console.warn('[seed] 缓存清理跳过（Redis 不可用）:', e instanceof Error ? e.message : e)
   } finally {
@@ -52,6 +59,7 @@ const { auditLogs } = require('./seed-data/auditLogs')
 const { systemConfig } = require('./seed-data/systemConfig')
 const { dicts } = require('./seed-data/dict')
 const { announcements } = require('./seed-data/announcements')
+const { adminAccounts, adminRoles, permissionCatalog } = require('./seed-data/rbac')
 /* eslint-enable @typescript-eslint/no-var-requires */
 
 /** 取 ID 末尾数字，如 'U1015' -> 1015、'AP3016' -> 3016 */
@@ -96,19 +104,62 @@ async function main() {
   await prisma.idSequence.deleteMany()
   await prisma.dictEntry.deleteMany()
   await prisma.systemConfig.deleteMany()
+  await prisma.archiveSetting.deleteMany()
+  await prisma.adminUserRole.deleteMany()
+  await prisma.adminRolePermission.deleteMany()
+  await prisma.adminRole.deleteMany()
+  await prisma.adminPermission.deleteMany()
+  await prisma.loginLog.deleteMany()
+  await prisma.schedulerLog.deleteMany()
+  await prisma.mallAsset.deleteMany()
   await prisma.adminUser.deleteMany()
 
   const counts: Record<string, number> = {}
 
   // ---------- 认证与基础设施 ----------
-  await prisma.adminUser.create({
-    data: {
-      username: 'admin',
-      passwordHash: await hash('admin123', 10),
-      name: '社区管理员',
-    },
-  })
-  counts.AdminUser = 1
+  // RBAC 权限点目录 + 角色 + 角色权限 + 管理员账号（R1/R2）
+  for (const p of permissionCatalog) {
+    await prisma.adminPermission.create({
+      data: { code: p.code, name: p.name, module: p.module, authType: p.authType, sort: p.sort },
+    })
+  }
+  counts.AdminPermission = permissionCatalog.length
+
+  for (const r of adminRoles) {
+    await prisma.adminRole.create({
+      data: {
+        id: r.id,
+        code: r.code,
+        name: r.name,
+        description: r.description,
+        sort: r.sort,
+        createdAt: '2026-09-01 10:00',
+      },
+    })
+    for (const code of r.permCodes) {
+      await prisma.adminRolePermission.create({ data: { roleId: r.id, permissionCode: code } })
+    }
+  }
+  counts.AdminRole = adminRoles.length
+
+  const roleIdByCode = new Map(adminRoles.map((r: { code: string; id: string }) => [r.code, r.id]))
+  for (const a of adminAccounts) {
+    const created = await prisma.adminUser.create({
+      data: {
+        username: a.username,
+        passwordHash: await hash(a.password, 10),
+        name: a.name,
+        status: a.status,
+        lastLoginAt: null,
+      },
+    })
+    for (const roleCode of a.roleCodes) {
+      await prisma.adminUserRole.create({
+        data: { adminUserId: created.id, roleId: roleIdByCode.get(roleCode) as string },
+      })
+    }
+  }
+  counts.AdminUser = adminAccounts.length
 
   await prisma.systemConfig.create({
     data: {
@@ -119,13 +170,33 @@ async function main() {
       mallOpen: systemConfig.mallOpen,
       demandOpen: systemConfig.demandOpen,
       reservationOpen: systemConfig.reservationOpen,
-      dailyLoginPoints: systemConfig.dailyLoginPoints,
       leaseExpireRemindDays: systemConfig.leaseExpireRemindDays,
+      uploadMaxSizeMb: systemConfig.uploadMaxSizeMb,
       updatedAt: systemConfig.updatedAt,
       updatedBy: systemConfig.updatedBy,
     },
   })
   counts.SystemConfig = 1
+
+  // 归档设置：各标签页默认关闭自动归档/自动删除（企业标签页不支持自动归档）
+  for (const domain of [
+    'enterprise',
+    'externalEnterprise',
+    'article',
+    'submission',
+    'announcement',
+    'demand',
+    'project',
+    'event',
+    'lease',
+    'reservation',
+    'goods',
+    'order',
+    'application',
+  ]) {
+    await prisma.archiveSetting.create({ data: { domain } })
+  }
+  counts.ArchiveSetting = 13
 
   for (const [type, entries] of Object.entries(dicts) as Array<[string, Array<{ code: string; label: string; sort: number; status?: string }>]>) {
     await prisma.dictEntry.createMany({
@@ -184,7 +255,6 @@ async function main() {
         id: e.id,
         name: e.name,
         industry: e.industry,
-        stage: e.stage,
         size: e.size,
         foundedAt: e.foundedAt,
         settledAt: e.settledAt ?? null,
@@ -193,6 +263,8 @@ async function main() {
         showcaseStatus: e.showcaseStatus,
         showcaseComment: e.showcaseComment ?? null,
         experience: e.experience ?? 0,
+        contactUserId: e.contactUserId ?? null,
+        contactTitle: e.contactTitle ?? '',
         contactName: e.contactName,
         contactPhone: e.contactPhone,
         contactEmail: e.contactEmail ?? null,
@@ -209,6 +281,9 @@ async function main() {
         id: p.id,
         name: p.name,
         industry: p.industry,
+        status: p.status ?? 'active',
+        size: p.size ?? '',
+        foundedAt: p.foundedAt ?? '',
         description: p.description,
         cooperationCount: p.cooperationCount ?? 0,
         firstCooperationAt: p.firstCooperationAt,
@@ -266,6 +341,15 @@ async function main() {
         matchedRespondent: d.matchedRespondent ?? null,
         projectId: d.projectId ?? null,
         respondPoints: d.respondPoints ?? null,
+        creatorName:
+          d.publisherIdentity && ['community_enterprise', 'external_enterprise'].includes(d.publisherIdentity.type)
+            ? (d.contactName ?? d.publisherName)
+            : d.publisherName,
+        /* 创建人：发布方为用户本人时取 publisherId；企业类需求的正常流程为个人用户代企业提交，
+         * 创建人即联系人本人，按联系人手机号回查用户 UID（种子联系人全部命中用户表） */
+        creatorId: (d.publisherId ?? '').startsWith('U')
+          ? d.publisherId
+          : (users.find((u: { phone: string }) => u.phone === d.contactPhone)?.uid ?? null),
       },
     })
     for (const r of d.respondents) {
@@ -514,7 +598,7 @@ async function main() {
   }
   counts.WorkstationArea = workstationAreas.length
 
-  // mock 工位以「区域名」关联（M1 改 areaId 外键）
+  // mock 办公位以「区域名」关联（M1 改 areaId 外键）
   const areaIdByName = new Map<string, string>(workstationAreas.map((a: any) => [a.name, a.id]))
   for (const w of workstations) {
     await prisma.workstation.create({
@@ -542,7 +626,7 @@ async function main() {
         id: l.id,
         renterId: l.enterpriseId ?? '',
         renterName: l.enterpriseName,
-        renterType: (l.enterpriseId ?? '').startsWith('U') ? 'individual' : 'enterprise',
+        renterType: l.renterType ?? ((l.enterpriseId ?? '').startsWith('U') ? 'individual' : (l.enterpriseId ? 'enterprise' : 'custom')),
         startDate: l.startDate,
         endDate: l.endDate ?? '',
         longTerm: l.longTerm ?? false,
@@ -615,6 +699,8 @@ async function main() {
         name: c.name,
         description: c.description,
         sort: c.sort,
+        submissionOpen: c.submissionOpen ?? true,
+        system: c.system ?? false,
         status: c.status ?? 'enabled',
         createdAt: c.createdAt,
       },
@@ -627,12 +713,15 @@ async function main() {
       data: {
         id: a.id,
         title: a.title,
-        columnId: a.columnId,
-        columnName: a.columnName,
-        authorId: a.authorId,
+        channel: a.channel ?? 'submitted',
+        columnId: a.columnIds?.[0] ?? a.columnId,
+        columnName: a.columnNames?.[0] ?? a.columnName,
+        authorId: a.authorId ?? null,
         authorName: a.authorName,
         authorIdentity: a.authorIdentity ?? null,
         status: a.status,
+        content: a.content ?? '',
+        scheduledAt: a.scheduledAt ?? null,
         publishedAt: a.publishedAt ?? null,
         views: a.views ?? 0,
         summary: a.summary,
@@ -728,7 +817,8 @@ async function main() {
     ['LS', leases.map((x: any) => x.id)],
     ['S', spaces.map((x: any) => x.id)],
     ['SR', reservations.map((x: any) => x.id)],
-    ['A', articles.map((x: any) => x.id)],
+    ['A', articles.filter((x: any) => x.channel !== 'submitted').map((x: any) => x.id)],
+    ['SU', articles.filter((x: any) => x.channel === 'submitted').map((x: any) => x.id)],
     ['CL', columns.map((x: any) => x.id)],
     ['SC', showcaseRequests.map((x: any) => x.id)],
     ['AN', announcements.map((x: any) => x.id)],

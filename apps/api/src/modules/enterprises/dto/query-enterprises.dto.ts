@@ -22,6 +22,6 @@ export class QueryEnterprisesDto {
   industry?: string
 
   @IsOptional()
-  @IsIn(['active', 'pending', 'exited'])
+  @IsIn(['active', 'pending', 'exited', 'disabled'])
   status?: string
 }

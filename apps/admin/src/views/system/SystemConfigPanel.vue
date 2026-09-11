@@ -5,7 +5,7 @@ import PageHeader from '@/components/PageHeader.vue'
 import { fetchSystemConfig, saveSystemConfig } from '@/api/systemConfig'
 import type { SystemConfig } from '@/types'
 
-/* 系统配置：站点信息与运行时开关（保存即生效；M1 持久化并按端下发） */
+/* 系统配置：站点信息与运行时开关（保存即生效；按端下发） */
 const loading = ref(true)
 const saving = ref(false)
 const formRef = ref()
@@ -18,8 +18,8 @@ const form = reactive<SystemConfig>({
   mallOpen: true,
   demandOpen: true,
   reservationOpen: true,
-  dailyLoginPoints: false,
   leaseExpireRemindDays: 15,
+  uploadMaxSizeMb: 10,
   updatedAt: '',
   updatedBy: '',
 })
@@ -105,13 +105,6 @@ async function onSave() {
               </div>
               <t-switch v-model="form.reservationOpen" />
             </div>
-            <div class="switch-row">
-              <div class="switch-text">
-                <div class="switch-label">每日登录积分奖励</div>
-                <div class="switch-tip">开启后按积分规则 daily_login 每日发放（M1 生效）</div>
-              </div>
-              <t-switch v-model="form.dailyLoginPoints" />
-            </div>
           </div>
 
           <div class="section-title">运营参数</div>
@@ -122,7 +115,15 @@ async function onSave() {
               :rules="[{ required: true, message: '请输入 1-90 的整数', trigger: 'submit' }]"
             >
               <t-input-number v-model="form.leaseExpireRemindDays" :min="1" :max="90" :step="1" theme="column" style="width: 200px" />
-              <template #help>距到期不足该天数的租约将标记为「即将到期」并推送通知（M0 通知中心已内置种子提醒）</template>
+              <template #help>距到期不足该天数的租约将标记为「即将到期」并推送通知</template>
+            </t-form-item>
+            <t-form-item
+              label="上传文件大小限制（MB）"
+              name="uploadMaxSizeMb"
+              :rules="[{ required: true, message: '请输入 1-100 的整数', trigger: 'submit' }]"
+            >
+              <t-input-number v-model="form.uploadMaxSizeMb" :min="1" :max="100" :step="1" theme="column" style="width: 200px" />
+              <template #help>素材库与富文本图片上传的单文件大小上限（1-100 MB）</template>
             </t-form-item>
           </div>
         </t-form>
@@ -141,7 +142,7 @@ async function onSave() {
 }
 
 .config-card {
-  max-width: 860px;
+  width: 100%;
 }
 
 .section-title {

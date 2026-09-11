@@ -19,6 +19,78 @@ body,
   padding: 0;
 }
 
+/* ---------- 富文本展示 ---------- */
+
+/* wangEditor 全屏修复：全屏容器（position:fixed）未设置 z-index，
+ * 会与弹框内后续 DOM（底部按钮/表单选择框）同层竞态而被压在下层；
+ * 显式抬到 TDesign Dialog（默认 2500）之上 */
+.w-e-full-screen-container {
+  z-index: 3000;
+}
+
+/* wangEditor 暗色模式（R 增强）：编辑器全部用 --w-e-* CSS 变量着色，
+ * 暗色下按 TDesign dark 配色（深灰表面 + 白字 + 细分隔线）覆盖同名变量，
+ * 随应用 theme-mode="dark"（:root[theme-mode='dark']）联动切换 */
+:root[theme-mode='dark'] {
+  --w-e-textarea-bg-color: transparent;
+  --w-e-textarea-color: #e6e6ea;
+  --w-e-textarea-border-color: #4b4b51;
+  --w-e-textarea-slight-border-color: #3a3a3f;
+  --w-e-textarea-slight-color: #8a8a92;
+  --w-e-textarea-slight-bg-color: #202023;
+  --w-e-textarea-selected-border-color: #4290f7;
+  --w-e-textarea-handler-bg-color: #4290f7;
+  --w-e-toolbar-color: #c9c9cf;
+  --w-e-toolbar-bg-color: #242427;
+  --w-e-toolbar-active-color: #ffffff;
+  --w-e-toolbar-active-bg-color: #2f2f33;
+  --w-e-toolbar-disabled-color: #6f6f76;
+  --w-e-toolbar-border-color: #3a3a3f;
+  --w-e-modal-button-bg-color: #2a2a2e;
+  --w-e-modal-button-border-color: #48484e;
+}
+
+/* wangEditor 弹层内原生输入框在暗色下的兜底（部分版本未走变量） */
+:root[theme-mode='dark'] .w-e-modal input,
+:root[theme-mode='dark'] .w-e-modal textarea {
+  background-color: var(--w-e-toolbar-bg-color);
+  color: var(--w-e-toolbar-color);
+}
+
+.rich-text {
+  font-size: 14px;
+  line-height: 1.7;
+  word-break: break-word;
+}
+
+.rich-text p {
+  margin: 0 0 8px;
+}
+
+.rich-text h2,
+.rich-text h3 {
+  margin: 12px 0 6px;
+  font-weight: 600;
+  line-height: 1.4;
+}
+
+.rich-text blockquote {
+  margin: 8px 0;
+  padding: 4px 12px;
+  border-left: 3px solid var(--td-brand-color);
+  color: var(--td-text-color-secondary);
+}
+
+.rich-text img {
+  max-width: 100%;
+  height: auto;
+  border-radius: var(--td-radius-small);
+}
+
+.rich-text a {
+  color: var(--td-brand-color);
+}
+
 /* ---------- 页面通用 ---------- */
 
 .page-header {
@@ -255,4 +327,43 @@ body,
     padding: 40px 32px;
     min-height: 220px;
   }
+}
+
+/* ---------- 实体 ID 标签（用户 UID / 企业 ID） ---------- */
+/* 列表名称下方独立成行（父容器为纵向 flex） */
+.id-tag-block {
+  align-self: flex-start;
+  margin-top: 2px;
+}
+
+/* 名称/字段同行内联（详情、抽屉、打印等） */
+.id-tag {
+  margin-left: 4px;
+  vertical-align: middle;
+}
+
+/* ---------- 表格省略号 tooltip 文字颜色 ---------- */
+/* 省略号 tooltip 会复用单元格 DOM；自定义单元格内的名称/电话等带自身文字色，
+ * 在深色气泡中呈「灰底黑字」不可读。只让内容区后代继承气泡主题色（内容区自身保持主题白字），全局一次修复 */
+.t-tooltip .t-popup__content * {
+  color: inherit !important;
+}
+
+/* 省略号悬浮内容按纯文本呈现：去除内容内标签/链接等元素的样式与装饰 */
+.t-tooltip .t-popup__content .t-tag,
+.t-tooltip .t-popup__content .t-tag *,
+.t-tooltip .t-popup__content a,
+.t-tooltip .t-popup__content svg {
+  background: transparent !important;
+  border: none !important;
+  box-shadow: none !important;
+  padding: 0 !important;
+  margin: 0 !important;
+  font: inherit !important;
+  line-height: inherit !important;
+  display: inline !important;
+  height: auto !important;
+  width: auto !important;
+  vertical-align: baseline !important;
+  color: inherit !important;
 }

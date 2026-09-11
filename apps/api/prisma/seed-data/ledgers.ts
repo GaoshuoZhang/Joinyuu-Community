@@ -7,28 +7,28 @@ import type { ExperienceRecord, PointsRecord } from '@/types'
 
 export const experienceRecords: ExperienceRecord[] = [
   /* E2001 星澜智能科技（当前 3200） */
-  { id: 'EX8001', targetType: 'enterprise', targetId: 'E2001', delta: 1500, balance: 1500, reason: '「社区知识库共建」立项经验', at: '2025-12-10 14:20', source: 'rule', operator: '系统' },
+  { id: 'EX8001', targetType: 'enterprise', targetId: 'E2001', delta: 1500, balance: 1500, reason: '「社区知识库共建」立项经验值', at: '2025-12-10 14:20', source: 'rule', operator: '系统' },
   { id: 'EX8002', targetType: 'enterprise', targetId: 'E2001', delta: 800, balance: 2300, reason: '年度活跃企业奖励', at: '2026-03-15 10:00', source: 'manual', operator: '社区管理员' },
   { id: 'EX8003', targetType: 'enterprise', targetId: 'E2001', delta: -200, balance: 2100, reason: '共享会议室超时使用扣减', at: '2026-06-01 09:30', source: 'manual', operator: '社区管理员' },
-  { id: 'EX8004', targetType: 'enterprise', targetId: 'E2001', delta: 700, balance: 2800, reason: '「聚屿小程序共研计划」启动经验', at: '2026-07-15 16:00', source: 'rule', operator: '系统' },
+  { id: 'EX8004', targetType: 'enterprise', targetId: 'E2001', delta: 700, balance: 2800, reason: '「聚屿小程序共研计划」启动经验值', at: '2026-07-15 16:00', source: 'rule', operator: '系统' },
   { id: 'EX8005', targetType: 'enterprise', targetId: 'E2001', delta: 400, balance: 3200, reason: '主办「第 12 期创业夜话」分享', at: '2026-09-05 19:00', source: 'manual', operator: '社区管理员' },
   /* E2002 芯启半导体（当前 4800） */
-  { id: 'EX8006', targetType: 'enterprise', targetId: 'E2002', delta: 2000, balance: 2000, reason: '「半导体供应链对接专项」经验', at: '2025-10-20 11:00', source: 'manual', operator: '社区管理员' },
+  { id: 'EX8006', targetType: 'enterprise', targetId: 'E2002', delta: 2000, balance: 2000, reason: '「半导体供应链对接专项」经验值', at: '2025-10-20 11:00', source: 'manual', operator: '社区管理员' },
   { id: 'EX8007', targetType: 'enterprise', targetId: 'E2002', delta: 1200, balance: 3200, reason: '年度贡献企业奖励', at: '2026-01-15 15:30', source: 'manual', operator: '社区管理员' },
   { id: 'EX8008', targetType: 'enterprise', targetId: 'E2002', delta: -300, balance: 2900, reason: '设备共享档期违约扣减', at: '2026-05-30 10:15', source: 'manual', operator: '社区管理员' },
   { id: 'EX8009', targetType: 'enterprise', targetId: 'E2002', delta: 1900, balance: 4800, reason: '供应链专项结项奖励', at: '2026-09-01 14:00', source: 'rule', operator: '系统' },
   /* E2003 拾光文创（当前 100） */
   { id: 'EX8010', targetType: 'enterprise', targetId: 'E2003', delta: 100, balance: 100, reason: '提交入驻申请', at: '2026-09-06 10:18', source: 'rule', operator: '系统' },
   /* E2004 云径网络（当前 2100） */
-  { id: 'EX8011', targetType: 'enterprise', targetId: 'E2004', delta: 1000, balance: 1000, reason: '「社区知识库共建」发起经验', at: '2026-02-10 09:00', source: 'manual', operator: '社区管理员' },
+  { id: 'EX8011', targetType: 'enterprise', targetId: 'E2004', delta: 1000, balance: 1000, reason: '「社区知识库共建」发起经验值', at: '2026-02-10 09:00', source: 'manual', operator: '社区管理员' },
   { id: 'EX8012', targetType: 'enterprise', targetId: 'E2004', delta: 600, balance: 1600, reason: '开源组件库共建贡献', at: '2026-06-20 17:40', source: 'manual', operator: '社区管理员' },
-  { id: 'EX8013', targetType: 'enterprise', targetId: 'E2004', delta: 500, balance: 2100, reason: '导师计划筹备经验', at: '2026-08-15 11:20', source: 'manual', operator: '社区管理员' },
+  { id: 'EX8013', targetType: 'enterprise', targetId: 'E2004', delta: 500, balance: 2100, reason: '导师计划筹备经验值', at: '2026-08-15 11:20', source: 'manual', operator: '社区管理员' },
   /* E2005 沧岚新材料（当前 1200） */
   { id: 'EX8014', targetType: 'enterprise', targetId: 'E2005', delta: 600, balance: 600, reason: '入驻奖励', at: '2026-03-01 10:00', source: 'rule', operator: '系统' },
   { id: 'EX8015', targetType: 'enterprise', targetId: 'E2005', delta: 600, balance: 1200, reason: '检测设备共享协作', at: '2026-07-20 15:10', source: 'manual', operator: '社区管理员' },
   /* E2006 逐浪出行（当前 2400） */
   { id: 'EX8016', targetType: 'enterprise', targetId: 'E2006', delta: 800, balance: 800, reason: '入驻奖励', at: '2026-04-28 09:30', source: 'rule', operator: '系统' },
-  { id: 'EX8017', targetType: 'enterprise', targetId: 'E2006', delta: 1000, balance: 1800, reason: '「智慧园区访客系统」立项经验', at: '2026-07-10 14:45', source: 'rule', operator: '系统' },
+  { id: 'EX8017', targetType: 'enterprise', targetId: 'E2006', delta: 1000, balance: 1800, reason: '「智慧园区访客系统」立项经验值', at: '2026-07-10 14:45', source: 'rule', operator: '系统' },
   { id: 'EX8018', targetType: 'enterprise', targetId: 'E2006', delta: 600, balance: 2400, reason: '试点进度奖励', at: '2026-09-03 13:40', source: 'manual', operator: '社区管理员' },
   /* E2007 木白设计工作室（当前 1500） */
   { id: 'EX8019', targetType: 'enterprise', targetId: 'E2007', delta: 500, balance: 500, reason: '入驻奖励', at: '2026-05-16 10:00', source: 'rule', operator: '系统' },

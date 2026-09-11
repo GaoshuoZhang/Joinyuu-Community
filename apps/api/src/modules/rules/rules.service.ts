@@ -7,7 +7,7 @@ import { formatNow } from '../../common/utils/time'
 import type { SaveLevelTiersDto } from './dto/save-level-tiers.dto'
 import type { UpdateExperienceRuleDto } from './dto/update-experience-rule.dto'
 
-/* M0 形状（apps/admin/src/types/index.ts）——返回与 M0 stub 逐字段一致（可空字段 null → undefined） */
+/* 返回形状与 apps/admin/src/types/index.ts 逐字段一致（可空字段 null → undefined） */
 export interface ExperienceRuleDto {
   code: string
   name: string
@@ -19,7 +19,7 @@ export interface ExperienceRuleDto {
 }
 
 /* 规则管理（wiki-backend.md §7.11/§10）：
- * 经验值规则（5 条固定项仅编辑经验值与启停）、经验发放记录（source=rule）、
+ * 经验值规则（6 条固定项仅编辑经验值与启停）、经验值发放记录（source=rule）、
  * 等级梯度整组保存（1-10 级、门槛逐级递增，事务内整体替换）。
  * rules:experience / rules:levels 走缓存（10min，与积分引擎共用同一键），写操作主动失效。 */
 @Injectable()
@@ -68,7 +68,7 @@ export class RulesService {
     return { code: 0 }
   }
 
-  /* ---------- 经验发放记录（流水，不缓存） ---------- */
+  /* ---------- 经验值发放记录（流水，不缓存） ---------- */
 
   async listExperienceIssuance(): Promise<ExperienceRecord[]> {
     return this.prisma.experienceRecord.findMany({

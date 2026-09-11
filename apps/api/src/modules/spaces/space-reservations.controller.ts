@@ -1,9 +1,11 @@
 import { Body, Controller, Get, HttpCode, Param, Post, Query, Req } from '@nestjs/common'
 import type { AuthenticatedRequest } from '../../common/interfaces/authenticated-request'
+import { RequirePermission } from '../../common/decorators/require-permission.decorator'
 import { SpacesService, type ReservationDto } from './spaces.service'
 import { QueryReservationsDto } from './dto/query-reservations.dto'
 import { ReviewReservationDto } from './dto/review-reservation.dto'
 
+@RequirePermission('/spaces/reservations')
 @Controller('api/admin/space-reservations')
 export class SpaceReservationsController {
   constructor(private readonly spaces: SpacesService) {}
@@ -27,5 +29,11 @@ export class SpaceReservationsController {
   @Post(':id/cancel')
   cancel(@Param('id') id: string): Promise<{ code: number }> {
     return this.spaces.cancelReservation(id)
+  }
+
+  @HttpCode(200)
+  @Post(':id/archive')
+  archive(@Param('id') id: string, @Req() req: AuthenticatedRequest): Promise<{ code: number }> {
+    return this.spaces.archive(id, req.user?.name ?? '社区管理员')
   }
 }

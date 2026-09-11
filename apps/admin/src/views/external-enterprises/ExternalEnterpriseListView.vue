@@ -1,9 +1,12 @@
 <script setup lang="ts">
 import { computed, onMounted, reactive, ref } from 'vue'
 import { useRouter } from 'vue-router'
-import { RefreshIcon, SearchIcon, DownloadIcon } from 'tdesign-icons-vue-next'
+import { AddIcon, SearchIcon, DownloadIcon } from 'tdesign-icons-vue-next'
 import { MessagePlugin } from 'tdesign-vue-next'
 import PageHeader from '@/components/PageHeader.vue'
+import ColumnController from '@/components/ColumnController.vue'
+import StatusTag from '@/components/StatusTag.vue'
+import ExternalEnterpriseFormDialog from '@/components/ExternalEnterpriseFormDialog.vue'
 import { fetchExternalEnterprises } from '@/api/external-enterprises'
 import { dictFallback, fetchDictEntries } from '@/api/dicts'
 import { exportCsv } from '@/utils/exportCsv'
@@ -19,27 +22,35 @@ const query = reactive({
   pageSize: 10,
   keyword: '',
   industry: '',
+  status: '',
 })
 
-/* 行业选项来自数据字典（M0-E 起与社区企业共用 industry 字典），加载失败回退默认词表 */
+/* 行业选项来自数据字典（与社区企业共用 industry 字典），加载失败回退默认词表 */
 const industryOptions = ref([
   { label: '全部', value: '' },
   ...dictFallback.industry.map((label) => ({ label, value: label })),
 ])
+
+const statusOptions = [
+  { label: '全部', value: '' },
+  { label: '正常', value: 'active' },
+  { label: '已停用', value: 'disabled' },
+]
 
 /* 排序：默认累计合作倒序（合作最多在前），支持累计合作/首次合作正倒序 */
 const sortBy = ref<'cooperationCount' | 'firstCooperationAt'>('cooperationCount')
 const sortOrder = ref<'ascend' | 'descend'>('descend')
 
 const columns = [
-  { colKey: 'name', title: '企业名称', cell: 'name', width: 220 },
-  { colKey: 'industry', title: '行业', width: 120 },
+  { colKey: 'name', title: '企业名称', cell: 'name', width: 220 , ellipsis: true},
+  { colKey: 'industry', title: '行业', width: 120 , ellipsis: true},
   {
     colKey: 'cooperationCount',
     title: '累计合作',
     width: 95,
     sorter: true,
     sortType: 'all',
+  ellipsis: true,
   },
   {
     colKey: 'firstCooperationAt',
@@ -47,10 +58,20 @@ const columns = [
     width: 110,
     sorter: true,
     sortType: 'all',
+  ellipsis: true,
   },
-  { colKey: 'memberCount', title: '关联成员', cell: 'memberCount', width: 95 },
+  { colKey: 'memberCount', title: '关联成员', cell: 'memberCount', width: 95 , ellipsis: true},
+  { colKey: 'status', title: '状态', cell: 'status', width: 90 , ellipsis: true},
   { colKey: 'op', title: '操作', cell: 'op', width: 90 },
 ]
+
+/* 列配置：本地持久化显隐/顺序 */
+const visibleColKeys = ref<string[]>(columns.map((c) => c.colKey))
+
+const visibleColumns = computed(() => {
+  const byKey = new Map(columns.map((c) => [c.colKey, c]))
+  return visibleColKeys.value.map((k) => byKey.get(k)).filter(Boolean)
+})
 
 const pagination = computed(() => ({
   current: query.page,
@@ -92,6 +113,7 @@ function onSearch() {
 function onReset() {
   query.keyword = ''
   query.industry = ''
+  query.status = ''
   query.page = 1
   load()
 }
@@ -106,12 +128,23 @@ function goDetail(row: ExternalEnterprise) {
   router.push(`/external-enterprises/${row.id}`)
 }
 
-/* 导出当前页外部企业列表为 CSV */
+/* 新增合作企业弹窗 */
+const formVisible = ref(false)
+const formMode = ref<'create' | 'edit'>('create')
+const current = ref<ExternalEnterprise | null>(null)
+
+function openCreate() {
+  formMode.value = 'create'
+  current.value = null
+  formVisible.value = true
+}
+
+/* 导出当前页合作企业列表为 CSV */
 function onExport() {
   exportCsv(
-    '外部企业列表',
+    '合作企业列表',
     ['编号', '企业名称', '行业', '累计合作', '首次合作', '关联成员数'],
-    list.value.map((e) => [e.id, e.name, e.industry, e.cooperationCount, e.firstCooperationAt, e.members.length]),
+    list.value.map((e) => [e.id, `${e.name} [${e.id}]`, e.industry, e.cooperationCount, e.firstCooperationAt, e.members.length]),
   )
   MessagePlugin.success(`已导出当前页 ${list.value.length} 条数据`)
 }
@@ -131,11 +164,20 @@ onMounted(() => {
 
 <template>
   <div class="external-list page-fade-in">
-    <PageHeader title="外部企业" description="由成员外部企业身份聚合的合作企业（未入驻社区，无展示页）">
+    <PageHeader title="合作企业" description="由成员合作企业身份聚合的合作企业（未入驻社区，无展示页）">
       <template #actions>
+        <ColumnController
+          v-model="visibleColKeys"
+          storage-key="external-enterprises"
+          :columns="columns.map((c) => ({ key: c.colKey, title: c.title }))"
+        />
         <t-button variant="outline" @click="onExport">
           <template #icon><DownloadIcon /></template>
           导出
+        </t-button>
+        <t-button theme="primary" v-permission="'perm:external-enterprise:create'" @click="openCreate">
+          <template #icon><AddIcon /></template>
+          新增合作企业
         </t-button>
       </template>
     </PageHeader>
@@ -156,12 +198,19 @@ onMounted(() => {
         style="width: 150px"
         @change="onSearch"
       />
+      <t-select
+        v-model="query.status"
+        label="状态"
+        :options="statusOptions"
+        clearable
+        style="width: 130px"
+        @change="onSearch"
+      />
       <t-button theme="primary" variant="outline" @click="onSearch">
         <template #icon><SearchIcon /></template>
         查询
       </t-button>
       <t-button variant="outline" theme="default" @click="onReset">
-        <template #icon><RefreshIcon /></template>
         重置
       </t-button>
     </div>
@@ -173,11 +222,11 @@ onMounted(() => {
         hover
         resizable
         :data="list"
-        :columns="columns"
+        :columns="visibleColumns"
         :sort="tableSort"
         :loading="loading"
         :pagination="pagination"
-        empty="暂无符合条件的外部企业"
+        empty="暂无符合条件的合作企业"
         @page-change="onPageChange"
         @sort-change="onSortChange"
         @row-click="({ row }) => goDetail(row)"
@@ -185,7 +234,10 @@ onMounted(() => {
         <template #name="{ row }">
           <div class="name-cell">
             <t-avatar size="36px">{{ row.name.slice(0, 1) }}</t-avatar>
-            <span class="name-text">{{ row.name }}</span>
+            <div class="name-meta">
+              <span class="name-text">{{ row.name }}</span>
+              <t-tag class="id-tag-block" size="small" variant="light">{{ row.id }}</t-tag>
+            </div>
           </div>
         </template>
 
@@ -195,6 +247,10 @@ onMounted(() => {
           <t-tag variant="light" size="small">{{ row.members.length }} 人</t-tag>
         </template>
 
+        <template #status="{ row }">
+          <StatusTag entity="enterprise" :value="row.status" />
+        </template>
+
         <template #op="{ row }">
           <div class="op-cell" @click.stop>
             <t-button variant="text" size="small" @click="goDetail(row)">详情</t-button>
@@ -202,6 +258,13 @@ onMounted(() => {
         </template>
       </t-table>
     </div>
+
+    <ExternalEnterpriseFormDialog
+      v-model:visible="formVisible"
+      :mode="formMode"
+      :enterprise="current"
+      @success="load"
+    />
   </div>
 </template>
 
@@ -214,6 +277,13 @@ onMounted(() => {
   display: flex;
   align-items: center;
   gap: 12px;
+}
+
+.name-meta {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
 }
 
 .name-text {

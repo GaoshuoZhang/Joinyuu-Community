@@ -4,8 +4,8 @@ import type { PrismaService } from '../../common/prisma/prisma.service'
 /* Prisma 基础模型类型不含关系字段，需显式叠加 identities（include 后返回的形状） */
 type UserWithIdentities = PrismaUser & { identities: UserIdentity[] }
 
-/* 用户实体 Prisma 行 → M0 User 形状映射（wiki-backend.md §5.2 / apps/admin/src/types/index.ts）
- * 契约：返回与 M0 mock 完全一致（identities 数组按插入序、activities Json 透传、stats 实时派生） */
+/* 用户实体 Prisma 行 → User 形状映射（wiki-backend.md §5.2 / apps/admin/src/types/index.ts）
+ * 契约：返回与既有契约完全一致（identities 数组按插入序、activities Json 透传、stats 实时派生） */
 
 export interface UserActivity {
   time: string
@@ -51,7 +51,7 @@ export interface UserDto {
   activities: UserActivity[]
 }
 
-/* 身份映射：M0 可选字段（enterpriseId/enterpriseName/role/level/experience）缺失时省略，而非输出 null */
+/* 身份映射：可选字段（enterpriseId/enterpriseName/role/level/experience）缺失时省略，而非输出 null */
 export function toIdentityDto(identity: UserIdentity): IdentityDto {
   const dto: IdentityDto = { type: identity.type, title: identity.title }
   if (identity.enterpriseId != null) dto.enterpriseId = identity.enterpriseId
@@ -62,7 +62,7 @@ export function toIdentityDto(identity: UserIdentity): IdentityDto {
   return dto
 }
 
-/* 用户 stats 实时派生（与 M0 fetchUser 口径一致）：
+/* 用户 stats 实时派生：
  * demands = 发布人 publisherId=uid；projects = 个人承接 or 其社区企业承接；events = 报名记录含该用户 */
 export async function computeUserStats(
   prisma: PrismaService,

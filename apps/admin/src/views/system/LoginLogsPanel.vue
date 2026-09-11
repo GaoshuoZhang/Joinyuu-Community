@@ -1,0 +1,180 @@
+<script setup lang="ts">
+import { computed, onMounted, reactive, ref } from 'vue'
+import { SearchIcon } from 'tdesign-icons-vue-next'
+import PageHeader from '@/components/PageHeader.vue'
+import { fetchLoginLogs, type LoginLog } from '@/api/login-logs'
+import type { TdDateRangePickerProps } from 'tdesign-vue-next'
+
+/* 登录日志：管理员登录成功/失败记录（真实接口 /api/admin/login-logs）。 */
+const loading = ref(false)
+const list = ref<LoginLog[]>([])
+const total = ref(0)
+
+const query = reactive({
+  page: 1,
+  pageSize: 15,
+  status: '',
+  keyword: '',
+  range: ['', ''],
+})
+
+const statusOptions = [
+  { label: '全部', value: '' },
+  { label: '成功', value: 'success' },
+  { label: '失败', value: 'failed' },
+  { label: '锁定', value: 'locked' },
+]
+
+const columns = [
+  { colKey: 'createdAt', title: '登录时间', width: 170, resizable: true , ellipsis: true},
+  { colKey: 'user', title: '登录账号', cell: 'user', width: 140, resizable: true , ellipsis: true},
+  { colKey: 'ip', title: 'IP 地址', width: 130 , ellipsis: true},
+  { colKey: 'region', title: '归属地', width: 110 , ellipsis: true},
+  { colKey: 'device', title: '设备', width: 170, resizable: true , ellipsis: true},
+  { colKey: 'status', title: '状态', cell: 'status', width: 90 , ellipsis: true},
+  { colKey: 'failedReason', title: '失败原因', cell: 'failedReason', width: 120 , ellipsis: true},
+]
+
+const pagination = computed(() => ({
+  current: query.page,
+  pageSize: query.pageSize,
+  total: total.value,
+  showJumper: true,
+}))
+
+async function load() {
+  loading.value = true
+  try {
+    const res = await fetchLoginLogs({
+      page: query.page,
+      pageSize: query.pageSize,
+      status: query.status,
+      keyword: query.keyword,
+      startDate: query.range[0] || undefined,
+      endDate: query.range[1] || undefined,
+    })
+    list.value = res.list
+    total.value = res.total
+  } catch (e) {
+    MessagePlugin.error(e instanceof Error ? e.message : '数据加载失败')
+  } finally {
+    loading.value = false
+  }
+}
+
+function onSearch() {
+  query.page = 1
+  load()
+}
+
+function onReset() {
+  query.status = ''
+  query.keyword = ''
+  query.range = ['', '']
+  query.page = 1
+  load()
+}
+
+function onPageChange(p: { current: number; pageSize: number }) {
+  query.page = p.current
+  query.pageSize = p.pageSize
+  load()
+}
+
+function onRangeChange(v: TdDateRangePickerProps['value']) {
+  query.range = Array.isArray(v) ? (v as string[]) : ['', '']
+}
+
+onMounted(load)
+</script>
+
+<template>
+  <div class="login-logs-panel page-fade-in">
+    <PageHeader title="登录日志" description="管理员登录成功与失败记录，用于安全审计与异常排查">
+    </PageHeader>
+
+    <div class="page-filter-bar">
+      <t-input
+        v-model="query.keyword"
+        clearable
+        placeholder="搜索账号/姓名/IP"
+        style="width: 200px"
+        @enter="onSearch"
+      />
+      <t-select v-model="query.status" label="状态" :options="statusOptions" style="width: 140px" @change="onSearch" />
+      <t-date-range-picker
+        v-model="query.range"
+        :clearable="true"
+        :style="{ width: 260 }"
+        separator="至"
+        @change="onRangeChange"
+      />
+      <t-button theme="primary" @click="onSearch">
+        <template #icon><SearchIcon /></template>
+        查询
+      </t-button>
+      <t-button variant="outline" @click="onReset">重置</t-button>
+    </div>
+
+    <t-table
+      row-key="id"
+      table-layout="fixed"
+      hover
+      resizable
+      :data="list"
+      :columns="columns"
+      :loading="loading"
+      :pagination="pagination"
+      empty="暂无登录日志"
+      @page-change="onPageChange"
+    >
+      <template #user="{ row }">
+        <div class="cell-user">
+          <span class="user-name">{{ row.name }}</span>
+          <span class="user-sub">{{ row.username }}</span>
+        </div>
+      </template>
+      <template #status="{ row }">
+        <t-tag
+          :theme="row.status === 'success' ? 'success' : row.status === 'locked' ? 'warning' : 'danger'"
+          variant="light"
+          size="small"
+        >
+          {{ row.status === 'success' ? '成功' : row.status === 'locked' ? '锁定' : '失败' }}
+        </t-tag>
+      </template>
+      <template #failedReason="{ row }">
+        <span v-if="row.failedReason" class="fail-reason">{{ row.failedReason }}</span>
+        <span v-else class="muted">—</span>
+      </template>
+    </t-table>
+  </div>
+</template>
+
+<style scoped>
+.cell-user {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.user-name {
+  color: var(--td-text-color-primary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.user-sub {
+  font-size: 12px;
+  color: var(--td-text-color-placeholder);
+}
+
+.fail-reason {
+  color: var(--td-error-color);
+}
+
+.muted {
+  color: var(--td-text-color-placeholder);
+}
+</style>

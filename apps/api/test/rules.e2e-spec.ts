@@ -1,11 +1,12 @@
 /* M1-D 规则验收（wiki-backend.md §7.11）：
- * 等级梯度整组保存校验（非递增 → 400 精确文案）+ 积分/经验规则编辑 + 发放记录过滤（source=rule）。
- * 前置：docker compose up + prisma migrate + seed（含 5 级等级梯度、8 条积分规则、5 条经验规则） */
+ * 等级梯度整组保存校验（非递增 → 400 精确文案）+ 积分/经验值规则编辑 + 发放记录过滤（source=rule）。
+ * 前置：docker compose up + prisma migrate + seed（含 5 级等级梯度、9 条积分规则、6 条经验值规则） */
 import { INestApplication } from '@nestjs/common'
 import { Test } from '@nestjs/testing'
 import request from 'supertest'
 import { AppModule } from '../src/app.module'
 import { reseed } from './helpers/reseed'
+import { loginAs } from './helpers/login'
 
 describe('M1-D rules 规则管理', () => {
   let app: INestApplication
@@ -17,10 +18,7 @@ describe('M1-D rules 规则管理', () => {
     app = moduleRef.createNestApplication()
     await app.init()
 
-    const login = await request(app.getHttpServer())
-      .post('/api/admin/auth/login')
-      .send({ username: 'admin', password: 'admin123' })
-    token = login.body.data.token
+    token = await loginAs(app)
   })
 
   afterAll(async () => {

@@ -8,9 +8,9 @@ export interface ApplicationQuery {
   status?: string
 }
 
-/* 已接入 M1 真实接口：GET /api/admin/applications?page&pageSize&type&status
- * 口径：仅返回入驻申请与身份绑定；空间预约申请随公共空间模块、
- * 展示页发布申请随资讯内容模块迁移至各自审批入口 */
+/* GET /api/admin/applications?page&pageSize&type&status
+ * 口径：返回企业入驻/个体入驻/企业合作/身份绑定四类审核；空间预约随公共空间模块、
+ * 展示页发布随资讯内容模块，各有独立审核入口 */
 export async function fetchApplications(query: ApplicationQuery): Promise<PageResult<Application>> {
   const qs = new URLSearchParams()
   qs.set('page', String(query.page))
@@ -20,12 +20,28 @@ export async function fetchApplications(query: ApplicationQuery): Promise<PageRe
   return httpGet<PageResult<Application>>(`/applications?${qs}`)
 }
 
-/* 已接入 M1 真实接口：POST /api/admin/applications/:id/approve，入参 { comment } */
+/* POST /api/admin/applications/:id/approve，入参 { comment } */
 export async function approveApplication(id: string, comment: string): Promise<{ code: number }> {
   return httpPost<{ code: number }>(`/applications/${id}/approve`, { comment })
 }
 
-/* 已接入 M1 真实接口：POST /api/admin/applications/:id/reject，入参 { comment } */
+/* POST /api/admin/applications/:id/reject，入参 { comment } */
 export async function rejectApplication(id: string, comment: string): Promise<{ code: number }> {
   return httpPost<{ code: number }>(`/applications/${id}/reject`, { comment })
+}
+
+/* POST /api/admin/applications/:id/archive */
+export async function archiveApplication(id: string): Promise<{ code: number }> {
+  return httpPost<{ code: number }>(`/applications/${id}/archive`, {})
+}
+
+/* 审核单打印数据：GET /api/admin/applications/:id/print */
+export interface ApplicationPrintResult {
+  title: string
+  generatedAt: string
+  application: Application
+}
+
+export async function fetchApplicationPrint(id: string): Promise<ApplicationPrintResult> {
+  return httpGet<ApplicationPrintResult>(`/applications/${id}/print`)
 }

@@ -19,10 +19,16 @@ export class RedisService implements OnModuleDestroy {
     })
   }
 
-  /** 将 JWT jti 加入黑名单（剩余有效期秒数） */
+  /** 将 JWT jti 加入黑名单（剩余有效期秒数）；Redis 异常仅告警，不阻断登出/踢人流程 */
   async blacklist(jti: string, seconds: number): Promise<void> {
-    if (seconds > 0) {
+    if (seconds <= 0) return
+    try {
       await this.client.set(`auth:blacklist:${jti}`, '1', 'EX', seconds)
+    } catch (e) {
+      console.error(
+        '[redis] 黑名单写入失败（令牌将保留至自然过期）:',
+        e instanceof Error ? e.message : e,
+      )
     }
   }
 
@@ -74,6 +80,26 @@ export class RedisService implements OnModuleDestroy {
     const value = await loader()
     await this.setCache(key, value, ttlSeconds)
     return value
+  }
+
+  /** PING 往返耗时（ms）；Redis 不可用返回 -1（降级展示） */
+  async ping(): Promise<number> {
+    try {
+      const t0 = Date.now()
+      await this.client.ping()
+      return Date.now() - t0
+    } catch {
+      return -1
+    }
+  }
+
+  /** Redis INFO 原文；不可用返回空串 */
+  async info(): Promise<string> {
+    try {
+      return await this.client.info()
+    } catch {
+      return ''
+    }
   }
 
   async onModuleDestroy(): Promise<void> {

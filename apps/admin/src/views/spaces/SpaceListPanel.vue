@@ -1,16 +1,17 @@
 <script setup lang="ts">
-import { onMounted, ref } from 'vue'
+import { computed, onMounted, ref } from 'vue'
 import { MessagePlugin } from 'tdesign-vue-next'
 import { useRouter } from 'vue-router'
-import { AddIcon, RefreshIcon } from 'tdesign-icons-vue-next'
+import { AddIcon } from 'tdesign-icons-vue-next'
 import PageHeader from '@/components/PageHeader.vue'
 import StatusTag from '@/components/StatusTag.vue'
 import SpaceFormDialog from '@/components/SpaceFormDialog.vue'
+import ColumnController from '@/components/ColumnController.vue'
 import { fetchSpaces, setSpaceStatus } from '@/api/spaces'
 import { spaceTypeMap } from '@/constants/status'
 import type { Space } from '@/types'
 
-/* 空间管理面板：新增/编辑基础信息 + 维护登记/停用/恢复（预约审批与使用看板在另两个 Tab）；
+/* 空间管理面板：新增/编辑基础信息 + 维护登记/停用/恢复（预约审核见「公共空间预约」）；
  * 点击空间条目 → 跳转空间详情页（信息 + 预约日历 + 预约明细） */
 const router = useRouter()
 const loading = ref(false)
@@ -18,15 +19,24 @@ const list = ref<Space[]>([])
 const acting = ref('')
 
 const columns = [
-  { colKey: 'name', title: '空间', cell: 'name', minWidth: 160, resizable: true },
-  { colKey: 'type', title: '类型', cell: 'type', width: 100, resizable: true },
-  { colKey: 'capacity', title: '容量', width: 80, resizable: true },
-  { colKey: 'location', title: '位置', width: 130, resizable: true },
-  { colKey: 'time', title: '开放时段', cell: 'time', width: 120, resizable: true },
-  { colKey: 'equipment', title: '设备', cell: 'equipment', minWidth: 200, resizable: true },
-  { colKey: 'status', title: '状态', cell: 'status', width: 100, resizable: true },
+  { colKey: 'name', title: '空间', cell: 'name', width: 160, resizable: true , ellipsis: true},
+  { colKey: 'type', title: '类型', cell: 'type', width: 100, resizable: true , ellipsis: true},
+  { colKey: 'capacity', title: '容量', width: 80, resizable: true , ellipsis: true},
+  { colKey: 'location', title: '位置', width: 130, resizable: true , ellipsis: true},
+  { colKey: 'booking', title: '预约方式', cell: 'booking', width: 150, resizable: true , ellipsis: true},
+  { colKey: 'time', title: '开放时段', cell: 'time', width: 120, resizable: true , ellipsis: true},
+  { colKey: 'equipment', title: '设备', cell: 'equipment', width: 200, resizable: true , ellipsis: true},
+  { colKey: 'status', title: '状态', cell: 'status', width: 100, resizable: true , ellipsis: true},
   { colKey: 'op', title: '操作', cell: 'op', width: 210 },
 ]
+
+/* 列配置：本地持久化显隐/顺序 */
+const visibleColKeys = ref<string[]>(columns.map((c) => c.colKey))
+
+const visibleColumns = computed(() => {
+  const byKey = new Map(columns.map((c) => [c.colKey, c]))
+  return visibleColKeys.value.map((k) => byKey.get(k)).filter(Boolean)
+})
 
 async function load() {
   loading.value = true
@@ -51,7 +61,7 @@ async function onSetStatus(row: Space, status: Space['status']) {
   }
 }
 
-/* 创建 / 编辑空间 */
+/* 新增 / 编辑空间 */
 const formVisible = ref(false)
 const formMode = ref<'create' | 'edit'>('create')
 const currentSpace = ref<Space | null>(null)
@@ -78,18 +88,22 @@ onMounted(load)
 
 <template>
   <div class="space-list-panel page-fade-in">
-    <PageHeader title="公共空间管理" description="公共空间的创建、时段与设备维护（预约审批与使用看板见「公共空间预约」）" />
+    <PageHeader title="公共空间管理" description="公共空间的新增、时段与设备维护（预约审核见「公共空间预约」）">
+      <template #actions>
+        <ColumnController
+          v-model="visibleColKeys"
+          storage-key="spaces"
+          :columns="columns.map((c) => ({ key: c.colKey, title: c.title }))"
+        />
+        <t-button theme="primary" @click="openCreate">
+          <template #icon><AddIcon /></template>
+          新增空间
+        </t-button>
+      </template>
+    </PageHeader>
 
     <div class="page-filter-bar">
-      <span class="panel-tip">空间名被社区活动场地引用，重命名会要求同步活动数据（原型提示）。</span>
-      <t-button variant="outline" style="margin-left: auto" @click="load">
-        <template #icon><RefreshIcon /></template>
-        刷新
-      </t-button>
-      <t-button theme="primary" @click="openCreate">
-        <template #icon><AddIcon /></template>
-        新增空间
-      </t-button>
+      <span class="panel-tip">空间名被社区活动引用，重命名会要求同步活动数据。</span>
     </div>
 
     <div class="page-card">
@@ -99,7 +113,7 @@ onMounted(load)
         hover
         resizable
         :data="list"
-        :columns="columns"
+        :columns="visibleColumns"
         :loading="loading"
         empty="暂无空间数据"
         @row-click="({ row }) => goDetail(row)"
@@ -110,6 +124,16 @@ onMounted(load)
         </template>
         <template #type="{ row }">
           <t-tag variant="light">{{ spaceTypeMap[row.type] ?? row.type }}</t-tag>
+        </template>
+        <template #booking="{ row }">
+          <div class="booking-cell">
+            <t-tag :theme="row.needReservation ? 'primary' : 'default'" variant="light" size="small">
+              {{ row.needReservation ? '需预约' : '免预约' }}
+            </t-tag>
+            <t-tag v-if="row.needReservation" :theme="row.needApproval ? 'warning' : 'success'" variant="light" size="small">
+              {{ row.needApproval ? '需审核' : '免审核' }}
+            </t-tag>
+          </div>
         </template>
         <template #time="{ row }">
           {{ row.allDay ? '全天开放' : `${row.openTime} ~ ${row.closeTime}` }}
@@ -173,6 +197,12 @@ onMounted(load)
 
 .eq-tag {
   margin: 2px 4px 2px 0;
+}
+
+.booking-cell {
+  display: flex;
+  align-items: center;
+  gap: 6px;
 }
 
 .op-cell {
