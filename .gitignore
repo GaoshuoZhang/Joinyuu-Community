@@ -11,4 +11,6 @@ start-admin-web.bat
 start-backend.bat
 .workbuddy/
 .playwright-cli/
+.trae/
 .logs/
+uploads/
