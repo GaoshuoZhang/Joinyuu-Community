@@ -1,0 +1,263 @@
+/* ============================================================
+   聚屿社区 · 客户端 Web — 全局补充样式
+   对齐管理后台 Design Contract（apps/admin/src/styles/tokens.css）：
+   色彩/组件形态一律使用 TDesign 默认 token（--td-*），此处只补充：
+   布局骨架尺寸、页面通用类、动效、客户端专属（品牌渐变/移动安全区）
+   ============================================================ */
+
+:root {
+  /* 布局骨架尺寸 */
+  --app-topbar-h: 60px;
+  --app-mobile-topbar-h: 52px;
+  --app-mobile-tabbar-h: 56px;
+  --app-content-max: 1120px;
+
+  /* 品牌渐变（客户端专属：后台登录页为内联渐变，客户端多处 logo/横幅复用） */
+  --client-brand-gradient: linear-gradient(135deg, var(--td-brand-color) 0%, var(--td-brand-color-5) 100%);
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#app {
+  min-height: 100%;
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  font-family:
+    -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Hiragino Sans GB',
+    'Microsoft YaHei', sans-serif;
+  color: var(--td-text-color-primary);
+  background: var(--td-bg-color-page);
+  -webkit-font-smoothing: antialiased;
+}
+
+a {
+  color: inherit;
+  text-decoration: none;
+}
+
+/* 键盘用户需要能清楚看到当前焦点；鼠标点击不会触发该轮廓。 */
+:focus-visible {
+  outline: 2px solid var(--td-brand-color);
+  outline-offset: 2px;
+}
+
+/* ---------- 页面通用 ---------- */
+
+.page-header {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 16px;
+}
+
+.page-header .page-title {
+  margin: 0;
+  font-size: 20px;
+  font-weight: 600;
+  line-height: 28px;
+  color: var(--td-text-color-primary);
+}
+
+.page-header .page-desc {
+  margin: 4px 0 0;
+  font-size: 13px;
+  color: var(--td-text-color-secondary);
+}
+
+.page-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+/* 筛选区统一包裹 */
+.page-filter-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 12px;
+  padding: 12px 16px;
+  margin-bottom: 16px;
+  background: var(--td-bg-color-container);
+  border: 1px solid var(--td-component-border);
+  border-radius: var(--td-radius-medium);
+}
+
+/* 内容卡片 */
+.page-card {
+  background: var(--td-bg-color-container);
+  border: 1px solid var(--td-component-border);
+  border-radius: var(--td-radius-medium);
+  padding: 16px;
+}
+
+.field-help {
+  margin-top: 4px;
+  color: var(--td-text-color-placeholder);
+  font-size: 12px;
+  line-height: 20px;
+}
+
+/* 页面载入动效：淡入上移
+ * fill-mode 必须用 backwards，禁止 both/forwards：动画结束后残留的 transform
+ * 会让页面根元素成为固定定位弹层的包含块，弹层高度被内容高度裁切 */
+.page-fade-in {
+  animation: pageFadeIn 240ms ease-out backwards;
+}
+
+@keyframes pageFadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* 卡片交错载入 */
+.stagger > * {
+  animation: pageFadeIn 240ms ease-out backwards;
+}
+.stagger > *:nth-child(1) { animation-delay: 0ms; }
+.stagger > *:nth-child(2) { animation-delay: 60ms; }
+.stagger > *:nth-child(3) { animation-delay: 120ms; }
+.stagger > *:nth-child(4) { animation-delay: 180ms; }
+.stagger > *:nth-child(5) { animation-delay: 240ms; }
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    scroll-behavior: auto !important;
+    transition-duration: 0.01ms !important;
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+  }
+
+  .page-fade-in,
+  .stagger > * {
+    animation: none;
+  }
+}
+
+/* ---------- 实体 ID 标签 ---------- */
+/* 列表名称下方独立成行（父容器为纵向 flex） */
+.id-tag-block {
+  align-self: flex-start;
+  margin-top: 2px;
+}
+
+/* 名称/字段同行内联（详情、抽屉等） */
+.id-tag {
+  margin-left: 4px;
+  vertical-align: middle;
+}
+
+/* ---------- 移动端 ---------- */
+
+/* 底部 TabBar 安全区 */
+.safe-area-bottom {
+  padding-bottom: env(safe-area-inset-bottom);
+}
+
+/* 移动端列表项通用卡片 */
+.m-card {
+  background: var(--td-bg-color-container);
+  border: 1px solid var(--td-component-border);
+  border-radius: var(--td-radius-medium);
+  padding: 14px;
+}
+
+/* ---------- 移除移动端按钮的 ::after 描边层 ---------- */
+/* tdesign-mobile-vue 用 `.t-button::after`（200% 尺寸 + scale(.5)）来画 1px 描边，
+ * 该 ::after 自带 border-style: solid，再由各主题变体补 border-width / border-color
+ * （见 node_modules/tdesign-mobile-vue/es/button/style/index.css）。
+ * 客户端统一扁平化，去掉这层描边；用双类名提高特异性，避免与库样式按加载顺序竞争。
+ * 桌面端不受影响：tdesign-vue-next 的按钮不使用 ::after 画描边。 */
+.t-button.t-button::after {
+  border-style: none;
+}
+
+/* ---------- 登录/注册品牌区 ---------- */
+/* 与管理后台登录页同一套样式（apps/admin/src/styles/tokens.css） */
+
+.login-page {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  min-height: 100vh;
+}
+
+.login-brand {
+  position: relative;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  padding: 64px;
+  color: #fff;
+  background: linear-gradient(152deg, #062a56 0%, #0052d9 58%, #0080c9 100%);
+}
+
+.login-brand::before,
+.login-brand::after {
+  content: '';
+  position: absolute;
+  border-radius: 50%;
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  pointer-events: none;
+}
+
+.login-brand::before {
+  width: 420px;
+  height: 420px;
+  right: -140px;
+  bottom: -160px;
+}
+
+.login-brand::after {
+  width: 260px;
+  height: 260px;
+  right: 40px;
+  bottom: -80px;
+  border-style: dashed;
+}
+
+.login-form-side {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 32px;
+  background: var(--td-bg-color-page);
+}
+
+.login-form-card {
+  width: 380px;
+  max-width: 100%;
+  padding: 40px 36px;
+  background: var(--td-bg-color-container);
+  border: 1px solid var(--td-component-border);
+  border-radius: var(--td-radius-large);
+  box-shadow: var(--td-shadow-1);
+}
+
+@media (max-width: 900px) {
+  .login-page {
+    grid-template-columns: 1fr;
+  }
+
+  .login-brand {
+    padding: 40px 32px;
+    min-height: 220px;
+  }
+}
