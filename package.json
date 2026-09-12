@@ -12,6 +12,13 @@
     "db:down": "docker compose -f apps/api/docker-compose.dev.yml down",
     "db:migrate": "pnpm --filter @joinyuu/api db:migrate",
     "db:seed": "pnpm --filter @joinyuu/api db:seed",
-    "db:reset": "pnpm --filter @joinyuu/api db:reset"
+    "db:reset": "pnpm --filter @joinyuu/api db:reset",
+    "lint": "eslint .",
+    "lint:fix": "eslint . --fix"
+  },
+  "devDependencies": {
+    "eslint": "^10.10.0",
+    "eslint-plugin-vue": "^10.11.0",
+    "typescript-eslint": "^8.70.0"
   }
 }

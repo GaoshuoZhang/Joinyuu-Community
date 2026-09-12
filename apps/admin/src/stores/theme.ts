@@ -14,6 +14,7 @@ export const useThemeStore = defineStore('theme', {
       const next = mode ?? this.mode
       this.mode = next
       localStorage.setItem(STORAGE_KEY, next)
+      document.documentElement.style.colorScheme = next
       if (next === 'dark') document.documentElement.setAttribute('theme-mode', 'dark')
       else document.documentElement.removeAttribute('theme-mode')
     },

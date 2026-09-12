@@ -133,6 +133,7 @@ async function main() {
         name: r.name,
         description: r.description,
         sort: r.sort,
+        dataScope: r.dataScope ?? [],
         createdAt: '2026-09-01 10:00',
       },
     })
@@ -151,6 +152,7 @@ async function main() {
         name: a.name,
         status: a.status,
         lastLoginAt: null,
+        passwordUpdatedAt: '2026-09-01 10:00',
       },
     })
     for (const roleCode of a.roleCodes) {
@@ -172,6 +174,14 @@ async function main() {
       reservationOpen: systemConfig.reservationOpen,
       leaseExpireRemindDays: systemConfig.leaseExpireRemindDays,
       uploadMaxSizeMb: systemConfig.uploadMaxSizeMb,
+      passwordExpireDays: systemConfig.passwordExpireDays,
+      minioEnabled: systemConfig.minioEnabled,
+      minioEndpoint: systemConfig.minioEndpoint,
+      minioPort: systemConfig.minioPort,
+      minioUseSsl: systemConfig.minioUseSsl,
+      minioAccessKey: systemConfig.minioAccessKey,
+      minioSecretKey: systemConfig.minioSecretKey,
+      minioBucket: systemConfig.minioBucket,
       updatedAt: systemConfig.updatedAt,
       updatedBy: systemConfig.updatedBy,
     },
@@ -812,6 +822,7 @@ async function main() {
     ['PT', pointsRecords.map((x: any) => x.id)],
     ['G', goods.map((x: any) => x.id)],
     ['RO', redemptionOrders.map((x: any) => x.id)],
+    ['R', adminRoles.map((x: any) => x.id)],
     ['WS', workstations.map((x: any) => x.id)],
     ['WA', workstationAreas.map((x: any) => x.id)],
     ['LS', leases.map((x: any) => x.id)],

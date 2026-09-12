@@ -2,10 +2,12 @@ import { BadRequestException, ConflictException, Injectable, NotFoundException }
 import { hash } from 'bcryptjs'
 import { randomInt } from 'node:crypto'
 import { PrismaService } from '../../../common/prisma/prisma.service'
+import { RedisService } from '../../../common/redis/redis.service'
+import { passwordExpiredKey } from '../../../common/redis/cache-keys'
 import { AuditService } from '../../../common/audit/audit.service'
 import { AdminPermissionService } from '../../../common/rbac/admin-permission.service'
 import { AdminSessionService } from '../../auth/admin-session.service'
-import { formatDateTime } from '../../../common/utils/time'
+import { formatDateTime, formatNow } from '../../../common/utils/time'
 import type { CreateAdminDto } from './dto/create-admin.dto'
 import type { UpdateAdminDto } from './dto/update-admin.dto'
 import type { ResetPasswordDto } from './dto/reset-password.dto'
@@ -41,6 +43,7 @@ export interface AdminAccountDto {
 export class AdminsService {
   constructor(
     private readonly prisma: PrismaService,
+    private readonly redis: RedisService,
     private readonly audit: AuditService,
     private readonly permissions: AdminPermissionService,
     private readonly sessions: AdminSessionService,
@@ -77,12 +80,14 @@ export class AdminsService {
         username,
         name: dto.name.trim(),
         passwordHash: await hash(initialPassword, 10),
+        passwordUpdatedAt: formatNow(),
         status: 'active',
       },
     })
     await this.prisma.adminUserRole.createMany({
       data: roleIds.map((roleId) => ({ adminUserId: created.id, roleId })),
     })
+    await this.redis.delCache(passwordExpiredKey(username))
     await this.audit.record({
       module: 'RBAC',
       action: '新增管理员',
@@ -158,8 +163,9 @@ export class AdminsService {
     if (!admin) throw new NotFoundException('管理员不存在')
     await this.prisma.adminUser.update({
       where: { id },
-      data: { passwordHash: await hash(dto.password, 10) },
+      data: { passwordHash: await hash(dto.password, 10), passwordUpdatedAt: formatNow() },
     })
+    await this.redis.delCache(passwordExpiredKey(admin.username))
     /* 旧 token 全部失效（黑名单） */
     await this.sessions.kickByUsername(admin.username)
     await this.audit.record({

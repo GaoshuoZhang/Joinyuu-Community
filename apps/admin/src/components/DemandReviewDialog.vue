@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { nextTick, ref, watch } from 'vue'
 import { MessagePlugin } from 'tdesign-vue-next'
-import { identityTypeMap, userLevelMap } from '@/constants/identity'
+import { identityTypeMap } from '@/constants/identity'
 import { approveDemand, rejectDemand } from '@/api/demands'
 import type { Demand } from '@/types'
 
@@ -80,12 +80,6 @@ async function onConfirmReject() {
   }
 }
 
-/* 范围拼接展示（只读） */
-function scopeItems(identities: string[]): string[] {
-  const names = identities.map((t) => identityTypeMap[t as keyof typeof identityTypeMap] ?? t)
-  return names
-}
-
 /* 需求方身份快照 → 纯文本标签（企业仅显示 社区企业/合作企业，不追加成员标题） */
 function publisherIdentityLabel(d: Demand): string {
   const type = d.publisherIdentity?.type
@@ -99,6 +93,8 @@ function publisherIdentityLabel(d: Demand): string {
     :visible="visible"
     header="审核需求"
     width="640px"
+    :close-on-overlay-click="false"
+    :close-on-esc-keydown="false"
     @close="onCancel"
   >
     <template #footer>
@@ -149,7 +145,7 @@ function publisherIdentityLabel(d: Demand): string {
           <t-form-item :rules="[{ required: true, message: '请填写驳回原因', trigger: 'submit' }]" name="rejectReason">
             <t-textarea
               v-model="rejectReason"
-              placeholder="驳回原因（必填，将通知提交人）"
+              placeholder="驳回原因（必填，将通知提交人）…"
               :autosize="{ minRows: 3, maxRows: 5 }"
             />
           </t-form-item>

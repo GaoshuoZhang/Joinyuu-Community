@@ -1,10 +1,11 @@
 <script setup lang="ts">
+import ListErrorState from '@/components/ListErrorState.vue'
 import { computed, nextTick, onMounted, reactive, ref, watch } from 'vue'
 import { MessagePlugin } from 'tdesign-vue-next'
 import type { FormProps } from 'tdesign-vue-next'
 import { AddIcon } from 'tdesign-icons-vue-next'
 import StatusTag from '@/components/StatusTag.vue'
-import { createColumn, deleteColumn, fetchArticles, fetchColumns, toggleColumnStatus, toggleColumnSubmission, updateColumn } from '@/api/contents'
+import { createColumn, deleteColumn, fetchColumns, toggleColumnStatus, toggleColumnSubmission, updateColumn } from '@/api/contents'
 import PageHeader from '@/components/PageHeader.vue'
 import ColumnController from '@/components/ColumnController.vue'
 import type { ArticleColumn } from '@/types'
@@ -12,6 +13,7 @@ import type { ArticleColumn } from '@/types'
 /* 栏目管理面板：新增/编辑栏目（含「开放投稿」开关） + 启用/停用 + 删除；
  * 系统保留栏目「未指定」：不可编辑/停用/删除，删除其他栏目时其文章自动转移至此 */
 const loading = ref(false)
+const loadError = ref('')
 const list = ref<ArticleColumn[]>([])
 const acting = ref('')
 
@@ -49,6 +51,9 @@ async function load() {
     /* 多选栏目：一篇文章可计入多个栏目 */
     for (const a of articlesRes.list) for (const id of a.columnIds) counts[id] = (counts[id] ?? 0) + 1
     articleCountByColumn.value = counts
+    loadError.value = ''
+  } catch (e) {
+    loadError.value = e instanceof Error ? e.message : '数据加载失败'
   } finally {
     loading.value = false
   }
@@ -173,6 +178,7 @@ onMounted(load)
 
 <template>
   <div class="column-panel page-fade-in">
+    <ListErrorState v-if="loadError" :message="loadError" :loading="loading" @retry="() => load()" />
     <PageHeader title="栏目管理" description="文章栏目的新增、排序与投稿开关；系统保留栏目「未指定」不可变更">
       <template #actions>
         <ColumnController
@@ -199,7 +205,7 @@ onMounted(load)
         :data="list"
         :columns="visibleColumns"
         :loading="loading"
-        empty="暂无栏目数据"
+        empty="暂无栏目"
       >
         <template #name="{ row }">
           <div class="cell-title">{{ row.name }}</div>
@@ -276,7 +282,7 @@ onMounted(load)
       <t-form ref="formRef" :data="form" :rules="rules" label-align="top">
         <div class="form-row">
           <t-form-item label="栏目名称" name="name">
-            <t-input v-model="form.name" placeholder="如 创投观察" />
+            <t-input v-model="form.name" placeholder="如 创投观察…" />
           </t-form-item>
           <t-form-item label="排序权重" name="sort">
             <t-input-number v-model="form.sort" :min="1" theme="column" style="width: 100%" />
@@ -286,7 +292,7 @@ onMounted(load)
           <t-textarea
             v-model="form.description"
             :autosize="{ minRows: 3, maxRows: 5 }"
-            placeholder="栏目定位与内容方向"
+            placeholder="栏目定位与内容方向…"
           />
         </t-form-item>
         <t-form-item label="开放投稿" name="submissionOpen">

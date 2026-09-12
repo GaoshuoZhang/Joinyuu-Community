@@ -1,7 +1,9 @@
-import { BadRequestException, ForbiddenException, Injectable, NotFoundException } from '@nestjs/common'
+import { BadRequestException, ConflictException, ForbiddenException, Injectable, NotFoundException } from '@nestjs/common'
 import { PrismaService } from '../../../common/prisma/prisma.service'
 import { AuditService } from '../../../common/audit/audit.service'
 import { AdminPermissionService } from '../../../common/rbac/admin-permission.service'
+import { IdGeneratorService } from '../../../common/id-generator/id-generator.service'
+import { formatNow } from '../../../common/utils/time'
 
 export interface AdminRoleDto {
   id: string
@@ -9,6 +11,8 @@ export interface AdminRoleDto {
   name: string
   description: string
   permCodes: string[]
+  /** 数据范围域集合（空数组 = 不限制全部） */
+  dataScope: string[]
 }
 
 export interface PermissionItemDto {
@@ -30,6 +34,7 @@ export class RolesService {
     private readonly prisma: PrismaService,
     private readonly audit: AuditService,
     private readonly permissions: AdminPermissionService,
+    private readonly ids: IdGeneratorService,
   ) {}
 
   async list(): Promise<AdminRoleDto[]> {
@@ -43,7 +48,51 @@ export class RolesService {
       name: r.name,
       description: r.description,
       permCodes: rolePerms.filter((p) => p.roleId === r.id).map((p) => p.permissionCode),
+      dataScope: r.dataScope,
     }))
+  }
+
+  /** 新增自定义角色：初始无权限点（经「权限配置」分配）；编码唯一且不可占用内置 super */
+  async create(
+    dto: { code: string; name: string; description?: string },
+    operator: { username: string; name: string },
+  ): Promise<AdminRoleDto> {
+    const code = dto.code.trim()
+    const name = dto.name.trim()
+    const description = dto.description?.trim() ?? ''
+    if (code === 'super') throw new BadRequestException('不可使用内置角色编码 super')
+
+    const codeExists = await this.prisma.adminRole.findUnique({ where: { code } })
+    if (codeExists) throw new ConflictException('该角色编码已存在')
+    const nameExists = await this.prisma.adminRole.findFirst({ where: { name } })
+    if (nameExists) throw new ConflictException('该角色名称已存在')
+
+    const maxSort = await this.prisma.adminRole.aggregate({ _max: { sort: true } })
+    const created = await this.prisma.adminRole.create({
+      data: {
+        id: await this.ids.next('R'),
+        code,
+        name,
+        description: description || '自定义角色',
+        sort: (maxSort._max.sort ?? 0) + 10,
+        createdAt: formatNow(),
+      },
+    })
+    await this.audit.record({
+      module: 'RBAC',
+      action: '新增角色',
+      target: `${created.code} · ${created.name}`,
+      detail: '初始无权限点，待权限配置分配',
+      operator: operator.name,
+    })
+    return {
+      id: created.id,
+      code: created.code,
+      name: created.name,
+      description: created.description,
+      permCodes: [],
+      dataScope: created.dataScope,
+    }
   }
 
   async savePermissions(
@@ -96,6 +145,30 @@ export class RolesService {
       action: '分配角色权限',
       target: `${role.code} · ${role.name}`,
       detail: unique.includes('*') ? '全量权限' : `${unique.length} 个权限点`,
+      operator: operator.name,
+    })
+    return { code: 0 }
+  }
+
+  /** 设置角色数据范围（域集合）；空数组 = 不限制全部；超管角色不可限制 */
+  async saveScope(
+    id: string,
+    dataScope: string[],
+    operator: { username: string; name: string },
+  ): Promise<{ code: number }> {
+    const role = await this.prisma.adminRole.findUnique({ where: { id } })
+    if (!role) throw new NotFoundException('角色不存在')
+    if (role.code === 'super') throw new BadRequestException('超级管理员角色不可限制数据范围')
+
+    const unique = [...new Set(dataScope)]
+    await this.prisma.adminRole.update({ where: { id }, data: { dataScope: unique } })
+    /* 数据范围变更 → 关联管理员权限/范围缓存失效（改角色即时生效） */
+    await this.permissions.invalidateByRole(id)
+    await this.audit.record({
+      module: 'RBAC',
+      action: '设置数据范围',
+      target: `${role.code} · ${role.name}`,
+      detail: unique.length === 0 ? '不限制（全部域）' : `数据范围：${unique.join('、')}`,
       operator: operator.name,
     })
     return { code: 0 }

@@ -2,6 +2,7 @@
 import { nextTick, reactive, ref, watch } from 'vue'
 import { MessagePlugin } from 'tdesign-vue-next'
 import type { FormProps } from 'tdesign-vue-next'
+import { focusFirstInvalid } from '@/utils/form'
 import {
   addExternalMember,
   createExternalEnterprise,
@@ -112,7 +113,7 @@ function payload(): ExternalEnterprisePayload {
 
 async function onConfirm() {
   const valid = await formRef.value.validate()
-  if (valid !== true) return
+  if (valid !== true) return focusFirstInvalid(formRef.value)
   submitting.value = true
   try {
     if (props.mode === 'create') {
@@ -166,6 +167,8 @@ function onClose() {
     :visible="visible"
     :header="mode === 'create' ? '新增合作企业' : '编辑合作企业'"
     width="640px"
+    :close-on-overlay-click="false"
+    :close-on-esc-keydown="false"
     @close="onClose"
   >
     <template #footer>
@@ -179,14 +182,14 @@ function onClose() {
 
     <t-form ref="formRef" :data="form" :rules="rules" label-align="top">
       <t-form-item label="企业名称" name="name">
-        <t-input v-model="form.name" clearable placeholder="请输入企业名称" />
+        <t-input v-model="form.name" clearable placeholder="请输入企业名称…" />
       </t-form-item>
       <div class="form-row">
         <t-form-item label="行业" name="industry">
-          <t-select v-model="form.industry" :options="industryOptions" clearable filterable placeholder="选择行业" />
+          <t-select v-model="form.industry" :options="industryOptions" clearable filterable placeholder="选择行业…" />
         </t-form-item>
         <t-form-item label="规模" name="size">
-          <t-select v-model="form.size" :options="sizeOptions" clearable placeholder="选择规模" />
+          <t-select v-model="form.size" :options="sizeOptions" clearable placeholder="选择规模…" />
         </t-form-item>
       </div>
       <div class="form-row">
@@ -198,7 +201,7 @@ function onClose() {
         <t-textarea
           v-model="form.description"
           :autosize="{ minRows: 3, maxRows: 6 }"
-          placeholder="选填"
+          placeholder="选填…"
         />
       </t-form-item>
       <t-form-item v-if="mode === 'edit'" label="关联成员">
@@ -212,7 +215,7 @@ function onClose() {
             multiple
             clearable
             filterable
-            placeholder="选择关联成员（可选多人）"
+            placeholder="选择关联成员（可选多人）…"
           />
         </div>
       </t-form-item>

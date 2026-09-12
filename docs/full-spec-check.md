@@ -2,7 +2,7 @@
 
 > 跨会话/跨 agent 的进度唯一事实来源。每完成一个模块，同步勾选。
 > 细致契约见 [wiki-admin-web.md](./wiki-admin-web.md) 与 [wiki-backend.md](./wiki-backend.md)；实体字段见 [docs/entity-fields.md](./entity-fields.md)。
-> 最后更新：2026-09-12（**M1.5 R1~R12 全部落地并有本工作树增强**：RBAC/管理员账号/登录安全/上传素材/富文本/监控/趋势/登录日志/导出打印/暗色/列配置/归档管理；e2e **25 套件 / 163 用例**）
+> 最后更新：2026-09-12（**M1.5 R1~R12 全部落地并有本工作树增强**：RBAC/管理员账号/登录安全/上传素材/富文本/监控/趋势/登录日志/导出打印/暗色/列配置/归档管理/新增角色/一键强制下线/角色与账号三 Tab 统一筛选栏/工作台视觉修复；e2e **25 套件 / 169 用例**）
 
 ## 0. 项目定位
 
@@ -45,7 +45,7 @@
 
 ## 4. M1 后端服务（已完成）
 
-> M1.5 增强后现状（代码为准）：36 个 controller（34 个 `/api/admin` + health + public files）共 **188 个在册 HTTP 端点**（管理端 186 + 公开 2）；Prisma schema **43 模型**（M1 时 35，M1.5 新增 RBAC 4 表 / LoginLog / SchedulerLog / MallAsset / ArchiveSetting 共 8 表）。
+> M1.5 增强后现状（代码为准）：36 个 controller（34 个 `/api/admin` + health + public files）共 **191 个在册 HTTP 端点**（管理端 189 + 公开 2；2026-09-12 新增 `POST /api/admin/roles` 与 `POST /api/admin/auth/sessions/kick-all`）；Prisma schema **43 模型**（M1 时 35，M1.5 新增 RBAC 4 表 / LoginLog / SchedulerLog / MallAsset / ArchiveSetting 共 8 表）。
 
 - **M1-A 底座**：NestJS 11 + 全局管线（包络/异常过滤/JWT 守卫/审计拦截器/前缀 ID 发号器）、Docker Compose（PG+Redis）、Prisma schema（M1 时 35 模型，M1.5 后 43）+ seed 骨架、认证（JWT + Redis 登出黑名单）、健康检查
 - **M1-B 社区成员域（21 端点）**：users / individuals / enterprises / external-enterprises / applications / ledgers；grantIdentity 联动、账本事务、审计迁移、admin 五组页面接入
@@ -116,6 +116,8 @@
 > - R3 密码周期**未实现**：仅强度校验（修改/重置 ≥8 位含字母与数字；新建管理员未传密码时随机生成 12 位初始密码并一次性返回）；登录失败锁定为 Redis 实现（5 次失败 / 15 分钟）。
 > - R4 对象存储以本地磁盘驱动落地（`StorageService` 抽象 + `UPLOAD_DIR` 可配，默认 `apps/api/uploads`，MinIO 驱动待接入）；素材与富文本图片共用的上传大小限制由系统配置 `uploadMaxSizeMb` 控制（1-100MB 整数，默认 10MB；multer 100MB 硬兜底），上传经魔数嗅探（禁 SVG）与 HTML 消毒。
 > - R12 软删/归档现覆盖 **13 个域/标签页**：社区企业 / 合作企业 / 资讯发布 / 投稿内容 / 公告栏 / 需求 / 项目 / 活动 / 租赁 / 空间预约 / 商品 / 商城订单 / 申请审核（资讯发布与投稿内容同属 Article 的 official/submitted 两个标签页）；每域可配置自动归档（开关 + 延时 + 状态）与自动删除（开关 + 延时），由调度任务 `archive-auto-archive` / `archive-auto-purge`（每 5 分钟）执行；恢复/彻底删除仅限 `deletedAt` 非空对象并保留审计。
+> - 2026-09-12 功能增强（前后端）：**新增角色** `POST /api/admin/roles`（编码唯一/不可用 super/名称唯一，ID 走 R 前缀 seed 续号自 R5，初始无权限点，审计「RBAC · 新增角色」；UI 在 角色与账号·角色权限 Tab，筛选栏 + 新增弹窗）；**一键强制下线** `POST /api/admin/auth/sessions/kick-all`（保留当前操作者会话，返回实际下线数；UI 在 在线会话 Tab，popconfirm 确认）；管理员账号 Tab 的「新增管理员」从独占按钮行移入筛选栏右端；三 Tab 统一「筛选栏 + 表格卡片」结构；工作台修复 待办 StatCard 贴边（TDesign `.t-link` 基础样式覆盖）与 系统公告条目文字水平居中（column flex 下 `align-items:center` 渗透）。
+> - 2026-09-12 有头浏览器全量走查（playwright-cli，chrome headed）：覆盖 登录边界（错验证码/错密码/5 次锁定 429/成功）、工作台交互（趋势切换/编辑布局开关恢复）、用户筛选与详情、企业新增校验、栏目系统保留行、归档空态与 13 域 tab、配置越界（1-90/1-100）、字典重名 409、日志模块筛选与 URL 同步、角色新增边界（非法编码前端拦截/super 后端 400）、暗色持久化、404 兜底、auditor 菜单裁剪与越权 403；**发现并修复缺陷**：系统管理菜单组 `canSee` 误用聚合路径码导致 auditor 整组菜单不可见（见 wiki-admin-web §4）；全程 console 零 JS 运行时异常（仅测试触发的预期 4xx）。
 
 ---
 
@@ -123,5 +125,5 @@
 
 - 设计契约冻结机制（M0 建立，见 wiki-admin-web.md）
 - 实体字段沉淀：docs/entity-fields.md（43 模型，schema.prisma 为事实来源）
-- 后端测试：e2e 25 套件 / 163 用例 + `test/helpers/reseed.ts` 套件级隔离，`pnpm --filter @joinyuu/api test:e2e`
+- 后端测试：e2e 25 套件 / 169 用例 + `test/helpers/reseed.ts` 套件级隔离，`pnpm --filter @joinyuu/api test:e2e`
 - CI/CD 与部署方案：待规划

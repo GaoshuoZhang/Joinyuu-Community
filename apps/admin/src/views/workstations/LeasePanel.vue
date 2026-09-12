@@ -1,5 +1,7 @@
 <script setup lang="ts">
-import { computed, onMounted, ref, watch } from 'vue'
+import { useListQueryState } from '@/utils/listQuery'
+import ListErrorState from '@/components/ListErrorState.vue'
+import { computed, onMounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { MessagePlugin } from 'tdesign-vue-next'
 import { AddIcon, DownloadIcon } from 'tdesign-icons-vue-next'
@@ -11,12 +13,14 @@ import LeaseFormDialog from '@/components/LeaseFormDialog.vue'
 import ColumnController from '@/components/ColumnController.vue'
 import { archiveLease, deriveLeaseStatus, fetchLeases, fetchWorkstations, terminateLease, type LeaseViewStatus } from '@/api/workstations'
 import { exportCsv, statusLabel } from '@/utils/exportCsv'
+import { formatDateOnly } from '@/utils/format'
 import type { Lease, Workstation } from '@/types'
 
 /* 租约管理面板：新增租约（=分配办公位）/ 续期编辑 / 终止释放办公位；
  * 状态 active/expiring/expired/terminated 由结束日期读取时派生。
  * 支持 query（?renterId=&renterType=）自动筛选该主体的租约（企业/用户详情「关联租赁」跳转）。 */
 const loading = ref(false)
+const loadError = ref('')
 const leases = ref<Lease[]>([])
 const workstations = ref<Workstation[]>([])
 const acting = ref('')
@@ -32,18 +36,7 @@ const router = useRouter()
 const renterId = ref('')
 const renterType = ref('')
 
-function readQuery() {
-  renterId.value = (route.query.renterId as string) || ''
-  renterType.value = (route.query.renterType as string) || ''
-}
 
-watch(
-  () => route.query,
-  () => {
-    readQuery()
-    applyFilter()
-  },
-)
 
 /* 筛选标签主体名称（企业/用户） */
 const renterName = computed(() => {
@@ -75,14 +68,9 @@ function setStatFilter(status: LeaseViewStatus) {
   statusFilter.value = statusFilter.value === status ? '' : status
 }
 
-function applyFilter() {
-  /* 数据在 load 后由 computed filteredLeases 决定展示；筛选标签渲染依赖 leases */
-}
-
 function clearFilter() {
   renterId.value = ''
   renterType.value = ''
-  router.replace({ query: {} })
 }
 
 const columns = [
@@ -127,6 +115,9 @@ async function load() {
     const [ls, ws] = await Promise.all([fetchLeases(), fetchWorkstations()])
     leases.value = ls
     workstations.value = ws
+    loadError.value = ''
+  } catch (e) {
+    loadError.value = e instanceof Error ? e.message : '数据加载失败'
   } finally {
     loading.value = false
   }
@@ -255,8 +246,9 @@ function onExport() {
   MessagePlugin.success(`已导出当前页 ${filteredLeases.value.length} 条数据`)
 }
 
+useListQueryState({}, undefined, { refs: { status: statusFilter, keyword, renterId, renterType }, live: true })
+
 onMounted(async () => {
-  readQuery()
   await load()
   /* 「关联租赁」跳转：自动打开新增租约弹窗并预选该办公位/办公室 */
   if (route.query.create === '1') {
@@ -267,6 +259,7 @@ onMounted(async () => {
 
 <template>
   <div class="lease-panel page-fade-in">
+    <ListErrorState v-if="loadError" :message="loadError" :loading="loading" @retry="() => load()" />
     <PageHeader title="租赁管理" description="办公位与办公室租约的新增、续期与终止；新增租约即完成办公位/办公室分配">
       <template #actions>
         <ColumnController
@@ -281,7 +274,7 @@ onMounted(async () => {
           <template #icon><DownloadIcon /></template>
           导出
         </t-button>
-        <t-button theme="primary" @click="openCreate">
+        <t-button theme="primary" @click="() => openCreate()">
           <template #icon><AddIcon /></template>
           新增租约
         </t-button>
@@ -322,7 +315,7 @@ onMounted(async () => {
     <div class="page-filter-bar">
       <t-input
         v-model="keyword"
-        placeholder="搜索租约编号/办公位编号/租赁方/联系人/联系电话"
+        placeholder="搜索租约编号/办公位编号/租赁方/联系人/联系电话…"
         clearable
         style="width: 320px"
       />
@@ -343,7 +336,7 @@ onMounted(async () => {
         :data="filteredLeases"
         :columns="visibleColumns"
         :loading="loading"
-        empty="暂无租约数据"
+        empty="暂无租约"
         @row-click="onRowClick"
       >
         <template #enterprise="{ row }">
@@ -368,7 +361,7 @@ onMounted(async () => {
         <template #status="{ row }">
           <StatusTag entity="lease" :value="deriveLeaseStatus(row)" />
           <div v-if="deriveLeaseStatus(row) === 'terminated' && row.terminatedAt" class="terminated-at">
-            {{ row.terminatedAt.slice(0, 10) }}
+            {{ formatDateOnly(row.terminatedAt) }}
           </div>
         </template>
         <template #op="{ row }">

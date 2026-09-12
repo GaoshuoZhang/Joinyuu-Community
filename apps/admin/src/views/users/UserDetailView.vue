@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, nextTick, onMounted, reactive, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
+import { useQueryTab } from '@/utils/navigation'
 import { MessagePlugin } from 'tdesign-vue-next'
 import type { FormProps } from 'tdesign-vue-next'
 import { ArrowLeftIcon } from 'tdesign-icons-vue-next'
@@ -37,7 +38,19 @@ const loading = ref(true)
 const user = ref<User | null>(null)
 /** 合作企业档案缓存：external_enterprise 身份经"档案名 + 成员 uid"反查档案 ID */
 const externalArchives = ref<ExternalEnterprise[]>([])
-const activeTab = ref('identities')
+const activeTab = useQueryTab('identities', ['identities', 'applications', 'demands', 'projects', 'events', 'leases', 'submissions', 'reservations', 'experience', 'points', 'activities'] as const)
+
+function maskCitizenId(value?: string | null): string {
+  if (!value) return '—'
+  if (value.length <= 8) return `${value.slice(0, 2)}****${value.slice(-2)}`
+  return `${value.slice(0, 6)}********${value.slice(-4)}`
+}
+
+function maskOpaqueId(value?: string | null): string {
+  if (!value) return '—'
+  if (value.length <= 10) return `${value.slice(0, 2)}…${value.slice(-2)}`
+  return `${value.slice(0, 6)}…${value.slice(-4)}`
+}
 
 /* 头部身份标签行：个人用户为默认身份，不展示 */
 const headerIdentities = computed(() => user.value?.identities.filter((i) => i.type !== 'individual') ?? [])
@@ -69,14 +82,6 @@ function canGoEnterprise(identity: UserIdentity): boolean {
   return identity.type === 'external_enterprise' && !!externalArchiveId(identity)
 }
 
-function goEnterprise(identity: UserIdentity) {
-  if (identity.type === 'community_enterprise' && identity.enterpriseId) {
-    router.push(`/enterprises/${identity.enterpriseId}`)
-  } else if (identity.type === 'external_enterprise') {
-    const archiveId = externalArchiveId(identity)
-    if (archiveId) router.push(`/external-enterprises/${archiveId}`)
-  }
-}
 
 /* ---------- 账号编辑 / 冻结 / 恢复 ---------- */
 
@@ -143,11 +148,17 @@ async function onConfirmEdit() {
 
 const freezeVisible = ref(false)
 const freezeSaving = ref(false)
+const freezeFormRef = ref()
 const freezeForm = reactive({
   permanent: false,
   until: '',
   reason: '',
 })
+
+const freezeRules: FormProps['rules'] = {
+  reason: [{ required: true, message: '请填写冻结原因', trigger: 'blur' }],
+  until: [{ required: true, message: '请选择冻结期限或开启长期冻结', trigger: 'change' }],
+}
 
 /* 长期开关：开启后清空冻结期限（期限项随之隐藏） */
 watch(
@@ -162,18 +173,13 @@ function openFreeze() {
   freezeForm.until = ''
   freezeForm.reason = ''
   freezeVisible.value = true
+  nextTick(() => freezeFormRef.value?.clearValidate())
 }
 
 async function onConfirmFreeze() {
   if (!user.value) return
-  if (!freezeForm.reason.trim()) {
-    MessagePlugin.warning('请填写冻结原因')
-    return
-  }
-  if (!freezeForm.permanent && !freezeForm.until) {
-    MessagePlugin.warning('请选择冻结期限或开启长期冻结')
-    return
-  }
+  const valid = await freezeFormRef.value.validate()
+  if (valid !== true) return
   freezeSaving.value = true
   try {
     const payload: UserFreezePayload = {
@@ -491,12 +497,12 @@ onMounted(async () => {
             <t-tag v-else theme="default" variant="light" size="small">未实名</t-tag>
           </t-descriptions-item>
           <t-descriptions-item label="真实姓名">{{ user.realName ?? '—' }}</t-descriptions-item>
-          <t-descriptions-item label="身份证号">{{ user.citizenId ?? '—' }}</t-descriptions-item>
+          <t-descriptions-item label="身份证号">{{ maskCitizenId(user.citizenId) }}</t-descriptions-item>
           <t-descriptions-item label="微信绑定">
             {{ user.wechatOpenid ? (user.wechatVerified ? '已绑定 · 已微信实名' : '已绑定 · 未微信实名') : '未绑定' }}
           </t-descriptions-item>
-          <t-descriptions-item label="微信 OpenID">{{ user.wechatOpenid ?? '—' }}</t-descriptions-item>
-          <t-descriptions-item label="微信 UnionID">{{ user.wechatUnionid ?? '—' }}</t-descriptions-item>
+          <t-descriptions-item label="微信 OpenID">{{ maskOpaqueId(user.wechatOpenid) }}</t-descriptions-item>
+          <t-descriptions-item label="微信 UnionID">{{ maskOpaqueId(user.wechatUnionid) }}</t-descriptions-item>
           <t-descriptions-item v-if="user.status === 'frozen'" label="冻结信息" :span="3">
             {{ user.frozenUntil ? `冻结至 ${user.frozenUntil}` : '长期冻结' }} · 原因：{{ user.frozenReason ?? '—' }}
           </t-descriptions-item>
@@ -517,12 +523,11 @@ onMounted(async () => {
               description="该用户仅持有默认的个人用户身份"
             />
             <div v-else class="identity-list">
-              <div
+              <t-link theme="default" hover="color" :href="identity.type === 'community_enterprise' ? '#/enterprises/' + identity.enterpriseId : '#/external-enterprises/' + externalArchiveId(identity)" :disabled="!canGoEnterprise(identity)"
                 v-for="(identity, i) in displayIdentities"
                 :key="i"
                 class="identity-card"
                 :class="{ clickable: canGoEnterprise(identity) }"
-                @click="goEnterprise(identity)"
               >
                 <div class="identity-card-head">
                   <span class="identity-name">{{ identityName(identity) }}<t-tag v-if="identity.enterpriseId" class="id-tag" size="small" variant="light">{{ identity.enterpriseId }}</t-tag></span>
@@ -544,7 +549,7 @@ onMounted(async () => {
                     经验值等级：{{ identity.level }} 级
                   </span>
                 </div>
-              </div>
+              </t-link>
             </div>
           </t-tab-panel>
 
@@ -1022,25 +1027,25 @@ onMounted(async () => {
       </template>
       <t-form ref="editFormRef" :data="editForm" :rules="editRules" label-align="top">
         <t-form-item label="昵称" name="nickname">
-          <t-input v-model="editForm.nickname" placeholder="请输入昵称" />
+          <t-input v-model="editForm.nickname" name="nickname" autocomplete="off" placeholder="请输入昵称…" />
         </t-form-item>
         <t-form-item label="手机号" name="phone">
-          <t-input v-model="editForm.phone" placeholder="请输入手机号" />
+          <t-input v-model="editForm.phone" name="phone" type="tel" inputmode="tel" autocomplete="tel" placeholder="请输入手机号…" />
         </t-form-item>
         <t-form-item label="邮箱" name="email">
-          <t-input v-model="editForm.email" placeholder="请输入邮箱" />
+          <t-input v-model="editForm.email" name="email" inputmode="email" autocomplete="email" placeholder="请输入邮箱…" />
         </t-form-item>
         <t-form-item label="性别" name="gender">
-          <t-select v-model="editForm.gender" :options="genderOptions" placeholder="请选择性别" />
+          <t-select v-model="editForm.gender" :options="genderOptions" placeholder="请选择性别…" />
         </t-form-item>
         <t-form-item label="真实姓名" name="realName">
-          <t-input v-model="editForm.realName" placeholder="请输入真实姓名" />
+          <t-input v-model="editForm.realName" name="real-name" autocomplete="name" placeholder="请输入真实姓名…" />
         </t-form-item>
         <t-form-item label="身份证号" name="citizenId">
-          <t-input v-model="editForm.citizenId" placeholder="请输入身份证号" />
+          <t-input v-model="editForm.citizenId" name="citizen-id" inputmode="text" autocomplete="off" :spellcheck="false" placeholder="请输入身份证号…" />
         </t-form-item>
         <t-form-item label="简介" name="bio">
-          <t-textarea v-model="editForm.bio" :autosize="{ minRows: 3, maxRows: 5 }" placeholder="请输入简介" />
+          <t-textarea v-model="editForm.bio" :autosize="{ minRows: 3, maxRows: 5 }" placeholder="请输入简介…" />
         </t-form-item>
       </t-form>
     </t-dialog>
@@ -1058,12 +1063,12 @@ onMounted(async () => {
           <t-button theme="danger" :loading="freezeSaving" @click="onConfirmFreeze">确认冻结</t-button>
         </div>
       </template>
-      <t-form :data="freezeForm" label-align="top">
+      <t-form ref="freezeFormRef" :data="freezeForm" :rules="freezeRules" label-align="top">
         <t-form-item label="冻结原因" name="reason">
           <t-textarea
             v-model="freezeForm.reason"
             :autosize="{ minRows: 3, maxRows: 5 }"
-            placeholder="请填写冻结原因（必填），将记录在账号信息中"
+            placeholder="请填写冻结原因（必填），将记录在账号信息中…"
           />
         </t-form-item>
         <t-form-item label="长期冻结" name="permanent">
@@ -1078,7 +1083,7 @@ onMounted(async () => {
             valueType="YYYY-MM-DD HH:mm"
             enable-time-picker
             clearable
-            placeholder="选择冻结截止时间"
+            placeholder="选择冻结截止时间…"
             style="width: 100%"
           />
         </t-form-item>
@@ -1088,7 +1093,7 @@ onMounted(async () => {
     <!-- 经验值调整（社区个体） -->
     <AdjustValueDialog
       v-model:visible="expAdjustVisible"
-      :header="`调整经验值 · ${user?.name ?? ''}`"
+      :header="`调整经验值 · ${user?.realName ?? user?.nickname ?? ''}`"
       balance-label="当前经验值（社区个体）"
       :balance="communityIndividualIdentity?.experience ?? 0"
       :loading="expAdjusting"
@@ -1098,7 +1103,7 @@ onMounted(async () => {
     <!-- 积分调整 -->
     <AdjustValueDialog
       v-model:visible="pointsAdjustVisible"
-      :header="`调整积分 · ${user?.name ?? ''}`"
+      :header="`调整积分 · ${user?.realName ?? user?.nickname ?? ''}`"
       balance-label="当前积分（个人用户）"
       :balance="user?.points ?? 0"
       :loading="pointsAdjusting"
@@ -1173,6 +1178,9 @@ onMounted(async () => {
 }
 
 .identity-card {
+  display: block;
+  white-space: normal;
+  text-align: left;
   padding: 12px 16px;
   border: 1px solid var(--td-component-border);
   border-radius: var(--td-radius-medium);

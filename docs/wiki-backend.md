@@ -249,7 +249,7 @@ TZ=Asia/Shanghai
 - **JWT**：payload `{ sub: username, name, jti: uuid }`，有效期 2h；密钥取 `JWT_SECRET`（生产缺失启动即抛错，开发默认 `dev-only-change-me`）。
 - **登出**：`POST /api/admin/auth/logout` → jti 写 Redis 黑名单 `auth:blacklist:<jti>`（TTL=剩余有效期）+ 移出会话索引 → `{ code: 0 }`。
 - **登录日志**：`LoginLog` 三态 `success/fail/locked` + 失败原因；查询 `GET /api/admin/login-logs`（权限 `/logs/login`，支持状态/关键词/时间范围，返回 name=账号展示名、region 由 IP 派生）。
-- **在线会话**：Redis `auth:admin:sessions` 单键维护全部在线会话（含 jti/username/name/ip/device/loginAt/exp，TTL 2h 且每次写入刷新）；`GET /api/admin/auth/sessions` 与会话列表权限 `/system/sessions` 可见；`POST /api/admin/auth/sessions/:jti/kick` 强制下线（黑名单 + 移出索引，**目标不存在返回 404**）。
+- **在线会话**：Redis `auth:admin:sessions` 单键维护全部在线会话（含 jti/username/name/ip/device/loginAt/exp，TTL 2h 且每次写入刷新）；`GET /api/admin/auth/sessions` 与会话列表权限 `/system/sessions` 可见；`POST /api/admin/auth/sessions/:jti/kick` 强制下线（黑名单 + 移出索引，**目标不存在返回 404**）；`POST /api/admin/auth/sessions/kick-all` 一键强制下线其余全部会话（当前操作者会话保留，返回 `{ code, kicked }` 实际下线数，2026-09-12 新增）。
 - **修改密码**：`POST /api/admin/auth/change-password`（原密码校验；新密码 ≥8 位且含字母与数字，不得与原密码相同）→ 失效权限缓存 + **踢出该账号全部会话** + 审计「认证 · 修改密码」。
 - **管理员账号联动**：新增管理员未传密码时随机生成 12 位初始密码并一次性返回；编辑角色/停用/重置密码后失效权限缓存并强制下线；系统保留至少一名启用状态的超级管理员，超管角色必须保留 `['*']`，非超管不可分配超出自身权限的权限码。
 - **前端约定**：localStorage key `joinyuu_admin_token` 存 JWT，请求头 `Authorization: Bearer <token>`；401 统一跳登录页。
@@ -287,6 +287,7 @@ TZ=Asia/Shanghai
 | POST | /api/admin/auth/change-password | `{ oldPassword, newPassword }`；新密码 ≥8 位含字母数字；成功后踢出全部会话并审计 |
 | GET | /api/admin/auth/sessions | 在线会话列表（权限 `/system/sessions`） |
 | POST | /api/admin/auth/sessions/:jti/kick | 强制下线（权限 `/system/sessions`；jti 不存在 404） |
+| POST | /api/admin/auth/sessions/kick-all | 一键强制下线其余全部会话，当前操作者会话保留；返回 `{ code: 0, kicked }`（权限 `/system/sessions`；2026-09-12 新增） |
 
 ### 7.2 用户与社区个体 users / individuals（8）
 
@@ -515,6 +516,7 @@ TZ=Asia/Shanghai
 | POST | /api/admin/dicts/:type/:code/toggle-status | 启用↔停用 |
 | DELETE | /api/admin/dicts/:type/:code | 删除并重排同类型 sort；历史引用值不受影响 |
 | GET | /api/admin/roles | 角色列表（含权限码集合）；权限 `/system/roles` |
+| POST | /api/admin/roles | 新增自定义角色 `{ code, name, description? }`（2026-09-12 新增）；code 小写字母开头仅含小写字母/数字/下划线（2-32）且唯一（409）、不可用内置 `super`（400）、名称唯一（409）；ID 走 R 前缀发号、sort 追加、初始无权限点；审计「RBAC · 新增角色」 |
 | PUT | /api/admin/roles/:id/permissions | `{ permCodes }`；超管角色仅超管可改且必须保留 `['*']`；非超管不可越权分配；变更即时失效关联管理员权限缓存 |
 | GET | /api/admin/permissions/catalog | 权限点目录（按模块分组）；权限 `/system/roles` |
 | GET | /api/admin/admins | query keyword(username/name)；权限 `/system/admins` |
@@ -696,7 +698,7 @@ TZ=Asia/Shanghai
   - 内容：columns 6（含系统保留「未指定」COL_NONE）/ articles 10（官方 A×2 + 投稿 SU×8）/ showcaseRequests 5 / announcements 6
   - 系统：dicts 25（demand_category 6 / industry 11 / event_type 5 / goods_category 3）/ notifications 10（N9001+）/ auditLogs 25（AL1001+）/ systemConfig 1
   - M1.5 治理：AdminPermission **49** / AdminRole **4**（super/operator/auditor/space-ops）/ AdminUser **4**（admin/operator/auditor/space-ops，初始密码 admin123，space-ops 为 disabled 示例）/ ArchiveSetting **13**（各标签页默认关闭自动归档/自动删除）
-- **ID 序列**：`IdSequence` 初始化 23 个前缀（U/E/AP/D/P/EV/XE/EX/PT/G/RO/WS/WA/LS/S/SR/A/SU/CL/SC/AN/N/AL）为各前缀当前最大值；项目编号另按 `CODE-<year>` 初始化（JY-YYYY-NN 按年独立发号）；素材 AST 不预置（运行时发号）。**投稿文章使用 SU 前缀**（官方文章 A 前缀）。
+- **ID 序列**：`IdSequence` 初始化 24 个前缀（U/E/AP/D/P/EV/XE/EX/PT/G/RO/R/WS/WA/LS/S/SR/A/SU/CL/SC/AN/N/AL）为各前缀当前最大值（R = 角色，内置 R1~R4，运行时新增角色自 R5 续号）；项目编号另按 `CODE-<year>` 初始化（JY-YYYY-NN 按年独立发号）；素材 AST 不预置（运行时发号）。**投稿文章使用 SU 前缀**（官方文章 A 前缀）。
 - **要求**：编号前缀与源数据一致；跨模块引用一致（末笔流水 balance=实体当前值、办公位↔租约↔企业、预约/活动场地等）；`db:seed` 幂等（按 FK 逆序清空后重建）；种子运行后清理 Redis 应用缓存与动态鉴权键（§10）。
 - 种子数据中已知历史 mock 瑕疵若仍存在则保持原样迁移，不做"顺手修正"（M1.5 内容/申请改造已同步调整相关数据，如旧 XE7004 档案已移除）。
 

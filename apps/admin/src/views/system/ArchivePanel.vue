@@ -1,5 +1,7 @@
 <script setup lang="ts">
 import { computed, onMounted, reactive, ref } from 'vue'
+import ListErrorState from '@/components/ListErrorState.vue'
+import { useListQueryState } from '@/utils/listQuery'
 import { DialogPlugin, MessagePlugin } from 'tdesign-vue-next'
 import { DeleteIcon, RollbackIcon, SearchIcon, SettingIcon } from 'tdesign-icons-vue-next'
 import PageHeader from '@/components/PageHeader.vue'
@@ -89,6 +91,7 @@ interface ArchiveColumn {
 }
 
 const loading = ref(false)
+const loadError = ref('')
 const acting = ref('')
 const list = ref<ArchiveItem[]>([])
 const total = ref(0)
@@ -254,7 +257,9 @@ const columns = computed<ArchiveColumn[]>(() => {
 })
 
 async function load() {
+  syncQuery()
   loading.value = true
+  loadError.value = ''
   try {
     const res = await fetchArchiveList({
       domain: activeDomain.value,
@@ -265,6 +270,7 @@ async function load() {
     list.value = res.list
     total.value = res.total
   } catch (e) {
+    loadError.value = e instanceof Error ? e.message : '数据加载失败'
     MessagePlugin.error(e instanceof Error ? e.message : '数据加载失败')
   } finally {
     loading.value = false
@@ -461,11 +467,14 @@ async function onSaveSettings() {
   }
 }
 
+const { syncQuery } = useListQueryState(query, load, { refs: { activeDomain, keyword } })
+
 onMounted(load)
 </script>
 
 <template>
   <div class="archive-panel page-fade-in">
+    <ListErrorState v-if="loadError" :message="loadError" :loading="loading" @retry="load" />
     <PageHeader
       title="归档管理"
       description="集中管理各业务域归档对象，可恢复或彻底删除；各标签页支持独立归档设置"
@@ -480,7 +489,7 @@ onMounted(load)
         v-model="keyword"
         class="toolbar-keyword"
         clearable
-        placeholder="搜索名称/编号"
+        placeholder="搜索名称/编号…"
         @enter="onSearch"
       />
       <t-button theme="primary" @click="onSearch">
@@ -505,7 +514,7 @@ onMounted(load)
         :data="list"
         :columns="columns"
         :loading="loading"
-        empty="暂无归档数据"
+        empty="暂无归档记录"
       >
         <template #name="{ row }">{{ row.data.name }}</template>
         <template #industry="{ row }">{{ row.data.industry || '—' }}</template>
@@ -680,7 +689,7 @@ onMounted(load)
         class="strong-confirm-input"
         :status="strongConfirmError ? 'error' : 'default'"
         :tips="strongConfirmError"
-        placeholder="请输入指定内容"
+        placeholder="请输入指定内容…"
         @enter="onStrongConfirmSubmit"
       />
       <template #footer>

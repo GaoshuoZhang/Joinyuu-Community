@@ -1,8 +1,9 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
+import { useQueryTab } from '@/utils/navigation'
 import { MessagePlugin } from 'tdesign-vue-next'
-import { ArrowLeftIcon, EditIcon } from 'tdesign-icons-vue-next'
+import { ArrowLeftIcon } from 'tdesign-icons-vue-next'
 import StatusTag from '@/components/StatusTag.vue'
 import EventFormDialog from '@/components/EventFormDialog.vue'
 import EventScheduleDialog from '@/components/EventScheduleDialog.vue'
@@ -24,7 +25,7 @@ const route = useRoute()
 const router = useRouter()
 const loading = ref(true)
 const event = ref<CommunityEvent | null>(null)
-const tab = ref('info')
+const tab = useQueryTab('info', ['info', 'enrollments', 'checkin'] as const)
 /* 已归档条目：隐藏全部写操作（含报名审核/签到），仅保留只读内容 */
 const isArchived = computed(() => !!event.value?.deletedAt)
 /* 当前审核中的记录标识：`${userId}:${approved | rejected}` */
@@ -36,10 +37,6 @@ const editVisible = ref(false)
 
 /* 操作中的标识 */
 const acting = ref('')
-
-function isActing(action: 'publish-now' | 'cancel' | 'cancel-schedule' | 'enrollment' | 'restore' | 'archive') {
-  return acting.value === action
-}
 
 /* 待发布 → 立即发布（开放报名） */
 async function onPublishNow() {

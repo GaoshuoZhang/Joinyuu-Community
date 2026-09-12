@@ -1,13 +1,15 @@
 <script setup lang="ts">
-import { computed, nextTick, onMounted, reactive, ref, watch } from 'vue'
+import { computed, defineAsyncComponent, nextTick, onMounted, reactive, ref, watch } from 'vue'
 import { MessagePlugin } from 'tdesign-vue-next'
 import type { FormProps } from 'tdesign-vue-next'
+import { focusFirstInvalid } from '@/utils/form'
 import { AddIcon, DeleteIcon } from 'tdesign-icons-vue-next'
 import { fetchUndertakerOptions, initiateProject, type UndertakerOption } from '@/api/demands'
 import { createProject, updateProject } from '@/api/projects'
 import { fetchExperienceRules } from '@/api/rules'
-import RichEditor from '@/components/RichEditor.vue'
 import type { Demand, MilestoneInput, Project } from '@/types'
+
+const RichEditor = defineAsyncComponent(() => import('@/components/RichEditor.vue'))
 
 /* 项目表单弹窗（新增 / 需求立项共用）：
  * - demand 为 null：后台直接新增项目
@@ -185,13 +187,6 @@ watch(
   },
 )
 
-/* 已选承接方（保持选择顺序） */
-const selectedUndertakers = computed(() =>
-  form.undertakers
-    .map((v) => undertakerOptions.value.find((o) => o.value === v))
-    .filter((o): o is UndertakerOption => !!o),
-)
-
 /* 里程碑负责方候选 = 已选承接方 */
 const ownerOptions = computed(() => form.undertakers.map((v) => ({ label: undertakerNameOf(v), value: undertakerNameOf(v) })))
 
@@ -230,7 +225,7 @@ function removeMilestone(i: number) {
 
 async function onConfirm() {
   const valid = await formRef.value.validate()
-  if (valid !== true) return
+  if (valid !== true) return focusFirstInvalid(formRef.value)
   if (shares.value.some((s) => !Number.isInteger(s) || s < 0) || shareSum.value !== 100) {
     MessagePlugin.warning('承接占比须为不小于 0 的整数，且合计为 100%')
     return
@@ -304,6 +299,8 @@ function onClose() {
     :header="mode === 'edit' ? '编辑项目' : demand ? '需求立项' : '新增项目'"
     width="880px"
     lazy
+    :close-on-overlay-click="false"
+    :close-on-esc-keydown="false"
     @close="onClose"
   >
     <template #footer>
@@ -318,7 +315,7 @@ function onClose() {
 
     <t-form ref="formRef" :data="form" :rules="rules" label-align="top">
       <t-form-item label="项目名称" name="projectName">
-        <t-input clearable v-model="form.projectName" placeholder="需求立项默认取需求标题，可修改" />
+        <t-input clearable v-model="form.projectName" placeholder="需求立项默认取需求标题，可修改…" />
       </t-form-item>
       <t-form-item label="承接方（可多选/自定义）" name="undertakers">
         <t-select
@@ -327,7 +324,7 @@ function onClose() {
           filterable
           creatable
           :options="undertakerOptions"
-          placeholder="搜索或选择承接方（社区企业/合作企业/用户），可输入名称自定义新增"
+          placeholder="搜索或选择承接方（社区企业/合作企业/用户），可输入名称自定义新增…"
         />
       </t-form-item>
 
@@ -341,7 +338,7 @@ function onClose() {
           <t-input
             clearable
             :value="ensureContact(v).contactName"
-            placeholder="联系人姓名"
+            placeholder="联系人姓名…"
             @change="(val: string) => (ensureContact(v).contactName = val)"
           />
         </t-form-item>
@@ -349,7 +346,7 @@ function onClose() {
           <t-input
             clearable
             :value="ensureContact(v).phone"
-            placeholder="联系电话"
+            placeholder="联系电话…"
             @change="(val: string) => (ensureContact(v).phone = val)"
           />
         </t-form-item>
@@ -383,7 +380,7 @@ function onClose() {
       </div>
 
       <t-form-item label="项目说明" name="description">
-        <RichEditor v-model="form.description" placeholder="项目说明" :min-height="320" />
+        <RichEditor v-model="form.description" placeholder="项目说明…" :min-height="320" />
       </t-form-item>
 
       <div class="milestone-block">
@@ -397,31 +394,31 @@ function onClose() {
         <div v-for="(m, i) in milestones" :key="i" class="milestone-row">
           <template v-if="m.fixed === 'start'">
             <t-input disabled value="项目立项" />
-            <t-date-picker clearable v-model="m.date" placeholder="日期 *" />
+            <t-date-picker clearable v-model="m.date" placeholder="日期 *…" />
             <span class="milestone-ghost"></span>
             <t-select
               v-model="m.owners"
               multiple
               :options="ownerOptions"
               disabled
-              placeholder="责任方：全部承接方（固定）"
+              placeholder="责任方：全部承接方（固定）…"
             />
           </template>
           <template v-else-if="m.fixed === 'end'">
             <t-input disabled value="预期交付" />
-            <t-date-picker clearable v-model="m.date" placeholder="日期 *" />
+            <t-date-picker clearable v-model="m.date" placeholder="日期 *…" />
             <span class="milestone-ghost"></span>
             <t-select
               v-model="m.owners"
               multiple
               clearable
               :options="ownerOptions"
-              placeholder="责任方 *（不选 = 全部承接方）"
+              placeholder="责任方 *（不选 = 全部承接方）…"
             />
           </template>
           <template v-else>
-            <t-input clearable v-model="m.name" placeholder="节点描述 *" />
-            <t-date-picker clearable v-model="m.date" placeholder="日期 *" />
+            <t-input clearable v-model="m.name" placeholder="节点描述 *…" />
+            <t-date-picker clearable v-model="m.date" placeholder="日期 *…" />
             <t-button variant="text" theme="danger" size="small" @click="removeMilestone(i)">
               <template #icon><DeleteIcon /></template>
             </t-button>
@@ -430,7 +427,7 @@ function onClose() {
               multiple
               clearable
               :options="ownerOptions"
-              placeholder="责任方 *（可多选）"
+              placeholder="责任方 *（可多选）…"
             />
           </template>
         </div>

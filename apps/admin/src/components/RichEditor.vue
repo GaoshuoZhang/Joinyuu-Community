@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { onBeforeUnmount, ref, shallowRef, watch } from 'vue'
+import { computed, onBeforeUnmount, ref, shallowRef, watch } from 'vue'
 import { Editor, Toolbar } from '@wangeditor/editor-for-vue'
 import type { IDomEditor, IEditorConfig, IToolbarConfig } from '@wangeditor/editor'
 import '@wangeditor/editor/dist/css/style.css'
@@ -31,6 +31,7 @@ const emit = defineEmits<{
 
 const editorRef = shallowRef<IDomEditor>()
 const valueHtml = ref(props.modelValue)
+const editorHeight = computed(() => Math.max(props.minHeight, 360))
 
 /* 工具栏：默认全套（撤销重做/标题/加粗斜体下划线删除线/颜色/列表/对齐/行高/链接/图片/代码块/引用/分割线/清除格式/全屏） */
 const toolbarConfig: Partial<IToolbarConfig> = {}
@@ -81,7 +82,7 @@ onBeforeUnmount(() => {
       :default-config="editorConfig"
       mode="default"
       class="rich-body"
-      :style="{ height: `${minHeight}px`, overflowY: 'hidden' }"
+      :style="{ height: `${editorHeight}px` }"
       @on-created="handleCreated"
     />
   </div>

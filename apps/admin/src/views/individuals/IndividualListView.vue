@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, onMounted, reactive, ref } from 'vue'
+import { useListQueryState } from '@/utils/listQuery'
 import { useRouter } from 'vue-router'
 import { SearchIcon, DownloadIcon } from 'tdesign-icons-vue-next'
 import { MessagePlugin } from 'tdesign-vue-next'
@@ -8,11 +9,13 @@ import StatusTag from '@/components/StatusTag.vue'
 import IdentityTags from '@/components/IdentityTags.vue'
 import ColumnController from '@/components/ColumnController.vue'
 import { fetchIndividuals } from '@/api/individuals'
+import ListErrorState from '@/components/ListErrorState.vue'
 import { exportCsv, statusLabel } from '@/utils/exportCsv'
 import type { User, UserIdentity } from '@/types'
 
 const router = useRouter()
 const loading = ref(true)
+const loadError = ref('')
 const list = ref<User[]>([])
 const total = ref(0)
 
@@ -56,11 +59,15 @@ const pagination = computed(() => ({
 }))
 
 async function load() {
+  syncQuery()
   loading.value = true
+  loadError.value = ''
   try {
     const res = await fetchIndividuals({ ...query })
     list.value = res.list
     total.value = res.total
+  } catch (e) {
+    loadError.value = e instanceof Error ? e.message : '数据加载失败'
   } finally {
     loading.value = false
   }
@@ -121,11 +128,15 @@ function onExport() {
   MessagePlugin.success(`已导出当前页 ${list.value.length} 条数据`)
 }
 
+const { syncQuery } = useListQueryState(query, load)
+
 onMounted(load)
 </script>
 
 <template>
   <div class="individual-list page-fade-in">
+    <ListErrorState v-if="loadError" :message="loadError" :loading="loading" @retry="load" />
+
     <PageHeader title="社区个体" description="持有社区个体身份的成员（该身份每人至多一个）">
       <template #actions>
         <ColumnController
@@ -144,7 +155,7 @@ onMounted(load)
       <t-input
         v-model="query.keyword"
         class="filter-keyword"
-        placeholder="搜索姓名/ID/联系电话"
+        placeholder="搜索姓名/ID/联系电话…"
         clearable
         @enter="onSearch"
       />
@@ -175,7 +186,7 @@ onMounted(load)
         :columns="visibleColumns"
         :loading="loading"
         :pagination="pagination"
-        empty="暂无符合条件的社区个体"
+        empty="暂无社区个体"
         @page-change="onPageChange"
         @row-click="({ row }) => goDetail(row)"
       >

@@ -39,6 +39,8 @@ function onConfirm() {
     :visible="visible"
     :header="title"
     width="480px"
+    :close-on-overlay-click="false"
+    :close-on-esc-keydown="false"
     @close="onClose"
   >
     <p class="archive-tip">选择需要归档的状态（默认全选）：</p>

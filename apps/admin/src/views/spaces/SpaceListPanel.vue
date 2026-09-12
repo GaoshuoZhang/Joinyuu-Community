@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import ListErrorState from '@/components/ListErrorState.vue'
 import { computed, onMounted, ref } from 'vue'
 import { MessagePlugin } from 'tdesign-vue-next'
 import { useRouter } from 'vue-router'
@@ -15,6 +16,7 @@ import type { Space } from '@/types'
  * 点击空间条目 → 跳转空间详情页（信息 + 预约日历 + 预约明细） */
 const router = useRouter()
 const loading = ref(false)
+const loadError = ref('')
 const list = ref<Space[]>([])
 const acting = ref('')
 
@@ -42,6 +44,9 @@ async function load() {
   loading.value = true
   try {
     list.value = await fetchSpaces()
+    loadError.value = ''
+  } catch (e) {
+    loadError.value = e instanceof Error ? e.message : '数据加载失败'
   } finally {
     loading.value = false
   }
@@ -88,6 +93,7 @@ onMounted(load)
 
 <template>
   <div class="space-list-panel page-fade-in">
+    <ListErrorState v-if="loadError" :message="loadError" :loading="loading" @retry="() => load()" />
     <PageHeader title="公共空间管理" description="公共空间的新增、时段与设备维护（预约审核见「公共空间预约」）">
       <template #actions>
         <ColumnController
@@ -115,7 +121,7 @@ onMounted(load)
         :data="list"
         :columns="visibleColumns"
         :loading="loading"
-        empty="暂无空间数据"
+        empty="暂无空间"
         @row-click="({ row }) => goDetail(row)"
       >
         <template #name="{ row }">

@@ -2,6 +2,7 @@
 import { computed, nextTick, reactive, ref, watch } from 'vue'
 import { MessagePlugin } from 'tdesign-vue-next'
 import type { FormProps } from 'tdesign-vue-next'
+import { focusFirstInvalid } from '@/utils/form'
 import {
   createWorkstation,
   deleteWorkstation,
@@ -51,7 +52,7 @@ const initialMaintenance = ref(false)
 const typeOptions = Object.entries(workstationTypeMap).map(([value, label]) => ({ label, value }))
 
 const seatNoTip = computed(() =>
-  props.mode === 'create' ? '不可重复，建议「区域前缀-序号」' : '',
+  props.mode === 'create' ? '不可重复，建议「区域前缀-序号」…' : '',
 )
 
 /* 已分配办公位不可删除（需先终止租约）；维护中/空闲可直接删除 */
@@ -111,7 +112,7 @@ const rules: FormProps['rules'] = {
 
 async function onConfirm() {
   const valid = await formRef.value.validate()
-  if (valid !== true) return
+  if (valid !== true) return focusFirstInvalid(formRef.value)
   submitting.value = true
   try {
     const payload = {
@@ -169,6 +170,8 @@ async function onDelete() {
     :visible="visible"
     :header="mode === 'create' ? '新增办公位' : '编辑办公位信息'"
     width="560px"
+    :close-on-overlay-click="false"
+    :close-on-esc-keydown="false"
     @close="onClose"
   >
     <template #footer>
@@ -189,7 +192,7 @@ async function onDelete() {
     </template>
     <t-form ref="formRef" :data="form" :rules="rules" label-align="top">
       <t-form-item label="所属区域" name="area">
-        <t-select clearable v-model="form.area" :options="areaOptions" placeholder="区域在「区域规划」中维护" />
+        <t-select clearable v-model="form.area" :options="areaOptions" placeholder="区域在「区域规划」中维护…" />
       </t-form-item>
       <div class="form-row">
         <t-form-item label="办公位编号" name="seatNo">
@@ -209,18 +212,18 @@ async function onDelete() {
             :min="0"
             theme="column"
             style="width: 100%"
-            placeholder="选填；月租租约自动累加用"
+            placeholder="选填；月租租约自动累加用…"
           />
         </t-form-item>
         <t-form-item v-if="form.type === 'office'" label="面积（㎡）" name="areaSqm">
-          <t-input-number v-model="form.areaSqm" :min="0" theme="column" style="width: 100%" placeholder="选填" />
+          <t-input-number v-model="form.areaSqm" :min="0" theme="column" style="width: 100%" placeholder="选填…" />
         </t-form-item>
       </div>
       <t-form-item label="备注" name="note">
         <t-textarea
           v-model="form.note"
           :autosize="{ minRows: 2, maxRows: 4 }"
-          placeholder="维护原因、使用注意事项等（选填）"
+          placeholder="维护原因、使用注意事项等（选填）…"
         />
       </t-form-item>
       <t-form-item v-if="mode === 'edit'" label="维护状态" name="maintenance">

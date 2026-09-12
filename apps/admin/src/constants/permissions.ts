@@ -65,7 +65,7 @@ export const permissionGroups: PermissionGroup[] = [
     ],
   },
   {
-    name: '积分商城',
+    name: '积分管理',
     perms: [
       { code: '/mall/goods', name: '商品管理' },
       { code: '/mall/orders', name: '订单管理' },
@@ -86,7 +86,7 @@ export const permissionGroups: PermissionGroup[] = [
     perms: [
       { code: '/system/dicts', name: '数据字典' },
       { code: '/system/config', name: '系统配置' },
-      { code: '/logs/audit', name: '审计日志' },
+      { code: '/logs/audit', name: '操作日志' },
       { code: '/system/roles', name: '角色权限' },
       { code: '/system/admins', name: '管理员账号' },
       { code: '/system/sessions', name: '在线会话' },
@@ -106,8 +106,9 @@ export function getAllPermissionCodes(): string[] {
   return [...set]
 }
 
-/** '*'(超管) 或包含该权限码 */
-export function hasPermission(permissions: string[], code: string): boolean {
+/** '*'(超管) 或包含该权限码；传入数组时任一命中即通过 */
+export function hasPermission(permissions: string[], code: string | string[]): boolean {
   if (permissions.includes('*')) return true
+  if (Array.isArray(code)) return code.some((c) => permissions.includes(c))
   return permissions.includes(code)
 }

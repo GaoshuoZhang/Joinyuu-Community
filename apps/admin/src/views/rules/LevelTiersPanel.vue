@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import ListErrorState from '@/components/ListErrorState.vue'
 import { onMounted, reactive, ref } from 'vue'
 import { MessagePlugin } from 'tdesign-vue-next'
 import { AddIcon, DeleteIcon } from 'tdesign-icons-vue-next'
@@ -11,6 +12,7 @@ import type { LevelTier } from '@/types'
 const MAX_LEVELS = 10
 
 const loading = ref(false)
+const loadError = ref('')
 const saving = ref(false)
 const tiers = reactive<{ rows: LevelTier[] }>({ rows: [] })
 
@@ -18,6 +20,9 @@ async function load() {
   loading.value = true
   try {
     tiers.rows = await fetchLevelTiers()
+    loadError.value = ''
+  } catch (e) {
+    loadError.value = e instanceof Error ? e.message : '数据加载失败'
   } finally {
     loading.value = false
   }
@@ -73,6 +78,7 @@ onMounted(load)
 
 <template>
   <div class="level-rules-panel page-fade-in">
+    <ListErrorState v-if="loadError" :message="loadError" :loading="loading" @retry="() => load()" />
     <PageHeader title="等级规则" description="设定经验值等级梯度：等级数、每级标签与门槛经验值" />
 
     <div class="page-filter-bar">
@@ -94,7 +100,7 @@ onMounted(load)
             <t-tag theme="primary" variant="light" size="small">{{ i + 1 }} 级</t-tag>
           </span>
           <span class="tier-col-label">
-            <t-input v-model="tier.label" :maxlength="8" clearable placeholder="如 青铜" />
+            <t-input v-model="tier.label" :maxlength="8" clearable placeholder="如 青铜…" />
           </span>
           <span class="tier-col-threshold">
             <t-input-number

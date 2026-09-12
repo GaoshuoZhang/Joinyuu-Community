@@ -1,5 +1,7 @@
 <script setup lang="ts">
 import { computed, onMounted, reactive, ref } from 'vue'
+import ListErrorState from '@/components/ListErrorState.vue'
+import { useListQueryState } from '@/utils/listQuery'
 import { MessagePlugin } from 'tdesign-vue-next'
 import { AddIcon, SearchIcon, DownloadIcon } from 'tdesign-icons-vue-next'
 import PageHeader from '@/components/PageHeader.vue'
@@ -14,6 +16,7 @@ import type { MallGoods } from '@/types'
 
 /* 商品管理面板：列表 + 上架/下架/归档 + 新增/编辑（新增商品默认下架） */
 const loading = ref(false)
+const loadError = ref('')
 const list = ref<MallGoods[]>([])
 const total = ref(0)
 const acting = ref('')
@@ -65,11 +68,15 @@ const pagination = computed(() => ({
 }))
 
 async function load() {
+  syncQuery()
   loading.value = true
+  loadError.value = ''
   try {
     const res = await fetchGoods({ ...query })
     list.value = res.list
     total.value = res.total
+  } catch (e) {
+    loadError.value = e instanceof Error ? e.message : '数据加载失败'
   } finally {
     loading.value = false
   }
@@ -160,6 +167,8 @@ function onExport() {
   MessagePlugin.success(`已导出当前页 ${list.value.length} 条数据`)
 }
 
+const { syncQuery } = useListQueryState(query, load)
+
 onMounted(() => {
   load()
   fetchDictEntries('goods_category')
@@ -175,7 +184,8 @@ onMounted(() => {
 
 <template>
   <div class="goods-panel page-fade-in">
-    <PageHeader title="商品管理" description="积分商品的新增、上下架与库存维护（原积分商城·商品管理）">
+    <ListErrorState v-if="loadError" :message="loadError" :loading="loading" @retry="load" />
+    <PageHeader title="商品管理" description="积分商品的新增、上下架与库存维护">
       <template #actions>
         <ColumnController
           v-model="visibleColKeys"
@@ -196,7 +206,7 @@ onMounted(() => {
     <div class="page-filter-bar">
       <t-input
         v-model="query.keyword"
-        placeholder="搜索商品名称/编号"
+        placeholder="搜索商品名称/编号…"
         clearable
         style="width: 220px"
         @enter="onSearch"
@@ -236,7 +246,7 @@ onMounted(() => {
   :columns="visibleColumns"
   :loading="loading"
   :pagination="pagination"
-  empty="暂无符合条件的商品"
+  empty="暂无商品"
   @page-change="onPageChange"
   >
         <template #name="{ row }">

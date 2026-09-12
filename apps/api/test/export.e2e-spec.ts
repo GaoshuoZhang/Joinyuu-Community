@@ -54,7 +54,7 @@ describe('M1.5 R9 导出与打印', () => {
     expect(lines.length).toBeGreaterThan(1)
   })
 
-  it('导出审计日志 CSV；未知域 404', async () => {
+  it('导出操作日志 CSV；未知域 404', async () => {
     const logs = await request(app.getHttpServer())
       .get('/api/admin/export/audit-logs')
       .set(auth())

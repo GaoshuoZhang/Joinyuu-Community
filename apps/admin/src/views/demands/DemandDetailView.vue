@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
+import { useQueryTab } from '@/utils/navigation'
 import { MessagePlugin } from 'tdesign-vue-next'
 import { ArrowLeftIcon } from 'tdesign-icons-vue-next'
 import StatusTag from '@/components/StatusTag.vue'
@@ -16,7 +17,7 @@ const route = useRoute()
 const router = useRouter()
 const loading = ref(true)
 const demand = ref<Demand | null>(null)
-const tab = ref('info')
+const tab = useQueryTab('info', ['info', 'respondents'] as const)
 /* 已归档条目：隐藏全部写操作，仅保留只读内容与「查看关联项目」跳转 */
 const isArchived = computed(() => !!demand.value?.deletedAt)
 
@@ -146,10 +147,6 @@ function publisherLinkTarget(d: Demand): string | null {
   if (d.publisherId.startsWith('E')) return '/enterprises/' + d.publisherId
   return null
 }
-function goPublisher(d: Demand) {
-  const to = publisherLinkTarget(d)
-  if (to) router.push(to)
-}
 
 /* 创建人跳转：创建人为注册用户（U 前缀）时 → 用户详情，其余（管理员代建等）不跳 */
 function creatorLinkTarget(d: Demand): string | null {
@@ -157,10 +154,6 @@ function creatorLinkTarget(d: Demand): string | null {
   return null
 }
 
-function goCreator(d: Demand) {
-  const to = creatorLinkTarget(d)
-  if (to) router.push(to)
-}
 
 /* 需求方身份快照 → 纯文本标签（企业仅显示 社区企业/合作企业，不追加成员标题） */
 function publisherIdentityLabel(d: Demand): string {
@@ -272,22 +265,20 @@ onMounted(load)
         <t-descriptions :column="2" bordered class="head-desc">
           <t-descriptions-item label="编号">{{ demand.id }}</t-descriptions-item>
           <t-descriptions-item label="需求方">
-            <span
+            <t-link theme="default" hover="color" :href="publisherLinkTarget(demand) ? '#' + publisherLinkTarget(demand) : undefined" :disabled="!publisherLinkTarget(demand)"
               class="publisher-link"
               :class="{ clickable: publisherLinkTarget(demand) }"
-              @click="goPublisher(demand)"
             >
               {{ demand.publisherName }}<t-tag v-if="demand.publisherId" class="id-tag" size="small" variant="light">{{ demand.publisherId }}</t-tag>
-            </span>
+            </t-link>
           </t-descriptions-item>
           <t-descriptions-item label="创建人">
-            <span
+            <t-link theme="default" hover="color" :href="creatorLinkTarget(demand) ? '#' + creatorLinkTarget(demand) : undefined" :disabled="!creatorLinkTarget(demand)"
               class="publisher-link"
               :class="{ clickable: creatorLinkTarget(demand) }"
-              @click="goCreator(demand)"
             >
               {{ demand.creatorName || '—' }}<t-tag v-if="demand.creatorId" class="id-tag" size="small" variant="light">{{ demand.creatorId }}</t-tag>
-            </span>
+            </t-link>
           </t-descriptions-item>
           <t-descriptions-item label="需求方身份">
             <span>{{ publisherIdentityLabel(demand) }}</span>

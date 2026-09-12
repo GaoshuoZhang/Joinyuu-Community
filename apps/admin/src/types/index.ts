@@ -691,8 +691,8 @@ export interface ArticleColumn {
 export type ShowcaseTargetType = 'enterprise' | 'individual'
 
 /* ============================================================
-   系统管理域 — 实体类型（通知 / 审计日志 / 系统配置 / 数据字典）
-   命名前缀：通知 N9001+ / 审计日志 AL1001+
+   系统管理域 — 实体类型（通知 / 操作日志 / 系统配置 / 数据字典）
+   命名前缀：通知 N9001+ / 操作日志 AL1001+
    ============================================================ */
 
 export interface AdminNotification {
@@ -707,18 +707,23 @@ export interface AdminNotification {
   link?: string
 }
 
-/** 后台操作涉及的模块（审计日志统计口径） */
+/** 后台操作涉及的模块（操作日志统计口径） */
 export type AuditModule =
   | '社区成员'
+  | '社区企业'
+  | '合作企业'
   | '审核中心'
   | '需求管理'
   | '项目管理'
   | '活动管理'
   | '积分商城'
-  | '规则管理'
   | '空间管理'
   | '内容管理'
+  | '素材库'
+  | 'RBAC'
   | '系统管理'
+  | '归档管理'
+  | '认证'
 
 export interface AuditLog {
   id: string
@@ -747,6 +752,19 @@ export interface SystemConfig {
   leaseExpireRemindDays: number
   /** 上传文件大小限制（MB，素材库/富文本图片上传共用） */
   uploadMaxSizeMb: number
+  /** 密码有效期（天）：0=不启用；超期登录后仅允许修改密码 */
+  passwordExpireDays: number
+  /** MinIO 对象存储开关（关闭时上传写入本地磁盘 UPLOAD_DIR） */
+  minioEnabled: boolean
+  /** MinIO 服务地址（不含协议与端口，如 127.0.0.1） */
+  minioEndpoint: string
+  /** MinIO 服务端口（1-65535） */
+  minioPort: number
+  /** 是否使用 HTTPS 访问 MinIO */
+  minioUseSsl: boolean
+  minioAccessKey: string
+  minioSecretKey: string
+  minioBucket: string
   updatedAt: string
   updatedBy: string
 }

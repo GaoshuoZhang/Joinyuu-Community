@@ -16,6 +16,8 @@ export interface SeedRole {
   description: string
   sort: number
   permCodes: string[]
+  /** 数据范围（域维度），空数组=全部；域：members|biz|space|contents|mall|rules|system */
+  dataScope?: string[]
 }
 
 export interface SeedAdminAccount {
@@ -64,8 +66,8 @@ export const permissionCatalog: SeedPermission[] = [
   { code: '/contents/showcase', name: '展示页发布', module: '内容管理', authType: 'menu', sort: 54 },
   { code: '/contents/announcements', name: '公告栏', module: '内容管理', authType: 'menu', sort: 55 },
 
-  { code: '/mall/goods', name: '商品管理', module: '积分商城', authType: 'menu', sort: 60 },
-  { code: '/mall/orders', name: '订单管理', module: '积分商城', authType: 'menu', sort: 61 },
+  { code: '/mall/goods', name: '商品管理', module: '积分管理', authType: 'menu', sort: 60 },
+  { code: '/mall/orders', name: '订单管理', module: '积分管理', authType: 'menu', sort: 61 },
 
   { code: '/rules/points', name: '积分规则', module: '规则管理', authType: 'menu', sort: 70 },
   { code: '/rules/experience', name: '经验值规则', module: '规则管理', authType: 'menu', sort: 71 },
@@ -75,14 +77,14 @@ export const permissionCatalog: SeedPermission[] = [
 
   { code: '/system/dicts', name: '数据字典', module: '系统管理', authType: 'menu', sort: 80 },
   { code: '/system/config', name: '系统配置', module: '系统管理', authType: 'menu', sort: 81 },
-  { code: '/logs/audit', name: '审计日志', module: '系统管理', authType: 'menu', sort: 82 },
+  { code: '/logs/audit', name: '操作日志', module: '系统管理', authType: 'menu', sort: 82 },
   { code: '/system/roles', name: '角色权限', module: '系统管理', authType: 'menu', sort: 83 },
   { code: '/system/admins', name: '管理员账号', module: '系统管理', authType: 'menu', sort: 84 },
   { code: '/system/sessions', name: '在线会话', module: '系统管理', authType: 'menu', sort: 85 },
   { code: '/system/assets', name: '素材库', module: '系统管理', authType: 'menu', sort: 86 },
   { code: '/system/monitor', name: '系统监控', module: '系统管理', authType: 'menu', sort: 87 },
   { code: '/logs/login', name: '登录日志', module: '系统管理', authType: 'menu', sort: 88 },
-  { code: '/system/trash', name: '回收站', module: '系统管理', authType: 'menu', sort: 89 },
+  { code: '/system/trash', name: '归档管理', module: '系统管理', authType: 'menu', sort: 89 },
   { code: '/system/export', name: '数据导出', module: '系统管理', authType: 'menu', sort: 90 },
 ]
 
@@ -134,6 +136,7 @@ export const adminRoles: SeedRole[] = [
     name: '空间运营',
     description: '仅空间域（数据范围示例）',
     sort: 4,
+    dataScope: ['space'],
     permCodes: [
       '/dashboard',
       '/workstations',

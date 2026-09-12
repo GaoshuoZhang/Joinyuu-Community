@@ -4,7 +4,7 @@
 
 - This repository is a pnpm workspace. Workspace packages are under `apps/*` and `packages/*`.
 - The active applications are `apps/admin` (Vue 3 + TypeScript + Vite + TDesign admin web) and `apps/api` (NestJS 11 + Prisma 6 + PostgreSQL 17 + Redis 7.4 backend).
-- The current stage is **M1.5 completed** (admin governance enhancement, R1~R12: RBAC/account/security/upload/rich-text/monitoring/charts/export), plus follow-up hardening and UX/governance work (security hardening, archive system, terminology unification, ID display rules, list interaction cleanup). M0 (admin prototype) and M1 (backend, M1-A~E: 129 endpoints, admin fully HTTP-integrated, `src/mock/` removed) are complete; the API currently exposes 186 `/api/admin/**` routes over 43 Prisma models (14 migrations). Client web (M2) and mini program (M3) are not started.
+- The current stage is **M1.5 completed** (admin governance enhancement, R1~R12: RBAC/account/security/upload/rich-text/monitoring/charts/export), plus follow-up hardening and UX/governance work (security hardening, archive system, terminology unification, ID display rules, list interaction cleanup, role creation, bulk session kick-off). M0 (admin prototype) and M1 (backend, M1-A~E: 129 endpoints, admin fully HTTP-integrated, `src/mock/` removed) are complete; the API currently exposes 189 `/api/admin/**` routes over 43 Prisma models (14 migrations). Client web (M2) and mini program (M3) are not started.
 - Read `README.md`, `docs/wiki-backend.md`, `docs/wiki-admin-web.md`, and `docs/full-spec-check.md` before making broad changes. The wikis are the frozen contracts; `full-spec-check.md` is the progress reference (includes the M1.5 R1~R12 front/back-end routes).
 
 ## Commands
@@ -24,7 +24,7 @@ pnpm db:reset       # drop + migrate + full seed (idempotent)
 - The admin dev server uses port `7758` (binds `0.0.0.0`) and proxies `/api` to the backend at `http://127.0.0.1:7757`; the API dev server uses port `7757`.
 - `pnpm build:admin` runs the Vite production build. It does not type-check Vue SFC templates.
 - TypeScript-only checks: `pnpm --filter @joinyuu/admin exec tsc -p tsconfig.json --noEmit` (admin) and `pnpm --filter @joinyuu/api exec tsc -p tsconfig.json --noEmit` (api). From `apps/admin`/`apps/api` you can also run `pnpm exec tsc -p tsconfig.json --noEmit`; plain `pnpm exec tsc` at the repo root fails because TypeScript is a dependency of the apps, not the workspace root. Neither check validates Vue templates fully (unregistered components or wrong template variables can still slip through).
-- Backend e2e suite: `pnpm --filter @joinyuu/api test:e2e` (25 suites / 163 cases; requires Docker services up; each suite reseeds via `test/helpers/reseed.ts`). There is no ESLint configuration and no unit test suite yet. Do not claim more was verified than actually ran.
+- Backend e2e suite: `pnpm --filter @joinyuu/api test:e2e` (25 suites / 169 cases; requires Docker services up; each suite reseeds via `test/helpers/reseed.ts`). There is no ESLint configuration and no unit test suite yet. Do not claim more was verified than actually ran.
 
 ## Application Structure
 
@@ -42,7 +42,7 @@ pnpm db:reset       # drop + migrate + full seed (idempotent)
 - RBAC: admin routes are guarded by `@RequirePermission` (permission catalog with 49 codes, supporting `string | string[]` any-of) plus the global JWT guard; the frontend applies `v-permission` and route `meta.perm` checks (`src/directives/permission.ts`, `src/constants/permissions.ts`).
 - Archive system: soft delete uses `deletedAt`/`deletedBy`; `TrashService` exposes 13 domains with restore/purge plus per-domain `ArchiveSetting` (auto-archive/auto-delete delays and archivable statuses), driven by scheduler jobs. User-history domains require triple confirmation before purge or enabling auto-purge.
 - Assets are stored through `StorageService` (local disk, `UPLOAD_DIR`) and served from `/api/public/files/:key`; uploads are magic-byte sniffed (SVG rejected) and HTML is sanitized before write.
-- Seed writes 23 IdSequence prefixes (U/E/AP/D/P/EV/XE/EX/PT/G/RO/WS/WA/LS/S/SR/A/SU/CL/SC/AN/N/AL) plus per-year `CODE-<year>` project codes; submitted articles use the SU prefix.
+- Seed writes 24 IdSequence prefixes (U/E/AP/D/P/EV/XE/EX/PT/G/RO/R/WS/WA/LS/S/SR/A/SU/CL/SC/AN/N/AL) plus per-year `CODE-<year>` project codes; submitted articles use the SU prefix; custom roles use the R prefix (built-ins R1~R4 are seeded, generated roles continue from R5).
 - Backend endpoints return the exact M0 stub shapes; the global envelope interceptor wraps them into `{ code: 0, data }`. Errors use 400/404/409 with the exact M0 Chinese messages. See `docs/wiki-backend.md` §4.
 - Successful write operations on the backend record an audit entry through `AuditService` (`@Audit` decorator or direct call) when the M0 domain had `recordAudit`. The frontend no longer records audit entries for HTTP-ized domains.
 - Backend state is PostgreSQL with seedable fixtures (`pnpm db:reset` reproduces it). Do not describe admin web state as persisted mock state.

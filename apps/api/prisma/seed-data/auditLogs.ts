@@ -1,6 +1,6 @@
 import type { AuditLog } from '@/types'
 
-/* 审计日志数据 — 命名前缀 AL1001+
+/* 操作日志数据 — 命名前缀 AL1001+
  * 记录后台管理员的全部写操作（谁在何时对什么做了什么）。
  * M0：种子数据 + recordAudit 埋点（见 api/auditLogs.ts，已埋入各域关键写接口）；
  * M1：统一由服务端中间件记录，含 IP 与变更前后快照 */

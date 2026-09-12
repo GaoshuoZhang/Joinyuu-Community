@@ -52,7 +52,7 @@ function onCancel() {
 </script>
 
 <template>
-  <t-dialog :visible="visible" header="定时发布" width="480px" @close="onCancel">
+  <t-dialog :visible="visible" header="定时发布" width="480px" :close-on-overlay-click="false" :close-on-esc-keydown="false" @close="onCancel">
     <template #footer>
       <div class="dialog-footer">
         <t-button variant="text" theme="default" @click="onCancel">取消</t-button>
@@ -72,7 +72,7 @@ function onCancel() {
           v-model="scheduledAt"
           valueType="YYYY-MM-DD HH:mm"
           enable-time-picker
-          placeholder="到点自动发布"
+          placeholder="到点自动发布…"
           style="width: 100%"
         />
       </t-form-item>

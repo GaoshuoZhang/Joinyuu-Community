@@ -1,5 +1,7 @@
 <script setup lang="ts">
 import { computed, onMounted, reactive, ref } from 'vue'
+import ListErrorState from '@/components/ListErrorState.vue'
+import { useListQueryState } from '@/utils/listQuery'
 import { MessagePlugin } from 'tdesign-vue-next'
 import { SearchIcon, DownloadIcon } from 'tdesign-icons-vue-next'
 import PageHeader from '@/components/PageHeader.vue'
@@ -18,6 +20,7 @@ import type { RedemptionOrder } from '@/types'
 
 /* 兑换订单面板：发货 / 标记完成 / 取消（退积分回库存）/ 归档 + 收件信息详情抽屉 */
 const loading = ref(false)
+const loadError = ref('')
 const list = ref<RedemptionOrder[]>([])
 const total = ref(0)
 const acting = ref('')
@@ -63,11 +66,15 @@ const pagination = computed(() => ({
 }))
 
 async function load() {
+  syncQuery()
   loading.value = true
+  loadError.value = ''
   try {
     const res = await fetchRedemptionOrders({ ...query })
     list.value = res.list
     total.value = res.total
+  } catch (e) {
+    loadError.value = e instanceof Error ? e.message : '数据加载失败'
   } finally {
     loading.value = false
   }
@@ -224,11 +231,14 @@ function onExport() {
   MessagePlugin.success(`已导出当前页 ${list.value.length} 条数据`)
 }
 
+const { syncQuery } = useListQueryState(query, load)
+
 onMounted(load)
 </script>
 
 <template>
   <div class="orders-panel page-fade-in">
+    <ListErrorState v-if="loadError" :message="loadError" :loading="loading" @retry="load" />
     <PageHeader title="订单管理" description="积分兑换订单的发货、完成与取消处理">
       <template #actions>
         <ColumnController
@@ -249,7 +259,7 @@ onMounted(load)
     <div class="page-filter-bar">
       <t-input
         v-model="query.keyword"
-        placeholder="搜索订单编号/用户/商品"
+        placeholder="搜索订单编号/用户/商品…"
         clearable
         style="width: 240px"
         @enter="onSearch"

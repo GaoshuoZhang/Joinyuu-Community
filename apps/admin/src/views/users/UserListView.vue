@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, onMounted, reactive, ref } from 'vue'
+import { useListQueryState } from '@/utils/listQuery'
 import { useRouter } from 'vue-router'
 import { MessagePlugin } from 'tdesign-vue-next'
 import { SearchIcon, DownloadIcon } from 'tdesign-icons-vue-next'
@@ -10,10 +11,12 @@ import ColumnController from '@/components/ColumnController.vue'
 import { userCategoryOptions, identityTypeMap } from '@/constants/identity'
 import { fetchUsers } from '@/api/users'
 import { exportCsv, statusLabel } from '@/utils/exportCsv'
+import ListErrorState from '@/components/ListErrorState.vue'
 import type { User } from '@/types'
 
 const router = useRouter()
 const loading = ref(true)
+const loadError = ref('')
 const list = ref<User[]>([])
 const total = ref(0)
 
@@ -65,11 +68,15 @@ const pagination = computed(() => ({
 }))
 
 async function load() {
+  syncQuery()
   loading.value = true
+  loadError.value = ''
   try {
     const res = await fetchUsers({ ...query })
     list.value = res.list
     total.value = res.total
+  } catch (e) {
+    loadError.value = e instanceof Error ? e.message : '数据加载失败'
   } finally {
     loading.value = false
   }
@@ -131,11 +138,15 @@ function goDetail(row: User) {
   router.push(`/users/${row.uid}`)
 }
 
+const { syncQuery } = useListQueryState(query, load)
+
 onMounted(load)
 </script>
 
 <template>
   <div class="user-list page-fade-in">
+    <ListErrorState v-if="loadError" :message="loadError" :loading="loading" @retry="load" />
+
     <PageHeader title="用户管理" description="社区成员账号与关联身份管理">
       <template #actions>
         <ColumnController
@@ -154,7 +165,7 @@ onMounted(load)
       <t-input
         v-model="query.keyword"
         class="filter-keyword"
-        placeholder="搜索昵称/UID/联系电话"
+        placeholder="搜索昵称/UID/联系电话…"
         clearable
         @enter="onSearch"
       />
@@ -201,7 +212,7 @@ onMounted(load)
         :columns="visibleColumns"
         :loading="loading"
         :pagination="pagination"
-        empty="暂无符合条件的用户"
+        empty="暂无用户"
         @page-change="onPageChange"
         @row-click="({ row }) => goDetail(row)"
       >

@@ -1,6 +1,8 @@
 <script setup lang="ts">
 import { computed, onMounted, reactive, ref, watch } from 'vue'
-import { useRoute, useRouter } from 'vue-router'
+import ListErrorState from '@/components/ListErrorState.vue'
+import { useListQueryState } from '@/utils/listQuery'
+import { useRouter } from 'vue-router'
 import { MessagePlugin } from 'tdesign-vue-next'
 import { AddIcon, SearchIcon, DownloadIcon } from 'tdesign-icons-vue-next'
 import PageHeader from '@/components/PageHeader.vue'
@@ -8,7 +10,6 @@ import StatusTag from '@/components/StatusTag.vue'
 import ColumnController from '@/components/ColumnController.vue'
 import BulkArchiveDialog from '@/components/BulkArchiveDialog.vue'
 import EventFormDialog from '@/components/EventFormDialog.vue'
-import { fetchPointsRules } from '@/api/mall'
 import { dictFallback, fetchDictEntries } from '@/api/dicts'
 import { exportCsv, statusLabel } from '@/utils/exportCsv'
 import EventScheduleDialog from '@/components/EventScheduleDialog.vue'
@@ -16,9 +17,9 @@ import { archiveEvent, cancelEvent, cancelEventSchedule, fetchEvents, publishEve
 import { fetchUser } from '@/api/users'
 import type { CommunityEvent } from '@/types'
 
-const route = useRoute()
 const router = useRouter()
 const loading = ref(false)
+const loadError = ref('')
 const list = ref<CommunityEvent[]>([])
 const total = ref(0)
 /* 当前执行中的行操作标识：`${id}:publish-now | cancel | cancel-schedule | enrollment | restore | archive` */
@@ -96,11 +97,15 @@ const pagination = computed(() => ({
 }))
 
 async function load() {
+  syncQuery()
   loading.value = true
+  loadError.value = ''
   try {
     const res = await fetchEvents({ ...query, sortBy: sortBy.value, sortOrder: sortOrder.value })
     list.value = res.list
     total.value = res.total
+  } catch (e) {
+    loadError.value = e instanceof Error ? e.message : '数据加载失败'
   } finally {
     loading.value = false
   }
@@ -327,7 +332,6 @@ function openSchedule(row: CommunityEvent) {
 /* 用户详情「数据概览」跳转带入报名人 ID（query: participant），按 ID 过滤避免同名歧义；
  * 筛选标签姓名经 fetchUser 解析展示 */
 async function applyRouteFilter() {
-  query.participant = (route.query.participant as string) || ''
   participantName.value = ''
   if (query.participant) {
     try {
@@ -346,13 +350,9 @@ function clearParticipant() {
   load()
 }
 
-watch(
-  () => route.query,
-  () => {
-    applyRouteFilter()
-    load()
-  },
-)
+watch(() => query.participant, applyRouteFilter)
+
+const { syncQuery } = useListQueryState(query, load, { refs: { sortBy, sortOrder } })
 
 onMounted(() => {
   applyRouteFilter()
@@ -389,6 +389,7 @@ function onExport() {
 
 <template>
   <div class="event-list page-fade-in">
+    <ListErrorState v-if="loadError" :message="loadError" :loading="loading" @retry="load" />
     <PageHeader title="活动管理" description="社区活动的新增、发布、报名与签到管理">
       <template #actions>
         <ColumnController
@@ -413,7 +414,7 @@ function onExport() {
     <div class="page-filter-bar">
       <t-input
         v-model="query.keyword"
-        placeholder="搜索活动标题/编号"
+        placeholder="搜索活动标题/编号…"
         clearable
         style="width: 220px"
         @enter="onSearch"

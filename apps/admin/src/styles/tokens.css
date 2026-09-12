@@ -19,6 +19,51 @@ body,
   padding: 0;
 }
 
+/* 键盘用户需要能清楚看到当前焦点；鼠标点击不会触发该轮廓。 */
+:focus-visible {
+  outline: 2px solid var(--td-brand-color);
+  outline-offset: 2px;
+}
+
+/* 路由懒加载期间的非阻塞顶部进度提示。 */
+html[data-route-loading='true']::after {
+  content: '';
+  position: fixed;
+  z-index: 5000;
+  top: 0;
+  left: 0;
+  width: 38%;
+  height: 2px;
+  background: var(--td-brand-color);
+  box-shadow: 0 0 8px var(--td-brand-color);
+  animation: routeLoading 900ms ease-in-out infinite;
+}
+
+@keyframes routeLoading {
+  from { transform: translateX(-100%); }
+  to { transform: translateX(360%); }
+}
+
+/* 普通 Dialog 保持页头、页脚可见，仅滚动内容区。TDesign 默认只给 body
+ * overflow:auto，却没有为外层设置视口上限，长表单会整体超出屏幕。 */
+.t-dialog__ctx .t-dialog__position:not(.t-dialog__position_fullscreen) {
+  padding: 32px 16px;
+}
+
+.t-dialog__ctx .t-dialog--default:not(.t-dialog__fullscreen) {
+  display: flex;
+  flex-direction: column;
+  box-sizing: border-box;
+  max-width: calc(100vw - 32px);
+  max-height: calc(100vh - 64px);
+}
+
+.t-dialog__ctx .t-dialog--default:not(.t-dialog__fullscreen) > .t-dialog__body {
+  flex: 1 1 auto;
+  min-height: 0;
+  overscroll-behavior: contain;
+}
+
 /* ---------- 富文本展示 ---------- */
 
 /* wangEditor 全屏修复：全屏容器（position:fixed）未设置 z-index，
@@ -135,12 +180,30 @@ body,
   border-radius: var(--td-radius-medium);
 }
 
+.field-help {
+  margin-top: 4px;
+  color: var(--td-text-color-placeholder);
+  font-size: 12px;
+  line-height: 20px;
+}
+
 /* 内容卡片 */
 .page-card {
   background: var(--td-bg-color-container);
   border: 1px solid var(--td-component-border);
   border-radius: var(--td-radius-medium);
   padding: 16px;
+}
+
+/* 管理后台的数据表、统计指标与时间金额使用等宽数字，便于纵向比较。 */
+.t-table,
+.t-statistic,
+.stats-value,
+.stat-num,
+.redis-value,
+.monitor-stat-value,
+.terminated-at {
+  font-variant-numeric: tabular-nums;
 }
 
 /* 页面载入动效：淡入上移
@@ -173,6 +236,15 @@ body,
 .stagger > *:nth-child(5) { animation-delay: 240ms; }
 
 @media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    scroll-behavior: auto !important;
+    transition-duration: 0.01ms !important;
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+  }
+
   .page-fade-in,
   .stagger > * {
     animation: none;
@@ -213,6 +285,10 @@ body,
 /* 可点击的筛选卡片（调用方传 class="stat-clickable"） */
 .stat-clickable {
   cursor: pointer;
+}
+
+.stat-clickable:focus-visible {
+  box-shadow: 0 0 0 2px var(--td-brand-color-focus);
 }
 
 /* 筛选激活态 */

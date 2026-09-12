@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, onMounted, reactive, ref } from 'vue'
+import { useListQueryState } from '@/utils/listQuery'
 import { useRouter } from 'vue-router'
 import { AddIcon, SearchIcon, DownloadIcon } from 'tdesign-icons-vue-next'
 import { MessagePlugin } from 'tdesign-vue-next'
@@ -8,12 +9,14 @@ import ColumnController from '@/components/ColumnController.vue'
 import StatusTag from '@/components/StatusTag.vue'
 import ExternalEnterpriseFormDialog from '@/components/ExternalEnterpriseFormDialog.vue'
 import { fetchExternalEnterprises } from '@/api/external-enterprises'
+import ListErrorState from '@/components/ListErrorState.vue'
 import { dictFallback, fetchDictEntries } from '@/api/dicts'
 import { exportCsv } from '@/utils/exportCsv'
 import type { ExternalEnterprise } from '@/types'
 
 const router = useRouter()
 const loading = ref(true)
+const loadError = ref('')
 const list = ref<ExternalEnterprise[]>([])
 const total = ref(0)
 
@@ -81,11 +84,15 @@ const pagination = computed(() => ({
 }))
 
 async function load() {
+  syncQuery()
   loading.value = true
+  loadError.value = ''
   try {
     const res = await fetchExternalEnterprises({ ...query, sortBy: sortBy.value, sortOrder: sortOrder.value })
     list.value = res.list
     total.value = res.total
+  } catch (e) {
+    loadError.value = e instanceof Error ? e.message : '数据加载失败'
   } finally {
     loading.value = false
   }
@@ -149,6 +156,8 @@ function onExport() {
   MessagePlugin.success(`已导出当前页 ${list.value.length} 条数据`)
 }
 
+const { syncQuery } = useListQueryState(query, load, { refs: { sortBy, sortOrder } })
+
 onMounted(() => {
   load()
   fetchDictEntries('industry')
@@ -164,6 +173,8 @@ onMounted(() => {
 
 <template>
   <div class="external-list page-fade-in">
+    <ListErrorState v-if="loadError" :message="loadError" :loading="loading" @retry="load" />
+
     <PageHeader title="合作企业" description="由成员合作企业身份聚合的合作企业（未入驻社区，无展示页）">
       <template #actions>
         <ColumnController
@@ -186,7 +197,7 @@ onMounted(() => {
       <t-input
         v-model="query.keyword"
         class="filter-keyword"
-        placeholder="搜索企业ID/名称/行业"
+        placeholder="搜索企业ID/名称/行业…"
         clearable
         @enter="onSearch"
       />
@@ -226,7 +237,7 @@ onMounted(() => {
         :sort="tableSort"
         :loading="loading"
         :pagination="pagination"
-        empty="暂无符合条件的合作企业"
+        empty="暂无合作企业"
         @page-change="onPageChange"
         @sort-change="onSortChange"
         @row-click="({ row }) => goDetail(row)"

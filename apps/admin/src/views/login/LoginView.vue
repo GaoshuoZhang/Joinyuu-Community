@@ -54,6 +54,11 @@ const onSubmit: FormProps['onSubmit'] = async ({ validateResult, firstError }) =
       captchaId: captcha.value?.captchaId ?? '',
       captchaCode: form.captcha,
     })
+    if (auth.passwordExpired) {
+      MessagePlugin.warning('密码已过期，请先修改密码')
+      router.push('/system/change-password')
+      return
+    }
     MessagePlugin.success('登录成功，欢迎回来')
     const redirect = (route.query.redirect as string) || '/dashboard'
     router.push(redirect)
@@ -67,6 +72,7 @@ const onSubmit: FormProps['onSubmit'] = async ({ validateResult, firstError }) =
 }
 
 const highlights = ['企业与需求双向连接', '活动运营与签到管理', '跨企业项目协作', '积分与空间运营']
+const showDemoAccount = import.meta.env.DEV || import.meta.env.VITE_SHOW_DEMO_ACCOUNT === 'true'
 </script>
 
 <template>
@@ -108,7 +114,15 @@ const highlights = ['企业与需求双向连接', '活动运营与签到管理'
 
         <t-form :data="form" :rules="rules" label-width="0" @submit="onSubmit">
           <t-form-item name="username">
-            <t-input v-model="form.username" size="large" clearable placeholder="请输入用户名" />
+            <t-input
+              v-model="form.username"
+              size="large"
+              clearable
+              name="username"
+              autocomplete="username"
+              :spellcheck="false"
+              placeholder="请输入用户名…"
+            />
           </t-form-item>
           <t-form-item name="password">
             <t-input
@@ -116,7 +130,9 @@ const highlights = ['企业与需求双向连接', '活动运营与签到管理'
               size="large"
               type="password"
               clearable
-              placeholder="请输入密码"
+              name="password"
+              autocomplete="current-password"
+              placeholder="请输入密码…"
             />
           </t-form-item>
           <t-form-item name="captcha">
@@ -126,18 +142,16 @@ const highlights = ['企业与需求双向连接', '活动运营与签到管理'
                 size="large"
                 clearable
                 maxlength="4"
-                placeholder="验证码"
+                name="captcha"
+                inputmode="numeric"
+                autocomplete="one-time-code"
+                placeholder="验证码…"
                 style="flex: 1"
               />
-              <img
-                v-if="captcha"
-                :src="captcha.image"
-                class="captcha-img"
-                alt="验证码"
-                title="点击刷新"
-                @click="loadCaptcha"
-              />
-              <t-button variant="text" shape="square" size="large" @click="loadCaptcha">
+              <button v-if="captcha" type="button" class="captcha-image-button" aria-label="刷新验证码" @click="loadCaptcha">
+                <img :src="captcha.image" class="captcha-img" alt="验证码" />
+              </button>
+              <t-button variant="text" shape="square" size="large" aria-label="刷新验证码" title="刷新验证码" @click="loadCaptcha">
                 <template #icon><RefreshIcon /></template>
               </t-button>
             </div>
@@ -149,7 +163,7 @@ const highlights = ['企业与需求双向连接', '活动运营与签到管理'
           </t-form-item>
         </t-form>
 
-        <div class="demo-account">
+        <div v-if="showDemoAccount" class="demo-account">
           演示账号：<code>admin</code> / <code>admin123</code>
         </div>
       </div>
@@ -244,7 +258,16 @@ const highlights = ['企业与需求双向连接', '活动运营与签到管理'
   height: 40px;
   border: 1px solid var(--td-component-border);
   border-radius: var(--td-radius-medium);
-  cursor: pointer;
   flex-shrink: 0;
+  display: block;
+}
+
+.captcha-image-button {
+  flex-shrink: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  border-radius: var(--td-radius-medium);
+  cursor: pointer;
 }
 </style>

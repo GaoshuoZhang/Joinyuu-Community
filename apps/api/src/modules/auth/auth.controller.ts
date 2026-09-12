@@ -15,11 +15,11 @@ export class AuthController {
     private readonly sessions: AdminSessionService,
   ) {}
 
-  /** 图形验证码：返回 { captchaId, image(dataURL) } */
+  /** 图形验证码：返回 { captchaId, image(dataURL) }；按客户端 IP 限流（60s 内最多 30 次） */
   @Public()
   @Get('captcha')
-  captcha(): Promise<{ captchaId: string; image: string }> {
-    return this.auth.generateCaptcha()
+  captcha(@Req() req: AuthenticatedRequest): Promise<{ captchaId: string; image: string }> {
+    return this.auth.generateCaptcha(req.ip ?? req.socket.remoteAddress ?? '')
   }
 
   @Public()
@@ -64,5 +64,15 @@ export class AuthController {
   @Post('sessions/:jti/kick')
   kickSession(@Param('jti') jti: string): Promise<{ code: number }> {
     return this.sessions.kick(jti)
+  }
+
+  /** 一键强制下线：下线除当前会话外的全部在线会话（黑名单即时生效，操作者自身保留） */
+  @RequirePermission('/system/sessions')
+  @HttpCode(200)
+  @Post('sessions/kick-all')
+  kickAllSessions(@Req() req: AuthenticatedRequest): Promise<{ code: number; kicked: number }> {
+    const payload = req.user
+    if (!payload) throw new UnauthorizedException('未登录或登录已过期')
+    return this.sessions.kickAll(payload.jti)
   }
 }

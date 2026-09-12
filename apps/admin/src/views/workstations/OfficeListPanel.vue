@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import { useListQueryState } from '@/utils/listQuery'
+import ListErrorState from '@/components/ListErrorState.vue'
 import { computed, onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { AddIcon, BuildingIcon, CheckCircleIcon, MapIcon, SettingIcon } from 'tdesign-icons-vue-next'
@@ -16,6 +18,7 @@ import type { Lease, Workstation, WorkstationArea, WorkstationStatus } from '@/t
  * 区域规划/新增办公位在页头操作区；卡片提供「编辑」（含维护中开关）与「关联租赁」（跳转租赁管理并预选）操作；
  * 租约全生命周期操作在「租赁管理」页 */
 const loading = ref(false)
+const loadError = ref('')
 const workstations = ref<Workstation[]>([])
 const leases = ref<Lease[]>([])
 const areas = ref<WorkstationArea[]>([])
@@ -79,10 +82,15 @@ async function load(silent = false) {
     workstations.value = ws
     leases.value = ls
     areas.value = areaList
+    loadError.value = ''
+  } catch (e) {
+    loadError.value = e instanceof Error ? e.message : '数据加载失败'
   } finally {
     if (!silent) loading.value = false
   }
 }
+
+useListQueryState({}, undefined, { refs: { status: statusFilter, area: areaFilter }, live: true })
 
 onMounted(load)
 
@@ -118,16 +126,19 @@ function goLeaseDetail(row: Workstation) {
   if (id) router.push(`/workstations/leases/${id}`)
 }
 
-function goEnterprise(w: Workstation) {
-  if (!w.enterpriseId) return
-  if (w.enterpriseId.startsWith('U')) router.push(`/users/${w.enterpriseId}`)
-  else if (w.enterpriseId.startsWith('XE')) router.push(`/external-enterprises/${w.enterpriseId}`)
-  else if (w.enterpriseId.startsWith('E')) router.push(`/enterprises/${w.enterpriseId}`)
+function enterpriseHref(w: Workstation): string | undefined {
+  const id = w.enterpriseId
+  if (!id) return undefined
+  if (id.startsWith('U')) return router.resolve('/users/' + id).href
+  if (id.startsWith('XE')) return router.resolve('/external-enterprises/' + id).href
+  if (id.startsWith('E')) return router.resolve('/enterprises/' + id).href
+  return undefined
 }
 </script>
 
 <template>
   <div class="office-panel page-fade-in">
+    <ListErrorState v-if="loadError" :message="loadError" :loading="loading" @retry="() => load()" />
     <PageHeader title="办公室管理" description="独立办公室的占用企业与维护状态（卡片可编辑资料或关联租赁）；租约新增/续期/终止在「租赁管理」页操作">
       <template #actions>
         <t-button variant="outline" @click="areaPlanVisible = true">
@@ -208,7 +219,7 @@ function goEnterprise(w: Workstation) {
 
         <template v-if="w.enterpriseName">
           <div class="office-enterprise-row">
-            <span class="office-enterprise clickable" :title="w.enterpriseName" @click="goEnterprise(w)">{{ w.enterpriseName }}</span>
+            <t-link class="office-enterprise clickable" :title="w.enterpriseName" :href="enterpriseHref(w)" :disabled="!enterpriseHref(w)" theme="primary" hover="color">{{ w.enterpriseName }}</t-link>
             <t-tag v-if="w.enterpriseId" size="small" variant="light">{{ w.enterpriseId }}</t-tag>
           </div>
           <div v-if="leaseOf(w)" class="office-lease">{{ leaseEndText(leaseOf(w)!) }}</div>

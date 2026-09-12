@@ -1,11 +1,19 @@
 import { defineConfig } from 'vite'
 import vue from '@vitejs/plugin-vue'
+import Components from 'unplugin-vue-components/vite'
+import { TDesignResolver } from '@tdesign-vue-next/auto-import-resolver'
 import { fileURLToPath, URL } from 'node:url'
 
 // 相对 base：dist 产物可直接静态托管或本地打开
 export default defineConfig({
   base: './',
-  plugins: [vue()],
+  plugins: [
+    vue(),
+    Components({
+      resolvers: [TDesignResolver({ library: 'vue-next' })],
+      dts: false,
+    }),
+  ],
   resolve: {
     alias: {
       '@': fileURLToPath(new URL('./src', import.meta.url)),
@@ -24,12 +32,13 @@ export default defineConfig({
     },
   },
   build: {
+    /* wangEditor 是只在编辑弹窗打开后请求的独立块；它自身约 812 kB，按异步块预算单独告警。 */
+    chunkSizeWarningLimit: 850,
     rollupOptions: {
       output: {
-        /* 拆分体积大户，避免单 chunk 过大（index 主包 / TDesign / 富文本编辑器） */
+        /* 富文本编辑器仅在表单弹窗实际打开后加载。TDesign 由自动导入插件按组件拆分。 */
         manualChunks: {
           'vendor-vue': ['vue', 'vue-router', 'pinia'],
-          'vendor-tdesign': ['tdesign-vue-next', 'tdesign-icons-vue-next'],
           'vendor-editor': ['@wangeditor/editor', '@wangeditor/editor-for-vue'],
         },
       },

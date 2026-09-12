@@ -11,7 +11,7 @@ import { DashboardController } from './dashboard.controller'
 import { DashboardService } from './dashboard.service'
 
 /* 系统管理域（wiki-backend.md §7.15/§7.16）：
- * 通知中心 / 审计日志查询 / 系统配置 / 数据字典 / 工作台聚合（dashboard + todos），共 12 端点。 */
+ * 通知中心 / 操作日志查询 / 系统配置 / 数据字典 / 工作台聚合（dashboard + todos），共 12 端点。 */
 @Module({
   controllers: [
     NotificationsController,

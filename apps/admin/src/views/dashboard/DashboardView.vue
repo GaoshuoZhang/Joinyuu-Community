@@ -171,11 +171,6 @@ const todoCardIcons: Record<string, unknown> = {
   lease: TimeIcon,
 }
 
-function goTodo(todo: { route: string }) {
-  /* 文章审核待办：旧待办路径映射到投稿审核页 /contents/submissions */
-  const route = todo.route === '/contents' ? '/contents/submissions' : todo.route
-  router.push(route)
-}
 
 const quickEntries = [
   { label: '用户管理', path: '/users', icon: UserIcon },
@@ -247,7 +242,7 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onLayoutKeydown))
             <div class="layout-panel">
               <div class="layout-panel-head">
                 <span class="layout-panel-title">工作台布局</span>
-                <t-link theme="primary" hover="color" size="small" @click="resetCards">恢复默认</t-link>
+                <t-button theme="primary" variant="text" size="small" @click="resetCards">恢复默认</t-button>
               </div>
               <div class="layout-list">
                 <div v-for="k in CARD_KEYS" :key="k" class="layout-row">
@@ -276,7 +271,7 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onLayoutKeydown))
             :label="todo.title"
             :value="todo.count"
             :icon="todoCardIcons[todo.key]"
-            @click="goTodo(todo)"
+            :href="router.resolve(todo.route === '/contents' ? '/contents/submissions' : todo.route).href"
           />
         </div>
       </section>
@@ -288,29 +283,31 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onLayoutKeydown))
             <h3 class="panel-title">平台数据</h3>
           </div>
           <div class="stats-grid">
-            <div
+            <t-link
               v-for="item in platformStats"
               :key="item.label"
               class="stats-cell clickable"
-              @click="router.push(item.route)"
+              :href="`#${item.route}`"
+              theme="default"
+              hover="color"
             >
               <component :is="item.icon" class="stats-icon" />
               <div class="stats-cell-main">
-                <span class="stats-value">{{ item.value.toLocaleString() }}</span>
+                <span class="stats-value">{{ item.value.toLocaleString('zh-CN') }}</span>
                 <span class="stats-label">{{ item.label }}</span>
               </div>
-            </div>
+            </t-link>
           </div>
         </section>
 
         <section v-show="isCardOn('announcements')" class="dash-block page-card">
           <div class="panel-head">
             <h3 class="panel-title">系统公告</h3>
-            <t-link theme="primary" hover="color" @click="router.push('/contents/announcements')">全部</t-link>
+            <t-link href="#/contents/announcements" theme="primary" hover="color">全部</t-link>
           </div>
           <t-empty v-if="!announcements.length && !announcementsLoading" description="暂无公告" />
           <div v-else class="notice-list">
-            <div v-for="a in announcements" :key="a.id" class="todo-item dash-item" @click="router.push('/contents/announcements')">
+            <t-link theme="default" hover="color" v-for="a in announcements" :key="a.id" class="todo-item dash-item" href="#/contents/announcements">
               <div class="todo-main">
                 <t-tag v-if="a.pinned" theme="warning" variant="light" size="small">置顶</t-tag>
                 <span class="todo-title">{{ a.title }}</span>
@@ -318,7 +315,7 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onLayoutKeydown))
               <div class="todo-meta">
                 <span>公告 · {{ a.publishedAt }}</span>
               </div>
-            </div>
+            </t-link>
           </div>
         </section>
       </div>
@@ -328,15 +325,15 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onLayoutKeydown))
         <section v-show="isCardOn('approvals')" class="dash-block page-card">
           <div class="panel-head">
             <h3 class="panel-title">待办审核</h3>
-            <t-link theme="primary" hover="color" @click="router.push('/approvals')">全部</t-link>
+            <t-link href="#/approvals" theme="primary" hover="color">全部</t-link>
           </div>
           <t-empty v-if="data.pendingApplications.length === 0" description="暂无待审核申请" />
           <div v-else class="todo-list">
-            <div
+            <t-link theme="default" hover="color"
               v-for="app in data.pendingApplications"
               :key="app.id"
               class="todo-item"
-              @click="router.push('/approvals')"
+              href="#/approvals"
             >
               <div class="todo-main">
                 <t-tag variant="light" size="small">{{ applicationTypeMap[app.type].label }}</t-tag>
@@ -346,22 +343,22 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onLayoutKeydown))
                 <span>{{ app.applicantName }} 提交于 {{ app.submittedAt }}</span>
                 <StatusTag entity="application" :value="app.status" />
               </div>
-            </div>
+            </t-link>
           </div>
         </section>
 
         <section v-show="isCardOn('events')" class="dash-block page-card">
           <div class="panel-head">
             <h3 class="panel-title">近期活动</h3>
-            <t-link theme="primary" hover="color" @click="router.push('/events')">全部</t-link>
+            <t-link href="#/events" theme="primary" hover="color">全部</t-link>
           </div>
           <t-empty v-if="data.upcomingEvents.length === 0" description="暂无近期活动" />
           <div v-else class="event-list">
-            <div
+            <t-link theme="default" hover="color"
               v-for="event in data.upcomingEvents"
               :key="event.id"
               class="event-item"
-              @click="router.push(`/events/${event.id}`)"
+              :href="`#/events/${event.id}`"
             >
               <div class="event-main">
                 <span class="event-title">{{ event.title }}</span>
@@ -372,7 +369,7 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onLayoutKeydown))
                 <span><LocationIcon /> {{ event.location }}</span>
                 <span>已报名 {{ event.enrollments.filter((e) => e.status === 'approved').length }}/{{ event.capacity }}</span>
               </div>
-            </div>
+            </t-link>
           </div>
         </section>
       </div>
@@ -391,10 +388,10 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onLayoutKeydown))
               <div class="trend-head">
                 <div class="trend-stat">
                   <span class="trend-label">{{ activeTrendLabel }}（近 {{ trendDays }} 天）</span>
-                  <strong>{{ trendTotal.toLocaleString() }}</strong>
+                  <strong>{{ trendTotal.toLocaleString('zh-CN') }}</strong>
                 </div>
               </div>
-              <div v-loading="trendLoading" class="trend-body">
+              <t-loading :loading="trendLoading" size="small" class="trend-body">
                 <TrendChart
                   v-if="trend.length"
                   :labels="trend.map((p) => p.date)"
@@ -402,7 +399,7 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onLayoutKeydown))
                   :color="t.value === 'points' ? '#00A870' : '#0052D9'"
                   :height="220"
                 />
-              </div>
+              </t-loading>
             </t-tab-panel>
           </t-tabs>
         </section>
@@ -412,10 +409,10 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onLayoutKeydown))
             <h3 class="panel-title">快捷入口</h3>
           </div>
           <div class="quick-grid">
-            <div v-for="entry in quickEntries" :key="entry.path" class="quick-item" @click="router.push(entry.path)">
+            <t-link theme="default" hover="color" v-for="entry in quickEntries" :key="entry.path" class="quick-item" :href="`#${entry.path}`">
               <component :is="entry.icon" class="quick-icon" />
               <span>{{ entry.label }}</span>
-            </div>
+            </t-link>
           </div>
         </section>
       </div>
@@ -476,6 +473,9 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onLayoutKeydown))
 /* 统一条目高度：待办审核/近期活动/系统公告保持同一视觉 */
 .todo-item,
 .event-item {
+  display: block;
+  white-space: normal;
+  text-align: left;
   min-height: 60px;
   box-sizing: border-box;
   padding: 10px 12px;
@@ -489,6 +489,7 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onLayoutKeydown))
   display: flex !important;
   flex-direction: column;
   justify-content: center;
+  align-items: flex-start;
 }
 
 .todo-item:hover,
@@ -538,6 +539,7 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onLayoutKeydown))
 }
 
 .stats-cell {
+  min-width: 0;
   display: flex;
   align-items: center;
   gap: 10px;
@@ -598,7 +600,7 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onLayoutKeydown))
   font-size: 13px;
   color: var(--td-text-color-secondary);
   cursor: pointer;
-  transition: all 120ms ease;
+  transition: color 120ms ease, background-color 120ms ease, transform 120ms ease;
 }
 
 .quick-item:hover {

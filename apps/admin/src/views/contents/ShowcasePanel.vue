@@ -1,5 +1,7 @@
 <script setup lang="ts">
 import { computed, onMounted, reactive, ref } from 'vue'
+import ListErrorState from '@/components/ListErrorState.vue'
+import { useListQueryState } from '@/utils/listQuery'
 import { MessagePlugin } from 'tdesign-vue-next'
 import StatusTag from '@/components/StatusTag.vue'
 import ColumnController from '@/components/ColumnController.vue'
@@ -11,6 +13,7 @@ import type { ShowcaseRequest } from '@/types'
  * 状态 Tab + 目标类型筛选 + 详情抽屉（审核时间线）+ 通过/驳回意见对话框；
  * 企业目标审核结果联动企业展示页状态（published/rejected），个人目标接入主页实体 */
 const loading = ref(false)
+const loadError = ref('')
 const list = ref<ShowcaseRequest[]>([])
 const total = ref(0)
 
@@ -60,11 +63,15 @@ const pagination = computed(() => ({
 }))
 
 async function load() {
+  syncQuery()
   loading.value = true
+  loadError.value = ''
   try {
     const res = await fetchShowcaseRequests({ ...query })
     list.value = res.list
     total.value = res.total
+  } catch (e) {
+    loadError.value = e instanceof Error ? e.message : '数据加载失败'
   } finally {
     loading.value = false
   }
@@ -130,11 +137,14 @@ async function onConfirm() {
   }
 }
 
+const { syncQuery } = useListQueryState(query, load)
+
 onMounted(load)
 </script>
 
 <template>
   <div class="showcase-panel">
+    <ListErrorState v-if="loadError" :message="loadError" :loading="loading" @retry="load" />
     <div class="page-filter-bar">
       <t-select
         v-model="query.targetType"
@@ -170,7 +180,7 @@ onMounted(load)
         :columns="visibleColumns"
         :loading="loading"
         :pagination="pagination"
-        empty="暂无符合条件的展示页申请"
+        empty="暂无展示页申请"
         @page-change="onPageChange"
         @row-click="({ row }) => openDetail(row)"
       >
@@ -272,7 +282,7 @@ onMounted(load)
       </p>
       <t-textarea
         v-model="comment"
-        placeholder="审核意见（驳回时建议填写原因）"
+        placeholder="审核意见（驳回时建议填写原因）…"
         :autosize="{ minRows: 3, maxRows: 5 }"
       />
     </t-dialog>

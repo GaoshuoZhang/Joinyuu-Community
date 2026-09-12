@@ -2,7 +2,7 @@
 
 > 本文档沉淀管理后台（admin web）开发的细致描述与全部工程契约，是所有页面/子代理的唯一视觉与结构依据。
 > 冻结后不得私自发明颜色、字号、圆角、间距；不得重写导航。
-> 技术栈由用户指定：Vue 3 + Vite + TypeScript + TDesign Vue Next + Pinia + Vue Router（M0 原型交付；M1 起全部 API 文件接入真实 HTTP，`src/mock/` 已删除；M1.5 完成后台治理增强 R1~R12，见 §9/§10）。
+> 技术栈由用户指定：Vue 3 + Vite + TypeScript + TDesign Vue Next + Pinia + Vue Router（M0 原型交付；M1 起全部 API 文件接入真实 HTTP，`src/mock/` 已删除；M1.5 完成后台治理增强 R1~R12，见 §9/§10；2026-09-12 后续增强：数据范围（R1）/密码周期（R3）/MinIO 对象存储（R4）/系统管理菜单聚合（角色与账号、日志与审计）/新增角色（RBAC）/一键强制下线（在线会话）/角色与账号三 Tab 统一筛选栏结构/工作台视觉修复）。
 
 ## 1. Style Tier & Aesthetic Direction
 
@@ -77,19 +77,16 @@
 | 规则管理 | 经验值发放记录 | /rules/experience-records | `ViewListIcon` |
 | 系统管理 | 数据字典 | /system/dicts | `AppIcon` |
 | 系统管理 | 系统配置 | /system/config | `SettingIcon` |
-| 系统管理 | 审计日志 | /logs/audit | `ViewListIcon` |
-| 系统管理 | 登录日志 | /logs/login | `UserListIcon` |
-| 系统管理 | 角色权限 | /system/roles | `CheckCircleIcon` |
-| 系统管理 | 管理员账号 | /system/admins | `UserListIcon` |
-| 系统管理 | 在线会话 | /system/sessions | `CheckCircleIcon` |
+| 系统管理 | 日志与审计 | /system/logs | `ViewListIcon` |
+| 系统管理 | 角色与账号 | /system/account | `UserListIcon` |
 | 系统管理 | 素材库 | /assets/library | `ViewModuleIcon` |
 | 系统管理 | 系统监控 | /system/monitor | `DashboardIcon` |
 | 系统管理 | 归档管理 | /system/trash | `Edit2Icon` |
 
-- **菜单渲染受 RBAC 约束（R1，2026-09-11/12）**：除工作台外的每个菜单项挂 `v-permission="'<code>'"`，分组以 `canSee(codes)` 判定「至少一个可见菜单项才渲染」；菜单 code 即路由路径（如 `/users`），按钮级权限用 `perm:<域>:<动作>`（企业/合作企业的 create/update/disable/enable/delete 共 10 个）
+- **菜单渲染受 RBAC 约束（R1，2026-09-11/12）**：除工作台外的每个菜单项挂 `v-permission="'<code>'"`，分组以 `canSee(codes)` 判定「至少一个可见菜单项才渲染」；菜单 code 即路由路径（如 `/users`），按钮级权限用 `perm:<域>:<动作>`（企业/合作企业的 create/update/disable/enable/delete 共 10 个）；`v-permission`/`meta.perm`/`hasPerm` 均支持 `string | string[]`（any-of，聚合页按多权限码渲染）
 - 菜单顺序（2026-09-10 契约，2026-09-12 内容管理二级扩为 6 项）：工作台 → 社区成员 → 业务运营 → 空间管理 → 内容管理 → 积分商城 → 规则管理 → 系统管理；**默认折叠**积分商城/规则管理/系统管理三组（expandedMenus 受控初始值，"全部展开/全部折叠"按钮切换）；**跳转自动展开**：路由 meta.group 变化时（含刷新直达/通知跳转/标签切换）自动展开页面所属分组，仅追加不收起其他组（GROUP_KEY_BY_META 映射，immediate，注意 group-points 的 meta 值为「积分管理」而菜单标题为「积分商城」）
 - 内容管理为一级菜单（2026-09-12 拆分，替代原「资讯内容」单页三 tab）：资讯发布（/contents/publish，官方文章）+ 投稿内容（/contents/submissions，用户投稿审核）+ 栏目管理（/contents/columns）+ 阅读统计（/contents/stats）+ 展示页发布（/contents/showcase）+ 公告栏（/contents/announcements）；原 ArticlePanel / ContentsView 已删除
-- 系统管理为一级菜单：数据字典 + 系统配置 + 审计日志 + 登录日志 + 角色权限 + 管理员账号 + 在线会话 + 素材库 + 系统监控 + 归档管理（R1~R12，2026-09-12）；原「回收站」升级为「归档管理」；通知中心为顶栏铃铛（NotificationIcon + t-badge 未读数，点击跳转关联页面）；六域待办卡片并入工作台顶部
+- 系统管理为一级菜单：数据字典 + 系统配置 + 日志与审计 + 角色与账号 + 素材库 + 系统监控 + 归档管理（2026-09-12 菜单聚合：原「审计日志/登录日志/角色权限/管理员账号/在线会话」5 项合并为 2 个选项卡聚合页，子页不再独立路由）；「日志与审计」= 操作日志（原「审计日志」更名）+ 登录日志，「角色与账号」= 管理员账号 + 角色权限 + 在线会话，tab 与 `?tab=` 双向同步且旧路径（/logs/audit、/logs/login、/system/roles、/system/admins、/system/sessions）重定向对应 tab；原「回收站」升级为「归档管理」；通知中心为顶栏铃铛（NotificationIcon + t-badge 未读数，点击跳转关联页面）；六域待办卡片并入工作台顶部
 - 规则管理为一级菜单：积分规则（/rules/points）+ 经验值规则（/rules/experience）+ 等级规则（/rules/levels）+ 积分发放记录（/rules/ledger）+ 经验值发放记录（/rules/experience-records）；
 - 积分商城为一级菜单：/mall 重定向至 /mall/goods，商品/订单两个二级页面直接以面板组件作为路由页面（各含 PageHeader）
 - 空间管理为一级菜单：办公位管理=开放/半开放办公位平面图（独立办公室移出）、办公室管理=独立办公室卡片视图（占用企业+租期+租金）、租赁管理=租约列表+详情页；公共空间管理=空间列表+详情页（预约日历），公共空间预约=预约审核面板
@@ -101,11 +98,12 @@
 - 表单：`t-form / t-form-item / t-input / t-select / t-date-picker / t-textarea / t-radio-group`
 - 反馈：`t-dialog`（确认/审核意见）、`t-drawer`（右侧详情抽屉，size="480px~560px"）、`t-popconfirm`（轻量危险确认）、`MessagePlugin.success/error`（操作结果）
 - 展示：`t-tag`（variant="light"）、`t-descriptions`(:column="2")、`t-tabs + t-tab-panel`、`t-timeline`（审核记录）、`t-steps`（进度节点）、`t-progress`（进度条）、`t-avatar`、`t-empty`（空态）、`t-skeleton`（加载）、`t-statistic`（统计数值——共享 `StatCard` 组件内部基于 t-statistic 封装，props 保持 label/value/icon）、`t-list + t-list-item`（弹窗内简易列表，如区域规划）
-- 加载状态（组件标准化约定，2026-09-08）：表格用 `:loading` prop；卡片网格等非表格区域一律用 `<t-loading :loading="...">` 组件包裹——**禁止使用 `v-loading` 指令**的运行时不生效用法（TDesign `app.use(TDesign)` 会跳过 loading 指令注册，Element Plus 风格写法运行时静默失效不报编译错；当前 DashboardView/AssetLibrary/MonitorPanel/打印页仍有存量 `v-loading`，属待清理项）；StatCard 等自定义组件优先以 TDesign 组件为内核实现
+- 加载状态（组件标准化约定，2026-09-08；2026-09-12 存量清理完成）：表格用 `:loading` prop；卡片网格等非表格区域一律用 `<t-loading :loading="...">` 组件包裹——**禁止使用 TDesign Loading 指令（directive）的运行时不生效用法**（TDesign `app.use(TDesign)` 会跳过 loading 指令注册，Element Plus 风格写法运行时静默失效不报编译错；原 DashboardView/AssetLibrary/MonitorPanel/两处打印页共 5 处存量已于 2026-09-12 统一改为 `<t-loading>` 包裹）；StatCard 等自定义组件优先以 TDesign 组件为内核实现
 - 状态标签：**必须**用共享 `StatusTag` 组件 + `constants/status.ts` 的状态映射，禁止页面自造状态文案/配色；`StatusTag` 支持 `scheduledAt`（scheduled 状态直接显示定时发布时间 + hover「到点自动发布」，不再显示"定时发布中"文案）与 `enrollmentOpen`（event=published 时拼接 报名中/暂停报名）
 - 身份标签：**必须**用共享 `IdentityTags` 组件 + `constants/identity.ts` 的身份词汇表（`identityTypeMap` / `roleLabelMap` / `userCategoryOptions`），禁止页面自造身份文案
 - **M1.5 新增共享组件（2026-09-12）**：`RichEditor`（wangEditor v5 富文本，v-model=HTML，图片走 `uploadAsset`，对外 API 同旧 textarea 封装）、`TrendChart`（零依赖纯 SVG 折线/渐变面积/悬浮十字线，供工作台 30 日趋势）、`ColumnController`（列显隐+顺序调整，localStorage `joinyuu_cols_<storageKey>` 持久化，ESC 关闭）、`BulkArchiveDialog`（一键归档：复选框列出可归档状态，默认全选后二次确认）、`ArticleReviewDialog`（待审核投稿通过/驳回必填原因，readonly 复用于详情）、`ArticleScheduleDialog`（文章定时发布）、`EnterpriseFormDialog`（社区企业新增/编辑，关联用户必填并自动填充联系人）、`ExternalEnterpriseFormDialog`（合作企业新增/编辑）
 - **按钮级权限（R1，2026-09-12）**：`v-permission="'<code>'"` 指令（`src/directives/permission.ts`）采用 **display 方案**——无权限时 `el.style.display = 'none'`（不删 DOM），`mounted` + `updated` 双钩子判定，权限集合变化可恢复；路由守卫按 `meta.perm` 优先、否则逐级回退推导（`/users/U1001 → /users`）校验，失败落地 `/403`（ForbiddenView）
+- **菜单组显隐必须用目录真实权限码（2026-09-12 修复）**：AdminLayout 各分组的 `canSee([...codes], group)` 曾在系统管理组误用聚合路由路径 `/system/logs`、`/system/account`（权限目录中不存在，目录码为 `/logs/audit`、`/logs/login`、`/system/roles`、`/system/admins`、`/system/sessions`），导致仅持有聚合前旧码的角色（如 auditor）整组菜单不可见；已改为目录真实码全集。新增聚合菜单时组级 canSee、子项 v-permission、路由 meta.perm 三处必须同源对齐
 - **ID 展示规范（2026-09-12，全站统一）**：用户/企业等实体 ID 一律用 `t-tag` 标签展示——列表名称下方独立成行用 `.id-tag-block`（tokens.css 全局类），名称/字段同行内联用 `.id-tag`；名称已包含在标签内时用 `名称 [ID]` 格式（如 `IdentityTags` 社区企业标签、打印页、导出 CSV：`张三 [U1001]`/`聚屿科技 [E2001]`）；同一视图不重复展示同一 ID（如用户详情头部已有「用户ID」行时，IdentityTags 传 `:show-id="false"`）
 - **全站交互减法（2026-09-12）**：列表页**不设刷新按钮**（路由切换/操作成功后自动 `load()`）与**表格批量选择操作**（`row-select` 已全站移除）；批量场景统一改用「一键归档」+ `BulkArchiveDialog`；表格 `table-layout="fixed"`（resizable 必须 fixed，列宽显式声明）
 - **术语统一（2026-09-12）**：联系电话 / 办公位 / 社区企业 / 合作企业 / 经验值 / 审核 / 新增 / 归档；禁止再出现 联系方式 / 工位 / 外部企业 / 审批 / 新建 / 回收站 等旧词
@@ -125,8 +123,8 @@
 - 身份卡跳转（2026-09-09）：社区企业身份卡 → 社区企业详情（enterpriseId）；合作企业身份卡 → 合作企业详情（external_enterprise 身份无 enterpriseId 字段，按"档案名 + 成员 userId"反查档案 ID，UserDetailView 加载合作企业档案列表反查，可解析才显示可点击）
 - 数据概览联动（冻结；2026-09-12 修订）：**用户详情已取消独立数据概览卡片**，改由 7 个记录标签页（申请/需求/项目/活动/租赁/投稿/预约）直接展示；社区企业/合作企业详情保留「数据概览」选项卡（需求发布=以该企业身份发布的需求量、参与项目=该企业承接的项目量），卡片有数据时可点击跳转对应列表——跳转 query 携带 `enterprise`：**一律传企业 ID**——社区企业 E2001（按 publisherIdentity.enterpriseId / 承接方 t.id 匹配）、合作企业 XE7001（按 ID 解析档案名后以 enterpriseName / 成员个人承接匹配）；用户侧跳转 query 仅携带用户 ID（需求列表 `publisher`、项目列表 `participant`），按 ID 过滤避免同名歧义；列表以可关闭标签展示该筛选，名称解析：用户经 fetchUser、社区企业经 fetchEnterprise、合作企业经 fetchExternalEnterprise 由 ID 解析（均失败回退显示原值），重置时一并清除
 - 经验值与积分账本（冻结；2026-09-12 接入真实接口）：`api/ledgers.ts` 双流水（ExperienceRecord 前缀 EX8001+ / PointsRecord 前缀 PT9001+），每笔含 delta/balance（变动后余额）/reason/at/operator/source，末笔 balance 与实体当前值一致；经验值归属=社区企业（Enterprise.experience）或社区个体身份（UserIdentity.experience），积分归属=用户（User.points，挂靠个人用户身份人人可有）；账本选项卡——企业详情「经验值」（可增减）、用户详情「经验值」（**仅持有社区个体身份的用户显示**，可增减）、用户详情「积分」（所有用户，可增减）；调整经共享 `AdjustValueDialog`（方向+数量+必填事由，扣减不超余额、余额不可为负），API：`GET/POST /api/admin/experience-records`（入参 targetType+targetId）、`GET/POST /api/admin/points-records`
-- 组件标准化审计结论（2026-09-08 初版；2026-09-12 复核）：依赖 = vue 全家桶 + tdesign-vue-next/icons + pinia + `@wangeditor/editor`（含 for-vue，R5 富文本），无其他第三方 UI 库；共享组件 26 个（M1.5 新增 RichEditor/TrendChart/ColumnController/BulkArchiveDialog/ArticleReviewDialog/ArticleScheduleDialog/EnterpriseFormDialog/ExternalEnterpriseFormDialog）；视图层自绘 DOM 已收敛：办公位/办公室卡片为 **t-card（size="small" + hover-shadow）内核**，边框/圆角/阴影来自 TDesign，状态底色经类覆盖容器背景；剩余自绘 DOM（图例色点、board 卡片、.page-card 容器）为装饰/布局元素，保留现状；**残留待清理：5 处 `v-loading`**（DashboardView 趋势区 / AssetLibrary 网格 / MonitorPanel 外层 / LeasePrintView / ApprovalPrintView——TDesign `app.use(TDesign)` 会跳过 loading 指令注册，运行时静默失效，应改为 `<t-loading>` 包裹）
-- 开发环境约定（2026-09-09，冻结；2026-09-10 M1 修订；2026-09-12 M1.5 修订）：**admin-web dev 端口统一 7758**（package.json dev 脚本已固化 `vite --port 7758`），浏览器访问 `http://localhost:7758`；**M1 起登录态为真实 JWT**——localStorage `joinyuu_admin_token` 必须来自 `POST /api/admin/auth/login`（admin/admin123），**登录必须携带图形验证码**（`GET /auth/captcha` 取 `captchaId`+SVG dataURL，点击图片或刷新按钮换一张；服务端强制校验，失败/锁定都写登录日志），任意旧 mock 值会触发 401 清 token+名称+权限缓存跳登录；dev 需同时运行后端（7757，vite 已配 `/api` proxy）；不要使用其他端口（如 5199）起 dev server
+- 组件标准化审计结论（2026-09-08 初版；2026-09-12 复核）：依赖 = vue 全家桶 + tdesign-vue-next/icons + pinia + `@wangeditor/editor`（含 for-vue，R5 富文本），无其他第三方 UI 库；共享组件 26 个（M1.5 新增 RichEditor/TrendChart/ColumnController/BulkArchiveDialog/ArticleReviewDialog/ArticleScheduleDialog/EnterpriseFormDialog/ExternalEnterpriseFormDialog）；视图层自绘 DOM 已收敛：办公位/办公室卡片为 **t-card（size="small" + hover-shadow）内核**，边框/圆角/阴影来自 TDesign，状态底色经类覆盖容器背景；剩余自绘 DOM（图例色点、board 卡片、.page-card 容器）为装饰/布局元素，保留现状；**加载指令存量清理已完成（2026-09-12）**：DashboardView 趋势区 / AssetLibrary 网格 / MonitorPanel 外层 / LeasePrintView / ApprovalPrintView 共 5 处已统一改为 `<t-loading>` 包裹
+- 开发环境约定（2026-09-09，冻结；2026-09-10 M1 修订；2026-09-12 M1.5 修订）：**admin-web dev 端口统一 7758**（package.json dev 脚本已固化 `vite --port 7758`），浏览器访问 `http://localhost:7758`；**M1 起登录态为真实 JWT**——localStorage `joinyuu_admin_token` 必须来自 `POST /api/admin/auth/login`（admin/admin123），**登录必须携带图形验证码**（`GET /auth/captcha` 取 `captchaId`+SVG dataURL，点击图片或刷新按钮换一张；服务端强制校验，失败/锁定都写登录日志），任意旧 mock 值会触发 401 清 token+名称+权限缓存跳登录；dev 需同时运行后端（7757，vite 已配 `/api` proxy）；不要使用其他端口（如 5199）起 dev server；验证码接口同 IP 限流 30 次/分钟（超出 429）
 
 - 表格布局约定（2026-09-09）：凡开启 `resizable` 的 t-table 必须用 **`table-layout="fixed"`**（TDesign 警告 auto+resizable 组合；控制台刷屏）；列宽全部显式声明 width/minWidth，fixed 下按声明生效；无 resizable 的表格可保留 auto（如空间详情预约明细）
 
@@ -173,12 +171,12 @@
 
 ## 5. 页面清单（M1.5 全量，2026-09-12）
 
-> 路由以 `src/router/index.ts` 为准：AdminLayout 下 48 个页面路由（含 /403，不含 /mall 重定向）+ /login + 2 个独立打印视图（共 51 个页面组件）；`/mall` 重定向至 `/mall/goods`，`/:pathMatch(.*)*` 兜底重定向 `/dashboard`。
+> 路由以 `src/router/index.ts` 为准：AdminLayout 下 45 个页面路由（含 /403 与 5 条旧路径重定向，不含 /mall 重定向）+ /login + 2 个独立打印视图（共 48 个页面组件；系统管理 5 个子页作为 2 个聚合页的 tab 子组件，不再独立路由）；`/mall` 重定向至 `/mall/goods`，`/:pathMatch(.*)*` 兜底重定向 `/dashboard`。
 
 | 页面 | 路由 | 职责 | 关键交互 |
 |---|---|---|---|
 | 登录 | /login | 品牌区 + 真实 JWT 登录（M1 起）；图形验证码为必填项 | 演示账号 admin/admin123；验证码图片点击/刷新按钮换一张，登录失败自动清空验证码并刷新；加载/错误反馈 |
-| 工作台 | /dashboard | 六域待办卡片（有待办高亮）+ 平台数据 6 卡 + 系统公告 + 待办审核 + 近期活动 + 运营趋势 + 快捷入口 | 待办/平台数据/公告/审核/活动点击直达；趋势支持 新增成员/新增需求/新增活动/发放积分 四指标 × 3/7/15/30 天，顶部显示**区间累计值**；「编辑布局」popup 控制 7 个区块显隐（localStorage 持久化），与 ColumnController 一样支持 ESC 关闭 |
+| 工作台 | /dashboard | 六域待办卡片（有待办高亮）+ 平台数据 6 卡 + 系统公告 + 待办审核 + 近期活动 + 运营趋势 + 快捷入口 | 待办/平台数据/公告/审核/活动点击直达；趋势支持 新增成员/新增需求/新增活动/发放积分 四指标 × 3/7/15/30 天，顶部显示**区间累计值**；「编辑布局」popup 控制 7 个区块显隐（localStorage 持久化），与 ColumnController 一样支持 ESC 关闭；2026-09-12 视觉修复：待办 StatCard（`t-link` 渲染）补内边距与左对齐（TDesign `.t-link` 基础样式 `padding:0`/`justify-content:center` 会覆盖自定义卡片样式，组件内需以 `.stat-card.t-link` 提升特异性回写）、系统公告条目 `.dash-item` 补 `align-items: flex-start`（column 布局下 `t-link` 的 `align-items:center` 会使文字水平居中） |
 | 用户列表 | /users | 筛选（关键词/身份/状态/实名状态）+ 列设置 + 导出 | 行点击/详情按钮进用户详情；冻结/解冻在详情页执行 |
 | 用户详情 | /users/:id | 资料头（昵称/用户ID/身份标签/状态）+ 编辑/冻结/恢复 + tabs | tabs：身份信息 / 申请·需求·项目·活动·租赁·投稿·预约 7 个记录页（各分「进行中/历史记录」，已归档条目标「已归档」）/ 经验值（仅社区个体）/ 积分 / 活跃记录；需求/项目/活动/租赁记录行可点击跳详情；社区企业/合作企业身份卡跳企业详情 |
 | 社区个体 | /individuals | 社区个体身份成员列表（关键词/状态筛选）+ 列设置 + 导出 | 行点击进用户详情 |
@@ -215,13 +213,15 @@
 | 展示页发布 | /contents/showcase | 展示页申请：状态 Tab + 目标类型筛选 + 列设置 | 行点击/详情抽屉（审核时间线）；待审核→通过/驳回；通过联动企业展示页状态 |
 | 公告栏 | /contents/announcements | 站点公告管理：新增即发布，置顶优先排序（AN1001+）+ 列设置 | 发布/编辑/下架/重新发布/置顶/归档（归档后可恢复）；AnnouncementFormDialog 双模式 |
 | 数据字典 | /system/dicts | 四类字典项（需求类别/行业/活动类型/**商品类型**）新增/启停/删除 | 字典项 label 即业务存储值，暂不支持改名；各业务下拉统一从字典拉取（失败回退 dictFallback 词表） |
-| 系统配置 | /system/config | 站点信息 + 功能开关（注册/积分商城/需求广场/空间预约）+ 运营参数（临期提醒窗口 1-90 天、**上传文件大小限制 1-100MB**） | 保存即生效，记录更新时间与操作人 |
-| 审计日志 | /logs/audit | 服务端写操作留痕（操作时间/操作人/模块/动作/对象/详情，含 before/after 快照） | 模块筛选 + 关键词搜索；只读 |
-| 登录日志 | /logs/login | 管理员登录成功/失败/锁定三态记录（账号/姓名/IP/归属地/设备/失败原因） | 关键词 + 状态 + 日期区间筛选；只读 |
-| 角色权限 | /system/roles | 角色列表 + 权限点分配矩阵（按权限目录分组渲染，后端目录失败回退内置 49 码目录） | 超管角色强制全量 `*`；分组全选/全不选；保存角色权限集合 |
-| 管理员账号 | /system/admins | 管理员列表（账号/姓名/角色/状态/最后登录/创建时间） | 新增/编辑（账号、姓名、角色）；启停；重置密码（≥8 位）；新增未传密码时后端返回随机初始密码一次性提示 |
-| 修改密码 | /system/change-password | 原密码 + 新密码（≥8 位含字母与数字）+ 确认 | 改密成功即登出跳登录页（后端黑名单当前账号全部会话） |
-| 在线会话 | /system/sessions | 当前在线管理员会话（账号/姓名/IP/设备/登录时间） | 强制下线（Redis 黑名单即时生效）；只读 |
+| 系统配置 | /system/config | 站点信息 + 功能开关（注册/积分商城/需求广场/空间预约）+ 运营参数（临期提醒窗口 1-90 天、**上传文件大小限制 1-100MB**、**密码有效期 0-3650 天（0=不启用）**）+ **MinIO 对象存储**分区（启用开关 + endpoint/端口/SSL/AccessKey/SecretKey/Bucket） | 保存即生效（MinIO 配置保存后即时切换存储驱动），记录更新时间与操作人 |
+| 日志与审计 | /system/logs | 选项卡聚合页：操作日志 + 登录日志（按权限过滤 tab；tab 与 `?tab=` 同步；子页标题隐藏） | 由「日志与审计」菜单进入；旧路径 /logs/audit、/logs/login 重定向对应 tab |
+| 操作日志（日志与审计 Tab，原「审计日志」） | /system/logs?tab=audit | 服务端写操作留痕（操作时间/操作人/模块/动作/对象/详情，含 before/after 快照） | 模块筛选 + 关键词搜索；只读 |
+| 登录日志（日志与审计 Tab） | /system/logs?tab=login | 管理员登录成功/失败/锁定三态记录（账号/姓名/IP/归属地/设备/失败原因） | 关键词 + 状态 + 日期区间筛选；只读 |
+| 角色与账号 | /system/account | 选项卡聚合页：管理员账号 + 角色权限 + 在线会话（按权限过滤 tab；tab 与 `?tab=` 同步；子页标题隐藏） | 由「角色与账号」菜单进入；旧路径 /system/roles、/system/admins、/system/sessions 重定向对应 tab |
+| 角色权限（角色与账号 Tab） | /system/account?tab=roles | 角色列表 + 权限点分配矩阵（按权限目录分组渲染，后端目录失败回退内置 49 码目录）+ **数据范围**列 + **筛选栏（关键词过滧行内，2026-09-12）+ 新增角色** | 超管角色强制全量 `*` 且不可限制数据范围；分组全选/全不选；保存角色权限集合；数据范围弹窗 7 域多选（members/biz/space/contents/mall/rules/system，空=全部）；新增角色弹窗（编码小写字母开头唯一/名称必填唯一/说明选填，创建后初始无权限点，走「权限配置」分配；错误提示以后端 400/409 为准） |
+| 管理员账号（角色与账号 Tab） | /system/account?tab=admins | 管理员列表（账号/姓名/角色/状态/最后登录/创建时间）+ 筛选栏（搜索/查询/重置 + 右端**新增管理员**，2026-09-12 从独立按钮行移入筛选栏） | 新增/编辑（账号、姓名、角色）；启停；重置密码（≥8 位）；新增未传密码时后端返回随机初始密码一次性提示 |
+| 修改密码 | /system/change-password | 原密码 + 新密码（≥8 位含字母与数字）+ 确认 | 改密成功即登出跳登录页（后端黑名单当前账号全部会话）；**密码过期后登录会被引导到本页**（其它接口 403「密码已过期，请先修改密码」，改密即解除） |
+| 在线会话（角色与账号 Tab） | /system/account?tab=sessions | 当前在线管理员会话（账号/姓名/IP/设备/登录时间）+ 筛选栏（关键词过滧行内，2026-09-12）+ **一键强制下线**（右端危险色，popconfirm 确认） | 单会话强制下线与一键下线均走 Redis 黑名单即时生效；一键下线**保留当前操作者会话**，成功提示实际下线数（0 时提示无其他会话）；接口 `POST /auth/sessions/kick-all` |
 | 素材库 | /assets/library | 图片素材网格：来源筛选（全部/资讯发布/投稿内容/未关联）+ 文件名搜索 + 数量/总大小统计 | 上传（受系统配置限制）；复制 URL；**替换**（同 URL 覆盖，引用方即时生效）；删除；来源标签 `资讯发布-A1010`/`投稿内容-SU1006`/`未关联` |
 | 系统监控 | /system/monitor | 服务健康/运行时长/接口平均延迟/DB·Redis 延迟 + Redis 概览（内存/命中率/键数/版本）+ 定时任务表 | 执行日志抽屉；lastResult 三态 success/failed/unknown |
 | 归档管理 | /system/trash | 13 域 Tab（社区企业/合作企业/资讯发布/投稿内容/公告栏/需求/项目/活动/租赁/空间预约/商品/商城订单/申请审核）+ 关键词搜索 + 每页独立「归档设置」 | 恢复；彻底删除（普通域 popconfirm；**用户历史域三连确认**：两次确认 + 输入「永久删除」）；归档设置：自动归档开关/延时/可归档状态、自动删除开关/延时（用户历史域开启自动删除需三连确认） |
@@ -256,15 +256,16 @@
 ## 9. M1.5 治理增强约定（R1~R12，2026-09-12）
 
 - **通知中心**：顶栏铃铛（t-popup + t-badge 未读数），API `api/notifications.ts`（真实接口 `/notifications`、`/:id/read`、`/read-all`，N9001+ 种子数据）；点击未读项标记已读并跳转 link 路由，全部已读一键操作；由后端业务事件与定时任务写入
-- **审计日志（R9 扩展）**：写操作由后端 `AuditInterceptor + AuditService` 统一留痕（含 IP 与 before/after 快照），前端只读消费 `api/auditLogs.ts`；不再有前端 `recordAudit`
+- **操作日志（R9 扩展，原「审计日志」2026-09-12 更名）**：写操作由后端 `AuditInterceptor + AuditService` 统一留痕（含 IP 与 before/after 快照），前端只读消费 `api/auditLogs.ts`；不再有前端 `recordAudit`；与登录日志同挂「日志与审计」聚合页
 - **数据字典**：`api/dicts.ts` 四类（demand_category / industry / event_type / **goods_category**）；消费端模式 = ref 初始值用 `dictFallback` 词表 + onMounted 拉字典按 `status=enabled` 覆盖（需求两页/需求与活动表单/社区企业与合作企业列表/商品列表与商品表单等）
 - **列表导出（R9）**：`utils/exportCsv.ts` 的 `exportCsv(filename, headers, rows)` 前端直出 CSV（带 BOM 防乱码）+ `statusLabel(entity, value)` 状态转文案 + `exportAllRows`（按现有筛选逐页拉取后导出，返回行数）；导出按钮统一放 PageHeader #actions（DownloadIcon），导出后 toast 提示条数；已接入 10 页（用户/社区个体/社区企业/合作企业/需求/项目/活动/商品/订单/租约），其中需求列表另有「导出全部」；导出 CSV 中人员/企业列同样使用 `名称 [ID]` 格式
 - **一键归档（替代原表格批量操作）**：`BulkArchiveDialog`（复选框列出可归档状态，默认全选 + 二次确认）接入 8 页——申请审核、需求、项目、活动、租赁、空间预约、投稿内容、订单；单条归档按钮在对应行的终态出现；归档对象进入「归档管理」可恢复/彻底删除
 - **归档管理（R12）**：13 域 Tab + 关键词搜索；恢复（popconfirm）与彻底删除（普通域 popconfirm；8 个用户历史域 `application/demand/project/event/lease/submission/reservation/order` 为三连确认：弹窗确认 ×2 + 强确认输入「永久删除」）；每域独立「归档设置」（自动归档开关/延时/可归档状态多开关、自动删除开关/延时；用户历史域开启自动删除时同样要求三连确认）；用户历史域的「彻底删除」按钮不走 popconfirm 而直接弹出三连确认流程
-- **RBAC（R1）**：权限码沿用菜单路径（如 `/users`）+ 按钮级 `perm:<域>:<动作>`，前端目录 `constants/permissions.ts`（49 码）与后端 `/permissions/catalog` 对齐（目录加载失败回退内置副本）；`v-permission` 为 display 方案（mounted + updated 双钩子）；路由守卫按 `meta.perm` 优先、逐级回退推导权限码，无权限落地 `/403`；登录响应携带 `permissions`（无角色=空集合，前端不再兜底全量），权限缓存 `joinyuu_admin_perm_codes` 随 401 清理
+- **RBAC（R1）**：权限码沿用菜单路径（如 `/users`）+ 按钮级 `perm:<域>:<动作>`，前端目录 `constants/permissions.ts`（49 码）与后端 `/permissions/catalog` 对齐（目录加载失败回退内置副本）；`v-permission` 为 display 方案（mounted + updated 双钩子，支持 `string | string[]` any-of）；路由守卫按 `meta.perm`（支持数组）优先、逐级回退推导权限码，无权限落地 `/403`；登录响应携带 `permissions`（无角色=空集合，前端不再兜底全量），权限缓存 `joinyuu_admin_perm_codes` 随 401 清理
+- **数据范围（域维度，R1，2026-09-12 实装）**：`AdminRole.dataScope`（7 域 members/biz/space/contents/mall/rules/system，空数组=全部）；登录响应携带 `dataScope` → localStorage `joinyuu_admin_scope_codes`（401 清理）；`constants/scopes.ts` 提供域标签与 `GROUP_DOMAIN`/`scopeAllowsGroup` 共享映射；菜单 `canSee` 合并范围判断、路由按 `meta.group` 域校验 → `/403`；RolePanel 提供「数据范围」列 + 7 域多选弹窗（超管不可限制）；后端 `DomainScopeGuard` 按 URL 首段域拦截（域外 403「无权限访问该数据范围」）
 - **管理员与角色（R1/R2）**：角色权限页（角色列表 + 权限点分配矩阵，超管角色强制 `*`）；管理员账号页新增/编辑/启停/重置密码，新增未传密码时后端随机生成 12 位初始密码并一次性展示
-- **登录安全（R3/R8）**：登录图形验证码必填（`GET /auth/captcha`，SVG dataURL，点击图片/刷新按钮换一张，失败自动刷新）；修改密码页（原密码 + 新密码 ≥8 位含字母数字，改密后当前账号全部会话强制下线并回登录页）；在线会话页（强制下线即时生效）；登录日志三态 success/failed/locked + 失败原因，支持关键词/状态/日期区间筛选
-- **文件上传与素材库（R4）**：`api/assets.ts` 上传/列表/删除/**替换**（同 URL 覆盖存储内容，引用方即时生效）；素材库页来源筛选（全部/资讯发布/投稿内容/未关联）、来源标签 `资讯发布-A1010` / `投稿内容-SU1006` / `未关联`、复制 URL；上传走后端 `StorageService`（本地磁盘 `UPLOAD_DIR`，`/api/public/files/:key`），魔数嗅探（拒绝 SVG、不信任客户端 MIME）；单文件大小上限取系统配置 `uploadMaxSizeMb`（1-100MB）
+- **登录安全（R3/R8）**：登录图形验证码必填（`GET /auth/captcha`，SVG dataURL，点击图片/刷新按钮换一张，失败自动刷新）；修改密码页（原密码 + 新密码 ≥8 位含字母数字，改密后当前账号全部会话强制下线并回登录页）；在线会话页（强制下线即时生效）；登录日志三态 success/failed/locked + 失败原因，支持关键词/状态/日期区间筛选；**密码周期**：系统配置「密码有效期」（0-3650 天，默认 90，0=不启用），超期登录响应 `passwordExpired=true` 并强制改密（其它接口 403「密码已过期，请先修改密码」，改密即解除）；验证码接口同 IP 限流 30 次/分钟
+- **文件上传与素材库（R4）**：`api/assets.ts` 上传/列表/删除/**替换**（同 URL 覆盖存储内容，引用方即时生效）；素材库页来源筛选（全部/资讯发布/投稿内容/未关联）、来源标签 `资讯发布-A1010` / `投稿内容-SU1006` / `未关联`、复制 URL；上传走后端 `StorageService`（本地磁盘 `UPLOAD_DIR`，`/api/public/files/:key`），魔数嗅探（拒绝 SVG、不信任客户端 MIME）；单文件大小上限取系统配置 `uploadMaxSizeMb`（1-100MB）；**MinIO 双驱动**：系统配置四要素（启用/endpoint/AccessKey/SecretKey）齐全时走 MinIO（bucket 自动创建），否则本地磁盘回退，保存配置即时切换（判定缓存失效）；公开读取路径不变（`/api/public/files/:key`）
 - **富文本（R5）**：`RichEditor`（wangEditor v5）替换文章/公告/商品说明等 textarea，v-model=HTML；图片经 `uploadAsset` 插入；服务端白名单清洗后落库；暗色模式下由 tokens.css 的 `--w-e-*` 变量覆盖
 - **系统监控（R6）**：服务健康（healthy/degraded/down）、运行时长、接口平均延迟、DB/Redis 延迟、Redis 概览（内存/命中率/键数/版本/连接数）、定时任务表（cron/上次执行/耗时/结果三态）；执行日志抽屉
 - **趋势图表（R7）**：工作台「运营趋势」= 四指标（新增成员/新增需求/新增活动/发放积分）× 3/7/15/30 天，数据 `GET /dashboard/trend?days=`；`TrendChart` 纯 SVG（渐变面积 + 悬浮提示），顶部统计为**区间累计值**（非最后一日值）；「平台数据」6 卡片可点击跳对应列表（全部用户/社区个体/社区企业/合作企业/进行中的项目/资讯内容）
@@ -272,7 +273,7 @@
 - **列显示配置（R11）**：`ColumnController` 接入 20 个列表页（用户/社区个体/社区企业/合作企业/申请审核/需求/需求审核/项目/活动/租赁/公共空间/公共空间预约/资讯发布/投稿内容/栏目/阅读统计/展示页/公告/商品/订单），显隐+顺序本地持久化 `joinyuu_cols_<storageKey>`，支持 ESC 关闭；工作台「编辑布局」popup 同交互
 - **待办卡片（并入工作台）**：`fetchDashboard().todos` 聚合六域待办数（入驻审核/需求审核/空间预约/展示页发布/文章审核/临期租约 `deriveLeaseStatus`）；工作台顶部以 StatCard 渲染（`stat-clickable` 可点击直达 + `is-active` 有待办高亮），stat-grid 6 列；文章审核待办路由映射 `/contents/submissions`
 - **打印视图（R9）**：`/prints/lease/:id`（租约确认单，列表/详情进入）与 `/prints/approval/:id`（申请审核单，专用接口直取详情，申请抽屉进入）为独立裸页，`window.print` 输出干净纸张
-- **系统配置**：`api/systemConfig.ts` fetch/save（真实接口）；`leaseExpireRemindDays` 校验 1-90、`uploadMaxSizeMb` 校验 1-100；保存即生效并由后端留痕（页面展示最近保存时间/操作人）
+- **系统配置**：`api/systemConfig.ts` fetch/save（真实接口）；`leaseExpireRemindDays` 校验 1-90、`uploadMaxSizeMb` 校验 1-100、`passwordExpireDays` 校验 0-3650、MinIO 7 字段校验（端口 1-65535、Bucket 名称正则）；保存即生效并由后端留痕（页面展示最近保存时间/操作人），MinIO 配置保存后即时切换存储驱动
 - **交互减法与可访问性**：无面包屑（详情页提供返回）、无列表刷新按钮、无表格批量选择（详见 §4）
 
 ## 10. M1 后端接入状态（2026-09-12 全量接入完成）
@@ -287,3 +288,4 @@
 | 日期 | 说明 |
 |---|---|
 | 2026-09-12 | **M1.5 全量回写**（代码事实来源：工作树自 5555770 起的 ~300 文件改动）：① 页面/路由——新增归档管理（/system/trash，13 域 Tab + 三连确认）、租赁详情（/workstations/leases/:id）、资讯发布/投稿内容/栏目管理/阅读统计（内容管理拆分）、角色权限/管理员账号/在线会话/素材库/系统监控/登录日志/修改密码/403、租约与审核单打印视图；删除 ArticlePanel/ContentsView/UsageBoardPanel；② 组件——新增 RichEditor（wangEditor）、TrendChart（纯 SVG）、ColumnController、BulkArchiveDialog、ArticleReviewDialog/ArticleScheduleDialog、EnterpriseFormDialog/ExternalEnterpriseFormDialog；v-permission 改 display+updated，`.id-tag`/`.id-tag-block` 全局化；③ 交互——ID 展示规范、术语统一、去除刷新按钮与表格批量操作、关闭全部=关闭其他、暗色模式、素材来源/替换、上传大小配置、工作台区间累计与可点击卡片、popup ESC；④ 列表——租赁详情与筛选、预约六态派生、申请审核四类型与行操作、商品默认下架/发货方式/范围/富文本、订单一键归档、归档守卫、用户详情 7 记录页当前/历史分区、需求创建人跳转、企业/合作企业归档仅停用态；⑤ 登录安全——验证码必填、修改密码、会话管理、登录日志三态、401 清理权限缓存；⑥ API——22/22 + M1.5 六域全量 HTTP 化、mock 删除、§6/§7/§9/§10 重写 |
+| 2026-09-12 | **菜单聚合与治理增强落地**：① 系统管理菜单聚合——新增「角色与账号」（/system/account：管理员账号/角色权限/在线会话）与「日志与审计」（/system/logs：操作日志/登录日志）两个选项卡聚合页，原 5 项独立菜单合并、子页作为 tab 组件不再独立路由，tab 与 `?tab=` 双向同步、按权限过滤，旧路径全部重定向；「审计日志」更名「操作日志」（含权限名/导出文件名/种子/e2e 文案）；② 权限码全链路支持 `string | string[]`（any-of）；③ R1 数据范围（域维度）实装（dataScope + 登录响应 + 菜单/路由过滤 + RolePanel 数据范围弹窗 + DomainScopeGuard）；④ R3 密码周期（系统配置「密码有效期」+ 过期强制改密 + 验证码限流 30 次/分钟）；⑤ R4 MinIO 双驱动 + 系统配置「MinIO 对象存储」分区（本地磁盘回退保留）；⑥ 工程债——v-loading 存量 5 处改 `<t-loading>`、暗色菜单主题动态化、ESLint 配置与双端 lint、API 单元测试套件（24 用例）、会话索引 Redis Hash 重构、权限码启动校验、parseRegion 公网解析、RBAC 关联表外键 |

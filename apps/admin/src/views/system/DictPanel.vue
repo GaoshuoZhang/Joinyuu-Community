@@ -1,5 +1,7 @@
 <script setup lang="ts">
-import { computed, onMounted, reactive, ref } from 'vue'
+import { useListQueryState } from '@/utils/listQuery'
+import ListErrorState from '@/components/ListErrorState.vue'
+import { computed, onMounted, ref } from 'vue'
 import { MessagePlugin } from 'tdesign-vue-next'
 import { AddIcon, DeleteIcon } from 'tdesign-icons-vue-next'
 import PageHeader from '@/components/PageHeader.vue'
@@ -15,6 +17,7 @@ import type { DictEntry, DictType } from '@/types'
 /* 数据字典：站点选项词汇的单一来源（需求类别/行业/活动类型）。
  * 页面下拉选项全部改为从字典拉取；label 即业务存储值，暂不支持改名（避免历史数据失配） */
 const loading = ref(false)
+const loadError = ref('')
 const acting = ref('')
 const activeType = ref<DictType>('demand_category')
 const entries = ref<DictEntry[]>([])
@@ -24,8 +27,6 @@ const typeOptions = (Object.keys(dictTypeMap) as DictType[]).map((t) => ({
   label: dictTypeMap[t],
   value: t,
 }))
-
-const query = reactive({})
 
 const columns = [
   { colKey: 'sort', title: '排序', width: 80 , ellipsis: true},
@@ -38,9 +39,13 @@ const columns = [
 const enabledCount = computed(() => entries.value.filter((e) => e.status === 'enabled').length)
 
 async function load(silent = false) {
+  syncQuery()
   if (!silent) loading.value = true
   try {
     entries.value = await fetchDictEntries(activeType.value)
+    loadError.value = ''
+  } catch (e) {
+    loadError.value = e instanceof Error ? e.message : '数据加载失败'
   } finally {
     loading.value = false
   }
@@ -92,20 +97,23 @@ async function onDelete(row: DictEntry) {
   }
 }
 
+const { syncQuery } = useListQueryState({}, () => { newLabel.value = ''; void load() }, { refs: { type: activeType } })
+
 onMounted(load)
 </script>
 
 <template>
   <div class="dict-panel page-fade-in">
+    <ListErrorState v-if="loadError" :message="loadError" :loading="loading" @retry="() => load()" />
     <PageHeader title="数据字典" description="站点选项词汇的统一配置入口，各业务页面的下拉选项均从字典取用">
     </PageHeader>
 
-    <div class="filter-bar">
+    <div class="page-filter-bar">
       <t-select v-model="activeType" :options="typeOptions" style="width: 180px" @change="onTypeChange" />
       <t-input
         v-model="newLabel"
         clearable
-        :placeholder="`新增${dictTypeMap[activeType]}项（新增即启用）`"
+        :placeholder="`新增${dictTypeMap[activeType]}项（新增即启用）…`"
         style="width: 280px"
         @enter="onCreate"
       />
@@ -123,6 +131,7 @@ onMounted(load)
       :loading="loading"
       :data="entries"
       :columns="columns"
+      empty="暂无字典项"
     >
       <template #status="{ row }">
         <t-switch
@@ -148,13 +157,6 @@ onMounted(load)
 </template>
 
 <style scoped>
-.filter-bar {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  margin-bottom: 16px;
-}
-
 .op-cell {
   display: flex;
   gap: 4px;

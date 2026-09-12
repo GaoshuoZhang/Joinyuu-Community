@@ -1,6 +1,6 @@
 <script setup lang="ts">
+import ListErrorState from '@/components/ListErrorState.vue'
 import { computed, onMounted, ref } from 'vue'
-import { MessagePlugin } from 'tdesign-vue-next'
 import PageHeader from '@/components/PageHeader.vue'
 import {
   fetchCronLogs,
@@ -12,6 +12,7 @@ import {
 
 /* 系统监控：服务健康 / Redis 概览 / 定时任务执行情况（真实接口 /api/admin/monitor）。 */
 const loading = ref(false)
+const loadError = ref('')
 const overview = ref<MonitorOverview | null>(null)
 const job = ref<CronJobStatus | null>(null)
 
@@ -19,8 +20,9 @@ async function load(silent = false) {
   if (!silent) loading.value = true
   try {
     overview.value = await fetchMonitorOverview()
+    loadError.value = ''
   } catch (e) {
-    MessagePlugin.error(e instanceof Error ? e.message : '监控数据加载失败')
+    loadError.value = e instanceof Error ? e.message : '数据加载失败'
   } finally {
     loading.value = false
   }
@@ -61,15 +63,18 @@ const jobColumns = [
 const logVisible = ref(false)
 const logs = ref<CronRunLog[]>([])
 const logLoading = ref(false)
+const logError = ref('')
 
 async function openLogs(row: CronJobStatus) {
+  if (job.value?.name !== row.name) logs.value = []
   job.value = row
   logVisible.value = true
   logLoading.value = true
   try {
     logs.value = await fetchCronLogs(row.name)
+    logError.value = ''
   } catch (e) {
-    MessagePlugin.error(e instanceof Error ? e.message : '执行日志加载失败')
+    logError.value = e instanceof Error ? e.message : '执行日志加载失败'
   } finally {
     logLoading.value = false
   }
@@ -87,41 +92,42 @@ onMounted(load)
 
 <template>
   <div class="monitor-panel page-fade-in">
+    <ListErrorState v-if="loadError" :message="loadError" :loading="loading" @retry="() => load()" />
     <PageHeader title="系统监控" description="服务健康、Redis 缓存与定时任务执行情况一览">
     </PageHeader>
 
-    <div v-loading="loading">
+    <t-loading :loading="loading" size="small">
       <!-- 服务健康卡 -->
-      <div class="stat-row">
-        <div class="stat-card">
-          <div class="stat-label">服务状态</div>
-          <div class="stat-value">
+      <div class="monitor-stat-row">
+        <div class="monitor-stat-card">
+          <div class="monitor-stat-label">服务状态</div>
+          <div class="monitor-stat-value">
             <t-tag :theme="statusTag(overview?.service.status).theme" variant="light" size="medium">
               {{ statusTag(overview?.service.status).label }}
             </t-tag>
           </div>
-          <div class="stat-sub">
+          <div class="monitor-stat-sub">
             {{ overview?.service.name }} · v{{ overview?.service.version }} · {{ overview?.service.nodeEnv }}
           </div>
         </div>
-        <div class="stat-card">
-          <div class="stat-label">已运行</div>
-          <div class="stat-value">{{ uptimeText }}</div>
-          <div class="stat-sub">启动于 {{ overview?.service.startedAt }}</div>
+        <div class="monitor-stat-card">
+          <div class="monitor-stat-label">已运行</div>
+          <div class="monitor-stat-value">{{ uptimeText }}</div>
+          <div class="monitor-stat-sub">启动于 {{ overview?.service.startedAt }}</div>
         </div>
-        <div class="stat-card">
-          <div class="stat-label">接口平均延迟</div>
-          <div class="stat-value">{{ overview?.service.apiLatencyMs ?? '—' }} ms</div>
-          <div class="stat-sub">近 5 分钟窗口</div>
+        <div class="monitor-stat-card">
+          <div class="monitor-stat-label">接口平均延迟</div>
+          <div class="monitor-stat-value">{{ overview?.service.apiLatencyMs ?? '—' }} ms</div>
+          <div class="monitor-stat-sub">近 5 分钟窗口</div>
         </div>
-        <div class="stat-card">
-          <div class="stat-label">数据库 / 缓存</div>
-          <div class="stat-value">
+        <div class="monitor-stat-card">
+          <div class="monitor-stat-label">数据库 / 缓存</div>
+          <div class="monitor-stat-value">
             <span>PostgreSQL {{ overview?.service.db.latencyMs }}ms</span>
             <span class="dot-space">·</span>
             <span>Redis {{ overview?.service.redis.latencyMs }}ms</span>
           </div>
-          <div class="stat-sub">
+          <div class="monitor-stat-sub">
             <t-tag size="small" theme="success" variant="light">连接正常</t-tag>
           </div>
         </div>
@@ -144,7 +150,7 @@ onMounted(load)
           </div>
           <div class="redis-cell">
             <div class="redis-label">键数量</div>
-            <div class="redis-value">{{ overview?.redis.keys.toLocaleString() }}</div>
+            <div class="redis-value">{{ overview?.redis.keys.toLocaleString('zh-CN') }}</div>
             <div class="redis-sub">客户端连接 {{ overview?.redis.connectedClients }}</div>
           </div>
           <div class="redis-cell">
@@ -181,7 +187,7 @@ onMounted(load)
           </template>
         </t-table>
       </t-card>
-    </div>
+    </t-loading>
 
     <!-- 执行日志抽屉 -->
     <t-drawer
@@ -191,6 +197,7 @@ onMounted(load)
       :close-btn="true"
       :close-on-esc-keydown="true"
     >
+      <ListErrorState v-if="logError" :message="logError" :loading="logLoading" @retry="job && openLogs(job)" />
       <t-table
         row-key="id"
         hover
@@ -212,26 +219,27 @@ onMounted(load)
 </template>
 
 <style scoped>
-.stat-row {
+.monitor-stat-row {
   display: grid;
-  grid-template-columns: repeat(4, 1fr);
+  grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 16px;
   margin-bottom: 16px;
 }
 
-.stat-card {
+.monitor-stat-card {
+  min-width: 0;
   padding: 16px;
   border: 1px solid var(--td-component-border);
   border-radius: var(--td-radius-medium);
   background: var(--td-bg-color-container);
 }
 
-.stat-label {
+.monitor-stat-label {
   font-size: 13px;
   color: var(--td-text-color-secondary);
 }
 
-.stat-value {
+.monitor-stat-value {
   display: flex;
   align-items: center;
   gap: 4px;
@@ -239,6 +247,7 @@ onMounted(load)
   font-size: 22px;
   font-weight: 600;
   color: var(--td-text-color-primary);
+  overflow-wrap: anywhere;
 }
 
 .dot-space {
@@ -246,9 +255,24 @@ onMounted(load)
   font-weight: 400;
 }
 
-.stat-sub {
+.monitor-stat-sub {
   font-size: 12px;
   color: var(--td-text-color-placeholder);
+  overflow-wrap: anywhere;
+}
+
+@media (max-width: 1100px) {
+  .monitor-stat-row,
+  .redis-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 640px) {
+  .monitor-stat-row,
+  .redis-grid {
+    grid-template-columns: 1fr;
+  }
 }
 
 .redis-card {

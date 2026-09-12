@@ -1,5 +1,7 @@
 <script setup lang="ts">
 import { computed, onMounted, reactive, ref } from 'vue'
+import ListErrorState from '@/components/ListErrorState.vue'
+import { useListQueryState } from '@/utils/listQuery'
 import { MessagePlugin } from 'tdesign-vue-next'
 import { DeleteIcon, SearchIcon } from 'tdesign-icons-vue-next'
 import PageHeader from '@/components/PageHeader.vue'
@@ -22,6 +24,7 @@ import type { Article } from '@/types'
  * 状态机：待审核 →（通过）待发布 /（驳回）已驳回；待发布 → 定时发布中/已发布；已发布 →（下架）待发布。
  * 操作：待审核=详情(审核)；已驳回=详情/归档；待发布=编辑/定时发布/立即发布/归档；定时发布中=详情/取消定时/立即发布；已发布=下架。 */
 const loading = ref(false)
+const loadError = ref('')
 const acting = ref('')
 const list = ref<Article[]>([])
 const total = ref(0)
@@ -67,12 +70,15 @@ const pagination = computed(() => ({
 }))
 
 async function load() {
+  syncQuery()
   loading.value = true
+  loadError.value = ''
   try {
     const res = await fetchArticles({ ...query, channel: 'submitted' })
     list.value = res.list
     total.value = res.total
   } catch (e) {
+    loadError.value = e instanceof Error ? e.message : '数据加载失败'
     MessagePlugin.error(e instanceof Error ? e.message : '数据加载失败')
   } finally {
     loading.value = false
@@ -191,7 +197,7 @@ async function onCancelSchedule(row: Article) {
   acting.value = row.id + ':cancel-schedule'
   try {
     await cancelArticleSchedule(row.id)
-    MessagePlugin.success('已取消定时发布，文章转为待发布')
+    MessagePlugin.success('已取消定时发布，文章转入待发布')
     await load()
   } catch (e) {
     MessagePlugin.error(e instanceof Error ? e.message : '操作失败')
@@ -233,11 +239,14 @@ function openView(row: Article) {
   viewVisible.value = true
 }
 
+const { syncQuery } = useListQueryState(query, load)
+
 onMounted(load)
 </script>
 
 <template>
   <div class="article-submission page-fade-in">
+    <ListErrorState v-if="loadError" :message="loadError" :loading="loading" @retry="load" />
     <PageHeader title="投稿内容" description="社区个体/企业用户投稿文章，审核通过后进入待发布，可定时或立即上架">
       <template #actions>
         <ColumnController
@@ -252,7 +261,7 @@ onMounted(load)
     </PageHeader>
 
     <div class="page-filter-bar">
-      <t-input v-model="query.keyword" clearable placeholder="搜索标题/编号" style="width: 220px" @enter="onSearch" />
+      <t-input v-model="query.keyword" clearable placeholder="搜索标题/编号…" style="width: 220px" @enter="onSearch" />
       <t-select v-model="query.status" label="状态" :options="statusOptions" style="width: 160px" @change="onSearch" />
       <t-button theme="primary" @click="onSearch">
         <template #icon><SearchIcon /></template>
@@ -318,7 +327,7 @@ onMounted(load)
 
           <!-- 定时发布中：取消定时发布 / 立即发布 -->
           <template v-else-if="row.status === 'scheduled'">
-            <t-popconfirm content="确认取消定时发布？文章将转为待发布。" @confirm="onCancelSchedule(row)">
+            <t-popconfirm content="确认取消定时发布？该文章将转为「待发布」" @confirm="onCancelSchedule(row)">
               <t-button
                 variant="text"
                 size="small"

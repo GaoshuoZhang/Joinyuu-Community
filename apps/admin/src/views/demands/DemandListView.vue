@@ -1,6 +1,8 @@
 <script setup lang="ts">
 import { computed, onMounted, reactive, ref, watch } from 'vue'
-import { useRoute, useRouter } from 'vue-router'
+import ListErrorState from '@/components/ListErrorState.vue'
+import { useListQueryState } from '@/utils/listQuery'
+import { useRouter } from 'vue-router'
 import { MessagePlugin } from 'tdesign-vue-next'
 import type { FormProps } from 'tdesign-vue-next'
 import { AddIcon, SearchIcon, DownloadIcon } from 'tdesign-icons-vue-next'
@@ -158,6 +160,7 @@ async function onProxyConfirm() {
     proxyVisible.value = false
     await load()
   } catch (e) {
+    loadError.value = e instanceof Error ? e.message : '数据加载失败'
     MessagePlugin.error(e instanceof Error ? e.message : '代报名失败')
   } finally {
     proxySaving.value = false
@@ -172,9 +175,9 @@ function fetchPublisherOptionsUsers() {
 function fetchPublisherOptionsEnterprises() {
   return publisherOptionsCache?.enterprises ?? []
 }
-const route = useRoute()
 const router = useRouter()
 const loading = ref(true)
+const loadError = ref('')
 const list = ref<Demand[]>([])
 const total = ref(0)
 const closingId = ref('')
@@ -259,11 +262,15 @@ const pagination = computed(() => ({
 }))
 
 async function load() {
+  syncQuery()
   loading.value = true
+  loadError.value = ''
   try {
     const res = await fetchDemands({ ...query, sortBy: sortBy.value, sortOrder: sortOrder.value })
     list.value = res.list
     total.value = res.total
+  } catch (e) {
+    loadError.value = e instanceof Error ? e.message : '数据加载失败'
   } finally {
     loading.value = false
   }
@@ -540,8 +547,6 @@ function goProject(row: Demand) {
  * 企业详情「数据概览」跳转带入企业 ID（query: enterprise，社区企业 E* / 合作企业 XE*），
  * 标签显示名称：社区企业经 fetchEnterprise、合作企业经 fetchExternalEnterprise 由 ID 解析 */
 async function applyRouteFilter() {
-  query.publisherId = (route.query.publisher as string) || ''
-  query.enterprise = (route.query.enterprise as string) || ''
   publisherName.value = ''
   enterpriseName.value = ''
   if (query.publisherId) {
@@ -582,13 +587,9 @@ function clearEnterprise() {
   load()
 }
 
-watch(
-  () => route.query,
-  () => {
-    applyRouteFilter()
-    load()
-  },
-)
+watch(() => [query.publisherId, query.enterprise], applyRouteFilter)
+
+const { syncQuery } = useListQueryState(query, load, { refs: { sortBy, sortOrder }, aliases: { publisherId: 'publisher' } })
 
 onMounted(() => {
   applyRouteFilter()
@@ -606,6 +607,7 @@ onMounted(() => {
 
 <template>
   <div class="demand-list page-fade-in">
+    <ListErrorState v-if="loadError" :message="loadError" :loading="loading" @retry="load" />
     <PageHeader title="需求管理" description="需求广场的新增、审核、发布编辑与立项管理">
       <template #actions>
         <ColumnController
@@ -635,7 +637,7 @@ onMounted(() => {
       <t-input
         v-model="query.keyword"
         class="filter-keyword"
-        placeholder="搜索标题/编号"
+        placeholder="搜索标题/编号…"
         clearable
         @enter="onSearch"
       />
@@ -693,7 +695,7 @@ onMounted(() => {
         :sort="tableSort"
         :loading="loading"
         :pagination="pagination"
-        empty="暂无符合条件的需求"
+        empty="暂无需求"
         @page-change="onPageChange"
         @sort-change="onSortChange"
         @row-click="({ row }) => goDetail(row)"
@@ -865,26 +867,26 @@ onMounted(() => {
             filterable
             creatable
             :options="proxyOptions"
-            placeholder="选择已注册的个人用户/企业，或直接输入新报名方"
-            tips="未注册的报名方可直接输入名称新增；选中已注册将自动填充联系电话"
+            placeholder="选择已注册的个人用户/企业，或直接输入新报名方…"
           />
+          <div class="field-help">未注册的报名方可直接输入名称新增；选中已注册将自动填充联系电话</div>
         </t-form-item>
         <div class="form-row">
           <t-form-item label="联系电话" name="phone">
-            <t-input clearable v-model="proxyForm.phone" placeholder="必填" />
+            <t-input clearable v-model="proxyForm.phone" name="proxy-phone" type="tel" inputmode="tel" autocomplete="tel" placeholder="必填…" />
           </t-form-item>
           <t-form-item label="联系邮箱" name="email">
-            <t-input clearable v-model="proxyForm.email" placeholder="选填" />
+            <t-input clearable v-model="proxyForm.email" name="proxy-email" type="email" inputmode="email" autocomplete="email" placeholder="选填…" />
           </t-form-item>
         </div>
         <t-form-item label="报价" name="quote">
-          <t-input clearable v-model="proxyForm.quote" placeholder="如 ¥8,000" />
+          <t-input clearable v-model="proxyForm.quote" placeholder="如 ¥8,000…" />
         </t-form-item>
         <t-form-item label="响应留言" name="message">
           <t-textarea
             v-model="proxyForm.message"
             :autosize="{ minRows: 2, maxRows: 4 }"
-            placeholder="代报名备注，留空默认记录「管理员代报名」"
+            placeholder="代报名备注，留空默认记录「管理员代报名」…"
           />
         </t-form-item>
       </t-form>

@@ -1,14 +1,16 @@
 <script setup lang="ts">
-import { computed, nextTick, onMounted, reactive, ref, watch } from 'vue'
+import { computed, defineAsyncComponent, nextTick, onMounted, reactive, ref, watch } from 'vue'
 import { MessagePlugin } from 'tdesign-vue-next'
 import type { FormProps } from 'tdesign-vue-next'
+import { focusFirstInvalid } from '@/utils/form'
 import { createDemand, fetchPublisherOptions, updateDemand, type DemandPublishPayload } from '@/api/demands'
 import { dictFallback, fetchDictEntries } from '@/api/dicts'
 import { fetchUser } from '@/api/users'
 import { fetchPointsRules } from '@/api/mall'
 import { identityTypeMap, userLevelOptions, visibilityIdentityOptions } from '@/constants/identity'
-import RichEditor from '@/components/RichEditor.vue'
 import type { Demand, User, UserIdentity } from '@/types'
+
+const RichEditor = defineAsyncComponent(() => import('@/components/RichEditor.vue'))
 
 /* 需求弹窗（双模式共用）：
  * - create：后台直接新增需求，需求方可选已注册个人用户/企业（自动填充联系电话），
@@ -282,7 +284,7 @@ const rules = computed<FormProps['rules']>(() => ({
 
 async function onConfirm() {
   const valid = await formRef.value.validate()
-  if (valid !== true) return
+  if (valid !== true) return focusFirstInvalid(formRef.value)
   /* 联系人/联系电话仅在"选择需求方"时自动填充一次（@change/watch 触发）；
    * 确认保存不做重解析，保留用户手动修改的值 */
   if (!form.publisherValue.trim()) {
@@ -358,6 +360,8 @@ function onClose() {
     :header="headerMap[mode]"
     width="880px"
     lazy
+    :close-on-overlay-click="false"
+    :close-on-esc-keydown="false"
     @close="onClose"
   >
     <template #footer>
@@ -378,13 +382,13 @@ function onClose() {
             filterable
             creatable
             @change="(val: unknown) => applyPublisherContact(String(val ?? ''))"
-            placeholder="选择已注册的个人用户/企业，或直接输入新需求方"
-            tips="未注册的需求方可直接输入名称新增；选中已注册企业/个人用户将自动填充联系电话"
+            placeholder="选择已注册的个人用户/企业，或直接输入新需求方…"
           />
+          <div class="field-help">未注册的需求方可直接输入名称新增；选中已注册企业/个人用户将自动填充联系电话</div>
         </t-form-item>
       </template>
       <t-form-item v-else label="需求方" name="publisherValue">
-        <t-input :value="publisherName" disabled placeholder="提交人不可变更" />
+        <t-input :value="publisherName" disabled placeholder="提交人不可变更…" />
       </t-form-item>
 
       <t-form-item v-if="publisherType === 'custom'" label="需求方身份" name="customIdentityType">
@@ -392,31 +396,31 @@ function onClose() {
           v-model="form.customIdentityType"
           :options="customIdentityOptions"
           clearable
-          placeholder="请选择需求方身份"
+          placeholder="请选择需求方身份…"
         />
       </t-form-item>
 
       <div class="form-row">
         <t-form-item label="联系人" name="contactName">
-          <t-input clearable v-model="form.contactName" placeholder="企业提交自动填企业联系人" />
+          <t-input clearable v-model="form.contactName" placeholder="企业提交自动填企业联系人…" />
         </t-form-item>
         <t-form-item label="联系电话" name="contactPhone">
-          <t-input clearable v-model="form.contactPhone" placeholder="选已注册需求方后自动填充" />
+          <t-input clearable v-model="form.contactPhone" name="contact-phone" type="tel" inputmode="tel" autocomplete="tel" placeholder="选已注册需求方后自动填充…" />
         </t-form-item>
         <t-form-item label="联系邮箱" name="contactEmail">
-          <t-input clearable v-model="form.contactEmail" placeholder="选填" />
+          <t-input clearable v-model="form.contactEmail" name="contact-email" type="email" inputmode="email" autocomplete="email" placeholder="选填…" />
         </t-form-item>
       </div>
 
       <t-form-item label="需求标题" name="title">
-        <t-input clearable v-model="form.title" placeholder="请输入需求标题" />
+        <t-input clearable v-model="form.title" placeholder="请输入需求标题…" />
       </t-form-item>
       <div class="form-row">
         <t-form-item label="类别" name="category">
           <t-select v-model="form.category" :options="categoryOptions" clearable />
         </t-form-item>
         <t-form-item label="预算" name="budget">
-          <t-input clearable v-model="form.budget" placeholder="如 ¥10,000 - 30,000 / 面议" />
+          <t-input clearable v-model="form.budget" placeholder="如 ¥10,000 - 30,000 / 面议…" />
         </t-form-item>
       </div>
       <div class="form-row">
@@ -426,7 +430,7 @@ function onClose() {
             valueType="YYYY-MM-DD"
             clearable
             style="width: 100%"
-            placeholder="请选择预期交付截止日"
+            placeholder="请选择预期交付截止日…"
           />
         </t-form-item>
         <t-form-item label="报名截止时间" name="deadline">
@@ -451,11 +455,11 @@ function onClose() {
             multiple
             clearable
             :options="visibilityIdentityOptions"
-            placeholder="不限"
+            placeholder="不限…"
           />
         </t-form-item>
         <t-form-item label="等级" name="visibilityLevels">
-          <t-select v-model="form.visibilityLevels" multiple clearable :options="userLevelOptions" placeholder="不限" />
+          <t-select v-model="form.visibilityLevels" multiple clearable :options="userLevelOptions" placeholder="不限…" />
         </t-form-item>
       </div>
 
@@ -474,11 +478,11 @@ function onClose() {
             multiple
             clearable
             :options="visibilityIdentityOptions"
-            placeholder="不限"
+            placeholder="不限…"
           />
         </t-form-item>
         <t-form-item label="等级" name="enrollmentLevels">
-          <t-select v-model="form.enrollmentLevels" multiple clearable :options="userLevelOptions" placeholder="不限" />
+          <t-select v-model="form.enrollmentLevels" multiple clearable :options="userLevelOptions" placeholder="不限…" />
         </t-form-item>
       </div>
 
@@ -492,7 +496,7 @@ function onClose() {
       </t-form-item>
 
       <t-form-item label="需求内容" name="description">
-        <RichEditor v-model="form.description" placeholder="需求详细描述，支持图文排版" :min-height="320" />
+        <RichEditor v-model="form.description" placeholder="需求详细描述，支持图文排版…" :min-height="320" />
       </t-form-item>
     </t-form>
   </t-dialog>

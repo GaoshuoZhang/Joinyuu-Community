@@ -10,6 +10,7 @@ import { compare, hash } from 'bcryptjs'
 import { randomUUID } from 'node:crypto'
 import { PrismaService } from '../../common/prisma/prisma.service'
 import { RedisService } from '../../common/redis/redis.service'
+import { captchaRateKey, passwordExpiredKey } from '../../common/redis/cache-keys'
 import { AuditService } from '../../common/audit/audit.service'
 import { AdminPermissionService } from '../../common/rbac/admin-permission.service'
 import { formatNow } from '../../common/utils/time'
@@ -27,6 +28,11 @@ const FAIL_PREFIX = 'auth:login:fail:'
 const LOCK_PREFIX = 'auth:login:lock:'
 const LOGIN_MAX_FAILURES = 5
 const LOGIN_LOCK_SEC = 15 * 60
+/** 验证码限流：同一 IP 60 秒内最多 30 次（防接口滥用） */
+const CAPTCHA_RATE_MAX = 30
+const CAPTCHA_RATE_WINDOW_SEC = 60
+/** 密码过期标记 TTL（秒），与 JWT 有效期一致 */
+const PWD_EXPIRED_TTL = TOKEN_TTL_SEC
 /** 账号不存在时也执行一次 bcrypt 比较，抹平登录响应的用户存在性时间侧信道 */
 const DUMMY_PASSWORD_HASH = '$2b$10$L20rudETk1Q2kkxvL0qY.esJFfCsn2pwmKfgawCqy34hp8jtwMUWC'
 
@@ -41,6 +47,10 @@ export interface LoginResult {
   token: string
   name: string
   permissions: string[]
+  /** 数据范围域集合（空数组 = 不限制全部域；超管为空数组） */
+  dataScope: string[]
+  /** 密码已过期（登录仍成功，但除白名单接口外均被守卫拦截，改密后解除） */
+  passwordExpired: boolean
 }
 
 @Injectable()
@@ -55,8 +65,12 @@ export class AuthService {
     private readonly loginLogs: LoginLogService,
   ) {}
 
-  /** 生成图形验证码：答案存 Redis 5 分钟 */
-  async generateCaptcha(): Promise<{ captchaId: string; image: string }> {
+  /** 生成图形验证码：先按 IP 限流（60s 内最多 30 次），答案存 Redis 5 分钟 */
+  async generateCaptcha(ip: string): Promise<{ captchaId: string; image: string }> {
+    const count = await this.redis.incrWithTtl(captchaRateKey(ip || 'unknown'), CAPTCHA_RATE_WINDOW_SEC)
+    if (count !== null && count > CAPTCHA_RATE_MAX) {
+      throw new HttpException('操作过于频繁，请稍后重试', HttpStatus.TOO_MANY_REQUESTS)
+    }
     const { code, image } = buildCaptcha()
     const captchaId = randomUUID()
     await this.redis.setCache(CAPTCHA_PREFIX + captchaId, code, CAPTCHA_TTL)
@@ -137,8 +151,17 @@ export class AuthService {
     /* 登录成功清除失败计数与锁定 */
     await this.redis.delCache(FAIL_PREFIX + rateKey, LOCK_PREFIX + rateKey)
 
+    /* 密码周期：超期仍放行登录，但写过期标记，守卫仅放行改密/登出等白名单接口 */
+    const passwordExpired = await this.isPasswordExpired(admin)
+    if (passwordExpired) {
+      await this.redis.setFlag(passwordExpiredKey(admin.username), PWD_EXPIRED_TTL)
+    } else {
+      await this.redis.delCache(passwordExpiredKey(admin.username))
+    }
+
     const jti = randomUUID()
     const permissions = await this.permissions.getPermCodes(username)
+    const dataScope = await this.permissions.getScopeCodes(username)
     const payload: AdminJwtPayload = { sub: admin.username, name: admin.name, jti }
     const token = await this.jwt.signAsync(payload)
 
@@ -160,7 +183,21 @@ export class AuthService {
       status: 'success',
     })
 
-    return { token, name: admin.name, permissions }
+    return { token, name: admin.name, permissions, dataScope, passwordExpired }
+  }
+
+  /** 密码是否已超过 SystemConfig.passwordExpireDays（0/未配置、无时间戳、时间戳不可解析 → 不过期） */
+  private async isPasswordExpired(admin: { passwordUpdatedAt: string | null }): Promise<boolean> {
+    if (!admin.passwordUpdatedAt) return false
+    const config = await this.prisma.systemConfig.findUnique({
+      where: { id: 1 },
+      select: { passwordExpireDays: true },
+    })
+    const days = config?.passwordExpireDays ?? 0
+    if (days <= 0) return false
+    const updated = new Date(admin.passwordUpdatedAt.replace(' ', 'T'))
+    if (Number.isNaN(updated.getTime())) return false
+    return Date.now() - updated.getTime() > days * 24 * 60 * 60 * 1000
   }
 
   async logout(payload: AdminJwtPayload): Promise<{ code: number }> {
@@ -187,8 +224,9 @@ export class AuthService {
     }
     await this.prisma.adminUser.update({
       where: { id: admin.id },
-      data: { passwordHash: await hash(newPassword, 10) },
+      data: { passwordHash: await hash(newPassword, 10), passwordUpdatedAt: formatNow() },
     })
+    await this.redis.delCache(passwordExpiredKey(username))
     await this.permissions.invalidate(username)
     await this.sessions.kickByUsername(username)
     await this.audit.record({ module: '认证', action: '修改密码', target: username, operator: username })

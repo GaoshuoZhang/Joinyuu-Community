@@ -3,7 +3,7 @@ import type { AuditLog, Prisma } from '@prisma/client'
 import { PrismaService } from '../../common/prisma/prisma.service'
 import type { QueryAuditLogsDto } from './dto/query-audit-logs.dto'
 
-/* 审计日志查询（wiki-backend.md §7.15/§9.1）：module 精确筛选 + keyword 跨 target/action/detail/operator
+/* 操作日志查询（wiki-backend.md §7.15/§9.1）：module 精确筛选 + keyword 跨 target/action/detail/operator
  * 模糊匹配，最新在前。写入由各域服务 / AuditInterceptor 完成，本服务只读。 */
 @Injectable()
 export class AuditLogsService {

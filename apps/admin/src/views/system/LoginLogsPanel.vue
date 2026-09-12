@@ -1,18 +1,22 @@
 <script setup lang="ts">
 import { computed, onMounted, reactive, ref } from 'vue'
+import ListErrorState from '@/components/ListErrorState.vue'
+import { useListQueryState } from '@/utils/listQuery'
 import { SearchIcon } from 'tdesign-icons-vue-next'
+import { MessagePlugin } from 'tdesign-vue-next'
 import PageHeader from '@/components/PageHeader.vue'
 import { fetchLoginLogs, type LoginLog } from '@/api/login-logs'
 import type { TdDateRangePickerProps } from 'tdesign-vue-next'
 
 /* 登录日志：管理员登录成功/失败记录（真实接口 /api/admin/login-logs）。 */
 const loading = ref(false)
+const loadError = ref('')
 const list = ref<LoginLog[]>([])
 const total = ref(0)
 
 const query = reactive({
   page: 1,
-  pageSize: 15,
+  pageSize: 10,
   status: '',
   keyword: '',
   range: ['', ''],
@@ -43,7 +47,9 @@ const pagination = computed(() => ({
 }))
 
 async function load() {
+  syncQuery()
   loading.value = true
+  loadError.value = ''
   try {
     const res = await fetchLoginLogs({
       page: query.page,
@@ -56,6 +62,7 @@ async function load() {
     list.value = res.list
     total.value = res.total
   } catch (e) {
+    loadError.value = e instanceof Error ? e.message : '数据加载失败'
     MessagePlugin.error(e instanceof Error ? e.message : '数据加载失败')
   } finally {
     loading.value = false
@@ -85,11 +92,14 @@ function onRangeChange(v: TdDateRangePickerProps['value']) {
   query.range = Array.isArray(v) ? (v as string[]) : ['', '']
 }
 
+const { syncQuery } = useListQueryState(query, load, { prefix: 'login.' })
+
 onMounted(load)
 </script>
 
 <template>
   <div class="login-logs-panel page-fade-in">
+    <ListErrorState v-if="loadError" :message="loadError" :loading="loading" @retry="load" />
     <PageHeader title="登录日志" description="管理员登录成功与失败记录，用于安全审计与异常排查">
     </PageHeader>
 
@@ -97,7 +107,7 @@ onMounted(load)
       <t-input
         v-model="query.keyword"
         clearable
-        placeholder="搜索账号/姓名/IP"
+        placeholder="搜索账号/姓名/IP…"
         style="width: 200px"
         @enter="onSearch"
       />

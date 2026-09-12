@@ -6,15 +6,17 @@
 const TOKEN_KEY = 'joinyuu_admin_token'
 const NAME_KEY = 'joinyuu_admin_name'
 const PERMS_KEY = 'joinyuu_admin_perm_codes'
+const SCOPE_KEY = 'joinyuu_admin_scope_codes'
 const BASE_PATH = '/api/admin'
 /* 请求超时（ms）：后端挂起时主动中止，避免无限挂载 */
 const REQUEST_TIMEOUT = 30_000
 
-/* 401：清理全部登录缓存（token / 名称 / 权限），避免残留旧权限集合 */
+/* 401：清理全部登录缓存（token / 名称 / 权限 / 数据范围），避免残留旧权限集合 */
 function clearAuthStorage(): void {
   localStorage.removeItem(TOKEN_KEY)
   localStorage.removeItem(NAME_KEY)
   localStorage.removeItem(PERMS_KEY)
+  localStorage.removeItem(SCOPE_KEY)
 }
 
 type HttpMethod = 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE'
@@ -66,10 +68,20 @@ export async function http<T>(method: HttpMethod, path: string, body?: unknown):
   }
 
   if (!res.ok || payload == null || payload.code !== 0) {
-    throw new Error(payload?.message ?? `请求失败（${res.status}）`)
+    throwError(res.status, payload?.message)
   }
 
   return payload.data as T
+}
+
+/* 密码过期 403：引导到修改密码页（当前已是该页则不重复跳转）；错误仍抛出由页面提示 */
+function throwError(status: number, message?: string): never {
+  const text = message ?? `请求失败（${status}）`
+  if (status === 403 && text.includes('密码已过期')) {
+    const target = '#/system/change-password'
+    if (window.location.hash !== target) window.location.hash = target
+  }
+  throw new Error(text)
 }
 
 export function httpGet<T>(path: string): Promise<T> {
@@ -132,7 +144,7 @@ export async function httpUpload<T>(path: string, form: FormData): Promise<T> {
   }
 
   if (!res.ok || payload == null || payload.code !== 0) {
-    throw new Error(payload?.message ?? `请求失败（${res.status}）`)
+    throwError(res.status, payload?.message)
   }
 
   return payload.data as T

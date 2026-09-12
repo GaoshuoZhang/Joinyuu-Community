@@ -20,6 +20,16 @@ export function dictCacheKey(type: string): string {
   return `dicts:${type}`
 }
 
+/** 密码过期标记键（登录超期时写入，JWT 守卫读取；改密/重置后清除） */
+export function passwordExpiredKey(username: string): string {
+  return `auth:admin:pwd-expired:${username}`
+}
+
+/** 验证码接口 IP 限流键（60s 窗口） */
+export function captchaRateKey(ip: string): string {
+  return `auth:captcha:rate:${ip}`
+}
+
 /** 全部应用缓存键（seed 重种子后清理；不含 JWT 黑名单） */
 export const APP_CACHE_KEYS: readonly string[] = [
   CACHE_KEYS.systemConfig,

@@ -9,6 +9,7 @@ import SpaceFormDialog from '@/components/SpaceFormDialog.vue'
 import { fetchReservations, fetchSpace, setSpaceStatus } from '@/api/spaces'
 import { spaceTypeMap, statusMap } from '@/constants/status'
 import { deriveReservationStatus } from '@/utils/reservation'
+import { formatMonthKey } from '@/utils/format'
 import type { Space, SpaceReservation } from '@/types'
 
 /* 空间详情页：空间信息 + Calendar 日历（cellAppend 追加当日预约详情）+ 预约明细表。
@@ -70,7 +71,7 @@ function onControllerChange(opts: { filterDate: Date }) {
 
 const monthKey = computed(() => {
   const d = displayedDate.value
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`
+  return formatMonthKey(d)
 })
 
 const monthReservations = computed(() => reservations.value.filter((r) => r.date.startsWith(monthKey.value)))
@@ -127,13 +128,14 @@ onMounted(load)
 
 <template>
   <div class="space-detail page-fade-in">
+    <t-button variant="text" theme="default" class="back-btn" @click="router.push('/spaces')">
+      <template #icon><ArrowLeftIcon /></template>
+      返回
+    </t-button>
+
     <PageHeader :title="space?.name ?? '空间详情'" :description="`${spaceTypeMap[space?.type ?? 'meeting'] ?? ''} · ${space?.location ?? ''}`">
       <template #actions>
         <t-tag v-if="isArchived" theme="default" variant="light">已归档</t-tag>
-        <t-button variant="outline" @click="router.push('/spaces')">
-          <template #icon><ArrowLeftIcon /></template>
-          返回列表
-        </t-button>
         <template v-if="space && !isArchived">
           <t-button variant="outline" @click="openEdit">
             <template #icon><EditIcon /></template>
@@ -161,6 +163,8 @@ onMounted(load)
     </PageHeader>
 
     <t-loading :loading="loading" size="small">
+      <t-empty v-if="!loading && !space" description="空间不存在、已归档或加载失败" />
+      <template v-else-if="space">
       <div class="page-card">
         <t-descriptions :column="3" bordered>
           <t-descriptions-item label="空间类型">{{ spaceTypeMap[space?.type ?? 'meeting'] ?? '—' }}</t-descriptions-item>
@@ -238,6 +242,7 @@ onMounted(load)
           </div>
         </div>
       </div>
+      </template>
     </t-loading>
 
     <SpaceFormDialog v-model:visible="formVisible" mode="edit" :space="space" @success="load" />
@@ -245,6 +250,10 @@ onMounted(load)
 </template>
 
 <style scoped>
+.back-btn {
+  margin-bottom: 12px;
+}
+
 .card-section-title {
   margin: 0 0 12px;
   font-size: 14px;

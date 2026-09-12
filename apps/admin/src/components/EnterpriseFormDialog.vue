@@ -2,6 +2,7 @@
 import { nextTick, reactive, ref, watch } from 'vue'
 import { MessagePlugin } from 'tdesign-vue-next'
 import type { FormProps } from 'tdesign-vue-next'
+import { focusFirstInvalid } from '@/utils/form'
 import { createEnterprise, updateEnterprise, type EnterprisePayload } from '@/api/enterprises'
 import { fetchPublisherOptions } from '@/api/demands'
 import { dictFallback, fetchDictEntries } from '@/api/dicts'
@@ -160,7 +161,7 @@ function payload(): EnterprisePayload {
 
 async function onConfirm() {
   const valid = await formRef.value.validate()
-  if (valid !== true) return
+  if (valid !== true) return focusFirstInvalid(formRef.value)
   submitting.value = true
   try {
     if (props.mode === 'create') {
@@ -189,6 +190,8 @@ function onClose() {
     :visible="visible"
     :header="mode === 'create' ? '新增企业' : '编辑企业'"
     width="640px"
+    :close-on-overlay-click="false"
+    :close-on-esc-keydown="false"
     @close="onClose"
   >
     <template #footer>
@@ -202,19 +205,19 @@ function onClose() {
 
     <t-form ref="formRef" :data="form" :rules="rules" label-align="top">
       <t-form-item label="企业名称" name="name">
-        <t-input v-model="form.name" clearable placeholder="请输入企业名称" />
+        <t-input v-model="form.name" clearable placeholder="请输入企业名称…" />
       </t-form-item>
       <div class="form-row">
         <t-form-item label="行业" name="industry">
-          <t-select v-model="form.industry" :options="industryOptions" clearable filterable placeholder="选择行业" />
+          <t-select v-model="form.industry" :options="industryOptions" clearable filterable placeholder="选择行业…" />
         </t-form-item>
         <t-form-item label="规模" name="size">
-          <t-select v-model="form.size" :options="sizeOptions" clearable placeholder="选择规模" />
+          <t-select v-model="form.size" :options="sizeOptions" clearable placeholder="选择规模…" />
         </t-form-item>
       </div>
       <div class="form-row">
         <t-form-item label="入驻类型" name="leaseType">
-          <t-select v-model="form.leaseType" :options="leaseTypeOptions" clearable placeholder="选择入驻类型" />
+          <t-select v-model="form.leaseType" :options="leaseTypeOptions" clearable placeholder="选择入驻类型…" />
         </t-form-item>
         <t-form-item label="成立时间" name="foundedAt">
           <t-date-picker v-model="form.foundedAt" valueType="YYYY-MM" clearable style="width: 100%" />
@@ -226,27 +229,27 @@ function onClose() {
           :options="contactOptions"
           filterable
           clearable
-          placeholder="选择已注册的个人用户作为联系人"
-          tips="选择后自动填充联系电话与联系邮箱；社区企业必须关联一个个人用户"
+          placeholder="选择已注册的个人用户作为联系人…"
           @change="(val: unknown) => applyContactUser(String(val ?? ''))"
         />
+        <div class="field-help">选择后自动填充联系电话与联系邮箱；社区企业必须关联一个个人用户</div>
       </t-form-item>
       <t-form-item label="职位" name="contactTitle">
-        <t-input v-model="form.contactTitle" clearable placeholder="联系人在企业的职位，如 创始人 & CEO（选填）" />
+        <t-input v-model="form.contactTitle" clearable placeholder="联系人在企业的职位，如 创始人 & CEO（选填）…" />
       </t-form-item>
       <div class="form-row">
         <t-form-item label="联系电话" name="contactPhone">
-          <t-input v-model="form.contactPhone" disabled placeholder="选择联系人后自动填充" />
+          <t-input v-model="form.contactPhone" name="contact-phone" type="tel" inputmode="tel" autocomplete="tel" disabled placeholder="选择联系人后自动填充…" />
         </t-form-item>
         <t-form-item label="联系邮箱" name="contactEmail">
-          <t-input v-model="form.contactEmail" disabled placeholder="选择联系人后自动填充" />
+          <t-input v-model="form.contactEmail" name="contact-email" type="email" inputmode="email" autocomplete="email" disabled placeholder="选择联系人后自动填充…" />
         </t-form-item>
       </div>
       <t-form-item label="企业简介" name="description">
         <t-textarea
           v-model="form.description"
           :autosize="{ minRows: 3, maxRows: 6 }"
-          placeholder="选填"
+          placeholder="选填…"
         />
       </t-form-item>
     </t-form>
@@ -258,6 +261,13 @@ function onClose() {
   display: grid;
   grid-template-columns: 1fr 1fr;
   gap: 0 16px;
+}
+
+.field-help {
+  margin-top: 4px;
+  color: var(--td-text-color-placeholder);
+  font-size: 12px;
+  line-height: 20px;
 }
 
 .dialog-footer {

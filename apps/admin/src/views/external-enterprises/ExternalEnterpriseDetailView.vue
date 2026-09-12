@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { onMounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
+import { useQueryTab } from '@/utils/navigation'
 import { MessagePlugin } from 'tdesign-vue-next'
 import { ArrowLeftIcon, EditIcon } from 'tdesign-icons-vue-next'
 import StatusTag from '@/components/StatusTag.vue'
@@ -19,7 +20,7 @@ const route = useRoute()
 const router = useRouter()
 const loading = ref(true)
 const enterprise = ref<ExternalEnterprise | null>(null)
-const tab = ref('info')
+const tab = useQueryTab('info', ['info', 'stats', 'members'] as const)
 const acting = ref('')
 
 /* 数据概览 */
@@ -53,15 +54,7 @@ onMounted(async () => {
 
 /* 数据概览卡片 → 跳转对应列表并自动筛选（有数据时可点击）
  * 以合作企业 ID（XE*）传参，列表按 ID 解析档案名后过滤，避免企业名歧义 */
-function goDemands() {
-  if (!enterprise.value || !stats.value || stats.value.demandCount === 0) return
-  router.push({ path: '/demands', query: { enterprise: enterprise.value.id } })
-}
 
-function goProjects() {
-  if (!enterprise.value || !stats.value || stats.value.projectCount === 0) return
-  router.push({ path: '/projects', query: { enterprise: enterprise.value.id } })
-}
 
 /* 编辑 / 停用 / 归档 */
 function openEdit() {
@@ -214,22 +207,20 @@ async function onEnable() {
           <t-tab-panel value="stats" label="数据概览">
             <div class="tab-body">
               <div class="stats-grid">
-                <div
+                <t-link theme="default" hover="color" :href="router.resolve({ path: '/demands', query: { enterprise: enterprise.id } }).href" :disabled="(stats?.demandCount ?? 0) === 0"
                   class="stat-item"
                   :class="{ clickable: (stats?.demandCount ?? 0) > 0 }"
-                  @click="goDemands"
                 >
                   <span class="stat-num">{{ stats?.demandCount ?? 0 }}</span>
                   <span class="stat-label">需求发布</span>
-                </div>
-                <div
+                </t-link>
+                <t-link theme="default" hover="color" :href="router.resolve({ path: '/projects', query: { enterprise: enterprise.id } }).href" :disabled="(stats?.projectCount ?? 0) === 0"
                   class="stat-item"
                   :class="{ clickable: (stats?.projectCount ?? 0) > 0 }"
-                  @click="goProjects"
                 >
                   <span class="stat-num">{{ stats?.projectCount ?? 0 }}</span>
                   <span class="stat-label">参与项目</span>
-                </div>
+                </t-link>
               </div>
             </div>
           </t-tab-panel>

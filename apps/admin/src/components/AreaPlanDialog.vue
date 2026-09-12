@@ -2,6 +2,7 @@
 import { computed, nextTick, reactive, ref, watch } from 'vue'
 import { MessagePlugin } from 'tdesign-vue-next'
 import type { FormProps } from 'tdesign-vue-next'
+import { focusFirstInvalid } from '@/utils/form'
 import {
   createWorkstationArea,
   deleteWorkstationArea,
@@ -89,7 +90,7 @@ const rules: FormProps['rules'] = {
 
 async function onConfirm() {
   const valid = await formRef.value.validate()
-  if (valid !== true) return
+  if (valid !== true) return focusFirstInvalid(formRef.value)
   submitting.value = true
   try {
     const payload = { name: form.name.trim(), type: form.type, description: form.description }
@@ -128,7 +129,14 @@ function onClose() {
 </script>
 
 <template>
-  <t-dialog :visible="visible" header="区域规划" width="680px" @close="onClose">
+  <t-dialog
+    :visible="visible"
+    header="区域规划"
+    width="680px"
+    :close-on-overlay-click="false"
+    :close-on-esc-keydown="false"
+    @close="onClose"
+  >
     <template #footer>
       <div class="dialog-footer">
         <t-button variant="text" theme="default" @click="onClose">关闭</t-button>
@@ -145,7 +153,7 @@ function onClose() {
       </div>
       <div class="form-row">
         <t-form-item label="区域名称" name="name">
-          <t-input v-model="form.name" placeholder="如 D 区 · 创客办公位" />
+          <t-input v-model="form.name" placeholder="如 D 区 · 创客办公位…" />
         </t-form-item>
         <t-form-item label="区域主类型" name="type">
           <t-select v-model="form.type" :options="typeOptions" />
@@ -155,7 +163,7 @@ function onClose() {
         <t-textarea
           v-model="form.description"
           :autosize="{ minRows: 2, maxRows: 4 }"
-          placeholder="区域位置与用途说明（可选）"
+          placeholder="区域位置与用途说明（可选）…"
         />
       </t-form-item>
     </t-form>

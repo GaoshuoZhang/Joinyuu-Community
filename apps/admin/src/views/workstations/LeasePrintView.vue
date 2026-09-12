@@ -55,7 +55,7 @@ onMounted(async () => {
       <t-button theme="primary" @click="doPrint">打印</t-button>
     </div>
 
-    <div v-loading="loading" class="paper">
+    <t-loading :loading="loading" size="small" class="paper">
       <template v-if="notFound">
         <div class="empty-tip">未找到租约记录（{{ route.params.id }}）</div>
       </template>
@@ -92,7 +92,7 @@ onMounted(async () => {
           </tr>
           <tr>
             <td class="label">月租金</td>
-            <td>¥{{ lease.monthlyRent.toLocaleString() }} / 月</td>
+            <td>¥{{ lease.monthlyRent.toLocaleString('zh-CN') }} / 月</td>
             <td class="label">状态</td>
             <td>{{ statusLabel[deriveLeaseStatus(lease)] ?? lease.status }}</td>
           </tr>
@@ -124,7 +124,7 @@ onMounted(async () => {
 
         <p class="doc-foot">本单据由聚屿社区管理后台生成，仅供存档。</p>
       </template>
-    </div>
+    </t-loading>
   </div>
 </template>
 

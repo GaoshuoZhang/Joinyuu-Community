@@ -29,6 +29,26 @@ services:
       interval: 5s
       timeout: 3s
       retries: 10
+  minio:
+    image: minio/minio:latest
+    container_name: joinyuu-minio
+    restart: unless-stopped
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: minioadmin # 控制台登录 User 框（即 AccessKey）
+      MINIO_ROOT_PASSWORD: minioadmin # 控制台登录 Password 框（即 SecretKey）
+    ports:
+      - "9000:9000" # S3 API（系统配置中 Endpoint 对应本机 127.0.0.1:9000）
+      - "9001:9001" # 控制台 http://127.0.0.1:9001（User=minioadmin / Password=minioadmin）
+    volumes:
+      - joinyuu-minio-data:/data
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+      start_period: 10s
 volumes:
   joinyuu-pgdata:
   joinyuu-redisdata:
+  joinyuu-minio-data:

@@ -2,6 +2,7 @@
 import { computed, nextTick, reactive, ref, watch } from 'vue'
 import { MessagePlugin } from 'tdesign-vue-next'
 import type { FormProps } from 'tdesign-vue-next'
+import { focusFirstInvalid } from '@/utils/form'
 import { createLease, fetchRenterOptions, updateLease } from '@/api/workstations'
 import { workstationTypeMap } from '@/constants/status'
 import type { Lease, LeaseRenterType, RentPeriod, Workstation } from '@/types'
@@ -182,7 +183,7 @@ const rules: FormProps['rules'] = {
 
 async function onConfirm() {
   const valid = await formRef.value.validate()
-  if (valid !== true) return
+  if (valid !== true) return focusFirstInvalid(formRef.value)
   /* 非"长期"租约必须填写结束日期 */
   if (!form.longTerm && !form.endDate) {
     MessagePlugin.error('请选择租赁结束日期，或开启"长期"开关')
@@ -245,6 +246,8 @@ function onClose() {
     :visible="visible"
     :header="mode === 'create' ? '新增租约 · 分配办公位' : '编辑租约'"
     width="620px"
+    :close-on-overlay-click="false"
+    :close-on-esc-keydown="false"
     @close="onClose"
   >
     <template #footer>
@@ -261,18 +264,18 @@ function onClose() {
           v-if="mode === 'edit'"
           :value="form.enterpriseName"
           disabled
-          placeholder="租赁方不可变更"
+          placeholder="租赁方不可变更…"
         />
         <t-select
           v-else
           v-model="form.renterValue"
           :options="renterOptions"
-          placeholder="选择已注册的企业/个人用户，或直接输入新租赁方"
+          placeholder="选择已注册的企业/个人用户，或直接输入新租赁方…"
           filterable
           creatable
           style="width: 100%"
-          tips="未注册的租赁方可直接输入名称新增；选中已注册企业/个人用户将自动填充联系电话"
         />
+        <div v-if="mode === 'create'" class="field-help">未注册的租赁方可直接输入名称新增；选中已注册企业/个人用户将自动填充联系电话</div>
       </t-form-item>
       <t-form-item v-if="mode === 'create'" label="选择办公位（仅空闲）" name="workstationIds">
         <t-tree-select
@@ -282,7 +285,7 @@ function onClose() {
           clearable
           filterable
           :min-collapsed-num="3"
-          placeholder="按区域分组；可多选，独立办公室支持整间分配"
+          placeholder="按区域分组；可多选，独立办公室支持整间分配…"
         />
       </t-form-item>
       <div v-else class="edit-tip">换办公位需终止原租约后重新新增（编辑仅支持租期/租金/联系人）</div>
@@ -315,7 +318,7 @@ function onClose() {
           />
         </t-form-item>
         <t-form-item :label="`租金（元）/ ${rentPeriodLabel}`" name="monthlyRent">
-          <t-input-number v-model="form.monthlyRent" :min="0" theme="column" style="width: 100%" placeholder="月租周期选办公位后可自动累加" />
+          <t-input-number v-model="form.monthlyRent" :min="0" theme="column" style="width: 100%" placeholder="月租周期选办公位后可自动累加…" />
         </t-form-item>
       </div>
       <div class="form-row">
@@ -323,7 +326,7 @@ function onClose() {
           <t-input clearable v-model="form.contactName" />
         </t-form-item>
         <t-form-item label="联系电话" name="contactPhone">
-          <t-input clearable v-model="form.contactPhone" />
+          <t-input clearable v-model="form.contactPhone" name="contact-phone" type="tel" inputmode="tel" autocomplete="tel" />
         </t-form-item>
       </div>
     </t-form>

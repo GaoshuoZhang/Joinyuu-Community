@@ -1,7 +1,9 @@
 <script setup lang="ts">
-import { computed, onMounted, reactive, ref } from 'vue'
+import { computed, nextTick, onMounted, reactive, ref } from 'vue'
+import ListErrorState from '@/components/ListErrorState.vue'
+import { useListQueryState } from '@/utils/listQuery'
 import { useRouter } from 'vue-router'
-import { MessagePlugin } from 'tdesign-vue-next'
+import { MessagePlugin, type FormProps } from 'tdesign-vue-next'
 import PageHeader from '@/components/PageHeader.vue'
 import StatusTag from '@/components/StatusTag.vue'
 import BulkArchiveDialog from '@/components/BulkArchiveDialog.vue'
@@ -13,6 +15,7 @@ import type { Application } from '@/types'
 const router = useRouter()
 
 const loading = ref(true)
+const loadError = ref('')
 const list = ref<Application[]>([])
 const total = ref(0)
 
@@ -65,11 +68,15 @@ const pagination = computed(() => ({
 }))
 
 async function load() {
+  syncQuery()
   loading.value = true
+  loadError.value = ''
   try {
     const res = await fetchApplications({ ...query })
     list.value = res.list
     total.value = res.total
+  } catch (e) {
+    loadError.value = e instanceof Error ? e.message : '数据加载失败'
   } finally {
     loading.value = false
   }
@@ -169,25 +176,34 @@ async function onBulkConfirm(values: string[]) {
 /* 通过 / 驳回对话框 */
 const dialogVisible = ref(false)
 const dialogAction = ref<'approve' | 'reject'>('approve')
-const comment = ref('')
+const commentFormRef = ref()
+const commentForm = reactive({ comment: '' })
 const submitting = ref(false)
+
+/* 驳回必须填写原因（与需求/投稿审核一致），通过时意见可选 */
+const commentRules = computed<FormProps['rules']>(() =>
+  dialogAction.value === 'reject' ? { comment: [{ required: true, message: '请填写驳回原因', trigger: 'blur' }] } : {},
+)
 
 function openDialog(action: 'approve' | 'reject', row: Application) {
   current.value = row
   dialogAction.value = action
-  comment.value = ''
+  commentForm.comment = ''
   dialogVisible.value = true
+  nextTick(() => commentFormRef.value?.clearValidate())
 }
 
 async function onConfirm() {
   if (!current.value) return
+  const valid = await commentFormRef.value.validate()
+  if (valid !== true) return
   submitting.value = true
   try {
     if (dialogAction.value === 'approve') {
-      await approveApplication(current.value.id, comment.value)
+      await approveApplication(current.value.id, commentForm.comment.trim())
       MessagePlugin.success('已通过')
     } else {
-      await rejectApplication(current.value.id, comment.value)
+      await rejectApplication(current.value.id, commentForm.comment.trim())
       MessagePlugin.success('已驳回')
     }
     dialogVisible.value = false
@@ -199,11 +215,14 @@ async function onConfirm() {
   }
 }
 
+const { syncQuery } = useListQueryState(query, load)
+
 onMounted(load)
 </script>
 
 <template>
   <div class="approval-list page-fade-in">
+    <ListErrorState v-if="loadError" :message="loadError" :loading="loading" @retry="load" />
     <PageHeader title="申请审核" description="企业入驻、个体入驻、企业合作与身份绑定的统一审核">
       <template #actions>
         <ColumnController
@@ -244,7 +263,7 @@ onMounted(load)
         :columns="visibleColumns"
         :loading="loading"
         :pagination="pagination"
-        empty="暂无符合条件的申请"
+        empty="暂无申请"
         @page-change="onPageChange"
         @row-click="({ row }) => openDetail(row)"
       >
@@ -350,11 +369,15 @@ onMounted(load)
       @confirm="onConfirm"
       @close="dialogVisible = false"
     >
-      <t-textarea
-        v-model="comment"
-        placeholder="审核意见（可选）"
-        :autosize="{ minRows: 3, maxRows: 5 }"
-      />
+      <t-form ref="commentFormRef" :data="commentForm" :rules="commentRules">
+        <t-form-item name="comment">
+          <t-textarea
+            v-model="commentForm.comment"
+            :placeholder="dialogAction === 'reject' ? '请填写驳回原因（必填，将通知申请人）…' : '审核意见（可选）…'"
+            :autosize="{ minRows: 3, maxRows: 5 }"
+          />
+        </t-form-item>
+      </t-form>
     </t-dialog>
 
     <!-- 一键归档：状态选择二次确认对话框 -->

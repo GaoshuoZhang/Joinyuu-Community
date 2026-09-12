@@ -1,10 +1,12 @@
 <script setup lang="ts">
-import { nextTick, reactive, ref, watch } from 'vue'
+import { defineAsyncComponent, nextTick, reactive, ref, watch } from 'vue'
 import { MessagePlugin } from 'tdesign-vue-next'
 import type { FormProps } from 'tdesign-vue-next'
+import { focusFirstInvalid } from '@/utils/form'
 import { createAnnouncement, updateAnnouncement } from '@/api/announcements'
-import RichEditor from '@/components/RichEditor.vue'
 import type { Announcement } from '@/types'
+
+const RichEditor = defineAsyncComponent(() => import('@/components/RichEditor.vue'))
 
 /* 公告表单弹窗（新增即发布 / 编辑双模式共用）：
  * - create：标题 + 内容 + 置顶，确认后立即发布
@@ -53,7 +55,7 @@ watch(
 
 async function onConfirm() {
   const valid = await formRef.value.validate()
-  if (valid !== true) return
+  if (valid !== true) return focusFirstInvalid(formRef.value)
   submitting.value = true
   try {
     if (props.mode === 'edit' && props.announcement) {
@@ -83,6 +85,8 @@ function onClose() {
     :header="mode === 'edit' ? '编辑公告' : '发布公告'"
     width="760px"
     lazy
+    :close-on-overlay-click="false"
+    :close-on-esc-keydown="false"
     @close="onClose"
   >
     <template #footer>
@@ -96,10 +100,10 @@ function onClose() {
 
     <t-form ref="formRef" :data="form" :rules="rules" label-align="top">
       <t-form-item label="公告标题" name="title">
-        <t-input v-model="form.title" clearable placeholder="请输入公告标题" />
+        <t-input v-model="form.title" clearable placeholder="请输入公告标题…" />
       </t-form-item>
       <t-form-item label="公告内容" name="content">
-        <RichEditor v-model="form.content" placeholder="请输入公告内容（客户端公告位将完整展示）" :min-height="320" />
+        <RichEditor v-model="form.content" placeholder="请输入公告内容（客户端公告位将完整展示）…" :min-height="320" />
       </t-form-item>
       <t-form-item label="置顶" name="pinned">
         <div class="pin-row">

@@ -1,7 +1,10 @@
 <script setup lang="ts">
-import { onMounted, reactive, ref } from 'vue'
+import { useListQueryState } from '@/utils/listQuery'
+import ListErrorState from '@/components/ListErrorState.vue'
+import { computed, onMounted, reactive, ref } from 'vue'
 import { MessagePlugin } from 'tdesign-vue-next'
 import type { FormProps } from 'tdesign-vue-next'
+import { focusFirstInvalid } from '@/utils/form'
 import { AddIcon, SearchIcon } from 'tdesign-icons-vue-next'
 import PageHeader from '@/components/PageHeader.vue'
 import { fetchAdmins, saveAdmin, updateAdminStatus, resetAdminPassword, type AdminAccount } from '@/api/admins'
@@ -10,10 +13,12 @@ import { fetchRoles } from '@/api/roles'
 /* 管理员账号：多运营人员 + 角色分配 + 启停 + 重置密码 */
 
 const loading = ref(true)
+const loadError = ref('')
 const list = ref<AdminAccount[]>([])
 const roleOptions = ref<{ label: string; value: string }[]>([])
 
 const keyword = ref('')
+const appliedKeyword = ref('')
 
 const columns = [
   { colKey: 'account', title: '账号', cell: 'account', width: 180 , ellipsis: true},
@@ -30,8 +35,9 @@ async function load() {
     const [accounts, roles] = await Promise.all([fetchAdmins(), fetchRoles()])
     list.value = accounts
     roleOptions.value = roles.map((r) => ({ label: r.name, value: r.code }))
+    loadError.value = ''
   } catch (e) {
-    MessagePlugin.error(e instanceof Error ? e.message : '数据加载失败')
+    loadError.value = e instanceof Error ? e.message : '数据加载失败'
   } finally {
     loading.value = false
   }
@@ -73,7 +79,7 @@ function openEdit(row: AdminAccount) {
 
 async function onSave() {
   const valid = await formRef.value.validate()
-  if (valid !== true) return
+  if (valid !== true) return focusFirstInvalid(formRef.value)
   saving.value = true
   try {
     const res = await saveAdmin(editingId.value, { ...form })
@@ -132,34 +138,46 @@ async function onReset() {
   }
 }
 
-function filtered() {
-  const kw = keyword.value.trim().toLowerCase()
+const filtered = computed(() => {
+  const kw = appliedKeyword.value.toLowerCase()
   if (!kw) return list.value
   return list.value.filter((a) => a.username.toLowerCase().includes(kw) || a.name.toLowerCase().includes(kw))
+})
+
+function onQuery() {
+  appliedKeyword.value = keyword.value.trim()
+  syncQuery()
 }
+
+function onResetQuery() {
+  keyword.value = ''
+  appliedKeyword.value = ''
+  syncQuery()
+}
+
+const { syncQuery } = useListQueryState({}, () => { keyword.value = appliedKeyword.value }, { prefix: 'admins.', refs: { keyword: appliedKeyword } })
+keyword.value = appliedKeyword.value
 
 onMounted(load)
 </script>
 
 <template>
   <div class="admin-panel page-fade-in">
-    <PageHeader title="管理员账号" description="多运营人员账号、角色分配与启停管理">
-      <template #actions>
-        <t-button theme="primary" @click="openCreate">
-          <template #icon><AddIcon /></template>
-          新增管理员
-        </t-button>
-      </template>
-    </PageHeader>
+    <ListErrorState v-if="loadError" :message="loadError" :loading="loading" @retry="() => load()" />
+    <PageHeader title="管理员账号" description="多运营人员账号、角色分配与启停管理" />
 
     <div class="page-filter-bar">
-      <t-input v-model="keyword" class="filter-keyword" placeholder="搜索账号/姓名" clearable />
-      <t-button theme="primary" variant="outline">
+      <t-input v-model="keyword" class="filter-keyword" placeholder="搜索账号/姓名…" clearable @enter="onQuery" />
+      <t-button theme="primary" variant="outline" @click="onQuery">
         <template #icon><SearchIcon /></template>
         查询
       </t-button>
-      <t-button variant="outline" theme="default" @click="keyword = ''">
+      <t-button variant="outline" theme="default" @click="onResetQuery">
         重置
+      </t-button>
+      <t-button theme="primary" class="filter-create" @click="openCreate">
+        <template #icon><AddIcon /></template>
+        新增管理员
       </t-button>
     </div>
 
@@ -169,7 +187,7 @@ onMounted(load)
         table-layout="fixed"
         hover
         resizable
-        :data="filtered()"
+        :data="filtered"
         :columns="columns"
         :loading="loading"
         empty="暂无管理员账号"
@@ -222,13 +240,13 @@ onMounted(load)
       </template>
       <t-form ref="formRef" :data="form" :rules="rules" label-align="top">
         <t-form-item label="账号" name="username">
-          <t-input v-model="form.username" :disabled="editingId != null" placeholder="登录用户名（唯一）" />
+          <t-input v-model="form.username" :disabled="editingId != null" name="username" autocomplete="off" :spellcheck="false" placeholder="登录用户名（唯一）…" />
         </t-form-item>
         <t-form-item label="姓名" name="name">
-          <t-input v-model="form.name" placeholder="审计日志中的操作人显示名" />
+          <t-input v-model="form.name" name="display-name" autocomplete="off" placeholder="操作日志中的操作人显示名…" />
         </t-form-item>
         <t-form-item label="角色" name="roleCodes">
-          <t-select v-model="form.roleCodes" multiple :options="roleOptions" placeholder="选择角色（可多选）" />
+          <t-select v-model="form.roleCodes" multiple :options="roleOptions" placeholder="选择角色（可多选）…" />
         </t-form-item>
       </t-form>
     </t-dialog>
@@ -247,7 +265,7 @@ onMounted(load)
         </div>
       </template>
       <p class="reset-tip">将重置「{{ resetTarget?.username }}」的登录密码，重置后需使用新密码登录。</p>
-      <t-input v-model="resetPassword" type="password" placeholder="新密码（至少 8 位）" />
+      <t-input v-model="resetPassword" type="password" name="reset-password" autocomplete="new-password" placeholder="新密码（至少 8 位）…" />
     </t-dialog>
   </div>
 </template>
@@ -255,6 +273,9 @@ onMounted(load)
 <style scoped>
 .filter-keyword {
   width: 240px;
+}
+.filter-create {
+  margin-left: auto;
 }
 
 .account-cell {

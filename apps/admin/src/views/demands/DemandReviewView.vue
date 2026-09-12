@@ -1,5 +1,7 @@
 <script setup lang="ts">
 import { computed, onMounted, reactive, ref } from 'vue'
+import ListErrorState from '@/components/ListErrorState.vue'
+import { useListQueryState } from '@/utils/listQuery'
 import { useRouter } from 'vue-router'
 import { SearchIcon } from 'tdesign-icons-vue-next'
 import PageHeader from '@/components/PageHeader.vue'
@@ -14,6 +16,7 @@ import type { Demand } from '@/types'
  * 审核为只读：通过 → 转入「待发布」；驳回需填写原因；取消不做任何动作 */
 const router = useRouter()
 const loading = ref(true)
+const loadError = ref('')
 const list = ref<Demand[]>([])
 const total = ref(0)
 
@@ -68,11 +71,15 @@ const pagination = computed(() => ({
 }))
 
 async function load() {
+  syncQuery()
   loading.value = true
+  loadError.value = ''
   try {
     const res = await fetchDemands({ ...query, sortBy: sortBy.value, sortOrder: sortOrder.value })
     list.value = res.list
     total.value = res.total
+  } catch (e) {
+    loadError.value = e instanceof Error ? e.message : '数据加载失败'
   } finally {
     loading.value = false
   }
@@ -130,6 +137,8 @@ function openReview(row: Demand) {
   reviewVisible.value = true
 }
 
+const { syncQuery } = useListQueryState(query, load, { refs: { sortBy, sortOrder } })
+
 onMounted(() => {
   load()
   fetchDictEntries('demand_category')
@@ -145,6 +154,7 @@ onMounted(() => {
 
 <template>
   <div class="demand-review page-fade-in">
+    <ListErrorState v-if="loadError" :message="loadError" :loading="loading" @retry="load" />
     <PageHeader title="需求审核" description="集中处理需求广场提交的待审核需求：只读审核，通过后转入「待发布」或驳回">
       <template #actions>
         <ColumnController
@@ -159,7 +169,7 @@ onMounted(() => {
       <t-input
         v-model="query.keyword"
         class="filter-keyword"
-        placeholder="搜索标题/编号"
+        placeholder="搜索标题/编号…"
         clearable
         @enter="onSearch"
       />

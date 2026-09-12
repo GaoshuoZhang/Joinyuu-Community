@@ -64,6 +64,8 @@ const formRef = ref()
     :visible="visible"
     header="定时发布"
     width="480px"
+    :close-on-overlay-click="false"
+    :close-on-esc-keydown="false"
     @close="onCancel"
   >
     <template #footer>
@@ -82,7 +84,7 @@ const formRef = ref()
           v-model="scheduledAt"
           valueType="YYYY-MM-DD HH:mm"
           enable-time-picker
-          placeholder="到点自动发布"
+          placeholder="到点自动发布…"
           style="width: 100%"
         />
       </t-form-item>

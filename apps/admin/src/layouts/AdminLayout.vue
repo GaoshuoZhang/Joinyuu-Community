@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, ref, watch } from 'vue'
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import {
   AppIcon,
@@ -27,9 +27,11 @@ import {
   ViewModuleIcon,
 } from 'tdesign-icons-vue-next'
 import { MessagePlugin } from 'tdesign-vue-next'
+import ListErrorState from '@/components/ListErrorState.vue'
 import { useAuthStore } from '@/stores/auth'
 import { useTabsStore } from '@/stores/tabs'
 import { useThemeStore } from '@/stores/theme'
+import { scopeAllowsGroup } from '@/constants/scopes'
 import {
   fetchNotifications,
   markAllNotificationsRead,
@@ -43,14 +45,26 @@ const auth = useAuthStore()
 const tabs = useTabsStore()
 const theme = useThemeStore()
 
-/* RBAC：分组至少含一个可见菜单项才渲染（避免空分组标题） */
-function canSee(codes: string[]): boolean {
+/* RBAC：分组至少含一个可见菜单项、且数据范围放行该域时才渲染（避免空分组标题） */
+function canSee(codes: string[], group: string): boolean {
+  if (!scopeAllowsGroup(auth.dataScope, auth.permissions, group)) return false
   return codes.some((code) => auth.hasPerm(code))
 }
 
 const collapsed = ref(false)
+const compactViewport = window.matchMedia('(max-width: 1199px)')
 
-/* ---------- 菜单分组展开/折叠（受控）：低频组（积分商城/规则管理/系统管理）默认折叠 ---------- */
+function syncCompactSidebar(event: MediaQueryList | MediaQueryListEvent = compactViewport) {
+  if (event.matches) collapsed.value = true
+}
+
+onMounted(() => {
+  syncCompactSidebar()
+  compactViewport.addEventListener('change', syncCompactSidebar)
+})
+onBeforeUnmount(() => compactViewport.removeEventListener('change', syncCompactSidebar))
+
+/* ---------- 菜单分组展开/折叠（受控）：低频组（积分管理/规则管理/系统管理）默认折叠 ---------- */
 const ALL_GROUP_KEYS = ['group-members', 'group-biz', 'group-points', 'group-rules', 'group-space', 'group-contents', 'group-system']
 const DEFAULT_COLLAPSED_GROUPS = ['group-points', 'group-rules', 'group-system']
 const expandedMenus = ref<string[]>(ALL_GROUP_KEYS.filter((k) => !DEFAULT_COLLAPSED_GROUPS.includes(k)))
@@ -108,21 +122,35 @@ const noticeVisible = ref(false)
 const noticeList = ref<AdminNotification[]>([])
 const unreadCount = computed(() => noticeList.value.filter((n) => !n.read).length)
 
+function focusMainContent() {
+  document.getElementById('main-content')?.focus()
+}
+
+const noticeError = ref('')
+const noticeLoading = ref(false)
+
 async function loadNotifications() {
+  noticeLoading.value = true
   try {
     noticeList.value = await fetchNotifications()
-  } catch {
-    /* 通知加载失败静默处理，不影响主流程 */
+    noticeError.value = ''
+  } catch (error) {
+    noticeError.value = error instanceof Error ? error.message : '通知加载失败'
+  } finally {
+    noticeLoading.value = false
   }
 }
 
 async function onNoticeClick(item: AdminNotification) {
   if (!item.read) {
-    item.read = true
-    await markNotificationRead(item.id)
+    try {
+      await markNotificationRead(item.id)
+      item.read = true
+    } catch {
+      MessagePlugin.error('标记已读失败，请重试')
+    }
   }
   noticeVisible.value = false
-  if (item.link) router.push(item.link)
 }
 
 async function onReadAll() {
@@ -133,10 +161,22 @@ async function onReadAll() {
 
 onMounted(loadNotifications)
 
+const tabBarRef = ref<HTMLElement | null>(null)
+
+async function revealActiveTab() {
+  await nextTick()
+  const activeTab = tabBarRef.value?.querySelector<HTMLElement>('.tab-item.active')
+  activeTab?.scrollIntoView({
+    block: 'nearest',
+    inline: 'nearest',
+    behavior: window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth',
+  })
+}
+
 /* 路由变化 → 同步多标签页 */
 watch(
   () => route.path,
-  (path) => {
+  async (path) => {
     if (path !== '/login') {
       tabs.add({
         path,
@@ -144,6 +184,7 @@ watch(
         closable: path !== '/dashboard',
       })
     }
+    await revealActiveTab()
   },
   { immediate: true },
 )
@@ -160,6 +201,10 @@ function closeTab(path: string) {
 /* 全部关闭：关闭除当前页外的所有标签（工作台始终保留），保持在当前页 */
 function closeAllTabs() {
   tabs.closeOthers(route.path)
+}
+
+function clickCurrentTarget(event: KeyboardEvent) {
+  ;(event.currentTarget as HTMLElement | null)?.click()
 }
 
 const dropdownOptions = [
@@ -182,9 +227,14 @@ async function handleDropdown(item: { value?: string | number }) {
 
 <template>
   <div class="admin-shell">
+    <t-link class="skip-link" href="#main-content" @click.prevent="focusMainContent">跳到主要内容</t-link>
     <!-- 侧栏 -->
-    <aside class="side-col" :class="{ collapsed }">
-      <div class="side-logo" @click="router.push('/dashboard')">
+    <aside class="side-col" :class="{ collapsed }" aria-label="主导航">
+      <t-link theme="default" hover="color"
+        class="side-logo"
+        aria-label="返回工作台"
+        href="#/dashboard"
+      >
         <svg class="logo-mark" viewBox="0 0 32 32" aria-hidden="true">
           <rect width="32" height="32" rx="7" fill="#0052D9" />
           <circle cx="12.5" cy="14" r="5" fill="#7BD8F5" />
@@ -192,14 +242,14 @@ async function handleDropdown(item: { value?: string | number }) {
           <path d="M5 23c2.5-2.4 5-2.4 7.5 0s5 2.4 7.5 0 5-2.4 7.5 0" stroke="#FFFFFF" stroke-width="2" fill="none" stroke-linecap="round" />
         </svg>
         <span v-if="!collapsed" class="logo-text">聚屿社区</span>
-      </div>
+      </t-link>
 
       <div class="side-menu">
         <t-menu
           :value="activePath"
           :collapsed="collapsed"
           v-model:expanded="expandedMenus"
-          theme="light"
+          :theme="theme.mode"
           @change="handleMenuChange"
         >
           <t-menu-item value="/dashboard">
@@ -207,7 +257,7 @@ async function handleDropdown(item: { value?: string | number }) {
             工作台
           </t-menu-item>
 
-          <t-submenu v-if="canSee(['/users', '/individuals', '/enterprises', '/external-enterprises', '/approvals'])" value="group-members" title="社区成员">
+          <t-submenu v-if="canSee(['/users', '/individuals', '/enterprises', '/external-enterprises', '/approvals'], '社区成员')" value="group-members" title="社区成员">
             <template #icon><UserCircleIcon /></template>
             <t-menu-item value="/users" v-permission="'/users'">
               <template #icon><UserListIcon /></template>
@@ -231,7 +281,7 @@ async function handleDropdown(item: { value?: string | number }) {
             </t-menu-item>
           </t-submenu>
 
-          <t-submenu v-if="canSee(['/demands', '/demands/review', '/projects', '/events'])" value="group-biz" title="业务运营">
+          <t-submenu v-if="canSee(['/demands', '/demands/review', '/projects', '/events'], '业务运营')" value="group-biz" title="业务运营">
             <template #icon><ViewListIcon /></template>
             <t-menu-item value="/demands" v-permission="'/demands'">
               <template #icon><ViewListIcon /></template>
@@ -252,7 +302,7 @@ async function handleDropdown(item: { value?: string | number }) {
           </t-submenu>
 
           <t-submenu
-            v-if="canSee(['/workstations', '/workstations/offices', '/workstations/leases', '/spaces', '/spaces/reservations'])"
+            v-if="canSee(['/workstations', '/workstations/offices', '/workstations/leases', '/spaces', '/spaces/reservations'], '空间管理')"
             value="group-space"
             title="空间管理"
           >
@@ -280,7 +330,7 @@ async function handleDropdown(item: { value?: string | number }) {
           </t-submenu>
 
           <t-submenu
-            v-if="canSee(['/contents/publish', '/contents/submissions', '/contents/columns', '/contents/stats', '/contents/showcase', '/contents/announcements'])"
+            v-if="canSee(['/contents/publish', '/contents/submissions', '/contents/columns', '/contents/stats', '/contents/showcase', '/contents/announcements'], '内容管理')"
             value="group-contents"
             title="内容管理"
           >
@@ -311,7 +361,7 @@ async function handleDropdown(item: { value?: string | number }) {
             </t-menu-item>
           </t-submenu>
 
-          <t-submenu v-if="canSee(['/mall/goods', '/mall/orders'])" value="group-points" title="积分商城">
+          <t-submenu v-if="canSee(['/mall/goods', '/mall/orders'], '积分管理')" value="group-points" title="积分管理">
             <template #icon><CartIcon /></template>
             <t-menu-item value="/mall/goods" v-permission="'/mall/goods'">
               <template #icon><CartIcon /></template>
@@ -324,7 +374,7 @@ async function handleDropdown(item: { value?: string | number }) {
           </t-submenu>
 
           <t-submenu
-            v-if="canSee(['/rules/points', '/rules/experience', '/rules/levels', '/rules/ledger', '/rules/experience-records'])"
+            v-if="canSee(['/rules/points', '/rules/experience', '/rules/levels', '/rules/ledger', '/rules/experience-records'], '规则管理')"
             value="group-rules"
             title="规则管理"
           >
@@ -352,7 +402,7 @@ async function handleDropdown(item: { value?: string | number }) {
           </t-submenu>
 
           <t-submenu
-            v-if="canSee(['/system/dicts', '/system/config', '/logs/audit', '/logs/login', '/system/roles', '/system/admins', '/system/sessions', '/system/assets', '/system/monitor', '/system/trash'])"
+            v-if="canSee(['/system/dicts', '/system/config', '/logs/audit', '/logs/login', '/system/roles', '/system/admins', '/system/sessions', '/system/assets', '/system/monitor', '/system/trash'], '系统管理')"
             value="group-system"
             title="系统管理"
           >
@@ -365,25 +415,13 @@ async function handleDropdown(item: { value?: string | number }) {
               <template #icon><SettingIcon /></template>
               系统配置
             </t-menu-item>
-            <t-menu-item value="/logs/audit" v-permission="'/logs/audit'">
+            <t-menu-item value="/system/logs" v-permission="['/logs/audit', '/logs/login']">
               <template #icon><ViewListIcon /></template>
-              审计日志
+              日志与审计
             </t-menu-item>
-            <t-menu-item value="/logs/login" v-permission="'/logs/login'">
+            <t-menu-item value="/system/account" v-permission="['/system/admins', '/system/roles', '/system/sessions']">
               <template #icon><UserListIcon /></template>
-              登录日志
-            </t-menu-item>
-            <t-menu-item value="/system/roles" v-permission="'/system/roles'">
-              <template #icon><CheckCircleIcon /></template>
-              角色权限
-            </t-menu-item>
-            <t-menu-item value="/system/admins" v-permission="'/system/admins'">
-              <template #icon><UserListIcon /></template>
-              管理员账号
-            </t-menu-item>
-            <t-menu-item value="/system/sessions" v-permission="'/system/sessions'">
-              <template #icon><CheckCircleIcon /></template>
-              在线会话
+              角色与账号
             </t-menu-item>
             <t-menu-item value="/assets/library" v-permission="'/system/assets'">
               <template #icon><ViewModuleIcon /></template>
@@ -402,12 +440,12 @@ async function handleDropdown(item: { value?: string | number }) {
       </div>
 
       <div class="side-footer">
-        <div class="footer-btn" @click="toggleAllGroups">
+        <div class="footer-btn" role="button" tabindex="0" @click="toggleAllGroups" @keydown.enter.space.prevent="toggleAllGroups">
           <ChevronUpIcon v-if="isAllExpanded" />
           <ChevronDownIcon v-else />
           <span v-if="!collapsed">{{ isAllExpanded ? '全部折叠' : '全部展开' }}</span>
         </div>
-        <div class="footer-btn" @click="collapsed = !collapsed">
+        <div class="footer-btn" role="button" tabindex="0" @click="collapsed = !collapsed" @keydown.enter.space.prevent="collapsed = !collapsed">
           <ChevronLeftIcon :class="{ 'rotate-180': collapsed }" />
           <span v-if="!collapsed">收起菜单</span>
         </div>
@@ -427,26 +465,35 @@ async function handleDropdown(item: { value?: string | number }) {
           <template #icon><CloseIcon /></template>
           全部关闭
         </t-button>
-        <div class="tab-bar">
+        <nav ref="tabBarRef" class="tab-bar" aria-label="已打开页面">
           <div
             v-for="tab in tabs.tabs"
             :key="tab.path"
             class="tab-item"
             :class="{ active: tab.path === route.path }"
-            @click="router.push(tab.path)"
           >
-            <span class="tab-title">{{ tab.title }}</span>
-            <span v-if="tab.closable" class="tab-close" @click.stop="closeTab(tab.path)">
+            <t-link class="tab-title" theme="default" hover="color" :href="router.resolve(tab.path).href" :aria-current="tab.path === route.path ? 'page' : undefined">{{ tab.title }}</t-link>
+            <span
+              v-if="tab.closable"
+              class="tab-close"
+              role="button"
+              tabindex="0"
+              :aria-label="`关闭${tab.title}`"
+              @click.stop="closeTab(tab.path)"
+              @keydown.enter.space.stop.prevent="closeTab(tab.path)"
+            >
               <CloseIcon />
             </span>
           </div>
-        </div>
+        </nav>
         <div class="top-right">
           <t-button
             variant="text"
             shape="square"
             class="theme-btn"
             :title="theme.mode === 'dark' ? '切换浅色模式' : '切换暗色模式'"
+            :aria-label="theme.mode === 'dark' ? '切换浅色模式' : '切换暗色模式'"
+            :aria-pressed="theme.mode === 'dark'"
             @click="theme.toggle()"
           >
             <template #icon>
@@ -460,7 +507,13 @@ async function handleDropdown(item: { value?: string | number }) {
             :show-arrow="false"
           >
             <t-badge :count="unreadCount" :offset="[4, 8]">
-              <t-button variant="text" shape="square" class="notice-btn">
+              <t-button
+                variant="text"
+                shape="square"
+                class="notice-btn"
+                aria-label="通知中心"
+                :aria-expanded="noticeVisible"
+              >
                 <template #icon><NotificationIcon /></template>
               </t-button>
             </t-badge>
@@ -468,15 +521,20 @@ async function handleDropdown(item: { value?: string | number }) {
               <div class="notice-panel">
                 <div class="notice-head">
                   <span class="notice-title">通知中心</span>
-                  <t-link v-if="unreadCount > 0" theme="primary" hover="color" @click="onReadAll">全部已读</t-link>
+                  <t-button v-if="unreadCount > 0" theme="primary" variant="text" size="small" @click="onReadAll">全部已读</t-button>
                 </div>
                 <div class="notice-list">
-                  <div
+                  <ListErrorState v-if="noticeError" :message="noticeError" :loading="noticeLoading" @retry="loadNotifications" />
+                  <t-link theme="default" hover="color"
                     v-for="n in noticeList"
                     :key="n.id"
                     class="notice-item"
                     :class="{ 'is-unread': !n.read }"
+                    :href="n.link ? router.resolve(n.link).href : undefined"
+                    :role="n.link ? undefined : 'button'"
+                    :tabindex="n.link ? undefined : 0"
                     @click="onNoticeClick(n)"
+                    @keydown.enter.space="!n.link && onNoticeClick(n)"
                   >
                     <div class="notice-item-head">
                       <span class="notice-dot" v-if="!n.read"></span>
@@ -484,14 +542,20 @@ async function handleDropdown(item: { value?: string | number }) {
                     </div>
                     <div class="notice-item-content">{{ n.content }}</div>
                     <div class="notice-item-time">{{ n.at }}</div>
-                  </div>
-                  <t-empty v-if="!noticeList.length" description="暂无通知" size="small" />
+                  </t-link>
+                  <t-empty v-if="!noticeError && !noticeLoading && !noticeList.length" description="暂无通知" size="small" />
                 </div>
               </div>
             </template>
           </t-popup>
           <t-dropdown :options="dropdownOptions" @click="handleDropdown">
-            <div class="admin-chip">
+            <div
+              class="admin-chip"
+              role="button"
+              tabindex="0"
+              aria-label="管理员菜单"
+              @keydown.enter.space.prevent="clickCurrentTarget"
+            >
               <t-avatar size="28px">{{ auth.name.slice(0, 1) }}</t-avatar>
               <span class="admin-name">{{ auth.name || '管理员' }}</span>
             </div>
@@ -499,11 +563,11 @@ async function handleDropdown(item: { value?: string | number }) {
         </div>
       </header>
 
-      <main class="page-scroll">
+      <main id="main-content" class="page-scroll" tabindex="-1">
         <router-view v-slot="{ Component, route: viewRoute }">
           <transition name="page" mode="out-in">
-            <!-- key 绑定 fullPath：同路由不同参数（如 users/U1003 → users/U1001）强制重挂载，避免详情页显示旧数据 -->
-            <component :is="Component" :key="viewRoute.fullPath" />
+            <!-- path 已包含详情实体 ID，可在实体切换时重挂载；query（筛选/选项卡）变化不应销毁整个页面。 -->
+            <component :is="Component" :key="viewRoute.path" />
           </transition>
         </router-view>
       </main>
@@ -517,6 +581,22 @@ async function handleDropdown(item: { value?: string | number }) {
   grid-template-columns: auto 1fr;
   height: 100vh;
   overflow: hidden;
+}
+
+.skip-link {
+  position: fixed;
+  z-index: 4000;
+  top: 8px;
+  left: 8px;
+  padding: 8px 12px;
+  color: var(--td-text-color-anti);
+  background: var(--td-brand-color);
+  border-radius: var(--td-radius-default);
+  transform: translateY(-150%);
+}
+
+.skip-link:focus {
+  transform: translateY(0);
 }
 
 /* ---------- 侧栏 ---------- */
@@ -567,6 +647,7 @@ async function handleDropdown(item: { value?: string | number }) {
   flex: 1;
   overflow-y: auto;
   overflow-x: hidden;
+  overscroll-behavior: contain;
 }
 
 .side-footer {
@@ -672,9 +753,13 @@ async function handleDropdown(item: { value?: string | number }) {
 .notice-list {
   max-height: 380px;
   overflow-y: auto;
+  overscroll-behavior: contain;
 }
 
 .notice-item {
+  display: block;
+  white-space: normal;
+  text-align: left;
   padding: 10px 16px;
   cursor: pointer;
   border-bottom: 1px solid var(--td-bg-color-page);
@@ -755,6 +840,8 @@ async function handleDropdown(item: { value?: string | number }) {
   height: 100%;
   padding: 0 8px;
   overflow-x: auto;
+  overscroll-behavior-x: contain;
+  scroll-behavior: smooth;
 }
 
 .tab-bar::-webkit-scrollbar {
@@ -784,7 +871,7 @@ async function handleDropdown(item: { value?: string | number }) {
   cursor: pointer;
   white-space: nowrap;
   background: var(--td-bg-color-page);
-  transition: all 120ms ease;
+  transition: color 120ms ease, border-color 120ms ease, background-color 120ms ease;
 }
 
 .tab-item:hover {

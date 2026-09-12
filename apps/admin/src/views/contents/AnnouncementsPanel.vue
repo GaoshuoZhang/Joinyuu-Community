@@ -1,5 +1,7 @@
 <script setup lang="ts">
 import { computed, onMounted, reactive, ref } from 'vue'
+import ListErrorState from '@/components/ListErrorState.vue'
+import { useListQueryState } from '@/utils/listQuery'
 import { MessagePlugin } from 'tdesign-vue-next'
 import { AddIcon, PinIcon, SearchIcon } from 'tdesign-icons-vue-next'
 import PageHeader from '@/components/PageHeader.vue'
@@ -17,6 +19,7 @@ import type { Announcement } from '@/types'
 
 /* 公告栏：站点公告的发布/编辑/下架/置顶管理（新增即发布，客户端公告位仅消费已发布公告） */
 const loading = ref(false)
+const loadError = ref('')
 const acting = ref('')
 const list = ref<Announcement[]>([])
 const total = ref(0)
@@ -59,11 +62,15 @@ const pagination = computed(() => ({
 }))
 
 async function load() {
+  syncQuery()
   loading.value = true
+  loadError.value = ''
   try {
     const res = await fetchAnnouncements({ ...query })
     list.value = res.list
     total.value = res.total
+  } catch (e) {
+    loadError.value = e instanceof Error ? e.message : '数据加载失败'
   } finally {
     loading.value = false
   }
@@ -157,11 +164,14 @@ async function onDelete(row: Announcement) {
   }
 }
 
+const { syncQuery } = useListQueryState(query, load)
+
 onMounted(load)
 </script>
 
 <template>
   <div class="announcements-panel page-fade-in">
+    <ListErrorState v-if="loadError" :message="loadError" :loading="loading" @retry="load" />
     <PageHeader title="公告栏" description="站点公告的发布、置顶与下架管理（客户端公告位仅展示已发布公告）">
       <template #actions>
         <ColumnController
@@ -180,7 +190,7 @@ onMounted(load)
       <t-input
         v-model="query.keyword"
         clearable
-        placeholder="搜索公告标题/编号"
+        placeholder="搜索公告标题/编号…"
         style="width: 220px"
         @enter="onSearch"
       />

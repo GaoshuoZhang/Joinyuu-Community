@@ -34,6 +34,7 @@ import { SchedulerModule } from './scheduler/scheduler.module'
 import { HealthController } from './health/health.controller'
 import { JwtAuthGuard } from './common/guards/jwt-auth.guard'
 import { PermissionGuard } from './common/guards/permission.guard'
+import { DomainScopeGuard } from './common/guards/domain-scope.guard'
 import { EnvelopeInterceptor } from './common/interceptors/envelope.interceptor'
 import { AuditInterceptor } from './common/interceptors/audit.interceptor'
 import { HttpExceptionFilter } from './common/filters/http-exception.filter'
@@ -77,6 +78,7 @@ import { HttpExceptionFilter } from './common/filters/http-exception.filter'
     { provide: APP_PIPE, useValue: new ValidationPipe({ transform: true, whitelist: true }) },
     { provide: APP_GUARD, useClass: JwtAuthGuard },
     { provide: APP_GUARD, useClass: PermissionGuard },
+    { provide: APP_GUARD, useClass: DomainScopeGuard },
     { provide: APP_INTERCEPTOR, useClass: EnvelopeInterceptor },
     { provide: APP_INTERCEPTOR, useClass: AuditInterceptor },
     { provide: APP_FILTER, useClass: HttpExceptionFilter },

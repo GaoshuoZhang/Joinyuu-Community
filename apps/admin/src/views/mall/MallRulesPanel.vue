@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import ListErrorState from '@/components/ListErrorState.vue'
 import { nextTick, onMounted, reactive, ref } from 'vue'
 import { MessagePlugin } from 'tdesign-vue-next'
 import type { FormProps } from 'tdesign-vue-next'
@@ -9,6 +10,7 @@ import type { PointsRule } from '@/types'
 
 /* 积分规则面板：触发项写死（code 为后端关联标识），仅可编辑积分值与启停，不允许新增/删除 */
 const loading = ref(false)
+const loadError = ref('')
 const list = ref<PointsRule[]>([])
 const acting = ref('')
 
@@ -26,6 +28,9 @@ async function load() {
   loading.value = true
   try {
     list.value = await fetchPointsRules()
+    loadError.value = ''
+  } catch (e) {
+    loadError.value = e instanceof Error ? e.message : '数据加载失败'
   } finally {
     loading.value = false
   }
@@ -90,6 +95,7 @@ onMounted(load)
 
 <template>
   <div class="rules-panel page-fade-in">
+    <ListErrorState v-if="loadError" :message="loadError" :loading="loading" @retry="() => load()" />
     <PageHeader title="积分规则" description="积分发放制度：触发项固定，发放自动；扣除积分由管理员手动调整" />
 
     <div class="page-filter-bar">

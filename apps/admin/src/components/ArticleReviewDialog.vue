@@ -71,7 +71,7 @@ function onCancel() {
 </script>
 
 <template>
-  <t-dialog :visible="visible" :header="title ?? `审核投稿 · ${article?.title ?? ''}`" width="720px" @close="onCancel">
+  <t-dialog :visible="visible" :header="title ?? `审核投稿 · ${article?.title ?? ''}`" width="720px" :close-on-overlay-click="false" :close-on-esc-keydown="false" @close="onCancel">
     <template #footer>
       <div class="dialog-footer">
         <t-button variant="text" theme="default" @click="onCancel">
@@ -122,7 +122,7 @@ function onCancel() {
       </div>
 
       <div v-if="rejecting" class="reject-box">
-        <t-textarea v-model="reason" :autosize="{ minRows: 2, maxRows: 4 }" placeholder="请填写驳回原因（通知投稿人）" maxlength="200" />
+        <t-textarea v-model="reason" :autosize="{ minRows: 2, maxRows: 4 }" placeholder="请填写驳回原因（通知投稿人）…" maxlength="200" />
       </div>
     </div>
   </t-dialog>

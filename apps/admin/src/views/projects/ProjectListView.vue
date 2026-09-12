@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, nextTick, onMounted, reactive, ref, watch } from 'vue'
-import { useRoute, useRouter } from 'vue-router'
+import { useListQueryState } from '@/utils/listQuery'
+import { useRouter } from 'vue-router'
 import { MessagePlugin } from 'tdesign-vue-next'
 import type { FormProps } from 'tdesign-vue-next'
 import { AddIcon, SearchIcon, DownloadIcon } from 'tdesign-icons-vue-next'
@@ -10,15 +11,16 @@ import ColumnController from '@/components/ColumnController.vue'
 import BulkArchiveDialog from '@/components/BulkArchiveDialog.vue'
 import ProjectFormDialog from '@/components/ProjectFormDialog.vue'
 import { fetchProjects, pauseProject, resumeProject, closeProject, archiveProject } from '@/api/projects'
+import ListErrorState from '@/components/ListErrorState.vue'
 import { fetchEnterprise } from '@/api/enterprises'
 import { fetchExternalEnterprise } from '@/api/external-enterprises'
 import { fetchUser } from '@/api/users'
 import { exportCsv, statusLabel } from '@/utils/exportCsv'
 import type { Project } from '@/types'
 
-const route = useRoute()
 const router = useRouter()
 const loading = ref(false)
+const loadError = ref('')
 /* 当前执行中的行操作标识：`${id}:pause | resume | close | archive` */
 const acting = ref('')
 const list = ref<Project[]>([])
@@ -84,11 +86,15 @@ const pagination = computed(() => ({
 }))
 
 async function load() {
+  syncQuery()
   loading.value = true
+  loadError.value = ''
   try {
     const res = await fetchProjects({ ...query, sortBy: sortBy.value, sortOrder: sortOrder.value })
     list.value = res.list
     total.value = res.total
+  } catch (e) {
+    loadError.value = e instanceof Error ? e.message : '数据加载失败'
   } finally {
     loading.value = false
   }
@@ -308,8 +314,6 @@ function onRowClick({ row }: { row: Project }) {
  * 企业详情「数据概览」跳转带入企业 ID（query: enterprise，社区企业 E* / 合作企业 XE*），
  * 标签显示名称：社区企业经 fetchEnterprise、合作企业经 fetchExternalEnterprise 由 ID 解析 */
 async function applyRouteFilter() {
-  query.participant = (route.query.participant as string) || ''
-  query.enterprise = (route.query.enterprise as string) || ''
   participantName.value = ''
   enterpriseName.value = ''
   if (query.participant) {
@@ -350,13 +354,9 @@ function clearEnterprise() {
   load()
 }
 
-watch(
-  () => route.query,
-  () => {
-    applyRouteFilter()
-    load()
-  },
-)
+watch(() => [query.participant, query.enterprise], applyRouteFilter)
+
+const { syncQuery } = useListQueryState(query, load, { refs: { sortBy, sortOrder } })
 
 onMounted(() => {
   applyRouteFilter()
@@ -366,6 +366,8 @@ onMounted(() => {
 
 <template>
   <div class="project-list page-fade-in">
+    <ListErrorState v-if="loadError" :message="loadError" :loading="loading" @retry="load" />
+
     <PageHeader title="项目管理" description="跨企业协作项目的新增、承接方与进度管理">
       <template #actions>
         <ColumnController
@@ -390,7 +392,7 @@ onMounted(() => {
     <div class="page-filter-bar">
       <t-input
         v-model="query.keyword"
-        placeholder="搜索项目名称/编号"
+        placeholder="搜索项目名称/编号…"
         clearable
         style="width: 220px"
         @enter="onSearch"
@@ -552,7 +554,7 @@ onMounted(() => {
           <t-textarea
             v-model="closeForm.reason"
             :autosize="{ minRows: 3, maxRows: 5 }"
-            placeholder="请填写关闭原因（必填），将记录在项目信息中"
+            placeholder="请填写关闭原因（必填），将记录在项目信息中…"
           />
         </t-form-item>
       </t-form>

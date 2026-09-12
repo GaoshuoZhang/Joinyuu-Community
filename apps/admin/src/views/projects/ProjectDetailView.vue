@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, nextTick, onMounted, reactive, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
+import { useQueryTab } from '@/utils/navigation'
 import { MessagePlugin } from 'tdesign-vue-next'
 import type { FormProps } from 'tdesign-vue-next'
 import { ArrowLeftIcon } from 'tdesign-icons-vue-next'
@@ -13,7 +14,7 @@ const route = useRoute()
 const router = useRouter()
 const loading = ref(true)
 const project = ref<Project | null>(null)
-const tab = ref('info')
+const tab = useQueryTab('info', ['info', 'milestones'] as const)
 /* 已归档条目：隐藏全部写操作，仅保留只读内容 */
 const isArchived = computed(() => !!project.value?.deletedAt)
 
@@ -35,16 +36,6 @@ function canGoUndertaker(u: ProjectUndertaker): boolean {
   return !!u.id
 }
 
-function goUndertaker(u: ProjectUndertaker) {
-  if (u.type === 'custom' || !u.id) return
-  if (u.id.startsWith('XE')) {
-    router.push(`/external-enterprises/${u.id}`)
-  } else if (u.type === 'enterprise') {
-    router.push(`/enterprises/${u.id}`)
-  } else {
-    router.push(`/users/${u.id}`)
-  }
-}
 
 async function load() {
   loading.value = true
@@ -77,9 +68,6 @@ const milestoneCurrent = computed(() => {
   return ms.filter((m) => m.status === 'done').length
 })
 
-function goSourceDemand() {
-  if (project.value?.sourceDemandId) router.push(`/demands/${project.value.sourceDemandId}`)
-}
 
 const formVisible = ref(false)
 const formMode = ref<'create' | 'edit'>('create')
@@ -250,7 +238,7 @@ onMounted(load)
             <t-progress :percentage="project.progress" />
           </t-descriptions-item>
           <t-descriptions-item label="来源需求">
-            <t-link v-if="project.sourceDemandId" theme="primary" hover="color" @click="goSourceDemand">
+            <t-link v-if="project.sourceDemandId" theme="primary" hover="color" :href="`#/demands/${project.sourceDemandId}`">
               {{ project.sourceDemandId }} · 详情
             </t-link>
             <span v-else class="muted">社区自建</span>
@@ -266,12 +254,11 @@ onMounted(load)
               <div class="block">
                 <h4 class="block-title">承接方与占比</h4>
                 <div class="undertaker-list">
-                  <div
+                  <t-link theme="default" hover="color" :href="u.id.startsWith('XE') ? '#/external-enterprises/' + u.id : u.type === 'enterprise' ? '#/enterprises/' + u.id : '#/users/' + u.id" :disabled="!canGoUndertaker(u)"
                     v-for="u in project.undertakers"
                     :key="u.id + u.type"
                     class="undertaker-row"
                     :class="{ clickable: canGoUndertaker(u) }"
-                    @click="goUndertaker(u)"
                   >
                     <div class="ut-info">
                       <span class="ut-name">{{ u.name }}<t-tag v-if="u.id" class="id-tag" size="small" variant="light">{{ u.id }}</t-tag></span>
@@ -281,7 +268,7 @@ onMounted(load)
                       <t-progress :percentage="u.share" class="ut-bar" />
                       <span class="ut-num">{{ u.share }}%</span>
                     </div>
-                  </div>
+                  </t-link>
                 </div>
               </div>
 
@@ -358,7 +345,7 @@ onMounted(load)
             <t-textarea
               v-model="closeForm.reason"
               :autosize="{ minRows: 3, maxRows: 5 }"
-              placeholder="请填写关闭原因（必填），将记录在项目信息中"
+              placeholder="请填写关闭原因（必填），将记录在项目信息中…"
             />
           </t-form-item>
         </t-form>

@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
+import { useQueryTab } from '@/utils/navigation'
 import { MessagePlugin } from 'tdesign-vue-next'
 import { ArrowLeftIcon, EditIcon } from 'tdesign-icons-vue-next'
 import StatusTag from '@/components/StatusTag.vue'
@@ -25,7 +26,7 @@ const router = useRouter()
 const loading = ref(true)
 const enterprise = ref<Enterprise | null>(null)
 const members = ref<User[]>([])
-const tab = ref('info')
+const tab = useQueryTab('info', ['info', 'leases', 'stats', 'members', 'experience', 'showcase'] as const)
 
 const rejectVisible = ref(false)
 const rejectComment = ref('')
@@ -192,15 +193,7 @@ function memberRoleText(member: User) {
 
 /* 数据概览卡片 → 跳转对应列表并按企业 ID 自动筛选（有数据时可点击）
  * 跳转参数携带企业 ID（合作企业以名称为唯一标识），避免同名歧义 */
-function goDemands() {
-  if (!enterprise.value || !stats.value || stats.value.demandCount === 0) return
-  router.push({ path: '/demands', query: { enterprise: enterprise.value.id } })
-}
 
-function goProjects() {
-  if (!enterprise.value || !stats.value || stats.value.projectCount === 0) return
-  router.push({ path: '/projects', query: { enterprise: enterprise.value.id } })
-}
 
 /* 经验值调整 */
 async function onAdjustExperience(delta: number, reason: string) {
@@ -414,22 +407,20 @@ onMounted(() => {
           <t-tab-panel value="stats" label="数据概览">
             <div class="tab-body">
               <div class="stats-grid">
-                <div
+                <t-link theme="default" hover="color" :href="router.resolve({ path: '/demands', query: { enterprise: enterprise.id } }).href" :disabled="(stats?.demandCount ?? 0) === 0"
                   class="stat-item"
                   :class="{ clickable: (stats?.demandCount ?? 0) > 0 }"
-                  @click="goDemands"
                 >
                   <span class="stat-num">{{ stats?.demandCount ?? 0 }}</span>
                   <span class="stat-label">需求发布</span>
-                </div>
-                <div
+                </t-link>
+                <t-link theme="default" hover="color" :href="router.resolve({ path: '/projects', query: { enterprise: enterprise.id } }).href" :disabled="(stats?.projectCount ?? 0) === 0"
                   class="stat-item"
                   :class="{ clickable: (stats?.projectCount ?? 0) > 0 }"
-                  @click="goProjects"
                 >
                   <span class="stat-num">{{ stats?.projectCount ?? 0 }}</span>
                   <span class="stat-label">参与项目</span>
-                </div>
+                </t-link>
               </div>
             </div>
           </t-tab-panel>
@@ -531,7 +522,7 @@ onMounted(() => {
     >
       <t-textarea
         v-model="rejectComment"
-        placeholder="驳回原因（必填）"
+        placeholder="驳回原因（必填）…"
         :autosize="{ minRows: 3, maxRows: 5 }"
       />
     </t-dialog>

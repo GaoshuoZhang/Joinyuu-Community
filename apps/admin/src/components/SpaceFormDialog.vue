@@ -2,6 +2,7 @@
 import { nextTick, reactive, ref, watch } from 'vue'
 import { MessagePlugin } from 'tdesign-vue-next'
 import type { FormProps } from 'tdesign-vue-next'
+import { focusFirstInvalid } from '@/utils/form'
 import { createSpace, updateSpace } from '@/api/spaces'
 import { spaceTypeMap } from '@/constants/status'
 import type { Space, SpaceType } from '@/types'
@@ -92,7 +93,7 @@ const rules: FormProps['rules'] = {
 
 async function onConfirm() {
   const valid = await formRef.value.validate()
-  if (valid !== true) return
+  if (valid !== true) return focusFirstInvalid(formRef.value)
   if (!form.allDay && form.closeTime <= form.openTime) {
     MessagePlugin.error('关闭时间需晚于开放时间')
     return
@@ -138,6 +139,8 @@ function onClose() {
     :visible="visible"
     :header="mode === 'create' ? '新增公共空间' : '编辑公共空间'"
     width="620px"
+    :close-on-overlay-click="false"
+    :close-on-esc-keydown="false"
     @close="onClose"
   >
     <template #footer>
@@ -151,7 +154,7 @@ function onClose() {
     <t-form ref="formRef" :data="form" :rules="rules" label-align="top">
       <div class="form-row">
         <t-form-item label="空间名称" name="name">
-          <t-input clearable v-model="form.name" placeholder="如 共享会议室 C" />
+          <t-input clearable v-model="form.name" placeholder="如 共享会议室 C…" />
         </t-form-item>
         <t-form-item label="空间类型" name="type">
           <t-select clearable v-model="form.type" :options="typeOptions" />
@@ -162,7 +165,7 @@ function onClose() {
           <t-input-number v-model="form.capacity" :min="1" theme="column" style="width: 100%" />
         </t-form-item>
         <t-form-item label="位置" name="location">
-          <t-input clearable v-model="form.location" placeholder="如 岛屿中心 2F" />
+          <t-input clearable v-model="form.location" placeholder="如 岛屿中心 2F…" />
         </t-form-item>
       </div>
       <div class="form-row">
@@ -199,14 +202,14 @@ function onClose() {
         <t-tag-input
           v-model="equipmentTags"
           clearable
-          placeholder="输入设备名后回车新增，如 投影仪、白板"
+          placeholder="输入设备名后回车新增，如 投影仪、白板…"
         />
       </t-form-item>
       <t-form-item label="空间说明" name="description">
         <t-textarea
           v-model="form.description"
           :autosize="{ minRows: 3, maxRows: 6 }"
-          placeholder="适用场景与使用说明"
+          placeholder="适用场景与使用说明…"
         />
       </t-form-item>
     </t-form>

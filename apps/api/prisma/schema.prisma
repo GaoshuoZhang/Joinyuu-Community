@@ -26,18 +26,25 @@ model AdminUser {
   name         String   @db.VarChar(64)
   status       String   @default("active") @db.VarChar(16) // active | disabled
   lastLoginAt  String?  @db.VarChar(16)
+  /** 密码最近修改时间（密码周期策略用；YYYY-MM-DD HH:mm） */
+  passwordUpdatedAt String? @db.VarChar(16)
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
+  roles        AdminUserRole[]
 }
 
 // RBAC 角色（R1）
 model AdminRole {
-  id          String @id @db.VarChar(16)
-  code        String @unique @db.VarChar(32)
-  name        String @db.VarChar(64)
-  description String @db.VarChar(255)
-  sort        Int    @default(0)
-  createdAt   String @db.VarChar(16)
+  id          String   @id @db.VarChar(16)
+  code        String   @unique @db.VarChar(32)
+  name        String   @db.VarChar(64)
+  description String   @db.VarChar(255)
+  sort        Int      @default(0)
+  /** 数据范围（域维度）：members|biz|space|contents|mall|rules|system；空数组=全部 */
+  dataScope   String[] @default([])
+  createdAt   String   @db.VarChar(16)
+  userRoles   AdminUserRole[]
+  permissions AdminRolePermission[]
 }
 
 // RBAC 权限点目录（R1）：code 为菜单路径或 perm:xxx 按钮码
@@ -54,16 +61,19 @@ model AdminUserRole {
   id          Int    @id @default(autoincrement())
   adminUserId Int
   roleId      String @db.VarChar(16)
+  adminUser   AdminUser @relation(fields: [adminUserId], references: [id], onDelete: Cascade)
+  role        AdminRole @relation(fields: [roleId], references: [id], onDelete: Cascade)
 
   @@unique([adminUserId, roleId])
   @@index([roleId])
 }
 
-// 角色-权限点关联（R1）
+// 角色-权限点关联（R1）。permissionCode 不设外键：'*' 为超管标记，不在目录表中
 model AdminRolePermission {
   id             Int    @id @default(autoincrement())
   roleId         String @db.VarChar(16)
   permissionCode String @db.VarChar(64)
+  role           AdminRole @relation(fields: [roleId], references: [id], onDelete: Cascade)
 
   @@unique([roleId, permissionCode])
   @@index([permissionCode])
@@ -737,6 +747,18 @@ model SystemConfig {
    * 上传文件大小限制（MB），素材库与富文本图片上传共用
    */
   uploadMaxSizeMb       Int     @default(10)
+  /**
+   * 密码有效期（天）：0=不启用；超期登录后仅允许修改密码
+   */
+  passwordExpireDays    Int     @default(90)
+  /** MinIO 对象存储配置（R4）：未启用时使用本地磁盘驱动 */
+  minioEnabled          Boolean @default(false)
+  minioEndpoint         String  @default("") @db.VarChar(255)
+  minioPort             Int     @default(9000)
+  minioUseSsl           Boolean @default(false)
+  minioAccessKey        String  @default("") @db.VarChar(128)
+  minioSecretKey        String  @default("") @db.VarChar(128)
+  minioBucket           String  @default("joinyuu") @db.VarChar(64)
   updatedAt             String  @db.VarChar(16)
   updatedBy             String  @db.VarChar(64)
 }

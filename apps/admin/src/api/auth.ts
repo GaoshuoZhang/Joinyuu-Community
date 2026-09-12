@@ -4,18 +4,24 @@ import { httpGet, httpPost } from './http'
  * POST /api/admin/auth/login
  * 入参 { username, password }，返回 { code: 0, data: { token, name } }
  * 登录响应返回 permissions（角色权限集合；无角色管理员为空数组，前端不再兜底全量）
+ * 与 dataScope（数据范围域集合；空数组 = 不限制全部域）
  * 演示账号：admin / admin123
  */
+export interface LoginResult {
+  token: string
+  name: string
+  permissions?: string[]
+  dataScope?: string[]
+  /** 密码已过期：登录成功但仅允许修改密码；前端应跳转改密页 */
+  passwordExpired?: boolean
+}
+
 export async function login(
   username: string,
   password: string,
   captcha?: { captchaId: string; captchaCode: string },
-): Promise<{ token: string; name: string; permissions?: string[] }> {
-  return httpPost<{ token: string; name: string; permissions?: string[] }>('/auth/login', {
-    username,
-    password,
-    ...(captcha ? captcha : {}),
-  })
+): Promise<LoginResult> {
+  return httpPost<LoginResult>('/auth/login', { username, password, ...(captcha ? captcha : {}) })
 }
 
 /* POST /api/admin/auth/logout */
@@ -59,4 +65,9 @@ export async function fetchSessions(): Promise<AdminSession[]> {
 /** POST /api/admin/auth/sessions/:jti/kick — 强制下线（黑名单 + 删会话） */
 export async function kickSession(jti: string): Promise<{ code: number }> {
   return httpPost<{ code: number }>(`/auth/sessions/${jti}/kick`)
+}
+
+/** POST /api/admin/auth/sessions/kick-all — 一键强制下线其余全部会话（当前会话保留） */
+export async function kickAllSessions(): Promise<{ code: number; kicked: number }> {
+  return httpPost<{ code: number; kicked: number }>('/auth/sessions/kick-all')
 }

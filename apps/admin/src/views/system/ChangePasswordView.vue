@@ -3,6 +3,7 @@ import { reactive, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { MessagePlugin } from 'tdesign-vue-next'
 import type { FormProps } from 'tdesign-vue-next'
+import { focusFirstInvalid } from '@/utils/form'
 import PageHeader from '@/components/PageHeader.vue'
 import { changePassword } from '@/api/auth'
 import { useAuthStore } from '@/stores/auth'
@@ -38,7 +39,7 @@ const rules: FormProps['rules'] = {
 
 async function onSubmit() {
   const valid = await formRef.value.validate()
-  if (valid !== true) return
+  if (valid !== true) return focusFirstInvalid(formRef.value)
   saving.value = true
   try {
     await changePassword(form.oldPassword, form.newPassword)
@@ -61,13 +62,13 @@ async function onSubmit() {
     <div class="page-card form-card">
       <t-form ref="formRef" :data="form" :rules="rules" label-align="left" label-width="90px" @submit="onSubmit">
         <t-form-item label="原密码" name="oldPassword">
-          <t-input v-model="form.oldPassword" type="password" placeholder="当前登录密码" style="width: 320px" />
+          <t-input v-model="form.oldPassword" type="password" name="current-password" autocomplete="current-password" placeholder="当前登录密码…" style="width: 320px" />
         </t-form-item>
         <t-form-item label="新密码" name="newPassword">
-          <t-input v-model="form.newPassword" type="password" placeholder="至少 8 位，包含字母与数字" style="width: 320px" />
+          <t-input v-model="form.newPassword" type="password" name="new-password" autocomplete="new-password" placeholder="至少 8 位，包含字母与数字…" style="width: 320px" />
         </t-form-item>
         <t-form-item label="确认新密码" name="confirm">
-          <t-input v-model="form.confirm" type="password" placeholder="再次输入新密码" style="width: 320px" />
+          <t-input v-model="form.confirm" type="password" name="confirm-password" autocomplete="new-password" placeholder="再次输入新密码…" style="width: 320px" />
         </t-form-item>
         <t-form-item>
           <t-button theme="primary" type="submit" :loading="saving">确认修改</t-button>

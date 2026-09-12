@@ -44,7 +44,7 @@ const points = computed(() => props.data.map((v, i) => `${xAt(i)},${yAt(v)}`).jo
 const areaPath = computed(() => {
   if (!props.data.length) return ''
   const first = props.data.map((_, i) => xAt(i))[0]
-  const last = props.data.map((_, i) => xAt(i)).at(-1) as number
+  const last = props.data.length ? xAt(props.data.length - 1) : PAD.left
   const bottom = PAD.top + innerH.value
   return `M ${first} ${bottom} L ${points.value.replace(/ /g, ' L ')} L ${last} ${bottom} Z`
 })
@@ -80,6 +80,19 @@ function onMove(e: MouseEvent) {
   hoverIndex.value = Math.max(0, Math.min(props.data.length - 1, idx))
 }
 
+function onKeydown(e: KeyboardEvent) {
+  if (!props.data.length) return
+  if (e.key !== 'ArrowLeft' && e.key !== 'ArrowRight') return
+  e.preventDefault()
+  const current = hoverIndex.value ?? (e.key === 'ArrowRight' ? -1 : props.data.length)
+  hoverIndex.value = Math.max(0, Math.min(props.data.length - 1, current + (e.key === 'ArrowRight' ? 1 : -1)))
+}
+
+const accessibleSummary = computed(() => {
+  if (!props.data.length) return '暂无趋势数据'
+  return `趋势图，共 ${props.data.length} 个数据点，最小值 ${Math.min(...props.data).toLocaleString('zh-CN')}，最大值 ${Math.max(...props.data).toLocaleString('zh-CN')}`
+})
+
 const hoverInfo = computed(() => {
   const i = hoverIndex.value
   if (i === null || props.data[i] === undefined) return null
@@ -99,8 +112,12 @@ const hoverInfo = computed(() => {
       <svg
         :viewBox="`0 0 ${W} ${height}`"
         :style="{ width: '100%', height: `${height}px`, display: 'block' }"
+        role="img"
+        tabindex="0"
+        :aria-label="accessibleSummary"
         @mousemove="onMove"
         @mouseleave="hoverIndex = null"
+        @keydown="onKeydown"
       >
         <defs>
           <linearGradient :id="fillId" x1="0" y1="0" x2="0" y2="1">
@@ -113,7 +130,7 @@ const hoverInfo = computed(() => {
         <g v-for="t in ticks" :key="t.y">
           <line :x1="PAD.left" :x2="W - PAD.right" :y1="t.y" :y2="t.y" stroke="var(--td-component-stroke)" stroke-width="1" />
           <text :x="PAD.left - 8" :y="t.y + 4" text-anchor="end" class="axis-text">
-            {{ Math.round(t.v).toLocaleString() }}
+            {{ Math.round(t.v).toLocaleString('zh-CN') }}
           </text>
         </g>
 
@@ -136,7 +153,7 @@ const hoverInfo = computed(() => {
             <rect width="122" height="40" rx="6" fill="var(--td-bg-color-container)" stroke="var(--td-component-border)" />
             <text :x="10" :y="16" class="tip-label">{{ hoverInfo.label }}</text>
             <text :x="10" :y="33" class="tip-value" :fill="props.color">
-              {{ hoverInfo.value.toLocaleString() }}{{ unit }}
+              {{ hoverInfo.value.toLocaleString('zh-CN') }}{{ unit }}
             </text>
           </g>
         </g>

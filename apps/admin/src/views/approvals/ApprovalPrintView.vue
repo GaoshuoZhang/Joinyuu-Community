@@ -46,7 +46,7 @@ onMounted(async () => {
       <t-button theme="primary" @click="doPrint">打印</t-button>
     </div>
 
-    <div v-loading="loading" class="paper">
+    <t-loading :loading="loading" size="small" class="paper">
       <template v-if="!application">
         <div class="empty-tip">未找到审核记录（{{ route.params.id }}）</div>
       </template>
@@ -113,7 +113,7 @@ onMounted(async () => {
 
         <p class="doc-foot">本单据由聚屿社区管理后台生成，仅供存档。</p>
       </template>
-    </div>
+    </t-loading>
   </div>
 </template>
 

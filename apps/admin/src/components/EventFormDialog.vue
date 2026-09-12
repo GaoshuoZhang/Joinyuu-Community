@@ -1,13 +1,15 @@
 <script setup lang="ts">
-import { nextTick, onMounted, reactive, ref, watch } from 'vue'
+import { defineAsyncComponent, nextTick, onMounted, reactive, ref, watch } from 'vue'
 import { MessagePlugin } from 'tdesign-vue-next'
 import type { FormProps } from 'tdesign-vue-next'
+import { focusFirstInvalid } from '@/utils/form'
 import { createEvent, updateEvent, type EventPayload } from '@/api/events'
 import { fetchPointsRules } from '@/api/mall'
 import { dictFallback, fetchDictEntries } from '@/api/dicts'
 import { userLevelOptions, visibilityIdentityOptions } from '@/constants/identity'
-import RichEditor from '@/components/RichEditor.vue'
 import type { CommunityEvent } from '@/types'
+
+const RichEditor = defineAsyncComponent(() => import('@/components/RichEditor.vue'))
 
 /* 活动新增/编辑弹窗：基本信息 + 报名截止时间
  * + 可见范围/等级 + 可报名范围/等级（默认与可见一致，可单独调整）+ 报名是否需审核
@@ -178,7 +180,7 @@ function parseTags(): string[] {
 
 async function onConfirm() {
   const valid = await formRef.value.validate()
-  if (valid !== true) return
+  if (valid !== true) return focusFirstInvalid(formRef.value)
   submitting.value = true
   try {
     const payload: EventPayload = {
@@ -228,6 +230,8 @@ function onClose() {
     :header="mode === 'create' ? '新增活动' : '编辑活动'"
     width="880px"
     lazy
+    :close-on-overlay-click="false"
+    :close-on-esc-keydown="false"
     @close="onClose"
   >
     <template #footer>
@@ -240,7 +244,7 @@ function onClose() {
     </template>
     <t-form ref="formRef" :data="form" :rules="rules" label-align="top">
       <t-form-item label="活动标题" name="title">
-        <t-input clearable v-model="form.title" placeholder="请输入活动标题" />
+        <t-input clearable v-model="form.title" placeholder="请输入活动标题…" />
       </t-form-item>
       <div class="form-row">
         <t-form-item label="活动类型" name="type">
@@ -274,24 +278,24 @@ function onClose() {
           valueType="YYYY-MM-DD HH:mm"
           enable-time-picker
           clearable
-          placeholder="留空 = 不限，活动开始前均可报名"
+          placeholder="留空 = 不限，活动开始前均可报名…"
           style="width: 100%"
         />
       </t-form-item>
       <div class="form-row">
         <t-form-item label="地点" name="location">
-          <t-input clearable v-model="form.location" placeholder="如 聚屿路演厅" />
+          <t-input clearable v-model="form.location" placeholder="如 聚屿路演厅…" />
         </t-form-item>
         <t-form-item label="主办方" name="host">
-          <t-input clearable v-model="form.host" placeholder="如 聚屿社区" />
+          <t-input clearable v-model="form.host" placeholder="如 聚屿社区…" />
         </t-form-item>
       </div>
       <div class="form-row">
         <t-form-item label="主讲嘉宾" name="speaker">
-          <t-input clearable v-model="form.speaker" placeholder="无则留空" />
+          <t-input clearable v-model="form.speaker" placeholder="无则留空…" />
         </t-form-item>
         <t-form-item label="标签" name="tags">
-          <t-input clearable v-model="tagsText" placeholder="多个标签用逗号分隔" />
+          <t-input clearable v-model="tagsText" placeholder="多个标签用逗号分隔…" />
         </t-form-item>
       </div>
 
@@ -307,11 +311,11 @@ function onClose() {
             multiple
             clearable
             :options="visibilityIdentityOptions"
-            placeholder="不限"
+            placeholder="不限…"
           />
         </t-form-item>
         <t-form-item label="等级" name="visibilityLevels">
-          <t-select v-model="form.visibilityLevels" multiple clearable :options="userLevelOptions" placeholder="不限" />
+          <t-select v-model="form.visibilityLevels" multiple clearable :options="userLevelOptions" placeholder="不限…" />
         </t-form-item>
       </div>
 
@@ -330,11 +334,11 @@ function onClose() {
             multiple
             clearable
             :options="visibilityIdentityOptions"
-            placeholder="不限"
+            placeholder="不限…"
           />
         </t-form-item>
         <t-form-item label="等级" name="enrollmentLevels">
-          <t-select v-model="form.enrollmentLevels" multiple clearable :options="userLevelOptions" placeholder="不限" />
+          <t-select v-model="form.enrollmentLevels" multiple clearable :options="userLevelOptions" placeholder="不限…" />
         </t-form-item>
       </div>
 
@@ -364,7 +368,7 @@ function onClose() {
       </div>
 
       <t-form-item label="活动简介" name="description">
-        <RichEditor v-model="form.description" placeholder="活动详细说明，支持图文排版" :min-height="320" />
+        <RichEditor v-model="form.description" placeholder="活动详细说明，支持图文排版…" :min-height="320" />
       </t-form-item>
     </t-form>
   </t-dialog>

@@ -7,6 +7,7 @@ import PageHeader from '@/components/PageHeader.vue'
 import StatusTag from '@/components/StatusTag.vue'
 import LeaseFormDialog from '@/components/LeaseFormDialog.vue'
 import { archiveLease, deriveLeaseStatus, fetchLease, fetchWorkstations, terminateLease } from '@/api/workstations'
+import { formatDateOnly } from '@/utils/format'
 import type { Lease, Workstation } from '@/types'
 
 /* 租赁详情页：只读展示租约全量信息 + 办公位 + 终止时间，
@@ -39,13 +40,6 @@ function goBack() {
 }
 
 /* 租赁方跳转：企业 → 社区企业详情；个人 → 用户详情（自定义不跳） */
-function goRenter() {
-  const l = lease.value
-  if (!l) return
-  if ((l.renterType ?? 'custom') === 'enterprise') router.push(`/enterprises/${l.enterpriseId}`)
-  else if ((l.renterType ?? 'custom') === 'individual') router.push(`/users/${l.enterpriseId}`)
-}
-
 function openPrint() {
   if (!lease.value) return
   window.open(router.resolve({ path: `/prints/lease/${lease.value.id}` }).href, '_blank', 'noopener')
@@ -109,14 +103,15 @@ onMounted(async () => {
 </script>
 
 <template>
-  <div class="lease-detail">
+  <div class="lease-detail page-fade-in">
+    <t-button variant="text" theme="default" class="back-btn" @click="goBack">
+      <template #icon><ArrowLeftIcon /></template>
+      返回
+    </t-button>
+
     <PageHeader :title="`租赁详情 · ${lease?.id ?? ''}`" description="租约基础信息、办公位归属与联系人">
       <template #actions>
         <t-tag v-if="isArchived" theme="default" variant="light">已归档</t-tag>
-        <t-button variant="outline" @click="goBack">
-          <template #icon><ArrowLeftIcon /></template>
-          返回列表
-        </t-button>
         <t-button v-if="lease" @click="openPrint">打印租约</t-button>
         <template v-if="lease && !isArchived">
           <t-button v-if="lease.status === 'active'" variant="outline" @click="openEdit">
@@ -148,7 +143,7 @@ onMounted(async () => {
         <div class="head-row">
           <StatusTag entity="lease" :value="viewStatus" />
           <span v-if="viewStatus === 'terminated' && lease.terminatedAt" class="terminated-at">
-            终止于 {{ lease.terminatedAt.slice(0, 10) }}
+            终止于 {{ formatDateOnly(lease.terminatedAt) }}
           </span>
         </div>
 
@@ -159,7 +154,7 @@ onMounted(async () => {
               v-if="(lease.renterType ?? 'custom') !== 'custom'"
               theme="primary"
               hover="color"
-              @click="goRenter"
+              :href="router.resolve((lease.renterType === 'enterprise' ? '/enterprises/' : '/users/') + lease.enterpriseId).href"
             >
               {{ lease.enterpriseName }}<t-tag v-if="lease.enterpriseId" class="id-tag" size="small" variant="light">{{ lease.enterpriseId }}</t-tag>
             </t-link>
@@ -200,6 +195,10 @@ onMounted(async () => {
 </template>
 
 <style scoped>
+.back-btn {
+  margin-bottom: 12px;
+}
+
 .head-row {
   display: flex;
   align-items: center;

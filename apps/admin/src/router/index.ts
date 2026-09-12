@@ -1,6 +1,7 @@
 import { createRouter, createWebHashHistory } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
 import { getAllPermissionCodes } from '@/constants/permissions'
+import { scopeAllowsGroup } from '@/constants/scopes'
 
 /* 权限码集合：路由守卫据此推导菜单/详情路由所需权限（与 constants/permissions 目录同步） */
 const ALL_PERMS = new Set(getAllPermissionCodes())
@@ -236,34 +237,25 @@ const router = createRouter({
           meta: { title: '系统配置', group: '系统管理' },
         },
         {
-          path: 'logs/audit',
-          component: () => import('@/views/system/AuditLogPanel.vue'),
-          meta: { title: '审计日志', group: '系统管理' },
+          path: 'system/logs',
+          component: () => import('@/views/system/LogAuditView.vue'),
+          meta: { title: '日志与审计', group: '系统管理', perm: ['/logs/audit', '/logs/login'] },
         },
+        /* 旧路径兼容：迁移到「日志与审计」「角色与账号」选项卡页 */
+        { path: 'logs/audit', redirect: '/system/logs?tab=audit' },
+        { path: 'logs/login', redirect: '/system/logs?tab=login' },
         {
-          path: 'logs/login',
-          component: () => import('@/views/system/LoginLogsPanel.vue'),
-          meta: { title: '登录日志', group: '系统管理', perm: '/logs/login' },
+          path: 'system/account',
+          component: () => import('@/views/system/AccountRoleView.vue'),
+          meta: { title: '角色与账号', group: '系统管理', perm: ['/system/admins', '/system/roles', '/system/sessions'] },
         },
-        {
-          path: 'system/roles',
-          component: () => import('@/views/system/RolePanel.vue'),
-          meta: { title: '角色权限', group: '系统管理' },
-        },
-        {
-          path: 'system/admins',
-          component: () => import('@/views/system/AdminPanel.vue'),
-          meta: { title: '管理员账号', group: '系统管理' },
-        },
+        { path: 'system/roles', redirect: '/system/account?tab=roles' },
+        { path: 'system/admins', redirect: '/system/account?tab=admins' },
+        { path: 'system/sessions', redirect: '/system/account?tab=sessions' },
         {
           path: 'system/change-password',
           component: () => import('@/views/system/ChangePasswordView.vue'),
           meta: { title: '修改密码', group: '系统管理' },
-        },
-        {
-          path: 'system/sessions',
-          component: () => import('@/views/system/SessionPanel.vue'),
-          meta: { title: '在线会话', group: '系统管理' },
         },
         {
           path: 'assets/library',
@@ -295,6 +287,7 @@ const router = createRouter({
  * 直接读 localStorage（token 唯一持久化事实源）：http.ts 收到 401 时会先清 token 再跳登录，
  * Pinia state 是启动快照无法感知，读 store 会把 /login 误重定向回 /dashboard */
 router.beforeEach((to) => {
+  document.documentElement.dataset.routeLoading = 'true'
   const logged = !!localStorage.getItem('joinyuu_admin_token')
   if (to.path !== '/login' && !logged) {
     return { path: '/login', query: to.fullPath === '/' ? {} : { redirect: to.fullPath } }
@@ -302,13 +295,23 @@ router.beforeEach((to) => {
   if (to.path === '/login' && logged) {
     return '/dashboard'
   }
-  /* RBAC：路由级权限校验（meta.perm 优先，否则按权限目录推导），无权限落地 /403 */
-  const perm = (to.meta.perm as string | undefined) ?? requiredPerm(to.path)
-  if (logged && perm) {
+  /* RBAC：路由级权限校验（meta.perm 优先，否则按权限目录推导；支持数组 any-of），无权限落地 /403 */
+  const perm = (to.meta.perm as string | string[] | undefined) ?? requiredPerm(to.path)
+  if (logged) {
     const auth = useAuthStore()
-    if (!auth.hasPerm(perm)) return { path: '/403' }
+    if (perm && !auth.hasPerm(perm)) return { path: '/403' }
+    /* 数据范围：登录页/403/打印与无 group 路由放行；范围非空且不含该域 → /403 */
+    const group = to.meta.group as string | undefined
+    if (group && !scopeAllowsGroup(auth.dataScope, auth.permissions, group)) return { path: '/403' }
   }
   return true
 })
+
+function finishRouteLoading() {
+  delete document.documentElement.dataset.routeLoading
+}
+
+router.afterEach(finishRouteLoading)
+router.onError(finishRouteLoading)
 
 export default router

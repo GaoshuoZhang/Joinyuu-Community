@@ -1,5 +1,7 @@
 <script setup lang="ts">
 import { computed, onMounted, reactive, ref } from 'vue'
+import ListErrorState from '@/components/ListErrorState.vue'
+import { useListQueryState } from '@/utils/listQuery'
 import { MessagePlugin } from 'tdesign-vue-next'
 import PageHeader from '@/components/PageHeader.vue'
 import StatusTag from '@/components/StatusTag.vue'
@@ -13,6 +15,7 @@ import type { Space, SpaceReservation } from '@/types'
  * 状态 Tab + 空间/日期筛选 + 详情抽屉（审核时间线）+ 通过/驳回意见对话框；
  * 通过时服务端校验时段冲突（已通过预约 / 已发布活动占用） */
 const loading = ref(false)
+const loadError = ref('')
 const list = ref<SpaceReservation[]>([])
 const total = ref(0)
 const spaces = ref<Space[]>([])
@@ -68,7 +71,9 @@ const pagination = computed(() => ({
 const DERIVED_STATUSES = ['approved', 'using', 'ended']
 
 async function load() {
+  syncQuery()
   loading.value = true
+  loadError.value = ''
   try {
     const apiStatus = DERIVED_STATUSES.includes(query.status) ? 'approved' : query.status
     const res = await fetchReservations({ ...query, status: apiStatus })
@@ -76,6 +81,8 @@ async function load() {
       ? res.list.filter((r) => deriveReservationStatus(r) === query.status)
       : res.list
     total.value = res.total
+  } catch (e) {
+    loadError.value = e instanceof Error ? e.message : '数据加载失败'
   } finally {
     loading.value = false
   }
@@ -232,6 +239,8 @@ async function onBulkConfirm(values: string[]) {
   }
 }
 
+const { syncQuery } = useListQueryState(query, load)
+
 onMounted(() => {
   loadSpaces()
   load()
@@ -240,6 +249,7 @@ onMounted(() => {
 
 <template>
   <div class="reservation-panel page-fade-in">
+    <ListErrorState v-if="loadError" :message="loadError" :loading="loading" @retry="load" />
     <PageHeader title="公共空间预约" description="空间预约的审核处理">
       <template #actions>
         <ColumnController
@@ -273,7 +283,7 @@ onMounted(() => {
           v-model="query.date"
           valueType="YYYY-MM-DD"
           clearable
-          placeholder="按预约日期筛选"
+          placeholder="按预约日期筛选…"
           style="width: 180px; margin-left: 24px"
           @change="onDateChange"
         />
@@ -291,7 +301,7 @@ onMounted(() => {
         :columns="visibleColumns"
         :loading="loading"
         :pagination="pagination"
-        empty="暂无符合条件的预约"
+        empty="暂无预约"
         @page-change="onPageChange"
         @row-click="({ row }) => openDetail(row)"
       >
@@ -397,7 +407,7 @@ onMounted(() => {
       </p>
       <t-textarea
         v-model="comment"
-        placeholder="审核意见（驳回时建议填写原因）"
+        placeholder="审核意见（驳回时建议填写原因）…"
         :autosize="{ minRows: 3, maxRows: 5 }"
       />
     </t-dialog>

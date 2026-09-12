@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import { useListQueryState } from '@/utils/listQuery'
+import ListErrorState from '@/components/ListErrorState.vue'
 import { computed, onMounted, ref } from 'vue'
 import { MessagePlugin } from 'tdesign-vue-next'
 import { DeleteIcon, UploadIcon } from 'tdesign-icons-vue-next'
@@ -7,6 +9,7 @@ import { deleteAsset, fetchAssets, replaceAsset, uploadAsset, type MallAsset } f
 
 /* 素材库：上传/网格列表/来源筛选/替换/删除/复制 URL（真实接口 /api/admin/assets）。 */
 const loading = ref(false)
+const loadError = ref('')
 const uploading = ref(false)
 const assets = ref<MallAsset[]>([])
 const activeSource = ref('')
@@ -48,8 +51,9 @@ async function load(silent = false) {
   if (!silent) loading.value = true
   try {
     assets.value = await fetchAssets()
+    loadError.value = ''
   } catch (e) {
-    MessagePlugin.error(e instanceof Error ? e.message : '数据加载失败')
+    loadError.value = e instanceof Error ? e.message : '数据加载失败'
   } finally {
     loading.value = false
   }
@@ -142,11 +146,14 @@ async function onDelete(row: MallAsset) {
   }
 }
 
+useListQueryState({}, undefined, { refs: { source: activeSource, keyword: search }, live: true })
+
 onMounted(load)
 </script>
 
 <template>
   <div class="asset-library page-fade-in">
+    <ListErrorState v-if="loadError" :message="loadError" :loading="loading" @retry="() => load()" />
     <PageHeader title="素材库" description="集中管理上传的图片素材，供商品、活动、文章等业务场景引用">
       <template #actions>
         <input ref="fileInput" type="file" accept="image/*" class="hidden-file" @change="onFileChange" />
@@ -158,17 +165,17 @@ onMounted(load)
       </template>
     </PageHeader>
 
-    <div class="filter-bar">
+    <div class="page-filter-bar">
       <t-select v-model="activeSource" :options="sourceOptions" style="width: 140px" />
-      <t-input v-model="search" clearable placeholder="按文件名搜索" style="width: 240px" />
+      <t-input v-model="search" clearable placeholder="按文件名搜索…" style="width: 240px" />
       <t-tag variant="light" theme="primary">{{ filtered.length }} 个素材 · 共 {{ totalSize }}</t-tag>
     </div>
 
-    <div v-loading="loading" class="asset-grid">
+    <t-loading :loading="loading" size="small" class="asset-grid">
       <div v-if="!filtered.length" class="asset-empty">暂无素材，点击右上角「上传图片」新增</div>
       <div v-for="a in filtered" :key="a.id" class="asset-card">
         <div class="asset-thumb-wrap">
-          <img class="asset-thumb" :src="a.url" :alt="a.fileName" />
+          <img class="asset-thumb" :src="a.url" :alt="a.fileName" width="320" height="120" loading="lazy" decoding="async" />
           <t-tag class="asset-badge" size="small" variant="light" theme="primary">{{ sourceText(a) }}</t-tag>
         </div>
         <div class="asset-info">
@@ -189,18 +196,11 @@ onMounted(load)
           </t-popconfirm>
         </div>
       </div>
-    </div>
+    </t-loading>
   </div>
 </template>
 
 <style scoped>
-.filter-bar {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  margin-bottom: 16px;
-}
-
 .hidden-file {
   display: none;
 }

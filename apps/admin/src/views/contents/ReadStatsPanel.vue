@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import ListErrorState from '@/components/ListErrorState.vue'
 import { computed, onMounted, ref } from 'vue'
 import StatCard from '@/components/StatCard.vue'
 import PageHeader from '@/components/PageHeader.vue'
@@ -8,6 +9,7 @@ import type { Article } from '@/types'
 
 /* 阅读统计面板：已发布（含已下架）文章的阅读数据汇总与排行；数据与文章列表同源 */
 const loading = ref(false)
+const loadError = ref('')
 const list = ref<Article[]>([])
 
 const published = computed(() => list.value.filter((a) => a.publishedAt))
@@ -40,6 +42,9 @@ async function load() {
   try {
     const res = await fetchArticles({ page: 1, pageSize: 999, sortBy: 'views', sortOrder: 'descend' })
     list.value = res.list
+    loadError.value = ''
+  } catch (e) {
+    loadError.value = e instanceof Error ? e.message : '数据加载失败'
   } finally {
     loading.value = false
   }
@@ -50,6 +55,7 @@ onMounted(load)
 
 <template>
   <div class="read-stats-panel page-fade-in">
+    <ListErrorState v-if="loadError" :message="loadError" :loading="loading" @retry="() => load()" />
     <PageHeader title="阅读统计" description="文章阅读量汇总与排行">
       <template #actions>
         <ColumnController
@@ -75,7 +81,7 @@ onMounted(load)
         :data="ranked"
         :columns="visibleColumns"
         :loading="loading"
-        empty="暂无文章数据"
+        empty="暂无文章"
       >
         <template #rank="{ row }">
           <span :class="['rank-badge', { 'is-top': ranked.indexOf(row) < 3 }]">

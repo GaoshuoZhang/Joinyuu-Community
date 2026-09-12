@@ -114,7 +114,7 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKeydown))
     :overlay-style="{ padding: '0' }"
     :overlay-inner-style="{ background: 'transparent', boxShadow: 'none', borderRadius: '0', padding: '0' }"
   >
-    <t-button variant="outline" :class="{ 'is-active': visible }" title="列设置">
+    <t-button variant="outline" :class="{ 'is-active': visible }" title="列设置" aria-label="列设置">
       <template #icon><SettingIcon /></template>
     </t-button>
     <template #content>
@@ -133,8 +133,8 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKeydown))
               {{ c.title }}
             </t-checkbox>
             <div class="col-move">
-              <ChevronUpIcon class="col-move-btn" @click="move(c.key, -1)" />
-              <ChevronDownIcon class="col-move-btn" @click="move(c.key, 1)" />
+              <ChevronUpIcon class="col-move-btn" role="button" tabindex="0" :aria-label="`上移${c.title}`" @click="move(c.key, -1)" @keydown.enter.space.prevent="move(c.key, -1)" />
+              <ChevronDownIcon class="col-move-btn" role="button" tabindex="0" :aria-label="`下移${c.title}`" @click="move(c.key, 1)" @keydown.enter.space.prevent="move(c.key, 1)" />
             </div>
           </div>
         </div>
@@ -170,6 +170,7 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKeydown))
 .col-list {
   max-height: 260px;
   overflow-y: auto;
+  overscroll-behavior: contain;
 }
 
 .col-row {

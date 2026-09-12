@@ -1,11 +1,13 @@
 <script setup lang="ts">
-import { nextTick, reactive, ref, watch } from 'vue'
+import { defineAsyncComponent, nextTick, reactive, ref, watch } from 'vue'
 import { MessagePlugin } from 'tdesign-vue-next'
 import type { FormProps } from 'tdesign-vue-next'
+import { focusFirstInvalid } from '@/utils/form'
 import { createArticle, fetchArticleColumns, updateArticle } from '@/api/contents'
 import { fetchPublisherOptions } from '@/api/demands'
-import RichEditor from '@/components/RichEditor.vue'
 import type { Article, ArticleChannel } from '@/types'
+
+const RichEditor = defineAsyncComponent(() => import('@/components/RichEditor.vue'))
 
 /* 文章新增/编辑弹窗（资讯发布与投稿编辑共用）：
  * - channel=official（资讯发布）：新增即「待发布」；作者可选，选项同「新增需求」的需求方（注册个人用户/企业）
@@ -141,7 +143,7 @@ function channelAuthorName(): string | undefined {
 
 async function onConfirm() {
   const valid = await formRef.value.validate()
-  if (valid !== true) return
+  if (valid !== true) return focusFirstInvalid(formRef.value)
   submitting.value = true
   try {
     const payload = {
@@ -188,6 +190,8 @@ function onClose() {
     :header="mode === 'create' ? (channel === 'official' ? '发布资讯' : '新增投稿') : '编辑文章'"
     width="880px"
     lazy
+    :close-on-overlay-click="false"
+    :close-on-esc-keydown="false"
     @close="onClose"
   >
     <template #footer>
@@ -199,11 +203,11 @@ function onClose() {
 
     <t-form ref="formRef" :data="form" :rules="rules" label-align="top">
       <t-form-item label="文章标题" name="title">
-        <t-input v-model="form.title" clearable placeholder="请输入文章标题" />
+        <t-input v-model="form.title" clearable placeholder="请输入文章标题…" />
       </t-form-item>
       <div class="form-row">
         <t-form-item label="所属栏目" name="columnId">
-          <t-select v-model="form.columnId" clearable :options="columnOptions" placeholder="选择栏目" />
+          <t-select v-model="form.columnId" clearable :options="columnOptions" placeholder="选择栏目…" />
         </t-form-item>
         <t-form-item v-if="channel === 'official'" label="作者" name="authorValue">
           <t-select
@@ -211,7 +215,7 @@ function onClose() {
             :options="authorOptions"
             filterable
             clearable
-            placeholder="选择已注册的个人用户/企业"
+            placeholder="选择已注册的个人用户/企业…"
           />
         </t-form-item>
         <t-form-item v-else-if="channel === 'submitted' && article" label="作者">
@@ -222,14 +226,14 @@ function onClose() {
         <t-textarea
           v-model="form.summary"
           :autosize="{ minRows: 2, maxRows: 4 }"
-          placeholder="文章摘要，列表与客户端卡片展示用"
+          placeholder="文章摘要，列表与客户端卡片展示用…"
         />
       </t-form-item>
       <t-form-item label="正文内容" name="content">
-        <RichEditor v-model="form.content" placeholder="请输入正文内容，支持图文排版" :min-height="320" />
+        <RichEditor v-model="form.content" placeholder="请输入正文内容，支持图文排版…" :min-height="320" />
       </t-form-item>
       <t-form-item label="标签" name="tags">
-        <t-input v-model="tagsText" placeholder="多个标签用逗号分隔" />
+        <t-input v-model="tagsText" placeholder="多个标签用逗号分隔…" />
       </t-form-item>
     </t-form>
   </t-dialog>

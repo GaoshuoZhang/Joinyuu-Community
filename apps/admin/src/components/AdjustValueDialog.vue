@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { reactive, ref, watch } from 'vue'
+import { ref, watch } from 'vue'
 import { MessagePlugin } from 'tdesign-vue-next'
 
 /* 数值调整弹窗（经验值/积分共用）：方向 + 数量 + 事由，校验后交由父组件调 API */
@@ -81,7 +81,7 @@ function onClose() {
       <t-form-item label="调整事由">
         <t-textarea
           v-model="reason"
-          placeholder="必填，如「承接项目结项奖励」「违规扣减」"
+          placeholder="必填，如「承接项目结项奖励」「违规扣减」…"
           :autosize="{ minRows: 2, maxRows: 4 }"
         />
       </t-form-item>

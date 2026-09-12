@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import ListErrorState from '@/components/ListErrorState.vue'
 import { computed, onMounted, ref } from 'vue'
 import PageHeader from '@/components/PageHeader.vue'
 import StatCard from '@/components/StatCard.vue'
@@ -8,6 +9,7 @@ import type { PointsRecord } from '@/types'
 
 /* 积分发放记录面板：仅展示系统按积分规则自动发放的记录（手动调整/兑换扣减不在此列） */
 const loading = ref(false)
+const loadError = ref('')
 const list = ref<PointsRecord[]>([])
 const userLabels = ref<Record<string, string>>({})
 
@@ -39,6 +41,9 @@ async function load() {
     const map: Record<string, string> = {}
     for (const o of opts) map[o.value] = o.label
     userLabels.value = map
+    loadError.value = ''
+  } catch (e) {
+    loadError.value = e instanceof Error ? e.message : '数据加载失败'
   } finally {
     loading.value = false
   }
@@ -49,6 +54,7 @@ onMounted(load)
 
 <template>
   <div class="ledger-panel page-fade-in">
+    <ListErrorState v-if="loadError" :message="loadError" :loading="loading" @retry="() => load()" />
     <PageHeader title="积分发放记录" description="系统按积分规则自动发放的积分记录（发放自动，扣除为管理员手动调整）" />
 
     <div class="stat-row">

@@ -1,13 +1,15 @@
 <script setup lang="ts">
-import { nextTick, onMounted, reactive, ref, watch } from 'vue'
+import { defineAsyncComponent, nextTick, onMounted, reactive, ref, watch } from 'vue'
 import { MessagePlugin } from 'tdesign-vue-next'
 import type { FormProps } from 'tdesign-vue-next'
+import { focusFirstInvalid } from '@/utils/form'
 import { createGoods, updateGoods } from '@/api/mall'
 import { fetchDictEntries } from '@/api/dicts'
 import { goodsCategoryMap, isPhysicalCategory } from '@/constants/status'
 import { userLevelOptions, visibilityIdentityOptions } from '@/constants/identity'
-import RichEditor from '@/components/RichEditor.vue'
 import type { MallGoods, GoodsCategory } from '@/types'
+
+const RichEditor = defineAsyncComponent(() => import('@/components/RichEditor.vue'))
 
 /* 商品新增/编辑弹窗：新增即下架（status=off，由列表操作上架）；编辑不影响已有兑换订单；
  * 实物商品配置发货方式（自提/邮寄），并可自定义可见范围与可下单范围 */
@@ -117,7 +119,7 @@ const rules: FormProps['rules'] = {
 
 async function onConfirm() {
   const valid = await formRef.value.validate()
-  if (valid !== true) return
+  if (valid !== true) return focusFirstInvalid(formRef.value)
   const physical = isPhysicalCategory(form.category)
   if (physical && form.shippingMethods.includes('pickup') && !form.pickupAddress.trim()) {
     MessagePlugin.warning('请填写自提地址')
@@ -165,6 +167,9 @@ function onClose() {
     :visible="visible"
     :header="mode === 'create' ? '新增商品' : '编辑商品'"
     width="560px"
+    lazy
+    :close-on-overlay-click="false"
+    :close-on-esc-keydown="false"
     @close="onClose"
   >
     <template #footer>
@@ -177,7 +182,7 @@ function onClose() {
     </template>
     <t-form ref="formRef" :data="form" :rules="rules" label-align="top">
       <t-form-item label="商品名称" name="name">
-        <t-input clearable v-model="form.name" placeholder="请输入商品名称" />
+        <t-input clearable v-model="form.name" placeholder="请输入商品名称…" />
       </t-form-item>
       <div class="form-row">
         <t-form-item label="商品类型" name="category">
@@ -199,7 +204,7 @@ function onClose() {
             multiple
             clearable
             :options="shippingMethodOptions"
-            placeholder="请选择发货方式"
+            placeholder="请选择发货方式…"
           />
         </t-form-item>
         <t-form-item
@@ -207,7 +212,7 @@ function onClose() {
           label="自提地址"
           name="pickupAddress"
         >
-          <t-input clearable v-model="form.pickupAddress" placeholder="请输入自提地址" />
+          <t-input clearable v-model="form.pickupAddress" placeholder="请输入自提地址…" />
         </t-form-item>
         <t-form-item
           v-if="form.shippingMethods.includes('delivery')"
@@ -232,11 +237,11 @@ function onClose() {
             multiple
             clearable
             :options="visibilityIdentityOptions"
-            placeholder="不限"
+            placeholder="不限…"
           />
         </t-form-item>
         <t-form-item label="等级" name="visibilityLevels">
-          <t-select v-model="form.visibilityLevels" multiple clearable :options="userLevelOptions" placeholder="不限" />
+          <t-select v-model="form.visibilityLevels" multiple clearable :options="userLevelOptions" placeholder="不限…" />
         </t-form-item>
       </div>
 
@@ -262,16 +267,16 @@ function onClose() {
             multiple
             clearable
             :options="visibilityIdentityOptions"
-            placeholder="不限"
+            placeholder="不限…"
           />
         </t-form-item>
         <t-form-item label="等级" name="orderLevels">
-          <t-select v-model="form.orderLevels" multiple clearable :options="userLevelOptions" placeholder="不限" />
+          <t-select v-model="form.orderLevels" multiple clearable :options="userLevelOptions" placeholder="不限…" />
         </t-form-item>
       </div>
 
       <t-form-item label="商品说明" name="description">
-        <RichEditor v-model="form.description" placeholder="兑换说明、领取方式等" :min-height="320" />
+        <RichEditor v-model="form.description" placeholder="兑换说明、领取方式等…" :min-height="320" />
       </t-form-item>
     </t-form>
   </t-dialog>
