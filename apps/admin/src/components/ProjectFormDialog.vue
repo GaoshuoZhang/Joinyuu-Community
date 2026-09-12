@@ -295,11 +295,11 @@ function onClose() {
 
 <template>
   <t-dialog
+    :close-on-overlay-click="true"
     :visible="visible"
     :header="mode === 'edit' ? '编辑项目' : demand ? '需求立项' : '新增项目'"
     width="880px"
     lazy
-    :close-on-overlay-click="false"
     :close-on-esc-keydown="false"
     @close="onClose"
   >
@@ -475,7 +475,7 @@ function onClose() {
 
 .share-title {
   font-size: 14px;
-  font-weight: 600;
+  font-weight: 400;
   color: var(--td-text-color-primary);
 }
 

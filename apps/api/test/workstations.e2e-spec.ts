@@ -65,6 +65,41 @@ describe('M1-D workstations 办公位/区域/租约', () => {
     expect(target!.area).toBe('A 区 · 开放办公位')
   })
 
+  it('编辑租约 → 备注落库 + 编辑记录追加（编辑原因必填）', async () => {
+    const base = {
+      startDate: '2026-09-01',
+      endDate: '2027-08-31',
+      longTerm: false,
+      rentPeriod: 'month',
+      contactName: '陈屿',
+      contactPhone: '13801210001',
+      note: '续租一年',
+    }
+    // 缺少编辑原因 → 400
+    const bad = await request(app.getHttpServer())
+      .put(`/api/admin/workstation-leases/${leaseId}`)
+      .set('Authorization', `Bearer ${token}`)
+      .send({ ...base, monthlyRent: 1200 })
+    expect(bad.status).toBe(400)
+
+    const ok = await request(app.getHttpServer())
+      .put(`/api/admin/workstation-leases/${leaseId}`)
+      .set('Authorization', `Bearer ${token}`)
+      .send({ ...base, monthlyRent: 1500, reason: '客户续租并调整租金' })
+    expect(ok.status).toBe(200)
+    expect(ok.body.data).toEqual({ code: 0 })
+
+    const list = await request(app.getHttpServer())
+      .get('/api/admin/workstation-leases')
+      .set('Authorization', `Bearer ${token}`)
+    const row = (list.body.data as Array<Record<string, unknown>>).find((l) => l.id === leaseId)
+    expect(row!.note).toBe('续租一年')
+    const records = row!.editRecords as Array<Record<string, unknown>>
+    expect(records.length).toBe(1)
+    expect(records[0].reason).toBe('客户续租并调整租金')
+    expect(records[0].operator).toBe('社区管理员')
+  })
+
   it('终止租约 → 释放办公位为 idle', async () => {
     const res = await request(app.getHttpServer())
       .post(`/api/admin/workstation-leases/${leaseId}/terminate`)

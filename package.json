@@ -6,6 +6,8 @@
   "scripts": {
     "dev:admin": "pnpm --filter @joinyuu/admin dev",
     "build:admin": "pnpm --filter @joinyuu/admin build",
+    "dev:client-mobile": "pnpm --filter @joinyuu/client-mobile dev",
+    "build:client-mobile": "pnpm --filter @joinyuu/client-mobile build",
     "dev:api": "pnpm --filter @joinyuu/api dev",
     "build:api": "pnpm --filter @joinyuu/api build",
     "db:up": "docker compose -f apps/api/docker-compose.dev.yml up -d --wait",

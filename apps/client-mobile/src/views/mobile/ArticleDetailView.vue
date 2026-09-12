@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, onMounted } from 'vue'
-import { useRoute, useRouter } from 'vue-router'
-import { Button, Loading } from 'tdesign-mobile-vue'
+import { useRoute } from 'vue-router'
+import { Loading } from 'tdesign-mobile-vue'
 import { useAsyncList } from '@/composables/useAsyncList'
 import { fetchArticle } from '@/api/contents'
 import EmptyBlock from '@/components/shared/EmptyBlock.vue'
@@ -9,7 +9,6 @@ import type { Article } from '@/types'
 
 /* 移动文章详情：标题/栏目/作者/时间/浏览量 + 正文按换行分段；404 → 空态 + 返回 */
 const route = useRoute()
-const router = useRouter()
 
 const { data, loading, error, run } = useAsyncList<Article>(() => fetchArticle(String(route.params.id)))
 const article = computed(() => data.value)
@@ -28,7 +27,6 @@ onMounted(run)
     <Loading v-if="loading" class="state" text="加载中…" />
     <template v-else-if="error">
       <EmptyBlock :text="error" />
-      <Button class="back" variant="outline" block @click="router.back()">返回</Button>
     </template>
     <template v-else-if="article">
       <header class="head">
@@ -39,7 +37,6 @@ onMounted(run)
       <article class="m-card body">
         <p v-for="(p, i) in paragraphs" :key="i" class="para">{{ p }}</p>
       </article>
-      <Button class="back" variant="outline" block @click="router.back()">返回</Button>
     </template>
   </div>
 </template>
@@ -49,7 +46,7 @@ onMounted(run)
   padding: 16px;
   display: flex;
   flex-direction: column;
-  gap: 14px;
+  gap: 12px;
 }
 
 .state {
@@ -62,9 +59,9 @@ onMounted(run)
 
 .col-tag {
   display: inline-block;
-  font-size: 11px;
+  font-size: 12px;
   padding: 2px 7px;
-  border-radius: 4px;
+  border-radius: var(--td-radius-small);
   background: var(--td-brand-color-1);
   color: var(--td-brand-color);
 }
@@ -77,7 +74,7 @@ onMounted(run)
 
 .meta {
   margin: 0;
-  font-size: 11px;
+  font-size: 12px;
   color: var(--td-text-color-placeholder);
 }
 
@@ -94,9 +91,5 @@ onMounted(run)
 
 .para:last-child {
   margin-bottom: 0;
-}
-
-.back {
-  margin-top: 2px;
 }
 </style>

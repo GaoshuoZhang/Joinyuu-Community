@@ -12,7 +12,7 @@ import { deriveReservationStatus } from '@/utils/reservation'
 import type { Space, SpaceReservation } from '@/types'
 
 /* 公共空间预约页（独立路由页）：预约审核；
- * 状态 Tab + 空间/日期筛选 + 详情抽屉（审核时间线）+ 通过/驳回意见对话框；
+ * 状态 Tab + 空间/日期筛选 + 详情抽屉（审核时间线）+ 通过/驳回意见抽屉；
  * 通过时服务端校验时段冲突（已通过预约 / 已发布活动占用） */
 const loading = ref(false)
 const loadError = ref('')
@@ -320,14 +320,15 @@ onMounted(() => {
         </template>
         <template #op="{ row }">
           <div class="op-cell" @click.stop>
-            <template v-if="row.status === 'pending'">
-              <t-button variant="text" size="small" theme="primary" @click="openDialog('approve', row)">
-                通过
-              </t-button>
-              <t-button variant="text" size="small" theme="danger" @click="openDialog('reject', row)">
-                驳回
-              </t-button>
-            </template>
+            <t-button
+              v-if="row.status === 'pending'"
+              variant="text"
+              size="small"
+              theme="primary"
+              @click="openDetail(row)"
+            >
+              审核
+            </t-button>
             <t-popconfirm
               v-if="row.status === 'pending' || row.status === 'approved'"
               content="确认取消该预约？"
@@ -344,7 +345,6 @@ onMounted(() => {
                 归档
               </t-button>
             </t-popconfirm>
-            <t-button variant="text" size="small" @click="openDetail(row)">详情</t-button>
           </div>
         </template>
       </t-table>
@@ -389,18 +389,14 @@ onMounted(() => {
       </template>
     </t-drawer>
 
-    <!-- 审核意见对话框 -->
-    <t-dialog
+    <!-- 审核意见抽屉 -->
+    <t-drawer
       v-model:visible="dialogVisible"
       :header="dialogAction === 'approve' ? '通过预约' : '驳回预约'"
-      width="520px"
-      :confirm-btn="{
-        content: dialogAction === 'approve' ? '确认通过' : '确认驳回',
-        theme: dialogAction === 'approve' ? 'primary' : 'danger',
-        loading: submitting,
-      }"
-      @confirm="onConfirm"
-      @close="dialogVisible = false"
+      size="520px"
+      :footer="false"
+      :close-btn="true"
+      :close-on-esc-keydown="true"
     >
       <p v-if="dialogAction === 'approve'" class="dialog-tip">
         通过前系统将自动校验时段冲突（已通过预约与社区活动占用）。
@@ -410,7 +406,17 @@ onMounted(() => {
         placeholder="审核意见（驳回时建议填写原因）…"
         :autosize="{ minRows: 3, maxRows: 5 }"
       />
-    </t-dialog>
+      <div class="drawer-footer">
+        <t-button variant="text" theme="default" @click="dialogVisible = false">取消</t-button>
+        <t-button
+          :theme="dialogAction === 'approve' ? 'primary' : 'danger'"
+          :loading="submitting"
+          @click="onConfirm"
+        >
+          {{ dialogAction === 'approve' ? '确认通过' : '确认驳回' }}
+        </t-button>
+      </div>
+    </t-drawer>
 
     <!-- 一键归档：状态选择二次确认对话框 -->
     <BulkArchiveDialog
@@ -544,5 +550,18 @@ onMounted(() => {
   margin: 0 0 12px;
   font-size: 12px;
   color: var(--td-text-color-secondary);
+}
+
+.drawer-footer {
+  position: sticky;
+  bottom: 0;
+  z-index: 1;
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 16px;
+  padding: 12px 0;
+  border-top: 1px solid var(--td-component-border);
+  background: var(--td-bg-color-container);
 }
 </style>

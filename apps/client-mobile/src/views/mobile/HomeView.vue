@@ -1,7 +1,7 @@
 <script setup lang="ts">
-import { onMounted, ref } from 'vue'
+import { onMounted } from 'vue'
 import { useRouter } from 'vue-router'
-import { Input, Loading, Swiper, SwiperItem, Toast } from 'tdesign-mobile-vue'
+import { Icon, Button, Grid, GridItem, Loading, Search, Swiper, SwiperItem } from 'tdesign-mobile-vue'
 import { useConfigStore } from '@/stores/config'
 import { useAsyncList } from '@/composables/useAsyncList'
 import { fetchHomeFeed } from '@/api/home'
@@ -13,20 +13,15 @@ import EmptyBlock from '@/components/shared/EmptyBlock.vue'
 const router = useRouter()
 const config = useConfigStore()
 const { data: feed, loading, error, run } = useAsyncList(fetchHomeFeed)
-const keyword = ref('')
 
 onMounted(() => {
   config.ensureLoaded()
   run()
 })
 
-function onSearch() {
-  const kw = keyword.value.trim()
-  if (!kw) {
-    Toast('请输入要搜索的关键词')
-    return
-  }
-  void router.push({ path: '/projects', query: { keyword: kw } })
+/* 搜索：聚焦即进入项目页（实时搜索在该页进行） */
+function onSearchFocus() {
+  void router.push('/projects')
 }
 
 const bannerLinks: Record<string, string> = {
@@ -45,25 +40,22 @@ function goPublish() {
 }
 
 const featureEntries = [
-  { path: '/intros/enterprise', icon: '🏢', label: '企业入驻', desc: '共享工位与资源' },
-  { path: '/intros/talent', icon: '🧑‍💻', label: '人才登记', desc: '让企业找到你' },
+  { path: '/intros/enterprise', icon: 'usergroup', label: '企业入驻', desc: '共享工位与资源' },
+  { path: '/intros/talent', icon: 'app', label: '人才登记', desc: '让企业找到你' },
 ] as const
 
 const quickEntries = [
-  { path: '/articles/new', icon: '✍️', label: '文章投稿' },
-  { path: '/mall', icon: '🎁', label: '积分商城' },
-  { path: '/spaces', icon: '🪑', label: '空间预约' },
-  { path: '/events', icon: '📅', label: '活动计划' },
+  { path: '/articles/new', icon: 'edit-1', label: '文章投稿' },
+  { path: '/mall', icon: 'shop', label: '积分商城' },
+  { path: '/spaces', icon: 'building', label: '空间预约' },
+  { path: '/events', icon: 'calendar', label: '活动计划' },
 ] as const
 </script>
 
 <template>
   <div class="home page-fade-in">
-    <!-- 顶部搜索 -->
-    <div class="search-bar">
-      <Input v-model="keyword" placeholder="搜索项目 / 需求" clearable @enter="onSearch" />
-      <button class="search-btn" type="button" @click="onSearch">搜索</button>
-    </div>
+    <!-- 顶部搜索：聚焦即进入项目页实时搜索 -->
+    <Search placeholder="搜索项目 / 需求" @focus="onSearchFocus" />
 
     <Loading v-if="loading" class="state" text="加载中…" />
     <EmptyBlock v-else-if="error" :text="error" />
@@ -79,29 +71,34 @@ const quickEntries = [
         </SwiperItem>
       </Swiper>
 
-      <!-- 需求发布（独占一行） -->
-      <button class="publish-entry" type="button" @click="goPublish">
-        <span class="pe-icon">📣</span>
-        <span class="pe-text">发布需求 · 让社区一起帮你完成</span>
-        <span class="pe-arrow">›</span>
-      </button>
+      <!-- 需求发布（独占一行，主题主色） -->
+      <Button theme="primary" block size="large" class="publish-entry pressable" @click="goPublish">
+        <template #icon><Icon name="flag" size="20px" /></template>
+        发布需求 · 让社区一起帮你完成 ›
+      </Button>
 
       <!-- 两个重要快捷入口 -->
-      <div class="feature-grid stagger">
-        <button v-for="f in featureEntries" :key="f.path" class="feature-card" type="button" @click="router.push(f.path)">
-          <span class="feature-icon">{{ f.icon }}</span>
-          <span class="feature-label">{{ f.label }}</span>
-          <span class="feature-desc">{{ f.desc }}</span>
-        </button>
-      </div>
+      <Grid :column="2" :gutter="10" hover class="feature-grid stagger">
+        <GridItem
+          v-for="f in featureEntries"
+          :key="f.path"
+          class="feature-item"
+          :icon="true"
+          @click="router.push(f.path)"
+        >
+          <template #icon><Icon :name="f.icon" size="22px" /></template>
+          <template #text><span class="feature-label">{{ f.label }}</span></template>
+          <template #description><span class="feature-desc">{{ f.desc }}</span></template>
+        </GridItem>
+      </Grid>
 
       <!-- 四个普通快捷入口 -->
-      <div class="quick-grid stagger">
-        <button v-for="q in quickEntries" :key="q.path" class="quick-card" type="button" @click="router.push(q.path)">
-          <span class="quick-icon">{{ q.icon }}</span>
-          <span class="quick-label">{{ q.label }}</span>
-        </button>
-      </div>
+      <Grid :column="4" :gutter="8" hover class="quick-grid stagger">
+        <GridItem v-for="q in quickEntries" :key="q.path" class="quick-item" :icon="true" @click="router.push(q.path)">
+          <template #icon><span class="quick-icon"><Icon :name="q.icon" size="22px" /></span></template>
+          <template #text>{{ q.label }}</template>
+        </GridItem>
+      </Grid>
 
       <!-- 最新项目 -->
       <section class="block">
@@ -111,7 +108,7 @@ const quickEntries = [
         </div>
         <EmptyBlock v-if="!(feed?.latestDemands ?? []).length" text="暂无进行中的项目" />
         <div v-else class="list">
-          <article v-for="d in feed.latestDemands" :key="d.id" class="m-card demand-item" @click="router.push(`/demands/${d.id}`)">
+          <article v-for="d in feed.latestDemands" :key="d.id" class="m-card demand-item pressable" @click="router.push(`/demands/${d.id}`)">
             <div class="d-head">
               <h3 class="d-title">{{ d.title }}</h3>
               <span class="d-cat">{{ d.categoryLabel }}</span>
@@ -133,7 +130,7 @@ const quickEntries = [
         </div>
         <EmptyBlock v-if="!(feed?.topArticles ?? []).length" text="暂无精选文章" />
         <div v-else class="list">
-          <article v-for="a in feed.topArticles" :key="a.id" class="m-card article-item" @click="router.push(`/articles/${a.id}`)">
+          <article v-for="a in feed.topArticles" :key="a.id" class="m-card article-item pressable" @click="router.push(`/articles/${a.id}`)">
             <div class="d-head">
               <h3 class="d-title">{{ a.title }}</h3>
               <span class="d-cat">{{ a.columnLabel }}</span>
@@ -154,23 +151,7 @@ const quickEntries = [
   display: flex;
   flex-direction: column;
   gap: 12px;
-  padding: 12px 16px 8px;
-}
-
-.search-bar {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-
-.search-btn {
-  flex-shrink: 0;
-  border: none;
-  border-radius: var(--td-radius-default);
-  background: var(--td-brand-color);
-  color: var(--td-text-color-anti);
-  font-size: 13px;
-  padding: 9px 16px;
+  padding: 16px;
 }
 
 .state {
@@ -178,110 +159,114 @@ const quickEntries = [
 }
 
 .banner {
-  border-radius: var(--td-radius-medium);
+  border-radius: var(--td-radius-large);
   overflow: hidden;
 }
 
 .banner-card {
+  position: relative;
   height: 130px;
   padding: 22px 20px;
   color: var(--td-text-color-anti);
+  overflow: hidden;
+}
+
+/* 氛围装饰：半透明白圆环，呼应 admin login 品牌区语言 */
+.banner-card::before,
+.banner-card::after {
+  content: '';
+  position: absolute;
+  border-radius: 50%;
+  border: 1px solid rgba(255, 255, 255, 0.22);
+  pointer-events: none;
+}
+
+.banner-card::before {
+  width: 150px;
+  height: 150px;
+  right: -40px;
+  bottom: -70px;
+}
+
+.banner-card::after {
+  width: 84px;
+  height: 84px;
+  right: 62px;
+  bottom: -24px;
+  border-style: dashed;
+  opacity: 0.8;
 }
 
 .banner-title {
+  position: relative;
   margin: 0 0 6px;
   font-size: 18px;
   font-weight: 700;
 }
 
 .banner-sub {
+  position: relative;
   margin: 0;
   font-size: 12px;
   opacity: 0.85;
 }
 
-.publish-entry {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  width: 100%;
-  padding: 14px 16px;
-  border-radius: var(--td-radius-medium);
-  background: var(--td-brand-color);
-  color: var(--td-text-color-anti);
-  border: none;
-  font-size: 14px;
-}
-
-.pe-icon {
-  font-size: 18px;
-}
-
-.pe-text {
-  flex: 1;
-  text-align: left;
-  font-weight: 600;
-}
-
+/* 双入口卡：GridItem 覆盖为品牌渐变色卡；清掉 Grid 根 gutter padding，使网格与卡片边缘对齐 */
 .feature-grid {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 10px;
+  padding: 0 !important;
+  --td-grid-item-bg-color: transparent;
 }
 
-.feature-card {
-  position: relative;
-  display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-  gap: 2px;
-  padding: 14px;
-  border: none;
-  border-radius: var(--td-radius-medium);
+.feature-item {
+  --td-grid-item-bg-color: transparent;
+  --td-grid-item-image-bg-color: transparent;
+
+  border-radius: var(--td-radius-large);
   background: var(--client-brand-gradient);
+  box-shadow: var(--td-shadow-1);
   color: var(--td-text-color-anti);
   text-align: left;
+  padding: 14px 12px;
 }
 
-.feature-icon {
-  font-size: 20px;
-  margin-bottom: 4px;
+.feature-item :deep(.t-grid-item__content) {
+  align-items: flex-start;
 }
 
 .feature-label {
   font-size: 15px;
   font-weight: 700;
+  color: var(--td-text-color-anti);
 }
 
 .feature-desc {
-  font-size: 11px;
+  font-size: 12px;
   opacity: 0.85;
+  color: var(--td-text-color-anti);
 }
 
+/* 四宫格：白底卡片项 + 品牌浅底图标气泡；同样清掉根 padding 对齐卡片边缘 */
 .quick-grid {
-  display: grid;
-  grid-template-columns: repeat(4, 1fr);
-  gap: 8px;
+  padding: 0 !important;
+  --td-grid-item-bg-color: var(--td-bg-color-container);
 }
 
-.quick-card {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 6px;
-  padding: 12px 4px;
+.quick-item {
+  --td-grid-item-image-bg-color: transparent;
+
+  border-radius: var(--td-radius-large);
   border: 1px solid var(--td-component-border);
-  border-radius: var(--td-radius-medium);
-  background: var(--td-bg-color-container);
+  overflow: hidden;
 }
 
 .quick-icon {
-  font-size: 20px;
-}
-
-.quick-label {
-  font-size: 11px;
-  color: var(--td-text-color-primary);
+  display: grid;
+  place-items: center;
+  width: 36px;
+  height: 36px;
+  border-radius: var(--td-radius-circle);
+  color: var(--td-brand-color);
+  background: var(--td-brand-color-light);
 }
 
 .block-head {
@@ -330,8 +315,8 @@ const quickEntries = [
 .d-cat {
   flex-shrink: 0;
   padding: 2px 8px;
-  border-radius: 4px;
-  font-size: 11px;
+  border-radius: var(--td-radius-small);
+  font-size: 12px;
   color: var(--td-brand-color);
   background: var(--td-brand-color-light);
 }
@@ -341,7 +326,7 @@ const quickEntries = [
   align-items: center;
   gap: 12px;
   margin-top: 8px;
-  font-size: 11px;
+  font-size: 12px;
   color: var(--td-text-color-secondary);
 }
 

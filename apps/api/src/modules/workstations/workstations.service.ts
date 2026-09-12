@@ -4,6 +4,7 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common'
+import { Prisma } from '@prisma/client'
 import type { Lease, LeaseWorkstation, Workstation, WorkstationArea } from '@prisma/client'
 import { PrismaService } from '../../common/prisma/prisma.service'
 import { IdGeneratorService } from '../../common/id-generator/id-generator.service'
@@ -38,6 +39,12 @@ export interface WorkstationDto {
   note?: string
 }
 
+export interface LeaseEditRecord {
+  at: string
+  operator: string
+  reason: string
+}
+
 export interface LeaseDto {
   id: string
   enterpriseId: string
@@ -53,6 +60,8 @@ export interface LeaseDto {
   rentPeriod: string
   contactName: string
   contactPhone: string
+  note?: string
+  editRecords?: LeaseEditRecord[]
   terminatedAt?: string
   deletedAt?: string
 }
@@ -99,6 +108,9 @@ function toLeaseDto(l: LeaseWithWorkstations): LeaseDto {
     contactName: l.contactName,
     contactPhone: l.contactPhone,
   }
+  if (l.note != null) dto.note = l.note
+  const editRecords = Array.isArray(l.editRecords) ? (l.editRecords as unknown as LeaseEditRecord[]) : []
+  if (editRecords.length) dto.editRecords = editRecords
   if (l.terminatedAt != null) dto.terminatedAt = l.terminatedAt
   if (l.deletedAt != null) dto.deletedAt = l.deletedAt
   return dto
@@ -346,6 +358,7 @@ export class WorkstationsService {
           rentPeriod: payload.rentPeriod ?? 'month',
           contactName: payload.contactName,
           contactPhone: payload.contactPhone,
+          note: payload.note?.trim() || null,
         },
       })
       for (const wsId of payload.workstationIds) {
@@ -377,13 +390,19 @@ export class WorkstationsService {
       rentPeriod: payload.rentPeriod ?? 'month',
       contactName: payload.contactName,
       contactPhone: payload.contactPhone,
+      note: payload.note?.trim() || undefined,
     }
   }
 
-  async updateLease(id: string, payload: LeaseUpdateDto): Promise<{ code: number }> {
+  async updateLease(id: string, payload: LeaseUpdateDto, operator: string): Promise<{ code: number }> {
     const lease = await this.prisma.lease.findUnique({ where: { id } })
     if (!lease) throw new NotFoundException('租约不存在')
     if (lease.status === 'terminated') throw new ConflictException('已终止租约不可编辑')
+
+    const editRecords = Array.isArray(lease.editRecords)
+      ? (lease.editRecords as unknown as LeaseEditRecord[])
+      : []
+    editRecords.push({ at: formatNow(), operator, reason: payload.reason.trim() })
 
     await this.prisma.lease.update({
       where: { id },
@@ -395,6 +414,8 @@ export class WorkstationsService {
         rentPeriod: payload.rentPeriod ?? 'month',
         contactName: payload.contactName,
         contactPhone: payload.contactPhone,
+        note: payload.note?.trim() || null,
+        editRecords: editRecords as unknown as Prisma.InputJsonValue,
       },
     })
     return { code: 0 }

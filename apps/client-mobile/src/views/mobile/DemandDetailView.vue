@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { Button, Textarea, Toast } from 'tdesign-mobile-vue'
+import { Button, Loading, Textarea, Toast } from 'tdesign-mobile-vue'
 import { fetchDemand, respondDemand } from '@/api/demands'
 import { ApiError } from '@/api/http'
 import { useAuthStore } from '@/stores/auth'
@@ -45,10 +45,9 @@ async function onRespond() {
 
 <template>
   <div class="m-detail page-fade-in stagger">
-    <div v-if="loading" class="hint">加载中…</div>
+    <Loading v-if="loading" class="state" text="加载中…" />
     <template v-else-if="error">
       <EmptyBlock :text="error" />
-      <Button theme="default" variant="outline" block class="back-btn" @click="router.push('/demands')">返回需求广场</Button>
     </template>
     <template v-else-if="demand">
       <div class="m-card">
@@ -88,16 +87,7 @@ async function onRespond() {
   padding: 16px;
   display: flex;
   flex-direction: column;
-  gap: 14px;
-}
-
-.hint {
-  padding: 20px;
-  color: var(--td-text-color-placeholder);
-  font-size: 12px;
-  text-align: center;
-  background: var(--td-bg-color-container);
-  border-radius: var(--td-radius-medium);
+  gap: 12px;
 }
 
 .head {
@@ -124,9 +114,9 @@ async function onRespond() {
 }
 
 .cat {
-  font-size: 11px;
+  font-size: 12px;
   padding: 2px 7px;
-  border-radius: 4px;
+  border-radius: var(--td-radius-small);
   background: var(--td-brand-color-1);
   color: var(--td-brand-color);
 }
@@ -162,7 +152,7 @@ async function onRespond() {
   color: var(--td-text-color-secondary);
   background: var(--td-bg-color-page);
   border: 1px dashed var(--td-component-border);
-  border-radius: var(--td-radius-medium);
+  border-radius: var(--td-radius-large);
   padding: 12px 14px;
 }
 
@@ -173,9 +163,5 @@ async function onRespond() {
 
 .submit-btn {
   margin-top: 10px;
-}
-
-.back-btn {
-  flex-shrink: 0;
 }
 </style>

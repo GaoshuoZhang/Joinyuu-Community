@@ -2,7 +2,7 @@
 import { computed, nextTick, onMounted, reactive, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useQueryTab } from '@/utils/navigation'
-import { MessagePlugin } from 'tdesign-vue-next'
+import { DialogPlugin, MessagePlugin } from 'tdesign-vue-next'
 import type { FormProps } from 'tdesign-vue-next'
 import { ArrowLeftIcon } from 'tdesign-icons-vue-next'
 import StatusTag from '@/components/StatusTag.vue'
@@ -14,6 +14,7 @@ import {
   fetchUser,
   fetchUserRecords,
   freezeUser,
+  resetUserPassword,
   updateUser,
   updateUserStatus,
   type UserApplicationRecord,
@@ -217,6 +218,72 @@ async function onRestore() {
   } finally {
     restoring.value = false
   }
+}
+
+/* ---------- 重置密码（强制覆盖当前登录密码） ---------- */
+
+const resetPwdVisible = ref(false)
+const resetPwdSaving = ref(false)
+const resetPwdFormRef = ref()
+const resetPwdForm = reactive({ password: '', confirmPassword: '' })
+
+/* 确认密码一致性校验（TDesign 自定义校验器签名） */
+function validateConfirmPassword(
+  _value: unknown,
+  params: { password: string; confirmPassword: string },
+): { result: boolean; message?: string } {
+  if (params.confirmPassword !== params.password) return { result: false, message: '两次输入的密码不一致' }
+  return { result: true }
+}
+
+const resetPwdRules: FormProps['rules'] = {
+  password: [
+    { required: true, message: '请输入新密码', trigger: 'blur' },
+    { min: 8, message: '密码至少 8 位', trigger: 'blur' },
+    { pattern: /^(?=.*[A-Za-z])(?=.*\d).+$/, message: '密码需同时包含字母和数字', trigger: 'blur' },
+  ],
+  confirmPassword: [
+    { required: true, message: '请再次输入新密码', trigger: 'blur' },
+    { validator: validateConfirmPassword },
+  ],
+}
+
+function openResetPwd() {
+  resetPwdForm.password = ''
+  resetPwdForm.confirmPassword = ''
+  resetPwdVisible.value = true
+  nextTick(() => resetPwdFormRef.value?.clearValidate())
+}
+
+async function submitResetPassword(uid: string) {
+  resetPwdSaving.value = true
+  try {
+    await resetUserPassword(uid, resetPwdForm.password)
+    MessagePlugin.success('密码已重置')
+    resetPwdVisible.value = false
+  } catch (e) {
+    MessagePlugin.error(e instanceof Error ? e.message : '重置失败')
+  } finally {
+    resetPwdSaving.value = false
+  }
+}
+
+async function onConfirmResetPwd() {
+  const current = user.value
+  if (!current) return
+  const valid = await resetPwdFormRef.value.validate()
+  if (valid !== true) return
+  /* 二次确认：确认后才真正覆盖密码（确认弹窗关闭后由外层弹窗展示提交态） */
+  const confirmDialog = DialogPlugin.confirm({
+    header: '确认重置密码',
+    body: `将强制覆盖用户「${current.nickname}」的当前登录密码，此操作不可撤销。确认继续？`,
+    theme: 'warning',
+    confirmBtn: { content: '确认重置', theme: 'danger' },
+    onConfirm: () => {
+      confirmDialog.destroy()
+      void submitResetPassword(current.uid)
+    },
+  })
 }
 
 /* ---------- 经验值 / 积分流水 ---------- */
@@ -477,6 +544,7 @@ onMounted(async () => {
           </div>
           <div class="profile-actions">
             <t-button variant="outline" @click="openEdit">编辑</t-button>
+            <t-button variant="outline" @click="openResetPwd">重置密码</t-button>
             <t-popconfirm
               v-if="user.status === 'frozen'"
               content="确认恢复该账号？恢复后冻结信息将被清除"
@@ -1086,6 +1154,35 @@ onMounted(async () => {
             placeholder="选择冻结截止时间…"
             style="width: 100%"
           />
+        </t-form-item>
+      </t-form>
+    </t-dialog>
+
+    <!-- 重置密码：管理员强制覆盖用户登录密码（提交前二次确认） -->
+    <t-dialog
+      v-model:visible="resetPwdVisible"
+      :header="user ? `重置密码 · ${user.nickname} [${user.uid}]` : '重置密码'"
+      width="480px"
+      :close-on-overlay-click="true"
+      @close="resetPwdVisible = false"
+    >
+      <template #footer>
+        <div class="dialog-footer">
+          <t-button variant="text" theme="default" @click="resetPwdVisible = false">取消</t-button>
+          <t-button theme="danger" :loading="resetPwdSaving" @click="onConfirmResetPwd">确认重置</t-button>
+        </div>
+      </template>
+      <t-form ref="resetPwdFormRef" :data="resetPwdForm" :rules="resetPwdRules" label-align="top">
+        <t-form-item label="新密码" name="password">
+          <t-input
+            v-model="resetPwdForm.password"
+            type="password"
+            clearable
+            placeholder="至少 8 位，需包含字母和数字…"
+          />
+        </t-form-item>
+        <t-form-item label="确认新密码" name="confirmPassword">
+          <t-input v-model="resetPwdForm.confirmPassword" type="password" clearable placeholder="请再次输入新密码…" />
         </t-form-item>
       </t-form>
     </t-dialog>

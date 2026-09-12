@@ -45,23 +45,31 @@
 
 ## 4. M1 后端服务（已完成）
 
-> M1.5 增强后现状（代码为准）：36 个 controller（34 个 `/api/admin` + health + public files）共 **191 个在册 HTTP 端点**（管理端 189 + 公开 2；2026-09-12 新增 `POST /api/admin/roles` 与 `POST /api/admin/auth/sessions/kick-all`）；Prisma schema **43 模型**（M1 时 35，M1.5 新增 RBAC 4 表 / LoginLog / SchedulerLog / MallAsset / ArchiveSetting 共 8 表）。
+> M1.5 增强后现状（代码为准）：36 个 controller（34 个 `/api/admin` + health + public files）共 **193 个在册 HTTP 端点**（管理端 191 + 公开 2；2026-09-12 新增 `POST /api/admin/roles`、`POST /api/admin/auth/sessions/kick-all`、`POST /api/admin/users` 与 `POST /api/admin/users/:id/reset-password`）；Prisma schema **43 模型**（M1 时 35，M1.5 新增 RBAC 4 表 / LoginLog / SchedulerLog / MallAsset / ArchiveSetting 共 8 表）。
 
 - **M1-A 底座**：NestJS 11 + 全局管线（包络/异常过滤/JWT 守卫/审计拦截器/前缀 ID 发号器）、Docker Compose（PG+Redis）、Prisma schema（M1 时 35 模型，M1.5 后 43）+ seed 骨架、认证（JWT + Redis 登出黑名单）、健康检查
-- **M1-B 社区成员域（21 端点）**：users / individuals / enterprises / external-enterprises / applications / ledgers；grantIdentity 联动、账本事务、审计迁移、admin 五组页面接入
+- **M1-B 社区成员域（23 端点）**：users / individuals / enterprises / external-enterprises / applications / ledgers；新增用户生成默认个人身份、管理员重置登录密码、grantIdentity 联动、账本事务、审计迁移、admin 五组页面接入
 - **M1-C 业务运营域（34 端点）**：demands / projects / events；状态机服务端校验（409）、定时发布与活动自动结束、积分/经验引擎接入、立项双向关联、admin 四组页面接入
 - **M1-D 运营设施域**：mall / rules / workstations / spaces / contents / announcements；订单退款事务、租约临期通知、预约冲突校验、admin 接入
 - **M1-E 系统域与收尾（12 端点）**：notifications / audit-logs / config / dicts / dashboard / todos；审计 before/after 快照、Redis 缓存（配置/字典/规则/工作台，写失效）、admin 全量接入、mock 删除、`/api/app/**` 设计文档、entity-fields 文档、全量回归（e2e 完整通过、浏览器走查）
 
-## 5. M2 客户端 Web（未开始）
+## 5. M2 客户端（移动端 `client-mobile` / 桌面端 `client-web`）
 
-- 居民端骨架（`apps/client`）
-- 注册登录与多身份管理
-- 需求广场：浏览（可见范围过滤）/ 提交（选身份）/ 响应
-- 活动中心：浏览 / 报名（可报名范围过滤）/ 我的报名
-- 项目协作：承接 / 进度查看
-- 个人中心：积分 / 经验等级 / 商城兑换
-- 对接 `/api/app/**`
+> 规划：[docs/m2-client-plan.md](./m2-client-plan.md)（v2 已确认，含完成度看板）；契约：[docs/api-app-design.md](./api-app-design.md)；移动端实现契约：[docs/wiki-client-mobile.md](./wiki-client-mobile.md)（随批次补充）；桌面端契约 `wiki-client-web.md` 待应用创建时新建。
+> 策略：Mock-First——客户端拆为两个独立应用/入口，**先移动端后桌面端**；`apps/client-mobile`（原 `apps/client`，dev 7759，与 admin 零粘连）前端先行 + Mock 数据，超边界功能（站内信/位置签到/首页聚合）以 `[MOCK-ONLY]` 交付并登记缺口；接入期（M2-R）实现 `/api/app/**` 并销号。
+> 拆分状态：`apps/client-mobile` **已收敛为纯移动端**（2026-09-13 移除 `views/desktop/**` 与 `dualView`，信息架构重构为 5 Tab：首页/项目/社区/广场/我的，社区视角）；`apps/client-web` 尚未创建（将承接原桌面视图与 `tdesign-vue-next`）。
+
+- [√] 客户端工程骨架（`apps/client-mobile` 独立包 / 7759 / 纯移动端 5-Tab 壳 / tokens / 请求层 / mock 底座 / devtools 身份切换器）
+- [√] 登录 / 注册 / 首页（搜索+轮播+需求发布+双入口+四宫格+最新项目+精选文章）
+- [√] 注册登录与多身份管理（Mock 全量交互已交付；后端多身份 JWT 为缺口）
+- [√] 需求广场：浏览（可见范围过滤）/ 提交（选身份）/ 响应
+- [√] 活动中心：浏览 / 报名（可报名范围过滤）/ 我的报名 / 位置签到〔边界外，已登记缺口〕
+- [√] 站内信中心〔边界外，已登记缺口〕
+- [√] 项目协作：承接 / 进度查看
+- [√] 个人中心：资料 / 积分 / 经验等级 / 商城兑换
+- [√] 空间预约：可用时段 / 提交（冲突 409）/ 我的预约
+- [√] 内容：文章浏览 / 投稿 / 我的投稿；企业展示页与展示页申请
+- [ ] 对接 `/api/app/**`（M2-R：后端实现 + 缺口销号 + http 切换 + e2e）
 
 ## 6. M3 微信小程序（未开始）
 

@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { Button, Toast } from 'tdesign-mobile-vue'
+import { Button, Loading, Toast } from 'tdesign-mobile-vue'
 import { createOrder, fetchGoodsDetail } from '@/api/mall'
 import { useAsyncList } from '@/composables/useAsyncList'
 import { useAuthStore } from '@/stores/auth'
@@ -48,9 +48,7 @@ async function onRedeem() {
 
 <template>
   <div class="m-goods page-fade-in">
-    <a class="back" @click="router.push('/mall')">‹ 返回</a>
-
-    <div v-if="loading" class="skeleton">加载中…</div>
+    <Loading v-if="loading" class="state" text="加载中…" />
     <EmptyBlock v-else-if="error" :text="error" />
     <template v-else-if="goods">
       <section class="m-card main">
@@ -87,21 +85,6 @@ async function onRedeem() {
   display: flex;
   flex-direction: column;
   gap: 12px;
-}
-
-.back {
-  font-size: 12px;
-  color: var(--td-text-color-secondary);
-  cursor: pointer;
-  width: fit-content;
-}
-
-.skeleton {
-  padding: 20px;
-  color: var(--td-text-color-placeholder);
-  font-size: 12px;
-  background: var(--td-bg-color-container);
-  border-radius: var(--td-radius-medium);
 }
 
 .name {
@@ -168,7 +151,7 @@ async function onRedeem() {
 
 .hint {
   margin: 0;
-  font-size: 11px;
+  font-size: 12px;
   color: var(--td-text-color-placeholder);
 }
 </style>

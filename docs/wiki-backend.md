@@ -15,7 +15,7 @@
 **范围内**：
 
 - `apps/api`：NestJS 11 + Prisma 6 + PostgreSQL 17 + Redis 7.4 的后端应用（Monorepo 内新包）
-- `/api/admin/**` 全量端点（**186 个**，见第 7 节清单；含 M1.5 新增的权限/会话/监控/素材/归档/导出/打印等），另加 `/api/health` 与 `/api/public/files/:key` 两个公开端点
+- `/api/admin/**` 全量端点（**191 个**，见第 7 节清单；含 M1.5 新增的权限/会话/监控/素材/归档/导出/打印等），另加 `/api/health` 与 `/api/public/files/:key` 两个公开端点
 - 管理端认证（图形验证码 + JWT + 登出黑名单 + Redis 登录锁定 + 会话索引/强制下线/改密踢线）、审计日志服务端化、业务事件驱动通知、定时任务（定时发布/活动结束/租约临期/自动归档/自动删除，共 6 个）
 - RBAC：49 个权限码 + 4 个内置角色（super/operator/auditor/space-ops），`@RequirePermission` 覆盖 33/35 controller（health/files 为 `@Public`，notifications 有意仅登录）
 - 归档体系：13 个业务域软删除（`deletedAt`/`deletedBy`）+ 可归档时间戳（`archivableAt`）+ 归档管理恢复/彻底删除 + 自动归档/自动删除
@@ -289,11 +289,13 @@ TZ=Asia/Shanghai
 | POST | /api/admin/auth/sessions/:jti/kick | 强制下线（权限 `/system/sessions`；jti 不存在 404） |
 | POST | /api/admin/auth/sessions/kick-all | 一键强制下线其余全部会话，当前操作者会话保留；返回 `{ code: 0, kicked }`（权限 `/system/sessions`；2026-09-12 新增） |
 
-### 7.2 用户与社区个体 users / individuals（8）
+### 7.2 用户与社区个体 users / individuals（10）
 
 | 方法 | 路径 | 说明 |
 |---|---|---|
 | GET | /api/admin/users | query：page/pageSize/keyword(昵称/uid/phone)/status/category(individual=仅基础身份、community_individual、community_enterprise、external_enterprise)/realStatus(verified/unverified) |
+| POST | /api/admin/users | 新增用户；body `{ nickname, phone, email, gender, realName?, citizenId?, bio? }`；联系电话不可重复；服务端生成 U 编号、正常状态、0 积分及默认个人用户身份；返回 `{ id }`；审计「社区成员 · 新增用户」 |
+| POST | /api/admin/users/:id/reset-password | 管理员强制重置登录密码；body `{ password }`（≥8 位且含字母数字）；直接覆盖 `passwordHash` 并写 `passwordUpdatedAt`；审计「社区成员 · 重置密码」 |
 | GET | /api/admin/users/:id | 详情；stats 由 demands/projects/events 实时 COUNT（projects=个人承接或其社区企业承接） |
 | GET | /api/admin/users/:id/records | 记录聚合（详情页记录标签）：applications/demands/projects/events/leases/submissions/reservations 七域按用户维度返回；含已归档条目（`deletedAt` 非空） |
 | PUT | /api/admin/users/:id | 编辑资料（昵称/联系电话/邮箱/性别/真实姓名/证件号/简介；空串对必填类字段忽略、实名/证件号/简介允许清空）；审计「社区成员 · 编辑用户信息」 |
@@ -548,7 +550,7 @@ TZ=Asia/Shanghai
 | GET | /api/admin/todos | 六域待办聚合：入驻/合作/身份审核、需求审核、空间预约审核、展示页发布、文章审核、临期租约（窗口取 SystemConfig.leaseExpireRemindDays），`[{ key, title, description, count, route }]` |
 | GET | /api/admin/dashboard/trend | query `days`（默认 30，范围 3-90）；按日聚合 `{ date(M-DD), members, demands, events, points }`（含补零） |
 
-**端点总计：186**（`/api/admin/**`；另有 `GET /api/health`、`GET /api/public/files/:key` 两个 `@Public` 端点，未计入）。
+**端点总计：191**（`/api/admin/**`；另有 `GET /api/health`、`GET /api/public/files/:key` 两个 `@Public` 端点，未计入）。
 
 ## 8. 业务规则服务端化
 
@@ -652,7 +654,7 @@ TZ=Asia/Shanghai
 ### 9.1 审计（AuditService 直写 + AuditInterceptor 骨架）
 
 - **实现**：各域写操作在 Service 内成功路径调用 `AuditService.record`（M1.5 起不再使用 `@Audit` 装饰器端点；`AuditInterceptor` 仍作为全局骨架保留）。字段：operator（JWT name；系统触发为「系统」/「系统自动归档」）、module/action/target/detail、ip（拦截器场景）、before/after（变更前后快照，JSONB）。
-- **模块覆盖（15 类）**：认证（修改密码）、RBAC（管理员增改启停/重置密码/角色权限分配）、社区成员（编辑用户信息/冻结账号）、社区企业（新增/编辑/停用/启用/归档企业）、合作企业（新增/编辑/停用/启用/归档/关联成员增删）、审核中心（审核通过/驳回/归档申请）、需求管理（新增/审核通过/驳回/发布/定时/取消定时/撤回/关闭/立项/归档）、项目管理（新增/暂停/恢复/关闭/归档）、活动管理（发布/定时/取消定时/报名开关/取消/恢复/归档）、空间管理（预约审核/取消/归档、租约归档）、内容管理（文章审核/发布/定时/下架/删除、公告发布/编辑/下架/重新发布/置顶/删除）、积分商城（积分调整/商品上架下架/归档/订单发货/归档）、系统管理（保存配置/字典增删启停）、素材库（上传/替换/删除）、归档管理（恢复对象/彻底删除对象/更新归档设置）。
+- **模块覆盖（15 类）**：认证（修改密码）、RBAC（管理员增改启停/重置密码/角色权限分配）、社区成员（新增用户/编辑用户信息/重置密码/冻结账号）、社区企业（新增/编辑/停用/启用/归档企业）、合作企业（新增/编辑/停用/启用/归档/关联成员增删）、审核中心（审核通过/驳回/归档申请）、需求管理（新增/审核通过/驳回/发布/定时/取消定时/撤回/关闭/立项/归档）、项目管理（新增/暂停/恢复/关闭/归档）、活动管理（发布/定时/取消定时/报名开关/取消/恢复/归档）、空间管理（预约审核/取消/归档、租约归档）、内容管理（文章审核/发布/定时/下架/删除、公告发布/编辑/下架/重新发布/置顶/删除）、积分商城（积分调整/商品上架下架/归档/订单发货/归档）、系统管理（保存配置/字典增删启停）、素材库（上传/替换/删除）、归档管理（恢复对象/彻底删除对象/更新归档设置）。
 - **写入失败不影响主流程**（异步/捕获告警）；`id` 走 AL 前缀；`ip`/`before`/`after` 为扩展列。
 - 查询口径同 M0：module 精确筛选 + keyword 跨 target/action/detail/operator 模糊，最新在前；响应只含 M0 形状字段（不含 ip/before/after）。
 

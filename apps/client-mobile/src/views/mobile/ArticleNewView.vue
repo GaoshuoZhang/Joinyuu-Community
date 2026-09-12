@@ -93,7 +93,7 @@ async function onSubmit() {
   padding: 16px;
   display: flex;
   flex-direction: column;
-  gap: 14px;
+  gap: 12px;
 }
 
 .head {
@@ -130,7 +130,7 @@ async function onSubmit() {
 
 .count {
   margin: 6px 0 0;
-  font-size: 11px;
+  font-size: 12px;
   color: var(--td-error-color);
 }
 

@@ -56,7 +56,7 @@ export interface DemandPublishPayload {
   contactPhone: string
   /** 提交人联系邮箱（选填） */
   contactEmail?: string
-  /** 自定义响应需求奖励积分（缺省 = 按积分规则发放） */
+  /** 响应需求奖励积分（历史缺省值按积分规则发放） */
   respondPoints?: number
 }
 

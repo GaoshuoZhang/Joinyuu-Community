@@ -186,11 +186,11 @@ function onClose() {
 
 <template>
   <t-dialog
+    :close-on-overlay-click="true"
     :visible="visible"
     :header="mode === 'create' ? (channel === 'official' ? '发布资讯' : '新增投稿') : '编辑文章'"
     width="880px"
     lazy
-    :close-on-overlay-click="false"
     :close-on-esc-keydown="false"
     @close="onClose"
   >

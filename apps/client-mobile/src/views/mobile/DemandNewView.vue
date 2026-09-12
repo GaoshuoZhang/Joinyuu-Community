@@ -89,13 +89,12 @@ async function onSubmit() {
 <template>
   <div class="m-new-demand page-fade-in">
     <div v-if="!demandOpen">
-      <EmptyBlock text="需求广场暂未开放" />
-      <Button theme="default" variant="outline" block class="back-btn" @click="router.push('/demands')">返回需求广场</Button>
+      <EmptyBlock text="发布功能暂未开放" />
     </div>
 
     <template v-else>
       <h1 class="title">发布需求</h1>
-      <p class="subtitle">提交后进入审核，通过审核后上架需求广场</p>
+      <p class="subtitle">提交后进入审核，通过后展示在项目列表</p>
 
       <div class="field">
         <label>需求标题</label>
@@ -200,15 +199,10 @@ async function onSubmit() {
 
 .date-trigger {
   border: 1px solid var(--td-component-border);
-  border-radius: var(--td-radius-medium);
+  border-radius: var(--td-radius-large);
 }
 
 .submit-btn {
   margin-top: 8px;
-}
-
-.back-btn {
-  margin-top: 14px;
-  flex-shrink: 0;
 }
 </style>

@@ -1,10 +1,9 @@
 <script setup lang="ts">
 import { computed } from 'vue'
+import { Tag } from 'tdesign-mobile-vue'
 
-/* 状态标签（双端通用）：kind 决定状态集；配色取 TDesign t-tag light 变体，
- * 与 admin 的 StatusTag（t-tag variant="light"）视觉口径一致。
- * 刻意不引入组件库：桌面/移动分属两个 TDesign 包，共享组件一旦引入任一包
- * 都会把该包代码带进另一端的 chunk，破坏双端分包隔离（plan §3.4）。 */
+/* 状态标签：TDesign Tag 轻封装（kind 决定状态集，配色与 admin StatusTag 口径一致：
+ * warning=待定 / success=通过 / danger=驳回 / primary=中间态 / default=终态）。 */
 const props = defineProps<{ kind: 'demand' | 'enroll' | 'order' | 'reservation' | 'article' | 'application'; value: string }>()
 
 type Tone = 'default' | 'primary' | 'success' | 'warning' | 'danger'
@@ -49,43 +48,5 @@ const meta = computed(() => map[props.kind]?.[props.value] ?? { label: props.val
 </script>
 
 <template>
-  <span class="state-tag" :class="meta.tone">{{ meta.label }}</span>
+  <Tag :theme="meta.tone" variant="light" size="small">{{ meta.label }}</Tag>
 </template>
-
-<style scoped>
-.state-tag {
-  display: inline-flex;
-  align-items: center;
-  height: 22px;
-  padding: 0 8px;
-  font-size: 12px;
-  line-height: 22px;
-  white-space: nowrap;
-  border-radius: var(--td-radius-small);
-}
-
-.state-tag.default {
-  color: var(--td-text-color-primary);
-  background-color: var(--td-bg-color-container-hover);
-}
-
-.state-tag.primary {
-  color: var(--td-brand-color);
-  background-color: var(--td-brand-color-light);
-}
-
-.state-tag.success {
-  color: var(--td-success-color);
-  background-color: var(--td-success-color-light);
-}
-
-.state-tag.warning {
-  color: var(--td-warning-color);
-  background-color: var(--td-warning-color-light);
-}
-
-.state-tag.danger {
-  color: var(--td-error-color);
-  background-color: var(--td-error-color-light);
-}
-</style>

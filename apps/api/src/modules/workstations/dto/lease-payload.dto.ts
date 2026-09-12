@@ -40,4 +40,8 @@ export class LeasePayloadDto {
 
   @IsString()
   contactPhone!: string
+
+  @IsOptional()
+  @IsString()
+  note?: string
 }

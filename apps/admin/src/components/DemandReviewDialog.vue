@@ -5,9 +5,9 @@ import { identityTypeMap } from '@/constants/identity'
 import { approveDemand, rejectDemand } from '@/api/demands'
 import type { Demand } from '@/types'
 
-/* 只读审核对话框：待审核需求仅读查看，不允许编辑任何项。
+/* 只读审核抽屉：待审核需求仅读查看，不允许编辑任何项。
  * 底部按钮（从左到右）：取消 / 驳回 / 通过——通过 = 转为待发布；驳回 = 必须填写驳回原因；
- * 取消 = 关闭窗口不做任何动作。 */
+ * 取消 = 关闭抽屉不做任何动作。 */
 const props = defineProps<{
   visible: boolean
   demand: Demand | null
@@ -89,28 +89,15 @@ function publisherIdentityLabel(d: Demand): string {
 </script>
 
 <template>
-  <t-dialog
+  <t-drawer
     :visible="visible"
     header="审核需求"
-    width="640px"
-    :close-on-overlay-click="false"
-    :close-on-esc-keydown="false"
+    size="560px"
+    :footer="false"
+    :close-btn="true"
+    :close-on-esc-keydown="true"
     @close="onCancel"
   >
-    <template #footer>
-      <div class="dialog-footer">
-        <template v-if="phase === 'review'">
-          <t-button variant="text" theme="default" @click="onCancel">取消</t-button>
-          <t-button variant="outline" theme="danger" @click="onReject">驳回</t-button>
-          <t-button theme="primary" :loading="submitting" @click="onApprove">通过</t-button>
-        </template>
-        <template v-else>
-          <t-button variant="text" theme="default" @click="phase = 'review'">返回</t-button>
-          <t-button theme="danger" :loading="submitting" @click="onConfirmReject">确认驳回</t-button>
-        </template>
-      </div>
-    </template>
-
     <template v-if="demand">
       <template v-if="phase === 'review'">
         <t-alert theme="warning" title="只读审核" message="需求审核阶段不支持编辑；通过后转为「待发布」，由运营决定发布时间。" />
@@ -151,15 +138,34 @@ function publisherIdentityLabel(d: Demand): string {
           </t-form-item>
         </t-form>
       </template>
+
+      <div class="drawer-footer">
+        <template v-if="phase === 'review'">
+          <t-button variant="text" theme="default" @click="onCancel">取消</t-button>
+          <t-button variant="outline" theme="danger" @click="onReject">驳回</t-button>
+          <t-button theme="primary" :loading="submitting" @click="onApprove">通过</t-button>
+        </template>
+        <template v-else>
+          <t-button variant="text" theme="default" @click="phase = 'review'">返回</t-button>
+          <t-button theme="danger" :loading="submitting" @click="onConfirmReject">确认驳回</t-button>
+        </template>
+      </div>
     </template>
-  </t-dialog>
+  </t-drawer>
 </template>
 
 <style scoped>
-.dialog-footer {
+.drawer-footer {
+  position: sticky;
+  bottom: 0;
+  z-index: 1;
   display: flex;
   justify-content: flex-end;
   gap: 8px;
+  margin-top: 16px;
+  padding: 12px 0;
+  border-top: 1px solid var(--td-component-border);
+  background: var(--td-bg-color-container);
 }
 
 .review-title {
@@ -183,6 +189,12 @@ function publisherIdentityLabel(d: Demand): string {
 
 .review-desc {
   margin-bottom: 4px;
+}
+
+/* 联系邮箱等无空格长文本在描述表格中强制换行，避免溢出撑破抽屉 */
+.review-desc :deep(.t-descriptions__content) {
+  word-break: break-all;
+  overflow-wrap: anywhere;
 }
 
 .block-title {

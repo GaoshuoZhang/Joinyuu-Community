@@ -143,10 +143,9 @@ const form = reactive<DemandPublishPayload & { customIdentityType: CustomPublish
   customIdentityType: '',
 })
 
-/* 自定义开关：可见范围/可报名范围（关=不限）/ 响应需求奖励积分（关=按积分规则） */
+/* 自定义开关：可见范围/可报名范围（关=不限） */
 const customVisibility = ref(false)
 const customEnrollment = ref(false)
-const customRespond = ref(false)
 
 /* watch 在 form 声明之后注册：getter 立即求值 form.publisherValue，置于 form 之前会 TDZ 报错 */
 watch(
@@ -164,6 +163,7 @@ onMounted(async () => {
   try {
     const rules = await fetchPointsRules()
     rulePoints.respond = rules.find((r) => r.code === 'demand_responded')?.points ?? 20
+    if (props.visible && props.mode === 'create') form.respondPoints = rulePoints.respond
   } catch {
     /* 规则加载失败时保留默认值 */
   }
@@ -175,11 +175,6 @@ onMounted(async () => {
     .catch(() => {
       /* 字典加载失败保留回退词表 */
     })
-})
-
-/* 打开自定义奖励开关时，输入框默认填入积分规则设定值 */
-watch(customRespond, (v) => {
-  if (v) form.respondPoints = rulePoints.respond
 })
 
 watch(
@@ -202,7 +197,6 @@ watch(
       form.contactEmail = ''
       customVisibility.value = false
       customEnrollment.value = false
-      customRespond.value = false
       form.respondPoints = rulePoints.respond
       form.publisherValue = ''
       publisherId.value = ''
@@ -226,7 +220,6 @@ watch(
         : props.demand.deadline
       customVisibility.value = props.demand.visibilityIdentities.length > 0 || props.demand.visibilityLevels.length > 0
       customEnrollment.value = props.demand.enrollmentIdentities.length > 0 || props.demand.enrollmentLevels.length > 0
-      customRespond.value = props.demand.respondPoints != null
       form.respondPoints = props.demand.respondPoints ?? rulePoints.respond
       publisherId.value = props.demand.publisherId
       publisherName.value = props.demand.publisherName
@@ -324,7 +317,7 @@ async function onConfirm() {
         visibilityLevels: customVisibility.value ? formBody.visibilityLevels : [],
         enrollmentIdentities: customEnrollment.value ? formBody.enrollmentIdentities : [],
         enrollmentLevels: customEnrollment.value ? formBody.enrollmentLevels : [],
-        respondPoints: customRespond.value ? formBody.respondPoints : undefined,
+        respondPoints: formBody.respondPoints,
       })
       MessagePlugin.success(`需求已新增，进入待发布状态（${demand.id}）`)
     } else if (props.demand) {
@@ -335,7 +328,7 @@ async function onConfirm() {
         visibilityLevels: customVisibility.value ? formBody.visibilityLevels : [],
         enrollmentIdentities: customEnrollment.value ? formBody.enrollmentIdentities : [],
         enrollmentLevels: customEnrollment.value ? formBody.enrollmentLevels : [],
-        respondPoints: customRespond.value ? formBody.respondPoints : undefined,
+        respondPoints: formBody.respondPoints,
         ...(customIdentity ? { publisherIdentity: customIdentity } : {}),
       })
       MessagePlugin.success('修改已保存')
@@ -356,11 +349,11 @@ function onClose() {
 
 <template>
   <t-dialog
+    :close-on-overlay-click="true"
     :visible="visible"
     :header="headerMap[mode]"
     width="880px"
     lazy
-    :close-on-overlay-click="false"
     :close-on-esc-keydown="false"
     @close="onClose"
   >
@@ -375,7 +368,12 @@ function onClose() {
     <t-form ref="formRef" :data="{ ...form, publisherId: publisherId }" :rules="rules" label-align="top">
       <!-- create 模式：提交人（可新增新条目）与提交身份 -->
       <template v-if="mode === 'create'">
-        <t-form-item label="需求方" name="publisherValue">
+        <t-form-item name="publisherValue">
+          <template #label>
+            <t-popup content="未注册的需求方可直接输入名称新增；选中已注册企业/个人用户将自动填充联系电话" show-arrow>
+              <span class="scope-popup-trigger">需求方</span>
+            </t-popup>
+          </template>
           <t-select
             v-model="form.publisherValue"
             :options="publisherOptions"
@@ -384,7 +382,6 @@ function onClose() {
             @change="(val: unknown) => applyPublisherContact(String(val ?? ''))"
             placeholder="选择已注册的个人用户/企业，或直接输入新需求方…"
           />
-          <div class="field-help">未注册的需求方可直接输入名称新增；选中已注册企业/个人用户将自动填充联系电话</div>
         </t-form-item>
       </template>
       <t-form-item v-else label="需求方" name="publisherValue">
@@ -443,56 +440,67 @@ function onClose() {
         </t-form-item>
       </div>
 
-      <div class="scope-head">
-        <span class="scope-title">自定义可见范围</span>
-        <t-switch v-model="customVisibility" />
-      </div>
-      <span class="scope-tip-block">默认关闭 = 所有身份、等级均可见；开启后可限定可见的身份与等级</span>
-      <div v-if="customVisibility" class="form-row">
-        <t-form-item label="身份" name="visibilityIdentities">
-          <t-select
-            v-model="form.visibilityIdentities"
-            multiple
-            clearable
-            :options="visibilityIdentityOptions"
-            placeholder="不限…"
-          />
-        </t-form-item>
-        <t-form-item label="等级" name="visibilityLevels">
-          <t-select v-model="form.visibilityLevels" multiple clearable :options="userLevelOptions" placeholder="不限…" />
-        </t-form-item>
-      </div>
-
-      <div class="scope-head">
-        <span class="scope-title">自定义可报名范围</span>
-        <div class="scope-right">
-          <t-switch v-model="customEnrollment" />
-          <t-button v-if="customEnrollment && customVisibility" variant="text" size="small" @click="syncEnrollment">同步可见范围</t-button>
+      <div class="form-row">
+        <div class="scope-col">
+          <div class="scope-head">
+            <t-popup content="关闭 = 所有用户可见" show-arrow>
+              <span class="scope-title scope-popup-trigger">自定义可见范围</span>
+            </t-popup>
+            <t-popup content="关闭 = 所有用户可见" show-arrow>
+              <span class="scope-switch-trigger"><t-switch v-model="customVisibility" /></span>
+            </t-popup>
+          </div>
+          <t-form-item v-if="customVisibility" label="身份" name="visibilityIdentities">
+            <t-select
+              v-model="form.visibilityIdentities"
+              multiple
+              clearable
+              :options="visibilityIdentityOptions"
+              placeholder="不限…"
+            />
+          </t-form-item>
+          <t-form-item v-if="customVisibility" label="等级" name="visibilityLevels">
+            <t-select v-model="form.visibilityLevels" multiple clearable :options="userLevelOptions" placeholder="不限…" />
+          </t-form-item>
+        </div>
+        <div class="scope-col">
+          <div class="scope-head">
+            <t-popup content="关闭 = 所有用户可报名" show-arrow>
+              <span class="scope-title scope-popup-trigger">自定义可报名范围</span>
+            </t-popup>
+            <div class="scope-right">
+              <t-button v-if="customEnrollment && customVisibility" variant="text" size="small" @click="syncEnrollment">同步可见范围</t-button>
+              <t-popup content="关闭 = 所有用户可报名" show-arrow>
+                <span class="scope-switch-trigger"><t-switch v-model="customEnrollment" /></span>
+              </t-popup>
+            </div>
+          </div>
+          <t-form-item v-if="customEnrollment" label="身份" name="enrollmentIdentities">
+            <t-select
+              v-model="form.enrollmentIdentities"
+              multiple
+              clearable
+              :options="visibilityIdentityOptions"
+              placeholder="不限…"
+            />
+          </t-form-item>
+          <t-form-item v-if="customEnrollment" label="等级" name="enrollmentLevels">
+            <t-select v-model="form.enrollmentLevels" multiple clearable :options="userLevelOptions" placeholder="不限…" />
+          </t-form-item>
         </div>
       </div>
-      <span class="scope-tip-block">默认关闭 = 所有身份、等级均可报名；开启后可限定可报名的身份与等级</span>
-      <div v-if="customEnrollment" class="form-row">
-        <t-form-item label="身份" name="enrollmentIdentities">
-          <t-select
-            v-model="form.enrollmentIdentities"
-            multiple
-            clearable
-            :options="visibilityIdentityOptions"
-            placeholder="不限…"
-          />
-        </t-form-item>
-        <t-form-item label="等级" name="enrollmentLevels">
-          <t-select v-model="form.enrollmentLevels" multiple clearable :options="userLevelOptions" placeholder="不限…" />
-        </t-form-item>
-      </div>
 
-      <div class="scope-head">
-        <span class="scope-title">自定义响应需求奖励积分</span>
-        <t-switch v-model="customRespond" />
-      </div>
-      <span class="scope-tip-block">默认关闭 = 按「积分规则」的响应需求奖励（{{ rulePoints.respond }} 积分）发放；开启后可按需求单独调整响应奖励</span>
-      <t-form-item v-if="customRespond" label="响应需求奖励积分" name="respondPoints">
-        <t-input-number v-model="form.respondPoints" :min="0" theme="column" style="width: 100%" />
+      <t-form-item name="respondPoints">
+        <template #label>
+          <t-popup content="默认使用积分规则值，可直接为本需求调整响应奖励" show-arrow>
+            <span class="scope-popup-trigger">响应奖励积分（规则值：{{ rulePoints.respond }}）</span>
+          </t-popup>
+        </template>
+        <t-popup content="默认使用积分规则值，可直接为本需求调整响应奖励" show-arrow>
+          <div class="reward-input-trigger">
+            <t-input-number v-model="form.respondPoints" :min="0" theme="column" style="width: 100%" />
+          </div>
+        </t-popup>
       </t-form-item>
 
       <t-form-item label="需求内容" name="description">
@@ -509,17 +517,22 @@ function onClose() {
   gap: 0 16px;
 }
 
-.scope-tip-block {
-  display: block;
-  margin: -6px 0 12px;
-  font-size: 12px;
-  color: var(--td-text-color-secondary);
+.scope-col {
+  min-width: 0;
+}
+
+@media (max-width: 767px) {
+  .form-row {
+    grid-template-columns: 1fr;
+  }
 }
 
 .scope-head {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   justify-content: space-between;
+  gap: 4px 8px;
   margin-bottom: 8px;
 }
 
@@ -531,8 +544,20 @@ function onClose() {
 
 .scope-title {
   font-size: 14px;
-  font-weight: 600;
+  font-weight: 400;
   color: var(--td-text-color-primary);
+}
+
+.scope-popup-trigger {
+  cursor: help;
+}
+
+.scope-switch-trigger {
+  display: inline-flex;
+}
+
+.reward-input-trigger {
+  width: 100%;
 }
 
 .scope-tip {

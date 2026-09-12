@@ -3,7 +3,7 @@ import { computed, onMounted, reactive, ref } from 'vue'
 import { useListQueryState } from '@/utils/listQuery'
 import { useRouter } from 'vue-router'
 import { MessagePlugin } from 'tdesign-vue-next'
-import { SearchIcon, DownloadIcon } from 'tdesign-icons-vue-next'
+import { SearchIcon, DownloadIcon, AddIcon } from 'tdesign-icons-vue-next'
 import PageHeader from '@/components/PageHeader.vue'
 import StatusTag from '@/components/StatusTag.vue'
 import IdentityTags from '@/components/IdentityTags.vue'
@@ -12,6 +12,7 @@ import { userCategoryOptions, identityTypeMap } from '@/constants/identity'
 import { fetchUsers } from '@/api/users'
 import { exportCsv, statusLabel } from '@/utils/exportCsv'
 import ListErrorState from '@/components/ListErrorState.vue'
+import UserFormDialog from '@/components/UserFormDialog.vue'
 import type { User } from '@/types'
 
 const router = useRouter()
@@ -19,6 +20,7 @@ const loading = ref(true)
 const loadError = ref('')
 const list = ref<User[]>([])
 const total = ref(0)
+const formVisible = ref(false)
 
 const query = reactive({
   page: 1,
@@ -138,6 +140,15 @@ function goDetail(row: User) {
   router.push(`/users/${row.uid}`)
 }
 
+function onCreated(id: string) {
+  query.keyword = id
+  query.status = ''
+  query.category = ''
+  query.realStatus = ''
+  query.page = 1
+  load()
+}
+
 const { syncQuery } = useListQueryState(query, load)
 
 onMounted(load)
@@ -157,6 +168,10 @@ onMounted(load)
         <t-button variant="outline" @click="onExport">
           <template #icon><DownloadIcon /></template>
           导出
+        </t-button>
+        <t-button theme="primary" v-permission="'/users'" @click="formVisible = true">
+          <template #icon><AddIcon /></template>
+          新增用户
         </t-button>
       </template>
     </PageHeader>
@@ -253,6 +268,8 @@ onMounted(load)
         </template>
       </t-table>
     </div>
+
+    <UserFormDialog v-model:visible="formVisible" @success="onCreated" />
   </div>
 </template>
 

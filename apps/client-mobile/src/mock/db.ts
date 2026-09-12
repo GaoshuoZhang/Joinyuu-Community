@@ -96,7 +96,7 @@ export const accounts: MockAccount[] = [
     identities: [
       { type: 'individual' },
       { type: 'community_individual', level: 3, levelName: '岛屿开拓者', experience: 1320 },
-      { type: 'community_enterprise', enterpriseId: 'E2001', enterpriseName: '芯启半导体' },
+      { type: 'community_enterprise', enterpriseId: 'E2001', enterpriseName: '芯启半导体', enterpriseRole: '创始人' },
     ],
     registeredAt: '2025-03-15 14:20',
   },
@@ -109,7 +109,7 @@ export const accounts: MockAccount[] = [
     points: 860,
     identities: [
       { type: 'individual' },
-      { type: 'community_enterprise', enterpriseId: 'E2004', enterpriseName: '木白设计工作室' },
+      { type: 'community_enterprise', enterpriseId: 'E2004', enterpriseName: '木白设计工作室', enterpriseRole: '总经理' },
     ],
     registeredAt: '2025-07-23 10:05',
   },

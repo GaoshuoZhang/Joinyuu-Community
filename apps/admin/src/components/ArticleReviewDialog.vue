@@ -4,7 +4,7 @@ import { MessagePlugin } from 'tdesign-vue-next'
 import { reviewArticle } from '@/api/contents'
 import type { Article } from '@/types'
 
-/* 文章审阅弹窗：审核模式（待审核投稿）支持驳回/通过；只读模式（定时发布中查看详情）仅展示 */
+/* 文章审阅抽屉：审核模式（待审核投稿）支持驳回/通过；只读模式（定时发布中查看详情）仅展示 */
 const props = defineProps<{
   visible: boolean
   article: Article | null
@@ -71,27 +71,15 @@ function onCancel() {
 </script>
 
 <template>
-  <t-dialog :visible="visible" :header="title ?? `审核投稿 · ${article?.title ?? ''}`" width="720px" :close-on-overlay-click="false" :close-on-esc-keydown="false" @close="onCancel">
-    <template #footer>
-      <div class="dialog-footer">
-        <t-button variant="text" theme="default" @click="onCancel">
-          {{ readonly ? '关闭' : '取消' }}
-        </t-button>
-        <template v-if="!readonly">
-          <t-button
-            v-if="rejecting"
-            theme="danger"
-            :loading="acting === 'reject'"
-            @click="onReject"
-          >
-            确认驳回
-          </t-button>
-          <t-button v-else variant="outline" theme="danger" @click="rejecting = true">驳回</t-button>
-          <t-button v-if="!rejecting" theme="primary" :loading="acting === 'approve'" @click="onApprove">通过</t-button>
-        </template>
-      </div>
-    </template>
-
+  <t-drawer
+    :visible="visible"
+    :header="title ?? `审核投稿 · ${article?.title ?? ''}`"
+    size="720px"
+    :footer="false"
+    :close-btn="true"
+    :close-on-esc-keydown="true"
+    @close="onCancel"
+  >
     <div v-if="article" class="review-body">
       <div class="meta-grid">
         <div class="meta-item">
@@ -125,7 +113,25 @@ function onCancel() {
         <t-textarea v-model="reason" :autosize="{ minRows: 2, maxRows: 4 }" placeholder="请填写驳回原因（通知投稿人）…" maxlength="200" />
       </div>
     </div>
-  </t-dialog>
+
+    <div v-if="article" class="drawer-footer">
+      <t-button variant="text" theme="default" @click="onCancel">
+        {{ readonly ? '关闭' : '取消' }}
+      </t-button>
+      <template v-if="!readonly">
+        <t-button
+          v-if="rejecting"
+          theme="danger"
+          :loading="acting === 'reject'"
+          @click="onReject"
+        >
+          确认驳回
+        </t-button>
+        <t-button v-else variant="outline" theme="danger" @click="rejecting = true">驳回</t-button>
+        <t-button v-if="!rejecting" theme="primary" :loading="acting === 'approve'" @click="onApprove">通过</t-button>
+      </template>
+    </div>
+  </t-drawer>
 </template>
 
 <style scoped>
@@ -198,9 +204,16 @@ function onCancel() {
   margin-top: 16px;
 }
 
-.dialog-footer {
+.drawer-footer {
+  position: sticky;
+  bottom: 0;
+  z-index: 1;
   display: flex;
   justify-content: flex-end;
   gap: 8px;
+  margin-top: 16px;
+  padding: 12px 0;
+  border-top: 1px solid var(--td-component-border);
+  background: var(--td-bg-color-container);
 }
 </style>

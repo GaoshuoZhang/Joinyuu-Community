@@ -12,7 +12,7 @@ import type { CommunityEvent } from '@/types'
 const RichEditor = defineAsyncComponent(() => import('@/components/RichEditor.vue'))
 
 /* 活动新增/编辑弹窗：基本信息 + 报名截止时间
- * + 可见范围/等级 + 可报名范围/等级（默认与可见一致，可单独调整）+ 报名是否需审核
+ * + 可见范围/等级 + 可报名范围/等级（默认与可见一致，可单独调整）+ 报名需审核
  * 新增无定时发布选项：新活动统一进入「待发布」，由列表操作决定立即发布/定时发布 */
 const props = defineProps<{
   visible: boolean
@@ -27,11 +27,6 @@ const emit = defineEmits<{
 
 /* 活动类型选项来自数据字典，加载失败回退默认词表 */
 const typeOptions = ref(dictFallback.event_type.map((t) => ({ label: t, value: t })))
-
-const reviewOptions = [
-  { label: '需审核', value: 1 },
-  { label: '无需审核（报名即通过）', value: 0 },
-]
 
 const submitting = ref(false)
 const formRef = ref()
@@ -52,14 +47,12 @@ const form = reactive({
   visibilityLevels: [] as string[],
   enrollmentIdentities: [] as string[],
   enrollmentLevels: [] as string[],
-  requireReview: 1,
-  customEnrollPoints: false,
+  requireReview: true,
   enrollPoints: 5,
-  customCheckinPoints: false,
   checkinPoints: 10,
 })
 
-/* 积分规则默认分值：报名奖励 / 签到奖励（关闭自定义时按此发放） */
+/* 积分规则默认分值：报名奖励 / 签到奖励 */
 const rulePoints = reactive({ enroll: 5, checkin: 10 })
 
 /* 范围开关：可见范围/可报名范围（关=不限，提交空数组） */
@@ -71,6 +64,10 @@ onMounted(async () => {
     const rules = await fetchPointsRules()
     rulePoints.enroll = rules.find((r) => r.code === 'activity_enroll_approved')?.points ?? 5
     rulePoints.checkin = rules.find((r) => r.code === 'activity_checkin')?.points ?? 10
+    if (props.visible && props.mode === 'create') {
+      form.enrollPoints = rulePoints.enroll
+      form.checkinPoints = rulePoints.checkin
+    }
   } catch {
     /* 规则加载失败时保留默认值 */
   }
@@ -83,20 +80,6 @@ onMounted(async () => {
       /* 字典加载失败保留回退词表 */
     })
 })
-
-/* 打开自定义开关时，输入框默认填入积分规则设定值 */
-watch(
-  () => form.customEnrollPoints,
-  (v) => {
-    if (v) form.enrollPoints = rulePoints.enroll
-  },
-)
-watch(
-  () => form.customCheckinPoints,
-  (v) => {
-    if (v) form.checkinPoints = rulePoints.checkin
-  },
-)
 
 watch(
   () => props.visible,
@@ -117,10 +100,8 @@ watch(
       form.visibilityLevels = [...props.event.visibilityLevels]
       form.enrollmentIdentities = [...props.event.enrollmentIdentities]
       form.enrollmentLevels = [...props.event.enrollmentLevels]
-      form.requireReview = props.event.requireReview ? 1 : 0
-      form.customEnrollPoints = props.event.enrollPoints != null
+      form.requireReview = props.event.requireReview
       form.enrollPoints = props.event.enrollPoints ?? rulePoints.enroll
-      form.customCheckinPoints = props.event.checkinPoints != null
       form.checkinPoints = props.event.checkinPoints ?? rulePoints.checkin
       customVisibility.value = props.event.visibilityIdentities.length > 0 || props.event.visibilityLevels.length > 0
       customEnrollment.value = props.event.enrollmentIdentities.length > 0 || props.event.enrollmentLevels.length > 0
@@ -140,10 +121,8 @@ watch(
       form.visibilityLevels = []
       form.enrollmentIdentities = []
       form.enrollmentLevels = []
-      form.requireReview = 1
-      form.customEnrollPoints = false
+      form.requireReview = true
       form.enrollPoints = rulePoints.enroll
-      form.customCheckinPoints = false
       form.checkinPoints = rulePoints.checkin
       customVisibility.value = false
       customEnrollment.value = false
@@ -198,10 +177,10 @@ async function onConfirm() {
       visibilityLevels: customVisibility.value ? form.visibilityLevels : [],
       enrollmentIdentities: customEnrollment.value ? form.enrollmentIdentities : [],
       enrollmentLevels: customEnrollment.value ? form.enrollmentLevels : [],
-      requireReview: form.requireReview === 1,
+      requireReview: form.requireReview,
       enrollmentDeadline: form.enrollmentDeadline || undefined,
-      enrollPoints: form.customEnrollPoints ? form.enrollPoints : undefined,
-      checkinPoints: form.customCheckinPoints ? form.checkinPoints : undefined,
+      enrollPoints: form.enrollPoints,
+      checkinPoints: form.checkinPoints,
     }
     if (props.mode === 'create') {
       const event = await createEvent(payload)
@@ -226,11 +205,11 @@ function onClose() {
 
 <template>
   <t-dialog
+    :close-on-overlay-click="true"
     :visible="visible"
     :header="mode === 'create' ? '新增活动' : '编辑活动'"
     width="880px"
     lazy
-    :close-on-overlay-click="false"
     :close-on-esc-keydown="false"
     @close="onClose"
   >
@@ -272,16 +251,28 @@ function onClose() {
           />
         </t-form-item>
       </div>
-      <t-form-item label="报名截止时间" name="enrollmentDeadline">
-        <t-date-picker
-          v-model="form.enrollmentDeadline"
-          valueType="YYYY-MM-DD HH:mm"
-          enable-time-picker
-          clearable
-          placeholder="留空 = 不限，活动开始前均可报名…"
-          style="width: 100%"
-        />
-      </t-form-item>
+      <div class="form-row">
+        <t-form-item label="报名截止时间" name="enrollmentDeadline">
+          <t-date-picker
+            v-model="form.enrollmentDeadline"
+            valueType="YYYY-MM-DD HH:mm"
+            enable-time-picker
+            clearable
+            placeholder="留空 = 不限，活动开始前均可报名…"
+            style="width: 100%"
+          />
+        </t-form-item>
+        <t-form-item name="requireReview">
+          <template #label>
+            <t-popup content="开启后，用户报名需经管理员审核；关闭后报名自动通过" show-arrow>
+              <span class="scope-popup-trigger">报名需审核</span>
+            </t-popup>
+          </template>
+          <t-popup content="开启后，用户报名需经管理员审核；关闭后报名自动通过" show-arrow>
+            <span class="scope-switch-trigger"><t-switch v-model="form.requireReview" /></span>
+          </t-popup>
+        </t-form-item>
+      </div>
       <div class="form-row">
         <t-form-item label="地点" name="location">
           <t-input clearable v-model="form.location" placeholder="如 聚屿路演厅…" />
@@ -299,72 +290,85 @@ function onClose() {
         </t-form-item>
       </div>
 
-      <div class="scope-head">
-        <span class="scope-title">自定义可见范围</span>
-        <t-switch v-model="customVisibility" />
-      </div>
-      <span class="scope-tip-block">默认关闭 = 所有身份、等级均可见；开启后可限定可见的身份与等级</span>
-      <div v-if="customVisibility" class="form-row">
-        <t-form-item label="身份" name="visibilityIdentities">
-          <t-select
-            v-model="form.visibilityIdentities"
-            multiple
-            clearable
-            :options="visibilityIdentityOptions"
-            placeholder="不限…"
-          />
-        </t-form-item>
-        <t-form-item label="等级" name="visibilityLevels">
-          <t-select v-model="form.visibilityLevels" multiple clearable :options="userLevelOptions" placeholder="不限…" />
-        </t-form-item>
-      </div>
-
-      <div class="scope-head">
-        <span class="scope-title">自定义可报名范围</span>
-        <div class="scope-right">
-          <t-switch v-model="customEnrollment" />
-          <t-button v-if="customEnrollment && customVisibility" variant="text" size="small" @click="syncEnrollment">同步可见范围</t-button>
+      <div class="form-row">
+        <div class="scope-col">
+          <div class="scope-head">
+            <t-popup content="关闭 = 所有用户可见" show-arrow>
+              <span class="scope-title scope-popup-trigger">自定义可见范围</span>
+            </t-popup>
+            <t-popup content="关闭 = 所有用户可见" show-arrow>
+              <span class="scope-switch-trigger"><t-switch v-model="customVisibility" /></span>
+            </t-popup>
+          </div>
+          <t-form-item v-if="customVisibility" label="身份" name="visibilityIdentities">
+            <t-select
+              v-model="form.visibilityIdentities"
+              multiple
+              clearable
+              :options="visibilityIdentityOptions"
+              placeholder="不限…"
+            />
+          </t-form-item>
+          <t-form-item v-if="customVisibility" label="等级" name="visibilityLevels">
+            <t-select v-model="form.visibilityLevels" multiple clearable :options="userLevelOptions" placeholder="不限…" />
+          </t-form-item>
+        </div>
+        <div class="scope-col">
+          <div class="scope-head">
+            <t-popup content="关闭 = 所有用户可报名" show-arrow>
+              <span class="scope-title scope-popup-trigger">自定义可报名范围</span>
+            </t-popup>
+            <div class="scope-right">
+              <t-button v-if="customEnrollment && customVisibility" variant="text" size="small" @click="syncEnrollment">同步可见范围</t-button>
+              <t-popup content="关闭 = 所有用户可报名" show-arrow>
+                <span class="scope-switch-trigger"><t-switch v-model="customEnrollment" /></span>
+              </t-popup>
+            </div>
+          </div>
+          <t-form-item v-if="customEnrollment" label="身份" name="enrollmentIdentities">
+            <t-select
+              v-model="form.enrollmentIdentities"
+              multiple
+              clearable
+              :options="visibilityIdentityOptions"
+              placeholder="不限…"
+            />
+          </t-form-item>
+          <t-form-item v-if="customEnrollment" label="等级" name="enrollmentLevels">
+            <t-select v-model="form.enrollmentLevels" multiple clearable :options="userLevelOptions" placeholder="不限…" />
+          </t-form-item>
         </div>
       </div>
-      <span class="scope-tip-block">默认关闭 = 所有身份、等级均可报名；开启后可限定可报名的身份与等级</span>
-      <div v-if="customEnrollment" class="form-row">
-        <t-form-item label="身份" name="enrollmentIdentities">
-          <t-select
-            v-model="form.enrollmentIdentities"
-            multiple
-            clearable
-            :options="visibilityIdentityOptions"
-            placeholder="不限…"
-          />
-        </t-form-item>
-        <t-form-item label="等级" name="enrollmentLevels">
-          <t-select v-model="form.enrollmentLevels" multiple clearable :options="userLevelOptions" placeholder="不限…" />
-        </t-form-item>
-      </div>
 
-      <t-form-item label="报名是否需审核" name="requireReview">
-        <t-radio-group v-model="form.requireReview" :options="reviewOptions" />
-      </t-form-item>
-
-      <div class="scope-head">
-        <span class="scope-title">积分奖励</span>
-        <span class="scope-tip">默认按「积分规则」配置发放（报名 {{ rulePoints.enroll }} / 签到 {{ rulePoints.checkin }}）；开启自定义后可按活动单独调整</span>
-      </div>
       <div class="form-row">
-        <t-form-item label="自定义报名奖励积分" name="customEnrollPoints">
-          <t-switch v-model="form.customEnrollPoints" />
-        </t-form-item>
-        <t-form-item v-if="form.customEnrollPoints" label="报名奖励积分" name="enrollPoints">
-          <t-input-number v-model="form.enrollPoints" :min="0" theme="column" style="width: 100%" />
-        </t-form-item>
-      </div>
-      <div class="form-row">
-        <t-form-item label="自定义签到奖励积分" name="customCheckinPoints">
-          <t-switch v-model="form.customCheckinPoints" />
-        </t-form-item>
-        <t-form-item v-if="form.customCheckinPoints" label="签到奖励积分" name="checkinPoints">
-          <t-input-number v-model="form.checkinPoints" :min="0" theme="column" style="width: 100%" />
-        </t-form-item>
+        <div class="scope-col">
+          <t-form-item class="reward-value" name="enrollPoints">
+            <template #label>
+              <t-popup content="默认使用积分规则值，可直接为本活动调整报名奖励" show-arrow>
+                <span class="scope-popup-trigger">报名奖励积分（规则值：{{ rulePoints.enroll }}）</span>
+              </t-popup>
+            </template>
+            <t-popup content="默认使用积分规则值，可直接为本活动调整报名奖励" show-arrow>
+              <div class="reward-input-trigger">
+                <t-input-number v-model="form.enrollPoints" :min="0" theme="column" style="width: 100%" />
+              </div>
+            </t-popup>
+          </t-form-item>
+        </div>
+        <div class="scope-col">
+          <t-form-item class="reward-value" name="checkinPoints">
+            <template #label>
+              <t-popup content="默认使用积分规则值，可直接为本活动调整签到奖励" show-arrow>
+                <span class="scope-popup-trigger">签到奖励积分（规则值：{{ rulePoints.checkin }}）</span>
+              </t-popup>
+            </template>
+            <t-popup content="默认使用积分规则值，可直接为本活动调整签到奖励" show-arrow>
+              <div class="reward-input-trigger">
+                <t-input-number v-model="form.checkinPoints" :min="0" theme="column" style="width: 100%" />
+              </div>
+            </t-popup>
+          </t-form-item>
+        </div>
       </div>
 
       <t-form-item label="活动简介" name="description">
@@ -381,24 +385,37 @@ function onClose() {
   gap: 0 16px;
 }
 
+.scope-col {
+  min-width: 0;
+}
+
+@media (max-width: 767px) {
+  .form-row {
+    grid-template-columns: 1fr;
+  }
+}
+
 .dialog-footer {
   display: flex;
   justify-content: flex-end;
   gap: 8px;
 }
 
-.scope-tip-block {
-  display: block;
-  margin: -6px 0 12px;
-  font-size: 12px;
-  color: var(--td-text-color-secondary);
-}
-
 .scope-head {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   justify-content: space-between;
+  gap: 4px 8px;
   margin-bottom: 8px;
+}
+
+.reward-value {
+  margin-bottom: 0;
+}
+
+.reward-input-trigger {
+  width: 100%;
 }
 
 .scope-right {
@@ -409,12 +426,15 @@ function onClose() {
 
 .scope-title {
   font-size: 14px;
-  font-weight: 600;
+  font-weight: 400;
   color: var(--td-text-color-primary);
 }
 
-.scope-tip {
-  font-size: 12px;
-  color: var(--td-text-color-secondary);
+.scope-popup-trigger {
+  cursor: help;
+}
+
+.scope-switch-trigger {
+  display: inline-flex;
 }
 </style>

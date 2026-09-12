@@ -54,7 +54,7 @@ onMounted(run)
   padding: 16px;
   display: flex;
   flex-direction: column;
-  gap: 14px;
+  gap: 12px;
 }
 
 .head .page-title {
@@ -88,7 +88,7 @@ onMounted(run)
 
 .meta {
   margin: 6px 0 0;
-  font-size: 11px;
+  font-size: 12px;
   color: var(--td-text-color-placeholder);
 }
 
@@ -100,7 +100,7 @@ onMounted(run)
 
 .hint {
   margin: 3px 0 0;
-  font-size: 11px;
+  font-size: 12px;
   color: var(--td-text-color-secondary);
 }
 </style>

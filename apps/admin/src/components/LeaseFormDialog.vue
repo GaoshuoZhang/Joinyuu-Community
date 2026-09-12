@@ -10,7 +10,8 @@ import type { Lease, LeaseRenterType, RentPeriod, Workstation } from '@/types'
 /* 租约新增/编辑弹窗（办公位分配入口）：
  * 新增 = 选择租赁方（可新增新条目：已注册企业/个人用户自动填充联系电话，未注册可直接输入）
  *        + 锁定空闲办公位 + 租期/租金/联系人，新增成功后办公位转为已分配；
- * 编辑 = 仅调整租期/租金/联系人（换办公位/换租赁方需终止原租约后重建） */
+ * 编辑 = 仅调整租期/租金/联系人/备注（换办公位/换租赁方需终止原租约后重建），
+ *        提交时必填编辑原因，服务端追加编辑记录 */
 const props = defineProps<{
   visible: boolean
   mode: 'create' | 'edit'
@@ -45,6 +46,8 @@ const form = reactive({
   rentPeriod: 'month' as RentPeriod,
   contactName: '',
   contactPhone: '',
+  note: '',
+  reason: '',
 })
 
 /* 付款周期选项与标签（单位用于"租金（元）/ N"动态标签） */
@@ -152,6 +155,8 @@ watch(
       form.rentPeriod = props.lease.rentPeriod ?? 'month'
       form.contactName = props.lease.contactName
       form.contactPhone = props.lease.contactPhone
+      form.note = props.lease.note ?? ''
+      form.reason = ''
     } else {
       form.renterValue = ''
       form.enterpriseId = ''
@@ -165,6 +170,8 @@ watch(
       form.rentPeriod = 'month'
       form.contactName = ''
       form.contactPhone = ''
+      form.note = ''
+      form.reason = ''
     }
     /* 清除上次会话残留的校验红框（仅清状态，不动表单值） */
     nextTick(() => formRef.value?.clearValidate())
@@ -172,14 +179,17 @@ watch(
 )
 
 /* 规则 trigger 一律 submit：确认时 formRef.validate() 才触发红框提示 */
-const rules: FormProps['rules'] = {
+const rules = computed<FormProps['rules']>(() => ({
   renterValue: [{ required: true, message: '请选择或输入租赁方', trigger: 'submit' }],
   workstationIds: [{ required: true, message: '请选择至少一个空闲办公位', trigger: 'submit' }],
   startDate: [{ required: true, message: '请选择租赁开始日期', trigger: 'submit' }],
   contactName: [{ required: true, message: '请输入联系人', trigger: 'submit' }],
   contactPhone: [{ required: true, message: '请输入联系电话', trigger: 'submit' }],
   monthlyRent: [{ required: true, message: '请输入租金', trigger: 'submit' }],
-}
+  ...(props.mode === 'edit'
+    ? { reason: [{ required: true, message: '请填写编辑原因', trigger: 'submit' }] }
+    : {}),
+}))
 
 async function onConfirm() {
   const valid = await formRef.value.validate()
@@ -213,6 +223,7 @@ async function onConfirm() {
         rentPeriod: form.rentPeriod,
         contactName: form.contactName,
         contactPhone: form.contactPhone,
+        note: form.note.trim() || undefined,
       })
       MessagePlugin.success(`租约已新增，所选办公位已分配（${lease.id}）`)
     } else if (props.lease) {
@@ -224,6 +235,8 @@ async function onConfirm() {
         rentPeriod: form.rentPeriod,
         contactName: form.contactName,
         contactPhone: form.contactPhone,
+        note: form.note.trim() || undefined,
+        reason: form.reason.trim(),
       })
       MessagePlugin.success('租约修改已保存')
     }
@@ -243,10 +256,10 @@ function onClose() {
 
 <template>
   <t-dialog
+    :close-on-overlay-click="true"
     :visible="visible"
     :header="mode === 'create' ? '新增租约 · 分配办公位' : '编辑租约'"
-    width="620px"
-    :close-on-overlay-click="false"
+    width="880px"
     :close-on-esc-keydown="false"
     @close="onClose"
   >
@@ -259,24 +272,25 @@ function onClose() {
       </div>
     </template>
     <t-form ref="formRef" :data="form" :rules="rules" label-align="top">
-      <t-form-item label="租赁方" name="renterValue">
-        <t-input
-          v-if="mode === 'edit'"
-          :value="form.enterpriseName"
-          disabled
-          placeholder="租赁方不可变更…"
-        />
-        <t-select
-          v-else
-          v-model="form.renterValue"
-          :options="renterOptions"
-          placeholder="选择已注册的企业/个人用户，或直接输入新租赁方…"
-          filterable
-          creatable
-          style="width: 100%"
-        />
-        <div v-if="mode === 'create'" class="field-help">未注册的租赁方可直接输入名称新增；选中已注册企业/个人用户将自动填充联系电话</div>
-      </t-form-item>
+      <div class="form-row">
+        <t-form-item label="租赁方" name="renterValue">
+          <t-input
+            v-if="mode === 'edit'"
+            :value="form.enterpriseName"
+            disabled
+            placeholder="租赁方不可变更…"
+          />
+          <t-select
+            v-else
+            v-model="form.renterValue"
+            :options="renterOptions"
+            placeholder="选择已注册的企业/个人用户，或直接输入新租赁方…"
+            filterable
+            creatable
+            style="width: 100%"
+          />
+        </t-form-item>
+      </div>
       <t-form-item v-if="mode === 'create'" label="选择办公位（仅空闲）" name="workstationIds">
         <t-tree-select
           v-model="form.workstationIds"
@@ -315,6 +329,7 @@ function onClose() {
             :options="rentPeriodOptions"
             theme="button"
             variant="primary-filled"
+            class="rent-period-group"
           />
         </t-form-item>
         <t-form-item :label="`租金（元）/ ${rentPeriodLabel}`" name="monthlyRent">
@@ -329,6 +344,21 @@ function onClose() {
           <t-input clearable v-model="form.contactPhone" name="contact-phone" type="tel" inputmode="tel" autocomplete="tel" />
         </t-form-item>
       </div>
+      <t-form-item label="备注" name="note">
+        <t-textarea
+          v-model="form.note"
+          :maxlength="255"
+          :autosize="{ minRows: 2, maxRows: 3 }"
+          placeholder="租约补充说明等（选填）…"
+        />
+      </t-form-item>
+      <t-form-item v-if="mode === 'edit'" label="编辑原因" name="reason">
+        <t-textarea
+          v-model="form.reason"
+          :autosize="{ minRows: 2, maxRows: 4 }"
+          placeholder="请填写本次修改的原因（必填，将记入编辑记录）…"
+        />
+      </t-form-item>
     </t-form>
   </t-dialog>
 </template>
@@ -338,6 +368,22 @@ function onClose() {
   display: grid;
   grid-template-columns: 1fr 1fr;
   gap: 0 16px;
+}
+
+.rent-period-group {
+  display: flex;
+  width: 100%;
+}
+
+.rent-period-group :deep(.t-radio-button) {
+  flex: 1;
+  justify-content: center;
+}
+
+@media (max-width: 767px) {
+  .form-row {
+    grid-template-columns: 1fr;
+  }
 }
 
 .dialog-footer {

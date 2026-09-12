@@ -44,24 +44,57 @@ html[data-route-loading='true']::after {
   to { transform: translateX(360%); }
 }
 
-/* 普通 Dialog 保持页头、页脚可见，仅滚动内容区。TDesign 默认只给 body
- * overflow:auto，却没有为外层设置视口上限，长表单会整体超出屏幕。 */
+/* 普通 Dialog 整体滚动（需求 11）：页头、正文、页脚处于同一滚动容器，
+ * 底部按钮跟随内容滚动，而非 body 内部滚动、footer 固定。TDesign 默认
+ * 只给 body overflow:auto，却没有为外层设置视口上限，长表单会整体超出
+ * 屏幕；且 --top 定位使用内联 padding-top（约 20vh），限高后仍会溢出
+ * 底部 → 统一改为垂直居中 + !important 压过内联 padding。 */
 .t-dialog__ctx .t-dialog__position:not(.t-dialog__position_fullscreen) {
-  padding: 32px 16px;
+  align-items: center;
+  padding: 32px 16px !important;
 }
 
 .t-dialog__ctx .t-dialog--default:not(.t-dialog__fullscreen) {
-  display: flex;
-  flex-direction: column;
+  display: block;
   box-sizing: border-box;
   max-width: calc(100vw - 32px);
   max-height: calc(100vh - 64px);
+  overflow-y: auto;
+  overscroll-behavior: contain;
 }
 
+/* body 回归普通文档流，不再独立产生滚动条（否则会与整体滚动抢夺） */
 .t-dialog__ctx .t-dialog--default:not(.t-dialog__fullscreen) > .t-dialog__body {
-  flex: 1 1 auto;
-  min-height: 0;
-  overscroll-behavior: contain;
+  overflow: visible;
+}
+
+/* 滚动条美化/内缩（需求 8）：thumb 用透明边框 + padding-box 裁切，
+ * 视觉上与对话框右边缘留出间距，不再贴边，也不会压住头部/页脚内容 */
+.t-dialog__ctx .t-dialog--default:not(.t-dialog__fullscreen)::-webkit-scrollbar {
+  width: 12px;
+  height: 12px;
+}
+
+.t-dialog__ctx .t-dialog--default:not(.t-dialog__fullscreen)::-webkit-scrollbar-thumb {
+  border: 3px solid transparent;
+  border-radius: 8px;
+  background-color: var(--td-scrollbar-color, rgba(0, 0, 0, 0.18));
+  background-clip: padding-box;
+}
+
+.t-dialog__ctx .t-dialog--default:not(.t-dialog__fullscreen)::-webkit-scrollbar-thumb:hover {
+  background-color: var(--td-scrollbar-hover-color, rgba(0, 0, 0, 0.3));
+}
+
+.t-dialog__ctx .t-dialog--default:not(.t-dialog__fullscreen)::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+@-moz-document url-prefix() {
+  .t-dialog__ctx .t-dialog--default:not(.t-dialog__fullscreen) {
+    scrollbar-color: var(--td-scrollbar-color) transparent;
+    scrollbar-width: thin;
+  }
 }
 
 /* ---------- 富文本展示 ---------- */

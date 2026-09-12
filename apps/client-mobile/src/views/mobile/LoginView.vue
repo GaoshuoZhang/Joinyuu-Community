@@ -157,7 +157,7 @@ async function onSubmit() {
 .demo {
   margin: 12px 0 0;
   text-align: center;
-  font-size: 11px;
+  font-size: 12px;
   color: var(--td-text-color-placeholder);
 }
 </style>

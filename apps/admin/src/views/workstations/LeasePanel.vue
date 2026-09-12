@@ -80,6 +80,7 @@ const columns = [
   { colKey: 'term', title: '租期', cell: 'term', width: 180, resizable: true , ellipsis: true},
   { colKey: 'monthlyRent', title: '租金（元）', cell: 'rent', width: 110, resizable: true , ellipsis: true},
   { colKey: 'contactName', title: '联系人', cell: 'contact', width: 140, resizable: true , ellipsis: true},
+  { colKey: 'note', title: '备注', cell: 'note', width: 140, resizable: true , ellipsis: true},
   { colKey: 'status', title: '状态', cell: 'status', width: 110, resizable: true , ellipsis: true},
   { colKey: 'op', title: '操作', cell: 'op', width: 190 },
 ]
@@ -231,7 +232,7 @@ function openEdit(row: Lease) {
 function onExport() {
   exportCsv(
     '租约列表',
-    ['租约编号', '租赁方', '办公位', '租期', '租金', '联系人', '联系电话', '状态'],
+    ['租约编号', '租赁方', '办公位', '租期', '租金', '联系人', '联系电话', '备注', '状态'],
     filteredLeases.value.map((l) => [
       l.id,
       `${l.enterpriseName} [${l.enterpriseId || '未注册'}]`,
@@ -240,6 +241,7 @@ function onExport() {
       `${l.monthlyRent} / ${rentPeriodLabel(l)}`,
       l.contactName,
       l.contactPhone,
+      l.note || '—',
       statusLabel('lease', deriveLeaseStatus(l)),
     ]),
   )
@@ -357,6 +359,9 @@ onMounted(async () => {
         <template #contact="{ row }">
           <div class="cell-title">{{ row.contactName }}</div>
           <div class="cell-sub">{{ row.contactPhone }}</div>
+        </template>
+        <template #note="{ row }">
+          {{ row.note || '—' }}
         </template>
         <template #status="{ row }">
           <StatusTag entity="lease" :value="deriveLeaseStatus(row)" />

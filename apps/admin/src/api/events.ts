@@ -105,9 +105,9 @@ export interface EventPayload {
   requireReview: boolean
   /** 报名截止时间（空 = 不限，活动开始前均可报名） */
   enrollmentDeadline?: string
-  /** 自定义报名奖励积分（缺省 = 按积分规则发放） */
+  /** 报名奖励积分（历史缺省值按积分规则发放） */
   enrollPoints?: number
-  /** 自定义签到奖励积分（缺省 = 按积分规则发放） */
+  /** 签到奖励积分（历史缺省值按积分规则发放） */
   checkinPoints?: number
 }
 

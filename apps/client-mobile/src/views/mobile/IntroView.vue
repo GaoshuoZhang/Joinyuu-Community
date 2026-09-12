@@ -107,7 +107,7 @@ function goApply() {
 
 .p-meta {
   margin: 10px 0 0;
-  font-size: 11px;
+  font-size: 12px;
   color: var(--td-text-color-placeholder);
 }
 
@@ -118,7 +118,7 @@ function goApply() {
 .tip {
   margin: 0;
   text-align: center;
-  font-size: 11px;
+  font-size: 12px;
   color: var(--td-text-color-placeholder);
 }
 </style>

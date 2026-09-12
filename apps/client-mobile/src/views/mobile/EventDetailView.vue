@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { Button, Progress, Toast } from 'tdesign-mobile-vue'
+import { Button, Loading, Progress, Toast } from 'tdesign-mobile-vue'
 import { cancelEnrollment, enrollEvent, fetchEvent } from '@/api/events'
 import { useAsyncList } from '@/composables/useAsyncList'
 import { useAuthStore } from '@/stores/auth'
@@ -86,9 +86,7 @@ function goCheckIn() {
 
 <template>
   <div class="m-detail page-fade-in stagger">
-    <a class="back" @click="router.push('/events')">‹ 返回</a>
-
-    <div v-if="loading" class="skeleton">加载中…</div>
+    <Loading v-if="loading" class="state" text="加载中…" />
     <EmptyBlock v-else-if="error" :text="error" />
     <template v-else-if="event">
       <p v-if="isEnded" class="ended-banner">该活动已结束</p>
@@ -155,25 +153,10 @@ function goCheckIn() {
   gap: 12px;
 }
 
-.back {
-  font-size: 12px;
-  color: var(--td-text-color-secondary);
-  cursor: pointer;
-  width: fit-content;
-}
-
-.skeleton {
-  padding: 20px;
-  color: var(--td-text-color-placeholder);
-  font-size: 12px;
-  background: var(--td-bg-color-container);
-  border-radius: var(--td-radius-medium);
-}
-
 .ended-banner {
   margin: 0;
   padding: 10px 14px;
-  border-radius: var(--td-radius-medium);
+  border-radius: var(--td-radius-large);
   background: var(--td-bg-color-page);
   border: 1px solid var(--td-component-border);
   color: var(--td-text-color-secondary);
@@ -188,9 +171,9 @@ function goCheckIn() {
 }
 
 .type-tag {
-  font-size: 11px;
+  font-size: 12px;
   padding: 2px 8px;
-  border-radius: 4px;
+  border-radius: var(--td-radius-small);
   background: var(--td-brand-color-1);
   color: var(--td-brand-color);
 }

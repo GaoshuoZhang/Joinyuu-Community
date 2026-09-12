@@ -3,9 +3,9 @@
 ## Repository Overview
 
 - This repository is a pnpm workspace. Workspace packages are under `apps/*` and `packages/*`.
-- The active applications are `apps/admin` (Vue 3 + TypeScript + Vite + TDesign admin web) and `apps/api` (NestJS 11 + Prisma 6 + PostgreSQL 17 + Redis 7.4 backend).
-- The current stage is **M1.5 completed** (admin governance enhancement, R1~R12: RBAC/account/security/upload/rich-text/monitoring/charts/export), plus follow-up hardening and UX/governance work (security hardening, archive system, terminology unification, ID display rules, list interaction cleanup, role creation, bulk session kick-off). M0 (admin prototype) and M1 (backend, M1-A~E: 129 endpoints, admin fully HTTP-integrated, `src/mock/` removed) are complete; the API currently exposes 189 `/api/admin/**` routes over 43 Prisma models (14 migrations). Client web (M2) and mini program (M3) are not started.
-- Read `README.md`, `docs/wiki-backend.md`, `docs/wiki-admin-web.md`, and `docs/full-spec-check.md` before making broad changes. The wikis are the frozen contracts; `full-spec-check.md` is the progress reference (includes the M1.5 R1~R12 front/back-end routes).
+- The active applications are `apps/admin` (Vue 3 + TypeScript + Vite + TDesign admin web), `apps/api` (NestJS 11 + Prisma 6 + PostgreSQL 17 + Redis 7.4 backend), and `apps/client-mobile` (Vue 3 + TypeScript + Vite + TDesign Mobile Vue; M2 mobile client).
+- The current stage is **M1.5 completed** (admin governance enhancement, R1~R12: RBAC/account/security/upload/rich-text/monitoring/charts/export), plus follow-up hardening and UX/governance work (security hardening, archive system, terminology unification, ID display rules, list interaction cleanup, role creation, bulk session kick-off). M0 (admin prototype) and M1 (backend, M1-A~E: 129 endpoints, admin fully HTTP-integrated, `src/mock/` removed) are complete; the API currently exposes 189 `/api/admin/**` routes over 43 Prisma models (14 migrations). The client (M2) is split into two independent apps/entries, **mobile first**: `apps/client-mobile` (done, renamed from `apps/client`, dev port `7759`, **pure mobile** since 2026-09-13 — desktop views and `dualView` sharding removed), and `apps/client-web` (desktop, **to be created**, will take over the former `views/desktop/**` + `tdesign-vue-next`). The mini program (M3) is not started.
+- Read `README.md`, `docs/wiki-backend.md`, `docs/wiki-admin-web.md`, `docs/wiki-client-mobile.md`, and `docs/full-spec-check.md` before making broad changes. The wikis are the frozen contracts; `full-spec-check.md` is the progress reference (includes the M1.5 R1~R12 front/back-end routes).
 
 ## Commands
 
@@ -15,22 +15,25 @@ Run these from the repository root unless noted otherwise:
 pnpm install
 pnpm dev:admin
 pnpm build:admin
+pnpm dev:client-mobile  # Vite dev server on port 7759
+pnpm build:client-mobile
 pnpm db:up          # PostgreSQL 17 + Redis 7.4 via Docker Compose (waits for health)
 pnpm dev:api        # NestJS dev server on port 7757
 pnpm build:api
 pnpm db:reset       # drop + migrate + full seed (idempotent)
 ```
 
-- The admin dev server uses port `7758` (binds `0.0.0.0`) and proxies `/api` to the backend at `http://127.0.0.1:7757`; the API dev server uses port `7757`.
+- The admin dev server uses port `7758` (binds `0.0.0.0`) and proxies `/api` to the backend at `http://127.0.0.1:7757`; the API dev server uses port `7757`; the mobile client dev server (`apps/client-mobile`) uses port `7759` (binds `0.0.0.0`) and proxies `/api` to `http://127.0.0.1:7757`.
 - `pnpm build:admin` runs the Vite production build. It does not type-check Vue SFC templates.
-- TypeScript-only checks: `pnpm --filter @joinyuu/admin exec tsc -p tsconfig.json --noEmit` (admin) and `pnpm --filter @joinyuu/api exec tsc -p tsconfig.json --noEmit` (api). From `apps/admin`/`apps/api` you can also run `pnpm exec tsc -p tsconfig.json --noEmit`; plain `pnpm exec tsc` at the repo root fails because TypeScript is a dependency of the apps, not the workspace root. Neither check validates Vue templates fully (unregistered components or wrong template variables can still slip through).
-- Backend e2e suite: `pnpm --filter @joinyuu/api test:e2e` (25 suites / 169 cases; requires Docker services up; each suite reseeds via `test/helpers/reseed.ts`). There is no ESLint configuration and no unit test suite yet. Do not claim more was verified than actually ran.
+- TypeScript-only checks: `pnpm --filter @joinyuu/admin exec tsc -p tsconfig.json --noEmit` (admin), `pnpm --filter @joinyuu/api exec tsc -p tsconfig.json --noEmit` (api), and `pnpm --filter @joinyuu/client-mobile exec tsc -p tsconfig.json --noEmit` (client-mobile). From `apps/admin`/`apps/api`/`apps/client-mobile` you can also run `pnpm exec tsc -p tsconfig.json --noEmit`; plain `pnpm exec tsc` at the repo root fails because TypeScript is a dependency of the apps, not the workspace root. Neither check validates Vue templates fully (unregistered components or wrong template variables can still slip through).
+- Backend e2e suite: `pnpm --filter @joinyuu/api test:e2e` (25 suites / 169 cases; requires Docker services up; each suite reseeds via `test/helpers/reseed.ts`). There is no unit test suite yet; ESLint is configured at the repo root (`eslint.config.mjs`) for the Vue apps (`apps/admin`, `apps/client-mobile`), while the API has none. Do not claim more was verified than actually ran.
 
 ## Application Structure
 
 - `apps/admin/src/main.ts` registers Vue, Pinia, the router, TDesign Vue Next, global styles, the `v-permission` directive, and the persisted theme store.
 - `apps/admin/src/layouts/AdminLayout.vue` is the single admin shell. Keep menu order, active-route normalization, tab behavior, notifications, breadcrumbs, and group expansion behavior consistent there.
 - `apps/admin/src/router/index.ts` is the route table with the RBAC route guard. Use named existing routes/paths and preserve the hash-router setup when adding navigation.
+- `apps/client-mobile` is the M2 mobile client (Vue 3 + Vite + Pinia + vue-router + TDesign Mobile Vue, **pure mobile**, no desktop code): bottom 5-Tab shell (首页/项目/社区/广场/我的) in `src/views/mobile/AppShell.vue`, `src/views/mobile/` holds all views (Home/Projects/Community 3-tab/Plaza 2-tab/Intro/Me…), `src/api/` is the contract layer (`mock`/`http` switch via `VITE_API_MODE`), `src/mock/` is the `[MOCK-ONLY]` mock backend, `src/components/shared/` must stay component-library-free, and `src/router/` holds the route table (pure mobile, no `dualView`). Its frozen contract is `docs/wiki-client-mobile.md`.
 - `apps/admin/src/views/` contains page-level views; `apps/admin/src/components/` contains reusable UI; `apps/admin/src/stores/` contains Pinia state.
 - `apps/admin/src/types/index.ts` contains the M0 domain types; the frozen database model lives in `apps/api/prisma/schema.prisma` (43 models / 14 migrations).
 - `apps/api` is the backend: `prisma/seed.ts` + `prisma/seed-data/` (single seed source, idempotent), `src/modules/<domain>/` per-domain Nest modules (including `assets` and `system/{admins,login-logs,monitor,roles,trash,export}`), `src/common/` infrastructure (envelope interceptor, exception filter, JWT + permission guards, RBAC service, `@RequirePermission`/`@Public` decorators, audit service, id generator, points engine, storage service, sanitize-html/device/time utils), `src/scheduler/` cron jobs (scheduled publish, event auto-end, lease expiry, archive auto-archive/auto-purge).
@@ -65,6 +68,6 @@ pnpm db:reset       # drop + migrate + full seed (idempotent)
 
 - Keep changes minimal and preserve existing visual language and route behavior.
 - Before editing a page, inspect its API, types, seed data, and related shared components. Update all consumers when changing a domain field or status.
-- After admin edits, run `pnpm --filter @joinyuu/admin exec tsc -p tsconfig.json --noEmit` and `pnpm build:admin` when applicable. After api edits, run `pnpm --filter @joinyuu/api exec tsc -p tsconfig.json --noEmit` and `pnpm build:api`; run the e2e suite when behavior changed (requires `pnpm db:up`; each suite reseeds itself). Also grep for declarations/usages when doing scripted or cross-file changes, because TypeScript does not validate Vue templates completely.
+- After admin edits, run `pnpm --filter @joinyuu/admin exec tsc -p tsconfig.json --noEmit` and `pnpm build:admin` when applicable. After api edits, run `pnpm --filter @joinyuu/api exec tsc -p tsconfig.json --noEmit` and `pnpm build:api`; run the e2e suite when behavior changed (requires `pnpm db:up`; each suite reseeds itself). After client-mobile edits, run `pnpm --filter @joinyuu/client-mobile exec tsc -p tsconfig.json --noEmit`, `pnpm --filter @joinyuu/client-mobile run lint`, and `pnpm build:client-mobile` when applicable. Also grep for declarations/usages when doing scripted or cross-file changes, because TypeScript does not validate Vue templates completely.
 - Use browser automation only when explicitly requested or when a runtime-only issue cannot be verified statically. If browser testing is used, do not commit `.playwright-cli/` artifacts.
 - Do not commit build output, secrets, local environment files, `node_modules/`, `dist/`, `.workbuddy/`, or `.playwright-cli/`.

@@ -12,8 +12,41 @@
   --app-mobile-tabbar-h: 56px;
   --app-content-max: 1120px;
 
-  /* 品牌渐变（客户端专属：后台登录页为内联渐变，客户端多处 logo/横幅复用） */
+  /* 品牌渐变（客户端专属：后台登录页为内联渐变，客户端横幅/入口卡复用） */
   --client-brand-gradient: linear-gradient(135deg, var(--td-brand-color) 0%, var(--td-brand-color-5) 100%);
+}
+
+/* 通用按压反馈（移动端微交互）：可点击的卡片/宫格/列表项添加 .pressable */
+.pressable {
+  transition: transform 120ms ease, opacity 120ms ease;
+  cursor: pointer;
+}
+
+.pressable:active {
+  transform: scale(0.97);
+}
+
+/* ---------- 搜索框（TDesign Search 全局规格） ---------- */
+/* 只调 Search 自身：白底与卡片一致，圆角与其他元素对齐（radius-large=9px）；
+ * 组件根元素不带背景（避免二次容器色差） */
+.t-search {
+  --td-search-bg-color: var(--td-bg-color-container);
+  --td-search-square-radius: var(--td-radius-large);
+}
+
+/* ---------- 选项卡页（TDesign Tabs） ---------- */
+/* 标题条白底由页面上的 --td-tab-nav-background 控制（作用于 .t-tabs 根与 __wrapper）；
+ * 内容区回填页面灰底，保持「灰底 + 白卡片」层次；手势监听绑定在 .t-tabs__content 上，
+ * 把内容区撑满可视高度，内容不足一屏时卡片下方空白也在手势区内，左右滑动可切换选项卡 */
+.top-tabs .t-tabs__content {
+  min-height: calc(100vh - var(--app-mobile-topbar-h) - var(--app-mobile-tabbar-h) - 80px);
+  background: var(--td-bg-color-page);
+}
+
+@supports (height: 100dvh) {
+  .top-tabs .t-tabs__content {
+    min-height: calc(100dvh - var(--app-mobile-topbar-h) - var(--app-mobile-tabbar-h) - 80px);
+  }
 }
 
 * {
@@ -89,14 +122,14 @@ a {
   margin-bottom: 16px;
   background: var(--td-bg-color-container);
   border: 1px solid var(--td-component-border);
-  border-radius: var(--td-radius-medium);
+  border-radius: var(--td-radius-large);
 }
 
 /* 内容卡片 */
 .page-card {
   background: var(--td-bg-color-container);
   border: 1px solid var(--td-component-border);
-  border-radius: var(--td-radius-medium);
+  border-radius: var(--td-radius-large);
   padding: 16px;
 }
 
@@ -175,8 +208,8 @@ a {
 .m-card {
   background: var(--td-bg-color-container);
   border: 1px solid var(--td-component-border);
-  border-radius: var(--td-radius-medium);
-  padding: 14px;
+  border-radius: var(--td-radius-large);
+  padding: 16px;
 }
 
 /* ---------- 移除移动端按钮的 ::after 描边层 ---------- */

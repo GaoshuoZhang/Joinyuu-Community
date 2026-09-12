@@ -1,5 +1,5 @@
 import { Type } from 'class-transformer'
-import { IsBoolean, IsIn, IsInt, IsOptional, IsString, Min } from 'class-validator'
+import { IsBoolean, IsIn, IsInt, IsNotEmpty, IsOptional, IsString, Min } from 'class-validator'
 
 /* 租约续期/改租金/改联系人载荷（对照 apps/admin/src/api/workstations.ts LeaseUpdatePayload） */
 export class LeaseUpdateDto {
@@ -26,4 +26,13 @@ export class LeaseUpdateDto {
 
   @IsString()
   contactPhone!: string
+
+  @IsOptional()
+  @IsString()
+  note?: string
+
+  /* 编辑原因（必填）：续租/改租金等修改须记录原因，便于追溯 */
+  @IsString()
+  @IsNotEmpty({ message: '请填写编辑原因' })
+  reason!: string
 }

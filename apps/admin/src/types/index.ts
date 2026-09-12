@@ -187,7 +187,7 @@ export interface Demand {
   matchedRespondent?: string
   /** 立项后关联的项目 ID（status = projected 时存在） */
   projectId?: string
-  /** 自定义响应需求奖励积分（缺省 = 按积分规则 demand_responded 发放） */
+  /** 响应需求奖励积分（历史缺省值按积分规则 demand_responded 发放） */
   respondPoints?: number
   respondents: DemandRespondent[]
   /** 归档时间（非空表示已归档，详情页写操作隐藏） */
@@ -290,9 +290,9 @@ export interface CommunityEvent {
   enrollmentDeadline?: string
   /** 定时发布时间（设置后进入定时发布中状态，到点自动发布） */
   scheduledAt?: string
-  /** 自定义报名奖励积分（缺省 = 按积分规则 activity_enroll_approved 发放） */
+  /** 报名奖励积分（历史缺省值按积分规则 activity_enroll_approved 发放） */
   enrollPoints?: number
-  /** 自定义签到奖励积分（缺省 = 按积分规则 activity_checkin 发放） */
+  /** 签到奖励积分（历史缺省值按积分规则 activity_checkin 发放） */
   checkinPoints?: number
   description: string
   tags: string[]
@@ -536,6 +536,13 @@ export interface Workstation {
 
 export type LeaseBaseStatus = 'active' | 'terminated'
 
+/** 租约编辑记录（编辑租约时必填原因，按时间追加） */
+export interface LeaseEditRecord {
+  at: string
+  operator: string
+  reason: string
+}
+
 /** 租赁方类型：enterprise=注册企业 / individual=注册个人用户 / custom=未注册（弹窗内自建条目） */
 export type LeaseRenterType = 'enterprise' | 'individual' | 'custom'
 
@@ -577,6 +584,10 @@ export interface Lease {
   rentPeriod?: RentPeriod
   contactName: string
   contactPhone: string
+  /** 备注（非必填，随新增/编辑维护） */
+  note?: string | null
+  /** 编辑记录（续租/改租金等修改留痕，最新在后） */
+  editRecords?: LeaseEditRecord[]
   /** 终止时间（terminated 时存在） */
   terminatedAt?: string
   /** 归档时间（非空表示已归档，详情页写操作隐藏） */

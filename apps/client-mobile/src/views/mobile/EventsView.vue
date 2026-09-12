@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
-import { Button, Input, Tag } from 'tdesign-mobile-vue'
+import { Button, Input, Loading, Tag } from 'tdesign-mobile-vue'
 import { fetchEvents } from '@/api/events'
 import { useAsyncList } from '@/composables/useAsyncList'
 import EmptyBlock from '@/components/shared/EmptyBlock.vue'
@@ -52,12 +52,12 @@ function search() {
       <Button theme="primary" @click="search">搜索</Button>
     </div>
 
-    <div v-if="loading" class="skeleton">加载中…</div>
+    <Loading v-if="loading" class="state" text="加载中…" />
     <section v-else-if="error" class="error-box">
       <p>{{ error }}</p>
       <Button variant="outline" size="small" @click="run">重试</Button>
     </section>
-    <EmptyBlock v-else-if="(data ?? []).length === 0" text="暂无符合条件" />
+    <EmptyBlock v-else-if="(data ?? []).length === 0" text="暂无符合条件的活动" />
     <div v-else class="event-list stagger">
       <article v-for="ev in data" :key="ev.id" class="event-card m-card" @click="router.push(`/events/${ev.id}`)">
         <div class="event-top">
@@ -81,7 +81,7 @@ function search() {
 
 .manage-note {
   margin: 0;
-  font-size: 11px;
+  font-size: 12px;
   color: var(--td-text-color-placeholder);
 }
 
@@ -105,14 +105,6 @@ function search() {
 
 .search-input {
   flex: 1;
-}
-
-.skeleton {
-  padding: 20px;
-  color: var(--td-text-color-placeholder);
-  font-size: 12px;
-  background: var(--td-bg-color-container);
-  border-radius: var(--td-radius-medium);
 }
 
 .error-box {
@@ -143,15 +135,15 @@ function search() {
 }
 
 .type-tag {
-  font-size: 11px;
+  font-size: 12px;
   padding: 2px 8px;
-  border-radius: 4px;
+  border-radius: var(--td-radius-small);
   background: var(--td-brand-color-1);
   color: var(--td-brand-color);
 }
 
 .capacity {
-  font-size: 11px;
+  font-size: 12px;
   color: var(--td-brand-color);
 }
 
@@ -163,7 +155,7 @@ function search() {
 
 .meta {
   margin: 0;
-  font-size: 11px;
+  font-size: 12px;
   color: var(--td-text-color-secondary);
 }
 </style>

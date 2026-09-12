@@ -39,6 +39,7 @@
 
 - **无独立面包屑**（2026-09-12）：顶栏不再渲染面包屑，标签页即导航；详情页统一提供「返回」按钮（`router.back()`）
 - **「全部关闭」= 关闭其他（2026-09-12，tabs store `closeOthers`）**：保留工作台与当前页标签；仅一个标签时按钮禁用；点击后停留在当前页，不跳转
+- **标签栏滚轮（2026-09-12）**：标签溢出时，鼠标滚轮转换为水平滚动；未溢出时保留页面纵向滚动；标签栏滚动条视觉隐藏
 - **暗色模式（R10）**：顶栏月亮/太阳按钮切换 `light/dark`，`stores/theme.ts` 持久化到 localStorage（`joinyuu_theme`），切换即设置/移除 `<html theme-mode="dark">`；启动时 `main.ts` 立即应用持久化主题；tokens.css 同步覆盖 wangEditor 暗色变量
 
 - 菜单：**唯一 `src/layouts/AdminLayout.vue`** 渲染；路由全部挂在其 children 下；页面组件**禁止**再写任何导航/侧栏/顶栏
@@ -102,10 +103,12 @@
 - 状态标签：**必须**用共享 `StatusTag` 组件 + `constants/status.ts` 的状态映射，禁止页面自造状态文案/配色；`StatusTag` 支持 `scheduledAt`（scheduled 状态直接显示定时发布时间 + hover「到点自动发布」，不再显示"定时发布中"文案）与 `enrollmentOpen`（event=published 时拼接 报名中/暂停报名）
 - 身份标签：**必须**用共享 `IdentityTags` 组件 + `constants/identity.ts` 的身份词汇表（`identityTypeMap` / `roleLabelMap` / `userCategoryOptions`），禁止页面自造身份文案
 - **M1.5 新增共享组件（2026-09-12）**：`RichEditor`（wangEditor v5 富文本，v-model=HTML，图片走 `uploadAsset`，对外 API 同旧 textarea 封装）、`TrendChart`（零依赖纯 SVG 折线/渐变面积/悬浮十字线，供工作台 30 日趋势）、`ColumnController`（列显隐+顺序调整，localStorage `joinyuu_cols_<storageKey>` 持久化，ESC 关闭）、`BulkArchiveDialog`（一键归档：复选框列出可归档状态，默认全选后二次确认）、`ArticleReviewDialog`（待审核投稿通过/驳回必填原因，readonly 复用于详情）、`ArticleScheduleDialog`（文章定时发布）、`EnterpriseFormDialog`（社区企业新增/编辑，关联用户必填并自动填充联系人）、`ExternalEnterpriseFormDialog`（合作企业新增/编辑）
+- **新增用户组件（2026-09-12）**：`UserFormDialog` 使用统一 880px 表单对话框；新增用户后服务端生成 UID、0 积分和默认个人用户身份，列表自动按新 UID 筛选
 - **按钮级权限（R1，2026-09-12）**：`v-permission="'<code>'"` 指令（`src/directives/permission.ts`）采用 **display 方案**——无权限时 `el.style.display = 'none'`（不删 DOM），`mounted` + `updated` 双钩子判定，权限集合变化可恢复；路由守卫按 `meta.perm` 优先、否则逐级回退推导（`/users/U1001 → /users`）校验，失败落地 `/403`（ForbiddenView）
 - **菜单组显隐必须用目录真实权限码（2026-09-12 修复）**：AdminLayout 各分组的 `canSee([...codes], group)` 曾在系统管理组误用聚合路由路径 `/system/logs`、`/system/account`（权限目录中不存在，目录码为 `/logs/audit`、`/logs/login`、`/system/roles`、`/system/admins`、`/system/sessions`），导致仅持有聚合前旧码的角色（如 auditor）整组菜单不可见；已改为目录真实码全集。新增聚合菜单时组级 canSee、子项 v-permission、路由 meta.perm 三处必须同源对齐
 - **ID 展示规范（2026-09-12，全站统一）**：用户/企业等实体 ID 一律用 `t-tag` 标签展示——列表名称下方独立成行用 `.id-tag-block`（tokens.css 全局类），名称/字段同行内联用 `.id-tag`；名称已包含在标签内时用 `名称 [ID]` 格式（如 `IdentityTags` 社区企业标签、打印页、导出 CSV：`张三 [U1001]`/`聚屿科技 [E2001]`）；同一视图不重复展示同一 ID（如用户详情头部已有「用户ID」行时，IdentityTags 传 `:show-id="false"`）
 - **全站交互减法（2026-09-12）**：列表页**不设刷新按钮**（路由切换/操作成功后自动 `load()`）与**表格批量选择操作**（`row-select` 已全站移除）；批量场景统一改用「一键归档」+ `BulkArchiveDialog`；表格 `table-layout="fixed"`（resizable 必须 fixed，列宽显式声明）
+- **列表 URL 状态与错误恢复（2026-09-12）**：`src/utils/listQuery.ts` 统一服务端列表的 URL 查询状态（25 页接入；聚合页用 `audit.*` / `login.*` / `admins.*` 命名空间隔离并保留父级 `tab`；需求 `publisher` 深链别名兼容）——查询/重置/翻页/排序实际加载时同步 URL（输入关键词不触发）、computed 前端筛选列表用 live 模式实时同步、setup 恢复不重复首载、前进后退与外部 query 变化可恢复、分页正整数校验（pageSize 上限 100，非法回退默认）；只读列表（积分发放/阅读统计）保持固定 URL，不造无业务意义的参数。`src/components/ListErrorState.vue` 统一持久错误恢复（TDesign Alert + 错误原因 + 重试按钮 + 加载中禁用），36 个加载入口（含通知列表与监控执行日志）全部接入；契约由 `apps/admin/test/listQuery.test.mjs` 与 `uiContracts.test.mjs` 固化（Node test 运行）
 - **术语统一（2026-09-12）**：联系电话 / 办公位 / 社区企业 / 合作企业 / 经验值 / 审核 / 新增 / 归档；禁止再出现 联系方式 / 工位 / 外部企业 / 审批 / 新建 / 回收站 等旧词
 - 用户模型与微信登录预备（冻结，2026-09-09）：**UserStatus 仅剩 active/frozen**（待激活 pending 移除，种子样例已转 active）；字段改名 **`id`→`uid`、`name`→`nickname`**（昵称语义，微信登录预备；全站 User 引用同步：fetchUserOptions/fetchPublisherOptions/fetchRenterOptions 返回结构、 undertaker 立项候选、用户详情路由传参等；**业务快照字段名不改**——demand.publisherName、spaceReservation.userName、project.undertakers[].name、external 成员 name 等仍是展示快照，仅取值源改 nickname）；新增 `realName?`/`citizenId?`（实名信息）、`wechatOpenid?`/`wechatUnionid?`/`wechatVerified?`（微信登录预留，默认未认证）、`frozenUntil?`/`frozenReason?`（冻结信息，解冻时清除）；**实名状态 = 派生值**（realName 与 citizenId 均填写=已实名，否则未实名），列表列/筛选/详情均按此规则，不落独立字段；**社区个体（community_individual）身份要求已实名**——不存在未实名的社区个体，种子数据保证（未实名用户仅持有 individual 基础身份）
 
@@ -162,6 +165,7 @@
 - 活动奖励自定义（冻结，2026-09-09）：创建/编辑活动表单新增「积分奖励」块——自定义报名奖励积分、自定义签到奖励积分两开关（默认关=按积分规则 activity_enroll_approved / activity_checkin 发放）；开启后出现数字输入框，默认值预填积分规则设定值，可按活动调整；CommunityEvent 加 `enrollPoints?`/`checkinPoints?`（缺省=按规则）；活动列表「报名」列（x/容量）与「签到」列（x/y）下方各展示积分 tag（活动自定义值 ?? 规则默认值）；
 - 需求响应奖励与范围开关（冻结，2026-09-09）：创建/编辑需求表单（DemandPublishDialog 双模式共用）① 新增「自定义响应需求奖励积分」开关（默认关=按 demand_responded 规则；开启后输入框预填规则值，Demand 加 `respondPoints?`），需求列表「响应」列（响应数）下方展示积分 tag；② 「可见范围」「可报名范围」升级为**自定义开关**（默认关=不限身份等级，开启后显示原身份/等级选择框），编辑回填按历史数据有无值自动置开关状态，提交时空数组=不限；
 - 积分规则制度（冻结，2026-09-11 修订；9 项与 seed 一致）：**发放积分自动、扣除积分手动**——规则仅含发放类触发项，写死共 9 项：activity_checkin 活动签到(+10)、activity_enroll_approved 活动报名通过(+5)、article_accepted 投稿采纳(+30)、demand_published 需求发布(+15)、demand_responded 响应需求(+20，发放给响应成员)、demand_undertaken 需求承接立项(+200)、project_milestone 项目里程碑达成(+100)、identity_first_bind 首次入驻/绑定身份(+50)、daily_login 每日登录(+1，默认停用)；**系统无法自动判定违规，不设自动扣分规则，扣除积分由管理员手动调整**（adjustPoints 支持负值）；**PointsRule 字段：code/name/scene/points(正数，唯一可编辑)/status(启停)/description(写死)**；UI 无新增/删除入口，编辑弹窗只读展示触发项+仅分值可改；后端实现按 code 关联发放逻辑
+- **奖励输入框修订（2026-09-12，替代上方自定义开关口径）**：活动报名/签到奖励与需求响应奖励始终展示数字输入框，标题标注当前规则值并提供悬浮说明；默认填规则值，可按单个活动/需求直接调整并保存。
   - 办公位 workstation：idle=空闲/success，assigned=已分配/primary，maintenance=维护中/warning
   - 租约 lease：active=生效中/success，expiring=即将到期/warning（15 天内派生，`EXPIRING_WINDOW_DAYS=15`），expired=已到期/danger（过期派生），terminated=已终止/default
   - 空间 space：available=可用/success，maintenance=维护中/warning，disabled=已停用/default
@@ -177,7 +181,7 @@
 |---|---|---|---|
 | 登录 | /login | 品牌区 + 真实 JWT 登录（M1 起）；图形验证码为必填项 | 演示账号 admin/admin123；验证码图片点击/刷新按钮换一张，登录失败自动清空验证码并刷新；加载/错误反馈 |
 | 工作台 | /dashboard | 六域待办卡片（有待办高亮）+ 平台数据 6 卡 + 系统公告 + 待办审核 + 近期活动 + 运营趋势 + 快捷入口 | 待办/平台数据/公告/审核/活动点击直达；趋势支持 新增成员/新增需求/新增活动/发放积分 四指标 × 3/7/15/30 天，顶部显示**区间累计值**；「编辑布局」popup 控制 7 个区块显隐（localStorage 持久化），与 ColumnController 一样支持 ESC 关闭；2026-09-12 视觉修复：待办 StatCard（`t-link` 渲染）补内边距与左对齐（TDesign `.t-link` 基础样式 `padding:0`/`justify-content:center` 会覆盖自定义卡片样式，组件内需以 `.stat-card.t-link` 提升特异性回写）、系统公告条目 `.dash-item` 补 `align-items: flex-start`（column 布局下 `t-link` 的 `align-items:center` 会使文字水平居中） |
-| 用户列表 | /users | 筛选（关键词/身份/状态/实名状态）+ 列设置 + 导出 | 行点击/详情按钮进用户详情；冻结/解冻在详情页执行 |
+| 用户列表 | /users | 筛选（关键词/身份/状态/实名状态）+ 列设置 + 导出 + 新增用户 | 新增时填写昵称/联系电话/邮箱/性别及可选实名资料，服务端生成 UID 与默认个人身份；行点击/详情按钮进用户详情；冻结/解冻在详情页执行 |
 | 用户详情 | /users/:id | 资料头（昵称/用户ID/身份标签/状态）+ 编辑/冻结/恢复 + tabs | tabs：身份信息 / 申请·需求·项目·活动·租赁·投稿·预约 7 个记录页（各分「进行中/历史记录」，已归档条目标「已归档」）/ 经验值（仅社区个体）/ 积分 / 活跃记录；需求/项目/活动/租赁记录行可点击跳详情；社区企业/合作企业身份卡跳企业详情 |
 | 社区个体 | /individuals | 社区个体身份成员列表（关键词/状态筛选）+ 列设置 + 导出 | 行点击进用户详情 |
 | 企业列表 | /enterprises | 社区企业筛选（关键词/行业/状态）+ 列设置 + 导出 + 新增企业 | 新增需权限 `perm:enterprise:create`；行点击进详情 |

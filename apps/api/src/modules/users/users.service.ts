@@ -1,4 +1,5 @@
 import { BadRequestException, ConflictException, Injectable, NotFoundException } from '@nestjs/common'
+import { hash } from 'bcryptjs'
 import type { Prisma } from '@prisma/client'
 import { PrismaService } from '../../common/prisma/prisma.service'
 import { AuditService } from '../../common/audit/audit.service'
@@ -7,6 +8,9 @@ import type { QueryUsersDto } from './dto/query-users.dto'
 import type { QueryIndividualsDto } from './dto/query-individuals.dto'
 import type { FreezeUserDto } from './dto/freeze-user.dto'
 import type { UpdateUserDto } from './dto/update-user.dto'
+import type { CreateUserDto } from './dto/create-user.dto'
+import { IdGeneratorService } from '../../common/id-generator/id-generator.service'
+import { formatNow, formatToday } from '../../common/utils/time'
 
 /* 用户与社区个体域：读多写少（冻结为写），stats 实时派生（wiki-backend.md §7.2） */
 @Injectable()
@@ -14,6 +18,7 @@ export class UsersService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly audit: AuditService,
+    private readonly ids: IdGeneratorService,
   ) {}
 
   async list(query: QueryUsersDto): Promise<{ list: UserDto[]; total: number }> {
@@ -32,6 +37,68 @@ export class UsersService {
 
     const list = await Promise.all(rows.map((u) => buildUserDto(this.prisma, u)))
     return { list, total }
+  }
+
+  async create(dto: CreateUserDto, operator: string): Promise<{ id: string }> {
+    const nickname = dto.nickname.trim()
+    const phone = dto.phone.trim()
+    const email = dto.email.trim()
+    if (!nickname) throw new BadRequestException('请输入昵称')
+    if (!phone) throw new BadRequestException('请输入联系电话')
+    if (!email) throw new BadRequestException('请输入邮箱')
+
+    const existing = await this.prisma.user.findFirst({ where: { phone }, select: { uid: true } })
+    if (existing) throw new ConflictException('该联系电话已被其他用户使用')
+
+    const uid = await this.ids.next('U')
+    await this.prisma.user.create({
+      data: {
+        uid,
+        nickname,
+        phone,
+        email,
+        gender: dto.gender,
+        realName: dto.realName?.trim() || null,
+        citizenId: dto.citizenId?.trim() || null,
+        registeredAt: formatToday(),
+        lastActiveAt: formatNow(),
+        bio: dto.bio?.trim() ?? '',
+        identities: {
+          create: { type: 'individual', title: '个人用户' },
+        },
+      },
+    })
+
+    await this.audit.record({
+      module: '社区成员',
+      action: '新增用户',
+      target: `${uid} · ${nickname}`,
+      detail: `联系电话：${phone}`,
+      operator,
+    })
+    return { id: uid }
+  }
+
+  /* 管理员强制重置用户登录密码：直接覆盖当前密码，写审计（不可撤销） */
+  async resetPassword(id: string, password: string, operator: string): Promise<{ code: number }> {
+    const user = await this.prisma.user.findUnique({ where: { uid: id } })
+    if (!user) throw new NotFoundException('用户不存在')
+    const next = (password ?? '').trim()
+    if (next.length < 8) throw new BadRequestException('密码至少 8 位')
+
+    await this.prisma.user.update({
+      where: { uid: id },
+      data: { passwordHash: await hash(next, 10), passwordUpdatedAt: formatNow() },
+    })
+
+    await this.audit.record({
+      module: '社区成员',
+      action: '重置密码',
+      target: `${user.uid} · ${user.nickname}`,
+      detail: '管理员强制重置登录密码',
+      operator,
+    })
+    return { code: 0 }
   }
 
   async listIndividuals(query: QueryIndividualsDto): Promise<{ list: UserDto[]; total: number }> {

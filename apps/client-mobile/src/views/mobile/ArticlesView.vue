@@ -1,7 +1,7 @@
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
-import { Button, Input, Loading, Tag } from 'tdesign-mobile-vue'
+import { Button, Loading, Search, Tag } from 'tdesign-mobile-vue'
 import { useAsyncList } from '@/composables/useAsyncList'
 import { fetchArticles, fetchColumns } from '@/api/contents'
 import { useAuthStore } from '@/stores/auth'
@@ -32,6 +32,14 @@ function pickColumn(label: string) {
   activeColumn.value = label
   loadArticles()
 }
+
+/* 实时搜索：输入防抖 300ms 后自动检索（清空即恢复全量） */
+let searchTimer: number | undefined
+watch(keyword, () => {
+  window.clearTimeout(searchTimer)
+  searchTimer = window.setTimeout(() => loadArticles(), 300)
+})
+onBeforeUnmount(() => window.clearTimeout(searchTimer))
 </script>
 
 <template>
@@ -60,9 +68,8 @@ function pickColumn(label: string) {
         </Tag>
       </div>
       <div class="search-row">
-        <Input v-model="keyword" class="search-input" placeholder="搜索文章标题…" enterkeyhint="search" clearable />
-        <Button theme="primary" size="small" @click="loadArticles">查询</Button>
-        <Button v-if="auth.isLogged" theme="primary" variant="outline" size="small" @click="router.push('/articles/new')">投稿</Button>
+        <Search v-model="keyword" class="search" placeholder="搜索文章标题" />
+        <Button v-if="auth.isLogged" theme="primary" variant="outline" size="small" class="contribute" @click="router.push('/articles/new')">投稿</Button>
       </div>
     </header>
 
@@ -85,7 +92,7 @@ function pickColumn(label: string) {
   padding: 16px;
   display: flex;
   flex-direction: column;
-  gap: 14px;
+  gap: 12px;
 }
 
 .toolbar {
@@ -116,9 +123,13 @@ function pickColumn(label: string) {
   gap: 10px;
 }
 
-.search-input {
+.search {
   flex: 1;
   min-width: 0;
+}
+
+.contribute {
+  flex-shrink: 0;
 }
 
 .state {
@@ -137,9 +148,9 @@ function pickColumn(label: string) {
 
 .col-tag {
   display: inline-block;
-  font-size: 11px;
+  font-size: 12px;
   padding: 2px 7px;
-  border-radius: 4px;
+  border-radius: var(--td-radius-small);
   background: var(--td-brand-color-1);
   color: var(--td-brand-color);
 }
@@ -163,7 +174,7 @@ function pickColumn(label: string) {
 
 .meta {
   margin: 0;
-  font-size: 11px;
+  font-size: 12px;
   color: var(--td-text-color-placeholder);
 }
 </style>

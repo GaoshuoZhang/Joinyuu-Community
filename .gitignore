@@ -9,6 +9,7 @@ dist/
 .vscode/
 start-admin-web.bat
 start-backend.bat
+start-client-mobile.bat
 .workbuddy/
 .playwright-cli/
 .trae/

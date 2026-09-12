@@ -1,7 +1,7 @@
 <script setup lang="ts">
-import { onMounted, ref, watch } from 'vue'
+import { onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
-import { Button, Input, Loading, Popup, Tabs, TabPanel, Tag } from 'tdesign-mobile-vue'
+import { Button, Loading, Popup, Search, Tabs, TabPanel, Tag } from 'tdesign-mobile-vue'
 import { fetchEnterpriseList, fetchPolicies, fetchTalents } from '@/api/community'
 import { useAsyncList } from '@/composables/useAsyncList'
 import EmptyBlock from '@/components/shared/EmptyBlock.vue'
@@ -30,6 +30,28 @@ const { data: enterprises, loading: enterprisesLoading, error: enterprisesError,
 
 onMounted(runPolicies)
 
+/* 实时搜索：各 tab 输入防抖 300ms 后自动检索（清空即恢复全量） */
+let serviceTimer: number | undefined
+let talentTimer: number | undefined
+let enterpriseTimer: number | undefined
+watch(serviceKeyword, () => {
+  window.clearTimeout(serviceTimer)
+  serviceTimer = window.setTimeout(() => runPolicies(), 300)
+})
+watch(talentKeyword, () => {
+  window.clearTimeout(talentTimer)
+  talentTimer = window.setTimeout(() => runTalents(), 300)
+})
+watch(enterpriseKeyword, () => {
+  window.clearTimeout(enterpriseTimer)
+  enterpriseTimer = window.setTimeout(() => runEnterprises(), 300)
+})
+onBeforeUnmount(() => {
+  window.clearTimeout(serviceTimer)
+  window.clearTimeout(talentTimer)
+  window.clearTimeout(enterpriseTimer)
+})
+
 watch(activeTab, (tab) => {
   if (tab === 'service') {
     serviceKeyword.value = ''
@@ -57,16 +79,7 @@ function openPolicy(p: CommunityPolicy) {
     <Tabs v-model="activeTab" class="top-tabs">
       <!-- 社区服务：政策/指引列表 -->
       <TabPanel value="service" label="社区服务">
-        <div class="search-row">
-          <Input
-            v-model="serviceKeyword"
-            class="search-input"
-            placeholder="搜索政策关键词…"
-            clearable
-            @keyup.enter="runPolicies"
-          />
-          <Button theme="primary" @click="runPolicies">查询</Button>
-        </div>
+        <Search v-model="serviceKeyword" class="tab-search" placeholder="搜索政策关键词" />
 
         <Loading v-if="policiesLoading" class="state" text="加载中…" />
         <EmptyBlock v-else-if="policiesError" :text="policiesError" />
@@ -90,16 +103,7 @@ function openPolicy(p: CommunityPolicy) {
 
       <!-- 人才库：社区个体卡片 -->
       <TabPanel value="talent" label="人才库">
-        <div class="search-row">
-          <Input
-            v-model="talentKeyword"
-            class="search-input"
-            placeholder="搜索人才关键词…"
-            clearable
-            @keyup.enter="runTalents"
-          />
-          <Button theme="primary" @click="runTalents">查询</Button>
-        </div>
+        <Search v-model="talentKeyword" class="tab-search" placeholder="搜索人才关键词" />
 
         <Loading v-if="talentsLoading" class="state" text="加载中…" />
         <EmptyBlock v-else-if="talentsError" :text="talentsError" />
@@ -122,16 +126,7 @@ function openPolicy(p: CommunityPolicy) {
 
       <!-- 企业库：企业卡片 -->
       <TabPanel value="enterprise" label="企业库">
-        <div class="search-row">
-          <Input
-            v-model="enterpriseKeyword"
-            class="search-input"
-            placeholder="搜索企业关键词…"
-            clearable
-            @keyup.enter="runEnterprises"
-          />
-          <Button theme="primary" @click="runEnterprises">查询</Button>
-        </div>
+        <Search v-model="enterpriseKeyword" class="tab-search" placeholder="搜索企业关键词" />
 
         <Loading v-if="enterprisesLoading" class="state" text="加载中…" />
         <EmptyBlock v-else-if="enterprisesError" :text="enterprisesError" />
@@ -174,26 +169,27 @@ function openPolicy(p: CommunityPolicy) {
   padding: 16px;
   display: flex;
   flex-direction: column;
-  gap: 14px;
+  gap: 12px;
 }
 
 .top-tabs {
+  /* 标题条白底（区别于页面灰底，可见可点），内容卡片保留白底 */
+  --td-tab-nav-background: var(--td-bg-color-container);
   --td-tabs-track-color: var(--td-brand-color);
+}
+
+.tab-search {
+  /* 与选项卡标题条拉开间距 */
+  margin-top: 12px;
+  margin-bottom: 12px;
 }
 
 .state {
   padding: 20px 0;
 }
 
-.search-row {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  margin-bottom: 12px;
-}
-
-.search-input {
-  flex: 1;
+.tab-search {
+  margin-bottom: 10px;
 }
 
 .list {
@@ -220,9 +216,9 @@ function openPolicy(p: CommunityPolicy) {
 .role-tag,
 .showcase-tag {
   flex-shrink: 0;
-  font-size: 11px;
+  font-size: 12px;
   padding: 2px 8px;
-  border-radius: 4px;
+  border-radius: var(--td-radius-small);
   background: var(--td-brand-color-1);
   color: var(--td-brand-color);
 }
@@ -235,7 +231,7 @@ function openPolicy(p: CommunityPolicy) {
 .updated,
 .meta,
 .members {
-  font-size: 11px;
+  font-size: 12px;
   color: var(--td-text-color-secondary);
 }
 
@@ -316,7 +312,7 @@ function openPolicy(p: CommunityPolicy) {
 
 .pop-body .p-updated {
   margin: 0;
-  font-size: 11px;
+  font-size: 12px;
   color: var(--td-text-color-placeholder);
 }
 </style>

@@ -6,6 +6,8 @@ import { QueryUsersDto } from './dto/query-users.dto'
 import { UpdateUserStatusDto } from './dto/update-user-status.dto'
 import { UpdateUserDto } from './dto/update-user.dto'
 import { FreezeUserDto } from './dto/freeze-user.dto'
+import { CreateUserDto } from './dto/create-user.dto'
+import { ResetUserPasswordDto } from './dto/reset-user-password.dto'
 
 @Controller('api/admin/users')
 export class UsersController {
@@ -21,6 +23,25 @@ export class UsersController {
   @Get()
   list(@Query() query: QueryUsersDto): Promise<{ list: unknown; total: number }> {
     return this.users.list(query)
+  }
+
+  @RequirePermission('/users')
+  @HttpCode(200)
+  @Post()
+  create(@Body() dto: CreateUserDto, @Req() req: AuthenticatedRequest): Promise<{ id: string }> {
+    return this.users.create(dto, req.user?.name ?? '社区管理员')
+  }
+
+  /* 管理员强制重置用户登录密码（覆盖当前密码，需二次确认由前端保证） */
+  @RequirePermission('/users')
+  @HttpCode(200)
+  @Post(':id/reset-password')
+  resetPassword(
+    @Param('id') id: string,
+    @Body() dto: ResetUserPasswordDto,
+    @Req() req: AuthenticatedRequest,
+  ): Promise<{ code: number }> {
+    return this.users.resetPassword(id, dto.password, req.user?.name ?? '社区管理员')
   }
 
   @RequirePermission('/users')

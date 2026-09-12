@@ -42,7 +42,6 @@ async function onSubmit() {
   <div class="page-fade-in m-showcase-apply">
     <template v-if="notFound">
       <EmptyBlock text="企业不存在" />
-      <Button variant="outline" block @click="router.back()">返回</Button>
     </template>
     <template v-else>
       <header class="head">
@@ -66,7 +65,7 @@ async function onSubmit() {
   padding: 16px;
   display: flex;
   flex-direction: column;
-  gap: 14px;
+  gap: 12px;
 }
 
 .head {

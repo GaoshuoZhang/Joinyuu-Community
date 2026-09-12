@@ -512,12 +512,13 @@ onMounted(() => {
     <t-empty v-else description="企业不存在或已归档" />
 
     <!-- 驳回原因 -->
-    <t-dialog
+    <t-drawer
       v-model:visible="rejectVisible"
       header="展示页审核"
-      width="520px"
-      :confirm-btn="{ content: '确认驳回', loading: submitting }"
-      @confirm="onConfirmReject"
+      size="560px"
+      :footer="false"
+      :close-btn="true"
+      :close-on-esc-keydown="true"
       @close="rejectVisible = false"
     >
       <t-textarea
@@ -525,7 +526,11 @@ onMounted(() => {
         placeholder="驳回原因（必填）…"
         :autosize="{ minRows: 3, maxRows: 5 }"
       />
-    </t-dialog>
+      <div class="drawer-footer">
+        <t-button variant="text" theme="default" @click="rejectVisible = false">取消</t-button>
+        <t-button theme="danger" :loading="submitting" @click="onConfirmReject">确认驳回</t-button>
+      </div>
+    </t-drawer>
 
     <!-- 经验值调整 -->
     <AdjustValueDialog
@@ -762,5 +767,18 @@ onMounted(() => {
   margin-top: 2px;
   font-size: 12px;
   color: var(--td-text-color-secondary);
+}
+
+.drawer-footer {
+  position: sticky;
+  bottom: 0;
+  z-index: 1;
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 16px;
+  padding: 12px 0;
+  border-top: 1px solid var(--td-component-border);
+  background: var(--td-bg-color-container);
 }
 </style>

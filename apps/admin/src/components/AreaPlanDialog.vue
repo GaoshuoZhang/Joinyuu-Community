@@ -130,10 +130,10 @@ function onClose() {
 
 <template>
   <t-dialog
+    :close-on-overlay-click="true"
     :visible="visible"
     header="区域规划"
-    width="680px"
-    :close-on-overlay-click="false"
+    width="880px"
     :close-on-esc-keydown="false"
     @close="onClose"
   >
@@ -220,7 +220,7 @@ function onClose() {
 
 .form-title {
   font-size: 14px;
-  font-weight: 600;
+  font-weight: 400;
   color: var(--td-text-color-primary);
 }
 
@@ -239,7 +239,7 @@ function onClose() {
 .area-list-title {
   margin-bottom: 8px;
   font-size: 13px;
-  font-weight: 600;
+  font-weight: 400;
   color: var(--td-text-color-primary);
 }
 

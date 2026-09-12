@@ -187,10 +187,10 @@ function onClose() {
 
 <template>
   <t-dialog
+    :close-on-overlay-click="true"
     :visible="visible"
     :header="mode === 'create' ? '新增企业' : '编辑企业'"
-    width="640px"
-    :close-on-overlay-click="false"
+    width="880px"
     :close-on-esc-keydown="false"
     @close="onClose"
   >
@@ -229,10 +229,10 @@ function onClose() {
           :options="contactOptions"
           filterable
           clearable
+          style="width: calc(50% - 8px)"
           placeholder="选择已注册的个人用户作为联系人…"
           @change="(val: unknown) => applyContactUser(String(val ?? ''))"
         />
-        <div class="field-help">选择后自动填充联系电话与联系邮箱；社区企业必须关联一个个人用户</div>
       </t-form-item>
       <t-form-item label="职位" name="contactTitle">
         <t-input v-model="form.contactTitle" clearable placeholder="联系人在企业的职位，如 创始人 & CEO（选填）…" />
@@ -261,13 +261,6 @@ function onClose() {
   display: grid;
   grid-template-columns: 1fr 1fr;
   gap: 0 16px;
-}
-
-.field-help {
-  margin-top: 4px;
-  color: var(--td-text-color-placeholder);
-  font-size: 12px;
-  line-height: 20px;
 }
 
 .dialog-footer {

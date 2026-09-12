@@ -81,11 +81,11 @@ function onClose() {
 
 <template>
   <t-dialog
+    :close-on-overlay-click="true"
     :visible="visible"
     :header="mode === 'edit' ? '编辑公告' : '发布公告'"
-    width="760px"
+    width="880px"
     lazy
-    :close-on-overlay-click="false"
     :close-on-esc-keydown="false"
     @close="onClose"
   >

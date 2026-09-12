@@ -128,7 +128,7 @@ function goMine() {
   padding: 16px;
   display: flex;
   flex-direction: column;
-  gap: 14px;
+  gap: 12px;
 }
 
 .head .page-title {

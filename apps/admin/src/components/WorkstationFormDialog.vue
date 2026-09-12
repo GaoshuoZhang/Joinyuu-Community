@@ -167,10 +167,10 @@ async function onDelete() {
 
 <template>
   <t-dialog
+    :close-on-overlay-click="true"
     :visible="visible"
     :header="mode === 'create' ? '新增办公位' : '编辑办公位信息'"
-    width="560px"
-    :close-on-overlay-click="false"
+    width="880px"
     :close-on-esc-keydown="false"
     @close="onClose"
   >

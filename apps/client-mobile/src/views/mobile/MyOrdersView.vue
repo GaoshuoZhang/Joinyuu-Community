@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { onMounted } from 'vue'
 import { useRouter } from 'vue-router'
-import { Button } from 'tdesign-mobile-vue'
+import { Button, Loading } from 'tdesign-mobile-vue'
 import { fetchMyOrders } from '@/api/mall'
 import { useAsyncList } from '@/composables/useAsyncList'
 import EmptyBlock from '@/components/shared/EmptyBlock.vue'
@@ -17,7 +17,7 @@ onMounted(run)
 
 <template>
   <div class="m-orders page-fade-in stagger">
-    <div v-if="loading" class="skeleton">加载中…</div>
+    <Loading v-if="loading" class="state" text="加载中…" />
     <section v-else-if="error" class="error-box">
       <p>{{ error }}</p>
       <Button variant="outline" size="small" @click="run">重试</Button>
@@ -47,14 +47,6 @@ onMounted(run)
   display: flex;
   flex-direction: column;
   gap: 10px;
-}
-
-.skeleton {
-  padding: 20px;
-  color: var(--td-text-color-placeholder);
-  font-size: 12px;
-  background: var(--td-bg-color-container);
-  border-radius: var(--td-radius-medium);
 }
 
 .error-box {
@@ -94,7 +86,7 @@ onMounted(run)
 
 .meta {
   margin: 0;
-  font-size: 11px;
+  font-size: 12px;
   color: var(--td-text-color-secondary);
 }
 

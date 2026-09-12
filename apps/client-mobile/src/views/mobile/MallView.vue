@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { onMounted } from 'vue'
 import { useRouter } from 'vue-router'
-import { Button } from 'tdesign-mobile-vue'
+import { Button, Loading } from 'tdesign-mobile-vue'
 import { fetchGoods } from '@/api/mall'
 import { useAsyncList } from '@/composables/useAsyncList'
 import { useAuthStore } from '@/stores/auth'
@@ -23,7 +23,7 @@ onMounted(run)
       <strong>{{ auth.points }}</strong>
     </section>
 
-    <div v-if="loading" class="skeleton">加载中…</div>
+    <Loading v-if="loading" class="state" text="加载中…" />
     <template v-else-if="error">
       <EmptyBlock :text="error" />
       <Button variant="outline" size="small" class="retry" @click="run">重试</Button>
@@ -56,7 +56,7 @@ onMounted(run)
   align-items: center;
   gap: 8px;
   padding: 6px 14px;
-  border-radius: var(--td-radius-medium);
+  border-radius: var(--td-radius-large);
   background: var(--td-brand-color-1);
   font-size: 12px;
   color: var(--td-text-color-secondary);
@@ -65,14 +65,6 @@ onMounted(run)
 .points-bar strong {
   color: var(--td-brand-color);
   font-size: 15px;
-}
-
-.skeleton {
-  padding: 20px;
-  color: var(--td-text-color-placeholder);
-  font-size: 12px;
-  background: var(--td-bg-color-container);
-  border-radius: var(--td-radius-medium);
 }
 
 .retry {
@@ -115,7 +107,7 @@ onMounted(run)
 
 .desc {
   margin: 0 0 8px;
-  font-size: 11px;
+  font-size: 12px;
   color: var(--td-text-color-secondary);
   line-height: 1.6;
   display: -webkit-box;
@@ -126,7 +118,7 @@ onMounted(run)
 
 .stock {
   margin: 0;
-  font-size: 11px;
+  font-size: 12px;
   color: var(--td-text-color-placeholder);
 }
 </style>

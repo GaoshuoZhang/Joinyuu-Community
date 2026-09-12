@@ -77,20 +77,20 @@ onMounted(run)
 
 .bar {
   height: 8px;
-  border-radius: 4px;
+  border-radius: var(--td-radius-small);
   background: rgba(255, 255, 255, 0.25);
   overflow: hidden;
 }
 
 .fill {
   height: 100%;
-  border-radius: 4px;
+  border-radius: var(--td-radius-small);
   background: var(--td-text-color-anti);
 }
 
 .bar-meta {
   margin: 8px 0 0;
-  font-size: 11px;
+  font-size: 12px;
   opacity: 0.85;
 }
 
@@ -118,7 +118,7 @@ onMounted(run)
 
 .meta {
   margin: 0;
-  font-size: 11px;
+  font-size: 12px;
   color: var(--td-text-color-secondary);
 }
 

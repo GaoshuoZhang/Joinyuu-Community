@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
-import { Button, Toast } from 'tdesign-mobile-vue'
+import { Button, Loading, Toast } from 'tdesign-mobile-vue'
 import { cancelEnrollment, fetchMyEnrollments } from '@/api/events'
 import { useAsyncList } from '@/composables/useAsyncList'
 import EmptyBlock from '@/components/shared/EmptyBlock.vue'
@@ -52,7 +52,7 @@ async function doCancel(item: MyEnrollmentItem) {
 
 <template>
   <div class="m-enrollments page-fade-in stagger">
-    <div v-if="loading" class="skeleton">加载中…</div>
+    <Loading v-if="loading" class="state" text="加载中…" />
     <section v-else-if="error" class="error-box">
       <p>{{ error }}</p>
       <Button variant="outline" size="small" @click="run">重试</Button>
@@ -96,14 +96,6 @@ async function doCancel(item: MyEnrollmentItem) {
   gap: 10px;
 }
 
-.skeleton {
-  padding: 20px;
-  color: var(--td-text-color-placeholder);
-  font-size: 12px;
-  background: var(--td-bg-color-container);
-  border-radius: var(--td-radius-medium);
-}
-
 .error-box {
   text-align: center;
   color: var(--td-error-color);
@@ -133,7 +125,7 @@ async function doCancel(item: MyEnrollmentItem) {
 
 .meta {
   margin: 0 0 12px;
-  font-size: 11px;
+  font-size: 12px;
   color: var(--td-text-color-secondary);
 }
 

@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
+import { Loading } from 'tdesign-mobile-vue'
 import { fetchMyResponses } from '@/api/demands'
 import { useAsyncList } from '@/composables/useAsyncList'
 import EmptyBlock from '@/components/shared/EmptyBlock.vue'
@@ -17,7 +18,7 @@ const items = computed(() => data.value ?? [])
   <div class="m-my-responses page-fade-in">
     <h1 class="title">我的响应</h1>
 
-    <div v-if="loading" class="hint">加载中…</div>
+    <Loading v-if="loading" class="state" text="加载中…" />
     <EmptyBlock v-else-if="error" :text="error" />
     <EmptyBlock v-else-if="items.length === 0" text="暂无响应记录" />
     <div v-else class="list stagger">
@@ -35,21 +36,12 @@ const items = computed(() => data.value ?? [])
   padding: 16px;
   display: flex;
   flex-direction: column;
-  gap: 14px;
+  gap: 12px;
 }
 
 .title {
   margin: 0;
   font-size: 18px;
-}
-
-.hint {
-  padding: 20px;
-  color: var(--td-text-color-placeholder);
-  font-size: 12px;
-  text-align: center;
-  background: var(--td-bg-color-container);
-  border-radius: var(--td-radius-medium);
 }
 
 .list {
@@ -77,7 +69,7 @@ const items = computed(() => data.value ?? [])
 
 .row-at {
   margin: 6px 0 0;
-  font-size: 11px;
+  font-size: 12px;
   color: var(--td-text-color-placeholder);
 }
 </style>

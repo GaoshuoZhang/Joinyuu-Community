@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
-import { Button } from 'tdesign-mobile-vue'
+import { Button, Loading } from 'tdesign-mobile-vue'
 import { fetchMyDemands } from '@/api/demands'
 import { useAsyncList } from '@/composables/useAsyncList'
 import StateTag from '@/components/shared/StateTag.vue'
@@ -19,7 +19,7 @@ const items = computed(() => data.value ?? [])
   <div class="m-my-demands page-fade-in">
     <Button theme="primary" block class="publish" @click="router.push('/demands/new')">发布需求</Button>
 
-    <div v-if="loading" class="hint">加载中…</div>
+    <Loading v-if="loading" class="state" text="加载中…" />
     <EmptyBlock v-else-if="error" :text="error" />
     <template v-else-if="items.length === 0">
       <EmptyBlock text="暂无需求，去发布第一条" />
@@ -47,16 +47,7 @@ const items = computed(() => data.value ?? [])
   padding: 16px;
   display: flex;
   flex-direction: column;
-  gap: 14px;
-}
-
-.hint {
-  padding: 20px;
-  color: var(--td-text-color-placeholder);
-  font-size: 12px;
-  text-align: center;
-  background: var(--td-bg-color-container);
-  border-radius: var(--td-radius-medium);
+  gap: 12px;
 }
 
 .list {
@@ -84,21 +75,21 @@ const items = computed(() => data.value ?? [])
   flex-wrap: wrap;
   gap: 10px;
   margin-top: 8px;
-  font-size: 11px;
+  font-size: 12px;
   color: var(--td-text-color-secondary);
 }
 
 .cat {
-  font-size: 11px;
+  font-size: 12px;
   padding: 2px 7px;
-  border-radius: 4px;
+  border-radius: var(--td-radius-small);
   background: var(--td-brand-color-1);
   color: var(--td-brand-color);
 }
 
 .row-time {
   margin: 6px 0 0;
-  font-size: 11px;
+  font-size: 12px;
   color: var(--td-text-color-placeholder);
 }
 

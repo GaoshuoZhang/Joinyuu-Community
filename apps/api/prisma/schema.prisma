@@ -153,6 +153,8 @@ model User {
   wechatVerified Boolean            @default(false)
   frozenUntil    String?            @db.VarChar(16)
   frozenReason   String?            @db.VarChar(255)
+  passwordHash   String?            @db.VarChar(255)
+  passwordUpdatedAt String?          @db.VarChar(16)
   points         Int                @default(0)
   registeredAt   String             @db.VarChar(16)
   lastActiveAt   String             @db.VarChar(16)
@@ -559,6 +561,8 @@ model Lease {
   rentPeriod   String             @default("month") @db.VarChar(8) // day | week | month | year
   contactName  String             @db.VarChar(64)
   contactPhone String             @db.VarChar(32)
+  note         String?            @db.VarChar(255)
+  editRecords  Json               @default("[]")
   terminatedAt String?            @db.VarChar(16)
   deletedAt    String?            @db.VarChar(16)
   deletedBy    String?            @db.VarChar(64)

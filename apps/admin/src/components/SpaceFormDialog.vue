@@ -136,10 +136,10 @@ function onClose() {
 
 <template>
   <t-dialog
+    :close-on-overlay-click="true"
     :visible="visible"
     :header="mode === 'create' ? '新增公共空间' : '编辑公共空间'"
-    width="620px"
-    :close-on-overlay-click="false"
+    width="880px"
     :close-on-esc-keydown="false"
     @close="onClose"
   >

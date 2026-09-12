@@ -176,12 +176,24 @@ onMounted(async () => {
             </t-tag>
             <span v-if="!lease.workstationLabels.length" class="muted">—</span>
           </t-descriptions-item>
+          <t-descriptions-item label="备注" :span="2">{{ lease.note || '—' }}</t-descriptions-item>
           <t-descriptions-item v-if="viewStatus === 'terminated'" label="终止时间" :span="2">
             {{ lease.terminatedAt ?? '—' }}
           </t-descriptions-item>
         </t-descriptions>
       </template>
       </t-loading>
+    </div>
+
+    <div v-if="lease" class="page-card record-card">
+      <h4 class="record-title">编辑记录</h4>
+      <t-empty v-if="!lease.editRecords?.length" description="暂无编辑记录" />
+      <t-timeline v-else class="record-timeline" mode="same">
+        <t-timeline-item v-for="(r, i) in lease.editRecords" :key="i">
+          <div class="record-reason">{{ r.reason }}</div>
+          <div class="record-meta">{{ r.operator }} · {{ r.at }}</div>
+        </t-timeline-item>
+      </t-timeline>
     </div>
 
     <LeaseFormDialog
@@ -212,7 +224,35 @@ onMounted(async () => {
 }
 
 .detail-desc {
-  max-width: 860px;
+  width: 100%;
+}
+
+.record-card {
+  margin-top: 16px;
+}
+
+.record-title {
+  margin: 0 0 12px;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--td-text-color-primary);
+}
+
+.record-timeline {
+  padding-top: 8px;
+}
+
+.record-reason {
+  font-size: 14px;
+  line-height: 22px;
+  color: var(--td-text-color-primary);
+}
+
+.record-meta {
+  margin-top: 2px;
+  font-size: 12px;
+  line-height: 18px;
+  color: var(--td-text-color-secondary);
 }
 
 .ws-tag {

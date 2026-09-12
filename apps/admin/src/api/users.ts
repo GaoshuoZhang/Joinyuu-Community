@@ -36,6 +36,25 @@ export async function fetchUsers(query: UserQuery): Promise<PageResult<User>> {
   return httpGet<PageResult<User>>(`/users?${qs}`)
 }
 
+export interface CreateUserPayload {
+  nickname: string
+  phone: string
+  email: string
+  gender: User['gender']
+  realName?: string
+  citizenId?: string
+  bio?: string
+}
+
+export function createUser(payload: CreateUserPayload): Promise<{ id: string }> {
+  return httpPost<{ id: string }>('/users', payload)
+}
+
+/* POST /api/admin/users/:id/reset-password — 管理员强制覆盖用户登录密码 */
+export async function resetUserPassword(id: string, password: string): Promise<{ code: number }> {
+  return httpPost<{ code: number }>(`/users/${id}/reset-password`, { password })
+}
+
 /* GET /api/admin/users/:id
  * stats 从需求/项目/活动数据实时汇总，保证与列表页按用户筛选的结果一致 */
 export async function fetchUser(id: string): Promise<User> {

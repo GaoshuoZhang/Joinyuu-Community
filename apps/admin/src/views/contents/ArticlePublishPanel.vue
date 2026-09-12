@@ -231,6 +231,7 @@ onMounted(load)
       :pagination="pagination"
       empty="暂无资讯"
       @page-change="onPageChange"
+      @row-click="({ row }) => openView(row)"
     >
       <template #title="{ row }">
         <div class="cell-title">
@@ -252,9 +253,7 @@ onMounted(load)
       <template #publishedAt="{ row }">{{ row.publishedAt ?? '—' }}</template>
       <template #op="{ row }">
         <div class="op-cell" @click.stop>
-          <!-- 查看详情：任意状态均可用 -->
-          <t-button variant="text" size="small" @click="openView(row)">详情</t-button>
-          <!-- 待发布：编辑 / 定时发布 / 立即发布 / 归档 -->
+          <!-- 待发布：编辑 / 定时发布 / 立即发布 / 归档；查看详情靠行点击 -->
           <template v-if="row.status === 'pending_release'">
             <t-button variant="text" size="small" @click="openEdit(row)">编辑</t-button>
             <t-button variant="text" size="small" @click="openSchedule(row)">定时发布</t-button>

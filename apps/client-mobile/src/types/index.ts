@@ -46,6 +46,8 @@ export interface UserIdentity {
   /** community_enterprise 关联企业 */
   enterpriseId?: string
   enterpriseName?: string
+  /** 用户在关联企业内的职务（身份切换选项展示用） */
+  enterpriseRole?: string
   /** external_enterprise 自由填写主体 */
   organizationName?: string
 }

@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { onMounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { Button, Toast } from 'tdesign-mobile-vue'
+import { Button, Loading, Toast } from 'tdesign-mobile-vue'
 import { checkInEvent, fetchEvent } from '@/api/events'
 import { useAsyncList } from '@/composables/useAsyncList'
 import { getPosition } from '@/utils/geolocation'
@@ -65,9 +65,7 @@ function backToDetail() {
 
 <template>
   <div class="m-checkin page-fade-in stagger">
-    <a class="back" @click="backToDetail">‹ 返回</a>
-
-    <div v-if="loading" class="skeleton">加载中…</div>
+    <Loading v-if="loading" class="state" text="加载中…" />
     <EmptyBlock v-else-if="error" :text="error" />
     <template v-else-if="event">
       <section class="m-card info">
@@ -115,21 +113,6 @@ function backToDetail() {
   gap: 12px;
 }
 
-.back {
-  font-size: 12px;
-  color: var(--td-text-color-secondary);
-  cursor: pointer;
-  width: fit-content;
-}
-
-.skeleton {
-  padding: 20px;
-  color: var(--td-text-color-placeholder);
-  font-size: 12px;
-  background: var(--td-bg-color-container);
-  border-radius: var(--td-radius-medium);
-}
-
 .title {
   margin: 0 0 10px;
   font-size: 16px;
@@ -153,13 +136,13 @@ function backToDetail() {
 
 .coord {
   margin: 0;
-  font-size: 11px;
+  font-size: 12px;
   color: var(--td-text-color-secondary);
 }
 
 .geo-hint {
   margin: 0;
-  font-size: 11px;
+  font-size: 12px;
   color: var(--td-text-color-placeholder);
 }
 
@@ -172,7 +155,7 @@ function backToDetail() {
 
 .tip {
   margin: 0;
-  font-size: 11px;
+  font-size: 12px;
   color: var(--td-text-color-placeholder);
 }
 

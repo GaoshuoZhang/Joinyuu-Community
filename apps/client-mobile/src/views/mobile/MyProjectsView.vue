@@ -52,7 +52,7 @@ onMounted(run)
   padding: 16px;
   display: flex;
   flex-direction: column;
-  gap: 14px;
+  gap: 12px;
 }
 
 .page-title {
@@ -87,7 +87,7 @@ onMounted(run)
 }
 
 .ent {
-  font-size: 11px;
+  font-size: 12px;
   color: var(--td-text-color-secondary);
 }
 
@@ -125,7 +125,7 @@ onMounted(run)
   margin: 10px 0 0;
   padding-top: 10px;
   border-top: 1px dashed var(--td-component-border);
-  font-size: 11px;
+  font-size: 12px;
   color: var(--td-text-color-placeholder);
 }
 </style>

@@ -10,7 +10,7 @@ import { showcaseTargetTypeMap } from '@/constants/status'
 import type { ShowcaseRequest } from '@/types'
 
 /* 展示页发布面板（迁移自申请审核页的展示页发布类型）：
- * 状态 Tab + 目标类型筛选 + 详情抽屉（审核时间线）+ 通过/驳回意见对话框；
+ * 状态 Tab + 目标类型筛选 + 详情抽屉（审核时间线）+ 通过/驳回意见抽屉；
  * 企业目标审核结果联动企业展示页状态（published/rejected），个人目标接入主页实体 */
 const loading = ref(false)
 const loadError = ref('')
@@ -212,7 +212,9 @@ onMounted(load)
                 驳回
               </t-button>
             </template>
-            <t-button variant="text" size="small" @click="openDetail(row)">详情</t-button>
+            <t-button variant="text" size="small" @click="openDetail(row)">
+              {{ row.status === 'pending' ? '审核' : '详情' }}
+            </t-button>
           </div>
         </template>
       </t-table>
@@ -256,18 +258,14 @@ onMounted(load)
       </template>
     </t-drawer>
 
-    <!-- 审核意见对话框 -->
-    <t-dialog
+    <!-- 审核意见抽屉 -->
+    <t-drawer
       v-model:visible="dialogVisible"
       :header="dialogAction === 'approve' ? '通过展示页申请' : '驳回展示页申请'"
-      width="520px"
-      :confirm-btn="{
-        content: dialogAction === 'approve' ? '确认通过' : '确认驳回',
-        theme: dialogAction === 'approve' ? 'primary' : 'danger',
-        loading: submitting,
-      }"
-      @confirm="onConfirm"
-      @close="dialogVisible = false"
+      size="520px"
+      :footer="false"
+      :close-btn="true"
+      :close-on-esc-keydown="true"
     >
       <p v-if="current" class="dialog-tip">
         {{
@@ -285,7 +283,17 @@ onMounted(load)
         placeholder="审核意见（驳回时建议填写原因）…"
         :autosize="{ minRows: 3, maxRows: 5 }"
       />
-    </t-dialog>
+      <div class="drawer-footer">
+        <t-button variant="text" theme="default" @click="dialogVisible = false">取消</t-button>
+        <t-button
+          :theme="dialogAction === 'approve' ? 'primary' : 'danger'"
+          :loading="submitting"
+          @click="onConfirm"
+        >
+          {{ dialogAction === 'approve' ? '确认通过' : '确认驳回' }}
+        </t-button>
+      </div>
+    </t-drawer>
   </div>
 </template>
 
@@ -410,5 +418,18 @@ onMounted(load)
   margin: 0 0 12px;
   font-size: 12px;
   color: var(--td-text-color-secondary);
+}
+
+.drawer-footer {
+  position: sticky;
+  bottom: 0;
+  z-index: 1;
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 16px;
+  padding: 12px 0;
+  border-top: 1px solid var(--td-component-border);
+  background: var(--td-bg-color-container);
 }
 </style>

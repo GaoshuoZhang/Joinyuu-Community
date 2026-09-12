@@ -239,6 +239,12 @@ function openView(row: Article) {
   viewVisible.value = true
 }
 
+/* 行点击：待审核进入审核，其余状态只读详情 */
+function onRowClick({ row }: { row: Article }) {
+  if (row.status === 'pending') openReview(row)
+  else openView(row)
+}
+
 const { syncQuery } = useListQueryState(query, load)
 
 onMounted(load)
@@ -281,6 +287,7 @@ onMounted(load)
       :pagination="pagination"
       empty="暂无投稿"
       @page-change="onPageChange"
+      @row-click="onRowClick"
     >
       <template #title="{ row }">
         <div class="cell-title">
@@ -304,9 +311,9 @@ onMounted(load)
       </template>
       <template #op="{ row }">
         <div class="op-cell" @click.stop>
-          <!-- 查看详情：待审核进入审核（可驳回/通过），其余状态只读 -->
-          <t-button variant="text" size="small" @click="row.status === 'pending' ? openReview(row) : openView(row)">
-            详情
+          <!-- 待审核：进入审核（可驳回/通过）；其余状态查看详情靠行点击 -->
+          <t-button v-if="row.status === 'pending'" variant="text" size="small" @click="openReview(row)">
+            审核
           </t-button>
           <!-- 待发布：编辑 / 定时发布 / 立即发布 / 归档 -->
           <template v-if="row.status === 'pending_release'">

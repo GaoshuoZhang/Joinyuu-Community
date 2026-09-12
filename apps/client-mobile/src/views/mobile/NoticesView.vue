@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
-import { Button, Tag, Toast } from 'tdesign-mobile-vue'
+import { Button, Loading, Tag, Toast } from 'tdesign-mobile-vue'
 import { ApiError } from '@/api/http'
 import { useNoticesStore } from '@/stores/notices'
 import { useAsyncList } from '@/composables/useAsyncList'
@@ -89,7 +89,7 @@ async function onReadAll() {
       </div>
     </div>
 
-    <div v-if="loading" class="hint">加载中…</div>
+    <Loading v-if="loading" class="state" text="加载中…" />
     <EmptyBlock v-else-if="error" :text="error" />
     <EmptyBlock v-else-if="notices.list.length === 0" text="暂无站内信" />
     <EmptyBlock v-else-if="filtered.length === 0" text="该类型下暂无通知" />
@@ -111,7 +111,7 @@ async function onReadAll() {
   padding: 16px;
   display: flex;
   flex-direction: column;
-  gap: 14px;
+  gap: 12px;
 }
 
 .toolbar {
@@ -143,15 +143,6 @@ async function onReadAll() {
 .unread-count.zero {
   color: var(--td-text-color-placeholder);
   font-weight: 400;
-}
-
-.hint {
-  padding: 20px;
-  color: var(--td-text-color-placeholder);
-  font-size: 12px;
-  text-align: center;
-  background: var(--td-bg-color-container);
-  border-radius: var(--td-radius-medium);
 }
 
 .list {
@@ -201,7 +192,7 @@ async function onReadAll() {
 
 .n-at {
   margin: 6px 0 0;
-  font-size: 11px;
+  font-size: 12px;
   color: var(--td-text-color-placeholder);
 }
 </style>

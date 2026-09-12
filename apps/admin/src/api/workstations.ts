@@ -136,6 +136,8 @@ export interface LeasePayload {
   rentPeriod: RentPeriod
   contactName: string
   contactPhone: string
+  /** 备注（非必填） */
+  note?: string
 }
 
 /* GET /api/admin/renter-options — 租赁方选项（全部个人用户 + 全部企业，含联系电话用于自动填充） */
@@ -164,6 +166,10 @@ export interface LeaseUpdatePayload {
   rentPeriod: RentPeriod
   contactName: string
   contactPhone: string
+  /** 备注（非必填） */
+  note?: string
+  /** 编辑原因（必填，服务端追加编辑记录） */
+  reason: string
 }
 
 /* PUT /api/admin/workstation-leases/:id — 续期/改租金/改联系人；

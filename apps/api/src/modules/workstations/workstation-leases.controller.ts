@@ -27,8 +27,12 @@ export class WorkstationLeasesController {
   }
 
   @Put(':id')
-  update(@Param('id') id: string, @Body() dto: LeaseUpdateDto): Promise<{ code: number }> {
-    return this.workstations.updateLease(id, dto)
+  update(
+    @Param('id') id: string,
+    @Body() dto: LeaseUpdateDto,
+    @Req() req: AuthenticatedRequest,
+  ): Promise<{ code: number }> {
+    return this.workstations.updateLease(id, dto, req.user?.name ?? '社区管理员')
   }
 
   @HttpCode(200)

@@ -1,25 +1,29 @@
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
-import { Tabs, TabPanel, Loading, Tag } from 'tdesign-mobile-vue'
+import { Search, Tabs, TabPanel, Loading, Tag } from 'tdesign-mobile-vue'
 import { fetchEvents } from '@/api/events'
 import { fetchArticles, fetchColumns } from '@/api/contents'
 import { useAsyncList } from '@/composables/useAsyncList'
 import EmptyBlock from '@/components/shared/EmptyBlock.vue'
 import type { CommunityEvent, Article, ArticleColumn } from '@/types'
 
-/* 广场页：顶部「活动 / 资讯」两个选项卡。活动展示进行中/已发布；资讯按栏目分类展示已发布文章。 */
+/* 广场页：顶部「活动 / 资讯」两个选项卡，各带实时搜索（防抖 300ms）。
+ * 活动展示进行中/已发布；资讯按栏目分类展示已发布文章。 */
 const router = useRouter()
 
 const activeTab = ref('events')
 
+const eventKeywordInput = ref('')
+const articleKeywordInput = ref('')
+
 const { data: events, loading: eventsLoading, error: eventsError, run: loadEvents } = useAsyncList<CommunityEvent[]>(
-  () => fetchEvents(),
+  () => fetchEvents({ keyword: eventKeywordInput.value.trim() || undefined }),
 )
 const { data: columnData, run: loadColumns } = useAsyncList<ArticleColumn[]>(fetchColumns)
 const activeColumn = ref('')
 const { data: articleData, loading: articlesLoading, error: articlesError, run: loadArticles } = useAsyncList<Article[]>(() =>
-  fetchArticles({ column: activeColumn.value || undefined }),
+  fetchArticles({ column: activeColumn.value || undefined, keyword: articleKeywordInput.value.trim() || undefined }),
 )
 
 const columns = computed(() => columnData.value ?? [])
@@ -33,6 +37,22 @@ onMounted(() => {
   loadArticles()
 })
 
+/* 实时搜索：输入防抖 300ms 后自动检索（清空即恢复全量） */
+let eventTimer: number | undefined
+let articleTimer: number | undefined
+watch(eventKeywordInput, () => {
+  window.clearTimeout(eventTimer)
+  eventTimer = window.setTimeout(() => loadEvents(), 300)
+})
+watch(articleKeywordInput, () => {
+  window.clearTimeout(articleTimer)
+  articleTimer = window.setTimeout(() => loadArticles(), 300)
+})
+onBeforeUnmount(() => {
+  window.clearTimeout(eventTimer)
+  window.clearTimeout(articleTimer)
+})
+
 function pickColumn(label: string) {
   activeColumn.value = label
   loadArticles()
@@ -43,9 +63,10 @@ function pickColumn(label: string) {
   <div class="page-fade-in m-plaza">
     <Tabs v-model="activeTab" class="top-tabs">
       <TabPanel value="events" label="活动">
+        <Search v-model="eventKeywordInput" class="tab-search" placeholder="搜索活动关键词" />
         <Loading v-if="eventsLoading" class="state" text="加载中…" />
         <EmptyBlock v-else-if="eventsError" :text="eventsError" />
-        <EmptyBlock v-else-if="eventsEmpty" text="暂无进行中的活动" />
+        <EmptyBlock v-else-if="eventsEmpty" text="暂无符合条件的活动" />
         <div v-else class="stagger list">
           <article
             v-for="ev in events"
@@ -64,6 +85,7 @@ function pickColumn(label: string) {
       </TabPanel>
 
       <TabPanel value="articles" label="资讯">
+        <Search v-model="articleKeywordInput" class="tab-search" placeholder="搜索资讯关键词" />
         <div class="chips">
           <Tag
             class="chip"
@@ -113,11 +135,19 @@ function pickColumn(label: string) {
   padding: 16px;
   display: flex;
   flex-direction: column;
-  gap: 14px;
+  gap: 12px;
 }
 
 .top-tabs {
+  /* 标题条白底（区别于页面灰底，可见可点），内容卡片保留白底 */
+  --td-tab-nav-background: var(--td-bg-color-container);
   --td-tabs-track-color: var(--td-brand-color);
+}
+
+.tab-search {
+  /* 与选项卡标题条拉开间距 */
+  margin-top: 12px;
+  margin-bottom: 12px;
 }
 
 .state {
@@ -160,15 +190,15 @@ function pickColumn(label: string) {
 .type-tag,
 .col-tag {
   display: inline-block;
-  font-size: 11px;
+  font-size: 12px;
   padding: 2px 8px;
-  border-radius: 4px;
+  border-radius: var(--td-radius-small);
   background: var(--td-brand-color-1);
   color: var(--td-brand-color);
 }
 
 .capacity {
-  font-size: 11px;
+  font-size: 12px;
   color: var(--td-brand-color);
 }
 
@@ -191,7 +221,7 @@ function pickColumn(label: string) {
 
 .meta {
   margin: 0;
-  font-size: 11px;
+  font-size: 12px;
   color: var(--td-text-color-placeholder);
 }
 </style>

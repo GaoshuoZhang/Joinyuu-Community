@@ -196,4 +196,27 @@ export default tseslint.config(
     },
     rules: vueRules,
   },
+  {
+    name: 'joinyuu/client-mobile',
+    files: ['apps/client-mobile/src/**/*.{ts,vue}'],
+    extends: [...tseslint.configs.recommended],
+    languageOptions: {
+      globals: browserGlobals,
+    },
+    rules: sharedRules,
+  },
+  {
+    name: 'joinyuu/client-mobile-vue',
+    files: ['apps/client-mobile/src/**/*.vue'],
+    extends: [
+      ...pluginVue.configs['flat/recommended'],
+      pluginVue.configs['no-layout-rules'],
+    ],
+    languageOptions: {
+      parserOptions: {
+        parser: tseslint.parser,
+      },
+    },
+    rules: vueRules,
+  },
 );

@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, onMounted } from 'vue'
-import { useRoute, useRouter } from 'vue-router'
-import { Button, Loading } from 'tdesign-mobile-vue'
+import { useRoute } from 'vue-router'
+import { Loading } from 'tdesign-mobile-vue'
 import { useAsyncList } from '@/composables/useAsyncList'
 import { fetchEnterpriseShowcase } from '@/api/enterprises'
 import EmptyBlock from '@/components/shared/EmptyBlock.vue'
@@ -10,7 +10,6 @@ import type { EnterpriseShowcase } from '@/types'
 /* 移动企业展示页：品牌横幅（渐变 + 企业名首字）+ 介绍 + 成员列表；
  * 仅 published 可见（404 → 空态 + 返回）；申请入口仅通过 /enterprises/:id/showcase-apply 路由直达 */
 const route = useRoute()
-const router = useRouter()
 
 const { data, loading, error, run } = useAsyncList<EnterpriseShowcase>(() =>
   fetchEnterpriseShowcase(String(route.params.id)),
@@ -26,7 +25,6 @@ onMounted(run)
     <Loading v-if="loading" class="state" text="加载中…" />
     <template v-else-if="error">
       <EmptyBlock :text="error" />
-      <Button variant="outline" block @click="router.back()">返回</Button>
     </template>
     <template v-else-if="showcase">
       <section class="banner">
@@ -58,7 +56,7 @@ onMounted(run)
   padding: 16px;
   display: flex;
   flex-direction: column;
-  gap: 14px;
+  gap: 12px;
 }
 
 .state {
@@ -68,7 +66,7 @@ onMounted(run)
 .banner {
   display: flex;
   align-items: center;
-  gap: 14px;
+  gap: 12px;
   padding: 22px 18px;
   border-radius: var(--td-radius-large);
   background: var(--client-brand-gradient);
@@ -81,7 +79,7 @@ onMounted(run)
   height: 52px;
   display: grid;
   place-items: center;
-  border-radius: 12px;
+  border-radius: var(--td-radius-large);
   background: rgba(255, 255, 255, 0.2);
   font-size: 26px;
   font-weight: 700;
@@ -123,9 +121,9 @@ onMounted(run)
 }
 
 .member {
-  font-size: 11px;
+  font-size: 12px;
   padding: 3px 11px;
-  border-radius: 999px;
+  border-radius: var(--td-radius-circle);
   background: var(--td-brand-color-1);
   color: var(--td-brand-color);
 }

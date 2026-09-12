@@ -46,7 +46,7 @@ const typeLabel: Record<ApplicationType, string> = {
   padding: 16px;
   display: flex;
   flex-direction: column;
-  gap: 14px;
+  gap: 12px;
 }
 
 .state {
@@ -80,7 +80,7 @@ const typeLabel: Record<ApplicationType, string> = {
 
 .meta {
   margin: 0;
-  font-size: 11px;
+  font-size: 12px;
   color: var(--td-text-color-placeholder);
 }
 

@@ -140,7 +140,7 @@ async function onSubmit() {
 
 .tip {
   margin: 12px 0 0;
-  font-size: 11px;
+  font-size: 12px;
   color: var(--td-text-color-placeholder);
 }
 </style>

@@ -1,7 +1,7 @@
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { Button, Input, Tag, Toast } from 'tdesign-mobile-vue'
+import { Button, Search, Tag, Toast } from 'tdesign-mobile-vue'
 import { fetchDemands } from '@/api/demands'
 import { useAuthStore } from '@/stores/auth'
 import { useAsyncList } from '@/composables/useAsyncList'
@@ -48,19 +48,17 @@ function selectCategory(label: string) {
   run()
 }
 
-function onSearch() {
-  keyword.value = keywordInput.value.trim()
-  page.value = 1
-  run()
-}
-
-function onReset() {
-  keywordInput.value = ''
-  keyword.value = ''
-  category.value = ''
-  page.value = 1
-  run()
-}
+/* 实时搜索：输入防抖 300ms 后自动检索（清空即恢复全量） */
+let searchTimer: number | undefined
+watch(keywordInput, () => {
+  window.clearTimeout(searchTimer)
+  searchTimer = window.setTimeout(() => {
+    keyword.value = v.trim()
+    page.value = 1
+    run()
+  }, 300)
+})
+onBeforeUnmount(() => window.clearTimeout(searchTimer))
 
 async function loadMore() {
   if (loading.value) return
@@ -87,11 +85,7 @@ function onPublish() {
 
     <Button theme="primary" block class="publish" @click="onPublish">发布需求</Button>
 
-    <div class="search-row">
-      <Input v-model="keywordInput" class="search-input" placeholder="搜索项目" clearable @enter="onSearch" />
-      <Button theme="primary" class="search-btn" @click="onSearch">查询</Button>
-      <Button theme="default" variant="outline" class="search-btn" @click="onReset">重置</Button>
-    </div>
+    <Search v-model="keywordInput" class="search" placeholder="搜索项目" />
 
     <div class="chips">
       <Tag :theme="category === '' ? 'primary' : 'default'" variant="light" size="medium" @click="selectCategory('')">
@@ -155,14 +149,8 @@ function onPublish() {
   color: var(--td-text-color-secondary);
 }
 
-.search-row {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-
-.search-input {
-  flex: 1;
+.search {
+  margin-bottom: 2px;
 }
 
 .chips {
@@ -178,7 +166,7 @@ function onPublish() {
   font-size: 12px;
   text-align: center;
   background: var(--td-bg-color-container);
-  border-radius: var(--td-radius-medium);
+  border-radius: var(--td-radius-large);
 }
 
 .list {
@@ -199,9 +187,9 @@ function onPublish() {
 
 .d-cat {
   flex-shrink: 0;
-  font-size: 11px;
+  font-size: 12px;
   padding: 2px 7px;
-  border-radius: 4px;
+  border-radius: var(--td-radius-small);
   background: var(--td-brand-color-light);
   color: var(--td-brand-color);
 }
@@ -221,7 +209,7 @@ function onPublish() {
   align-items: center;
   gap: 12px;
   margin-top: 8px;
-  font-size: 11px;
+  font-size: 12px;
   color: var(--td-text-color-secondary);
 }
 
@@ -233,7 +221,7 @@ function onPublish() {
 
 .d-resp {
   margin: 6px 0 0;
-  font-size: 11px;
+  font-size: 12px;
   color: var(--td-brand-color);
   font-weight: 600;
 }
@@ -245,7 +233,7 @@ function onPublish() {
 .end-tip {
   margin: 0;
   text-align: center;
-  font-size: 11px;
+  font-size: 12px;
   color: var(--td-text-color-placeholder);
 }
 </style>

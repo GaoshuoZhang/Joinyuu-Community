@@ -61,8 +61,13 @@ function syncCompactSidebar(event: MediaQueryList | MediaQueryListEvent = compac
 onMounted(() => {
   syncCompactSidebar()
   compactViewport.addEventListener('change', syncCompactSidebar)
+  measureTabScroll()
+  window.addEventListener('resize', measureTabScroll)
 })
-onBeforeUnmount(() => compactViewport.removeEventListener('change', syncCompactSidebar))
+onBeforeUnmount(() => {
+  compactViewport.removeEventListener('change', syncCompactSidebar)
+  window.removeEventListener('resize', measureTabScroll)
+})
 
 /* ---------- 菜单分组展开/折叠（受控）：低频组（积分管理/规则管理/系统管理）默认折叠 ---------- */
 const ALL_GROUP_KEYS = ['group-members', 'group-biz', 'group-points', 'group-rules', 'group-space', 'group-contents', 'group-system']
@@ -162,16 +167,60 @@ async function onReadAll() {
 onMounted(loadNotifications)
 
 const tabBarRef = ref<HTMLElement | null>(null)
+const tabTrackRef = ref<HTMLElement | null>(null)
+/* 标签栏采用 transform 位移动画（参考 TDesign Tabs 的导航滑动实现）：
+ * 容器 overflow:hidden + 轨道 translate3d，滚轮始终把纵向增量转成横向位移 */
+const tabScrollLeft = ref(0)
+const tabMaxScroll = ref(0)
+
+const tabTrackStyle = computed(() => ({ transform: `translate3d(${-tabScrollLeft.value}px, 0, 0)` }))
+
+function clampTabOffset(value: number) {
+  return Math.max(0, Math.min(value, tabMaxScroll.value))
+}
+
+function setTabOffset(value: number) {
+  tabScrollLeft.value = clampTabOffset(value)
+}
+
+function measureTabScroll() {
+  const bar = tabBarRef.value
+  const track = tabTrackRef.value
+  if (!bar || !track) return
+  const style = getComputedStyle(bar)
+  const padding = parseFloat(style.paddingLeft) + parseFloat(style.paddingRight)
+  tabMaxScroll.value = Math.max(0, track.scrollWidth - (bar.clientWidth - padding))
+  setTabOffset(tabScrollLeft.value)
+}
+
+function handleTabBarWheel(event: WheelEvent) {
+  if (tabMaxScroll.value <= 0) return
+  event.preventDefault()
+  const { deltaX, deltaY } = event
+  setTabOffset(tabScrollLeft.value + (Math.abs(deltaX) > Math.abs(deltaY) ? deltaX : deltaY))
+}
 
 async function revealActiveTab() {
   await nextTick()
-  const activeTab = tabBarRef.value?.querySelector<HTMLElement>('.tab-item.active')
-  activeTab?.scrollIntoView({
-    block: 'nearest',
-    inline: 'nearest',
-    behavior: window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth',
-  })
+  measureTabScroll()
+  const bar = tabBarRef.value
+  const track = tabTrackRef.value
+  if (!bar || !track) return
+  const active = track.querySelector<HTMLElement>('.tab-item.active')
+  if (!active) return
+  const left = active.offsetLeft
+  const right = left + active.offsetWidth
+  const viewLeft = tabScrollLeft.value
+  const viewRight = viewLeft + bar.clientWidth
+  if (left < viewLeft) setTabOffset(left)
+  else if (right > viewRight) setTabOffset(right - bar.clientWidth)
 }
+
+/* 标签数量变化（新增/关闭）后重新测量可滚动范围 */
+watch(
+  () => tabs.tabs.length,
+  () => nextTick(measureTabScroll),
+)
 
 /* 路由变化 → 同步多标签页 */
 watch(
@@ -465,25 +514,27 @@ async function handleDropdown(item: { value?: string | number }) {
           <template #icon><CloseIcon /></template>
           全部关闭
         </t-button>
-        <nav ref="tabBarRef" class="tab-bar" aria-label="已打开页面">
-          <div
-            v-for="tab in tabs.tabs"
-            :key="tab.path"
-            class="tab-item"
-            :class="{ active: tab.path === route.path }"
-          >
-            <t-link class="tab-title" theme="default" hover="color" :href="router.resolve(tab.path).href" :aria-current="tab.path === route.path ? 'page' : undefined">{{ tab.title }}</t-link>
-            <span
-              v-if="tab.closable"
-              class="tab-close"
-              role="button"
-              tabindex="0"
-              :aria-label="`关闭${tab.title}`"
-              @click.stop="closeTab(tab.path)"
-              @keydown.enter.space.stop.prevent="closeTab(tab.path)"
+        <nav ref="tabBarRef" class="tab-bar" aria-label="已打开页面" @wheel="handleTabBarWheel">
+          <div ref="tabTrackRef" class="tab-track" :style="tabTrackStyle">
+            <div
+              v-for="tab in tabs.tabs"
+              :key="tab.path"
+              class="tab-item"
+              :class="{ active: tab.path === route.path }"
             >
-              <CloseIcon />
-            </span>
+              <t-link class="tab-title" theme="default" hover="color" :href="router.resolve(tab.path).href" :aria-current="tab.path === route.path ? 'page' : undefined">{{ tab.title }}</t-link>
+              <span
+                v-if="tab.closable"
+                class="tab-close"
+                role="button"
+                tabindex="0"
+                :aria-label="`关闭${tab.title}`"
+                @click.stop="closeTab(tab.path)"
+                @keydown.enter.space.stop.prevent="closeTab(tab.path)"
+              >
+                <CloseIcon />
+              </span>
+            </div>
           </div>
         </nav>
         <div class="top-right">
@@ -834,18 +885,20 @@ async function handleDropdown(item: { value?: string | number }) {
 .tab-bar {
   display: flex;
   align-items: center;
-  gap: 4px;
   flex: 1;
   min-width: 0;
   height: 100%;
   padding: 0 8px;
-  overflow-x: auto;
-  overscroll-behavior-x: contain;
-  scroll-behavior: smooth;
+  overflow: hidden;
 }
 
-.tab-bar::-webkit-scrollbar {
-  height: 4px;
+/* 轨道随滚轮横向位移（transform，参考 TDesign Tabs 导航滑动） */
+.tab-track {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  will-change: transform;
+  transition: transform 0.3s cubic-bezier(0.38, 0, 0.24, 1);
 }
 
 .tab-close-all {
@@ -862,6 +915,7 @@ async function handleDropdown(item: { value?: string | number }) {
   display: flex;
   align-items: center;
   gap: 4px;
+  flex-shrink: 0;
   height: 28px;
   padding: 0 10px;
   border: 1px solid var(--td-component-border);

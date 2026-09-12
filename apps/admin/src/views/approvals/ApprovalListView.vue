@@ -356,18 +356,14 @@ onMounted(load)
       </template>
     </t-drawer>
 
-    <!-- 审核意见对话框 -->
-    <t-dialog
+    <!-- 审核意见抽屉 -->
+    <t-drawer
       v-model:visible="dialogVisible"
       :header="dialogAction === 'approve' ? '通过审核' : '驳回审核'"
-      width="520px"
-      :confirm-btn="{
-        content: dialogAction === 'approve' ? '确认通过' : '确认驳回',
-        theme: dialogAction === 'approve' ? 'primary' : 'danger',
-        loading: submitting,
-      }"
-      @confirm="onConfirm"
-      @close="dialogVisible = false"
+      size="520px"
+      :footer="false"
+      :close-btn="true"
+      :close-on-esc-keydown="true"
     >
       <t-form ref="commentFormRef" :data="commentForm" :rules="commentRules">
         <t-form-item name="comment">
@@ -378,7 +374,17 @@ onMounted(load)
           />
         </t-form-item>
       </t-form>
-    </t-dialog>
+      <div class="drawer-footer">
+        <t-button variant="text" theme="default" @click="dialogVisible = false">取消</t-button>
+        <t-button
+          :theme="dialogAction === 'approve' ? 'primary' : 'danger'"
+          :loading="submitting"
+          @click="onConfirm"
+        >
+          {{ dialogAction === 'approve' ? '确认通过' : '确认驳回' }}
+        </t-button>
+      </div>
+    </t-drawer>
 
     <!-- 一键归档：状态选择二次确认对话框 -->
     <BulkArchiveDialog
@@ -503,5 +509,18 @@ onMounted(load)
   margin-top: 24px;
   padding-top: 16px;
   border-top: 1px solid var(--td-component-border);
+}
+
+.drawer-footer {
+  position: sticky;
+  bottom: 0;
+  z-index: 1;
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 16px;
+  padding: 12px 0;
+  border-top: 1px solid var(--td-component-border);
+  background: var(--td-bg-color-container);
 }
 </style>

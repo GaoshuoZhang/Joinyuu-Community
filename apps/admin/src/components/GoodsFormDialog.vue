@@ -164,11 +164,11 @@ function onClose() {
 
 <template>
   <t-dialog
+    :close-on-overlay-click="true"
     :visible="visible"
     :header="mode === 'create' ? '新增商品' : '编辑商品'"
-    width="560px"
+    width="880px"
     lazy
-    :close-on-overlay-click="false"
     :close-on-esc-keydown="false"
     @close="onClose"
   >
@@ -225,54 +225,55 @@ function onClose() {
       </template>
 
       <!-- 自定义范围：关闭 = 不限身份、等级 -->
-      <div class="scope-head">
-        <span class="scope-title">自定义可见范围</span>
-        <t-switch v-model="customVisibility" />
-      </div>
-      <span class="scope-tip-block">默认关闭 = 所有身份、等级均可见；开启后可限定可见的身份与等级</span>
-      <div v-if="customVisibility" class="form-row">
-        <t-form-item label="身份" name="visibilityIdentities">
-          <t-select
-            v-model="form.visibilityIdentities"
-            multiple
-            clearable
-            :options="visibilityIdentityOptions"
-            placeholder="不限…"
-          />
-        </t-form-item>
-        <t-form-item label="等级" name="visibilityLevels">
-          <t-select v-model="form.visibilityLevels" multiple clearable :options="userLevelOptions" placeholder="不限…" />
-        </t-form-item>
-      </div>
-
-      <div class="scope-head">
-        <span class="scope-title">自定义可下单范围</span>
-        <div class="scope-right">
-          <t-switch v-model="customOrdering" />
-          <t-button
-            v-if="customOrdering && customVisibility"
-            variant="text"
-            size="small"
-            @click="syncOrdering"
-          >
-            同步可见范围
-          </t-button>
+      <div class="form-row">
+        <div class="scope-col">
+          <div class="scope-head">
+            <span class="scope-title">自定义可见范围</span>
+            <t-switch v-model="customVisibility" />
+          </div>
+          <span class="scope-tip-block">默认关闭 = 所有身份、等级均可见；开启后可限定可见的身份与等级</span>
+          <t-form-item v-if="customVisibility" label="身份" name="visibilityIdentities">
+            <t-select
+              v-model="form.visibilityIdentities"
+              multiple
+              clearable
+              :options="visibilityIdentityOptions"
+              placeholder="不限…"
+            />
+          </t-form-item>
+          <t-form-item v-if="customVisibility" label="等级" name="visibilityLevels">
+            <t-select v-model="form.visibilityLevels" multiple clearable :options="userLevelOptions" placeholder="不限…" />
+          </t-form-item>
         </div>
-      </div>
-      <span class="scope-tip-block">默认关闭 = 所有身份、等级均可下单；开启后可限定可下单的身份与等级</span>
-      <div v-if="customOrdering" class="form-row">
-        <t-form-item label="身份" name="orderIdentities">
-          <t-select
-            v-model="form.orderIdentities"
-            multiple
-            clearable
-            :options="visibilityIdentityOptions"
-            placeholder="不限…"
-          />
-        </t-form-item>
-        <t-form-item label="等级" name="orderLevels">
-          <t-select v-model="form.orderLevels" multiple clearable :options="userLevelOptions" placeholder="不限…" />
-        </t-form-item>
+        <div class="scope-col">
+          <div class="scope-head">
+            <span class="scope-title">自定义可下单范围</span>
+            <div class="scope-right">
+              <t-switch v-model="customOrdering" />
+              <t-button
+                v-if="customOrdering && customVisibility"
+                variant="text"
+                size="small"
+                @click="syncOrdering"
+              >
+                同步可见范围
+              </t-button>
+            </div>
+          </div>
+          <span class="scope-tip-block">默认关闭 = 所有身份、等级均可下单；开启后可限定可下单的身份与等级</span>
+          <t-form-item v-if="customOrdering" label="身份" name="orderIdentities">
+            <t-select
+              v-model="form.orderIdentities"
+              multiple
+              clearable
+              :options="visibilityIdentityOptions"
+              placeholder="不限…"
+            />
+          </t-form-item>
+          <t-form-item v-if="customOrdering" label="等级" name="orderLevels">
+            <t-select v-model="form.orderLevels" multiple clearable :options="userLevelOptions" placeholder="不限…" />
+          </t-form-item>
+        </div>
       </div>
 
       <t-form-item label="商品说明" name="description">
@@ -289,10 +290,22 @@ function onClose() {
   gap: 0 16px;
 }
 
+.scope-col {
+  min-width: 0;
+}
+
+@media (max-width: 767px) {
+  .form-row {
+    grid-template-columns: 1fr;
+  }
+}
+
 .scope-head {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   justify-content: space-between;
+  gap: 4px 8px;
   margin-bottom: 8px;
 }
 
@@ -304,7 +317,7 @@ function onClose() {
 
 .scope-title {
   font-size: 14px;
-  font-weight: 600;
+  font-weight: 400;
   color: var(--td-text-color-primary);
 }
 
