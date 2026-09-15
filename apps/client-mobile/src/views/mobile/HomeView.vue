@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { onMounted, watch } from 'vue'
+import { onMounted, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { Icon, Button, Grid, GridItem, Loading, Search, Swiper, SwiperItem } from 'tdesign-mobile-vue'
 import { useAuthStore } from '@/stores/auth'
@@ -29,9 +29,11 @@ watch(feed, (f) => {
   if (f && auth.isLogged) notices.setUnread(f.noticesUnread)
 })
 
-/* 搜索：聚焦即进入项目页（实时搜索在该页进行） */
-function onSearchFocus() {
-  void router.push('/projects')
+const searchKeyword = ref('')
+
+/* 首页搜索直达跨域搜索页，保留关键词以便用户继续检索。 */
+function onSearch() {
+  void router.push({ path: '/search', query: searchKeyword.value.trim() ? { q: searchKeyword.value.trim() } : undefined })
 }
 
 const bannerLinks: Record<string, string> = {
@@ -64,8 +66,8 @@ const quickEntries = [
 
 <template>
   <div class="home page-fade-in">
-    <!-- 顶部搜索：聚焦即进入项目页实时搜索 -->
-    <Search placeholder="搜索项目 / 需求" @focus="onSearchFocus" />
+    <!-- 顶部搜索：进入全局搜索页，覆盖项目、活动、文章与社区内容 -->
+    <Search v-model="searchKeyword" placeholder="搜索项目、活动、文章或社区服务" @focus="onSearch" @search="onSearch" />
 
     <p v-if="feed?.siteSlogan" class="home-slogan">{{ feed.siteSlogan }}</p>
 

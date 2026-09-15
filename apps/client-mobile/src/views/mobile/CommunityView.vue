@@ -1,6 +1,6 @@
 <script setup lang="ts">
-import { onBeforeUnmount, onMounted, ref, watch } from 'vue'
-import { useRouter } from 'vue-router'
+import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
 import { Button, Loading, Popup, Search, Tabs, TabPanel, Tag, Toast, Avatar } from 'tdesign-mobile-vue'
 import { fetchEnterpriseList, fetchPolicies, fetchTalents } from '@/api/community'
 import { useAsyncList } from '@/composables/useAsyncList'
@@ -12,6 +12,7 @@ import type { CommunityPolicy, EnterpriseRecord, TalentMember } from '@/types'
  * 每个 tab 自带搜索；切换 tab 时重置搜索并重新拉取。数据均经 @/api/community。
  * 企业库：已发布名片点入名片；成员对待发布名片可直达申请；其余提示未发布。 */
 const router = useRouter()
+const route = useRoute()
 const auth = useAuthStore()
 
 function canApplyShowcase(e: EnterpriseRecord) {
@@ -36,7 +37,7 @@ const talentKeyword = ref('')
 const enterpriseKeyword = ref('')
 
 const { data: policies, loading: policiesLoading, error: policiesError, run: runPolicies } = useAsyncList<CommunityPolicy[]>(
-  () => fetchPolicies({ keyword: serviceKeyword.value.trim() || undefined }),
+  () => fetchPolicies({ keyword: serviceKeyword.value.trim() || undefined, category: selectedCategory.value || undefined }),
 )
 const { data: talents, loading: talentsLoading, error: talentsError, run: runTalents } = useAsyncList<TalentMember[]>(
   () => fetchTalents({ keyword: talentKeyword.value.trim() || undefined }),
@@ -45,6 +46,10 @@ const { data: enterprises, loading: enterprisesLoading, error: enterprisesError,
   useAsyncList<EnterpriseRecord[]>(() =>
     fetchEnterpriseList({ keyword: enterpriseKeyword.value.trim() || undefined }),
   )
+
+const serviceCategories = computed(() => [...new Set((policies.value ?? []).map((item) => item.category))])
+const selectedCategory = ref('')
+const featuredPolicy = computed(() => (policies.value ?? [])[0])
 
 onMounted(runPolicies)
 
@@ -56,6 +61,7 @@ watch(serviceKeyword, () => {
   window.clearTimeout(serviceTimer)
   serviceTimer = window.setTimeout(() => runPolicies(), 300)
 })
+watch(selectedCategory, () => runPolicies())
 watch(talentKeyword, () => {
   window.clearTimeout(talentTimer)
   talentTimer = window.setTimeout(() => runTalents(), 300)
@@ -90,6 +96,19 @@ function openPolicy(p: CommunityPolicy) {
   currentPolicy.value = p
   policyVisible.value = true
 }
+
+watch(
+  () => [route.query.tab, route.query.policy],
+  () => {
+    if (route.query.tab === 'service') activeTab.value = 'service'
+    const policy = (policies.value ?? []).find((item) => item.id === route.query.policy)
+    if (policy) openPolicy(policy)
+  },
+)
+watch(policies, () => {
+  const policy = (policies.value ?? []).find((item) => item.id === route.query.policy)
+  if (policy) openPolicy(policy)
+})
 </script>
 
 <template>
@@ -99,10 +118,23 @@ function openPolicy(p: CommunityPolicy) {
       <TabPanel value="service" label="社区服务">
         <Search v-model="serviceKeyword" class="tab-search" placeholder="搜索政策关键词" />
 
+        <div v-if="serviceCategories.length" class="service-categories">
+          <Tag size="small" variant="light" :theme="selectedCategory ? 'default' : 'primary'" @click="selectedCategory = ''">全部</Tag>
+          <Tag v-for="category in serviceCategories" :key="category" size="small" variant="light" :theme="selectedCategory === category ? 'primary' : 'default'" @click="selectedCategory = category">{{ category }}</Tag>
+        </div>
+
         <Loading v-if="policiesLoading" class="state" text="加载中…" />
         <EmptyBlock v-else-if="policiesError" :text="policiesError" />
         <EmptyBlock v-else-if="(policies ?? []).length === 0" text="暂无相关政策" />
-        <div v-else class="list stagger">
+        <template v-else>
+          <article v-if="featuredPolicy" class="service-feature m-card pressable" @click="openPolicy(featuredPolicy)">
+            <span class="eyebrow">社区服务精选</span>
+            <h2>{{ featuredPolicy.title }}</h2>
+            <p>{{ featuredPolicy.summary }}</p>
+            <span class="service-link">查看服务详情 ›</span>
+          </article>
+          <div class="service-section-head"><h2>服务指引</h2><span>{{ policies?.length ?? 0 }} 条内容</span></div>
+        <div class="list stagger">
           <article
             v-for="p in policies"
             :key="p.id"
@@ -117,6 +149,7 @@ function openPolicy(p: CommunityPolicy) {
             <p class="summary">{{ p.summary }}</p>
           </article>
         </div>
+        </template>
       </TabPanel>
 
       <!-- 人才库：社区个体卡片 -->
@@ -205,6 +238,45 @@ function openPolicy(p: CommunityPolicy) {
   margin-top: 12px;
   margin-bottom: 12px;
 }
+
+.service-categories {
+  display: flex;
+  gap: 8px;
+  margin: 0 0 12px;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+
+.service-categories::-webkit-scrollbar { display: none; }
+
+.service-categories :deep(.t-tag) { flex: 0 0 auto; }
+
+.service-feature {
+  position: relative;
+  margin-bottom: 16px;
+  overflow: hidden;
+  cursor: pointer;
+}
+
+.service-feature::after {
+  position: absolute;
+  top: -34px;
+  right: -22px;
+  width: 96px;
+  height: 96px;
+  border: 1px solid var(--td-brand-color-3);
+  border-radius: var(--td-radius-circle);
+  content: '';
+}
+
+.service-feature .eyebrow { color: var(--td-brand-color); font-size: 12px; font-weight: 600; }
+.service-feature h2 { position: relative; z-index: 1; margin: 8px 0; font-size: 17px; line-height: 1.45; }
+.service-feature p { position: relative; z-index: 1; display: -webkit-box; overflow: hidden; margin: 0; color: var(--td-text-color-secondary); font-size: 12px; line-height: 1.7; -webkit-box-orient: vertical; -webkit-line-clamp: 2; }
+.service-link { display: inline-block; margin-top: 12px; color: var(--td-brand-color); font-size: 12px; font-weight: 600; }
+
+.service-section-head { display: flex; align-items: baseline; justify-content: space-between; margin: 0 2px 8px; }
+.service-section-head h2 { margin: 0; font-size: 15px; }
+.service-section-head span { color: var(--td-text-color-placeholder); font-size: 12px; }
 
 .state {
   padding: 20px 0;

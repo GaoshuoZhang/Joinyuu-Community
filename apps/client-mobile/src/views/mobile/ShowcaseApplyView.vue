@@ -50,6 +50,7 @@ async function onSubmit() {
       </header>
 
       <div class="m-card form">
+        <div class="apply-note"><span>提交说明</span><p>请补充企业业务、服务能力或发布理由，方便运营人员完成审核。</p></div>
         <div class="field">
           <label>申请说明</label>
           <Textarea v-model="note" :autosize="{ minRows: 6, maxRows: 14 }" placeholder="请输入申请说明…" />
@@ -86,6 +87,9 @@ async function onSubmit() {
 .field {
   margin-bottom: 14px;
 }
+
+.apply-note { margin: -2px 0 18px; padding: 12px; border-radius: var(--td-radius-large); background: var(--td-bg-color-secondarycontainer); }
+.apply-note span { color: var(--td-brand-color); font-size: 12px; font-weight: 600; }.apply-note p { margin: 5px 0 0; color: var(--td-text-color-secondary); font-size: 12px; line-height: 1.7; }
 
 .field label {
   display: block;

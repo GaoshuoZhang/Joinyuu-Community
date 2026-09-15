@@ -1,5 +1,6 @@
 import type { Article, ArticleColumn, ArticleCreatePayload, MySubmittedArticle } from '@/types'
-import { articles, columns, myArticlesByUid, nowStamp, pushNotice } from '@/mock/db'
+import { articles, columns, enterprises, myArticlesByUid, nowStamp, pushNotice } from '@/mock/db'
+import { permissionsOf } from '@/mock/handlers/enterprises'
 import { readPayload } from '@/mock/session'
 import { fail, withLatency } from '@/mock/latency'
 
@@ -44,6 +45,12 @@ export async function createArticle(payload: ArticleCreatePayload): Promise<{ id
     const content = payload.content.trim()
     if (!title) fail(400, '请输入文章标题')
     if (!payload.columnCode) fail(400, '请选择栏目')
+    if (!payload.asIdentity) fail(400, '请选择投稿身份')
+    if (payload.asIdentity === 'community_enterprise' && payload.asEnterpriseId) {
+      const enterprise = enterprises.find((item) => item.id === payload.asEnterpriseId)
+      if (!enterprise || !enterprise.members.some((member) => member.uid === uid)) fail(403, '你不是该企业成员')
+      if (!permissionsOf(enterprise, uid).includes('article_submit')) fail(403, '你没有代企业提交投稿的权限')
+    }
     if (content.length < 30) fail(400, '正文至少 30 字')
     const id = `SU${Date.now()}`
     const columnLabel = columns.find((c) => c.code === payload.columnCode)?.label ?? payload.columnCode

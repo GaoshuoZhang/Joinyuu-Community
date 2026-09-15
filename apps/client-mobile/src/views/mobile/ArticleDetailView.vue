@@ -7,16 +7,20 @@ import { fetchArticle } from '@/api/contents'
 import EmptyBlock from '@/components/shared/EmptyBlock.vue'
 import type { Article } from '@/types'
 
-/* 移动文章详情：标题/栏目/作者/时间/浏览量 + 正文按换行分段；404 → 空态 + 返回 */
+/* 移动文章详情：正文支持客户端投稿生成的 Markdown 图片行，兼容既有纯文本内容。 */
 const route = useRoute()
 
 const { data, loading, error, run } = useAsyncList<Article>(() => fetchArticle(String(route.params.id)))
 const article = computed(() => data.value)
-const paragraphs = computed(() =>
+const contentBlocks = computed(() =>
   (data.value?.content ?? '')
     .split('\n')
     .map((s) => s.trim())
-    .filter(Boolean),
+    .filter(Boolean)
+    .map((text) => {
+      const image = text.match(/^!\[[^\]]*\]\((.+)\)$/)
+      return image ? { type: 'image' as const, url: image[1] } : { type: 'text' as const, text }
+    }),
 )
 
 onMounted(run)
@@ -32,10 +36,14 @@ onMounted(run)
       <header class="head">
         <span class="col-tag">{{ article.columnLabel }}</span>
         <h1 class="title">{{ article.title }}</h1>
-        <p class="meta">{{ article.authorName }} · {{ article.publishedAt }} · {{ article.views }} 次浏览</p>
+       <p class="meta">{{ article.authorName }} · {{ article.publishedAt }} · {{ article.views }} 次浏览</p>
       </header>
+      <img v-if="article.coverUrl" class="cover" :src="article.coverUrl" :alt="article.title" />
       <article class="m-card body">
-        <p v-for="(p, i) in paragraphs" :key="i" class="para">{{ p }}</p>
+        <template v-for="(block, i) in contentBlocks" :key="i">
+          <img v-if="block.type === 'image'" class="content-image" :src="block.url" alt="文章配图" />
+          <p v-else class="para">{{ block.text }}</p>
+        </template>
       </article>
     </template>
   </div>
@@ -81,6 +89,17 @@ onMounted(run)
 .body {
   padding: 16px;
 }
+
+.cover,
+.content-image {
+  display: block;
+  width: 100%;
+  border-radius: var(--td-radius-large);
+  object-fit: cover;
+}
+
+.cover { max-height: 240px; }
+.content-image { margin: 0 0 12px; max-height: 420px; }
 
 .para {
   margin: 0 0 12px;

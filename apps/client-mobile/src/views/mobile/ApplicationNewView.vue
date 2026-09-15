@@ -41,8 +41,9 @@ async function onSubmit() {
       <p class="subtitle">适用于已具备社区个体 / 社区企业资质，需绑定到当前账号的用户</p>
     </header>
 
-    <div class="m-card form">
-      <div class="field">
+      <div class="m-card form">
+        <div class="form-note"><span>申请说明</span><p>提交后由社区运营人员审核，结果将通过站内信通知。</p></div>
+        <div class="field">
         <span class="field-label">要绑定的身份</span>
         <RadioGroup v-model="form.identityType" class="id-chips">
           <Radio value="community_individual" label="社区个体" />
@@ -81,6 +82,8 @@ async function onSubmit() {
   font-size: 20px;
 }
 
+.head { padding: 4px 2px; }
+
 .head .subtitle {
   margin: 0;
   font-size: 12px;
@@ -89,8 +92,15 @@ async function onSubmit() {
 }
 
 .field {
-  margin-bottom: 15px;
+  margin-bottom: 20px;
+  padding-bottom: 18px;
+  border-bottom: 1px solid var(--td-component-border);
 }
+
+.field:last-of-type { margin-bottom: 14px; padding-bottom: 0; border-bottom: 0; }
+
+.form-note { margin: -2px 0 18px; padding: 12px; border-radius: var(--td-radius-large); background: var(--td-bg-color-secondarycontainer); }
+.form-note span { color: var(--td-brand-color); font-size: 12px; font-weight: 600; }.form-note p { margin: 5px 0 0; color: var(--td-text-color-secondary); font-size: 12px; line-height: 1.7; }
 
 .field label,
 .field .field-label {
@@ -102,11 +112,14 @@ async function onSubmit() {
 
 .id-chips {
   display: flex;
-  gap: 16px;
+  gap: 12px;
+  padding: 12px;
+  border-radius: var(--td-radius-large);
+  background: var(--td-bg-color-secondarycontainer);
 }
 
 .tip {
-  margin: 12px 0 0;
+  margin: 16px 0 0;
   font-size: 12px;
   line-height: 1.7;
   color: var(--td-text-color-placeholder);

@@ -533,6 +533,8 @@ export interface Article {
   publishedAt: string
   views: number
   summary: string
+  /** 文章封面（投稿时上传，可选） */
+  coverUrl?: string
   content: string
 }
 
@@ -550,6 +552,11 @@ export interface MySubmittedArticle {
 export interface ArticleCreatePayload {
   title: string
   columnCode: string
+  /** 投稿归属身份；代社区企业投稿时同时传 asEnterpriseId */
+  asIdentity: IdentityType
+  asEnterpriseId?: string
+  /** 封面与正文图片均复用客户端上传契约 */
+  coverUrl?: string
   content: string
 }
 

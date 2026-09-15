@@ -18,6 +18,7 @@ export const router = createRouter({
       children: [
         /* ---- 底部 Tab ---- */
         { path: '', name: 'home', component: () => import('@/views/mobile/HomeView.vue') },
+        { path: 'search', name: 'global-search', component: () => import('@/views/mobile/GlobalSearchView.vue') },
         { path: 'projects', name: 'projects', component: () => import('@/views/mobile/ProjectsView.vue') },
         { path: 'community', name: 'community', component: () => import('@/views/mobile/CommunityView.vue') },
         { path: 'plaza', name: 'plaza', component: () => import('@/views/mobile/PlazaView.vue') },

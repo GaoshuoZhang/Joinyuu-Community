@@ -42,6 +42,7 @@ const active = computed(() => {
 
 /* 二级页标题映射（按前缀最长优先匹配）；param 路由用前缀，如 /demands/:id、/events/:id/check-in、/talents/:uid */
 const PAGE_TITLES: [string, string][] = [
+  ['/search', '全局搜索'],
   ['/me/cards/individual', '个人名片'],
   ['/me/identities', '关联身份'],
   ['/me/invitations', '企业邀请'],
@@ -118,7 +119,7 @@ function onNotices() {
 
 <template>
   <div class="m-shell">
-    <Navbar :title="pageTitle || config.config.siteName || '聚屿社区'" :fixed="false" :safe-area-inset-top="false">
+    <Navbar :title="pageTitle || config.config.siteName || '聚屿社区'" fixed placeholder :z-index="100" :safe-area-inset-top="false">
       <template #left>
         <ChevronLeftIcon v-if="!isTab" class="nav-back" size="24px" aria-label="返回" @click="goBack" />
       </template>

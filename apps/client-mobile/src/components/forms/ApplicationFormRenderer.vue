@@ -162,7 +162,8 @@ async function onSubmit() {
       </header>
 
       <div v-if="schema.tips?.length" class="m-card tips">
-        <p v-for="(t, i) in schema.tips" :key="i" class="tip-line">· {{ t }}</p>
+        <p class="tips-title">申请前请准备</p>
+        <p v-for="(t, i) in schema.tips" :key="i" class="tip-line"><span>{{ String(i + 1).padStart(2, '0') }}</span>{{ t }}</p>
       </div>
 
       <div class="m-card form">
@@ -266,6 +267,10 @@ async function onSubmit() {
   font-size: 20px;
 }
 
+.head {
+  padding: 4px 2px;
+}
+
 .head .subtitle {
   margin: 0;
   font-size: 13px;
@@ -277,18 +282,46 @@ async function onSubmit() {
 }
 
 .tips {
-  padding: 12px 14px;
+  border-left: 3px solid var(--td-brand-color);
+  padding: 14px;
+}
+
+.tips-title {
+  margin: 0 0 8px;
+  color: var(--td-text-color-primary);
+  font-size: 14px;
+  font-weight: 600;
 }
 
 .tip-line {
-  margin: 0;
+  display: flex;
+  gap: 8px;
+  margin: 0 0 4px;
   font-size: 12px;
   line-height: 1.8;
   color: var(--td-text-color-secondary);
 }
 
+.tip-line span {
+  color: var(--td-brand-color);
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.form {
+  padding-top: 18px;
+}
+
 .field {
-  margin-bottom: 16px;
+  margin-bottom: 20px;
+  padding-bottom: 18px;
+  border-bottom: 1px solid var(--td-component-border);
+}
+
+.field:last-of-type {
+  margin-bottom: 14px;
+  padding-bottom: 0;
+  border-bottom: 0;
 }
 
 .field label,
@@ -308,6 +341,10 @@ async function onSubmit() {
   border-radius: var(--td-radius-large);
 }
 
+.picker-cell :deep(.t-cell__title) {
+  font-size: 14px;
+}
+
 .picker-cell.empty :deep(.t-cell__title) {
   color: var(--td-text-color-placeholder);
 }
@@ -319,6 +356,6 @@ async function onSubmit() {
 }
 
 .submit {
-  margin-top: 4px;
+  margin-top: 8px;
 }
 </style>
