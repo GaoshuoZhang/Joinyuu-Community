@@ -1,13 +1,47 @@
 <script setup lang="ts">
-import { onMounted } from 'vue'
-import { Loading } from 'tdesign-mobile-vue'
+import { onMounted, ref } from 'vue'
+import { Button, DialogPlugin, Loading, Toast } from 'tdesign-mobile-vue'
 import { useAsyncList } from '@/composables/useAsyncList'
-import { fetchMyReservations } from '@/api/spaces'
+import { cancelReservation, fetchMyReservations } from '@/api/spaces'
 import StateTag from '@/components/shared/StateTag.vue'
+import IdentityTag from '@/components/shared/IdentityTag.vue'
 import EmptyBlock from '@/components/shared/EmptyBlock.vue'
+import type { SpaceReservation } from '@/types'
 
+/* 移动我的预约：预约卡片；pending/approved 可取消（Dialog 二次确认）+ Toast + 列表刷新 */
 const { data, loading, error, run } = useAsyncList(fetchMyReservations)
 onMounted(run)
+
+const actingId = ref('')
+
+function canCancel(r: SpaceReservation) {
+  return r.status === 'pending' || r.status === 'approved'
+}
+
+function onCancelTap(r: SpaceReservation) {
+  DialogPlugin.confirm({
+    title: '取消预约',
+    content: `确认取消「${r.spaceName}」${r.date} ${r.start}-${r.end} 的预约？`,
+    cancelBtn: '保留预约',
+    confirmBtn: '确认取消',
+    onConfirm: () => {
+      void doCancel(r)
+    },
+  })
+}
+
+async function doCancel(r: SpaceReservation) {
+  actingId.value = r.id
+  try {
+    await cancelReservation(r.id)
+    Toast('已取消预约')
+    await run()
+  } catch (e) {
+    Toast(e instanceof Error ? e.message : '取消失败，请稍后重试')
+  } finally {
+    actingId.value = ''
+  }
+}
 </script>
 
 <template>
@@ -23,7 +57,16 @@ onMounted(run)
           <h3 class="name">{{ r.spaceName }}</h3>
           <StateTag kind="reservation" :value="r.status" />
         </div>
+        <p v-if="r.identityType" class="subject">
+          <IdentityTag :type="r.identityType" />
+          <span class="subject-name">{{ r.subjectName }}</span>
+        </p>
         <p class="meta">📅 {{ r.date }} · {{ r.start }} - {{ r.end }} · 提交于 {{ r.createdAt }}</p>
+        <div v-if="canCancel(r)" class="ops">
+          <Button theme="danger" variant="outline" size="small" :disabled="actingId === r.id" @click="onCancelTap(r)">
+            {{ actingId === r.id ? '处理中…' : '取消预约' }}
+          </Button>
+        </div>
       </article>
     </div>
   </div>
@@ -70,5 +113,23 @@ onMounted(run)
   margin: 6px 0 0;
   font-size: 12px;
   color: var(--td-text-color-secondary);
+}
+
+.subject {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 8px 0 0;
+  font-size: 12px;
+}
+
+.subject-name {
+  color: var(--td-text-color-secondary);
+}
+
+.ops {
+  margin-top: 10px;
+  display: flex;
+  justify-content: flex-end;
 }
 </style>

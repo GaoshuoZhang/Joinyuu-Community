@@ -1,16 +1,34 @@
 <script setup lang="ts">
 import { onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
-import { Button, Loading, Popup, Search, Tabs, TabPanel, Tag } from 'tdesign-mobile-vue'
+import { Button, Loading, Popup, Search, Tabs, TabPanel, Tag, Toast, Avatar } from 'tdesign-mobile-vue'
 import { fetchEnterpriseList, fetchPolicies, fetchTalents } from '@/api/community'
 import { useAsyncList } from '@/composables/useAsyncList'
+import { useAuthStore } from '@/stores/auth'
 import EmptyBlock from '@/components/shared/EmptyBlock.vue'
-import type { CommunityPolicy, TalentMember } from '@/types'
-import type { EnterpriseRecord } from '@/mock/db'
+import type { CommunityPolicy, EnterpriseRecord, TalentMember } from '@/types'
 
 /* 社区页（社区管理者视角）：顶部选项卡「社区服务 / 人才库 / 企业库」，
- * 每个 tab 自带搜索；切换 tab 时重置搜索并重新拉取。数据均经 @/api/community。 */
+ * 每个 tab 自带搜索；切换 tab 时重置搜索并重新拉取。数据均经 @/api/community。
+ * 企业库：已发布名片点入名片；成员对待发布名片可直达申请；其余提示未发布。 */
 const router = useRouter()
+const auth = useAuthStore()
+
+function canApplyShowcase(e: EnterpriseRecord) {
+  return e.showcaseStatus !== 'published' && auth.isLogged && e.members.some((m) => m.name === auth.name)
+}
+
+function onEnterpriseTap(e: EnterpriseRecord) {
+  if (e.showcaseStatus === 'published') {
+    void router.push(`/enterprises/${e.id}`)
+    return
+  }
+  if (canApplyShowcase(e)) {
+    void router.push(`/enterprises/${e.id}/showcase-apply`)
+    return
+  }
+  Toast('该企业名片尚未发布')
+}
 
 const activeTab = ref('service')
 const serviceKeyword = ref('')
@@ -109,9 +127,12 @@ function openPolicy(p: CommunityPolicy) {
         <EmptyBlock v-else-if="talentsError" :text="talentsError" />
         <EmptyBlock v-else-if="(talents ?? []).length === 0" text="暂无匹配人才" />
         <div v-else class="list stagger">
-          <article v-for="t in talents" :key="t.uid" class="talent-card m-card">
+          <article v-for="t in talents" :key="t.uid" class="talent-card m-card" @click="router.push(`/talents/${t.uid}`)">
             <div class="row-head">
-              <h3 class="title name">{{ t.name }}</h3>
+              <span class="talent-name">
+                <Avatar size="40px" :image="t.avatar" class="talent-avatar">{{ t.name.slice(0, 1) }}</Avatar>
+                <h3 class="title name">{{ t.name }}</h3>
+              </span>
               <span class="role-tag">{{ t.role }}</span>
             </div>
             <p class="intro">{{ t.intro }}</p>
@@ -136,15 +157,16 @@ function openPolicy(p: CommunityPolicy) {
             v-for="e in enterprises"
             :key="e.id"
             class="enterprise-card m-card"
-            @click="router.push(`/enterprises/${e.id}`)"
+            @click="onEnterpriseTap(e)"
           >
             <div class="row-head">
               <h3 class="title name">{{ e.name }}</h3>
               <span v-if="e.showcaseStatus === 'published'" class="showcase-tag">入驻展示</span>
+              <span v-else-if="canApplyShowcase(e)" class="apply-tag">申请企业名片 ›</span>
+              <span v-else class="unpublished-tag">企业名片未发布</span>
             </div>
             <p class="meta">{{ e.industry }} · {{ e.size }}</p>
             <p class="intro">{{ e.description }}</p>
-            <p class="members">成员（{{ e.members.length }}）：{{ e.members.join('、') }}</p>
           </article>
         </div>
       </TabPanel>
@@ -212,6 +234,18 @@ function openPolicy(p: CommunityPolicy) {
   margin-bottom: 8px;
 }
 
+.talent-name {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.talent-avatar {
+  flex-shrink: 0;
+  font-size: 16px;
+}
+
 .cat-tag,
 .role-tag,
 .showcase-tag {
@@ -228,9 +262,20 @@ function openPolicy(p: CommunityPolicy) {
   color: var(--td-success-color);
 }
 
+.apply-tag {
+  flex-shrink: 0;
+  font-size: 12px;
+  color: var(--td-brand-color);
+}
+
+.unpublished-tag {
+  flex-shrink: 0;
+  font-size: 12px;
+  color: var(--td-text-color-placeholder);
+}
+
 .updated,
-.meta,
-.members {
+.meta {
   font-size: 12px;
   color: var(--td-text-color-secondary);
 }

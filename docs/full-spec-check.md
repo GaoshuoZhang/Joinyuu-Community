@@ -56,14 +56,14 @@
 ## 5. M2 客户端（移动端 `client-mobile` / 桌面端 `client-web`）
 
 > 规划：[docs/m2-client-plan.md](./m2-client-plan.md)（v2 已确认，含完成度看板）；契约：[docs/api-app-design.md](./api-app-design.md)；移动端实现契约：[docs/wiki-client-mobile.md](./wiki-client-mobile.md)（随批次补充）；桌面端契约 `wiki-client-web.md` 待应用创建时新建。
-> 策略：Mock-First——客户端拆为两个独立应用/入口，**先移动端后桌面端**；`apps/client-mobile`（原 `apps/client`，dev 7759，与 admin 零粘连）前端先行 + Mock 数据，超边界功能（站内信/位置签到/首页聚合）以 `[MOCK-ONLY]` 交付并登记缺口；接入期（M2-R）实现 `/api/app/**` 并销号。
+> 策略：Mock-First——客户端拆为两个独立应用/入口，**先移动端后桌面端**；`apps/client-mobile`（原 `apps/client`，dev 7759，与 admin 零粘连）前端先行 + Mock 数据，超边界功能（站内信/签到/首页聚合）以 `[MOCK-ONLY]` 交付并登记缺口；接入期（M2-R）实现 `/api/app/**` 并销号。
 > 拆分状态：`apps/client-mobile` **已收敛为纯移动端**（2026-09-13 移除 `views/desktop/**` 与 `dualView`，信息架构重构为 5 Tab：首页/项目/社区/广场/我的，社区视角）；`apps/client-web` 尚未创建（将承接原桌面视图与 `tdesign-vue-next`）。
 
 - [√] 客户端工程骨架（`apps/client-mobile` 独立包 / 7759 / 纯移动端 5-Tab 壳 / tokens / 请求层 / mock 底座 / devtools 身份切换器）
 - [√] 登录 / 注册 / 首页（搜索+轮播+需求发布+双入口+四宫格+最新项目+精选文章）
 - [√] 注册登录与多身份管理（Mock 全量交互已交付；后端多身份 JWT 为缺口）
 - [√] 需求广场：浏览（可见范围过滤）/ 提交（选身份）/ 响应
-- [√] 活动中心：浏览 / 报名（可报名范围过滤）/ 我的报名 / 位置签到〔边界外，已登记缺口〕
+- [√] 活动中心：浏览 / 报名（可报名范围过滤）/ 我的报名 / 签到〔边界外，已登记缺口〕
 - [√] 站内信中心〔边界外，已登记缺口〕
 - [√] 项目协作：承接 / 进度查看
 - [√] 个人中心：资料 / 积分 / 经验等级 / 商城兑换

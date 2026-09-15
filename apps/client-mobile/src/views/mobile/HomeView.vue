@@ -1,22 +1,32 @@
 <script setup lang="ts">
-import { onMounted } from 'vue'
+import { onMounted, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { Icon, Button, Grid, GridItem, Loading, Search, Swiper, SwiperItem } from 'tdesign-mobile-vue'
+import { useAuthStore } from '@/stores/auth'
 import { useConfigStore } from '@/stores/config'
+import { useNoticesStore } from '@/stores/notices'
 import { useAsyncList } from '@/composables/useAsyncList'
 import { fetchHomeFeed } from '@/api/home'
 import EmptyBlock from '@/components/shared/EmptyBlock.vue'
+import { demandDateText } from '@/constants/demand'
 
 /* 首页（社区运营入口导向，2026-09-13 重构）：
- * 搜索框 → 轮播 → 需求发布 → 双入口(企业入驻/人才登记) → 四宫格(文章投稿/积分商城/空间预约/活动计划)
- * → 最新项目 → 精选文章。 */
+ * 搜索框 → 站点标语 → 轮播 → 需求发布 → 双入口(企业合作/人才登记) → 四宫格(文章投稿/积分商城/空间预约/活动计划)
+ * → 进行中活动（横滑） → 最新项目 → 精选文章。 */
 const router = useRouter()
 const config = useConfigStore()
+const auth = useAuthStore()
+const notices = useNoticesStore()
 const { data: feed, loading, error, run } = useAsyncList(fetchHomeFeed)
 
 onMounted(() => {
   config.ensureLoaded()
   run()
+})
+
+/* 铃铛未读角标：登录态以首页聚合未读数初始化（AppShell 冷启动另有轻量兜底刷新） */
+watch(feed, (f) => {
+  if (f && auth.isLogged) notices.setUnread(f.noticesUnread)
 })
 
 /* 搜索：聚焦即进入项目页（实时搜索在该页进行） */
@@ -40,7 +50,7 @@ function goPublish() {
 }
 
 const featureEntries = [
-  { path: '/intros/enterprise', icon: 'usergroup', label: '企业入驻', desc: '共享工位与资源' },
+  { path: '/intros/enterprise', icon: 'usergroup', label: '企业合作', desc: '入驻或成为伙伴' },
   { path: '/intros/talent', icon: 'app', label: '人才登记', desc: '让企业找到你' },
 ] as const
 
@@ -56,6 +66,8 @@ const quickEntries = [
   <div class="home page-fade-in">
     <!-- 顶部搜索：聚焦即进入项目页实时搜索 -->
     <Search placeholder="搜索项目 / 需求" @focus="onSearchFocus" />
+
+    <p v-if="feed?.siteSlogan" class="home-slogan">{{ feed.siteSlogan }}</p>
 
     <Loading v-if="loading" class="state" text="加载中…" />
     <EmptyBlock v-else-if="error" :text="error" />
@@ -83,10 +95,9 @@ const quickEntries = [
           v-for="f in featureEntries"
           :key="f.path"
           class="feature-item"
-          :icon="true"
           @click="router.push(f.path)"
         >
-          <template #icon><Icon :name="f.icon" size="22px" /></template>
+          <template #image><Icon :name="f.icon" size="22px" /></template>
           <template #text><span class="feature-label">{{ f.label }}</span></template>
           <template #description><span class="feature-desc">{{ f.desc }}</span></template>
         </GridItem>
@@ -94,11 +105,34 @@ const quickEntries = [
 
       <!-- 四个普通快捷入口 -->
       <Grid :column="4" :gutter="8" hover class="quick-grid stagger">
-        <GridItem v-for="q in quickEntries" :key="q.path" class="quick-item" :icon="true" @click="router.push(q.path)">
-          <template #icon><span class="quick-icon"><Icon :name="q.icon" size="22px" /></span></template>
+        <GridItem v-for="q in quickEntries" :key="q.path" class="quick-item" @click="router.push(q.path)">
+          <template #image><span class="quick-icon"><Icon :name="q.icon" size="22px" /></span></template>
           <template #text>{{ q.label }}</template>
         </GridItem>
       </Grid>
+
+      <!-- 进行中活动（横滑卡片） -->
+      <section class="block">
+        <div class="block-head">
+          <h2>进行中活动</h2>
+          <a class="more" @click="router.push('/events')">更多 ›</a>
+        </div>
+        <EmptyBlock v-if="!(feed?.hotEvents ?? []).length" text="暂无进行中活动" />
+        <div v-else class="hot-scroll">
+          <article
+            v-for="e in feed.hotEvents"
+            :key="e.id"
+            class="m-card hot-card pressable"
+            @click="router.push(`/events/${e.id}`)"
+          >
+            <span class="d-cat">{{ e.type }}</span>
+            <h3 class="hot-title">{{ e.title }}</h3>
+            <p class="hot-meta">🕐 {{ e.startTime }}</p>
+            <p class="hot-meta">📍 {{ e.location }}</p>
+            <p class="hot-enrolled">{{ e.enrolled }}/{{ e.capacity }} 人已报名</p>
+          </article>
+        </div>
+      </section>
 
       <!-- 最新项目 -->
       <section class="block">
@@ -115,7 +149,7 @@ const quickEntries = [
             </div>
             <div class="d-meta">
               <span class="d-pub">{{ d.publisherName }}</span>
-              <span>截止 {{ d.deadline }}</span>
+              <span v-if="demandDateText(d)">{{ demandDateText(d) }}</span>
               <span class="d-resp">{{ d.responseCount }} 人响应</span>
             </div>
           </article>
@@ -209,6 +243,53 @@ const quickEntries = [
   margin: 0;
   font-size: 12px;
   opacity: 0.85;
+}
+
+.home-slogan {
+  margin: -4px 2px 0;
+  font-size: 12px;
+  color: var(--td-text-color-secondary);
+}
+
+/* 进行中活动：横向滑动卡片 */
+.hot-scroll {
+  display: flex;
+  gap: 10px;
+  overflow-x: auto;
+  padding-bottom: 4px;
+  scrollbar-width: none;
+}
+
+.hot-scroll::-webkit-scrollbar {
+  display: none;
+}
+
+.hot-card {
+  flex: 0 0 76%;
+  cursor: pointer;
+}
+
+.hot-title {
+  margin: 8px 0;
+  font-size: 14px;
+  line-height: 1.4;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.hot-meta {
+  margin: 0 0 4px;
+  font-size: 12px;
+  color: var(--td-text-color-secondary);
+}
+
+.hot-enrolled {
+  margin: 6px 0 0;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--td-brand-color);
 }
 
 /* 双入口卡：GridItem 覆盖为品牌渐变色卡；清掉 Grid 根 gutter padding，使网格与卡片边缘对齐 */

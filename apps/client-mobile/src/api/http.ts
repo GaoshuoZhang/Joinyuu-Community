@@ -21,16 +21,21 @@ function readToken(): string {
   return localStorage.getItem('joinyuu_client_token') ?? ''
 }
 
+/** 401 统一处理：清 token/身份并通知入口层（history 路由跳转由 main.ts 监听事件执行） */
 function handleUnauthorized() {
   localStorage.removeItem('joinyuu_client_token')
-  if (!location.hash.startsWith('#/login')) {
-    location.hash = `#/login?redirect=${encodeURIComponent(location.hash.slice(1) || '/')}`
-  }
+  localStorage.removeItem('joinyuu_client_identity')
+  window.dispatchEvent(
+    new CustomEvent('joinyuu:unauthorized', {
+      detail: { redirect: location.pathname + location.search },
+    }),
+  )
 }
 
 async function request<T>(path: string, init: RequestInit): Promise<T> {
   const headers = new Headers(init.headers)
-  if (init.body) headers.set('Content-Type', 'application/json')
+  /* FormData 上传由浏览器自动带 boundary，不能手动设置 Content-Type */
+  if (init.body && !(init.body instanceof FormData)) headers.set('Content-Type', 'application/json')
   const token = readToken()
   if (token) headers.set('Authorization', `Bearer ${token}`)
 
@@ -55,6 +60,11 @@ export function httpPost<T>(path: string, data?: unknown): Promise<T> {
 
 export function httpPut<T>(path: string, data?: unknown): Promise<T> {
   return request<T>(path, { method: 'PUT', body: data === undefined ? undefined : JSON.stringify(data) })
+}
+
+/** multipart 上传（图片/PDF 等；缺口 §7.1-6 POST /api/app/uploads） */
+export function httpUpload<T>(path: string, form: FormData): Promise<T> {
+  return request<T>(path, { method: 'POST', body: form })
 }
 
 export const apiMode: 'mock' | 'http' = import.meta.env.VITE_API_MODE === 'http' ? 'http' : 'mock'

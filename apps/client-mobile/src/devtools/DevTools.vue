@@ -5,10 +5,12 @@ import { Button, Switch } from 'tdesign-mobile-vue'
 import { useAuthStore } from '@/stores/auth'
 import { useConfigStore } from '@/stores/config'
 import { useNoticesStore } from '@/stores/notices'
-import { accounts } from '@/mock/db'
+import { mockAdvanceOrder } from '@/api/mall'
+import { accounts, appConfig, events, ordersByUid } from '@/mock/db'
 
 /* [MOCK-ONLY] 开发者工具（仅 mock 模式挂载，接入期随 mock 目录退役）：
- * 1. 演示账号一键切换  2. 功能开关实时覆写  3. 重置 Mock 数据 */
+ * 1. 演示账号一键切换  2. 功能开关实时覆写  3. 签到场景（位置注入 + 时间窗对齐）
+ * 4. 订单场景（模拟后台发货）  5. 重置 Mock 数据 */
 const router = useRouter()
 const auth = useAuthStore()
 const config = useConfigStore()
@@ -43,7 +45,64 @@ async function switchAccount(phone: string) {
 }
 
 function onToggle(key: (typeof switchKeys)[number], value: boolean | number) {
-  config.override({ [key]: Boolean(value) })
+  const next = Boolean(value)
+  config.override({ [key]: next })
+  /* [MOCK-ONLY] 同步 mock 业务门禁：保证「入口隐藏」与「写端点 400 文案」行为一致 */
+  appConfig[key] = next
+}
+
+/* ---- 签到场景：位置注入（utils/geolocation.ts 优先读取 window.__mockGeolocation） ---- */
+type GeoInject = 'inside' | 'outside' | 'denied' | 'clear'
+
+function injectLocation(kind: GeoInject) {
+  if (kind === 'clear') {
+    delete window.__mockGeolocation
+    flash('已清除位置注入（改用浏览器真实定位）')
+    return
+  }
+  if (kind === 'denied') {
+    window.__mockGeolocation = 'denied'
+    flash('已模拟「定位权限被拒绝」')
+    return
+  }
+  const venue = events[0]
+  window.__mockGeolocation =
+    kind === 'inside'
+      ? { lat: venue.venueLat, lng: venue.venueLng }
+      : { lat: venue.venueLat + 0.0045, lng: venue.venueLng }
+  flash(kind === 'inside' ? '已注入位置：签到主场地内' : '已注入位置：场地外约 500 米')
+}
+
+/* ---- 签到场景：把签到主场 EV6001 的时间窗对齐当前时刻，任意时间可演示签到成功 ---- */
+function alignCheckinWindow() {
+  const ev = events.find((e) => e.id === 'EV6001')
+  if (!ev) return
+  const pad = (n: number) => String(n).padStart(2, '0')
+  const clock = (d: Date) => `${pad(d.getHours())}:${pad(d.getMinutes())}`
+  const stamp = (d: Date) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${clock(d)}`
+  const now = Date.now()
+  ev.startTime = stamp(new Date(now - 30 * 60_000))
+  ev.endTime = stamp(new Date(now + 90 * 60_000))
+  ev.enrollmentDeadline = stamp(new Date(now + 60 * 60_000))
+  ev.checkinOpenMin = clock(new Date(now - 45 * 60_000))
+  ev.checkinCloseMin = clock(new Date(now + 90 * 60_000))
+  flash('EV6001 签到时间窗已对齐当前（进行中）')
+}
+
+/* ---- 订单场景：把当前账号的一笔待发货订单推进为已发货（再回「我的订单」确认收货） ---- */
+async function advanceFirstOrder() {
+  const order = (ordersByUid[auth.uid] ?? []).find((o) => o.status === 'pending_shipment')
+  if (!order) {
+    flash('当前账号没有待发货订单（可先兑换下单）')
+    return
+  }
+  busy.value = order.id
+  try {
+    await mockAdvanceOrder(order.id)
+    flash(`订单「${order.goodsName}」已发货，可去我的订单确认收货`)
+  } finally {
+    busy.value = ''
+  }
 }
 
 async function resetMock() {
@@ -78,6 +137,22 @@ async function resetMock() {
         <span>{{ key }}</span>
         <Switch :value="config.config[key]" @change="(v) => onToggle(key, v as boolean | number)" />
       </div>
+
+      <div class="section">签到场景 · 位置注入</div>
+      <div class="geo-grid">
+        <Button size="small" variant="outline" @click="injectLocation('inside')">场地内</Button>
+        <Button size="small" variant="outline" @click="injectLocation('outside')">场地外 500m</Button>
+        <Button size="small" variant="outline" @click="injectLocation('denied')">关闭定位</Button>
+        <Button size="small" variant="outline" @click="injectLocation('clear')">清除注入</Button>
+      </div>
+      <Button class="scenario" size="small" variant="outline" block @click="alignCheckinWindow">
+        签到活动时间窗对齐当前
+      </Button>
+
+      <div class="section">订单场景 · 模拟后台发货</div>
+      <Button class="scenario" size="small" variant="outline" block @click="advanceFirstOrder">
+        当前账号一笔待发货订单 → 已发货
+      </Button>
 
       <Button class="danger" theme="danger" variant="outline" block size="small" @click="resetMock">
         重置 Mock 数据（清 localStorage）
@@ -151,6 +226,16 @@ async function resetMock() {
   justify-content: space-between;
   font-size: 12px;
   padding: 6px 0;
+}
+
+.geo-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 6px;
+}
+
+.scenario {
+  margin-top: 6px;
 }
 
 .danger {

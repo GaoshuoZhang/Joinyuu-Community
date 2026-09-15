@@ -40,19 +40,35 @@
 | 方法 | 路径 | 说明 |
 |---|---|---|
 | GET | /api/app/me | 资料 + 身份列表（含各身份经验/等级）+ 积分余额 |
-| PUT | /api/app/me | 更新昵称/性别/简介等可编辑字段 |
-| GET | /api/app/me/points-records | 我的积分流水（分页，含 balance） |
+| PUT | /api/app/me | 更新昵称/头像/性别/简介等可编辑字段（头像为 `POST /uploads` 返回的 url） |
+| GET | /api/app/me/points-records | 我的积分流水（分页，含 balance）；积分按身份隔离：仅社区个体/个人用户可查看 |
+| GET | /api/app/me/realname | 实名认证状态：`{ verified, realName? 脱敏（首字）, citizenIdMasked? 前 4 后 4, verifiedAt? }`；「编辑资料」页实名认证入口 note（已认证/未认证）；缺口 m2-client-plan §7.1-18 |
+| PUT | /api/app/me/realname | 提交实名认证：`realName` + `citizenId`（18 位，含校验码）；已认证 409；真实后端需三要素/公安库核验后回写（mock 即时通过并发站内信） |
+| GET | /api/app/me/experience-records | 我的经验与等级（按**当前身份**取数：社区个体 → 个人经验/我的等级；社区企业 → 企业经验/企业等级；个人用户/合作企业 → 空）；可选 `identity` 查询参数指定身份；响应 `{ identityLabel, level, levelName, nextLevelExp, records[] }`——缺口 m2-client-plan §7.1-7 |
 | GET | /api/app/me/applications | 我提交的申请（含审核时间线） |
-| POST | /api/app/applications | 提交申请：settle 企业入驻 / individual 个体入驻 / cooperation 企业合作 / identity 身份绑定 → 管理端「申请审核」 |
+| GET | /api/app/application-form/:type | 申请表单 schema：`type` = settle 企业入驻 / cooperation 合作伙伴 / individual 人才登记；返回字段定义（text/textarea/select/number/date/upload、必填、选项、上传 accept/maxCount）与提交按钮文案，客户端按 schema 渲染（后台可配置，见 m2-client-plan §7.2-5） |
+| POST | /api/app/applications | 提交申请：schema 驱动字段（`fields`: key → string \| number \| 附件数组）与 identity 身份绑定（`identityType`）；upload 字段值为 `POST /api/app/uploads` 返回的 `{ key, name, size, type, url }` 数组 → 管理端「申请审核」 |
+| GET | /api/app/me/cards | 我的个人名片（社区个体；简历式分段字段；缺口 m2-client-plan §7.1-16） |
+| PUT | /api/app/me/cards/individual | 保存个人名片：`displayName/age/politicalStatus/intro/industryExperience/skills` + 可增删分段 `education/work/projects/honors/socials/customLinks`（条目数组）；头像同步个人资料（只读）；真实后端应提交审核；保存后公开到社区人才库 |
+| GET | /api/app/me/identities | 我的关联身份列表：社区个体 + 我关联的社区企业/合作企业（可多个）；企业项含 `roleLabel`（负责人/成员）、`isContact`、`permissions`（成员权限；负责人为全部）、`showcaseStatus` 与 `enterpriseId` 详情入口；「我的」页有关联身份时显示「关联身份」入口 |
+| GET | /api/app/me/enterprises/:id | 企业详情：关联人可查看；含企业信息（`logo` 企业 Logo、`foundedAt` 成立时间、`website` 官网、`address` 办公地点、`services` 主营业务、`advantages` 核心优势）、成员列表（含 `isContact`、职位与 `permissions`）、`myPermissions`（我在该企业的权限集合；负责人为全部）、负责人、待接受邀请（仅负责人）与退驻/注销申请状态 |
+| PUT | /api/app/me/enterprises/:id | 修改企业基本信息（需 `edit_card` 权限；负责人默认拥有；行业/规模/简介/`logo`/成立时间/官网/办公地点/主营业务/核心优势；真实后端应提交审核，企业走 `showcaseStatus`） |
+| POST | /api/app/me/enterprises/:id/transfer-contact | 转移企业负责人（后台字段「联系人」= `contactUserId`，**仅负责人本人**）：`memberUid?` / `memberName`；转移后原负责人转为只读成员 |
+| POST | /api/app/me/enterprises/:id/invite | 邀请企业成员（需 `invite_member` 权限；姓名 + 手机号 + **职位 `role` 必填**）：生成邀请记录并给被邀请人发站内信（`/me/invitations/:id`）；手机号需已注册，已是成员/重复邀请/邀请自己分别 409；真实后端应支持短信邀请未注册手机号（缺口 m2-client-plan §7.1-17） |
+| PUT | /api/app/me/enterprises/:id/member | 修改企业成员信息：`memberUid?`/`memberName` + `role`/`phone`（需 `manage_members`；phone 为空串表示清空，冲突 409）+ `permissions`（需 `assign_permission`；负责人不可被分配，8 项枚举） |
+| POST | /api/app/me/enterprises/:id/remove-member | 移除企业成员（需 `manage_members` 权限；`memberUid?`/`memberName`；负责人本人需先转移负责人，否则 409） |
+| POST | /api/app/me/enterprises/:id/exit-application | 申请企业退驻/注销（可选 `reason`）→ 管理端审核；mock 记录 pending 状态 |
+| GET | /api/app/invitations/:id | 企业成员邀请详情（被邀请人本人或邀请方负责人可看，否则 403）：企业概要（`enterpriseLogo/enterpriseIndustry/enterpriseSize`）+ 邀请人/受邀成员/职位/状态（pending/accepted/rejected）与时间 |
+| POST | /api/app/invitations/:id/respond | 被邀请人处理邀请（body `action=accept\|reject`，仅被邀请人）：接受则写入企业成员并通知负责人；已处理 409 |
 
 ## 6. 需求广场
 
 | 方法 | 路径 | 说明 |
 |---|---|---|
-| GET | /api/app/demands | 浏览列表：仅 `published`；按可见范围过滤（§9）；分页/类别/关键词 |
-| GET | /api/app/demands/:id | 详情（不可见 → 404，不暴露存在性）；含响应数 |
-| POST | /api/app/demands | 提交需求：`demandOpen` 开关校验；发布方身份快照按 wiki §8.7（选身份提交）；创建即 `pending` → 管理端审核 |
-| GET | /api/app/me/demands | 我发布的需求（全状态） |
+| GET | /api/app/demands | 浏览列表：仅 `published`；按可见范围过滤（§9）；分页/类别/关键词；可选 `kind=task\|investment\|cooperation` 按需求类型筛选（分页与 total 统计前执行，省略时不限；历史无 kind 数据按 task）；返回 `kind`（task 找服务 / investment 找投资 / cooperation 找合作）与类型专属字段（task 含 `deliverBy` 预期交付日期；各类型含联系人 `contactName/contactPhone/contactEmail`） |
+| GET | /api/app/demands/:id | 详情（不可见 → 404，不暴露存在性）；含响应数、`kind` 与类型专属字段（task: deliverable/budget/deliverBy；investment: cooperationNeed/returnOffer；cooperation: bottleneck/partnershipMode/returnOffer）与联系人信息 |
+| POST | /api/app/demands | 提交需求：`demandOpen` 开关校验；`kind` 必填（task/investment/cooperation）；`categoryDict` 指定类目字典（task/cooperation→demand_category，investment→industry）；task 必填 `deliverable`（可选 `budget`）与 `deliverBy`（预期交付日期，希望在该日期前完成），investment 必填 `cooperationNeed`（可选 `returnOffer`），cooperation 必填 `bottleneck`（可选 `partnershipMode`/`returnOffer`）；`contactName`/`contactPhone` 必填、`contactEmail` 选填（校验格式）；`deadline` 不再收集（历史字段保留展示）；`asIdentity` 四类身份均可发布（含合作企业，类型不限），持有社区个体身份时不再单列个人用户选项；发布方身份快照按 wiki §8.7，`publisherName` 按主体取企业名/组织名（个人取昵称）；成员代企业发布时传 `asEnterpriseId`（服务端校验成员 `publish_demand` 权限，无权限 403）；创建即 `pending` → 管理端审核 |
+| GET | /api/app/me/demands | 我发布的需求（全状态，含 `kind`） |
 | POST | /api/app/demands/:id/respond | 响应需求：`published` 校验、不可响应自己的需求、防重复；通过后触发 `demand_responded` 积分（发放给响应成员，M2 批次） |
 | GET | /api/app/me/responses | 我的需求响应记录 |
 
@@ -79,15 +95,16 @@
 | GET | /api/app/me/orders | 我的兑换订单 |
 | GET | /api/app/spaces | 可预约空间列表（`needApproval`/时段/设备） |
 | GET | /api/app/spaces/:id/availability?date= | 某日已占用时段（已通过预约 + 已发布活动占用，口径同 wiki §8.8） |
-| POST | /api/app/spaces/reservations | 提交预约：`reservationOpen` 校验 + 提交前冲突预检（409 文案同 §8.8）→ 管理端审核 |
-| GET | /api/app/me/reservations | 我的预约（可取消 pending/approved） |
+| POST | /api/app/spaces/reservations | 提交预约：`reservationOpen` 校验 + 提交前冲突预检（409 文案同 §8.8）→ 管理端审核；payload 增 `asIdentity`（预约主体：个人用户/社区个体/社区企业/合作企业，均可预约），企业身份以企业名/组织名入主体快照；成员代企业预约时传 `asEnterpriseId`（服务端校验成员 `space_reserve` 权限，无权限 403） |
+| GET | /api/app/me/reservations | 我的预约（可取消 pending/approved）；返回 `identityType`/`subjectName` 主体快照 |
 | GET | /api/app/articles | 文章列表（`published`，栏目筛选/关键词；浏览量详情时 +1） |
 | GET | /api/app/articles/:id | 文章详情 |
 | GET | /api/app/article-columns | 栏目列表（enabled） |
 | POST | /api/app/articles | 投递文章（channel=submitted，编号 SU 前缀）：提交即待审核，审核通过转待发布（状态机同 wiki §8.1，作者身份快照） |
 | GET | /api/app/me/articles | 我投递的文章（含驳回原因，可再提交） |
-| GET | /api/app/enterprises/:id | 企业展示页（`showcaseStatus=published` 才可见） |
+| GET | /api/app/enterprises/:id | 企业展示页（`showcaseStatus=published` 才可见；含 `logo`/`foundedAt`/`website`/`address`/`services`/`advantages` 精致名片字段） |
 | POST | /api/app/showcase-requests | 展示页发布申请提交 → 管理端审核联动企业 showcaseStatus |
+| POST | /api/app/uploads | 申请资料 / 配图上传：multipart（`file` + `bizType`），仅图片与 PDF（魔数嗅探），大小限制同系统配置；返回 `{ key, name, size, type, url }` |
 
 ## 9. 可见范围与可报名范围过滤（需求/活动通用）
 
@@ -106,7 +123,7 @@
 |---|---|
 | M2-A | 骨架 + 注册登录/多身份 JWT + 配置与字典下发 + 个人中心/积分流水 |
 | M2-B | 需求广场（浏览/提交/响应）+ 活动中心（浏览/报名）+ 可见范围过滤 |
-| M2-C | 商城兑换 + 空间预约 + 文章投递 + 展示页申请 + 申请审核闭环联动 |
+| M2-C | 商城兑换 + 空间预约 + 文章投递 + 企业名片申请 + 申请审核闭环联动 |
 
 ## 修订记录
 
@@ -114,3 +131,18 @@
 |---|---|
 | 2026-09-10 | 初版：M1-E 产出 M2 客户端端点设计稿（覆盖注册登录/多身份、需求、活动、项目、商城、空间、内容、展示页、个人中心） |
 | 2026-09-12 | 按 M1.5 现状同步：申请类型扩为 settle/individual/cooperation/identity（企业入驻/个体入驻/企业合作/身份绑定）；「外部企业」→「合作企业」、审批→审核；每日登录积分改由 PointsRule `daily_login` 控制（`SystemConfig.dailyLoginPoints` 已删）；投稿编号 SU 前缀与文章状态机口径更新；模型数 43 |
+| 2026-09-13 | 企业合作/人才登记流程重构：新增申请表单 schema（`GET /application-form/:type`，后台可配置自定义字段）与 app 通用上传（`POST /uploads`，图片/PDF）约定；`POST /applications` 改为 schema 驱动字段 + 附件数组（identity 身份绑定保留 `identityType`） |
+| 2026-09-13 | 需求类型与专属字段：`POST /demands` 增 `kind/categoryDict` 与 task/investment/cooperation 专属字段（deliverable/budget / cooperationNeed/returnOffer / bottleneck/partnershipMode/returnOffer），列表、详情与「我的需求」返回 `kind`（task 找人干活 / investment 找投资 / cooperation 找合作；缺口 m2-client-plan §7.1-15） |
+| 2026-09-13 | 我的展示页自助编辑：新增 `GET/PUT /api/app/me/showcase`（社区企业/社区个体；企业编辑走展示页审核流，个人展示页联动社区人才库；缺口 m2-client-plan §7.1-16） |
+| 2026-09-13 | 展示页更名「名片」+ 企业名片/企业管理：`GET /me/cards`、`PUT /me/cards/individual`、`PUT /me/cards/enterprise`（仅企业联系人）替换原 `/me/showcase`；新增企业管理 `GET/PUT /me/enterprise`、`POST /me/enterprise/transfer-contact`（转移负责人 = 后台 `contactUserId`）/`invite`/`exit-application`（缺口 m2-client-plan §7.1-16） |
+| 2026-09-14 | 身份资产隔离：积分仅社区个体/个人用户可查看；新增 `GET /me/experience-records`（可选 `identity` 查询参数，按当前身份返回个人/企业经验与等级，社区个体→我的等级、社区企业→企业等级、个人用户/合作企业→空；缺口 m2-client-plan §7.1-7） |
+| 2026-09-14 | 主体快照对齐：`POST /demands` 明确四类身份（含合作企业）均可发布全部类型，`publisherName` 按主体取企业名/组织名；`POST /spaces/reservations` 增 `asIdentity`（四类身份均可预约，企业主体记企业名/组织名），`GET /me/reservations` 返回 `identityType/subjectName` |
+| 2026-09-14 | **身份模型收敛：移除全局「当前身份」切换**——身份仅在发布/提交表单内选择（归属快照）；「我的」页不再有身份切换，经验页按个人维度取数（`identity` 参数保留兼容）；企业能力收敛为「企业管理」：`GET /me/enterprises`（关联企业列表）+ `GET/PUT /me/enterprises/:id` + `POST /me/enterprises/:id/transfer-contact` / `invite` / `exit-application`（负责人可写、成员只读）；移除 `PUT /me/cards/enterprise` 与旧 `/me/enterprise` 系列端点 |
+| 2026-09-14 | 「企业管理」升级为「关联身份」：列表端点由 `GET /me/enterprises` 改为 `GET /me/identities`（含社区个体 + 全部关联社区企业/合作企业，可多个）；企业详情与操作仍为 `/me/enterprises/:id` 系列 |
+| 2026-09-14 | 需求表单调整：`deadline` 不再收集（保留历史字段展示，日期展示优先 `deliverBy`）；task 新增 `deliverBy`（预期交付日期）；三类需求新增 `contactName/contactPhone/contactEmail` 联系人信息；持有社区个体身份时发布身份选项不再单列个人用户 |
+| 2026-09-14 | 头像与企业管理增强：`PUT /me` 增 `avatar`（头像上传 url）；企业增 `logo`（企业详情/展示页返回，`PUT /me/enterprises/:id` 可保存）；邀请成员增必填 `role` 职位，新增 `PUT /me/enterprises/:id/member-role`（负责人可修改成员职位） |
+| 2026-09-14 | 个人名片简历化 + 企业名片丰富 + 头像同步：`PUT /me/cards/individual` 扩为分段字段（age/politicalStatus/industryExperience + education/work/projects/honors/socials/customLinks 可增删），新增 `GET /community/talents/:uid`（公开人才名片，头像取个人资料）；企业名片增 `foundedAt/website/address/services/advantages`（详情与展示页返回、负责人可编辑）；头像与 Logo 改为点头像直接上传/替换 |
+| 2026-09-14 | 企业管理细化：新增 `POST /me/enterprises/:id/remove-member`（负责人可移除成员，负责人本人需先转移）；企业名片编辑独立成页（企业详情仅保留负责人/成员/退驻模块 + 「编辑企业名片」入口，编辑仍走 `PUT /me/enterprises/:id`）；企业名片页标题与人才名片底栏归属「社区」Tab |
+| 2026-09-14 | **企业成员邀请闭环与成员手机号维护**：`POST /me/enterprises/:id/invite` 改为生成邀请记录 + 站内信（不再直接写入成员）；新增 `GET /invitations/:id`（邀请详情）与 `POST /invitations/:id/respond`（accept/reject，接受后写入成员并通知负责人）；`PUT /me/enterprises/:id/member-role` 改为 `PUT /me/enterprises/:id/member`（职位 + 手机号）；企业详情返回 `invitations`（待接受列表，仅负责人）；缺口 m2-client-plan §7.1-17 |
+| 2026-09-14 | **企业成员权限体系**：成员增 `permissions`（8 项枚举：`publish_demand/respond_demand/space_reserve/article_submit/manage_members/invite_member/assign_permission/edit_card`），负责人默认全部；`PUT /me/enterprises/:id/member` 支持分配权限（需 `assign_permission`，role/phone 需 `manage_members`）；`invite`/`remove-member`/`PUT /me/enterprises/:id` 分别校验 `invite_member`/`manage_members`/`edit_card`；`GET /me/identities` 与 `GET /me/enterprises/:id` 返回 `permissions`/`myPermissions`；`POST /demands` 与 `POST /spaces/reservations` 支持 `asEnterpriseId` 代企业主体（校验对应成员权限）；响应需求/文章投稿的代企业主体字段待后续批次 |
+| 2026-09-15 | **实名认证入口**：新增 `GET/PUT /me/realname`（实名状态 + 提交姓名/身份证号；实时状态脱敏展示；mock 即时通过，真实后端需三要素核验）；「编辑资料」页新增实名认证 Cell（note 已认证/未认证）；缺口 m2-client-plan §7.1-18 |

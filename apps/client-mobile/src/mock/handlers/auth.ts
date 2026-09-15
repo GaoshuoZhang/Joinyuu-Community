@@ -1,5 +1,5 @@
 import type { AuthResult, LoginPayload, RegisterPayload } from '@/types'
-import { accounts, appConfig, noticesByUid } from '@/mock/db'
+import { accounts, appConfig, noticesByUid, nowStamp } from '@/mock/db'
 import { clearToken, issueToken, readPayload } from '@/mock/session'
 import { fail, withLatency } from '@/mock/latency'
 
@@ -13,6 +13,7 @@ function toAuthResult(uid: string): AuthResult {
     token: issueToken(account.uid, account.identities),
     uid: account.uid,
     name: account.nickname,
+    avatar: account.avatar,
     identities: account.identities,
     points: account.points,
   }
@@ -48,10 +49,10 @@ export async function register(payload: RegisterPayload): Promise<AuthResult> {
       status: 'active',
       points: 0,
       identities: [{ type: 'individual' }],
-      registeredAt: new Date().toLocaleString('zh-CN', { year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' }).replace(/\//g, '-'),
+      registeredAt: nowStamp(),
     })
     noticesByUid[uid] = [
-      { id: `UN${Date.now()}`, type: 'system', title: '欢迎来到聚屿社区', content: '完善资料并提交入驻申请，解锁社区个体身份与更多功能。', at: new Date().toLocaleString('zh-CN', { hour12: false }).slice(0, 16), read: false, link: '/me' },
+      { id: `UN${Date.now()}`, type: 'system', title: '欢迎来到聚屿社区', content: '完善资料并提交入驻申请，解锁社区个体身份与更多功能。', at: nowStamp(), read: false, link: '/me' },
     ]
     return toAuthResult(uid)
   })
@@ -75,6 +76,7 @@ export async function restoreSession(): Promise<AuthResult | null> {
       token: localStorage.getItem('joinyuu_client_token') ?? '',
       uid: account.uid,
       name: account.nickname,
+      avatar: account.avatar,
       identities: account.identities,
       points: account.points,
     }),

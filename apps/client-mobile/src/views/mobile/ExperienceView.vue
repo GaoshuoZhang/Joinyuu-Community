@@ -5,7 +5,8 @@ import { useAsyncList } from '@/composables/useAsyncList'
 import { fetchExperience } from '@/api/experience'
 import EmptyBlock from '@/components/shared/EmptyBlock.vue'
 
-const { data, loading, error, run } = useAsyncList(fetchExperience)
+/* 我的等级：个人经验/等级（社区个体维度；无社区个体身份时为空态） */
+const { data, loading, error, run } = useAsyncList(() => fetchExperience())
 onMounted(run)
 </script>
 

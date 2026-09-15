@@ -128,7 +128,7 @@ function goCheckIn() {
         <template v-else-if="myStatus === 'approved'">
           <p v-if="myCheckedIn" class="status-line ok">✅ 已签到</p>
           <p v-else class="status-line"><span>报名已通过，记得准时参加</span></p>
-          <Button v-if="!myCheckedIn" theme="primary" block :disabled="acting" @click="goCheckIn">位置签到</Button>
+          <Button v-if="!myCheckedIn" theme="primary" block :disabled="acting" @click="goCheckIn">签到</Button>
           <Button theme="default" variant="outline" block :disabled="acting" @click="onCancel">取消报名</Button>
         </template>
 

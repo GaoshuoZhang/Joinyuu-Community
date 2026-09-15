@@ -4,7 +4,7 @@ import { readPayload } from '@/mock/session'
 import { fail, withLatency } from '@/mock/latency'
 
 /* [MOCK-ONLY] 活动中心 handlers。可见范围/可报名范围（缺口 §7-9）按身份模拟；
- * 位置签到（缺口 §7.1-2）完整模拟：时间窗 + Haversine 围栏 + 防重复 + activity_checkin 积分。 */
+ * 签到（缺口 §7.1-2）完整模拟：时间窗 + Haversine 围栏 + 防重复 + activity_checkin 积分。 */
 
 function requireUid(): string {
   const payload = readPayload()
@@ -104,7 +104,7 @@ export async function fetchMyEnrollments(): Promise<MyEnrollmentItem[]> {
   })
 }
 
-/* ---------- 位置签到（[MOCK-ONLY]，缺口 §7.1-2） ---------- */
+/* ---------- 签到（[MOCK-ONLY]，缺口 §7.1-2） ---------- */
 
 function haversineM(lat1: number, lng1: number, lat2: number, lng2: number): number {
   const R = 6371000
@@ -137,7 +137,7 @@ export async function checkInEvent(id: string, payload: CheckinPayload): Promise
     openAt.setHours(Math.floor(minutesOf(ev.checkinOpenMin) / 60), minutesOf(ev.checkinOpenMin) % 60, 0, 0)
     const closeAt = new Date(end)
     closeAt.setHours(Math.floor(minutesOf(ev.checkinCloseMin) / 60), minutesOf(ev.checkinCloseMin) % 60, 0, 0)
-    if (now < openAt) fail(400, '未到签到时间，请在活动开始前 30 分钟内签到')
+    if (now < openAt) fail(400, `未到签到时间，签到将于 ${ev.checkinOpenMin} 开放`)
     if (now > closeAt) fail(400, '活动已结束，无法签到')
 
     const distance = haversineM(payload.lat, payload.lng, ev.venueLat, ev.venueLng)
@@ -149,7 +149,7 @@ export async function checkInEvent(id: string, payload: CheckinPayload): Promise
     /* [MOCK-ONLY] 积分触发点：activity_checkin（签到积分，M1.5 已建引擎规则） */
     const pointsAwarded = 10
     grantPoints(uid, pointsAwarded, `活动签到：${ev.title}`, '活动签到')
-    pushNotice(uid, { type: 'points', title: '签到成功', content: `「${ev.title}」位置签到成功，积分 +${pointsAwarded}。`, link: '/me/points' })
+    pushNotice(uid, { type: 'points', title: '签到成功', content: `「${ev.title}」签到成功，积分 +${pointsAwarded}。`, link: '/me/points' })
     return { pointsAwarded }
   })
 }

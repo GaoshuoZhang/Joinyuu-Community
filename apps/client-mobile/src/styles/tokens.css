@@ -34,6 +34,12 @@
   --td-search-square-radius: var(--td-radius-large);
 }
 
+/* 输入类组件（Input/Textarea）与搜索框同规格：直接放在页面灰底上的白底输入框避免直角 */
+.t-input,
+.t-textarea {
+  border-radius: var(--td-radius-large);
+}
+
 /* ---------- 选项卡页（TDesign Tabs） ---------- */
 /* 标题条白底由页面上的 --td-tab-nav-background 控制（作用于 .t-tabs 根与 __wrapper）；
  * 内容区回填页面灰底，保持「灰底 + 白卡片」层次；手势监听绑定在 .t-tabs__content 上，
@@ -44,7 +50,18 @@
 }
 
 @supports (height: 100dvh) {
-  .top-tabs .t-tabs__content {
+.top-tabs {
+  border-radius: var(--td-radius-large);
+  overflow: hidden;
+  /* 白底由 .t-tabs__wrapper 承担（可独立圆角），根元素透明避免圆角缺口露白 */
+  background: transparent;
+}
+
+.top-tabs .t-tabs__wrapper {
+  border-radius: var(--td-radius-large);
+}
+
+.top-tabs .t-tabs__content {
     min-height: calc(100dvh - var(--app-mobile-topbar-h) - var(--app-mobile-tabbar-h) - 80px);
   }
 }

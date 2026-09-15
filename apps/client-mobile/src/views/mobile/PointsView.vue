@@ -1,14 +1,31 @@
 <script setup lang="ts">
-import { onMounted } from 'vue'
-import { Loading } from 'tdesign-mobile-vue'
+import { onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { useRouter } from 'vue-router'
+import { Button, Loading, Search } from 'tdesign-mobile-vue'
 import { useAuthStore } from '@/stores/auth'
 import { useAsyncList } from '@/composables/useAsyncList'
 import { fetchPointsRecords } from '@/api/me'
 import EmptyBlock from '@/components/shared/EmptyBlock.vue'
 
+/* 移动积分流水：余额卡（可去积分商城）+ 来源/事由搜索（防抖 300ms）+ 流水列表（含余额快照） */
+const router = useRouter()
 const auth = useAuthStore()
-const { data, loading, error, run } = useAsyncList(() => fetchPointsRecords({ page: 1, pageSize: 50 }))
-onMounted(run)
+const keyword = ref('')
+
+const { data, loading, error, run } = useAsyncList(() =>
+  fetchPointsRecords({ page: 1, pageSize: 50, keyword: keyword.value.trim() || undefined }),
+)
+onMounted(() => {
+  void auth.refreshProfile()
+  run()
+})
+
+let timer: number | undefined
+watch(keyword, () => {
+  window.clearTimeout(timer)
+  timer = window.setTimeout(() => run(), 300)
+})
+onBeforeUnmount(() => window.clearTimeout(timer))
 </script>
 
 <template>
@@ -18,9 +35,13 @@ onMounted(run)
       <b class="value">{{ auth.points.toLocaleString('zh-CN') }}</b>
     </div>
 
+    <Button theme="primary" variant="outline" block class="mall-link" @click="router.push('/mall')">去积分商城兑换</Button>
+
+    <Search v-model="keyword" class="ledger-search" placeholder="搜索来源或事由" />
+
     <Loading v-if="loading" class="state" text="加载中…" />
     <EmptyBlock v-else-if="error" :text="error" />
-    <EmptyBlock v-else-if="!data?.list.length" text="暂无积分流水" />
+    <EmptyBlock v-else-if="!data?.list.length" :text="keyword ? '暂无匹配流水' : '暂无积分流水'" />
     <div v-else class="m-card ledger stagger">
       <div v-for="r in data.list" :key="r.id" class="row">
         <div class="main">
@@ -60,6 +81,14 @@ onMounted(run)
 .value {
   font-size: 30px;
   font-weight: 700;
+}
+
+.ledger-search {
+  margin-bottom: 12px;
+}
+
+.mall-link {
+  margin-bottom: 14px;
 }
 
 .state {

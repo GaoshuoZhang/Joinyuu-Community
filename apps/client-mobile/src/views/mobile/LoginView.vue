@@ -70,6 +70,7 @@ async function onSubmit() {
       </div>
 
       <Button theme="primary" block size="large" :loading="submitting" @click="onSubmit">登录</Button>
+      <p class="guest"><router-link to="/" replace class="guest-link">暂不登录</router-link></p>
       <p class="swap">还没有账号？<router-link to="/register" class="link">立即注册</router-link></p>
       <p class="demo">演示：13800000001 / client123</p>
     </div>
@@ -141,6 +142,20 @@ async function onSubmit() {
   margin: 4px 0 0;
   font-size: 12px;
   color: var(--td-error-color);
+}
+
+.guest {
+  margin: 12px 0 0;
+  text-align: center;
+  font-size: 14px;
+}
+
+.guest-link {
+  display: inline-flex;
+  align-items: center;
+  min-height: 44px;
+  padding: 0 16px;
+  color: var(--td-text-color-secondary);
 }
 
 .swap {

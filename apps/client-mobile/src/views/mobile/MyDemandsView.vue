@@ -6,6 +6,7 @@ import { fetchMyDemands } from '@/api/demands'
 import { useAsyncList } from '@/composables/useAsyncList'
 import StateTag from '@/components/shared/StateTag.vue'
 import EmptyBlock from '@/components/shared/EmptyBlock.vue'
+import { DEMAND_KIND_LABELS } from '@/constants/demand'
 
 const router = useRouter()
 const { data, loading, error, run } = useAsyncList(fetchMyDemands)
@@ -32,6 +33,7 @@ const items = computed(() => data.value ?? [])
           <StateTag kind="demand" :value="d.status" />
         </div>
         <div class="row-meta">
+          <span v-if="d.kind" class="kind">{{ DEMAND_KIND_LABELS[d.kind] }}</span>
           <span class="cat">{{ d.categoryLabel }}</span>
           <span>{{ d.responseCount }} 人响应</span>
         </div>
@@ -85,6 +87,14 @@ const items = computed(() => data.value ?? [])
   border-radius: var(--td-radius-small);
   background: var(--td-brand-color-1);
   color: var(--td-brand-color);
+}
+
+.kind {
+  font-size: 12px;
+  padding: 2px 7px;
+  border-radius: var(--td-radius-small);
+  background: var(--td-bg-color-secondarycontainer);
+  color: var(--td-text-color-secondary);
 }
 
 .row-time {

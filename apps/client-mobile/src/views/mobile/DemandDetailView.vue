@@ -9,6 +9,7 @@ import { useAsyncList } from '@/composables/useAsyncList'
 import IdentityTag from '@/components/shared/IdentityTag.vue'
 import StateTag from '@/components/shared/StateTag.vue'
 import EmptyBlock from '@/components/shared/EmptyBlock.vue'
+import { DEMAND_KIND_LABELS, demandDateText } from '@/constants/demand'
 
 const route = useRoute()
 const router = useRouter()
@@ -57,13 +58,38 @@ async function onRespond() {
         </div>
         <div class="meta">
           <span class="cat">{{ demand.categoryLabel }}</span>
+          <span v-if="demand.kind" class="kind">{{ DEMAND_KIND_LABELS[demand.kind] }}</span>
           <span class="pub">
             <IdentityTag :type="demand.publisherIdentity" />
             <span class="pub-name">{{ demand.publisherName }}</span>
           </span>
         </div>
-        <p class="deadline">截止 {{ demand.deadline }} · {{ demand.responseCount }} 人响应</p>
+        <p class="deadline">
+          <span v-if="demandDateText(demand)">{{ demandDateText(demand) }} · </span>{{ demand.responseCount }} 人响应
+        </p>
         <p class="desc">{{ demand.description }}</p>
+        <div v-if="demand.kind === 'task' && (demand.deliverable || demand.budget)" class="extras">
+          <p v-if="demand.deliverable"><b>期望交付：</b>{{ demand.deliverable }}</p>
+          <p v-if="demand.budget"><b>预算范围：</b>{{ demand.budget }}</p>
+        </div>
+        <div v-else-if="demand.kind === 'investment' && (demand.cooperationNeed || demand.returnOffer)" class="extras">
+          <p v-if="demand.cooperationNeed"><b>希望获得：</b>{{ demand.cooperationNeed }}</p>
+          <p v-if="demand.returnOffer"><b>可提供回报：</b>{{ demand.returnOffer }}</p>
+        </div>
+        <div
+          v-else-if="demand.kind === 'cooperation' && (demand.bottleneck || demand.partnershipMode || demand.returnOffer)"
+          class="extras"
+        >
+          <p v-if="demand.bottleneck"><b>合作诉求：</b>{{ demand.bottleneck }}</p>
+          <p v-if="demand.partnershipMode"><b>期望合作方式：</b>{{ demand.partnershipMode }}</p>
+          <p v-if="demand.returnOffer"><b>可提供资源：</b>{{ demand.returnOffer }}</p>
+        </div>
+
+        <div v-if="demand.contactName || demand.contactPhone || demand.contactEmail" class="extras">
+          <p v-if="demand.contactName"><b>联系人：</b>{{ demand.contactName }}</p>
+          <p v-if="demand.contactPhone"><b>联系电话：</b>{{ demand.contactPhone }}</p>
+          <p v-if="demand.contactEmail"><b>联系邮箱：</b>{{ demand.contactEmail }}</p>
+        </div>
       </div>
 
       <div class="m-card">
@@ -119,6 +145,36 @@ async function onRespond() {
   border-radius: var(--td-radius-small);
   background: var(--td-brand-color-1);
   color: var(--td-brand-color);
+}
+
+.kind {
+  font-size: 12px;
+  padding: 2px 7px;
+  border-radius: var(--td-radius-small);
+  background: var(--td-bg-color-secondarycontainer);
+  color: var(--td-text-color-secondary);
+}
+
+.extras {
+  margin-top: 12px;
+  padding-top: 10px;
+  border-top: 1px dashed var(--td-component-border);
+}
+
+.extras p {
+  margin: 0 0 6px;
+  font-size: 13px;
+  line-height: 1.7;
+  color: var(--td-text-color-secondary);
+}
+
+.extras p:last-child {
+  margin-bottom: 0;
+}
+
+.extras b {
+  color: var(--td-text-color-primary);
+  font-weight: 600;
 }
 
 .pub {

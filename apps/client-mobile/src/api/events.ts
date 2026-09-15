@@ -35,7 +35,7 @@ export async function fetchMyEnrollments(): Promise<MyEnrollmentItem[]> {
   return httpGet<MyEnrollmentItem[]>('/me/enrollments')
 }
 
-/** [MOCK-ONLY] POST /api/app/events/:id/check-in — 位置签到（缺口 §7.1-2：围栏 + 时间窗 + 防重复 + activity_checkin 积分） */
+/** [MOCK-ONLY] POST /api/app/events/:id/check-in — 签到（缺口 §7.1-2：围栏 + 时间窗 + 防重复 + activity_checkin 积分） */
 export async function checkInEvent(id: string, payload: CheckinPayload): Promise<{ pointsAwarded: number }> {
   if (apiMode === 'mock') return mock.checkInEvent(id, payload)
   return httpPost<{ pointsAwarded: number }>(`/events/${id}/check-in`, payload)

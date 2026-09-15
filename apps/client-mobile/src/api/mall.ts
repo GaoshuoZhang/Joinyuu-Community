@@ -26,7 +26,13 @@ export async function fetchMyOrders(): Promise<MyOrder[]> {
   return httpGet<MyOrder[]>('/me/orders')
 }
 
-/** [MOCK-ONLY] devtools 订单状态推进（模拟后台发货；接入后为管理端能力，缺口 §7.2-3） */
+/** POST /api/app/mall/orders/:id/confirm — 确认收货（shipped → completed；缺口 §7.1-10 待补契约） */
+export async function confirmOrder(id: string): Promise<void> {
+  if (apiMode === 'mock') return mock.confirmOrder(id)
+  await httpPost(`/mall/orders/${id}/confirm`)
+}
+
+/** [MOCK-ONLY] devtools：模拟后台发货（pending_shipment → shipped；接入后为管理端能力，缺口 §7.2-3） */
 export async function mockAdvanceOrder(id: string): Promise<void> {
   if (apiMode === 'mock') return mock.advanceOrder(id)
 }

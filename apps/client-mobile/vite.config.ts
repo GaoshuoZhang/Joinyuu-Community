@@ -22,7 +22,6 @@ export default defineConfig({
     rollupOptions: {
       output: {
         manualChunks(id: string) {
-          if (id.includes('tdesign-vue-next')) return 'vendor-tdesktop'
           if (id.includes('tdesign-mobile-vue')) return 'vendor-tmobile'
           if (id.includes('node_modules')) return 'vendor'
         },

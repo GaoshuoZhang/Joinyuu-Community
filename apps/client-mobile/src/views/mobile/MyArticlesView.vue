@@ -42,7 +42,10 @@ onMounted(run)
         <p class="meta">{{ a.columnLabel }} · 提交于 {{ a.submittedAt }}</p>
         <template v-if="a.status === 'rejected'">
           <p class="reject">驳回原因：{{ a.rejectReason ?? '未填写' }}</p>
-          <p class="hint">修改后可再次投稿</p>
+          <p class="hint">
+            修改后可再次投稿
+            <a class="relink" @click="router.push('/articles/new')">重新投稿 ›</a>
+          </p>
         </template>
       </section>
     </div>
@@ -102,5 +105,11 @@ onMounted(run)
   margin: 3px 0 0;
   font-size: 12px;
   color: var(--td-text-color-secondary);
+}
+
+.relink {
+  margin-left: 4px;
+  color: var(--td-brand-color);
+  cursor: pointer;
 }
 </style>

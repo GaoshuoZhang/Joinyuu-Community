@@ -29,12 +29,12 @@ export const useNoticesStore = defineStore('notices', () => {
   }
 
   async function read(id: string): Promise<void> {
-    await markNoticeRead(id)
     const item = list.value.find((n) => n.id === id)
-    if (item && !item.read) {
-      item.read = true
-      unread.value = Math.max(0, unread.value - 1)
-    }
+    /* 先取未读快照：mock 层与列表共享对象引用，await 后 item.read 已被置真 */
+    const wasUnread = !!item && !item.read
+    await markNoticeRead(id)
+    if (item) item.read = true
+    if (wasUnread) unread.value = Math.max(0, unread.value - 1)
   }
 
   async function readAll(): Promise<void> {
@@ -49,5 +49,10 @@ export const useNoticesStore = defineStore('notices', () => {
     loadedOnce = false
   }
 
-  return { unread, list, refreshUnread, ensureLoaded, refreshAll, read, readAll, reset }
+  /** 以首页聚合等外部来源初始化未读角标（不触发额外请求） */
+  function setUnread(value: number): void {
+    unread.value = Math.max(0, Math.floor(value))
+  }
+
+  return { unread, list, refreshUnread, ensureLoaded, refreshAll, read, readAll, setUnread, reset }
 })

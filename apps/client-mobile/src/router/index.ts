@@ -23,12 +23,18 @@ export const router = createRouter({
         { path: 'plaza', name: 'plaza', component: () => import('@/views/mobile/PlazaView.vue') },
         { path: 'me', name: 'me', component: () => import('@/views/mobile/MeView.vue'), meta: { requiresAuth: true } },
 
-        /* ---- 需求发布 / 详情（项目语境）---- */
-        { path: 'demands/new', name: 'demand-new', component: () => import('@/views/mobile/DemandNewView.vue'), meta: { requiresAuth: true } },
+        /* ---- 需求发布（类型 hub + 独立表单）/ 详情（项目语境）---- */
+        { path: 'demands/new', name: 'demand-new', component: () => import('@/views/mobile/DemandPublishHubView.vue'), meta: { requiresAuth: true } },
+        { path: 'demands/new/task', name: 'demand-new-task', component: () => import('@/views/mobile/DemandTaskFormView.vue'), meta: { requiresAuth: true } },
+        { path: 'demands/new/invest', name: 'demand-new-invest', component: () => import('@/views/mobile/DemandInvestFormView.vue'), meta: { requiresAuth: true } },
+        { path: 'demands/new/cooperation', name: 'demand-new-cooperation', component: () => import('@/views/mobile/DemandCoopFormView.vue'), meta: { requiresAuth: true } },
         { path: 'demands/:id', name: 'demand-detail', component: () => import('@/views/mobile/DemandDetailView.vue') },
 
-        /* ---- 入驻说明（企业入驻 / 人才登记）---- */
-        { path: 'intros/:kind', name: 'intro', component: () => import('@/views/mobile/IntroView.vue') },
+        /* ---- 企业合作 / 人才登记（独立流程介绍页）---- */
+        { path: 'intros/enterprise', name: 'intro-enterprise', component: () => import('@/views/mobile/EnterpriseCoopView.vue') },
+        { path: 'intros/settle', name: 'intro-settle', component: () => import('@/views/mobile/IntroView.vue') },
+        { path: 'intros/cooperation', name: 'intro-cooperation', component: () => import('@/views/mobile/IntroView.vue') },
+        { path: 'intros/talent', name: 'intro-talent', component: () => import('@/views/mobile/IntroView.vue') },
 
         /* ---- 活动 ---- */
         { path: 'events', name: 'events', component: () => import('@/views/mobile/EventsView.vue') },
@@ -43,10 +49,12 @@ export const router = createRouter({
         { path: 'spaces', name: 'spaces', component: () => import('@/views/mobile/SpacesView.vue') },
         { path: 'spaces/:id/reserve', name: 'space-reserve', component: () => import('@/views/mobile/SpaceReserveView.vue'), meta: { requiresAuth: true } },
 
-        /* ---- 内容与展示页 ---- */
+        /* ---- 内容与企业名片 ---- */
         { path: 'articles', name: 'articles', component: () => import('@/views/mobile/ArticlesView.vue') },
         { path: 'articles/new', name: 'article-new', component: () => import('@/views/mobile/ArticleNewView.vue'), meta: { requiresAuth: true } },
         { path: 'articles/:id', name: 'article-detail', component: () => import('@/views/mobile/ArticleDetailView.vue') },
+        { path: 'talents/:uid', name: 'talent-card', component: () => import('@/views/mobile/TalentCardView.vue') },
+        /* talent-card: 公开人才名片（人才库点入） */
         { path: 'enterprises/:id', name: 'enterprise-showcase', component: () => import('@/views/mobile/EnterpriseShowcaseView.vue') },
         { path: 'enterprises/:id/showcase-apply', name: 'showcase-apply', component: () => import('@/views/mobile/ShowcaseApplyView.vue'), meta: { requiresAuth: true } },
 
@@ -54,7 +62,15 @@ export const router = createRouter({
         { path: 'notices', name: 'notices', component: () => import('@/views/mobile/NoticesView.vue'), meta: { requiresAuth: true } },
 
         /* ---- 个人中心 ---- */
+        { path: 'me/cards/individual', name: 'my-card-individual', component: () => import('@/views/mobile/MyIndividualCardView.vue'), meta: { requiresAuth: true } },
+        { path: 'me/identities', name: 'my-identities', component: () => import('@/views/mobile/IdentityListView.vue'), meta: { requiresAuth: true } },
+        /* 企业邀请详情（站内信跳转入，确认加入 / 拒绝） */
+        { path: 'me/invitations/:id', name: 'invitation-detail', component: () => import('@/views/mobile/InvitationView.vue'), meta: { requiresAuth: true } },
+        { path: 'me/enterprises/:id/edit', name: 'my-enterprise-card-edit', component: () => import('@/views/mobile/EnterpriseCardEditView.vue'), meta: { requiresAuth: true } },
+        { path: 'me/enterprises/:id/members/:memberKey', name: 'my-enterprise-member', component: () => import('@/views/mobile/EnterpriseMemberView.vue'), meta: { requiresAuth: true } },
+        { path: 'me/enterprises/:id', name: 'my-enterprise-detail', component: () => import('@/views/mobile/EnterpriseDetailView.vue'), meta: { requiresAuth: true } },
         { path: 'me/profile/edit', name: 'me-profile', component: () => import('@/views/mobile/ProfileEditView.vue'), meta: { requiresAuth: true } },
+        { path: 'me/realname', name: 'me-realname', component: () => import('@/views/mobile/RealNameView.vue'), meta: { requiresAuth: true } },
         { path: 'me/points', name: 'me-points', component: () => import('@/views/mobile/PointsView.vue'), meta: { requiresAuth: true } },
         { path: 'me/experience', name: 'me-experience', component: () => import('@/views/mobile/ExperienceView.vue'), meta: { requiresAuth: true } },
         { path: 'me/demands', name: 'me-demands', component: () => import('@/views/mobile/MyDemandsView.vue'), meta: { requiresAuth: true } },
@@ -66,6 +82,9 @@ export const router = createRouter({
         { path: 'me/applications', name: 'me-applications', component: () => import('@/views/mobile/MyApplicationsView.vue'), meta: { requiresAuth: true } },
         { path: 'me/projects', name: 'me-projects', component: () => import('@/views/mobile/MyProjectsView.vue'), meta: { requiresAuth: true } },
         { path: 'applications/new', name: 'application-new', component: () => import('@/views/mobile/ApplicationNewView.vue'), meta: { requiresAuth: true } },
+        { path: 'applications/settle', name: 'application-settle', component: () => import('@/views/mobile/ApplicationSettleView.vue'), meta: { requiresAuth: true } },
+        { path: 'applications/cooperation', name: 'application-cooperation', component: () => import('@/views/mobile/ApplicationCooperationView.vue'), meta: { requiresAuth: true } },
+        { path: 'applications/individual', name: 'application-individual', component: () => import('@/views/mobile/ApplicationIndividualView.vue'), meta: { requiresAuth: true } },
       ],
     },
 

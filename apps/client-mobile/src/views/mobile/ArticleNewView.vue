@@ -60,7 +60,7 @@ async function onSubmit() {
         <Input v-model="form.title" :maxlength="50" placeholder="请输入文章标题…" clearable />
       </div>
       <div class="field">
-        <label>栏目</label>
+        <span class="field-label">栏目</span>
         <div class="chips">
           <Tag
             v-for="c in columns"
@@ -81,6 +81,13 @@ async function onSubmit() {
         <p class="count" :class="{ ready: contentReady }">
           已输入 {{ contentLength }} 字{{ contentReady ? '，可以提交' : `，至少 ${MIN_CONTENT} 字` }}
         </p>
+      </div>
+      <div class="field">
+        <span class="field-label">配图（选填）</span>
+        <div class="img-placeholder" @click="Toast('图片上传将在接入真实接口后开放')">
+          <span class="plus">＋</span>
+          <span class="hint">图片上传暂未开放（Mock）</span>
+        </div>
       </div>
 
       <Button theme="primary" size="large" block :loading="submitting" @click="onSubmit">提交投稿</Button>
@@ -115,7 +122,8 @@ async function onSubmit() {
   margin-bottom: 14px;
 }
 
-.field label {
+.field label,
+.field .field-label {
   display: block;
   margin-bottom: 6px;
   font-size: 12px;
@@ -136,5 +144,22 @@ async function onSubmit() {
 
 .count.ready {
   color: var(--td-text-color-placeholder);
+}
+
+.img-placeholder {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  height: 84px;
+  border: 1px dashed var(--td-component-border);
+  border-radius: var(--td-radius-large);
+  color: var(--td-text-color-placeholder);
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.img-placeholder .plus {
+  font-size: 18px;
 }
 </style>

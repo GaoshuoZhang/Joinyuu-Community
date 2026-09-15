@@ -9,7 +9,7 @@ import EmptyBlock from '@/components/shared/EmptyBlock.vue'
 import type { CommunityEvent } from '@/types'
 import type { GeoPosition } from '@/utils/geolocation'
 
-/* 移动位置签到：活动信息 + 定位→围栏校验→签到；加载时静默预定位一次，错误内联展示并保留重试 */
+/* 移动签到：活动信息 + 定位→围栏校验→签到；加载时静默预定位一次，错误内联展示并保留重试 */
 const route = useRoute()
 const router = useRouter()
 const eventId = route.params.id as string
@@ -80,7 +80,7 @@ function backToDetail() {
             <span class="success-icon">✅</span>
             <p class="success-title">签到成功</p>
             <p class="success-points">积分 +{{ pointsAwarded }}</p>
-            <p class="success-tip">已记录本次位置签到，记得准时参加活动哦。</p>
+            <p class="success-tip">已记录本次签到，记得准时参加活动哦。</p>
             <Button theme="default" variant="outline" @click="backToDetail">返回活动详情</Button>
           </div>
         </template>

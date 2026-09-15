@@ -1,13 +1,14 @@
 import { apiMode, httpGet, httpPost } from './http'
-import type { Demand, DemandCreatePayload, MyDemandItem, MyResponseItem, PageQuery } from '@/types'
+import type { Demand, DemandKind, DemandCreatePayload, MyDemandItem, MyResponseItem, PageQuery } from '@/types'
 import * as mock from '@/mock/handlers/demands'
 
 /** GET /api/app/demands — 需求广场（published；可见范围过滤为缺口 §7-9，Mock 前端模拟） */
-export async function fetchDemands(query: PageQuery & { category?: string } = {}): Promise<{ list: Demand[]; total: number }> {
+export async function fetchDemands(query: PageQuery & { category?: string; kind?: DemandKind } = {}): Promise<{ list: Demand[]; total: number }> {
   if (apiMode === 'mock') return mock.fetchDemands(query)
   const qs = new URLSearchParams({ page: String(query.page ?? 1), pageSize: String(query.pageSize ?? 10) })
   if (query.keyword) qs.set('keyword', query.keyword)
   if (query.category) qs.set('category', query.category)
+  if (query.kind) qs.set('kind', query.kind)
   return httpGet(`/demands?${qs}`)
 }
 

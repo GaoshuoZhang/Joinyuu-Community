@@ -6,7 +6,7 @@ import { createShowcaseRequest } from '@/api/enterprises'
 import { ApiError } from '@/api/http'
 import EmptyBlock from '@/components/shared/EmptyBlock.vue'
 
-/* 移动展示页申请：说明必填；Mock 提交即通过并发布 → 跳企业展示页；
+/* 移动企业名片申请：说明必填；Mock 提交即通过并发布 → 跳企业名片；
  * 企业不存在（404）→ 空态（契约无预查接口，提交时判定） */
 const route = useRoute()
 const router = useRouter()
@@ -24,7 +24,7 @@ async function onSubmit() {
   submitting.value = true
   try {
     await createShowcaseRequest(enterpriseId, note.value.trim())
-    Toast('申请已通过，展示页已发布')
+    Toast('申请已通过，企业名片已发布')
     await router.push(`/enterprises/${enterpriseId}`)
   } catch (e) {
     if (e instanceof ApiError && e.code === 404) {
@@ -45,8 +45,8 @@ async function onSubmit() {
     </template>
     <template v-else>
       <header class="head">
-        <h2 class="page-title">申请发布展示页</h2>
-        <p class="page-desc">填写申请说明，审核通过后展示页将发布</p>
+        <h2 class="page-title">申请发布企业名片</h2>
+        <p class="page-desc">填写申请说明，审核通过后企业名片将发布</p>
       </header>
 
       <div class="m-card form">

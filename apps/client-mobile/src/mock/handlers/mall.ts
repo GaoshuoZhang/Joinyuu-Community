@@ -1,5 +1,5 @@
 import type { Goods, MyOrder } from '@/types'
-import { accountByUid, appConfig, goods, goodsOffIds, grantPoints, ordersByUid, pushNotice } from '@/mock/db'
+import { accountByUid, appConfig, goods, goodsOffIds, grantPoints, nowStamp, ordersByUid, pushNotice } from '@/mock/db'
 import { readPayload } from '@/mock/session'
 import { fail, withLatency } from '@/mock/latency'
 
@@ -42,7 +42,7 @@ export async function createOrder(goodsId: string): Promise<{ id: string; remain
     const id = `RO${Date.now()}`
     ;(ordersByUid[uid] ??= []).unshift({
       id, goodsId: g.id, goodsName: g.name, pointsCost: g.pointsCost,
-      status: 'pending_shipment', createdAt: new Date().toLocaleString('zh-CN', { hour12: false }).slice(0, 16),
+      status: 'pending_shipment', createdAt: nowStamp(),
     })
     g.stock -= 1
     grantPoints(uid, -g.pointsCost, `积分商城兑换：${g.name}`, '商城兑换')
@@ -59,18 +59,28 @@ export async function fetchMyOrders(): Promise<MyOrder[]> {
   })
 }
 
-/** [MOCK-ONLY] devtools 订单状态推进（模拟后台发货；接入后为管理端能力，缺口 §7.2-3） */
+/** [MOCK-ONLY] devtools：模拟后台发货（pending_shipment → shipped）；用户确认收货走 confirmOrder */
 export async function advanceOrder(id: string): Promise<void> {
   await withLatency(() => {
     const uid = readPayload()?.sub ?? ''
     const order = (ordersByUid[uid] ?? []).find((o) => o.id === id)
     if (!order) fail(404, '订单不存在')
-    if (order.status === 'pending_shipment') {
-      order.status = 'shipped'
-      order.shippedAt = new Date().toLocaleString('zh-CN', { hour12: false }).slice(0, 16)
-      pushNotice(uid, { type: 'order', title: '兑换订单已发货', content: `「${order.goodsName}」已寄出，请注意查收。`, link: '/me/orders' })
-    } else if (order.status === 'shipped') {
-      order.status = 'completed'
-    }
+    if (order.status !== 'pending_shipment') return
+    order.status = 'shipped'
+    order.shippedAt = nowStamp()
+    pushNotice(uid, { type: 'order', title: '兑换订单已发货', content: `「${order.goodsName}」已寄出，请注意查收。`, link: '/me/orders' })
   }, 120)
+}
+
+/** 确认收货：shipped → completed（缺口 §7.1-10；接入期接 POST /api/app/mall/orders/:id/confirm） */
+export async function confirmOrder(id: string): Promise<void> {
+  return withLatency(() => {
+    const uid = requireUid()
+    const order = (ordersByUid[uid] ?? []).find((o) => o.id === id)
+    if (!order) fail(404, '订单不存在')
+    if (order.status !== 'shipped') fail(409, '当前订单不可确认收货')
+    order.status = 'completed'
+    order.finishedAt = nowStamp()
+    pushNotice(uid, { type: 'order', title: '订单已完成', content: `「${order.goodsName}」已确认收货，感谢兑换。`, link: '/me/orders' })
+  }, 160)
 }

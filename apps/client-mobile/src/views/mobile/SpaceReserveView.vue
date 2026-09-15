@@ -3,27 +3,63 @@ import { computed, onMounted, reactive, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { Button, Cell, DateTimePicker, Input, Loading, NoticeBar, Popup, Tag, Toast } from 'tdesign-mobile-vue'
 import { fetchAvailability, fetchSpaces, createReservation } from '@/api/spaces'
+import { fetchMyIdentities } from '@/api/enterprises'
 import { ApiError } from '@/api/http'
-import type { Space, SpaceSlot } from '@/types'
+import { useAuthStore, identityOptionLabel } from '@/stores/auth'
+import type { IdentityType, Space, SpaceSlot, UserIdentity } from '@/types'
 
-/* 移动预约：日期 + 时段 chips（占用禁选）+ 主题 + 提交 */
+/* 移动预约：日期 + 时段 chips（占用禁选）+ 主题 + 身份（个人/企业主体）+ 提交 */
 const route = useRoute()
 const router = useRouter()
+const auth = useAuthStore()
 const spaceId = String(route.params.id)
 
 const space = ref<Space | null>(null)
 const date = ref(new Date().toISOString().slice(0, 10))
 const slots = ref<SpaceSlot[]>([])
 const slotsLoading = ref(false)
-const form = reactive({ selected: '', topic: '' })
+/* 预约身份选项：持社区个体时不再单独展示基础「个人用户」；含成员被授权「空间预约」的企业（代企业预约） */
+const delegatedIdentities = ref<UserIdentity[]>([])
+const identityOptions = computed(() => {
+  const base = auth.identities.filter((i) => !(i.type === 'individual' && auth.hasCommunityIndividual))
+  const extra = delegatedIdentities.value.filter(
+    (d) => !base.some((b) => b.type === 'community_enterprise' && b.enterpriseId === d.enterpriseId),
+  )
+  return [...base, ...extra]
+})
+const form = reactive({
+  selected: '',
+  topic: '',
+  asIdentity: (identityOptions.value[0]?.type ?? '') as IdentityType | '',
+  asEnterpriseId: '',
+})
 const submitting = ref(false)
 const resultStatus = ref<'' | 'pending' | 'approved'>('')
 const datePickerVisible = ref(false)
+
+/** 身份 chips 选中判定（企业需同时匹配企业 id） */
+function isIdentityPicked(i: UserIdentity): boolean {
+  return form.asIdentity === i.type && (i.type !== 'community_enterprise' || form.asEnterpriseId === (i.enterpriseId ?? ''))
+}
+
+function pickIdentity(i: UserIdentity) {
+  form.asIdentity = i.type
+  form.asEnterpriseId = i.type === 'community_enterprise' ? (i.enterpriseId ?? '') : ''
+}
 
 onMounted(async () => {
   const list = await fetchSpaces()
   space.value = list.find((s) => s.id === spaceId) ?? null
   await loadSlots()
+  if (!auth.isLogged) return
+  try {
+    const identities = await fetchMyIdentities()
+    delegatedIdentities.value = identities
+      .filter((i) => i.type === 'community_enterprise' && i.enterpriseId && (i.isContact || (i.permissions ?? []).includes('space_reserve')))
+      .map((i): UserIdentity => ({ type: 'community_enterprise', enterpriseId: i.enterpriseId, enterpriseName: i.name }))
+  } catch {
+    /* 未登录或接口异常时仅展示自有身份 */
+  }
 })
 
 async function loadSlots() {
@@ -40,9 +76,21 @@ const canSubmit = computed(() => !!form.selected && !submitting.value)
 
 async function onSubmit() {
   if (!canSubmit.value) return
+  if (!form.asIdentity) {
+    Toast('请选择预约身份')
+    return
+  }
   submitting.value = true
   try {
-    const res = await createReservation({ spaceId, date: date.value, start: form.selected, end: nextHour(form.selected), topic: form.topic })
+    const res = await createReservation({
+      spaceId,
+      date: date.value,
+      start: form.selected,
+      end: nextHour(form.selected),
+      topic: form.topic,
+      asIdentity: form.asIdentity,
+      ...(form.asIdentity === 'community_enterprise' && form.asEnterpriseId ? { asEnterpriseId: form.asEnterpriseId } : {}),
+    })
     resultStatus.value = res.status
     Toast(res.status === 'approved' ? '预约成功' : '预约已提交，待审核')
   } catch (e) {
@@ -74,7 +122,7 @@ function goMine() {
     </div>
 
     <div class="m-card">
-      <label class="field-label">选择时段（1 小时）</label>
+      <span class="field-label">选择时段（1 小时）</span>
       <Loading v-if="slotsLoading" class="slots-loading" text="加载中…" />
       <div v-else class="slots">
         <Tag
@@ -96,6 +144,23 @@ function goMine() {
     <div class="m-card">
       <label class="field-label">预约主题（选填）</label>
       <Input v-model="form.topic" :maxlength="30" placeholder="如：项目周会…" />
+    </div>
+
+    <div class="m-card">
+      <span class="field-label">以哪个身份预约</span>
+      <div class="chips">
+        <Tag
+          v-for="i in identityOptions"
+          :key="`${i.type}:${i.enterpriseId ?? ''}`"
+          :theme="isIdentityPicked(i) ? 'primary' : 'default'"
+          variant="light"
+          size="medium"
+          @click="pickIdentity(i)"
+        >
+          {{ identityOptionLabel(i, auth.name) }}
+        </Tag>
+      </div>
+      <p class="field-help">企业身份预约将计为企业主体的预约记录</p>
     </div>
 
     <Button theme="primary" size="large" block :disabled="!canSubmit" :loading="submitting" @click="onSubmit">
@@ -166,6 +231,18 @@ function goMine() {
 
 .slots-loading {
   padding: 8px 0;
+}
+
+.chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.field-help {
+  margin: 8px 0 0;
+  font-size: 12px;
+  color: var(--td-text-color-placeholder);
 }
 
 .mine-link {

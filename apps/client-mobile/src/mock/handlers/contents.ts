@@ -1,5 +1,5 @@
 import type { Article, ArticleColumn, ArticleCreatePayload, MySubmittedArticle } from '@/types'
-import { articles, columns, myArticlesByUid, pushNotice } from '@/mock/db'
+import { articles, columns, myArticlesByUid, nowStamp, pushNotice } from '@/mock/db'
 import { readPayload } from '@/mock/session'
 import { fail, withLatency } from '@/mock/latency'
 
@@ -12,7 +12,7 @@ function requireUid(): string {
 }
 
 function now(): string {
-  return new Date().toLocaleString('zh-CN', { hour12: false }).slice(0, 16)
+  return nowStamp()
 }
 
 export async function fetchColumns(): Promise<ArticleColumn[]> {

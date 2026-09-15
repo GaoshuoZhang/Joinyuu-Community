@@ -1,20 +1,38 @@
 <script setup lang="ts">
-import { onMounted, reactive, ref } from 'vue'
+import { computed, onMounted, reactive, ref } from 'vue'
 import { useRouter } from 'vue-router'
-import { Button, Input, Radio, RadioGroup, Textarea, Toast } from 'tdesign-mobile-vue'
-import { fetchMe, updateMe } from '@/api/me'
+import { Button, Cell, CellGroup, Input, Radio, RadioGroup, Textarea, Toast } from 'tdesign-mobile-vue'
+import { fetchMe, fetchRealName, updateMe } from '@/api/me'
 import { ApiError } from '@/api/http'
+import { useAuthStore } from '@/stores/auth'
 import { REQUIRED } from '@/utils/validators'
+import AvatarUploader from '@/components/shared/AvatarUploader.vue'
 
+/* 资料编辑：头像（点头像直接上传替换）/ 昵称 / 性别 / 简介 + 实名认证入口 */
 const router = useRouter()
-const form = reactive({ nickname: '', gender: 'unknown' as 'male' | 'female' | 'unknown', bio: '' })
+const auth = useAuthStore()
+const form = reactive({ nickname: '', avatar: '', gender: 'unknown' as 'male' | 'female' | 'unknown', bio: '' })
 const submitting = ref(false)
+
+/* 实名认证状态（入口 note）：null 表示加载中/未知 */
+const realNameVerified = ref<boolean | null>(null)
+const realNameNote = computed(() => {
+  if (realNameVerified.value === null) return ''
+  return realNameVerified.value ? '已认证' : '未认证'
+})
 
 onMounted(async () => {
   const me = await fetchMe()
   form.nickname = me.nickname
+  form.avatar = me.avatar ?? ''
   form.gender = me.gender
   form.bio = me.bio ?? ''
+  try {
+    const rn = await fetchRealName()
+    realNameVerified.value = rn.verified
+  } catch {
+    realNameVerified.value = null
+  }
 })
 
 async function onSave() {
@@ -25,6 +43,8 @@ async function onSave() {
   submitting.value = true
   try {
     await updateMe({ ...form })
+    auth.name = form.nickname.trim()
+    auth.avatar = form.avatar
     Toast('资料已更新')
     router.push('/me')
   } catch (e) {
@@ -39,11 +59,21 @@ async function onSave() {
   <div class="page-fade-in profile-edit">
     <div class="m-card">
       <div class="field">
+        <span class="field-label">头像</span>
+        <AvatarUploader
+          :image="form.avatar"
+          :fallback="form.nickname.slice(0, 1) || auth.name.slice(0, 1)"
+          size="64px"
+          biz-type="avatar"
+          @update:image="form.avatar = $event"
+        />
+      </div>
+      <div class="field">
         <label>昵称</label>
         <Input v-model="form.nickname" :maxlength="20" placeholder="社区展示名…" clearable />
       </div>
       <div class="field">
-        <label>性别</label>
+        <span class="field-label">性别</span>
         <RadioGroup v-model="form.gender" class="genders">
           <Radio value="unknown" label="保密" />
           <Radio value="male" label="男" />
@@ -63,6 +93,10 @@ async function onSave() {
         {{ submitting ? '保存中…' : '保存' }}
       </Button>
     </div>
+
+    <CellGroup theme="card" class="security">
+      <Cell title="实名认证" :note="realNameNote" arrow @click="router.push('/me/realname')" />
+    </CellGroup>
   </div>
 </template>
 
@@ -75,7 +109,8 @@ async function onSave() {
   margin-bottom: 15px;
 }
 
-.field label {
+.field label,
+.field .field-label {
   display: block;
   font-size: 13px;
   color: var(--td-text-color-secondary);
@@ -85,5 +120,15 @@ async function onSave() {
 .genders {
   display: flex;
   gap: 20px;
+}
+
+.security {
+  margin-top: 12px;
+}
+
+/* 卡片宽度与 .m-card 对齐（与 MeView 同口径） */
+.profile-edit :deep(.t-cell-group--card) {
+  margin: 0;
+  border: 1px solid var(--td-component-border);
 }
 </style>

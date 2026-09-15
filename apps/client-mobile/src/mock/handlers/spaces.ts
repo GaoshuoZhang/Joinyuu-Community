@@ -1,5 +1,6 @@
 import type { ReservationCreatePayload, Space, SpaceReservation, SpaceSlot } from '@/types'
-import { appConfig, occupiedSlots, pushNotice, reservationsByUid, spaces } from '@/mock/db'
+import { accountByUid, appConfig, enterprises, nowStamp, occupiedSlots, pushNotice, reservationsByUid, spaces } from '@/mock/db'
+import { permissionsOf } from '@/mock/handlers/enterprises'
 import { readPayload } from '@/mock/session'
 import { fail, withLatency } from '@/mock/latency'
 
@@ -49,10 +50,29 @@ export async function createReservation(payload: ReservationCreatePayload): Prom
       fail(409, '你已预约该时段，请勿重复提交')
     }
     const status: 'pending' | 'approved' = space.needApproval ? 'pending' : 'approved'
+    /* 主体快照：以哪个身份预约（个人身份存昵称，企业身份存企业名/组织名） */
+    const account = accountByUid(uid)
+    const identity = account?.identities.find((i) => i.type === payload.asIdentity) ?? account?.identities[0]
+    let identityType = identity?.type ?? 'individual'
+    let subjectName =
+      identityType === 'community_enterprise'
+        ? (identity?.enterpriseName ?? account?.nickname ?? '')
+        : identityType === 'external_enterprise'
+          ? (identity?.organizationName ?? account?.nickname ?? '')
+          : (account?.nickname ?? '')
+    /* 成员代企业预约：校验企业成员权限（space_reserve），主体快照为企业名 */
+    if (payload.asIdentity === 'community_enterprise' && payload.asEnterpriseId) {
+      const ent = enterprises.find((x) => x.id === payload.asEnterpriseId)
+      if (!ent) fail(404, '企业不存在')
+      if (!permissionsOf(ent, uid).includes('space_reserve')) fail(403, '你没有代企业预约空间的权限')
+      identityType = 'community_enterprise'
+      subjectName = ent.name
+    }
     mine.unshift({
       id: `SR${Date.now()}`, spaceId: space.id, spaceName: space.name,
       date: payload.date, start: payload.start, end: payload.end,
-      status, createdAt: new Date().toLocaleString('zh-CN', { hour12: false }).slice(0, 16),
+      status, createdAt: nowStamp(),
+      identityType, subjectName,
     })
     /* [MOCK-ONLY] 通知触发点：预约已提交 */
     pushNotice(uid, {

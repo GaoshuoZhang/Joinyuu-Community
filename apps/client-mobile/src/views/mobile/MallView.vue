@@ -13,7 +13,10 @@ const router = useRouter()
 const auth = useAuthStore()
 
 const { data, loading, error, run } = useAsyncList<Goods[]>(() => fetchGoods())
-onMounted(run)
+onMounted(() => {
+  void auth.refreshProfile()
+  run()
+})
 </script>
 
 <template>

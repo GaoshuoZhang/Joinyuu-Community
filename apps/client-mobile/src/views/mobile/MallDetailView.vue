@@ -1,21 +1,24 @@
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue'
+import { computed, h, onMounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { Button, Loading, Toast } from 'tdesign-mobile-vue'
+import { Button, DialogPlugin, Loading, Toast } from 'tdesign-mobile-vue'
 import { createOrder, fetchGoodsDetail } from '@/api/mall'
 import { useAsyncList } from '@/composables/useAsyncList'
 import { useAuthStore } from '@/stores/auth'
 import EmptyBlock from '@/components/shared/EmptyBlock.vue'
 import type { Goods } from '@/types'
 
-/* 移动商品详情：信息展示 + 立即兑换；未登录跳登录，成功提示剩余积分后进入我的订单 */
+/* 移动商品详情：信息展示 + 立即兑换（确认弹层含扣减后余额预览）；未登录跳登录，成功提示剩余积分后进入我的订单 */
 const route = useRoute()
 const router = useRouter()
 const auth = useAuthStore()
 const goodsId = route.params.id as string
 
 const { data: goods, loading, error, run } = useAsyncList<Goods>(() => fetchGoodsDetail(goodsId))
-onMounted(run)
+onMounted(() => {
+  void auth.refreshProfile()
+  run()
+})
 
 const submitting = ref(false)
 const ordered = ref(false)
@@ -23,20 +26,44 @@ const remainingPoints = ref<number | null>(null)
 
 const soldOut = computed(() => (goods.value?.stock ?? 0) <= 0)
 
-async function onRedeem() {
+function onRedeem() {
   if (!auth.isLogged) {
-    await router.push({ path: '/login', query: { redirect: route.fullPath } })
+    void router.push({ path: '/login', query: { redirect: route.fullPath } })
     return
   }
+  const item = goods.value
+  if (!item) return
+  if (auth.points < item.pointsCost) {
+    Toast(`积分不足，还差 ${item.pointsCost - auth.points} 积分`)
+    return
+  }
+  const remaining = auth.points - item.pointsCost
+  DialogPlugin.confirm({
+    title: '确认兑换',
+    content: () =>
+      h('div', { style: 'text-align:left' }, [
+        h('p', { style: 'margin:0 0 6px' }, `商品：${item.name}`),
+        h('p', { style: 'margin:0 0 6px' }, `消耗积分：${item.pointsCost}`),
+        h('p', { style: 'margin:0' }, `兑换后剩余：${remaining} 积分`),
+      ]),
+    cancelBtn: '再想想',
+    confirmBtn: '确认兑换',
+    onConfirm: () => {
+      void submitOrder(item)
+    },
+  })
+}
+
+async function submitOrder(item: Goods) {
   submitting.value = true
   try {
-    const res = await createOrder(goodsId)
+    const res = await createOrder(item.id)
     ordered.value = true
     remainingPoints.value = res.remainingPoints
     auth.points = res.remainingPoints
     Toast('兑换成功，待发货')
     setTimeout(() => {
-      router.push('/me/orders')
+      void router.push('/me/orders')
     }, 1200)
   } catch (e) {
     Toast(e instanceof Error ? e.message : '兑换失败，请稍后重试')

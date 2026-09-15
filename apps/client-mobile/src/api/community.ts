@@ -1,6 +1,5 @@
 import { apiMode, httpGet } from './http'
-import type { CommunityPolicy, TalentMember } from '@/types'
-import type { EnterpriseRecord } from '@/mock/db'
+import type { CommunityPolicy, EnterpriseRecord, TalentCard, TalentMember } from '@/types'
 import * as mock from '@/mock/handlers/community'
 
 /* 社区域契约（社区服务 / 人才库 / 企业库）。
@@ -15,6 +14,12 @@ export async function fetchPolicies(params?: { keyword?: string; category?: stri
 export async function fetchTalents(params?: { keyword?: string }): Promise<TalentMember[]> {
   if (apiMode === 'mock') return mock.fetchTalents(params)
   return httpGet<TalentMember[]>('/community/talents')
+}
+
+/** GET /api/app/community/talents/:uid — 公开人才名片（简历式，人才库点入） */
+export async function fetchTalentCard(uid: string): Promise<TalentCard> {
+  if (apiMode === 'mock') return mock.fetchTalentCard(uid)
+  return httpGet<TalentCard>(`/community/talents/${uid}`)
 }
 
 export async function fetchEnterpriseList(params?: { keyword?: string; industry?: string }): Promise<EnterpriseRecord[]> {

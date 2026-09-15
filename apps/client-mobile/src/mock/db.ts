@@ -1,10 +1,15 @@
 import type {
   AppConfig,
+  ApplicationFormSchema,
+  ApplicationType,
   Article,
   ArticleColumn,
   CommunityEvent,
   CommunityPolicy,
   Demand,
+  EnterpriseInvitation,
+  EnterpriseRecord,
+  ExperienceProfile,
   Goods,
   HomeArticleCard,
   HomeBanner,
@@ -12,6 +17,7 @@ import type {
   HomeEventCard,
   MyApplication,
   MyEnrollmentItem,
+  MyIndividualCard,
   MyOrder,
   MyProject,
   MyResponseItem,
@@ -50,6 +56,25 @@ export const dicts: Record<string, { code: string; label: string }[]> = {
     { code: 'ET002', label: '培训' },
     { code: 'ET003', label: '路演' },
     { code: 'ET004', label: '社交' },
+    { code: 'ET005', label: '赛事' },
+  ],
+  industry: [
+    { code: 'IN001', label: '人工智能' },
+    { code: 'IN002', label: '芯片半导体' },
+    { code: 'IN003', label: '文化创意' },
+    { code: 'IN004', label: '企业服务 SaaS' },
+    { code: 'IN005', label: '新材料' },
+    { code: 'IN006', label: '智慧交通' },
+    { code: 'IN007', label: '设计服务' },
+    { code: 'IN008', label: '商业航天' },
+    { code: 'IN009', label: '医疗健康' },
+    { code: 'IN010', label: '风险投资' },
+    { code: 'IN011', label: '财务咨询' },
+  ],
+  goods_category: [
+    { code: 'GC001', label: '实物商品' },
+    { code: 'GC002', label: '虚拟服务' },
+    { code: 'GC003', label: '权益券' },
   ],
   article_column: [
     { code: 'CL001', label: '社区动态' },
@@ -70,6 +95,14 @@ export interface MockAccount {
   points: number
   identities: UserIdentity[]
   registeredAt: string
+  gender?: 'male' | 'female' | 'unknown'
+  bio?: string
+  /** 头像图片地址（上传返回的 url） */
+  avatar?: string
+  /** 实名认证：真实姓名与证件号（[MOCK-ONLY] 缺口 §7.1-18；真实后端走三要素核验） */
+  realName?: string
+  citizenId?: string
+  realNameVerifiedAt?: string
 }
 
 export const accounts: MockAccount[] = [
@@ -85,6 +118,8 @@ export const accounts: MockAccount[] = [
       { type: 'community_individual', level: 4, levelName: '群岛共建者', experience: 2410 },
     ],
     registeredAt: '2025-03-12 09:30',
+    gender: 'male',
+    bio: '独立产品设计师，专注 SaaS 产品体验设计。',
   },
   {
     uid: 'U1004',
@@ -99,6 +134,11 @@ export const accounts: MockAccount[] = [
       { type: 'community_enterprise', enterpriseId: 'E2001', enterpriseName: '芯启半导体', enterpriseRole: '创始人' },
     ],
     registeredAt: '2025-03-15 14:20',
+    gender: 'male',
+    bio: '全栈工程师，芯启半导体创始人，专注车规级芯片。',
+    realName: '苏明远',
+    citizenId: '330106199203081236',
+    realNameVerifiedAt: '2025-03-16 10:20',
   },
   {
     uid: 'U1006',
@@ -112,6 +152,11 @@ export const accounts: MockAccount[] = [
       { type: 'community_enterprise', enterpriseId: 'E2004', enterpriseName: '木白设计工作室', enterpriseRole: '总经理' },
     ],
     registeredAt: '2025-07-23 10:05',
+    gender: 'female',
+    bio: '品牌与空间设计师，木白设计工作室总经理。',
+    realName: '林晚',
+    citizenId: '330106199507221023',
+    realNameVerifiedAt: '2025-07-24 09:12',
   },
   {
     uid: 'U1014',
@@ -125,6 +170,8 @@ export const accounts: MockAccount[] = [
       { type: 'external_enterprise', organizationName: '云径数据' },
     ],
     registeredAt: '2025-05-09 16:40',
+    gender: 'male',
+    bio: '数据中台产品经理，云径数据联合创始人。',
   },
   {
     uid: 'U1015',
@@ -135,6 +182,7 @@ export const accounts: MockAccount[] = [
     points: 0,
     identities: [{ type: 'individual' }],
     registeredAt: '2026-09-12 09:00',
+    gender: 'unknown',
   },
   {
     uid: 'U1009',
@@ -145,6 +193,7 @@ export const accounts: MockAccount[] = [
     points: 0,
     identities: [{ type: 'individual' }],
     registeredAt: '2025-08-01 11:00',
+    gender: 'unknown',
   },
 ]
 
@@ -161,33 +210,53 @@ export function accountByUid(uid: string): MockAccount | undefined {
 export const demands: Demand[] = [
   {
     id: 'D4001', title: '社区品牌 IP 形象共创', description: '为聚屿社区设计一套品牌 IP 形象与基础VI，需提供 3 个方向的概念稿与最终源文件。',
-    categoryLabel: '设计', status: 'published', publisherUid: 'U1001', publisherName: '陈屿', publisherIdentity: 'community_individual',
+    categoryLabel: '设计', status: 'published', kind: 'task', publisherUid: 'U1001', publisherName: '陈屿', publisherIdentity: 'community_individual',
+    deliverable: '3 个方向的 IP 概念稿、最终 VI 源文件与使用说明', budget: '¥8,000 - 15,000',
+    deliverBy: '2026-09-25', contactName: '陈屿', contactPhone: '13800000001', contactEmail: 'chenyu@example.com',
     deadline: '2026-09-30', responseCount: 3, visibilityIdentities: [], visibilityLevels: [], createdAt: '2026-09-02 10:00',
   },
   {
     id: 'D4002', title: '社区小程序前端开发合作', description: '与社区联合开发成员端小程序，涵盖活动报名、需求广场与积分商城入口，三家社区企业联合共研。',
-    categoryLabel: '技术开发', status: 'published', publisherUid: 'U1014', publisherName: '云径数据', publisherIdentity: 'external_enterprise',
+    categoryLabel: '技术开发', status: 'published', kind: 'investment', publisherUid: 'U1014', publisherName: '云径数据', publisherIdentity: 'external_enterprise',
+    cooperationNeed: '寻找 3 家社区企业联合共研，需要产品设计与前端研发资源', returnOffer: '联合署名、成果共享、优先内推合作机会',
+    contactName: '周慕深', contactPhone: '13800000004', contactEmail: 'zhoumoshen@example.com',
     deadline: '2026-10-15', responseCount: 2, visibilityIdentities: ['community_enterprise', 'external_enterprise'], visibilityLevels: [], createdAt: '2026-09-06 17:12',
   },
   {
-    id: 'D4003', title: '低价海报加急代做', description: '加急海报，价格好商量。', categoryLabel: '设计', status: 'rejected',
-    publisherUid: 'U1001', publisherName: '陈屿', publisherIdentity: 'community_individual', deadline: '2026-09-20', responseCount: 0,
+    id: 'D4003', title: '低价海报加急代做', description: '加急海报，价格好商量。', categoryLabel: '设计', status: 'rejected', kind: 'task',
+    publisherUid: 'U1001', publisherName: '陈屿', publisherIdentity: 'community_individual', deliverBy: '2026-09-18', contactName: '陈屿', contactPhone: '13800000001',
+    deadline: '2026-09-20', responseCount: 0,
     visibilityIdentities: [], visibilityLevels: [], createdAt: '2026-09-03 09:00', rejectReason: '与社区定位不符，请补充完整需求说明与合理预算',
   },
   {
     id: 'D4004', title: '共享会议室隔音改造咨询', description: '会议室 A 隔音效果不佳，寻求改造方案与报价。', categoryLabel: '供应链',
-    status: 'published', publisherUid: 'U1006', publisherName: '木白设计工作室', publisherIdentity: 'community_enterprise', deadline: '2026-10-01',
+    status: 'published', kind: 'task', publisherUid: 'U1006', publisherName: '木白设计工作室', publisherIdentity: 'community_enterprise', deadline: '2026-10-01',
+    deliverable: '隔音改造方案、材料清单与施工报价', deliverBy: '2026-09-28',
+    contactName: '林晚', contactPhone: '13800000003', contactEmail: 'linwan@example.com',
     responseCount: 2, visibilityIdentities: [], visibilityLevels: [], createdAt: '2026-09-05 09:00',
   },
   {
-    id: 'D4005', title: '季度财税合规咨询', description: 'Q4 财税合规体检与政策解读，需要上门服务。', categoryLabel: '法务财务', status: 'published',
-    publisherUid: 'U1004', publisherName: '苏明远', publisherIdentity: 'community_enterprise', deadline: '2026-10-08', responseCount: 1,
-    visibilityIdentities: [], visibilityLevels: [3, 4, 5], createdAt: '2026-09-07 14:00',
+    id: 'D4005', title: '季度财税合规咨询', description: 'Q4 财税合规体检与政策解读，需要上门服务。', categoryLabel: '法务财务', status: 'published', kind: 'task',
+    publisherUid: 'U1004', publisherName: '苏明远', publisherIdentity: 'community_enterprise', deadline: '2026-10-08',
+    deliverable: 'Q4 财税合规体检报告与一场政策解读会', deliverBy: '2026-10-02',
+    contactName: '苏明远', contactPhone: '13800000002',
+    responseCount: 1, visibilityIdentities: [], visibilityLevels: [3, 4, 5], createdAt: '2026-09-07 14:00',
   },
   {
-    id: 'D4012', title: '社区公众号栏目代运营', description: '公众号每周两更，需选题、撰写与排版。', categoryLabel: '市场', status: 'pending',
+    id: 'D4012', title: '社区公众号栏目代运营', description: '公众号每周两更，需选题、撰写与排版。', categoryLabel: '市场', status: 'pending', kind: 'cooperation',
     publisherUid: 'U1001', publisherName: '陈屿', publisherIdentity: 'community_individual', deadline: '2026-11-01', responseCount: 0,
+    bottleneck: '团队精力集中在产品研发，公众号「每周两更」难以为继，希望找到稳定的内容团队承接',
+    partnershipMode: '按季度代运营合作，可先试运营一个月',
+    returnOffer: '已有栏目定位与素材库，可提供选题方向、社区案例与署名曝光',
     visibilityIdentities: [], visibilityLevels: [], createdAt: '2026-09-10 11:00',
+  },
+  {
+    id: 'D4013', title: '设计工作室寻求线上渠道合作伙伴', description: '团队深耕品牌与空间设计，希望找到擅长线上获客与内容运营的伙伴联合拓展。', categoryLabel: '市场', status: 'published', kind: 'cooperation',
+    publisherUid: 'U1006', publisherName: '木白设计工作室', publisherIdentity: 'community_enterprise', deadline: '2026-10-20', responseCount: 0,
+    bottleneck: '获客渠道单一，线上内容与投放缺乏专人运营',
+    partnershipMode: '联合运营 + 渠道分成，可按项目结算',
+    returnOffer: '设计能力与案例背书，可承接伙伴客户的品牌与空间设计',
+    visibilityIdentities: [], visibilityLevels: [], createdAt: '2026-09-12 15:30',
   },
 ]
 
@@ -202,45 +271,55 @@ export const responsesByUid: Record<string, MyResponseItem[]> = {
   ],
 }
 
-/* ---------- 活动中心（EV6001 为签到演示主场：签到窗全天 [MOCK-ONLY]） ---------- */
+/* [MOCK-ONLY] 演示日期工具：活动时间按「今天 + 偏移天」生成，保证报名/签到等场景在任意日期打开都可走通 */
+function demoDate(dayOffset: number, hhmm: string): string {
+  const d = new Date()
+  d.setDate(d.getDate() + dayOffset)
+  const [h, m] = hhmm.split(':').map(Number)
+  d.setHours(h, m, 0, 0)
+  const pad = (n: number) => String(n).padStart(2, '0')
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(h)}:${pad(m)}`
+}
+
+/* ---------- 活动中心（EV6001 为签到演示主场：今晚 19:00，签到窗 18:30-21:00 [MOCK-ONLY]） ---------- */
 
 export const events: CommunityEvent[] = [
   {
     id: 'EV6001', title: '第 12 期创业夜话 · AI 应用的落地时刻', typeLabel: '沙龙',
-    startTime: '2026-09-12 19:00', endTime: '2026-09-12 21:00', location: '岛屿咖啡区',
-    capacity: 60, approvedCount: 8, requireReview: false, enrollmentDeadline: '2026-09-12 18:00', status: 'published',
+    startTime: demoDate(0, '19:00'), endTime: demoDate(0, '21:00'), location: '岛屿咖啡区',
+    capacity: 60, approvedCount: 8, requireReview: false, enrollmentDeadline: demoDate(0, '18:00'), status: 'published',
     visibilityIdentities: [], visibilityLevels: [], enrollmentIdentities: [], enrollmentLevels: [],
     description: '两位一线 AI 创业者聊落地：场景选择、成本结构与团队配置。',
-    venueLat: 31.2304, venueLng: 121.4737, checkinRadiusM: 200, checkinOpenMin: '00:00', checkinCloseMin: '23:59',
+    venueLat: 31.2304, venueLng: 121.4737, checkinRadiusM: 200, checkinOpenMin: '18:30', checkinCloseMin: '21:00',
   },
   {
     id: 'EV6005', title: '设计思维工作坊：从用户访谈到原型', typeLabel: '培训',
-    startTime: '2026-09-18 14:00', endTime: '2026-09-18 17:00', location: '共享会议室 A',
-    capacity: 24, approvedCount: 2, requireReview: true, enrollmentDeadline: '2026-09-17 12:00', status: 'published',
+    startTime: demoDate(5, '14:00'), endTime: demoDate(5, '17:00'), location: '共享会议室 A',
+    capacity: 24, approvedCount: 2, requireReview: true, enrollmentDeadline: demoDate(4, '12:00'), status: 'published',
     visibilityIdentities: [], visibilityLevels: [], enrollmentIdentities: [], enrollmentLevels: [],
     description: '两小时工作坊，带你完整走一遍用户访谈到低保真原型的流程。',
     venueLat: 31.2318, venueLng: 121.4751, checkinRadiusM: 200, checkinOpenMin: '13:30', checkinCloseMin: '17:00',
   },
   {
     id: 'EV6003', title: '聚屿社区年度路演日 2026', typeLabel: '路演',
-    startTime: '2026-09-26 13:30', endTime: '2026-09-26 18:00', location: '聚屿路演厅',
-    capacity: 120, approvedCount: 2, requireReview: true, enrollmentDeadline: '2026-09-24 12:00', status: 'published',
+    startTime: demoDate(13, '13:30'), endTime: demoDate(13, '18:00'), location: '聚屿路演厅',
+    capacity: 120, approvedCount: 2, requireReview: true, enrollmentDeadline: demoDate(12, '12:00'), status: 'published',
     visibilityIdentities: [], visibilityLevels: [], enrollmentIdentities: [], enrollmentLevels: [],
     description: '十个社区项目登台路演，投资人现场点评。', venueLat: 31.2325, venueLng: 121.4762,
     checkinRadiusM: 200, checkinOpenMin: '13:00', checkinCloseMin: '18:00',
   },
   {
     id: 'EV6009', title: 'Q4 社区企业闭门交流会', typeLabel: '社交',
-    startTime: '2026-10-15 18:30', endTime: '2026-10-15 21:00', location: '聚屿路演厅',
-    capacity: 50, approvedCount: 0, requireReview: false, enrollmentDeadline: '2026-10-14 18:00', status: 'published',
+    startTime: demoDate(32, '18:30'), endTime: demoDate(32, '21:00'), location: '聚屿路演厅',
+    capacity: 50, approvedCount: 0, requireReview: false, enrollmentDeadline: demoDate(31, '18:00'), status: 'published',
     visibilityIdentities: ['community_enterprise', 'external_enterprise'], visibilityLevels: [], enrollmentIdentities: ['community_enterprise', 'external_enterprise'], enrollmentLevels: [],
     description: '仅面向社区企业与合作伙伴的闭门交流。', venueLat: 31.2325, venueLng: 121.4762,
     checkinRadiusM: 200, checkinOpenMin: '18:00', checkinCloseMin: '21:00',
   },
   {
     id: 'EV6008', title: '创业心理舒缓小组（第 3 期）', typeLabel: '沙龙',
-    startTime: '2026-09-08 19:00', endTime: '2026-09-08 21:00', location: '岛屿咖啡区',
-    capacity: 20, approvedCount: 12, requireReview: false, enrollmentDeadline: '2026-09-07 18:00', status: 'ended',
+    startTime: demoDate(-5, '19:00'), endTime: demoDate(-5, '21:00'), location: '岛屿咖啡区',
+    capacity: 20, approvedCount: 12, requireReview: false, enrollmentDeadline: demoDate(-6, '18:00'), status: 'ended',
     visibilityIdentities: [], visibilityLevels: [], enrollmentIdentities: [], enrollmentLevels: [],
     description: '已结束活动（用于签到失败态演示）。', venueLat: 31.2304, venueLng: 121.4737,
     checkinRadiusM: 200, checkinOpenMin: '18:30', checkinCloseMin: '21:00',
@@ -295,10 +374,10 @@ export const spaces: Space[] = [
 
 export const reservationsByUid: Record<string, SpaceReservation[]> = {
   U1001: [
-    { id: 'SR5001', spaceId: 'S1002', spaceName: '共享会议室 A', date: '2026-09-20', start: '14:00', end: '16:00', status: 'approved', createdAt: '2026-09-10 10:00' },
+    { id: 'SR5001', spaceId: 'S1002', spaceName: '共享会议室 A', date: '2026-09-20', start: '14:00', end: '16:00', status: 'approved', createdAt: '2026-09-10 10:00', identityType: 'community_individual', subjectName: '陈屿' },
   ],
   U1004: [
-    { id: 'SR5101', spaceId: 'S1002', spaceName: '共享会议室 A', date: '2026-09-21', start: '10:00', end: '12:00', status: 'pending', createdAt: '2026-09-11 09:00' },
+    { id: 'SR5101', spaceId: 'S1002', spaceName: '共享会议室 A', date: '2026-09-21', start: '10:00', end: '12:00', status: 'pending', createdAt: '2026-09-11 09:00', identityType: 'community_enterprise', subjectName: '芯启半导体' },
   ],
 }
 
@@ -336,23 +415,49 @@ export const myArticlesByUid: Record<string, MySubmittedArticle[]> = {
   ],
 }
 
-/* ---------- 企业展示页 ---------- */
-
-export interface EnterpriseRecord {
-  id: string
-  name: string
-  industry: string
-  size: string
-  description: string
-  showcaseStatus: 'published' | 'none'
-  members: string[]
-}
+/* ---------- 企业名片（原「展示页」更名，含成员与联系人） ---------- */
 
 export const enterprises: EnterpriseRecord[] = [
-  { id: 'E2001', name: '芯启半导体', industry: '集成电路', size: '50-99 人', description: '车规级芯片设计与验证服务商，社区首批入驻企业。', showcaseStatus: 'published', members: ['苏明远'] },
-  { id: 'E2004', name: '木白设计工作室', industry: '设计', size: '5-9 人', description: '品牌与空间设计工作室，社区多个公共空间的设计方。', showcaseStatus: 'published', members: ['林晚'] },
-  { id: 'E2002', name: '云径数据', industry: '数据服务', size: '20-49 人', description: '合作企业，数据中台与小程序联合研发伙伴。', showcaseStatus: 'none', members: ['周慕深'] },
+  {
+    id: 'E2001', name: '芯启半导体', industry: '集成电路', size: '50-99 人',
+    foundedAt: '2019-05', website: 'https://xinqi.example.com', address: '聚屿社区 3 号楼 5 层',
+    services: '车规级芯片设计、验证与量产支持',
+    advantages: '核心团队来自头部芯片公司，具备完整的车规认证经验，已服务多家主机厂与 Tier1 供应商。',
+    description: '车规级芯片设计与验证服务商，社区首批入驻企业。', showcaseStatus: 'published',
+    contactUid: 'U1004', contactName: '苏明远',
+    members: [
+      { uid: 'U1004', name: '苏明远', role: '创始人' },
+      { name: '江晚晴', role: '产品负责人', phone: '13900001021', permissions: ['respond_demand', 'space_reserve', 'article_submit'] },
+    ],
+  },
+  {
+    id: 'E2004', name: '木白设计工作室', industry: '设计', size: '5-9 人',
+    foundedAt: '2016-03', website: 'https://mubai.example.com', address: '聚屿社区 2 号楼 201',
+    services: '品牌设计、空间设计与施工监理',
+    advantages: '深耕本地创业社区，作品覆盖多个公共空间与社区品牌，交付口碑稳定。',
+    description: '品牌与空间设计工作室，社区多个公共空间的设计方。', showcaseStatus: 'published',
+    contactUid: 'U1006', contactName: '林晚',
+    members: [
+      { uid: 'U1006', name: '林晚', role: '总经理' },
+      { name: '周予安', role: '设计总监' },
+    ],
+  },
+  {
+    id: 'E2002', name: '云径数据', industry: '数据服务', size: '20-49 人',
+    foundedAt: '2018-09', website: 'https://yunjing.example.com', address: '软件园 B 座 12 层',
+    services: '数据中台建设与小程序联合研发',
+    advantages: '数据工程团队 20+，具备多行业数据中台交付经验，支持联合研发与长期运维。',
+    description: '合作企业，数据中台与小程序联合研发伙伴。', showcaseStatus: 'none',
+    contactUid: 'U1014', contactName: '周慕深',
+    members: [{ uid: 'U1014', name: '周慕深', role: '联合创始人' }],
+  },
 ]
+
+/* [MOCK-ONLY] 企业退驻/注销申请（缺口 §7.1-16：真实后端走管理端审核） */
+export const enterpriseExitApplications: Record<string, { status: 'pending'; reason?: string; at: string }> = {}
+
+/* [MOCK-ONLY] 企业成员邀请记录（缺口 §7.1-17：真实后端为邀请记录 + 站内信/短信，接受后写入成员） */
+export const enterpriseInvitations: EnterpriseInvitation[] = []
 
 /* ---------- 项目协作（只读） ---------- */
 
@@ -390,6 +495,80 @@ export const applicationsByUid: Record<string, MyApplication[]> = {
   U1015: [],
 }
 
+/* ---------- 申请表单 schema [MOCK-ONLY]（缺口 §7.1-14：接入期由后端按类型下发自定义字段） ---------- */
+
+const industryOptions = dicts.industry.map((d) => ({ label: d.label, value: d.label }))
+
+export const applicationFormSchemas: Partial<Record<ApplicationType, ApplicationFormSchema>> = {
+  settle: {
+    type: 'settle',
+    title: '企业入驻申请',
+    subtitle: '提交资料并通过审核后，成为「社区企业」并获得办公空间',
+    submitLabel: '提交入驻申请',
+    tips: ['企业入驻需在社区拥有办公空间（工位或独立办公室）', '请准备营业执照；审核约 3 个工作日，结果站内信通知'],
+    fields: [
+      { key: 'companyName', label: '企业名称', type: 'text', required: true, placeholder: '与营业执照一致', maxlength: 60 },
+      { key: 'creditCode', label: '统一社会信用代码', type: 'text', required: true, placeholder: '18 位统一社会信用代码', maxlength: 18 },
+      { key: 'industry', label: '所属行业', type: 'select', required: true, options: industryOptions },
+      { key: 'companySize', label: '团队规模', type: 'select', required: true, options: [
+        { label: '1-9 人', value: '1-9 人' },
+        { label: '10-49 人', value: '10-49 人' },
+        { label: '50-99 人', value: '50-99 人' },
+        { label: '100 人以上', value: '100 人以上' },
+      ] },
+      { key: 'officeNeeds', label: '办公空间需求', type: 'select', required: true, help: '企业入驻需在社区拥有办公空间', options: [
+        { label: '1-2 个工位', value: '1-2 个工位' },
+        { label: '3-6 个工位', value: '3-6 个工位' },
+        { label: '独立办公室', value: '独立办公室' },
+        { label: '其他（在简介中说明）', value: '其他' },
+      ] },
+      { key: 'settleDate', label: '预计入驻时间', type: 'date', required: true },
+      { key: 'contactName', label: '联系人', type: 'text', required: true, maxlength: 20 },
+      { key: 'contactPhone', label: '联系电话', type: 'text', required: true, placeholder: '11 位手机号', maxlength: 11 },
+      { key: 'intro', label: '企业简介与主营业务', type: 'textarea', required: true, maxlength: 500, placeholder: '简要介绍业务方向、核心产品与入驻诉求…' },
+      { key: 'businessLicense', label: '营业执照', type: 'upload', required: true, accept: 'image/*,application/pdf', help: '支持 JPG/PNG/PDF，单个文件 ≤10MB' },
+      { key: 'extraFiles', label: '其他补充材料', type: 'upload', accept: 'image/*,application/pdf', multiple: true, maxCount: 3, help: '选填，最多 3 个文件' },
+    ],
+  },
+  cooperation: {
+    type: 'cooperation',
+    title: '合作伙伴申请',
+    subtitle: '无需入驻办公，审核通过后成为「合作企业」',
+    submitLabel: '提交合作申请',
+    tips: ['适合投资机构、服务机构、高校院所等', '审核通过后开通企业名片申请与项目对接'],
+    fields: [
+      { key: 'orgName', label: '机构名称', type: 'text', required: true, maxlength: 60 },
+      { key: 'orgType', label: '机构类型', type: 'select', required: true, options: [
+        { label: '企业', value: '企业' },
+        { label: '投资机构', value: '投资机构' },
+        { label: '高校院所', value: '高校院所' },
+        { label: '服务机构', value: '服务机构' },
+        { label: '其他', value: '其他' },
+      ] },
+      { key: 'coopField', label: '合作领域与方式', type: 'textarea', required: true, maxlength: 300, placeholder: '希望在哪些领域、以什么方式与社区及社区企业合作…' },
+      { key: 'resources', label: '可提供的资源', type: 'textarea', maxlength: 200, placeholder: '选填：资金、渠道、服务能力等' },
+      { key: 'contactName', label: '联系人', type: 'text', required: true, maxlength: 20 },
+      { key: 'contactPhone', label: '联系电话', type: 'text', required: true, maxlength: 11 },
+      { key: 'attachments', label: '资质或案例材料', type: 'upload', accept: 'image/*,application/pdf', multiple: true, maxCount: 3, help: '选填，最多 3 个文件' },
+    ],
+  },
+  individual: {
+    type: 'individual',
+    title: '人才登记',
+    subtitle: '登记个人专长，审核通过后成为「社区个体」',
+    submitLabel: '提交人才登记',
+    tips: ['审核通过后进入社区人才库，可被社区企业按需检索与对接', '登记即代表同意社区向入驻企业展示你的专长信息'],
+    fields: [
+      { key: 'realName', label: '真实姓名', type: 'text', required: true, maxlength: 20 },
+      { key: 'skills', label: '擅长领域', type: 'text', required: true, placeholder: '如：产品设计 / 前端开发 / 法务财税', maxlength: 40 },
+      { key: 'years', label: '从业年限', type: 'number', required: true, placeholder: '如：5' },
+      { key: 'intro', label: '个人简介', type: 'textarea', required: true, maxlength: 300, placeholder: '介绍你的经验、代表项目与可提供的帮助…' },
+      { key: 'contactPhone', label: '联系电话', type: 'text', required: true, maxlength: 11 },
+      { key: 'portfolio', label: '作品集或简历', type: 'upload', accept: 'image/*,application/pdf', multiple: true, maxCount: 2, help: '选填，最多 2 个文件' },
+    ],
+  },
+}
+
 /* ---------- 经验值流水（缺口 §7-7） ---------- */
 
 export const experienceByUid: Record<string, { records: { id: string; delta: number; balance: number; reason: string; at: string }[]; identityLabel: string; level: number; levelName: string; nextLevelExp: number }> = {
@@ -404,6 +583,25 @@ export const experienceByUid: Record<string, { records: { id: string; delta: num
   U1004: {
     identityLabel: '社区个体', level: 3, levelName: '岛屿开拓者', nextLevelExp: 1800,
     records: [{ id: 'EX4101', delta: +50, balance: 1320, reason: '首次绑定社区个体身份', at: '2026-06-30 10:00' }],
+  },
+}
+
+/** 企业经验（社区企业身份维度；身份隔离：企业经验与个人经验互不相通） */
+export const enterpriseExperienceByEid: Record<string, ExperienceProfile> = {
+  E2001: {
+    identityLabel: '社区企业', level: 3, levelName: '同行先锋', nextLevelExp: 1800,
+    records: [
+      { id: 'EX6101', delta: +200, balance: 680, reason: '联合立项：车规芯片验证项目', at: '2026-08-26 15:00' },
+      { id: 'EX6042', delta: +80, balance: 480, reason: '承办社区技术分享会', at: '2026-08-08 14:00' },
+      { id: 'EX6001', delta: +400, balance: 400, reason: '首次入驻社区企业', at: '2026-05-20 10:00' },
+    ],
+  },
+  E2004: {
+    identityLabel: '社区企业', level: 2, levelName: '启航伙伴', nextLevelExp: 800,
+    records: [
+      { id: 'EX7008', delta: +120, balance: 260, reason: '社区公共空间设计合作', at: '2026-08-12 11:00' },
+      { id: 'EX7001', delta: +140, balance: 140, reason: '首次入驻社区企业', at: '2026-06-18 10:00' },
+    ],
   },
 }
 
@@ -449,6 +647,13 @@ export const noticesByUid: Record<string, UserNotice[]> = {
   U1015: [],
 }
 
+/** 统一时间戳：YYYY-MM-DD HH:mm（与后端契约一致） */
+export function nowStamp(): string {
+  const d = new Date()
+  const pad = (n: number) => String(n).padStart(2, '0')
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`
+}
+
 /** 未读数（供 devtools 与壳角标） */
 export function unreadCount(uid: string): number {
   return (noticesByUid[uid] ?? []).filter((n) => !n.read).length
@@ -456,7 +661,7 @@ export function unreadCount(uid: string): number {
 
 /** [MOCK-ONLY] 通知触发点（与未来后端触发点一一对应） */
 export function pushNotice(uid: string, notice: Omit<UserNotice, 'id' | 'read' | 'at'>): void {
-  const at = new Date().toLocaleString('zh-CN', { hour12: false }).slice(0, 16)
+  const at = nowStamp()
   ;(noticesByUid[uid] ??= []).unshift({ id: `UN${Date.now()}${Math.floor(Math.random() * 90 + 10)}`, at, read: false, ...notice })
 }
 
@@ -466,7 +671,7 @@ export function grantPoints(uid: string, delta: number, reason: string, source: 
   if (!account) return
   const records = (pointsRecordsByUid[uid] ??= [])
   const balance = (records[0]?.balance ?? account.points) + delta
-  const at = new Date().toLocaleString('zh-CN', { hour12: false }).slice(0, 16)
+  const at = nowStamp()
   records.unshift({ id: `PT${Date.now()}`, delta, balance, reason, source, at })
   account.points = balance
   pushNotice(uid, { type: 'points', title: `积分${delta >= 0 ? '到账' : '变动'} ${delta >= 0 ? '+' : ''}${delta}`, content: `${reason}，当前积分 ${balance}。`, link: '/me/points' })
@@ -480,16 +685,24 @@ export const homeBanners: HomeBanner[] = [
   { id: 'BN3', title: '积分商城上新', subtitle: '会议室优先预约卡等你兑换' },
 ]
 
-export const homeEvents: HomeEventCard[] = [
-  { id: 'EV6001', title: '第 12 期创业夜话 · AI 应用的落地时刻', type: '沙龙', startTime: '2026-09-12 19:00', location: '岛屿咖啡区', enrolled: 8, capacity: 60 },
-  { id: 'EV6005', title: '设计思维工作坊：从用户访谈到原型', type: '培训', startTime: '2026-09-18 14:00', location: '共享会议室 A', enrolled: 2, capacity: 24 },
-  { id: 'EV6003', title: '聚屿社区年度路演日 2026', type: '路演', startTime: '2026-09-26 13:30', location: '聚屿路演厅', enrolled: 2, capacity: 120 },
-]
+/* 首页活动卡从活动列表派生，保证与活动详情的时间/报名数一致 */
+export const homeEvents: HomeEventCard[] = events
+  .filter((e) => e.status === 'published')
+  .slice(0, 3)
+  .map((e) => ({
+    id: e.id,
+    title: e.title,
+    type: e.typeLabel,
+    startTime: e.startTime,
+    location: e.location,
+    enrolled: e.approvedCount,
+    capacity: e.capacity,
+  }))
 
 export const homeDemands: HomeDemandCard[] = [
-  { id: 'D4001', title: '社区品牌 IP 形象共创', categoryLabel: '设计', publisherName: '陈屿', publisherIdentity: 'community_individual', deadline: '2026-09-30', responseCount: 3 },
-  { id: 'D4004', title: '共享会议室隔音改造咨询', categoryLabel: '供应链', publisherName: '木白设计工作室', publisherIdentity: 'community_enterprise', deadline: '2026-10-01', responseCount: 2 },
-  { id: 'D4005', title: '季度财税合规咨询', categoryLabel: '法务财务', publisherName: '苏明远', publisherIdentity: 'community_enterprise', deadline: '2026-10-08', responseCount: 1 },
+  { id: 'D4001', title: '社区品牌 IP 形象共创', categoryLabel: '设计', publisherName: '陈屿', publisherIdentity: 'community_individual', deliverBy: '2026-09-25', responseCount: 3 },
+  { id: 'D4004', title: '共享会议室隔音改造咨询', categoryLabel: '供应链', publisherName: '木白设计工作室', publisherIdentity: 'community_enterprise', deliverBy: '2026-09-28', responseCount: 2 },
+  { id: 'D4005', title: '季度财税合规咨询', categoryLabel: '法务财务', publisherName: '苏明远', publisherIdentity: 'community_enterprise', deliverBy: '2026-10-02', responseCount: 1 },
 ]
 
 export const homeArticles: HomeArticleCard[] = [
@@ -502,23 +715,23 @@ export const homeArticles: HomeArticleCard[] = [
 
 export const communityPolicies: CommunityPolicy[] = [
   {
-    id: 'PT1',
+    id: 'PL1',
     category: '入驻指南',
-    title: '企业入驻流程与权益',
-    summary: '提交企业资料 → 社区审核 → 签约入驻，享受工位、资源对接与活动优先。',
-    content: '企业入驻面向在社区注册的创业团队。流程：1）在「我的-提交申请」选择企业入驻并填写企业简介与主要业务；2）社区运营 3 个工作日内审核；3）审核通过后签约并分配办公空间与专属顾问。入驻企业可享受共享会议室优先预约、需求广场发布、路演活动优先报名等权益。',
-    updatedAt: '2026-08-01',
+    title: '企业合作流程与权益',
+    summary: '企业合作分「企业入驻」与「合作伙伴」两种，按需选择并提交对应申请。',
+    content: '企业合作分两种方式：1）企业入驻——需在社区拥有办公空间（工位或办公室），审核通过后成为「社区企业」，可享受共享会议室优先预约、需求广场发布、路演活动优先报名等权益；2）合作伙伴——无需入驻办公，以项目与资源合作方式参与社区共建，审核通过后成为「合作企业」，可申请企业名片并优先对接社区企业资源。两种方式均从首页「企业合作」入口了解差异并提交申请，社区运营 3 个工作日内审核。',
+    updatedAt: '2026-09-13',
   },
   {
-    id: 'PT2',
+    id: 'PL2',
     category: '入驻指南',
     title: '人才登记说明',
-    summary: '登记个人专长可进入社区人才库，被企业按需检索与对接。',
-    content: '社区个体可登记自己的专长领域（设计 / 技术 / 法务 / 财务 / 市场等）与个人简介，审核通过后进入人才库展示。企业发布的需求可由人才库成员响应，或由社区运营进行定向撮合。登记即代表同意社区将你的专长信息展示给入驻企业。',
-    updatedAt: '2026-08-01',
+    summary: '登记真实姓名、专长与简介，审核通过后成为「社区个体」。',
+    content: '人才登记面向设计师、开发者、顾问等自由职业者与专业人才。从首页「人才登记」入口提交真实姓名、擅长领域、从业年限与个人简介（可附作品集/简历），社区运营 3 个工作日内审核；通过后授予「社区个体」身份与经验等级，进入社区人才库，可被社区企业按需检索、响应需求或参与项目协作。',
+    updatedAt: '2026-09-13',
   },
   {
-    id: 'PT3',
+    id: 'PL3',
     category: '空间政策',
     title: '公共空间使用规范',
     summary: '会议室/路演厅需线上预约，按需使用、超时释放、保持整洁。',
@@ -526,7 +739,7 @@ export const communityPolicies: CommunityPolicy[] = [
     updatedAt: '2026-07-20',
   },
   {
-    id: 'PT4',
+    id: 'PL4',
     category: '活动规范',
     title: '活动发起与报名规则',
     summary: '活动由社区运营统一发布，报名即到、如需取消请提前 24 小时。',
@@ -534,7 +747,7 @@ export const communityPolicies: CommunityPolicy[] = [
     updatedAt: '2026-07-20',
   },
   {
-    id: 'PT5',
+    id: 'PL5',
     category: '积分规则',
     title: '积分获取与使用',
     summary: '参与响应、活动报名、投稿采纳均可获得积分，可兑换商城好礼。',
@@ -542,7 +755,7 @@ export const communityPolicies: CommunityPolicy[] = [
     updatedAt: '2026-07-18',
   },
   {
-    id: 'PT6',
+    id: 'PL6',
     category: '管理制度',
     title: '社区公约',
     summary: '诚信互助、尊重隐私、共创共建，违规将被限制社区服务。',
@@ -555,18 +768,48 @@ export const communityPolicies: CommunityPolicy[] = [
 
 export const talentMembers: TalentMember[] = [
   { uid: 'U1001', name: '陈屿', role: '产品设计', intro: '5 年 SaaS 产品设计经验，擅长从 0 到 1 的体验设计。', skills: ['产品设计', '用户研究', '原型'] },
-  { uid: 'U1002', name: '林晚', role: '视觉设计', intro: '品牌与插画方向，社区多个活动的视觉主设计。', skills: ['品牌设计', '插画', 'UI'] },
-  { uid: 'U1003', name: '苏明远', role: '技术开发', intro: '全栈工程师，专注小程序与数据中台方向。', skills: ['Vue', 'Node.js', '小程序'] },
-  { uid: 'U1004', name: '许星河', role: '市场运营', intro: '本地生活与内容增长操盘手，帮助多个品牌冷启动。', skills: ['市场推广', '内容运营', '增长'] },
-  { uid: 'U1005', name: '顾之遥', role: '法务财税', intro: '执业律师，专注创业公司法务与财税合规咨询。', skills: ['公司法务', '财税合规', '合同'] },
-  { uid: 'U1006', name: '赵一鸣', role: '供应链', intro: '供应链与采购管理 8 年，熟悉制造与跨境电商。', skills: ['供应链', '采购', '跨境'] },
+  { uid: 'U1004', name: '苏明远', role: '技术开发', intro: '全栈工程师，专注小程序与数据中台方向。', skills: ['Vue', 'Node.js', '小程序'] },
+  { uid: 'U3001', name: '顾之遥', role: '法务财税', intro: '执业律师，专注创业公司法务与财税合规咨询。', skills: ['公司法务', '财税合规', '合同'] },
+  { uid: 'U3002', name: '许星河', role: '市场运营', intro: '本地生活与内容增长操盘手，帮助多个品牌冷启动。', skills: ['市场推广', '内容运营', '增长'] },
+  { uid: 'U3003', name: '赵一鸣', role: '供应链', intro: '供应链与采购管理 8 年，熟悉制造与跨境电商。', skills: ['供应链', '采购', '跨境'] },
+  { uid: 'U3004', name: '沈知微', role: '品牌设计', intro: '品牌与插画方向，多个社区活动的视觉主设计。', skills: ['品牌设计', '插画', 'UI'] },
 ]
+/* ---------- 个人名片 [MOCK-ONLY]（缺口 §7.1-16：社区个体名片自助编辑，简历式分段） ---------- */
+
+export type IndividualShowcase = Omit<MyIndividualCard, 'avatar' | 'level' | 'levelName'>
+
+export const individualShowcases: Record<string, IndividualShowcase> = {
+  U1001: {
+    displayName: '陈屿',
+    age: '29',
+    politicalStatus: '共青团员',
+    intro: '5 年 SaaS 产品设计经验，擅长从 0 到 1 的体验设计。',
+    industryExperience: '深耕 B 端 SaaS 与社区产品设计，主导过多个产品的体验重构与设计系统建设。',
+    skills: ['产品设计', '用户研究', '原型'],
+    education: [{ school: '浙江大学', major: '工业设计', degree: '本科', period: '2014 - 2018' }],
+    work: [
+      { company: '某 SaaS 科技公司', title: '高级产品设计师', period: '2021 - 至今', description: '负责核心产品体验设计，搭建组件库与设计规范。' },
+    ],
+    projects: [
+      { name: '聚屿社区品牌 IP 共创', role: '设计主理', period: '2026', description: '主导社区品牌 IP 与 VI 体系设计。' },
+    ],
+    honors: [{ name: '红点设计概念奖', date: '2023' }],
+    socials: [{ label: 'GitHub', url: 'https://github.com/chenyu-demo' }],
+    customLinks: [{ label: '个人作品集', url: 'https://portfolio.example.com/chenyu' }],
+  },
+}
 
 /* ---------- 需求/报名自增 ID ---------- */
+
 export let demandSeq = 4020
 export function nextDemandId(): string {
   return `D${demandSeq++}`
 }
 export function nextEnrollmentId(): string {
   return `EE${enrollmentSeq++}`
+}
+
+let invitationSeq = 1
+export function nextInvitationId(): string {
+  return `EI${invitationSeq++}`
 }
