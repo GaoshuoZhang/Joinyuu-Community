@@ -373,6 +373,8 @@ src/
 
 ### 7.3 契约文档待修订清单
 
+> **R0 完成注记（2026-09-16）**：本清单所列文档修订项已随 [m2-r-plan.md](./m2-r-plan.md) R0 在 `api-app-design.md` 落地——§8.1 全部 [MOCK-ONLY] 端点转正、新增 §8.2（v40~v43 端点）与 §12（站内信与通知偏好）、§4/§5/§6/§7/§8 相关扩充；`docs/entity-fields.md` 新增 §8（22 新模型 + 13 模型字段扩展）。接入期随 R1~R4 落地代码。
+
 - `docs/api-app-design.md`：新增 §12 站内信；§7 扩签到；§4 扩首页聚合（含 banner 运营位）与批量字典；§8 扩确认收货（`completed` 与后端 `finished` 口径对齐）/预约取消/经验流水/app 通用上传（图片/PDF）；§2 细化多身份 JWT 响应结构与 app 图形验证码；§5 扩申请表单 schema（`GET /application-form/:type`）、附件字段与个人名片/企业管理（`GET /me/cards`、`PUT /me/cards/individual`、`GET /me/enterprises`、`GET/PUT /me/enterprises/:id`、`transfer-contact`/`invite`/`exit-application`）；§6 扩需求类型与专属字段（`kind`/`categoryDict`/deliverable/cooperationNeed 等）；新增社区服务/人才库/企业库端点（policies/talents/enterprises）。
 - `docs/entity-fields.md`：新增 UserNotification；Activity 签到字段（venueLat/venueLng/checkinRadiusM/checkinOpenMin/checkinCloseMin）；Enrollment 签到字段（checkinAt 已存在，位置/方式待定）；字典类型注记（schema 注释写 3 类、实际 4 类含 goods_category）。
 

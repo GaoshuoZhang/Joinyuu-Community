@@ -3,7 +3,7 @@
 > M2 客户端 Web（居民端）端点设计。依据：M0 冻结的实体模型与状态流（`docs/wiki-admin-web.md`）、
 > 后端既有契约与业务规则（`docs/wiki-backend.md` §4/§5/§8）、M1.5 已落地的数据模型（43 模型）。
 > 本文档为 M2 实施的契约基线：实施前如有调整，先改本文档（记录变更）再改代码（wiki-backend §14 契约变更流程）。
-> 状态：设计稿（M1-E 产出；2026-09-12 按 M1.5 代码现状同步词汇与类型）。
+> 状态：**M2-R 接入期契约（2026-09-16 起，规划见 [m2-r-plan.md](./m2-r-plan.md)）**。§8.1/§8.2 端点已全部转正为正式契约；实施以本文档为基线，偏差先改本文档再改代码（wiki-backend §14 契约变更流程）。
 
 ## 1. 定位与范围
 
@@ -112,9 +112,9 @@
 | POST | /api/app/showcase-requests | 展示页发布申请提交 → 管理端审核联动企业 showcaseStatus |
 | POST | /api/app/uploads | 申请资料 / 配图上传：multipart（`file` + `bizType`），仅图片与 PDF（魔数嗅探），大小限制同系统配置；返回 `{ key, name, size, type, url }` |
 
-### 8.1 v33~v37 Mock 超界端点（[MOCK-ONLY]，接入期逐条销号）
+### 8.1 v33~v37 Mock 超界端点（已转正为正式契约，2026-09-16）
 
-> 客户端已实现、后端尚无对应端点的能力（缺口 §7.1-19~22）。接入期需补服务端实现并在本节转为正式契约。
+> 客户端已实现、后端原无对应端点的能力（缺口 §7.1-19~22）。**R0（2026-09-16）起全部转正**：表内 `[MOCK-ONLY]`/「入期销号」字样仅作缺口来源追溯，不再有未生效语义；接入期按 m2-r-plan.md 分工实现。
 
 | 方法 | 路径 | 说明 |
 |---|---|---|
@@ -146,6 +146,35 @@
 | POST/GET | /api/app/articles/:id/likes/toggle · /articles/:id/comments | v38 文章点赞与评论（评论 2-200 字，过滤屏蔽用户） |
 | POST | /api/app/auth/register（`agreed` 必填） | v38 注册须同意用户协议与隐私政策并留痕 |
 
+### 8.2 v40~v43 Mock 端点转正（2026-09-16 新增，正式契约）
+
+> v40~v43 客户端已实现、后端原未登记端点（缺口 §7.7 D/E 表）。R0 起转正，接入期按 m2-r-plan.md R2~R4 实现。
+
+| 方法 | 路径 | 说明 |
+|---|---|---|
+| GET | /api/app/search | 全域聚合搜索：`keyword` + 可选类型过滤（demand/event/article/enterprise/space/talent/community）+ 分类计数 + 分页 cursor；结果与首页/各列表一致 |
+| GET | /api/app/home | 首页聚合：siteInfo + 功能开关 + 公告 `announcements`（有效期内、置顶优先取 2，Announcement 增 `expireAt/link`）+ banner 运营位 + 精选活动/最新需求/置顶文章/未读数（缺口 §7.1-3 扩展） |
+| GET | /api/app/me/enrollments/:id/ticket | 电子票：报名 approved 签发 `ticketNo` + HMAC 确定性核销码（HMAC-SHA256(eventId+ticketId+secret) 截断）；签到成功即核销（E1） |
+| GET/POST | /api/app/me/demands/:id/messages | 需求沟通留言板：`GET` 消息列表（仅需求发布方与响应方可见，未读计数）+ `POST` 发言，消息可追溯（E2） |
+| GET/POST | /api/app/me/projects/:id/tasks | 项目协作·任务：任务 CRUD（名称/负责人/状态/截止），参与双方可见（E3） |
+| PUT | /api/app/me/projects/:id/tasks/:taskId | 更新任务状态/字段 |
+| GET/POST | /api/app/me/projects/:id/files | 项目协作·文件：对象存储 + 鉴权下载（仅参与双方） |
+| GET/POST | /api/app/me/projects/:id/discussions | 项目协作·讨论（参与双方） |
+| GET | /api/app/me/tasks | 积分任务中心：任务列表含进度（PointsTask + UserTaskRecord；每日/一次性/条件任务）（E4） |
+| POST | /api/app/me/tasks/:code/claim | 领取任务奖励：幂等（重复领取 409）、每日任务按自然日重置 |
+| GET | /api/app/me/stats | 个人数据看板：积分/经验/需求/响应/项目/活动/签到聚合口径（E5） |
+| POST | /api/app/service-applications | 社区公共服务在线申请提交（ServiceApplication，受理流转 → admin A15 队列）（E6） |
+| GET | /api/app/me/service-applications | 我的服务申请（状态回执；支持催办） |
+| POST | /api/app/me/service-applications/:id/urge | 催办（限频） |
+| GET | /api/app/me/enterprise-workbench | 企业工作台：企业维度聚合（需求/响应/项目/成员统计），仅成员/负责人可看（E7） |
+| GET | /api/app/me/realname-rights | 实名分级权益：权益规则下发（未实名发布/报名额度），写端点服务端校验（R3-1/E8） |
+| POST | /api/app/mall/orders/:id/review | 订单评价：1~5 星 + 文字（每单一次；需订单 finished） |
+| GET/POST | /api/app/me/history | 浏览历史：本机阅读历史增量上报/拉取/分页；DELETE 清空（D7） |
+| GET | /api/app/card-schema/:type | 名片可编辑字段 schema 下发（`type=individual\|enterprise`；后台可配置用户可填字段，见 m2-r-plan §3.1 A19）——Q8 决策产物 |
+| GET | /api/app/community/policies | 社区服务/政策内容（Policy 模型：PL 前缀、`category/version/effectiveAt/publisher/attachments/featured/status`；运营来源 admin A18）（§7.1-12 + Q3） |
+
+**§8.1/§8.2 转正注记**：原标记 `[MOCK-ONLY]` / 缺口的端点（响应撤回/审核、项目里程碑提交/验收/退回、申请与投稿撤回重提、商城履约与核销、收藏/到货提醒/埋点、地址簿/账号安全/注销导出/通知偏好/举报/屏蔽/点赞评论/改期/候补/订单取消）均在转正范围，接入期按 m2-r-plan.md R1~R4 分工实现。
+
 ## 9. 可见范围与可报名范围过滤（需求/活动通用）
 
 - 用户身份集合 I（individual/community_individual/community_enterprise/external_enterprise）与等级集合 L（各身份 level）。
@@ -164,6 +193,23 @@
 | M2-A | 骨架 + 注册登录/多身份 JWT + 配置与字典下发 + 个人中心/积分流水 |
 | M2-B | 需求广场（浏览/提交/响应）+ 活动中心（浏览/报名）+ 可见范围过滤 |
 | M2-C | 商城兑换 + 空间预约 + 文章投递 + 企业名片申请 + 申请审核闭环联动 |
+
+> 里程碑实施以 `docs/m2-r-plan.md` R0~R4 批次为准（2026-09-16 修订）。
+
+## 12. 站内信与通知偏好（R1 新增，正式契约）
+
+> 缺口 §7.1-1 / §7.7 A5。`UserNotification` 模型（id UN；type audit_result/enroll_result/order/points/system/invite/transfer/report/article/demand/project/mall/service + link?；title/content/at/read/archived；userId）。
+
+| 方法 | 路径 | 说明 |
+|---|---|---|
+| GET | /api/app/notices | 站内信列表：分页/类型筛选/`status=unread\|read\|archived`；返回未读数 |
+| GET | /api/app/notices/unread-count | 未读数（首页/顶栏角标） |
+| POST | /api/app/notices/:id/read | 标记已读（幂等） |
+| POST | /api/app/notices/read-all | 全部已读 |
+| POST | /api/app/notices/:id/archive | 归档/恢复归档（已读才可归档） |
+| GET/PUT | /api/app/me/notices/prefs | 通知偏好：启用类型集合（至少一种；关闭后列表与推送均不出现该类型；约束 `NotificationService` 触发） |
+
+**触发点**（R2/R3 各业务接线，均经 `NotificationService.pushNotice()`）：申请/需求/投稿/报名/预约审核结果、订单下单/发货/取消/补货、签到成功、注册欢迎、企业邀请/接受/拒绝/成员更新、负责人转移请求/结果、举报处置回执、活动候补递补、改期/取消通知、里程碑提交/验收/退回、服务申请受理/回执、数据导出完成。
 
 ## 修订记录
 
@@ -187,3 +233,4 @@
 | 2026-09-14 | **企业成员权限体系**：成员增 `permissions`（8 项枚举：`publish_demand/respond_demand/space_reserve/article_submit/manage_members/invite_member/assign_permission/edit_card`），负责人默认全部；`PUT /me/enterprises/:id/member` 支持分配权限（需 `assign_permission`，role/phone 需 `manage_members`）；`invite`/`remove-member`/`PUT /me/enterprises/:id` 分别校验 `invite_member`/`manage_members`/`edit_card`；`GET /me/identities` 与 `GET /me/enterprises/:id` 返回 `permissions`/`myPermissions`；`POST /demands` 与 `POST /spaces/reservations` 支持 `asEnterpriseId` 代企业主体（校验对应成员权限）；响应需求/文章投稿的代企业主体字段待后续批次 |
 | 2026-09-15 | **v33~v37 Mock 超界端点登记**：新增 §8.1 汇总客户端已实现、后端待补的需求撮合与项目协作、审核撤回/重提、商城履约、信任治理、收藏/提醒/埋点端点（缺口 m2-client-plan §7.1-19~22） |
 | 2026-09-15 | **实名认证入口**：新增 `GET/PUT /me/realname`（实名状态 + 提交姓名/身份证号；实时状态脱敏展示；mock 即时通过，真实后端需三要素核验）；「编辑资料」页新增实名认证 Cell（note 已认证/未认证）；缺口 m2-client-plan §7.1-18 |
+| 2026-09-16 | **M2-R 接入期契约转正（R0）**：§8.1 v33~v37 [MOCK-ONLY] 端点全部转正为正式契约；新增 §8.2 v40~v43 端点转正表（search/home 扩展/电子票/需求沟通/项目协作任务·文件·讨论/积分任务中心/个人看板/服务在线申请/企业工作台/实名分级权益/订单评价/浏览历史/名片字段 schema/社区政策）；新增 §12 站内信与通知偏好（模型 + 端点 + 触发点清单）；里程碑实施改指 m2-r-plan.md R0~R4 |

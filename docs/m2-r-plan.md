@@ -1,6 +1,6 @@
 # 聚屿社区 · M2-R 接入期实施规划（/api/app/** 对齐）
 
-> 状态：**已立项（2026-09-16）**，规划稿 v1，未开始实施。
+> 状态：**已立项（2026-09-16）**；**R0 已完成（2026-09-16：契约转正 + 实体扩展 + 迁移方案 + 开放问题定稿）**，下一步 R1。
 > 依据：`docs/api-app-design.md`（契约基线）、`docs/m2-client-plan.md` §7 缺口登记与 §7.7 交底表、`docs/wiki-backend.md` §4/§8、客户端 v43 Mock 现状（2026-09-16 代码调研）。
 > 本文是 M2-R 的**进度事实来源**：完成后端/API 与 admin 两张对齐表即完成 M2-R。`m2-client-plan.md` §7 仍是缺口登记总表，销号时两边同步勾选。
 
@@ -17,12 +17,12 @@
 
 | 批次 | 内容 | 依赖 | 状态 |
 |---|---|---|---|
-| R0 | 契约冻结与迁移设计（文档/决策/迁移方案，零端点） | — | [ ] 未开始 |
+| R0 | 契约冻结与迁移设计（文档/决策/迁移方案，零端点） | — | [√] 已完成（2026-09-16） |
 | R1 | 鉴权底座与个人中心 + 站内信 | R0 | [ ] 未开始 |
 | R2 | 核心业务闭环（需求/项目/活动/商城/空间/内容/申请/首页/搜索） | R1 | [ ] 未开始 |
 | R3 | 信任治理（实名/举报/屏蔽/邀请/转移/权限/名片/社区/协议） | R1（与 R2 可并行） | [ ] 未开始 |
 | R4 | 延伸观测与切换（任务/看板/服务申请/企业工作台/实名分级/埋点 + http 切换 + 全量回归） | R2+R3 | [ ] 未开始 |
-| A-* | admin 面板对齐（§3.1 A1~A18，随对应 API 批次实施） | 各批次 | [ ] 未开始 |
+| A-* | admin 面板对齐（§3.1 A1~A19，随对应 API 批次实施） | 各批次 | [ ] 未开始 |
 
 ## 1. 各端现状基线（2026-09-16 调研）
 
@@ -46,12 +46,12 @@
 
 ### 2.1 R0 契约冻结与迁移设计（零端点，纯文档/方案）
 
-| # | 工作项 | 实施要点 | 验收 |
-|---|---|---|---|
-| R0-1 | api-app-design.md 修订 | §8.1 全部 [MOCK-ONLY] 端点转正；补 v40~v43 新端点设计（电子票/任务中心/看板/服务申请/企业工作台/实名分级/搜索聚合/浏览历史/订单评价/候补/改期）；修订记录留痕 | 全部客户端 api 函数在文档中有对应端点定义；双方形状一致 |
-| R0-2 | entity-fields.md 扩展 | 按 §2.6 迁移清单补新模型与字段说明 | 模型数与 schema.prisma 一致 |
-| R0-3 | Prisma 迁移方案定稿 | 一次设计、按批次执行（R1/R2/R3 各一组 migration）；含索引与回填策略 | 迁移清单评审通过（§2.6 全项有批次归属） |
-| R0-4 | 决策项落地（§5 开放问题逐条定稿） | MallGoods 分类语义拆分、订单状态 completed/finished 映射、社区政策运营来源、核销码算法、短信降级形态 | §5 表全部标「已决」 |
+| # | 工作项 | 实施要点 | 验收 | 状态 |
+|---|---|---|---|---|
+| R0-1 | api-app-design.md 修订 | §8.1 全部 [MOCK-ONLY] 端点转正；补 v40~v43 新端点设计；修订记录留痕 | 全部客户端 api 函数在文档中有对应端点定义 | [√]（§8.2 转正表 + §12 站内信） |
+| R0-2 | entity-fields.md 扩展 | 按 §2.6 迁移清单补新模型与字段说明 | 模型数与 schema.prisma 一致 | [√]（§8：22 新模型 + 13 字段扩展） |
+| R0-3 | Prisma 迁移方案定稿 | 一次设计、按批次执行（R1~R4 各一组 migration）；含索引与回填策略 | 迁移清单评审通过（§2.6 全项有批次归属） | [√]（§2.6 已标批次） |
+| R0-4 | 决策项落地（§5 开放问题逐条定稿） | MallGoods 分类语义、订单终态映射、政策模型、核销码、短信降级等 | §5 表全部标「已决」 | [√]（§5 全部定稿，见 R0 决策记录） |
 
 ### 2.2 R1 鉴权底座与个人中心 + 站内信（P0）
 
@@ -131,7 +131,7 @@
 | R2 | Demand | demandType、deliverable/budget/deliverBy、cooperationNeed/bottleneck/partnershipMode/returnOffer、contactName/contactPhone/contactEmail、projectId |
 | R2 | DemandRespondent | **userId 关联**（必加，「我的响应」依赖）、status 扩展 accepted/rejected、reviewAt/rejectReason/withdrawnAt |
 | R2 | Milestone | 交付状态扩展（todo/submitted/accepted/returned）、attachments、returnReason、submitAt/acceptAt |
-| R2 | MallGoods | fulfillment（physical/voucher/service）、goodsCategory（挂 goods_category 字典；旧 category 语义处置见 R0-4） |
+| R2 | MallGoods | **category 语义改造（Q1 决）**：category → `goods_category` 字典分类（GC code，客户端分类筛选用）；新增 `fulfillment`（physical/voucher/service）承载履约类型；旧 category 数据（physical/virtual/voucher）迁移到 fulfillment，admin A13 商品挂分类字典 |
 | R2 | RedemptionOrder | voucherCode/voucherExpiresAt、trackingNo、cancelledAt、rating/reviewComment |
 | R2 | Space | status（维护中）、maxHours、advanceDays、openHours |
 | R2 | SpaceReservation | identityType/subjectName 主体快照、asEnterpriseId |
@@ -151,7 +151,7 @@
 > 实施约定：每个面板项遵循「API 端点（admin 侧）→ 权限点（`src/constants/permissions.ts` 目录扩展 + RBAC）→ 视图/组件（TDesign Vue Next）→ 菜单/路由（AdminLayout + router，保持菜单组顺序）→ UI contract 测试」；术语遵循 AGENTS.md（审核/新增/归档/联系电话…）；列表页无批量操作与刷新按钮、ColumnController 纳入、软删域接归档体系。
 > 统一检查方法：`pnpm --filter @joinyuu/admin exec tsc -p tsconfig.json --noEmit` + `pnpm build:admin` + `test:ui`；验收 = 与对应 API 能力联调后闭环（A 项编号 ↔ §2 批次项）。
 
-### 3.1 必做项（A1~A18，随批次实施）
+### 3.1 必做项（A1~A19，随批次实施）
 
 | # | 面板项 | 实施要点 | 对应 API/批次 | 验收 checklist |
 |---|---|---|---|---|
@@ -173,6 +173,7 @@
 | A16 | 积分任务配置（E4，P1） | 新面板「积分任务」：任务规则配置（类型/条件/奖励/启停）+ 发放对账（流水按任务来源过滤） | R4-1 | 领取记录与流水对得上 |
 | A17 | 实名分级权益配置（E8，P2） | 权益规则配置面板（各等级/实名状态的发布与报名额度） | R3-1 / R4-5 | 调整后 C 端限额即时生效 |
 | A18 | 社区政策内容管理（§0.5 决策落地，P1） | 新面板「社区服务内容」（内容管理组）：政策/指引的分类、版本化、附件、精选、发布（Policy 模型） | R3-5 | 政策增改后 C 端社区服务 Tab 联动 |
+| A19 | 名片管理（Q8 决，P2） | 新面板「名片管理」（成员/社区企业域）：后台**查看/编辑**个人名片与社区企业名片（均免审核保存即公开）；维护「用户可填名片字段白名单」配置（`GET /api/app/card-schema/:type` 下发） | R3-5 | 后台编辑名片后 C 端侧同步；字段白名单配置后 C 端表单按 schema 渲染 |
 
 ### 3.2 可选项（登记不排期，随 API 落地后评估）
 
@@ -185,21 +186,22 @@
 3. R4-9：`VITE_API_MODE=http` → 全量 app e2e → 25+ 既有套件回归 → 移动端 Playwright 走查（复用 v42 64 页场景基线）→ 勾选 `full-spec-check.md` M2-R。
 4. mock 模式保留为演示通道（不删除 `src/mock/`），文档注记双模式共存口径。
 
-## 5. 开放问题（R0 逐条定稿）
+## 5. 开放问题（R0 逐条定稿，2026-09-16）
 
-| # | 问题 | 推荐方案（R0 评审确认） | 状态 |
+| # | 问题 | 定稿方案 | 状态 |
 |---|---|---|---|
-| Q1 | MallGoods.category 语义冲突（后端=履约类型，客户端=GC 字典） | 增 `fulfillment` + `goodsCategory` 两字段；旧 `category` 数据迁移映射到 fulfillment，admin A13 跟进 | 待定 |
-| Q2 | 订单终态 completed（客户端）vs finished（后端） | 后端维持 `finished`；客户端 http 层做状态映射（零迁移，UI 不动） | 待定 |
-| Q3 | 社区政策/服务内容运营来源（§0.5 遗留） | 新建 `Policy` 模型 + admin A18 内容面板（政策有版本/附件/精选语义，不复用 Announcement） | 待定 |
-| Q4 | 电子票核销码算法（D-2 降级） | HMAC-SHA256(eventId+ticketId+serverSecret) 截断 8 位，确定性可复现、防猜测；核销走 admin 端点（A3）+ app 自助签到互斥口径（check-in 成功即核销 or 独立，R0 定） | 待定 |
-| Q5 | 短信降级形态 | 找回密码/换绑复用图形验证码；企业邀请未注册手机号维持 400（文案提示先注册），短信接口位留 `SmsService` 空实现 | 待定 |
-| Q6 | 默认地址删除语义 | 删除默认地址时自动转移至最新地址（或置空并在下单强制选择，倾向前者） | 待定 |
-| Q7 | 点赞/评论计数存储 | 冗余计数列（Article.likeCount/commentCount，写时事务更新）vs 聚合查询；倾向冗余列（列表页性能） | 待定 |
-| Q8 | 个人名片「保存即公开」vs 审核流 | 客户端 mock 为保存即公开；真实后端建议个人名片免审核（字段可见性由隐私开关控制）、企业名片走 showcaseStatus 审核流 | 待定 |
+| Q1 | MallGoods.category 语义冲突（后端=履约类型，客户端=GC 字典） | **改造现有 category 语义**（用户拍板）：category → `goods_category` 字典分类（GC code，客户端分类筛选）；新增 `fulfillment`（physical/voucher/service）承载履约类型；旧 category 数据迁移到 fulfillment；admin A13 商品挂分类字典 | ✅ 已决 |
+| Q2 | 订单终态 completed（客户端）vs finished（后端） | 后端维持 `finished`；客户端 http 层状态映射（零迁移，UI 不动） | ✅ 已决（推荐方案） |
+| Q3 | 社区政策/服务内容运营来源（§0.5 遗留） | **新建 `Policy` 模型**（用户拍板）+ admin A18 内容面板（category/version/effectiveAt/publisher/attachments/featured，不复用 Announcement） | ✅ 已决 |
+| Q4 | 电子票核销码算法（D-2 降级） | **HMAC 确定性码 + 签到即核销**（用户拍板）：HMAC-SHA256(eventId+ticketId+secret) 截断 8 位；`EventTicket` 签发；签到成功即核销（与 admin 核销台 A3 同口径、防重复） | ✅ 已决 |
+| Q5 | 短信降级形态 | 找回密码/换绑复用图形验证码；企业邀请未注册手机号维持 400（提示先注册）；留 `SmsService` 接口位（空实现，真实短信接入为后续替换项） | ✅ 已决（推荐方案） |
+| Q6 | 默认地址删除语义 | 删除默认地址时自动转移至最近更新的非默认地址；无其他地址则置空、下单时强制选择 | ✅ 已决（推荐方案） |
+| Q7 | 点赞/评论计数存储 | 冗余计数列（Article.likeCount/commentCount，写时事务更新）+ 列表页直接读取（性能） | ✅ 已决（推荐方案） |
+| Q8 | 个人名片「保存即公开」vs 审核流 | **两者均免审核保存即公开**（用户自定义拍板）：个人与社区企业名片保存即公开；admin 后台可**查看/编辑**个人与企业名片；并可配置「用户编辑名片时可填写的字段白名单」（`GET /api/app/card-schema/:type` 下发，admin A19） | ✅ 已决 |
 
 ## 6. 修订记录
 
 | 日期 | 摘要 |
 |---|---|
-| 2026-09-16 | 初版：M2-R 立项规划——四项决策（全量分批/降级实现/必做全做/独立文档）；R0~R4 五批后端对齐表（22 新模型 + 13 模型字段扩展 + 约 110 端点）、admin A1~A18 必做 + 可选项登记、8 项开放问题待 R0 定稿；基于 v43 客户端 / api 43 模型 / admin 16 视图目录现状调研 |
+| 2026-09-16 | 初版：M2-R 立项规划——四项决策（全量分批/降级实现/必做全做/独立文档）；R0~R4 五批后端对齐表（22 新模型 + 13 模型字段扩展 + 约 110 端点）、admin A1~A19 必做 + 可选项登记、8 项开放问题待 R0 定稿；基于 v43 客户端 / api 43 模型 / admin 16 视图目录现状调研 |
+| 2026-09-16 | **R0 完成**：① api-app-design.md §8.1 [MOCK-ONLY] 端点转正 + 新增 §8.2（v40~v43 端点）+ §12（站内信）；② entity-fields.md 新增 §8（22 新模型 + 13 模型字段扩展）；③ §2.6 迁移方案按 R1~R4 分组定稿；④ §5 开放问题全部定稿（Q1 改造 category 语义、Q3 新建 Policy、Q4 HMAC+签到即核销、Q8 两者免审+后台可编辑+名片字段可配置；Q2/Q5/Q6/Q7 按推荐方案）；admin 必做扩为 A1~A19（新增 A19 名片管理） |
