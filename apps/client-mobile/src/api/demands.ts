@@ -94,7 +94,7 @@ export async function fetchDemandResponses(id: string): Promise<MyResponseItem[]
 /** [MOCK-ONLY] 需求发布者处理响应；接受后生成协作项目。 */
 export async function reviewDemandResponse(id: string, responseId: string, action: 'accept' | 'reject', reason?: string): Promise<void> {
   if (apiMode === 'mock') return mock.reviewDemandResponse(id, responseId, action, reason)
-  await httpPost(`/me/demands/${id}/responses/${responseId}/review`, { action, reason })
+  await httpPost(`/me/demands/${id}/responses/${responseId}/review`, { action, rejectReason: reason })
 }
 
 export type { PageQuery }

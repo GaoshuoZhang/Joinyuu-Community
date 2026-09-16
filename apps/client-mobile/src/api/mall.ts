@@ -6,7 +6,7 @@ import * as mock from '@/mock/handlers/mall'
 export async function fetchGoods(query: { category?: string } = {}): Promise<Goods[]> {
   if (apiMode === 'mock') return mock.fetchGoods(query)
   const qs = query.category ? `?category=${encodeURIComponent(query.category)}` : ''
-  return httpGet<Goods[]>(`/mall/goods${qs}`)
+  return (await httpGet<{ list: Goods[]; total: number }>(`/mall/goods${qs}`)).list
 }
 
 /** GET /api/app/mall/goods/:id — 商品详情 */
@@ -24,14 +24,14 @@ export async function createOrder(goodsId: string, addressId?: string): Promise<
 /** GET /api/app/me/orders — 我的兑换订单 */
 export async function fetchMyOrders(): Promise<MyOrder[]> {
   if (apiMode === 'mock') return mock.fetchMyOrders()
-  return httpGet<MyOrder[]>('/me/orders')
+  return (await httpGet<{ list: MyOrder[]; total: number }>('/me/orders')).list
 }
 
 /** POST /api/app/mall/orders/:id/confirm — 确认收货（实物 shipped → completed；缺口 §7.1-10 待补契约） */
 /** POST /api/app/mall/orders/:id/review — 完成订单评价（1~5 星 + 可选文字） */
 export async function reviewOrder(id: string, rating: number, review?: string): Promise<void> {
   if (apiMode === 'mock') return mock.reviewOrder(id, rating, review)
-  await httpPost(`/mall/orders/${id}/review`, { rating, review })
+  await httpPost(`/mall/orders/${id}/review`, { rating, comment: review })
 }
 
 export async function confirmOrder(id: string): Promise<void> {

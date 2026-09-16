@@ -128,6 +128,13 @@ const form = reactive<DemandPublishPayload & { customIdentityType: CustomPublish
   publisherValue: '',
   title: '',
   category: '',
+  demandType: 'task',
+  deliverable: '',
+  deliverBy: '',
+  cooperationNeed: '',
+  returnOffer: '',
+  bottleneck: '',
+  partnershipMode: '',
   budget: '',
   period: '',
   description: '',
@@ -184,6 +191,13 @@ watch(
     if (props.mode === 'create' || !props.demand) {
       form.title = ''
       form.category = ''
+      form.demandType = 'task'
+      form.deliverable = ''
+      form.deliverBy = ''
+      form.cooperationNeed = ''
+      form.returnOffer = ''
+      form.bottleneck = ''
+      form.partnershipMode = ''
       form.budget = ''
       form.period = ''
       form.description = ''
@@ -207,6 +221,13 @@ watch(
     } else {
       form.title = props.demand.title
       form.category = props.demand.category
+      form.demandType = props.demand.demandType ?? 'task'
+      form.deliverable = props.demand.deliverable ?? ''
+      form.deliverBy = props.demand.deliverBy ?? ''
+      form.cooperationNeed = props.demand.cooperationNeed ?? ''
+      form.returnOffer = props.demand.returnOffer ?? ''
+      form.bottleneck = props.demand.bottleneck ?? ''
+      form.partnershipMode = props.demand.partnershipMode ?? ''
       form.budget = props.demand.budget
       form.period = props.demand.period
       form.description = props.demand.description
@@ -413,11 +434,42 @@ function onClose() {
         <t-input clearable v-model="form.title" placeholder="请输入需求标题…" />
       </t-form-item>
       <div class="form-row">
+        <t-form-item label="需求类型" name="demandType">
+          <t-select v-model="form.demandType" :options="[
+            { label: '找服务', value: 'task' },
+            { label: '找投资', value: 'investment' },
+            { label: '找合作', value: 'cooperation' },
+          ]" />
+        </t-form-item>
         <t-form-item label="类别" name="category">
           <t-select v-model="form.category" :options="categoryOptions" clearable />
         </t-form-item>
         <t-form-item label="预算" name="budget">
           <t-input clearable v-model="form.budget" placeholder="如 ¥10,000 - 30,000 / 面议…" />
+        </t-form-item>
+      </div>
+      <div v-if="form.demandType === 'task'" class="form-row">
+        <t-form-item label="预期交付内容" name="deliverable">
+          <t-input v-model="form.deliverable" clearable placeholder="说明期望获得的成果" />
+        </t-form-item>
+        <t-form-item label="预期交付日期" name="deliverBy">
+          <t-date-picker v-model="form.deliverBy" valueType="YYYY-MM-DD" clearable style="width: 100%" />
+        </t-form-item>
+      </div>
+      <div v-else-if="form.demandType === 'investment'" class="form-row">
+        <t-form-item label="合作需求" name="cooperationNeed">
+          <t-input v-model="form.cooperationNeed" clearable placeholder="说明融资或资源合作需求" />
+        </t-form-item>
+        <t-form-item label="可提供回报" name="returnOffer">
+          <t-input v-model="form.returnOffer" clearable placeholder="说明可提供的合作回报" />
+        </t-form-item>
+      </div>
+      <div v-else class="form-row">
+        <t-form-item label="业务瓶颈" name="bottleneck">
+          <t-input v-model="form.bottleneck" clearable placeholder="说明当前需要解决的问题" />
+        </t-form-item>
+        <t-form-item label="期望合作方式" name="partnershipMode">
+          <t-input v-model="form.partnershipMode" clearable placeholder="如联合研发、渠道合作" />
         </t-form-item>
       </div>
       <div class="form-row">

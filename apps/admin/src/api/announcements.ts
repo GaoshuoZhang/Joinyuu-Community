@@ -22,6 +22,8 @@ export interface AnnouncementPayload {
   title: string
   content: string
   pinned: boolean
+  expireAt?: string
+  link?: string
 }
 
 /* POST /api/admin/announcements — 发布公告（新增即发布） */

@@ -24,6 +24,34 @@ export class CreateDemandDto {
   @IsString()
   category!: string
 
+  @IsOptional()
+  @IsIn(['task', 'investment', 'cooperation'])
+  demandType?: 'task' | 'investment' | 'cooperation'
+
+  @IsOptional()
+  @IsString()
+  deliverable?: string
+
+  @IsOptional()
+  @IsString()
+  deliverBy?: string
+
+  @IsOptional()
+  @IsString()
+  cooperationNeed?: string
+
+  @IsOptional()
+  @IsString()
+  returnOffer?: string
+
+  @IsOptional()
+  @IsString()
+  bottleneck?: string
+
+  @IsOptional()
+  @IsString()
+  partnershipMode?: string
+
   @IsString()
   budget!: string
 

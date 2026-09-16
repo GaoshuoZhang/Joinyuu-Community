@@ -8,6 +8,8 @@ import { formatNow } from '../../common/utils/time'
 import { sanitizeHtml } from '../../common/utils/sanitize-html'
 import type { EventPayloadDto } from './dto/event-payload.dto'
 import { toEventDto } from './event-dto'
+import { NotificationService } from '../../common/notify/notification.service'
+import type { RescheduleEventDto } from './dto/reschedule-event.dto'
 
 /* 活动模块（wiki-backend.md §7.8/§8.1/§8.4）：
  * 状态机 pending_release →(publish-now|schedule)→ published|scheduled →(到点定时任务)→ published
@@ -37,6 +39,7 @@ export class EventsService {
     private readonly ids: IdGeneratorService,
     private readonly audit: AuditService,
     private readonly engine: PointsEngineService,
+    private readonly notify: NotificationService,
   ) {}
 
   async findAll(query: EventQuery): Promise<{ list: unknown[]; total: number }> {
@@ -73,12 +76,30 @@ export class EventsService {
   }
 
   async findOne(id: string): Promise<unknown> {
-    const event = await this.prisma.communityEvent.findUnique({
-      where: { id },
-      include: { enrollments: { orderBy: { id: 'asc' } } },
-    })
+    const [event, feedbacks] = await Promise.all([
+      this.prisma.communityEvent.findUnique({
+        where: { id },
+        include: { enrollments: { orderBy: { id: 'asc' } } },
+      }),
+      this.prisma.eventFeedback.findMany({ where: { eventId: id }, orderBy: { at: 'desc' } }),
+    ])
     if (!event) throw new NotFoundException('活动不存在')
-    return toEventDto(event, event.enrollments)
+    const average = feedbacks.length
+      ? Number((feedbacks.reduce((sum, item) => sum + item.rating, 0) / feedbacks.length).toFixed(1))
+      : 0
+    return {
+      ...toEventDto(event, event.enrollments),
+      feedbackSummary: {
+        average,
+        total: feedbacks.length,
+        list: feedbacks.map((item) => ({
+          userId: item.userId,
+          rating: item.rating,
+          comment: item.comment,
+          at: item.at,
+        })),
+      },
+    }
   }
 
   async create(payload: EventPayloadDto): Promise<unknown> {
@@ -105,6 +126,12 @@ export class EventsService {
         scheduledAt: null,
         enrollPoints: payload.enrollPoints ?? null,
         checkinPoints: payload.checkinPoints ?? null,
+        venueLat: payload.venueLat ?? null,
+        venueLng: payload.venueLng ?? null,
+        checkinRadiusM: payload.checkinRadiusM ?? 200,
+        checkinOpenMin: payload.checkinOpenMin ?? 30,
+        checkinCloseMin: payload.checkinCloseMin ?? 30,
+        cancelDeadlineHours: payload.cancelDeadlineHours ?? 24,
         description: sanitizeHtml(payload.description),
         tags: payload.tags,
       },
@@ -134,6 +161,12 @@ export class EventsService {
         tags: payload.tags,
         enrollPoints: payload.enrollPoints ?? null,
         checkinPoints: payload.checkinPoints ?? null,
+        venueLat: payload.venueLat ?? null,
+        venueLng: payload.venueLng ?? null,
+        checkinRadiusM: payload.checkinRadiusM ?? 200,
+        checkinOpenMin: payload.checkinOpenMin ?? 30,
+        checkinCloseMin: payload.checkinCloseMin ?? 30,
+        cancelDeadlineHours: payload.cancelDeadlineHours ?? 24,
         visibilityIdentities: payload.visibilityIdentities,
         visibilityLevels: payload.visibilityLevels,
         enrollmentIdentities: payload.enrollmentIdentities,
@@ -237,9 +270,27 @@ export class EventsService {
       throw new ConflictException('该状态下不可取消活动')
     }
 
-    await this.prisma.communityEvent.update({
-      where: { id },
-      data: { status: 'cancelled', archivableAt: formatNow() },
+    const active = await this.prisma.eventEnrollment.findMany({
+      where: { eventId: id, status: { in: ['pending', 'approved', 'waitlisted'] } },
+      select: { userId: true },
+    })
+    await this.prisma.$transaction(async (tx) => {
+      await tx.communityEvent.update({
+        where: { id },
+        data: { status: 'cancelled', enrollmentOpen: false, archivableAt: formatNow() },
+      })
+      await tx.eventEnrollment.updateMany({
+        where: { eventId: id, status: { in: ['pending', 'approved', 'waitlisted'] } },
+        data: { status: 'cancelled', waitlisted: false, waitlistOrder: null },
+      })
+      for (const enrollment of active) {
+        await this.notify.pushNoticeInTransaction(tx, enrollment.userId, {
+          type: 'event',
+          title: '活动已取消',
+          content: `「${event.title}」已取消，报名状态已同步更新。`,
+          link: '/me/enrollments',
+        })
+      }
     })
 
     await this.audit.record({
@@ -272,6 +323,42 @@ export class EventsService {
       operator,
     })
     return { code: 0 }
+  }
+
+  async reschedule(id: string, dto: RescheduleEventDto, operator: string): Promise<{ notified: number }> {
+    const event = await this.prisma.communityEvent.findUnique({ where: { id } })
+    if (!event) throw new NotFoundException('活动不存在')
+    if (event.status !== 'published') throw new ConflictException('仅已发布活动可改期')
+    if (dto.startTime >= dto.endTime) throw new ConflictException('结束时间需晚于开始时间')
+
+    const active = await this.prisma.eventEnrollment.findMany({
+      where: { eventId: id, status: { in: ['pending', 'approved', 'waitlisted'] } },
+      select: { userId: true },
+    })
+    await this.prisma.$transaction(async (tx) => {
+      await tx.communityEvent.update({
+        where: { id },
+        data: { startTime: dto.startTime, endTime: dto.endTime, rescheduledTo: dto.startTime },
+      })
+      for (const enrollment of active) {
+        await this.notify.pushNoticeInTransaction(tx, enrollment.userId, {
+          type: 'event',
+          title: '活动时间已调整',
+          content: `「${event.title}」改期至 ${dto.startTime}，原因：${dto.reason.trim()}。请留意行程。`,
+          link: '/me/enrollments',
+        })
+      }
+    })
+    await this.audit.record({
+      module: '活动管理',
+      action: '活动改期',
+      target: `${event.id} · ${event.title}`,
+      detail: dto.reason.trim(),
+      before: { startTime: event.startTime, endTime: event.endTime },
+      after: { startTime: dto.startTime, endTime: dto.endTime },
+      operator,
+    })
+    return { notified: active.length }
   }
 
   async archive(id: string, operator: string): Promise<{ code: number }> {
@@ -342,7 +429,7 @@ export class EventsService {
       /* 条件更新防并发重复签到与重复发奖 */
       const updated = await this.prisma.eventEnrollment.updateMany({
         where: { eventId, userId, checkedIn: false },
-        data: { checkedIn: true, checkInAt: formatNow() },
+        data: { checkedIn: true, checkInAt: formatNow(), checkinMethod: 'admin' },
       })
       if (updated.count === 0) throw new ConflictException('该报名已签到，请勿重复操作')
 
@@ -355,6 +442,40 @@ export class EventsService {
       /* 签到经验值：归属社区个体身份（引擎内按 LevelTier 重算 level） */
       await this.engine.issueExperience('individual', userId, 'activity_checkin', CHECKIN_EXP_REASON)
     }
+    return { code: 0 }
+  }
+
+  async listTickets(eventId: string) {
+    const event = await this.prisma.communityEvent.findUnique({ where: { id: eventId }, select: { id: true } })
+    if (!event) throw new NotFoundException('活动不存在')
+    const tickets = await this.prisma.eventTicket.findMany({ where: { eventId }, orderBy: { id: 'asc' } })
+    const enrollments = await this.prisma.eventEnrollment.findMany({
+      where: { id: { in: tickets.map((ticket) => ticket.enrollmentId) } },
+      select: { id: true, userId: true, name: true },
+    })
+    const byId = new Map(enrollments.map((item) => [item.id, item]))
+    return tickets.map((ticket) => ({
+      ticketNo: ticket.ticketNo,
+      redeemCode: ticket.redeemCode,
+      userId: byId.get(ticket.enrollmentId)?.userId ?? '',
+      userName: byId.get(ticket.enrollmentId)?.name ?? '',
+      redeemedAt: ticket.redeemedAt ?? undefined,
+    }))
+  }
+
+  async redeemTicket(eventId: string, rawCode: string): Promise<{ code: number }> {
+    const redeemCode = rawCode.trim().toUpperCase()
+    const ticket = await this.prisma.eventTicket.findFirst({ where: { eventId, redeemCode } })
+    if (!ticket) throw new NotFoundException('电子票核销码无效')
+    if (ticket.redeemedAt) throw new ConflictException('该电子票已核销')
+    const enrollment = await this.prisma.eventEnrollment.findUnique({ where: { id: ticket.enrollmentId } })
+    if (!enrollment || enrollment.status !== 'approved') throw new ConflictException('该电子票对应报名不可核销')
+    if (!enrollment.checkedIn) await this.checkin(eventId, enrollment.userId)
+    const updated = await this.prisma.eventTicket.updateMany({
+      where: { id: ticket.id, redeemedAt: null },
+      data: { redeemedAt: formatNow() },
+    })
+    if (updated.count !== 1) throw new ConflictException('该电子票已核销')
     return { code: 0 }
   }
 

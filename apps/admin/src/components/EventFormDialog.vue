@@ -50,6 +50,12 @@ const form = reactive({
   requireReview: true,
   enrollPoints: 5,
   checkinPoints: 10,
+  venueLat: '',
+  venueLng: '',
+  checkinRadiusM: 200,
+  checkinOpenMin: 30,
+  checkinCloseMin: 30,
+  cancelDeadlineHours: 24,
 })
 
 /* 积分规则默认分值：报名奖励 / 签到奖励 */
@@ -103,6 +109,12 @@ watch(
       form.requireReview = props.event.requireReview
       form.enrollPoints = props.event.enrollPoints ?? rulePoints.enroll
       form.checkinPoints = props.event.checkinPoints ?? rulePoints.checkin
+      form.venueLat = props.event.venueLat ?? ''
+      form.venueLng = props.event.venueLng ?? ''
+      form.checkinRadiusM = props.event.checkinRadiusM ?? 200
+      form.checkinOpenMin = props.event.checkinOpenMin ?? 30
+      form.checkinCloseMin = props.event.checkinCloseMin ?? 30
+      form.cancelDeadlineHours = props.event.cancelDeadlineHours ?? 24
       customVisibility.value = props.event.visibilityIdentities.length > 0 || props.event.visibilityLevels.length > 0
       customEnrollment.value = props.event.enrollmentIdentities.length > 0 || props.event.enrollmentLevels.length > 0
       tagsText.value = props.event.tags.join('，')
@@ -124,6 +136,12 @@ watch(
       form.requireReview = true
       form.enrollPoints = rulePoints.enroll
       form.checkinPoints = rulePoints.checkin
+      form.venueLat = ''
+      form.venueLng = ''
+      form.checkinRadiusM = 200
+      form.checkinOpenMin = 30
+      form.checkinCloseMin = 30
+      form.cancelDeadlineHours = 24
       customVisibility.value = false
       customEnrollment.value = false
       tagsText.value = ''
@@ -181,6 +199,12 @@ async function onConfirm() {
       enrollmentDeadline: form.enrollmentDeadline || undefined,
       enrollPoints: form.enrollPoints,
       checkinPoints: form.checkinPoints,
+      venueLat: form.venueLat || undefined,
+      venueLng: form.venueLng || undefined,
+      checkinRadiusM: form.checkinRadiusM,
+      checkinOpenMin: form.checkinOpenMin,
+      checkinCloseMin: form.checkinCloseMin,
+      cancelDeadlineHours: form.cancelDeadlineHours,
     }
     if (props.mode === 'create') {
       const event = await createEvent(payload)
@@ -369,6 +393,31 @@ function onClose() {
             </t-popup>
           </t-form-item>
         </div>
+      </div>
+
+      <div class="form-row">
+        <t-form-item label="场地纬度" name="venueLat">
+          <t-input v-model="form.venueLat" placeholder="如 30.2741；留空不校验位置" />
+        </t-form-item>
+        <t-form-item label="场地经度" name="venueLng">
+          <t-input v-model="form.venueLng" placeholder="如 120.1551；留空不校验位置" />
+        </t-form-item>
+      </div>
+      <div class="form-row">
+        <t-form-item label="签到半径（米）" name="checkinRadiusM">
+          <t-input-number v-model="form.checkinRadiusM" :min="1" theme="column" style="width: 100%" />
+        </t-form-item>
+        <t-form-item label="取消报名时限（开场前小时）" name="cancelDeadlineHours">
+          <t-input-number v-model="form.cancelDeadlineHours" :min="0" theme="column" style="width: 100%" />
+        </t-form-item>
+      </div>
+      <div class="form-row">
+        <t-form-item label="签到提前开放（分钟）" name="checkinOpenMin">
+          <t-input-number v-model="form.checkinOpenMin" :min="0" theme="column" style="width: 100%" />
+        </t-form-item>
+        <t-form-item label="签到延后关闭（分钟）" name="checkinCloseMin">
+          <t-input-number v-model="form.checkinCloseMin" :min="0" theme="column" style="width: 100%" />
+        </t-form-item>
       </div>
 
       <t-form-item label="活动简介" name="description">

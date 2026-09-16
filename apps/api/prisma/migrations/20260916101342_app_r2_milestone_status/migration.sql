@@ -1,0 +1,2 @@
+-- AlterTable
+ALTER TABLE "Milestone" ALTER COLUMN "status" SET DATA TYPE VARCHAR(16);

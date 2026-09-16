@@ -31,7 +31,7 @@ const query = reactive({
 
 const categoryOptions = ref([
   { label: '全部', value: '' },
-  ...Object.values(goodsCategoryMap).map((label) => ({ label, value: label })),
+  ...Object.entries(goodsCategoryMap).map(([value, label]) => ({ label, value })),
 ])
 
 const statusOptions = [
@@ -48,6 +48,7 @@ const dataColumns = [
   { colKey: 'stock', title: '库存', cell: 'stock', width: 90, resizable: true , ellipsis: true},
   { colKey: 'redeemedCount', title: '累计兑换', width: 100, resizable: true , ellipsis: true},
   { colKey: 'status', title: '状态', cell: 'status', width: 100, resizable: true , ellipsis: true},
+  { colKey: 'subscriberCount', title: '到货提醒', width: 100, resizable: true, ellipsis: true },
   { colKey: 'createdAt', title: '创建时间', width: 150, resizable: true , ellipsis: true},
   { colKey: 'op', title: '操作', cell: 'op', width: 170 },
 ]
@@ -175,7 +176,7 @@ onMounted(() => {
     .then((entries) => {
       const options = entries
         .filter((e) => e.status === 'enabled')
-        .map((e) => ({ label: e.label, value: e.label }))
+        .map((e) => ({ label: e.label, value: e.code }))
       if (options.length) categoryOptions.value = [{ label: '全部', value: '' }, ...options]
     })
     .catch(() => undefined)

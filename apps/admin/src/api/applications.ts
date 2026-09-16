@@ -45,3 +45,24 @@ export interface ApplicationPrintResult {
 export async function fetchApplicationPrint(id: string): Promise<ApplicationPrintResult> {
   return httpGet<ApplicationPrintResult>(`/applications/${id}/print`)
 }
+
+export interface ApplicationFormConfig {
+  type: 'settle' | 'cooperation' | 'individual' | 'identity'
+  title: string
+  subtitle: string
+  submitLabel: string
+  tips?: string[]
+  fields: Array<Record<string, unknown>>
+  updatedAt?: string
+}
+
+export async function fetchApplicationFormConfigs(): Promise<ApplicationFormConfig[]> {
+  return httpGet<ApplicationFormConfig[]>('/applications/form-configs/all')
+}
+
+export async function saveApplicationFormConfig(
+  type: string,
+  config: Omit<ApplicationFormConfig, 'type' | 'updatedAt'>,
+): Promise<{ code: number }> {
+  return httpPost<{ code: number }>(`/applications/form-configs/${type}`, config)
+}

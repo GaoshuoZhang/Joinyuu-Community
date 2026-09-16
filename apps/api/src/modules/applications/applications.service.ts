@@ -7,6 +7,8 @@ import { PointsEngineService } from '../../common/engine/points-engine/points-en
 import { RedisService } from '../../common/redis/redis.service'
 import { CACHE_KEYS } from '../../common/redis/cache-keys'
 import { formatNow, formatToday } from '../../common/utils/time'
+import { DEFAULT_APPLICATION_SCHEMAS } from '../app/applications/applications.service'
+import type { ApplicationFormConfigDto } from './dto/application-form-config.dto'
 
 interface ApprovalRecord {
   step: string
@@ -58,6 +60,35 @@ export class ApplicationsService {
     private readonly engine: PointsEngineService,
     private readonly redis: RedisService,
   ) {}
+
+  async formConfigs() {
+    const rows = await this.prisma.applicationFormConfig.findMany()
+    const stored = new Map(rows.map((row) => [row.type, row]))
+    return Object.entries(DEFAULT_APPLICATION_SCHEMAS).map(([type, fallback]) => {
+      const row = stored.get(type)
+      return row
+        ? { type, title: row.title, subtitle: row.subtitle, submitLabel: row.submitLabel, tips: row.tips, fields: row.fields, updatedAt: row.updatedAt }
+        : fallback
+    })
+  }
+
+  async saveFormConfig(type: string, dto: ApplicationFormConfigDto, operator: string): Promise<{ code: number }> {
+    if (!(type in DEFAULT_APPLICATION_SCHEMAS)) throw new NotFoundException('申请表单类型不存在')
+    const now = formatNow()
+    await this.prisma.applicationFormConfig.upsert({
+      where: { type },
+      create: { type, title: dto.title.trim(), subtitle: dto.subtitle.trim(), submitLabel: dto.submitLabel.trim(), tips: dto.tips as Prisma.InputJsonValue, fields: dto.fields as Prisma.InputJsonValue, updatedAt: now },
+      update: { title: dto.title.trim(), subtitle: dto.subtitle.trim(), submitLabel: dto.submitLabel.trim(), tips: dto.tips as Prisma.InputJsonValue, fields: dto.fields as Prisma.InputJsonValue, updatedAt: now },
+    })
+    await this.audit.record({
+      module: '申请审核',
+      action: '更新申请表单配置',
+      target: type,
+      after: { title: dto.title, fieldCount: dto.fields.length },
+      operator,
+    })
+    return { code: 0 }
+  }
 
   async findAll(query: ApplicationQuery): Promise<{ list: unknown[]; total: number }> {
     const where: Prisma.ApplicationWhereInput = { type: { in: APPLICATION_TYPES }, deletedAt: null }

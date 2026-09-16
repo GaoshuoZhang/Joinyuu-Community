@@ -287,6 +287,15 @@ onMounted(load)
           <t-descriptions-item label="联系电话">{{ demand.contactPhone ?? '—' }}</t-descriptions-item>
           <t-descriptions-item label="联系邮箱">{{ demand.contactEmail ?? '—' }}</t-descriptions-item>
           <t-descriptions-item label="预算">{{ demand.budget }}</t-descriptions-item>
+          <t-descriptions-item label="需求类型">
+            {{ demand.demandType === 'investment' ? '找投资' : demand.demandType === 'cooperation' ? '找合作' : '找服务' }}
+          </t-descriptions-item>
+          <t-descriptions-item v-if="demand.demandType === 'task'" label="预期交付内容">{{ demand.deliverable || '—' }}</t-descriptions-item>
+          <t-descriptions-item v-if="demand.demandType === 'task'" label="预期交付日期">{{ demand.deliverBy || '—' }}</t-descriptions-item>
+          <t-descriptions-item v-if="demand.demandType === 'investment'" label="合作需求">{{ demand.cooperationNeed || '—' }}</t-descriptions-item>
+          <t-descriptions-item v-if="demand.demandType === 'investment'" label="可提供回报">{{ demand.returnOffer || '—' }}</t-descriptions-item>
+          <t-descriptions-item v-if="demand.demandType === 'cooperation'" label="业务瓶颈">{{ demand.bottleneck || '—' }}</t-descriptions-item>
+          <t-descriptions-item v-if="demand.demandType === 'cooperation'" label="期望合作方式">{{ demand.partnershipMode || '—' }}</t-descriptions-item>
           <t-descriptions-item label="预期交付截止日">{{ demand.period }}</t-descriptions-item>
           <t-descriptions-item label="报名截止时间">{{ demand.deadline }}</t-descriptions-item>
           <t-descriptions-item v-if="demand.status === 'scheduled' && demand.scheduledAt" label="定时发布时间">

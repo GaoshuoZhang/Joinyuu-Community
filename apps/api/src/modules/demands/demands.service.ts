@@ -40,6 +40,13 @@ export interface DemandDto {
   id: string
   title: string
   category: string
+  demandType: string
+  deliverable?: string
+  deliverBy?: string
+  cooperationNeed?: string
+  returnOffer?: string
+  bottleneck?: string
+  partnershipMode?: string
   publisherId: string
   publisherName: string
   publisherIdentity: unknown
@@ -114,6 +121,7 @@ function toDemandDto(d: DemandWithRespondents): DemandDto {
     id: d.id,
     title: d.title,
     category: d.category,
+    demandType: d.demandType,
     publisherId: d.publisherId,
     publisherName: d.publisherName,
     publisherIdentity: d.publisherIdentity,
@@ -131,6 +139,12 @@ function toDemandDto(d: DemandWithRespondents): DemandDto {
     respondents: d.respondents.map(toRespondentDto),
   }
   if (d.creatorName != null) dto.creatorName = d.creatorName
+  if (d.deliverable != null) dto.deliverable = d.deliverable
+  if (d.deliverBy != null) dto.deliverBy = d.deliverBy
+  if (d.cooperationNeed != null) dto.cooperationNeed = d.cooperationNeed
+  if (d.returnOffer != null) dto.returnOffer = d.returnOffer
+  if (d.bottleneck != null) dto.bottleneck = d.bottleneck
+  if (d.partnershipMode != null) dto.partnershipMode = d.partnershipMode
   if (d.creatorId != null) dto.creatorId = d.creatorId
   if (d.contactName != null) dto.contactName = d.contactName
   if (d.contactPhone != null) dto.contactPhone = d.contactPhone
@@ -168,6 +182,7 @@ export class DemandsService {
       ]
     }
     if (query.category) where.category = query.category
+    if (query.demandType) where.demandType = query.demandType
     if (query.status) where.status = query.status
     if (query.publisherId) where.publisherId = query.publisherId
 
@@ -645,6 +660,13 @@ export class DemandsService {
     return {
       title: dto.title,
       category: dto.category,
+      demandType: dto.demandType ?? 'task',
+      deliverable: dto.deliverable?.trim() || null,
+      deliverBy: dto.deliverBy || null,
+      cooperationNeed: dto.cooperationNeed?.trim() || null,
+      returnOffer: dto.returnOffer?.trim() || null,
+      bottleneck: dto.bottleneck?.trim() || null,
+      partnershipMode: dto.partnershipMode?.trim() || null,
       budget: (dto.budget ?? '').trim() || '面议',
       period: dto.period,
       deadline: dto.deadline,

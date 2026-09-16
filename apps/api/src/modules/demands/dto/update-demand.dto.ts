@@ -1,5 +1,5 @@
 import { Type } from 'class-transformer'
-import { IsArray, IsInt, IsOptional, IsString, Min } from 'class-validator'
+import { IsArray, IsIn, IsInt, IsOptional, IsString, Min } from 'class-validator'
 
 /* PUT /api/admin/demands/:id 入参（DemandPublishPayload，编辑不改状态/提交人） */
 export class UpdateDemandDto {
@@ -8,6 +8,34 @@ export class UpdateDemandDto {
 
   @IsString()
   category!: string
+
+  @IsOptional()
+  @IsIn(['task', 'investment', 'cooperation'])
+  demandType?: 'task' | 'investment' | 'cooperation'
+
+  @IsOptional()
+  @IsString()
+  deliverable?: string
+
+  @IsOptional()
+  @IsString()
+  deliverBy?: string
+
+  @IsOptional()
+  @IsString()
+  cooperationNeed?: string
+
+  @IsOptional()
+  @IsString()
+  returnOffer?: string
+
+  @IsOptional()
+  @IsString()
+  bottleneck?: string
+
+  @IsOptional()
+  @IsString()
+  partnershipMode?: string
 
   @IsString()
   budget!: string

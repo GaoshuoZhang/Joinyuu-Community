@@ -7,6 +7,8 @@ import { EventPayloadDto } from './dto/event-payload.dto'
 import { ScheduleEventDto } from './dto/schedule-event.dto'
 import { ReviewEnrollmentDto } from './dto/review-enrollment.dto'
 import { CheckinEventDto } from './dto/checkin-event.dto'
+import { RescheduleEventDto } from './dto/reschedule-event.dto'
+import { RedeemTicketDto } from './dto/redeem-ticket.dto'
 
 @RequirePermission('/events')
 @Controller('api/admin/events')
@@ -76,6 +78,16 @@ export class EventsController {
   }
 
   @HttpCode(200)
+  @Post(':id/reschedule')
+  reschedule(
+    @Param('id') id: string,
+    @Body() dto: RescheduleEventDto,
+    @Req() req: AuthenticatedRequest,
+  ) {
+    return this.events.reschedule(id, dto, req.user?.name ?? '社区管理员')
+  }
+
+  @HttpCode(200)
   @Post(':id/archive')
   archive(@Param('id') id: string, @Req() req: AuthenticatedRequest) {
     return this.events.archive(id, req.user?.name ?? '社区管理员')
@@ -95,5 +107,16 @@ export class EventsController {
   @Post(':id/checkin')
   checkin(@Param('id') id: string, @Body() dto: CheckinEventDto) {
     return this.events.checkin(id, dto.userId)
+  }
+
+  @Get(':id/tickets')
+  tickets(@Param('id') id: string) {
+    return this.events.listTickets(id)
+  }
+
+  @HttpCode(200)
+  @Post(':id/tickets/redeem')
+  redeemTicket(@Param('id') id: string, @Body() dto: RedeemTicketDto) {
+    return this.events.redeemTicket(id, dto.code)
   }
 }

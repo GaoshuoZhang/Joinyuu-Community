@@ -51,6 +51,16 @@ export class RedisService implements OnModuleDestroy {
     }
   }
 
+  /** 原子抢占短期标记；Redis 故障时 fail-open，数据库约束/事务仍负责最终一致性。 */
+  async acquireFlag(key: string, ttlSeconds: number): Promise<boolean> {
+    try {
+      return (await this.client.set(key, '1', 'EX', ttlSeconds, 'NX')) === 'OK'
+    } catch (e) {
+      console.error('[redis] 标记抢占失败，降级放行:', e instanceof Error ? e.message : e)
+      return true
+    }
+  }
+
   /** 标记键是否存在；Redis 不可用时降级返回 false（fail-open 放行） */
   async hasFlag(key: string): Promise<boolean> {
     try {

@@ -29,6 +29,8 @@ const form = reactive({
   title: '',
   content: '',
   pinned: false,
+  expireAt: '',
+  link: '',
 })
 
 const rules: FormProps['rules'] = {
@@ -44,10 +46,14 @@ watch(
       form.title = props.announcement.title
       form.content = props.announcement.content
       form.pinned = props.announcement.pinned
+      form.expireAt = props.announcement.expireAt ?? ''
+      form.link = props.announcement.link ?? ''
     } else {
       form.title = ''
       form.content = ''
       form.pinned = false
+      form.expireAt = ''
+      form.link = ''
     }
     nextTick(() => formRef.value?.clearValidate())
   },
@@ -111,6 +117,14 @@ function onClose() {
           <span class="pin-tip">置顶公告在客户端公告位优先展示</span>
         </div>
       </t-form-item>
+      <div class="meta-row">
+        <t-form-item label="有效期至" name="expireAt">
+          <t-date-picker v-model="form.expireAt" valueType="YYYY-MM-DD HH:mm" enable-time-picker clearable style="width: 100%" />
+        </t-form-item>
+        <t-form-item label="跳转链接" name="link">
+          <t-input v-model="form.link" clearable placeholder="如 /events/EV1001；留空不跳转" />
+        </t-form-item>
+      </div>
       <p v-if="mode === 'create'" class="publish-tip">确认后公告立即发布至客户端公告位，可随时下架或重新编辑。</p>
     </t-form>
   </t-dialog>
@@ -138,5 +152,11 @@ function onClose() {
   margin: 0;
   font-size: 12px;
   color: var(--td-text-color-secondary);
+}
+
+.meta-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
 }
 </style>

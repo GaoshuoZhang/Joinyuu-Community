@@ -47,11 +47,14 @@ export const statusMap = {
     published: { label: '已发布', theme: 'success' },
     ended: { label: '已结束', theme: 'default' },
     cancelled: { label: '已取消', theme: 'danger' },
+    postponed: { label: '已改期', theme: 'warning' },
   },
   enrollment: {
     pending: { label: '待审核', theme: 'warning' },
     approved: { label: '已通过', theme: 'success' },
     rejected: { label: '已驳回', theme: 'danger' },
+    waitlisted: { label: '候补中', theme: 'primary' },
+    cancelled: { label: '已取消', theme: 'default' },
   },
   goods: {
     on: { label: '已上架', theme: 'success' },
@@ -128,6 +131,9 @@ export const showcaseTargetTypeMap: Record<string, { label: string; theme: 'defa
 /* 选项词汇表（页面统一取用，禁止自造文案） */
 
 export const goodsCategoryMap: Record<string, string> = {
+  GC001: '实物商品',
+  GC002: '虚拟服务',
+  GC003: '权益券',
   physical: '实物商品',
   virtual: '虚拟服务',
   voucher: '权益券',

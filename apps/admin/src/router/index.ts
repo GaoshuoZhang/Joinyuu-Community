@@ -88,6 +88,11 @@ const router = createRouter({
           meta: { title: '申请审核', group: '社区成员' },
         },
         {
+          path: 'application-form-config',
+          component: () => import('@/views/approvals/ApplicationFormConfigView.vue'),
+          meta: { title: '申请表单配置', group: '社区成员', perm: '/approvals' },
+        },
+        {
           path: 'demands',
           component: () => import('@/views/demands/DemandListView.vue'),
           meta: { title: '需求管理', group: '业务运营' },

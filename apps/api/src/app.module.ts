@@ -37,6 +37,16 @@ import { AppMeModule } from './modules/app/me/me.module'
 import { AppConfigModule } from './modules/app/config/config.module'
 import { AppNoticesModule } from './modules/app/notices/notices.module'
 import { AppAddressesModule } from './modules/app/addresses/addresses.module'
+import { AppDemandsModule } from './modules/app/demands/demands.module'
+import { AppProjectsModule } from './modules/app/projects/projects.module'
+import { AppEventsModule } from './modules/app/events/events.module'
+import { AppMallModule } from './modules/app/mall/mall.module'
+import { AppSpacesModule } from './modules/app/spaces/spaces.module'
+import { AppContentsModule } from './modules/app/contents/contents.module'
+import { AppApplicationsModule } from './modules/app/applications/applications.module'
+import { AppHomeModule } from './modules/app/home/home.module'
+import { AppSearchModule } from './modules/app/search/search.module'
+import { AppUploadsModule } from './modules/app/uploads/uploads.module'
 import { SchedulerModule } from './scheduler/scheduler.module'
 import { HealthController } from './health/health.controller'
 import { JwtAuthGuard } from './common/guards/jwt-auth.guard'
@@ -86,6 +96,16 @@ import { HttpExceptionFilter } from './common/filters/http-exception.filter'
     AppConfigModule,
     AppNoticesModule,
     AppAddressesModule,
+    AppDemandsModule,
+    AppProjectsModule,
+    AppEventsModule,
+    AppMallModule,
+    AppSpacesModule,
+    AppContentsModule,
+    AppApplicationsModule,
+    AppHomeModule,
+    AppSearchModule,
+    AppUploadsModule,
     SchedulerModule,
   ],
   controllers: [HealthController],

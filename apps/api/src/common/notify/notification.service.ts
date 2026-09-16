@@ -2,6 +2,7 @@ import { Injectable } from '@nestjs/common'
 import { PrismaService } from '../prisma/prisma.service'
 import { IdGeneratorService } from '../id-generator/id-generator.service'
 import { formatNow } from '../utils/time'
+import type { Prisma } from '@prisma/client'
 
 export interface NoticeInput {
   type: string
@@ -22,29 +23,36 @@ export class NotificationService {
 
   async pushNotice(userId: string, input: NoticeInput): Promise<void> {
     try {
-      const pref = await this.prisma.userNotificationPreference.findUnique({
-        where: { userId },
-      })
-      if (pref) {
-        const enabled = (pref.enabledTypes ?? []) as string[]
-        if (!enabled.includes('all') && !enabled.includes(input.type)) return
-      }
-      await this.prisma.userNotification.create({
-        data: {
-          id: await this.ids.next('UN'),
-          userId,
-          type: input.type,
-          title: input.title,
-          content: input.content,
-          link: input.link ?? null,
-          at: formatNow(),
-        },
-      })
+      await this.pushNoticeInTransaction(this.prisma, userId, input)
     } catch (error) {
       console.error(
         '[notify] 站内信写入失败（不阻断主流程）:',
         error instanceof Error ? error.message : error,
       )
     }
+  }
+
+  /** 事务版通知写入：业务要求通知与状态原子提交时使用，错误交给调用方回滚。 */
+  async pushNoticeInTransaction(
+    tx: Prisma.TransactionClient | PrismaService,
+    userId: string,
+    input: NoticeInput,
+  ): Promise<void> {
+    const pref = await tx.userNotificationPreference.findUnique({ where: { userId } })
+    if (pref) {
+      const enabled = (pref.enabledTypes ?? []) as string[]
+      if (!enabled.includes('all') && !enabled.includes(input.type)) return
+    }
+    await tx.userNotification.create({
+      data: {
+        id: await this.ids.next('UN'),
+        userId,
+        type: input.type,
+        title: input.title,
+        content: input.content,
+        link: input.link ?? null,
+        at: formatNow(),
+      },
+    })
   }
 }

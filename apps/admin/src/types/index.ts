@@ -145,6 +145,13 @@ export interface Demand {
   id: string
   title: string
   category: string
+  demandType: 'task' | 'investment' | 'cooperation'
+  deliverable?: string
+  deliverBy?: string
+  cooperationNeed?: string
+  returnOffer?: string
+  bottleneck?: string
+  partnershipMode?: string
   /** 提交人（注册用户/企业，或未注册的自建条目） */
   publisherId: string
   publisherName: string
@@ -248,7 +255,7 @@ export interface Project {
   deletedAt?: string | null
 }
 
-export type EventStatus = 'pending_release' | 'scheduled' | 'published' | 'ended' | 'cancelled'
+export type EventStatus = 'pending_release' | 'scheduled' | 'published' | 'ended' | 'cancelled' | 'postponed'
 
 export interface EventEnrollment {
   userId: string
@@ -256,9 +263,13 @@ export interface EventEnrollment {
   enterprise: string
   phone: string
   appliedAt: string
-  status: 'pending' | 'approved' | 'rejected'
+  status: 'pending' | 'approved' | 'rejected' | 'waitlisted' | 'cancelled'
   checkedIn: boolean
   checkInAt: string | null
+  waitlistOrder?: number
+  checkinLat?: string
+  checkinLng?: string
+  checkinMethod?: 'self' | 'admin'
 }
 
 export interface CommunityEvent {
@@ -294,6 +305,18 @@ export interface CommunityEvent {
   enrollPoints?: number
   /** 签到奖励积分（历史缺省值按积分规则 activity_checkin 发放） */
   checkinPoints?: number
+  venueLat?: string
+  venueLng?: string
+  checkinRadiusM?: number
+  checkinOpenMin?: number
+  checkinCloseMin?: number
+  cancelDeadlineHours?: number
+  rescheduledTo?: string
+  feedbackSummary?: {
+    average: number
+    total: number
+    list: Array<{ userId: string; rating: number; comment: string; at: string }>
+  }
   description: string
   tags: string[]
   enrollments: EventEnrollment[]
@@ -410,6 +433,7 @@ export interface ExternalEnterprise {
 /* ---------- 积分商城 ---------- */
 
 export type GoodsCategory = string
+export type GoodsFulfillment = 'physical' | 'voucher' | 'service'
 export type GoodsStatus = 'on' | 'off' | 'restock'
 
 export interface MallGoods {
@@ -417,6 +441,8 @@ export interface MallGoods {
   name: string
   /** 实物商品 / 虚拟服务 / 权益券 */
   category: GoodsCategory
+  /** 履约类型：实物配送 / 券码 / 服务权益 */
+  fulfillment: GoodsFulfillment
   /** 兑换所需积分 */
   points: number
   /** 库存（虚拟/权益券可设较大值） */
@@ -425,6 +451,7 @@ export interface MallGoods {
   description: string
   /** 累计兑换次数 */
   redeemedCount: number
+  subscriberCount?: number
   createdAt: string
   /** 发货方式（仅实物商品）：pickup 自提 / delivery 邮寄 */
   shippingMethods?: Array<'pickup' | 'delivery'>
@@ -463,6 +490,7 @@ export interface RedemptionOrder {
   note?: string
   /** 取消原因（cancelled 时存在，积分原路退回） */
   cancelReason?: string
+  trackingNo?: string
 }
 
 export type RuleStatus = 'enabled' | 'disabled'
@@ -804,6 +832,8 @@ export interface Announcement {
   publishedAt: string
   createdAt: string
   updatedAt?: string
+  expireAt?: string
+  link?: string
 }
 
 export interface ShowcaseRequest {

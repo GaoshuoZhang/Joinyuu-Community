@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue'
+import { computed, onMounted, reactive, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useQueryTab } from '@/utils/navigation'
 import { MessagePlugin } from 'tdesign-vue-next'
@@ -14,18 +14,23 @@ import {
   cancelEventSchedule,
   checkInEvent,
   fetchEvent,
+  fetchEventTickets,
   publishEventNow,
+  redeemEventTicket,
+  rescheduleEvent,
   restoreCancelledEvent,
   reviewEventEnrollment,
   toggleEventEnrollment,
 } from '@/api/events'
+import type { EventTicketRow } from '@/api/events'
 import type { CommunityEvent, EventEnrollment } from '@/types'
+import { exportCsv } from '@/utils/exportCsv'
 
 const route = useRoute()
 const router = useRouter()
 const loading = ref(true)
 const event = ref<CommunityEvent | null>(null)
-const tab = useQueryTab('info', ['info', 'enrollments', 'checkin'] as const)
+const tab = useQueryTab('info', ['info', 'enrollments', 'checkin', 'tickets'] as const)
 /* 已归档条目：隐藏全部写操作（含报名审核/签到），仅保留只读内容 */
 const isArchived = computed(() => !!event.value?.deletedAt)
 /* 当前审核中的记录标识：`${userId}:${approved | rejected}` */
@@ -34,9 +39,40 @@ const reviewing = ref('')
 const checkingIn = ref('')
 /* 编辑弹窗 */
 const editVisible = ref(false)
+const tickets = ref<EventTicketRow[]>([])
+const redeemCode = ref('')
+const redeeming = ref(false)
 
 /* 操作中的标识 */
 const acting = ref('')
+const rescheduleVisible = ref(false)
+const rescheduleForm = reactive({ startTime: '', endTime: '', reason: '' })
+
+function openReschedule() {
+  if (!event.value) return
+  rescheduleForm.startTime = event.value.startTime
+  rescheduleForm.endTime = event.value.endTime
+  rescheduleForm.reason = ''
+  rescheduleVisible.value = true
+}
+
+async function onReschedule() {
+  if (!event.value || !rescheduleForm.startTime || !rescheduleForm.endTime || !rescheduleForm.reason.trim()) {
+    MessagePlugin.warning('请填写新时间和改期原因')
+    return
+  }
+  acting.value = 'reschedule'
+  try {
+    const result = await rescheduleEvent(event.value.id, { ...rescheduleForm, reason: rescheduleForm.reason.trim() })
+    MessagePlugin.success(`活动已改期，已通知 ${result.notified} 位报名者`)
+    rescheduleVisible.value = false
+    await load(true)
+  } catch (e) {
+    MessagePlugin.error(e instanceof Error ? e.message : '改期失败')
+  } finally {
+    acting.value = ''
+  }
+}
 
 /* 待发布 → 立即发布（开放报名） */
 async function onPublishNow() {
@@ -143,6 +179,7 @@ const enrollmentColumns = [
   { colKey: 'phone', title: '联系电话', width: 130 , ellipsis: true},
   { colKey: 'appliedAt', title: '报名时间', width: 150 , ellipsis: true},
   { colKey: 'status', title: '状态', cell: 'status', width: 96 , ellipsis: true},
+  { colKey: 'waitlistOrder', title: '候补顺序', cell: 'waitlistOrder', width: 96, ellipsis: true },
   { colKey: 'op', title: '操作', cell: 'op', width: 120 },
 ]
 
@@ -150,6 +187,8 @@ const checkInColumns = [
   { colKey: 'name', title: '报名人', width: 120 , ellipsis: true},
   { colKey: 'enterprise', title: '所属企业', width: 180, ellipsis: true },
   { colKey: 'checkedIn', title: '签到状态', cell: 'checkState', width: 140 , ellipsis: true},
+  { colKey: 'checkinMethod', title: '签到方式', cell: 'checkinMethod', width: 110, ellipsis: true },
+  { colKey: 'checkinLocation', title: '签到坐标', cell: 'checkinLocation', width: 180, ellipsis: true },
   { colKey: 'op', title: '操作', cell: 'op', width: 120 },
 ]
 
@@ -157,6 +196,7 @@ async function load(silent = false) {
   if (!silent) loading.value = true
   try {
     event.value = await fetchEvent(route.params.id as string)
+    tickets.value = await fetchEventTickets(route.params.id as string)
   } catch {
     MessagePlugin.error('活动加载失败')
   } finally {
@@ -198,6 +238,38 @@ async function onCheckIn(row: EventEnrollment) {
   } finally {
     checkingIn.value = ''
   }
+}
+
+async function onRedeemTicket() {
+  if (!event.value || !redeemCode.value.trim()) {
+    MessagePlugin.warning('请输入核销码')
+    return
+  }
+  redeeming.value = true
+  try {
+    await redeemEventTicket(event.value.id, redeemCode.value)
+    MessagePlugin.success('电子票核销成功')
+    redeemCode.value = ''
+    await load(true)
+  } catch (e) {
+    MessagePlugin.error(e instanceof Error ? e.message : '核销失败')
+  } finally {
+    redeeming.value = false
+  }
+}
+
+function exportTickets() {
+  exportCsv(
+    `活动票务-${event.value?.id ?? ''}`,
+    ['票号', '核销码', '报名人', '用户编号', '核销时间'],
+    tickets.value.map((ticket) => [
+      ticket.ticketNo,
+      ticket.redeemCode,
+      ticket.userName,
+      ticket.userId,
+      ticket.redeemedAt ?? '未核销',
+    ]),
+  )
 }
 
 /* checkInAt 形如 'YYYY-MM-DD HH:mm'，签到标签只展示 HH:mm */
@@ -301,6 +373,7 @@ onMounted(() => load())
               </template>
               <template v-else-if="event.status === 'published'">
                 <t-button variant="outline" @click="editVisible = true">编辑</t-button>
+                <t-button variant="outline" theme="warning" @click="openReschedule">活动改期</t-button>
                 <t-button variant="outline" :loading="acting === 'enrollment'" @click="onToggleEnrollment">
                   {{ event.enrollmentOpen ? '暂停报名' : '开放报名' }}
                 </t-button>
@@ -343,6 +416,18 @@ onMounted(() => load())
           <t-descriptions-item label="报名截止时间">
             {{ event.enrollmentDeadline || '不限（活动开始前均可报名）' }}
           </t-descriptions-item>
+          <t-descriptions-item label="签到范围">
+            {{ event.venueLat && event.venueLng ? `${event.venueLat}, ${event.venueLng}（${event.checkinRadiusM ?? 200} 米）` : '未启用地理围栏' }}
+          </t-descriptions-item>
+          <t-descriptions-item label="签到时间窗">
+            开始前 {{ event.checkinOpenMin ?? 30 }} 分钟至开始后 {{ event.checkinCloseMin ?? 30 }} 分钟
+          </t-descriptions-item>
+          <t-descriptions-item label="取消报名时限">
+            开场前 {{ event.cancelDeadlineHours ?? 24 }} 小时
+          </t-descriptions-item>
+          <t-descriptions-item v-if="event.rescheduledTo" label="最近改期至">
+            {{ event.rescheduledTo }}
+          </t-descriptions-item>
           <t-descriptions-item v-if="event.status === 'scheduled' && event.scheduledAt" label="定时发布时间">
             {{ event.scheduledAt }}（到点自动发布）
           </t-descriptions-item>
@@ -358,6 +443,19 @@ onMounted(() => load())
                 <t-tag v-for="tag in event.tags" :key="tag" variant="outline" size="small">
                   {{ tag }}
                 </t-tag>
+              </div>
+              <div class="feedback-block">
+                <h4>活动反馈</h4>
+                <p class="feedback-summary">
+                  平均评分 {{ event.feedbackSummary?.average ?? 0 }} / 5，共 {{ event.feedbackSummary?.total ?? 0 }} 条
+                </p>
+                <t-list v-if="event.feedbackSummary?.list.length" :split="true">
+                  <t-list-item v-for="item in event.feedbackSummary.list" :key="`${item.userId}-${item.at}`">
+                    <t-list-item-meta :title="`${item.userId} · ${item.rating} 星`" :description="item.comment || '未填写文字反馈'" />
+                    <template #action>{{ item.at }}</template>
+                  </t-list-item>
+                </t-list>
+                <t-empty v-else description="暂无活动反馈" />
               </div>
             </div>
           </t-tab-panel>
@@ -376,6 +474,7 @@ onMounted(() => load())
                 <template #status="{ row }">
                   <StatusTag entity="enrollment" :value="row.status" />
                 </template>
+                <template #waitlistOrder="{ row }">{{ row.waitlistOrder ?? '—' }}</template>
                 <template #op="{ row }">
                   <template v-if="!isArchived && row.status === 'pending'">
                     <t-popconfirm content="确认通过该报名？" @confirm="onReview(row, 'approved')">
@@ -413,6 +512,12 @@ onMounted(() => load())
                   </t-tag>
                   <t-tag v-else theme="warning" variant="light">未签到</t-tag>
                 </template>
+                <template #checkinMethod="{ row }">
+                  {{ row.checkinMethod === 'self' ? '自助签到' : row.checkinMethod === 'admin' ? '管理端补签' : '—' }}
+                </template>
+                <template #checkinLocation="{ row }">
+                  {{ row.checkinLat && row.checkinLng ? `${row.checkinLat}, ${row.checkinLng}` : '—' }}
+                </template>
                 <template #op="{ row }">
                   <t-button
                     v-if="!isArchived && !row.checkedIn"
@@ -426,6 +531,35 @@ onMounted(() => load())
                 </template>
               </t-table>
               <t-empty v-else description="暂无已通过报名" />
+            </div>
+          </t-tab-panel>
+
+          <t-tab-panel value="tickets" label="票务核销">
+            <div class="tab-body">
+              <div class="ticket-tools">
+                <t-input v-model="redeemCode" placeholder="输入 8 位核销码" clearable style="width: 260px" @enter="onRedeemTicket" />
+                <t-button theme="primary" :loading="redeeming" @click="onRedeemTicket">核销</t-button>
+                <t-button variant="outline" @click="exportTickets">导出票务名单</t-button>
+              </div>
+              <t-table
+                v-if="tickets.length"
+                row-key="ticketNo"
+                :data="tickets"
+                :columns="[
+                  { colKey: 'ticketNo', title: '票号' },
+                  { colKey: 'redeemCode', title: '核销码' },
+                  { colKey: 'userName', title: '报名人' },
+                  { colKey: 'userId', title: '用户编号' },
+                  { colKey: 'redeemedAt', title: '核销状态', cell: 'redeemedAt' },
+                ]"
+              >
+                <template #redeemedAt="{ row }">
+                  <t-tag :theme="row.redeemedAt ? 'success' : 'warning'" variant="light">
+                    {{ row.redeemedAt || '未核销' }}
+                  </t-tag>
+                </template>
+              </t-table>
+              <t-empty v-else description="暂无已签发电子票" />
             </div>
           </t-tab-panel>
         </t-tabs>
@@ -444,6 +578,26 @@ onMounted(() => load())
 
     <!-- 待发布：定时发布对话框 -->
     <EventScheduleDialog v-model:visible="scheduleVisible" :event="event" @success="() => load(true)" />
+
+    <t-dialog v-model:visible="rescheduleVisible" header="活动改期" width="560px" :confirm-btn="null" :cancel-btn="null">
+      <t-form :data="rescheduleForm" label-align="top">
+        <div class="reschedule-grid">
+          <t-form-item label="新开始时间" name="startTime">
+            <t-date-picker v-model="rescheduleForm.startTime" valueType="YYYY-MM-DD HH:mm" enable-time-picker style="width: 100%" />
+          </t-form-item>
+          <t-form-item label="新结束时间" name="endTime">
+            <t-date-picker v-model="rescheduleForm.endTime" valueType="YYYY-MM-DD HH:mm" enable-time-picker style="width: 100%" />
+          </t-form-item>
+        </div>
+        <t-form-item label="改期原因" name="reason">
+          <t-textarea v-model="rescheduleForm.reason" :maxlength="200" placeholder="将随站内信通知报名者" />
+        </t-form-item>
+      </t-form>
+      <template #footer>
+        <t-button variant="text" theme="default" @click="rescheduleVisible = false">取消</t-button>
+        <t-button theme="primary" :loading="acting === 'reschedule'" @click="onReschedule">确认改期并通知</t-button>
+      </template>
+    </t-dialog>
   </div>
 </template>
 
@@ -533,10 +687,29 @@ onMounted(() => load())
   gap: 8px;
 }
 
+.feedback-block {
+  margin-top: 24px;
+}
+
+.feedback-block h4 {
+  margin: 0 0 8px;
+}
+
+.feedback-summary {
+  color: var(--td-text-color-secondary);
+}
+
 .checkin-summary {
   margin-bottom: 12px;
   font-size: 13px;
   color: var(--td-text-color-secondary);
+}
+
+.ticket-tools {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 16px;
 }
 
 .num {
@@ -546,5 +719,11 @@ onMounted(() => load())
 
 .op-none {
   color: var(--td-text-color-secondary);
+}
+
+.reschedule-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
 }
 </style>

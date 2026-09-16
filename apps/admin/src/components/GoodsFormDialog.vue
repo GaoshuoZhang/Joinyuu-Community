@@ -5,9 +5,9 @@ import type { FormProps } from 'tdesign-vue-next'
 import { focusFirstInvalid } from '@/utils/form'
 import { createGoods, updateGoods } from '@/api/mall'
 import { fetchDictEntries } from '@/api/dicts'
-import { goodsCategoryMap, isPhysicalCategory } from '@/constants/status'
+import { goodsCategoryMap } from '@/constants/status'
 import { userLevelOptions, visibilityIdentityOptions } from '@/constants/identity'
-import type { MallGoods, GoodsCategory } from '@/types'
+import type { MallGoods, GoodsCategory, GoodsFulfillment } from '@/types'
 
 const RichEditor = defineAsyncComponent(() => import('@/components/RichEditor.vue'))
 
@@ -24,14 +24,14 @@ const emit = defineEmits<{
   (e: 'success'): void
 }>()
 
-const categoryOptions = ref(Object.values(goodsCategoryMap).map((label) => ({ label, value: label })))
+const categoryOptions = ref(Object.entries(goodsCategoryMap).map(([value, label]) => ({ label, value })))
 
 onMounted(() => {
   fetchDictEntries('goods_category')
     .then((entries) => {
       const mapped = entries
         .filter((e) => e.status === 'enabled')
-        .map((e) => ({ label: e.label, value: e.label }))
+        .map((e) => ({ label: e.label, value: e.code }))
       if (mapped.length) categoryOptions.value = mapped
     })
     .catch(() => undefined)
@@ -40,6 +40,11 @@ onMounted(() => {
 const shippingMethodOptions = [
   { label: '自提', value: 'pickup' },
   { label: '邮寄', value: 'delivery' },
+]
+const fulfillmentOptions = [
+  { label: '实物配送', value: 'physical' },
+  { label: '券码权益', value: 'voucher' },
+  { label: '服务权益', value: 'service' },
 ]
 
 const submitting = ref(false)
@@ -51,7 +56,8 @@ const customOrdering = ref(false)
 
 const form = reactive({
   name: '',
-  category: '实物商品' as GoodsCategory,
+  category: 'GC001' as GoodsCategory,
+  fulfillment: 'physical' as GoodsFulfillment,
   points: 100,
   stock: 50,
   description: '',
@@ -71,6 +77,7 @@ watch(
     if (props.mode === 'edit' && props.goods) {
       form.name = props.goods.name
       form.category = props.goods.category
+      form.fulfillment = props.goods.fulfillment
       form.points = props.goods.points
       form.stock = props.goods.stock
       form.description = props.goods.description
@@ -85,7 +92,8 @@ watch(
       customOrdering.value = form.orderIdentities.length > 0 || form.orderLevels.length > 0
     } else {
       form.name = ''
-      form.category = '实物商品'
+      form.category = 'GC001'
+      form.fulfillment = 'physical'
       form.points = 100
       form.stock = 50
       form.description = ''
@@ -114,13 +122,14 @@ function syncOrdering() {
 const rules: FormProps['rules'] = {
   name: [{ required: true, message: '请输入商品名称', trigger: 'submit' }],
   category: [{ required: true, message: '请选择商品类型', trigger: 'submit' }],
+  fulfillment: [{ required: true, message: '请选择履约类型', trigger: 'submit' }],
   description: [{ required: true, message: '请输入商品说明', trigger: 'submit' }],
 }
 
 async function onConfirm() {
   const valid = await formRef.value.validate()
   if (valid !== true) return focusFirstInvalid(formRef.value)
-  const physical = isPhysicalCategory(form.category)
+  const physical = form.fulfillment === 'physical'
   if (physical && form.shippingMethods.includes('pickup') && !form.pickupAddress.trim()) {
     MessagePlugin.warning('请填写自提地址')
     return
@@ -130,6 +139,7 @@ async function onConfirm() {
     const payload = {
       name: form.name,
       category: form.category,
+      fulfillment: form.fulfillment,
       points: form.points,
       stock: form.stock,
       description: form.description,
@@ -185,8 +195,11 @@ function onClose() {
         <t-input clearable v-model="form.name" placeholder="请输入商品名称…" />
       </t-form-item>
       <div class="form-row">
-        <t-form-item label="商品类型" name="category">
+        <t-form-item label="商品分类" name="category">
           <t-select clearable v-model="form.category" :options="categoryOptions" />
+        </t-form-item>
+        <t-form-item label="履约类型" name="fulfillment">
+          <t-select :clearable="false" v-model="form.fulfillment" :options="fulfillmentOptions" />
         </t-form-item>
         <t-form-item label="兑换积分" name="points">
           <t-input-number v-model="form.points" :min="1" theme="column" style="width: 100%" />
@@ -197,7 +210,7 @@ function onClose() {
       </t-form-item>
 
       <!-- 实物商品：发货方式（自提/邮寄），按选择显示自提地址或邮费 -->
-      <template v-if="isPhysicalCategory(form.category)">
+      <template v-if="form.fulfillment === 'physical'">
         <t-form-item label="发货方式" name="shippingMethods">
           <t-select
             v-model="form.shippingMethods"

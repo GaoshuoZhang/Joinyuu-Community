@@ -23,6 +23,10 @@ export class QueryDemandsDto {
   category?: string
 
   @IsOptional()
+  @IsIn(['task', 'investment', 'cooperation'])
+  demandType?: string
+
+  @IsOptional()
   @IsIn(['pending', 'pending_release', 'scheduled', 'published', 'rejected', 'projected', 'closed'])
   status?: string
 

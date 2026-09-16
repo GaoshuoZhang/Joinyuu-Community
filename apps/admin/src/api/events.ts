@@ -48,6 +48,22 @@ export async function checkInEvent(eventId: string, userId: string): Promise<{ c
   return httpPost<{ code: number }>(`/events/${eventId}/checkin`, { userId })
 }
 
+export interface EventTicketRow {
+  ticketNo: string
+  redeemCode: string
+  userId: string
+  userName: string
+  redeemedAt?: string
+}
+
+export async function fetchEventTickets(eventId: string): Promise<EventTicketRow[]> {
+  return httpGet<EventTicketRow[]>(`/events/${eventId}/tickets`)
+}
+
+export async function redeemEventTicket(eventId: string, code: string): Promise<{ code: number }> {
+  return httpPost<{ code: number }>(`/events/${eventId}/tickets/redeem`, { code })
+}
+
 /* ---------- 状态流转：待发布 / 定时发布中 / 已发布（报名中|暂停报名）/ 已结束 / 已取消 ---------- */
 
 /* POST /api/admin/events/:id/publish-now — 待发布活动立即发布（开放报名） */
@@ -80,6 +96,13 @@ export async function restoreCancelledEvent(id: string): Promise<{ code: number 
   return httpPost<{ code: number }>(`/events/${id}/restore`)
 }
 
+export async function rescheduleEvent(
+  id: string,
+  payload: { startTime: string; endTime: string; reason: string },
+): Promise<{ notified: number }> {
+  return httpPost<{ notified: number }>(`/events/${id}/reschedule`, payload)
+}
+
 /* POST /api/admin/events/:id/archive — 归档已结束/已取消活动（可在归档管理中恢复） */
 export async function archiveEvent(id: string): Promise<{ code: number }> {
   return httpPost<{ code: number }>(`/events/${id}/archive`)
@@ -109,6 +132,12 @@ export interface EventPayload {
   enrollPoints?: number
   /** 签到奖励积分（历史缺省值按积分规则发放） */
   checkinPoints?: number
+  venueLat?: string
+  venueLng?: string
+  checkinRadiusM?: number
+  checkinOpenMin?: number
+  checkinCloseMin?: number
+  cancelDeadlineHours?: number
 }
 
 /* POST /api/admin/events — 新增活动（无定时发布选项，新增即进入待发布） */

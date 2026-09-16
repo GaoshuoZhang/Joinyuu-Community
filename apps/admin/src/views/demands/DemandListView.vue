@@ -191,6 +191,7 @@ const query = reactive({
   pageSize: 10,
   keyword: '',
   category: '',
+  demandType: '',
   status: '',
   publisherId: '',
   enterprise: '',
@@ -216,10 +217,18 @@ const statusOptions = [
   { label: '已立项', value: 'projected' },
   { label: '已关闭', value: 'closed' },
 ]
+const demandTypeOptions = [
+  { label: '全部类型', value: '' },
+  { label: '找服务', value: 'task' },
+  { label: '找投资', value: 'investment' },
+  { label: '找合作', value: 'cooperation' },
+]
+const demandTypeLabel: Record<string, string> = { task: '找服务', investment: '找投资', cooperation: '找合作' }
 
 const columns = [
   { colKey: 'title', title: '需求', cell: 'title', width: 210, resizable: true , ellipsis: true},
   { colKey: 'category', title: '类别', cell: 'category', width: 95, resizable: true , ellipsis: true},
+  { colKey: 'demandType', title: '需求类型', cell: 'demandType', width: 100, resizable: true, ellipsis: true },
   { colKey: 'publisher', title: '需求方', cell: 'publisher', width: 200, resizable: true , ellipsis: true},
   { colKey: 'budget', title: '预算', width: 125, resizable: true , ellipsis: true},
   { colKey: 'respondents', title: '响应', cell: 'respondents', width: 92, resizable: true , ellipsis: true},
@@ -349,6 +358,7 @@ function onSearch() {
 function onReset() {
   query.keyword = ''
   query.category = ''
+  query.demandType = ''
   query.status = ''
   query.publisherId = ''
   query.enterprise = ''
@@ -650,6 +660,14 @@ onMounted(() => {
         @change="onSearch"
       />
       <t-select
+        v-model="query.demandType"
+        label="需求类型"
+        :options="demandTypeOptions"
+        clearable
+        style="width: 140px"
+        @change="onSearch"
+      />
+      <t-select
         v-model="query.status"
         label="状态"
         :options="statusOptions"
@@ -709,6 +727,9 @@ onMounted(() => {
 
         <template #category="{ row }">
           <t-tag variant="light">{{ row.category }}</t-tag>
+        </template>
+        <template #demandType="{ row }">
+          <t-tag variant="light" theme="primary">{{ demandTypeLabel[row.demandType] ?? row.demandType }}</t-tag>
         </template>
 
         <template #publisher="{ row }">

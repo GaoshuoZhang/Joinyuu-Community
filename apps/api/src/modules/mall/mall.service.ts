@@ -16,6 +16,7 @@ import type { GoodsPayloadDto } from './dto/goods-payload.dto'
 import type { QueryGoodsDto } from './dto/query-goods.dto'
 import type { QueryRedemptionOrdersDto } from './dto/query-redemption-orders.dto'
 import type { UpdatePointsRuleDto } from './dto/update-points-rule.dto'
+import { NotificationService } from '../../common/notify/notification.service'
 
 /* 返回形状与 apps/admin/src/types/index.ts 逐字段一致（可空字段 null → undefined） */
 export interface RedemptionOrderDto {
@@ -34,6 +35,7 @@ export interface RedemptionOrderDto {
   address?: string
   note?: string
   cancelReason?: string
+  trackingNo?: string
 }
 
 export interface PointsRuleDto {
@@ -59,11 +61,12 @@ export class MallService {
     private readonly ids: IdGeneratorService,
     private readonly audit: AuditService,
     private readonly redis: RedisService,
+    private readonly notify: NotificationService,
   ) {}
 
   /* ---------- 商品管理 ---------- */
 
-  async listGoods(query: QueryGoodsDto): Promise<{ list: MallGoods[]; total: number }> {
+  async listGoods(query: QueryGoodsDto): Promise<{ list: Array<MallGoods & { subscriberCount: number }>; total: number }> {
     const where: Prisma.MallGoodsWhereInput = { deletedAt: null }
     if (query.keyword) {
       const kw = query.keyword.trim()
@@ -72,7 +75,7 @@ export class MallService {
         { id: { contains: kw, mode: 'insensitive' } },
       ]
     }
-    if (query.category) where.category = query.category
+    if (query.category) where.category = this.resolveCategory(query.category)
     if (query.status) where.status = query.status
 
     const [rows, total] = await Promise.all([
@@ -91,7 +94,14 @@ export class MallService {
     })
 
     const start = (query.page - 1) * query.pageSize
-    return { list: sorted.slice(start, start + query.pageSize), total }
+    const pageRows = sorted.slice(start, start + query.pageSize)
+    const counts = await this.prisma.restockSubscribe.groupBy({
+      by: ['goodsId'],
+      where: { goodsId: { in: pageRows.map((item) => item.id) }, notifiedAt: null },
+      _count: { _all: true },
+    })
+    const countMap = new Map(counts.map((item) => [item.goodsId, item._count._all]))
+    return { list: pageRows.map((item) => ({ ...item, subscriberCount: countMap.get(item.id) ?? 0 })), total }
   }
 
   async createGoods(dto: GoodsPayloadDto): Promise<MallGoods> {
@@ -99,7 +109,8 @@ export class MallService {
       data: {
         id: await this.ids.next('G'),
         name: dto.name,
-        category: dto.category,
+        category: this.resolveCategory(dto.category),
+        fulfillment: this.resolveFulfillment(dto),
         points: dto.points,
         stock: dto.stock,
         status: dto.stock === 0 ? 'restock' : 'off',
@@ -126,7 +137,8 @@ export class MallService {
       where: { id },
       data: {
         name: dto.name,
-        category: dto.category,
+        category: this.resolveCategory(dto.category),
+        fulfillment: this.resolveFulfillment(dto),
         points: dto.points,
         stock: dto.stock,
         status,
@@ -138,6 +150,7 @@ export class MallService {
         orderLevels: dto.orderLevels ?? [],
       },
     })
+    if (goods.stock === 0 && dto.stock > 0) await this.notifyRestocked(goods.id, goods.name)
     return { code: 0 }
   }
 
@@ -147,6 +160,7 @@ export class MallService {
 
     /* 下架即进入可归档计时（archivableAt）；重新上架清除计时 */
     const nextStatus = goods.status === 'on' ? 'off' : 'on'
+    if (nextStatus === 'on' && goods.stock <= 0) throw new ConflictException('库存为 0，无法上架')
     const archivableAt = nextStatus === 'off' ? formatNow() : null
     await this.prisma.mallGoods.update({ where: { id }, data: { status: nextStatus, archivableAt } })
 
@@ -188,7 +202,7 @@ export class MallService {
     pickupAddress: string | null
     shippingFee: number | null
   } {
-    if (dto.category !== 'physical' && dto.category !== '实物商品') {
+    if (this.resolveFulfillment(dto) !== 'physical') {
       return { shippingMethods: [], pickupAddress: null, shippingFee: null }
     }
 
@@ -201,6 +215,50 @@ export class MallService {
     }
     const shippingFee = shippingMethods.includes('delivery') ? dto.shippingFee ?? 0 : null
     return { shippingMethods, pickupAddress, shippingFee }
+  }
+
+  /** 兼容 R1 旧管理端 category 值，同时把分类与履约方式彻底拆开。 */
+  private resolveCategory(category: string): string {
+    const aliases: Record<string, string> = {
+      physical: 'GC001',
+      '实物商品': 'GC001',
+      virtual: 'GC002',
+      service: 'GC002',
+      '虚拟服务': 'GC002',
+      voucher: 'GC003',
+      '权益券': 'GC003',
+    }
+    return aliases[category] ?? category
+  }
+
+  private resolveFulfillment(dto: GoodsPayloadDto): 'physical' | 'voucher' | 'service' {
+    if (dto.fulfillment) return dto.fulfillment
+    const category = this.resolveCategory(dto.category)
+    if (category === 'GC001') return 'physical'
+    if (category === 'GC003') return 'voucher'
+    return 'service'
+  }
+
+  /** 补货后向尚未通知的订阅者发送站内信，并记录 notifiedAt 防重复。 */
+  private async notifyRestocked(goodsId: string, goodsName: string): Promise<void> {
+    const subscriptions = await this.prisma.restockSubscribe.findMany({
+      where: { goodsId, notifiedAt: null },
+      select: { id: true, userId: true },
+    })
+    if (!subscriptions.length) return
+    const at = formatNow()
+    await this.prisma.restockSubscribe.updateMany({
+      where: { id: { in: subscriptions.map((item) => item.id) }, notifiedAt: null },
+      data: { notifiedAt: at },
+    })
+    for (const subscription of subscriptions) {
+      await this.notify.pushNotice(subscription.userId, {
+        type: 'mall',
+        title: '到货提醒',
+        content: `您关注的商品「${goodsName}」已补货，欢迎前往积分商城查看。`,
+        link: `/mall/${goodsId}`,
+      })
+    }
   }
 
   /* ---------- 兑换订单 ---------- */
@@ -238,14 +296,17 @@ export class MallService {
     return { list: sorted.slice(start, start + query.pageSize).map(toOrderDto), total }
   }
 
-  async shipOrder(id: string, operator: string): Promise<{ code: number }> {
+  async shipOrder(id: string, trackingNo: string | undefined, operator: string): Promise<{ code: number }> {
     const order = await this.prisma.redemptionOrder.findUnique({ where: { id } })
     if (!order) throw new NotFoundException('兑换订单不存在')
     if (order.status !== 'pending_shipment') throw new ConflictException('仅待发货订单可发货')
+    if (!order.recipientName || !order.recipientPhone || !order.address) {
+      throw new ConflictException('收件信息不完整，无法发货')
+    }
 
     await this.prisma.redemptionOrder.update({
       where: { id },
-      data: { status: 'shipped', shippedAt: formatNow() },
+      data: { status: 'shipped', shippedAt: formatNow(), trackingNo: trackingNo?.trim() || null },
     })
 
     await this.audit.record({
@@ -255,6 +316,12 @@ export class MallService {
       before: { status: order.status },
       after: { status: 'shipped' },
       operator,
+    })
+    await this.notify.pushNotice(order.userId, {
+      type: 'mall',
+      title: '兑换订单已发货',
+      content: `您兑换的「${order.goodsName}」已发货${trackingNo?.trim() ? `，运单号：${trackingNo.trim()}` : ''}。`,
+      link: '/me/orders',
     })
     return { code: 0 }
   }
@@ -294,7 +361,7 @@ export class MallService {
   }
 
   async cancelOrder(id: string): Promise<{ code: number }> {
-    return this.prisma.$transaction(async (tx) => {
+    const result = await this.prisma.$transaction(async (tx) => {
       const order = await tx.redemptionOrder.findUnique({ where: { id } })
       if (!order) throw new NotFoundException('兑换订单不存在')
       if (order.status !== 'pending_shipment') throw new ConflictException('仅待发货订单可取消')
@@ -338,8 +405,15 @@ export class MallService {
         data: { status: 'cancelled', cancelReason: ORDER_CANCEL_REASON },
       })
 
-      return { code: 0 }
+      return { code: 0, userId: order.userId, goodsName: order.goodsName, points: order.points }
     })
+    await this.notify.pushNotice(result.userId, {
+      type: 'mall',
+      title: '兑换订单已取消',
+      content: `「${result.goodsName}」订单已取消，${result.points} 积分已退回。`,
+      link: '/me/orders',
+    })
+    return { code: result.code }
   }
 
   /* ---------- 积分规则 ---------- */
@@ -410,6 +484,7 @@ function toOrderDto(order: RedemptionOrder): RedemptionOrderDto {
   if (order.address != null) dto.address = order.address
   if (order.note != null) dto.note = order.note
   if (order.cancelReason != null) dto.cancelReason = order.cancelReason
+  if (order.trackingNo != null) dto.trackingNo = order.trackingNo
   return dto
 }
 

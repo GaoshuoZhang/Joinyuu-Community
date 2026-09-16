@@ -1,4 +1,4 @@
-import { IsBoolean, IsNotEmpty, IsString } from 'class-validator'
+import { IsBoolean, IsNotEmpty, IsOptional, IsString, MaxLength } from 'class-validator'
 
 /* 公告新增/编辑载荷（对照 apps/admin/src/api/announcements.ts AnnouncementPayload） */
 export class AnnouncementPayloadDto {
@@ -12,4 +12,13 @@ export class AnnouncementPayloadDto {
 
   @IsBoolean()
   pinned!: boolean
+
+  @IsOptional()
+  @IsString()
+  expireAt?: string
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(128)
+  link?: string
 }

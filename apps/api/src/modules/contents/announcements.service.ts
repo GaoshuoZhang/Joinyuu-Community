@@ -19,6 +19,8 @@ function toAnnouncementDto(a: Announcement): Record<string, unknown> {
     createdAt: a.createdAt,
   }
   if (a.updatedAt != null) dto.updatedAt = a.updatedAt
+  if (a.expireAt != null) dto.expireAt = a.expireAt
+  if (a.link != null) dto.link = a.link
   return dto
 }
 
@@ -67,6 +69,8 @@ export class AnnouncementsService {
         publishedAt: now,
         createdAt: now,
         updatedAt: null,
+        expireAt: payload.expireAt || null,
+        link: payload.link?.trim() || null,
       },
     })
 
@@ -94,6 +98,8 @@ export class AnnouncementsService {
         content,
         pinned: payload.pinned,
         updatedAt: formatNow(),
+        expireAt: payload.expireAt || null,
+        link: payload.link?.trim() || null,
       },
     })
 
@@ -101,8 +107,8 @@ export class AnnouncementsService {
       module: '内容管理',
       action: '编辑公告',
       target: `${item.id} · ${title}`,
-      before: { title: item.title, content: item.content, pinned: item.pinned },
-      after: { title, content, pinned: payload.pinned },
+      before: { title: item.title, content: item.content, pinned: item.pinned, expireAt: item.expireAt, link: item.link },
+      after: { title, content, pinned: payload.pinned, expireAt: payload.expireAt, link: payload.link },
       operator,
     })
     return { code: 0 }

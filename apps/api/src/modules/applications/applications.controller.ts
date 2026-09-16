@@ -4,6 +4,7 @@ import { RequirePermission } from '../../common/decorators/require-permission.de
 import { ApplicationsService } from './applications.service'
 import { QueryApplicationsDto } from './dto/query-applications.dto'
 import { ReviewApplicationDto } from './dto/review-application.dto'
+import { ApplicationFormConfigDto } from './dto/application-form-config.dto'
 
 @RequirePermission('/approvals')
 @Controller('api/admin/applications')
@@ -13,6 +14,21 @@ export class ApplicationsController {
   @Get()
   findAll(@Query() query: QueryApplicationsDto) {
     return this.applications.findAll(query)
+  }
+
+  @Get('form-configs/all')
+  formConfigs() {
+    return this.applications.formConfigs()
+  }
+
+  @HttpCode(200)
+  @Post('form-configs/:type')
+  saveFormConfig(
+    @Param('type') type: string,
+    @Body() dto: ApplicationFormConfigDto,
+    @Req() req: AuthenticatedRequest,
+  ) {
+    return this.applications.saveFormConfig(type, dto, req.user?.name ?? '社区管理员')
   }
 
   /** 审核单打印数据 */

@@ -1,8 +1,10 @@
 <script setup lang="ts">
 import { onMounted, ref } from 'vue'
 import { useRoute } from 'vue-router'
-import { Button, Input, Loading, TabPanel, Tabs, Textarea, Toast } from 'tdesign-mobile-vue'
-import { addProjectFile, addProjectTask, fetchProjectCollab, sendProjectMessage, toggleProjectTask } from '@/api/projects'
+import { Button, Input, Loading, TabPanel, Tabs, Textarea, Toast, Upload } from 'tdesign-mobile-vue'
+import type { UploadFile } from 'tdesign-mobile-vue'
+import { addProjectFile, addProjectTask, downloadProjectFile, fetchProjectCollab, sendProjectMessage, toggleProjectTask } from '@/api/projects'
+import { uploadFile } from '@/api/uploads'
 import { useAsyncList } from '@/composables/useAsyncList'
 import EmptyBlock from '@/components/shared/EmptyBlock.vue'
 
@@ -15,6 +17,7 @@ onMounted(run)
 
 const taskInput = ref('')
 const fileForm = ref({ name: '', url: '' })
+const uploadFiles = ref<UploadFile[]>([])
 const messageInput = ref('')
 const busy = ref('')
 
@@ -50,6 +53,7 @@ async function submitFile() {
   try {
     await addProjectFile(projectId, fileForm.value.name, fileForm.value.url)
     fileForm.value = { name: '', url: '' }
+    uploadFiles.value = []
     await run()
   } catch (e) {
     Toast(e instanceof Error ? e.message : '添加失败')
@@ -69,6 +73,28 @@ async function submitMessage() {
     Toast(e instanceof Error ? e.message : '发送失败')
   } finally {
     busy.value = ''
+  }
+}
+
+async function requestProjectFile(file: UploadFile | UploadFile[]) {
+  const target = Array.isArray(file) ? file[0] : file
+  const raw = target?.raw as File | undefined
+  if (!raw) return { status: 'fail' as const, error: '文件读取失败', response: {} }
+  try {
+    const info = await uploadFile(raw, 'project')
+    fileForm.value.name = info.name
+    fileForm.value.url = info.url
+    return { status: 'success' as const, response: info }
+  } catch (e) {
+    return { status: 'fail' as const, error: e instanceof Error ? e.message : '上传失败', response: {} }
+  }
+}
+
+async function onDownloadFile(id: string, name: string) {
+  try {
+    await downloadProjectFile(projectId, id, name)
+  } catch (e) {
+    Toast(e instanceof Error ? e.message : '下载失败')
   }
 }
 </script>
@@ -102,7 +128,13 @@ async function submitMessage() {
           <div class="panel">
             <div class="file-form m-card">
               <Input v-model="fileForm.name" placeholder="文件名（如：需求说明书 v2）" :maxlength="40" />
-              <Input v-model="fileForm.url" placeholder="文件链接（https://…）" />
+              <Upload
+                v-model:files="uploadFiles"
+                accept="image/*,application/pdf"
+                :max="1"
+                :size-limit="{ size: 10, unit: 'MB' }"
+                :request-method="requestProjectFile"
+              />
               <Button size="small" variant="outline" block :loading="busy === 'file'" @click="submitFile">添加文件</Button>
             </div>
             <EmptyBlock v-if="!(data?.files ?? []).length" text="暂无共享文件" />
@@ -110,7 +142,7 @@ async function submitMessage() {
               <article v-for="f in data?.files" :key="f.id" class="m-card file">
                 <p class="file-name">{{ f.name }}</p>
                 <p class="meta">{{ f.at }}</p>
-                <a class="file-link" :href="f.url" target="_blank" rel="noopener noreferrer">打开链接 ›</a>
+                <Button class="file-link" variant="text" size="small" @click="onDownloadFile(f.id, f.name)">下载文件 ›</Button>
               </article>
             </div>
           </div>

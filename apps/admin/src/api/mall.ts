@@ -5,6 +5,7 @@ import type {
   PointsRule,
   PointsRecord,
   GoodsCategory,
+  GoodsFulfillment,
 } from '@/types'
 import { httpGet, httpPost, httpPut } from './http'
 
@@ -38,6 +39,7 @@ export async function fetchGoods(query: GoodsQuery): Promise<PageResult<MallGood
 export interface GoodsPayload {
   name: string
   category: GoodsCategory
+  fulfillment: GoodsFulfillment
   points: number
   stock: number
   description: string
@@ -103,8 +105,8 @@ export async function fetchRedemptionOrders(
 }
 
 /* POST /api/admin/mall/redemption-orders/:id/ship — 待发货 → 已发货 */
-export async function shipRedemptionOrder(id: string): Promise<{ code: number }> {
-  return httpPost<{ code: number }>(`/mall/redemption-orders/${id}/ship`)
+export async function shipRedemptionOrder(id: string, trackingNo?: string): Promise<{ code: number }> {
+  return httpPost<{ code: number }>(`/mall/redemption-orders/${id}/ship`, { trackingNo })
 }
 
 /* POST /api/admin/mall/redemption-orders/:id/finish — 已发货 → 已完成 */

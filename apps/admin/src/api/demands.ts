@@ -6,6 +6,7 @@ export interface DemandQuery {
   pageSize: number
   keyword?: string
   category?: string
+  demandType?: string
   status?: string
   /** 按提交人筛选（用户详情数据概览跳转） */
   publisherId?: string
@@ -23,6 +24,7 @@ export async function fetchDemands(query: DemandQuery): Promise<PageResult<Deman
   qs.set('pageSize', String(query.pageSize))
   if (query.keyword) qs.set('keyword', query.keyword)
   if (query.category) qs.set('category', query.category)
+  if (query.demandType) qs.set('demandType', query.demandType)
   if (query.status) qs.set('status', query.status)
   if (query.publisherId) qs.set('publisherId', query.publisherId)
   if (query.enterprise) qs.set('enterprise', query.enterprise)
@@ -41,6 +43,13 @@ export interface DemandPublishPayload {
   publisherValue?: string
   title: string
   category: string
+  demandType?: 'task' | 'investment' | 'cooperation'
+  deliverable?: string
+  deliverBy?: string
+  cooperationNeed?: string
+  returnOffer?: string
+  bottleneck?: string
+  partnershipMode?: string
   budget: string
   period: string
   description: string

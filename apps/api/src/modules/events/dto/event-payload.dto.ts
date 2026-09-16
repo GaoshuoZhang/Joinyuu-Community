@@ -1,5 +1,5 @@
 import { Type } from 'class-transformer'
-import { IsArray, IsBoolean, IsInt, IsNotEmpty, IsOptional, IsString, Min } from 'class-validator'
+import { IsArray, IsBoolean, IsInt, IsLatitude, IsLongitude, IsNotEmpty, IsOptional, IsString, Min } from 'class-validator'
 
 /* 活动新增/编辑载荷（对照 apps/admin/src/api/events.ts EventPayload） */
 export class EventPayloadDto {
@@ -75,4 +75,36 @@ export class EventPayloadDto {
   @IsInt()
   @Min(0)
   checkinPoints?: number
+
+  @IsOptional()
+  @IsLatitude()
+  venueLat?: string
+
+  @IsOptional()
+  @IsLongitude()
+  venueLng?: string
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  checkinRadiusM?: number
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(0)
+  checkinOpenMin?: number
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(0)
+  checkinCloseMin?: number
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(0)
+  cancelDeadlineHours?: number
 }

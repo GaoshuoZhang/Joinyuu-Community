@@ -328,6 +328,10 @@ async function handleDropdown(item: { value?: string | number }) {
               <template #icon><CheckCircleIcon /></template>
               申请审核
             </t-menu-item>
+            <t-menu-item value="/application-form-config" v-permission="'/approvals'">
+              <template #icon><CheckCircleIcon /></template>
+              申请表单配置
+            </t-menu-item>
           </t-submenu>
 
           <t-submenu v-if="canSee(['/demands', '/demands/review', '/projects', '/events'], '业务运营')" value="group-biz" title="业务运营">

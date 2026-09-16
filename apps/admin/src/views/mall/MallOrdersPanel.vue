@@ -99,11 +99,24 @@ function onPageChange(p: { current: number; pageSize: number }) {
 }
 
 /* 待发货 → 已发货 */
-async function onShip(row: RedemptionOrder) {
+const shipVisible = ref(false)
+const shipOrder = ref<RedemptionOrder | null>(null)
+const trackingNo = ref('')
+
+function openShip(row: RedemptionOrder) {
+  shipOrder.value = row
+  trackingNo.value = row.trackingNo ?? ''
+  shipVisible.value = true
+}
+
+async function onShip() {
+  const row = shipOrder.value
+  if (!row) return
   acting.value = `${row.id}:ship`
   try {
-    await shipRedemptionOrder(row.id)
+    await shipRedemptionOrder(row.id, trackingNo.value.trim() || undefined)
     MessagePlugin.success('订单已发货')
+    shipVisible.value = false
     await load()
   } catch (e) {
     MessagePlugin.error(e instanceof Error ? e.message : '操作失败')
@@ -309,11 +322,7 @@ onMounted(load)
           <div class="op-cell" @click.stop>
             <!-- 待发货：发货 / 取消 -->
             <template v-if="row.status === 'pending_shipment'">
-              <t-popconfirm content="确认发货？实物商品请先核对收件信息" @confirm="onShip(row)">
-                <t-button variant="text" size="small" theme="primary" :loading="isActing(row, 'ship')">
-                  发货
-                </t-button>
-              </t-popconfirm>
+              <t-button variant="text" size="small" theme="primary" :loading="isActing(row, 'ship')" @click="openShip(row)">发货</t-button>
               <t-popconfirm content="确认取消该订单？消耗积分将退回用户账户，库存回补" @confirm="onCancel(row)">
                 <t-button variant="text" size="small" theme="danger" :loading="isActing(row, 'cancel')">
                   取消订单
@@ -359,6 +368,7 @@ onMounted(load)
           <t-descriptions-item label="消耗积分">{{ current.points }}</t-descriptions-item>
           <t-descriptions-item label="下单时间">{{ current.createdAt }}</t-descriptions-item>
           <t-descriptions-item v-if="current.shippedAt" label="发货时间">{{ current.shippedAt }}</t-descriptions-item>
+          <t-descriptions-item v-if="current.trackingNo" label="运单号">{{ current.trackingNo }}</t-descriptions-item>
           <t-descriptions-item v-if="current.finishedAt" label="完成时间">{{ current.finishedAt }}</t-descriptions-item>
           <t-descriptions-item v-if="current.recipientName" label="收件人">
             {{ current.recipientName }}（{{ current.recipientPhone }}）
@@ -371,6 +381,25 @@ onMounted(load)
         </p>
       </template>
     </t-drawer>
+
+    <t-dialog v-model:visible="shipVisible" header="订单发货" :confirm-btn="null" :cancel-btn="null" width="520px">
+      <template v-if="shipOrder">
+        <t-descriptions :column="1" bordered>
+          <t-descriptions-item label="商品">{{ shipOrder.goodsName }}</t-descriptions-item>
+          <t-descriptions-item label="收件人">{{ shipOrder.recipientName }}（{{ shipOrder.recipientPhone }}）</t-descriptions-item>
+          <t-descriptions-item label="收件地址">{{ shipOrder.address }}</t-descriptions-item>
+        </t-descriptions>
+        <t-form label-align="top" class="ship-form">
+          <t-form-item label="运单号">
+            <t-input v-model="trackingNo" clearable placeholder="自提订单可留空" />
+          </t-form-item>
+        </t-form>
+      </template>
+      <template #footer>
+        <t-button variant="text" theme="default" @click="shipVisible = false">取消</t-button>
+        <t-button theme="primary" :loading="!!shipOrder && isActing(shipOrder, 'ship')" @click="onShip">确认发货</t-button>
+      </template>
+    </t-dialog>
 
     <!-- 一键归档：状态选择二次确认对话框 -->
     <BulkArchiveDialog
@@ -399,6 +428,10 @@ onMounted(load)
   align-items: center;
   gap: 4px;
   flex-wrap: nowrap;
+}
+
+.ship-form {
+  margin-top: 16px;
 }
 
 .drawer-head {

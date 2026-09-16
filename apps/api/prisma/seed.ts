@@ -528,11 +528,15 @@ async function main() {
 
   // ---------- 积分商城与规则 ----------
   for (const g of goods) {
+    /* M2-R R2（Q1 决）：category 改造为 goods_category 字典分类（GC code），履约类型由 fulfillment 承担 */
+    const gcCode: Record<string, string> = { 实物商品: 'GC001', 虚拟服务: 'GC002', 权益券: 'GC003' }
+    const fulfillment: Record<string, string> = { 实物商品: 'physical', 虚拟服务: 'service', 权益券: 'voucher' }
     await prisma.mallGoods.create({
       data: {
         id: g.id,
         name: g.name,
-        category: g.category,
+        category: gcCode[g.category] ?? g.category,
+        fulfillment: fulfillment[g.category] ?? 'physical',
         points: g.points,
         stock: g.stock,
         status: g.status ?? 'on',

@@ -8,7 +8,7 @@ export async function fetchEvents(query: { type?: string; keyword?: string } = {
   const qs = new URLSearchParams()
   if (query.type) qs.set('type', query.type)
   if (query.keyword) qs.set('keyword', query.keyword)
-  return httpGet<CommunityEvent[]>(`/events?${qs}`)
+  return (await httpGet<{ list: CommunityEvent[]; total: number }>(`/events?${qs}`)).list
 }
 
 /** GET /api/app/events/:id — 详情（报名进度/我的报名态） */
@@ -32,7 +32,7 @@ export async function cancelEnrollment(id: string): Promise<void> {
 /** [MOCK-ONLY] v38 我的活动反馈（是否已评价） */
 export async function fetchMyEventFeedback(eventId: string): Promise<MyEventFeedback | null> {
   if (apiMode === 'mock') return mock.fetchMyEventFeedback(eventId)
-  return httpGet<MyEventFeedback | null>(`/events/${eventId}/feedback/me`)
+  return httpGet<MyEventFeedback | null>(`/events/${eventId}/feedback`)
 }
 
 /** [MOCK-ONLY] v38 提交活动反馈（结束后 + 参与过） */
@@ -41,7 +41,7 @@ export async function submitEventFeedback(eventId: string, payload: EventFeedbac
   await httpPost(`/events/${eventId}/feedback`, payload)
 }
 
-/** GET /api/app/events/:id/ticket — 活动电子票（v42 [MOCK-ONLY]） */
+/** GET /api/app/events/:id/ticket — 当前用户在该活动的电子票。 */
 export async function fetchEventTicket(id: string): Promise<EventTicket> {
   if (apiMode === 'mock') return mock.fetchEventTicket(id)
   return httpGet<EventTicket>(`/events/${id}/ticket`)
@@ -50,7 +50,7 @@ export async function fetchEventTicket(id: string): Promise<EventTicket> {
 /** GET /api/app/me/enrollments — 我的报名 */
 export async function fetchMyEnrollments(): Promise<MyEnrollmentItem[]> {
   if (apiMode === 'mock') return mock.fetchMyEnrollments()
-  return httpGet<MyEnrollmentItem[]>('/me/enrollments')
+  return (await httpGet<{ list: MyEnrollmentItem[]; total: number }>('/me/enrollments')).list
 }
 
 /** [MOCK-ONLY] POST /api/app/events/:id/check-in — 签到（缺口 §7.1-2：围栏 + 时间窗 + 防重复 + activity_checkin 积分） */

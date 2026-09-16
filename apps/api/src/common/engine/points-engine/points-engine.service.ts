@@ -21,30 +21,77 @@ export class PointsEngineService {
 
   /** 为用户发放积分（挂靠个人用户身份）；规则缺失/停用则 no-op */
   async issuePoints(userId: string, code: string, reason: string, dedupeKey?: string): Promise<void> {
-    const rule = (await this.pointsRules()).find((r) => r.code === code)
-    if (!rule || rule.status !== 'enabled') return
-
     try {
       await this.prisma.$transaction(async (tx) => {
-        const user = await tx.user.update({ where: { uid: userId }, data: { points: { increment: rule.points } } })
-        await tx.pointsRecord.create({
-          data: {
-            id: await this.ids.next('PT'),
-            userId,
-            delta: rule.points,
-            balance: user.points,
-            reason,
-            at: formatNow(),
-            operator: '系统',
-            source: 'rule',
-            dedupeKey: dedupeKey ?? null,
-          },
-        })
+        await this.issuePointsInTransaction(tx, userId, code, reason, dedupeKey)
       })
     } catch (error) {
       if (dedupeKey && error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002') return
       throw error
     }
+  }
+
+  /** 在调用方事务中发放积分，用于需要“状态迁移 + 奖励 + 流水”原子提交的业务。 */
+  async issuePointsInTransaction(
+    tx: Prisma.TransactionClient,
+    userId: string,
+    code: string,
+    reason: string,
+    dedupeKey?: string,
+  ): Promise<void> {
+    const rule = (await this.pointsRules()).find((r) => r.code === code)
+    if (!rule || rule.status !== 'enabled') return
+    const user = await tx.user.update({ where: { uid: userId }, data: { points: { increment: rule.points } } })
+    await tx.pointsRecord.create({
+      data: {
+        id: await this.ids.next('PT'),
+        userId,
+        delta: rule.points,
+        balance: user.points,
+        reason,
+        at: formatNow(),
+        operator: '系统',
+        source: 'rule',
+        dedupeKey: dedupeKey ?? null,
+      },
+    })
+  }
+
+  /** 发放业务明确指定的积分值（仍写规则流水与幂等键），用于活动级覆盖值。 */
+  async issueFixedPoints(userId: string, amount: number, reason: string, dedupeKey: string): Promise<void> {
+    if (!Number.isInteger(amount) || amount <= 0) return
+    try {
+      await this.prisma.$transaction(async (tx) => {
+        await this.issueFixedPointsInTransaction(tx, userId, amount, reason, dedupeKey)
+      })
+    } catch (error) {
+      if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002') return
+      throw error
+    }
+  }
+
+  async issueFixedPointsInTransaction(
+    tx: Prisma.TransactionClient,
+    userId: string,
+    amount: number,
+    reason: string,
+    dedupeKey: string,
+  ): Promise<void> {
+    if (!Number.isInteger(amount) || amount <= 0) return
+    const user = await tx.user.update({ where: { uid: userId }, data: { points: { increment: amount } } })
+    await tx.pointsRecord.create({
+      data: {
+        id: await this.ids.next('PT'),
+        userId,
+        delta: amount,
+        balance: user.points,
+        reason,
+        at: formatNow(),
+        operator: '系统',
+        source: 'rule',
+        dedupeKey,
+      },
+    })
   }
 
   /** 为社区企业（enterprise）或社区个体身份（individual）发放经验值；规则缺失/停用则 no-op */
@@ -54,53 +101,37 @@ export class PointsEngineService {
     code: string,
     reason: string,
   ): Promise<void> {
+    await this.prisma.$transaction(async (tx) => {
+      await this.issueExperienceInTransaction(tx, targetType, targetId, code, reason)
+    })
+  }
+
+  /** 在调用方事务中发放经验值。 */
+  async issueExperienceInTransaction(
+    tx: Prisma.TransactionClient,
+    targetType: 'enterprise' | 'individual',
+    targetId: string,
+    code: string,
+    reason: string,
+  ): Promise<void> {
     const rule = (await this.experienceRules()).find((r) => r.code === code)
     if (!rule || rule.status !== 'enabled') return
-
-    /* 等级梯度在事务外读取（只读缓存，不依赖事务内状态） */
     const tiers = await this.levelTiers()
 
-    await this.prisma.$transaction(async (tx) => {
-      if (targetType === 'enterprise') {
-        const enterprise = await tx.enterprise.findUnique({ where: { id: targetId } })
-        if (!enterprise) return
-        const balance = enterprise.experience + rule.exp
-        const level = this.resolveLevel(tiers, balance)
-        await tx.enterprise.update({ where: { id: targetId }, data: { experience: balance } })
-        await tx.userIdentity.updateMany({
-          where: { type: 'community_enterprise', enterpriseId: targetId },
-          data: { level },
-        })
-        await tx.experienceRecord.create({
-          data: {
-            id: await this.ids.next('EX'),
-            targetType: 'enterprise',
-            targetId,
-            delta: rule.exp,
-            balance,
-            reason,
-            at: formatNow(),
-            operator: '系统',
-            source: 'rule',
-          },
-        })
-        return
-      }
-
-      const identity = await tx.userIdentity.findFirst({
-        where: { userId: targetId, type: 'community_individual' },
-      })
-      if (!identity) return
-      const balance = (identity.experience ?? 0) + rule.exp
+    if (targetType === 'enterprise') {
+      const enterprise = await tx.enterprise.findUnique({ where: { id: targetId } })
+      if (!enterprise) return
+      const balance = enterprise.experience + rule.exp
       const level = this.resolveLevel(tiers, balance)
-      await tx.userIdentity.update({
-        where: { id: identity.id },
-        data: { experience: balance, level },
+      await tx.enterprise.update({ where: { id: targetId }, data: { experience: balance } })
+      await tx.userIdentity.updateMany({
+        where: { type: 'community_enterprise', enterpriseId: targetId },
+        data: { level },
       })
       await tx.experienceRecord.create({
         data: {
           id: await this.ids.next('EX'),
-          targetType: 'individual',
+          targetType: 'enterprise',
           targetId,
           delta: rule.exp,
           balance,
@@ -110,6 +141,31 @@ export class PointsEngineService {
           source: 'rule',
         },
       })
+      return
+    }
+
+    const identity = await tx.userIdentity.findFirst({
+      where: { userId: targetId, type: 'community_individual' },
+    })
+    if (!identity) return
+    const balance = (identity.experience ?? 0) + rule.exp
+    const level = this.resolveLevel(tiers, balance)
+    await tx.userIdentity.update({
+      where: { id: identity.id },
+      data: { experience: balance, level },
+    })
+    await tx.experienceRecord.create({
+      data: {
+        id: await this.ids.next('EX'),
+        targetType: 'individual',
+        targetId,
+        delta: rule.exp,
+        balance,
+        reason,
+        at: formatNow(),
+        operator: '系统',
+        source: 'rule',
+      },
     })
   }
 
