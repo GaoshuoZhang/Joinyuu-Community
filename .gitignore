@@ -15,3 +15,5 @@ start-client-mobile.bat
 .trae/
 .logs/
 uploads/
+!apps/api/src/modules/app/uploads/
+!apps/api/src/modules/app/uploads/**
