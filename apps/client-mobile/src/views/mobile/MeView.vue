@@ -1,13 +1,16 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
-import { Avatar, Cell, CellGroup } from 'tdesign-mobile-vue'
+import { Avatar, Cell, CellGroup, DialogPlugin } from 'tdesign-mobile-vue'
 import { useAuthStore } from '@/stores/auth'
 import { useNoticesStore } from '@/stores/notices'
 import { fetchExperience } from '@/api/experience'
 import { fetchMyIdentities } from '@/api/enterprises'
 import IdentityTag from '@/components/shared/IdentityTag.vue'
 import type { MyIdentitySummary } from '@/types'
+import { useAnimSuppress } from '@/composables/useAnimSuppress'
+
+useAnimSuppress()
 
 /* 个人中心：身份不做全局切换（发布/提交时在表单内选择归属）；
  * 「关联身份」列出全部身份（社区个体 + 各社区企业/合作企业），点入后按身份操作。 */
@@ -37,12 +40,26 @@ const recordEntries = [
   { path: '/me/reservations', label: '我的预约' },
   { path: '/me/articles', label: '我的投稿' },
   { path: '/me/applications', label: '我的申请' },
+  { path: '/me/favorites', label: '我的收藏' },
+  { path: '/me/history', label: '浏览历史' },
 ]
 
-const moreEntries = [
-  { path: '/me/profile/edit', label: '编辑资料' },
-  { path: '/notices', label: '站内信', note: notices.unread > 0 ? `${notices.unread} 条未读` : '' },
-]
+const moreEntries = computed(() => {
+  const entries: { path: string; label: string; note?: string }[] = [
+    { path: '/me/tasks', label: '积分任务', note: '完成任务领积分' },
+    { path: '/me/stats', label: '数据看板' },
+    { path: '/me/services', label: '服务申请' },
+    { path: '/me/profile/edit', label: '编辑资料' },
+  ]
+  const enterprise = auth.profileIdentities.find((i) => i.type === 'community_enterprise' && i.enterpriseId)
+  if (enterprise?.enterpriseId) entries.splice(3, 0, { path: `/me/enterprises/${enterprise.enterpriseId}/workbench`, label: '企业工作台', note: enterprise.enterpriseName ?? '' })
+  entries.push(
+    { path: '/me/addresses', label: '收货地址' },
+    { path: '/me/security', label: '账号与安全' },
+    { path: '/notices', label: '站内信', note: notices.unread > 0 ? `${notices.unread} 条未读` : '' },
+  )
+  return entries
+})
 
 async function loadIdentities() {
   if (!auth.isLogged) return
@@ -70,7 +87,19 @@ onMounted(() => {
   void loadIdentities()
 })
 
-async function onLogout() {
+function onLogout() {
+  DialogPlugin.confirm({
+    title: '退出登录',
+    content: '确认退出当前账号？未保存的编辑内容将丢失。',
+    cancelBtn: '取消',
+    confirmBtn: '确认退出',
+    onConfirm: () => {
+      void doLogout()
+    },
+  })
+}
+
+async function doLogout() {
   await auth.logout()
   notices.reset()
   await router.push('/login')
@@ -79,7 +108,7 @@ async function onLogout() {
 
 <template>
   <div class="page-fade-in me">
-    <section class="m-card profile pressable" @click="router.push('/me/profile/edit')">
+    <section class="m-card profile pressable" v-pressable @click="router.push('/me/profile/edit')">
       <Avatar size="56px" class="avatar" :image="auth.avatar">{{ auth.name.slice(0, 1) }}</Avatar>
       <div class="info">
         <p class="name">{{ auth.name }}</p>

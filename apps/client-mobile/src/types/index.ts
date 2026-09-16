@@ -110,6 +110,8 @@ export interface UserNotice {
   read: boolean
   /** 点击跳转的业务路由（可选） */
   link?: string
+  /** v39：归档标记（归档后默认不在列表显示） */
+  archived?: boolean
 }
 
 /* ---------- 首页聚合 [MOCK-ONLY]（缺口 §7-3 GET /api/app/home） ---------- */
@@ -122,6 +124,29 @@ export interface HomeFeed {
   hotEvents: HomeEventCard[]
   latestDemands: HomeDemandCard[]
   topArticles: HomeArticleCard[]
+  /** [MOCK-ONLY] v40 运营公告（后台公告发布后下发；接入期接 GET /api/app/announcements） */
+  announcements?: HomeAnnouncement[]
+}
+
+/* ===== v42 新功能类型 ===== */
+export interface PointsTask { key: string; title: string; desc: string; points: number; done: boolean; claimed: boolean }
+export interface MyStats { pointsEarned: number; pointsSpent: number; demands: number; responses: number; enrollments: number; articles: number; projects: number; orders: number }
+export interface ServiceApplication { id: string; policyId: string; policyTitle: string; applicantName: string; phone: string; note?: string; status: 'pending' | 'processing' | 'done'; at: string }
+export interface EventTicket { eventId: string; eventTitle: string; startTime: string; location: string; ticketCode: string; status: 'valid' | 'checked' | 'cancelled'; checkedIn: boolean; waitlistOrder?: number }
+export interface DemandMessage { id: string; uid: string; name: string; content: string; at: string; mine: boolean }
+export interface ProjectTask { id: string; title: string; done: boolean; at: string }
+export interface ProjectFileItem { id: string; name: string; url: string; at: string }
+export interface ProjectMessage { id: string; uid: string; name: string; content: string; at: string; mine: boolean }
+export interface EnterpriseWorkbench { responseCount: number; recentResponses: { id: string; demandId: string; demandTitle: string; at: string }[] }
+export interface RealNameBenefit { tier: string; title: string; items: string[]; active: boolean }
+
+/** [MOCK-ONLY] v40 首页公告 */
+export interface HomeAnnouncement {
+  id: string
+  title: string
+  content: string
+  at: string
+  pinned?: boolean
 }
 
 export interface HomeBanner {
@@ -139,6 +164,11 @@ export interface CommunityPolicy {
   summary: string
   content: string
   updatedAt: string
+  /** v39：版本与生效信息（真实后端由内容管理发布） */
+  version?: string
+  effectiveAt?: string
+  publisher?: string
+  attachments?: { name: string; url: string }[]
 }
 
 export interface TalentMember {
@@ -275,6 +305,8 @@ export interface RegisterPayload {
   confirmPassword: string
   captchaCode: string
   nickname?: string
+  /** v38：注册须勾选同意用户协议与隐私政策 */
+  agreed?: boolean
 }
 
 /** 登录/注册响应：多身份 JWT（缺口 §7-4，后端接入时实现签发） */
@@ -308,7 +340,7 @@ export interface ExperienceProfile {
 
 /* ---------- 需求广场 ---------- */
 
-export type DemandStatus = 'pending' | 'published' | 'rejected' | 'closed'
+export type DemandStatus = 'pending' | 'published' | 'projected' | 'rejected' | 'withdrawn' | 'closed'
 
 /** 需求类型（[MOCK-ONLY] 缺口 §7.1-15：后端待增 demandType 字段）
  * task = 找服务（寻找项目执行与交付服务）；investment = 找投资（有规划找投资人与伙伴）；
@@ -349,6 +381,10 @@ export interface Demand {
   visibilityLevels: number[]
   createdAt: string
   rejectReason?: string
+  projectId?: string
+  /** [MOCK-ONLY] v35 驳回后申诉：已提交申诉与原因 */
+  appealed?: boolean
+  appealReason?: string
   /** 我是否已响应（详情页用） */
   myResponse?: boolean
 }
@@ -401,11 +437,17 @@ export interface MyResponseItem {
   demandTitle: string
   note: string
   at: string
+  responderUid?: string
+  responderName?: string
+  responderIdentity?: IdentityType
+  status?: 'pending' | 'accepted' | 'rejected'
+  reviewedAt?: string
+  rejectReason?: string
 }
 
 /* ---------- 活动中心 ---------- */
 
-export type EventStatus = 'published' | 'ended'
+export type EventStatus = 'published' | 'ended' | 'cancelled'
 
 export interface CommunityEvent {
   id: string
@@ -430,7 +472,8 @@ export interface CommunityEvent {
   checkinRadiusM: number
   checkinOpenMin: string
   checkinCloseMin: string
-  myEnrollmentStatus?: 'pending' | 'approved' | 'cancelled'
+  myEnrollmentStatus?: 'pending' | 'approved' | 'waitlisted' | 'rejected' | 'cancelled'
+  myEnrollmentRejectReason?: string
   myCheckedIn?: boolean
 }
 
@@ -440,13 +483,33 @@ export interface MyEnrollmentItem {
   eventTitle: string
   startTime: string
   location: string
-  status: 'pending' | 'approved' | 'cancelled'
+  status: 'pending' | 'approved' | 'waitlisted' | 'rejected' | 'cancelled'
   checkedIn: boolean
+  rejectReason?: string
+  /** [MOCK-ONLY] v38 候补顺序（1 为最先递补） */
+  waitlistOrder?: number
+  /** [MOCK-ONLY] v40 活动状态快照（用于展示「活动已取消/已改期」） */
+  eventStatus?: EventStatus
+  /** [MOCK-ONLY] v40 改期后的开始时间（与原 startTime 不同时展示） */
+  rescheduledTo?: string
 }
 
 export interface CheckinPayload {
   lat: number
   lng: number
+}
+
+/** [MOCK-ONLY] v38 活动反馈（结束后提交，用于运营复盘） */
+export interface EventFeedbackPayload {
+  rating: number
+  comment?: string
+}
+
+export interface MyEventFeedback {
+  eventId: string
+  rating: number
+  comment?: string
+  at: string
 }
 
 /* ---------- 积分商城 ---------- */
@@ -459,7 +522,21 @@ export interface Goods {
   description: string
 }
 
-export type OrderStatus = 'pending_shipment' | 'shipped' | 'completed'
+export type OrderStatus = 'pending_shipment' | 'shipped' | 'pending_use' | 'completed' | 'cancelled'
+
+/** 履约类型：[MOCK-ONLY] v34 区分实物 / 数字券 / 服务权益 */
+export type GoodsFulfillment = 'physical' | 'voucher' | 'service'
+
+export interface Goods {
+  id: string
+  name: string
+  pointsCost: number
+  stock: number
+  description: string
+  fulfillment: GoodsFulfillment
+  /** [MOCK-ONLY] v40 商品分类（字典 goods_category） */
+  category?: string
+}
 
 export interface MyOrder {
   id: string
@@ -467,9 +544,43 @@ export interface MyOrder {
   goodsName: string
   pointsCost: number
   status: OrderStatus
+  fulfillment: GoodsFulfillment
+  /** voucher：兑换后生成的券码 */
+  voucherCode?: string
+  /** voucher：券码有效期（过期不可使用） */
+  voucherExpiresAt?: string
+  /** [MOCK-ONLY] v40 物流单号（发货后写入） */
+  trackingNo?: string
+  /** v41 订单评价（完成订单可评一次） */
+  rating?: number
+  review?: string
+  reviewedAt?: string
+  /** physical：收货信息快照 */
+  recipientName?: string
+  recipientPhone?: string
+  recipientAddress?: string
   createdAt: string
   shippedAt?: string
+  usedAt?: string
   finishedAt?: string
+  cancelledAt?: string
+}
+
+/* ---------- 收货地址（v38 [MOCK-ONLY]） ---------- */
+
+export interface AddressItem {
+  id: string
+  name: string
+  phone: string
+  address: string
+  isDefault: boolean
+}
+
+export interface AddressPayload {
+  name: string
+  phone: string
+  address: string
+  isDefault?: boolean
 }
 
 /* ---------- 空间预约 ---------- */
@@ -483,6 +594,12 @@ export interface Space {
   needApproval: boolean
   openTime: string
   closeTime: string
+  /** [MOCK-ONLY] v38：开放 / 维护中（维护中不可预约） */
+  status: 'open' | 'maintenance'
+  /** [MOCK-ONLY] v38：单次最长预约小时数 */
+  maxHours: number
+  /** [MOCK-ONLY] v38：最多可提前预约天数 */
+  advanceDays: number
 }
 
 export interface SpaceSlot {
@@ -504,6 +621,7 @@ export interface SpaceReservation {
   identityType?: IdentityType
   /** 预约主体名称（企业名/组织名；个人身份存昵称） */
   subjectName?: string
+  rejectReason?: string
 }
 
 export interface ReservationCreatePayload {
@@ -536,9 +654,23 @@ export interface Article {
   /** 文章封面（投稿时上传，可选） */
   coverUrl?: string
   content: string
+  /** [MOCK-ONLY] v38 点赞数与我的点赞状态 */
+  likeCount?: number
+  liked?: boolean
 }
 
-export type SubmittedStatus = 'pending' | 'pending_release' | 'rejected' | 'published'
+/** [MOCK-ONLY] v38 文章评论 */
+export interface ArticleComment {
+  id: string
+  articleId: string
+  uid: string
+  authorName: string
+  avatar?: string
+  content: string
+  at: string
+}
+
+export type SubmittedStatus = 'pending' | 'pending_release' | 'rejected' | 'withdrawn' | 'published'
 
 export interface MySubmittedArticle {
   id: string
@@ -547,6 +679,9 @@ export interface MySubmittedArticle {
   status: SubmittedStatus
   submittedAt: string
   rejectReason?: string
+  /** [MOCK-ONLY] v35 驳回后申诉 */
+  appealed?: boolean
+  appealReason?: string
 }
 
 export interface ArticleCreatePayload {
@@ -586,6 +721,12 @@ export interface EnterpriseShowcase {
 
 /* ---------- 我的名片（原「展示页」更名，自助编辑，[MOCK-ONLY]，缺口 §7.1-16） ---------- */
 
+/** [MOCK-ONLY] v35 名片字段可见性（个人名片公开预览用） */
+export interface CardVisibility {
+  age: boolean
+  politicalStatus: boolean
+}
+
 export interface MyIndividualCard {
   displayName: string
   /** 同步个人资料头像（只读展示） */
@@ -603,6 +744,8 @@ export interface MyIndividualCard {
   customLinks: IndividualLink[]
   level?: number
   levelName?: string
+  /** 公开可见性（缺省视为全部公开） */
+  visibility?: CardVisibility
 }
 
 /** 公开人才名片（GET /api/app/community/talents/:uid）：人才库点入的公开简历页 */
@@ -657,6 +800,8 @@ export interface MyIndividualCardPayload {
   honors: IndividualHonor[]
   socials: IndividualLink[]
   customLinks: IndividualLink[]
+  /** 公开可见性（缺省视为全部公开） */
+  visibility?: CardVisibility
 }
 
 /* ---------- 关联身份（身份列表 + 按身份查看/操作，[MOCK-ONLY]，缺口 §7.1-16） ---------- */
@@ -723,8 +868,10 @@ export interface MyEnterpriseDetail {
   isContact: boolean
   /** 我在该企业的权限（负责人为全部权限；成员为被分配集合） */
   myPermissions: EnterpriseMemberPermission[]
-  /** 待接受的企业成员邀请（仅负责人可见） */
+  /** 待接受的企业成员邀请（仅负责人可见，过期邀请以 expired 状态返回） */
   invitations: EnterpriseInvitation[]
+  /** 我发起的负责人转移请求（仅负责人可见，待对方接受） */
+  transferRequest?: EnterpriseTransferRequest | null
   exitApplication?: EnterpriseExitApplication | null
 }
 
@@ -778,9 +925,54 @@ export interface EnterpriseInvitation {
   /** 加入后的成员职位 */
   role: string
   inviterName: string
-  status: 'pending' | 'accepted' | 'rejected'
+  status: 'pending' | 'accepted' | 'rejected' | 'revoked' | 'expired'
   at: string
   respondedAt?: string
+  /** 邀请有效期（默认 7 天；过期后不可处理） */
+  expiresAt?: string
+}
+
+/** [MOCK-ONLY] v35 负责人转移请求：需目标成员接受后生效 */
+export interface EnterpriseTransferRequest {
+  id: string
+  enterpriseId: string
+  enterpriseName: string
+  fromUid: string
+  fromName: string
+  toUid: string
+  toName: string
+  status: 'pending' | 'accepted' | 'rejected' | 'revoked' | 'expired'
+  at: string
+  respondedAt?: string
+  /** 请求有效期（默认 7 天） */
+  expiresAt?: string
+}
+
+/** [MOCK-ONLY] v35 举报（聚合到 Mock 运营队列，接入期接管理端举报处理） */
+export type ReportTargetType = 'demand' | 'article' | 'enterprise' | 'comment' | 'user'
+
+export interface ReportPayload {
+  targetType: ReportTargetType
+  targetId: string
+  targetTitle: string
+  reason: string
+  detail?: string
+}
+
+/* ---------- 收藏（v37 [MOCK-ONLY]） ---------- */
+
+export type FavoriteTargetType = 'demand' | 'article' | 'event' | 'enterprise' | 'talent'
+
+
+
+
+export interface FavoriteItem {
+  id: string
+  type: FavoriteTargetType
+  targetId: string
+  title: string
+  subtitle?: string
+  at: string
 }
 
 /** 邀请详情（GET /api/app/invitations/:id）：邀请 + 企业概要，供被邀请人确认加入/拒绝 */
@@ -806,15 +998,30 @@ export interface Milestone {
   id: string
   title: string
   done: boolean
+  /** 交付验收状态：[MOCK-ONLY] v33 项目协作；历史数据缺省时按 done 推导 */
+  status?: 'todo' | 'submitted' | 'accepted'
+  submittedAt?: string
+  submitNote?: string
+  /** [MOCK-ONLY] v38：交付证据附件（图片） */
+  attachments?: { name: string; url: string }[]
+  /** [MOCK-ONLY] v38：被发起方退回的原因（退回后回到待提交） */
+  returnReason?: string
+  acceptedAt?: string
 }
 
 export interface MyProject {
   id: string
   name: string
-  role: '本人承接' | '企业承接'
+  role: '需求发起方' | '本人承接' | '企业承接'
   enterpriseName?: string
+  /** 企业承接时的企业 id（结项经验按企业维度发放） */
+  enterpriseId?: string
+  sourceDemandId?: string
+  partnerName?: string
   progress: number
   milestones: Milestone[]
+  /** 全部里程碑验收通过后的结项时间 */
+  finishedAt?: string
 }
 
 /* ---------- 申请（企业合作：企业入驻/合作伙伴；人才登记；身份绑定） ---------- */
@@ -864,7 +1071,7 @@ export interface MyApplication {
   id: string
   type: ApplicationType
   targetName: string
-  status: 'pending' | 'approved' | 'rejected'
+  status: 'pending' | 'approved' | 'rejected' | 'withdrawn'
   submittedAt: string
   reviewedAt?: string
   rejectReason?: string

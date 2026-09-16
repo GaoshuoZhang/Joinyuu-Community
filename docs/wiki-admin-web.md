@@ -175,7 +175,7 @@
 
 ## 5. 页面清单（M1.5 全量，2026-09-12）
 
-> 路由以 `src/router/index.ts` 为准：AdminLayout 下 45 个页面路由（含 /403 与 5 条旧路径重定向，不含 /mall 重定向）+ /login + 2 个独立打印视图（共 48 个页面组件；系统管理 5 个子页作为 2 个聚合页的 tab 子组件，不再独立路由）；`/mall` 重定向至 `/mall/goods`，`/:pathMatch(.*)*` 兜底重定向 `/dashboard`。
+> 路由以 `src/router/index.ts` 为准：当前共 56 条路由记录，其中 49 条 component-backed（48 个视图路由 + AdminLayout 壳），其余 7 条为 `/mall`、5 条旧系统路径和 catch-all 重定向；系统管理 5 个子页作为 2 个聚合页的 tab 子组件，不再独立路由。
 
 | 页面 | 路由 | 职责 | 关键交互 |
 |---|---|---|---|
@@ -282,7 +282,7 @@
 
 ## 10. M1 后端接入状态（2026-09-12 全量接入完成）
 
-- 后端 `apps/api`（NestJS 11，端口 7757）：36 个 controller、源码统计 188 个 `/api/admin/**` 路由装饰器（M1 129 端点 + M1.5 治理域：RBAC/管理员/验证码/改密/会话/登录日志/素材/监控/归档设置/趋势等）；admin dev（7758）经 vite proxy 转发 `/api` → `http://127.0.0.1:7757`
+- 后端 `apps/api`（NestJS 11，端口 7757）：36 个 controller、源码统计 193 个 HTTP 路由装饰器（`/api/admin/**` 191 + health/public 各 1）；admin dev（7758）经 vite proxy 转发 `/api` → `http://127.0.0.1:7757`
 - 本地启动顺序：`pnpm db:up` → `pnpm db:reset` → `pnpm dev:api` → `pnpm dev:admin`；登录为真实 JWT（admin/admin123）+ 必填图形验证码；旧 mock token 会触发 401 → 清 token/名称/权限缓存跳登录
 - **接入进度：22/22 M1 域 + 6 个 M1.5 新增域（roles / admins / assets / login-logs / monitor / trash）全部 HTTP 化**；`src/mock/` 已删除，种子数据内化至 `apps/api/prisma/seed-data/`
 - 契约细节（端点清单/入参/返回形状/状态机/错误文案）见 [wiki-backend.md](./wiki-backend.md) §6~§9；治理路线与验收见 [full-spec-check.md](./full-spec-check.md) §7
@@ -292,4 +292,4 @@
 | 日期 | 说明 |
 |---|---|
 | 2026-09-12 | **M1.5 全量回写**（代码事实来源：工作树自 5555770 起的 ~300 文件改动）：① 页面/路由——新增归档管理（/system/trash，13 域 Tab + 三连确认）、租赁详情（/workstations/leases/:id）、资讯发布/投稿内容/栏目管理/阅读统计（内容管理拆分）、角色权限/管理员账号/在线会话/素材库/系统监控/登录日志/修改密码/403、租约与审核单打印视图；删除 ArticlePanel/ContentsView/UsageBoardPanel；② 组件——新增 RichEditor（wangEditor）、TrendChart（纯 SVG）、ColumnController、BulkArchiveDialog、ArticleReviewDialog/ArticleScheduleDialog、EnterpriseFormDialog/ExternalEnterpriseFormDialog；v-permission 改 display+updated，`.id-tag`/`.id-tag-block` 全局化；③ 交互——ID 展示规范、术语统一、去除刷新按钮与表格批量操作、关闭全部=关闭其他、暗色模式、素材来源/替换、上传大小配置、工作台区间累计与可点击卡片、popup ESC；④ 列表——租赁详情与筛选、预约六态派生、申请审核四类型与行操作、商品默认下架/发货方式/范围/富文本、订单一键归档、归档守卫、用户详情 7 记录页当前/历史分区、需求创建人跳转、企业/合作企业归档仅停用态；⑤ 登录安全——验证码必填、修改密码、会话管理、登录日志三态、401 清理权限缓存；⑥ API——22/22 + M1.5 六域全量 HTTP 化、mock 删除、§6/§7/§9/§10 重写 |
-| 2026-09-12 | **菜单聚合与治理增强落地**：① 系统管理菜单聚合——新增「角色与账号」（/system/account：管理员账号/角色权限/在线会话）与「日志与审计」（/system/logs：操作日志/登录日志）两个选项卡聚合页，原 5 项独立菜单合并、子页作为 tab 组件不再独立路由，tab 与 `?tab=` 双向同步、按权限过滤，旧路径全部重定向；「审计日志」更名「操作日志」（含权限名/导出文件名/种子/e2e 文案）；② 权限码全链路支持 `string | string[]`（any-of）；③ R1 数据范围（域维度）实装（dataScope + 登录响应 + 菜单/路由过滤 + RolePanel 数据范围弹窗 + DomainScopeGuard）；④ R3 密码周期（系统配置「密码有效期」+ 过期强制改密 + 验证码限流 30 次/分钟）；⑤ R4 MinIO 双驱动 + 系统配置「MinIO 对象存储」分区（本地磁盘回退保留）；⑥ 工程债——v-loading 存量 5 处改 `<t-loading>`、暗色菜单主题动态化、ESLint 配置与双端 lint、API 单元测试套件（24 用例）、会话索引 Redis Hash 重构、权限码启动校验、parseRegion 公网解析、RBAC 关联表外键 |
+| 2026-09-12 | **菜单聚合与治理增强落地**：① 系统管理菜单聚合——新增「角色与账号」（/system/account：管理员账号/角色权限/在线会话）与「日志与审计」（/system/logs：操作日志/登录日志）两个选项卡聚合页，原 5 项独立菜单合并、子页作为 tab 组件不再独立路由，tab 与 `?tab=` 双向同步、按权限过滤，旧路径全部重定向；「审计日志」更名「操作日志」（含权限名/导出文件名/种子/e2e 文案）；② 权限码全链路支持 `string | string[]`（any-of）；③ R1 数据范围（域维度）实装（dataScope + 登录响应 + 菜单/路由过滤 + RolePanel 数据范围弹窗 + DomainScopeGuard）；④ R3 密码周期（系统配置「密码有效期」+ 过期强制改密 + 验证码限流 30 次/分钟）；⑤ R4 MinIO 双驱动 + 系统配置「MinIO 对象存储」分区（本地磁盘回退保留）；⑥ 工程债——v-loading 存量 5 处改 `<t-loading>`、暗色菜单主题动态化、ESLint 配置与双端 lint、API 单元测试（当前 4 套件 / 25 个源码用例声明）、会话索引 Redis Hash 重构、权限码启动校验、parseRegion 公网解析、RBAC 关联表外键 |

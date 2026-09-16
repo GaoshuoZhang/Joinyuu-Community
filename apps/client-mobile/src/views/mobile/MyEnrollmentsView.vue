@@ -1,10 +1,11 @@
 <script setup lang="ts">
 import { onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
-import { Button, Loading, Toast } from 'tdesign-mobile-vue'
+import { Button, Toast } from 'tdesign-mobile-vue'
 import { cancelEnrollment, fetchMyEnrollments } from '@/api/events'
 import { useAsyncList } from '@/composables/useAsyncList'
 import EmptyBlock from '@/components/shared/EmptyBlock.vue'
+import ListSkeleton from '@/components/ListSkeleton.vue'
 import StateTag from '@/components/shared/StateTag.vue'
 import type { MyEnrollmentItem } from '@/types'
 
@@ -19,7 +20,8 @@ const confirmingId = ref('')
 let confirmTimer: ReturnType<typeof setTimeout> | null = null
 
 function canCancel(item: MyEnrollmentItem) {
-  return item.status === 'pending' || item.status === 'approved'
+  /* v38：候补中可随时退出；正式报名开始前 24 小时内不可取消（由服务端校验并返回原因） */
+  return item.status === 'pending' || item.status === 'approved' || item.status === 'waitlisted'
 }
 
 function onCancelTap(item: MyEnrollmentItem) {
@@ -52,22 +54,27 @@ async function doCancel(item: MyEnrollmentItem) {
 
 <template>
   <div class="m-enrollments page-fade-in stagger">
-    <Loading v-if="loading" class="state" text="加载中…" />
-    <section v-else-if="error" class="error-box">
-      <p>{{ error }}</p>
-      <Button variant="outline" size="small" @click="run">重试</Button>
-    </section>
+    <ListSkeleton v-if="loading" />
+    <EmptyBlock v-else-if="error" :text="error" action-text="重试" @action="run" />
     <template v-else-if="(data ?? []).length > 0">
+      <p class="list-count">共 {{ (data ?? []).length }} 条报名</p>
       <div v-for="item in data" :key="item.id" class="m-card">
         <div class="row">
           <a class="title" @click="router.push(`/events/${item.eventId}`)">{{ item.eventTitle }}</a>
           <StateTag kind="enroll" :value="item.status" />
         </div>
         <p class="meta">🕐 {{ item.startTime }} · 📍 {{ item.location }}</p>
+        <p v-if="item.status === 'waitlisted'" class="waitlist-note">
+          候补中{{ item.waitlistOrder ? `（第 ${item.waitlistOrder} 位）` : '' }}，有空位将自动递补并通知你
+        </p>
+        <p v-if="item.eventStatus === 'cancelled'" class="cancel-note">活动已取消，报名已同步取消</p>
+        <p v-else-if="item.rescheduledTo" class="waitlist-note">活动改期至 {{ item.rescheduledTo }}</p>
+        <p v-if="item.rejectReason" class="reject-reason">驳回原因：{{ item.rejectReason }}</p>
         <div class="ops">
           <span v-if="item.checkedIn" class="checked">已签到</span>
-          <a v-else-if="item.status === 'approved'" class="checkin-link" @click="router.push(`/events/${item.eventId}/check-in`)">去签到 ›</a>
+          <a v-else-if="item.status === 'approved'" class="checkin-link" v-pressable @click="router.push(`/events/${item.eventId}/check-in`)">去签到 ›</a>
           <span v-else class="placeholder" />
+          <a v-if="item.status === 'approved' || item.checkedIn" class="checkin-link" v-pressable @click="router.push(`/events/${item.eventId}/ticket`)">电子票 ›</a>
           <Button
             v-if="canCancel(item)"
             theme="danger"
@@ -76,7 +83,7 @@ async function doCancel(item: MyEnrollmentItem) {
             :disabled="actingId === item.id"
             @click="onCancelTap(item)"
           >
-            {{ confirmingId === item.id ? '再点一次确认取消' : '取消报名' }}
+            {{ confirmingId === item.id ? '再点一次确认取消' : item.status === 'waitlisted' ? '退出候补' : '取消报名' }}
           </Button>
         </div>
       </div>
@@ -127,6 +134,24 @@ async function doCancel(item: MyEnrollmentItem) {
   margin: 0 0 12px;
   font-size: 12px;
   color: var(--td-text-color-secondary);
+}
+
+.reject-reason {
+  margin: 0 0 10px;
+  color: var(--td-error-color);
+  font-size: 12px;
+}
+
+.waitlist-note {
+  margin: 0 0 10px;
+  color: var(--td-brand-color);
+  font-size: 12px;
+}
+
+.cancel-note {
+  margin: 0 0 10px;
+  color: var(--td-error-color);
+  font-size: 12px;
 }
 
 .ops {

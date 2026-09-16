@@ -45,7 +45,7 @@ async function onSubmit() {
 </script>
 
 <template>
-  <div class="m-login">
+  <div class="page-fade-in m-login">
     <div class="hero">
       <span class="logo">聚</span>
       <h1 class="title">聚屿社区</h1>
@@ -54,16 +54,20 @@ async function onSubmit() {
 
     <div class="form">
       <div class="field">
-        <Input v-model="form.phone" :maxlength="11" placeholder="手机号" clearable />
+        <label>手机号</label>
+        <Input v-model="form.phone" type="tel" :maxlength="11" placeholder="手机号" clearable @keyup.enter="onSubmit" />
         <p v-if="errors.phone" class="error">{{ errors.phone }}</p>
       </div>
       <div class="field">
-        <Input v-model="form.password" type="password" placeholder="密码" clearable />
+        <label>密码</label>
+        <Input v-model="form.password" type="password" placeholder="密码" clearable @keyup.enter="onSubmit" />
         <p v-if="errors.password" class="error">{{ errors.password }}</p>
+        <p class="forgot"><router-link to="/forgot-password" class="link">忘记密码？</router-link></p>
       </div>
       <div class="field">
+        <label>验证码</label>
         <div class="captcha-row">
-          <Input v-model="form.captchaCode" :maxlength="4" placeholder="验证码（演示：8888）" />
+          <Input v-model="form.captchaCode" :maxlength="4" placeholder="验证码（演示：8888）" @keyup.enter="onSubmit" />
           <span class="hint">8888</span>
         </div>
         <p v-if="errors.captchaCode" class="error">{{ errors.captchaCode }}</p>
@@ -80,8 +84,9 @@ async function onSubmit() {
 <style scoped>
 .m-login {
   min-height: 100vh;
+  min-height: 100dvh;
   background: var(--td-bg-color-container);
-  padding: 0 22px;
+  padding: 0 22px calc(22px + env(safe-area-inset-bottom));
 }
 
 .hero {
@@ -114,7 +119,14 @@ async function onSubmit() {
 }
 
 .field {
-  margin-bottom: 14px;
+  margin-bottom: 16px;
+}
+
+.field label {
+  display: block;
+  margin-bottom: 6px;
+  font-size: 12px;
+  color: var(--td-text-color-secondary);
 }
 
 .captcha-row {
@@ -125,6 +137,7 @@ async function onSubmit() {
 
 .captcha-row :deep(.t-input) {
   flex: 1;
+  min-width: 0;
 }
 
 .hint {
@@ -167,6 +180,12 @@ async function onSubmit() {
 
 .link {
   color: var(--td-brand-color);
+}
+
+.forgot {
+  margin: 8px 0 0;
+  text-align: right;
+  font-size: 13px;
 }
 
 .demo {

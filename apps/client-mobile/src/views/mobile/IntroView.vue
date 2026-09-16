@@ -136,7 +136,7 @@ function goApply() {
   margin-bottom: 8px;
   padding: 2px 8px;
   font-size: 12px;
-  border-radius: var(--td-radius-small);
+  border-radius: var(--td-tag-square-border-radius, 4px);
   color: var(--td-brand-color);
   background: var(--td-brand-color-light);
 }

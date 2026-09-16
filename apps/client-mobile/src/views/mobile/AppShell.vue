@@ -1,11 +1,12 @@
 <script setup lang="ts">
-import { computed, onMounted } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { Avatar, Badge, Icon, Navbar, TabBar, TabBarItem } from 'tdesign-mobile-vue'
+import { Avatar, Badge, Icon, Navbar, NoticeBar, TabBar, TabBarItem } from 'tdesign-mobile-vue'
 import { ChevronLeftIcon, NotificationIcon } from 'tdesign-icons-vue-next'
 import { useAuthStore } from '@/stores/auth'
 import { useConfigStore } from '@/stores/config'
 import { useNoticesStore } from '@/stores/notices'
+import { pageTitleFor } from '@/constants/pageTitles'
 import 'tdesign-mobile-vue/es/style/index.css'
 
 /* 移动应用壳：Navbar（居中：Tab 页=社区名 / 二级页=页面标题；左：仅二级页返回箭头；
@@ -20,96 +21,153 @@ const notices = useNoticesStore()
 onMounted(() => {
   config.ensureLoaded()
   if (auth.isLogged) notices.refreshUnread()
+  window.addEventListener('online', onOnline)
+  window.addEventListener('offline', onOffline)
 })
+
+onBeforeUnmount(() => {
+  window.removeEventListener('online', onOnline)
+  window.removeEventListener('offline', onOffline)
+})
+
+/* v43：顶栏背景随滚动渐显（0 → 1），避免内容滚动到下方时透出文字 */
+const NAVBAR_FADE_DISTANCE = 80
+const scrollTop = ref(0)
+const navbarAlpha = computed(() => Math.min(1, Math.max(0, scrollTop.value / NAVBAR_FADE_DISTANCE)))
+const navbarStyle = computed(() => ({
+  '--td-navbar-bg-color': `rgba(255, 255, 255, ${navbarAlpha.value.toFixed(3)})`,
+}))
+let scrollRaf = 0
+function onWindowScroll() {
+  if (scrollRaf) return
+  scrollRaf = window.requestAnimationFrame(() => {
+    scrollRaf = 0
+    scrollTop.value = window.scrollY
+  })
+}
+onMounted(() => window.addEventListener('scroll', onWindowScroll, { passive: true }))
+onBeforeUnmount(() => {
+  window.removeEventListener('scroll', onWindowScroll)
+  if (scrollRaf) window.cancelAnimationFrame(scrollRaf)
+})
+/* 路由切换/返回恢复滚动位置后同步一次（避免残留上次的透明度） */
+watch(
+  () => route.fullPath,
+  () => {
+    window.requestAnimationFrame(() => {
+      scrollTop.value = window.scrollY
+    })
+  },
+)
+
+/* v38：离线提示（弱网/断网时给用户明确反馈） */
+const offline = ref(typeof navigator !== 'undefined' && !navigator.onLine)
+function onOnline() {
+  offline.value = false
+}
+function onOffline() {
+  offline.value = true
+}
 
 const tabs = [
   { value: '/', label: '首页', icon: 'home' },
-  { value: '/projects', label: '项目', icon: 'app' },
+  { value: '/projects', label: '需求', icon: 'app' },
   { value: '/community', label: '社区', icon: 'usergroup' },
   { value: '/plaza', label: '广场', icon: 'calendar' },
   { value: '/me', label: '我的', icon: 'user' },
 ] as const
 
-/* 底部 Tab 高亮：企业/人才名片归属「社区」Tab（其余按首段路径匹配） */
-const TAB_ALIASES: Record<string, string> = {
-  enterprises: '/community',
+/* 底部 Tab 高亮（v36：按路由段集中映射，二级页稳定归属所属 Tab，不依赖路径前缀猜断） */
+const TAB_BY_SEGMENT: Record<string, string> = {
+  '': '/',
+  search: '/',
+  projects: '/projects',
+  demands: '/projects',
+  community: '/community',
   talents: '/community',
+  enterprises: '/community',
+  spaces: '/community',
+  intros: '/community',
+  plaza: '/plaza',
+  events: '/plaza',
+  articles: '/plaza',
+  mall: '/me',
+  me: '/me',
+  notices: '/me',
+  applications: '/me',
 }
+const TAB_ROOTS = new Set(tabs.map((tab) => tab.value))
 const active = computed(() => {
   const segment = route.path.split('/')[1] ?? ''
-  return TAB_ALIASES[segment] ?? '/' + segment
+  const target = TAB_BY_SEGMENT[segment] ?? `/${segment}`
+  return TAB_ROOTS.has(target) ? target : ''
 })
 
 /* 二级页标题映射（按前缀最长优先匹配）；param 路由用前缀，如 /demands/:id、/events/:id/check-in、/talents/:uid */
-const PAGE_TITLES: [string, string][] = [
-  ['/search', '全局搜索'],
-  ['/me/cards/individual', '个人名片'],
-  ['/me/identities', '关联身份'],
-  ['/me/invitations', '企业邀请'],
-  ['/me/enterprises', '企业详情'],
-  ['/me/profile/edit', '编辑资料'],
-  ['/me/realname', '实名认证'],
-  ['/me/applications', '我的申请'],
-  ['/me/reservations', '我的预约'],
-  ['/me/enrollments', '我的报名'],
-  ['/me/responses', '我的响应'],
-  ['/me/experience', '我的等级'],
-  ['/me/demands', '我的需求'],
-  ['/me/projects', '我的项目'],
-  ['/me/articles', '我的投稿'],
-  ['/me/orders', '我的订单'],
-  ['/me/points', '我的积分'],
-  ['/check-in', '签到'],
-  ['/events', '活动计划'],
-  ['/spaces/reserve', '预约提交'],
-  ['/spaces', '空间预约'],
-  ['/mall', '积分商城'],
-  ['/articles/new', '文章投稿'],
-  ['/articles', '社区内容'],
-  ['/talents', '个人名片'],
-  ['/intros/enterprise', '企业合作'],
-  ['/intros/settle', '企业入驻'],
-  ['/intros/cooperation', '合作伙伴'],
-  ['/intros/talent', '人才登记'],
-  ['/demands/new/task', '找服务'],
-  ['/demands/new/invest', '找投资'],
-  ['/demands/new/cooperation', '找合作'],
-  ['/demands/new', '发布需求'],
-  ['/demands', '项目详情'],
-  ['/showcase-apply', '企业名片申请'],
-  ['/enterprises', '企业名片'],
-  ['/applications/settle', '企业入驻申请'],
-  ['/applications/cooperation', '合作伙伴申请'],
-  ['/applications/individual', '人才登记申请'],
-  ['/applications/new', '身份绑定申请'],
-  ['/notices', '站内信'],
-]
-
 /* 仅底部 Tab 对应路径按 Tab 页处理（居中显示社区名 + 无返回箭头）；/me/** 等二级页显示返回箭头与标题 */
 const isTab = computed(() => tabs.some((t) => t.value === route.path))
+
+/* v38：需要保留浏览状态的列表页（组件名 = 文件名） */
+const KEEP_ALIVE_NAMES = [
+  'HomeView',
+  'MeView',
+  'GlobalSearchView',
+  'ProjectsView',
+  'CommunityView',
+  'PlazaView',
+  'EventsView',
+  'MallView',
+  'SpacesView',
+]
 /* 「我的」页：隐藏右上角用户信息、仅显示消息铃铛 */
 const isMe = computed(() => route.path === '/me')
-const pageTitle = computed(() => {
-  if (isTab.value) return ''
-  const p = route.path
-  /* 编辑企业名片 / 成员管理：需先于 /me/enterprises 前缀命中 */
-  if (/^\/me\/enterprises\/[^/]+\/edit$/.test(p)) return '编辑企业名片'
-  if (/^\/me\/enterprises\/[^/]+\/members\//.test(p)) return '成员管理'
-  for (const [prefix, title] of PAGE_TITLES) {
-    if (p.includes(prefix)) return title
-  }
-  return ''
+const pageTitle = computed(() => pageTitleFor(route.path))
+
+/* v41/v43：削减动画——Tab 间切换不播放页面过渡；缓存页再次激活的入场动画抑制由
+ * useAnimSuppress 在页面根元素上处理（避免 shell 类切换让离场页重放动画）。 */
+const transitionName = ref('page')
+const removeAnimGuard = router.beforeEach((to, from) => {
+  transitionName.value = Boolean(to.meta.keepAlive) && Boolean(from.meta.keepAlive) ? 'none' : 'page'
+  return true
 })
+onBeforeUnmount(removeAnimGuard)
+
+/* v41：深链进入二级页时，返回按板块回到来源列表而不是一律回首页 */
+const BACK_FALLBACK: Record<string, string> = {
+  articles: '/plaza?tab=articles',
+  events: '/events',
+  demands: '/projects',
+  mall: '/mall',
+  talents: '/community?tab=talent',
+  enterprises: '/community?tab=enterprise',
+  spaces: '/spaces',
+  search: '/',
+  me: '/me',
+  notices: '/me',
+  applications: '/me',
+  intros: '/community',
+}
 
 function goBack() {
-  if (window.history.length > 1) router.back()
-  else void router.push('/')
+  /* v38：优先判断路由历史中是否真的有上一页，避免深链/新标签页直接退出应用 */
+  const back = (window.history.state as { back?: string | null } | null)?.back
+  if (back) {
+    router.back()
+    return
+  }
+  const segment = route.path.split('/')[1] ?? ''
+  void router.push(BACK_FALLBACK[segment] ?? TAB_BY_SEGMENT[segment] ?? '/')
 }
 
 function onTabChange(value: string | number) {
   const path = String(value)
   /* 精确比较：在 /me/** 等二级页点击所属 Tab 时回到 Tab 根路径 */
-  if (route.path !== path) void router.push(path)
+  if (route.path === path) {
+    /* v38：再次点击当前 Tab 回到顶部（移动端通用预期） */
+    window.scrollTo({ top: 0, behavior: 'smooth' })
+    return
+  }
+  void router.push(path)
 }
 
 function onNotices() {
@@ -119,31 +177,59 @@ function onNotices() {
 
 <template>
   <div class="m-shell">
-    <Navbar :title="pageTitle || config.config.siteName || '聚屿社区'" fixed placeholder :z-index="100" :safe-area-inset-top="false">
+    <a class="skip-link" href="#main">跳到主要内容</a>
+    <Navbar
+      :title="pageTitle || config.config.siteName || '聚屿社区'"
+      fixed
+      placeholder
+      :z-index="100"
+      :safe-area-inset-top="true"
+      :style="navbarStyle"
+    >
       <template #left>
-        <ChevronLeftIcon v-if="!isTab" class="nav-back" size="24px" aria-label="返回" @click="goBack" />
+        <button v-if="!isTab" class="nav-back" type="button" aria-label="返回" @click="goBack">
+          <ChevronLeftIcon size="24px" />
+        </button>
       </template>
       <template #right>
         <button v-if="auth.isLogged && !isMe" class="nav-me" type="button" aria-label="我的" @click="router.push('/me')">
           <Avatar size="30px" :image="auth.avatar">{{ auth.name.slice(0, 1) }}</Avatar>
         </button>
-        <Badge v-if="isMe" :count="notices.unread" :max-count="99">
-          <NotificationIcon class="bell" size="22px" aria-label="站内信" @click="onNotices" />
+        <Badge v-if="isMe" class="bell-badge" :count="notices.unread" :max-count="99" :offset="[-10, 10]">
+          <button class="nav-bell" type="button" aria-label="站内信" @click="onNotices">
+            <NotificationIcon size="22px" />
+          </button>
         </Badge>
       </template>
     </Navbar>
 
-    <main class="m-content">
-      <router-view v-slot="{ Component }">
-        <Transition name="page" mode="out-in">
-          <component :is="Component" :key="$route.fullPath" />
+    <NoticeBar
+      v-if="offline"
+      visible
+      theme="warning"
+      content="当前网络不可用，部分内容可能不是最新，请检查网络后重试。"
+      class="offline-bar"
+    />
+
+    <main id="main" class="m-content" tabindex="-1">
+      <!-- v38：列表/浏览页 KeepAlive，保留筛选、分页与滚动位置；详情页即时重建；v41：Tab 间切换无过渡 -->
+      <router-view v-slot="{ Component, route: current }">
+        <Transition :name="transitionName" mode="out-in">
+          <KeepAlive :include="KEEP_ALIVE_NAMES">
+            <component :is="Component" :key="current.meta.keepAlive ? String(current.name) : current.fullPath" />
+          </KeepAlive>
         </Transition>
       </router-view>
     </main>
 
     <TabBar :value="active" :fixed="true" :placeholder="false" safe-area-inset-bottom :bordered="true" @change="onTabChange">
       <TabBarItem v-for="tab in tabs" :key="tab.value" :value="tab.value">
-        <template #icon><Icon :name="tab.icon" size="22px" /></template>
+        <template #icon>
+          <Badge v-if="tab.value === '/me' && notices.unread > 0" :count="notices.unread" :max-count="99">
+            <Icon :name="tab.icon" size="22px" />
+          </Badge>
+          <Icon v-else :name="tab.icon" size="22px" />
+        </template>
         {{ tab.label }}
       </TabBarItem>
     </TabBar>
@@ -151,10 +237,17 @@ function onNotices() {
 </template>
 
 <style scoped>
+/* v43：顶栏背景渐变过渡（透明度由内联 CSS 变量控制） */
+.m-shell :deep(.t-navbar__content) {
+  transition: background-color 160ms linear;
+}
+
 .m-shell {
   --td-tab-bar-height: var(--app-mobile-tabbar-h);
 
   min-height: 100vh;
+  /* v38：dvh 兜底，避免移动端浏览器工具栏遮挡 */
+  min-height: 100dvh;
   display: flex;
   flex-direction: column;
   background: var(--td-bg-color-page);
@@ -162,27 +255,63 @@ function onNotices() {
 
 .m-content {
   flex: 1;
-  padding-bottom: calc(var(--app-mobile-tabbar-h) + 16px);
+  /* v38：底部安全区也要计入内容留白，否则最后一行会被 Home 指示条压住 */
+  padding-bottom: calc(var(--app-mobile-tabbar-h) + 16px + env(safe-area-inset-bottom));
 }
 
-/* 页面切换过渡：上移淡入（与 tokens 的 page-fade-in 同节奏） */
+.offline-bar {
+  --td-notice-bar-warning-color: var(--td-warning-color);
+}
+
+/* v39：跳转链接（键盘聚焦时可见） */
+.skip-link {
+  position: absolute;
+  left: 8px;
+  top: -48px;
+  z-index: 200;
+  padding: 10px 14px;
+  border-radius: var(--td-radius-default);
+  background: var(--td-brand-color);
+  color: var(--td-text-color-anti);
+  font-size: 13px;
+  transition: top 160ms ease;
+}
+
+.skip-link:focus {
+  top: calc(8px + env(safe-area-inset-top));
+}
+
+.m-content:focus {
+  outline: none;
+}
+
+/* 页面切换过渡（v41：更快、仅淡入淡出；Tab 间切换走 none 无过渡） */
 .page-enter-active,
 .page-leave-active {
-  transition: opacity 160ms ease, transform 160ms ease;
+  transition: opacity 140ms ease;
 }
 
-.page-enter-from {
-  opacity: 0;
-  transform: translateY(6px);
+.none-enter-active,
+.none-leave-active {
+  transition: none;
 }
 
+.page-enter-from,
 .page-leave-to {
   opacity: 0;
-  transform: translateY(-4px);
 }
 
 .nav-back {
-  display: block;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  /* v36：触控目标 ≥44×44px（作用于按钮容器，不拉伸图标本身） */
+  width: 44px;
+  height: 44px;
+  margin: -10px;
+  padding: 0;
+  border: none;
+  background: none;
   color: var(--td-text-color-primary);
   cursor: pointer;
 }
@@ -191,16 +320,33 @@ function onNotices() {
 .nav-me {
   display: inline-flex;
   align-items: center;
-  padding: 2px 4px;
+  justify-content: center;
+  min-width: 44px;
+  min-height: 44px;
+  margin-right: -7px;
+  padding: 0;
   border: none;
   background: none;
   border-radius: var(--td-radius-circle);
   cursor: pointer;
 }
 
-.bell {
-  display: block;
+/* v39 修复：44px 触控目标加在按钮上，铃铛图标保持 22px（此前直接作用于 SVG 被拉伸） */
+.nav-bell {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 44px;
+  height: 44px;
+  padding: 0;
+  border: none;
+  background: none;
   color: var(--td-text-color-primary);
   cursor: pointer;
+}
+
+/* v43：铃铛角标容器不再使用负外边距，避免红点漂出屏幕 */
+.bell-badge {
+  display: inline-flex;
 }
 </style>

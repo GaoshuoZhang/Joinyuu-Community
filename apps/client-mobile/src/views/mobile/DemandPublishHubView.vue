@@ -52,6 +52,7 @@ function goForm() {
         :key="item.kind"
         class="kind-card m-card"
         :class="{ active: selected === item.kind }"
+        v-pressable
         @click="selected = item.kind"
       >
         <div class="card-head">
@@ -155,7 +156,7 @@ function goForm() {
 }
 
 .step {
-  font-size: 11px;
+  font-size: 12px;
   line-height: 1;
   padding: 5px 8px;
   border-radius: var(--td-radius-default);

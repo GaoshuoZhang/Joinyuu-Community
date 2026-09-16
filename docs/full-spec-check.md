@@ -2,7 +2,7 @@
 
 > 跨会话/跨 agent 的进度唯一事实来源。每完成一个模块，同步勾选。
 > 细致契约见 [wiki-admin-web.md](./wiki-admin-web.md) 与 [wiki-backend.md](./wiki-backend.md)；实体字段见 [docs/entity-fields.md](./entity-fields.md)。
-> 最后更新：2026-09-12（**M1.5 R1~R12 全部落地并有本工作树增强**：RBAC/管理员账号/登录安全/上传素材/富文本/监控/趋势/登录日志/导出打印/暗色/列配置/归档管理/新增角色/一键强制下线/角色与账号三 Tab 统一筛选栏/工作台视觉修复；e2e **25 套件 / 169 用例**）
+> 最后更新：2026-09-15。M1.5 R1~R12 与后续治理增强已完成；M2 移动端 Mock-First 已交付至 v33，当前决策为继续深化 Mock，**M2-R `/api/app/**` 暂不启动**。测试源码静态清点：API e2e 25 套件 / 170 个用例声明、unit 4 套件 / 25 个用例声明；最近一次有记录的 e2e 全量通过为 25 套件 / 169 用例。
 
 ## 0. 项目定位
 
@@ -32,8 +32,17 @@
 | M0 | 后台原型（Mock 驱动） | 已完成（A~E 全） |
 | M1 | 后端服务（NestJS + Prisma + PG + Redis） | 已完成（A~E 全） |
 | **M1.5** | **后台治理增强（R1~R12）** | **已完成（R1~R12 全 + 本工作树增强，见 §7）** |
-| M2 | 客户端 Web | 未开始 |
+| **M2-Mobile** | **移动端 Mock-First** | **v33 已交付，继续深化产品闭环与 UX** |
+| M2-R | `/api/app/**` 真实接口接入 | 暂不启动（产品决策） |
+| M2-Web | 桌面客户端 `client-web` | 未开始 |
 | M3 | 微信小程序 | 未开始 |
+
+### 2.1 当前代码规模（2026-09-15 静态清点）
+
+- API：43 个 Prisma 模型、17 个迁移、36 个 controller、193 个 HTTP 路由装饰器（admin 191 + health 1 + public files 1；app 0）。
+- Admin：56 条路由记录，其中 49 条 component-backed（48 个视图路由 + AdminLayout 壳），其余 7 条为重定向。
+- Client Mobile：61 条路由记录，其中 60 条 component-backed；58 个唯一视图文件、20 个 API 契约文件、20 个 mock handler 文件。
+- 测试：API e2e 25 套件 / 170 个源码用例声明，API unit 4 套件 / 25 个源码用例声明，Admin UI contract 2 文件 / 10 个源码用例声明。源码声明数不等于本次已执行通过数。
 
 ## 3. M0 后台原型（已完成）
 
@@ -45,7 +54,7 @@
 
 ## 4. M1 后端服务（已完成）
 
-> M1.5 增强后现状（代码为准）：36 个 controller（34 个 `/api/admin` + health + public files）共 **193 个在册 HTTP 端点**（管理端 191 + 公开 2；2026-09-12 新增 `POST /api/admin/roles`、`POST /api/admin/auth/sessions/kick-all`、`POST /api/admin/users` 与 `POST /api/admin/users/:id/reset-password`）；Prisma schema **43 模型**（M1 时 35，M1.5 新增 RBAC 4 表 / LoginLog / SchedulerLog / MallAsset / ArchiveSetting 共 8 表）。
+> M1.5 增强后现状（代码为准）：36 个 controller（34 个 `/api/admin` + health + public files）共 **193 个在册 HTTP 端点**（管理端 191 + 公开 2）；Prisma schema **43 模型 / 17 个迁移**。`/api/app/**` controller 与端点均为 0，符合 M2-R 暂不启动决策。
 
 - **M1-A 底座**：NestJS 11 + 全局管线（包络/异常过滤/JWT 守卫/审计拦截器/前缀 ID 发号器）、Docker Compose（PG+Redis）、Prisma schema（M1 时 35 模型，M1.5 后 43）+ seed 骨架、认证（JWT + Redis 登出黑名单）、健康检查
 - **M1-B 社区成员域（23 端点）**：users / individuals / enterprises / external-enterprises / applications / ledgers；新增用户生成默认个人身份、管理员重置登录密码、grantIdentity 联动、账本事务、审计迁移、admin 五组页面接入
@@ -55,7 +64,7 @@
 
 ## 5. M2 客户端（移动端 `client-mobile` / 桌面端 `client-web`）
 
-> 规划：[docs/m2-client-plan.md](./m2-client-plan.md)（v2 已确认，含完成度看板）；契约：[docs/api-app-design.md](./api-app-design.md)；移动端实现契约：[docs/wiki-client-mobile.md](./wiki-client-mobile.md)（随批次补充）；桌面端契约 `wiki-client-web.md` 待应用创建时新建。
+> 规划：[docs/m2-client-plan.md](./m2-client-plan.md)（Mock 已交付至 v33，含完成度看板）；契约：[docs/api-app-design.md](./api-app-design.md)；移动端实现契约：[docs/wiki-client-mobile.md](./wiki-client-mobile.md)；桌面端契约 `wiki-client-web.md` 待应用创建时新建。
 > 策略：Mock-First——客户端拆为两个独立应用/入口，**先移动端后桌面端**；`apps/client-mobile`（原 `apps/client`，dev 7759，与 admin 零粘连）前端先行 + Mock 数据，超边界功能（站内信/签到/首页聚合）以 `[MOCK-ONLY]` 交付并登记缺口；接入期（M2-R）实现 `/api/app/**` 并销号。
 > 拆分状态：`apps/client-mobile` **已收敛为纯移动端**（2026-09-13 移除 `views/desktop/**` 与 `dualView`，信息架构重构为 5 Tab：首页/项目/社区/广场/我的，社区视角）；`apps/client-web` 尚未创建（将承接原桌面视图与 `tdesign-vue-next`）。
 
@@ -69,7 +78,18 @@
 - [√] 个人中心：资料 / 积分 / 经验等级 / 商城兑换
 - [√] 空间预约：可用时段 / 提交（冲突 409）/ 我的预约
 - [√] 内容：文章浏览 / 投稿 / 我的投稿；企业展示页与展示页申请
-- [ ] 对接 `/api/app/**`（M2-R：后端实现 + 缺口销号 + http 切换 + e2e）
+- [√] v32 Mock 基础设施：版本化状态持久化 / 稳定 ID / 可控业务时钟 / 正常、慢网、离线、500、超时场景 / 需求、申请、活动报名、空间预约、投稿五域运营审核模拟
+- [√] v33 需求撮合闭环：发布者筛选/接受/驳回响应、响应撤回、接受后双方项目记录、项目详情（参与人/里程碑提交与验收/自动结项）、承接方积分/经验与站内信联动
+- [√] v34 审核与履约闭环：需求/投稿/申请撤回与驳回后修改重提；商城实物/券码/服务权益履约模型
+- [√] v35 信任与治理：联系方式登录可见、名片字段可见性、举报与申诉、邀请有效期与撤销、负责人转移接受闭环
+- [√] v36 系统性 UX：请求防竞态、滚动恢复、Tab 归属映射、44px 触控目标、表单标签与草稿、错误重试与搜索降级
+- [√] v37 激活与留存：新手任务清单、搜索升级、收藏与到货提醒、Mock 埋点漏斗
+- [√] v38 全量体验整改与产品级 Mock 闭环：草稿/返回/安全区/错误重试/表单保护、地址簿、账号安全（找回密码/换绑/注销/导出/协议同意）、活动候补与反馈、通知偏好、订单取消与券码期限、空间规则、里程碑证据与退回、举报状态与屏蔽、点赞评论；API/admin 跟进交底见 m2-client-plan §7.7
+- [√] v39 体验补全（纯客户端）：浏览去重与阅读历史、分享、活动日历（.ics）、骨架屏与下拉刷新、skip link 与路由聚焦、官网校验、图片占位、筛选进 URL、列表计数、政策版本化、通知归档/待处理、行内错误补齐、语义化与首页个性化；Playwright headed 全链路走查（22 页零控制台错误）并修复导航图标被 44px 规则拉伸、投稿编辑器按钮高度不一致、网络异常时守卫 reject 空白页等回归
+
+- [√] v42 八大功能新增（纯客户端 Mock）：活动电子票、需求沟通、项目协作、积分任务/规则、个人看板、服务在线申请、企业工作台/代企业响应、实名分级权益；全场景 E2E 三轮 64 页零失败
+- [√] v41 移动端三轮复审整改（纯客户端）：URL query 同步与深链修复、订单评价、注销冷静期与撤回、图片兜底、对比度与预约约束、举报不预选、空态清除筛选；headed 实测零控制台错误
+- [√] v40 产品/UX 复审整改（纯客户端）：活动取消/改期运营模拟与取消失效链路、分享扩展、浏览历史页、首页公告、商城分类筛选（URL 同步）、物流单号、评论/用户举报、企业/人才收藏与筛选、搜索分类 chips 可点击、无障碍集中补丁（Toast aria-live、Dialog role）、滚动位置记忆与骨架屏一致性；项目页排序（最新/响应最多）与文章/活动/社区/广场筛选 URL 同步；首页「为你推荐」；投稿/评论/响应/地址/账号安全/邀请/退回原因表单行内错误；我的列表与通知/社区/广场计数补齐；修复首页推荐块误入样式区导致的渲染报错。Playwright headed 增量复测零控制台错误- [ ] 对接 `/api/app/**`（M2-R：**暂不启动**；待移动端 Mock 产品闭环与 UX 达到评审基线后再决策）
 
 ## 6. M3 微信小程序（未开始）
 
@@ -83,13 +103,13 @@
 
 > 以成熟后台系统为参照补齐的能力演进，前端与后端配套推进；优先级 P0 为治理打底，P1 为运营体验，P2 为打磨。
 > 前端 F1~F12 与后端 B1~B12 已全部落地（B10 暗色无后端、B11 列配置纯前端，按计划跳过）。
-> 验证：前后端 `tsc --noEmit` + `build` 通过；e2e **25 套件 / 163 用例**全绿（在 M1 的 16 套件 / 78 用例基础上新增 system-rbac / admins / auth-security / monitor / assets / trash / export / dashboard-trend / sanitize 共 9 套件），`pnpm db:reset` 幂等。
+> 历史验证：前后端 `tsc --noEmit` + `build` 通过，`pnpm db:reset` 幂等。当前测试源码为 e2e **25 套件 / 170 个用例声明**、unit **4 套件 / 25 个用例声明**；最近一次有记录的 e2e 全量通过为 **25 套件 / 169 用例**，新增声明需在具备 Node/pnpm 与 Docker 的环境中重跑后才能更新通过口径。
 
 ### 7.1 前端实现路线
 
 | R | 能力 | 优先级 | 前端交付 |
 |---|---|---|---|
-| R1 | RBAC 权限体系 | P0 | 角色管理页（权限点分配矩阵）、菜单/按钮权限过滤（v-permission 指令）、403 页；数据范围说明未实现（见注记） |
+| R1 | RBAC 权限体系 | P0 | 角色管理页（权限点分配矩阵）、菜单/按钮权限过滤、403 页；7 域数据范围已实现（非行级） |
 | R2 | 管理员账号管理 | P0 | 管理员列表页（新增/启停/重置密码/分配角色） |
 | R3 | 登录安全 | P0 | 登录页图形验证码、修改密码页、会话管理页（在线会话/强制下线） |
 | R4 | 文件上传与素材库 | P1 | 素材库页（上传/列表/删除/选择器）、TDesign upload 封装、业务接入（商品图/活动封面/文章配图/企业 Logo） |
@@ -106,10 +126,10 @@
 
 | R | 能力 | 后端交付 | 依赖 |
 |---|---|---|---|
-| R1 | RBAC | migration：AdminRole / AdminPermission / 关系表（AdminUser 挂角色）；`@RequirePermission` 守卫；角色/权限 CRUD + 权限点目录接口（49 码，含 `/system/export`）；登录响应带权限集合；数据范围（域维度）**未实现** | 无 |
+| R1 | RBAC | AdminRole / AdminPermission / 关系表；`@RequirePermission`；角色/权限 CRUD；49 码目录；7 域 `dataScope` + `DomainScopeGuard`（域级，不含行级/组织级过滤） | 无 |
 | R2 | 管理员账号 | AdminUser CRUD（增改启停/重置密码/角色分配）端点 + 审计 | R1 |
-| R3 | 登录安全 | 验证码令牌（Redis 短时）；密码策略校验（强度；**周期未实现**）；修改密码（原密码校验 + 踢下线）；会话管理（Redis 会话索引、强制下线撤销 token） | R1 |
-| R4 | 上传与素材 | 对象存储抽象（本地磁盘驱动 + `UPLOAD_DIR`，MinIO 待接入）；素材表 CRUD 与上传端点（大小限制走系统配置 1-100MB） | 无 |
+| R3 | 登录安全 | 验证码令牌、失败锁定、强度校验、可配置密码有效期与过期强制改密、会话管理与改密踢线 | R1 |
+| R4 | 上传与素材 | `StorageService` 本地磁盘/MinIO 双驱动；素材 CRUD 与上传端点；大小限制走系统配置 1-100MB | 无 |
 | R5 | 富文本 | 富文本存储 + HTML 清洁（XSS 过滤） | R4 |
 | R6 | 监控 | 服务/Redis 健康与统计端点；SchedulerLog 表（任务执行记录）与状态接口 | 无 |
 | R7 | 图表 | 聚合统计端点（成员/需求/活动/积分按日趋势） | 无 |
@@ -120,9 +140,9 @@
 | R12 | 归档管理 | 删除类改软删（deletedAt/deletedBy）+ 恢复/彻底清理端点 + 归档设置（ArchiveSetting）+ 调度自动归档/自动删除，保留审计 | 各业务域 |
 
 > 实施注记（2026-09-12 以代码为准的口径）：
-> - R1 数据范围（域维度）**未实现**：后端无 dataScope 过滤，权限控制为菜单/端点级。`@RequirePermission` 覆盖 **33/36** 个 controller（health、public files 为公开端点，notifications 有意仅登录；若不计公开 health 则为 33/35）；权限目录 **49 码**（含 `/system/export`）。装饰器支持 `string | string[]`（any-of），权限集合含 `'*'`（超管）时全量放行。
-> - R3 密码周期**未实现**：仅强度校验（修改/重置 ≥8 位含字母与数字；新建管理员未传密码时随机生成 12 位初始密码并一次性返回）；登录失败锁定为 Redis 实现（5 次失败 / 15 分钟）。
-> - R4 对象存储以本地磁盘驱动落地（`StorageService` 抽象 + `UPLOAD_DIR` 可配，默认 `apps/api/uploads`，MinIO 驱动待接入）；素材与富文本图片共用的上传大小限制由系统配置 `uploadMaxSizeMb` 控制（1-100MB 整数，默认 10MB；multer 100MB 硬兜底），上传经魔数嗅探（禁 SVG）与 HTML 消毒。
+> - R1 数据范围已按 7 个业务域实现：`AdminRole.dataScope` 持久化，前端菜单/路由与后端 `DomainScopeGuard` 同步拦截；空数组与超管 `'*'` 为不限制。当前不包含行级、组织级、所有者级或租户级过滤。
+> - R3 密码周期已实现：`passwordExpireDays` 默认 90、0 为关闭；过期会话仅允许验证码/登录/登出/改密/健康检查，改密后更新时间戳并清除限制。强度规则仍为 ≥8 位含字母与数字。
+> - R4 对象存储已实现本地磁盘/MinIO 双驱动：系统配置持久化 MinIO 连接参数并支持切换，失败时保留本地驱动路径；真实 MinIO 对象 I/O 尚无 e2e 覆盖。上传仍受 `uploadMaxSizeMb` 与 100MB 硬上限、魔数嗅探和 HTML 消毒保护。
 > - R12 软删/归档现覆盖 **13 个域/标签页**：社区企业 / 合作企业 / 资讯发布 / 投稿内容 / 公告栏 / 需求 / 项目 / 活动 / 租赁 / 空间预约 / 商品 / 商城订单 / 申请审核（资讯发布与投稿内容同属 Article 的 official/submitted 两个标签页）；每域可配置自动归档（开关 + 延时 + 状态）与自动删除（开关 + 延时），由调度任务 `archive-auto-archive` / `archive-auto-purge`（每 5 分钟）执行；恢复/彻底删除仅限 `deletedAt` 非空对象并保留审计。
 > - 2026-09-12 功能增强（前后端）：**新增角色** `POST /api/admin/roles`（编码唯一/不可用 super/名称唯一，ID 走 R 前缀 seed 续号自 R5，初始无权限点，审计「RBAC · 新增角色」；UI 在 角色与账号·角色权限 Tab，筛选栏 + 新增弹窗）；**一键强制下线** `POST /api/admin/auth/sessions/kick-all`（保留当前操作者会话，返回实际下线数；UI 在 在线会话 Tab，popconfirm 确认）；管理员账号 Tab 的「新增管理员」从独占按钮行移入筛选栏右端；三 Tab 统一「筛选栏 + 表格卡片」结构；工作台修复 待办 StatCard 贴边（TDesign `.t-link` 基础样式覆盖）与 系统公告条目文字水平居中（column flex 下 `align-items:center` 渗透）。
 > - 2026-09-12 有头浏览器全量走查（playwright-cli，chrome headed）：覆盖 登录边界（错验证码/错密码/5 次锁定 429/成功）、工作台交互（趋势切换/编辑布局开关恢复）、用户筛选与详情、企业新增校验、栏目系统保留行、归档空态与 13 域 tab、配置越界（1-90/1-100）、字典重名 409、日志模块筛选与 URL 同步、角色新增边界（非法编码前端拦截/super 后端 400）、暗色持久化、404 兜底、auditor 菜单裁剪与越权 403；**发现并修复缺陷**：系统管理菜单组 `canSee` 误用聚合路径码导致 auditor 整组菜单不可见（见 wiki-admin-web §4）；全程 console 零 JS 运行时异常（仅测试触发的预期 4xx）。
@@ -133,5 +153,5 @@
 
 - 设计契约冻结机制（M0 建立，见 wiki-admin-web.md）
 - 实体字段沉淀：docs/entity-fields.md（43 模型，schema.prisma 为事实来源）
-- 后端测试：e2e 25 套件 / 169 用例 + `test/helpers/reseed.ts` 套件级隔离，`pnpm --filter @joinyuu/api test:e2e`
+- 后端测试：e2e 25 套件 / 170 个源码声明（最近记录 169 个全量通过）+ unit 4 套件 / 25 个源码声明；e2e 由 `test/helpers/reseed.ts` 套件级隔离
 - CI/CD 与部署方案：待规划

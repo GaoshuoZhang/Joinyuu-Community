@@ -19,3 +19,21 @@ export async function createApplication(payload: ApplicationCreatePayload): Prom
   if (apiMode === 'mock') return mock.createApplication(payload)
   return httpPost<{ id: string }>('/applications', payload)
 }
+
+/** [MOCK-ONLY] 撤回审核中的申请。 */
+export async function withdrawApplication(id: string): Promise<void> {
+  if (apiMode === 'mock') return mock.withdrawApplication(id)
+  await httpPost(`/me/applications/${id}/withdraw`)
+}
+
+/** [MOCK-ONLY] 驳回/撤回后修改重提（可补充材料）。 */
+export async function resubmitApplication(id: string, payload: ApplicationCreatePayload): Promise<void> {
+  if (apiMode === 'mock') return mock.resubmitApplication(id, payload)
+  await httpPost(`/me/applications/${id}/resubmit`, payload)
+}
+
+/** [MOCK-ONLY] 重提前回填申请原始载荷。 */
+export async function fetchMyApplicationPayload(id: string): Promise<ApplicationCreatePayload> {
+  if (apiMode === 'mock') return mock.fetchMyApplicationPayload(id)
+  return httpGet<ApplicationCreatePayload>(`/me/applications/${id}/payload`)
+}

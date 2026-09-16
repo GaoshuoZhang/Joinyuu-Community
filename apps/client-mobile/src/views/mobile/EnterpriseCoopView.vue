@@ -61,6 +61,7 @@ function onConfirm() {
       :key="opt.key"
       class="m-card option"
       :class="{ active: selected === opt.key }"
+      v-pressable
       @click="selected = opt.key"
     >
       <div class="opt-head">

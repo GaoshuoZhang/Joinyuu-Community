@@ -39,12 +39,20 @@ export const useAuthStore = defineStore('auth', () => {
 
   let restorePromise: Promise<void> | null = null
 
-  /** 刷新后恢复会话（守卫首次跳转前 await 一次） */
+  /** 刷新后恢复会话（守卫首次跳转前 await 一次）。
+   * v38 修复：恢复请求失败（离线/超时/500 等）时不得让路由守卫 reject（否则整页空白），
+   * 失败后允许后续导航重试恢复。 */
   function ensureRestored(): Promise<void> {
-    restorePromise ??= authApi.restoreSession().then((result) => {
-      if (result) apply(result)
-    })
-    return restorePromise
+    if (restorePromise) return restorePromise
+    restorePromise = authApi
+      .restoreSession()
+      .then((result) => {
+        if (result) apply(result)
+      })
+      .catch(() => {
+        restorePromise = null
+      })
+    return restorePromise ?? Promise.resolve()
   }
 
   function apply(result: AuthResult) {
@@ -88,7 +96,8 @@ export const useAuthStore = defineStore('auth', () => {
       const me = await fetchMe()
       if (!me || me.uid !== uid.value) return
       name.value = me.nickname
-      if (me.avatar) avatar.value = me.avatar
+      avatar.value = me.avatar ?? ''
+      identities.value = me.identities
       points.value = me.points
     } catch {
       /* 拉取失败时保留本地缓存 */

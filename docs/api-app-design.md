@@ -71,6 +71,9 @@
 | GET | /api/app/me/demands | 我发布的需求（全状态，含 `kind`） |
 | POST | /api/app/demands/:id/respond | 响应需求：`published` 校验、不可响应自己的需求、防重复；通过后触发 `demand_responded` 积分（发放给响应成员，M2 批次） |
 | GET | /api/app/me/responses | 我的需求响应记录 |
+| POST | /api/app/me/responses/:id/withdraw | [MOCK-ONLY·缺口 §7.1-19] 响应者撤回待处理响应（撤回后可重新响应）；已处理 409 |
+| GET | /api/app/me/demands/:id/responses | [MOCK-ONLY·缺口 §7.1-19] 需求发布者查看响应列表（响应方快照 + `status=pending/accepted/rejected` + 审核时间/驳回原因）；非发布者 403 |
+| POST | /api/app/me/demands/:id/responses/:responseId/review | [MOCK-ONLY·缺口 §7.1-19] 发布者处理响应（`action=accept\|reject`，驳回必填原因）；接受后需求转 `projected` 并在事务内生成协作项目（双向记录 + 里程碑）、发放 `demand_undertaken` 积分与项目经验、通知双方、自动驳回其余待处理响应 |
 
 ## 7. 活动中心
 
@@ -88,7 +91,10 @@
 
 | 方法 | 路径 | 说明 |
 |---|---|---|
-| GET | /api/app/me/projects | 我承接的项目（本人或其社区企业身份所在企业承接；进度/里程碑只读） |
+| GET | /api/app/me/projects | 我承接的项目（需求发起方 / 本人或其社区企业身份所在企业承接；进度与里程碑状态） |
+| GET | /api/app/me/projects/:id | 项目详情（参与双方可看）：参与人、来源需求、进度与里程碑交付验收状态——[MOCK-ONLY·缺口 §7.1-19] |
+| POST | /api/app/me/projects/:id/milestones/:milestoneId/submit | [MOCK-ONLY·缺口 §7.1-19] 承接方提交里程碑完成（可附说明）→ 待发起方验收；发起方调用 403 |
+| POST | /api/app/me/projects/:id/milestones/:milestoneId/accept | [MOCK-ONLY·缺口 §7.1-19] 发起方验收里程碑；全部验收通过自动结项并按 wiki-backend §8.6 发放 `project_completed` 经验 |
 | GET | /api/app/mall/goods | 商品列表：`on` 且有库存优先（`restock` 库存为 0 不展示）；`mallOpen` 关闭 → 400 |
 | GET | /api/app/mall/goods/:id | 商品详情 |
 | POST | /api/app/mall/orders | 兑换下单：积分充足 + 库存充足（事务：扣积分+写流水+扣库存+建订单 `pending_shipment`） |
@@ -105,6 +111,40 @@
 | GET | /api/app/enterprises/:id | 企业展示页（`showcaseStatus=published` 才可见；含 `logo`/`foundedAt`/`website`/`address`/`services`/`advantages` 精致名片字段） |
 | POST | /api/app/showcase-requests | 展示页发布申请提交 → 管理端审核联动企业 showcaseStatus |
 | POST | /api/app/uploads | 申请资料 / 配图上传：multipart（`file` + `bizType`），仅图片与 PDF（魔数嗅探），大小限制同系统配置；返回 `{ key, name, size, type, url }` |
+
+### 8.1 v33~v37 Mock 超界端点（[MOCK-ONLY]，接入期逐条销号）
+
+> 客户端已实现、后端尚无对应端点的能力（缺口 §7.1-19~22）。接入期需补服务端实现并在本节转为正式契约。
+
+| 方法 | 路径 | 说明 |
+|---|---|---|
+| GET | /api/app/me/demands/:id/responses | 需求发布者查看响应（响应方快照 + `status=pending/accepted/rejected` + 审核时间/驳回原因）；非发布者 403 |
+| POST | /api/app/me/demands/:id/responses/:responseId/review | 发布者处理响应（`action=accept\|reject`，驳回必填原因）；接受后需求转 `projected` 并在事务内生成项目（双向记录 + 里程碑）、发放积分/经验、通知双方、自动驳回其余待处理响应 |
+| POST | /api/app/me/responses/:id/withdraw | 响应者撤回待处理响应（撤回后可重新响应） |
+| GET | /api/app/me/projects/:id | 项目详情（参与双方、来源需求、进度与里程碑交付验收状态） |
+| POST | /api/app/me/projects/:id/milestones/:milestoneId/submit | 承接方提交里程碑完成（可附说明）→ 待发起方验收；发起方调用 403 |
+| POST | /api/app/me/projects/:id/milestones/:milestoneId/accept | 发起方验收里程碑；全部验收通过自动结项并按 wiki-backend §8.6 发放 `project_completed` 经验 |
+| POST | /api/app/me/demands/:id/withdraw · /resubmit · /appeal | 需求撤回（pending→withdrawn）、驳回/撤回后重提（保留编号）、驳回后一次性申诉 |
+| POST | /api/app/me/articles/:id/withdraw · /resubmit · /appeal；GET /api/app/me/articles/:id/payload | 投稿撤回 / 重提（回填原始内容）/ 申诉 |
+| POST | /api/app/me/applications/:id/withdraw · /resubmit；GET /api/app/me/applications/:id/payload | 申请撤回 / 修改重提（可补充材料；附件需重新上传） |
+| POST | /api/app/mall/orders/:id/use | 服务权益核销（`pending_use → completed`）；`Goods` 增 `fulfillment=physical\|voucher\|service`，券码订单返回 `voucherCode` |
+| POST | /api/app/mall/goods/:id/restock-subscribe | 缺货商品到货提醒订阅（补货通知依赖后台补货动作） |
+| POST | /api/app/reports | 举报（需求 / 文章 / 企业名片；管理端举报处理与内容处置为后台缺口） |
+| GET | /api/app/me/favorites · POST /api/app/me/favorites/toggle | 收藏需求 / 文章 / 活动与切换 |
+| POST | /api/app/me/enterprises/invitations/:id/revoke | 撤销待接受的企业成员邀请（邀请 7 天有效期） |
+| GET | /api/app/me/transfer-requests · POST /:id/respond · /:id/cancel | 负责人转移请求列表 / 目标成员接受或拒绝 / 发起方撤销（接受后变更负责人） |
+| POST | /api/app/analytics/events | Mock 埋点漏斗（登录/注册/发布/响应/报名/签到/下单/投稿/预约/收藏/举报/搜索）；真实接入为数据平台上报 |
+| GET/POST/PUT/DELETE | /api/app/me/addresses(/:id) | v38 收货地址簿（默认地址唯一）；实物订单创建必带 `addressId` 并写入收货快照 |
+| POST | /api/app/auth/reset-password · /auth/change-phone · /me/change-password | v38 找回密码（短信码+限频）/ 换绑手机号（新号验证码+占用 409）/ 登录态改密（原密码校验，成功后其他会话失效） |
+| POST | /api/app/me/deletion-request · /me/data-export | v38 注销申请（运营复核）与个人数据导出（异步打包 + 站内信） |
+| GET/POST | /api/app/events/:id/feedback | v38 活动反馈（结束后 + 参与过，一人一条） |
+| GET/PUT | /api/app/me/notices/prefs | v38 通知偏好（启用的类型集合，至少一种；同时约束推送） |
+| POST | /api/app/mall/orders/:id/cancel | v38 用户取消实物待发货订单（退积分 + 回补库存）；券码订单签发 `voucherExpiresAt`（30 天） |
+| POST | /api/app/me/projects/:id/milestones/:mid/return | v38 发起方退回里程碑（记录原因，承接方可重新提交；提交支持 `attachments[]`） |
+| GET | /api/app/me/reports | v38 我的举报（状态 pending/resolved/rejected 由 admin 处置回写） |
+| GET/POST | /api/app/me/blocklist(/:uid/remove) | v38 屏蔽名单（评论与内容列表过滤被屏蔽用户） |
+| POST/GET | /api/app/articles/:id/likes/toggle · /articles/:id/comments | v38 文章点赞与评论（评论 2-200 字，过滤屏蔽用户） |
+| POST | /api/app/auth/register（`agreed` 必填） | v38 注册须同意用户协议与隐私政策并留痕 |
 
 ## 9. 可见范围与可报名范围过滤（需求/活动通用）
 
@@ -145,4 +185,5 @@
 | 2026-09-14 | 企业管理细化：新增 `POST /me/enterprises/:id/remove-member`（负责人可移除成员，负责人本人需先转移）；企业名片编辑独立成页（企业详情仅保留负责人/成员/退驻模块 + 「编辑企业名片」入口，编辑仍走 `PUT /me/enterprises/:id`）；企业名片页标题与人才名片底栏归属「社区」Tab |
 | 2026-09-14 | **企业成员邀请闭环与成员手机号维护**：`POST /me/enterprises/:id/invite` 改为生成邀请记录 + 站内信（不再直接写入成员）；新增 `GET /invitations/:id`（邀请详情）与 `POST /invitations/:id/respond`（accept/reject，接受后写入成员并通知负责人）；`PUT /me/enterprises/:id/member-role` 改为 `PUT /me/enterprises/:id/member`（职位 + 手机号）；企业详情返回 `invitations`（待接受列表，仅负责人）；缺口 m2-client-plan §7.1-17 |
 | 2026-09-14 | **企业成员权限体系**：成员增 `permissions`（8 项枚举：`publish_demand/respond_demand/space_reserve/article_submit/manage_members/invite_member/assign_permission/edit_card`），负责人默认全部；`PUT /me/enterprises/:id/member` 支持分配权限（需 `assign_permission`，role/phone 需 `manage_members`）；`invite`/`remove-member`/`PUT /me/enterprises/:id` 分别校验 `invite_member`/`manage_members`/`edit_card`；`GET /me/identities` 与 `GET /me/enterprises/:id` 返回 `permissions`/`myPermissions`；`POST /demands` 与 `POST /spaces/reservations` 支持 `asEnterpriseId` 代企业主体（校验对应成员权限）；响应需求/文章投稿的代企业主体字段待后续批次 |
+| 2026-09-15 | **v33~v37 Mock 超界端点登记**：新增 §8.1 汇总客户端已实现、后端待补的需求撮合与项目协作、审核撤回/重提、商城履约、信任治理、收藏/提醒/埋点端点（缺口 m2-client-plan §7.1-19~22） |
 | 2026-09-15 | **实名认证入口**：新增 `GET/PUT /me/realname`（实名状态 + 提交姓名/身份证号；实时状态脱敏展示；mock 即时通过，真实后端需三要素核验）；「编辑资料」页新增实名认证 Cell（note 已认证/未认证）；缺口 m2-client-plan §7.1-18 |

@@ -1,31 +1,76 @@
 <script setup lang="ts">
-import { onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
-import { Button, Loading, Search } from 'tdesign-mobile-vue'
+import { Loading, Button, Search, Toast } from 'tdesign-mobile-vue'
 import { useAuthStore } from '@/stores/auth'
-import { useAsyncList } from '@/composables/useAsyncList'
 import { fetchPointsRecords } from '@/api/me'
 import EmptyBlock from '@/components/shared/EmptyBlock.vue'
+import type { PointsRecord } from '@/types'
 
-/* 移动积分流水：余额卡（可去积分商城）+ 来源/事由搜索（防抖 300ms）+ 流水列表（含余额快照） */
+/* 移动积分流水：余额卡（可去积分商城）+ 来源/事由搜索（防抖 300ms）+ 分页流水列表（含余额快照）
+ * v38：改为分页加载（首屏 20 条 + 加载更多 + 总数），不再静默截断 50 条。 */
 const router = useRouter()
 const auth = useAuthStore()
 const keyword = ref('')
 
-const { data, loading, error, run } = useAsyncList(() =>
-  fetchPointsRecords({ page: 1, pageSize: 50, keyword: keyword.value.trim() || undefined }),
-)
+const PAGE_SIZE = 20
+const items = ref<PointsRecord[]>([])
+const total = ref(0)
+const page = ref(1)
+const loading = ref(false)
+const error = ref('')
+let requestId = 0
+
+async function load(reset = false) {
+  const id = ++requestId
+  if (reset) {
+    page.value = 1
+    items.value = []
+    total.value = 0
+  }
+  loading.value = true
+  error.value = ''
+  try {
+    const res = await fetchPointsRecords({ page: page.value, pageSize: PAGE_SIZE, keyword: keyword.value.trim() || undefined })
+    if (id !== requestId) return
+    items.value = page.value === 1 ? res.list : items.value.concat(res.list)
+    total.value = res.total
+  } catch (e) {
+    if (id !== requestId) return
+    error.value = e instanceof Error ? e.message : '加载失败，请稍后重试'
+  } finally {
+    if (id === requestId) loading.value = false
+  }
+}
+
 onMounted(() => {
   void auth.refreshProfile()
-  run()
+  void load(true)
 })
 
 let timer: number | undefined
 watch(keyword, () => {
   window.clearTimeout(timer)
-  timer = window.setTimeout(() => run(), 300)
+  timer = window.setTimeout(() => void load(true), 300)
 })
 onBeforeUnmount(() => window.clearTimeout(timer))
+
+const firstLoading = computed(() => loading.value && items.value.length === 0)
+const hasMore = computed(() => items.value.length < total.value)
+
+function loadMore() {
+  if (loading.value) return
+  const prev = page.value
+  page.value = prev + 1
+  void load().then(() => {
+    /* v41：失败回退页码并保留已有流水 */
+    if (error.value) {
+      page.value = prev
+      Toast(error.value)
+      error.value = ''
+    }
+  })
+}
 </script>
 
 <template>
@@ -36,30 +81,62 @@ onBeforeUnmount(() => window.clearTimeout(timer))
     </div>
 
     <Button theme="primary" variant="outline" block class="mall-link" @click="router.push('/mall')">去积分商城兑换</Button>
+    <div class="quick-links">
+      <Button size="small" variant="text" @click="router.push('/me/tasks')">任务中心</Button>
+      <Button size="small" variant="text" @click="router.push('/mall/rules')">积分规则</Button>
+    </div>
 
     <Search v-model="keyword" class="ledger-search" placeholder="搜索来源或事由" />
 
-    <Loading v-if="loading" class="state" text="加载中…" />
-    <EmptyBlock v-else-if="error" :text="error" />
-    <EmptyBlock v-else-if="!data?.list.length" :text="keyword ? '暂无匹配流水' : '暂无积分流水'" />
-    <div v-else class="m-card ledger stagger">
-      <div v-for="r in data.list" :key="r.id" class="row">
-        <div class="main">
-          <p class="reason">{{ r.reason }}</p>
-          <p class="meta">{{ r.source }} · {{ r.at }}</p>
-        </div>
-        <div class="side">
-          <span class="delta" :class="{ neg: r.delta < 0 }">{{ r.delta >= 0 ? '+' : '' }}{{ r.delta }}</span>
-          <span class="balance">余额 {{ r.balance }}</span>
+    <Loading v-if="firstLoading" class="state" text="加载中…" />
+    <EmptyBlock v-else-if="error && !items.length" :text="error" action-text="重试" @action="() => load(true)" />
+    <EmptyBlock v-else-if="!items.length" :text="keyword ? '暂无匹配流水' : '暂无积分流水'" />
+    <template v-else>
+      <p class="ledger-count">共 {{ total }} 条流水</p>
+      <div class="m-card ledger stagger">
+        <div v-for="r in items" :key="r.id" class="row">
+          <div class="main">
+            <p class="reason">{{ r.reason }}</p>
+            <p class="meta">{{ r.source }} · {{ r.at }}</p>
+          </div>
+          <div class="side">
+            <span class="delta" :class="{ neg: r.delta < 0 }">{{ r.delta >= 0 ? '+' : '' }}{{ r.delta }}</span>
+            <span class="balance">余额 {{ r.balance }}</span>
+          </div>
         </div>
       </div>
-    </div>
+      <Button v-if="hasMore" variant="outline" block class="more-btn" :loading="loading" @click="loadMore">加载更多</Button>
+      <p v-else class="ledger-end">已加载全部</p>
+    </template>
   </div>
 </template>
 
 <style scoped>
+.quick-links {
+  display: flex;
+  justify-content: center;
+  gap: 8px;
+}
+
 .points {
   padding: 16px;
+}
+
+.ledger-count {
+  margin: 0 0 8px;
+  font-size: 12px;
+  color: var(--td-text-color-placeholder);
+}
+
+.more-btn {
+  margin-top: 12px;
+}
+
+.ledger-end {
+  margin: 12px 0 0;
+  text-align: center;
+  font-size: 12px;
+  color: var(--td-text-color-placeholder);
 }
 
 .balance-card {
@@ -139,7 +216,7 @@ onBeforeUnmount(() => window.clearTimeout(timer))
 
 .balance {
   display: block;
-  font-size: 10px;
+  font-size: 12px;
   color: var(--td-text-color-secondary);
 }
 </style>

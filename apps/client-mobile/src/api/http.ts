@@ -32,6 +32,9 @@ function handleUnauthorized() {
   )
 }
 
+/** 请求超时（v38）：避免弱网/断网时页面无限等待 */
+const REQUEST_TIMEOUT_MS = 15_000
+
 async function request<T>(path: string, init: RequestInit): Promise<T> {
   const headers = new Headers(init.headers)
   /* FormData 上传由浏览器自动带 boundary，不能手动设置 Content-Type */
@@ -39,7 +42,18 @@ async function request<T>(path: string, init: RequestInit): Promise<T> {
   const token = readToken()
   if (token) headers.set('Authorization', `Bearer ${token}`)
 
-  const res = await fetch(`/api/app${path}`, { ...init, headers })
+  const controller = new AbortController()
+  const timer = window.setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS)
+  let res: Response
+  try {
+    res = await fetch(`/api/app${path}`, { ...init, headers, signal: controller.signal })
+  } catch (error) {
+    if (!navigator.onLine) throw new ApiError(0, '当前网络不可用，请检查网络后重试')
+    if (error instanceof DOMException && error.name === 'AbortError') throw new ApiError(408, '请求超时，请重试')
+    throw new ApiError(0, '网络异常，请稍后重试')
+  } finally {
+    window.clearTimeout(timer)
+  }
   const body = (await res.json().catch(() => null)) as (Envelope<T> & Partial<ErrorEnvelope>) | null
   if (!res.ok || !body || body.code !== 0) {
     const code = body?.code ?? res.status
@@ -60,6 +74,10 @@ export function httpPost<T>(path: string, data?: unknown): Promise<T> {
 
 export function httpPut<T>(path: string, data?: unknown): Promise<T> {
   return request<T>(path, { method: 'PUT', body: data === undefined ? undefined : JSON.stringify(data) })
+}
+
+export function httpDelete<T>(path: string): Promise<T> {
+  return request<T>(path, { method: 'DELETE' })
 }
 
 /** multipart 上传（图片/PDF 等；缺口 §7.1-6 POST /api/app/uploads） */

@@ -1,4 +1,4 @@
-import { apiMode, httpPost, MOCK_LATENCY } from './http'
+import { apiMode, httpGet, httpPost, MOCK_LATENCY } from './http'
 import type { AuthResult, LoginPayload, RegisterPayload } from '@/types'
 import * as mock from '@/mock/handlers/auth'
 
@@ -26,9 +26,8 @@ export async function getCaptcha(): Promise<{ captchaId: string; image: string }
     await new Promise((r) => setTimeout(r, 120))
     return { captchaId: 'mock', image: 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20"></svg>') }
   }
-  const res = await fetch('/api/app/auth/captcha')
-  const body = (await res.json()) as { code: number; data: { captchaId: string; image: string } }
-  return body.data
+  /* v40：改走统一请求封装（包络解包 + 401 处理），与其他接口一致 */
+  return httpGet<{ captchaId: string; image: string }>('/auth/captcha')
 }
 
 /** Mock 会话恢复（刷新后按 token 还原登录态）；http 模式由 GET /api/app/me 承担 */
@@ -36,4 +35,16 @@ export async function restoreSession(): Promise<AuthResult | null> {
   if (apiMode === 'mock') return mock.restoreSession()
   await new Promise((r) => setTimeout(r, MOCK_LATENCY))
   return null
+}
+
+/** [MOCK-ONLY] v38 找回密码（手机号 + 短信验证码 + 新密码；接入期接短信通道）。 */
+export async function resetPassword(payload: { phone: string; captchaCode: string; password: string }): Promise<void> {
+  if (apiMode === 'mock') return mock.resetPassword(payload)
+  await httpPost('/auth/reset-password', payload)
+}
+
+/** [MOCK-ONLY] v38 更换绑定手机号（登录态 + 新手机号验证码）。 */
+export async function changePhone(payload: { phone: string; captchaCode: string }): Promise<void> {
+  if (apiMode === 'mock') return mock.changePhone(payload)
+  await httpPost('/auth/change-phone', payload)
 }

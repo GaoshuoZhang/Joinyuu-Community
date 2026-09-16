@@ -1,12 +1,16 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { Button, Loading, Popup, Search, Tabs, TabPanel, Tag, Toast, Avatar } from 'tdesign-mobile-vue'
+import { Button, Popup, PullDownRefresh, Search, Tabs, TabPanel, Tag, Toast, Avatar } from 'tdesign-mobile-vue'
 import { fetchEnterpriseList, fetchPolicies, fetchTalents } from '@/api/community'
 import { useAsyncList } from '@/composables/useAsyncList'
+import ListSkeleton from '@/components/ListSkeleton.vue'
 import { useAuthStore } from '@/stores/auth'
 import EmptyBlock from '@/components/shared/EmptyBlock.vue'
 import type { CommunityPolicy, EnterpriseRecord, TalentMember } from '@/types'
+import { useAnimSuppress } from '@/composables/useAnimSuppress'
+
+useAnimSuppress()
 
 /* 社区页（社区管理者视角）：顶部选项卡「社区服务 / 人才库 / 企业库」，
  * 每个 tab 自带搜索；切换 tab 时重置搜索并重新拉取。数据均经 @/api/community。
@@ -17,6 +21,20 @@ const auth = useAuthStore()
 
 function canApplyShowcase(e: EnterpriseRecord) {
   return e.showcaseStatus !== 'published' && auth.isLogged && e.members.some((m) => m.name === auth.name)
+}
+
+/* v39：下拉刷新 */
+const refreshing = ref(false)
+
+async function onRefresh() {
+  refreshing.value = true
+  try {
+    await Promise.all([runPolicies(), runTalents(), runEnterprises()])
+  } finally {
+    setTimeout(() => {
+      refreshing.value = false
+    }, 300)
+  }
 }
 
 function onEnterpriseTap(e: EnterpriseRecord) {
@@ -31,10 +49,25 @@ function onEnterpriseTap(e: EnterpriseRecord) {
   Toast('该企业名片尚未发布')
 }
 
-const activeTab = ref('service')
-const serviceKeyword = ref('')
-const talentKeyword = ref('')
-const enterpriseKeyword = ref('')
+const TAB_VALUES = ['service', 'talent', 'enterprise']
+const initialTab = String(route.query.tab ?? 'service')
+const activeTab = ref(TAB_VALUES.includes(initialTab) ? initialTab : 'service')
+const initialQ = String(route.query.q ?? '')
+const serviceKeyword = ref(activeTab.value === 'service' ? initialQ : '')
+const talentKeyword = ref(activeTab.value === 'talent' ? initialQ : '')
+const enterpriseKeyword = ref(activeTab.value === 'enterprise' ? initialQ : '')
+
+/* v40：Tab/关键词/分类同步 URL（保留分享深链 policy） */
+function syncQuery() {
+  const keyword = activeTab.value === 'service' ? serviceKeyword.value : activeTab.value === 'talent' ? talentKeyword.value : enterpriseKeyword.value
+  const query: Record<string, string> = { tab: activeTab.value }
+  if (keyword.trim()) query.q = keyword.trim()
+  if (activeTab.value === 'service' && selectedCategory.value) query.category = selectedCategory.value
+  const current = route.query as Record<string, string>
+  if (current.policy) query.policy = current.policy
+  if (current.tab === query.tab && current.q === query.q && current.category === query.category) return
+  void router.replace({ query })
+}
 
 const { data: policies, loading: policiesLoading, error: policiesError, run: runPolicies } = useAsyncList<CommunityPolicy[]>(
   () => fetchPolicies({ keyword: serviceKeyword.value.trim() || undefined, category: selectedCategory.value || undefined }),
@@ -47,28 +80,92 @@ const { data: enterprises, loading: enterprisesLoading, error: enterprisesError,
     fetchEnterpriseList({ keyword: enterpriseKeyword.value.trim() || undefined }),
   )
 
-const serviceCategories = computed(() => [...new Set((policies.value ?? []).map((item) => item.category))])
-const selectedCategory = ref('')
+/* v41：分类选项基于全量政策，避免选中后其余分类消失 */
+const { data: allPolicies, run: runAllPolicies } = useAsyncList<CommunityPolicy[]>(() => fetchPolicies({}))
+const serviceCategories = computed(() => [...new Set((allPolicies.value ?? []).map((item) => item.category))])
+const selectedCategory = ref(String(route.query.category ?? ''))
 const featuredPolicy = computed(() => (policies.value ?? [])[0])
 
-onMounted(runPolicies)
+onMounted(() => {
+  runAllPolicies()
+  /* v41：深链 ?tab=talent/enterprise 首屏加载对应数据，避免假空态 */
+  if (activeTab.value === 'service') runPolicies()
+  else if (activeTab.value === 'talent') runTalents()
+  else runEnterprises()
+})
 
-/* 实时搜索：各 tab 输入防抖 300ms 后自动检索（清空即恢复全量） */
+/* v43：进入不再自动重载（下拉刷新已覆盖，避免每次进入浪费请求） */
+
+/* v43：自研滑动切换（TDesign 1.16.2 原生滑动会连续跳项）——每次手势只切换一格 */
+let swipe: { identifier: number; x: number; y: number; index: number; switched: boolean } | null = null
+
+function cancelSwipe() {
+  swipe = null
+}
+
+function startSwipe(event: TouchEvent) {
+  cancelSwipe()
+  const target = event.target
+  if (event.touches.length !== 1 || !(target instanceof Element)) return
+  if (!target.closest('.t-tabs__content') || target.closest('.chips, input, textarea')) return
+  const touch = event.touches[0]
+  swipe = {
+    identifier: touch.identifier,
+    x: touch.clientX,
+    y: touch.clientY,
+    index: TAB_VALUES.indexOf(activeTab.value),
+    switched: false,
+  }
+}
+
+function moveSwipe(event: TouchEvent) {
+  if (!swipe || swipe.switched) return
+  if (event.touches.length !== 1) return cancelSwipe()
+  const touch = event.touches[0]
+  const dx = touch.clientX - swipe.x
+  const dy = touch.clientY - swipe.y
+  if (Math.abs(dx) <= Math.abs(dy)) return
+  if (event.cancelable) event.preventDefault()
+  if (Math.abs(dx) < 40) return
+  const next = TAB_VALUES[swipe.index + (dx < 0 ? 1 : -1)]
+  if (!next) return
+  activeTab.value = next
+  swipe.switched = true
+}
+
+/* 实时搜索：各 tab 输入防抖 300ms 后自动检索（清空即恢复全量）
+ * v38：仅在对应 Tab 激活时响应，避免切换 Tab 清空关键词时触发隐藏 Tab 的多余请求 */
 let serviceTimer: number | undefined
 let talentTimer: number | undefined
 let enterpriseTimer: number | undefined
 watch(serviceKeyword, () => {
+  if (activeTab.value !== 'service') return
   window.clearTimeout(serviceTimer)
-  serviceTimer = window.setTimeout(() => runPolicies(), 300)
+  serviceTimer = window.setTimeout(() => {
+    syncQuery()
+    runPolicies()
+  }, 300)
 })
-watch(selectedCategory, () => runPolicies())
+watch(selectedCategory, () => {
+  if (activeTab.value !== 'service') return
+  syncQuery()
+  runPolicies()
+})
 watch(talentKeyword, () => {
+  if (activeTab.value !== 'talent') return
   window.clearTimeout(talentTimer)
-  talentTimer = window.setTimeout(() => runTalents(), 300)
+  talentTimer = window.setTimeout(() => {
+    syncQuery()
+    runTalents()
+  }, 300)
 })
 watch(enterpriseKeyword, () => {
+  if (activeTab.value !== 'enterprise') return
   window.clearTimeout(enterpriseTimer)
-  enterpriseTimer = window.setTimeout(() => runEnterprises(), 300)
+  enterpriseTimer = window.setTimeout(() => {
+    syncQuery()
+    runEnterprises()
+  }, 300)
 })
 onBeforeUnmount(() => {
   window.clearTimeout(serviceTimer)
@@ -87,6 +184,7 @@ watch(activeTab, (tab) => {
     enterpriseKeyword.value = ''
     runEnterprises()
   }
+  syncQuery()
 })
 
 /* 政策正文展示（Popup 弹层） */
@@ -95,6 +193,14 @@ const currentPolicy = ref<CommunityPolicy | null>(null)
 function openPolicy(p: CommunityPolicy) {
   currentPolicy.value = p
   policyVisible.value = true
+}
+
+/* v42：跳转我的服务申请并按 query 打开办理表单 */
+function onApplyPolicy() {
+  const policy = currentPolicy.value
+  if (!policy) return
+  policyVisible.value = false
+  void router.push({ path: '/me/services', query: { apply: policy.id, title: policy.title } })
 }
 
 watch(
@@ -112,8 +218,15 @@ watch(policies, () => {
 </script>
 
 <template>
-  <div class="m-community page-fade-in">
-    <Tabs v-model="activeTab" class="top-tabs">
+  <PullDownRefresh :value="refreshing" @refresh="onRefresh">
+  <div
+    class="m-community page-fade-in"
+    @touchstart="startSwipe"
+    @touchmove="moveSwipe"
+    @touchend="cancelSwipe"
+    @touchcancel="cancelSwipe"
+  >
+    <Tabs v-model="activeTab" class="top-tabs" :swipeable="false">
       <!-- 社区服务：政策/指引列表 -->
       <TabPanel value="service" label="社区服务">
         <Search v-model="serviceKeyword" class="tab-search" placeholder="搜索政策关键词" />
@@ -123,11 +236,11 @@ watch(policies, () => {
           <Tag v-for="category in serviceCategories" :key="category" size="small" variant="light" :theme="selectedCategory === category ? 'primary' : 'default'" @click="selectedCategory = category">{{ category }}</Tag>
         </div>
 
-        <Loading v-if="policiesLoading" class="state" text="加载中…" />
-        <EmptyBlock v-else-if="policiesError" :text="policiesError" />
+        <ListSkeleton v-if="policiesLoading && !(policies ?? []).length" />
+        <EmptyBlock v-else-if="policiesError" :text="policiesError" action-text="重试" @action="runPolicies" />
         <EmptyBlock v-else-if="(policies ?? []).length === 0" text="暂无相关政策" />
         <template v-else>
-          <article v-if="featuredPolicy" class="service-feature m-card pressable" @click="openPolicy(featuredPolicy)">
+          <article v-if="featuredPolicy" class="service-feature m-card pressable" v-pressable @click="openPolicy(featuredPolicy)">
             <span class="eyebrow">社区服务精选</span>
             <h2>{{ featuredPolicy.title }}</h2>
             <p>{{ featuredPolicy.summary }}</p>
@@ -138,7 +251,7 @@ watch(policies, () => {
           <article
             v-for="p in policies"
             :key="p.id"
-            class="policy-card m-card"
+            class="policy-card m-card" v-pressable
             @click="openPolicy(p)"
           >
             <div class="row-head">
@@ -156,11 +269,12 @@ watch(policies, () => {
       <TabPanel value="talent" label="人才库">
         <Search v-model="talentKeyword" class="tab-search" placeholder="搜索人才关键词" />
 
-        <Loading v-if="talentsLoading" class="state" text="加载中…" />
-        <EmptyBlock v-else-if="talentsError" :text="talentsError" />
+        <ListSkeleton v-if="talentsLoading && !(talents ?? []).length" />
+        <EmptyBlock v-else-if="talentsError" :text="talentsError" action-text="重试" @action="runTalents" />
         <EmptyBlock v-else-if="(talents ?? []).length === 0" text="暂无匹配人才" />
         <div v-else class="list stagger">
-          <article v-for="t in talents" :key="t.uid" class="talent-card m-card" @click="router.push(`/talents/${t.uid}`)">
+          <p class="list-count">共 {{ talents?.length ?? 0 }} 位人才</p>
+          <article v-for="t in talents" :key="t.uid" class="talent-card m-card" v-pressable @click="router.push(`/talents/${t.uid}`)">
             <div class="row-head">
               <span class="talent-name">
                 <Avatar size="40px" :image="t.avatar" class="talent-avatar">{{ t.name.slice(0, 1) }}</Avatar>
@@ -182,14 +296,15 @@ watch(policies, () => {
       <TabPanel value="enterprise" label="企业库">
         <Search v-model="enterpriseKeyword" class="tab-search" placeholder="搜索企业关键词" />
 
-        <Loading v-if="enterprisesLoading" class="state" text="加载中…" />
-        <EmptyBlock v-else-if="enterprisesError" :text="enterprisesError" />
+        <ListSkeleton v-if="enterprisesLoading && !(enterprises ?? []).length" />
+        <EmptyBlock v-else-if="enterprisesError" :text="enterprisesError" action-text="重试" @action="runEnterprises" />
         <EmptyBlock v-else-if="(enterprises ?? []).length === 0" text="暂无企业数据" />
         <div v-else class="list stagger">
+          <p class="list-count">共 {{ enterprises?.length ?? 0 }} 家企业</p>
           <article
             v-for="e in enterprises"
             :key="e.id"
-            class="enterprise-card m-card"
+            class="enterprise-card m-card" v-pressable
             @click="onEnterpriseTap(e)"
           >
             <div class="row-head">
@@ -212,11 +327,21 @@ watch(policies, () => {
         <h3 class="p-title">{{ currentPolicy.title }}</h3>
         <p class="p-summary">{{ currentPolicy.summary }}</p>
         <p class="p-content">{{ currentPolicy.content }}</p>
+        <div v-if="currentPolicy.version || currentPolicy.effectiveAt || currentPolicy.publisher" class="p-meta">
+          <span v-if="currentPolicy.version">版本：{{ currentPolicy.version }}</span>
+          <span v-if="currentPolicy.effectiveAt">生效日期：{{ currentPolicy.effectiveAt }}</span>
+          <span v-if="currentPolicy.publisher">发布主体：{{ currentPolicy.publisher }}</span>
+        </div>
+        <div v-if="currentPolicy.attachments?.length" class="p-files">
+          <a v-for="file in currentPolicy.attachments" :key="file.url" :href="file.url" target="_blank" rel="noopener">{{ file.name }}</a>
+        </div>
         <p class="p-updated">更新时间：{{ currentPolicy.updatedAt }}</p>
+        <Button v-if="currentPolicy" theme="primary" block @click="onApplyPolicy">在线申请</Button>
         <Button variant="outline" block @click="policyVisible = false">关闭</Button>
       </div>
     </Popup>
   </div>
+  </PullDownRefresh>
 </template>
 
 <style scoped>
@@ -431,5 +556,26 @@ watch(policies, () => {
   margin: 0;
   font-size: 12px;
   color: var(--td-text-color-placeholder);
+}
+
+.pop-body .p-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin: 10px 0 2px;
+  font-size: 12px;
+  color: var(--td-text-color-secondary);
+}
+
+.pop-body .p-files {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-top: 8px;
+  font-size: 12px;
+}
+
+.pop-body .p-files a {
+  color: var(--td-brand-color);
 }
 </style>

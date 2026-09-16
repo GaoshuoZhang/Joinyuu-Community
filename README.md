@@ -6,9 +6,11 @@
 
 ## 当前状态
 
-**M1.5 后台治理增强已完成** — M0 后台原型（A~E）、M1 后端（A~E，129 个基线端点）与 M1.5 治理增强（R1~R12）全部落地：`apps/api`（NestJS 11 + Prisma 6 + PostgreSQL 17 + Redis 7.4，43 模型 / 14 个迁移）当前提供 186 条 `/api/admin/**` 路由，含 JWT + RBAC 权限守卫、验证码登录与失败锁定、在线会话、素材库（本地磁盘存储 + HTML 清洗）、系统监控、趋势聚合、登录日志、导出/打印、归档体系（13 个业务域软删除集中管理 + 按域归档设置 + 自动归档/自动删除调度）、状态机服务端校验、定时任务、积分/经验发放引擎、审计 before/after 快照、Redis 缓存（降级回源）与全量种子（23 个 IdSequence 前缀，投稿编号 SU）；admin web 28 个域文件全部接入真实接口，`src/mock/` 已删除，并完成安全加固、术语统一、ID 展示规范与列表交互收敛（无批量操作/刷新按钮，列设置覆盖 20 个列表页）。后端 e2e 25 套件 / 163 用例全绿。M2 客户端（端点设计见 [docs/api-app-design.md](./docs/api-app-design.md)）与 M3 小程序未开始，整体进度见 [docs/full-spec-check.md](./docs/full-spec-check.md)。
+**M1.5 后台治理增强已完成，M2 移动端 Mock 持续深化中。** M0 后台原型（A~E）、M1 后端（A~E，129 个基线端点）与 M1.5 治理增强（R1~R12）全部落地。`apps/api` 当前有 43 个 Prisma 模型、17 个迁移、36 个 controller 和 193 个 HTTP 路由装饰器（`/api/admin/**` 191 条 + health/public 各 1 条）；数据范围（域级）、密码周期和 MinIO/本地磁盘双存储驱动均已实现。admin web 有 56 条路由记录（49 条 component-backed，含 AdminLayout 壳），28 个 API 域文件已全量接入真实接口，`src/mock/` 已删除。
 
-开发策略：**以管理后台 Web 作为初始驱动**——先在后台原型中冻结实体模型、状态流与 API 接口形状，再据此实现后端与客户端（M1/M1.5 已完成，M2 客户端未开始）。
+`apps/client-mobile` 已完成纯移动端 Mock-First v40：62 条路由记录（61 条 component-backed、59 个唯一视图文件），覆盖登录注册、项目/需求、活动与签到、商城、空间预约、内容投稿、站内信、关联身份与企业治理、实名认证、全局搜索等流程；v32 提供版本化快照、稳定发号、可控时钟、网络异常场景和五域运营审核，v33 打通需求撮合与项目协作，v34 补齐审核撤回/驳回重提与商城履约模型，v35 落地联系方式可见范围、名片隐私、举报申诉与企业治理闭环，v36 完成请求防竞态、滚动恢复、触控目标、表单草稿与错误重试，v37 新增新手任务、搜索升级、收藏/到货提醒与 Mock 埋点漏斗，v38 完成全量体验整改（草稿与返回安全、安全区、错误重试、行内校验、可访问性）并落地产品级 Mock 闭环（收货地址、账号安全与隐私协议、活动候补与反馈、通知偏好、订单取消与券码期限、空间规则、里程碑证据与退回、举报状态与屏蔽、点赞评论），v39 完成体验补全（浏览去重与阅读历史、分享、活动日历、骨架屏与下拉刷新、skip link 与路由聚焦、官网校验、筛选进 URL、列表计数、政策版本化、通知归档、首页个性化），v42 新增活动电子票、需求沟通、项目协作、积分任务与规则、个人看板、服务在线申请、企业工作台与代企业响应、实名分级权益（纯客户端 Mock，全场景 E2E 三轮 64 页零失败），v41 完成三轮复审整改（URL query 同步、订单评价、注销冷静期与撤回、图片兜底、预约与对比度修复、空态清除筛选），v40 完成产品/UX 复审整改（活动取消/改期运营模拟与取消失效链路、分享扩展、浏览历史页、首页公告、商城分类筛选与 URL 同步、物流单号、评论/用户举报、企业/人才收藏与筛选、搜索分类 chips、无障碍集中补丁与滚动位置记忆，以及项目排序、四页筛选 URL 同步、首页推荐与表单行内错误），并通过 Playwright headed 全链路走查（22 页零控制台错误）修复导航图标拉伸、编辑器按钮高度不一致等回归；**M2-R `/api/app/**` 真实接口接入按当前产品策略暂不启动**，API/admin 跟进方法与验收标准见 `docs/m2-client-plan.md` §7.7；`apps/client-web` 和 M3 小程序尚未开始。后端测试源码现有 e2e 25 套件 / 170 个用例声明、unit 4 套件 / 25 个用例声明；最近一次有记录的 e2e 全量通过口径为 25 套件 / 169 用例。整体进度见 [docs/full-spec-check.md](./docs/full-spec-check.md)。
+
+开发策略：M1/M1.5 已完成；M2 采用 **Mock-First、移动端优先**，先深化 `client-mobile` 的产品闭环和 UX，再决定 M2-R 真实接口接入时点，之后创建桌面端 `client-web`。
 
 ## 技术栈
 
@@ -18,7 +20,8 @@
 | 后端（M1/M1.5 已完成） | NestJS 11 + Prisma 6 + RESTful API（`apps/api`，端口 7757） |
 | 数据库（M1/M1.5 已完成） | PostgreSQL 17 + Redis 7.4（Docker Compose 本地开发） |
 | 管理后台 Web（当前） | Vue 3 + Vite + TypeScript + TDesign Vue Next + Pinia + Vue Router |
-| 客户端 Web（M2，未开始） | 同上（TDesign Vue Next） |
+| 客户端移动端（M2，Mock 深化中） | Vue 3 + Vite + TypeScript + TDesign Mobile Vue + Pinia + Vue Router |
+| 客户端 Web（M2，未开始） | Vue 3 + Vite + TypeScript + TDesign Vue Next + Pinia + Vue Router |
 | 微信小程序（M3，未开始） | TDesign WeChat MiniProgram |
 
 ## 仓库结构
@@ -37,12 +40,17 @@ apps/
       types/        # 实体类型定义
       views/        # 页面（按领域分目录，system/ 含归档管理 ArchivePanel 等治理页）
   api/              # 后端服务（NestJS 11 + Prisma 6 + PostgreSQL 17 + Redis 7.4）
-    prisma/         # schema.prisma（43 模型）+ 14 个 migrations + seed.ts + seed-data/（种子数据单一来源）
+    prisma/         # schema.prisma（43 模型）+ 17 个 migrations + seed.ts + seed-data/（种子数据单一来源）
     src/
       common/       # 底座：Prisma/Redis（缓存+黑名单，降级回源）/响应包络/异常过滤/JWT+权限 Guard/装饰器/RBAC/审计（含快照）/前缀 ID 发号器/积分引擎/存储（本地磁盘）/HTML 清洗与工具
       modules/      # 按域模块：auth/users/enterprises/applications/demands/projects/events/mall/rules/workstations/spaces/contents/assets + system 子域（admins/login-logs/monitor/roles/trash/export）
       scheduler/    # 定时任务（需求/资讯定时发布、活动自动结束、租约临期、归档自动归档/自动删除）
-    test/           # e2e 套件（25 套件 163 用例，每套件重种子隔离）
+    test/           # e2e（25 套件 / 170 个源码用例声明，每套件重种子隔离）
+  client-mobile/    # M2 纯移动端 Mock-First 应用（v38，M2-R 暂不启动）
+    src/
+      api/          # 17 个契约文件，mock/http 双模式；默认 mock
+      mock/         # [MOCK-ONLY] 内存数据与 16 个 handler
+      views/mobile/ # 58 个唯一视图文件，60 条 component-backed 路由
 packages/           # 预留（共享包）
 docs/
   full-spec-check.md    # 整体项目开发规划与进度核对表（进度唯一事实来源，含 M1.5 R1~R12 路线）

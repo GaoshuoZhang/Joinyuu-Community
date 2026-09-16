@@ -13,7 +13,7 @@ onMounted(run)
 <template>
   <div class="page-fade-in experience">
     <Loading v-if="loading" class="state" text="加载中…" />
-    <EmptyBlock v-else-if="error" :text="error" />
+    <EmptyBlock v-else-if="error" :text="error" action-text="重试" @action="run" />
     <EmptyBlock v-else-if="!data || !data.records.length" text="绑定社区个体身份后，经验与等级将在这里展示" />
     <template v-else>
       <div class="level-card">

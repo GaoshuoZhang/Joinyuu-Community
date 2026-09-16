@@ -1,16 +1,18 @@
 <script setup lang="ts">
 import { computed, onMounted, reactive, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { Button, Input, Loading, Tag, Textarea, Toast } from 'tdesign-mobile-vue'
+import { Loading, Button, Input, Tag, Textarea, Toast } from 'tdesign-mobile-vue'
 import { fetchEnterpriseDetail, updateMyEnterprise } from '@/api/enterprises'
 import { useAsyncList } from '@/composables/useAsyncList'
+import { useDraft } from '@/composables/useDraft'
+import { useUnsavedGuard } from '@/composables/useUnsavedGuard'
 import { ApiError } from '@/api/http'
 import EmptyBlock from '@/components/shared/EmptyBlock.vue'
 import AvatarUploader from '@/components/shared/AvatarUploader.vue'
 
 /* 编辑企业名片（负责人或获「编辑企业名片」权限的成员，[MOCK-ONLY]，缺口 §7.1-16/17）：
  * Logo / 企业名称 / 行业 / 规模 / 成立时间 / 官网 / 办公地点 / 简介 / 主营业务 / 核心优势；
- * 保存后回到企业详情（企业名片编辑的独立页面）。 */
+ * 保存后回到企业详情；v38 增加草稿、离开保护与保存后显式返回（避免深链退出应用）。 */
 const route = useRoute()
 const router = useRouter()
 const enterpriseId = String(route.params.id)
@@ -38,6 +40,24 @@ const form = reactive({
   advantages: '',
 })
 const submitting = ref(false)
+/* v39：官网协议校验（与后端一致，避免直接渲染为 href） */
+const websiteError = computed(() => {
+  const url = form.website.trim()
+  if (!url) return ''
+  return /^https?:\/\//i.test(url) ? '' : '官网需以 http(s):// 开头'
+})
+
+/* v38 草稿与离开保护 */
+const { hasDraft: draftAvailable, savedAt: draftSavedAt, detect: detectDraft, restore: restoreDraft, discard: discardDraft, clear: clearDraft, rebase: rebaseDraft, dirty } = useDraft(
+  `enterprise-card-${enterpriseId}`,
+  () => ({ ...form }),
+  (value) => Object.assign(form, value),
+  {
+    enabled: () => canEdit.value && !!data.value,
+    isEmpty: () => !form.industry.trim() && !form.description.trim() && !form.size,
+  },
+)
+useUnsavedGuard(() => dirty.value)
 
 function fillForm() {
   const d = data.value
@@ -51,6 +71,8 @@ function fillForm() {
   form.description = d.description
   form.services = d.services ?? ''
   form.advantages = d.advantages ?? ''
+  rebaseDraft()
+  detectDraft()
 }
 
 async function onSave() {
@@ -64,6 +86,10 @@ async function onSave() {
   }
   if (form.description.trim().length < 10) {
     Toast('企业简介至少 10 个字')
+    return
+  }
+  if (websiteError.value) {
+    Toast(websiteError.value)
     return
   }
   submitting.value = true
@@ -80,7 +106,8 @@ async function onSave() {
       advantages: form.advantages.trim() || undefined,
     })
     Toast('企业名片已保存')
-    router.back()
+    clearDraft()
+    await router.replace(`/me/enterprises/${enterpriseId}`)
   } catch (e) {
     Toast(e instanceof ApiError ? e.message : '保存失败，请稍后重试')
   } finally {
@@ -92,9 +119,14 @@ async function onSave() {
 <template>
   <div class="page-fade-in m-card-edit">
     <Loading v-if="loading" class="state" text="加载中…" />
-    <EmptyBlock v-else-if="error" :text="error" />
+    <EmptyBlock v-else-if="error" :text="error" action-text="重试" @action="run" />
     <EmptyBlock v-else-if="!canEdit" text="仅企业负责人或获授权成员可编辑企业名片" />
     <template v-else-if="data">
+      <div v-if="draftAvailable" class="draft-bar">
+        <span>检测到 {{ draftSavedAt }} 的未保存草稿</span>
+        <a v-pressable @click="restoreDraft">恢复</a>
+        <a v-pressable @click="discardDraft">放弃</a>
+      </div>
       <section class="m-card">
         <div class="field">
           <span class="field-label">企业 Logo</span>
@@ -139,6 +171,7 @@ async function onSave() {
         <div class="field">
           <label>企业官网</label>
           <Input v-model="form.website" :maxlength="80" placeholder="https://" clearable />
+          <p v-if="websiteError" class="field-error">{{ websiteError }}</p>
         </div>
         <div class="field">
           <label>办公地点</label>
@@ -172,6 +205,32 @@ async function onSave() {
   display: flex;
   flex-direction: column;
   gap: 12px;
+}
+
+.draft-bar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  border-radius: var(--td-radius-default);
+  background: var(--td-warning-color-1, #fff1e9);
+  font-size: 12px;
+  color: var(--td-text-color-secondary);
+}
+
+.draft-bar a {
+  color: var(--td-brand-color);
+  cursor: pointer;
+}
+
+.draft-bar a:first-of-type {
+  margin-left: auto;
+}
+
+.field-error {
+  margin: 6px 0 0;
+  font-size: 12px;
+  color: var(--td-error-color);
 }
 
 .state {

@@ -157,17 +157,17 @@ a {
   line-height: 20px;
 }
 
-/* 页面载入动效：淡入上移
+/* 页面载入动效：淡入上移（v41 缩短为 150ms，削弱重复动画负担）
  * fill-mode 必须用 backwards，禁止 both/forwards：动画结束后残留的 transform
  * 会让页面根元素成为固定定位弹层的包含块，弹层高度被内容高度裁切 */
 .page-fade-in {
-  animation: pageFadeIn 240ms ease-out backwards;
+  animation: pageFadeIn 150ms ease-out backwards;
 }
 
 @keyframes pageFadeIn {
   from {
     opacity: 0;
-    transform: translateY(8px);
+    transform: translateY(6px);
   }
   to {
     opacity: 1;
@@ -175,15 +175,19 @@ a {
   }
 }
 
-/* 卡片交错载入 */
-.stagger > * {
-  animation: pageFadeIn 240ms ease-out backwards;
+/* v43：缓存页再次激活时抑制入场/交错动画（类由 useAnimSuppress 加在页面根元素，只增不减） */
+.no-replay.page-fade-in,
+.no-replay .page-fade-in,
+.no-replay .stagger > * {
+  animation: none !important;
 }
-.stagger > *:nth-child(1) { animation-delay: 0ms; }
-.stagger > *:nth-child(2) { animation-delay: 60ms; }
-.stagger > *:nth-child(3) { animation-delay: 120ms; }
-.stagger > *:nth-child(4) { animation-delay: 180ms; }
-.stagger > *:nth-child(5) { animation-delay: 240ms; }
+
+/* 卡片交错载入（v41 缩短节奏：150ms 动画 + 36ms 步进） */
+.stagger > * {
+  animation: pageFadeIn 150ms ease-out backwards;
+}
+/* v43：不再对前 5 项递增延迟——第 6 项起没有延迟会先于前 5 项出现，造成列表「下先上后」的倒置感；
+ * 统一同时淡入，视觉自上而下连续。 */
 
 @media (prefers-reduced-motion: reduce) {
   *,
@@ -310,4 +314,66 @@ a {
     padding: 40px 32px;
     min-height: 220px;
   }
+}
+
+/* v38 触控目标：小号操作按钮 ≥44px，超小号图标按钮 ≥36px（移动端最小可点面积） */
+.t-button--size-small {
+  min-height: 44px;
+}
+
+.t-button--size-extra-small {
+  min-height: 36px;
+}
+
+/* 筛选 chips（Tag）扩大点击面积，状态标签不受影响 */
+.chips .t-tag,
+.response-filters .t-tag,
+.recent-chips .t-tag,
+.count-chips .t-tag {
+  min-height: 32px;
+}
+
+/* v38 屏幕阅读器专用文本 */
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+/* v39 列表计数 */
+.list-count {
+  margin: 0 2px;
+  font-size: 12px;
+  color: var(--td-text-color-placeholder);
+}
+
+/* v40 可读性与触控：小号 Tag 字号不低于 12px；交互 chips 保证可点面积；元信息提升对比度 */
+.t-tag--size-small {
+  font-size: 12px;
+}
+
+.slots .t-tag,
+.service-categories .t-tag {
+  min-height: 32px;
+}
+
+.list-count {
+  color: var(--td-text-color-secondary);
+}
+
+/* v41：图片加载失败占位 */
+img.img-fallback {
+  background: var(--td-bg-color-secondarycontainer);
+  min-height: 90px;
+}
+
+/* v41：元信息/占位文本对比度提升（placeholder 原值约 2.85:1，不达 WCAG AA） */
+body {
+  --td-text-color-placeholder: #767676;
 }

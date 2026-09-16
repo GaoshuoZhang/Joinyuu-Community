@@ -1,5 +1,6 @@
-import type { PageQuery, PageResult, PointsRecord, RealNameInfo, RealNamePayload, UserProfile } from '@/types'
-import { accounts, nowStamp, pointsRecordsByUid, pushNotice } from '@/mock/db'
+import type { MyStats, PageQuery, PageResult, PointsRecord, PointsTask, RealNameInfo, RealNamePayload, ReportPayload, UserProfile } from '@/types'
+import { accountByUid, accountRequestsByUid, accounts, articles, blockedByUid, demands, enrollmentsByUid, favoritesByUid, grantPoints, nowStamp, ordersByUid, pointsRecordsByUid, pointsTaskClaimsByUid, pushNotice, reports, responsesByUid } from '@/mock/db'
+import { formatMockStamp, parseMockStamp } from '@/mock/runtime'
 import { readPayload } from '@/mock/session'
 import { fail, withLatency } from '@/mock/latency'
 
@@ -134,4 +135,154 @@ export async function fetchPointsRecords(query: PageQuery): Promise<PageResult<P
       total: all.length,
     }
   })
+}
+
+/* ---------- v38 账号安全与治理（[MOCK-ONLY]，接入期接 /api/app/me/**） ---------- */
+
+/** 修改登录密码（校验原密码） */
+export async function changePassword(payload: { oldPassword: string; password: string }): Promise<void> {
+  await withLatency(() => {
+    const uid = requireUid()
+    const account = accounts.find((a) => a.uid === uid)
+    if (!account) fail(404, '账号不存在')
+    if (!payload.oldPassword) fail(400, '请输入原密码')
+    if (payload.oldPassword !== account.password) fail(400, '原密码不正确')
+    if (!/^(?=.*[A-Za-z])(?=.*\d).{8,}$/.test(payload.password)) fail(400, '新密码至少 8 位且包含字母与数字')
+    account.password = payload.password
+  }, 200)
+}
+
+/** 提交注销申请（运营复核；冷静期内可撤销由后端实现） */
+export async function requestAccountDeletion(reason?: string): Promise<void> {
+  await withLatency(() => {
+    const uid = requireUid()
+    const requests = (accountRequestsByUid[uid] ??= {})
+    if (requests.deletion) fail(409, '注销申请已提交，请等待运营处理')
+    /* v41：7 天冷静期，期间可撤回 */
+    requests.deletion = { reason: reason?.trim() || undefined, at: nowStamp(), cancelableUntil: formatMockStamp(parseMockStamp(nowStamp()).getTime() + 7 * 86_400_000) }
+    pushNotice(uid, { type: 'system', title: '注销申请已受理', content: '社区运营将在 3 个工作日内与你确认，处理期间账号可继续使用。' })
+  }, 200)
+}
+
+/** 申请导出个人数据（Mock 记录申请；真实后端打包后以站内信/邮箱发送） */
+export async function requestDataExport(): Promise<void> {
+  await withLatency(() => {
+    const uid = requireUid()
+    const requests = (accountRequestsByUid[uid] ??= {})
+    requests.export = { at: nowStamp() }
+    pushNotice(uid, { type: 'system', title: '数据导出申请已提交', content: '数据包将在 3 个工作日内生成，并通过站内信通知下载方式。' })
+  }, 160)
+}
+
+/** v41 冷静期内撤回注销申请 */
+export async function cancelAccountDeletion(): Promise<void> {
+  await withLatency(() => {
+    const uid = requireUid()
+    const requests = accountRequestsByUid[uid]
+    if (!requests?.deletion) fail(404, '没有待处理的注销申请')
+    delete requests.deletion
+    pushNotice(uid, { type: 'system', title: '注销申请已撤回', content: '你的账号将恢复正常使用，感谢留下。' })
+  }, 200)
+}
+
+/* ===== v42 积分任务中心 / 个人数据看板 ===== */
+const TASK_DEFS = [
+  { key: 'publish', title: '发布一条需求', desc: '发布需求并进入审核', points: 10 },
+  { key: 'respond', title: '响应一条需求', desc: '对感兴趣的需求提交响应', points: 10 },
+  { key: 'enroll', title: '报名一场活动', desc: '报名社区活动', points: 10 },
+  { key: 'order', title: '兑换一件商品', desc: '在积分商城完成一次兑换', points: 5 },
+  { key: 'favorite', title: '收藏一次内容', desc: '收藏需求 / 文章 / 活动 / 企业 / 人才', points: 5 },
+] as const
+
+function taskDoneMap(uid: string): Record<string, boolean> {
+  return {
+    publish: demands.some((d) => d.publisherUid === uid),
+    respond: (responsesByUid[uid] ?? []).length > 0,
+    enroll: (enrollmentsByUid[uid] ?? []).length > 0,
+    order: (ordersByUid[uid] ?? []).length > 0,
+    favorite: (favoritesByUid[uid] ?? []).length > 0,
+  }
+}
+
+export async function fetchPointsTasks(): Promise<PointsTask[]> {
+  return withLatency(() => {
+    const uid = requireUid()
+    const claims = pointsTaskClaimsByUid[uid] ?? {}
+    const done = taskDoneMap(uid)
+    return TASK_DEFS.map((t) => ({ key: t.key, title: t.title, desc: t.desc, points: t.points, done: done[t.key] ?? false, claimed: Boolean(claims[t.key]) }))
+  }, 120)
+}
+
+export async function claimPointsTask(key: string): Promise<{ points: number }> {
+  return withLatency(() => {
+    const uid = requireUid()
+    const def = TASK_DEFS.find((t) => t.key === key)
+    if (!def) fail(404, '任务不存在')
+    const claims = (pointsTaskClaimsByUid[uid] ??= {})
+    if (claims[key]) fail(409, '该任务奖励已领取')
+    if (!taskDoneMap(uid)[key]) fail(409, '任务尚未完成')
+    claims[key] = nowStamp()
+    grantPoints(uid, def.points, `积分任务：${def.title}`, '任务奖励')
+    pushNotice(uid, { type: 'system', title: '任务奖励已到账', content: `${def.title} +${def.points} 积分。`, link: '/me/points' })
+    return { points: def.points }
+  }, 160)
+}
+
+export async function fetchMyStats(): Promise<MyStats> {
+  return withLatency(() => {
+    const uid = requireUid()
+    const records = pointsRecordsByUid[uid] ?? []
+    return {
+      pointsEarned: records.filter((r) => r.delta > 0).reduce((s, r) => s + r.delta, 0),
+      pointsSpent: records.filter((r) => r.delta < 0).reduce((s, r) => s + Math.abs(r.delta), 0),
+      demands: demands.filter((d) => d.publisherUid === uid).length,
+      responses: (responsesByUid[uid] ?? []).length,
+      enrollments: (enrollmentsByUid[uid] ?? []).length,
+      articles: articles.filter((a) => (a as { authorUid?: string }).authorUid === uid).length,
+      projects: 0,
+      orders: (ordersByUid[uid] ?? []).length,
+    }
+  }, 160)
+}
+
+/** 我的账号申请状态（注销/导出） */
+export async function fetchAccountRequests(): Promise<{ deletion?: { reason?: string; at: string; cancelableUntil?: string }; export?: { at: string } }> {
+  return withLatency(() => {
+    const uid = requireUid()
+    return structuredClone(accountRequestsByUid[uid] ?? {})
+  }, 100)
+}
+
+/** 我的举报记录（含处理状态） */
+export async function listMyReports(): Promise<(ReportPayload & { id: string; at: string; status: 'pending' | 'resolved' | 'rejected' })[]> {
+  return withLatency(() => {
+    const uid = requireUid()
+    return reports.filter((item) => item.uid === uid).map((item) => ({ ...item }))
+  }, 120)
+}
+
+/** 屏蔽名单（uid + 昵称） */
+export async function listBlockedUsers(): Promise<{ uid: string; name: string }[]> {
+  return withLatency(() => {
+    const uid = requireUid()
+    return (blockedByUid[uid] ?? []).map((blockedUid) => ({ uid: blockedUid, name: accountByUid(blockedUid)?.nickname ?? blockedUid }))
+  }, 120)
+}
+
+export async function blockUser(targetUid: string): Promise<void> {
+  await withLatency(() => {
+    const uid = requireUid()
+    if (targetUid === uid) fail(400, '不能屏蔽自己')
+    const list = (blockedByUid[uid] ??= [])
+    if (!list.includes(targetUid)) list.push(targetUid)
+  }, 140)
+}
+
+export async function unblockUser(targetUid: string): Promise<void> {
+  await withLatency(() => {
+    const uid = requireUid()
+    const list = (blockedByUid[uid] ??= [])
+    const index = list.indexOf(targetUid)
+    if (index >= 0) list.splice(index, 1)
+  }, 140)
 }

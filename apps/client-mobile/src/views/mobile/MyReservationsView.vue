@@ -1,11 +1,12 @@
 <script setup lang="ts">
 import { onMounted, ref } from 'vue'
-import { Button, DialogPlugin, Loading, Toast } from 'tdesign-mobile-vue'
+import { Button, DialogPlugin, Toast } from 'tdesign-mobile-vue'
 import { useAsyncList } from '@/composables/useAsyncList'
 import { cancelReservation, fetchMyReservations } from '@/api/spaces'
 import StateTag from '@/components/shared/StateTag.vue'
 import IdentityTag from '@/components/shared/IdentityTag.vue'
 import EmptyBlock from '@/components/shared/EmptyBlock.vue'
+import ListSkeleton from '@/components/ListSkeleton.vue'
 import type { SpaceReservation } from '@/types'
 
 /* 移动我的预约：预约卡片；pending/approved 可取消（Dialog 二次确认）+ Toast + 列表刷新 */
@@ -48,10 +49,11 @@ async function doCancel(r: SpaceReservation) {
   <div class="page-fade-in my-reservations">
     <h2 class="page-title">我的预约</h2>
 
-    <Loading v-if="loading" class="state" text="加载中…" />
-    <EmptyBlock v-else-if="error" :text="error" />
+    <ListSkeleton v-if="loading" />
+    <EmptyBlock v-else-if="error" :text="error" action-text="重试" @action="run" />
     <EmptyBlock v-else-if="!data?.length" text="暂无预约记录" />
     <div v-else class="stagger list">
+      <p class="list-count">共 {{ (data ?? []).length }} 条</p>
       <article v-for="r in data" :key="r.id" class="m-card">
         <div class="row">
           <h3 class="name">{{ r.spaceName }}</h3>
@@ -62,6 +64,7 @@ async function doCancel(r: SpaceReservation) {
           <span class="subject-name">{{ r.subjectName }}</span>
         </p>
         <p class="meta">📅 {{ r.date }} · {{ r.start }} - {{ r.end }} · 提交于 {{ r.createdAt }}</p>
+        <p v-if="r.rejectReason" class="reject-reason">驳回原因：{{ r.rejectReason }}</p>
         <div v-if="canCancel(r)" class="ops">
           <Button theme="danger" variant="outline" size="small" :disabled="actingId === r.id" @click="onCancelTap(r)">
             {{ actingId === r.id ? '处理中…' : '取消预约' }}
@@ -113,6 +116,12 @@ async function doCancel(r: SpaceReservation) {
   margin: 6px 0 0;
   font-size: 12px;
   color: var(--td-text-color-secondary);
+}
+
+.reject-reason {
+  margin: 8px 0 0;
+  color: var(--td-error-color);
+  font-size: 12px;
 }
 
 .subject {

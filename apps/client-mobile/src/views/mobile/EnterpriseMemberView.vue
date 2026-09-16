@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, onMounted, reactive, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { Avatar, Button, CheckboxGroup, DialogPlugin, Input, Loading, Tag, Toast } from 'tdesign-mobile-vue'
+import { Loading, Avatar, Button, CheckboxGroup, DialogPlugin, Input, Tag, Toast } from 'tdesign-mobile-vue'
 import { fetchEnterpriseDetail, removeEnterpriseMember, updateEnterpriseMember } from '@/api/enterprises'
 import { useAsyncList } from '@/composables/useAsyncList'
 import { ApiError } from '@/api/http'
@@ -84,8 +84,7 @@ async function onSave() {
   try {
     await updateEnterpriseMember(enterpriseId, payload)
     Toast('成员信息已更新')
-    await run()
-    router.back()
+    await router.replace(`/me/enterprises/${enterpriseId}`)
   } catch (e) {
     Toast(e instanceof ApiError ? e.message : '保存失败，请稍后重试')
   } finally {
@@ -111,7 +110,7 @@ async function doRemove() {
   try {
     await removeEnterpriseMember(enterpriseId, { memberUid: member.value.uid, memberName: member.value.name })
     Toast('成员已移除')
-    router.back()
+    await router.replace(`/me/enterprises/${enterpriseId}`)
   } catch (e) {
     Toast(e instanceof ApiError ? e.message : '移除失败，请稍后重试')
   }
@@ -121,7 +120,7 @@ async function doRemove() {
 <template>
   <div class="page-fade-in m-member">
     <Loading v-if="loading" class="state" text="加载中…" />
-    <EmptyBlock v-else-if="error" :text="error" />
+    <EmptyBlock v-else-if="error" :text="error" action-text="重试" @action="run" />
     <EmptyBlock v-else-if="!data" text="企业不存在" />
     <EmptyBlock v-else-if="!member" text="未找到该企业成员" />
     <EmptyBlock v-else-if="!canEnter" text="你没有管理该成员的权限" />

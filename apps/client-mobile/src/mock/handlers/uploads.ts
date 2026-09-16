@@ -1,5 +1,6 @@
 import type { UploadedFileInfo } from '@/types'
-import { fail } from '@/mock/latency'
+import { fail, withLatency } from '@/mock/latency'
+import { nextMockId } from '@/mock/runtime'
 
 /* [MOCK-ONLY] app 上传（图片/PDF）：内存读取为 data URL 供预览；接入期对接 POST /api/app/uploads（缺口 §7.1-6）。 */
 
@@ -16,15 +17,16 @@ function readAsDataURL(file: File): Promise<string> {
 }
 
 export async function uploadFile(file: File): Promise<UploadedFileInfo> {
-  await new Promise((r) => setTimeout(r, 260))
-  if (!ALLOWED_TYPES.includes(file.type)) fail(400, '仅支持 JPG/PNG/GIF/WebP 图片或 PDF 文件')
-  if (file.size > MAX_SIZE_MB * 1024 * 1024) fail(400, `文件大小不能超过 ${MAX_SIZE_MB}MB`)
-  const url = await readAsDataURL(file)
-  return {
-    key: `AST${Date.now()}${Math.floor(Math.random() * 90 + 10)}`,
-    name: file.name,
-    size: file.size,
-    type: file.type,
-    url,
-  }
+  return withLatency(async () => {
+    if (!ALLOWED_TYPES.includes(file.type)) fail(400, '仅支持 JPG/PNG/GIF/WebP 图片或 PDF 文件')
+    if (file.size > MAX_SIZE_MB * 1024 * 1024) fail(400, `文件大小不能超过 ${MAX_SIZE_MB}MB`)
+    const url = await readAsDataURL(file)
+    return {
+      key: nextMockId('AST'),
+      name: file.name,
+      size: file.size,
+      type: file.type,
+      url,
+    }
+  }, 260)
 }

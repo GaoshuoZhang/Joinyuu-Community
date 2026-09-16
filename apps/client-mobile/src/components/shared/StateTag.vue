@@ -12,18 +12,24 @@ const map: Record<string, Record<string, { label: string; tone: Tone }>> = {
   demand: {
     pending: { label: '待审核', tone: 'warning' },
     published: { label: '已发布', tone: 'success' },
+    projected: { label: '已立项', tone: 'success' },
+    withdrawn: { label: '已撤回', tone: 'default' },
     rejected: { label: '已驳回', tone: 'danger' },
     closed: { label: '已关闭', tone: 'default' },
   },
   enroll: {
     pending: { label: '待审核', tone: 'warning' },
     approved: { label: '已通过', tone: 'success' },
+    waitlisted: { label: '候补中', tone: 'primary' },
+    rejected: { label: '已驳回', tone: 'danger' },
     cancelled: { label: '已取消', tone: 'default' },
   },
   order: {
     pending_shipment: { label: '待发货', tone: 'warning' },
     shipped: { label: '已发货', tone: 'primary' },
+    pending_use: { label: '待使用', tone: 'primary' },
     completed: { label: '已完成', tone: 'success' },
+    cancelled: { label: '已取消', tone: 'default' },
   },
   reservation: {
     pending: { label: '待审核', tone: 'warning' },
@@ -35,12 +41,14 @@ const map: Record<string, Record<string, { label: string; tone: Tone }>> = {
     pending: { label: '待审核', tone: 'warning' },
     pending_release: { label: '待发布', tone: 'primary' },
     rejected: { label: '已驳回', tone: 'danger' },
+    withdrawn: { label: '已撤回', tone: 'default' },
     published: { label: '已发布', tone: 'success' },
   },
   application: {
     pending: { label: '待审核', tone: 'warning' },
     approved: { label: '已通过', tone: 'success' },
     rejected: { label: '已驳回', tone: 'danger' },
+    withdrawn: { label: '已撤回', tone: 'default' },
   },
 }
 

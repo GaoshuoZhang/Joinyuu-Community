@@ -1,21 +1,61 @@
 <script setup lang="ts">
-import { onMounted } from 'vue'
-import { useRouter } from 'vue-router'
-import { Button, Loading } from 'tdesign-mobile-vue'
+import { onMounted, ref } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
+import { Tag } from 'tdesign-mobile-vue'
 import { fetchGoods } from '@/api/mall'
 import { useAsyncList } from '@/composables/useAsyncList'
+import { useRefreshOnActivate } from '@/composables/useRefreshOnActivate'
+import { useAnimSuppress } from '@/composables/useAnimSuppress'
+import { useRouteQuerySync } from '@/composables/useRouteQuerySync'
+import { useDict } from '@/composables/useDict'
 import { useAuthStore } from '@/stores/auth'
 import EmptyBlock from '@/components/shared/EmptyBlock.vue'
+import ListSkeleton from '@/components/ListSkeleton.vue'
 import type { Goods } from '@/types'
 
-/* 移动积分商城：商品纵列卡片（已过滤下架与零库存）；mallOpen 关闭时 API 抛错 → EmptyBlock 展示 */
-const router = useRouter()
-const auth = useAuthStore()
+useAnimSuppress()
 
-const { data, loading, error, run } = useAsyncList<Goods[]>(() => fetchGoods())
+/* 移动积分商城：商品纵列卡片（已过滤下架与零库存）；mallOpen 关闭时 API 抛错 → EmptyBlock 展示。
+ * v40：商品分类筛选（字典 goods_category）并同步 URL。 */
+const router = useRouter()
+const route = useRoute()
+const auth = useAuthStore()
+const { items: categories } = useDict('goods_category')
+
+const category = ref(String(route.query.category ?? ''))
+const { data, loading, error, run } = useAsyncList<Goods[]>(() => fetchGoods({ category: category.value || undefined }))
+
+function syncQuery() {
+  const query: Record<string, string> = {}
+  if (category.value) query.category = category.value
+  const current = route.query as Record<string, string>
+  if (current.category === query.category) return
+  void router.replace({ query })
+}
+
+/* v41：外部跳转带来的分类同步 */
+useRouteQuerySync('/mall', (q) => {
+  const next = q.category ?? ''
+  if (next === category.value) return
+  category.value = next
+  run()
+})
+
+function pickCategory(code: string) {
+  category.value = category.value === code ? '' : code
+  syncQuery()
+  run()
+}
+
 onMounted(() => {
   void auth.refreshProfile()
   run()
+})
+
+/* v38：返回时刷新商品列表（积分与库存可能变化） */
+useRefreshOnActivate(() => {
+  run()
+  void auth.refreshProfile()
 })
 </script>
 
@@ -24,16 +64,29 @@ onMounted(() => {
     <section v-if="auth.isLogged" class="points-bar">
       <span>当前积分</span>
       <strong>{{ auth.points }}</strong>
+      <a class="points-rule" @click="router.push('/mall/rules')">积分规则 ›</a>
     </section>
 
-    <Loading v-if="loading" class="state" text="加载中…" />
-    <template v-else-if="error">
-      <EmptyBlock :text="error" />
-      <Button variant="outline" size="small" class="retry" @click="run">重试</Button>
-    </template>
+    <div class="chips">
+      <Tag :theme="category === '' ? 'primary' : 'default'" variant="light" size="medium" @click="pickCategory('')">全部</Tag>
+      <Tag
+        v-for="c in categories"
+        :key="c.code"
+        :theme="category === c.code ? 'primary' : 'default'"
+        variant="light"
+        size="medium"
+        @click="pickCategory(c.code)"
+      >
+        {{ c.label }}
+      </Tag>
+    </div>
+
+    <ListSkeleton v-if="loading && !(data ?? []).length" />
+    <EmptyBlock v-else-if="error" :text="error" action-text="重试" @action="run" />
     <EmptyBlock v-else-if="(data ?? []).length === 0" text="暂无可兑换商品" />
     <div v-else class="goods-list stagger">
-      <article v-for="g in data" :key="g.id" class="goods-card m-card" @click="router.push(`/mall/${g.id}`)">
+      <p class="list-count">共 {{ data?.length }} 件商品</p>
+      <article v-for="g in data" :key="g.id" class="goods-card m-card" v-pressable @click="router.push(`/mall/${g.id}`)">
         <div class="row">
           <h3 class="name">{{ g.name }}</h3>
           <span class="cost">{{ g.pointsCost }} 积分</span>
@@ -53,6 +106,13 @@ onMounted(() => {
   gap: 12px;
 }
 
+.chips {
+  display: flex;
+  gap: 8px;
+  overflow-x: auto;
+  padding-bottom: 2px;
+}
+
 .points-bar {
   align-self: flex-end;
   display: flex;
@@ -70,8 +130,11 @@ onMounted(() => {
   font-size: 15px;
 }
 
-.retry {
-  align-self: center;
+.points-rule {
+  min-height: 32px;
+  line-height: 32px;
+  margin-left: 4px;
+  color: var(--td-brand-color);
 }
 
 .goods-list {

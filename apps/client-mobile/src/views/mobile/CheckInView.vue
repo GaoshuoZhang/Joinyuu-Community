@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { onMounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { Button, Loading, Toast } from 'tdesign-mobile-vue'
+import { Loading, Button, Toast } from 'tdesign-mobile-vue'
 import { checkInEvent, fetchEvent } from '@/api/events'
 import { useAsyncList } from '@/composables/useAsyncList'
 import { getPosition } from '@/utils/geolocation'
@@ -66,7 +66,7 @@ function backToDetail() {
 <template>
   <div class="m-checkin page-fade-in stagger">
     <Loading v-if="loading" class="state" text="加载中…" />
-    <EmptyBlock v-else-if="error" :text="error" />
+    <EmptyBlock v-else-if="error" :text="error" action-text="重试" @action="run" />
     <template v-else-if="event">
       <section class="m-card info">
         <h1 class="title">{{ event.title }}</h1>

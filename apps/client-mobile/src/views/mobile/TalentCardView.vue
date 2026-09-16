@@ -1,24 +1,101 @@
 <script setup lang="ts">
-import { computed, onMounted } from 'vue'
+import { computed, onMounted, ref } from 'vue'
 import { useRoute } from 'vue-router'
-import { Avatar, Loading, Tag } from 'tdesign-mobile-vue'
+import { Loading, Avatar, Button, DialogPlugin, Tag, Toast } from 'tdesign-mobile-vue'
 import { useAsyncList } from '@/composables/useAsyncList'
 import { fetchTalentCard } from '@/api/community'
+import { listFavorites, toggleFavorite } from '@/api/favorites'
+import { blockUser } from '@/api/me'
+import { submitReport } from '@/api/reports'
+import { useAuthStore } from '@/stores/auth'
+import { shareContent } from '@/utils/share'
 import EmptyBlock from '@/components/shared/EmptyBlock.vue'
+import ReasonSheet from '@/components/ReasonSheet.vue'
 
-/* 公开人才名片（简历式）：人才库点入，展示个人资料头像与全部公开字段 */
+/* 公开人才名片（简历式）：人才库点入，展示个人资料头像与全部公开字段；v38 支持屏蔽用户。 */
 const route = useRoute()
+const auth = useAuthStore()
 const uid = String(route.params.uid)
 const { data, loading, error, run } = useAsyncList(() => fetchTalentCard(uid))
-onMounted(run)
+onMounted(async () => {
+  await run()
+  await loadFavorite()
+})
+
+/* v40：收藏人才名片 */
+const favorited = ref(false)
+async function loadFavorite() {
+  try {
+    const list = await listFavorites()
+    favorited.value = list.some((item) => item.type === 'talent' && item.targetId === uid)
+  } catch {
+    favorited.value = false
+  }
+}
+async function onToggleFavorite() {
+  if (!auth.isLogged) {
+    Toast('登录后可收藏')
+    return
+  }
+  try {
+    favorited.value = await toggleFavorite('talent', uid, card.value?.name ?? uid, card.value?.role)
+    Toast(favorited.value ? '已收藏' : '已取消收藏')
+  } catch (e) {
+    Toast(e instanceof Error ? e.message : '操作失败，请稍后重试')
+  }
+}
 
 const card = computed(() => data.value)
+const blocked = ref(false)
+
+/* v40：分享人才名片 */
+async function onShare() {
+  const item = card.value
+  if (!item) return
+  await shareContent({ title: item.name, text: `${item.role} · ${item.intro}` })
+}
+
+/* v40：举报用户 */
+const reportVisible = ref(false)
+const USER_REPORT_REASONS = ['虚假身份', '骚扰 / 辱骂', '违规内容', '广告推广', '其他']
+
+async function onReport(text: string) {
+  if (!text) return void Toast('请选择举报原因')
+  try {
+    await submitReport({ targetType: 'user', targetId: uid, targetTitle: card.value?.name ?? uid, reason: text })
+    Toast('举报已提交，运营将核实处理')
+  } catch (e) {
+    Toast(e instanceof Error ? e.message : '举报提交失败，请稍后重试')
+  }
+}
+
+function onBlock() {
+  if (!auth.isLogged) {
+    Toast('请先登录后再屏蔽')
+    return
+  }
+  DialogPlugin.confirm({
+    title: '屏蔽该用户',
+    content: `屏蔽后你将不再看到「${card.value?.name ?? '该用户'}」的相关内容。`,
+    cancelBtn: '取消',
+    confirmBtn: '确认屏蔽',
+    onConfirm: async () => {
+      try {
+        await blockUser(uid)
+        blocked.value = true
+        Toast('已加入屏蔽名单，可在账号与安全中管理')
+      } catch (e) {
+        Toast(e instanceof Error ? e.message : '操作失败，请稍后重试')
+      }
+    },
+  })
+}
 </script>
 
 <template>
   <div class="page-fade-in talent-card-page">
     <Loading v-if="loading" class="state" text="加载中…" />
-    <EmptyBlock v-else-if="error" :text="error" />
+    <EmptyBlock v-else-if="error" :text="error" action-text="重试" @action="run" />
     <template v-else-if="card">
       <section class="m-card hero">
         <Avatar size="64px" class="avatar" :image="card.avatar">{{ card.name.slice(0, 1) }}</Avatar>
@@ -36,6 +113,16 @@ const card = computed(() => data.value)
         <h3 class="sec-title">个人简介</h3>
         <p class="desc">{{ card.intro }}</p>
       </section>
+
+      <div class="actions">
+        <Button size="small" variant="outline" @click="onToggleFavorite">{{ favorited ? '★ 已收藏' : '☆ 收藏' }}</Button>
+        <Button size="small" variant="outline" @click="onShare">分享</Button>
+        <Button size="small" variant="outline" @click="reportVisible = true">举报</Button>
+        <Button size="small" variant="outline" theme="danger" :disabled="blocked || !auth.isLogged" @click="onBlock">
+          {{ blocked ? '已屏蔽' : auth.isLogged ? '屏蔽该用户' : '登录后可屏蔽' }}
+        </Button>
+      </div>
+      <ReasonSheet v-model:visible="reportVisible" title="举报用户" :reasons="USER_REPORT_REASONS" placeholder="补充说明（选填）…" submit-label="提交举报" @submit="onReport" />
 
       <section v-if="card.skills.length" class="m-card">
         <h3 class="sec-title">相关技能</h3>
@@ -109,6 +196,12 @@ const card = computed(() => data.value)
 </template>
 
 <style scoped>
+.actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
 .talent-card-page {
   padding: 16px;
   display: flex;

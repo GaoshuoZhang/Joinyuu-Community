@@ -1,4 +1,5 @@
 import type { AuthResult } from '@/types'
+import { nextMockId } from '@/mock/runtime'
 
 /* [MOCK-ONLY] 模拟会话：假 JWT（三段式形态）、localStorage 持久化、TTL 2h 与未来后端一致。 */
 
@@ -26,7 +27,7 @@ export function issueToken(uid: string, identities: AuthResult['identities']): s
     sub: uid,
     scope: 'app',
     identities,
-    jti: `mock-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+    jti: `mock-${nextMockId('JTI')}`,
     exp: Math.floor(Date.now() / 1000) + TTL_SECONDS,
   }
   const token = signFakeJwt(payload)

@@ -1,5 +1,5 @@
-import { apiMode, httpGet, httpPost } from './http'
-import type { UserNotice } from '@/types'
+import { apiMode, httpGet, httpPost, httpPut } from './http'
+import type { NoticeType, UserNotice } from '@/types'
 import * as mock from '@/mock/handlers/notices'
 
 /** [MOCK-ONLY] 站内信四端点为缺口 §7-1（UserNotification 模型 + 触发点），接入期实现 */
@@ -26,4 +26,21 @@ export async function markNoticeRead(id: string): Promise<void> {
 export async function markAllNoticesRead(): Promise<void> {
   if (apiMode === 'mock') return mock.markAllNoticesRead()
   await httpPost('/me/notices/read-all')
+}
+
+/** [MOCK-ONLY] v39 归档 / 恢复单条通知。 */
+export async function archiveNotice(id: string, archived: boolean): Promise<void> {
+  if (apiMode === 'mock') return mock.archiveNotice(id, archived)
+  await httpPost(`/me/notices/${id}/archive`, { archived })
+}
+
+/** [MOCK-ONLY] v38 通知偏好（启用的类型集合）。 */
+export async function fetchNoticePrefs(): Promise<NoticeType[]> {
+  if (apiMode === 'mock') return mock.fetchNoticePrefs()
+  return httpGet<NoticeType[]>('/me/notices/prefs')
+}
+
+export async function updateNoticePrefs(types: NoticeType[]): Promise<void> {
+  if (apiMode === 'mock') return mock.updateNoticePrefs(types)
+  await httpPut('/me/notices/prefs', { types })
 }

@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, onMounted, reactive, ref } from 'vue'
-import { Button, Input, Loading, NoticeBar, Tag, Toast } from 'tdesign-mobile-vue'
+import { Loading, Button, Input, NoticeBar, Tag, Toast } from 'tdesign-mobile-vue'
 import { fetchRealName, submitRealName } from '@/api/me'
 import { ApiError } from '@/api/http'
 import EmptyBlock from '@/components/shared/EmptyBlock.vue'
@@ -33,11 +33,21 @@ const form = reactive({ realName: '', citizenId: '' })
 const submitting = ref(false)
 const canSubmit = computed(() => !!form.realName.trim() && !!form.citizenId.trim() && !submitting.value)
 
+const errors = reactive({ realName: '', citizenId: '' })
+
 async function onSubmit() {
   if (!canSubmit.value) return
+  errors.realName = ''
+  errors.citizenId = ''
+  if (!form.realName.trim()) {
+    errors.realName = '请输入真实姓名'
+    Toast(errors.realName)
+    return
+  }
   const citizenId = form.citizenId.trim()
   if (!/^\d{17}[\dXx]$/.test(citizenId)) {
-    Toast('请输入正确的身份证号')
+    errors.citizenId = '请输入正确的身份证号'
+    Toast(errors.citizenId)
     return
   }
   submitting.value = true
@@ -55,8 +65,17 @@ async function onSubmit() {
 
 <template>
   <div class="page-fade-in m-realname">
+    <section class="m-card benefits">
+      <h3 class="benefits-title">认证权益</h3>
+      <ul class="benefits-list">
+        <li><b>基础</b>：浏览内容、报名活动、收藏与评论</li>
+        <li><b>实名</b>：发布需求、响应需求、投稿、空间预约</li>
+        <li><b>企业</b>：企业名片、以企业身份响应与项目管理</li>
+      </ul>
+    </section>
+
     <Loading v-if="loading" class="state" text="加载中…" />
-    <EmptyBlock v-else-if="error" :text="error" />
+    <EmptyBlock v-else-if="error" :text="error" action-text="重试" @action="load" />
 
     <template v-else-if="verified">
       <section class="m-card">
@@ -90,10 +109,12 @@ async function onSubmit() {
         <div class="field">
           <label>真实姓名</label>
           <Input v-model="form.realName" :maxlength="20" placeholder="请输入与证件一致的姓名" clearable />
+          <p v-if="errors.realName" class="field-error">{{ errors.realName }}</p>
         </div>
         <div class="field">
           <label>身份证号</label>
           <Input v-model="form.citizenId" :maxlength="18" placeholder="请输入 18 位身份证号" clearable />
+          <p v-if="errors.citizenId" class="field-error">{{ errors.citizenId }}</p>
         </div>
         <Button theme="primary" size="large" block :disabled="!canSubmit" :loading="submitting" @click="onSubmit">
           {{ submitting ? '提交中…' : '提交认证' }}
@@ -105,6 +126,25 @@ async function onSubmit() {
 </template>
 
 <style scoped>
+.benefits {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.benefits-title {
+  margin: 0;
+  font-size: 14px;
+}
+
+.benefits-list {
+  margin: 0;
+  padding-left: 18px;
+  font-size: 13px;
+  line-height: 1.9;
+  color: var(--td-text-color-secondary);
+}
+
 .m-realname {
   padding: 16px;
   padding-bottom: 32px;
@@ -142,6 +182,12 @@ async function onSubmit() {
   margin-bottom: 6px;
   font-size: 12px;
   color: var(--td-text-color-secondary);
+}
+
+.field-error {
+  margin: 6px 0 0;
+  font-size: 12px;
+  color: var(--td-error-color);
 }
 
 .read-row {

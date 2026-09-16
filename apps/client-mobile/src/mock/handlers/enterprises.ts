@@ -3,6 +3,7 @@ import type {
   EnterpriseMemberPermission,
   EnterpriseRecord,
   EnterpriseShowcase,
+  EnterpriseTransferRequest,
   IdentityType,
   InvitationAction,
   InvitationDetail,
@@ -16,14 +17,17 @@ import type {
   TransferContactPayload,
   UpdateMemberPayload,
 } from '@/types'
+import { enterpriseResponsesByEnterprise } from '@/mock/db'
 import { ENTERPRISE_PERMISSION_KEYS } from '@/constants/enterprise'
 import {
   accounts,
   enterpriseExitApplications,
   enterpriseInvitations,
+  enterpriseTransferRequests,
   enterprises,
   individualShowcases,
   nextInvitationId,
+  nextMockId,
   nowStamp,
   pushNotice,
   talentMembers,
@@ -31,8 +35,27 @@ import {
 import type { IndividualShowcase } from '@/mock/db'
 import { readPayload } from '@/mock/session'
 import { fail, withLatency } from '@/mock/latency'
+import { formatMockStamp, mockNowMs } from '@/mock/runtime'
+
+/** 邀请 / 转移请求有效期：7 天（按 Mock 业务时钟） */
+const INVITE_TTL_MS = 7 * 24 * 60 * 60 * 1000
+
+function expiryAfter7Days(): string {
+  return formatMockStamp(mockNowMs() + INVITE_TTL_MS)
+}
+
+function isExpired(expiresAt?: string): boolean {
+  if (!expiresAt) return false
+  return expiresAt < formatMockStamp()
+}
 
 /* [MOCK-ONLY] 企业 handlers：名片发布/展示、个人名片、关联身份（社区个体 + 关联企业明细与操作）。 */
+
+/** v42 企业工作台：企业名义响应记录 */
+export async function fetchEnterpriseWorkbench(id: string): Promise<import('@/types').EnterpriseWorkbench> {
+  const list = enterpriseResponsesByEnterprise[id] ?? []
+  return { responseCount: list.length, recentResponses: list.map((r) => ({ ...r })) }
+}
 
 export async function fetchEnterpriseShowcase(id: string): Promise<EnterpriseShowcase> {
   return withLatency(() => {
@@ -162,6 +185,10 @@ export async function updateIndividualCard(payload: MyIndividualCardPayload): Pr
       honors: (payload.honors ?? []).filter((h) => (h.name ?? '').trim()).map((h) => ({ name: h.name.trim(), date: text(h.date) })),
       socials: cleanLinks(payload.socials),
       customLinks: cleanLinks(payload.customLinks),
+      visibility: {
+        age: payload.visibility?.age ?? true,
+        politicalStatus: payload.visibility?.politicalStatus ?? true,
+      },
     }
     const talent = talentMembers.find((t) => t.uid === account.uid)
     if (talent) {
@@ -278,8 +305,14 @@ export async function fetchEnterpriseDetail(id: string): Promise<MyEnterpriseDet
       myPermissions: permissionsOf(e, account.uid),
       invitations:
         e.contactUid === account.uid
-          ? enterpriseInvitations.filter((i) => i.enterpriseId === e.id && i.status === 'pending')
+          ? enterpriseInvitations
+              .filter((i) => i.enterpriseId === e.id && i.status === 'pending')
+              .map((i) => (isExpired(i.expiresAt) ? { ...i, status: 'expired' as const } : { ...i }))
           : [],
+      transferRequest:
+        e.contactUid === account.uid
+          ? (enterpriseTransferRequests.find((r) => r.enterpriseId === e.id && r.status === 'pending' && !isExpired(r.expiresAt)) ?? null)
+          : null,
       exitApplication: enterpriseExitApplications[e.id] ?? null,
     }
   }, 160)
@@ -308,7 +341,10 @@ export async function updateMyEnterprise(id: string, payload: MyEnterprisePayloa
     e.size = size
     e.description = description
     e.foundedAt = (payload.foundedAt ?? '').trim() || undefined
-    e.website = (payload.website ?? '').trim() || undefined
+    const website = (payload.website ?? '').trim()
+    /* v39：官网协议校验（前端会预校验，服务端兜底） */
+    if (website && !/^https?:\/\//i.test(website)) fail(400, '企业官网需以 http(s):// 开头')
+    e.website = website || undefined
     e.address = (payload.address ?? '').trim() || undefined
     e.services = (payload.services ?? '').trim() || undefined
     e.advantages = (payload.advantages ?? '').trim() || undefined
@@ -320,30 +356,102 @@ export async function updateMyEnterprise(id: string, payload: MyEnterprisePayloa
   }, 180)
 }
 
+/** 发起负责人转移请求：需目标成员已注册（有 uid），对方接受后生效（v35）。 */
 export async function transferEnterpriseContact(id: string, payload: TransferContactPayload): Promise<void> {
   await withLatency(() => {
     const { account, enterprise: e } = requireContactEnterprise(id)
     const target = e.members.find((m) => (payload.memberUid ? m.uid === payload.memberUid : m.name === payload.memberName))
     if (!target) fail(404, '未找到该企业成员')
-    if (target.uid ? target.uid === e.contactUid : target.name === e.contactName) fail(409, '该成员已是企业负责人')
-    const from = e.contactName ?? account.nickname
-    e.contactUid = target.uid
-    e.contactName = target.name
-    pushNotice(account.uid, {
+    if (!target.uid) fail(400, '该成员尚未注册聚屿社区账号，暂无法转移负责人')
+    if (target.uid === e.contactUid) fail(409, '该成员已是企业负责人')
+    if (enterpriseTransferRequests.some((r) => r.enterpriseId === e.id && r.status === 'pending' && !isExpired(r.expiresAt))) {
+      fail(409, '已有待确认的转移请求，请等待对方处理或撤销后重试')
+    }
+    const request: EnterpriseTransferRequest = {
+      id: nextMockId('ET'),
+      enterpriseId: e.id,
+      enterpriseName: e.name,
+      fromUid: account.uid,
+      fromName: e.contactName ?? account.nickname,
+      toUid: target.uid,
+      toName: target.name,
+      status: 'pending',
+      at: nowStamp(),
+      expiresAt: expiryAfter7Days(),
+    }
+    enterpriseTransferRequests.unshift(request)
+    pushNotice(target.uid, { type: 'system', title: '企业负责人转移请求', content: `「${e.name}」的负责人 ${request.fromName} 邀请你接任企业负责人，请前往关联身份确认。`, link: '/me/identities' })
+    pushNotice(account.uid, { type: 'system', title: '转移请求已发送', content: `已向 ${target.name} 发送「${e.name}」负责人转移请求，等待对方确认。`, link: `/me/enterprises/${e.id}` })
+  }, 200)
+}
+
+/** 我收到的待确认负责人转移请求（过期自动过滤）。 */
+export async function fetchMyTransferRequests(): Promise<EnterpriseTransferRequest[]> {
+  return withLatency(() => {
+    const account = requireAccount()
+    return enterpriseTransferRequests
+      .filter((r) => r.toUid === account.uid && r.status === 'pending')
+      .map((r) => (isExpired(r.expiresAt) ? { ...r, status: 'expired' as const } : { ...r }))
+      .filter((r) => r.status === 'pending')
+  }, 160)
+}
+
+/** 被邀请人接受/拒绝负责人转移；接受后负责人变更并通知发起方。 */
+export async function respondEnterpriseTransfer(requestId: string, action: 'accept' | 'reject'): Promise<void> {
+  await withLatency(() => {
+    const account = requireAccount()
+    const request = enterpriseTransferRequests.find((r) => r.id === requestId)
+    if (!request) fail(404, '转移请求不存在')
+    if (request.toUid !== account.uid) fail(403, '仅被邀请人可处理该请求')
+    if (request.status !== 'pending') fail(409, '该请求已处理')
+    if (isExpired(request.expiresAt)) {
+      request.status = 'expired'
+      fail(409, '转移请求已过期')
+    }
+    const e = enterprises.find((x) => x.id === request.enterpriseId)
+    if (!e) fail(404, '企业不存在')
+    request.status = action === 'accept' ? 'accepted' : 'rejected'
+    request.respondedAt = nowStamp()
+    if (action === 'accept') {
+      e.contactUid = account.uid
+      e.contactName = request.toName
+    }
+    pushNotice(request.fromUid, {
       type: 'system',
-      title: '企业负责人已转移',
-      content: `「${e.name}」负责人已由 ${from} 转移至 ${target.name}。`,
+      title: action === 'accept' ? '负责人转移已确认' : '负责人转移被拒绝',
+      content: action === 'accept' ? `${request.toName} 已接受，成为「${e.name}」的企业负责人。` : `${request.toName} 拒绝了「${e.name}」负责人转移请求。`,
       link: `/me/enterprises/${e.id}`,
     })
-    if (target.uid) {
-      pushNotice(target.uid, {
-        type: 'system',
-        title: '你已成为企业负责人',
-        content: `你已成为「${e.name}」的企业负责人，可管理企业信息与成员。`,
-        link: `/me/enterprises/${e.id}`,
-      })
-    }
   }, 200)
+}
+
+/** 发起方撤销待确认的转移请求。 */
+export async function cancelEnterpriseTransfer(requestId: string): Promise<void> {
+  await withLatency(() => {
+    const account = requireAccount()
+    const request = enterpriseTransferRequests.find((r) => r.id === requestId)
+    if (!request) fail(404, '转移请求不存在')
+    if (request.fromUid !== account.uid) fail(403, '仅发起人可撤销该请求')
+    if (request.status !== 'pending') fail(409, '该请求已处理')
+    request.status = 'revoked'
+    request.respondedAt = nowStamp()
+    pushNotice(request.toUid, { type: 'system', title: '负责人转移已撤销', content: `「${request.enterpriseName}」的负责人转移请求已撤销。` })
+  }, 160)
+}
+
+/** 撤销待接受的企业邀请（需邀请权限）。 */
+export async function revokeEnterpriseInvitation(invitationId: string): Promise<void> {
+  await withLatency(() => {
+    const invitation = enterpriseInvitations.find((i) => i.id === invitationId)
+    if (!invitation) fail(404, '邀请不存在或已失效')
+    const { account, enterprise: e } = requireEnterprisePermission(invitation.enterpriseId, 'invite_member')
+    if (invitation.status !== 'pending') fail(409, '该邀请已处理')
+    invitation.status = 'revoked'
+    invitation.respondedAt = nowStamp()
+    const invited = accounts.find((a) => a.phone === invitation.phone)
+    if (invited) pushNotice(invited.uid, { type: 'system', title: '企业邀请已撤销', content: `「${e.name}」的成员邀请已被撤销。` })
+    pushNotice(account.uid, { type: 'system', title: '邀请已撤销', content: `已撤销对 ${invitation.memberName} 的「${e.name}」成员邀请。`, link: `/me/enterprises/${e.id}` })
+  }, 160)
 }
 
 /** 邀请企业成员：生成邀请记录 + 给被邀请人发站内信（[MOCK-ONLY] 缺口 §7.1-17；真实后端需短信兜底未注册手机号） */
@@ -374,6 +482,7 @@ export async function inviteEnterpriseMember(id: string, payload: InviteMemberPa
       inviterName: account.nickname,
       status: 'pending',
       at: nowStamp(),
+      expiresAt: expiryAfter7Days(),
     }
     enterpriseInvitations.unshift(invitation)
     pushNotice(invited.uid, {
@@ -416,6 +525,10 @@ export async function respondInvitation(id: string, action: InvitationAction): P
     if (!invitation) fail(404, '邀请不存在或已失效')
     if (account.phone !== invitation.phone) fail(403, '仅被邀请人可处理该邀请')
     if (invitation.status !== 'pending') fail(409, '该邀请已处理')
+    if (isExpired(invitation.expiresAt)) {
+      invitation.status = 'expired'
+      fail(409, '邀请已过期')
+    }
     const e = enterprises.find((x) => x.id === invitation.enterpriseId)
     if (!e) fail(404, '企业不存在')
     invitation.status = action === 'accept' ? 'accepted' : 'rejected'

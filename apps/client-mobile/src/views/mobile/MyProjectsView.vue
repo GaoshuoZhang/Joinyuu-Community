@@ -1,16 +1,26 @@
 <script setup lang="ts">
 import { computed, onMounted } from 'vue'
-import { Loading, Progress, Tag } from 'tdesign-mobile-vue'
+import { useRouter } from 'vue-router'
+import { Progress, Tag } from 'tdesign-mobile-vue'
 import { useAsyncList } from '@/composables/useAsyncList'
 import { fetchMyProjects } from '@/api/projects'
 import EmptyBlock from '@/components/shared/EmptyBlock.vue'
-import type { MyProject } from '@/types'
+import ListSkeleton from '@/components/ListSkeleton.vue'
+import type { Milestone, MyProject } from '@/types'
 
-/* 移动我的项目（只读）：role 标签（本人承接=蓝/企业承接=灰+企业名）+ 进度条 + 里程碑清单 */
+/* 移动我的项目：角色标签 + 进度 + 里程碑状态；点击进入项目详情（双方共享记录）。 */
+const router = useRouter()
 const { data, loading, error, run } = useAsyncList<MyProject[]>(fetchMyProjects)
 
 const projects = computed(() => data.value ?? [])
 const empty = computed(() => !loading.value && !error.value && projects.value.length === 0)
+
+function milestoneMark(m: Milestone): string {
+  const status = m.status ?? (m.done ? 'accepted' : 'todo')
+  if (status === 'accepted') return '✅'
+  if (status === 'submitted') return '⏳'
+  return '○'
+}
 
 onMounted(run)
 </script>
@@ -19,25 +29,30 @@ onMounted(run)
   <div class="page-fade-in m-my-projects">
     <h2 class="page-title">我的项目</h2>
 
-    <Loading v-if="loading" class="state" text="加载中…" />
-    <EmptyBlock v-else-if="error" :text="error" />
+    <ListSkeleton v-if="loading" />
+    <EmptyBlock v-else-if="error" :text="error" action-text="重试" @action="run" />
     <EmptyBlock v-else-if="empty" text="暂无承接中的项目" />
     <div v-else class="stagger list">
-      <section v-for="p in projects" :key="p.id" class="m-card">
+      <p class="list-count">共 {{ projects.length }} 个</p>
+      <section v-for="p in projects" :key="p.id" class="m-card project-card" v-pressable @click="router.push(`/me/projects/${p.id}`)">
         <header class="row">
           <h3 class="name">{{ p.name }}</h3>
-          <Tag v-if="p.role === '本人承接'" theme="primary" variant="light" size="small">本人承接</Tag>
+          <Tag v-if="p.finishedAt" theme="success" variant="light" size="small">已结项</Tag>
+          <Tag v-if="p.role === '需求发起方'" theme="success" variant="light" size="small">需求发起方</Tag>
+          <Tag v-else-if="p.role === '本人承接'" theme="primary" variant="light" size="small">本人承接</Tag>
           <template v-else>
             <Tag theme="default" variant="light" size="small">企业承接</Tag>
             <span v-if="p.enterpriseName" class="ent">{{ p.enterpriseName }}</span>
           </template>
         </header>
 
+        <p v-if="p.partnerName" class="partner">协作方：{{ p.partnerName }}</p>
+
         <Progress class="progress" :percentage="p.progress" />
 
         <ul v-if="p.milestones.length" class="milestones">
           <li v-for="m in p.milestones" :key="m.id" class="milestone" :class="{ done: m.done }">
-            <span class="mark">{{ m.done ? '✅' : '○' }}</span>
+            <span class="mark">{{ milestoneMark(m) }}</span>
             <span class="m-title">{{ m.title }}</span>
           </li>
         </ul>
@@ -71,6 +86,10 @@ onMounted(run)
   gap: 10px;
 }
 
+.project-card {
+  cursor: pointer;
+}
+
 .row {
   display: flex;
   align-items: center;
@@ -87,6 +106,12 @@ onMounted(run)
 }
 
 .ent {
+  font-size: 12px;
+  color: var(--td-text-color-secondary);
+}
+
+.partner {
+  margin: 8px 0 0;
   font-size: 12px;
   color: var(--td-text-color-secondary);
 }

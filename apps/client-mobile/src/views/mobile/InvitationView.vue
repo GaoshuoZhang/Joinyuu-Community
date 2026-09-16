@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { Avatar, Button, Cell, Loading, NoticeBar, Tag, Toast } from 'tdesign-mobile-vue'
+import { Loading, Avatar, Button, Cell, DialogPlugin, NoticeBar, Tag, Toast } from 'tdesign-mobile-vue'
 import { fetchInvitation, respondInvitation } from '@/api/enterprises'
 import { ApiError } from '@/api/http'
 import { useAsyncList } from '@/composables/useAsyncList'
@@ -22,11 +22,30 @@ const STATUS: Record<EnterpriseInvitation['status'], { label: string; theme: Tag
   pending: { label: '待接受', theme: 'warning' },
   accepted: { label: '已加入', theme: 'success' },
   rejected: { label: '已拒绝', theme: 'default' },
+  revoked: { label: '已撤销', theme: 'default' },
+  expired: { label: '已过期', theme: 'default' },
 }
 const statusTag = computed(() => STATUS[data.value?.status ?? 'pending'])
 
 const responding = ref(false)
-async function onRespond(action: InvitationAction) {
+
+function onRespond(action: InvitationAction) {
+  if (action === 'reject') {
+    DialogPlugin.confirm({
+      title: '拒绝邀请',
+      content: `确认拒绝加入「${data.value?.enterpriseName ?? '该企业'}」？如为误操作需企业负责人重新邀请。`,
+      cancelBtn: '再想想',
+      confirmBtn: '确认拒绝',
+      onConfirm: () => {
+        void doRespond('reject')
+      },
+    })
+    return
+  }
+  void doRespond('accept')
+}
+
+async function doRespond(action: InvitationAction) {
   responding.value = true
   try {
     await respondInvitation(invitationId, action)
@@ -47,7 +66,7 @@ function goEnterprise() {
 <template>
   <div class="page-fade-in m-invitation">
     <Loading v-if="loading" class="state" text="加载中…" />
-    <EmptyBlock v-else-if="error" :text="error" />
+    <EmptyBlock v-else-if="error" :text="error" action-text="重试" @action="run" />
     <template v-else-if="data">
       <section class="m-card ent">
         <Avatar shape="round" size="56px" :image="data.enterpriseLogo" class="ent-logo">

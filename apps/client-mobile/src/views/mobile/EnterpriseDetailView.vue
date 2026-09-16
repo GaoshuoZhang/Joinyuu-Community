@@ -1,26 +1,17 @@
 <script setup lang="ts">
-import { computed, onMounted, reactive, ref } from 'vue'
+import { computed, onMounted, reactive, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import {
-  ActionSheet,
-  Avatar,
-  Button,
-  Cell,
-  DialogPlugin,
-  Input,
-  Loading,
-  NoticeBar,
-  Popup,
-  Tag,
-  Toast,
-} from 'tdesign-mobile-vue'
+import { Loading, ActionSheet, Avatar, Button, Cell, DialogPlugin, Input, NoticeBar, Popup, Tag, Toast } from 'tdesign-mobile-vue'
 import {
   applyEnterpriseExit,
+  cancelEnterpriseTransfer,
   fetchEnterpriseDetail,
   inviteEnterpriseMember,
+  revokeEnterpriseInvitation,
   transferEnterpriseContact,
 } from '@/api/enterprises'
 import { useAsyncList } from '@/composables/useAsyncList'
+import { formatMockStamp, parseMockStamp } from '@/mock/runtime'
 import { ApiError } from '@/api/http'
 import EmptyBlock from '@/components/shared/EmptyBlock.vue'
 import type { EnterpriseMemberInfo, EnterpriseMemberPermission } from '@/types'
@@ -71,9 +62,9 @@ function onTransferSelected(_selected: unknown, index: number) {
   if (!member) return
   DialogPlugin.confirm({
     title: '转移企业负责人',
-    content: `确认将「${data.value?.enterpriseName}」的负责人转移给 ${member.name}？转移后你将失去企业管理权限。`,
+    content: `将向 ${member.name} 发送「${data.value?.enterpriseName}」负责人转移请求，对方接受后生效。`,
     cancelBtn: '取消',
-    confirmBtn: '确认转移',
+    confirmBtn: '发送请求',
     onConfirm: () => {
       void doTransfer(member)
     },
@@ -83,29 +74,88 @@ function onTransferSelected(_selected: unknown, index: number) {
 async function doTransfer(member: EnterpriseMemberInfo) {
   try {
     await transferEnterpriseContact(enterpriseId, { memberUid: member.uid, memberName: member.name })
-    Toast('企业负责人已转移')
+    Toast('转移请求已发送，等待对方确认')
     await run()
   } catch (e) {
     Toast(e instanceof ApiError ? e.message : '转移失败，请稍后重试')
   }
 }
 
+/* v35：撤销待确认的负责人转移请求 */
+function onCancelTransfer() {
+  const request = data.value?.transferRequest
+  if (!request) return
+  DialogPlugin.confirm({
+    title: '撤销转移请求',
+    content: `撤销后「${request.toName}」将无法接受该负责人转移请求。`,
+    cancelBtn: '取消',
+    confirmBtn: '确认撤销',
+    onConfirm: async () => {
+      try {
+        await cancelEnterpriseTransfer(request.id)
+        Toast('已撤销转移请求')
+        await run()
+      } catch (e) {
+        Toast(e instanceof ApiError ? e.message : '撤销失败，请稍后重试')
+      }
+    },
+  })
+}
+
+/* v35：撤销待接受的成员邀请 */
+function onRevokeInvitation(invitationId: string, memberName: string) {
+  DialogPlugin.confirm({
+    title: '撤销邀请',
+    content: `确认撤销对 ${memberName} 的成员邀请？`,
+    cancelBtn: '取消',
+    confirmBtn: '确认撤销',
+    onConfirm: async () => {
+      try {
+        await revokeEnterpriseInvitation(invitationId)
+        Toast('已撤销邀请')
+        await run()
+      } catch (e) {
+        Toast(e instanceof ApiError ? e.message : '撤销失败，请稍后重试')
+      }
+    },
+  })
+}
+
+function expiryText(expiresAt?: string): string {
+  if (!expiresAt) return '7 天内有效'
+  const diff = parseMockStamp(expiresAt).getTime() - parseMockStamp(formatMockStamp()).getTime()
+  if (diff <= 0) return '已过期'
+  const days = Math.ceil(diff / 86400000)
+  return `${days} 天内有效`
+}
+
 /* ---- 邀请企业成员（负责人；需指定职位） ---- */
 const inviteVisible = ref(false)
 const inviteForm = reactive({ name: '', phone: '', role: '' })
+/* v40：邀请表单行内错误 */
+const inviteErrors = reactive({ name: '', phone: '', role: '' })
+watch(() => inviteForm.name, () => (inviteErrors.name = ''))
+watch(() => inviteForm.phone, () => (inviteErrors.phone = ''))
+watch(() => inviteForm.role, () => (inviteErrors.role = ''))
 const inviting = ref(false)
 
 async function onInvite() {
+  inviteErrors.name = ''
+  inviteErrors.phone = ''
+  inviteErrors.role = ''
   if (!inviteForm.name.trim()) {
-    Toast('请输入成员姓名')
+    inviteErrors.name = '请输入成员姓名'
+    Toast(inviteErrors.name)
     return
   }
   if (!/^1\d{10}$/.test(inviteForm.phone.trim())) {
-    Toast('请输入正确的手机号')
+    inviteErrors.phone = '请输入正确的手机号'
+    Toast(inviteErrors.phone)
     return
   }
   if (!inviteForm.role.trim()) {
-    Toast('请输入成员职位')
+    inviteErrors.role = '请输入成员职位'
+    Toast(inviteErrors.role)
     return
   }
   inviting.value = true
@@ -129,8 +179,12 @@ async function onInvite() {
 }
 
 /* ---- 成员管理：跳转独立页（成员管理原为弹窗，内容较多无法上下滑动，v29 改为页面） ---- */
+function canManageMembers(m: EnterpriseMemberInfo): boolean {
+  return !m.isContact && (can('manage_members') || can('assign_permission'))
+}
+
 function goMemberManage(m: EnterpriseMemberInfo) {
-  if (!can('manage_members') && !can('assign_permission')) return
+  if (!canManageMembers(m)) return
   const key = m.uid ?? m.name
   void router.push(`/me/enterprises/${enterpriseId}/members/${encodeURIComponent(key)}`)
 }
@@ -162,7 +216,7 @@ async function doExit() {
 <template>
   <div class="page-fade-in m-enterprise">
     <Loading v-if="loading" class="state" text="加载中…" />
-    <EmptyBlock v-else-if="error" :text="error" />
+    <EmptyBlock v-else-if="error" :text="error" action-text="重试" @action="run" />
     <template v-else-if="data">
       <section class="m-card">
         <div class="ent-head">
@@ -194,7 +248,7 @@ async function doExit() {
             <p class="contact-hint">负责管理企业名片与成员</p>
           </div>
           <Button
-            v-if="isContact"
+            v-if="isContact && !data.transferRequest"
             theme="primary"
             variant="outline"
             size="small"
@@ -204,6 +258,16 @@ async function doExit() {
             转移负责人
           </Button>
         </div>
+        <template v-if="data.transferRequest">
+          <NoticeBar
+            visible
+            theme="warning"
+            :content="`负责人转移待 ${data.transferRequest.toName} 确认（${data.transferRequest.at} 发起，${expiryText(data.transferRequest.expiresAt)}）`"
+          />
+          <div class="transfer-cancel">
+            <Button size="small" variant="outline" @click="onCancelTransfer">撤销转移请求</Button>
+          </div>
+        </template>
       </section>
 
       <section class="m-card">
@@ -217,11 +281,19 @@ async function doExit() {
             v-for="inv in data.invitations"
             :key="inv.id"
             :title="inv.memberName"
-            :note="[inv.role, inv.phone, '待对方确认'].filter(Boolean).join(' · ')"
+            :note="[inv.role, inv.phone, inv.status === 'expired' ? '已过期' : '待对方确认'].filter(Boolean).join(' · ')"
             :bordered="false"
           >
             <template #right-icon>
-              <Tag size="small" variant="light" theme="warning">待接受</Tag>
+              <Tag v-if="inv.status === 'expired'" size="small" variant="light" theme="default">已过期</Tag>
+              <Button
+                v-else-if="can('invite_member')"
+                size="small"
+                variant="outline"
+                @click.stop="onRevokeInvitation(inv.id, inv.memberName)"
+              >
+                撤销
+              </Button>
             </template>
           </Cell>
         </div>
@@ -232,8 +304,8 @@ async function doExit() {
             :title="m.name"
             :note="[m.role, m.phone].filter(Boolean).join(' · ')"
             :bordered="false"
-            :arrow="!m.isContact && (can('manage_members') || can('assign_permission'))"
-            @click="goMemberManage(m)"
+            :arrow="canManageMembers(m)"
+            @click="canManageMembers(m) ? goMemberManage(m) : undefined"
           >
             <template #right-icon>
               <Tag v-if="m.isContact" size="small" variant="light" theme="primary">负责人</Tag>
@@ -272,15 +344,15 @@ async function doExit() {
         <h3 class="popup-title">邀请企业成员</h3>
         <div class="field">
           <label>成员姓名</label>
-          <Input v-model="inviteForm.name" :maxlength="20" placeholder="请输入成员姓名" clearable />
+          <Input v-model="inviteForm.name" :maxlength="20" placeholder="请输入成员姓名" clearable /><p v-if="inviteErrors.name" class="field-error">{{ inviteErrors.name }}</p>
         </div>
         <div class="field">
           <label>手机号</label>
-          <Input v-model="inviteForm.phone" type="tel" :maxlength="11" placeholder="请输入 11 位手机号" clearable />
+          <Input v-model="inviteForm.phone" type="tel" :maxlength="11" placeholder="请输入 11 位手机号" clearable /><p v-if="inviteErrors.phone" class="field-error">{{ inviteErrors.phone }}</p>
         </div>
         <div class="field">
           <label>职位</label>
-          <Input v-model="inviteForm.role" :maxlength="20" placeholder="如：产品负责人 / 设计总监" clearable />
+          <Input v-model="inviteForm.role" :maxlength="20" placeholder="如：产品负责人 / 设计总监" clearable /><p v-if="inviteErrors.role" class="field-error">{{ inviteErrors.role }}</p>
         </div>
         <Button theme="primary" size="large" block :loading="inviting" @click="onInvite">
           {{ inviting ? '发送中…' : '发送邀请' }}
@@ -372,6 +444,12 @@ async function doExit() {
   gap: 10px;
 }
 
+.transfer-cancel {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 10px;
+}
+
 .contact-name {
   margin: 0 0 4px;
   font-size: 15px;
@@ -436,5 +514,11 @@ async function doExit() {
   margin: 0 0 8px;
   font-size: 12px;
   color: var(--td-text-color-secondary);
+}
+
+.field-error {
+  margin: 6px 0 0;
+  font-size: 12px;
+  color: var(--td-error-color);
 }
 </style>

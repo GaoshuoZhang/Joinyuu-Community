@@ -1,18 +1,25 @@
 <script setup lang="ts">
-import { onMounted, reactive, ref } from 'vue'
-import { useRouter } from 'vue-router'
+import { computed, onMounted, reactive, ref } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
 import { Button, Cell, DateTimePicker, Input, Loading, Picker, Popup, Textarea, Toast, Upload } from 'tdesign-mobile-vue'
 import type { UploadFile } from 'tdesign-mobile-vue'
-import { createApplication, fetchApplicationFormSchema } from '@/api/applications'
+import { createApplication, fetchApplicationFormSchema, fetchMyApplicationPayload, resubmitApplication } from '@/api/applications'
 import { uploadFile } from '@/api/uploads'
 import { ApiError } from '@/api/http'
 import EmptyBlock from '@/components/shared/EmptyBlock.vue'
 import type { ApplicationFormField, ApplicationFormSchema, ApplicationType, UploadedFileInfo } from '@/types'
+import { formatMockDate, mockClockVersion } from '@/mock/runtime'
+import { useDraft } from '@/composables/useDraft'
+import { useUnsavedGuard } from '@/composables/useUnsavedGuard'
 
 /* schema 驱动的申请表单渲染器（缺口 §7.1-14 自定义字段 + §7.1-6 资料上传）。
- * 三个独立流程页（企业入驻/合作伙伴/人才登记）各自引入本组件，字段来自 mock schema。 */
+ * 三个独立流程页（企业入驻/合作伙伴/人才登记）各自引入本组件，字段来自 mock schema；
+ * v34 支持 ?revise=<申请 id> 修改重提（附件需重新上传）；v38 增加草稿与离开保护。 */
 const props = defineProps<{ type: ApplicationType }>()
 const router = useRouter()
+const route = useRoute()
+const reviseId = String(route.query.revise ?? '')
+const revising = computed(() => !!reviseId)
 
 const schema = ref<ApplicationFormSchema | null>(null)
 const loading = ref(true)
@@ -21,6 +28,15 @@ const submitting = ref(false)
 
 const values = reactive<Record<string, string>>({})
 const filesMap = reactive<Record<string, UploadFile[]>>({})
+
+/* v38 草稿与离开保护（附件不进入草稿） */
+const { hasDraft: draftAvailable, savedAt: draftSavedAt, detect: detectDraft, restore: restoreDraft, discard: discardDraft, clear: clearDraft, rebase: rebaseDraft, dirty } = useDraft(
+  `application-${props.type}`,
+  () => ({ ...values }),
+  (value) => Object.assign(values, value),
+  { enabled: () => !revising.value, isEmpty: () => Object.values(values).every((item) => !item) },
+)
+useUnsavedGuard(() => dirty.value)
 
 onMounted(load)
 
@@ -34,10 +50,21 @@ async function load() {
       values[f.key] = ''
       if (f.type === 'upload') filesMap[f.key] = []
     }
+    if (reviseId) {
+      const payload = await fetchMyApplicationPayload(reviseId)
+      const fields = payload.fields ?? {}
+      for (const f of data.fields) {
+        if (f.type === 'upload') continue
+        const value = fields[f.key]
+        if (value !== undefined && value !== null && typeof value !== 'object') values[f.key] = String(value)
+      }
+    }
   } catch (e) {
     error.value = e instanceof ApiError ? e.message : '表单加载失败，请稍后重试'
   } finally {
     loading.value = false
+    rebaseDraft()
+    if (!revising.value) detectDraft()
   }
 }
 
@@ -65,15 +92,14 @@ function optionLabel(f: ApplicationFormField): string {
 const dateField = ref<ApplicationFormField | null>(null)
 const dateVisible = ref(false)
 const dateValue = ref('')
-const todayStr = (() => {
-  const d = new Date()
-  const pad = (n: number) => String(n).padStart(2, '0')
-  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`
-})()
+const todayStr = computed(() => {
+  void mockClockVersion.value
+  return formatMockDate()
+})
 
 function openDate(f: ApplicationFormField) {
   dateField.value = f
-  dateValue.value = values[f.key] || todayStr
+  dateValue.value = values[f.key] || todayStr.value
   dateVisible.value = true
 }
 
@@ -110,19 +136,26 @@ function uploadedOf(f: ApplicationFormField): UploadedFileInfo[] {
     }))
 }
 
+/* v38 行内校验：字段级错误 */
+const fieldErrors = reactive<Record<string, string>>({})
+
 async function onSubmit() {
   const s = schema.value
   if (!s) return
+  Object.keys(fieldErrors).forEach((key) => delete fieldErrors[key])
   for (const f of s.fields) {
     if (f.type === 'upload') {
       if (f.required && uploadedOf(f).length === 0) {
+        fieldErrors[f.key] = `请上传${f.label}`
         Toast(`请上传${f.label}`)
         return
       }
       continue
     }
     if (f.required && !values[f.key]?.trim()) {
-      Toast(f.type === 'select' || f.type === 'date' ? `请选择${f.label}` : `请填写${f.label}`)
+      const message = f.type === 'select' || f.type === 'date' ? `请选择${f.label}` : `请填写${f.label}`
+      fieldErrors[f.key] = message
+      Toast(message)
       return
     }
   }
@@ -139,8 +172,14 @@ async function onSubmit() {
   }
   submitting.value = true
   try {
-    await createApplication({ type: props.type, fields })
-    Toast('申请已提交，审核结果将站内信通知')
+    if (revising.value) {
+      await resubmitApplication(reviseId, { type: props.type, fields })
+      Toast('已重新提交审核')
+    } else {
+      await createApplication({ type: props.type, fields })
+      Toast('申请已提交，审核结果将站内信通知')
+    }
+    clearDraft()
     await router.push('/me/applications')
   } catch (e) {
     Toast(e instanceof ApiError ? e.message : '提交失败，请稍后重试')
@@ -153,13 +192,19 @@ async function onSubmit() {
 <template>
   <div class="page-fade-in apply-form">
     <Loading v-if="loading" class="state" text="加载中…" />
-    <EmptyBlock v-else-if="error" :text="error" />
+    <EmptyBlock v-else-if="error" :text="error" action-text="重试" @action="load" />
 
     <template v-else-if="schema">
       <header class="head">
-        <h1 class="title">{{ schema.title }}</h1>
-        <p class="subtitle">{{ schema.subtitle }}</p>
+        <h1 class="title">{{ revising ? `修改重提 · ${schema.title}` : schema.title }}</h1>
+        <p class="subtitle">{{ revising ? '修改后将重新进入审核队列；附件需重新上传。' : schema.subtitle }}</p>
       </header>
+
+      <div v-if="draftAvailable && !revising" class="draft-bar">
+        <span>检测到 {{ draftSavedAt }} 的未保存草稿</span>
+        <a @click="restoreDraft">恢复</a>
+        <a @click="discardDraft">放弃</a>
+      </div>
 
       <div v-if="schema.tips?.length" class="m-card tips">
         <p class="tips-title">申请前请准备</p>
@@ -221,11 +266,12 @@ async function onSubmit() {
             :request-method="requestUpload"
           />
 
+          <p v-if="fieldErrors[f.key]" class="field-error">{{ fieldErrors[f.key] }}</p>
           <p v-if="f.help" class="help">{{ f.help }}</p>
         </div>
 
         <Button theme="primary" size="large" block class="submit" :loading="submitting" @click="onSubmit">
-          {{ submitting ? '提交中…' : schema.submitLabel }}
+          {{ submitting ? '提交中…' : revising ? '重新提交' : schema.submitLabel }}
         </Button>
       </div>
     </template>
@@ -260,6 +306,32 @@ async function onSubmit() {
   display: flex;
   flex-direction: column;
   gap: 12px;
+}
+
+.draft-bar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  border-radius: var(--td-radius-default);
+  background: var(--td-warning-color-1, #fff1e9);
+  font-size: 12px;
+  color: var(--td-text-color-secondary);
+}
+
+.draft-bar a {
+  color: var(--td-brand-color);
+  cursor: pointer;
+}
+
+.draft-bar a:first-of-type {
+  margin-left: auto;
+}
+
+.field-error {
+  margin: 6px 0 0;
+  font-size: 12px;
+  color: var(--td-error-color);
 }
 
 .head .title {
@@ -304,7 +376,7 @@ async function onSubmit() {
 
 .tip-line span {
   color: var(--td-brand-color);
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 600;
 }
 

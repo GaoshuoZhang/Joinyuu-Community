@@ -1,6 +1,7 @@
 import type { CommunityPolicy, EnterpriseRecord, TalentCard, TalentMember } from '@/types'
-import { accounts, communityPolicies, enterprises, individualShowcases, talentMembers } from '@/mock/db'
+import { accounts, communityPolicies, enterprises, individualShowcases, nextMockId, nowStamp, serviceApplicationsByUid, talentMembers } from '@/mock/db'
 import type { IndividualShowcase } from '@/mock/db'
+import { readPayload } from '@/mock/session'
 import { fail, withLatency } from '@/mock/latency'
 
 /* [MOCK-ONLY] 社区域 handler（社区服务政策 / 人才库 / 企业库）。
@@ -14,6 +15,33 @@ function matchKeyword(text: string, kw?: string): boolean {
   if (!kw) return true
   return text.includes(kw)
 }
+
+/* ===== v42 社区公共服务在线申请 ===== */
+export async function applyCommunityService(payload: { policyId: string; applicantName: string; phone: string; note?: string }): Promise<{ id: string }> {
+  return withLatency(() => {
+    const uid = readPayload()?.sub
+    if (!uid) fail(401, '请先登录后再申请')
+    const policy = communityPolicies.find((p) => p.id === payload.policyId)
+    if (!policy) fail(404, '服务不存在')
+    if (!payload.applicantName.trim()) fail(400, '请填写申请人')
+    if (!/^1\d{10}$/.test(payload.phone.trim())) fail(400, '请填写正确的联系电话')
+    const list = (serviceApplicationsByUid[uid] ??= [])
+    const id = nextMockId('SA')
+    list.unshift({ id, policyId: policy.id, policyTitle: policy.title, applicantName: payload.applicantName.trim(), phone: payload.phone.trim(), note: payload.note?.trim() || undefined, status: 'pending', at: nowStamp() })
+    return { id }
+  }, 200)
+}
+
+export async function listMyServiceApplications(): Promise<import('@/types').ServiceApplication[]> {
+  return withLatency(() => {
+    const uid = readPayload()?.sub
+    if (!uid) return []
+    return [...(serviceApplicationsByUid[uid] ?? [])]
+  }, 120)
+}
+
+/* ===== v42 社区公共服务在线申请 ===== */
+
 
 export async function fetchPolicies(query: CommunityPoliciesQuery = {}): Promise<CommunityPolicy[]> {
   return withLatency(() => {
@@ -45,14 +73,16 @@ export async function fetchTalentCard(uid: string): Promise<TalentCard> {
     const stored = individualShowcases[uid]
     const base: Partial<IndividualShowcase> = stored ?? (talent ? { displayName: talent.name, intro: talent.intro, skills: talent.skills } : {})
     if (!base.displayName) fail(404, '人才名片不存在或未公开')
+    /* [MOCK-ONLY] v35 名片字段可见性：按保存的公开设置过滤敏感字段 */
+    const visibility = base.visibility ?? { age: true, politicalStatus: true }
     return {
       uid,
       name: base.displayName,
       avatar: account?.avatar,
       level: identity?.level,
       levelName: identity?.levelName,
-      age: base.age,
-      politicalStatus: base.politicalStatus,
+      age: visibility.age ? base.age : undefined,
+      politicalStatus: visibility.politicalStatus ? base.politicalStatus : undefined,
       intro: base.intro ?? '',
       industryExperience: base.industryExperience,
       skills: base.skills ?? [],

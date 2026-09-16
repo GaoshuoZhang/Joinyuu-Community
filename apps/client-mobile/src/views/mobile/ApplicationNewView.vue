@@ -1,30 +1,62 @@
 <script setup lang="ts">
-import { reactive, ref } from 'vue'
-import { useRouter } from 'vue-router'
-import { Button, Radio, RadioGroup, Textarea, Toast } from 'tdesign-mobile-vue'
-import { createApplication } from '@/api/applications'
+import { computed, onMounted, reactive, ref } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
+import { Button, Input, Radio, RadioGroup, Textarea, Toast } from 'tdesign-mobile-vue'
+import { createApplication, fetchMyApplicationPayload, resubmitApplication } from '@/api/applications'
 import { ApiError } from '@/api/http'
 import type { IdentityType } from '@/types'
 
 /* 身份绑定申请（/applications/new）：把已有账号绑定到社区个体 / 社区企业身份。
- * 企业合作（企业入驻 / 合作伙伴）与人才登记为独立流程与表单页，见首页入口。 */
+ * 企业合作（企业入驻 / 合作伙伴）与人才登记为独立流程与表单页，见首页入口。
+ * v34 支持 ?revise=<申请 id> 修改重提。 */
 const router = useRouter()
+const route = useRoute()
+const reviseId = String(route.query.revise ?? '')
+const revising = computed(() => !!reviseId)
 
 const form = reactive({
   identityType: 'community_individual' as IdentityType,
+  organizationName: '',
   note: '',
 })
 const submitting = ref(false)
+
+onMounted(async () => {
+  if (!reviseId) return
+  try {
+    const payload = await fetchMyApplicationPayload(reviseId)
+    if (payload.identityType) form.identityType = payload.identityType
+    form.organizationName = payload.organizationName ?? ''
+    form.note = payload.note ?? ''
+  } catch (e) {
+    Toast(e instanceof ApiError ? e.message : '加载原申请失败')
+  }
+})
 
 async function onSubmit() {
   if (!form.identityType) {
     Toast('请选择要绑定的身份类型')
     return
   }
+  if (form.identityType === 'community_enterprise' && !form.organizationName.trim()) {
+    Toast('请填写要绑定的社区企业名称')
+    return
+  }
   submitting.value = true
   try {
-    await createApplication({ type: 'identity', identityType: form.identityType, note: form.note.trim() || undefined })
-    Toast('申请已提交，审核结果将站内信通知')
+    const payload = {
+      type: 'identity' as const,
+      identityType: form.identityType,
+      organizationName: form.identityType === 'community_enterprise' ? form.organizationName.trim() : undefined,
+      note: form.note.trim() || undefined,
+    }
+    if (revising.value) {
+      await resubmitApplication(reviseId, payload)
+      Toast('已重新提交审核')
+    } else {
+      await createApplication(payload)
+      Toast('申请已提交，审核结果将站内信通知')
+    }
     await router.push('/me/applications')
   } catch (e) {
     Toast(e instanceof ApiError ? e.message : '提交失败，请稍后重试')
@@ -37,8 +69,8 @@ async function onSubmit() {
 <template>
   <div class="page-fade-in apply">
     <header class="head">
-      <h1 class="title">身份绑定申请</h1>
-      <p class="subtitle">适用于已具备社区个体 / 社区企业资质，需绑定到当前账号的用户</p>
+      <h1 class="title">{{ revising ? '修改重提 · 身份绑定申请' : '身份绑定申请' }}</h1>
+      <p class="subtitle">{{ revising ? '修改后将重新进入审核队列' : '适用于已具备社区个体 / 社区企业资质，需绑定到当前账号的用户' }}</p>
     </header>
 
       <div class="m-card form">
@@ -49,6 +81,11 @@ async function onSubmit() {
           <Radio value="community_individual" label="社区个体" />
           <Radio value="community_enterprise" label="社区企业" />
         </RadioGroup>
+      </div>
+
+      <div v-if="form.identityType === 'community_enterprise'" class="field">
+        <label>社区企业名称</label>
+        <Input v-model="form.organizationName" :maxlength="60" placeholder="请填写已入驻社区的企业全称" clearable />
       </div>
 
       <div class="field">
@@ -62,7 +99,7 @@ async function onSubmit() {
       </div>
 
       <Button theme="primary" size="large" block class="submit" :loading="submitting" @click="onSubmit">
-        {{ submitting ? '提交中…' : '提交申请' }}
+        {{ submitting ? '提交中…' : revising ? '重新提交' : '提交申请' }}
       </Button>
       <p class="tip">同类型申请审核中不可重复提交；企业入驻 / 合作伙伴 / 人才登记请从首页对应入口发起。</p>
     </div>

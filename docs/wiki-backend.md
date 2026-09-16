@@ -17,15 +17,15 @@
 - `apps/api`：NestJS 11 + Prisma 6 + PostgreSQL 17 + Redis 7.4 的后端应用（Monorepo 内新包）
 - `/api/admin/**` 全量端点（**191 个**，见第 7 节清单；含 M1.5 新增的权限/会话/监控/素材/归档/导出/打印等），另加 `/api/health` 与 `/api/public/files/:key` 两个公开端点
 - 管理端认证（图形验证码 + JWT + 登出黑名单 + Redis 登录锁定 + 会话索引/强制下线/改密踢线）、审计日志服务端化、业务事件驱动通知、定时任务（定时发布/活动结束/租约临期/自动归档/自动删除，共 6 个）
-- RBAC：49 个权限码 + 4 个内置角色（super/operator/auditor/space-ops），`@RequirePermission` 覆盖 33/35 controller（health/files 为 `@Public`，notifications 有意仅登录）
+- RBAC：49 个权限码 + 4 个内置角色（super/operator/auditor/space-ops），34 个 admin controller 中 33 个挂 `@RequirePermission`，notifications 有意仅登录；health/files 为公开 controller
 - 归档体系：13 个业务域软删除（`deletedAt`/`deletedBy`）+ 可归档时间戳（`archivableAt`）+ 归档管理恢复/彻底删除 + 自动归档/自动删除
-- 文件上传与素材库（本地磁盘驱动；上传魔数嗅探禁 SVG；大小上限由系统配置，1-100MB 默认 10）
+- 文件上传与素材库（MinIO/本地磁盘双驱动；上传魔数嗅探禁 SVG；大小上限由系统配置，1-100MB 默认 10）
 - 积分/经验发放引擎（按规则 code 触发，事务写流水）
 - admin web 接入：`src/api/` 层 HTTP 化改造（函数签名不变，视图零改动），M1-E 起删除共享 mock
 - 种子数据：从 M0 mock 迁移并按 M1.5 改造，保持全部编号与跨模块引用一致（见第 11 节）
 - `/api/app/**` 客户端接口**仅输出设计文档**（M1-E 交付 `docs/api-app-design.md`），不实现
 
-**范围外**（留给 M2/M3）：客户端 Web、微信小程序、微信登录、支付、对象存储（MinIO，当前为本地磁盘驱动）、CI/CD、分布式部署。
+**范围外**：M2-R `/api/app/**` 实现（当前暂不启动）、桌面客户端、微信小程序、微信登录、支付、CI/CD、分布式部署。MinIO 双驱动已实现，但真实对象 I/O 尚缺 e2e 覆盖。
 
 ## 2. 技术栈与工程结构
 
@@ -39,10 +39,10 @@
 | 密码 | bcryptjs（纯 JS 实现，规避 Windows 原生编译问题） |
 | 富文本清洗 | sanitize-html **精确锁定 2.16.0**（2.17.x 依赖 htmlparser2@12 纯 ESM，与 Nest CJS/jest 链不兼容） |
 | 文件上传 | `@nestjs/platform-express` FileInterceptor（multer 内存存储，硬上限 100MB 兜底，实际限制按系统配置） |
-| 对象存储 | 本地磁盘驱动 `StorageService`（`UPLOAD_DIR` 可配，默认 `apps/api/uploads`；MinIO 驱动待接入） |
+| 对象存储 | `StorageService` 双驱动：MinIO 或本地磁盘回退（`UPLOAD_DIR` 可配，默认 `apps/api/uploads`） |
 | 验证码 | 自研 SVG dataURL（`captcha.util.ts`，4 位去易混字符，无第三方依赖） |
 | 时间 | 原生 Date + `common/utils/time.ts` 统一格式化（`TZ=Asia/Shanghai`） |
-| 测试 | Jest + supertest（e2e 25 套件 / 163 用例） |
+| 测试 | Jest + supertest（源码静态清点：e2e 25 套件 / 170 声明；unit 4 套件 / 25 声明；最近记录 e2e 25 / 169 全量通过） |
 
 **目录结构**（`apps/api/`）：
 
@@ -50,7 +50,7 @@
 apps/api/
   prisma/
     schema.prisma        # 全量实体建模（43 模型，见第 5 节）
-    migrations/          # prisma migrate 产出（14 个迁移）
+    migrations/          # prisma migrate 产出（17 个迁移）
     seed.ts              # M0 mock 迁移 + M1.5 治理种子（见第 11 节）
     seed-data/           # 各域种子数据（seed 唯一数据源；api tsconfig exclude）
   src/
@@ -258,11 +258,11 @@ TZ=Asia/Shanghai
 ### 6.2 RBAC 权限模型（M1.5 R1/R2）
 
 - **权限码 = 菜单路径或 `perm:xxx` 按钮码**，共 **49 码**（种子 `permissionCatalog` 为唯一目录），`*` 为超级管理员全量标记；`@RequirePermission(code | code[])` 支持 any-of 语义；`PermissionGuard` 叠加在 `JwtAuthGuard` 之后，权限集合命中任一所需码或含 `*` 放行，否则 403「无权限执行该操作」；未声明 `@RequirePermission` 的端点仅需登录。
-- **覆盖范围**：35 个 controller 中 33 个挂 `@RequirePermission`；`health` 与 `files`（公开文件读取）为 `@Public`，`notifications`（通知中心）有意仅登录。无声明 controller 内的个别端点（如 `GET /enterprises/options`、`GET /users/options`）仅需登录。
+- **覆盖范围**：36 个 controller 中，34 个属于 admin；其中 33 个挂 `@RequirePermission`，`notifications` 有意仅登录。`health` 与 `files`（公开文件读取）为公开 controller。无声明 controller 内的个别端点（如 `GET /enterprises/options`、`GET /users/options`）仅需登录。
 - **权限目录（按模块）**：工作台 `/dashboard`；社区成员 `/users`、`/individuals`、`/enterprises`、`/external-enterprises`、`/approvals` + 企业按钮码 `perm:enterprise:create|update|disable|enable|delete`、`perm:external-enterprise:create|update|disable|enable|delete`；业务运营 `/demands`、`/demands/review`、`/projects`、`/events`；空间管理 `/workstations`、`/workstations/offices`、`/workstations/leases`、`/spaces`、`/spaces/reservations`；内容管理 `/contents/publish`、`/contents/submissions`、`/contents/columns`、`/contents/stats`、`/contents/showcase`、`/contents/announcements`；积分商城 `/mall/goods`、`/mall/orders`；规则管理 `/rules/points`、`/rules/experience`、`/rules/levels`、`/rules/ledger`、`/rules/experience-records`；系统管理 `/system/dicts`、`/system/config`、`/logs/audit`、`/system/roles`、`/system/admins`、`/system/sessions`、`/system/assets`、`/system/monitor`、`/logs/login`、`/system/trash`、`/system/export`。
 - **内置角色**（`AdminRole` + `AdminRolePermission`）：`super`（`*` 全量）、`operator`（业务运营+内容+商城）、`auditor`（审核类）、`space-ops`（空间域）；角色权限保存即时失效关联管理员的权限缓存（`auth:admin:perms:<username>`，TTL 2h）。
 - **权限点目录接口**：`GET /api/admin/permissions/catalog` 按模块分组返回，供角色勾选矩阵渲染。
-- 数据范围（域维度）未实现：权限控制为菜单/端点级，无行级 dataScope 过滤。
+- 数据范围已按 7 个业务域实现：`AdminRole.dataScope` + `DomainScopeGuard` 对 URL 域做允许/拒绝；当前仍无行级、组织级、所有者级或租户级过滤。
 
 ### 6.3 安全加固基线（M1.5）
 
@@ -782,7 +782,7 @@ TZ=Asia/Shanghai
 - [x] R10 暗色模式：纯前端 token（无后端）
 - [x] R11 列配置：纯前端 localStorage（无后端）
 - [x] R12 归档：13 域软删除 + 可归档时间戳 + 归档管理（列表/设置/恢复/彻底删除）+ 自动归档/自动删除调度 + 用户历史域三重确认
-- **验证**：e2e **25 套件 / 163 用例**全绿（trash 14 / assets 8 / sanitize 4 / monitor 3 / system-rbac 7 / auth-security 7 / admins 7 / export 5 / dashboard-trend 2 等新增/重写套件；`test/helpers/login.ts` 提供验证码登录助手）；`api tsc --noEmit` + `build:api`、`admin tsc --noEmit` + `build:admin` 通过；`pnpm db:reset` 幂等。
+- **验证口径**：当前源码静态清点为 e2e **25 套件 / 170 个用例声明**、unit **4 套件 / 25 个用例声明**；最近一次有记录的 e2e 全量通过为 **25 套件 / 169 用例**。历史 `api/admin tsc --noEmit`、build 与 `pnpm db:reset` 已通过；新增声明必须重跑后才能并入“全绿”口径。
 
 ## 14. 工程约定
 

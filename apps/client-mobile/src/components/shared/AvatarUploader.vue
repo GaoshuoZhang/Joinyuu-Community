@@ -60,8 +60,11 @@ async function onChange(event: Event) {
     class="avatar-uploader"
     :class="[`shape-${shape}`, { uploading }]"
     role="button"
+    tabindex="0"
     :aria-label="shape === 'round' ? '上传企业 Logo' : '更换头像'"
     @click="pick"
+    @keydown.enter.prevent="pick"
+    @keydown.space.prevent="pick"
   >
     <Avatar :size="size" :shape="shape" :image="image" class="avatar-el">{{ fallback }}</Avatar>
     <span class="mask">{{ uploading ? '上传中…' : '更换' }}</span>
@@ -98,7 +101,7 @@ async function onChange(event: Event) {
   bottom: 0;
   padding: 1px 0 2px;
   text-align: center;
-  font-size: 10px;
+  font-size: 12px;
   line-height: 1.4;
   color: #fff;
   background: rgba(0, 0, 0, 0.4);

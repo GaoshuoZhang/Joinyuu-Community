@@ -1,18 +1,26 @@
 <script setup lang="ts">
 import { onMounted, ref } from 'vue'
-import { useRouter } from 'vue-router'
-import { Button, Input, Loading, Tag } from 'tdesign-mobile-vue'
+import { useRoute, useRouter } from 'vue-router'
+import { Button, Input, Tag } from 'tdesign-mobile-vue'
 import { fetchEvents } from '@/api/events'
 import { useAsyncList } from '@/composables/useAsyncList'
+import { useRefreshOnActivate } from '@/composables/useRefreshOnActivate'
+import { useAnimSuppress } from '@/composables/useAnimSuppress'
+import { useRouteQuerySync } from '@/composables/useRouteQuerySync'
 import EmptyBlock from '@/components/shared/EmptyBlock.vue'
+import ListSkeleton from '@/components/ListSkeleton.vue'
 import type { CommunityEvent } from '@/types'
 
+useAnimSuppress()
+
 /* 移动活动列表：类型 chips 横滑 + 关键词 + 纵列卡片；发布活动为管理端能力，不提供入口 */
+const route = useRoute()
 const router = useRouter()
 
 const TYPE_CHIPS = ['全部', '沙龙', '培训', '路演', '社交']
-const activeType = ref('全部')
-const keyword = ref('')
+const initialType = String(route.query.type ?? '')
+const activeType = ref(TYPE_CHIPS.includes(initialType) ? initialType : '全部')
+const keyword = ref(String(route.query.q ?? ''))
 
 const { data, loading, error, run } = useAsyncList<CommunityEvent>(() =>
   fetchEvents({ type: activeType.value === '全部' ? undefined : activeType.value, keyword: keyword.value.trim() || undefined }),
@@ -20,12 +28,37 @@ const { data, loading, error, run } = useAsyncList<CommunityEvent>(() =>
 
 onMounted(run)
 
+/* v38：返回时刷新活动列表 */
+useRefreshOnActivate(run)
+
+/* v40：类型/关键词同步 URL */
+function syncQuery() {
+  const query: Record<string, string> = {}
+  if (activeType.value !== '全部') query.type = activeType.value
+  if (keyword.value.trim()) query.q = keyword.value.trim()
+  const current = route.query as Record<string, string>
+  if (current.type === query.type && current.q === query.q) return
+  void router.replace({ query })
+}
+
+/* v41：外部跳转带来的类型/关键词同步 */
+useRouteQuerySync('/events', (q) => {
+  const nextType = TYPE_CHIPS.includes(q.type ?? '') ? String(q.type) : '全部'
+  const nextKeyword = q.q ?? ''
+  if (nextType === activeType.value && nextKeyword === keyword.value) return
+  activeType.value = nextType
+  keyword.value = nextKeyword
+  run()
+})
+
 function pickType(chip: string) {
   activeType.value = chip
+  syncQuery()
   run()
 }
 
 function search() {
+  syncQuery()
   run()
 }
 </script>
@@ -52,14 +85,12 @@ function search() {
       <Button theme="primary" @click="search">搜索</Button>
     </div>
 
-    <Loading v-if="loading" class="state" text="加载中…" />
-    <section v-else-if="error" class="error-box">
-      <p>{{ error }}</p>
-      <Button variant="outline" size="small" @click="run">重试</Button>
-    </section>
+    <ListSkeleton v-if="loading && !(data ?? []).length" />
+    <EmptyBlock v-else-if="error" :text="error" action-text="重试" @action="run" />
     <EmptyBlock v-else-if="(data ?? []).length === 0" text="暂无符合条件的活动" />
     <div v-else class="event-list stagger">
-      <article v-for="ev in data" :key="ev.id" class="event-card m-card" @click="router.push(`/events/${ev.id}`)">
+      <p class="list-count">共 {{ (data ?? []).length }} 场活动</p>
+      <article v-for="ev in data" :key="ev.id" class="event-card m-card" v-pressable @click="router.push(`/events/${ev.id}`)">
         <div class="event-top">
           <span class="type-tag">{{ ev.typeLabel }}</span>
           <span class="capacity">已报名 {{ ev.approvedCount }}/{{ ev.capacity }}</span>
@@ -137,7 +168,7 @@ function search() {
 .type-tag {
   font-size: 12px;
   padding: 2px 8px;
-  border-radius: var(--td-radius-small);
+  border-radius: var(--td-tag-square-border-radius, 4px);
   background: var(--td-brand-color-1);
   color: var(--td-brand-color);
 }

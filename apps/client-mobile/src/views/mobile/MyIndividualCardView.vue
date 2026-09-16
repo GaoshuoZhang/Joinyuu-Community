@@ -1,15 +1,19 @@
 <script setup lang="ts">
 import { computed, onMounted, reactive, ref } from 'vue'
 import { useRouter } from 'vue-router'
-import { Avatar, Button, Input, Loading, Tag, Textarea, Toast } from 'tdesign-mobile-vue'
+import { Loading, Avatar, Button, Input, Switch, Tag, Textarea, Toast } from 'tdesign-mobile-vue'
 import { fetchMyCards, updateIndividualCard } from '@/api/enterprises'
 import { useAsyncList } from '@/composables/useAsyncList'
+import { useDraft } from '@/composables/useDraft'
+import { useUnsavedGuard } from '@/composables/useUnsavedGuard'
+import { useAuthStore } from '@/stores/auth'
 import { ApiError } from '@/api/http'
 import EmptyBlock from '@/components/shared/EmptyBlock.vue'
 
 /* 个人名片（简历式，[MOCK-ONLY]，缺口 §7.1-16）：预览 + 分段编辑（可增删）；
- * 头像同步个人资料；保存即生效并公开到社区人才库。 */
+ * 头像同步个人资料；保存即生效并公开到社区人才库；v35 支持敏感字段可见性与公开预览。 */
 const router = useRouter()
+const auth = useAuthStore()
 const { data, loading, error, run } = useAsyncList(fetchMyCards)
 onMounted(async () => {
   await run()
@@ -18,6 +22,7 @@ onMounted(async () => {
 
 const card = computed(() => data.value?.individual)
 const submitting = ref(false)
+const formErrors = reactive({ displayName: '', intro: '', links: '' })
 
 type Entry = Record<string, string>
 const form = reactive({
@@ -33,7 +38,18 @@ const form = reactive({
   honors: [] as Entry[],
   socials: [] as Entry[],
   customLinks: [] as Entry[],
+  showAge: true,
+  showPoliticalStatus: true,
 })
+
+/* v38 草稿与离开保护 */
+const { hasDraft: draftAvailable, savedAt: draftSavedAt, detect: detectDraft, restore: restoreDraft, discard: discardDraft, clear: clearDraft, rebase: rebaseDraft, dirty } = useDraft(
+  'individual-card',
+  () => ({ ...form }),
+  (value) => Object.assign(form, value),
+  { enabled: () => !!card.value, isEmpty: () => !form.displayName.trim() && !form.intro.trim() },
+)
+useUnsavedGuard(() => dirty.value)
 
 /** 可增删的分段：key = form 中的列表字段 */
 const LIST_SECTIONS: {
@@ -112,6 +128,10 @@ function fillForm() {
   form.honors = (c.honors ?? []).map((h) => ({ name: h.name ?? '', date: h.date ?? '' }))
   form.socials = (c.socials ?? []).map((l) => ({ label: l.label ?? '', url: l.url ?? '' }))
   form.customLinks = (c.customLinks ?? []).map((l) => ({ label: l.label ?? '', url: l.url ?? '' }))
+  form.showAge = c.visibility?.age ?? true
+  form.showPoliticalStatus = c.visibility?.politicalStatus ?? true
+  rebaseDraft()
+  detectDraft()
 }
 
 function parseSkills(): string[] {
@@ -129,17 +149,13 @@ function removeEntry(key: (typeof LIST_SECTIONS)[number]['key'], index: number) 
 }
 
 async function onSave() {
-  if (!form.displayName.trim()) {
-    Toast('请输入姓名')
-    return
-  }
-  if (form.intro.trim().length < 10) {
-    Toast('个人简介至少 10 个字')
-    return
-  }
+  formErrors.displayName = form.displayName.trim() ? '' : '请输入姓名'
+  formErrors.intro = form.intro.trim().length >= 10 ? '' : '个人简介至少 10 个字'
   const links = [...form.socials, ...form.customLinks]
-  if (links.some((l) => (l.url ?? '').trim() && !/^https?:\/\//.test(l.url.trim()))) {
-    Toast('链接需以 http(s):// 开头')
+  formErrors.links = links.some((l) => (l.url ?? '').trim() && !/^https?:\/\//.test(l.url.trim())) ? '链接需以 http(s):// 开头' : ''
+  const first = Object.values(formErrors).find(Boolean)
+  if (first) {
+    Toast(first)
     return
   }
   submitting.value = true
@@ -157,8 +173,10 @@ async function onSave() {
       honors: form.honors.map((h) => ({ name: h.name ?? '', date: h.date ?? '' })),
       socials: form.socials.map((l) => ({ label: l.label ?? '', url: l.url ?? '' })),
       customLinks: form.customLinks.map((l) => ({ label: l.label ?? '', url: l.url ?? '' })),
+      visibility: { age: form.showAge, politicalStatus: form.showPoliticalStatus },
     })
     Toast('个人名片已保存')
+    clearDraft()
     await run()
     fillForm()
   } catch (e) {
@@ -172,9 +190,14 @@ async function onSave() {
 <template>
   <div class="page-fade-in m-card-page">
     <Loading v-if="loading" class="state" text="加载中…" />
-    <EmptyBlock v-else-if="error" :text="error" />
+    <EmptyBlock v-else-if="error" :text="error" action-text="重试" @action="run" />
     <EmptyBlock v-else-if="!card" text="当前账号没有个人名片" />
     <template v-else>
+      <div v-if="draftAvailable" class="draft-bar">
+        <span>检测到 {{ draftSavedAt }} 的未保存草稿</span>
+        <a v-pressable @click="restoreDraft">恢复</a>
+        <a v-pressable @click="discardDraft">放弃</a>
+      </div>
       <section class="m-card preview">
         <div class="head">
           <Avatar size="52px" class="avatar" :image="card.avatar">{{ card.displayName.slice(0, 1) }}</Avatar>
@@ -184,6 +207,7 @@ async function onSave() {
           </div>
           <span class="card-badge">个人名片</span>
         </div>
+        <p class="preview-link" @click="router.push(`/talents/${auth.uid}`)">预览公开名片效果 ›</p>
         <div v-if="card.skills.length" class="skills">
           <Tag v-for="s in card.skills" :key="s" size="small" variant="light" theme="primary" class="skill">{{ s }}</Tag>
         </div>
@@ -195,6 +219,7 @@ async function onSave() {
         <div class="field">
           <label>姓名</label>
           <Input v-model="form.displayName" :maxlength="20" placeholder="展示在社区人才库中的名称" clearable />
+          <p v-if="formErrors.displayName" class="field-error">{{ formErrors.displayName }}</p>
         </div>
         <div class="field">
           <label>年龄</label>
@@ -211,10 +236,24 @@ async function onSave() {
         <div class="field">
           <label>个人简介</label>
           <Textarea v-model="form.intro" :autosize="{ minRows: 4, maxRows: 10 }" :maxlength="300" placeholder="介绍你的经历、专长与合作意向…" />
+          <p v-if="formErrors.intro" class="field-error">{{ formErrors.intro }}</p>
         </div>
         <div class="field">
           <label>行业经验</label>
           <Textarea v-model="form.industryExperience" :autosize="{ minRows: 3, maxRows: 8 }" :maxlength="300" placeholder="所在行业、年限与代表成果…" />
+        </div>
+      </section>
+
+      <section class="m-card">
+        <h3 class="sec-title">公开可见性</h3>
+        <p class="privacy-tip">关闭后该字段不会出现在公开人才名片中。</p>
+        <div class="switch-row">
+          <span>公开年龄</span>
+          <Switch v-model="form.showAge" />
+        </div>
+        <div class="switch-row">
+          <span>公开政治面貌</span>
+          <Switch v-model="form.showPoliticalStatus" />
         </div>
       </section>
 
@@ -235,6 +274,7 @@ async function onSave() {
       </section>
 
       <section class="m-card">
+        <p v-if="formErrors.links" class="field-error">{{ formErrors.links }}</p>
         <Button theme="primary" size="large" block :loading="submitting" @click="onSave">
           {{ submitting ? '保存中…' : '保存并公开到人才库' }}
         </Button>
@@ -251,6 +291,32 @@ async function onSave() {
   display: flex;
   flex-direction: column;
   gap: 12px;
+}
+
+.draft-bar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  border-radius: var(--td-radius-default);
+  background: var(--td-warning-color-1, #fff1e9);
+  font-size: 12px;
+  color: var(--td-text-color-secondary);
+}
+
+.draft-bar a {
+  color: var(--td-brand-color);
+  cursor: pointer;
+}
+
+.field-error {
+  margin: 6px 0 0;
+  font-size: 12px;
+  color: var(--td-error-color);
+}
+
+.draft-bar a:first-of-type {
+  margin-left: auto;
 }
 
 .state {
@@ -297,9 +363,36 @@ async function onSave() {
   flex-shrink: 0;
   font-size: 12px;
   padding: 2px 8px;
-  border-radius: var(--td-radius-small);
+  border-radius: var(--td-tag-square-border-radius, 4px);
   background: var(--td-brand-color-1);
   color: var(--td-brand-color);
+}
+
+.preview-link {
+  margin: 10px 0 0;
+  text-align: right;
+  font-size: 12px;
+  color: var(--td-brand-color);
+  cursor: pointer;
+}
+
+.privacy-tip {
+  margin: -2px 0 10px;
+  font-size: 12px;
+  color: var(--td-text-color-placeholder);
+}
+
+.switch-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 0;
+  font-size: 13px;
+  border-top: 1px solid var(--td-component-border);
+}
+
+.switch-row:first-of-type {
+  border-top: 0;
 }
 
 .skills {

@@ -1,5 +1,7 @@
 import type {
+  AddressItem,
   AppConfig,
+  ArticleComment,
   ApplicationFormSchema,
   ApplicationType,
   Article,
@@ -9,29 +11,43 @@ import type {
   Demand,
   EnterpriseInvitation,
   EnterpriseRecord,
+  EnterpriseTransferRequest,
   ExperienceProfile,
+  FavoriteItem,
   Goods,
   HomeArticleCard,
+  HomeAnnouncement,
   HomeBanner,
   HomeDemandCard,
   HomeEventCard,
   MyApplication,
   MyEnrollmentItem,
+  MyEventFeedback,
   MyIndividualCard,
   MyOrder,
   MyProject,
   MyResponseItem,
   MySubmittedArticle,
   PointsRecord,
+  ReportPayload,
+  NoticeType,
   Space,
   SpaceReservation,
   TalentMember,
   UserIdentity,
   UserNotice,
 } from '@/types'
+import {
+  formatMockStamp,
+  mockNowDate,
+  nextMockId,
+  readStoredMockData,
+  registerMockStateExporter,
+} from '@/mock/runtime'
 
-/* [MOCK-ONLY] 内存数据库：实体从 apps/api/prisma/seed-data 派生（同字段形态、同 ID 体系），
- * 运行时可变状态（报名/下单/预约/已读）内存演进，刷新重置。接入 M2 真实后端后整目录退役。 */
+export { nextMockId } from '@/mock/runtime'
+
+/* [MOCK-ONLY] v33 内存数据库：实体从 seed 派生，可变状态写入版本化 localStorage 快照。 */
 
 export const appConfig: AppConfig = {
   siteName: '聚屿社区',
@@ -103,6 +119,8 @@ export interface MockAccount {
   realName?: string
   citizenId?: string
   realNameVerifiedAt?: string
+  /** v38：协议同意时间（版本化留痕为后端缺口） */
+  agreementAt?: string
 }
 
 export const accounts: MockAccount[] = [
@@ -213,7 +231,7 @@ export const demands: Demand[] = [
     categoryLabel: '设计', status: 'published', kind: 'task', publisherUid: 'U1001', publisherName: '陈屿', publisherIdentity: 'community_individual',
     deliverable: '3 个方向的 IP 概念稿、最终 VI 源文件与使用说明', budget: '¥8,000 - 15,000',
     deliverBy: '2026-09-25', contactName: '陈屿', contactPhone: '13800000001', contactEmail: 'chenyu@example.com',
-    deadline: '2026-09-30', responseCount: 3, visibilityIdentities: [], visibilityLevels: [], createdAt: '2026-09-02 10:00',
+    deadline: '2026-09-30', responseCount: 2, visibilityIdentities: [], visibilityLevels: [], createdAt: '2026-09-02 10:00',
   },
   {
     id: 'D4002', title: '社区小程序前端开发合作', description: '与社区联合开发成员端小程序，涵盖活动报名、需求广场与积分商城入口，三家社区企业联合共研。',
@@ -233,7 +251,7 @@ export const demands: Demand[] = [
     status: 'published', kind: 'task', publisherUid: 'U1006', publisherName: '木白设计工作室', publisherIdentity: 'community_enterprise', deadline: '2026-10-01',
     deliverable: '隔音改造方案、材料清单与施工报价', deliverBy: '2026-09-28',
     contactName: '林晚', contactPhone: '13800000003', contactEmail: 'linwan@example.com',
-    responseCount: 2, visibilityIdentities: [], visibilityLevels: [], createdAt: '2026-09-05 09:00',
+    responseCount: 1, visibilityIdentities: [], visibilityLevels: [], createdAt: '2026-09-05 09:00',
   },
   {
     id: 'D4005', title: '季度财税合规咨询', description: 'Q4 财税合规体检与政策解读，需要上门服务。', categoryLabel: '法务财务', status: 'published', kind: 'task',
@@ -263,17 +281,19 @@ export const demands: Demand[] = [
 /* 我的响应记录（按 uid） */
 export const responsesByUid: Record<string, MyResponseItem[]> = {
   U1001: [
-    { id: 'DR9001', demandId: 'D4004', demandTitle: '共享会议室隔音改造咨询', note: '可提供两家供应商比价方案。', at: '2026-09-06 10:00' },
-    { id: 'DR9002', demandId: 'D4001', demandTitle: '社区品牌 IP 形象共创', note: '参与概念稿方向 B。', at: '2026-09-03 15:00' },
+    { id: 'DR9001', demandId: 'D4004', demandTitle: '共享会议室隔音改造咨询', note: '可提供两家供应商比价方案。', at: '2026-09-06 10:00', responderUid: 'U1001', responderName: '陈屿', responderIdentity: 'community_individual', status: 'pending' },
+  ],
+  U1004: [
+    { id: 'DR9002', demandId: 'D4001', demandTitle: '社区品牌 IP 形象共创', note: '参与概念稿方向 B。', at: '2026-09-03 15:00', responderUid: 'U1004', responderName: '苏明远', responderIdentity: 'community_individual', status: 'pending' },
   ],
   U1014: [
-    { id: 'DR9101', demandId: 'D4001', demandTitle: '社区品牌 IP 形象共创', note: '云径设计组可参与。', at: '2026-09-04 09:00' },
+    { id: 'DR9101', demandId: 'D4001', demandTitle: '社区品牌 IP 形象共创', note: '云径设计组可参与。', at: '2026-09-04 09:00', responderUid: 'U1014', responderName: '周慕深', responderIdentity: 'external_enterprise', status: 'pending' },
   ],
 }
 
 /* [MOCK-ONLY] 演示日期工具：活动时间按「今天 + 偏移天」生成，保证报名/签到等场景在任意日期打开都可走通 */
 function demoDate(dayOffset: number, hhmm: string): string {
-  const d = new Date()
+  const d = mockNowDate()
   d.setDate(d.getDate() + dayOffset)
   const [h, m] = hhmm.split(':').map(Number)
   d.setHours(h, m, 0, 0)
@@ -329,47 +349,45 @@ export const events: CommunityEvent[] = [
 /* 我的报名（按 uid，含签到状态 [MOCK-ONLY]） */
 export const enrollmentsByUid: Record<string, MyEnrollmentItem[]> = {
   U1001: [
-    { id: 'EE7001', eventId: 'EV6005', eventTitle: '设计思维工作坊：从用户访谈到原型', startTime: '2026-09-18 14:00', location: '共享会议室 A', status: 'pending', checkedIn: false },
-    { id: 'EE7002', eventId: 'EV6001', eventTitle: '第 12 期创业夜话 · AI 应用的落地时刻', startTime: '2026-09-12 19:00', location: '岛屿咖啡区', status: 'approved', checkedIn: false },
+    { id: 'EE7002', eventId: 'EV6001', eventTitle: '第 12 期创业夜话 · AI 应用的落地时刻', startTime: events.find((event) => event.id === 'EV6001')!.startTime, location: '岛屿咖啡区', status: 'approved', checkedIn: false },
   ],
   U1004: [
-    { id: 'EE7101', eventId: 'EV6001', eventTitle: '第 12 期创业夜话 · AI 应用的落地时刻', startTime: '2026-09-12 19:00', location: '岛屿咖啡区', status: 'approved', checkedIn: true },
+    { id: 'EE7001', eventId: 'EV6005', eventTitle: '设计思维工作坊：从用户访谈到原型', startTime: events.find((event) => event.id === 'EV6005')!.startTime, location: '共享会议室 A', status: 'pending', checkedIn: false },
+    { id: 'EE7101', eventId: 'EV6001', eventTitle: '第 12 期创业夜话 · AI 应用的落地时刻', startTime: events.find((event) => event.id === 'EV6001')!.startTime, location: '岛屿咖啡区', status: 'approved', checkedIn: true },
   ],
 }
-
-/* 我的报名自增 ID */
-let enrollmentSeq = 7200
 
 /* ---------- 积分商城 ---------- */
 
 export const goods: Goods[] = [
-  { id: 'G1001', name: '会议室优先预约卡', pointsCost: 500, stock: 12, description: '未来 7 天内任意会议室时段优先预约权一张。' },
-  { id: 'G1002', name: '精品咖啡券（单杯）', pointsCost: 150, stock: 30, description: '岛屿咖啡区任意现制咖啡一杯。' },
-  { id: 'G1003', name: '聚屿周边帆布袋', pointsCost: 300, stock: 8, description: '社区联名帆布袋，路演日同款。' },
-  { id: 'G1004', name: '独立办公位体验日', pointsCost: 800, stock: 3, description: '独立办公室体验一日（工作日有效，需提前预约）。' },
-  { id: 'G1005', name: '打印机 A4 纸包月', pointsCost: 220, stock: 0, description: '公共打印机 A4 纸包月额度（补货中，暂不展示）。' },
-  { id: 'G1006', name: '已下架 · 周年纪念徽章', pointsCost: 100, stock: 5, description: '已下架商品（不展示）。', },
+  { id: 'G1001', name: '会议室优先预约卡', pointsCost: 500, stock: 12, description: '未来 7 天内任意会议室时段优先预约权一张。', fulfillment: 'service', category: 'GC002' },
+  { id: 'G1002', name: '精品咖啡券（单杯）', pointsCost: 150, stock: 30, description: '岛屿咖啡区任意现制咖啡一杯。', fulfillment: 'voucher', category: 'GC003' },
+  { id: 'G1003', name: '聚屿周边帆布袋', pointsCost: 300, stock: 8, description: '社区联名帆布袋，路演日同款。', fulfillment: 'physical', category: 'GC001' },
+  { id: 'G1004', name: '独立办公位体验日', pointsCost: 800, stock: 3, description: '独立办公室体验一日（工作日有效，需提前预约）。', fulfillment: 'service', category: 'GC002' },
+  { id: 'G1005', name: '打印机 A4 纸包月', pointsCost: 220, stock: 0, description: '公共打印机 A4 纸包月额度（补货中，暂不展示）。', fulfillment: 'physical' },
+  { id: 'G1006', name: '已下架 · 周年纪念徽章', pointsCost: 100, stock: 5, description: '已下架商品（不展示）。', fulfillment: 'physical' },
 ]
 export const goodsOffIds = ['G1006']
 export const goodsHiddenZeroStock = true
 
 export const ordersByUid: Record<string, MyOrder[]> = {
   U1001: [
-    { id: 'RO2001', goodsId: 'G1002', goodsName: '精品咖啡券（单杯）', pointsCost: 150, status: 'shipped', createdAt: '2026-08-28 12:00', shippedAt: '2026-08-30 10:00' },
-    { id: 'RO2006', goodsId: 'G1001', goodsName: '会议室优先预约卡', pointsCost: 500, status: 'pending_shipment', createdAt: '2026-09-08 15:00' },
+    { id: 'RO2001', goodsId: 'G1002', goodsName: '精品咖啡券（单杯）', pointsCost: 150, status: 'completed', fulfillment: 'voucher', voucherCode: 'JYV-8F2K6M', createdAt: '2026-08-28 12:00', finishedAt: '2026-08-28 12:00' },
+    { id: 'RO2006', goodsId: 'G1001', goodsName: '会议室优先预约卡', pointsCost: 500, status: 'pending_use', fulfillment: 'service', createdAt: '2026-09-08 15:00' },
   ],
   U1004: [
-    { id: 'RO2010', goodsId: 'G1003', goodsName: '聚屿周边帆布袋', pointsCost: 300, status: 'completed', createdAt: '2026-08-15 09:00', shippedAt: '2026-08-17 09:00' },
+    { id: 'RO2010', goodsId: 'G1003', goodsName: '聚屿周边帆布袋', pointsCost: 300, status: 'completed', fulfillment: 'physical', createdAt: '2026-08-15 09:00', shippedAt: '2026-08-17 09:00', finishedAt: '2026-08-18 10:00' },
   ],
 }
 
 /* ---------- 空间预约 ---------- */
 
 export const spaces: Space[] = [
-  { id: 'S1001', name: '岛屿咖啡区', location: '一楼东侧', capacity: 40, equipment: ['咖啡机', '白板'], needApproval: false, openTime: '08:00', closeTime: '22:00' },
-  { id: 'S1002', name: '共享会议室 A', location: '二楼 201', capacity: 12, equipment: ['投影', '视频会议', '白板'], needApproval: true, openTime: '09:00', closeTime: '21:00' },
-  { id: 'S1003', name: '聚屿路演厅', location: '三楼 301', capacity: 120, equipment: ['舞台灯光', '音响', '直播机位'], needApproval: true, openTime: '09:00', closeTime: '21:00' },
-  { id: 'S1004', name: '共享工位区', location: '二楼 203', capacity: 30, equipment: ['升降桌', '显示器'], needApproval: false, openTime: '08:00', closeTime: '22:00' },
+  { id: 'S1001', name: '岛屿咖啡区', location: '一楼东侧', capacity: 40, equipment: ['咖啡机', '白板'], needApproval: false, openTime: '08:00', closeTime: '22:00', status: 'open', maxHours: 4, advanceDays: 30 },
+  { id: 'S1002', name: '共享会议室 A', location: '二楼 201', capacity: 12, equipment: ['投影', '视频会议', '白板'], needApproval: true, openTime: '09:00', closeTime: '21:00', status: 'open', maxHours: 4, advanceDays: 30 },
+  { id: 'S1003', name: '聚屿路演厅', location: '三楼 301', capacity: 120, equipment: ['舞台灯光', '音响', '直播机位'], needApproval: true, openTime: '09:00', closeTime: '21:00', status: 'open', maxHours: 4, advanceDays: 30 },
+  { id: 'S1004', name: '共享工位区', location: '二楼 203', capacity: 30, equipment: ['升降桌', '显示器'], needApproval: false, openTime: '08:00', closeTime: '22:00', status: 'open', maxHours: 4, advanceDays: 30 },
+  { id: 'S1005', name: '共享会议室 B', location: '二楼 202', capacity: 8, equipment: ['投影', '白板'], needApproval: true, openTime: '09:00', closeTime: '21:00', status: 'maintenance', maxHours: 2, advanceDays: 14 },
 ]
 
 export const reservationsByUid: Record<string, SpaceReservation[]> = {
@@ -377,18 +395,31 @@ export const reservationsByUid: Record<string, SpaceReservation[]> = {
     { id: 'SR5001', spaceId: 'S1002', spaceName: '共享会议室 A', date: '2026-09-20', start: '14:00', end: '16:00', status: 'approved', createdAt: '2026-09-10 10:00', identityType: 'community_individual', subjectName: '陈屿' },
   ],
   U1004: [
-    { id: 'SR5101', spaceId: 'S1002', spaceName: '共享会议室 A', date: '2026-09-21', start: '10:00', end: '12:00', status: 'pending', createdAt: '2026-09-11 09:00', identityType: 'community_enterprise', subjectName: '芯启半导体' },
+    { id: 'SR5101', spaceId: 'S1002', spaceName: '共享会议室 A', date: '2026-09-22', start: '10:00', end: '12:00', status: 'pending', createdAt: '2026-09-11 09:00', identityType: 'community_enterprise', subjectName: '芯启半导体' },
   ],
 }
 
-/** 某空间某日的已占用时段（确定性伪随机 + 已通过预约） */
+/** 某空间某日的已占用时段（基础占用 + 全账号已通过预约 + 同场地活动）。 */
 export function occupiedSlots(spaceId: string, date: string): { start: string; end: string }[] {
   const seed = [...(spaceId + date)].reduce((s, c) => s + c.charCodeAt(0), 0)
   const slots: { start: string; end: string }[] = []
   for (let h = 9; h <= 20; h++) {
     if ((seed + h) % 4 === 0) slots.push({ start: `${String(h).padStart(2, '0')}:00`, end: `${String(h + 1).padStart(2, '0')}:00` })
   }
-  return slots
+  for (const records of Object.values(reservationsByUid)) {
+    for (const reservation of records) {
+      if (reservation.spaceId === spaceId && reservation.date === date && reservation.status === 'approved') {
+        slots.push({ start: reservation.start, end: reservation.end })
+      }
+    }
+  }
+  const spaceName = spaces.find((space) => space.id === spaceId)?.name
+  for (const event of events) {
+    if (spaceName && event.location === spaceName && event.status === 'published' && event.startTime.startsWith(date)) {
+      slots.push({ start: event.startTime.slice(11, 16), end: event.endTime.slice(11, 16) })
+    }
+  }
+  return slots.filter((slot, index, list) => list.findIndex((item) => item.start === slot.start && item.end === slot.end) === index)
 }
 
 /* ---------- 内容与投稿 ---------- */
@@ -458,6 +489,76 @@ export const enterpriseExitApplications: Record<string, { status: 'pending'; rea
 
 /* [MOCK-ONLY] 企业成员邀请记录（缺口 §7.1-17：真实后端为邀请记录 + 站内信/短信，接受后写入成员） */
 export const enterpriseInvitations: EnterpriseInvitation[] = []
+
+/* [MOCK-ONLY] v35 负责人转移请求（需目标成员接受后生效） */
+export const enterpriseTransferRequests: EnterpriseTransferRequest[] = []
+
+/* [MOCK-ONLY] v35 举报记录（聚合到 Mock 运营队列，接入期接管理端举报处理） */
+export const reports: (ReportPayload & { id: string; uid: string; at: string; status: 'pending' })[] = []
+
+/* [MOCK-ONLY] v37 收藏（按用户） */
+export const favoritesByUid: Record<string, FavoriteItem[]> = {}
+
+/* [MOCK-ONLY] v37 到货提醒订阅（goods id 列表） */
+export const restockSubscriptions: Record<string, string[]> = {}
+
+/* [MOCK-ONLY] v37 Mock 埋点计数（漏斗观察，DevTools 可见） */
+export const analyticsCounters: Record<string, number> = {}
+
+/* ---------- v38：地址 / 通知偏好 / 屏蔽 / 账号申请 / 活动反馈 ---------- */
+export const addressesByUid: Record<string, AddressItem[]> = {
+  U1001: [
+    { id: 'AD1001', name: '陈屿', phone: '13800000001', address: '上海市杨浦区大学路 88 号 3 号楼 501', isDefault: true },
+  ],
+  U1004: [
+    { id: 'AD1002', name: '苏明远', phone: '13800000002', address: '上海市浦东新区张江路 100 号 芯启半导体', isDefault: true },
+  ],
+}
+
+/** 通知偏好：未配置视为全部开启 */
+export const noticePrefsByUid: Record<string, NoticeType[]> = {}
+
+/** v40：通知类型全集（偏好与未读数口径共用） */
+export const ALL_NOTICE_TYPES: NoticeType[] = ['audit_result', 'enroll_result', 'order', 'points', 'system']
+
+/** 屏蔽名单（v38 [MOCK-ONLY]） */
+export const blockedByUid: Record<string, string[]> = {}
+
+/** 账号申请（注销 / 数据导出；v38 [MOCK-ONLY]） */
+/* ===== v42 新状态（内存态，不参与快照持久化） ===== */
+export const demandMessagesByDemand: Record<string, import('@/types').DemandMessage[]> = {}
+export const projectTasksByProject: Record<string, import('@/types').ProjectTask[]> = {}
+export const projectFilesByProject: Record<string, import('@/types').ProjectFileItem[]> = {}
+export const projectMessagesByProject: Record<string, import('@/types').ProjectMessage[]> = {}
+export const pointsTaskClaimsByUid: Record<string, Record<string, string>> = {}
+export const serviceApplicationsByUid: Record<string, import('@/types').ServiceApplication[]> = {}
+export const enterpriseResponsesByEnterprise: Record<string, { id: string; demandId: string; demandTitle: string; at: string }[]> = {}
+
+export const accountRequestsByUid: Record<string, { deletion?: { reason?: string; at: string; cancelableUntil?: string }; export?: { at: string } }> = {}
+
+/** 活动反馈（按 uid + eventId；v38 [MOCK-ONLY]） */
+export const eventFeedbackByUid: Record<string, MyEventFeedback[]> = {}
+
+/* ---------- v38：文章点赞与评论 [MOCK-ONLY] ---------- */
+
+export const articleLikesByUid: Record<string, string[]> = {
+  U1001: ['A1002'],
+  U1004: ['A1001', 'SU1001'],
+}
+
+export const articleComments: ArticleComment[] = [
+  { id: 'CM1001', articleId: 'A1001', uid: 'U1004', authorName: '苏明远', content: '指南很清晰，入驻流程按这个走一遍就通了。', at: '2026-09-06 11:20' },
+  { id: 'CM1002', articleId: 'A1002', uid: 'U1001', authorName: '陈屿', content: '社区项目的三种路径总结得很到位，期待更多案例复盘。', at: '2026-09-02 09:10' },
+]
+
+/** [MOCK-ONLY] 记录一次埋点事件（接入期为真实埋点 SDK / 数据平台上报） */
+export function trackMockEvent(name: string): void {
+  analyticsCounters[name] = (analyticsCounters[name] ?? 0) + 1
+}
+
+/** 审核模拟器保留的原始申请载荷，不暴露给客户端 API。 */
+export const applicationPayloadById: Record<string, { uid: string; payload: import('@/types').ApplicationCreatePayload }> = {}
+export const articlePayloadById: Record<string, { uid: string; payload: import('@/types').ArticleCreatePayload }> = {}
 
 /* ---------- 项目协作（只读） ---------- */
 
@@ -649,9 +750,7 @@ export const noticesByUid: Record<string, UserNotice[]> = {
 
 /** 统一时间戳：YYYY-MM-DD HH:mm（与后端契约一致） */
 export function nowStamp(): string {
-  const d = new Date()
-  const pad = (n: number) => String(n).padStart(2, '0')
-  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`
+  return formatMockStamp()
 }
 
 /** 未读数（供 devtools 与壳角标） */
@@ -662,7 +761,7 @@ export function unreadCount(uid: string): number {
 /** [MOCK-ONLY] 通知触发点（与未来后端触发点一一对应） */
 export function pushNotice(uid: string, notice: Omit<UserNotice, 'id' | 'read' | 'at'>): void {
   const at = nowStamp()
-  ;(noticesByUid[uid] ??= []).unshift({ id: `UN${Date.now()}${Math.floor(Math.random() * 90 + 10)}`, at, read: false, ...notice })
+  ;(noticesByUid[uid] ??= []).unshift({ id: nextMockId('UN'), at, read: false, ...notice })
 }
 
 /** [MOCK-ONLY] 积分/经验入账（写流水 + 更新余额，对应后端 PointsEngineService） */
@@ -672,12 +771,41 @@ export function grantPoints(uid: string, delta: number, reason: string, source: 
   const records = (pointsRecordsByUid[uid] ??= [])
   const balance = (records[0]?.balance ?? account.points) + delta
   const at = nowStamp()
-  records.unshift({ id: `PT${Date.now()}`, delta, balance, reason, source, at })
+  records.unshift({ id: nextMockId('PT'), delta, balance, reason, source, at })
   account.points = balance
   pushNotice(uid, { type: 'points', title: `积分${delta >= 0 ? '到账' : '变动'} ${delta >= 0 ? '+' : ''}${delta}`, content: `${reason}，当前积分 ${balance}。`, link: '/me/points' })
 }
 
+/** [MOCK-ONLY] 社区个体经验入账；基础账号或企业身份不混入个人经验。 */
+export function grantExperience(uid: string, delta: number, reason: string): void {
+  const account = accountByUid(uid)
+  const identity = account?.identities.find((item) => item.type === 'community_individual')
+  if (!identity) return
+  const profile = (experienceByUid[uid] ??= {
+    identityLabel: '社区个体', level: 1, levelName: '初来乍到', nextLevelExp: 100, records: [],
+  })
+  const balance = (profile.records[0]?.balance ?? identity.experience ?? 0) + delta
+  profile.records.unshift({ id: nextMockId('EX'), delta, balance, reason, at: nowStamp() })
+  identity.experience = balance
+}
+
+/** [MOCK-ONLY] 社区企业经验按企业隔离。 */
+export function grantEnterpriseExperience(enterpriseId: string, delta: number, reason: string): void {
+  const profile = (enterpriseExperienceByEid[enterpriseId] ??= {
+    identityLabel: '社区企业', level: 1, levelName: '初来乍到', nextLevelExp: 100, records: [],
+  })
+  const balance = (profile.records[0]?.balance ?? 0) + delta
+  profile.records.unshift({ id: nextMockId('EX'), delta, balance, reason, at: nowStamp() })
+}
+
 /* ---------- 首页聚合卡片 ---------- */
+
+/* [MOCK-ONLY] v40 运营公告（后台公告发布后下发；接入期接 /api/app/announcements） */
+export const announcements: HomeAnnouncement[] = [
+  { id: 'AN1001', title: '第二批社区企业招募启动，9 月 30 日截止', content: '第二批社区企业招募已启动：入驻可享共享会议室优先预约、需求广场发布与路演优先报名等权益。请在「企业合作」入口提交入驻申请，运营将于 3 个工作日内审核。', at: '2026-09-12 09:00', pinned: true },
+  { id: 'AN1002', title: '9 月 26 日年度路演日观众报名中', content: '聚屿社区年度路演日将于 9 月 26 日 13:30 在聚屿路演厅举行，十个社区项目登台路演，投资人现场点评。活动页可报名。', at: '2026-09-10 10:00' },
+  { id: 'AN1003', title: '共享会议室 A 隔音改造期间使用提示', content: '共享会议室 A 将于 9 月下旬进行隔音改造，施工期间预约可能受影响，请优先使用会议室 B 或咖啡区活动位。', at: '2026-09-08 15:00' },
+]
 
 export const homeBanners: HomeBanner[] = [
   { id: 'BN1', title: '第二批社区企业招募启动', subtitle: '申请入驻，共享工位与创业资源' },
@@ -700,8 +828,8 @@ export const homeEvents: HomeEventCard[] = events
   }))
 
 export const homeDemands: HomeDemandCard[] = [
-  { id: 'D4001', title: '社区品牌 IP 形象共创', categoryLabel: '设计', publisherName: '陈屿', publisherIdentity: 'community_individual', deliverBy: '2026-09-25', responseCount: 3 },
-  { id: 'D4004', title: '共享会议室隔音改造咨询', categoryLabel: '供应链', publisherName: '木白设计工作室', publisherIdentity: 'community_enterprise', deliverBy: '2026-09-28', responseCount: 2 },
+  { id: 'D4001', title: '社区品牌 IP 形象共创', categoryLabel: '设计', publisherName: '陈屿', publisherIdentity: 'community_individual', deliverBy: '2026-09-25', responseCount: 2 },
+  { id: 'D4004', title: '共享会议室隔音改造咨询', categoryLabel: '供应链', publisherName: '木白设计工作室', publisherIdentity: 'community_enterprise', deliverBy: '2026-09-28', responseCount: 1 },
   { id: 'D4005', title: '季度财税合规咨询', categoryLabel: '法务财务', publisherName: '苏明远', publisherIdentity: 'community_enterprise', deliverBy: '2026-10-02', responseCount: 1 },
 ]
 
@@ -721,6 +849,9 @@ export const communityPolicies: CommunityPolicy[] = [
     summary: '企业合作分「企业入驻」与「合作伙伴」两种，按需选择并提交对应申请。',
     content: '企业合作分两种方式：1）企业入驻——需在社区拥有办公空间（工位或办公室），审核通过后成为「社区企业」，可享受共享会议室优先预约、需求广场发布、路演活动优先报名等权益；2）合作伙伴——无需入驻办公，以项目与资源合作方式参与社区共建，审核通过后成为「合作企业」，可申请企业名片并优先对接社区企业资源。两种方式均从首页「企业合作」入口了解差异并提交申请，社区运营 3 个工作日内审核。',
     updatedAt: '2026-09-13',
+    version: 'v3.1',
+    effectiveAt: '2026-09-15',
+    publisher: '聚屿社区运营组',
   },
   {
     id: 'PL2',
@@ -737,6 +868,9 @@ export const communityPolicies: CommunityPolicy[] = [
     summary: '会议室/路演厅需线上预约，按需使用、超时释放、保持整洁。',
     content: '社区公共空间（会议室、路演厅、咖啡区活动位）通过「空间预约」线上预订。每次预约最长 4 小时；如需变更请提前取消，否则按爽约累计；连续两次爽约将暂停预约权限一周。使用期间请保持设备与场地整洁，离场前关闭灯光与设备。',
     updatedAt: '2026-07-20',
+    version: 'v2.0',
+    effectiveAt: '2026-08-01',
+    publisher: '聚屿社区运营组',
   },
   {
     id: 'PL4',
@@ -801,15 +935,114 @@ export const individualShowcases: Record<string, IndividualShowcase> = {
 
 /* ---------- 需求/报名自增 ID ---------- */
 
-export let demandSeq = 4020
 export function nextDemandId(): string {
-  return `D${demandSeq++}`
+  return nextMockId('D')
 }
 export function nextEnrollmentId(): string {
-  return `EE${enrollmentSeq++}`
+  return nextMockId('EE')
 }
 
-let invitationSeq = 1
 export function nextInvitationId(): string {
-  return `EI${invitationSeq++}`
+  return nextMockId('EI')
 }
+
+type PersistedMockData = {
+  appConfig: AppConfig
+  accounts: MockAccount[]
+  demands: Demand[]
+  responsesByUid: typeof responsesByUid
+  events: CommunityEvent[]
+  enrollmentsByUid: typeof enrollmentsByUid
+  goods: Goods[]
+  ordersByUid: typeof ordersByUid
+  reservationsByUid: typeof reservationsByUid
+  articles: Article[]
+  myArticlesByUid: typeof myArticlesByUid
+  enterprises: EnterpriseRecord[]
+  enterpriseExitApplications: typeof enterpriseExitApplications
+  enterpriseInvitations: EnterpriseInvitation[]
+  enterpriseTransferRequests: EnterpriseTransferRequest[]
+  reports: typeof reports
+  favoritesByUid: typeof favoritesByUid
+  restockSubscriptions: typeof restockSubscriptions
+  analyticsCounters: typeof analyticsCounters
+  addressesByUid: typeof addressesByUid
+  noticePrefsByUid: typeof noticePrefsByUid
+  blockedByUid: typeof blockedByUid
+  accountRequestsByUid: typeof accountRequestsByUid
+  eventFeedbackByUid: typeof eventFeedbackByUid
+  articleLikesByUid: typeof articleLikesByUid
+  articleComments: ArticleComment[]
+  projectsByUid: typeof projectsByUid
+  applicationsByUid: typeof applicationsByUid
+  applicationPayloadById: typeof applicationPayloadById
+  articlePayloadById: typeof articlePayloadById
+  experienceByUid: typeof experienceByUid
+  enterpriseExperienceByEid: typeof enterpriseExperienceByEid
+  pointsRecordsByUid: typeof pointsRecordsByUid
+  noticesByUid: typeof noticesByUid
+  talentMembers: TalentMember[]
+  individualShowcases: typeof individualShowcases
+}
+
+function replaceArray<T>(target: T[], source?: T[]): void {
+  if (Array.isArray(source)) target.splice(0, target.length, ...source)
+}
+
+function replaceRecord<T extends object>(target: T, source?: T): void {
+  if (!source || typeof source !== 'object') return
+  for (const key of Object.keys(target)) delete (target as Record<string, unknown>)[key]
+  Object.assign(target, source)
+}
+
+const persisted = readStoredMockData<Partial<PersistedMockData>>()
+if (persisted) {
+  if (persisted.appConfig) Object.assign(appConfig, persisted.appConfig)
+  replaceArray(accounts, persisted.accounts)
+  replaceArray(demands, persisted.demands)
+  replaceRecord(responsesByUid, persisted.responsesByUid)
+  replaceArray(events, persisted.events)
+  replaceRecord(enrollmentsByUid, persisted.enrollmentsByUid)
+  replaceArray(goods, persisted.goods)
+  replaceRecord(ordersByUid, persisted.ordersByUid)
+  replaceRecord(reservationsByUid, persisted.reservationsByUid)
+  replaceArray(articles, persisted.articles)
+  replaceRecord(myArticlesByUid, persisted.myArticlesByUid)
+  replaceArray(enterprises, persisted.enterprises)
+  replaceRecord(enterpriseExitApplications, persisted.enterpriseExitApplications)
+  replaceArray(enterpriseInvitations, persisted.enterpriseInvitations)
+  replaceArray(enterpriseTransferRequests, persisted.enterpriseTransferRequests)
+  replaceArray(reports, persisted.reports)
+  replaceRecord(favoritesByUid, persisted.favoritesByUid)
+  replaceRecord(restockSubscriptions, persisted.restockSubscriptions)
+  replaceRecord(analyticsCounters, persisted.analyticsCounters)
+  replaceRecord(addressesByUid, persisted.addressesByUid)
+  replaceRecord(noticePrefsByUid, persisted.noticePrefsByUid)
+  replaceRecord(blockedByUid, persisted.blockedByUid)
+  replaceRecord(accountRequestsByUid, persisted.accountRequestsByUid)
+  replaceRecord(eventFeedbackByUid, persisted.eventFeedbackByUid)
+  replaceRecord(articleLikesByUid, persisted.articleLikesByUid)
+  replaceArray(articleComments, persisted.articleComments)
+  replaceRecord(projectsByUid, persisted.projectsByUid)
+  replaceRecord(applicationsByUid, persisted.applicationsByUid)
+  replaceRecord(applicationPayloadById, persisted.applicationPayloadById)
+  replaceRecord(articlePayloadById, persisted.articlePayloadById)
+  replaceRecord(experienceByUid, persisted.experienceByUid)
+  replaceRecord(enterpriseExperienceByEid, persisted.enterpriseExperienceByEid)
+  replaceRecord(pointsRecordsByUid, persisted.pointsRecordsByUid)
+  replaceRecord(noticesByUid, persisted.noticesByUid)
+  replaceArray(talentMembers, persisted.talentMembers)
+  replaceRecord(individualShowcases, persisted.individualShowcases)
+}
+
+registerMockStateExporter((): PersistedMockData => ({
+  appConfig, accounts, demands, responsesByUid, events, enrollmentsByUid, goods, ordersByUid,
+  reservationsByUid, articles, myArticlesByUid, enterprises, enterpriseExitApplications,
+  enterpriseInvitations, enterpriseTransferRequests, reports,
+  favoritesByUid, restockSubscriptions, analyticsCounters,
+  addressesByUid, noticePrefsByUid, blockedByUid, accountRequestsByUid, eventFeedbackByUid,
+  articleLikesByUid, articleComments,
+  projectsByUid, applicationsByUid, applicationPayloadById, articlePayloadById,
+  experienceByUid, enterpriseExperienceByEid, pointsRecordsByUid, noticesByUid, talentMembers,
+  individualShowcases,
+}))

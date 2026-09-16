@@ -1,5 +1,6 @@
 import { createRouter, createWebHistory } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
+import { pageTitleFor } from '@/constants/pageTitles'
 
 /** M2 移动端路由表（纯移动端，2026-09-13 移除桌面端后直连 mobile 视图）。
  * 底部 5 Tab：首页 / 项目 / 社区 / 广场 / 我的（见 m2-client-plan §5.3 重构说明）。
@@ -10,6 +11,7 @@ export const router = createRouter({
     /* 壳外独立页 */
     { path: '/login', name: 'login', component: () => import('@/views/mobile/LoginView.vue'), meta: { guestOnly: true } },
     { path: '/register', name: 'register', component: () => import('@/views/mobile/RegisterView.vue'), meta: { guestOnly: true } },
+    { path: '/forgot-password', name: 'forgot-password', component: () => import('@/views/mobile/ForgotPasswordView.vue') },
 
     /* 壳内页面（底部 Tab 结构） */
     {
@@ -17,12 +19,15 @@ export const router = createRouter({
       component: () => import('@/views/mobile/AppShell.vue'),
       children: [
         /* ---- 底部 Tab ---- */
-        { path: '', name: 'home', component: () => import('@/views/mobile/HomeView.vue') },
-        { path: 'search', name: 'global-search', component: () => import('@/views/mobile/GlobalSearchView.vue') },
-        { path: 'projects', name: 'projects', component: () => import('@/views/mobile/ProjectsView.vue') },
-        { path: 'community', name: 'community', component: () => import('@/views/mobile/CommunityView.vue') },
-        { path: 'plaza', name: 'plaza', component: () => import('@/views/mobile/PlazaView.vue') },
-        { path: 'me', name: 'me', component: () => import('@/views/mobile/MeView.vue'), meta: { requiresAuth: true } },
+        { path: '', name: 'home', component: () => import('@/views/mobile/HomeView.vue'), meta: { keepAlive: true } },
+        { path: 'search', name: 'global-search', component: () => import('@/views/mobile/GlobalSearchView.vue'), meta: { keepAlive: true } },
+        { path: 'projects', name: 'projects', component: () => import('@/views/mobile/ProjectsView.vue'), meta: { keepAlive: true } },
+        { path: 'community', name: 'community', component: () => import('@/views/mobile/CommunityView.vue'), meta: { keepAlive: true } },
+        { path: 'plaza', name: 'plaza', component: () => import('@/views/mobile/PlazaView.vue'), meta: { keepAlive: true } },
+        { path: 'me', name: 'me', component: () => import('@/views/mobile/MeView.vue'), meta: { requiresAuth: true, keepAlive: true } },
+        { path: 'me/tasks', name: 'points-tasks', component: () => import('@/views/mobile/PointsTasksView.vue'), meta: { requiresAuth: true } },
+        { path: 'me/stats', name: 'my-stats', component: () => import('@/views/mobile/MyStatsView.vue'), meta: { requiresAuth: true } },
+        { path: 'me/services', name: 'my-services', component: () => import('@/views/mobile/ServiceApplicationsView.vue'), meta: { requiresAuth: true } },
 
         /* ---- 需求发布（类型 hub + 独立表单）/ 详情（项目语境）---- */
         { path: 'demands/new', name: 'demand-new', component: () => import('@/views/mobile/DemandPublishHubView.vue'), meta: { requiresAuth: true } },
@@ -30,6 +35,7 @@ export const router = createRouter({
         { path: 'demands/new/invest', name: 'demand-new-invest', component: () => import('@/views/mobile/DemandInvestFormView.vue'), meta: { requiresAuth: true } },
         { path: 'demands/new/cooperation', name: 'demand-new-cooperation', component: () => import('@/views/mobile/DemandCoopFormView.vue'), meta: { requiresAuth: true } },
         { path: 'demands/:id', name: 'demand-detail', component: () => import('@/views/mobile/DemandDetailView.vue') },
+        { path: 'demands/:id/messages', name: 'demand-messages', component: () => import('@/views/mobile/DemandMessagesView.vue'), meta: { requiresAuth: true } },
 
         /* ---- 企业合作 / 人才登记（独立流程介绍页）---- */
         { path: 'intros/enterprise', name: 'intro-enterprise', component: () => import('@/views/mobile/EnterpriseCoopView.vue') },
@@ -38,20 +44,23 @@ export const router = createRouter({
         { path: 'intros/talent', name: 'intro-talent', component: () => import('@/views/mobile/IntroView.vue') },
 
         /* ---- 活动 ---- */
-        { path: 'events', name: 'events', component: () => import('@/views/mobile/EventsView.vue') },
+        { path: 'events', name: 'events', component: () => import('@/views/mobile/EventsView.vue'), meta: { keepAlive: true } },
         { path: 'events/:id', name: 'event-detail', component: () => import('@/views/mobile/EventDetailView.vue') },
         { path: 'events/:id/check-in', name: 'event-checkin', component: () => import('@/views/mobile/CheckInView.vue'), meta: { requiresAuth: true } },
+        { path: 'events/:id/ticket', name: 'event-ticket', component: () => import('@/views/mobile/EventTicketView.vue'), meta: { requiresAuth: true } },
 
         /* ---- 积分商城 ---- */
-        { path: 'mall', name: 'mall', component: () => import('@/views/mobile/MallView.vue') },
-        { path: 'mall/:id', name: 'mall-detail', component: () => import('@/views/mobile/MallDetailView.vue'), meta: { requiresAuth: true } },
+        { path: 'mall', name: 'mall', component: () => import('@/views/mobile/MallView.vue'), meta: { keepAlive: true } },
+        { path: 'mall/rules', name: 'points-rules', component: () => import('@/views/mobile/PointsRulesView.vue') },
+        { path: 'mall/:id', name: 'mall-detail', component: () => import('@/views/mobile/MallDetailView.vue') },
 
         /* ---- 空间预约 ---- */
-        { path: 'spaces', name: 'spaces', component: () => import('@/views/mobile/SpacesView.vue') },
+        { path: 'spaces', name: 'spaces', component: () => import('@/views/mobile/SpacesView.vue'), meta: { keepAlive: true } },
         { path: 'spaces/:id/reserve', name: 'space-reserve', component: () => import('@/views/mobile/SpaceReserveView.vue'), meta: { requiresAuth: true } },
 
         /* ---- 内容与企业名片 ---- */
-        { path: 'articles', name: 'articles', component: () => import('@/views/mobile/ArticlesView.vue') },
+        /* v43：独立文章列表页移除，统一走「广场 > 资讯」 */
+        { path: 'articles', redirect: '/plaza?tab=articles' },
         { path: 'articles/new', name: 'article-new', component: () => import('@/views/mobile/ArticleNewView.vue'), meta: { requiresAuth: true } },
         { path: 'articles/:id', name: 'article-detail', component: () => import('@/views/mobile/ArticleDetailView.vue') },
         { path: 'talents/:uid', name: 'talent-card', component: () => import('@/views/mobile/TalentCardView.vue') },
@@ -80,8 +89,16 @@ export const router = createRouter({
         { path: 'me/orders', name: 'me-orders', component: () => import('@/views/mobile/MyOrdersView.vue'), meta: { requiresAuth: true } },
         { path: 'me/reservations', name: 'me-reservations', component: () => import('@/views/mobile/MyReservationsView.vue'), meta: { requiresAuth: true } },
         { path: 'me/articles', name: 'me-articles', component: () => import('@/views/mobile/MyArticlesView.vue'), meta: { requiresAuth: true } },
+        { path: 'me/favorites', name: 'me-favorites', component: () => import('@/views/mobile/MyFavoritesView.vue'), meta: { requiresAuth: true } },
+        { path: 'me/history', name: 'me-history', component: () => import('@/views/mobile/HistoryView.vue'), meta: { requiresAuth: true } },
+        { path: 'me/addresses', name: 'me-addresses', component: () => import('@/views/mobile/AddressesView.vue'), meta: { requiresAuth: true } },
+        { path: 'me/security', name: 'me-security', component: () => import('@/views/mobile/SecurityView.vue'), meta: { requiresAuth: true } },
+        { path: 'privacy', name: 'privacy', component: () => import('@/views/mobile/PrivacyView.vue') },
         { path: 'me/applications', name: 'me-applications', component: () => import('@/views/mobile/MyApplicationsView.vue'), meta: { requiresAuth: true } },
         { path: 'me/projects', name: 'me-projects', component: () => import('@/views/mobile/MyProjectsView.vue'), meta: { requiresAuth: true } },
+        { path: 'me/projects/:id', name: 'my-project-detail', component: () => import('@/views/mobile/MyProjectDetailView.vue'), meta: { requiresAuth: true } },
+        { path: 'me/projects/:id/collab', name: 'project-collab', component: () => import('@/views/mobile/ProjectCollabView.vue'), meta: { requiresAuth: true } },
+        { path: 'me/enterprises/:id/workbench', name: 'enterprise-workbench', component: () => import('@/views/mobile/EnterpriseWorkbenchView.vue'), meta: { requiresAuth: true } },
         { path: 'applications/new', name: 'application-new', component: () => import('@/views/mobile/ApplicationNewView.vue'), meta: { requiresAuth: true } },
         { path: 'applications/settle', name: 'application-settle', component: () => import('@/views/mobile/ApplicationSettleView.vue'), meta: { requiresAuth: true } },
         { path: 'applications/cooperation', name: 'application-cooperation', component: () => import('@/views/mobile/ApplicationCooperationView.vue'), meta: { requiresAuth: true } },
@@ -91,6 +108,22 @@ export const router = createRouter({
 
     { path: '/:pathMatch(.*)*', redirect: '/' },
   ],
+  /* v36：返回时恢复滚动位置，新页面回到顶部；v40：同会话内 Tab 切换也记住各页滚动位置；v41：仅缓存页参与，避免详情页误用列表位置 */
+  scrollBehavior(to, from, savedPosition) {
+    if (savedPosition) return savedPosition
+    if (from.name && to.name && from.name !== to.name && to.meta.keepAlive) {
+      const remembered = scrollPositions.get(String(to.name))
+      if (typeof remembered === 'number') return { top: remembered }
+    }
+    return { top: 0 }
+  },
+})
+
+/* v41：按路由名记录滚动位置（仅缓存页；Tab 切换为 push，无浏览器 savedPosition） */
+const scrollPositions = new Map<string, number>()
+router.beforeEach((_to, from) => {
+  if (from.name && from.meta.keepAlive) scrollPositions.set(String(from.name), window.scrollY)
+  return true
 })
 
 router.beforeEach(async (to) => {
@@ -103,4 +136,34 @@ router.beforeEach(async (to) => {
     return { path: '/login', query: { redirect: to.fullPath } }
   }
   return true
+})
+
+/* v38：随路由更新浏览器标题，便于历史/最近任务识别；
+ * v39/v40：仅在路径变化且用户未在输入时聚焦主内容（避免搜索/筛选输入被夺焦、移动端键盘被收起）。 */
+const SITE_NAME = '聚屿社区'
+let lastPath = ''
+
+function isEditableFocused(): boolean {
+  const el = document.activeElement as HTMLElement | null
+  if (!el) return false
+  const tag = el.tagName
+  return tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT' || el.isContentEditable
+}
+
+router.afterEach((to) => {
+  const title = pageTitleFor(to.path)
+  document.title = title ? `${title} · ${SITE_NAME}` : SITE_NAME
+  if (to.path === lastPath) return
+  lastPath = to.path
+  if (isEditableFocused()) return
+  requestAnimationFrame(() => {
+    const main = document.getElementById('main')
+    if (main && document.activeElement !== main && !isEditableFocused()) {
+      try {
+        main.focus({ preventScroll: true })
+      } catch {
+        /* 浏览器不支持 preventScroll 时忽略 */
+      }
+    }
+  })
 })
