@@ -13,8 +13,9 @@ import BulkArchiveDialog from '@/components/BulkArchiveDialog.vue'
 import DemandPublishDialog from '@/components/DemandPublishDialog.vue'
 import DemandReviewDialog from '@/components/DemandReviewDialog.vue'
 import DemandScheduleDialog from '@/components/DemandScheduleDialog.vue'
+import ContentTakedownDialog from '@/components/ContentTakedownDialog.vue'
 import ProjectFormDialog from '@/components/ProjectFormDialog.vue'
-import { archiveDemand, cancelDemandSchedule, closeDemand, fetchDemands, publishDemandNow, retractDemand, proxyRespondDemand, fetchPublisherOptions } from '@/api/demands'
+import { archiveDemand, cancelDemandSchedule, closeDemand, fetchDemands, publishDemandNow, proxyRespondDemand, fetchPublisherOptions } from '@/api/demands'
 import { dictFallback, fetchDictEntries } from '@/api/dicts'
 import { exportAllRows, exportCsv, statusLabel } from '@/utils/exportCsv'
 import { fetchPointsRules } from '@/api/mall'
@@ -441,19 +442,9 @@ async function onCancelSchedule(row: Demand) {
 }
 
 /* 已发布 → 撤回发布，转回待发布 */
-const retractingId = ref('')
-
-async function onRetract(row: Demand) {
-  retractingId.value = row.id
-  try {
-    await retractDemand(row.id)
-    MessagePlugin.success('已撤回发布，需求转入待发布')
-    await load()
-  } catch (e) {
-    MessagePlugin.error(e instanceof Error ? e.message : '操作失败')
-  } finally {
-    retractingId.value = ''
-  }
+const takedownDialog = ref<InstanceType<typeof ContentTakedownDialog>>()
+function onRetract(row: Demand) {
+  takedownDialog.value?.open('demand', row)
 }
 
 /* 关闭 */
@@ -799,16 +790,14 @@ onMounted(() => {
             <!-- 已发布：立项 / 撤回发布 / 关闭 / 代报名（关闭后） -->
             <template v-if="row.status === 'published'">
               <t-button variant="text" size="small" theme="primary" @click="openProject(row)">立项</t-button>
-              <t-popconfirm content="确认撤回发布？需求将转为「待发布」" @confirm="onRetract(row)">
-                <t-button
-                  variant="text"
-                  size="small"
-                  theme="warning"
-                  :loading="retractingId === row.id"
-                >
-                  撤回发布
-                </t-button>
-              </t-popconfirm>
+              <t-button
+                variant="text"
+                size="small"
+                theme="warning"
+                @click="onRetract(row)"
+              >
+                撤回发布
+              </t-button>
             </template>
             <!-- 定时发布中：取消定时发布（状态标签直接显示定时发布时间） -->
             <t-popconfirm
@@ -866,6 +855,7 @@ onMounted(() => {
 
     <!-- 待发布：定时发布对话框 -->
     <DemandScheduleDialog v-model:visible="scheduleVisible" :demand="current" @success="load" />
+    <ContentTakedownDialog ref="takedownDialog" @success="load" />
 
     <!-- 立项弹窗 -->
     <ProjectFormDialog v-model:visible="projectVisible" mode="create" :demand="current" :project="null" @success="load" />

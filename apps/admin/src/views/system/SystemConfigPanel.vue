@@ -21,6 +21,7 @@ const form = reactive<SystemConfig>({
   mallOpen: true,
   demandOpen: true,
   reservationOpen: true,
+  realnameRequired: false,
   leaseExpireRemindDays: 15,
   uploadMaxSizeMb: 10,
   passwordExpireDays: 90,
@@ -150,6 +151,13 @@ onBeforeRouteLeave(async () => {
                 <div class="switch-tip">关闭后客户端暂停提交新的空间预约</div>
               </div>
               <t-switch v-model="form.reservationOpen" />
+            </div>
+            <div class="switch-row">
+              <div class="switch-text">
+                <div class="switch-label">实名认证要求</div>
+                <div class="switch-tip">开启后，未完成实名认证的用户不能发布需求或报名活动</div>
+              </div>
+              <t-switch v-model="form.realnameRequired" />
             </div>
           </div>
 

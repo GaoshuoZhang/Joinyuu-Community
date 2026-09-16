@@ -8,9 +8,10 @@ import StatusTag from '@/components/StatusTag.vue'
 import DemandPublishDialog from '@/components/DemandPublishDialog.vue'
 import DemandReviewDialog from '@/components/DemandReviewDialog.vue'
 import DemandScheduleDialog from '@/components/DemandScheduleDialog.vue'
+import ContentTakedownDialog from '@/components/ContentTakedownDialog.vue'
 import ProjectFormDialog from '@/components/ProjectFormDialog.vue'
 import { identityTypeMap, userLevelMap } from '@/constants/identity'
-import { cancelDemandSchedule, closeDemand, fetchDemand, publishDemandNow, retractDemand } from '@/api/demands'
+import { cancelDemandSchedule, closeDemand, fetchDemand, publishDemandNow } from '@/api/demands'
 import type { Demand, DemandRespondent } from '@/types'
 
 const route = useRoute()
@@ -104,20 +105,9 @@ async function onCancelSchedule() {
 }
 
 /* 已发布 → 撤回发布，转回待发布 */
-const retracting = ref(false)
-
-async function onRetract() {
-  if (!demand.value) return
-  retracting.value = true
-  try {
-    await retractDemand(demand.value.id)
-    MessagePlugin.success('已撤回发布，需求转入待发布')
-    await load()
-  } catch (e) {
-    MessagePlugin.error(e instanceof Error ? e.message : '操作失败')
-  } finally {
-    retracting.value = false
-  }
+const takedownDialog = ref<InstanceType<typeof ContentTakedownDialog>>()
+function onRetract() {
+  if (demand.value) takedownDialog.value?.open('demand', demand.value)
 }
 
 /* 关闭 */
@@ -250,9 +240,7 @@ onMounted(load)
               </template>
               <template v-else-if="demand.status === 'published'">
                 <t-button theme="primary" @click="projectVisible = true">立项</t-button>
-                <t-popconfirm content="确认撤回发布？需求将转为「待发布」" @confirm="onRetract">
-                  <t-button variant="outline" theme="warning" :loading="retracting">撤回发布</t-button>
-                </t-popconfirm>
+                <t-button variant="outline" theme="warning" @click="onRetract">撤回发布</t-button>
                 <t-button variant="outline" theme="danger" :loading="closing" @click="onCloseDemand">关闭</t-button>
               </template>
             </template>
@@ -365,6 +353,7 @@ onMounted(load)
 
     <!-- 待发布：定时发布对话框 -->
     <DemandScheduleDialog v-model:visible="scheduleVisible" :demand="demand" @success="load" />
+    <ContentTakedownDialog ref="takedownDialog" @success="load" />
 
     <!-- 立项弹窗 -->
     <ProjectFormDialog v-model:visible="projectVisible" mode="create" :demand="demand" :project="null" @success="load" />

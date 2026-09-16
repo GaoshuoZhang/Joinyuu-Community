@@ -15,6 +15,8 @@ import { NotificationService } from '../../../common/notify/notification.service
 import { PointsEngineService } from '../../../common/engine/points-engine/points-engine.service'
 import { formatNow, formatToday } from '../../../common/utils/time'
 import { sanitizeHtml } from '../../../common/utils/sanitize-html'
+import { assertRealnameAllowed } from '../realname/realname.service'
+import { assertEnterprisePermission } from '../../../common/enterprise/enterprise-permission'
 import type { CreateDemandDto } from './dto/create-demand.dto'
 import type { RespondDemandDto } from './dto/respond-demand.dto'
 import type { ReviewResponseDto } from './dto/review-response.dto'
@@ -45,11 +47,13 @@ export class AppDemandsService {
   async list(query: { kind?: string; category?: string; keyword?: string; page?: number; pageSize?: number }, req: Request) {
     const uid = await this.optionalUid(req)
     const identities = await this.identitySet(uid)
+    const blockedUids = await this.blockedUids(uid)
 
     const where: Prisma.DemandWhereInput = {
       status: 'published',
       deletedAt: null,
       AND: [this.visibilityCond(identities)],
+      ...(blockedUids.length ? { publisherId: { notIn: blockedUids } } : {}),
     }
     if (query.kind) where.demandType = query.kind
     if (query.keyword) {
@@ -87,9 +91,10 @@ export class AppDemandsService {
   async detail(id: string, req: Request) {
     const uid = await this.optionalUid(req)
     const identities = await this.identitySet(uid)
+    const blockedUids = await this.blockedUids(uid)
 
     const demand = await this.prisma.demand.findFirst({
-      where: { id, status: 'published', deletedAt: null },
+      where: { id, status: 'published', deletedAt: null, ...(blockedUids.length ? { publisherId: { notIn: blockedUids } } : {}) },
     })
     if (!demand || !this.visibly(identities, demand)) throw new NotFoundException('需求不存在或不可见')
 
@@ -116,9 +121,10 @@ export class AppDemandsService {
     }
   }
 
-  /** 提交需求：demandOpen 开关校验 → 身份快照 → status='pending'（管理端审核） */
+  /** 提交需求：demandOpen 开关校验 → 实名强制校验（分级权益）→ 身份快照 → status='pending'（管理端审核） */
   async create(uid: string, name: string, dto: CreateDemandDto) {
     await this.assertDemandOpen()
+    await assertRealnameAllowed(this.prisma, uid, 'publish')
     this.assertKindFields(dto)
     const user = await this.requireUser(uid)
     const publisher = await this.resolvePublisher(uid, name, user, dto)
@@ -371,10 +377,23 @@ export class AppDemandsService {
   async appealDemand(uid: string, demandId: string, reason: string) {
     const demand = await this.requireOwnDemand(uid, demandId)
     if (demand.status !== 'rejected') throw new ConflictException('仅被驳回的需求可申诉')
-    if (!(reason ?? '').trim()) throw new BadRequestException('请填写申诉原因')
-    await this.prisma.demand.update({
-      where: { id: demand.id },
-      data: { status: 'appealed', rejectedReason: reason.trim() },
+    const appealReason = (reason ?? '').trim()
+    if (!appealReason) throw new BadRequestException('请填写申诉原因')
+    await this.prisma.$transaction(async (tx) => {
+      const claimed = await tx.demand.updateMany({
+        where: { id: demand.id, status: 'rejected' },
+        data: { status: 'appealed' },
+      })
+      if (claimed.count !== 1) throw new ConflictException('该需求已申诉，请勿重复提交')
+      await tx.appeal.create({
+        data: {
+          appellantId: uid,
+          targetType: 'demand',
+          targetId: demand.id,
+          reason: appealReason,
+          createdAt: formatNow(),
+        },
+      })
     })
     return { code: 0 }
   }
@@ -513,6 +532,12 @@ export class AppDemandsService {
     if (cfg && cfg.demandOpen === false) throw new BadRequestException('需求发布暂未开放')
   }
 
+  private async blockedUids(uid?: string | null): Promise<string[]> {
+    if (!uid) return []
+    const rows = await this.prisma.userBlock.findMany({ where: { userId: uid }, select: { blockedUid: true } })
+    return rows.map((row) => row.blockedUid)
+  }
+
   /** 按需求类型的必填校验（对齐 docs/api-app-design.md §6） */
   private assertKindFields(dto: CreateDemandDto): void {
     const title = dto.title?.trim()
@@ -598,13 +623,17 @@ export class AppDemandsService {
     const identities = await this.prisma.userIdentity.findMany({ where: { userId: uid } })
 
     if (dto.asIdentity === 'community_enterprise' && dto.asEnterpriseId) {
-      await this.assertEnterprisePermission(uid, dto.asEnterpriseId, 'publish_demand')
+      await assertEnterprisePermission(this.prisma, uid, dto.asEnterpriseId, 'publish_demand')
       const ent = await this.prisma.enterprise.findUnique({ where: { id: dto.asEnterpriseId } })
       if (!ent) throw new BadRequestException('企业不存在')
       return {
         name: ent.name,
         identity: { type: 'community_enterprise', enterpriseId: ent.id, enterpriseName: ent.name, role: 'member', title: '社区企业成员' },
       }
+    }
+
+    if (dto.asIdentity === 'community_enterprise') {
+      throw new BadRequestException('请选择要代表的社区企业')
     }
 
     const asIdentity = dto.asIdentity ?? this.defaultIdentity(identities)
@@ -638,7 +667,7 @@ export class AppDemandsService {
     dto: RespondDemandDto,
   ): Promise<{ name: string; enterprise: string; phone: string | null; identity: Prisma.InputJsonValue | null }> {
     if (dto.asEnterpriseId) {
-      await this.assertEnterprisePermission(uid, dto.asEnterpriseId, 'respond_demand')
+      await assertEnterprisePermission(this.prisma, uid, dto.asEnterpriseId, 'respond_demand')
       const ent = await this.prisma.enterprise.findUnique({ where: { id: dto.asEnterpriseId } })
       if (!ent) throw new BadRequestException('企业不存在')
       return {
@@ -649,9 +678,14 @@ export class AppDemandsService {
       }
     }
 
+    if (dto.asIdentity === 'community_enterprise') {
+      throw new BadRequestException('请选择要代表的社区企业')
+    }
+
     const identities = await this.prisma.userIdentity.findMany({ where: { userId: uid } })
-    const ce = identities.find((i) => i.type === 'community_enterprise')
-    if (dto.asIdentity === 'community_enterprise' || (!dto.asIdentity && ce)) {
+    const ce = identities.find((i) => i.type === 'community_enterprise' && i.enterpriseId)
+    if (!dto.asIdentity && ce) {
+      await assertEnterprisePermission(this.prisma, uid, ce.enterpriseId as string, 'respond_demand')
       return {
         name: user.realName || user.nickname,
         enterprise: ce?.enterpriseName || '',
@@ -698,17 +732,6 @@ export class AppDemandsService {
     if (ri?.type === 'community_enterprise' && ri.enterpriseId) return { targetType: 'enterprise', targetId: ri.enterpriseId as string }
     if (response.userId) return { targetType: 'individual', targetId: response.userId }
     return null
-  }
-
-  /** 代企业主体权限校验：非成员 403；负责人默认全部权限（成员权限快照待企业管理批次落地） */
-  private async assertEnterprisePermission(uid: string, enterpriseId: string, _perm: string): Promise<void> {
-    const ent = await this.prisma.enterprise.findUnique({ where: { id: enterpriseId } })
-    if (!ent) throw new BadRequestException('企业不存在')
-    if (ent.contactUserId === uid) return
-    const member = await this.prisma.userIdentity.findFirst({
-      where: { userId: uid, type: 'community_enterprise', enterpriseId },
-    })
-    if (!member) throw new ForbiddenException('您不是该企业成员，无法代企业操作')
   }
 
   /* ---------- 可见范围 SQL 条件 ---------- */

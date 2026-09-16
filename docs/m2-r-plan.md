@@ -20,7 +20,7 @@
 | R0 | 契约冻结与迁移设计（文档/决策/迁移方案，零端点） | — | [√] 已完成（2026-09-16） |
 | R1 | 鉴权底座与个人中心 + 站内信 | R0 | [√] 已完成（2026-09-16） |
 | R2 | 核心业务闭环（需求/项目/活动/商城/空间/内容/申请/首页/搜索） | R1 | [√] 已完成并通过独立验证（2026-09-16） |
-| R3 | 信任治理（实名/举报/屏蔽/邀请/转移/权限/名片/社区/协议） | R1（与 R2 可并行） | [ ] 未开始 |
+| R3 | 信任治理（实名/举报/屏蔽/邀请/转移/权限/名片/社区/协议） | R1（与 R2 可并行） | [√] 已完成并通过独立验证（2026-09-16） |
 | R4 | 延伸观测与切换（任务/看板/服务申请/企业工作台/实名分级/埋点 + http 切换 + 全量回归） | R2+R3 | [ ] 未开始 |
 | A-* | admin 面板对齐（§3.1 A1~A19，随对应 API 批次实施） | 各批次 | [ ] 未开始 |
 
@@ -88,13 +88,13 @@
 | # | 工作项 | 实施要点（含缺口来源） | 验收 checklist |
 |---|---|---|---|
 | R3-1 | 实名认证（§7.1-18 + E8 + D-2） | `GET/PUT /me/realname`（脱敏展示；18 位校验码规则校验即时通过 + 站内信；已认证 409）；实名分级权益：权益规则下发（发布/报名额度）+ 服务端校验；`User.realName/citizenId` 已存在 | 未实名限流可验证（发布/报名额度 403/400）；脱敏口径（首字/前4后4） |
-| R3-2 | 举报/申诉/屏蔽（§7.1-21 + §7.7 A9/B1） | `Report` 模型（targetType：demand/article/enterprise/comment/user）；`POST /reports` + `GET /me/reports`（状态 pending/resolved/rejected 由 admin 处置回写）；需求/投稿驳回申诉（一次性）；`UserBlock` 屏蔽名单 + 列表过滤联动 | 处置后客户端状态可见；屏蔽后内容/评论不可见；申诉不可重复 |
+| R3-2 | 举报/申诉/屏蔽（§7.1-21 + §7.7 A9/B1） | `Report` 模型（targetType：demand/article/enterprise/comment/user）；`POST /reports` 仅入后台待处理队列，不自动下架或冻结、不通知被举报人；社区工作人员决定处置，`GET /me/reports` 回写 pending/resolved/rejected；下架理由选填，非空才通过站内信通知内容所属用户（与反馈举报人的处置说明分开）；文章/需求也可因非举报原因主动下架，适用同一通知规则；需求/投稿驳回申诉（一次性）；`UserBlock` 屏蔽名单 + 列表过滤联动 | 举报提交后对象状态不变；下架有理由才通知所属用户；处置后客户端状态可见；屏蔽后内容/评论不可见；申诉不可重复 |
 | R3-3 | 邀请闭环（§7.1-17/21） | `EnterpriseInvitation`（EI 前缀、7 天有效期）；invite（生成记录 + 站内信；未注册 400；重复/已是成员/自己 409）；`GET /invitations/:id`（仅被邀请人与邀请方负责人）；respond（accept 写成员 + 通知负责人 / reject）；revoke；过期态 | 非本人 403；接受后成员与关联身份即时出现；过期/撤销后不可接受 |
 | R3-4 | 成员权限与企业管理（§7.1-16/17） | `UserIdentity.permissions`（8 项枚举）；`GET /me/identities`（社区个体 + 全部关联企业 + roleLabel/isContact/permissions/enterpriseId/showcaseStatus）；`GET/PUT /me/enterprises/:id`（名片字段 logo/website/services 等；`edit_card` 校验）；`PUT /me/enterprises/:id/member`（职位/手机号/权限；`manage_members`/`assign_permission`）；`remove-member`（负责人先转移）；负责人转移改**请求制**：`transfer-contact` 发起 + `GET /me/transfer-requests` + respond/cancel（接受后变更 contactUserId + 权限回收）；`exit-application`（退驻 → admin 审核 A14） | 权限矩阵全覆盖（无权限 403）；代企业主体（发布/预约/响应/投稿）四端点一致校验；转移接受后原负责人转只读成员 |
 | R3-5 | 个人名片与社区（§7.1-12/16） | `GET /me/cards` + `PUT /me/cards/individual`（简历式分段 education/work/projects/honors/socials/customLinks + 年龄/政治面貌公开开关；保存→公开人才库；真实后端提交审核口径见 R0-4）；`GET /community/talents/:uid`（公开名片，头像取个人资料，按隐私开关过滤）；`GET /community/policies`（政策/服务内容，运营来源 §5 已决）；`GET /community/enterprises`（企业库 = showcaseStatus published） | 隐私开关字段对外不可见；未发布名片 404；政策版本化展示 |
 | R3-6 | 协议与政策（§7.7 A3/A11） | 协议版本化管理（用户协议/隐私政策版本 + AgreementConsent 留痕）；`GET /policies/:kind`（版本化下发） | 注册必须同意且留痕版本；政策更新后可获取新版本 |
 | R3-7 | 收藏（§7.1-22 + D6） | `Favorite`（targetType：demand/article/event/enterprise/talent）；`GET /me/favorites`（类型筛选）+ `toggle`（幂等去重） | 跨域收藏状态一致；重复 toggle 不产生脏数据 |
-| R3-8 | e2e 扩充 | `app-realname / app-reports / app-enterprises / app-community / app-favorites` 套件 | 全绿 |
+| R3-8 | e2e 扩充 | `app-realname / app-reports / app-enterprises / app-community / app-favorites` 套件 | 本轮整改后待独立 agent 复跑；不得以既有声明替代新结果 |
 
 ### 2.5 R4 延伸观测与切换收尾
 
@@ -211,6 +211,8 @@
 
 ## 6. 修订记录
 
+2026-09-16 举报处置规则补充（用户确认）：举报只入后台队列，不自动下架/冻结、不通知被举报人；工作人员可决定不调整、下架或处理账号。下架理由 `takedownReason` 选填，与反馈举报人的 `resolution` 分开，非空才给内容所属用户发站内信。文章与需求的主动下架入口同样支持该规则，不依赖举报。已完成 API/admin 类型检查与构建；临时数据库中 contents/demands 两套件通过，governance 补充用例修正必填测试参数后 5/5 通过，三个相关套件累计 23 例通过（非全量回归）。临时验证数据已清理，开发数据库未重置。
+
 | 日期 | 摘要 |
 |---|---|
 | 2026-09-16 | 初版：M2-R 立项规划——四项决策（全量分批/降级实现/必做全做/独立文档）；R0~R4 五批后端对齐表（22 新模型 + 15 个既有模型字段扩展 + 约 110 端点）、admin A1~A19 必做 + 可选项登记、8 项开放问题待 R0 定稿；基于 v43 客户端 / api 43 模型 / admin 16 视图目录现状调研 |
@@ -218,3 +220,6 @@
 | 2026-09-16 | **R1 完成并复查整改**：鉴权分流与验证码；注册双协议留痕；daily_login 数据库幂等；配置/字典；个人资料与头像、积分/经验；改密踢除其他 app 会话、重置密码踢除全部会话；换绑、注销冷静期与状态查询；生成并鉴权下载个人数据 JSON；站内信/偏好/归档；地址簿。Prisma 共 5 个 R1 新模型，并补手机号唯一、默认地址部分唯一索引、用户外键、协议版本联合唯一。R1 e2e 增强为 3 套件 / 25 用例；移动端 HTTP 适配层与真实图形验证码 UI 已对齐；全量 API e2e 28 套件 / 195 用例通过。 |
 | 2026-09-16 | **R2 复查整改**：修正客户端 HTTP 契约、活动/空间/商城并发与状态机、需求立项事务、文章评论、项目文件鉴权、商品分类迁移与补货通知；补齐活动配置/改期/票务核销、订单运单、公告有效期、需求类型及申请表单配置。已完成 API/admin/client TypeScript 静态检查与 API 构建；数据库迁移、全量 e2e 与浏览器回归待独立验证后再标记完成。 |
 | 2026-09-16 | **R2 独立验证通过（本次）**：①**迁移升级路径**——空库全量顺序升级 21 个 migration 全部成功（含 `ArticleComment`/`ApplicationFormConfig`），`migrate diff --from-migrations` 与 schema「No difference」；期间发现本地库因 `app_r2_core` 在被应用后又被编辑（校验和 2dd39131… ↔ 实际 574d1a5f…）而缺这 2 张表，已用 `migrate reset` 对齐（迁移文件本身正确，属本地库滞后；迁移尚未提交，编辑无扩散影响）。注：`app_r2_core`(092835) 时间戳早于 `app_r1_review_fixes`(093000)，空库回放顺序可行但语义顺序不直观，后续如需清理可重命名时间戳。②**全量 e2e**：32 套件 / 215 用例全绿（新增 `app-concurrency` 6 用例）。③**并发安全**（并发套件实证）：库存 1 商品 4 用户并发下单 → 仅 1 单成功、3 单 400 库存不足、库存 0/兑换数 1、仅 1 条扣分流水，无超卖；同用户 5 并发下单仅 1 单（Redis `acquireFlag` SET NX）；同用户 5 并发报名仅 1 条记录且 `dedupeKey=enroll:{uid}:{eventId}` 积分仅 1 条；4 并发签到仅 1 次生效、重复签到被拒、签到积分仅 1 条；容量 1 候补按序（先到先递补、后到仍候补）、两位已通过者并发取消时递补人数不超过释放名额。④**三端构建**：`build:api`/`build:admin`/`build:client-mobile` 全部成功，admin 与 client-mobile `tsc --noEmit`、client-mobile `lint` 全绿。⑤前一轮全量 e2e 曾出现 `users` 套件 1 次 503（`Can't reach database server`），单独复跑 11/11 通过、二次全量 215/215 通过，判定为本地 PG 瞬时连接抖动而非缺陷。 |
+| 2026-09-16 | **R3 整改复查**：补齐 admin 信任治理面板（举报处置、申诉复核、协议/政策版本管理）及 `/governance` RBAC；举报/收藏目标服务端校验；申诉记录与状态回写；企业八项成员权限在需求、响应、预约和投稿写端收口；屏蔽扩展至需求、文章、人才与企业；邀请/负责人转移增加并发约束；退驻纳入审核队列并回写企业状态；注册留存已发布协议版本。本轮已完成迁移、三端静态检查和构建，定向 e2e 由独立 agent 后续复跑，不能宣称全量用例已通过。 |
+| 2026-09-16 | **R3 整改独立验证通过（本次）**：①**迁移升级路径**——独立临时库空库回放 25 个 migration 全部成功、`migrate diff --from-migrations` 与 schema「empty migration」（零差异）、两次 seed 幂等且 Policy=5 正确。期间发现**主库缺 `Appeal` 表**（`app_r3_trust` 在复查补充 Appeal 模型前已应用于主库，`migrate status` 报 up-to-date 但物理表缺失 → 申诉 500 P2021），已 `migrate reset` 对齐，25 迁移重放 + seed 后新表齐全；这也说明复查新增的模型字段确实需要通过完整迁移对齐运行库。②**全量 e2e**：35 套件 / 239 用例全部通过（新增 `governance` 4 用例：举报处置 hide→需求下架/重复 409/user 冻结与恢复 restore、申诉写入 Appeal→复核 accepted 回 pending/rejected 分支保持、退驻审核 approve→企业 exited+展示 none、注册协议版本实际留痕）。期间修正：`system` 套件三处保存/校验 payload 补 `realnameRequired`（DTO 必填）；`app-trust` 收藏断言改为服务端快照标题（复查后标题由服务端生成）。③**seed 清理段补齐**：`Favorite`/`RestockSubscribe`/`EventFeedback` 无 FK、不随主表级联，此前未清理导致收藏跨 reseed 残留（单各自套件复现 toggle 幂等断言与真实状态翻转），已按顺序补 `deleteMany`。④多轮全量 e2e 中 `app-enterprises`/`app-me`/`app-concurrency` 曾有套件级 beforeAll 失败（`fetchAppCaptcha` 取不到 captchaId），单独复跑 25/25 全绿，与 R2 验证时 `users` 503 同因，判定为验证码请求瞬时抖动而非缺陷。⑤`build:api` 与 API `tsc --noEmit` 复核通过（admin/client-mobile 构建由复查方已验证）。 |
+| 2026-09-16 | **举报恢复流（用户拍板）**：内容类目标（需求/文章/企业）此前被 hide 后因目标校验无法再次成为举报对象，restore 仅对 user/comment 可达。本次落地「恢复动作不依赖新举报」——`governance.reviewReport` 对已处置（resolved）举报开放重开 review 流：请求 `action=restore` 时直接在事务内恢复对象（demand rejected→published、article withdrawn→published、enterprise rejected→published、user frozen→active），举报记录状态保持不变并记审计「恢复举报对象」；非 restore 动作对已处置举报仍 409；对象已恢复后再次恢复 409（条件更新 0 命中）。admin 治理面板「举报处置」列表对 resolved 且非 comment 目标提供「恢复对象」二次确认入口。`governance` e2e 扩展断言：恢复流 200 + 对象回 published + 重复恢复 409 + 非 restore 409。API/admin tsc、`build:api` 与治理套件全绿。 |

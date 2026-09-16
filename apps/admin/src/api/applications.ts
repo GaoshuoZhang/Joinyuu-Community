@@ -9,7 +9,7 @@ export interface ApplicationQuery {
 }
 
 /* GET /api/admin/applications?page&pageSize&type&status
- * 口径：返回企业入驻/个体入驻/企业合作/身份绑定四类审核；空间预约随公共空间模块、
+ * 口径：返回企业入驻/个体入驻/企业合作/身份绑定/企业退驻五类审核；空间预约随公共空间模块、
  * 展示页发布随资讯内容模块，各有独立审核入口 */
 export async function fetchApplications(query: ApplicationQuery): Promise<PageResult<Application>> {
   const qs = new URLSearchParams()

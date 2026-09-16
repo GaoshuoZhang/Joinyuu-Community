@@ -95,8 +95,8 @@ export async function publishDemandNow(id: string): Promise<{ code: number }> {
 }
 
 /* POST /api/admin/demands/:id/retract — 撤回发布：已发布 → 待发布 */
-export async function retractDemand(id: string): Promise<{ code: number }> {
-  return httpPost<{ code: number }>(`/demands/${id}/retract`)
+export async function retractDemand(id: string, takedownReason?: string): Promise<{ code: number }> {
+  return httpPost<{ code: number }>(`/demands/${id}/retract`, { takedownReason })
 }
 
 /* POST /api/admin/demands/:id/schedule — 待发布需求设定定时发布时间，转为定时发布中 */

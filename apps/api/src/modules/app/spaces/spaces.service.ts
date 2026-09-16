@@ -10,6 +10,7 @@ import { PrismaService } from '../../../common/prisma/prisma.service'
 import { IdGeneratorService } from '../../../common/id-generator/id-generator.service'
 import { NotificationService } from '../../../common/notify/notification.service'
 import { addDays, formatNow, formatToday } from '../../../common/utils/time'
+import { assertEnterprisePermission } from '../../../common/enterprise/enterprise-permission'
 import type { CreateReservationDto } from './dto/create-reservation.dto'
 
 /** 开放时段窗口 */
@@ -178,10 +179,11 @@ export class AppSpacesService {
     if (dto.asEnterpriseId) {
       const enterprise = await this.prisma.enterprise.findUnique({ where: { id: dto.asEnterpriseId } })
       if (!enterprise) throw new NotFoundException('企业不存在')
-      const perm = await this.hasEnterprisePermission(user.uid, dto.asEnterpriseId, 'space_reserve')
-      if (!perm) throw new ForbiddenException('你没有代企业预约空间的权限')
+      await assertEnterprisePermission(this.prisma, user.uid, dto.asEnterpriseId, 'space_reserve')
       identityType = 'community_enterprise'
       subjectName = subjectName || enterprise.name
+    } else if (identityType === 'community_enterprise') {
+      throw new BadRequestException('请选择要代表的社区企业')
     }
     if (!subjectName) subjectName = await this.resolveSubjectName(user, identityType, dto.asEnterpriseId)
 
@@ -310,18 +312,6 @@ export class AppSpacesService {
   private eventOccupiesSpace(event: CommunityEvent, space: Space): boolean {
     const loc = event.location
     return loc.includes(space.name) || loc.includes(space.location)
-  }
-
-  /** 企业成员权限：负责人（contactUserId）全量；成员身份（community_enterprise 关联）默认具备。
-   * R2 简化：无独立权限存储，成员按绑定即可代企业。 */
-  private async hasEnterprisePermission(uid: string, enterpriseId: string, _perm: string): Promise<boolean> {
-    const enterprise = await this.prisma.enterprise.findUnique({ where: { id: enterpriseId } })
-    if (!enterprise) return false
-    if (enterprise.contactUserId === uid) return true
-    const identity = await this.prisma.userIdentity.findFirst({
-      where: { userId: uid, type: 'community_enterprise', enterpriseId },
-    })
-    return !!identity
   }
 
   private async resolveSubjectName(

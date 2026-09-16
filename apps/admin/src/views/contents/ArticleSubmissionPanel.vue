@@ -9,6 +9,7 @@ import StatusTag from '@/components/StatusTag.vue'
 import ColumnController from '@/components/ColumnController.vue'
 import ArticleFormDialog from '@/components/ArticleFormDialog.vue'
 import ArticleScheduleDialog from '@/components/ArticleScheduleDialog.vue'
+import ContentTakedownDialog from '@/components/ContentTakedownDialog.vue'
 import ArticleReviewDialog from '@/components/ArticleReviewDialog.vue'
 import BulkArchiveDialog from '@/components/BulkArchiveDialog.vue'
 import {
@@ -16,7 +17,6 @@ import {
   deleteArticle,
   fetchArticles,
   publishArticleNow,
-  withdrawArticle,
 } from '@/api/contents'
 import type { Article } from '@/types'
 
@@ -220,17 +220,9 @@ async function onPublishNow(row: Article) {
   }
 }
 
-async function onWithdraw(row: Article) {
-  acting.value = row.id + ':withdraw'
-  try {
-    await withdrawArticle(row.id)
-    MessagePlugin.success('已下架，文章转为待发布')
-    await load()
-  } catch (e) {
-    MessagePlugin.error(e instanceof Error ? e.message : '操作失败')
-  } finally {
-    acting.value = ''
-  }
+const takedownDialog = ref<InstanceType<typeof ContentTakedownDialog>>()
+function onWithdraw(row: Article) {
+  takedownDialog.value?.open('article', row)
 }
 
 /* ---------- 查看详情（定时发布中只读） ---------- */
@@ -353,11 +345,9 @@ onMounted(load)
 
           <!-- 已发布：下架（转待发布） -->
           <template v-else-if="row.status === 'published'">
-            <t-popconfirm content="确认下架该文章？下架后转为待发布。" @confirm="onWithdraw(row)">
-              <t-button variant="text" size="small" theme="danger" :loading="acting === row.id + ':withdraw'">
-                下架
-              </t-button>
-            </t-popconfirm>
+            <t-button variant="text" size="small" theme="danger" @click="onWithdraw(row)">
+              下架
+            </t-button>
           </template>
 
           <!-- 已驳回：归档（移入归档管理，可恢复） -->
@@ -377,6 +367,7 @@ onMounted(load)
     <ArticleReviewDialog v-model:visible="viewVisible" :article="current" readonly title="文章详情" />
     <ArticleFormDialog v-model:visible="formVisible" mode="edit" :article="currentEdit" channel="submitted" @success="load" />
     <ArticleScheduleDialog v-model:visible="scheduleVisible" :article="current" @success="load" />
+    <ContentTakedownDialog ref="takedownDialog" @success="load" />
 
     <!-- 一键归档：状态选择二次确认对话框 -->
     <BulkArchiveDialog

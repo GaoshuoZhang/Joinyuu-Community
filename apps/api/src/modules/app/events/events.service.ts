@@ -13,6 +13,7 @@ import { IdGeneratorService } from '../../../common/id-generator/id-generator.se
 import { PointsEngineService } from '../../../common/engine/points-engine/points-engine.service'
 import { NotificationService } from '../../../common/notify/notification.service'
 import { formatNow } from '../../../common/utils/time'
+import { assertRealnameAllowed } from '../realname/realname.service'
 import { CheckInDto } from './dto/check-in.dto'
 import { SubmitFeedbackDto } from './dto/submit-feedback.dto'
 
@@ -104,6 +105,9 @@ export class AppEventsService {
     if (event.enrollmentOpen === false) throw new BadRequestException('报名暂未开放')
     const now = formatNow()
     if (event.enrollmentDeadline && now > event.enrollmentDeadline) throw new BadRequestException('报名已截止')
+
+    // 实名强制校验（M2-R R3 分级权益）：开关开启且未实名时禁止报名
+    await assertRealnameAllowed(this.prisma, uid, 'enroll')
 
     // 可报名范围过滤
     if (!this.scopeMatches(event.enrollmentIdentities, event.enrollmentLevels, user.identities)) {

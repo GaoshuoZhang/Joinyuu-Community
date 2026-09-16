@@ -9,6 +9,7 @@ import type { Demand, DemandRespondent } from '@prisma/client'
 import { PrismaService } from '../../common/prisma/prisma.service'
 import { IdGeneratorService } from '../../common/id-generator/id-generator.service'
 import { AuditService } from '../../common/audit/audit.service'
+import { NotificationService } from '../../common/notify/notification.service'
 import { formatNow } from '../../common/utils/time'
 import { sanitizeHtml } from '../../common/utils/sanitize-html'
 import { toIdentityDto } from '../users/user.mapper'
@@ -170,6 +171,7 @@ export class DemandsService {
     private readonly ids: IdGeneratorService,
     private readonly audit: AuditService,
     private readonly projects: ProjectsService,
+    private readonly notify: NotificationService,
   ) {}
 
   async findAll(query: QueryDemandsDto): Promise<{ list: DemandDto[]; total: number }> {
@@ -439,20 +441,25 @@ export class DemandsService {
     return { code: 0 }
   }
 
-  async retract(id: string, operator: string): Promise<{ code: number }> {
+  async retract(id: string, operator: string, takedownReason?: string): Promise<{ code: number }> {
     const demand = await this.prisma.demand.findUnique({ where: { id } })
-    if (!demand) throw new NotFoundException('需求不存在')
+    if (!demand || demand.deletedAt) throw new NotFoundException('需求不存在')
     if (demand.status !== 'published') throw new ConflictException('仅已发布的需求可撤回发布')
 
-    await this.prisma.demand.update({
-      where: { id },
-      data: { status: 'pending_release', scheduledAt: null, publishedAt: null },
+    await this.prisma.$transaction(async (tx) => {
+      const changed = await tx.demand.updateMany({
+        where: { id, deletedAt: null, status: 'published' },
+        data: { status: 'pending_release', scheduledAt: null, publishedAt: null },
+      })
+      if (changed.count !== 1) throw new ConflictException('需求状态已变化，请刷新后重试')
+      await this.notify.notifyContentTakedown(tx, 'demand', id, takedownReason)
     })
 
     await this.audit.record({
       module: '需求管理',
       action: '撤回发布',
       target: `${demand.id} · ${demand.title}`,
+      detail: takedownReason?.trim() || undefined,
       before: { status: demand.status, publishedAt: demand.publishedAt },
       after: { status: 'pending_release' },
       operator,

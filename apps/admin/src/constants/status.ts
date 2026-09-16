@@ -114,12 +114,13 @@ export const statusMap = {
 
 export type StatusEntity = keyof typeof statusMap
 
-/* 申请类型映射（四类：企业入驻 / 个体入驻 / 企业合作 / 身份绑定） */
+/* 申请类型映射（五类：企业入驻 / 个体入驻 / 企业合作 / 身份绑定 / 企业退驻） */
 export const applicationTypeMap: Record<string, { label: string; theme: 'default' | 'primary' | 'success' | 'warning' | 'danger' }> = {
   settle: { label: '企业入驻', theme: 'primary' },
   individual: { label: '个体入驻', theme: 'primary' },
   cooperation: { label: '企业合作', theme: 'primary' },
   identity: { label: '身份绑定', theme: 'primary' },
+  exit: { label: '企业退驻', theme: 'warning' },
 }
 
 /* 展示页发布申请目标类型：企业 / 个人 */

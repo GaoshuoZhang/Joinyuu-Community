@@ -9,13 +9,13 @@ import StatusTag from '@/components/StatusTag.vue'
 import ColumnController from '@/components/ColumnController.vue'
 import ArticleFormDialog from '@/components/ArticleFormDialog.vue'
 import ArticleScheduleDialog from '@/components/ArticleScheduleDialog.vue'
+import ContentTakedownDialog from '@/components/ContentTakedownDialog.vue'
 import ArticleReviewDialog from '@/components/ArticleReviewDialog.vue'
 import {
   cancelArticleSchedule,
   deleteArticle,
   fetchArticles,
   publishArticleNow,
-  withdrawArticle,
 } from '@/api/contents'
 import type { Article } from '@/types'
 
@@ -153,17 +153,9 @@ async function onPublishNow(row: Article) {
   }
 }
 
-async function onWithdraw(row: Article) {
-  acting.value = row.id + ':withdraw'
-  try {
-    await withdrawArticle(row.id)
-    MessagePlugin.success('已下架，文章转为待发布')
-    await load()
-  } catch (e) {
-    MessagePlugin.error(e instanceof Error ? e.message : '操作失败')
-  } finally {
-    acting.value = ''
-  }
+const takedownDialog = ref<InstanceType<typeof ContentTakedownDialog>>()
+function onWithdraw(row: Article) {
+  takedownDialog.value?.open('article', row)
 }
 
 /* ---------- 归档（待发布资讯） ---------- */
@@ -291,11 +283,9 @@ onMounted(load)
 
           <!-- 已发布：下架（转待发布） -->
           <template v-else-if="row.status === 'published'">
-            <t-popconfirm content="确认下架该文章？下架后转为待发布。" @confirm="onWithdraw(row)">
-              <t-button variant="text" size="small" theme="danger" :loading="acting === row.id + ':withdraw'">
-                下架
-              </t-button>
-            </t-popconfirm>
+            <t-button variant="text" size="small" theme="danger" @click="onWithdraw(row)">
+              下架
+            </t-button>
           </template>
         </div>
       </template>
@@ -303,6 +293,7 @@ onMounted(load)
 
     <ArticleFormDialog v-model:visible="formVisible" :mode="formMode" :article="current" channel="official" @success="load" />
     <ArticleScheduleDialog v-model:visible="scheduleVisible" :article="current" @success="load" />
+    <ContentTakedownDialog ref="takedownDialog" @success="load" />
     <ArticleReviewDialog v-model:visible="viewVisible" :article="current" readonly title="文章详情" />
   </div>
 </template>

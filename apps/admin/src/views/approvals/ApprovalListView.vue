@@ -26,13 +26,14 @@ const query = reactive({
   status: 'pending',
 })
 
-/* 申请审核页处理四类申请：企业入驻 / 个体入驻 / 企业合作 / 身份绑定 */
+/* 申请审核页处理入驻、身份绑定与企业退驻申请。 */
 const typeOptions = [
   { label: '全部', value: '' },
   { label: '企业入驻', value: 'settle' },
   { label: '个体入驻', value: 'individual' },
   { label: '企业合作', value: 'cooperation' },
   { label: '身份绑定', value: 'identity' },
+  { label: '企业退驻', value: 'exit' },
 ]
 
 const actionTextMap: Record<string, string> = {
@@ -223,7 +224,7 @@ onMounted(load)
 <template>
   <div class="approval-list page-fade-in">
     <ListErrorState v-if="loadError" :message="loadError" :loading="loading" @retry="load" />
-    <PageHeader title="申请审核" description="企业入驻、个体入驻、企业合作与身份绑定的统一审核">
+    <PageHeader title="申请审核" description="入驻、身份绑定与企业退驻的统一审核">
       <template #actions>
         <ColumnController
           v-model="visibleColKeys"
@@ -268,7 +269,7 @@ onMounted(load)
         @row-click="({ row }) => openDetail(row)"
       >
         <template #type="{ row }">
-          <t-tag variant="light">{{ applicationTypeMap[row.type].label }}</t-tag>
+          <t-tag variant="light">{{ applicationTypeMap[row.type]?.label ?? row.type }}</t-tag>
         </template>
 
         <template #applicant="{ row }">
@@ -312,7 +313,7 @@ onMounted(load)
       <template v-if="current">
         <div class="drawer-head">
           <span class="drawer-id">{{ current.id }}</span>
-          <t-tag variant="light">{{ applicationTypeMap[current.type].label }}</t-tag>
+          <t-tag variant="light">{{ applicationTypeMap[current.type]?.label ?? current.type }}</t-tag>
           <StatusTag entity="application" :value="current.status" />
           <t-button class="drawer-print" variant="outline" size="small" @click="onPrint(current)">打印</t-button>
         </div>

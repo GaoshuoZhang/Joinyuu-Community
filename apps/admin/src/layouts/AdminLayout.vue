@@ -455,7 +455,7 @@ async function handleDropdown(item: { value?: string | number }) {
           </t-submenu>
 
           <t-submenu
-            v-if="canSee(['/system/dicts', '/system/config', '/logs/audit', '/logs/login', '/system/roles', '/system/admins', '/system/sessions', '/system/assets', '/system/monitor', '/system/trash'], '系统管理')"
+            v-if="canSee(['/system/dicts', '/system/config', '/logs/audit', '/logs/login', '/system/roles', '/system/admins', '/system/sessions', '/system/assets', '/system/monitor', '/system/trash', '/governance'], '系统管理')"
             value="group-system"
             title="系统管理"
           >
@@ -487,6 +487,10 @@ async function handleDropdown(item: { value?: string | number }) {
             <t-menu-item value="/system/trash" v-permission="'/system/trash'">
               <template #icon><Edit2Icon /></template>
               归档管理
+            </t-menu-item>
+            <t-menu-item value="/system/governance" v-permission="'/governance'">
+              <template #icon><CheckCircleIcon /></template>
+              信任治理
             </t-menu-item>
           </t-submenu>
         </t-menu>

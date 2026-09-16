@@ -59,6 +59,7 @@ const applicationTypeTextMap: Record<string, string> = {
   individual: '个体入驻',
   cooperation: '企业合作',
   identity: '身份绑定',
+  exit: '企业退驻',
 }
 
 const applicationStatusTextMap: Record<string, string> = {

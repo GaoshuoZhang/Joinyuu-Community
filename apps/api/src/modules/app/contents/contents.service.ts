@@ -12,6 +12,7 @@ import { sanitizeHtml } from '../../../common/utils/sanitize-html'
 import { formatNow } from '../../../common/utils/time'
 import type { CreateArticleDto } from './dto/create-article.dto'
 import { JwtService } from '@nestjs/jwt'
+import { assertEnterprisePermission } from '../../../common/enterprise/enterprise-permission'
 
 /** 栏目 DTO（对齐客户端 ArticleColumn：code/label） */
 export interface ArticleColumnDto {
@@ -68,7 +69,7 @@ interface Snapshot {
 /* 内容与投稿（M2-R R2 /api/app/contents 与 /api/app/articles、me/articles）：
  * 浏览 published 文章（详情浏览量 +1、返回点赞/评论计数）、栏目、投稿（SU 前缀、channel=submitted、status=pending）、
  * 我的投稿（撤回/重提/申诉/回填）、点赞切换（Favorite targetType='article' 存我的点赞 + Article.likeCount 事务增减）。
- * 评论使用 ArticleComment 表并在事务内维护 Article.commentCount；R3 再叠加用户屏蔽过滤。 */
+ * 评论使用 ArticleComment 表并在事务内维护 Article.commentCount；R3 起评论列表叠加用户屏蔽过滤。 */
 @Injectable()
 export class AppContentsService {
   constructor(
@@ -87,8 +88,11 @@ export class AppContentsService {
   }
 
   /** published 文章列表（栏目/关键词过滤，publishedAt 倒序） */
-  async articles(columnId?: string, keyword?: string): Promise<ArticleDto[]> {
+  async articles(columnId?: string, keyword?: string, authorization?: string): Promise<ArticleDto[]> {
+    const viewerUid = await this.optionalUid(authorization)
+    const blockedUids = await this.blockedUids(viewerUid)
     const where: Prisma.ArticleWhereInput = { status: 'published', deletedAt: null }
+    if (blockedUids.length) where.authorId = { notIn: blockedUids }
     if (columnId) where.columnId = columnId
     if (keyword) where.OR = [{ title: { contains: keyword } }, { summary: { contains: keyword } }]
     const rows = await this.prisma.article.findMany({
@@ -101,8 +105,9 @@ export class AppContentsService {
   /** 文章详情：published；浏览量 +1；返回 likeCount/commentCount/myLiked */
   async articleDetail(id: string, authorization?: string): Promise<ArticleDto> {
     const uid = await this.optionalUid(authorization)
+    const blockedUids = await this.blockedUids(uid)
     const article = await this.prisma.article.findFirst({
-      where: { id, status: 'published', deletedAt: null },
+      where: { id, status: 'published', deletedAt: null, ...(blockedUids.length ? { authorId: { notIn: blockedUids } } : {}) },
     })
     if (!article) throw new NotFoundException('文章不存在')
     await this.prisma.article.updateMany({ where: { id, status: 'published' }, data: { views: { increment: 1 } } })
@@ -124,9 +129,10 @@ export class AppContentsService {
     if (dto.asEnterpriseId) {
       const enterprise = await this.prisma.enterprise.findUnique({ where: { id: dto.asEnterpriseId } })
       if (!enterprise) throw new NotFoundException('企业不存在')
-      const perm = await this.hasEnterprisePermission(user.uid, dto.asEnterpriseId, 'article_submit')
-      if (!perm) throw new ForbiddenException('你没有代企业投稿的权限')
+      await assertEnterprisePermission(this.prisma, user.uid, dto.asEnterpriseId, 'article_submit')
       snapshot = { type: 'community_enterprise', enterpriseId: enterprise.id, enterpriseName: enterprise.name }
+    } else if (dto.asIdentity === 'community_enterprise') {
+      throw new BadRequestException('请选择要代表的社区企业')
     }
 
     const id = await this.ids.next('SU')
@@ -195,13 +201,27 @@ export class AppContentsService {
   async appealArticle(uid: string, id: string, reason: string): Promise<{ code: number }> {
     const article = await this.mine(uid, id)
     if (article.status !== 'rejected') throw new ConflictException('仅已驳回的投稿可申诉')
+    const appealReason = reason.trim()
+    if (!appealReason) throw new BadRequestException('请填写申诉原因')
     const snap = (article.authorIdentity as unknown as Snapshot | null) ?? {}
-    await this.prisma.article.update({
-      where: { id },
-      data: {
-        status: 'appealed',
-        authorIdentity: { ...snap, appealReason: reason.trim() } as unknown as Prisma.InputJsonValue,
-      },
+    await this.prisma.$transaction(async (tx) => {
+      const claimed = await tx.article.updateMany({
+        where: { id, status: 'rejected' },
+        data: {
+          status: 'appealed',
+          authorIdentity: { ...snap, appealReason } as unknown as Prisma.InputJsonValue,
+        },
+      })
+      if (claimed.count !== 1) throw new ConflictException('该投稿已申诉，请勿重复提交')
+      await tx.appeal.create({
+        data: {
+          appellantId: uid,
+          targetType: 'article',
+          targetId: id,
+          reason: appealReason,
+          createdAt: formatNow(),
+        },
+      })
     })
     return { code: 0 }
   }
@@ -252,15 +272,17 @@ export class AppContentsService {
     return { liked: true, likeCount: article.likeCount + 1 }
   }
 
-  /** 已发布文章评论列表；R3 UserBlock 落地后在此追加屏蔽关系过滤。 */
-  async articleComments(articleId: string) {
+  /** 已发布文章评论列表；R3 屏蔽联动：登录态下排除「我屏蔽的用户」的评论（游客不过滤）。 */
+  async articleComments(articleId: string, authorization?: string) {
     const article = await this.prisma.article.findFirst({
       where: { id: articleId, status: 'published', deletedAt: null },
       select: { id: true },
     })
     if (!article) throw new NotFoundException('文章不存在')
+    const viewerUid = await this.optionalUid(authorization)
+    const blockedUids = await this.blockedUids(viewerUid)
     const rows = await this.prisma.articleComment.findMany({
-      where: { articleId },
+      where: blockedUids.length ? { articleId, userId: { notIn: blockedUids } } : { articleId },
       include: { user: { select: { avatar: true } } },
       orderBy: [{ at: 'asc' }, { id: 'asc' }],
     })
@@ -314,6 +336,12 @@ export class AppContentsService {
     }
   }
 
+  private async blockedUids(uid?: string): Promise<string[]> {
+    if (!uid) return []
+    const rows = await this.prisma.userBlock.findMany({ where: { userId: uid }, select: { blockedUid: true } })
+    return rows.map((row) => row.blockedUid)
+  }
+
   private async mine(uid: string, id: string): Promise<Article> {
     const article = await this.prisma.article.findFirst({
       where: { id, authorId: uid, channel: 'submitted', deletedAt: null },
@@ -331,16 +359,6 @@ export class AppContentsService {
     return null
   }
 
-  /** 企业成员权限：负责人全量；community_enterprise 关联成员默认具备（R2 简化，无独立权限存储） */
-  private async hasEnterprisePermission(uid: string, enterpriseId: string, _perm: string): Promise<boolean> {
-    const enterprise = await this.prisma.enterprise.findUnique({ where: { id: enterpriseId } })
-    if (!enterprise) return false
-    if (enterprise.contactUserId === uid) return true
-    const identity = await this.prisma.userIdentity.findFirst({
-      where: { userId: uid, type: 'community_enterprise', enterpriseId },
-    })
-    return !!identity
-  }
 }
 
 function toArticleDto(a: Article, includeLiked: boolean, liked?: boolean): ArticleDto {

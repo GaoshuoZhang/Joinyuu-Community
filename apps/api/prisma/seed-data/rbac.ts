@@ -86,6 +86,7 @@ export const permissionCatalog: SeedPermission[] = [
   { code: '/logs/login', name: '登录日志', module: '系统管理', authType: 'menu', sort: 88 },
   { code: '/system/trash', name: '归档管理', module: '系统管理', authType: 'menu', sort: 89 },
   { code: '/system/export', name: '数据导出', module: '系统管理', authType: 'menu', sort: 90 },
+  { code: '/governance', name: '信任治理', module: '系统管理', authType: 'menu', sort: 91 },
 ]
 
 /* 内置角色（超级管理员 '*' 全量；其余按模块授予） */
@@ -120,6 +121,7 @@ export const adminRoles: SeedRole[] = [
       '/mall/orders',
       '/rules/points',
       '/rules/ledger',
+      '/governance',
     ],
   },
   {
@@ -128,7 +130,7 @@ export const adminRoles: SeedRole[] = [
     name: '审核',
     description: '审核与审核类操作',
     sort: 3,
-    permCodes: ['/dashboard', '/approvals', '/demands/review', '/spaces/reservations', '/contents/showcase', '/logs/audit'],
+    permCodes: ['/dashboard', '/approvals', '/demands/review', '/spaces/reservations', '/contents/showcase', '/logs/audit', '/governance'],
   },
   {
     id: 'R4',

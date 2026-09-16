@@ -90,9 +90,9 @@ export interface Enterprise {
   tags: string[]
 }
 
-/* 申请类型（四类：企业入驻 / 个体入驻 / 企业合作 / 身份绑定）
+/* 申请类型（五类：企业入驻 / 个体入驻 / 企业合作 / 身份绑定 / 企业退驻）
  * 申请实体仍由 applications 维护 */
-export type ApplicationType = 'settle' | 'individual' | 'cooperation' | 'identity'
+export type ApplicationType = 'settle' | 'individual' | 'cooperation' | 'identity' | 'exit'
 export type ApplicationStatus = 'pending' | 'approved' | 'rejected'
 
 export interface ApprovalRecord {
@@ -787,6 +787,8 @@ export interface SystemConfig {
   demandOpen: boolean
   /** 空间预约开关 */
   reservationOpen: boolean
+  /** 开启后未实名用户不能发布需求或报名活动 */
+  realnameRequired: boolean
   /** 租约临期提醒窗口（天；派生逻辑见 api/workstations EXPIRING_WINDOW_DAYS） */
   leaseExpireRemindDays: number
   /** 上传文件大小限制（MB，素材库/富文本图片上传共用） */

@@ -278,6 +278,11 @@ const router = createRouter({
           meta: { title: '归档管理', group: '系统管理', perm: '/system/trash' },
         },
         {
+          path: 'system/governance',
+          component: () => import('@/views/system/GovernancePanel.vue'),
+          meta: { title: '信任治理', group: '系统管理', perm: '/governance' },
+        },
+        {
           path: '403',
           component: () => import('@/views/system/ForbiddenView.vue'),
           meta: { title: '无权限' },

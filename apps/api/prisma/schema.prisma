@@ -177,6 +177,10 @@ model User {
   deletionRequests       AccountDeletionRequest[]
   articleComments        ArticleComment[]
   demandResponses        DemandRespondent[]
+  reports                Report[]
+  appeals                Appeal[]
+  blocksCreated          UserBlock[]
+  individualCard         IndividualCard?
 
   @@index([status])
 }
@@ -189,6 +193,10 @@ model UserIdentity {
   enterpriseName String? @db.VarChar(128)
   role           String? @db.VarChar(16)
   title          String  @db.VarChar(64)
+  // M2-R R3：企业成员 8 项权限（publish_demand/respond_demand/space_reserve/article_submit/manage_members/invite_member/assign_permission/edit_card）；负责人隐式全量
+  permissions    String[] @default([])
+  // M2-R R3：成员联系电话（企业侧维护，可空）
+  memberPhone    String? @db.VarChar(32)
   level          Int?
   experience     Int?
   user           User    @relation(fields: [userId], references: [uid], onDelete: Cascade)
@@ -218,6 +226,12 @@ model Enterprise {
   contactPhone    String   @db.VarChar(32)
   contactEmail    String?  @db.VarChar(128)
   description     String   @db.Text
+  // M2-R R3：企业名片可编辑字段（Q8 决：免审保存 + admin 可查看编辑）
+  logo            String?  @db.VarChar(255)
+  website         String?  @db.VarChar(255)
+  address         String?  @db.VarChar(255)
+  services        String[] @default([])
+  advantages      String[] @default([])
   tags            String[]
   deletedAt       String?  @db.VarChar(16)
   deletedBy       String?  @db.VarChar(64)
@@ -914,6 +928,9 @@ model Favorite {
   userId     String @db.VarChar(16)
   targetType String @db.VarChar(16) // demand | article | event | enterprise | talent
   targetId   String @db.VarChar(16)
+  // M2-R R3：收藏时的展示快照（列表直接读取，避免跨域 join）
+  title      String @default("") @db.VarChar(128)
+  subtitle   String? @db.VarChar(128)
   createdAt  String @db.VarChar(16)
 
   @@unique([userId, targetType, targetId])
@@ -967,6 +984,10 @@ model SystemConfig {
    * 密码有效期（天）：0=不启用；超期登录后仅允许修改密码
    */
   passwordExpireDays    Int     @default(90)
+  /**
+   * M2-R R3：发布/报名等操作是否强制实名（实名分级权益，默认关闭保证存量兼容）
+   */
+  realnameRequired      Boolean @default(false)
   /**
    * MinIO 对象存储配置（R4）：未启用时使用本地磁盘驱动
    */
@@ -1074,4 +1095,131 @@ model AccountDeletionRequest {
   user         User    @relation(fields: [userId], references: [uid], onDelete: Cascade)
 
   @@index([userId])
+}
+
+// ---------- M2-R R3 批：信任治理（2026-09-16，/api/app/**） ----------
+
+// 举报（targetType：demand | article | enterprise | comment | user；状态由 admin 处置回写）
+model Report {
+  id          String  @id @db.VarChar(16) // RP 前缀
+  reporterId  String  @db.VarChar(16)
+  targetType  String  @db.VarChar(16)
+  targetId    String  @db.VarChar(16)
+  targetTitle String  @db.VarChar(128)
+  reason      String  @db.VarChar(64)
+  detail      String? @db.VarChar(500)
+  status      String  @default("pending") @db.VarChar(16) // pending | resolved | rejected
+  at          String  @db.VarChar(16)
+  handledAt   String? @db.VarChar(16)
+  handledBy   String? @db.VarChar(64)
+  resolution  String? @db.VarChar(255)
+  user        User    @relation(fields: [reporterId], references: [uid], onDelete: Cascade)
+
+  @@index([reporterId, status])
+  @@index([status])
+}
+
+// 需求/投稿申诉（一次性提交，管理端复核后回写原业务状态）
+model Appeal {
+  id          Int     @id @default(autoincrement())
+  appellantId String  @db.VarChar(16)
+  targetType  String  @db.VarChar(16) // demand | article
+  targetId    String  @db.VarChar(16)
+  reason      String  @db.VarChar(500)
+  status      String  @default("pending") @db.VarChar(16) // pending | resolved | rejected
+  createdAt   String  @db.VarChar(16)
+  handledAt   String? @db.VarChar(16)
+  handledBy   String? @db.VarChar(64)
+  resolution  String? @db.VarChar(255)
+  user        User    @relation(fields: [appellantId], references: [uid], onDelete: Cascade)
+
+  @@unique([appellantId, targetType, targetId])
+  @@index([status, createdAt])
+}
+
+// 屏蔽名单（屏蔽后对方的内容/评论在列表中不可见；blockedUid 不设外键便于解耦）
+model UserBlock {
+  id         Int    @id @default(autoincrement())
+  userId     String @db.VarChar(16) // 屏蔽发起人
+  blockedUid String @db.VarChar(16) // 被屏蔽用户
+  createdAt  String @db.VarChar(16)
+  user       User   @relation(fields: [userId], references: [uid], onDelete: Cascade)
+
+  @@unique([userId, blockedUid])
+  @@index([userId])
+}
+
+// 企业成员邀请（7 天有效期；被邀请人经站内信链接查看并接受/拒绝）
+model EnterpriseInvitation {
+  id            String  @id @db.VarChar(16) // EI 前缀
+  enterpriseId  String  @db.VarChar(16)
+  inviterId     String  @db.VarChar(16)
+  inviteeUid    String  @db.VarChar(16) // 手机号命中用户（未注册手机号在邀请时即拒绝）
+  memberName    String  @db.VarChar(64)
+  phone         String  @db.VarChar(32)
+  role          String  @db.VarChar(64)
+  status        String  @default("pending") @db.VarChar(16) // pending | accepted | rejected | revoked | expired
+  createdAt     String  @db.VarChar(16)
+  expiresAt     String  @db.VarChar(16)
+  respondedAt   String? @db.VarChar(16)
+
+  @@index([enterpriseId])
+  @@index([inviteeUid, status, expiresAt])
+  @@index([phone])
+}
+
+// 负责人转移请求（请求制：发起 → 对方接受/拒绝；接受后变更 contactUserId）
+model TransferRequest {
+  id           String  @id @db.VarChar(16) // TR 前缀
+  enterpriseId String  @db.VarChar(16)
+  fromUserId   String  @db.VarChar(16)
+  toUserId     String  @db.VarChar(16)
+  status       String  @default("pending") @db.VarChar(16) // pending | accepted | rejected | revoked | expired
+  createdAt    String  @db.VarChar(16)
+  expiresAt    String  @db.VarChar(16)
+  respondedAt  String? @db.VarChar(16)
+
+  @@index([toUserId, status])
+  @@index([enterpriseId])
+}
+
+// 政策/协议内容（kind：agreement_user | agreement_privacy | community；社区政策带 category/version/有效期）
+model Policy {
+  id          String  @id @db.VarChar(16) // PL 前缀
+  kind        String  @db.VarChar(24)
+  category    String  @default("-") @db.VarChar(32)
+  title       String  @db.VarChar(128)
+  summary     String  @default("") @db.VarChar(255)
+  content     String  @db.Text
+  version     String  @default("1.0") @db.VarChar(32)
+  effectiveAt String? @db.VarChar(16)
+  publisher   String  @default("聚屿社区") @db.VarChar(64)
+  attachments Json    @default("[]")
+  featured    Boolean @default(false)
+  status      String  @default("published") @db.VarChar(16) // published | archived
+  publishedAt String  @db.VarChar(16)
+  updatedAt   String  @db.VarChar(16)
+
+  @@index([kind, status])
+  @@index([category, status, effectiveAt])
+}
+
+// 个人名片（社区个体简历式分段；Q8 决：免审保存即公开，admin 可查看编辑）
+model IndividualCard {
+  userId             String  @id @db.VarChar(16)
+  intro              String  @default("") @db.VarChar(500)
+  industryExperience String? @db.VarChar(255)
+  skills             String[] @default([])
+  age                Int?
+  politicalStatus    String? @db.VarChar(16)
+  education          Json    @default("[]")
+  work               Json    @default("[]")
+  projects           Json    @default("[]")
+  honors             Json    @default("[]")
+  socials            Json    @default("[]")
+  customLinks        Json    @default("[]")
+  // 隐私开关：{ age, politicalStatus }
+  visibility         Json    @default("{\"age\":true,\"politicalStatus\":true}")
+  updatedAt          String  @db.VarChar(16)
+  user               User    @relation(fields: [userId], references: [uid], onDelete: Cascade)
 }

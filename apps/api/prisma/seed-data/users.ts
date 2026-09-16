@@ -57,7 +57,7 @@ export const users: User[] = [
     lastActiveAt: '2026-09-07 08:55',
     identities: [
       { type: 'individual', title: '个人用户' },
-      { type: 'community_enterprise', enterpriseId: 'E2001', enterpriseName: '星澜智能科技', role: 'member', title: 'CTO', level: 4 },
+      { type: 'community_enterprise', enterpriseId: 'E2001', enterpriseName: '星澜智能科技', role: 'member', title: 'CTO', permissions: ['publish_demand', 'respond_demand', 'space_reserve'], memberPhone: '13801210002', level: 4 },
       { type: 'community_individual', title: '开源组件库发起人', level: 2, experience: 800 },
     ],
     bio: '全栈工程师，负责星澜智能平台架构。社区开源组件库发起人之一。',
@@ -83,7 +83,7 @@ export const users: User[] = [
     lastActiveAt: '2026-09-06 18:22',
     identities: [
       { type: 'individual', title: '个人用户' },
-      { type: 'community_enterprise', enterpriseId: 'E2002', enterpriseName: '芯启半导体', role: 'member', title: '财务负责人', level: 5 },
+      { type: 'community_enterprise', enterpriseId: 'E2002', enterpriseName: '芯启半导体', role: 'member', title: '财务负责人', permissions: ['publish_demand', 'article_submit'], memberPhone: '13801210003', level: 5 },
       { type: 'external_enterprise', enterpriseName: '启衡咨询', title: '签约财务顾问' },
     ],
     bio: '半导体行业财务老兵，擅长创业企业股权与融资财务规划。',

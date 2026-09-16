@@ -20,8 +20,8 @@ export class AppContentsController {
   /** 文章列表（published，栏目/关键词；客户端传 column=栏目 id，兼容 columnId） */
   @Public()
   @Get('articles')
-  list(@Query('column') column?: string, @Query('columnId') columnId?: string, @Query('keyword') keyword?: string): Promise<ArticleDto[]> {
-    return this.contents.articles(column || columnId, keyword)
+  list(@Req() req: AppAuthenticatedRequest, @Query('column') column?: string, @Query('columnId') columnId?: string, @Query('keyword') keyword?: string): Promise<ArticleDto[]> {
+    return this.contents.articles(column || columnId, keyword, req.headers.authorization)
   }
 
   /** 文章详情（浏览量 +1） */
@@ -80,8 +80,8 @@ export class AppContentsController {
 
   @Public()
   @Get('articles/:id/comments')
-  comments(@Param('id') id: string) {
-    return this.contents.articleComments(id)
+  comments(@Req() req: AppAuthenticatedRequest, @Param('id') id: string) {
+    return this.contents.articleComments(id, req.headers.authorization)
   }
 
   @HttpCode(200)

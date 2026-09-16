@@ -4,6 +4,7 @@ import type { Article, ShowcaseRequest } from '@prisma/client'
 import { PrismaService } from '../../common/prisma/prisma.service'
 import { IdGeneratorService } from '../../common/id-generator/id-generator.service'
 import { AuditService } from '../../common/audit/audit.service'
+import { NotificationService } from '../../common/notify/notification.service'
 import { formatNow, formatToday } from '../../common/utils/time'
 import { sanitizeHtml } from '../../common/utils/sanitize-html'
 import { toIdentityDto } from '../users/user.mapper'
@@ -102,6 +103,7 @@ export class ContentsService {
     private readonly prisma: PrismaService,
     private readonly ids: IdGeneratorService,
     private readonly audit: AuditService,
+    private readonly notify: NotificationService,
   ) {}
 
   /* ---------- 文章管理 ---------- */
@@ -313,18 +315,23 @@ export class ContentsService {
   }
 
   /** 下架：已发布 → 待发布 */
-  async withdrawArticle(id: string, operator: string): Promise<{ code: number }> {
+  async withdrawArticle(id: string, operator: string, takedownReason?: string): Promise<{ code: number }> {
     const article = await this.prisma.article.findUnique({ where: { id } })
     if (!article || article.deletedAt) throw new NotFoundException('文章不存在')
     if (article.status !== 'published') throw new ConflictException('仅已发布的文章可下架')
-    await this.prisma.article.update({
-      where: { id },
-      data: { status: 'pending_release', publishedAt: null, scheduledAt: null },
+    await this.prisma.$transaction(async (tx) => {
+      const changed = await tx.article.updateMany({
+        where: { id, deletedAt: null, status: 'published' },
+        data: { status: 'pending_release', publishedAt: null, scheduledAt: null },
+      })
+      if (changed.count !== 1) throw new ConflictException('文章状态已变化，请刷新后重试')
+      await this.notify.notifyContentTakedown(tx, 'article', id, takedownReason)
     })
     await this.audit.record({
       module: '内容管理',
       action: '文章下架',
       target: `${article.id} · ${article.title}`,
+      detail: takedownReason?.trim() || undefined,
       before: { status: article.status },
       after: { status: 'pending_release' },
       operator,

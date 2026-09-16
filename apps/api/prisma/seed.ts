@@ -6,7 +6,7 @@
  * 注意：api tsconfig 无 '@/*' 路径映射，若用静态 import 会连带解析 '@/types' 导致 tsc 报错，
  * 因此这里用 require（返回 any，tsc 不追踪数据文件），运行时由 tsx 正确加载；
  * seed-data 目录已在 tsconfig exclude 中排除（M1-E 起 admin mock 已删除，此处为唯一数据源）。 */
-import { PrismaClient } from '@prisma/client'
+import { PrismaClient, Prisma } from '@prisma/client'
 import { hash } from 'bcryptjs'
 import Redis from 'ioredis'
 import { APP_CACHE_KEYS } from '../src/common/redis/cache-keys'
@@ -62,16 +62,91 @@ const { announcements } = require('./seed-data/announcements')
 const { adminAccounts, adminRoles, permissionCatalog } = require('./seed-data/rbac')
 /* eslint-enable @typescript-eslint/no-var-requires */
 
-/** 取 ID 末尾数字，如 'U1015' -> 1015、'AP3016' -> 3016 */
+/* 取 ID 末尾数字，如 'U1015' -> 1015、'AP3016' -> 3016 */
 function numericSuffix(id: string): number {
   const m = id.match(/(\d+)$/)
   return m ? parseInt(m[1], 10) : 0
 }
 
+/* M2-R R3：社区个体个人名片 seed（uid → 名片；免审保存即公开） */
+const individualCardSeeds: Record<string, Record<string, unknown>> = {
+  U1005: {
+    intro: '独立设计师，专注品牌视觉与产品界面，服务过 20+ 初创团队。',
+    industryExperience: '品牌设计 / UI·UX（8 年）',
+    skills: ['品牌视觉', 'UI/UX', '设计系统', '插画'],
+    age: 32,
+    politicalStatus: '群众',
+    education: [{ school: '中国美术学院', major: '视觉传达', degree: '本科', period: '2012-2016' }],
+    work: [{ company: '独立执业', title: '品牌设计师', period: '2019 至今', description: '服务初创团队品牌与产品界面设计。' }],
+    projects: [{ name: '聚屿社区品牌焕新', role: '主创', period: '2025', description: '社区 Logo 与视觉规范。' }],
+    honors: [{ name: '站酷设计奖', date: '2023' }],
+    socials: [{ label: 'Behance', url: 'https://behance.net/gubeichen' }],
+    customLinks: [],
+    updatedAt: '2026-08-20 10:00',
+  },
+  U1012: {
+    intro: '全栈工程师，偏前端架构与工程效能，常驻社区技术沙龙讲师。',
+    industryExperience: 'Web 全栈（6 年）',
+    skills: ['TypeScript', 'Vue/React', 'Node.js', '工程化'],
+    age: 29,
+    politicalStatus: '党员',
+    education: [{ school: '浙江大学', major: '软件工程', degree: '硕士', period: '2015-2018' }],
+    work: [{ company: '深空航天科技', title: '高级前端工程师', period: '2021 至今' }],
+    projects: [{ name: '社区小程序联营', role: '技术负责人', period: '2026' }],
+    honors: [],
+    socials: [],
+    customLinks: [{ label: '个人博客', url: 'https://blog.qinlang.dev' }],
+    updatedAt: '2026-08-25 14:00',
+  },
+}
+
+/* M2-R R3：政策与协议 seed（agreement_* 供注册/设置页版本化下发；community 供社区政策列表） */
+const policySeeds: Array<Record<string, unknown>> = [
+  {
+    id: 'PL1001', kind: 'agreement_user', category: '-', title: '聚屿社区用户协议',
+    summary: '社区用户权利义务与行为规范', version: '1.0',
+    content: '欢迎使用聚屿社区。本协议约定账号注册、身份管理、内容发布、积分商城与活动报名等场景下用户与平台双方的权利义务。用户应遵守法律法规与社区公序良俗，不得发布违法违规内容；平台有权对违规行为采取驳回、屏蔽、封禁等措施。',
+    effectiveAt: '2026-01-01', publisher: '聚屿社区', status: 'published',
+    publishedAt: '2026-01-01 00:00', updatedAt: '2026-01-01 00:00',
+  },
+  {
+    id: 'PL1002', kind: 'agreement_privacy', category: '-', title: '聚屿社区隐私政策',
+    summary: '个人信息收集、使用与保护说明', version: '1.0',
+    content: '我们仅在为您提供社区服务所必需的范围内收集个人信息（联系方式、实名信息、简历内容等），并采取加密与访问控制保护数据安全。未经您的同意，我们不会向第三方共享可识别个人身份的信息，法律法规另有规定的除外。',
+    effectiveAt: '2026-01-01', publisher: '聚屿社区', status: 'published',
+    publishedAt: '2026-01-01 00:00', updatedAt: '2026-01-01 00:00',
+  },
+  {
+    id: 'PL2001', kind: 'community', category: '人才政策', title: '社区人才登记与分级权益指引',
+    summary: '人才登记流程、实名分级与对应权益说明', version: '2.0',
+    content: '一、人才登记：完成个人名片填写并通过社区个体身份审核后进入社区人才库。\n二、实名分级：未实名用户可浏览与基础互动；完成实名认证后可提升发布与报名额度，并解锁企业对接优先推荐。\n三、权益明细以「我的-实名认证」页实时下发为准。',
+    effectiveAt: '2026-09-01', publisher: '聚屿社区运营部', status: 'published', featured: true,
+    publishedAt: '2026-09-01 10:00', updatedAt: '2026-09-01 10:00',
+  },
+  {
+    id: 'PL2002', kind: 'community', category: '入驻指南', title: '企业入驻与办公空间申请指引',
+    summary: '从提交申请到入驻办公的全流程说明', version: '1.2',
+    content: '一、提交入驻申请（营业执照等材料）。\n二、运营审核（3 个工作日内反馈）。\n三、签署入驻协议并办理工位/办公室租赁。\n四、公共空间预约需提前一个工作日提交，路演厅需提前三个工作日并附活动方案。',
+    effectiveAt: '2026-08-15', publisher: '聚屿社区运营部', status: 'published',
+    publishedAt: '2026-08-15 09:00', updatedAt: '2026-08-15 09:00',
+  },
+  {
+    id: 'PL2003', kind: 'community', category: '补贴申报', title: '2026 年度创业补贴申报通知',
+    summary: '补贴对象、标准与申报材料清单', version: '1.0',
+    content: '申报对象：完成社区企业入驻且正常运营满 6 个月的团队。补贴标准：按实际租金的 30% 给予年度补贴，上限 5 万元。申报材料：营业执照、租赁合同、纳税证明。申报截止：2026-11-30。',
+    effectiveAt: '2026-09-10', publisher: '聚屿社区运营部', status: 'published',
+    publishedAt: '2026-09-10 10:00', updatedAt: '2026-09-10 10:00',
+  },
+]
+
 async function main() {
   // ---------- 清空（FK 逆序） ----------
   await prisma.leaseWorkstation.deleteMany()
   await prisma.eventEnrollment.deleteMany()
+  /* M2-R R2/R3：无 FK 的挂靠表（userId/eventId/goodsId 仅为字符串列，不随主表级联，必须显式清理防跨 reseed 残留） */
+  await prisma.eventFeedback.deleteMany()
+  await prisma.restockSubscribe.deleteMany()
+  await prisma.favorite.deleteMany()
   await prisma.pointsRecord.deleteMany()
   /* M2-R R1 新增表（挂靠 user 的可变状态；必须随 User 一起清，避免孤儿残留导致 next 重号 P2002） */
   await prisma.userNotification.deleteMany()
@@ -79,6 +154,13 @@ async function main() {
   await prisma.address.deleteMany()
   await prisma.agreementConsent.deleteMany()
   await prisma.accountDeletionRequest.deleteMany()
+  /* M2-R R3 新增表 */
+  await prisma.report.deleteMany()
+  await prisma.userBlock.deleteMany()
+  await prisma.enterpriseInvitation.deleteMany()
+  await prisma.transferRequest.deleteMany()
+  await prisma.policy.deleteMany()
+  await prisma.individualCard.deleteMany()
   await prisma.redemptionOrder.deleteMany()
   await prisma.spaceReservation.deleteMany()
   await prisma.article.deleteMany()
@@ -259,11 +341,36 @@ async function main() {
           enterpriseName: ident.enterpriseName ?? null,
           role: ident.role ?? null,
           title: ident.title,
+          /* M2-R R3：成员 8 项权限与联系电话（负责人隐式全量，seed 仅给成员示例） */
+          permissions: ident.permissions ?? [],
+          memberPhone: ident.memberPhone ?? null,
           level: ident.level ?? null,
           experience: ident.experience ?? null,
         },
       })
       identityCount += 1
+    }
+    /* M2-R R3：社区个体个人名片（免审保存即公开；seed 给两位社区个体配简历） */
+    const cardSeed = individualCardSeeds[u.uid] as Record<string, unknown> | undefined
+    if (cardSeed) {
+      await prisma.individualCard.create({
+        data: {
+          userId: u.uid,
+          intro: cardSeed.intro as string,
+          industryExperience: (cardSeed.industryExperience as string) ?? null,
+          skills: (cardSeed.skills as string[]) ?? [],
+          age: (cardSeed.age as number) ?? null,
+          politicalStatus: (cardSeed.politicalStatus as string) ?? null,
+          education: (cardSeed.education ?? []) as Prisma.InputJsonValue,
+          work: (cardSeed.work ?? []) as Prisma.InputJsonValue,
+          projects: (cardSeed.projects ?? []) as Prisma.InputJsonValue,
+          honors: (cardSeed.honors ?? []) as Prisma.InputJsonValue,
+          socials: (cardSeed.socials ?? []) as Prisma.InputJsonValue,
+          customLinks: (cardSeed.customLinks ?? []) as Prisma.InputJsonValue,
+          visibility: (cardSeed.visibility ?? { age: true, politicalStatus: true }) as Prisma.InputJsonValue,
+          updatedAt: cardSeed.updatedAt ?? u.registeredAt,
+        },
+      })
     }
   }
   counts.User = users.length
@@ -289,6 +396,12 @@ async function main() {
         contactPhone: e.contactPhone,
         contactEmail: e.contactEmail ?? null,
         description: e.description,
+        /* M2-R R3：企业名片字段 */
+        logo: e.logo ?? null,
+        website: e.website ?? null,
+        address: e.address ?? null,
+        services: e.services ?? [],
+        advantages: e.advantages ?? [],
         tags: e.tags ?? [],
       },
     })
@@ -791,6 +904,29 @@ async function main() {
     })
   }
   counts.Announcement = announcements.length
+
+  /* M2-R R3：政策与协议 */
+  for (const p of policySeeds) {
+    await prisma.policy.create({
+      data: {
+        id: p.id as string,
+        kind: p.kind as string,
+        category: (p.category as string) ?? '-',
+        title: p.title as string,
+        summary: (p.summary as string) ?? '',
+        content: p.content as string,
+        version: (p.version as string) ?? '1.0',
+        effectiveAt: (p.effectiveAt as string) ?? null,
+        publisher: (p.publisher as string) ?? '聚屿社区',
+        attachments: p.attachments ?? [],
+        featured: (p.featured as boolean) ?? false,
+        status: (p.status as string) ?? 'published',
+        publishedAt: p.publishedAt as string,
+        updatedAt: p.updatedAt as string,
+      },
+    })
+  }
+  counts.Policy = policySeeds.length
 
   // ---------- 系统管理 ----------
   for (const n of notifications) {

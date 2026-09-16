@@ -95,6 +95,7 @@ export const permissionGroups: PermissionGroup[] = [
       { code: '/logs/login', name: '登录日志' },
       { code: '/system/trash', name: '归档管理' },
       { code: '/system/export', name: '数据导出' },
+      { code: '/governance', name: '信任治理' },
     ],
   },
 ]

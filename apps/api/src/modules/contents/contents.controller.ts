@@ -9,6 +9,7 @@ import { ScheduleArticleDto } from './dto/schedule-article.dto'
 import { ColumnPayloadDto } from './dto/column-payload.dto'
 import { QueryShowcaseRequestsDto } from './dto/query-showcase-requests.dto'
 import { ReviewShowcaseRequestDto } from './dto/review-showcase-request.dto'
+import { TakedownDto } from '../../common/dto/takedown.dto'
 
 @Controller('api/admin/contents')
 export class ContentsController {
@@ -76,8 +77,8 @@ export class ContentsController {
   @RequirePermission('/contents/publish')
   @HttpCode(200)
   @Post('articles/:id/withdraw')
-  withdrawArticle(@Param('id') id: string, @Req() req: AuthenticatedRequest) {
-    return this.contents.withdrawArticle(id, req.user?.name ?? '社区管理员')
+  withdrawArticle(@Param('id') id: string, @Body() dto: TakedownDto, @Req() req: AuthenticatedRequest) {
+    return this.contents.withdrawArticle(id, req.user?.name ?? '社区管理员', dto.takedownReason)
   }
 
   @RequirePermission('/contents/publish')

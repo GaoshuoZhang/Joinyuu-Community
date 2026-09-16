@@ -2,6 +2,7 @@ import { Body, Controller, Get, HttpCode, Param, Patch, Post, Put, Query, Req } 
 import type { AuthenticatedRequest } from '../../common/interfaces/authenticated-request'
 import { RequirePermission } from '../../common/decorators/require-permission.decorator'
 import { DemandsService, type DemandDto, type UndertakerOptionDto } from './demands.service'
+import { TakedownDto } from '../../common/dto/takedown.dto'
 import { QueryDemandsDto } from './dto/query-demands.dto'
 import { CreateDemandDto } from './dto/create-demand.dto'
 import { UpdateDemandDto } from './dto/update-demand.dto'
@@ -94,8 +95,8 @@ export class DemandsController {
   @RequirePermission('/demands')
   @HttpCode(200)
   @Post(':id/retract')
-  retract(@Param('id') id: string, @Req() req: AuthenticatedRequest): Promise<{ code: number }> {
-    return this.demands.retract(id, req.user?.name ?? '社区管理员')
+  retract(@Param('id') id: string, @Body() dto: TakedownDto, @Req() req: AuthenticatedRequest): Promise<{ code: number }> {
+    return this.demands.retract(id, req.user?.name ?? '社区管理员', dto.takedownReason)
   }
 
   @RequirePermission('/demands')

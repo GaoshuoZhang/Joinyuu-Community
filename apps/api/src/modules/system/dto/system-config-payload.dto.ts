@@ -22,6 +22,10 @@ export class SystemConfigPayloadDto {
   @IsBoolean()
   reservationOpen!: boolean
 
+  /** 开启后，未实名用户不能发布需求或报名活动。 */
+  @IsBoolean()
+  realnameRequired!: boolean
+
   @Type(() => Number)
   @IsInt({ message: '租约临期提醒窗口须为 1-90 的整数' })
   @Min(1, { message: '租约临期提醒窗口须为 1-90 的整数' })

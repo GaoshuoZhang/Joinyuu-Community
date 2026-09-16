@@ -22,6 +22,11 @@ export const enterprises: Enterprise[] = [
     contactEmail: 'contact.13801210001@joinyuu.cn',
     description:
       '星澜智能专注于大模型在企业知识管理与智能客服领域的落地应用，服务客户覆盖金融、零售与制造业，已完成 A 轮融资。',
+    /* M2-R R3：企业名片可编辑字段 */
+    website: 'https://xinglan-ai.example.cn',
+    address: '聚屿社区岛屿中心 3F 独立办公室',
+    services: ['企业知识管理', '智能客服', '大模型私有化部署'],
+    advantages: ['A 轮融资完成', '金融行业头部客户', '全自研模型底座'],
     tags: ['大模型', '知识管理', '智能客服'],
   },
   {

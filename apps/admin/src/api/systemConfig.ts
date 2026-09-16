@@ -13,6 +13,7 @@ export interface SystemConfigPayload {
   mallOpen: boolean
   demandOpen: boolean
   reservationOpen: boolean
+  realnameRequired: boolean
   leaseExpireRemindDays: number
   uploadMaxSizeMb: number
   /** 密码有效期（天）：0=不启用 */

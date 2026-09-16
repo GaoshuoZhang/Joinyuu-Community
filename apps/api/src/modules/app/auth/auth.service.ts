@@ -107,6 +107,17 @@ export class AuthService {
     const uid = await this.ids.next('U')
     const nickname = dto.nickname?.trim() || `用户${phone.slice(-4)}`
     const now = formatNow()
+    const agreements = await this.prisma.policy.findMany({
+      where: { kind: { in: ['agreement_user', 'agreement_privacy'] }, status: 'published' },
+      orderBy: { publishedAt: 'desc' },
+    })
+    const agreementVersions = new Map<string, string>()
+    for (const policy of agreements) {
+      if (!agreementVersions.has(policy.kind)) agreementVersions.set(policy.kind, policy.version)
+    }
+    if (!agreementVersions.has('agreement_user') || !agreementVersions.has('agreement_privacy')) {
+      throw new BadRequestException('用户协议或隐私政策尚未发布')
+    }
 
     try {
       await this.prisma.$transaction(async (tx) => {
@@ -129,10 +140,13 @@ export class AuthService {
         },
         })
         await tx.agreementConsent.createMany({
-          data: ['user_agreement', 'privacy_policy'].map((agreementType) => ({
+          data: [
+            ['user_agreement', 'agreement_user'],
+            ['privacy_policy', 'agreement_privacy'],
+          ].map(([agreementType, policyKind]) => ({
             userId: uid,
             agreementType,
-            version: '1',
+            version: agreementVersions.get(policyKind)!,
             consentedAt: now,
           })),
         })

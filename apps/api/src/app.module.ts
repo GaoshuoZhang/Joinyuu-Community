@@ -30,6 +30,7 @@ import { MonitorModule } from './modules/system/monitor/monitor.module'
 import { TrashModule } from './modules/system/trash/trash.module'
 import { ExportModule } from './modules/system/export/export.module'
 import { AssetsModule } from './modules/assets/assets.module'
+import { GovernanceModule } from './modules/governance/governance.module'
 import { NotificationModule } from './common/notify/notification.module'
 import { AppSessionModule } from './common/app-session/app-session.module'
 import { AppAuthModule } from './modules/app/auth/auth.module'
@@ -47,6 +48,12 @@ import { AppApplicationsModule } from './modules/app/applications/applications.m
 import { AppHomeModule } from './modules/app/home/home.module'
 import { AppSearchModule } from './modules/app/search/search.module'
 import { AppUploadsModule } from './modules/app/uploads/uploads.module'
+import { AppRealnameModule } from './modules/app/realname/realname.module'
+import { AppReportsModule } from './modules/app/reports/reports.module'
+import { AppEnterprisesModule } from './modules/app/enterprises/enterprises.module'
+import { AppCommunityModule } from './modules/app/community/community.module'
+import { AppFavoritesModule } from './modules/app/favorites/favorites.module'
+import { AppPoliciesModule } from './modules/app/policies/policies.module'
 import { SchedulerModule } from './scheduler/scheduler.module'
 import { HealthController } from './health/health.controller'
 import { JwtAuthGuard } from './common/guards/jwt-auth.guard'
@@ -89,6 +96,7 @@ import { HttpExceptionFilter } from './common/filters/http-exception.filter'
     TrashModule,
     ExportModule,
     AssetsModule,
+    GovernanceModule,
     NotificationModule,
     AppSessionModule,
     AppAuthModule,
@@ -106,6 +114,12 @@ import { HttpExceptionFilter } from './common/filters/http-exception.filter'
     AppHomeModule,
     AppSearchModule,
     AppUploadsModule,
+    AppRealnameModule,
+    AppReportsModule,
+    AppEnterprisesModule,
+    AppCommunityModule,
+    AppFavoritesModule,
+    AppPoliciesModule,
     SchedulerModule,
   ],
   controllers: [HealthController],

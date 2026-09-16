@@ -93,8 +93,8 @@ export async function cancelArticleSchedule(id: string): Promise<{ code: number 
 }
 
 /** POST /api/admin/contents/articles/:id/withdraw — 已发布 → 待发布（下架转待发布） */
-export async function withdrawArticle(id: string): Promise<{ code: number }> {
-  return httpPost<{ code: number }>(`/contents/articles/${id}/withdraw`)
+export async function withdrawArticle(id: string, takedownReason?: string): Promise<{ code: number }> {
+  return httpPost<{ code: number }>(`/contents/articles/${id}/withdraw`, { takedownReason })
 }
 
 /** DELETE /api/admin/contents/articles/:id（仅待审核/已驳回投稿可删） */

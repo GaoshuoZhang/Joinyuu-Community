@@ -362,7 +362,7 @@ TZ=Asia/Shanghai
 | POST | /api/admin/demands/:id/publish-now | pending_release → published（写 publishedAt） |
 | POST | /api/admin/demands/:id/schedule | `{ scheduledAt }`：pending_release → scheduled |
 | POST | /api/admin/demands/:id/cancel-schedule | scheduled → pending_release |
-| POST | /api/admin/demands/:id/retract | published → pending_release（清 publishedAt/scheduledAt） |
+| POST | /api/admin/demands/:id/retract | published → pending_release（清 publishedAt/scheduledAt）；可选 `takedownReason`（≤255 字），非空才通知内容所属用户；不要求存在举报 |
 | PATCH | /api/admin/demands/:id/status | `{ status: "closed" }`（pending_release/published 可关闭；写 archivableAt） |
 | POST | /api/admin/demands/:id/archive | 仅 rejected/closed/projected 可归档（软删） |
 | POST | /api/admin/demands/:id/proxy-respond | `{ userName, enterprise, phone, email?, quote?, message? }`（仅 published/projected；message 空记"管理员代报名"；联系电话必填） |
@@ -490,7 +490,7 @@ TZ=Asia/Shanghai
 | POST | /api/admin/contents/articles/:id/publish | 权限 `/contents/publish`：pending_release/scheduled → published + publishedAt |
 | POST | /api/admin/contents/articles/:id/schedule | 权限 `/contents/publish`：`{ scheduledAt }`；仅 pending_release → scheduled（须晚于当前时间） |
 | POST | /api/admin/contents/articles/:id/cancel-schedule | 权限 `/contents/publish`：scheduled → pending_release |
-| POST | /api/admin/contents/articles/:id/withdraw | 权限 `/contents/publish`：published → pending_release（清 publishedAt/scheduledAt） |
+| POST | /api/admin/contents/articles/:id/withdraw | 权限 `/contents/publish`：published → pending_release（清 publishedAt/scheduledAt）；可选 `takedownReason`（≤255 字），非空才通知内容所属用户；不要求存在举报 |
 | DELETE | /api/admin/contents/articles/:id | 权限 `/contents/publish`：仅 pending/rejected/pending_release **软删归档** |
 | GET | /api/admin/contents/columns | 按 sort 升序，含文章数聚合；权限 `/contents/columns` |
 | POST | /api/admin/contents/columns | 创建即启用；body 含 submissionOpen（开放投稿） |

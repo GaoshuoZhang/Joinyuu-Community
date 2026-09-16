@@ -5,6 +5,7 @@ import { IdGeneratorService } from '../../common/id-generator/id-generator.servi
 import { AuditService } from '../../common/audit/audit.service'
 import { PointsEngineService } from '../../common/engine/points-engine/points-engine.service'
 import { RedisService } from '../../common/redis/redis.service'
+import { NotificationService } from '../../common/notify/notification.service'
 import { CACHE_KEYS } from '../../common/redis/cache-keys'
 import { formatNow, formatToday } from '../../common/utils/time'
 import { DEFAULT_APPLICATION_SCHEMAS } from '../app/applications/applications.service'
@@ -34,22 +35,24 @@ interface GrantResult {
 const IDENTITY_FIRST_BIND_POINTS_REASON = '首次入驻/绑定身份'
 const IDENTITY_FIRST_BIND_EXP_REASON = '首次绑定社区身份'
 
-/* 申请类型（四类，与前端 applicationTypeMap 对齐）：
+/* 申请类型（五类，与前端 applicationTypeMap 对齐）：
  *   settle      企业入驻申请 → 通过：新增/激活社区企业 + community_enterprise 身份
  *   individual  个体入驻申请 → 通过：新增 community_individual 身份（社区个体）
  *   cooperation 企业合作申请 → 通过：新增/复用合作企业档案 + external_enterprise 身份
  *   identity    身份绑定申请 → 通过：按目标企业归属（社区企业或合作企业，缺失则自动新增合作企业）
+ *   exit        企业退驻申请 → 通过：企业转为已退驻并撤下展示名片
  */
 const APPLICATION_TYPE_LABELS: Record<string, string> = {
   settle: '企业入驻',
   individual: '个体入驻',
   cooperation: '企业合作',
   identity: '身份绑定',
+  exit: '企业退驻',
 }
 const APPLICATION_TYPES = Object.keys(APPLICATION_TYPE_LABELS)
 
 /* 申请审核（wiki-backend.md §7.5/§8.6）：
- * 仅上述四类；通过时授予申请人对应身份（grantIdentity 服务端化），
+ * 身份类申请通过时授予申请人对应身份（grantIdentity 服务端化），
  * 并联动企业/合作企业新增 + 首绑积分/经验值发放（identity_first_bind）。 */
 @Injectable()
 export class ApplicationsService {
@@ -59,6 +62,7 @@ export class ApplicationsService {
     private readonly audit: AuditService,
     private readonly engine: PointsEngineService,
     private readonly redis: RedisService,
+    private readonly notify: NotificationService,
   ) {}
 
   async formConfigs() {
@@ -136,6 +140,7 @@ export class ApplicationsService {
   async approve(id: string, comment: string | undefined, operator: string): Promise<{ code: number }> {
     const app = await this.prisma.application.findUnique({ where: { id } })
     if (!app) throw new NotFoundException('申请不存在')
+    if (app.status !== 'pending') throw new ConflictException('该申请已处理')
 
     const records = this.appendRecord(app.records, {
       step: '运营审核',
@@ -146,10 +151,17 @@ export class ApplicationsService {
     })
 
     const grant = await this.prisma.$transaction(async (tx) => {
-      await tx.application.update({
-        where: { id },
+      const claimed = await tx.application.updateMany({
+        where: { id, status: 'pending' },
         data: { status: 'approved', records, archivableAt: formatNow() },
       })
+      if (claimed.count !== 1) throw new ConflictException('该申请已处理')
+      if (app.type === 'exit') {
+        const enterprise = await tx.enterprise.findFirst({ where: { name: app.targetName, deletedAt: null } })
+        if (!enterprise) throw new NotFoundException('企业不存在')
+        await tx.enterprise.update({ where: { id: enterprise.id }, data: { status: 'exited', showcaseStatus: 'none' } })
+        return { userId: null, enterpriseId: enterprise.id }
+      }
       return this.grantIdentity(tx, app)
     })
 
@@ -182,6 +194,14 @@ export class ApplicationsService {
 
     /* 失效工作台聚合缓存，避免 60s 内待办卡片残留已处理项 */
     await this.redis.delCache(CACHE_KEYS.dashboardSummary)
+    const applicant = await this.prisma.user.findFirst({ where: { phone: app.applicantPhone }, select: { uid: true } })
+    if (applicant) {
+      await this.notify.pushNotice(applicant.uid, {
+        type: 'audit_result',
+        title: `${APPLICATION_TYPE_LABELS[app.type] ?? '申请'}已通过`,
+        content: comment || '您的申请已审核通过。',
+      })
+    }
 
     return { code: 0 }
   }
@@ -189,6 +209,7 @@ export class ApplicationsService {
   async reject(id: string, comment: string | undefined, operator: string): Promise<{ code: number }> {
     const app = await this.prisma.application.findUnique({ where: { id } })
     if (!app) throw new NotFoundException('申请不存在')
+    if (app.status !== 'pending') throw new ConflictException('该申请已处理')
 
     const records = this.appendRecord(app.records, {
       step: '运营审核',
@@ -198,10 +219,11 @@ export class ApplicationsService {
       at: formatNow(),
     })
 
-    await this.prisma.application.update({
-      where: { id },
+    const claimed = await this.prisma.application.updateMany({
+      where: { id, status: 'pending' },
       data: { status: 'rejected', records, archivableAt: formatNow() },
     })
+    if (claimed.count !== 1) throw new ConflictException('该申请已处理')
 
     await this.audit.record({
       module: '审核中心',
@@ -215,6 +237,14 @@ export class ApplicationsService {
 
     /* 失效工作台聚合缓存，避免 60s 内待办卡片残留已处理项 */
     await this.redis.delCache(CACHE_KEYS.dashboardSummary)
+    const applicant = await this.prisma.user.findFirst({ where: { phone: app.applicantPhone }, select: { uid: true } })
+    if (applicant) {
+      await this.notify.pushNotice(applicant.uid, {
+        type: 'audit_result',
+        title: `${APPLICATION_TYPE_LABELS[app.type] ?? '申请'}未通过`,
+        content: comment || '您的申请未获通过。',
+      })
+    }
 
     return { code: 0 }
   }
