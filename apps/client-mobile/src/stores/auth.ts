@@ -65,11 +65,11 @@ export const useAuthStore = defineStore('auth', () => {
     points.value = result.points
   }
 
-  async function login(payload: { phone: string; password: string; captchaCode: string }) {
+  async function login(payload: { phone: string; password: string; captchaId: string; captchaCode: string }) {
     apply(await authApi.login(payload))
   }
 
-  async function register(payload: { phone: string; password: string; confirmPassword: string; captchaCode: string; nickname?: string }) {
+  async function register(payload: { phone: string; password: string; confirmPassword: string; captchaId: string; captchaCode: string; nickname?: string; agreed?: boolean }) {
     apply(await authApi.register(payload))
   }
 

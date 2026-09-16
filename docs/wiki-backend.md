@@ -25,7 +25,7 @@
 - 种子数据：从 M0 mock 迁移并按 M1.5 改造，保持全部编号与跨模块引用一致（见第 11 节）
 - `/api/app/**` 客户端接口**仅输出设计文档**（M1-E 交付 `docs/api-app-design.md`），不实现
 
-**范围外**：M2-R `/api/app/**` 实现（当前暂不启动）、桌面客户端、微信小程序、微信登录、支付、CI/CD、分布式部署。MinIO 双驱动已实现，但真实对象 I/O 尚缺 e2e 覆盖。
+**当前增量范围**：M2-R `/api/app/**` 已启动，R0/R1 已完成，后续以 `docs/m2-r-plan.md` 为事实来源。桌面客户端、微信小程序、微信登录、支付、CI/CD、分布式部署仍在范围外。
 
 ## 2. 技术栈与工程结构
 
@@ -42,15 +42,15 @@
 | 对象存储 | `StorageService` 双驱动：MinIO 或本地磁盘回退（`UPLOAD_DIR` 可配，默认 `apps/api/uploads`） |
 | 验证码 | 自研 SVG dataURL（`captcha.util.ts`，4 位去易混字符，无第三方依赖） |
 | 时间 | 原生 Date + `common/utils/time.ts` 统一格式化（`TZ=Asia/Shanghai`） |
-| 测试 | Jest + supertest（源码静态清点：e2e 25 套件 / 170 声明；unit 4 套件 / 25 声明；最近记录 e2e 25 / 169 全量通过） |
+| 测试 | Jest + supertest（当前 e2e 28 套件 / 195 用例全量通过；unit 4 套件 / 25 声明） |
 
 **目录结构**（`apps/api/`）：
 
 ```
 apps/api/
   prisma/
-    schema.prisma        # 全量实体建模（43 模型，见第 5 节）
-    migrations/          # prisma migrate 产出（17 个迁移）
+    schema.prisma        # 全量实体建模（48 模型，见第 5 节）
+    migrations/          # prisma migrate 产出（19 个迁移）
     seed.ts              # M0 mock 迁移 + M1.5 治理种子（见第 11 节）
     seed-data/           # 各域种子数据（seed 唯一数据源；api tsconfig exclude）
   src/
@@ -192,7 +192,7 @@ TZ=Asia/Shanghai
 - **派生值不落列**（M0 明确口径）：用户实名状态（realName+citizenId 均填）、用户 stats（详情接口实时 COUNT）、租约 expiring/expired（读取派生）、"个人用户"筛选（仅持 individual 身份）、工作台趋势（按日聚合）。
 - 金额/积分为整数（分或元按 M0 现状：租金/预算为元字符串或整数、积分为整数）；枚举一律 String + 应用层枚举校验（保持与前端字符串契约一致，不用 PG enum，降低迁移摩擦）。
 
-### 5.2 表清单（43 模型）
+### 5.2 表清单（48 模型）
 
 | 分组 | Prisma 模型 | 主键前缀 | 要点 |
 |---|---|---|---|
@@ -205,7 +205,7 @@ TZ=Asia/Shanghai
 | 认证 | SchedulerLog | SL | jobName/startedAt/finishedAt/durationMs/status(ok/error)/detail?/rowsAffected；监控页与手动触发数据源 |
 | 认证 | MallAsset | AST | 素材库：fileName/mime/size/url/storeKey/bizType?/sourceType?(article/submission)/sourceId?(文章 ID)/createdBy/createdAt；上传魔数嗅探、替换为同键覆盖 |
 | 认证 | IdSequence | entityType（PK） | 前缀 ID 发号器（见 5.1） |
-| 成员 | User | U | uid 昵称 nickname、phone/email/gender/status(active/frozen)、realName?/citizenId?（实名派生）、wechatOpenid?/wechatUnionid?/wechatVerified?（M3 预留）、frozenUntil?/frozenReason?（解冻清空）、points（挂靠个人身份）、registeredAt/lastActiveAt、bio、activities Json |
+| 成员 | User | U | uid 昵称 nickname、phone 唯一、email/gender/avatar?/status(active/frozen)、realName?/citizenId?（实名派生）、wechatOpenid?/wechatUnionid?/wechatVerified?（M3 预留）、frozenUntil?/frozenReason?（解冻清空）、points（挂靠个人身份）、registeredAt/lastActiveAt、bio、activities Json |
 | 成员 | UserIdentity | 自增 | userId FK + type(individual/community_individual/community_enterprise/external_enterprise) + enterpriseId?/enterpriseName?/role?/title/level?/experience?；唯一约束 (userId, type, enterpriseId)；社区个体每人至多一条（应用层保证） |
 | 成员 | Enterprise | E | industry/size/foundedAt/settledAt/leaseType/status(active/pending/exited/disabled)/showcaseStatus(none/pending/published/rejected)/showcaseComment?/experience?/**contactUserId?（关联个人用户，社区企业必须关联）**/contactTitle/contact*/description/tags/**deletedAt?/deletedBy?**；M1.5 删除=软删归档（存在进行中租约时 409），可在归档管理恢复/彻底删除；不支持自动归档 |
 | 成员 | ExternalEnterpriseProfile | XE | 合作企业档案（name/industry/status(active/disabled)/size/foundedAt/description/cooperationCount/firstCooperationAt/**deletedAt?/deletedBy?**）；**ExternalEnterprise 聚合视图 = 档案 + identities(type=external_enterprise 且 enterpriseName 匹配) 派生成员，不建独立表**；删除=软删归档；不支持自动归档 |
@@ -218,7 +218,7 @@ TZ=Asia/Shanghai
 | 活动 | CommunityEvent | EV | 状态机字段 + createdAt/startTime/endTime/location/capacity/speaker/host/enrollmentOpen/visibility*/enrollment*/requireReview/enrollmentDeadline?/scheduledAt?/enrollPoints?/checkinPoints?/tags[]/**deletedAt?/deletedBy?/archivableAt?**（自动结束任务写 ended+archivableAt） |
 | 活动 | EventEnrollment | 自增 | 复合唯一 (eventId, userId)；userId/name/enterprise/phone/appliedAt/status(pending/approved/rejected)/checkedIn/checkInAt? |
 | 账本 | ExperienceRecord | EX | targetType(enterprise/individual)/targetId/delta/balance/reason/at/operator/source(rule/manual) |
-| 账本 | PointsRecord | PT | userId FK/delta/balance/reason/at/operator/source(rule/manual/redemption) |
+| 账本 | PointsRecord | PT | userId FK/delta/balance/reason/at/operator/source(rule/manual/redemption)/dedupeKey? 唯一（积分发放幂等） |
 | 商城 | MallGoods | G | name/category(physical/virtual/voucher；字典 goods_category)/points/stock/**status(on/off/restock 三态，库存为 0 记 restock)**/description/redeemedCount/createdAt/**shippingMethods[]/pickupAddress?/shippingFee?（实物发货）**/**visibilityIdentities[]/visibilityLevels[]/orderIdentities[]/orderLevels[]（可见/可下单范围）**/**deletedAt?/deletedBy?/archivableAt?** |
 | 商城 | RedemptionOrder | RO | userId/userName(快照)/goodsId/goodsName(快照)/points/status(pending_shipment/shipped/finished/cancelled)/createdAt/shippedAt?/finishedAt?/recipientName?/recipientPhone?/address?/note?/cancelReason?/**deletedAt?/deletedBy?/archivableAt?** |
 | 规则 | PointsRule | code（PK） | 9 条固定触发项（见 8.4）；name/scene/description 写死；points 可编辑；status |
@@ -239,6 +239,11 @@ TZ=Asia/Shanghai
 | 系统 | SystemConfig | 单例(id=1) | siteName/siteSlogan/registrationOpen/mallOpen/demandOpen/reservationOpen/leaseExpireRemindDays(1-90)/**uploadMaxSizeMb(1-100，默认 10；上传与富文本图片共用，dailyLoginPoints 已删除)**/updatedAt/updatedBy |
 | 系统 | DictEntry | 复合 (type, code) | type(**demand_category/industry/event_type/goods_category**)/code(DC/IN/ET/GC 前缀自增)/label 全类型唯一/sort/status(enabled/disabled) |
 | 系统 | ArchiveSetting | domain（PK） | 归档设置（13 域）：autoArchive/archiveDelayDays(0-365)/autoPurge/purgeDelayDays(1-3650)/archiveStatuses Json?（按状态开关）；企业/合作企业不支持自动归档 |
+| App | UserNotification | UN | userId FK 级联；type/title/content/at/link?/read/archived；站内信列表、未读数与归档 |
+| App | UserNotificationPreference | 复合 (userId, type) | userId FK 级联；按通知类型保存 enabled，列表与未读数统一过滤 |
+| App | Address | AD | userId FK 级联；name/phone/region/detail/isDefault/createdAt/updatedAt；每用户最多一个默认地址（部分唯一索引） |
+| App | AgreementConsent | 自增 | userId FK 级联；agreementType/version/consentedAt；(userId, agreementType, version) 联合唯一 |
+| App | AccountDeletionRequest | 自增 | userId FK 级联；reason?/status/requestedAt/effectiveAt?/cancelledAt?；7 天注销冷静期 |
 
 ## 6. 认证与权限
 

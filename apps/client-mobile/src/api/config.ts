@@ -11,5 +11,5 @@ export async function fetchAppConfig(): Promise<AppConfig> {
 /** GET /api/app/dicts/:type — 仅启用项（类型：demand_category/industry/event_type/goods_category） */
 export async function fetchDict(type: string): Promise<DictItem[]> {
   if (apiMode === 'mock') return mock.fetchDict(type)
-  return httpGet<DictItem[]>(`/dicts/${type}`)
+  return (await httpGet<{ type: string; items: DictItem[] }>(`/dicts/${type}`)).items
 }

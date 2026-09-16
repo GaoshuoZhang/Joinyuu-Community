@@ -3,27 +3,29 @@ import { onMounted, reactive, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { Button, Cell, CellGroup, DialogPlugin, Input, Popup, Tag, Textarea, Toast } from 'tdesign-mobile-vue'
 import { changePhone } from '@/api/auth'
-import { cancelAccountDeletion, changePassword, fetchAccountRequests, listBlockedUsers, listMyReports, requestAccountDeletion, requestDataExport, unblockUser } from '@/api/me'
+import { cancelAccountDeletion, changePassword, downloadPersonalData, fetchAccountRequests, listBlockedUsers, listMyReports, requestAccountDeletion, requestDataExport, unblockUser } from '@/api/me'
 import { ApiError } from '@/api/http'
 import type { ReportPayload } from '@/types'
+import { useCaptcha } from '@/composables/useCaptcha'
 
 /* 账号与安全（v38 [MOCK-ONLY]）：修改密码 / 更换手机号 / 注销申请 / 数据导出 / 我的举报 / 屏蔽名单。
  * 接入期对应后端缺口：短信通道、注销复核流程、数据导出任务、举报处理状态回写。 */
 const router = useRouter()
+const { captchaId, captchaImage, captchaLoading, refreshCaptcha } = useCaptcha()
 
-const requests = ref<{ deletion?: { reason?: string; at: string }; export?: { at: string } }>({})
+const requests = ref<{ deletion?: { reason?: string; at: string; cancelableUntil?: string }; export?: { at: string; url?: string } }>({})
 const reports = ref<(ReportPayload & { id: string; at: string; status: 'pending' | 'resolved' | 'rejected' })[]>([])
 const blocked = ref<{ uid: string; name: string }[]>([])
 
 async function loadAll() {
-  try {
-    const [req, rep, blk] = await Promise.all([fetchAccountRequests(), listMyReports(), listBlockedUsers()])
-    requests.value = req
-    reports.value = rep
-    blocked.value = blk
-  } catch {
-    /* 单项失败不阻塞页面 */
-  }
+  const [req, rep, blk] = await Promise.all([
+    fetchAccountRequests().catch(() => ({})),
+    listMyReports().catch(() => []),
+    listBlockedUsers().catch(() => []),
+  ])
+  requests.value = req
+  reports.value = rep
+  blocked.value = blk
 }
 onMounted(loadAll)
 
@@ -88,14 +90,18 @@ function onPhoneSave() {
     return void Toast(phoneErrors.captchaCode)
   }
   phoneSaving.value = true
-  changePhone({ phone: phoneForm.phone.trim(), captchaCode: phoneForm.captchaCode.trim() })
+  changePhone({ phone: phoneForm.phone.trim(), captchaId: captchaId.value, captchaCode: phoneForm.captchaCode.trim() })
     .then(() => {
       Toast('手机号已更新')
       phoneVisible.value = false
       phoneForm.phone = ''
       phoneForm.captchaCode = ''
     })
-    .catch((e) => Toast(e instanceof ApiError ? e.message : '更新失败，请稍后重试'))
+    .catch((e) => {
+      Toast(e instanceof ApiError ? e.message : '更新失败，请稍后重试')
+      phoneForm.captchaCode = ''
+      void refreshCaptcha()
+    })
     .finally(() => {
       phoneSaving.value = false
     })
@@ -149,6 +155,11 @@ function onCancelDeletion() {
 
 async function onExport() {
   try {
+    if (requests.value.export?.url) {
+      await downloadPersonalData(requests.value.export.url)
+      Toast('已开始下载')
+      return
+    }
     await requestDataExport()
     Toast('导出申请已提交')
     await loadAll()
@@ -191,7 +202,7 @@ const REPORT_STATUS: Record<string, string> = { pending: '处理中', resolved: 
     <p class="group-title">隐私与数据</p>
     <CellGroup theme="card">
       <Cell title="用户协议与隐私政策" arrow @click="router.push('/privacy')" />
-      <Cell title="导出个人数据" :note="requests.export ? `已申请（${requests.export.at}）` : '生成后站内信通知'" arrow @click="onExport" />
+      <Cell title="导出个人数据" :note="requests.export ? `已生成（${requests.export.at}），点击下载` : '生成后站内信通知'" arrow @click="onExport" />
       <Cell
         title="注销账号"
         :note="requests.deletion ? `申请处理中（${requests.deletion.at}）` : ''"
@@ -244,7 +255,7 @@ const REPORT_STATUS: Record<string, string> = { pending: '处理中', resolved: 
       <div class="sheet">
         <h3 class="sheet-title">更换绑定手机号</h3>
         <div class="field"><label>新手机号</label><Input v-model="phoneForm.phone" type="tel" :maxlength="11" placeholder="请输入新手机号" clearable /><p v-if="phoneErrors.phone" class="field-error">{{ phoneErrors.phone }}</p></div>
-        <div class="field"><label>验证码</label><Input v-model="phoneForm.captchaCode" :maxlength="4" placeholder="新手机号验证码（演示：8888）" clearable /><p v-if="phoneErrors.captchaCode" class="field-error">{{ phoneErrors.captchaCode }}</p></div>
+        <div class="field"><label>图形验证码</label><div class="captcha-row"><Input v-model="phoneForm.captchaCode" :maxlength="4" placeholder="请输入验证码" clearable /><button class="captcha-button" type="button" :disabled="captchaLoading" aria-label="刷新验证码" @click="refreshCaptcha"><img v-if="captchaImage" :src="captchaImage" alt="图形验证码" /><span v-else>刷新</span></button></div><p v-if="phoneErrors.captchaCode" class="field-error">{{ phoneErrors.captchaCode }}</p></div>
         <Button theme="primary" size="large" block :loading="phoneSaving" @click="onPhoneSave">确认更换</Button>
       </div>
     </Popup>
@@ -318,4 +329,9 @@ const REPORT_STATUS: Record<string, string> = { pending: '处理中', resolved: 
   font-size: 12px;
   color: var(--td-error-color);
 }
+
+.captcha-row { display: flex; align-items: center; gap: 10px; }
+.captcha-row :deep(.t-input) { flex: 1; min-width: 0; }
+.captcha-button { min-width: 96px; min-height: 40px; padding: 0; border: 0; border-radius: var(--td-radius-default); overflow: hidden; }
+.captcha-button img { display: block; width: 96px; height: 40px; }
 </style>

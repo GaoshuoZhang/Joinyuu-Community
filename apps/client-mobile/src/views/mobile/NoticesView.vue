@@ -4,6 +4,7 @@ import { useRouter } from 'vue-router'
 import { Button, Popup, Switch, Tag, Toast } from 'tdesign-mobile-vue'
 import { ApiError } from '@/api/http'
 import { fetchNoticePrefs, updateNoticePrefs, archiveNotice } from '@/api/notices'
+import { downloadPersonalData } from '@/api/me'
 import { useNoticesStore } from '@/stores/notices'
 import { useAsyncList } from '@/composables/useAsyncList'
 import EmptyBlock from '@/components/shared/EmptyBlock.vue'
@@ -63,6 +64,10 @@ async function onItemClick(n: UserNotice) {
   try {
     if (!n.read) await notices.read(n.id)
   } catch {
+    return
+  }
+  if (n.link?.startsWith('/api/app/me/data-exports/')) {
+    await downloadPersonalData(n.link)
     return
   }
   if (n.link) await router.push(n.link)

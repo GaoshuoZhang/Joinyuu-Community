@@ -34,19 +34,25 @@ export class JwtAuthGuard implements CanActivate {
   ) {}
 
   async canActivate(context: ExecutionContext): Promise<boolean> {
+    const request = context.switchToHttp().getRequest<AuthenticatedRequest>()
+    /* /api/app/** 由 AppJwtGuard 负责（路径分流，避免 admin 载荷误判 app 令牌） */
+    const path = (request.path || request.url || '').split('?')[0]
+    if (path === '/api/app' || path.startsWith('/api/app/')) return true
+
     const isPublic = this.reflector.getAllAndOverride<boolean>(IS_PUBLIC_KEY, [
       context.getHandler(),
       context.getClass(),
     ])
     if (isPublic) return true
 
-    const request = context.switchToHttp().getRequest<AuthenticatedRequest>()
     const header = request.headers.authorization ?? ''
     const token = header.startsWith('Bearer ') ? header.slice(7) : ''
     if (!token) throw new UnauthorizedException('未登录或登录已过期')
 
     try {
-      const payload = await this.jwt.verifyAsync<AdminJwtPayload>(token)
+      const payload = await this.jwt.verifyAsync<AdminJwtPayload & { scope?: string }>(token)
+      /* app 域令牌（scope='app'）禁止访问 admin 端点（路径分流见 R1-1） */
+      if (payload.scope === 'app') throw new UnauthorizedException('登录已过期，请重新登录')
       const blacklisted = await this.redis.isBlacklisted(payload.jti)
       if (blacklisted) throw new UnauthorizedException('登录已过期，请重新登录')
 

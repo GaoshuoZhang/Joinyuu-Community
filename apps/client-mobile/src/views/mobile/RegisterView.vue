@@ -7,6 +7,7 @@ import { useConfigStore } from '@/stores/config'
 import { useNoticesStore } from '@/stores/notices'
 import { ApiError } from '@/api/http'
 import { isCaptcha, isPasswordStrong, isPhone, PASSWORD_MSG, PHONE_MSG, REQUIRED } from '@/utils/validators'
+import { useCaptcha } from '@/composables/useCaptcha'
 import 'tdesign-mobile-vue/es/style/index.css'
 
 /* 移动注册：开关停用态 + 分步感表单（单页紧凑版）；成功即登录 */
@@ -14,6 +15,7 @@ const router = useRouter()
 const auth = useAuthStore()
 const config = useConfigStore()
 const notices = useNoticesStore()
+const { captchaId, captchaImage, captchaLoading, refreshCaptcha } = useCaptcha()
 void config.ensureLoaded()
 
 const form = reactive({ nickname: '', phone: '', password: '', confirmPassword: '', captchaCode: '' })
@@ -40,12 +42,14 @@ async function onSubmit() {
   if (closed.value || !validate()) return
   submitting.value = true
   try {
-    await auth.register({ ...form, agreed: agreed.value })
+    await auth.register({ ...form, captchaId: captchaId.value, agreed: agreed.value })
     notices.refreshUnread()
     Toast('注册成功，欢迎加入聚屿社区')
     await router.push('/')
   } catch (e) {
     Toast(e instanceof ApiError ? e.message : '注册失败，请稍后重试')
+    form.captchaCode = ''
+    await refreshCaptcha().catch(() => undefined)
   } finally {
     submitting.value = false
   }
@@ -106,11 +110,14 @@ async function onSubmit() {
           v-model="form.captchaCode"
           class="captcha-input"
           :maxlength="4"
-          placeholder="验证码（演示：8888）"
+          placeholder="请输入验证码"
           :disabled="closed"
           @keyup.enter="onSubmit"
         />
-        <span class="hint">8888</span>
+        <button class="captcha-button" type="button" :disabled="captchaLoading || closed" aria-label="刷新验证码" @click="refreshCaptcha">
+          <img v-if="captchaImage" :src="captchaImage" alt="图形验证码" />
+          <span v-else>刷新</span>
+        </button>
       </div>
       <div class="agreement">
         <Checkbox :checked="agreed" @change="(value: unknown) => (agreed = Boolean(value))" />
@@ -195,15 +202,25 @@ async function onSubmit() {
   min-width: 0;
 }
 
-.hint {
+.captcha-button {
   flex-shrink: 0;
   font-weight: 700;
   letter-spacing: 2px;
   color: var(--td-brand-color);
   background: var(--td-brand-color-1);
-  padding: 10px 12px;
+  padding: 0;
   border-radius: var(--td-radius-default);
   user-select: none;
+  border: 0;
+  overflow: hidden;
+  min-width: 96px;
+  min-height: 40px;
+}
+
+.captcha-button img {
+  display: block;
+  width: 96px;
+  height: 40px;
 }
 
 .error {

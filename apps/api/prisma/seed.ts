@@ -73,6 +73,12 @@ async function main() {
   await prisma.leaseWorkstation.deleteMany()
   await prisma.eventEnrollment.deleteMany()
   await prisma.pointsRecord.deleteMany()
+  /* M2-R R1 新增表（挂靠 user 的可变状态；必须随 User 一起清，避免孤儿残留导致 next 重号 P2002） */
+  await prisma.userNotification.deleteMany()
+  await prisma.userNotificationPreference.deleteMany()
+  await prisma.address.deleteMany()
+  await prisma.agreementConsent.deleteMany()
+  await prisma.accountDeletionRequest.deleteMany()
   await prisma.redemptionOrder.deleteMany()
   await prisma.spaceReservation.deleteMany()
   await prisma.article.deleteMany()
@@ -216,6 +222,8 @@ async function main() {
   }
 
   // ---------- 社区成员 ----------
+  /* M2-R R1：seed 用户统一登录密码 user123（app 端 /api/app/auth/login 用） */
+  const APP_DEFAULT_PASSWORD = await hash('user123', 10)
   let identityCount = 0
   for (const u of users) {
     await prisma.user.create({
@@ -233,6 +241,8 @@ async function main() {
         wechatVerified: u.wechatVerified ?? false,
         frozenUntil: u.frozenUntil ?? null,
         frozenReason: u.frozenReason ?? null,
+        passwordHash: APP_DEFAULT_PASSWORD,
+        passwordUpdatedAt: u.registeredAt,
         points: u.points,
         registeredAt: u.registeredAt,
         lastActiveAt: u.lastActiveAt,

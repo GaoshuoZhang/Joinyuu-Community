@@ -6,11 +6,11 @@
 
 ## 当前状态
 
-**M1.5 后台治理增强已完成，M2 移动端 Mock 持续深化中。** M0 后台原型（A~E）、M1 后端（A~E，129 个基线端点）与 M1.5 治理增强（R1~R12）全部落地。`apps/api` 当前有 43 个 Prisma 模型、17 个迁移、36 个 controller 和 193 个 HTTP 路由装饰器（`/api/admin/**` 191 条 + health/public 各 1 条）；数据范围（域级）、密码周期和 MinIO/本地磁盘双存储驱动均已实现。admin web 有 56 条路由记录（49 条 component-backed，含 AdminLayout 壳），28 个 API 域文件已全量接入真实接口，`src/mock/` 已删除。
+**M1.5 后台治理增强已完成，M2-R 真实接口接入进行中。** M0 后台原型（A~E）、M1 后端（A~E，129 个基线端点）与 M1.5 治理增强（R1~R12）全部落地；其基线为 43 个 Prisma 模型、17 个迁移和 193 个 HTTP 路由装饰器。数据范围（域级）、密码周期和 MinIO/本地磁盘双存储驱动均已实现。admin web 有 56 条路由记录（49 条 component-backed，含 AdminLayout 壳），28 个 API 域文件已全量接入真实接口，`src/mock/` 已删除。
 
-`apps/client-mobile` 已完成纯移动端 Mock-First v40：62 条路由记录（61 条 component-backed、59 个唯一视图文件），覆盖登录注册、项目/需求、活动与签到、商城、空间预约、内容投稿、站内信、关联身份与企业治理、实名认证、全局搜索等流程；v32 提供版本化快照、稳定发号、可控时钟、网络异常场景和五域运营审核，v33 打通需求撮合与项目协作，v34 补齐审核撤回/驳回重提与商城履约模型，v35 落地联系方式可见范围、名片隐私、举报申诉与企业治理闭环，v36 完成请求防竞态、滚动恢复、触控目标、表单草稿与错误重试，v37 新增新手任务、搜索升级、收藏/到货提醒与 Mock 埋点漏斗，v38 完成全量体验整改（草稿与返回安全、安全区、错误重试、行内校验、可访问性）并落地产品级 Mock 闭环（收货地址、账号安全与隐私协议、活动候补与反馈、通知偏好、订单取消与券码期限、空间规则、里程碑证据与退回、举报状态与屏蔽、点赞评论），v39 完成体验补全（浏览去重与阅读历史、分享、活动日历、骨架屏与下拉刷新、skip link 与路由聚焦、官网校验、筛选进 URL、列表计数、政策版本化、通知归档、首页个性化），v42 新增活动电子票、需求沟通、项目协作、积分任务与规则、个人看板、服务在线申请、企业工作台与代企业响应、实名分级权益（纯客户端 Mock，全场景 E2E 三轮 64 页零失败），v41 完成三轮复审整改（URL query 同步、订单评价、注销冷静期与撤回、图片兜底、预约与对比度修复、空态清除筛选），v40 完成产品/UX 复审整改（活动取消/改期运营模拟与取消失效链路、分享扩展、浏览历史页、首页公告、商城分类筛选与 URL 同步、物流单号、评论/用户举报、企业/人才收藏与筛选、搜索分类 chips、无障碍集中补丁与滚动位置记忆，以及项目排序、四页筛选 URL 同步、首页推荐与表单行内错误），并通过 Playwright headed 全链路走查（22 页零控制台错误）修复导航图标拉伸、编辑器按钮高度不一致等回归；**M2-R `/api/app/**` 真实接口接入按当前产品策略暂不启动**，API/admin 跟进方法与验收标准见 `docs/m2-client-plan.md` §7.7；`apps/client-web` 和 M3 小程序尚未开始。后端测试源码现有 e2e 25 套件 / 170 个用例声明、unit 4 套件 / 25 个用例声明；最近一次有记录的 e2e 全量通过口径为 25 套件 / 169 用例。整体进度见 [docs/full-spec-check.md](./docs/full-spec-check.md)。
+`apps/client-mobile` 已完成纯移动端 Mock-First v43，并于 2026-09-16 转入 **M2-R `/api/app/**` 真实接口接入期**。R0 契约与迁移设计、R1 鉴权底座/个人中心/站内信已完成；R2~R4 尚待实施。当前 API 为 48 个 Prisma 模型、19 个迁移、225 个 HTTP 路由装饰器（既有 193 + app 32）。详细进度与验收口径见 `docs/m2-r-plan.md`；`apps/client-web` 和 M3 小程序尚未开始。
 
-开发策略：M1/M1.5 已完成；M2 采用 **Mock-First、移动端优先**，先深化 `client-mobile` 的产品闭环和 UX，再决定 M2-R 真实接口接入时点，之后创建桌面端 `client-web`。
+开发策略：M1/M1.5 已完成；M2 采用 **Mock-First、移动端优先**，`client-mobile` 产品闭环和 UX 已深化至 v43，现按 R1~R4 分批接入真实接口，之后再创建桌面端 `client-web`。
 
 ## 技术栈
 
@@ -20,7 +20,7 @@
 | 后端（M1/M1.5 已完成） | NestJS 11 + Prisma 6 + RESTful API（`apps/api`，端口 7757） |
 | 数据库（M1/M1.5 已完成） | PostgreSQL 17 + Redis 7.4（Docker Compose 本地开发） |
 | 管理后台 Web（当前） | Vue 3 + Vite + TypeScript + TDesign Vue Next + Pinia + Vue Router |
-| 客户端移动端（M2，Mock 深化中） | Vue 3 + Vite + TypeScript + TDesign Mobile Vue + Pinia + Vue Router |
+| 客户端移动端（M2-R 接入中） | Vue 3 + Vite + TypeScript + TDesign Mobile Vue + Pinia + Vue Router |
 | 客户端 Web（M2，未开始） | Vue 3 + Vite + TypeScript + TDesign Vue Next + Pinia + Vue Router |
 | 微信小程序（M3，未开始） | TDesign WeChat MiniProgram |
 
@@ -40,13 +40,13 @@ apps/
       types/        # 实体类型定义
       views/        # 页面（按领域分目录，system/ 含归档管理 ArchivePanel 等治理页）
   api/              # 后端服务（NestJS 11 + Prisma 6 + PostgreSQL 17 + Redis 7.4）
-    prisma/         # schema.prisma（43 模型）+ 17 个 migrations + seed.ts + seed-data/（种子数据单一来源）
+    prisma/         # schema.prisma（48 模型）+ 19 个 migrations + seed.ts + seed-data/（种子数据单一来源）
     src/
       common/       # 底座：Prisma/Redis（缓存+黑名单，降级回源）/响应包络/异常过滤/JWT+权限 Guard/装饰器/RBAC/审计（含快照）/前缀 ID 发号器/积分引擎/存储（本地磁盘）/HTML 清洗与工具
       modules/      # 按域模块：auth/users/enterprises/applications/demands/projects/events/mall/rules/workstations/spaces/contents/assets + system 子域（admins/login-logs/monitor/roles/trash/export）
       scheduler/    # 定时任务（需求/资讯定时发布、活动自动结束、租约临期、归档自动归档/自动删除）
     test/           # e2e（25 套件 / 170 个源码用例声明，每套件重种子隔离）
-  client-mobile/    # M2 纯移动端 Mock-First 应用（v38，M2-R 暂不启动）
+  client-mobile/    # M2 纯移动端应用（v43，M2-R R1 已接入）
     src/
       api/          # 17 个契约文件，mock/http 双模式；默认 mock
       mock/         # [MOCK-ONLY] 内存数据与 16 个 handler
@@ -57,7 +57,7 @@ docs/
   wiki-admin-web.md     # 管理后台开发 Wiki（设计契约/组件规范/状态机/API 约定）
   wiki-backend.md       # 后端开发 Wiki（数据模型/端点契约/业务规则/里程碑）
   api-app-design.md     # M2 客户端 /api/app/** 端点设计
-  entity-fields.md      # 43 模型分域字段摘要（schema.prisma 为事实来源）
+  entity-fields.md      # 48 模型分域字段摘要及 M2-R 后续规划（schema.prisma 为事实来源）
 ```
 
 ## 开发命令
@@ -80,16 +80,16 @@ pnpm db:reset             # 重建数据库（drop + migrate + 全量种子）
 |---|---|
 | [docs/full-spec-check.md](./docs/full-spec-check.md) | 整体里程碑规划与进度勾选（含 M1.5 R1~R12 前后端路线）——**接手任务前先看这里**，完成后同步勾选 |
 | [docs/wiki-admin-web.md](./docs/wiki-admin-web.md) | 管理后台开发 Wiki：设计 tokens、布局骨架、组件规范、状态机、API 约定——**改 admin 代码前必读** |
-| [docs/wiki-backend.md](./docs/wiki-backend.md) | 后端开发 Wiki：数据模型（43 模型）、端点契约清单、业务规则、里程碑——**改后端代码前必读** |
+| [docs/wiki-backend.md](./docs/wiki-backend.md) | 后端开发 Wiki：数据模型（当前 48 模型）、端点契约清单、业务规则、里程碑——**改后端代码前必读** |
 | [docs/api-app-design.md](./docs/api-app-design.md) | M2 客户端 `/api/app/**` 端点设计稿 |
-| [docs/entity-fields.md](./docs/entity-fields.md) | 43 模型分域字段摘要（schema.prisma 为事实来源） |
+| [docs/entity-fields.md](./docs/entity-fields.md) | 48 模型分域字段摘要及 M2-R 后续规划（schema.prisma 为事实来源） |
 
 ## 关键工程约定（摘要，详见 wiki-admin-web.md / wiki-backend.md）
 
 1. **契约冻结**：菜单/路由/状态映射/身份词汇表已冻结，不得私自重写导航、发明颜色字号或自造状态文案。
 2. **共享组件强制**：状态标签用 `StatusTag`、身份标签用 `IdentityTags`，禁止页面自造。
 3. **种子数据单一来源**：后端 `apps/api/prisma/seed-data/`（admin `src/mock/` 已删除）；种子写入 23 个 IdSequence 前缀（U/E/AP/D/P/EV/XE/EX/PT/G/RO/WS/WA/LS/S/SR/A/SU/CL/SC/AN/N/AL）与项目编号 `CODE-<year>`，其中投稿文章编号用 SU。
-4. **接口契约以 wiki-backend §7 为准**：admin `src/api/` 28 个域文件已全部接入真实 HTTP（`/api/admin/**`）；写操作由后端 `@RequirePermission`（权限目录 49 码）与 `AuditService` 管控，客户端未来为 `/api/app/**`（见 api-app-design.md）。
+4. **接口契约以 wiki-backend §7 与 api-app-design.md 为准**：admin `src/api/` 28 个域文件已全部接入真实 HTTP（`/api/admin/**`）；写操作由后端 `@RequirePermission`（权限目录 49 码）与 `AuditService` 管控；客户端 `/api/app/**` 正按 M2-R 分批接入。
 5. **表单校验时机**：弹窗规则 `trigger: 'submit'`，打开时 `clearValidate()`，避免 DatePicker 交互提前红框。
 6. **表格规范**：开启 `resizable` 的表格必须 `table-layout="fixed"` + `hover`；服务端排序用受控 `:sort` + `@sort-change`。
 7. **术语统一**：联系电话 / 办公位 / 社区企业 / 合作企业 / 经验值 / 审核 / 新增 / 归档；禁止回退旧词（联系方式、工位、审批、新建、回收站等）。

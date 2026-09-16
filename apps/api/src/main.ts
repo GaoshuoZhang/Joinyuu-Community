@@ -9,7 +9,12 @@ function corsOrigins(): string[] {
     .map((s) => s.trim())
     .filter(Boolean)
   if (raw && raw.length) return raw
-  return ['http://localhost:7758', 'http://127.0.0.1:7758']
+  return [
+    'http://localhost:7758',
+    'http://127.0.0.1:7758',
+    'http://localhost:7759',
+    'http://127.0.0.1:7759',
+  ]
 }
 
 async function bootstrap(): Promise<void> {

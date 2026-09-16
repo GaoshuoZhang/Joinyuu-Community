@@ -142,7 +142,7 @@ model IdSequence {
 model User {
   uid            String             @id @db.VarChar(16)
   nickname       String             @db.VarChar(64)
-  phone          String             @db.VarChar(32)
+  phone          String             @unique @db.VarChar(32)
   email          String             @db.VarChar(128)
   gender         String             @db.VarChar(8)
   status         String             @default("active") @db.VarChar(16)
@@ -159,14 +159,19 @@ model User {
   registeredAt   String             @db.VarChar(16)
   lastActiveAt   String             @db.VarChar(16)
   bio            String             @db.Text
+  avatar         String?            @db.VarChar(255)
   activities     Json               @default("[]")
   identities     UserIdentity[]
   pointsRecords  PointsRecord[]
   enrollments    EventEnrollment[]
   reservations   SpaceReservation[]
   orders         RedemptionOrder[]
+  notifications  UserNotification[]
+  notificationPreference UserNotificationPreference?
+  addresses      Address[]
+  agreementConsents AgreementConsent[]
+  deletionRequests AccountDeletionRequest[]
 
-  @@index([phone])
   @@index([status])
 }
 
@@ -432,6 +437,7 @@ model PointsRecord {
   at       String @db.VarChar(16)
   operator String @db.VarChar(64)
   source   String @db.VarChar(16) // rule | manual | redemption
+  dedupeKey String? @unique @db.VarChar(128)
   user     User   @relation(fields: [userId], references: [uid])
 
   @@index([userId])
@@ -787,4 +793,77 @@ model ArchiveSetting {
   autoPurge        Boolean @default(false)
   purgeDelayDays   Int     @default(30)
   archiveStatuses  Json?
+}
+
+// ---------- M2-R R1 批：移动端基础设施（2026-09-16，/ api/app/**） ----------
+
+// 站内信（用户维度；admin 端为 AdminNotification，二者独立）
+model UserNotification {
+  id       String  @id @db.VarChar(16) // UN 前缀
+  userId   String  @db.VarChar(16)
+  type     String  @db.VarChar(32) // audit_result | enroll_result | order | points | system | invite | transfer | report | article | demand | project | mall | service
+  title    String  @db.VarChar(128)
+  content  String  @db.VarChar(255)
+  link     String? @db.VarChar(128)
+  at       String  @db.VarChar(16)
+  read     Boolean @default(false)
+  archived Boolean @default(false)
+  user     User    @relation(fields: [userId], references: [uid], onDelete: Cascade)
+
+  @@index([userId, read])
+  @@index([userId, archived])
+  @@index([userId, type])
+}
+
+// 通知偏好（userId 单行，启用的类型集合 Json 字符串数组；至少一种，约束 pushNotice）
+model UserNotificationPreference {
+  userId       String @id @db.VarChar(16)
+  enabledTypes Json   @default("[\"all\"]") // all | type 子集
+  updatedAt    String @db.VarChar(16)
+  user         User   @relation(fields: [userId], references: [uid], onDelete: Cascade)
+}
+
+// 收货地址簿（默认地址唯一由服务层保证）
+model Address {
+  id        String @id @db.VarChar(16) // AD 前缀
+  userId    String @db.VarChar(16)
+  name      String @db.VarChar(64)
+  phone     String @db.VarChar(32)
+  region    String @db.VarChar(128)
+  detail    String @db.VarChar(255)
+  isDefault Boolean @default(false)
+  createdAt String @db.VarChar(16)
+  updatedAt String @db.VarChar(16)
+  user      User   @relation(fields: [userId], references: [uid], onDelete: Cascade)
+
+  @@index([userId])
+}
+
+// 协议同意留痕（注册/政策版本）
+model AgreementConsent {
+  id            Int    @id @default(autoincrement())
+  userId        String @db.VarChar(16)
+  agreementType String @db.VarChar(32) // user_agreement | privacy_policy
+  version       String @db.VarChar(32)
+  consentedAt   String @db.VarChar(16)
+  user          User   @relation(fields: [userId], references: [uid], onDelete: Cascade)
+
+  @@unique([userId, agreementType, version])
+  @@index([userId])
+}
+
+// 注销申请（7 天冷静期：pending → cooling → approved；冷静期内可撤回取消）
+model AccountDeletionRequest {
+  id            String  @id @db.VarChar(16) // DR 前缀
+  userId        String  @db.VarChar(16)
+  status        String  @default("cooling") @db.VarChar(16) // cooling 冷静期 | approved 已注销 | cancelled 已撤回
+  requestedAt   String  @db.VarChar(16)
+  effectiveAt   String? @db.VarChar(16)
+  reason        String? @db.VarChar(255)
+  cancelReason  String? @db.VarChar(255)
+  cancelledAt   String? @db.VarChar(16)
+  approvedAt    String? @db.VarChar(16)
+  user          User    @relation(fields: [userId], references: [uid], onDelete: Cascade)
+
+  @@index([userId])
 }

@@ -1,5 +1,5 @@
 import { Injectable } from '@nestjs/common'
-import type { ExperienceRule, LevelTier, PointsRule } from '@prisma/client'
+import { Prisma, type ExperienceRule, type LevelTier, type PointsRule } from '@prisma/client'
 import { PrismaService } from '../../prisma/prisma.service'
 import { IdGeneratorService } from '../../id-generator/id-generator.service'
 import { RedisService } from '../../redis/redis.service'
@@ -20,28 +20,31 @@ export class PointsEngineService {
   ) {}
 
   /** 为用户发放积分（挂靠个人用户身份）；规则缺失/停用则 no-op */
-  async issuePoints(userId: string, code: string, reason: string): Promise<void> {
+  async issuePoints(userId: string, code: string, reason: string, dedupeKey?: string): Promise<void> {
     const rule = (await this.pointsRules()).find((r) => r.code === code)
     if (!rule || rule.status !== 'enabled') return
 
-    await this.prisma.$transaction(async (tx) => {
-      const user = await tx.user.findUnique({ where: { uid: userId } })
-      if (!user) return
-      const balance = user.points + rule.points
-      await tx.user.update({ where: { uid: userId }, data: { points: balance } })
-      await tx.pointsRecord.create({
-        data: {
-          id: await this.ids.next('PT'),
-          userId,
-          delta: rule.points,
-          balance,
-          reason,
-          at: formatNow(),
-          operator: '系统',
-          source: 'rule',
-        },
+    try {
+      await this.prisma.$transaction(async (tx) => {
+        const user = await tx.user.update({ where: { uid: userId }, data: { points: { increment: rule.points } } })
+        await tx.pointsRecord.create({
+          data: {
+            id: await this.ids.next('PT'),
+            userId,
+            delta: rule.points,
+            balance: user.points,
+            reason,
+            at: formatNow(),
+            operator: '系统',
+            source: 'rule',
+            dedupeKey: dedupeKey ?? null,
+          },
+        })
       })
-    })
+    } catch (error) {
+      if (dedupeKey && error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002') return
+      throw error
+    }
   }
 
   /** 为社区企业（enterprise）或社区个体身份（individual）发放经验值；规则缺失/停用则 no-op */

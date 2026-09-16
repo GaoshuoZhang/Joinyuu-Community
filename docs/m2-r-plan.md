@@ -18,7 +18,7 @@
 | 批次 | 内容 | 依赖 | 状态 |
 |---|---|---|---|
 | R0 | 契约冻结与迁移设计（文档/决策/迁移方案，零端点） | — | [√] 已完成（2026-09-16） |
-| R1 | 鉴权底座与个人中心 + 站内信 | R0 | [ ] 未开始 |
+| R1 | 鉴权底座与个人中心 + 站内信 | R0 | [√] 已完成（2026-09-16） |
 | R2 | 核心业务闭环（需求/项目/活动/商城/空间/内容/申请/首页/搜索） | R1 | [ ] 未开始 |
 | R3 | 信任治理（实名/举报/屏蔽/邀请/转移/权限/名片/社区/协议） | R1（与 R2 可并行） | [ ] 未开始 |
 | R4 | 延伸观测与切换（任务/看板/服务申请/企业工作台/实名分级/埋点 + http 切换 + 全量回归） | R2+R3 | [ ] 未开始 |
@@ -49,7 +49,7 @@
 | # | 工作项 | 实施要点 | 验收 | 状态 |
 |---|---|---|---|---|
 | R0-1 | api-app-design.md 修订 | §8.1 全部 [MOCK-ONLY] 端点转正；补 v40~v43 新端点设计；修订记录留痕 | 全部客户端 api 函数在文档中有对应端点定义 | [√]（§8.2 转正表 + §12 站内信） |
-| R0-2 | entity-fields.md 扩展 | 按 §2.6 迁移清单补新模型与字段说明 | 模型数与 schema.prisma 一致 | [√]（§8：22 新模型 + 13 字段扩展） |
+| R0-2 | entity-fields.md 扩展 | 按 §2.6 迁移清单补新模型与字段说明 | 模型数与 schema.prisma 一致 | [√]（§8：22 新模型 + 15 个既有模型字段扩展） |
 | R0-3 | Prisma 迁移方案定稿 | 一次设计、按批次执行（R1~R4 各一组 migration）；含索引与回填策略 | 迁移清单评审通过（§2.6 全项有批次归属） | [√]（§2.6 已标批次） |
 | R0-4 | 决策项落地（§5 开放问题逐条定稿） | MallGoods 分类语义、订单终态映射、政策模型、核销码、短信降级等 | §5 表全部标「已决」 | [√]（§5 全部定稿，见 R0 决策记录） |
 
@@ -121,11 +121,12 @@
 | R3 | Report / Appeal / UserBlock / EnterpriseInvitation / TransferRequest / Policy | 举报 / 申诉 / 屏蔽 / 邀请 / 转移 / 社区政策内容 |
 | R4 | PointsTask / UserTaskRecord / ServiceApplication / AnalyticsEvent | 任务 / 服务申请 / 埋点 |
 
-**字段级扩展（13 模型）**
+**字段级扩展（15 模型）**
 
 | 批次 | 模型 | 新增字段 |
 |---|---|---|
-| R1 | User | （无缺字段，`passwordHash/realName/citizenId` 已有） |
+| R1 | User | `avatar`（资料编辑与会话恢复返回）；`phone` 收紧为唯一（`passwordHash/realName/citizenId` 已有） |
+| R1 | PointsRecord | `dedupeKey`（可空唯一键，用于自然日任务等积分发放幂等） |
 | R2 | CommunityEvent | venueLat/venueLng/checkinRadiusM/checkinOpenMin/checkinCloseMin、cancelDeadlineHours、rescheduledTo（postponed 状态复用既有 cancelled 枚举位） |
 | R2 | EventEnrollment | waitlisted/waitlistOrder、checkinLat/checkinLng/checkinMethod |
 | R2 | Demand | demandType、deliverable/budget/deliverBy、cooperationNeed/bottleneck/partnershipMode/returnOffer、contactName/contactPhone/contactEmail、projectId |
@@ -139,6 +140,15 @@
 | R2 | Article | likeCount/commentCount（或聚合查询，R0-4 定） |
 | R3 | Enterprise | logo/website/address/services/advantages |
 | R3 | UserIdentity | permissions（8 项枚举数组） |
+
+**索引、约束与回填策略（R0 冻结）**
+
+| 批次 | 约束/索引 | 既有数据回填与上线顺序 |
+|---|---|---|
+| R1 | `User.phone` 唯一；`Address(userId) WHERE isDefault=true` 部分唯一；五个用户归属模型均以 `userId → User.uid ON DELETE CASCADE`；`AgreementConsent(userId,agreementType,version)` 联合唯一；`PointsRecord.dedupeKey` 唯一 | 现有用户密码由 seed/迁移脚本显式补齐；新增列先 nullable/default，再建索引；上线前先查重手机号，发现冲突则中止迁移 |
+| R2 | 消息按 demandId+at、协作资源按 projectId、反馈/票/收藏/提醒按业务唯一键建索引；`DemandRespondent.userId` 建普通索引与用户外键 | `MallGoods.category` 旧值先复制至 fulfillment，再按映射表回填 GC 分类；`DemandRespondent.userId` 先 nullable，通过响应快照/关联记录回填并核对未匹配行后再收紧；计数字段从关联表聚合回填 |
+| R3 | 举报 reporter/status、邀请 invitee/status/expireAt、转移 toUid/status、政策 category/status/effectiveAt 建组合索引；屏蔽关系双列唯一 | `UserIdentity.permissions` 先以空数组落列，再按负责人/成员规则批量回填；Enterprise 新展示字段保持 nullable，避免影响既有名片 |
+| R4 | 任务领取 `(userId,taskCode,date)` 唯一；服务申请 userId/status；埋点 eventType/at 与 userId/at 组合索引 | 任务与权益规则以 seed 幂等写入；AnalyticsEvent 仅新增表无回填；浏览历史若启用，先做客户端增量上报，不迁移本机旧快照 |
 
 ### 2.7 测试与验证策略
 
@@ -203,5 +213,6 @@
 
 | 日期 | 摘要 |
 |---|---|
-| 2026-09-16 | 初版：M2-R 立项规划——四项决策（全量分批/降级实现/必做全做/独立文档）；R0~R4 五批后端对齐表（22 新模型 + 13 模型字段扩展 + 约 110 端点）、admin A1~A19 必做 + 可选项登记、8 项开放问题待 R0 定稿；基于 v43 客户端 / api 43 模型 / admin 16 视图目录现状调研 |
-| 2026-09-16 | **R0 完成**：① api-app-design.md §8.1 [MOCK-ONLY] 端点转正 + 新增 §8.2（v40~v43 端点）+ §12（站内信）；② entity-fields.md 新增 §8（22 新模型 + 13 模型字段扩展）；③ §2.6 迁移方案按 R1~R4 分组定稿；④ §5 开放问题全部定稿（Q1 改造 category 语义、Q3 新建 Policy、Q4 HMAC+签到即核销、Q8 两者免审+后台可编辑+名片字段可配置；Q2/Q5/Q6/Q7 按推荐方案）；admin 必做扩为 A1~A19（新增 A19 名片管理） |
+| 2026-09-16 | 初版：M2-R 立项规划——四项决策（全量分批/降级实现/必做全做/独立文档）；R0~R4 五批后端对齐表（22 新模型 + 15 个既有模型字段扩展 + 约 110 端点）、admin A1~A19 必做 + 可选项登记、8 项开放问题待 R0 定稿；基于 v43 客户端 / api 43 模型 / admin 16 视图目录现状调研 |
+| 2026-09-16 | **R0 完成**：api-app-design.md §8.1 [MOCK-ONLY] 端点转正 + 新增 §8.2/§12；entity-fields.md 新增 §8（22 新模型 + 15 个既有模型字段扩展）；§2.6 迁移方案定稿；§5 开放问题全部定稿（Q1 category 语义改造 / Q3 Policy / Q4 HMAC+签到即核销 / Q8 名片免审+后台可编辑+字段可配置）；admin 必做扩为 A1~A19 |
+| 2026-09-16 | **R1 完成并复查整改**：鉴权分流与验证码；注册双协议留痕；daily_login 数据库幂等；配置/字典；个人资料与头像、积分/经验；改密踢除其他 app 会话、重置密码踢除全部会话；换绑、注销冷静期与状态查询；生成并鉴权下载个人数据 JSON；站内信/偏好/归档；地址簿。Prisma 共 5 个 R1 新模型，并补手机号唯一、默认地址部分唯一索引、用户外键、协议版本联合唯一。R1 e2e 增强为 3 套件 / 25 用例；移动端 HTTP 适配层与真实图形验证码 UI 已对齐；全量 API e2e 28 套件 / 195 用例通过。 |

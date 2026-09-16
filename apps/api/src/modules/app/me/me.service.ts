@@ -1,0 +1,314 @@
+import {
+  BadRequestException,
+  ConflictException,
+  Injectable,
+  NotFoundException,
+  UnauthorizedException,
+} from '@nestjs/common'
+import { compare, hash } from 'bcryptjs'
+import type { Prisma } from '@prisma/client'
+import { PrismaService } from '../../../common/prisma/prisma.service'
+import { RedisService } from '../../../common/redis/redis.service'
+import { IdGeneratorService } from '../../../common/id-generator/id-generator.service'
+import { NotificationService } from '../../../common/notify/notification.service'
+import { AppSessionService } from '../../../common/app-session/app-session.service'
+import { StorageService } from '../../../common/storage/storage.service'
+import { formatNow } from '../../../common/utils/time'
+import type { UpdateMeDto } from './dto/update-me.dto'
+import type { ChangePasswordDto } from './dto/change-password.dto'
+import type { ChangePhoneDto } from './dto/change-phone.dto'
+import type { DeletionRequestDto } from './dto/deletion-request.dto'
+
+/** 图形验证码存储前缀（与 app auth 共用同一键空间，一次性消费） */
+const CAPTCHA_PREFIX = 'captcha:app:'
+
+/** 身份类型 → 展示标签（经验页 identityLabel 用） */
+const IDENTITY_LABEL: Record<string, string> = {
+  individual: '个人用户',
+  community_individual: '社区个体',
+  community_enterprise: '社区企业',
+  external_enterprise: '合作企业',
+}
+
+/** 注销冷静期（天）：申请后 effectiveAt = requestedAt + 7 天 */
+const DELETION_COOLING_DAYS = 7
+
+/** 个人中心与账号安全（/api/app/me）：资料聚合、积分/经验流水、改密/换绑、注销与导出 */
+@Injectable()
+export class MeService {
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly redis: RedisService,
+    private readonly ids: IdGeneratorService,
+    private readonly notify: NotificationService,
+    private readonly sessions: AppSessionService,
+    private readonly storage: StorageService,
+  ) {}
+
+  /** 个人中心聚合：资料 + 全部身份 + 积分余额。 */
+  async profile(uid: string) {
+    const user = await this.prisma.user.findUnique({
+      where: { uid },
+      include: { identities: { orderBy: { id: 'asc' } } },
+    })
+    if (!user) throw new NotFoundException('用户不存在')
+
+    return {
+      uid: user.uid,
+      nickname: user.nickname,
+      gender: user.gender,
+      email: user.email,
+      phone: user.phone,
+      bio: user.bio,
+      points: user.points,
+      realName: user.realName ?? undefined,
+      status: user.status,
+      registeredAt: user.registeredAt,
+      avatar: user.avatar ?? undefined,
+      identities: user.identities.map((i) => ({
+        type: i.type,
+        level: i.level ?? undefined,
+        experience: i.experience ?? undefined,
+        enterpriseId: i.enterpriseId ?? undefined,
+        enterpriseName: i.enterpriseName ?? undefined,
+        enterpriseRole: i.role ?? undefined,
+        organizationName: i.type === 'external_enterprise' ? i.enterpriseName ?? undefined : undefined,
+      })),
+    }
+  }
+
+  /** 更新资料：仅更新传入的可编辑字段，头像 URL 一并持久化。 */
+  async updateMe(uid: string, dto: UpdateMeDto): Promise<{ code: number }> {
+    const user = await this.prisma.user.findUnique({ where: { uid } })
+    if (!user) throw new NotFoundException('用户不存在')
+
+    const data: Prisma.UserUpdateInput = {}
+    if (dto.nickname !== undefined && dto.nickname.trim()) data.nickname = dto.nickname.trim()
+    if (dto.gender !== undefined) data.gender = dto.gender
+    if (dto.bio !== undefined) data.bio = dto.bio.trim()
+    if (dto.email !== undefined) data.email = dto.email.trim()
+    if (dto.avatar !== undefined) data.avatar = dto.avatar.trim() || null
+
+    await this.prisma.user.update({ where: { uid }, data })
+    return { code: 0 }
+  }
+
+  /** 我的积分流水（分页倒序，每条含 balance） */
+  async pointsRecords(uid: string, page: number, pageSize: number) {
+    const where: Prisma.PointsRecordWhereInput = { userId: uid }
+    const [total, rows] = await Promise.all([
+      this.prisma.pointsRecord.count({ where }),
+      this.prisma.pointsRecord.findMany({
+        where,
+        orderBy: { at: 'desc' },
+        skip: (page - 1) * pageSize,
+        take: pageSize,
+      }),
+    ])
+    return {
+      list: rows.map((r) => ({
+        id: r.id,
+        delta: r.delta,
+        balance: r.balance,
+        reason: r.reason,
+        source: r.source,
+        at: r.at,
+      })),
+      total,
+    }
+  }
+
+  /** 我的经验与等级（按个人维度/社区个体身份取数；无社区个体身份返回空） */
+  async experienceRecords(uid: string, requestedIdentity?: string) {
+    const identity = await this.prisma.userIdentity.findFirst({
+      where: {
+        userId: uid,
+        type: requestedIdentity === 'community_enterprise' ? 'community_enterprise' : 'community_individual',
+      },
+    })
+    if (!identity) {
+      return { identityLabel: '', level: null, levelName: '', nextLevelExp: null, records: [] }
+    }
+
+    const experience = identity.experience ?? 0
+    const level = identity.level ?? 1
+    const tier = await this.prisma.levelTier.findUnique({ where: { level } })
+    /* 下一级门槛：经验 < threshold 的最小门槛（升序取第一个高于当前经验值者） */
+    const tiers = await this.prisma.levelTier.findMany({ orderBy: { threshold: 'asc' } })
+    const next = tiers.find((t) => t.threshold > experience)
+
+    const targetType = identity.type === 'community_enterprise' ? 'enterprise' : 'individual'
+    const targetId = targetType === 'enterprise' ? identity.enterpriseId ?? '' : uid
+    const records = await this.prisma.experienceRecord.findMany({
+      where: { targetType, targetId },
+      orderBy: { at: 'desc' },
+    })
+    return {
+      identityLabel: IDENTITY_LABEL[identity.type] || identity.type,
+      level,
+      levelName: tier?.label ?? '',
+      nextLevelExp: next ? next.threshold : null,
+      records: records.map((r) => ({ id: r.id, delta: r.delta, balance: r.balance, reason: r.reason, at: r.at })),
+    }
+  }
+
+  /** 登录态修改密码：校验原密码 → 更新，并使当前会话之外的 app 会话失效。 */
+  async changePassword(uid: string, currentJti: string, dto: ChangePasswordDto): Promise<{ code: number }> {
+    const user = await this.prisma.user.findUnique({ where: { uid } })
+    if (!user) throw new UnauthorizedException('未登录或登录已过期')
+    if (!user.passwordHash || !(await compare(dto.oldPassword, user.passwordHash))) {
+      throw new BadRequestException('原密码不正确')
+    }
+    if (dto.oldPassword === dto.newPassword) {
+      throw new BadRequestException('新密码不能与原密码相同')
+    }
+    await this.prisma.user.update({
+      where: { uid },
+      data: { passwordHash: await hash(dto.newPassword, 10), passwordUpdatedAt: formatNow() },
+    })
+    await this.sessions.kickOthers(uid, currentJti)
+    return { code: 0 }
+  }
+
+  /** 更换绑定手机号（新号图形验证码）；占用校验 → 更新 → 站内信 */
+  async changePhone(uid: string, dto: ChangePhoneDto): Promise<{ code: number }> {
+    const captchaOk = await this.verifyCaptcha(dto.captchaId, dto.captchaCode)
+    if (!captchaOk) throw new BadRequestException('验证码错误或已过期')
+
+    const newPhone = dto.newPhone.trim()
+    if (!/^1\d{10}$/.test(newPhone)) throw new BadRequestException('手机号格式不正确')
+    const conflict = await this.prisma.user.findFirst({ where: { phone: newPhone }, select: { uid: true } })
+    if (conflict && conflict.uid !== uid) throw new ConflictException('该手机号已绑定其他账号')
+
+    await this.prisma.user.update({ where: { uid }, data: { phone: newPhone } })
+    await this.notify.pushNotice(uid, {
+      type: 'system',
+      title: '手机号已更换',
+      content: '您绑定的手机号已更换成功，请牢记新号码登录。',
+    })
+    return { code: 0 }
+  }
+
+  /** 提交注销申请：进入 7 天冷静期；已有进行中申请则冲突 */
+  async deletionRequest(uid: string, dto: DeletionRequestDto): Promise<{ code: number; effectiveAt: string }> {
+    const existing = await this.prisma.accountDeletionRequest.findFirst({
+      where: { userId: uid, status: 'cooling' },
+      select: { id: true },
+    })
+    if (existing) throw new ConflictException('您已有进行中的注销申请，如需撤销请先取消')
+
+    const requestedAt = formatNow()
+    const effectiveAt = this.addDaysTime(requestedAt, DELETION_COOLING_DAYS)
+    await this.prisma.accountDeletionRequest.create({
+      data: {
+        id: await this.ids.next('DR'),
+        userId: uid,
+        status: 'cooling',
+        requestedAt,
+        effectiveAt,
+        reason: dto.reason?.trim() ?? null,
+      },
+    })
+
+    await this.notify.pushNotice(uid, {
+      type: 'system',
+      title: '注销申请已提交',
+      content: `您已提交账号注销申请，将于 ${effectiveAt} 生效；冷静期内可随时撤回。`,
+    })
+    return { code: 0, effectiveAt }
+  }
+
+  /** 撤销注销申请（冷静期内：cooling → cancelled） */
+  async cancelDeletion(uid: string): Promise<{ code: number }> {
+    const req = await this.prisma.accountDeletionRequest.findFirst({
+      where: { userId: uid, status: 'cooling' },
+      select: { id: true },
+    })
+    if (!req) throw new BadRequestException('没有可撤销的注销申请')
+
+    await this.prisma.accountDeletionRequest.update({
+      where: { id: req.id },
+      data: { status: 'cancelled', cancelledAt: formatNow() },
+    })
+    await this.notify.pushNotice(uid, {
+      type: 'system',
+      title: '注销申请已撤销',
+      content: '您的账号注销申请已撤销，账户可继续正常使用。',
+    })
+    return { code: 0 }
+  }
+
+  /** 个人数据导出：生成当前服务持有的用户维度 JSON，并通过受控文件端点提供下载。 */
+  async dataExport(uid: string): Promise<{ code: number; url: string }> {
+    const [user, points, experience, notifications, addresses, consents, deletionRequests, demands, articles] = await Promise.all([
+      this.prisma.user.findUnique({ where: { uid }, include: { identities: true, enrollments: true, reservations: true, orders: true } }),
+      this.prisma.pointsRecord.findMany({ where: { userId: uid }, orderBy: { at: 'asc' } }),
+      this.prisma.experienceRecord.findMany({ where: { targetId: uid }, orderBy: { at: 'asc' } }),
+      this.prisma.userNotification.findMany({ where: { userId: uid }, orderBy: { at: 'asc' } }),
+      this.prisma.address.findMany({ where: { userId: uid }, orderBy: { createdAt: 'asc' } }),
+      this.prisma.agreementConsent.findMany({ where: { userId: uid }, orderBy: { consentedAt: 'asc' } }),
+      this.prisma.accountDeletionRequest.findMany({ where: { userId: uid }, orderBy: { requestedAt: 'asc' } }),
+      this.prisma.demand.findMany({ where: { publisherId: uid }, orderBy: { createdAt: 'asc' } }),
+      this.prisma.article.findMany({ where: { authorId: uid }, orderBy: { createdAt: 'asc' } }),
+    ])
+    if (!user) throw new NotFoundException('用户不存在')
+    const generatedAt = formatNow()
+    const safeStamp = generatedAt.replace(/[- :]/g, '')
+    const key = `export-${uid}-${safeStamp}.json`
+    const { citizenId, ...safeUser } = user
+    const payload = {
+      generatedAt,
+      user: { ...safeUser, passwordHash: undefined, citizenId: citizenId ? `${citizenId.slice(0, 4)}**********${citizenId.slice(-4)}` : null },
+      points,
+      experience,
+      notifications,
+      addresses,
+      consents,
+      deletionRequests,
+      demands,
+      articles,
+    }
+    await this.storage.put(key, Buffer.from(JSON.stringify(payload, null, 2), 'utf8'), 'application/json')
+    const url = `/api/app/me/data-exports/${key}`
+    await this.notify.pushNotice(uid, {
+      type: 'system',
+      title: '个人数据导出已生成',
+      content: '您的个人数据导出已生成，点击查看或下载。',
+      link: url,
+    })
+    return { code: 0, url }
+  }
+
+  async accountRequests(uid: string) {
+    const [deletion, exported] = await Promise.all([
+      this.prisma.accountDeletionRequest.findFirst({ where: { userId: uid, status: 'cooling' }, orderBy: { requestedAt: 'desc' } }),
+      this.prisma.userNotification.findFirst({ where: { userId: uid, title: '个人数据导出已生成' }, orderBy: { at: 'desc' } }),
+    ])
+    return {
+      deletion: deletion ? { reason: deletion.reason ?? undefined, at: deletion.requestedAt, cancelableUntil: deletion.effectiveAt ?? undefined } : undefined,
+      export: exported ? { at: exported.at, url: exported.link ?? undefined } : undefined,
+    }
+  }
+
+  async readExport(uid: string, key: string): Promise<Buffer | null> {
+    if (!key.startsWith(`export-${uid}-`) || !key.endsWith('.json')) return null
+    return this.storage.read(key)
+  }
+
+  /* ---------- 内部工具 ---------- */
+
+  private async verifyCaptcha(captchaId: string, code: string): Promise<boolean> {
+    const expected = await this.redis.getCache<string>(CAPTCHA_PREFIX + captchaId)
+    await this.redis.delCache(CAPTCHA_PREFIX + captchaId)
+    if (!expected) return false
+    return expected.toUpperCase() === (code ?? '').toUpperCase()
+  }
+
+  /** 时间字符串（YYYY-MM-DD HH:mm）加天数 */
+  private addDaysTime(timeStr: string, days: number): string {
+    const d = new Date(timeStr.replace(' ', 'T'))
+    d.setDate(d.getDate() + days)
+    const p = (n: number): string => String(n).padStart(2, '0')
+    return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}`
+  }
+}

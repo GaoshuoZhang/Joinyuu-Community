@@ -1,4 +1,4 @@
-import { apiMode, httpGet, httpPost, httpPut } from './http'
+import { apiMode, httpDownload, httpGet, httpPost, httpPut } from './http'
 import type { MyStats, PageQuery, PageResult, PointsRecord, PointsTask, RealNameInfo, RealNamePayload, ReportPayload, UserProfile } from '@/types'
 import * as mock from '@/mock/handlers/me'
 
@@ -52,34 +52,44 @@ export async function fetchPointsRecords(query: PageQuery = {}): Promise<PageRes
   return httpGet<PageResult<PointsRecord>>(`/me/points-records?${qs}`)
 }
 
-/* ---------- v38 账号安全与治理（[MOCK-ONLY]） ---------- */
+/* ---------- 账号安全与治理（R1 已接入；举报与屏蔽留待 R3） ---------- */
 
-/** [MOCK-ONLY] 修改登录密码（校验原密码）。 */
+/** 修改登录密码（校验原密码，并使其他 app 会话失效）。 */
 export async function changePassword(payload: { oldPassword: string; password: string }): Promise<void> {
   if (apiMode === 'mock') return mock.changePassword(payload)
-  await httpPost('/me/change-password', payload)
+  await httpPost('/me/change-password', { oldPassword: payload.oldPassword, newPassword: payload.password })
 }
 
-/** [MOCK-ONLY] 提交注销申请。 */
+/** 提交账号注销申请。 */
 export async function requestAccountDeletion(reason?: string): Promise<void> {
   if (apiMode === 'mock') return mock.requestAccountDeletion(reason)
   await httpPost('/me/deletion-request', { reason })
 }
 
-/** [MOCK-ONLY] 申请导出个人数据。 */
+/** 申请生成个人数据导出。 */
 export async function requestDataExport(): Promise<void> {
   if (apiMode === 'mock') return mock.requestDataExport()
   await httpPost('/me/data-export')
 }
 
-/** [MOCK-ONLY] 我的账号申请状态（注销 / 导出）。 */
-/** POST /api/app/me/deletion/cancel — 冷静期内撤回注销申请 */
-export async function cancelAccountDeletion(): Promise<void> {
-  if (apiMode === 'mock') return mock.cancelAccountDeletion()
-  await httpPost('/me/deletion/cancel')
+export async function downloadPersonalData(url: string): Promise<void> {
+  const blob = await httpDownload(url)
+  const objectUrl = URL.createObjectURL(blob)
+  const anchor = document.createElement('a')
+  anchor.href = objectUrl
+  anchor.download = '聚屿社区-个人数据.json'
+  anchor.click()
+  URL.revokeObjectURL(objectUrl)
 }
 
-export async function fetchAccountRequests(): Promise<{ deletion?: { reason?: string; at: string; cancelableUntil?: string }; export?: { at: string } }> {
+/** 我的账号申请状态（注销 / 导出）。 */
+/** POST /api/app/me/deletion-request/cancel — 冷静期内撤回注销申请 */
+export async function cancelAccountDeletion(): Promise<void> {
+  if (apiMode === 'mock') return mock.cancelAccountDeletion()
+  await httpPost('/me/deletion-request/cancel')
+}
+
+export async function fetchAccountRequests(): Promise<{ deletion?: { reason?: string; at: string; cancelableUntil?: string }; export?: { at: string; url?: string } }> {
   if (apiMode === 'mock') return mock.fetchAccountRequests()
   return httpGet('/me/account-requests')
 }

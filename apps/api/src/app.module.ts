@@ -30,9 +30,17 @@ import { MonitorModule } from './modules/system/monitor/monitor.module'
 import { TrashModule } from './modules/system/trash/trash.module'
 import { ExportModule } from './modules/system/export/export.module'
 import { AssetsModule } from './modules/assets/assets.module'
+import { NotificationModule } from './common/notify/notification.module'
+import { AppSessionModule } from './common/app-session/app-session.module'
+import { AppAuthModule } from './modules/app/auth/auth.module'
+import { AppMeModule } from './modules/app/me/me.module'
+import { AppConfigModule } from './modules/app/config/config.module'
+import { AppNoticesModule } from './modules/app/notices/notices.module'
+import { AppAddressesModule } from './modules/app/addresses/addresses.module'
 import { SchedulerModule } from './scheduler/scheduler.module'
 import { HealthController } from './health/health.controller'
 import { JwtAuthGuard } from './common/guards/jwt-auth.guard'
+import { AppJwtGuard } from './common/guards/app-jwt.guard'
 import { PermissionGuard } from './common/guards/permission.guard'
 import { DomainScopeGuard } from './common/guards/domain-scope.guard'
 import { EnvelopeInterceptor } from './common/interceptors/envelope.interceptor'
@@ -71,12 +79,20 @@ import { HttpExceptionFilter } from './common/filters/http-exception.filter'
     TrashModule,
     ExportModule,
     AssetsModule,
+    NotificationModule,
+    AppSessionModule,
+    AppAuthModule,
+    AppMeModule,
+    AppConfigModule,
+    AppNoticesModule,
+    AppAddressesModule,
     SchedulerModule,
   ],
   controllers: [HealthController],
   providers: [
     { provide: APP_PIPE, useValue: new ValidationPipe({ transform: true, whitelist: true }) },
     { provide: APP_GUARD, useClass: JwtAuthGuard },
+    { provide: APP_GUARD, useClass: AppJwtGuard },
     { provide: APP_GUARD, useClass: PermissionGuard },
     { provide: APP_GUARD, useClass: DomainScopeGuard },
     { provide: APP_INTERCEPTOR, useClass: EnvelopeInterceptor },

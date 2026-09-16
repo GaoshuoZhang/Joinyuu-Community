@@ -6,6 +6,7 @@ import { useAuthStore } from '@/stores/auth'
 import { useNoticesStore } from '@/stores/notices'
 import { ApiError } from '@/api/http'
 import { isCaptcha, isPhone, PHONE_MSG, REQUIRED } from '@/utils/validators'
+import { useCaptcha } from '@/composables/useCaptcha'
 import 'tdesign-mobile-vue/es/style/index.css'
 
 /* 移动登录：全屏表单（Mock 验证码 8888）；错误用 Toast 反馈。 */
@@ -13,6 +14,7 @@ const router = useRouter()
 const route = useRoute()
 const auth = useAuthStore()
 const notices = useNoticesStore()
+const { captchaId, captchaImage, captchaLoading, refreshCaptcha } = useCaptcha()
 
 const form = reactive({ phone: '', password: '', captchaCode: '' })
 const submitting = ref(false)
@@ -32,12 +34,14 @@ async function onSubmit() {
   }
   submitting.value = true
   try {
-    await auth.login(form)
+    await auth.login({ ...form, captchaId: captchaId.value })
     notices.refreshUnread()
     Toast(`欢迎回来，${auth.name}`)
     await router.push(String(route.query.redirect ?? '/'))
   } catch (e) {
     Toast(e instanceof ApiError ? e.message : '登录失败，请稍后重试')
+    form.captchaCode = ''
+    await refreshCaptcha().catch(() => undefined)
   } finally {
     submitting.value = false
   }
@@ -67,8 +71,11 @@ async function onSubmit() {
       <div class="field">
         <label>验证码</label>
         <div class="captcha-row">
-          <Input v-model="form.captchaCode" :maxlength="4" placeholder="验证码（演示：8888）" @keyup.enter="onSubmit" />
-          <span class="hint">8888</span>
+          <Input v-model="form.captchaCode" :maxlength="4" placeholder="请输入验证码" @keyup.enter="onSubmit" />
+          <button class="captcha-button" type="button" :disabled="captchaLoading" aria-label="刷新验证码" @click="refreshCaptcha">
+            <img v-if="captchaImage" :src="captchaImage" alt="图形验证码" />
+            <span v-else>刷新</span>
+          </button>
         </div>
         <p v-if="errors.captchaCode" class="error">{{ errors.captchaCode }}</p>
       </div>
@@ -140,15 +147,25 @@ async function onSubmit() {
   min-width: 0;
 }
 
-.hint {
+.captcha-button {
   flex-shrink: 0;
-  padding: 10px 12px;
+  padding: 0;
   font-weight: 700;
   letter-spacing: 2px;
   color: var(--td-brand-color);
   background: var(--td-brand-color-1);
   border-radius: var(--td-radius-default);
   user-select: none;
+  border: 0;
+  overflow: hidden;
+  min-width: 96px;
+  min-height: 40px;
+}
+
+.captcha-button img {
+  display: block;
+  width: 96px;
+  height: 40px;
 }
 
 .error {

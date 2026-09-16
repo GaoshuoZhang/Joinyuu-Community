@@ -80,6 +80,19 @@ export function httpDelete<T>(path: string): Promise<T> {
   return request<T>(path, { method: 'DELETE' })
 }
 
+/** 下载需鉴权的二进制/文件响应（不走 JSON 包络）。 */
+export async function httpDownload(path: string): Promise<Blob> {
+  const headers = new Headers()
+  const token = readToken()
+  if (token) headers.set('Authorization', `Bearer ${token}`)
+  const res = await fetch(path, { headers })
+  if (!res.ok) {
+    if (res.status === 401) handleUnauthorized()
+    throw new ApiError(res.status, '文件下载失败，请稍后重试')
+  }
+  return res.blob()
+}
+
 /** multipart 上传（图片/PDF 等；缺口 §7.1-6 POST /api/app/uploads） */
 export function httpUpload<T>(path: string, form: FormData): Promise<T> {
   return request<T>(path, { method: 'POST', body: form })

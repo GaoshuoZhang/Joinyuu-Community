@@ -2,7 +2,7 @@
 
 > 跨会话/跨 agent 的进度唯一事实来源。每完成一个模块，同步勾选。
 > 细致契约见 [wiki-admin-web.md](./wiki-admin-web.md) 与 [wiki-backend.md](./wiki-backend.md)；实体字段见 [docs/entity-fields.md](./entity-fields.md)。
-> 最后更新：2026-09-16。M1.5 R1~R12 与后续治理增强已完成；M2 移动端 Mock-First 已交付至 v43（产品闭环与 UX 基线达成）；**2026-09-16 决策 M2-R `/api/app/**` 接入正式启动**，规划与进度见 [docs/m2-r-plan.md](./m2-r-plan.md)（R0~R4 五批：全量对齐分批实施、第三方依赖服务端降级、admin 必做全做可选后置）。测试源码静态清点：API e2e 25 套件 / 170 个用例声明、unit 4 套件 / 25 个用例声明；最近一次有记录的 e2e 全量通过为 25 套件 / 169 用例。
+> 最后更新：2026-09-16。M1.5 R1~R12 与后续治理增强已完成；M2 移动端 Mock-First 已交付至 v43；M2-R 已完成 R0/R1，R2~R4 待实施，规划见 [docs/m2-r-plan.md](./m2-r-plan.md)。本次实跑 API e2e **28 套件 / 195 用例全绿**。
 
 ## 0. 项目定位
 
@@ -39,10 +39,10 @@
 
 ### 2.1 当前代码规模（2026-09-15 静态清点）
 
-- API：43 个 Prisma 模型、17 个迁移、36 个 controller、193 个 HTTP 路由装饰器（admin 191 + health 1 + public files 1；app 0）。
+- API：48 个 Prisma 模型、19 个迁移、225 个 HTTP 路由装饰器（既有 193 + app R1 32）。
 - Admin：56 条路由记录，其中 49 条 component-backed（48 个视图路由 + AdminLayout 壳），其余 7 条为重定向。
 - Client Mobile：61 条路由记录，其中 60 条 component-backed；58 个唯一视图文件、20 个 API 契约文件、20 个 mock handler 文件。
-- 测试：API e2e 25 套件 / 170 个源码用例声明，API unit 4 套件 / 25 个源码用例声明，Admin UI contract 2 文件 / 10 个源码用例声明。源码声明数不等于本次已执行通过数。
+- 测试：API e2e 28 套件 / 195 个用例已于 2026-09-16 全量通过；API unit 4 套件 / 25 个源码声明；Admin UI contract 2 文件 / 10 个源码声明。
 
 ## 3. M0 后台原型（已完成）
 
@@ -54,7 +54,7 @@
 
 ## 4. M1 后端服务（已完成）
 
-> M1.5 增强后现状（代码为准）：36 个 controller（34 个 `/api/admin` + health + public files）共 **193 个在册 HTTP 端点**（管理端 191 + 公开 2）；Prisma schema **43 模型 / 17 个迁移**。`/api/app/**` controller 与端点均为 0，符合 M2-R 暂不启动决策。
+> M1.5 基线仍为 193 个端点；M2-R R1 在此基础上新增 32 个 `/api/app/**` 路由，Prisma schema 现为 **48 模型 / 19 个迁移**。后续接入进度见 `docs/m2-r-plan.md`。
 
 - **M1-A 底座**：NestJS 11 + 全局管线（包络/异常过滤/JWT 守卫/审计拦截器/前缀 ID 发号器）、Docker Compose（PG+Redis）、Prisma schema（M1 时 35 模型，M1.5 后 43）+ seed 骨架、认证（JWT + Redis 登出黑名单）、健康检查
 - **M1-B 社区成员域（23 端点）**：users / individuals / enterprises / external-enterprises / applications / ledgers；新增用户生成默认个人身份、管理员重置登录密码、grantIdentity 联动、账本事务、审计迁移、admin 五组页面接入
@@ -153,6 +153,6 @@
 ## 8. 横切约定
 
 - 设计契约冻结机制（M0 建立，见 wiki-admin-web.md）
-- 实体字段沉淀：docs/entity-fields.md（43 模型，schema.prisma 为事实来源）
-- 后端测试：e2e 25 套件 / 170 个源码声明（最近记录 169 个全量通过）+ unit 4 套件 / 25 个源码声明；e2e 由 `test/helpers/reseed.ts` 套件级隔离
+- 实体字段沉淀：docs/entity-fields.md（当前 48 模型，schema.prisma 为事实来源）
+- 后端测试：e2e 28 套件 / 195 个用例全量通过 + unit 4 套件 / 25 个源码声明；e2e 由 `test/helpers/reseed.ts` 套件级隔离
 - CI/CD 与部署方案：待规划

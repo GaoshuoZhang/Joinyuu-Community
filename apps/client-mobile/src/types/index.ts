@@ -297,6 +297,7 @@ export interface LoginPayload {
   phone: string
   password: string
   captchaCode: string
+  captchaId: string
 }
 
 export interface RegisterPayload {
@@ -304,6 +305,7 @@ export interface RegisterPayload {
   password: string
   confirmPassword: string
   captchaCode: string
+  captchaId: string
   nickname?: string
   /** v38：注册须勾选同意用户协议与隐私政策 */
   agreed?: boolean

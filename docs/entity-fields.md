@@ -1,8 +1,8 @@
-# 聚屿社区 · 实体字段清单（M1.5 数据模型，43 模型 + M2-R 规划扩展）
+# 聚屿社区 · 实体字段清单（48 个已落地模型 + M2-R 后续规划扩展）
 
 > 事实来源：`apps/api/prisma/schema.prisma`（唯一事实），本文档为人读索引。模型变更时改 schema 并向 wiki-backend §7 与本文档同步。
 > 通用约定：主键为前缀字符串 ID（IdSequence 原子发号）；时间绝大多数为 String（AdminUser 的 createdAt/updatedAt 为 DateTime）；枚举用 String + 应用层校验；展示快照冗余为列不外键化。
-> **M2-R 规划扩展（2026-09-16）**：§8 为 `/api/app/**` 接入新增模型与字段（按 `docs/m2-r-plan.md` §2.6 迁移清单设计，R1~R4 分批实施；未建迁移前 codebase 无对应模型）。
+> **M2-R 接入进度（2026-09-16）**：§8 为 `/api/app/**` 接入新增模型与字段；R1 已落地，R2~R4 仍按 `docs/m2-r-plan.md` §2.6 分批实施。
 
 ## 1. 认证、治理与基础设施（9）
 
@@ -18,13 +18,13 @@
 
 ## 2. 社区成员域（7）
 
-- **User** — 用户（uid PK U；nickname 展示名；phone/email/gender；status active/frozen；realName?/citizenId?；微信字段 M3 预留；frozenUntil?/frozenReason?；points 积分余额；registeredAt/lastActiveAt；bio；activities Json）
+- **User** — 用户（uid PK U；nickname 展示名；phone 唯一；email/gender；avatar?；status active/frozen；realName?/citizenId?；微信字段 M3 预留；frozenUntil?/frozenReason?；points 积分余额；registeredAt/lastActiveAt；bio；activities Json）
 - **UserIdentity** — 一人多身份（userId 级联；type individual/community_individual/community_enterprise/external_enterprise；enterpriseId?/enterpriseName?/role?/title；level?/experience? 仅社区两类持有；唯一 userId+type+enterpriseId）
 - **Enterprise** — 社区企业（id E；name/industry/size/foundedAt/settledAt?/leaseType；status pending 默认/active/exited/disabled；showcaseStatus none/pending/published/rejected + showcaseComment?；experience 企业经验；contactUserId? 关联个人用户 + contactTitle 职位 + contactName/contactPhone/contactEmail?；description/tags；deletedAt?/deletedBy?；**stage 已删**）
 - **ExternalEnterpriseProfile** — 合作企业档案（id XE；name/industry；status active/disabled；size/foundedAt；description；cooperationCount/firstCooperationAt；deletedAt?/deletedBy?；聚合视图 = 档案 + external_enterprise 身份派生成员，不建独立实体表）
 - **Application** — 申请审核（id AP；type settle 企业入驻/individual 个体入驻/cooperation 企业合作/identity 身份绑定；applicantName/applicantPhone/targetName；submittedAt；status pending/approved/rejected；summary；details Json 表单明细；records Json 审核时间线；deletedAt?/deletedBy?/archivableAt?）
 - **ExperienceRecord** — 经验流水（id EX；targetType enterprise/individual；targetId；delta/balance/reason/at/operator；source rule/manual）
-- **PointsRecord** — 积分流水（id PT；userId；delta/balance/reason/at/operator；source rule/manual/redemption）
+- **PointsRecord** — 积分流水（id PT；userId；delta/balance/reason/at/operator；source rule/manual/redemption；dedupeKey? 唯一，用于积分发放幂等）
 
 ## 3. 业务运营域（7）
 
@@ -68,7 +68,7 @@
 - **DictEntry** — 数据字典（type+code 联合 PK；type demand_category/industry/event_type/goods_category；label 全类型唯一；sort/status）
 - **ArchiveSetting** — 归档设置（domain PK；autoArchive/archiveDelayDays 自动归档延时；autoPurge/purgeDelayDays 自动删除延时；archiveStatuses Json? 按状态开关）
 
-## 8. M2-R 新增模型与字段扩展（2026-09-16 规划，按批次实施）
+## 8. M2-R 新增模型与字段扩展（2026-09-16；R1 已实施，R2~R4 规划）
 
 > 迁移按 `docs/m2-r-plan.md` R1~R4 分批执行（每批一组迁移）。字段口径以客户端 `apps/client-mobile/src/types/index.ts` 与 `api-app-design.md` 为准，偏差先改契约文档。
 
@@ -79,7 +79,7 @@
 | R1 | UserNotification | 站内信（id UN；userId；type audit_result/enroll_result/order/points/system/invite/transfer/report/article/demand/project/mall/service + link?；title/content/at；read/archived Bool）（§7.1-1） |
 | R1 | UserNotificationPreference | 通知偏好（userId+type 联合 PK 或 Json 集合；enabled 集合至少一种）（§7.7 A5） |
 | R1 | Address | 收货地址簿（id AD；userId；name/phone/region/detail；isDefault 唯一约束；createdAt/updatedAt）（§7.7 A1） |
-| R1 | AgreementConsent | 协议同意留痕（userId+agreementType+version；consentedAt；注册必填）（§7.7 A3/A11） |
+| R1 | AgreementConsent | 协议同意留痕（userId+agreementType+version 联合唯一；consentedAt；注册同时记录用户协议与隐私政策）（§7.7 A3/A11） |
 | R1 | AccountDeletionRequest | 注销申请（id；userId；status pending/cooling(7 天)/approved/cancelled；requestedAt/effectiveAt?；复核工单） |
 | R2 | DemandMessage | 需求沟通留言（demandId；senderId;content；at；仅发布方与响应方可见）（E2） |
 | R2 | ProjectTask | 项目协作任务（projectId；name/assignee/status/duedAt；参与双方可见）（E3） |
@@ -99,10 +99,12 @@
 | R4 | ServiceApplication | 社区服务申请（id SA；userId；serviceType（挂政策类别）；fields Json；status pending/accepted/processing/done/rejected + 回执/催办）（E6） |
 | R4 | AnalyticsEvent | 埋点（eventType 12 项：login/register/demand_publish/demand_respond/event_enroll/checkin/mall_order/article_submit/space_reserve/favorite/report/search；userId?；at；payload Json?）（§7.1-22） |
 
-### 8.2 既有模型字段扩展（13）
+### 8.2 既有模型字段扩展（15）
 
 | 批次 | 模型 | 新增字段 |
 |---|---|---|
+| R1 | User | avatar?；phone 唯一约束 |
+| R1 | PointsRecord | dedupeKey? 唯一，用于积分发放幂等 |
 | R2 | CommunityEvent | venueLat/venueLng/checkinRadiusM/checkinOpenMin/checkinCloseMin（签到几何与时间窗）；cancelDeadlineHours（取消时限，默认 24）；rescheduledTo?（postponed 改期目标；状态机增 postponed） |
 | R2 | EventEnrollment | waitlisted Bool + waitlistOrder Int?（候补与递补顺序）；checkinLat/checkinLng/checkinMethod（自助/补签） |
 | R2 | Demand | demandType task/investment/cooperation；task 专属 deliverable?/budget?/deliverBy?（预期交付日期）；investment 专属 cooperationNeed?/returnOffer?；cooperation 专属 bottleneck?/partnershipMode?；三类型通用 contactName/contactPhone/contactEmail？；projectId?（立项回填）；deadline 停用保留展示 |

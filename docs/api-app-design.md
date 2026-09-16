@@ -15,10 +15,11 @@
 
 | 项 | 设计 |
 |---|---|
-| 注册 | `POST /api/app/auth/register`；受 `SystemConfig.registrationOpen` 开关控制（关闭 → 400「注册暂未开放」）；手机号唯一；默认授予 `individual` 身份 |
-| 登录 | `POST /api/app/auth/login`（手机号+密码）；签发多身份 JWT：`{ sub: uid, scope: 'app', identities: [...], jti }` |
+| 注册 | `POST /api/app/auth/register`；body `{phone,password,nickname?,captchaId,captchaCode,agreed}`；受 `registrationOpen` 控制；手机号数据库唯一；默认授予 `individual`；同时记录用户协议与隐私政策版本 |
+| 登录 | `POST /api/app/auth/login`（手机号+密码+图形验证码 `captchaId/captchaCode`）；签发多身份 JWT：`{ sub: uid, scope: 'app', identities: [...], jti }` |
 | 令牌校验 | 复用 JWT Guard（按 `scope` 区分 admin/app 两套守卫）；登出黑名单复用 `auth:blacklist:{jti}` |
 | 登出 | `POST /api/app/auth/logout` |
+| 验证码 | `GET /api/app/auth/captcha` → `{captchaId,image}`；登录、注册、找回密码、换绑手机号均一次性消费 |
 | 每日登录积分 | 登录成功触发 `daily_login` 规则（PointsRule 固定触发项，种子默认停用；引擎按规则启停发放，自然日去重随 M2 客户端接入落地） |
 
 ## 3. 通用约定（沿用 wiki-backend §4）
