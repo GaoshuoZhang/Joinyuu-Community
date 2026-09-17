@@ -6,11 +6,11 @@
 
 ## 当前状态
 
-**M1.5 后台治理增强已完成，M2-R 真实接口接入进行中。** M0 后台原型（A~E）、M1 后端（A~E，129 个基线端点）与 M1.5 治理增强（R1~R12）全部落地；其基线为 43 个 Prisma 模型、17 个迁移和 193 个 HTTP 路由装饰器。数据范围（域级）、密码周期和 MinIO/本地磁盘双存储驱动均已实现。admin web 有 56 条路由记录（49 条 component-backed，含 AdminLayout 壳），28 个 API 域文件已全量接入真实接口，`src/mock/` 已删除。
+**M2-R 真实接口接入必做范围已完成（2026-09-17）。** M0、M1、M1.5 全部落地；移动端默认 HTTP，admin 已全量 HTTP 化。注销与实名治理、名片管理及字段配置已完成，验收证据见 [M2-R 收口记录](./docs/m2-r-closeout.md)。
 
-`apps/client-mobile` 已完成纯移动端 Mock-First v43，并于 2026-09-16 转入 **M2-R `/api/app/**` 真实接口接入期**。R0 契约与迁移设计、R1 鉴权底座/个人中心/站内信已完成；R2~R4 尚待实施。当前 API 为 48 个 Prisma 模型、19 个迁移、225 个 HTTP 路由装饰器（既有 193 + app 32）。详细进度与验收口径见 `docs/m2-r-plan.md`；`apps/client-web` 和 M3 小程序尚未开始。
+当前 API 为 **69 个 Prisma 模型、34 个迁移、66 个控制器 / 365 个 HTTP 路由装饰器**；admin 有 61 个视图、34 个 API 文件，移动端 63 个视图、21 个域 API 文件。API e2e **41 套件 / 282 用例**（含 `journey-flows` 三端联调 12 例：注册/实名/入驻/需求/项目/活动/商城/名片/空间）、unit 24 例、admin UI contract 10 例通过；三端接口对齐审计（`docs/api-alignment-audit.md`）已完成并修复重复路由与未接入端点。此前 64 个移动端入口 HTTP 加载走查与 A6/A19 跨端操作通过。可选历史同步和运营看板后置；`apps/client-web` 和 M3 尚未开始。
 
-开发策略：M1/M1.5 已完成；M2 采用 **Mock-First、移动端优先**，`client-mobile` 产品闭环和 UX 已深化至 v43，现按 R1~R4 分批接入真实接口，之后再创建桌面端 `client-web`。
+开发策略：M2 采用 **Mock-First、移动端优先**，v43 后完成 R0~R4 真实接入；后续桌面端 `client-web` 独立立项。显式 `VITE_API_MODE=mock` 保留演示通道。
 
 ## 技术栈
 
@@ -20,7 +20,7 @@
 | 后端（M1/M1.5 已完成） | NestJS 11 + Prisma 6 + RESTful API（`apps/api`，端口 7757） |
 | 数据库（M1/M1.5 已完成） | PostgreSQL 17 + Redis 7.4（Docker Compose 本地开发） |
 | 管理后台 Web（当前） | Vue 3 + Vite + TypeScript + TDesign Vue Next + Pinia + Vue Router |
-| 客户端移动端（M2-R 接入中） | Vue 3 + Vite + TypeScript + TDesign Mobile Vue + Pinia + Vue Router |
+| 客户端移动端（M2-R 已完成） | Vue 3 + Vite + TypeScript + TDesign Mobile Vue + Pinia + Vue Router |
 | 客户端 Web（M2，未开始） | Vue 3 + Vite + TypeScript + TDesign Vue Next + Pinia + Vue Router |
 | 微信小程序（M3，未开始） | TDesign WeChat MiniProgram |
 
@@ -30,7 +30,7 @@
 apps/
   admin/            # 管理后台 Web（全量接入真实接口；mock 已删除）
     src/
-      api/          # API 层 —— http.ts + 28 个域文件全部 HTTP 化
+      api/          # API 层 —— 33 个文件，全部 HTTP 化
       components/   # 共享组件（PageHeader/StatusTag/IdentityTags/RichEditor/TrendChart/ColumnController/BulkArchiveDialog/...）
       constants/    # 状态映射 / 身份词汇表 / 权限目录（冻结）
       directives/   # v-permission 按钮级权限指令
@@ -40,24 +40,25 @@ apps/
       types/        # 实体类型定义
       views/        # 页面（按领域分目录，system/ 含归档管理 ArchivePanel 等治理页）
   api/              # 后端服务（NestJS 11 + Prisma 6 + PostgreSQL 17 + Redis 7.4）
-    prisma/         # schema.prisma（48 模型）+ 19 个 migrations + seed.ts + seed-data/（种子数据单一来源）
+    prisma/         # schema.prisma（69 模型）+ 34 个 migrations + seed.ts + seed-data/（种子数据单一来源）
     src/
       common/       # 底座：Prisma/Redis（缓存+黑名单，降级回源）/响应包络/异常过滤/JWT+权限 Guard/装饰器/RBAC/审计（含快照）/前缀 ID 发号器/积分引擎/存储（本地磁盘）/HTML 清洗与工具
       modules/      # 按域模块：auth/users/enterprises/applications/demands/projects/events/mall/rules/workstations/spaces/contents/assets + system 子域（admins/login-logs/monitor/roles/trash/export）
       scheduler/    # 定时任务（需求/资讯定时发布、活动自动结束、租约临期、归档自动归档/自动删除）
-    test/           # e2e（25 套件 / 170 个源码用例声明，每套件重种子隔离）
-  client-mobile/    # M2 纯移动端应用（v43，M2-R R1 已接入）
+    test/           # e2e（41 套件 / 282 用例，每套件重种子隔离；journey-flows 为三端联调）
+  client-mobile/    # M2 纯移动端应用（M2-R 必做范围已完成）
     src/
-      api/          # 17 个契约文件，mock/http 双模式；默认 mock
+      api/          # mock/http 双模式；默认 http，显式 VITE_API_MODE=mock 可演示
       mock/         # [MOCK-ONLY] 内存数据与 16 个 handler
-      views/mobile/ # 58 个唯一视图文件，60 条 component-backed 路由
+      views/mobile/ # 63 个视图文件
 packages/           # 预留（共享包）
 docs/
   full-spec-check.md    # 整体项目开发规划与进度核对表（进度唯一事实来源，含 M1.5 R1~R12 路线）
   wiki-admin-web.md     # 管理后台开发 Wiki（设计契约/组件规范/状态机/API 约定）
   wiki-backend.md       # 后端开发 Wiki（数据模型/端点契约/业务规则/里程碑）
   api-app-design.md     # M2 客户端 /api/app/** 端点设计
-  entity-fields.md      # 48 模型分域字段摘要及 M2-R 后续规划（schema.prisma 为事实来源）
+  api-alignment-audit.md # 三端接口对齐审计（后端 365 路由 × 后台/移动端调用对照与发现）
+  entity-fields.md      # 72 模型分域字段摘要（schema.prisma 为事实来源）
 ```
 
 ## 开发命令
@@ -80,16 +81,16 @@ pnpm db:reset             # 重建数据库（drop + migrate + 全量种子）
 |---|---|
 | [docs/full-spec-check.md](./docs/full-spec-check.md) | 整体里程碑规划与进度勾选（含 M1.5 R1~R12 前后端路线）——**接手任务前先看这里**，完成后同步勾选 |
 | [docs/wiki-admin-web.md](./docs/wiki-admin-web.md) | 管理后台开发 Wiki：设计 tokens、布局骨架、组件规范、状态机、API 约定——**改 admin 代码前必读** |
-| [docs/wiki-backend.md](./docs/wiki-backend.md) | 后端开发 Wiki：数据模型（当前 48 模型）、端点契约清单、业务规则、里程碑——**改后端代码前必读** |
+| [docs/wiki-backend.md](./docs/wiki-backend.md) | 后端开发 Wiki：数据模型（当前 72 模型）、端点契约清单、业务规则、里程碑——**改后端代码前必读** |
 | [docs/api-app-design.md](./docs/api-app-design.md) | M2 客户端 `/api/app/**` 端点设计稿 |
-| [docs/entity-fields.md](./docs/entity-fields.md) | 48 模型分域字段摘要及 M2-R 后续规划（schema.prisma 为事实来源） |
+| [docs/entity-fields.md](./docs/entity-fields.md) | 72 模型分域字段摘要（schema.prisma 为事实来源） |
 
 ## 关键工程约定（摘要，详见 wiki-admin-web.md / wiki-backend.md）
 
 1. **契约冻结**：菜单/路由/状态映射/身份词汇表已冻结，不得私自重写导航、发明颜色字号或自造状态文案。
 2. **共享组件强制**：状态标签用 `StatusTag`、身份标签用 `IdentityTags`，禁止页面自造。
 3. **种子数据单一来源**：后端 `apps/api/prisma/seed-data/`（admin `src/mock/` 已删除）；种子写入 23 个 IdSequence 前缀（U/E/AP/D/P/EV/XE/EX/PT/G/RO/WS/WA/LS/S/SR/A/SU/CL/SC/AN/N/AL）与项目编号 `CODE-<year>`，其中投稿文章编号用 SU。
-4. **接口契约以 wiki-backend §7 与 api-app-design.md 为准**：admin `src/api/` 28 个域文件已全部接入真实 HTTP（`/api/admin/**`）；写操作由后端 `@RequirePermission`（权限目录 49 码）与 `AuditService` 管控；客户端 `/api/app/**` 正按 M2-R 分批接入。
+4. **接口契约以 wiki-backend 与 api-app-design.md 为准**：admin `src/api/` 33 个文件走真实 HTTP（`/api/admin/**`）；写操作由后端 `@RequirePermission`（55 码）与 `AuditService` 管控；客户端 `/api/app/**` M2-R 必做接入已完成。
 5. **表单校验时机**：弹窗规则 `trigger: 'submit'`，打开时 `clearValidate()`，避免 DatePicker 交互提前红框。
 6. **表格规范**：开启 `resizable` 的表格必须 `table-layout="fixed"` + `hover`；服务端排序用受控 `:sort` + `@sort-change`。
 7. **术语统一**：联系电话 / 办公位 / 社区企业 / 合作企业 / 经验值 / 审核 / 新增 / 归档；禁止回退旧词（联系方式、工位、审批、新建、回收站等）。
