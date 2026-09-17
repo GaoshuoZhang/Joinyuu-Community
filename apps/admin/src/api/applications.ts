@@ -9,8 +9,7 @@ export interface ApplicationQuery {
 }
 
 /* GET /api/admin/applications?page&pageSize&type&status
- * 口径：返回企业入驻/个体入驻/企业合作/身份绑定/企业退驻五类审核；空间预约随公共空间模块、
- * 展示页发布随资讯内容模块，各有独立审核入口 */
+ * 口径：返回企业入驻/个体入驻/企业合作/身份绑定/企业退驻五类审核；空间预约随公共空间模块。 */
 export async function fetchApplications(query: ApplicationQuery): Promise<PageResult<Application>> {
   const qs = new URLSearchParams()
   qs.set('page', String(query.page))
@@ -46,13 +45,37 @@ export async function fetchApplicationPrint(id: string): Promise<ApplicationPrin
   return httpGet<ApplicationPrintResult>(`/applications/${id}/print`)
 }
 
+export type ApplicationFormType = 'settle' | 'cooperation' | 'individual' | 'identity'
+export type ApplicationFieldType = 'text' | 'textarea' | 'select' | 'number' | 'date' | 'upload'
+
+export interface ApplicationFieldOption {
+  label: string
+  value: string
+  [property: string]: unknown
+}
+
+export interface ApplicationFormField {
+  key: string
+  label: string
+  type: ApplicationFieldType
+  required?: boolean
+  placeholder?: string
+  help?: string
+  maxlength?: number
+  options?: ApplicationFieldOption[]
+  accept?: string
+  multiple?: boolean
+  maxCount?: number
+  [property: string]: unknown
+}
+
 export interface ApplicationFormConfig {
-  type: 'settle' | 'cooperation' | 'individual' | 'identity'
+  type: ApplicationFormType
   title: string
   subtitle: string
   submitLabel: string
   tips?: string[]
-  fields: Array<Record<string, unknown>>
+  fields: ApplicationFormField[]
   updatedAt?: string
 }
 

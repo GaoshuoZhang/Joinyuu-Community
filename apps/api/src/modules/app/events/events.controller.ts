@@ -86,11 +86,6 @@ export class AppMeEnrollmentsController {
     return this.events.myEnrollments(this.uid(req))
   }
 
-  @Get('enrollments/:id/ticket')
-  ticket(@Req() req: AppAuthenticatedRequest, @Param('id') id: string) {
-    return this.events.myTicket(this.uid(req), id)
-  }
-
   private uid(req: AppAuthenticatedRequest): string {
     return req.user?.sub ?? ''
   }

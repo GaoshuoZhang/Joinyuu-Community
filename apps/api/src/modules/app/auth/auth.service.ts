@@ -180,9 +180,8 @@ export class AuthService {
     if (!user || !user.passwordHash || !(await compare(dto.password, user.passwordHash))) {
       throw new UnauthorizedException('手机号或密码错误')
     }
-    if (user.status === 'frozen') {
-      throw new UnauthorizedException('账号已冻结，请联系社区运营')
-    }
+    if (user.status === 'frozen') throw new UnauthorizedException('账号已冻结，请联系社区运营')
+    if (user.status !== 'active') throw new UnauthorizedException('账号已注销或停用，请联系社区运营')
 
     await this.prisma.user.update({ where: { uid: user.uid }, data: { lastActiveAt: formatNow() } })
 

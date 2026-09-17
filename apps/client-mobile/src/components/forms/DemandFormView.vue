@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, onMounted, reactive, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { Button, Cell, DateTimePicker, Input, Popup, Tag, Textarea, Toast } from 'tdesign-mobile-vue'
+import { Button, Cell, CheckTag, DateTimePicker, Icon, Input, Popup, Tag, Textarea, Toast } from 'tdesign-mobile-vue'
 import { createDemand, fetchMyDemandPayload, resubmitDemand } from '@/api/demands'
 import { fetchMyIdentities } from '@/api/enterprises'
 import { ApiError } from '@/api/http'
@@ -228,16 +228,16 @@ async function onSubmit() {
 
       <div v-if="draftAvailable && !revising" class="draft-bar">
         <span>检测到 {{ draftSavedAt }} 的未提交草稿</span>
-        <a @click="restoreDraft">恢复</a>
-        <a @click="discardDraft">放弃</a>
+        <a v-pressable @click="restoreDraft">恢复</a>
+        <a v-pressable @click="discardDraft">放弃</a>
       </div>
 
       <div class="flow m-card">
         <span class="flow-label">发布后推进流程</span>
         <div class="flow-steps">
           <template v-for="(s, i) in kindMeta.process" :key="s">
-            <span class="flow-step">{{ s }}</span>
-            <span v-if="i < kindMeta.process.length - 1" class="flow-arrow">›</span>
+            <Tag class="flow-step" size="small" variant="light" theme="primary">{{ s }}</Tag>
+            <Icon v-if="i < kindMeta.process.length - 1" name="chevron-right" size="12px" class="flow-arrow" />
           </template>
         </div>
       </div>
@@ -257,20 +257,20 @@ async function onSubmit() {
       <div class="field">
         <span class="field-label">{{ labels.cat }}</span>
         <div class="chips">
-          <Tag
+          <CheckTag
             v-for="c in dictItems"
             :key="c.code"
-            :theme="form.categoryCode === c.code ? 'primary' : 'default'"
             variant="light"
             size="medium"
-            @click="form.categoryCode = c.code"
+            :checked="form.categoryCode === c.code"
+            @change="form.categoryCode = c.code"
           >
             {{ c.label }}
-          </Tag>
+          </CheckTag>
         </div>
         <p v-if="dictError" class="field-error">
           {{ labels.cat }}加载失败
-          <a class="dict-retry" @click="reloadDict">重试</a>
+          <a class="dict-retry" v-pressable @click="reloadDict">重试</a>
         </p>
         <p v-else-if="errors.category" class="field-error">{{ errors.category }}</p>
       </div>
@@ -368,23 +368,23 @@ async function onSubmit() {
       </div>
       <div class="field">
         <label>联系邮箱（选填）</label>
-        <Input v-model="form.contactEmail" :maxlength="60" placeholder="便于对方直接邮件联系" clearable />
+        <Input v-model="form.contactEmail" type="email" autocomplete="email" :spell-check="false" :maxlength="60" placeholder="便于对方直接邮件联系" clearable />
         <p v-if="errors.contactEmail" class="field-error">{{ errors.contactEmail }}</p>
       </div>
 
       <div class="field">
         <span class="field-label">发布身份</span>
         <div class="chips">
-          <Tag
+          <CheckTag
             v-for="i in identityOptions"
             :key="`${i.type}:${i.enterpriseId ?? ''}`"
-            :theme="isIdentityPicked(i) ? 'primary' : 'default'"
             variant="light"
             size="medium"
-            @click="pickIdentity(i)"
+            :checked="isIdentityPicked(i)"
+            @change="pickIdentity(i)"
           >
             {{ identityOptionLabel(i, auth.name) }}
-          </Tag>
+          </CheckTag>
         </div>
       </div>
 
@@ -465,16 +465,11 @@ async function onSubmit() {
 }
 
 .flow-step {
-  font-size: 12px;
-  line-height: 1;
   padding: 5px 8px;
-  border-radius: var(--td-radius-default);
-  background: var(--td-brand-color-light);
-  color: var(--td-brand-color);
+  line-height: 1;
 }
 
 .flow-arrow {
-  font-size: 12px;
   color: var(--td-text-color-placeholder);
 }
 

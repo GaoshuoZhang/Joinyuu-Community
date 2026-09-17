@@ -85,16 +85,16 @@ export async function appealDemand(id: string, reason: string): Promise<void> {
   await httpPost(`/me/demands/${id}/appeal`, { reason })
 }
 
-/** [MOCK-ONLY] 需求发布者查看响应；真实 /api/app 接入时补正式端点。 */
+/** GET /api/app/me/demands/:id/responses — 发布者查看响应情况 */
 export async function fetchDemandResponses(id: string): Promise<MyResponseItem[]> {
   if (apiMode === 'mock') return mock.fetchDemandResponses(id)
   return httpGet<MyResponseItem[]>(`/me/demands/${id}/responses`)
 }
 
-/** [MOCK-ONLY] 需求发布者处理响应；接受后生成协作项目。 */
-export async function reviewDemandResponse(id: string, responseId: string, action: 'accept' | 'reject', reason?: string): Promise<void> {
-  if (apiMode === 'mock') return mock.reviewDemandResponse(id, responseId, action, reason)
-  await httpPost(`/me/demands/${id}/responses/${responseId}/review`, { action, rejectReason: reason })
+/** POST /api/app/me/demands/:id/select — 发布者多选意向承接方并提交立项（转 selected，管理员确认后立项） */
+export async function selectDemandResponders(id: string, responseIds: string[]): Promise<void> {
+  if (apiMode === 'mock') return mock.selectDemandResponders(id, responseIds)
+  await httpPost(`/me/demands/${id}/select`, { responseIds })
 }
 
 export type { PageQuery }

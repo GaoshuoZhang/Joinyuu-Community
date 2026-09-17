@@ -1,5 +1,5 @@
 import type { Enterprise, PageResult, User } from '@/types'
-import { httpDelete, httpGet, httpPatch, httpPost, httpPut } from './http'
+import { httpDelete, httpGet, httpPost, httpPut } from './http'
 
 export interface EnterpriseQuery {
   page: number
@@ -48,17 +48,6 @@ export async function fetchEnterpriseOptions(): Promise<{ label: string; value: 
  */
 export async function fetchEnterprise(id: string): Promise<{ enterprise: Enterprise; members: User[] }> {
   return httpGet<{ enterprise: Enterprise; members: User[] }>(`/enterprises/${id}`)
-}
-
-/* PATCH /api/admin/enterprises/:id/showcase-status，入参 { status, comment }
- * 展示页审核：published / rejected / pending
- */
-export async function reviewShowcase(
-  id: string,
-  status: Enterprise['showcaseStatus'],
-  comment?: string,
-): Promise<{ code: number }> {
-  return httpPatch<{ code: number }>(`/enterprises/${id}/showcase-status`, { status, comment })
 }
 
 export interface EnterpriseStats {

@@ -1,8 +1,8 @@
-# 聚屿社区 · 实体字段清单（48 个已落地模型 + M2-R 后续规划扩展）
+# 聚屿社区 · 实体字段清单（69 个已落地模型）
 
 > 事实来源：`apps/api/prisma/schema.prisma`（唯一事实），本文档为人读索引。模型变更时改 schema 并向 wiki-backend §7 与本文档同步。
 > 通用约定：主键为前缀字符串 ID（IdSequence 原子发号）；时间绝大多数为 String（AdminUser 的 createdAt/updatedAt 为 DateTime）；枚举用 String + 应用层校验；展示快照冗余为列不外键化。
-> **M2-R 接入进度（2026-09-16）**：§8 为 `/api/app/**` 接入新增模型与字段；R1 已落地，R2~R4 仍按 `docs/m2-r-plan.md` §2.6 分批实施。
+> **M2-R 收口及复查（2026-09-17）**：69 模型 / 34 迁移。后续迁移 `20260917120000_rule_redesign`（等级按身份拆分、发布限制取代实名权益权益、移除积分任务）、`20260917130000_admin_information_architecture`（移除 ShowcaseRequest 与 showcaseComment、政策权限拆分、等级回填）、`20260917140000_level_tier_identity_default_cleanup`、`20260917150000_publish_limits_default_unlimited`（发布限制默认 -1）、`20260917160000_article_closed_banners_notices_services`（文章 closed/评论开关/ArticleTakedown、HomeBanner、站内信简化、服务申请下线）、`20260917170000_banners_permission`（轮播图管理权限）。收口迁移 `20260917020000_m2r_closeout_governance` 新增 CardFieldConfig（type 主键、editableFields、updatedAt/By），User 增 realnameReviewStatus/SubmittedAt/ReviewedAt/ReviewedBy/ReviewNote，AccountDeletionRequest 增 reviewedAt/By/reviewNote 和 rejected 状态，IndividualCard 增 displayName。复查迁移 `20260917030000_closeout_review_guards` 为 AccountDeletionRequest 增 SQL 部分唯一索引（每 userId 最多一条 cooling）；User/Enterprise/Demand/Article 增 moderationVersion，由状态/归档/冻结写入触发器递增；Report 增 action、targetModerationVersion、restoredAt，绑定一次性恢复资格。功能验收见 `m2-r-closeout.md`。
 
 ## 1. 认证、治理与基础设施（9）
 
@@ -28,8 +28,8 @@
 
 ## 3. 业务运营域（7）
 
-- **Demand** — 需求（id D；状态机 pending→pending_release→published|scheduled→projected/closed/rejected；publisherId/publisherName/publisherIdentity Json?；contactName?/contactPhone?/contactEmail?；budget/period/deadline；scheduledAt?/publishedAt?；可见/可报名范围四数组；description/tags；rejectedReason?/matchedRespondent?/projectId?/respondPoints?；creatorName?/creatorId?；deletedAt?/deletedBy?/archivableAt?）
-- **DemandRespondent** — 需求响应（demandId 级联；name/enterprise/phone?/email?/quote?/message/at；status pending/contacted/closed）
+- **Demand** — 需求（id D；状态机 pending→pending_release→published|scheduled→selected→projected/closed/rejected；publisherId/publisherName/publisherIdentity Json?；contactName?/contactPhone?/contactEmail?；budget/period/deadline；scheduledAt?/publishedAt?；可见/可报名范围四数组；description/tags；rejectedReason?/matchedRespondent?/projectId?/respondPoints?；creatorName?/creatorId?；deletedAt?/deletedBy?/archivableAt?）
+- **DemandRespondent** — 需求响应（demandId 级联；name/enterprise/phone?/email?/quote?/message/at；status pending/accepted/rejected/closed（contacted 为历史值））
 - **Project** — 项目（id P；code JY-YYYY-NN 唯一；status running/paused/closed/finished；progress；startDate/endDate/initiatedAt；description/memberCount；sourceDemandId?/expReward?/closeReason?；deletedAt?/deletedBy?/archivableAt?）
 - **ProjectUndertaker** — 承接方（type enterprise/individual/custom；refId/name；share 合计须 100；contactName?/phone?）
 - **Milestone** — 里程碑（status todo/active/done；date；owners[] 负责承接方）
@@ -42,7 +42,9 @@
 - **RedemptionOrder** — 兑换订单（id RO；状态机 pending_shipment→shipped→finished/cancelled；userId/userName + goodsId/goodsName/points；createdAt/shippedAt?/finishedAt?；recipientName?/recipientPhone?/address?/note?；cancelReason?；deletedAt?/deletedBy?/archivableAt?）
 - **PointsRule** — 积分规则（code PK 固定 9 项：activity_checkin/activity_enroll_approved/article_accepted/demand_published/demand_responded/demand_undertaken/project_milestone/identity_first_bind/daily_login（默认停用）；name/scene/description 写死；points 可编辑；status）
 - **ExperienceRule** — 经验值规则（code PK 固定 6 项：activity_checkin/activity_enroll_approved/article_accepted/project_undertaken/project_completed/identity_first_bind；exp/status 可编辑）
-- **LevelTier** — 等级梯度（level PK 1-10；label/threshold 逐级递增）
+- **LevelTier** — 等级梯度（identityType+level 联合 PK；社区个体与社区企业分别维护 1-10 级标签和门槛）
+- **PublishingLimitRule** — 发布限制（identityType+level+action 联合 PK；四类 action：需求发布、文章投稿、活动报名、空间预约；`-1` 不限、`0` 禁止）
+- **PublishingLimitUsage** — 每日发布限制用量（subjectType+subjectId+action+date 联合 PK；社区企业按企业主体共享）
 
 ## 5. 空间管理（6）
 
@@ -53,18 +55,19 @@
 - **Space** — 公共空间（id S；name/type meeting/roadshow/meeting_room/multi/study；capacity/location/openTime/closeTime/allDay；needReservation/needApproval；equipment[]；status；description；deletedAt?/deletedBy?）
 - **SpaceReservation** — 空间预约（id SR；userId/userName/phone；spaceId/spaceName；date/startTime/endTime/purpose/attendees；status pending→approved/rejected/cancelled；submittedAt；records Json 审核时间线；rejectReason?；deletedAt?/deletedBy?/archivableAt?）
 
-## 6. 内容管理（4）
+## 6. 内容管理（6）
 
-- **Article** — 文章（id 官方 A / 投稿 SU；channel official|submitted；title/columnId/columnName；authorId?（官方可空、投稿为 UID、合作企业为 XE*）/authorName/authorIdentity Json?；status pending 待审核→pending_release 待发布→scheduled 定时发布中→published，分支 rejected 已驳回；content 富文本 HTML（写入 sanitize）；scheduledAt?/publishedAt?；views/summary/tags/createdAt；rejectedReason?；archivableAt?/deletedAt?/deletedBy?）
+- **Article** — 文章（id 官方 A / 投稿 SU；channel official|submitted；title/columnId/columnName；authorId?（官方可空、投稿为 UID、合作企业为 XE*）/authorName/authorIdentity Json?；status pending 待审核→pending_release 待发布→scheduled 定时发布中→published，分支 rejected 已驳回；**后台/举报下架 → closed 已关闭（可归档、可经原举报恢复）；成员主动撤回待审核投稿 → withdrawn（可重提）**；content 富文本 HTML（写入 sanitize）；commentsEnabled Bool 默认 true（关闭后客户端隐藏评论区且读写 409）；scheduledAt?/publishedAt?；views/summary/tags/createdAt；rejectedReason?；archivableAt?/deletedAt?/deletedBy?）
+- **ArticleTakedown** — 文章下架记录（自增 id；articleId 外键级联；source manual 后台主动 / governance 举报处置；reportId?；reason?；takenDownAt/takenDownBy；restoredAt?/restoredBy?；详情抽屉按下架时间倒序展示）
+- **HomeBanner** — 首页轮播图（id BN；title/subtitle；imageUrl?；link? 站内路径；sort 升序；enabled 单条开关；受 `SystemConfig.homeCarouselOpen` 总开关控制）
 - **ArticleColumn** — 栏目（id CL；name/description/sort；submissionOpen 开放投稿；system 系统保留「未指定」不可编辑；status）
-- **ShowcaseRequest** — 展示页发布申请（id SC；targetType enterprise/individual；targetId?/targetName/contentSummary；submitterName/submitterPhone；submittedAt；status pending/approved/rejected/cancelled；records Json；rejectReason?；通过/驳回联动 Enterprise.showcaseStatus）
 - **Announcement** — 公告（id AN；title/content；pinned；status published/withdrawn；publishedAt/createdAt/updatedAt?；archivableAt?/deletedAt?/deletedBy?）
 
 ## 7. 系统管理域（5）
 
 - **AdminNotification** — 管理端通知（id N；type approval/demand_review/reservation/showcase/article/lease/schedule 共 7 类；title/content/at/read/link?）
 - **AuditLog** — 审计日志（id AL；operator/module/action/target/detail?/at/ip?；before/after Json? 变更前后快照）
-- **SystemConfig** — 系统配置（单例 id=1；siteName/siteSlogan；registrationOpen/mallOpen/demandOpen/reservationOpen；leaseExpireRemindDays；uploadMaxSizeMb 上传上限 MB 1-100 默认 10（素材库/富文本共用）；updatedAt/updatedBy；**dailyLoginPoints 已删**）
+- **SystemConfig** — 系统配置（单例 id=1；siteName/siteSlogan；registrationOpen/mallOpen/demandOpen/reservationOpen；realnameRequired；homeCarouselOpen 首页轮播总开关；leaseExpireRemindDays；uploadMaxSizeMb 上传上限 MB 1-100 默认 10（素材库/富文本共用）；updatedAt/updatedBy；**dailyLoginPoints 已删**）
 - **DictEntry** — 数据字典（type+code 联合 PK；type demand_category/industry/event_type/goods_category；label 全类型唯一；sort/status）
 - **ArchiveSetting** — 归档设置（domain PK；autoArchive/archiveDelayDays 自动归档延时；autoPurge/purgeDelayDays 自动删除延时；archiveStatuses Json? 按状态开关）
 
@@ -72,12 +75,11 @@
 
 > 迁移按 `docs/m2-r-plan.md` R1~R4 分批执行（每批一组迁移）。字段口径以客户端 `apps/client-mobile/src/types/index.ts` 与 `api-app-design.md` 为准，偏差先改契约文档。
 
-### 8.1 新增模型（22）
+### 8.1 新增模型（27；含 2026-09-17 下线与新增调整）
 
 | 批次 | 模型 | 说明（前缀/关键字段） |
 |---|---|---|
-| R1 | UserNotification | 站内信（id UN；userId；type audit_result/enroll_result/order/points/system/invite/transfer/report/article/demand/project/mall/service + link?；title/content/at；read/archived Bool）（§7.1-1） |
-| R1 | UserNotificationPreference | 通知偏好（userId+type 联合 PK 或 Json 集合；enabled 集合至少一种）（§7.7 A5） |
+| R1 | UserNotification | 站内信（id UN；userId；type audit_result/enroll_result/order/points/system/invite/transfer/report/article/demand/project/mall/service + link?；title/content/at；read Bool）。单一列表、无归档、无分类偏好（2026-09-17 简化；`archived` 与 `UserNotificationPreference` 已移除）（§7.1-1） |
 | R1 | Address | 收货地址簿（id AD；userId；name/phone/region/detail；isDefault 唯一约束；createdAt/updatedAt）（§7.7 A1） |
 | R1 | AgreementConsent | 协议同意留痕（userId+agreementType+version 联合唯一；consentedAt；注册同时记录用户协议与隐私政策）（§7.7 A3/A11） |
 | R1 | AccountDeletionRequest | 注销申请（id；userId；status pending/cooling(7 天)/approved/cancelled；requestedAt/effectiveAt?；复核工单） |
@@ -94,10 +96,13 @@
 | R3 | EnterpriseInvitation | 企业成员邀请（id EI；enterpriseId；inviterUid；inviteeUid；role 职位；status pending/accepted/rejected/expired；7 天有效期）（§7.1-17） |
 | R3 | TransferRequest | 负责人转移请求（enterpriseId；fromUid/toUid；status pending/accepted/cancelled/expired；接受后变更 contactUserId）（§7.1-21） |
 | R3 | Policy | 社区政策/服务内容（id PL；category；title/content Html sanitize；version/effectiveAt；publisher；attachments[]；featured 精选；status；admin A18 维护）（§7.1-12+Q3） |
-| R4 | PointsTask | 积分任务（code PK；type daily/once/condition；title/description；points；enabled；每日重置）（E4） |
-| R4 | UserTaskRecord | 任务领取记录（userId+taskCode+date 唯一；claimedAt；领取幂等/每日重置）（E4） |
-| R4 | ServiceApplication | 社区服务申请（id SA；userId；serviceType（挂政策类别）；fields Json；status pending/accepted/processing/done/rejected + 回执/催办）（E6） |
+| R2 | ProjectDiscussion | 项目讨论（projectId/senderId/content/at），参与方鉴权 |
+| R2 | ArticleComment | 文章评论（articleId/userId/content/at），支持删除和举报 |
+| R2 | ApplicationFormConfig | 申请表单配置（type/title/subtitle/submitLabel/tips/fields） |
+| R3 | IndividualCard | 个人名片（userId 唯一、data Json、published、updatedAt） |
 | R4 | AnalyticsEvent | 埋点（eventType 12 项：login/register/demand_publish/demand_respond/event_enroll/checkin/mall_order/article_submit/space_reserve/favorite/report/search；userId?；at；payload Json?）（§7.1-22） |
+| 2026-09-17 | HomeBanner / ArticleTakedown | 首页轮播图与文章下架记录（见 §6；ServiceApplication 社区服务申请已下线，社区政策与通用申请审核保留） |
+| 规则重构 | PublishingLimitRule / PublishingLimitUsage | 按身份和动态等级设置四类每日发布限制；业务写入同事务占用，失败回滚、取消不返还 |
 
 ### 8.2 既有模型字段扩展（15）
 
@@ -128,3 +133,4 @@
 | 2026-09-10 | 初版：按 M1 落地的 35 模型分域沉淀字段清单（M1-E 收尾任务） |
 | 2026-09-12 | M1.5 同步：模型 35 → 43（新增 AdminRole/AdminPermission/AdminUserRole/AdminRolePermission/LoginLog/SchedulerLog/MallAsset/ArchiveSetting）；Enterprise 删 stage、增 contactUserId/contactTitle 与软删列；ExternalEnterpriseProfile 增 status/size/foundedAt 与软删列；Application 扩为 settle/individual/cooperation/identity 并增归档列；Demand 增 creatorName/creatorId、Project/CommunityEvent/Article/Announcement/Lease/SpaceReservation/MallGoods/RedemptionOrder 增 deletedAt/archivableAt；MallGoods 增发货方式/自提地址/运费/可见与可下单范围、status 增 restock；SystemConfig 删 dailyLoginPoints、增 uploadMaxSizeMb；MallAsset 增 sourceType/sourceId；DictEntry 增 goods_category；Article 重构 channel（official A / submitted SU）与状态机；PointsRule 9 项、ExperienceRule 6 项 |
 | 2026-09-16 | M2-R 规划扩展：新增 §8 新增模型（22，R1~R4 分组）与既有模型字段扩展（13）；R0 决策定稿——Q1 MallGoods category 改字典分类 + 新增 fulfillment；Q3 新建 Policy；Q4 电子票 HMAC + 签到即核销；Q7 点赞/评论冗余计数列；Q8 个人/企业名片均免审核、后台可查看编辑并可配置名片可编辑字段（card-schema 下发） |
+| 2026-09-17 | 需求撮合调整：Demand 状态机增 `selected`（发布者选定意向承接方，等待管理员立项；matchedRespondent 记录被选人）；DemandRespondent 现行状态 pending/accepted/rejected/closed（contacted 仅历史种子），撤回以 withdrawnAt 判别 |

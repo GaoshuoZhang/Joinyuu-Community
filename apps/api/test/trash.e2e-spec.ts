@@ -340,6 +340,15 @@ describe('M1.5 R12 归档管理（软删除）', () => {
       'closed',
       'projected',
     ])
+    expect(settings.find((s) => s.domain === 'article')?.archivableStatuses.map((s) => s.value)).toEqual([
+      'pending_release',
+      'closed',
+    ])
+    expect(settings.find((s) => s.domain === 'submission')?.archivableStatuses.map((s) => s.value)).toEqual([
+      'pending_release',
+      'rejected',
+      'closed',
+    ])
     expect(settings.find((s) => s.domain === 'goods')?.archivableStatuses).toEqual([
       { value: 'off', label: '已下架', enabled: false },
     ])

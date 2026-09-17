@@ -11,6 +11,7 @@ import { IdGeneratorService } from '../../../common/id-generator/id-generator.se
 import { NotificationService } from '../../../common/notify/notification.service'
 import { addDays, formatNow, formatToday } from '../../../common/utils/time'
 import { assertEnterprisePermission } from '../../../common/enterprise/enterprise-permission'
+import { consumePublishingLimit } from '../../../common/enterprise/publishing-limits'
 import type { CreateReservationDto } from './dto/create-reservation.dto'
 
 /** 开放时段窗口 */
@@ -191,6 +192,7 @@ export class AppSpacesService {
     const now = formatNow()
     const reservationId = await this.ids.next('SR')
     await this.prisma.$transaction(async (tx) => {
+      await consumePublishingLimit(tx, user.uid, 'space_reserve', { identityType, enterpriseId: dto.asEnterpriseId })
       /* 同一空间同一天串行化冲突检查，防止两个并发请求同时通过预检。 */
       await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${`${space.id}:${date}`}))`
       const conflicting = await tx.spaceReservation.findFirst({

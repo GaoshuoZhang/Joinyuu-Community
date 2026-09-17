@@ -7,7 +7,7 @@ import { createApplication, fetchApplicationFormSchema, fetchMyApplicationPayloa
 import { uploadFile } from '@/api/uploads'
 import { ApiError } from '@/api/http'
 import EmptyBlock from '@/components/shared/EmptyBlock.vue'
-import type { ApplicationFormField, ApplicationFormSchema, ApplicationType, UploadedFileInfo } from '@/types'
+import type { ApplicationCreatePayload, ApplicationFormField, ApplicationFormSchema, ApplicationType, IdentityType, UploadedFileInfo } from '@/types'
 import { formatMockDate, mockClockVersion } from '@/mock/runtime'
 import { useDraft } from '@/composables/useDraft'
 import { useUnsavedGuard } from '@/composables/useUnsavedGuard'
@@ -158,6 +158,16 @@ async function onSubmit() {
       Toast(message)
       return
     }
+    if (f.type === 'select' && values[f.key] && !f.options?.some((option) => option.value === values[f.key])) {
+      fieldErrors[f.key] = `${f.label}的选项无效`
+      Toast(fieldErrors[f.key])
+      return
+    }
+  }
+  if (props.type === 'identity' && values.identityType === 'community_enterprise' && !values.orgName?.trim()) {
+    fieldErrors.orgName = '请填写要绑定的社区企业名称'
+    Toast(fieldErrors.orgName)
+    return
   }
   const fields: Record<string, string | number | UploadedFileInfo[]> = {}
   for (const f of s.fields) {
@@ -172,11 +182,16 @@ async function onSubmit() {
   }
   submitting.value = true
   try {
+    const payload: ApplicationCreatePayload = { type: props.type, fields }
+    if (props.type === 'identity') {
+      payload.identityType = String(fields.identityType ?? '') as IdentityType
+      payload.organizationName = typeof fields.orgName === 'string' ? fields.orgName.trim() || undefined : undefined
+    }
     if (revising.value) {
-      await resubmitApplication(reviseId, { type: props.type, fields })
+      await resubmitApplication(reviseId, payload)
       Toast('已重新提交审核')
     } else {
-      await createApplication({ type: props.type, fields })
+      await createApplication(payload)
       Toast('申请已提交，审核结果将站内信通知')
     }
     clearDraft()
@@ -202,8 +217,8 @@ async function onSubmit() {
 
       <div v-if="draftAvailable && !revising" class="draft-bar">
         <span>检测到 {{ draftSavedAt }} 的未保存草稿</span>
-        <a @click="restoreDraft">恢复</a>
-        <a @click="discardDraft">放弃</a>
+        <a v-pressable @click="restoreDraft">恢复</a>
+        <a v-pressable @click="discardDraft">放弃</a>
       </div>
 
       <div v-if="schema.tips?.length" class="m-card tips">

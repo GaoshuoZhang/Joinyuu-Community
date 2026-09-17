@@ -1,9 +1,8 @@
 /* M1.5 内容管理 e2e（wiki-backend.md §7.14/§8.1/§8.9 + 内容改造）：
  * 覆盖：文章状态机（official→pending_release / submitted→pending；review；publish；schedule；
- *       cancel-schedule；withdraw；软删）+ 富文本 sanitize；栏目单选/开放投稿/系统保留栏目/删除转移；
- *       展示页审核联动企业 showcaseStatus。
+ *       cancel-schedule；withdraw；软删）+ 富文本 sanitize；栏目单选/开放投稿/系统保留栏目/删除转移。
  * 前置：docker compose up + prisma migrate + seed（SU1006 待发布 / SU1007、SU1008 待审核 / SU1009 已驳回 /
- *       SU1001~SU1005 已发布 / CL2003 干货分享 / COL_NONE 未指定 / SC1003 待审核企业 E2004 云径网络）。 */
+ *       SU1001~SU1005 已发布 / CL2003 干货分享 / COL_NONE 未指定）。 */
 import { INestApplication } from '@nestjs/common'
 import { Test } from '@nestjs/testing'
 import request from 'supertest'
@@ -12,7 +11,7 @@ import { PrismaService } from '../src/common/prisma/prisma.service'
 import { reseed } from './helpers/reseed'
 import { loginAs } from './helpers/login'
 
-describe('M1.5 contents 内容管理（文章/栏目/展示页）', () => {
+describe('M1.5 contents 内容管理（文章/栏目）', () => {
   let app: INestApplication
   let token: string
 
@@ -189,14 +188,34 @@ describe('M1.5 contents 内容管理（文章/栏目/展示页）', () => {
     expect(cancelled?.scheduledAt).toBeUndefined()
   })
 
-  it('下架：已发布 → 待发布', async () => {
+  it('管理员下架：已发布 → 已关闭，详情保留下架与恢复历史', async () => {
     const withdraw = await request(app.getHttpServer())
       .post('/api/admin/contents/articles/SU1001/withdraw')
       .set(auth())
+      .send({ takedownReason: '测试下架原因' })
     expect(withdraw.status).toBe(200)
     const withdrawn = await listArticle('SU1001')
-    expect(withdrawn?.status).toBe('pending_release')
-    expect(withdrawn?.publishedAt).toBeUndefined()
+    expect(withdrawn?.status).toBe('closed')
+
+    const detail = await request(app.getHttpServer())
+      .get('/api/admin/contents/articles/SU1001')
+      .set(auth())
+    expect(detail.status).toBe(200)
+    expect(detail.body.data.takedowns).toEqual([
+      expect.objectContaining({ source: 'manual', reason: '测试下架原因', restoredAt: null }),
+    ])
+
+    const restore = await request(app.getHttpServer())
+      .post('/api/admin/contents/articles/SU1001/restore')
+      .set(auth())
+    expect(restore.status).toBe(200)
+    expect((await listArticle('SU1001'))?.status).toBe('published')
+    const restoredDetail = await request(app.getHttpServer())
+      .get('/api/admin/contents/articles/SU1001')
+      .set(auth())
+    expect(restoredDetail.body.data.takedowns[0]).toEqual(
+      expect.objectContaining({ source: 'manual', reason: '测试下架原因', restoredAt: expect.any(String), restoredBy: expect.any(String) }),
+    )
   })
 
   it('删除：待审核/已驳回/待发布可软删（列表不可见）；已发布删除 409', async () => {
@@ -231,7 +250,7 @@ describe('M1.5 contents 内容管理（文章/栏目/展示页）', () => {
       .delete('/api/admin/contents/articles/A1002')
       .set(auth())
     expect(conflict.status).toBe(409)
-    expect(conflict.body).toEqual({ code: 409, message: '仅待审核、已驳回或待发布的文章可删除' })
+    expect(conflict.body).toEqual({ code: 409, message: '仅待审核、已驳回、待发布或已关闭的文章可归档' })
   })
 
   it('编辑：待发布可编辑；已发布 409', async () => {
@@ -320,24 +339,4 @@ describe('M1.5 contents 内容管理（文章/栏目/展示页）', () => {
     expect(moved?.columnNames).toEqual(['未指定'])
   })
 
-  it('展示页审核通过 → 联动企业 showcaseStatus；重复审核 → 409', async () => {
-    const review = await request(app.getHttpServer())
-      .post('/api/admin/contents/showcase-requests/SC1003/review')
-      .set(auth())
-      .send({ status: 'approved' })
-    expect(review.status).toBe(200)
-    expect(review.body).toEqual({ code: 0, data: { code: 0 } })
-
-    const detail = await request(app.getHttpServer())
-      .get('/api/admin/enterprises/E2004')
-      .set(auth())
-    expect(detail.body.data.enterprise.showcaseStatus).toBe('published')
-
-    const again = await request(app.getHttpServer())
-      .post('/api/admin/contents/showcase-requests/SC1003/review')
-      .set(auth())
-      .send({ status: 'approved' })
-    expect(again.status).toBe(409)
-    expect(again.body).toEqual({ code: 409, message: '该申请已处理，请勿重复审核' })
-  })
 })

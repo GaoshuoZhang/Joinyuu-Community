@@ -6,7 +6,6 @@ import { IdGeneratorService } from '../../common/id-generator/id-generator.servi
 import { formatNow, formatToday } from '../../common/utils/time'
 import { buildUserDto, type UserDto } from '../users/user.mapper'
 import type { QueryEnterprisesDto } from './dto/query-enterprises.dto'
-import type { ReviewShowcaseDto } from './dto/review-showcase.dto'
 import type { CreateEnterpriseDto } from './dto/create-enterprise.dto'
 import type { UpdateEnterpriseDto } from './dto/update-enterprise.dto'
 
@@ -20,8 +19,10 @@ export interface EnterpriseDto {
   leaseType: string
   status: string
   showcaseStatus: string
-  showcaseComment?: string
   experience: number
+  /** 企业等级（按 community_enterprise 等级梯度由经验值推导，列表接口下发） */
+  level?: number
+  levelName?: string
   /** 关联用户 UID（社区企业必须关联一个个人用户） */
   contactUserId?: string
   /** 联系人职位（展示于成员管理） */
@@ -51,13 +52,12 @@ export function toEnterpriseDto(e: Enterprise): EnterpriseDto {
     description: e.description,
     tags: e.tags,
   }
-  if (e.showcaseComment != null) dto.showcaseComment = e.showcaseComment
   if (e.contactEmail != null) dto.contactEmail = e.contactEmail
   if (e.contactUserId != null) dto.contactUserId = e.contactUserId
   return dto
 }
 
-/* 社区企业域（wiki-backend.md §7.3）：列表/选项/详情（含派生成员）/展示页审核/数据概览 + 新增/编辑/停用/删除 */
+/* 社区企业域（wiki-backend.md §7.3）：列表/选项/详情（含派生成员）/数据概览 + 新增/编辑/停用/删除 */
 @Injectable()
 export class EnterprisesService {
   constructor(
@@ -86,13 +86,13 @@ export class EnterprisesService {
     userId: string,
     title: string,
   ): Promise<void> {
-    const existing = await tx.userIdentity.findFirst({
+    const [existing, enterprise] = await Promise.all([tx.userIdentity.findFirst({
       where: { userId, type: 'community_enterprise', enterpriseId },
-    })
+    }), tx.enterprise.findUniqueOrThrow({ where: { id: enterpriseId } })])
+    const tiers = await tx.levelTier.findMany({ where: { identityType: 'community_enterprise' }, orderBy: { threshold: 'desc' } })
+    const level = tiers.find(t => t.threshold <= enterprise.experience)?.level ?? 1
     if (existing) {
-      if (existing.title !== title) {
-        await tx.userIdentity.update({ where: { id: existing.id }, data: { title } })
-      }
+      await tx.userIdentity.update({ where: { id: existing.id }, data: { title, enterpriseName, experience: enterprise.experience, level } })
       return
     }
     await tx.userIdentity.create({
@@ -103,8 +103,8 @@ export class EnterprisesService {
         enterpriseName,
         role: 'member',
         title,
-        level: 1,
-        experience: 0,
+        level,
+        experience: enterprise.experience,
       },
     })
   }
@@ -262,7 +262,7 @@ export class EnterprisesService {
 
     const where: Prisma.EnterpriseWhereInput = conditions.length ? { AND: conditions } : {}
 
-    const [total, rows] = await Promise.all([
+    const [total, rows, tiers] = await Promise.all([
       this.prisma.enterprise.count({ where }),
       this.prisma.enterprise.findMany({
         where,
@@ -270,9 +270,20 @@ export class EnterprisesService {
         skip: (query.page - 1) * query.pageSize,
         take: query.pageSize,
       }),
+      this.prisma.levelTier.findMany({
+        where: { identityType: 'community_enterprise' },
+        orderBy: { threshold: 'asc' },
+      }),
     ])
 
-    return { list: rows.map(toEnterpriseDto), total }
+    const descTiers = [...tiers].reverse()
+    return {
+      list: rows.map((e) => {
+        const tier = descTiers.find((t) => t.threshold <= e.experience)
+        return { ...toEnterpriseDto(e), ...(tier ? { level: tier.level, levelName: tier.label } : {}) }
+      }),
+      total,
+    }
   }
 
   async options(): Promise<Array<{ label: string; value: string }>> {
@@ -296,23 +307,6 @@ export class EnterprisesService {
     const members = await Promise.all(memberUsers.map((u) => buildUserDto(this.prisma, u)))
 
     return { enterprise: toEnterpriseDto(enterprise), members }
-  }
-
-  async reviewShowcase(id: string, dto: ReviewShowcaseDto): Promise<{ code: number }> {
-    const enterprise = await this.prisma.enterprise.findUnique({ where: { id } })
-    if (!enterprise) throw new NotFoundException('企业不存在')
-    const comment = (dto.comment ?? '').trim()
-    if (dto.status === 'rejected' && !comment) {
-      throw new BadRequestException('请填写驳回原因')
-    }
-    await this.prisma.enterprise.update({
-      where: { id },
-      data: {
-        showcaseStatus: dto.status,
-        ...(dto.status === 'rejected' ? { showcaseComment: comment } : {}),
-      },
-    })
-    return { code: 0 }
   }
 
   async stats(id: string): Promise<{ demandCount: number; projectCount: number }> {

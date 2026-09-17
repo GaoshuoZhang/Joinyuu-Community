@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { onMounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { Tag } from 'tdesign-mobile-vue'
+import { CheckTag, Icon } from 'tdesign-mobile-vue'
 import { fetchGoods } from '@/api/mall'
 import { useAsyncList } from '@/composables/useAsyncList'
 import { useRefreshOnActivate } from '@/composables/useRefreshOnActivate'
@@ -63,22 +63,22 @@ useRefreshOnActivate(() => {
   <div class="m-mall page-fade-in">
     <section v-if="auth.isLogged" class="points-bar">
       <span>当前积分</span>
-      <strong>{{ auth.points }}</strong>
-      <a class="points-rule" @click="router.push('/mall/rules')">积分规则 ›</a>
+      <strong class="tabular-nums">{{ auth.points.toLocaleString('zh-CN') }}</strong>
+      <a class="points-rule" v-pressable @click="router.push('/mall/rules')">积分规则<Icon name="chevron-right" size="12px" /></a>
     </section>
 
     <div class="chips">
-      <Tag :theme="category === '' ? 'primary' : 'default'" variant="light" size="medium" @click="pickCategory('')">全部</Tag>
-      <Tag
+      <CheckTag variant="light" size="medium" :checked="category === ''" @change="pickCategory('')">全部</CheckTag>
+      <CheckTag
         v-for="c in categories"
         :key="c.code"
-        :theme="category === c.code ? 'primary' : 'default'"
         variant="light"
         size="medium"
-        @click="pickCategory(c.code)"
+        :checked="category === c.code"
+        @change="pickCategory(c.code)"
       >
         {{ c.label }}
-      </Tag>
+      </CheckTag>
     </div>
 
     <ListSkeleton v-if="loading && !(data ?? []).length" />
@@ -131,10 +131,14 @@ useRefreshOnActivate(() => {
 }
 
 .points-rule {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
   min-height: 32px;
   line-height: 32px;
   margin-left: 4px;
   color: var(--td-brand-color);
+  cursor: pointer;
 }
 
 .goods-list {

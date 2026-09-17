@@ -26,7 +26,7 @@ export class QueryArticlesDto {
   channel?: 'official' | 'submitted'
 
   @IsOptional()
-  @IsIn(['pending', 'rejected', 'pending_release', 'scheduled', 'published'])
+  @IsIn(['pending', 'rejected', 'pending_release', 'scheduled', 'published', 'closed'])
   status?: string
 
   @IsOptional()

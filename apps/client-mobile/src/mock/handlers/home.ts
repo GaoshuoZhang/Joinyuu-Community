@@ -1,5 +1,5 @@
 import type { HomeFeed } from '@/types'
-import { ALL_NOTICE_TYPES, announcements, articles, demands, events, homeBanners, noticePrefsByUid, noticesByUid } from '@/mock/db'
+import { announcements, appConfig, articles, demands, events, homeBanners, noticesByUid } from '@/mock/db'
 import { readPayload } from '@/mock/session'
 import { withLatency } from '@/mock/latency'
 
@@ -7,10 +7,8 @@ import { withLatency } from '@/mock/latency'
 export async function fetchHomeFeed(): Promise<HomeFeed> {
   return withLatency(() => {
     const payload = readPayload()
-    /* v40：未读数与站内信列表口径一致（排除已归档与已关闭偏好的类型） */
-    const enabled = payload ? (noticePrefsByUid[payload.sub] ?? ALL_NOTICE_TYPES) : ALL_NOTICE_TYPES
     const unread = payload
-      ? (noticesByUid[payload.sub] ?? []).filter((n) => !n.read && !n.archived && enabled.includes(n.type)).length
+      ? (noticesByUid[payload.sub] ?? []).filter((n) => !n.read).length
       : 0
     const hotEvents = events.filter((event) => event.status === 'published').slice(0, 3).map((event) => ({
       id: event.id, title: event.title, type: event.typeLabel, startTime: event.startTime,
@@ -29,7 +27,8 @@ export async function fetchHomeFeed(): Promise<HomeFeed> {
       siteName: '聚屿社区',
       siteSlogan: '让每一座创业孤岛，在这里连成群岛。',
       noticesUnread: unread,
-      banners: homeBanners,
+      carouselEnabled: appConfig.homeCarouselOpen,
+      banners: appConfig.homeCarouselOpen ? homeBanners : [],
       hotEvents,
       latestDemands,
       topArticles,

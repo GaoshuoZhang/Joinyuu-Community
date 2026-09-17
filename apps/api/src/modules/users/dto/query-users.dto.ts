@@ -18,7 +18,7 @@ export class QueryUsersDto {
   keyword?: string
 
   @IsOptional()
-  @IsIn(['active', 'frozen'])
+  @IsIn(['active', 'frozen', 'deleted'])
   status?: string
 
   /* 身份筛选：individual=仅持有基础个人身份；其余为持该类型身份 */

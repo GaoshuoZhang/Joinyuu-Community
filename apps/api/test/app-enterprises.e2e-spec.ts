@@ -226,19 +226,6 @@ describe('M2-R R3 企业治理', () => {
     expect(JSON.stringify(app_?.details)).toContain('业务调整')
   })
 
-  it('展示申请：edit_card 持有人提交 → pending 记录生成 → 重复 409', async () => {
-    const submit = await appPost(app, founderB, '/api/app/showcase-requests', {
-      enterpriseId: 'E2002',
-      note: '申请发布企业展示页',
-    })
-    expect(submit.status).toBe(200)
-    const dup = await appPost(app, founderB, '/api/app/showcase-requests', {
-      enterpriseId: 'E2002',
-      note: '重复',
-    })
-    expect(dup.status).toBe(409)
-  })
-
   it('公开企业名片：published 可见含成员，non-published 404', async () => {
     const ok = await appGet(app, outsider, '/api/app/enterprises/E2001')
     expect(ok.status).toBe(200)
@@ -253,7 +240,7 @@ describe('M2-R R3 企业治理', () => {
   })
 
   it('企业工作台：成员可看代企业响应统计', async () => {
-    const res = await appGet(app, owner, '/api/app/enterprises/E2001/workbench')
+    const res = await appGet(app, owner, '/api/app/me/enterprise-workbench?enterpriseId=E2001')
     expect(res.status).toBe(200)
     expect(typeof res.body.data.responseCount).toBe('number')
     expect(Array.isArray(res.body.data.recentResponses)).toBe(true)

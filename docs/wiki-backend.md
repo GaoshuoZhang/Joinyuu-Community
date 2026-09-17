@@ -15,9 +15,9 @@
 **范围内**：
 
 - `apps/api`：NestJS 11 + Prisma 6 + PostgreSQL 17 + Redis 7.4 的后端应用（Monorepo 内新包）
-- `/api/admin/**` 全量端点（**191 个**，见第 7 节清单；含 M1.5 新增的权限/会话/监控/素材/归档/导出/打印等），另加 `/api/health` 与 `/api/public/files/:key` 两个公开端点
+- `/api/admin/**` 全量端点（**244 个**，见第 7 节清单；含 M1.5 权限/会话/监控/素材/归档/导出/打印与 M2-R 治理/规则/内容等），`/api/app/**` 移动端端点 **122 个**，另加 `/api/health` 与 `/api/public/files/:key` 两个公开端点（路由装饰器合计 368）
 - 管理端认证（图形验证码 + JWT + 登出黑名单 + Redis 登录锁定 + 会话索引/强制下线/改密踢线）、审计日志服务端化、业务事件驱动通知、定时任务（定时发布/活动结束/租约临期/自动归档/自动删除，共 6 个）
-- RBAC：49 个权限码 + 4 个内置角色（super/operator/auditor/space-ops），34 个 admin controller 中 33 个挂 `@RequirePermission`，notifications 有意仅登录；health/files 为公开 controller
+- RBAC：**56 个权限码** + 4 个内置角色（super/operator/auditor/space-ops），40 个 admin controller 中除 notifications（有意仅登录）外均挂 `@RequirePermission`；health/files 为公开 controller
 - 归档体系：13 个业务域软删除（`deletedAt`/`deletedBy`）+ 可归档时间戳（`archivableAt`）+ 归档管理恢复/彻底删除 + 自动归档/自动删除
 - 文件上传与素材库（MinIO/本地磁盘双驱动；上传魔数嗅探禁 SVG；大小上限由系统配置，1-100MB 默认 10）
 - 积分/经验发放引擎（按规则 code 触发，事务写流水）
@@ -25,7 +25,11 @@
 - 种子数据：从 M0 mock 迁移并按 M1.5 改造，保持全部编号与跨模块引用一致（见第 11 节）
 - `/api/app/**` 客户端接口**仅输出设计文档**（M1-E 交付 `docs/api-app-design.md`），不实现
 
-**当前增量范围**：M2-R `/api/app/**` 已启动，R0/R1 已完成，后续以 `docs/m2-r-plan.md` 为事实来源。桌面客户端、微信小程序、微信登录、支付、CI/CD、分布式部署仍在范围外。
+**当前增量范围**：M2-R 必做范围及收尾复查整改已完成，72 模型 / 28 迁移 / 371 HTTP 路由装饰器。38 e2e 套件 / 264 用例、4 unit 套件 / 24 用例通过；详见 `docs/m2-r-closeout.md`。桌面客户端、微信小程序、微信登录、支付、CI/CD、分布式部署仍在范围外。
+
+**收口端点（2026-09-17）**：`/api/admin/member-governance/deletions`、`/realnames` 分页列表及 `/:id/review`（POST `{action:'approve'|'reject',note}`），权限 `/member-governance`。注销冷静期届满后人工执行，User 置 deleted、密码与基础实名资料清除、会话失效、保留业务历史；驳回有通知。实名规则校验后 pending 即时生效，人工通过 approved，驳回 rejected 并清实名允许重提。`/api/admin/cards/:type` 列表、`/schema/:type` GET/PUT、`/individual/:uid` PUT、`/enterprise/:id` PUT，权限 `/card-management`。对应 app `GET /card-schema/:type` 下发可编辑字段，空白名单合法；名片 PUT 省略保留、空串清空，禁用字段 403。两类新增管理端路径均归属 members 数据范围。
+
+**收尾复查约束（2026-09-17）**：注销提交、撤回、后台执行共用 User 行锁；`AccountDeletionRequest_one_cooling_per_user` 为 SQL 部分唯一索引（Prisma schema 无法表达），每人最多一份 cooling 申请。增量迁移将历史重复组全部撤销并记录原因，单份申请不变。个人名片 visibility 为嵌套布尔对象，省略键保留当前值，前后台共用事务合并；展示姓名参与人才库、全域人才搜索和后台名片搜索。举报恢复只允许原 `action=hide`、未恢复且目标 `moderationVersion` 与处置快照相同的记录；状态/归档及用户冻结字段写入由 PostgreSQL 触发器递增版本，包含同值重新处置。旧版无来源快照的举报不可自动恢复；后续人工处理优先。迁移中的部分索引与触发器必须随库部署，不可只执行 `db push`。
 
 ## 2. 技术栈与工程结构
 
@@ -49,8 +53,8 @@
 ```
 apps/api/
   prisma/
-    schema.prisma        # 全量实体建模（48 模型，见第 5 节）
-    migrations/          # prisma migrate 产出（19 个迁移）
+    schema.prisma        # 全量实体建模（72 模型，见 entity-fields.md）
+    migrations/          # prisma migrate 产出（28 个迁移）
     seed.ts              # M0 mock 迁移 + M1.5 治理种子（见第 11 节）
     seed-data/           # 各域种子数据（seed 唯一数据源；api tsconfig exclude）
   src/
@@ -186,7 +190,7 @@ TZ=Asia/Shanghai
 - **主键 = 前缀字符串**（`@id String @db.VarChar(16)`；M1-B 已从 CHAR 改 VarChar，避免 PostgreSQL CHAR 尾部填充破坏 ID 契约），由 `IdGeneratorService` 发号：`id_sequences` 表（`entityType` PK + `nextNumber`）事务内 `INSERT ... ON CONFLICT DO UPDATE` 原子自增（发号器按需建行）；**禁止 MAX(id) 取号**（mock 写法，并发不安全）。编号前缀共 23 个（U/E/AP/D/P/EV/XE/EX/PT/G/RO/WS/WA/LS/S/SR/A/SU/CL/SC/AN/N/AL），另有按年独立的项目编号 `CODE-<year>`（JY-YYYY-NN）与运行时前缀 `AST`（素材）/`LL`（登录日志）/`SL`（调度日志）。
 - **快照字段保留为列，不外键化**（M0 冻结口径）：`demand.publisherName`、`project.undertakers[].name`、`reservation.spaceName`、`order.goodsName`、`article.columnName`、`lease.renterName` 等展示快照不随源数据改名而变；但关联导航字段（`publisherId`、`columnId`、`goodsId`、`creatorId`）同时落列，可关联查询。
 - **内嵌数组拆表**：`User.identities` → `identities` 表；`Demand.respondents`、`Project.undertakers/milestones`、`Event.enrollments` → 独立子表；`Lease.workstationIds` → `lease_workstations` 关联表（保留终止后的历史归属）。
-- **JSONB 承载半结构数据**：`Application.details/records`、`Reservation.records`、`ShowcaseRequest.records`（ApprovalRecord 时间线）、`Demand.publisherIdentity` / `Article.authorIdentity`（身份快照）、`User.activities`（活跃记录，纯展示追加）、`AuditLog.before/after`（变更快照）、`ArchiveSetting.archiveStatuses`（按状态开关）、`Space.equipment` / 各实体 `tags`（`String[]`）。
+- **JSONB 承载半结构数据**：`Application.details/records`、`Reservation.records`、`Demand.publisherIdentity` / `Article.authorIdentity`（身份快照）、`User.activities`（活跃记录，纯展示追加）、`AuditLog.before/after`（变更快照）、`ArchiveSetting.archiveStatuses`（按状态开关）、`Space.equipment` / 各实体 `tags`（`String[]`）。
 - **软删除（归档）列**：企业/合作企业/申请/需求/项目/活动/商品/兑换订单/租约/空间/空间预约/文章/公告均含 `deletedAt String?` + `deletedBy String?`（归档端点写入；空间当前仅预留列）；列表现默认过滤 `deletedAt: null`，归档管理页集中恢复/彻底删除（见 §8.10）。
 - **可归档时间戳 `archivableAt String?`**：对象进入"可归档状态"时写入（驳回/关闭/立项/结项/结束/取消/下架/完成/终止/审核完成等），自动归档任务以 `archivableAt + 延时` 判定；恢复在线态（如商品重新上架、活动恢复）时清除。注意与 `deletedAt` 语义区分：前者是"可以归档的计时起点"，后者是"已归档标记"。
 - **派生值不落列**（M0 明确口径）：用户实名状态（realName+citizenId 均填）、用户 stats（详情接口实时 COUNT）、租约 expiring/expired（读取派生）、"个人用户"筛选（仅持 individual 身份）、工作台趋势（按日聚合）。
@@ -223,24 +227,26 @@ TZ=Asia/Shanghai
 | 商城 | RedemptionOrder | RO | userId/userName(快照)/goodsId/goodsName(快照)/points/status(pending_shipment/shipped/finished/cancelled)/createdAt/shippedAt?/finishedAt?/recipientName?/recipientPhone?/address?/note?/cancelReason?/**deletedAt?/deletedBy?/archivableAt?** |
 | 规则 | PointsRule | code（PK） | 9 条固定触发项（见 8.4）；name/scene/description 写死；points 可编辑；status |
 | 规则 | ExperienceRule | code（PK） | 6 条固定触发项；同上 |
-| 规则 | LevelTier | level（PK） | label/threshold；整组保存、逐级递增校验、1-10 级（种子默认 5 级） |
+| 规则 | LevelTier | identityType+level | 社区个体、社区企业分别维护 label/threshold；整组保存、逐级递增校验、1-10 级 |
+| 规则 | PublishingLimitRule | identityType+level+action | 按实名身份或社区动态等级配置需求发布、文章投稿、活动报名、空间预约每日限制 |
+| 规则 | PublishingLimitUsage | subjectType+subjectId+action+date | 当日已用次数；企业身份按企业 ID 共享，业务事务失败不计入 |
 | 空间 | WorkstationArea | WA | name 唯一/type(open/office/semi)/description/createdAt |
 | 空间 | Workstation | WS | seatNo 全岛唯一/**areaId FK**（区域改名无需级联）/type/capacity/status(idle/assigned/maintenance)/enterpriseId?/enterpriseName?/leaseId?（assigned 时）/defaultMonthlyRent?/areaSqm?（office 类型）/note? |
 | 空间 | Lease | LS | renterId(enterprise=企业 ID/individual=用户 ID/custom 空)/renterName 快照/renterType/startDate/endDate(longTerm=true 时空串)/longTerm/status(active/terminated)/monthlyRent/rentPeriod(day/week/month/year，缺省 month)/contactName/contactPhone/terminatedAt?/**deletedAt?/deletedBy?/archivableAt?** |
 | 空间 | LeaseWorkstation | 复合 (leaseId, workstationId) | 关联表保留历史；办公位当前占用由 Workstation.leaseId 表达 |
 | 空间 | Space | S | name/type(meeting/roadshow/meeting_room/multi/study)/capacity/location/openTime/closeTime/allDay?/needReservation?/needApproval?/equipment String[]/status(available/maintenance/disabled)/description/**deletedAt?/deletedBy?** |
 | 空间 | SpaceReservation | SR | userId/userName 快照/phone/spaceId/spaceName 快照/date/startTime/endTime/purpose/attendees/status(pending/approved/rejected/cancelled)/submittedAt/records Json/rejectReason?/**deletedAt?/deletedBy?/archivableAt?** |
-| 内容 | Article | A / SU | title/**channel(official 社区发布 / submitted 用户投稿；官方 A 前缀，投稿 SU 前缀)**/columnId/columnName 快照/authorId?/authorName/authorIdentity Json/status(**pending/pending_release/scheduled/published/rejected**)/content（富文本，写入 sanitize）/scheduledAt?/publishedAt?/views/summary/tags/createdAt/rejectedReason?/**archivableAt?/deletedAt?/deletedBy?** |
+| 内容 | Article | A / SU | title/**channel(official 社区发布 / submitted 用户投稿；官方 A 前缀，投稿 SU 前缀)**/columnId/columnName 快照/authorId?/authorName/authorIdentity Json/status(**pending/pending_release/scheduled/published/rejected/closed** 已关闭；成员主动撤回仍用 withdrawn)/**commentsEnabled Bool 默认 true（关闭后 app 评论读写 409）**/content（富文本，写入 sanitize）/scheduledAt?/publishedAt?/views/summary/tags/createdAt/rejectedReason?/**archivableAt?/deletedAt?/deletedBy?** |
+| 内容 | ArticleTakedown | 自增 | articleId FK 级联/source(manual 后台主动 / governance 举报处置)/reportId?/reason?/takenDownAt/takenDownBy/restoredAt?/restoredBy?；文章详情按时间倒序返回 |
+| 内容 | HomeBanner | BN | title/subtitle/imageUrl?/link?/sort(升序)/enabled/createdAt/updatedAt；受 SystemConfig.homeCarouselOpen 总开关控制 |
 | 内容 | ArticleColumn | CL | name/description/sort/**submissionOpen（开放投稿开关）**/**system（系统保留栏目「未指定」COL_NONE，不可编辑/停用/删除、成员端不可见）**/status(enabled/disabled)/createdAt |
-| 内容 | ShowcaseRequest | SC | targetType(enterprise/individual)/targetId?/targetName/contentSummary/submitterName/submitterPhone/submittedAt/status(pending/approved/rejected/cancelled)/records Json/rejectReason? |
 | 内容 | Announcement | AN | title/content（富文本 sanitize）/pinned/status(published/withdrawn)/publishedAt/createdAt/updatedAt?/**archivableAt?/deletedAt?/deletedBy?**（删除仅允许已下架，软删） |
 | 系统 | AdminNotification | N | type(approval/demand_review/reservation/showcase/article/lease/schedule)/title/content/at/read/link? |
 | 系统 | AuditLog | AL | operator/module/action/target/detail?/at/ip?/before Json?/after Json?；查询返回 M0 形状（不含 ip/before/after） |
-| 系统 | SystemConfig | 单例(id=1) | siteName/siteSlogan/registrationOpen/mallOpen/demandOpen/reservationOpen/leaseExpireRemindDays(1-90)/**uploadMaxSizeMb(1-100，默认 10；上传与富文本图片共用，dailyLoginPoints 已删除)**/updatedAt/updatedBy |
+| 系统 | SystemConfig | 单例(id=1) | siteName/siteSlogan/registrationOpen/mallOpen/demandOpen/reservationOpen/realnameRequired/**homeCarouselOpen(首页轮播总开关)**/leaseExpireRemindDays(1-90)/**uploadMaxSizeMb(1-100，默认 10；上传与富文本图片共用，dailyLoginPoints 已删除)**/passwordExpireDays/MinIO 配置/updatedAt/updatedBy |
 | 系统 | DictEntry | 复合 (type, code) | type(**demand_category/industry/event_type/goods_category**)/code(DC/IN/ET/GC 前缀自增)/label 全类型唯一/sort/status(enabled/disabled) |
 | 系统 | ArchiveSetting | domain（PK） | 归档设置（13 域）：autoArchive/archiveDelayDays(0-365)/autoPurge/purgeDelayDays(1-3650)/archiveStatuses Json?（按状态开关）；企业/合作企业不支持自动归档 |
-| App | UserNotification | UN | userId FK 级联；type/title/content/at/link?/read/archived；站内信列表、未读数与归档 |
-| App | UserNotificationPreference | 复合 (userId, type) | userId FK 级联；按通知类型保存 enabled，列表与未读数统一过滤 |
+| App | UserNotification | UN | userId FK 级联；type/title/content/at/link?/read；站内信为单一列表（无归档、无分类偏好，2026-09-17 简化；`archived`/`UserNotificationPreference` 已移除） |
 | App | Address | AD | userId FK 级联；name/phone/region/detail/isDefault/createdAt/updatedAt；每用户最多一个默认地址（部分唯一索引） |
 | App | AgreementConsent | 自增 | userId FK 级联；agreementType/version/consentedAt；(userId, agreementType, version) 联合唯一 |
 | App | AccountDeletionRequest | 自增 | userId FK 级联；reason?/status/requestedAt/effectiveAt?/cancelledAt?；7 天注销冷静期 |
@@ -264,7 +270,7 @@ TZ=Asia/Shanghai
 
 - **权限码 = 菜单路径或 `perm:xxx` 按钮码**，共 **49 码**（种子 `permissionCatalog` 为唯一目录），`*` 为超级管理员全量标记；`@RequirePermission(code | code[])` 支持 any-of 语义；`PermissionGuard` 叠加在 `JwtAuthGuard` 之后，权限集合命中任一所需码或含 `*` 放行，否则 403「无权限执行该操作」；未声明 `@RequirePermission` 的端点仅需登录。
 - **覆盖范围**：36 个 controller 中，34 个属于 admin；其中 33 个挂 `@RequirePermission`，`notifications` 有意仅登录。`health` 与 `files`（公开文件读取）为公开 controller。无声明 controller 内的个别端点（如 `GET /enterprises/options`、`GET /users/options`）仅需登录。
-- **权限目录（按模块）**：工作台 `/dashboard`；社区成员 `/users`、`/individuals`、`/enterprises`、`/external-enterprises`、`/approvals` + 企业按钮码 `perm:enterprise:create|update|disable|enable|delete`、`perm:external-enterprise:create|update|disable|enable|delete`；业务运营 `/demands`、`/demands/review`、`/projects`、`/events`；空间管理 `/workstations`、`/workstations/offices`、`/workstations/leases`、`/spaces`、`/spaces/reservations`；内容管理 `/contents/publish`、`/contents/submissions`、`/contents/columns`、`/contents/stats`、`/contents/showcase`、`/contents/announcements`；积分商城 `/mall/goods`、`/mall/orders`；规则管理 `/rules/points`、`/rules/experience`、`/rules/levels`、`/rules/ledger`、`/rules/experience-records`；系统管理 `/system/dicts`、`/system/config`、`/logs/audit`、`/system/roles`、`/system/admins`、`/system/sessions`、`/system/assets`、`/system/monitor`、`/logs/login`、`/system/trash`、`/system/export`。
+- **权限目录（按模块）**：工作台 `/dashboard`；社区成员 `/users`、`/individuals`、`/enterprises`、`/external-enterprises`、`/approvals` + 企业按钮码 `perm:enterprise:create|update|disable|enable|delete`、`perm:external-enterprise:create|update|disable|enable|delete`；业务运营 `/demands`、`/demands/review`、`/projects`、`/events`；空间管理 `/workstations`、`/workstations/offices`、`/workstations/leases`、`/spaces`、`/spaces/reservations`；内容管理 `/contents/publish`、`/contents/submissions`、`/contents/columns`、`/contents/stats`、`/contents/policies`、`/contents/banners`、`/contents/announcements`；积分商城 `/mall/goods`、`/mall/orders`；规则管理 `/rules/points`、`/rules/experience`、`/rules/levels`、`/rules/publishing-limits`、`/rules/ledger`、`/rules/experience-records`；系统管理 `/system/dicts`、`/system/config`、`/system/policies`、`/logs/audit`、`/system/roles`、`/system/admins`、`/system/sessions`、`/system/assets`、`/system/monitor`、`/logs/login`、`/system/trash`、`/system/export`、`/governance`、`/card-management`、`/member-governance`（服务申请 `/engagement/services` 已随功能下线移除）。
 - **内置角色**（`AdminRole` + `AdminRolePermission`）：`super`（`*` 全量）、`operator`（业务运营+内容+商城）、`auditor`（审核类）、`space-ops`（空间域）；角色权限保存即时失效关联管理员的权限缓存（`auth:admin:perms:<username>`，TTL 2h）。
 - **权限点目录接口**：`GET /api/admin/permissions/catalog` 按模块分组返回，供角色勾选矩阵渲染。
 - 数据范围已按 7 个业务域实现：`AdminRole.dataScope` + `DomainScopeGuard` 对 URL 域做允许/拒绝；当前仍无行级、组织级、所有者级或租户级过滤。
@@ -313,7 +319,7 @@ TZ=Asia/Shanghai
 
 | 方法 | 路径 | 说明 |
 |---|---|---|
-| GET | /api/admin/enterprises | query：page/pageSize/keyword(名称/ID)/industry/status（active/pending/exited/disabled）；默认过滤已归档 |
+| GET | /api/admin/enterprises | query：page/pageSize/keyword(名称/ID)/industry/status（active/pending/exited/disabled）；默认过滤已归档；列表行附 `level/levelName`（社区企业等级梯度按经验值推导） |
 | GET | /api/admin/enterprises/options | 仅登录：`[{ label: "名称（ID）", value }]` |
 | POST | /api/admin/enterprises | 权限 `perm:enterprise:create`：body name/industry/size/leaseType/**contactUserId（必填）** + contactTitle?/foundedAt?/settledAt?/description?/tags?；联系人姓名/电话/邮箱由 contactUserId 解析；联系人同时写入 community_enterprise 身份；返回 `{ id }`（E 前缀、创建即正常态） |
 | GET | /api/admin/enterprises/:id | 详情含成员列表（identities type=community_enterprise 派生，含 stats） |
@@ -366,7 +372,7 @@ TZ=Asia/Shanghai
 | PATCH | /api/admin/demands/:id/status | `{ status: "closed" }`（pending_release/published 可关闭；写 archivableAt） |
 | POST | /api/admin/demands/:id/archive | 仅 rejected/closed/projected 可归档（软删） |
 | POST | /api/admin/demands/:id/proxy-respond | `{ userName, enterprise, phone, email?, quote?, message? }`（仅 published/projected；message 空记"管理员代报名"；联系电话必填） |
-| POST | /api/admin/demands/:id/initiate-project | ProjectInitPayload；创建项目 + 双向关联（demand.projectId ↔ project.sourceDemandId）→ projected + archivableAt |
+| POST | /api/admin/demands/:id/initiate-project | ProjectInitPayload；published/selected 可立项；创建项目 + 双向关联（demand.projectId ↔ project.sourceDemandId）→ projected + archivableAt；发布者与被选中承接方补发 `demand_undertaken` 积分、承接方按身份补发 `project_undertaken` 经验并通知双方（发布者为后台代发的企业 ID 时站内信落到企业联系人） |
 | GET | /api/admin/demands/undertaker-options | 承接方候选（社区企业/合作企业/社区个体/个人用户，value=`enterprise:E*`/`enterprise:XE*`/`individual:U*`） |
 | GET | /api/admin/publisher-options | 独立 controller：`{ users: [...], enterprises: [...] }` 含联系电话（自动填充用）；权限（`/demands`、`/enterprises`、`/contents/publish` 任一） |
 
@@ -498,8 +504,13 @@ TZ=Asia/Shanghai
 | POST | /api/admin/contents/columns/:id/toggle-status | 启用↔停用（停用后新文章不可选；系统保留栏目不可停用） |
 | POST | /api/admin/contents/columns/:id/toggle-submission | 开放↔关闭投稿开关 |
 | DELETE | /api/admin/contents/columns/:id | 删除栏目；其文章自动转移至系统保留栏目「未指定」（COL_NONE）；系统保留栏目不可删除 |
-| GET | /api/admin/contents/showcase-requests | query：page/pageSize/targetType/status；权限 `/contents/showcase` |
-| POST | /api/admin/contents/showcase-requests/:id/review | `{ status, comment? }`；**联动 Enterprise.showcaseStatus**（published/rejected）+ 审核时间线 |
+| GET/POST/PUT | /api/admin/contents/policies(/:id) | 权限 `/contents/policies`；仅管理 `kind=community`，支持分类、版本、附件、精选与发布状态 |
+| GET | /api/admin/contents/banners | 权限 `/contents/banners`；轮播图列表，`sort` 升序 |
+| GET/PUT | /api/admin/contents/banners/settings | 首页轮播图总开关（`{ carouselOpen }`），写操作清 `config:system` 缓存并审计 |
+| POST | /api/admin/contents/banners | 新增轮播图（BN 前缀；title/subtitle/imageUrl?/link?/sort/enabled），审计「新增轮播图」 |
+| PUT | /api/admin/contents/banners/:id | 编辑轮播图（审计 before/after） |
+| POST | /api/admin/contents/banners/:id/toggle-enabled | 单条启用/停用 |
+| DELETE | /api/admin/contents/banners/:id | 删除轮播图 |
 | GET | /api/admin/announcements | 置顶优先，其余发布时间倒序；默认过滤已归档；权限 `/contents/announcements` |
 | POST | /api/admin/announcements | 创建即发布（写 publishedAt，正文 sanitize） |
 | PUT | /api/admin/announcements/:id | 编辑（不改状态/发布时间） |
@@ -535,6 +546,7 @@ TZ=Asia/Shanghai
 | GET | /api/admin/monitor/overview | 服务/DB/Redis 健康指标 + 定时任务最近执行状态；权限 `/system/monitor` |
 | GET | /api/admin/monitor/cron-logs | 定时任务执行日志（jobName 可选，最新 100 条） |
 | POST | /api/admin/monitor/jobs/:name/run | 手动触发任务执行（写 SchedulerLog，失败透出 500「任务执行失败：...」） |
+| GET/POST/PUT | /api/admin/system/policies(/:id) | 权限 `/system/policies`；仅管理用户协议与隐私政策，注册和隐私页面读取已发布版本 |
 | GET | /api/admin/trash | 已归档列表（跨域聚合）：query page/pageSize/domain(标签页)/keyword(标题/编号)；按 deletedAt 倒序；权限 `/system/trash` |
 | GET | /api/admin/trash/settings | 13 个标签页的归档设置（含 autoArchiveSupported 与可归档状态列表） |
 | PUT | /api/admin/trash/settings/:domain | `{ autoArchive?, archiveDelayDays?, autoPurge?, purgeDelayDays?, archiveStatuses? }`；企业/合作企业开启自动归档报 400 |
@@ -552,19 +564,19 @@ TZ=Asia/Shanghai
 | 方法 | 路径 | 说明 |
 |---|---|---|
 | GET | /api/admin/dashboard | `{ stats: { pendingApplications, totalUsers, activeEnterprises, runningProjects, upcomingEvents }, todos, pendingApplications(前5), upcomingEvents(前4，未结束已发布按开始时间升序) }`；聚合缓存 60s；权限 `/dashboard` |
-| GET | /api/admin/todos | 六域待办聚合：入驻/合作/身份审核、需求审核、空间预约审核、展示页发布、文章审核、临期租约（窗口取 SystemConfig.leaseExpireRemindDays），`[{ key, title, description, count, route }]` |
+| GET | /api/admin/todos | 五域待办聚合：入驻/合作/身份审核、需求审核、空间预约审核、文章审核、临期租约（窗口取 SystemConfig.leaseExpireRemindDays），`[{ key, title, description, count, route }]` |
 | GET | /api/admin/dashboard/trend | query `days`（默认 30，范围 3-90）；按日聚合 `{ date(M-DD), members, demands, events, points }`（含补零） |
 
-**端点总计：191**（`/api/admin/**`；另有 `GET /api/health`、`GET /api/public/files/:key` 两个 `@Public` 端点，未计入）。
+**端点总计：244**（`/api/admin/**` 路由装饰器；`/api/app/**` 122 个另计，`GET /api/health`、`GET /api/public/files/:key` 两个 `@Public` 端点未计入）。
 
 ## 8. 业务规则服务端化
 
 ### 8.1 状态机校验矩阵（服务端 409 强制）
 
-- **需求**：`pending →(approve)→ pending_release →(publish-now | schedule)→ published | scheduled →(到点)→ published`；`pending →(reject)→ rejected`；`pending_release/published →(close)→ closed`；`published →(retract)→ pending_release`、`published →(initiate-project)→ projected`；`scheduled →(cancel-schedule)→ pending_release`。编辑约束：仅 pending_release/published 可编辑且不改状态。归档：仅 rejected/closed/projected。
+- **需求**：`pending →(approve)→ pending_release →(publish-now | schedule)→ published | scheduled →(到点)→ published`；`pending →(reject)→ rejected`；`pending_release/published →(close)→ closed`；`published →(retract)→ pending_release`、`published →(成员 select)→ selected →(initiate-project)→ projected`、`published →(initiate-project)→ projected`；`scheduled →(cancel-schedule)→ pending_release`。编辑约束：仅 pending_release/published 可编辑且不改状态（`selected` 不可编辑/撤回/关闭/代报名）。归档：仅 rejected/closed/projected。成员端 `select` 为多选意向承接方（被选转 `accepted`，未选保持 pending，不生成项目），立项由管理员在后台完成。
 - **活动**：`pending_release →(publish-now | schedule)→ published | scheduled →(到点)→ published`；`published →(endTime 过)→ ended`（定时任务，写 archivableAt）；`pending_release/published →(cancel)→ cancelled`（写 archivableAt）；`cancelled →(restore)→ pending_release`；published 内 enrollmentOpen 开关。编辑约束：scheduled/ended/cancelled 不可编辑。归档：仅 ended/cancelled。
 - **项目**：`running ↔ paused`；`paused →(close)→ closed`（写 archivableAt）；closed 只读（可"重新创建"=复制预填，生成新 P 编号）；里程碑全 done → finished（结项，见 8.5，写 archivableAt）；finished 不可编辑。归档：仅 finished/closed。
-- **文章**：`pending(投稿待审核) →(review approved)→ pending_release | (rejected)→ rejected`；`pending_release →(publish | schedule)→ published | scheduled`；`scheduled →(cancel-schedule)→ pending_release`；`rejected →(编辑保存)→ pending`（重新入审核队列）；`published →(withdraw)→ pending_release`。官方文章创建即 pending_release、投稿创建即 pending。归档：仅 pending/rejected/pending_release 可删除（软删）。
+- **文章**：`pending(投稿待审核) →(review approved)→ pending_release | (rejected)→ rejected`；`pending_release →(publish | schedule)→ published | scheduled`；`scheduled →(cancel-schedule)→ pending_release`；`rejected →(编辑保存)→ pending`（重新入审核队列）；`published →(staff/举报下架)→ closed`（写 `archivableAt` 并新增 `ArticleTakedown` 记录；`closed →(原举报恢复)→ published`）；成员主动撤回待审核投稿为 `pending → withdrawn`（可重提）。官方文章创建即 pending_release、投稿创建即 pending。归档：pending/rejected/pending_release/closed 可软删；`withdrawn` 为成员可重提状态，不归档。
 - **申请/预约/展示页**：`pending → approved | rejected`；预约另有 `pending/approved → cancelled`。归档：申请仅 approved/rejected；预约为已结束/rejected/cancelled。
 - **商品/订单**：`on ↔ off`（下架写 archivableAt、上架清除；stock=0 置 restock，补货后回落 off）；`pending_shipment → shipped → finished`；`pending_shipment → cancelled`（事务退款）；归档：商品仅 off、订单仅 finished。
 - **办公位/租约**：办公位 idle ↔ maintenance（直接切换）；assigned 仅经租约创建/终止进入/退出；租约 active → terminated（事务释放办公位）；归档：仅 terminated。
@@ -670,7 +682,6 @@ TZ=Asia/Shanghai
 | approval | 入驻/合作/身份绑定申请提交（M2 客户端写入；种子数据存在） | /approvals |
 | demand_review | 需求提交待审核（M2 客户端） | /demands/review |
 | reservation | 空间预约提交（M2 客户端） | /spaces/reservations |
-| showcase | 展示页发布申请提交（M2 客户端） | /contents/showcase |
 | article | 文章提交审核（M2 客户端） | /contents/submissions |
 | lease | 租约临期（每日任务，同日去重） | /workstations/leases |
 | schedule | 定时发布到点完成（需求/活动/文章 30s 扫描任务） | /demands、/events、/contents/publish |

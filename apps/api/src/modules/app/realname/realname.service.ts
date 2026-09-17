@@ -8,6 +8,8 @@ import {
 import { PrismaService } from '../../../common/prisma/prisma.service'
 import { NotificationService } from '../../../common/notify/notification.service'
 import type { UpdateRealnameDto } from './dto/update-realname.dto'
+import { currentPublishingLimits } from '../../../common/enterprise/publishing-limits'
+import { formatNow } from '../../../common/utils/time'
 
 /** GB 11643 身份证校验码：17 位数字加权因子与校验位映射（校验位 X 为大写） */
 const ID_WEIGHTS = [7, 9, 10, 5, 8, 4, 2, 1, 6, 3, 7, 9, 10, 5, 8, 4, 2]
@@ -50,14 +52,15 @@ export class AppRealnameService {
   async status(uid: string) {
     const user = await this.prisma.user.findUnique({
       where: { uid },
-      select: { realName: true, citizenId: true },
+      select: { realName: true, citizenId: true, realnameReviewStatus: true, realnameReviewNote: true },
     })
     if (!user) throw new NotFoundException('用户不存在')
-    if (!user.realName || !user.citizenId) return { verified: false }
+    if (!user.realName || !user.citizenId) return { verified: false, reviewStatus: user.realnameReviewStatus, reviewNote: user.realnameReviewNote ?? undefined }
     return {
       verified: true,
       realName: maskName(user.realName),
       citizenIdMasked: maskCitizenId(user.citizenId),
+      reviewStatus: user.realnameReviewStatus,
     }
   }
 
@@ -79,45 +82,51 @@ export class AppRealnameService {
 
     await this.prisma.user.update({
       where: { uid },
-      data: { realName, citizenId },
+      data: {
+        realName,
+        citizenId,
+        realnameReviewStatus: 'pending',
+        realnameSubmittedAt: formatNow(),
+        realnameReviewedAt: null,
+        realnameReviewedBy: null,
+        realnameReviewNote: null,
+      },
     })
     await this.notify.pushNotice(uid, {
       type: 'system',
-      title: '实名认证已完成',
-      content: `您的实名认证已完成（${maskName(realName)}），已享受已实名分级权益。`,
+      title: '实名认证已提交',
+      content: `您的实名信息已通过规则校验（${maskName(realName)}），已生效并进入人工复核。`,
     })
     return { code: 0 }
   }
 
   /** 实名分级权益（两条静态分级，active 标注当前所处层级） */
   async rights(uid: string) {
-    const user = await this.prisma.user.findUnique({
-      where: { uid },
-      select: { realName: true, citizenId: true },
+    const { rules, activeRules, subject } = await currentPublishingLimits(this.prisma, uid)
+    const config = await this.prisma.systemConfig.findUnique({ where: { id: 1 }, select: { realnameRequired: true } })
+    const label = (n: number) => n < 0 ? '不限' : `${n} 次/日`
+    const grouped = new Map<string, typeof rules>()
+    for (const rule of rules) {
+      const key = `${rule.identityType}:${rule.level}`
+      grouped.set(key, [...(grouped.get(key) ?? []), rule])
+    }
+    return [...grouped.values()].map(group => {
+      const first = group[0]
+      const limit = (action: string) => group.find(item => item.action === action)?.dailyLimit ?? -1
+      const active = first.identityType === subject.identityType && first.level === subject.level
+      return {
+        identityType: first.identityType,
+        level: first.level,
+        title: first.identityType === 'personal_unverified' ? '未实名个人'
+          : first.identityType === 'personal_verified' ? '已实名个人'
+            : `${first.identityType === 'community_individual' ? '社区个体' : '社区企业'} · 等级 ${first.level}`,
+        active,
+        items: first.identityType === 'personal_unverified' && config?.realnameRequired
+          ? ['当前社区要求先完成实名认证后再操作']
+          : [`需求发布：${label(limit('demand_publish'))}`, `文章投稿：${label(limit('article_publish'))}`, `活动报名：${label(limit('event_enroll'))}`, `空间预约：${label(limit('space_reserve'))}`],
+        limits: Object.fromEntries(group.map(item => [item.action, item.dailyLimit])),
+      }
     })
-    const verified = isVerified(user?.realName, user?.citizenId)
-    return [
-      {
-        tier: 'unverified',
-        title: '未实名',
-        items: [
-          '浏览社区内容、点赞与评论',
-          '发布需求、报名活动按基础额度执行',
-          '完成实名认证后可提升发布与报名额度',
-        ],
-        active: !verified,
-      },
-      {
-        tier: 'verified',
-        title: '已实名',
-        items: [
-          '发布需求与活动报名额度提升',
-          '投稿、空间预约等完整社区服务',
-          '企业合作与实名信任标识',
-        ],
-        active: verified,
-      },
-    ]
   }
 }
 

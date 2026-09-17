@@ -11,6 +11,9 @@ import type { UpdateUserDto } from './dto/update-user.dto'
 import type { CreateUserDto } from './dto/create-user.dto'
 import { IdGeneratorService } from '../../common/id-generator/id-generator.service'
 import { formatNow, formatToday } from '../../common/utils/time'
+import { NotificationService } from '../../common/notify/notification.service'
+import { AppSessionService } from '../../common/app-session/app-session.service'
+import type { ReviewDeletionDto, ReviewRealnameDto } from './dto/review-member-governance.dto'
 
 /* 用户与社区个体域：读多写少（冻结为写），stats 实时派生（wiki-backend.md §7.2） */
 @Injectable()
@@ -19,6 +22,8 @@ export class UsersService {
     private readonly prisma: PrismaService,
     private readonly audit: AuditService,
     private readonly ids: IdGeneratorService,
+    private readonly notify: NotificationService,
+    private readonly sessions: AppSessionService,
   ) {}
 
   async list(query: QueryUsersDto): Promise<{ list: UserDto[]; total: number }> {
@@ -83,6 +88,7 @@ export class UsersService {
   async resetPassword(id: string, password: string, operator: string): Promise<{ code: number }> {
     const user = await this.prisma.user.findUnique({ where: { uid: id } })
     if (!user) throw new NotFoundException('用户不存在')
+    if (user.status === 'deleted') throw new ConflictException('已注销账号不可重置密码')
     const next = (password ?? '').trim()
     if (next.length < 8) throw new BadRequestException('密码至少 8 位')
 
@@ -222,6 +228,7 @@ export class UsersService {
   async update(id: string, dto: UpdateUserDto, operator: string): Promise<{ code: number }> {
     const user = await this.prisma.user.findUnique({ where: { uid: id } })
     if (!user) throw new NotFoundException('用户不存在')
+    if (user.status === 'deleted') throw new ConflictException('已注销账号不可编辑')
 
     /* 仅更新传入字段；昵称/手机号/邮箱/性别忽略空串，实名/证件号/简介允许清空 */
     const data: Prisma.UserUpdateInput = {}
@@ -270,6 +277,7 @@ export class UsersService {
   async updateStatus(id: string, status: 'active' | 'frozen'): Promise<{ code: number }> {
     const user = await this.prisma.user.findUnique({ where: { uid: id } })
     if (!user) throw new NotFoundException('用户不存在')
+    if (user.status === 'deleted') throw new ConflictException('已注销账号不可恢复')
 
     if (status !== 'active') {
       /* 冻结必须走 freeze 接口（校验冻结期限/长期开关与原因），防止绕过校验直接置 frozen */
@@ -286,6 +294,7 @@ export class UsersService {
   async freeze(id: string, dto: FreezeUserDto, operator: string): Promise<{ code: number }> {
     const user = await this.prisma.user.findUnique({ where: { uid: id } })
     if (!user) throw new NotFoundException('用户不存在')
+    if (user.status === 'deleted') throw new ConflictException('已注销账号不可冻结')
     if (user.status === 'frozen') throw new ConflictException('该账号已处于冻结状态')
     if (!dto.permanent && !dto.until) throw new BadRequestException('请选择冻结期限或开启长期冻结')
     const reason = (dto.reason ?? '').trim()
@@ -323,6 +332,131 @@ export class UsersService {
       select: { uid: true, nickname: true },
     })
     return users.map((u) => ({ label: `${u.nickname}（${u.uid}）`, value: u.uid }))
+  }
+
+  async deletionRequests(page: number, pageSize: number, status?: string) {
+    const where: Prisma.AccountDeletionRequestWhereInput = status ? { status } : {}
+    const [total, rows] = await Promise.all([
+      this.prisma.accountDeletionRequest.count({ where }),
+      this.prisma.accountDeletionRequest.findMany({
+        where,
+        include: { user: { select: { uid: true, nickname: true, phone: true, status: true } } },
+        orderBy: [{ requestedAt: 'desc' }, { id: 'desc' }],
+        skip: (page - 1) * pageSize,
+        take: pageSize,
+      }),
+    ])
+    return { list: rows, total }
+  }
+
+  async reviewDeletion(id: string, dto: ReviewDeletionDto, operator: string): Promise<{ code: number }> {
+    const note = dto.note.trim()
+    if (!note) throw new BadRequestException('请填写复核说明')
+    const request = await this.prisma.accountDeletionRequest.findUnique({ where: { id }, include: { user: true } })
+    if (!request) throw new NotFoundException('注销申请不存在')
+    if (request.status !== 'cooling') throw new ConflictException('该注销申请已处理')
+    if (dto.action === 'approve' && request.effectiveAt && request.effectiveAt > formatNow()) {
+      throw new ConflictException('注销申请仍在冷静期内')
+    }
+    const now = formatNow()
+    await this.prisma.$transaction(async tx => {
+      const [user] = await tx.$queryRaw<{ status: string }[]>`SELECT status FROM "User" WHERE uid = ${request.userId} FOR UPDATE`
+      if (!user || user.status === 'deleted') throw new ConflictException('账号已注销')
+      const changed = await tx.accountDeletionRequest.updateMany({
+        where: { id, status: 'cooling' },
+        data: dto.action === 'approve'
+          ? { status: 'approved', approvedAt: now, reviewedAt: now, reviewedBy: operator, reviewNote: note }
+          : { status: 'rejected', cancelledAt: now, cancelReason: note, reviewedAt: now, reviewedBy: operator, reviewNote: note },
+      })
+      if (changed.count !== 1) throw new ConflictException('该注销申请已处理')
+      if (dto.action === 'approve') {
+        await tx.user.update({
+          where: { uid: request.userId },
+          data: {
+            status: 'deleted',
+            nickname: '已注销用户',
+            phone: `deleted:${request.userId}`,
+            email: '',
+            realName: null,
+            citizenId: null,
+            passwordHash: null,
+            avatar: null,
+            bio: '',
+            realnameReviewStatus: 'unverified',
+            realnameSubmittedAt: null,
+            realnameReviewedAt: null,
+            realnameReviewedBy: null,
+            realnameReviewNote: null,
+          },
+        })
+      } else {
+        await this.notify.pushNoticeInTransaction(tx, request.userId, {
+          type: 'system', title: '注销申请未通过', content: note, link: '/me/security',
+        })
+      }
+    })
+    if (dto.action === 'approve') await this.sessions.kickAll(request.userId)
+    await this.audit.record({
+      module: '社区成员', action: dto.action === 'approve' ? '确认账号注销' : '驳回账号注销',
+      target: `${request.userId} · ${request.user.nickname}`, detail: note, operator,
+    })
+    return { code: 0 }
+  }
+
+  async realnameReviews(page: number, pageSize: number, status?: string) {
+    const where: Prisma.UserWhereInput = {
+      status: { not: 'deleted' },
+      ...(status ? { realnameReviewStatus: status } : {}),
+    }
+    const [total, rows] = await Promise.all([
+      this.prisma.user.count({ where }),
+      this.prisma.user.findMany({
+        where,
+        orderBy: [{ realnameSubmittedAt: 'desc' }, { uid: 'asc' }],
+        skip: (page - 1) * pageSize,
+        take: pageSize,
+        select: {
+          uid: true, nickname: true, phone: true, realName: true, citizenId: true,
+          realnameReviewStatus: true, realnameSubmittedAt: true, realnameReviewedAt: true,
+          realnameReviewedBy: true, realnameReviewNote: true,
+        },
+      }),
+    ])
+    return {
+      list: rows.map(row => ({ ...row, citizenId: row.citizenId ? `${row.citizenId.slice(0, 4)}**********${row.citizenId.slice(-4)}` : null })),
+      total,
+    }
+  }
+
+  async reviewRealname(uid: string, dto: ReviewRealnameDto, operator: string): Promise<{ code: number }> {
+    const note = dto.note.trim()
+    if (!note) throw new BadRequestException('请填写复核说明')
+    const user = await this.prisma.user.findUnique({ where: { uid } })
+    if (!user) throw new NotFoundException('用户不存在')
+    if (user.realnameReviewStatus !== 'pending' || !user.realName || !user.citizenId) {
+      throw new ConflictException('该实名记录无需复核')
+    }
+    const now = formatNow()
+    await this.prisma.$transaction(async tx => {
+      const changed = await tx.user.updateMany({
+        where: { uid, status: { not: 'deleted' }, realnameReviewStatus: 'pending', realName: user.realName, citizenId: user.citizenId },
+        data: dto.action === 'approve'
+          ? { realnameReviewStatus: 'approved', realnameReviewedAt: now, realnameReviewedBy: operator, realnameReviewNote: note }
+          : { realName: null, citizenId: null, realnameReviewStatus: 'rejected', realnameReviewedAt: now, realnameReviewedBy: operator, realnameReviewNote: note },
+      })
+      if (changed.count !== 1) throw new ConflictException('该实名记录已变化，请重新加载')
+      await this.notify.pushNoticeInTransaction(tx, uid, {
+        type: 'audit_result',
+        title: dto.action === 'approve' ? '实名认证复核通过' : '实名认证复核未通过',
+        content: note,
+        link: '/me/realname',
+      })
+    })
+    await this.audit.record({
+      module: '社区成员', action: dto.action === 'approve' ? '通过实名复核' : '驳回实名复核',
+      target: `${uid} · ${user.nickname}`, detail: note, operator,
+    })
+    return { code: 0 }
   }
 
   private buildUsersWhere(query: QueryUsersDto): Prisma.UserWhereInput {

@@ -7,8 +7,6 @@ import { ArticlePayloadDto } from './dto/article-payload.dto'
 import { ReviewArticleDto } from './dto/review-article.dto'
 import { ScheduleArticleDto } from './dto/schedule-article.dto'
 import { ColumnPayloadDto } from './dto/column-payload.dto'
-import { QueryShowcaseRequestsDto } from './dto/query-showcase-requests.dto'
-import { ReviewShowcaseRequestDto } from './dto/review-showcase-request.dto'
 import { TakedownDto } from '../../common/dto/takedown.dto'
 
 @Controller('api/admin/contents')
@@ -22,6 +20,12 @@ export class ContentsController {
   @Get('articles')
   articles(@Query() query: QueryArticlesDto) {
     return this.contents.articles(query)
+  }
+
+  @RequirePermission(['/contents/publish', '/contents/submissions'])
+  @Get('articles/:id')
+  article(@Param('id') id: string) {
+    return this.contents.article(id)
   }
 
   @RequirePermission('/contents/publish')
@@ -81,6 +85,13 @@ export class ContentsController {
     return this.contents.withdrawArticle(id, req.user?.name ?? '社区管理员', dto.takedownReason)
   }
 
+  @RequirePermission(['/contents/publish', '/contents/submissions'])
+  @HttpCode(200)
+  @Post('articles/:id/restore')
+  restoreArticle(@Param('id') id: string, @Req() req: AuthenticatedRequest) {
+    return this.contents.restoreArticle(id, req.user?.name ?? '社区管理员')
+  }
+
   @RequirePermission('/contents/publish')
   @HttpCode(200)
   @Delete('articles/:id')
@@ -131,22 +142,4 @@ export class ContentsController {
     return this.contents.deleteColumn(id)
   }
 
-  /* ---------- 展示页发布申请 ---------- */
-
-  @RequirePermission('/contents/showcase')
-  @Get('showcase-requests')
-  showcaseRequests(@Query() query: QueryShowcaseRequestsDto) {
-    return this.contents.showcaseRequests(query)
-  }
-
-  @RequirePermission('/contents/showcase')
-  @HttpCode(200)
-  @Post('showcase-requests/:id/review')
-  reviewShowcaseRequest(
-    @Param('id') id: string,
-    @Body() dto: ReviewShowcaseRequestDto,
-    @Req() req: AuthenticatedRequest,
-  ) {
-    return this.contents.reviewShowcaseRequest(id, dto, req.user?.name ?? '社区管理员')
-  }
 }

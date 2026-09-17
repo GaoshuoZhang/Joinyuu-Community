@@ -17,6 +17,14 @@ export async function fetchSpaces(): Promise<Space[]> {
   return withLatency(() => [...spaces])
 }
 
+export async function fetchSpaceDetail(id: string): Promise<Space> {
+  return withLatency(() => {
+    const space = spaces.find((s) => s.id === id)
+    if (!space) fail(404, '空间不存在或已下架')
+    return { ...space }
+  }, 120)
+}
+
 export async function fetchAvailability(spaceId: string, date: string): Promise<SpaceSlot[]> {
   return withLatency(() => {
     const space = spaces.find((s) => s.id === spaceId)

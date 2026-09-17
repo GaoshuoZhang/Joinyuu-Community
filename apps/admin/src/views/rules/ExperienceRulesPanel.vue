@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import ListErrorState from '@/components/ListErrorState.vue'
 import { nextTick, onMounted, reactive, ref } from 'vue'
+import { useRouter } from 'vue-router'
 import { MessagePlugin } from 'tdesign-vue-next'
 import type { FormProps } from 'tdesign-vue-next'
 import PageHeader from '@/components/PageHeader.vue'
@@ -13,6 +14,7 @@ const loading = ref(false)
 const loadError = ref('')
 const list = ref<ExperienceRule[]>([])
 const acting = ref('')
+const router = useRouter()
 
 const columns = [
   { colKey: 'name', title: '触发项', cell: 'name', width: 180, resizable: true , ellipsis: true},
@@ -96,7 +98,9 @@ onMounted(load)
 <template>
   <div class="exp-rules-panel page-fade-in">
     <ListErrorState v-if="loadError" :message="loadError" :loading="loading" @retry="() => load()" />
-    <PageHeader title="经验值规则" description="经验值发放制度：触发项固定，发放自动；扣除经验值由管理员手动调整" />
+    <PageHeader title="经验值规则" description="经验值发放制度：触发项固定，发放自动；扣除经验值由管理员手动调整">
+      <template #actions><t-button variant="outline" @click="router.push('/rules/experience-records')">经验值发放记录</t-button></template>
+    </PageHeader>
 
     <div class="page-filter-bar">
       <span class="panel-tip">

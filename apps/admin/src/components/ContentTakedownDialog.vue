@@ -24,7 +24,7 @@ async function submit() {
     const reason = form.takedownReason.trim()
     if (type === 'article') await withdrawArticle(id, reason)
     else await retractDemand(id, reason)
-    MessagePlugin.success('已下架，内容转为待发布')
+    MessagePlugin.success(type === 'article' ? '文章已下架并关闭' : '已下架，内容转为待发布')
     visible.value = false
     emit('success')
   } catch (error) {
@@ -39,10 +39,10 @@ defineExpose({ open })
 
 <template>
   <t-dialog v-model:visible="visible" header="下架内容" width="520px" :close-on-overlay-click="false" :confirm-btn="{ content: '确认下架', loading: submitting }" @confirm="submit">
-    <p>确认下架「{{ target?.title }}」？下架后转为待发布。</p>
+    <p>确认下架「{{ target?.title }}」？{{ target?.type === 'article' ? '下架后状态为已关闭。' : '下架后转为待发布。' }}</p>
     <t-form :data="form" label-align="top">
       <t-form-item label="下架理由（选填）" name="takedownReason">
-        <t-textarea v-model="form.takedownReason" :maxlength="255" placeholder="填写后将通过站内信通知内容所属用户；留空不通知" />
+        <t-textarea v-model="form.takedownReason" :maxlength="255" placeholder="填写后将通过站内信通知内容所属用户；留空不通知…" />
       </t-form-item>
     </t-form>
   </t-dialog>

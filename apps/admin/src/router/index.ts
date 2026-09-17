@@ -87,11 +87,9 @@ const router = createRouter({
           component: () => import('@/views/approvals/ApprovalListView.vue'),
           meta: { title: '申请审核', group: '社区成员' },
         },
-        {
-          path: 'application-form-config',
-          component: () => import('@/views/approvals/ApplicationFormConfigView.vue'),
-          meta: { title: '申请表单配置', group: '社区成员', perm: '/approvals' },
-        },
+        { path: 'application-form-config', redirect: '/system/application-form-config' },
+        { path: 'member-governance', redirect: (to) => to.query.tab === 'realnames' ? '/system/realname-reviews' : '/system/deletion-requests' },
+        { path: 'card-management', component: () => import('@/views/users/CardManagementView.vue'), meta: { title: '名片管理', group: '社区成员', perm: '/card-management' } },
         {
           path: 'demands',
           component: () => import('@/views/demands/DemandListView.vue'),
@@ -141,16 +139,8 @@ const router = createRouter({
           component: () => import('@/views/mall/MallOrdersPanel.vue'),
           meta: { title: '订单管理', group: '积分管理' },
         },
-        {
-          path: 'rules/ledger',
-          component: () => import('@/views/mall/MallLedgerPanel.vue'),
-          meta: { title: '积分发放记录', group: '规则管理' },
-        },
-        {
-          path: 'rules/experience-records',
-          component: () => import('@/views/rules/ExperienceRecordsPanel.vue'),
-          meta: { title: '经验值发放记录', group: '规则管理' },
-        },
+        { path: 'rules/ledger', component: () => import('@/views/mall/MallLedgerPanel.vue'), meta: { title: '积分发放记录', group: '规则管理' } },
+        { path: 'rules/experience-records', component: () => import('@/views/rules/ExperienceRecordsPanel.vue'), meta: { title: '经验值发放记录', group: '规则管理' } },
         {
           path: 'rules/points',
           component: () => import('@/views/mall/MallRulesPanel.vue'),
@@ -165,6 +155,11 @@ const router = createRouter({
           path: 'rules/levels',
           component: () => import('@/views/rules/LevelTiersPanel.vue'),
           meta: { title: '等级规则', group: '规则管理' },
+        },
+        {
+          path: 'rules/publishing-limits',
+          component: () => import('@/views/rules/PublishLimitsPanel.vue'),
+          meta: { title: '发布限制', group: '规则管理', perm: '/rules/publishing-limits' },
         },
         {
           path: 'workstations',
@@ -222,9 +217,14 @@ const router = createRouter({
           meta: { title: '阅读统计', group: '内容管理', perm: '/contents/stats' },
         },
         {
-          path: 'contents/showcase',
-          component: () => import('@/views/contents/ShowcaseView.vue'),
-          meta: { title: '展示页发布', group: '内容管理' },
+          path: 'contents/policies',
+          component: () => import('@/views/contents/CommunityPolicyView.vue'),
+          meta: { title: '社区政策', group: '内容管理', perm: '/contents/policies' },
+        },
+        {
+          path: 'contents/banners',
+          component: () => import('@/views/contents/BannerPanel.vue'),
+          meta: { title: '轮播图管理', group: '内容管理', perm: '/contents/banners' },
         },
         {
           path: 'contents/announcements',
@@ -240,6 +240,21 @@ const router = createRouter({
           path: 'system/config',
           component: () => import('@/views/system/SystemConfigPanel.vue'),
           meta: { title: '系统配置', group: '系统管理' },
+        },
+        {
+          path: 'system/application-form-config',
+          component: () => import('@/views/approvals/ApplicationFormConfigView.vue'),
+          meta: { title: '申请表单配置', group: '系统管理', perm: '/approvals', scopeDomain: 'members' },
+        },
+        {
+          path: 'system/deletion-requests',
+          component: () => import('@/views/system/DeletionRequestsView.vue'),
+          meta: { title: '注销工单', group: '系统管理', perm: '/member-governance', scopeDomain: 'members' },
+        },
+        {
+          path: 'system/realname-reviews',
+          component: () => import('@/views/system/RealnameReviewsView.vue'),
+          meta: { title: '实名复核', group: '系统管理', perm: '/member-governance', scopeDomain: 'members' },
         },
         {
           path: 'system/logs',
@@ -280,7 +295,12 @@ const router = createRouter({
         {
           path: 'system/governance',
           component: () => import('@/views/system/GovernancePanel.vue'),
-          meta: { title: '信任治理', group: '系统管理', perm: '/governance' },
+          meta: { title: '举报与申诉', group: '系统管理', perm: '/governance' },
+        },
+        {
+          path: 'system/policies',
+          component: () => import('@/views/system/AgreementPolicyView.vue'),
+          meta: { title: '协议与政策', group: '系统管理', perm: '/system/policies' },
         },
         {
           path: '403',
@@ -312,7 +332,8 @@ router.beforeEach((to) => {
     if (perm && !auth.hasPerm(perm)) return { path: '/403' }
     /* 数据范围：登录页/403/打印与无 group 路由放行；范围非空且不含该域 → /403 */
     const group = to.meta.group as string | undefined
-    if (group && !scopeAllowsGroup(auth.dataScope, auth.permissions, group)) return { path: '/403' }
+    const scopeDomain = to.meta.scopeDomain as string | undefined
+    if (group && !scopeAllowsGroup(auth.dataScope, auth.permissions, group, scopeDomain)) return { path: '/403' }
   }
   return true
 })

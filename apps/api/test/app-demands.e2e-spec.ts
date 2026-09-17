@@ -1,5 +1,5 @@
-/* M2-R R2 验收：需求撮合闭环（浏览/响应/撤回/发布者筛选 → accept 立项生成协作项目 → 里程碑提交/验收/结项）
- * 前置：docker compose up + prisma migrate + seed；密码 user123 */
+/* M2-R R2 验收：需求撮合闭环（浏览/响应/撤回/发布者选定承接方 → selected → 管理员立项生成协作项目
+ * → 里程碑提交/验收/结项）。前置：docker compose up + prisma migrate + seed；密码 user123 */
 import { INestApplication } from '@nestjs/common'
 import { Test } from '@nestjs/testing'
 import request from 'supertest'
@@ -7,6 +7,7 @@ import { AppModule } from '../src/app.module'
 import { PrismaService } from '../src/common/prisma/prisma.service'
 import { reseed } from './helpers/reseed'
 import { appGet, appLoginAs, appPost } from './helpers/app-login'
+import { loginAs } from './helpers/login'
 
 describe('M2-R R2 app 需求撮合', () => {
   let app: INestApplication
@@ -60,6 +61,11 @@ describe('M2-R R2 app 需求撮合', () => {
     const dup = await appPost(app, tokenB, `/api/app/demands/${id}/respond`, { note: '再来一次' })
     expect(dup.status).toBe(409)
 
+    /* 详情返回本人响应快照（内容 + 状态），客户端据此隐藏响应入口并展示响应说明 */
+    const detail = await appGet(app, tokenB, `/api/app/demands/${id}`)
+    expect(detail.status).toBe(200)
+    expect(detail.body.data.myResponse).toMatchObject({ message: '我可以承接，做过类似项目', status: 'pending' })
+
     const mine = await appGet(app, tokenB, '/api/app/me/responses')
     expect(mine.status).toBe(200)
     const mineRows = Array.isArray(mine.body.data) ? mine.body.data : mine.body.data.list
@@ -70,11 +76,17 @@ describe('M2-R R2 app 需求撮合', () => {
     const withdraw = await appPost(app, tokenB, `/api/app/me/responses/${responseId}/withdraw`, {})
     expect(withdraw.status).toBe(200)
 
+    /* 撤回后视为未响应：重新出现响应入口 */
+    const afterWithdraw = await appGet(app, tokenB, `/api/app/demands/${id}`)
+    expect(afterWithdraw.body.data.myResponse).toBeUndefined()
+
     const again = await appPost(app, tokenB, `/api/app/demands/${id}/respond`, { note: '撤回后重响应' })
     expect(again.status).toBe(200)
   })
 
-  it('发布需求（pending→管理端置 published）→ 应者响应 → 发布者 accept → 立项 → 里程碑验收结项', async () => {
+  it('发布需求（pending→管理端置 published）→ 应者响应 → 发布者选定承接方 → 管理员立项 → 里程碑验收结项', async () => {
+    const adminToken = await loginAs(app)
+
     // ①发布者新建需求（kind=task），status=pending
     const created = await appPost(app, tokenA, '/api/app/demands', {
       title: 'R2 撮合测试需求-前端改版',
@@ -104,27 +116,71 @@ describe('M2-R R2 app 需求撮合', () => {
     })
     expect(resp.status).toBe(200)
 
-    // ④发布者查看响应列表
+    // ④发布者查看响应列表；非发布者 403
     const list = await appGet(app, tokenA, `/api/app/me/demands/${demandId}/responses`)
     expect(list.status).toBe(200)
     expect(list.body.data.length).toBe(1)
     const responseId: number = list.body.data[0].id
-
-    // ⑤非发布者查看响应列表 → 403
     const forbidden = await appGet(app, tokenB, `/api/app/me/demands/${demandId}/responses`)
     expect(forbidden.status).toBe(403)
 
-    // ⑥发布者 accept → 立项生成项目
-    const accept = await appPost(app, tokenA, `/api/app/me/demands/${demandId}/responses/${responseId}/review`, {
-      action: 'accept',
-    })
-    expect(accept.status).toBe(200)
-    const projectId: string = accept.body.data.projectId
-    expect(projectId).toBeTruthy()
+    // ⑤非发布者不可选定承接方；空选择 400
+    const notOwner = await appPost(app, tokenB, `/api/app/me/demands/${demandId}/select`, { responseIds: [responseId] })
+    expect(notOwner.status).toBe(403)
+    const empty = await appPost(app, tokenA, `/api/app/me/demands/${demandId}/select`, { responseIds: [] })
+    expect(empty.status).toBe(400)
 
-    // ⑦需求转 projected、双方项目可见
+    // ⑥发布者多选意向承接方并提交立项 → selected（不生成项目，等待管理员确认）
+    const selected = await appPost(app, tokenA, `/api/app/me/demands/${demandId}/select`, { responseIds: [responseId] })
+    expect(selected.status).toBe(200)
+    const afterSelect = await prisma.demand.findUnique({ where: { id: demandId } })
+    expect(afterSelect?.status).toBe('selected')
+    expect(afterSelect?.projectId).toBeNull()
+    expect(afterSelect?.matchedRespondent).toContain('顾北辰')
+    const acceptedRow = await prisma.demandRespondent.findFirst({ where: { id: responseId } })
+    expect(acceptedRow?.status).toBe('accepted')
+
+    // ⑦已选定后：发布者仍可查看详情；广场与非发布者不可见；不再接受新响应
+    const ownDetail = await appGet(app, tokenA, `/api/app/demands/${demandId}`)
+    expect(ownDetail.status).toBe(200)
+    expect(ownDetail.body.data.status).toBe('selected')
+    const outsiderDetail = await appGet(app, tokenB, `/api/app/demands/${demandId}`)
+    expect(outsiderDetail.status).toBe(404)
+    const plaza = await appGet(app, tokenB, '/api/app/demands?pageSize=50')
+    expect(plaza.body.data.list.some((d: { id: string }) => d.id === demandId)).toBe(false)
+    const againRespond = await appPost(app, tokenB, `/api/app/demands/${demandId}/respond`, { note: '再响应一次' })
+    expect(againRespond.status).toBe(409)
+
+    // ⑧管理员手动立项 → projected + 双向关联 + 承接方积分/经验补发
+    const initiated = await request(app.getHttpServer())
+      .post(`/api/admin/demands/${demandId}/initiate-project`)
+      .set('Authorization', `Bearer ${adminToken}`)
+      .send({
+        projectName: 'R2 撮合测试需求-前端改版专项',
+        undertakers: [{ type: 'individual', id: 'U1005', share: 100 }],
+        description: '承接移动端界面改版',
+        milestones: [
+          { name: '合作方案确认', date: '2026-10-01', owners: [] },
+          { name: '项目交付', date: '2026-10-30', owners: [] },
+        ],
+        expReward: 100,
+      })
+    expect(initiated.status).toBe(200)
+    const projectId: string = initiated.body.data.id
+    expect(projectId).toBeTruthy()
     const demand = await prisma.demand.findUnique({ where: { id: demandId } })
     expect(demand?.status).toBe('projected')
+    expect(demand?.projectId).toBe(projectId)
+    const rewarded = await prisma.pointsRecord.findFirst({
+      where: { userId: 'U1005', dedupeKey: `demand_undertaken:U1005:${demandId}` },
+    })
+    expect(rewarded?.delta).toBe(200)
+    const expGained = await prisma.experienceRecord.findFirst({
+      where: { targetType: 'individual', targetId: 'U1005', reason: '承接需求立项获得项目经验' },
+    })
+    expect(expGained?.delta).toBe(30)
+
+    // ⑨双方项目可见
     const projListA = await appGet(app, tokenA, '/api/app/me/projects')
     const projRowsA = Array.isArray(projListA.body.data) ? projListA.body.data : projListA.body.data.list
     expect(projRowsA.some((p: { id: string }) => p.id === projectId)).toBe(true)
@@ -132,7 +188,7 @@ describe('M2-R R2 app 需求撮合', () => {
     const projRowsB = Array.isArray(projListB.body.data) ? projListB.body.data : projListB.body.data.list
     expect(projRowsB.some((p: { id: string }) => p.id === projectId)).toBe(true)
 
-    // ⑧发起方不能 submit 里程碑（承接方才能）
+    // ⑩发起方不能 submit 里程碑（承接方才能）
     const detail = await appGet(app, tokenA, `/api/app/me/projects/${projectId}`)
     const milestone = detail.body.data.milestones.find((m: { status: string }) => m.status === 'todo')
     const msId: number = milestone.id
@@ -141,7 +197,7 @@ describe('M2-R R2 app 需求撮合', () => {
     })
     expect(subByPublisher.status).toBe(403)
 
-    // ⑨承接方 submit → 发布者 accept → 全部验收 → 自动结项
+    // ⑪承接方 submit → 发布者 accept → 全部验收 → 自动结项
     for (const m of detail.body.data.milestones) {
       const sub = await appPost(app, tokenB, `/api/app/me/projects/${projectId}/milestones/${m.id}/submit`, {
         note: '交付完成',

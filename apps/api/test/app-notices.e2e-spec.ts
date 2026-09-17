@@ -1,4 +1,4 @@
-/* M2-R R1 验收：站内信（列表/未读/已读/全部已读/归档）+ 通知偏好
+/* M2-R R1 验收：站内信列表、未读、已读与全部已读
  * 前置：docker compose up + prisma migrate + seed（用户统一密码 user123） */
 import { INestApplication } from '@nestjs/common'
 import { Test } from '@nestjs/testing'
@@ -7,11 +7,13 @@ import { AppModule } from '../src/app.module'
 import { reseed } from './helpers/reseed'
 import { appGet, appLoginAs, appPost } from './helpers/app-login'
 import { NotificationService } from '../src/common/notify/notification.service'
+import { PrismaService } from '../src/common/prisma/prisma.service'
 
-describe('M2-R R1 站内信与通知偏好', () => {
+describe('M2-R R1 站内信', () => {
   let app: INestApplication
   let token: string
   let notify: NotificationService
+  let prisma: PrismaService
 
   beforeAll(async () => {
     reseed()
@@ -19,6 +21,7 @@ describe('M2-R R1 站内信与通知偏好', () => {
     app = moduleRef.createNestApplication()
     await app.init()
     notify = moduleRef.get(NotificationService)
+    prisma = moduleRef.get(PrismaService)
     token = await appLoginAs(app, '13801210001', 'user123')
     await notify.pushNotice('U1001', { type: 'system', title: 'R1 测试通知', content: '用于验证已读与归档' })
   })
@@ -62,40 +65,14 @@ describe('M2-R R1 站内信与通知偏好', () => {
     expect(after.body.data.count).toBe(0)
   })
 
-  it('通知偏好：默认 all；改为子集后生效；禁止空集合', async () => {
-    const prefs = await appGet(app, token, '/api/app/me/notices/prefs')
-    expect(prefs.status).toBe(200)
-    expect(prefs.body.data.enabledTypes).toContain('all')
+  it('偏好与归档端点已移除，站内信单一列表且始终写入', async () => {
+    expect((await appGet(app, token, '/api/app/me/notices/prefs')).status).toBe(404)
+    expect((await request(app.getHttpServer()).put('/api/app/me/notices/prefs').set('Authorization', `Bearer ${token}`).send({ enabledTypes: ['system'] })).status).toBe(404)
+    expect((await appPost(app, token, '/api/app/notices/UN1/archive', { archived: true })).status).toBe(404)
 
-    const bad = await request(app.getHttpServer())
-      .put('/api/app/me/notices/prefs')
-      .set('Authorization', `Bearer ${token}`)
-      .send({ enabledTypes: [] })
-    expect(bad.status).toBe(400)
-
-    const ok = await request(app.getHttpServer())
-      .put('/api/app/me/notices/prefs')
-      .set('Authorization', `Bearer ${token}`)
-      .send({ enabledTypes: ['system', 'order'] })
-    expect(ok.status).toBe(200)
-    const after = await appGet(app, token, '/api/app/me/notices/prefs')
-    expect(after.body.data.enabledTypes).toEqual(['system', 'order'])
-    await notify.pushNotice('U1001', { type: 'demand', title: '应被过滤', content: '偏好关闭后不应写入' })
-    const filtered = await appGet(app, token, '/api/app/notices?type=demand')
-    expect(filtered.body.data.list).toHaveLength(0)
-  })
-
-  it('归档：仅已读可归档；归档后不在默认列表', async () => {
-    const list = await appGet(app, token, '/api/app/notices?page=1&pageSize=1')
-    if (list.body.data.list.length === 0) return
-    const id: string = list.body.data.list[0].id
-
-    await appPost(app, token, `/api/app/notices/${id}/read`, {})
-    const arch = await appPost(app, token, `/api/app/notices/${id}/archive`, { archived: true })
-    expect(arch.status).toBe(200)
-    const defaults = await appGet(app, token, '/api/app/notices')
-    expect(defaults.body.data.list.some((item: { id: string }) => item.id === id)).toBe(false)
-    const archived = await appGet(app, token, '/api/app/notices?status=archived')
-    expect(archived.body.data.list.some((item: { id: string }) => item.id === id)).toBe(true)
+    await notify.pushNotice('U1001', { type: 'demand', title: '始终写入', content: '站内信不再受分类偏好影响' })
+    const list = await appGet(app, token, '/api/app/notices?type=system&status=archived')
+    expect(list.body.data.list.some((item: { title: string }) => item.title === '始终写入')).toBe(true)
+    expect(await prisma.userNotification.count({ where: { userId: 'U1001' } })).toBeGreaterThan(0)
   })
 })

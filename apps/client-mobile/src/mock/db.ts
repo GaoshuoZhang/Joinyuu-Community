@@ -30,7 +30,6 @@ import type {
   MySubmittedArticle,
   PointsRecord,
   ReportPayload,
-  NoticeType,
   Space,
   SpaceReservation,
   TalentMember,
@@ -56,6 +55,7 @@ export const appConfig: AppConfig = {
   mallOpen: true,
   demandOpen: true,
   reservationOpen: true,
+  homeCarouselOpen: true,
 }
 
 export const dicts: Record<string, { code: string; label: string }[]> = {
@@ -432,11 +432,11 @@ export const columns: ArticleColumn[] = [
 ]
 
 export const articles: Article[] = [
-  { id: 'A1001', title: '入驻指南：三步加入聚屿社区', columnLabel: '社区动态', authorName: '社区运营组', publishedAt: '2026-09-05 10:00', views: 321, summary: '从注册到身份绑定的完整流程。', content: '第一步，注册账号；第二步，提交入驻申请；第三步，等待审核通过与身份授予……' },
-  { id: 'A1002', title: '路演日观察：社区项目的三种成长路径', columnLabel: '深度报道', authorName: '社区运营组', publishedAt: '2026-09-01 15:00', views: 208, summary: '我们在路演日现场记录了十个项目。', content: '技术型、服务型与社群型项目在社区里的成长路径各不相同……' },
-  { id: 'SU1001', title: '我在岛上的一年：从 lone wolf 到共建者', columnLabel: '岛民故事', authorName: '白若溪', publishedAt: '2026-08-20 09:00', views: 156, summary: '一位独立设计师的社区一年。', content: '一年前我拖着行李箱走进岛屿咖啡区……' },
-  { id: 'A1003', title: '9 月空间使用提示：会议室预约新规', columnLabel: '社区动态', authorName: '社区运营组', publishedAt: '2026-09-03 09:30', views: 98, summary: '会议室需提前一个工作日申请。', content: '自本月起，共享会议室 A 需提前一个工作日提交预约申请……' },
-  { id: 'A1004', title: '活动回顾：第 11 期创业夜话金句集', columnLabel: '活动回顾', authorName: '社区运营组', publishedAt: '2026-08-18 10:00', views: 132, summary: '十二个金句与三次全场掌声。', content: '「先找到问题，再谈技术选型」……' },
+  { id: 'A1001', title: '入驻指南：三步加入聚屿社区', columnLabel: '社区动态', authorName: '社区运营组', publishedAt: '2026-09-05 10:00', views: 321, summary: '从注册到身份绑定的完整流程。', content: '第一步，注册账号；第二步，提交入驻申请；第三步，等待审核通过与身份授予……', commentsEnabled: true },
+  { id: 'A1002', title: '路演日观察：社区项目的三种成长路径', columnLabel: '深度报道', authorName: '社区运营组', publishedAt: '2026-09-01 15:00', views: 208, summary: '我们在路演日现场记录了十个项目。', content: '技术型、服务型与社群型项目在社区里的成长路径各不相同……', commentsEnabled: true },
+  { id: 'SU1001', title: '我在岛上的一年：从 lone wolf 到共建者', columnLabel: '岛民故事', authorName: '白若溪', publishedAt: '2026-08-20 09:00', views: 156, summary: '一位独立设计师的社区一年。', content: '一年前我拖着行李箱走进岛屿咖啡区……', commentsEnabled: true },
+  { id: 'A1003', title: '9 月空间使用提示：会议室预约新规', columnLabel: '社区动态', authorName: '社区运营组', publishedAt: '2026-09-03 09:30', views: 98, summary: '会议室需提前一个工作日申请。', content: '自本月起，共享会议室 A 需提前一个工作日提交预约申请……', commentsEnabled: true },
+  { id: 'A1004', title: '活动回顾：第 11 期创业夜话金句集', columnLabel: '活动回顾', authorName: '社区运营组', publishedAt: '2026-08-18 10:00', views: 132, summary: '十二个金句与三次全场掌声。', content: '「先找到问题，再谈技术选型」……', commentsEnabled: true },
 ]
 
 export const myArticlesByUid: Record<string, MySubmittedArticle[]> = {
@@ -515,12 +515,6 @@ export const addressesByUid: Record<string, AddressItem[]> = {
   ],
 }
 
-/** 通知偏好：未配置视为全部开启 */
-export const noticePrefsByUid: Record<string, NoticeType[]> = {}
-
-/** v40：通知类型全集（偏好与未读数口径共用） */
-export const ALL_NOTICE_TYPES: NoticeType[] = ['audit_result', 'enroll_result', 'order', 'points', 'system']
-
 /** 屏蔽名单（v38 [MOCK-ONLY]） */
 export const blockedByUid: Record<string, string[]> = {}
 
@@ -530,8 +524,6 @@ export const demandMessagesByDemand: Record<string, import('@/types').DemandMess
 export const projectTasksByProject: Record<string, import('@/types').ProjectTask[]> = {}
 export const projectFilesByProject: Record<string, import('@/types').ProjectFileItem[]> = {}
 export const projectMessagesByProject: Record<string, import('@/types').ProjectMessage[]> = {}
-export const pointsTaskClaimsByUid: Record<string, Record<string, string>> = {}
-export const serviceApplicationsByUid: Record<string, import('@/types').ServiceApplication[]> = {}
 export const enterpriseResponsesByEnterprise: Record<string, { id: string; demandId: string; demandTitle: string; at: string }[]> = {}
 
 export const accountRequestsByUid: Record<string, { deletion?: { reason?: string; at: string; cancelableUntil?: string }; export?: { at: string } }> = {}
@@ -666,6 +658,24 @@ export const applicationFormSchemas: Partial<Record<ApplicationType, Application
       { key: 'intro', label: '个人简介', type: 'textarea', required: true, maxlength: 300, placeholder: '介绍你的经验、代表项目与可提供的帮助…' },
       { key: 'contactPhone', label: '联系电话', type: 'text', required: true, maxlength: 11 },
       { key: 'portfolio', label: '作品集或简历', type: 'upload', accept: 'image/*,application/pdf', multiple: true, maxCount: 2, help: '选填，最多 2 个文件' },
+    ],
+  },
+  identity: {
+    type: 'identity',
+    title: '身份绑定',
+    subtitle: '加入社区生态：绑定社区个体或社区企业身份',
+    submitLabel: '提交身份绑定',
+    tips: ['社区个体：面向个人专长展示', '社区企业：需填写要绑定并已在社区入驻的企业名称'],
+    fields: [
+      { key: 'identityType', label: '要绑定的身份', type: 'select', required: true, options: [
+        { label: '社区个体', value: 'community_individual' },
+        { label: '社区企业', value: 'community_enterprise' },
+      ] },
+      { key: 'orgName', label: '社区企业名称', type: 'text', maxlength: 60, help: '选择社区企业身份时填写' },
+      { key: 'industry', label: '所属行业', type: 'select', options: industryOptions },
+      { key: 'contactName', label: '联系人', type: 'text', required: true, maxlength: 20 },
+      { key: 'contactPhone', label: '联系电话', type: 'text', required: true, maxlength: 11 },
+      { key: 'certifications', label: '相关材料', type: 'upload', accept: 'image/*,application/pdf', multiple: true, maxCount: 3, help: '选填，最多 3 个文件' },
     ],
   },
 }
@@ -808,9 +818,9 @@ export const announcements: HomeAnnouncement[] = [
 ]
 
 export const homeBanners: HomeBanner[] = [
-  { id: 'BN1', title: '第二批社区企业招募启动', subtitle: '申请入驻，共享工位与创业资源' },
-  { id: 'BN2', title: '年度路演日报名中', subtitle: '9 月 26 日，聚屿路演厅' },
-  { id: 'BN3', title: '积分商城上新', subtitle: '会议室优先预约卡等你兑换' },
+  { id: 'BN1', title: '第二批社区企业招募启动', subtitle: '申请入驻，共享工位与创业资源', link: '/intros/enterprise' },
+  { id: 'BN2', title: '年度路演日报名中', subtitle: '9 月 26 日，聚屿路演厅', link: '/events' },
+  { id: 'BN3', title: '积分商城上新', subtitle: '会议室优先预约卡等你兑换', link: '/mall' },
 ]
 
 /* 首页活动卡从活动列表派生，保证与活动详情的时间/报名数一致 */
@@ -967,7 +977,6 @@ type PersistedMockData = {
   restockSubscriptions: typeof restockSubscriptions
   analyticsCounters: typeof analyticsCounters
   addressesByUid: typeof addressesByUid
-  noticePrefsByUid: typeof noticePrefsByUid
   blockedByUid: typeof blockedByUid
   accountRequestsByUid: typeof accountRequestsByUid
   eventFeedbackByUid: typeof eventFeedbackByUid
@@ -1017,7 +1026,6 @@ if (persisted) {
   replaceRecord(restockSubscriptions, persisted.restockSubscriptions)
   replaceRecord(analyticsCounters, persisted.analyticsCounters)
   replaceRecord(addressesByUid, persisted.addressesByUid)
-  replaceRecord(noticePrefsByUid, persisted.noticePrefsByUid)
   replaceRecord(blockedByUid, persisted.blockedByUid)
   replaceRecord(accountRequestsByUid, persisted.accountRequestsByUid)
   replaceRecord(eventFeedbackByUid, persisted.eventFeedbackByUid)
@@ -1040,7 +1048,7 @@ registerMockStateExporter((): PersistedMockData => ({
   reservationsByUid, articles, myArticlesByUid, enterprises, enterpriseExitApplications,
   enterpriseInvitations, enterpriseTransferRequests, reports,
   favoritesByUid, restockSubscriptions, analyticsCounters,
-  addressesByUid, noticePrefsByUid, blockedByUid, accountRequestsByUid, eventFeedbackByUid,
+  addressesByUid, blockedByUid, accountRequestsByUid, eventFeedbackByUid,
   articleLikesByUid, articleComments,
   projectsByUid, applicationsByUid, applicationPayloadById, articlePayloadById,
   experienceByUid, enterpriseExperienceByEid, pointsRecordsByUid, noticesByUid, talentMembers,

@@ -1,0 +1,91 @@
+<script setup lang="ts">
+import { computed, onMounted, reactive, ref } from 'vue'
+import { MessagePlugin } from 'tdesign-vue-next'
+import ColumnController from '@/components/ColumnController.vue'
+import ListErrorState from '@/components/ListErrorState.vue'
+import StatusTag from '@/components/StatusTag.vue'
+import { useListQueryState } from '@/utils/listQuery'
+import { fetchDeletions, fetchRealnameReviews, reviewDeletion, reviewRealname, type DeletionRow, type RealnameRow } from '@/api/memberGovernance'
+
+const props = defineProps<{ mode: 'deletions' | 'realnames' }>()
+const title = props.mode === 'deletions' ? '注销工单' : '实名复核'
+const status = ref('')
+const page = ref(1)
+const loading = ref(false)
+const loadError = ref('')
+const total = ref(0)
+const rows = ref<Array<DeletionRow | RealnameRow>>([])
+const visible = ref(false)
+const submitting = ref(false)
+const selectedId = ref('')
+const selectedName = ref('')
+const form = reactive({ action: 'reject' as 'approve' | 'reject', note: '' })
+
+const allColumns = props.mode === 'deletions' ? [
+  { colKey: 'id', title: '工单编号', width: 115 }, { colKey: 'user', title: '用户', width: 160 },
+  { colKey: 'reason', title: '申请原因', width: 190 }, { colKey: 'requestedAt', title: '申请时间', width: 160 },
+  { colKey: 'effectiveAt', title: '冷静期届满', width: 180 }, { colKey: 'status', title: '状态', width: 100 },
+  { colKey: 'reviewNote', title: '复核说明', width: 200 }, { colKey: 'op', title: '操作', width: 190 },
+] : [
+  { colKey: 'user', title: '用户', width: 160 }, { colKey: 'realName', title: '姓名', width: 110 },
+  { colKey: 'citizenId', title: '证件号（脱敏）', width: 200 }, { colKey: 'realnameSubmittedAt', title: '提交时间', width: 160 },
+  { colKey: 'status', title: '复核状态', width: 100 }, { colKey: 'realnameReviewNote', title: '复核说明', width: 200 },
+  { colKey: 'op', title: '操作', width: 190 },
+]
+const visibleKeys = ref<string[]>([])
+const columns = computed(() => allColumns.filter((column) => !visibleKeys.value.length || visibleKeys.value.includes(column.colKey)))
+const options = props.mode === 'deletions'
+  ? [{ value: '', label: '全部状态' }, { value: 'cooling', label: '待处理' }, { value: 'approved', label: '已注销' }, { value: 'rejected', label: '已驳回' }, { value: 'cancelled', label: '已撤回' }]
+  : [{ value: '', label: '全部状态' }, { value: 'pending', label: '待复核' }, { value: 'approved', label: '已通过' }, { value: 'rejected', label: '已驳回' }, { value: 'unverified', label: '未实名' }]
+const { syncQuery } = useListQueryState({}, load, { refs: { status, page } })
+let version = 0
+
+function cooling(row: DeletionRow) { return !!row.effectiveAt && new Date(row.effectiveAt.replace(' ', 'T')).getTime() > Date.now() }
+function remaining(row: DeletionRow) { return cooling(row) ? `剩余 ${Math.ceil((new Date(row.effectiveAt!.replace(' ', 'T')).getTime() - Date.now()) / 3600000)} 小时` : '已届满，可复核' }
+async function load() {
+  const current = ++version
+  syncQuery(); loading.value = true; loadError.value = ''
+  try {
+    const result = props.mode === 'deletions' ? await fetchDeletions(page.value, status.value) : await fetchRealnameReviews(page.value, status.value)
+    if (current === version) { rows.value = result.list; total.value = result.total }
+  } catch (error) { if (current === version) loadError.value = error instanceof Error ? error.message : '加载失败' }
+  finally { if (current === version) loading.value = false }
+}
+function open(row: DeletionRow | RealnameRow, action: 'approve' | 'reject') {
+  selectedId.value = props.mode === 'deletions' ? (row as DeletionRow).id : (row as RealnameRow).uid
+  selectedName.value = props.mode === 'deletions' ? (row as DeletionRow).user.nickname : (row as RealnameRow).nickname
+  Object.assign(form, { action, note: '' }); visible.value = true
+}
+async function submit() {
+  if (!form.note.trim()) return void MessagePlugin.warning('请填写复核说明')
+  submitting.value = true
+  try {
+    if (props.mode === 'deletions') await reviewDeletion(selectedId.value, form.action, form.note.trim())
+    else await reviewRealname(selectedId.value, form.action, form.note.trim())
+    visible.value = false; MessagePlugin.success('复核已完成'); await load()
+  } catch (error) { MessagePlugin.error(error instanceof Error ? error.message : '复核失败') }
+  finally { submitting.value = false }
+}
+onMounted(load)
+</script>
+
+<template>
+  <div class="page-card">
+    <div class="page-filter-bar">
+      <t-select v-model="status" :options="options" aria-label="筛选状态" @change="page = 1; load()" />
+      <ColumnController v-model="visibleKeys" :storage-key="`member-governance-${mode}`" :columns="allColumns.map(column => ({ key: column.colKey, title: column.title }))" />
+    </div>
+    <ListErrorState v-if="loadError" :message="loadError" :loading="loading" @retry="load" />
+    <t-table :row-key="mode === 'deletions' ? 'id' : 'uid'" :data="rows" :columns="columns" :loading="loading" table-layout="fixed" hover resizable :pagination="{ current: page, pageSize: 20, total, showPageSize: false }" @page-change="value => { page = value.current; load() }">
+      <template #user="{ row }"><span>{{ row.user?.nickname ?? row.nickname }}</span><t-tag class="id-tag-block" size="small" variant="light">{{ row.userId ?? row.uid }}</t-tag></template>
+      <template #id="{ row }"><t-tag class="id-tag" size="small" variant="light">{{ row.id }}</t-tag></template>
+      <template #effectiveAt="{ row }">{{ row.effectiveAt || '—' }}<p v-if="row.status === 'cooling'" class="field-help">{{ remaining(row) }}</p></template>
+      <template #status="{ row }"><StatusTag :entity="mode === 'deletions' ? 'accountDeletion' : 'realnameReview'" :value="mode === 'deletions' ? row.status : row.realnameReviewStatus" /></template>
+      <template #op="{ row }"><template v-if="mode === 'deletions' ? row.status === 'cooling' : row.realnameReviewStatus === 'pending'"><t-button variant="text" theme="primary" :disabled="mode === 'deletions' && cooling(row)" @click="open(row, 'approve')">{{ mode === 'deletions' ? '确认注销' : '通过' }}</t-button><t-button variant="text" theme="danger" @click="open(row, 'reject')">驳回</t-button></template><span v-else>—</span></template>
+    </t-table>
+  </div>
+  <t-dialog v-model:visible="visible" :header="`${form.action === 'approve' ? '确认通过' : '确认驳回'} · ${selectedName}`" :confirm-btn="{ content: '确认执行', loading: submitting }" @confirm="submit">
+    <p v-if="mode === 'deletions' && form.action === 'approve'">执行后账号将注销，登录会话失效，个人资料清除，业务历史保留。</p>
+    <t-form :data="form" label-align="top"><t-form-item label="复核说明" name="note" :rules="[{ required: true, message: '请填写复核说明' }]"><t-textarea v-model="form.note" :maxlength="255" placeholder="填写复核依据或驳回原因…" /></t-form-item></t-form>
+  </t-dialog>
+</template>

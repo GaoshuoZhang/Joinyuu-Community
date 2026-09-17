@@ -35,6 +35,7 @@ const statusOptions = [
   { label: '全部', value: '' },
   { label: '正常', value: 'active' },
   { label: '已冻结', value: 'frozen' },
+  { label: '已注销', value: 'deleted' },
 ]
 
 const realStatusOptions = [

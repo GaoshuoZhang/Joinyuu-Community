@@ -13,13 +13,14 @@ import { PrismaService } from '../../../common/prisma/prisma.service'
 import { IdGeneratorService } from '../../../common/id-generator/id-generator.service'
 import { NotificationService } from '../../../common/notify/notification.service'
 import { PointsEngineService } from '../../../common/engine/points-engine/points-engine.service'
-import { formatNow, formatToday } from '../../../common/utils/time'
+import { formatNow } from '../../../common/utils/time'
 import { sanitizeHtml } from '../../../common/utils/sanitize-html'
 import { assertRealnameAllowed } from '../realname/realname.service'
+import { consumePublishingLimit } from '../../../common/enterprise/publishing-limits'
 import { assertEnterprisePermission } from '../../../common/enterprise/enterprise-permission'
 import type { CreateDemandDto } from './dto/create-demand.dto'
 import type { RespondDemandDto } from './dto/respond-demand.dto'
-import type { ReviewResponseDto } from './dto/review-response.dto'
+import type { SelectRespondersDto } from './dto/select-responders.dto'
 import type { DemandMessageDto } from './dto/demand-message.dto'
 
 /** 响应方/发布方身份类型集合（用于可见范围过滤与代企业主体判定） */
@@ -94,18 +95,24 @@ export class AppDemandsService {
     const blockedUids = await this.blockedUids(uid)
 
     const demand = await this.prisma.demand.findFirst({
-      where: { id, status: 'published', deletedAt: null, ...(blockedUids.length ? { publisherId: { notIn: blockedUids } } : {}) },
+      where: { id, deletedAt: null, ...(blockedUids.length ? { publisherId: { notIn: blockedUids } } : {}) },
     })
-    if (!demand || !this.visibly(identities, demand)) throw new NotFoundException('需求不存在或不可见')
+    /* 发布者可查看自己需求的全状态详情（「我的需求」点击进入）；其余人仅可看已发布的可见需求 */
+    const isPublisher = !!uid && demand?.publisherId === uid
+    if (!demand || (!isPublisher && (demand.status !== 'published' || !this.visibly(identities, demand)))) {
+      throw new NotFoundException('需求不存在或不可见')
+    }
 
     const count = (await this.responseCounts([demand.id])).get(demand.id) ?? 0
-    let myResponded = false
+    /* 本人响应快照：撤回以 withdrawnAt 判别（撤回后视为未响应，可重新响应） */
+    let myResponse: { message: string; at: string; status: string } | null = null
     if (uid) {
       const mine = await this.prisma.demandRespondent.findFirst({
-        where: { demandId: demand.id, userId: uid, status: { in: ['pending', 'accepted'] } },
-        select: { id: true },
+        where: { demandId: demand.id, userId: uid, withdrawnAt: null },
+        orderBy: { id: 'desc' },
+        select: { message: true, at: true, status: true },
       })
-      myResponded = !!mine
+      if (mine) myResponse = mine
     }
 
     return {
@@ -117,7 +124,7 @@ export class AppDemandsService {
       createdAt: demand.createdAt,
       ...(demand.rejectedReason != null ? { rejectReason: demand.rejectedReason } : {}),
       ...(demand.projectId != null ? { projectId: demand.projectId } : {}),
-      myResponded,
+      ...(myResponse ? { myResponse } : {}),
     }
   }
 
@@ -130,7 +137,10 @@ export class AppDemandsService {
     const publisher = await this.resolvePublisher(uid, name, user, dto)
 
     const id = await this.ids.next('D')
-    await this.prisma.demand.create({
+    await this.prisma.$transaction(async tx => {
+      const identity = publisher.identity as { type?: string; enterpriseId?: string } | null
+      await consumePublishingLimit(tx, uid, 'demand_publish', { identityType: identity?.type, enterpriseId: identity?.enterpriseId })
+      await tx.demand.create({
       data: {
         id,
         title: dto.title.trim(),
@@ -160,6 +170,7 @@ export class AppDemandsService {
         createdAt: formatNow(),
         tags: [],
       },
+      })
     })
     return { id }
   }
@@ -278,26 +289,48 @@ export class AppDemandsService {
     }))
   }
 
-  /** 发布者处理响应：accept → 单事务立项生成协作项目；reject → 记录驳回 */
-  async reviewResponse(uid: string, demandId: string, responseId: string, dto: ReviewResponseDto) {
+  /**
+   * 发布者选择意向承接方（单选/多选）并提交立项申请：published → selected。
+   * 不可驳回响应（未选中的响应保持待处理）；实际立项由社区管理员完成。
+   */
+  async selectResponders(uid: string, demandId: string, dto: SelectRespondersDto) {
     const demand = await this.requireOwnDemand(uid, demandId)
-    const response = await this.prisma.demandRespondent.findFirst({
-      where: { id: this.toNum(responseId), demandId: demand.id },
+    if (demand.status !== 'published') throw new ConflictException('仅已发布的需求可选择承接方')
+
+    const ids = [...new Set((dto.responseIds ?? []).filter((n) => Number.isInteger(n) && n > 0))]
+    if (ids.length === 0) throw new BadRequestException('请至少选择一位意向承接方')
+
+    const responses = await this.prisma.demandRespondent.findMany({
+      where: { id: { in: ids }, demandId: demand.id, withdrawnAt: null },
+      orderBy: { id: 'asc' },
     })
-    if (!response) throw new NotFoundException('响应不存在')
-    if (response.status !== 'pending') throw new ConflictException('该响应已处理')
+    if (responses.length !== ids.length) throw new NotFoundException('响应不存在或已撤回')
 
-    if (dto.action === 'reject') {
-      const reason = (dto.rejectReason ?? '').trim()
-      if (!reason) throw new BadRequestException('请填写驳回原因')
-      await this.prisma.demandRespondent.update({
-        where: { id: response.id },
-        data: { status: 'rejected', reviewAt: formatNow(), rejectReason: reason },
+    await this.prisma.$transaction(async (tx) => {
+      const accepted = await tx.demandRespondent.updateMany({
+        where: { id: { in: ids }, demandId: demand.id, withdrawnAt: null, status: 'pending' },
+        data: { status: 'accepted', reviewAt: formatNow() },
       })
-      return { code: 0 }
-    }
+      if (accepted.count !== ids.length) throw new ConflictException('响应状态已变化，请刷新后重试')
 
-    return this.acceptAndInitiate(demand, response)
+      /* 需求转 selected：客户端列表/详情不再展示，也不接受新响应；等待管理员立项 */
+      const selected = await tx.demand.updateMany({
+        where: { id: demand.id, status: 'published', projectId: null },
+        data: { status: 'selected', matchedRespondent: responses.map((r) => r.name).join('、') },
+      })
+      if (selected.count !== 1) throw new ConflictException('需求状态已变化，请刷新后重试')
+
+      for (const response of responses) {
+        if (!response.userId) continue
+        await this.notify.pushNoticeInTransaction(tx, response.userId, {
+          type: 'demand',
+          title: '已被选为意向承接方',
+          content: `您响应的需求「${demand.title}」已选择您作为意向承接方，等待社区管理员立项。`,
+          link: `/demands/${demand.id}`,
+        })
+      }
+    })
+    return { code: 0 }
   }
 
   /** 审核中撤回：pending → withdrawn（保留编号） */
@@ -310,6 +343,7 @@ export class AppDemandsService {
 
   /** 驳回/撤回后重提：withdrawn|rejected → pending（保留编号，可改字段） */
   async resubmitDemand(uid: string, demandId: string, dto: CreateDemandDto) {
+    await this.assertDemandOpen()
     const demand = await this.requireOwnDemand(uid, demandId)
     if (demand.status !== 'withdrawn' && demand.status !== 'rejected') {
       throw new ConflictException('仅已撤回或已驳回的需求可重新提交')
@@ -318,8 +352,11 @@ export class AppDemandsService {
     const user = await this.requireUser(uid)
     const publisher = await this.resolvePublisher(uid, '', user, dto)
 
-    await this.prisma.demand.update({
-      where: { id: demand.id },
+    await this.prisma.$transaction(async tx => {
+      const identity = publisher.identity as { type?: string; enterpriseId?: string } | null
+      await consumePublishingLimit(tx, uid, 'demand_publish', { identityType: identity?.type, enterpriseId: identity?.enterpriseId })
+      const changed = await tx.demand.updateMany({
+      where: { id: demand.id, status: { in: ['withdrawn', 'rejected'] }, deletedAt: null },
       data: {
         title: dto.title.trim(),
         description: sanitizeHtml(dto.description.trim()),
@@ -342,6 +379,8 @@ export class AppDemandsService {
         status: 'pending',
         rejectedReason: null,
       },
+      })
+      if (changed.count !== 1) throw new ConflictException('需求状态已变化，请刷新后重试')
     })
     return { code: 0 }
   }
@@ -425,104 +464,6 @@ export class AppDemandsService {
       data: { demandId, senderId: uid, senderName: name || '用户', content, at: formatNow() },
     })
     return { code: 0 }
-  }
-
-  /* ---------- 接受立项（单事务） ---------- */
-
-  private async acceptAndInitiate(demand: Demand, response: DemandRespondent) {
-    const now = formatNow()
-    const year = new Date().getFullYear()
-    const seq = await this.ids.nextNumber(`CODE-${year}`)
-    const code = `JY-${year}-${String(seq).padStart(2, '0')}`
-    const projectId = await this.ids.next('P')
-
-    await this.prisma.$transaction(async (tx) => {
-      /* ①当前响应 accepted + 其余 pending 自动驳回并通知 */
-      const accepted = await tx.demandRespondent.updateMany({
-        where: { id: response.id, demandId: demand.id, status: 'pending' },
-        data: { status: 'accepted', reviewAt: now },
-      })
-      if (accepted.count !== 1) throw new ConflictException('该响应已处理')
-      const others = await tx.demandRespondent.findMany({
-        where: { demandId: demand.id, status: 'pending', id: { not: response.id } },
-      })
-      for (const o of others) {
-        await tx.demandRespondent.update({
-          where: { id: o.id },
-          data: { status: 'rejected', reviewAt: now, rejectReason: '发布者已接受其他响应' },
-        })
-        if (o.userId) {
-          await this.notify.pushNoticeInTransaction(tx, o.userId, {
-            type: 'demand',
-            title: '响应未通过',
-            content: '您响应的需求已接受其他响应，本次响应未通过。',
-          })
-        }
-      }
-
-      /* ②需求转 projected，同时回填项目关联；并发接受只允许一个成功。 */
-      const projected = await tx.demand.updateMany({
-        where: { id: demand.id, status: 'published', projectId: null },
-        data: { status: 'projected', matchedRespondent: response.name, projectId },
-      })
-      if (projected.count !== 1) throw new ConflictException('需求已立项或当前状态不可处理')
-
-      /* ③生成协作项目 */
-      const today = formatToday()
-      await tx.project.create({
-        data: {
-          id: projectId,
-          name: demand.title,
-          code,
-          status: 'running',
-          progress: 0,
-          startDate: today,
-          endDate: demand.deliverBy ?? '',
-          initiatedAt: today,
-          description: demand.description,
-          memberCount: 2,
-          sourceDemandId: demand.id,
-          expReward: demand.respondPoints ?? null,
-        },
-      })
-
-      /* ④两名承接方（发起方 + 响应方，各 50%） */
-      const publisher = this.undertakerRow(demand)
-      const respondent = this.respondentRow(response, demand.publisherId)
-      await tx.projectUndertaker.create({ data: { projectId, ...publisher, share: 50 } })
-      await tx.projectUndertaker.create({ data: { projectId, ...respondent, share: 50 } })
-
-      /* ⑤两段里程碑 */
-      const mDate = demand.deliverBy ?? ''
-      await tx.milestone.create({ data: { projectId, name: '第一阶段交付', status: 'todo', date: mDate, owners: [publisher.name] } })
-      await tx.milestone.create({ data: { projectId, name: '项目验收', status: 'todo', date: mDate, owners: [respondent.name] } })
-
-      /* ⑥⑦ 立项奖励使用 project_undertaken，结项的 project_completed 留给里程碑全部验收。 */
-      await this.points.issuePointsInTransaction(tx, demand.publisherId, 'demand_undertaken', '需求立项获得积分', `demand_undertaken:${demand.publisherId}:${demand.id}`)
-      if (response.userId) {
-        await this.points.issuePointsInTransaction(tx, response.userId, 'demand_undertaken', '承接需求立项获得积分', `demand_undertaken:${response.userId}:${demand.id}`)
-      }
-      const exp = this.respondentExperience(response)
-      if (exp) await this.points.issueExperienceInTransaction(tx, exp.targetType, exp.targetId, 'project_undertaken', '承接需求立项获得项目经验')
-
-      /* ⑧ 双方站内信与主状态同事务提交。 */
-      await this.notify.pushNoticeInTransaction(tx, demand.publisherId, {
-        type: 'demand',
-        title: '需求已达成合作',
-        content: `您的需求「${demand.title}」已承接，协作项目已生成。`,
-        link: `/me/projects/${projectId}`,
-      })
-      if (response.userId) {
-        await this.notify.pushNoticeInTransaction(tx, response.userId, {
-          type: 'demand',
-          title: '承接成功',
-          content: `您承接的需求「${demand.title}」已立项，协作项目已生成。`,
-          link: `/me/projects/${projectId}`,
-        })
-      }
-    })
-
-    return { projectId }
   }
 
   /* ---------- 内部工具 ---------- */
@@ -622,7 +563,7 @@ export class AppDemandsService {
   ): Promise<{ name: string; identity: Prisma.InputJsonValue | null }> {
     const identities = await this.prisma.userIdentity.findMany({ where: { userId: uid } })
 
-    if (dto.asIdentity === 'community_enterprise' && dto.asEnterpriseId) {
+    if (dto.asEnterpriseId) {
       await assertEnterprisePermission(this.prisma, uid, dto.asEnterpriseId, 'publish_demand')
       const ent = await this.prisma.enterprise.findUnique({ where: { id: dto.asEnterpriseId } })
       if (!ent) throw new BadRequestException('企业不存在')
@@ -650,6 +591,8 @@ export class AppDemandsService {
     if (asIdentity === 'community_enterprise') {
       const ent = identities.find((i) => i.type === 'community_enterprise')
       if (ent) {
+        if (!ent.enterpriseId) throw new BadRequestException('请选择要代表的社区企业')
+        await assertEnterprisePermission(this.prisma, uid, ent.enterpriseId, 'publish_demand')
         const enterprise = ent.enterpriseId ? await this.prisma.enterprise.findUnique({ where: { id: ent.enterpriseId } }) : null
         return {
           name: enterprise?.name ?? ent.enterpriseName ?? user.nickname,
@@ -699,39 +642,6 @@ export class AppDemandsService {
       phone: user.phone,
       identity: { type: 'individual', title: '个人用户' },
     }
-  }
-
-  /** 发布方在项目承接方记录（type/refId/name） */
-  private undertakerRow(demand: Demand): { type: string; refId: string; name: string; contactName?: string; phone?: string } {
-    const pi = demand.publisherIdentity as Record<string, unknown> | null
-    const isEnterprise = pi?.type === 'community_enterprise' || pi?.type === 'external_enterprise'
-    return {
-      type: isEnterprise ? 'enterprise' : 'individual',
-      refId: (isEnterprise ? pi?.enterpriseId : demand.publisherId) as string || demand.publisherId || '',
-      name: demand.publisherName || '发布方',
-      ...(demand.contactName ? { contactName: demand.contactName } : {}),
-      ...(demand.contactPhone ? { phone: demand.contactPhone } : {}),
-    }
-  }
-
-  /** 响应方在项目承接方记录（响应者主体） */
-  private respondentRow(response: DemandRespondent, publisherUid: string): { type: string; refId: string; name: string; contactName?: string; phone?: string } {
-    const ri = response.responderIdentity as Record<string, unknown> | null
-    const isEnterprise = ri?.type === 'community_enterprise' || ri?.type === 'external_enterprise'
-    return {
-      type: isEnterprise ? 'enterprise' : 'individual',
-      refId: (isEnterprise ? ri?.enterpriseId : response.userId) as string || response.userId || publisherUid || '',
-      name: response.name || '承接方',
-      ...(response.phone ? { phone: response.phone } : {}),
-    }
-  }
-
-  /** 承接方项目经验投放目标（enterprise / individual） */
-  private respondentExperience(response: DemandRespondent): { targetType: 'enterprise' | 'individual'; targetId: string } | null {
-    const ri = response.responderIdentity as Record<string, unknown> | null
-    if (ri?.type === 'community_enterprise' && ri.enterpriseId) return { targetType: 'enterprise', targetId: ri.enterpriseId as string }
-    if (response.userId) return { targetType: 'individual', targetId: response.userId }
-    return null
   }
 
   /* ---------- 可见范围 SQL 条件 ---------- */

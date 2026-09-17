@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue'
+import { computed, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useQueryTab } from '@/utils/navigation'
 import { MessagePlugin } from 'tdesign-vue-next'
@@ -14,23 +14,29 @@ import {
   enableEnterprise,
   fetchEnterprise,
   fetchEnterpriseStats,
-  reviewShowcase,
   type EnterpriseStats,
 } from '@/api/enterprises'
 import { adjustExperience, fetchExperienceRecords } from '@/api/ledgers'
 import { deriveLeaseStatus, fetchLeases, type LeaseViewStatus } from '@/api/workstations'
 import type { Enterprise, ExperienceRecord, Lease, User, UserIdentity } from '@/types'
+import { fetchCard, type CardRow } from '@/api/cards'
 
 const route = useRoute()
 const router = useRouter()
 const loading = ref(true)
 const enterprise = ref<Enterprise | null>(null)
 const members = ref<User[]>([])
-const tab = useQueryTab('info', ['info', 'leases', 'stats', 'members', 'experience', 'showcase'] as const)
-
-const rejectVisible = ref(false)
-const rejectComment = ref('')
-const submitting = ref(false)
+const tab = useQueryTab('info', ['info', 'card', 'leases', 'stats', 'members', 'experience'] as const)
+const card = ref<CardRow | null>(null)
+const cardLoading = ref(false)
+async function loadCard() {
+  if (!enterprise.value) return
+  cardLoading.value = true
+  try { card.value = await fetchCard('enterprise', enterprise.value.id) }
+  catch (error) { MessagePlugin.error(error instanceof Error ? error.message : '名片加载失败') }
+  finally { cardLoading.value = false }
+}
+watch(tab, (value) => { if (value === 'card') void loadCard() })
 
 /* 编辑弹窗 */
 const editVisible = ref(false)
@@ -70,18 +76,6 @@ const experienceColumns = [
   { colKey: 'operator', title: '操作人', width: 100 , ellipsis: true},
 ]
 
-const stepCurrent = computed(() => {
-  switch (enterprise.value?.showcaseStatus) {
-    case 'published':
-      return 2
-    case 'pending':
-    case 'rejected':
-      return 1
-    default:
-      return 0
-  }
-})
-
 const memberColumns = [
   { colKey: 'name', title: '成员', cell: 'member' , ellipsis: true},
   { colKey: 'title', title: '职位', cell: 'title' , ellipsis: true},
@@ -97,6 +91,7 @@ async function load() {
     const res = await fetchEnterprise(id)
     enterprise.value = res.enterprise
     members.value = res.members
+    if (tab.value === 'card') await loadCard()
     stats.value = await fetchEnterpriseStats(id)
     experienceRecords.value = await fetchExperienceRecords('enterprise', id)
   } catch {
@@ -211,40 +206,6 @@ async function onAdjustExperience(delta: number, reason: string) {
   }
 }
 
-async function onApprove() {
-  if (!enterprise.value) return
-  submitting.value = true
-  try {
-    await reviewShowcase(enterprise.value.id, 'published')
-    MessagePlugin.success('展示页已通过发布')
-    await load()
-  } finally {
-    submitting.value = false
-  }
-}
-
-function openReject() {
-  rejectComment.value = ''
-  rejectVisible.value = true
-}
-
-async function onConfirmReject() {
-  if (!enterprise.value) return
-  if (!rejectComment.value.trim()) {
-    MessagePlugin.warning('请填写驳回原因')
-    return
-  }
-  submitting.value = true
-  try {
-    await reviewShowcase(enterprise.value.id, 'rejected', rejectComment.value.trim())
-    MessagePlugin.success('已驳回展示页申请')
-    rejectVisible.value = false
-    await load()
-  } finally {
-    submitting.value = false
-  }
-}
-
 onMounted(() => {
   load()
   loadLeases()
@@ -283,11 +244,7 @@ onMounted(() => {
             </div>
           </div>
         </div>
-        <div v-if="enterprise.showcaseStatus === 'pending'" class="head-actions">
-          <t-button theme="primary" :loading="submitting" @click="onApprove">通过发布</t-button>
-          <t-button variant="outline" :loading="submitting" @click="openReject">驳回</t-button>
-        </div>
-        <div v-else class="head-actions">
+        <div class="head-actions">
           <t-button variant="outline" v-permission="'perm:enterprise:update'" @click="openEdit">
             <template #icon><EditIcon /></template>
             编辑
@@ -351,18 +308,25 @@ onMounted(() => {
                 <t-descriptions-item label="联系电话">{{ enterprise.contactPhone }}</t-descriptions-item>
               </t-descriptions>
 
-              <t-alert
-                v-if="enterprise.showcaseStatus === 'rejected' && enterprise.showcaseComment"
-                class="block-gap"
-                theme="error"
-                title="上次驳回原因"
-                :message="enterprise.showcaseComment"
-              />
-
               <div class="desc-block">
                 <h4 class="block-title">企业简介</h4>
                 <p class="desc-text">{{ enterprise.description }}</p>
               </div>
+            </div>
+          </t-tab-panel>
+
+          <t-tab-panel value="card" label="名片">
+            <div class="tab-body">
+              <t-loading :loading="cardLoading">
+                <t-descriptions v-if="card" :column="2" bordered>
+                  <t-descriptions-item label="Logo">{{ card.logo || '—' }}</t-descriptions-item>
+                  <t-descriptions-item label="企业官网">{{ card.website || '—' }}</t-descriptions-item>
+                  <t-descriptions-item label="办公地点" :span="2">{{ card.address || '—' }}</t-descriptions-item>
+                  <t-descriptions-item label="主营业务" :span="2">{{ card.services?.join('、') || '—' }}</t-descriptions-item>
+                  <t-descriptions-item label="核心优势" :span="2">{{ card.advantages?.join('、') || '—' }}</t-descriptions-item>
+                </t-descriptions>
+              </t-loading>
+              <t-button class="card-edit" v-permission="'/card-management'" @click="router.push('/card-management?type=enterprise&keyword=' + enterprise.id)">前往名片管理编辑</t-button>
             </div>
           </t-tab-panel>
 
@@ -478,59 +442,11 @@ onMounted(() => {
             </div>
           </t-tab-panel>
 
-          <!-- 展示页审核 -->
-          <t-tab-panel value="showcase" label="展示页审核">
-            <div class="tab-body showcase-body">
-              <t-steps :current="stepCurrent">
-                <t-step-item title="未提交" />
-                <t-step-item
-                  title="待审核"
-                  :status="enterprise.showcaseStatus === 'rejected' ? 'error' : undefined"
-                />
-                <t-step-item title="已发布" />
-              </t-steps>
-
-              <t-alert
-                v-if="enterprise.showcaseStatus === 'rejected' && enterprise.showcaseComment"
-                class="block-gap"
-                theme="error"
-                title="驳回原因"
-                :message="enterprise.showcaseComment"
-              />
-
-              <div v-if="enterprise.showcaseStatus === 'pending'" class="step-actions">
-                <t-button theme="primary" :loading="submitting" @click="onApprove">通过发布</t-button>
-                <t-button variant="outline" :loading="submitting" @click="openReject">驳回</t-button>
-              </div>
-              <p v-else class="step-tip">当前展示页状态：{{ enterprise.showcaseStatus === 'none' ? '企业尚未提交展示页' : '暂无需处理的审核任务' }}</p>
-            </div>
-          </t-tab-panel>
         </t-tabs>
       </div>
     </template>
 
     <t-empty v-else description="企业不存在或已归档" />
-
-    <!-- 驳回原因 -->
-    <t-drawer
-      v-model:visible="rejectVisible"
-      header="展示页审核"
-      size="560px"
-      :footer="false"
-      :close-btn="true"
-      :close-on-esc-keydown="true"
-      @close="rejectVisible = false"
-    >
-      <t-textarea
-        v-model="rejectComment"
-        placeholder="驳回原因（必填）…"
-        :autosize="{ minRows: 3, maxRows: 5 }"
-      />
-      <div class="drawer-footer">
-        <t-button variant="text" theme="default" @click="rejectVisible = false">取消</t-button>
-        <t-button theme="danger" :loading="submitting" @click="onConfirmReject">确认驳回</t-button>
-      </div>
-    </t-drawer>
 
     <!-- 经验值调整 -->
     <AdjustValueDialog
@@ -617,10 +533,7 @@ onMounted(() => {
 .tab-body {
   padding-top: 16px;
 }
-
-.block-gap {
-  margin-top: 16px;
-}
+.card-edit { margin-top: 16px; }
 
 .desc-block {
   margin-top: 24px;
@@ -723,23 +636,6 @@ onMounted(() => {
 .delta-sub {
   color: var(--td-error-color);
   font-weight: 600;
-}
-
-.showcase-body {
-  max-width: 640px;
-}
-
-.step-actions {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  margin-top: 24px;
-}
-
-.step-tip {
-  margin: 24px 0 0;
-  font-size: 13px;
-  color: var(--td-text-color-secondary);
 }
 
 .lease-head {

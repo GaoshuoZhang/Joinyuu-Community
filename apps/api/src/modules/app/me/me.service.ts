@@ -130,11 +130,14 @@ export class MeService {
       return { identityLabel: '', level: null, levelName: '', nextLevelExp: null, records: [] }
     }
 
-    const experience = identity.experience ?? 0
+    const enterprise = identity.type === 'community_enterprise' && identity.enterpriseId
+      ? await this.prisma.enterprise.findUnique({ where: { id: identity.enterpriseId } })
+      : null
+    const experience = enterprise?.experience ?? identity.experience ?? 0
     const level = identity.level ?? 1
-    const tier = await this.prisma.levelTier.findUnique({ where: { level } })
+    const tier = await this.prisma.levelTier.findUnique({ where: { identityType_level: { identityType: identity.type, level } } })
     /* 下一级门槛：经验 < threshold 的最小门槛（升序取第一个高于当前经验值者） */
-    const tiers = await this.prisma.levelTier.findMany({ orderBy: { threshold: 'asc' } })
+    const tiers = await this.prisma.levelTier.findMany({ where: { identityType: identity.type }, orderBy: { threshold: 'asc' } })
     const next = tiers.find((t) => t.threshold > experience)
 
     const targetType = identity.type === 'community_enterprise' ? 'enterprise' : 'individual'
@@ -191,51 +194,53 @@ export class MeService {
 
   /** 提交注销申请：进入 7 天冷静期；已有进行中申请则冲突 */
   async deletionRequest(uid: string, dto: DeletionRequestDto): Promise<{ code: number; effectiveAt: string }> {
-    const existing = await this.prisma.accountDeletionRequest.findFirst({
-      where: { userId: uid, status: 'cooling' },
-      select: { id: true },
-    })
-    if (existing) throw new ConflictException('您已有进行中的注销申请，如需撤销请先取消')
+    return this.prisma.$transaction(async tx => {
+      const [user] = await tx.$queryRaw<{ status: string }[]>`SELECT status FROM "User" WHERE uid = ${uid} FOR UPDATE`
+      if (!user || user.status === 'deleted') throw new ConflictException('账号已注销')
+      const existing = await tx.accountDeletionRequest.findFirst({
+        where: { userId: uid, status: 'cooling' },
+        select: { id: true },
+      })
+      if (existing) throw new ConflictException('您已有进行中的注销申请，如需撤销请先取消')
 
-    const requestedAt = formatNow()
-    const effectiveAt = this.addDaysTime(requestedAt, DELETION_COOLING_DAYS)
-    await this.prisma.accountDeletionRequest.create({
-      data: {
-        id: await this.ids.next('DR'),
-        userId: uid,
-        status: 'cooling',
-        requestedAt,
-        effectiveAt,
-        reason: dto.reason?.trim() ?? null,
-      },
-    })
+      const requestedAt = formatNow()
+      const effectiveAt = this.addDaysTime(requestedAt, DELETION_COOLING_DAYS)
+      await tx.accountDeletionRequest.create({
+        data: {
+          id: await this.ids.next('DR'),
+          userId: uid,
+          status: 'cooling',
+          requestedAt,
+          effectiveAt,
+          reason: dto.reason?.trim() ?? null,
+        },
+      })
 
-    await this.notify.pushNotice(uid, {
-      type: 'system',
-      title: '注销申请已提交',
-      content: `您已提交账号注销申请，将于 ${effectiveAt} 生效；冷静期内可随时撤回。`,
+      await this.notify.pushNoticeInTransaction(tx, uid, {
+        type: 'system',
+        title: '注销申请已提交',
+        content: `您已提交账号注销申请，冷静期于 ${effectiveAt} 届满，之后由工作人员复核执行；执行前可撤回。`,
+      })
+      return { code: 0, effectiveAt }
     })
-    return { code: 0, effectiveAt }
   }
 
-  /** 撤销注销申请（冷静期内：cooling → cancelled） */
+  /** 执行前可撤销该用户所有进行中的注销申请；与后台执行共用用户行锁。 */
   async cancelDeletion(uid: string): Promise<{ code: number }> {
-    const req = await this.prisma.accountDeletionRequest.findFirst({
-      where: { userId: uid, status: 'cooling' },
-      select: { id: true },
+    return this.prisma.$transaction(async tx => {
+      await tx.$queryRaw`SELECT uid FROM "User" WHERE uid = ${uid} FOR UPDATE`
+      const changed = await tx.accountDeletionRequest.updateMany({
+        where: { userId: uid, status: 'cooling' },
+        data: { status: 'cancelled', cancelledAt: formatNow() },
+      })
+      if (changed.count === 0) throw new BadRequestException('没有可撤销的注销申请')
+      await this.notify.pushNoticeInTransaction(tx, uid, {
+        type: 'system',
+        title: '注销申请已撤销',
+        content: '您的账号注销申请已撤销，账户可继续正常使用。',
+      })
+      return { code: 0 }
     })
-    if (!req) throw new BadRequestException('没有可撤销的注销申请')
-
-    await this.prisma.accountDeletionRequest.update({
-      where: { id: req.id },
-      data: { status: 'cancelled', cancelledAt: formatNow() },
-    })
-    await this.notify.pushNotice(uid, {
-      type: 'system',
-      title: '注销申请已撤销',
-      content: '您的账号注销申请已撤销，账户可继续正常使用。',
-    })
-    return { code: 0 }
   }
 
   /** 个人数据导出：生成当前服务持有的用户维度 JSON，并通过受控文件端点提供下载。 */

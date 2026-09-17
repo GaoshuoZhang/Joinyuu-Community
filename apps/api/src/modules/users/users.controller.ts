@@ -8,6 +8,7 @@ import { UpdateUserDto } from './dto/update-user.dto'
 import { FreezeUserDto } from './dto/freeze-user.dto'
 import { CreateUserDto } from './dto/create-user.dto'
 import { ResetUserPasswordDto } from './dto/reset-user-password.dto'
+import { ReviewDeletionDto, ReviewRealnameDto } from './dto/review-member-governance.dto'
 
 @Controller('api/admin/users')
 export class UsersController {
@@ -82,5 +83,34 @@ export class UsersController {
     @Req() req: AuthenticatedRequest,
   ): Promise<{ code: number }> {
     return this.users.freeze(id, dto, req.user?.name ?? '社区管理员')
+  }
+
+}
+
+@RequirePermission('/member-governance')
+@Controller('api/admin/member-governance')
+export class MemberGovernanceController {
+  constructor(private readonly users: UsersService) {}
+
+  @Get('deletions')
+  deletionRequests(@Query('page') page?: string, @Query('pageSize') pageSize?: string, @Query('status') status?: string) {
+    return this.users.deletionRequests(Math.max(1, Number(page) || 1), Math.max(1, Math.min(100, Number(pageSize) || 20)), status)
+  }
+
+  @HttpCode(200)
+  @Post('deletions/:requestId/review')
+  reviewDeletion(@Param('requestId') id: string, @Body() dto: ReviewDeletionDto, @Req() req: AuthenticatedRequest) {
+    return this.users.reviewDeletion(id, dto, req.user?.name ?? '社区管理员')
+  }
+
+  @Get('realnames')
+  realnameReviews(@Query('page') page?: string, @Query('pageSize') pageSize?: string, @Query('status') status?: string) {
+    return this.users.realnameReviews(Math.max(1, Number(page) || 1), Math.max(1, Math.min(100, Number(pageSize) || 20)), status)
+  }
+
+  @HttpCode(200)
+  @Post('realnames/:uid/review')
+  reviewRealname(@Param('uid') uid: string, @Body() dto: ReviewRealnameDto, @Req() req: AuthenticatedRequest) {
+    return this.users.reviewRealname(uid, dto, req.user?.name ?? '社区管理员')
   }
 }

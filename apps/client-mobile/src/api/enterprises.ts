@@ -21,7 +21,7 @@ import * as mock from '@/mock/handlers/enterprises'
 /** GET /api/app/enterprises/:id/workbench — 企业工作台（v42 [MOCK-ONLY]） */
 export async function fetchEnterpriseWorkbench(id: string): Promise<import('@/types').EnterpriseWorkbench> {
   if (apiMode === 'mock') return mock.fetchEnterpriseWorkbench(id)
-  return httpGet(`/enterprises/${id}/workbench`)
+  return httpGet(`/me/enterprise-workbench?enterpriseId=${encodeURIComponent(id)}`)
 }
 
 /** GET /api/app/enterprises/:id/workbench — 企业工作台（v42 [MOCK-ONLY]） */
@@ -29,12 +29,6 @@ export async function fetchEnterpriseWorkbench(id: string): Promise<import('@/ty
 export async function fetchEnterpriseShowcase(id: string): Promise<EnterpriseShowcase> {
   if (apiMode === 'mock') return mock.fetchEnterpriseShowcase(id)
   return httpGet<EnterpriseShowcase>(`/enterprises/${id}`)
-}
-
-/** POST /api/app/showcase-requests — 企业名片发布申请（→ 管理端审核联动 showcaseStatus） */
-export async function createShowcaseRequest(enterpriseId: string, note: string): Promise<void> {
-  if (apiMode === 'mock') return mock.createShowcaseRequest(enterpriseId, note)
-  await httpPost('/showcase-requests', { enterpriseId, note })
 }
 
 /** GET /api/app/me/cards — 我的名片（个人名片；缺口 §7.1-16） */
@@ -46,7 +40,7 @@ export async function fetchMyCards(): Promise<MyCards> {
 /** PUT /api/app/me/cards/individual — 保存个人名片（真实后端为提交审核） */
 export async function updateIndividualCard(payload: MyIndividualCardPayload): Promise<void> {
   if (apiMode === 'mock') return mock.updateIndividualCard(payload)
-  await httpPut('/me/cards/individual', payload)
+  await httpPut('/me/cards/individual', await editablePayload('individual', payload))
 }
 
 /** GET /api/app/me/identities — 我的关联身份（社区个体 + 我关联的社区企业/合作企业） */
@@ -64,7 +58,19 @@ export async function fetchEnterpriseDetail(id: string): Promise<MyEnterpriseDet
 /** PUT /api/app/me/enterprises/:id — 修改企业基本信息（仅企业负责人） */
 export async function updateMyEnterprise(id: string, payload: MyEnterprisePayload): Promise<void> {
   if (apiMode === 'mock') return mock.updateMyEnterprise(id, payload)
-  await httpPut(`/me/enterprises/${id}`, payload)
+  await httpPut(`/me/enterprises/${id}`, await editablePayload('enterprise', payload))
+}
+
+export async function fetchCardSchema(type: 'individual' | 'enterprise'): Promise<{ editableFields: string[] }> {
+  if (apiMode === 'mock') return { editableFields: type === 'individual'
+    ? ['displayName', 'age', 'politicalStatus', 'intro', 'industryExperience', 'skills', 'education', 'work', 'projects', 'honors', 'socials', 'customLinks', 'visibility']
+    : ['logo', 'industry', 'size', 'foundedAt', 'website', 'address', 'description', 'services', 'advantages'] }
+  return httpGet(`/card-schema/${type}`)
+}
+
+async function editablePayload(type: 'individual' | 'enterprise', payload: object) {
+  const { editableFields } = await fetchCardSchema(type)
+  return Object.fromEntries(Object.entries(payload).filter(([key]) => editableFields.includes(key)))
 }
 
 /** POST /api/app/me/enterprises/:id/transfer-contact — 转移企业负责人（后台字段：联系人） */

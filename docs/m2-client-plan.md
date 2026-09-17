@@ -25,7 +25,7 @@
 - [√] M2-v42 八大功能新增（纯客户端 Mock）：活动电子票、需求沟通、项目协作、积分任务与规则、个人看板、服务在线申请、企业工作台与代企业响应、实名分级权益；全场景 E2E 三轮 64 页零失败
 - [√] M2-v41 移动端三轮复审整改（纯客户端）：URL query 同步、社区深链、分类全量派生、忘记密码入口、积分分页回退、Mock 时钟、预约时长约束、对比度、订单评价、注销冷静期与撤回、图片兜底、举报不预选、空态清除筛选
 - [√] M2-v40 产品/UX 复审整改（纯客户端）：活动取消/改期运营模拟、分享扩展、浏览历史、首页公告、商城分类筛选（URL 同步）、物流单号、评论/用户举报、企业/人才收藏与筛选、搜索 chips 可点击、无障碍集中补丁、滚动位置记忆与骨架屏一致性；项目页排序（最新/响应最多）与文章/活动/社区/广场筛选 URL 同步、首页「为你推荐」、行内错误与列表计数补齐；Playwright headed 增量复测零控制台错误
-- [ ] M2-R 接入期：**已立项（2026-09-16）**，规划与进度见 [docs/m2-r-plan.md](./m2-r-plan.md)；范围为后端 `/api/app/**` 全量对齐（§7.1~§7.7 缺口逐条销号）+ HTTP 切换 + app e2e + 回归
+- [√] M2-R 接入期：**必做范围及收尾复查整改已完成（2026-09-17）**，R0~R4、A6/A19、HTTP 切换、38 套件 / 264 用例与此前 64 入口浏览器走查完成，见 [收口报告](./m2-r-closeout.md)。
 
 ### 0.2 页面清单（2026-09-13 核对：纯移动端，全部已交付）
 
@@ -45,15 +45,19 @@
 
 ### 0.3 后端缺口（§7.1，接入期销号）
 
-- [√] 缺口 1 站内信（UserNotification 模型 + 端点 + 触发点〔端点与 NotificationService 框架已交付，各业务触发点随 R2/R3 接线〕）　[ ] 缺口 2 签到（字段迁移 + check-in 端点）
-- [ ] 缺口 3 首页聚合端点　[√] 缺口 4 多身份 JWT 签发（2026-09-16）　[√] 缺口 5 批量字典下发（2026-09-16）　[ ] 缺口 6 投稿图片上传
-- [√] 缺口 7 经验值流水端点（2026-09-16，个人维度）　[ ] 缺口 8 积分触发点接线　[ ] 缺口 9 可见范围服务端过滤　[ ] 缺口 10 订单状态流转
-- [√] 缺口 11 app 图形验证码（2026-09-16）　[ ] 缺口 12 社区服务/人才库/企业库端点　[ ] 缺口 13 预约取消端点（§7.4 新增登记）　[ ] 缺口 14 申请表单 schema 下发（企业合作/人才登记）　[ ] 缺口 15 需求类型与专属字段（找服务 / 找投资 / 找合作）　[ ] 缺口 16 个人名片与关联身份（个人名片 GET /me/cards + PUT `/me/cards/individual`；关联身份 GET `/me/identities`；企业详情 GET/PUT `/me/enterprises/:id` + 转移负责人/邀请成员/退驻申请）　[ ] 缺口 17 企业成员邀请闭环与成员权限（邀请记录 + 站内信 + 邀请详情页接受/拒绝 + 成员手机号维护 + 8 项成员权限分配与服务端校验）　[ ] 缺口 18 实名认证（GET/PUT `/me/realname`，姓名 + 身份证号核验）　[ ] 缺口 19 需求撮合与项目协作（发布者筛选/接受/驳回响应、响应撤回；接受后立项生成项目；项目详情与里程碑提交/验收、自动结项）　[ ] 缺口 20 审核撤回与重提 + 商城履约模型　[ ] 缺口 21 信任与治理（联系方式可见范围、名片隐私、举报申诉、邀请撤销/过期、负责人转移接受）　[ ] 缺口 22 收藏 / 到货提醒 / Mock 埋点　[ ] 缺口 23 v38 客户端落地项（§7.7 A/B 表，R1 已交付地址簿与账号安全族，其余待后续批次）
+- [√] 1 站内信；2 签到；3 首页聚合；4 多身份 JWT；5 批量字典；6 通用上传。
+- [√] 7 经验流水；8 积分触发；9 可见范围过滤；10 订单状态流；11 图形验证码。
+- [√] 12 社区三域；13 预约取消；14 申请 schema；15 需求类型；16 个人/企业名片与身份。
+- [√] 17 邀请与权限；18 实名规则校验及人工复核；19 需求撮合与项目协作；20 撤回重提与履约。
+- [√] 21 举报/隐私/转移治理；22 收藏/提醒/埋点落库；23 地址、安全、注销治理等 v38 必做项。
+
+以上按 M2-R 已确认降级与可选项边界销号；第三方短信/三要素、跨端历史同步、可选运营视图不纳入已完成声明。§7 原始条目保留缺口来源描述，现行契约以 `api-app-design.md` 与收口报告为准。
 
 ### 0.4 后台缺口（§7.2）
 
-- [ ] 缺口 1 活动表单签到配置〔核对：admin 尚无〕　[ ] 缺口 2 签到名单标识与补签〔核对：手动补签已有，缺签到方式/距离标识〕
-- [ ] 缺口 3 发货与站内信联动〔核对：尚无〕　[ ] 缺口 4 站内信运营视图〔核对：尚无，仅管理员维度铃铛〕
+- [√] 1 活动签到配置；2 签到名单标识与补签；3 发货与站内信联动。
+- [√] 5 申请表单配置；6 需求类型；7 名片管理与企业退驻审核；A6 注销/实名治理、A19 字段白名单已补齐。
+- [ ] 4 站内信运营视图（可选，后置）；邀请/转移只读运营视图同属可选范围。
 
 ### 0.5 开放问题（§11）
 
@@ -349,7 +353,7 @@ src/
 | 16 | **个人名片与关联身份**（身份模型收敛：无全局「当前身份」）`GET /api/app/me/cards` + `PUT /me/cards/individual`（**简历式**个人名片：姓名/年龄/政治面貌/个人简介/行业经验/相关技能 + 可增删分段 教育经历·工作经历·项目经历·荣誉证书·社交媒体链接·自定义链接；头像同步个人资料；真实后端应提交审核，mock 保存即发布，公开到人才库 `/talents/:uid`）；**关联身份**：`GET /me/identities`（社区个体 + 我关联的全部社区企业/合作企业，可多个；含 `roleLabel`/`isContact`/`enterpriseId`）、`GET /me/enterprises/:id`（关联人可查看、负责人可编辑：基本信息 + Logo + 成立时间/官网/办公地点/主营业务/核心优势 + 成员职位）、`PUT /me/enterprises/:id`、`POST /me/enterprises/:id/transfer-contact`（转移负责人 = 后台 `contactUserId`）/`invite`（须指定职位）/`remove-member`（移除成员，负责人本人需先转移）/`exit-application`（退驻/注销走管理端审核）；企业名片编辑独立成页（详情保留负责人/成员/退驻 + 「编辑企业名片」入口） | /me/cards/individual、/talents/:uid、/me/identities、/me/enterprises/:id、/me/enterprises/:id/edit | api-app-design.md §5 扩充；后台审核与成员管理口径待定（§7.2-7） | P2 |
 | 17 | **企业成员邀请闭环**（[MOCK-ONLY]）：邀请不再直接写入成员，改为生成邀请记录并发站内信给被邀请人；新增 `GET /api/app/invitations/:id`（邀请详情：企业概要 + 邀请人/职位/状态，仅被邀请人或邀请方负责人可看）与 `POST /api/app/invitations/:id/respond`（`action=accept\|reject`；接受写入企业成员并通知负责人，拒绝仅记状态）；`PUT /me/enterprises/:id/member-role` 改为 `PUT /me/enterprises/:id/member`（可同时改职位与手机号）；企业详情返回 `invitations`（待接受列表，仅负责人）；被邀请手机号需已注册（未注册返回 400，真实后端应支持短信邀请）；**成员权限体系**（8 项：`publish_demand/respond_demand/space_reserve/article_submit/manage_members/invite_member/assign_permission/edit_card`）：负责人默认全部，成员由负责人分配；`PUT /me/enterprises/:id/member` 支持 `permissions`（需 `assign_permission`），role/phone 需 `manage_members`，`invite`/`remove-member`/企业信息编辑分别校验 `invite_member`/`manage_members`/`edit_card`；`GET /me/identities` 与 `GET /me/enterprises/:id` 返回 `permissions`/`myPermissions`；需求发布与空间预约支持 `asEnterpriseId` 代企业主体并校验对应权限（成员被授权后表单自动出现企业身份选项）；**响应需求/文章投稿的代企业主体字段与校验（`respond_demand`/`article_submit`）待后端支持 author/responder 覆盖后接入**（本轮仅权限可分配） | /me/invitations/:id、/me/enterprises/:id、需求发布/空间预约表单 | api-app-design.md §5/§6/§8 扩充；后台邀请记录与权限视图可选（§7.2-7） | P2 |
 | 18 | **实名认证** `GET /api/app/me/realname`（状态：脱敏姓名首字 + 证件号前 4 后 4）、`PUT /api/app/me/realname`（提交真实姓名 + 18 位身份证号；已认证 409）；真实后端需接三要素/公安库核验后回写并发送站内信，mock 即时通过；`User.realName/citizenId` 字段已存在但无 app 端点 | /me/profile/edit（入口 note）、/me/realname | api-app-design.md §5 扩充（已完成）；后台实名审核视图可选（§7.2-7） | P2 |
-| 19 | **需求撮合与项目协作**（[MOCK-ONLY]）：新增 `GET /api/app/me/demands/:id/responses`（仅需求发布者；响应方快照 + `status=pending/accepted/rejected`）与 `POST /api/app/me/demands/:id/responses/:responseId/review`（`action=accept\|reject`，驳回必填原因）、`POST /api/app/me/responses/:id/withdraw`（响应者撤回待处理）；接受后需求转 `projected`（= 后端立项语义），服务端需在事务内生成项目（发布方/承接方双向记录、里程碑）并发放 `demand_undertaken` 积分与项目经验、通知双方、自动驳回其余待处理响应；项目侧新增 `GET /api/app/me/projects/:id`、`POST /api/app/me/projects/:id/milestones/:milestoneId/submit`（承接方提交交付）与 `.../accept`（发起方验收），全部验收通过自动结项并按 wiki-backend §8.6 发放 `project_completed` 经验；`Demand` 增 `projectId`，`Milestone` 增交付验收状态，`DemandRespondent.status` 现为 pending/contacted/closed 需扩展 accepted/rejected 口径 | /me/demands（内联响应列表与筛选）、/me/responses（撤回）、/me/projects、/me/projects/:id | api-app-design.md §6/§8 增补（已注记 MOCK-ONLY）；entity-fields 需扩 | P1 |
+| 19 | **需求撮合与项目协作**（[MOCK-ONLY]；**2026-09-17 发布者处理响应已由 `POST /api/app/me/demands/:id/select`（多选承接方 → selected，管理员立项）取代，见 api-app-design.md §6/§8.1**）：新增 `GET /api/app/me/demands/:id/responses`（仅需求发布者；响应方快照 + `status=pending/accepted/rejected`）与 `POST /api/app/me/demands/:id/responses/:responseId/review`（`action=accept\|reject`，驳回必填原因）、`POST /api/app/me/responses/:id/withdraw`（响应者撤回待处理）；接受后需求转 `projected`（= 后端立项语义），服务端需在事务内生成项目（发布方/承接方双向记录、里程碑）并发放 `demand_undertaken` 积分与项目经验、通知双方、自动驳回其余待处理响应；项目侧新增 `GET /api/app/me/projects/:id`、`POST /api/app/me/projects/:id/milestones/:milestoneId/submit`（承接方提交交付）与 `.../accept`（发起方验收），全部验收通过自动结项并按 wiki-backend §8.6 发放 `project_completed` 经验；`Demand` 增 `projectId`，`Milestone` 增交付验收状态，`DemandRespondent.status` 现为 pending/contacted/closed 需扩展 accepted/rejected 口径 | /me/demands（内联响应列表与筛选）、/me/responses（撤回）、/me/projects、/me/projects/:id | api-app-design.md §6/§8 增补（已注记 MOCK-ONLY）；entity-fields 需扩 | P1 |
 | 20 | **审核撤回与重提 + 商城履约模型**（[MOCK-ONLY]·v34）：需求 `POST /me/demands/:id/withdraw`（pending→withdrawn）与 `POST /me/demands/:id/resubmit`（保留编号、驳回/撤回后重提）；投稿 `POST /me/articles/:id/withdraw`、`POST /me/articles/:id/resubmit`、`GET /me/articles/:id/payload`（重提回填原始内容）；申请 `POST /me/applications/:id/withdraw`、`POST /me/applications/:id/resubmit`、`GET /me/applications/:id/payload`；商城 `Goods` 增履约类型（physical/voucher/service）、订单状态增 `pending_use`、券码 `voucherCode` 与核销端点 `POST /mall/orders/:id/use`，实物确认收货维持既有设计 | /me/demands、/me/articles、/me/applications、/mall、/me/orders | api-app-design §8.1（MOCK-ONLY 端点表）；entity-fields 需扩 | P1 |
 | 21 | **信任与治理**（[MOCK-ONLY]·v35）：需求联系方式仅登录可见（游客提示）；个人名片可见性设置（年龄/政治面貌）与公开预览；举报 `POST /reports`（需求/文章/企业名片，管理端举报处理与内容处置为后台缺口）；驳回申诉 `POST /me/demands/:id/appeal`、`POST /me/articles/:id/appeal`；企业成员邀请有效期（7 天）与 `POST /me/enterprises/invitations/:id/revoke`；负责人转移请求-接受闭环：改写 `POST /me/enterprises/:id/transfer-contact` 为发起请求，新增 `GET /me/transfer-requests`、`POST /me/transfer-requests/:id/respond`、`POST /me/transfer-requests/:id/cancel`（接受后变更负责人） | /demands/:id、/talents/:uid、/me/cards/individual、/me/identities、/me/enterprises/:id | api-app-design §8.1；后台举报队列与邀请/转移记录视图为 §7.2 新增候选 | P1 |
 | 22 | **留存与观测**（[MOCK-ONLY]·v37）：收藏 `GET /me/favorites`、`POST /me/favorites/toggle`（需求/文章/活动）；到货提醒 `POST /mall/goods/:id/restock-subscribe`（缺货商品订阅，补货通知依赖后台补货动作）；Mock 埋点 `POST /analytics/events`（漏斗计数：登录/注册/发布/响应/报名/签到/下单/投稿/预约/收藏/举报/搜索；真实接入为数据平台上报） | /me/favorites、/mall/:id、各关键行为路径 | api-app-design §8.1；埋点口径与后台漏斗看板为接入期议题 | P2 |
@@ -412,8 +416,8 @@ src/
 | 已修复 | 401 拦截与路由不匹配 | 改 `joinyuu:unauthorized` 事件 → `main.ts` 清会话 + history 跳登录（带 redirect） |
 | 已修复 | 死代码/死分支 | 删除 `stores/breakpoint.ts` 与 `vendor-tdesktop` 分块；`mockAdvanceOrder/cancelReservation` 已接线 |
 | 已修复 | mock 数据一致性 | 人才库冲突 / 政策 `PL` 前缀 / 字典 4 类 / 活动时间相对化（§4.1） |
-| 遗留 | `fetchEvent` 对 ended 绕过可见范围 | 演示用；接入期按服务端过滤语义对齐 |
-| 遗留 | `restoreSession` / `getCaptcha` http 分支 | `restoreSession` http 由 `GET /me` 承担；`getCaptcha` 接入期改走统一请求封装（Mock 固定码 8888 策略见 §3.3） |
+| 已修复 | `fetchEvent` 对 ended 绕过可见范围 | R4 对齐服务端可见范围语义 |
+| 已修复 | `restoreSession` / `getCaptcha` http 分支 | R4 已统一公共请求封装，真实图形验证码登录已浏览器验证 |
 
 ### 7.6 M2-R 对接前置流程（缺口交底）
 
@@ -424,6 +428,8 @@ src/
 ### 7.7 v38 客户端落地项：API / admin 跟进方法与验收标准（2026-09-15）
 
 > 客户端已在 Mock 中完整落地以下能力；接入期按本表逐项实现。**验收标准 = 将该端点/页面接到 Mock 同款行为后，客户端无需改 UI 即可切换（api 层已留好 http 分支）。**
+
+> **2026-09-17 销号映射**：E1~E8、D1~D6/D8/D9、API A1~A11、admin B1/B3/B4/B5 必做部分已落地；B2 注销/实名部分随 A6 完成，邀请/转移只读视图为可选；D7 历史跨端同步和 B6 管理看板可选后置（埋点落库已完成）。现行降级：图形验证码代短信、实名规则校验后人工复核、HMAC 核销码。
 
 
 **v42 新增跟进项（移动端已 Mock，待 API/admin 落地）**

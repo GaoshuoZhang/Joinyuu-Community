@@ -1,4 +1,4 @@
-import { ConflictException, Injectable, NotFoundException } from '@nestjs/common'
+import { BadRequestException, ConflictException, Injectable, NotFoundException } from '@nestjs/common'
 import type { Prisma } from '@prisma/client'
 import { PrismaService } from '../../common/prisma/prisma.service'
 import { IdGeneratorService } from '../../common/id-generator/id-generator.service'
@@ -78,11 +78,20 @@ export class ApplicationsService {
 
   async saveFormConfig(type: string, dto: ApplicationFormConfigDto, operator: string): Promise<{ code: number }> {
     if (!(type in DEFAULT_APPLICATION_SCHEMAS)) throw new NotFoundException('申请表单类型不存在')
+    this.validateFormConfig(dto)
+    const fields = dto.fields.map((field) => {
+      const { extraProperties, options, ...known } = field
+      return {
+        ...extraProperties,
+        ...known,
+        ...(options ? { options: options.map(({ extraProperties: optionExtra, ...option }) => ({ ...optionExtra, ...option })) } : {}),
+      }
+    })
     const now = formatNow()
     await this.prisma.applicationFormConfig.upsert({
       where: { type },
-      create: { type, title: dto.title.trim(), subtitle: dto.subtitle.trim(), submitLabel: dto.submitLabel.trim(), tips: dto.tips as Prisma.InputJsonValue, fields: dto.fields as Prisma.InputJsonValue, updatedAt: now },
-      update: { title: dto.title.trim(), subtitle: dto.subtitle.trim(), submitLabel: dto.submitLabel.trim(), tips: dto.tips as Prisma.InputJsonValue, fields: dto.fields as Prisma.InputJsonValue, updatedAt: now },
+      create: { type, title: dto.title.trim(), subtitle: dto.subtitle.trim(), submitLabel: dto.submitLabel.trim(), tips: dto.tips as Prisma.InputJsonValue, fields: fields as Prisma.InputJsonValue, updatedAt: now },
+      update: { title: dto.title.trim(), subtitle: dto.subtitle.trim(), submitLabel: dto.submitLabel.trim(), tips: dto.tips as Prisma.InputJsonValue, fields: fields as Prisma.InputJsonValue, updatedAt: now },
     })
     await this.audit.record({
       module: '申请审核',
@@ -92,6 +101,43 @@ export class ApplicationsService {
       operator,
     })
     return { code: 0 }
+  }
+
+  private validateFormConfig(dto: ApplicationFormConfigDto): void {
+    if (!dto.title.trim() || !dto.submitLabel.trim()) throw new BadRequestException('表单标题和提交按钮文案不能为空')
+    const keys = new Set<string>()
+    for (const [index, field] of dto.fields.entries()) {
+      field.key = field.key.trim()
+      field.label = field.label.trim()
+      if (!field.label) throw new BadRequestException(`第 ${index + 1} 个字段的标题不能为空`)
+      if (keys.has(field.key)) throw new BadRequestException(`第 ${index + 1} 个字段的 key 重复`)
+      keys.add(field.key)
+      if (field.type === 'select') {
+        if (!field.options?.length) throw new BadRequestException(`字段「${field.label}」至少需要一个选项`)
+        const values = new Set<string>()
+        for (const option of field.options) {
+          option.label = option.label.trim()
+          option.value = option.value.trim()
+          if (!option.label || !option.value) throw new BadRequestException(`字段「${field.label}」存在空选项`)
+          if (values.has(option.value)) throw new BadRequestException(`字段「${field.label}」存在重复选项值`)
+          values.add(option.value)
+        }
+      } else if (field.options !== undefined) {
+        throw new BadRequestException(`仅选择字段「${field.label}」可以配置选项`)
+      }
+      if (field.type !== 'text' && field.type !== 'textarea' && field.maxlength !== undefined) {
+        throw new BadRequestException(`字段「${field.label}」不支持最大长度`)
+      }
+      if (field.type !== 'upload' && (field.accept !== undefined || field.multiple !== undefined || field.maxCount !== undefined)) {
+        throw new BadRequestException(`仅上传字段「${field.label}」可以配置上传属性`)
+      }
+      if (field.type === 'upload' && field.multiple !== true && (field.maxCount ?? 1) !== 1) {
+        throw new BadRequestException(`单文件上传字段「${field.label}」的最大数量必须为 1`)
+      }
+      if (field.type === 'upload' && field.accept && !field.accept.split(',').every((item) => /^(?:[\w.+-]+\/(?:\*|[\w.+-]+)|\.[\w]+)$/.test(item.trim()))) {
+        throw new BadRequestException(`字段「${field.label}」的文件类型限制无效`)
+      }
+    }
   }
 
   async findAll(query: ApplicationQuery): Promise<{ list: unknown[]; total: number }> {
@@ -109,7 +155,11 @@ export class ApplicationsService {
       this.prisma.application.count({ where }),
     ])
     const uidByPhone = await this.resolveApplicantIds(rows.map((r) => r.applicantPhone))
-    const list = rows.map((r) => ({ ...r, applicantId: uidByPhone.get(r.applicantPhone) ?? null }))
+    const list = rows.map((r) => ({
+      ...r,
+      details: this.detailEntries(r.type, r.details),
+      applicantId: uidByPhone.get(r.applicantPhone) ?? null,
+    }))
     return { list, total }
   }
 
@@ -133,7 +183,11 @@ export class ApplicationsService {
     return {
       title: `聚屿社区 · ${label}审核单`,
       generatedAt: formatNow(),
-      application: { ...row, applicantId: uidByPhone.get(row.applicantPhone) ?? null },
+      application: {
+        ...row,
+        details: this.detailEntries(row.type, row.details),
+        applicantId: uidByPhone.get(row.applicantPhone) ?? null,
+      },
     }
   }
 
@@ -273,11 +327,47 @@ export class ApplicationsService {
     return { code: 0 }
   }
 
-  /** 从申请表单 details（[{label,value}]）取字段值 */
-  private detailValue(details: Prisma.JsonValue, label: string): string | null {
-    if (!Array.isArray(details)) return null
-    const item = (details as { label?: string; value?: string }[]).find((d) => d?.label === label)
-    return typeof item?.value === 'string' && item.value.trim() ? item.value.trim() : null
+  /** 同时兼容历史 [{label,value}] 与客户端 schema 表单的 {fields:{key:value}}。 */
+  private detailValue(details: Prisma.JsonValue, label: string, ...keys: string[]): string | null {
+    if (Array.isArray(details)) {
+      const item = (details as { label?: string; value?: string }[]).find((detail) => detail?.label === label)
+      return typeof item?.value === 'string' && item.value.trim() ? item.value.trim() : null
+    }
+    if (!details || typeof details !== 'object') return null
+    const payload = details as Record<string, unknown>
+    for (const key of keys) {
+      const value = payload[key]
+      if (typeof value === 'string' && value.trim()) return value.trim()
+      if (typeof value === 'number') return String(value)
+    }
+    const fields = payload.fields
+    if (!fields || typeof fields !== 'object' || Array.isArray(fields)) return null
+    for (const key of keys) {
+      const value = (fields as Record<string, unknown>)[key]
+      if (typeof value === 'string' && value.trim()) return value.trim()
+      if (typeof value === 'number') return String(value)
+    }
+    return null
+  }
+
+  private detailEntries(type: string, details: Prisma.JsonValue): { label: string; value: string }[] {
+    if (Array.isArray(details)) return details as unknown as { label: string; value: string }[]
+    if (!details || typeof details !== 'object') return []
+    const payload = details as Record<string, unknown>
+    const fields = payload.fields
+    const schema = DEFAULT_APPLICATION_SCHEMAS[type as keyof typeof DEFAULT_APPLICATION_SCHEMAS]
+    const labels = new Map(schema?.fields.map((field) => [field.key, field.label]) ?? [])
+    const entries: { label: string; value: string }[] = []
+    if (fields && typeof fields === 'object' && !Array.isArray(fields)) {
+      for (const [key, value] of Object.entries(fields)) {
+        const display = Array.isArray(value)
+          ? value.map((item) => item && typeof item === 'object' && 'name' in item ? String(item.name) : String(item)).join('、')
+          : String(value ?? '')
+        if (display) entries.push({ label: labels.get(key) ?? key, value: display })
+      }
+    }
+    if (typeof payload.note === 'string' && payload.note.trim()) entries.push({ label: '补充说明', value: payload.note })
+    return entries
   }
 
   /** 解析「企业名 · 头衔」目标 */
@@ -299,11 +389,11 @@ export class ApplicationsService {
       data: {
         id: await this.ids.next('XE'),
         name,
-        industry: this.detailValue(details, '行业') ?? '综合',
+        industry: this.detailValue(details, '行业', 'industry') ?? '综合',
         status: 'active',
-        size: this.detailValue(details, '团队规模') ?? '',
-        foundedAt: this.detailValue(details, '成立时间') ?? '',
-        description: this.detailValue(details, '企业简介') ?? '审核通过自动新增的合作企业',
+        size: this.detailValue(details, '团队规模', 'companySize') ?? '',
+        foundedAt: this.detailValue(details, '成立时间', 'foundedAt') ?? '',
+        description: this.detailValue(details, '企业简介', 'intro', 'coopField') ?? '审核通过自动新增的合作企业',
         cooperationCount: 0,
         firstCooperationAt: formatNow().slice(0, 7),
       },
@@ -331,8 +421,8 @@ export class ApplicationsService {
     const { name, title } = this.splitTarget(app.targetName)
 
     if (type === 'settle') {
-      const entName = this.detailValue(details, '企业名称') ?? name
-      const applyingSpace = this.detailValue(details, '申请空间') ?? ''
+      const entName = this.detailValue(details, '企业名称', 'companyName') ?? name
+      const applyingSpace = this.detailValue(details, '申请空间', 'officeNeeds') ?? ''
       let ent = await tx.enterprise.findFirst({ where: { name: entName } })
       if (!ent) {
         ent = await tx.enterprise.create({
@@ -340,7 +430,7 @@ export class ApplicationsService {
             id: await this.ids.next('E'),
             name: entName,
             industry: '综合',
-            size: this.detailValue(details, '团队规模') ?? '1-50 人',
+            size: this.detailValue(details, '团队规模', 'companySize') ?? '1-50 人',
             foundedAt: formatNow().slice(0, 7),
             settledAt: formatToday(),
             leaseType: applyingSpace.includes('独立办公室') ? '独立办公室' : '办公位',
@@ -374,8 +464,8 @@ export class ApplicationsService {
           enterpriseName: ent.name,
           role: 'member',
           title: '社区企业成员',
-          level: 1,
-          experience: 0,
+          level: await this.enterpriseLevel(tx, ent.experience),
+          experience: ent.experience,
         },
       })
       return { userId: user.uid, enterpriseId: ent.id }
@@ -415,7 +505,23 @@ export class ApplicationsService {
       return { userId: user.uid, enterpriseId: null, profileId }
     }
 
-    /* type === 'identity'：优先社区企业，其次合作企业（缺失自动新增） */
+    const bindType = this.detailValue(details, '要绑定的身份', 'identityType')
+    if (bindType === 'community_individual') {
+      const duplicate = await tx.userIdentity.findFirst({ where: { userId: user.uid, type: 'community_individual' } })
+      if (duplicate) return { userId: null, enterpriseId: null }
+      await tx.userIdentity.create({
+        data: {
+          userId: user.uid,
+          type: 'community_individual',
+          title: '社区个体',
+          level: 1,
+          experience: 0,
+        },
+      })
+      return { userId: user.uid, enterpriseId: null }
+    }
+
+    /* 企业身份绑定：优先社区企业，其次合作企业（缺失自动新增）。 */
     const community = await tx.enterprise.findFirst({ where: { name } })
     if (community) {
       const dup = await tx.userIdentity.findFirst({
@@ -430,8 +536,8 @@ export class ApplicationsService {
           enterpriseName: community.name,
           role: 'member',
           title: title || '企业成员',
-          level: 1,
-          experience: 0,
+          level: await this.enterpriseLevel(tx, community.experience),
+          experience: community.experience,
         },
       })
       return { userId: user.uid, enterpriseId: community.id }
@@ -456,5 +562,13 @@ export class ApplicationsService {
   private appendRecord(raw: Prisma.JsonValue, record: ApprovalRecord): Prisma.InputJsonValue {
     const list: ApprovalRecord[] = Array.isArray(raw) ? (raw as unknown as ApprovalRecord[]) : []
     return [...list, record] as unknown as Prisma.InputJsonValue
+  }
+
+  private async enterpriseLevel(tx: Prisma.TransactionClient, experience: number): Promise<number> {
+    const tier = await tx.levelTier.findFirst({
+      where: { identityType: 'community_enterprise', threshold: { lte: experience } },
+      orderBy: { threshold: 'desc' },
+    })
+    return tier?.level ?? 1
   }
 }

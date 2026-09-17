@@ -23,9 +23,10 @@ export async function assertEnterprisePermission(
 ): Promise<void> {
   const enterprise = await prisma.enterprise.findUnique({
     where: { id: enterpriseId },
-    select: { contactUserId: true, deletedAt: true },
+    select: { contactUserId: true, deletedAt: true, status: true },
   })
   if (!enterprise || enterprise.deletedAt) throw new NotFoundException('企业不存在')
+  if (enterprise.status !== 'active') throw new ForbiddenException('企业当前状态不可操作')
   if (enterprise.contactUserId === uid) return
   const identity = await prisma.userIdentity.findFirst({
     where: { userId: uid, type: 'community_enterprise', enterpriseId },

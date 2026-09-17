@@ -1,10 +1,12 @@
 <script setup lang="ts">
 import ListErrorState from '@/components/ListErrorState.vue'
 import { computed, onMounted, ref } from 'vue'
+import { MessagePlugin } from 'tdesign-vue-next'
 import PageHeader from '@/components/PageHeader.vue'
 import {
   fetchCronLogs,
   fetchMonitorOverview,
+  runCronJob,
   type CronJobStatus,
   type CronRunLog,
   type MonitorOverview,
@@ -56,8 +58,26 @@ const jobColumns = [
   { colKey: 'lastRunAt', title: '上次执行', width: 170, resizable: true , ellipsis: true},
   { colKey: 'lastRunDurationMs', title: '耗时', cell: 'duration', width: 90 , ellipsis: true},
   { colKey: 'lastResult', title: '结果', cell: 'result', width: 90 , ellipsis: true},
-  { colKey: 'op', title: '操作', cell: 'op', width: 100 },
+  { colKey: 'op', title: '操作', cell: 'op', width: 170 },
 ]
+
+/* ---------- 手动执行（运维调试）：失败透出 500，执行结果写入 SchedulerLog ---------- */
+const runningJob = ref('')
+
+async function onRunJob(row: CronJobStatus) {
+  if (runningJob.value) return
+  runningJob.value = row.name
+  try {
+    await runCronJob(row.name)
+    MessagePlugin.success(`已执行「${row.name}」`)
+    await load(true)
+    if (job.value?.name === row.name) logs.value = await fetchCronLogs(row.name)
+  } catch (e) {
+    MessagePlugin.error(e instanceof Error ? e.message : '任务执行失败')
+  } finally {
+    runningJob.value = ''
+  }
+}
 
 /* ---------- 执行日志抽屉 ---------- */
 const logVisible = ref(false)
@@ -184,6 +204,9 @@ onMounted(load)
           </template>
           <template #op="{ row }">
             <t-button variant="text" size="small" @click="openLogs(row)">执行日志</t-button>
+            <t-popconfirm content="确认立即执行该定时任务？" @confirm="onRunJob(row)">
+              <t-button variant="text" size="small" theme="primary" :loading="runningJob === row.name">手动执行</t-button>
+            </t-popconfirm>
           </template>
         </t-table>
       </t-card>

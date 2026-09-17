@@ -6,9 +6,18 @@ export interface StatusConf {
 }
 
 export const statusMap = {
+  accountDeletion: {
+    cooling: { label: '待处理', theme: 'warning' }, approved: { label: '已注销', theme: 'default' },
+    rejected: { label: '已驳回', theme: 'danger' }, cancelled: { label: '已撤回', theme: 'default' },
+  },
+  realnameReview: {
+    unverified: { label: '未实名', theme: 'default' }, pending: { label: '待复核', theme: 'warning' },
+    approved: { label: '已通过', theme: 'success' }, rejected: { label: '已驳回', theme: 'danger' },
+  },
   user: {
     active: { label: '正常', theme: 'success' },
     frozen: { label: '已冻结', theme: 'danger' },
+    deleted: { label: '已注销', theme: 'default' },
   },
   enterprise: {
     active: { label: '正常', theme: 'success' },
@@ -17,9 +26,8 @@ export const statusMap = {
   },
   showcase: {
     published: { label: '已发布', theme: 'success' },
-    pending: { label: '待审核', theme: 'warning' },
-    rejected: { label: '已驳回', theme: 'danger' },
-    none: { label: '未提交', theme: 'default' },
+    rejected: { label: '治理下架', theme: 'danger' },
+    none: { label: '未发布', theme: 'default' },
   },
   application: {
     pending: { label: '待审核', theme: 'warning' },
@@ -31,6 +39,7 @@ export const statusMap = {
     pending_release: { label: '待发布', theme: 'primary' },
     scheduled: { label: '定时发布中', theme: 'primary' },
     published: { label: '已发布', theme: 'success' },
+    selected: { label: '已选定', theme: 'primary' },
     rejected: { label: '已驳回', theme: 'danger' },
     projected: { label: '已立项', theme: 'success' },
     closed: { label: '已关闭', theme: 'default' },
@@ -101,6 +110,7 @@ export const statusMap = {
     pending_release: { label: '待发布', theme: 'primary' },
     scheduled: { label: '定时发布中', theme: 'primary' },
     published: { label: '已发布', theme: 'success' },
+    closed: { label: '已关闭', theme: 'default' },
   },
   column: {
     enabled: { label: '启用', theme: 'success' },
@@ -121,12 +131,6 @@ export const applicationTypeMap: Record<string, { label: string; theme: 'default
   cooperation: { label: '企业合作', theme: 'primary' },
   identity: { label: '身份绑定', theme: 'primary' },
   exit: { label: '企业退驻', theme: 'warning' },
-}
-
-/* 展示页发布申请目标类型：企业 / 个人 */
-export const showcaseTargetTypeMap: Record<string, { label: string; theme: 'default' | 'primary' | 'success' | 'warning' | 'danger' }> = {
-  enterprise: { label: '企业展示页', theme: 'primary' },
-  individual: { label: '个人主页', theme: 'primary' },
 }
 
 /* 选项词汇表（页面统一取用，禁止自造文案） */

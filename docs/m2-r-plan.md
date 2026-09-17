@@ -1,6 +1,6 @@
 # 聚屿社区 · M2-R 接入期实施规划（/api/app/** 对齐）
 
-> 状态：**已立项（2026-09-16）**；**R0 已完成（2026-09-16：契约转正 + 实体扩展 + 迁移方案 + 开放问题定稿）**，下一步 R1。
+> 状态：**M2-R 必做范围及收尾复查整改已完成（2026-09-17）**。R0~R4、A6/A19 收口、默认 HTTP、38 套件 / 264 用例回归和此前 64 个移动端入口浏览器走查完成；可选项保留后置。验收明细见 [m2-r-closeout.md](./m2-r-closeout.md)。
 > 依据：`docs/api-app-design.md`（契约基线）、`docs/m2-client-plan.md` §7 缺口登记与 §7.7 交底表、`docs/wiki-backend.md` §4/§8、客户端 v43 Mock 现状（2026-09-16 代码调研）。
 > 本文是 M2-R 的**进度事实来源**：完成后端/API 与 admin 两张对齐表即完成 M2-R。`m2-client-plan.md` §7 仍是缺口登记总表，销号时两边同步勾选。
 
@@ -21,8 +21,8 @@
 | R1 | 鉴权底座与个人中心 + 站内信 | R0 | [√] 已完成（2026-09-16） |
 | R2 | 核心业务闭环（需求/项目/活动/商城/空间/内容/申请/首页/搜索） | R1 | [√] 已完成并通过独立验证（2026-09-16） |
 | R3 | 信任治理（实名/举报/屏蔽/邀请/转移/权限/名片/社区/协议） | R1（与 R2 可并行） | [√] 已完成并通过独立验证（2026-09-16） |
-| R4 | 延伸观测与切换（任务/看板/服务申请/企业工作台/实名分级/埋点 + http 切换 + 全量回归） | R2+R3 | [ ] 未开始 |
-| A-* | admin 面板对齐（§3.1 A1~A19，随对应 API 批次实施） | 各批次 | [ ] 未开始 |
+| R4 | 延伸观测与切换（任务/看板/服务申请/企业工作台/实名分级/埋点 + http 切换 + 全量回归） | R2+R3 | [√] 必做范围已完成；R4-7 可选后置 |
+| A-* | admin 面板对齐（§3.1 A1~A19，随对应 API 批次实施） | 各批次 | [√] 已完成；A6/A19 于 2026-09-17 补齐 |
 
 ## 1. 各端现状基线（2026-09-16 调研）
 
@@ -100,15 +100,15 @@
 
 | # | 工作项 | 实施要点（含缺口来源） | 验收 checklist |
 |---|---|---|---|
-| R4-1 | 积分任务中心（E4） | `PointsTask`（配置化：每日/一次性/条件任务）+ `UserTaskRecord`；`GET /me/tasks`（进度）+ `POST /me/tasks/:code/claim`（**领取幂等**、每日重置）；admin 配置联动 A16 | 领取幂等（并发/重复 409）；奖励入账流水可查 |
-| R4-2 | 个人看板（E5） | `GET /me/stats`（积分/经验/需求/响应/项目/活动/签到聚合口径） | 与流水/记录统计一致 |
-| R4-3 | 服务在线申请（E6） | `ServiceApplication` 模型 + `POST /service-applications` + `GET /me/service-applications`；受理流转（pending→accepted→processing→done/rejected）+ 回执 + 催办；admin 队列 A15 | 状态可回执；催办限频 |
-| R4-4 | 企业工作台（E7） | `GET /me/enterprise-workbench`（企业维度聚合：需求/响应/项目/成员统计）；代企业响应/投稿已在 R2-1/R2-8 支持（`asEnterpriseId`），本项做聚合视图与鉴权收口 | 权限与企业成员一致（仅成员/负责人可看） |
-| R4-5 | 实名分级权益校验收口（E8） | R3-1 权益规则在需求发布/活动报名/空间预约等写端点统一拦截（未实名限额） | 各写端点限额一致；文案统一 |
-| R4-6 | 埋点（§7.1-22 + B6） | `POST /analytics/events`（12 项口径：登录/注册/发布/响应/报名/签到/下单/投稿/预约/收藏/举报/搜索）；落库 `AnalyticsEvent`；admin 看板为可选项（§3.2） | 口径与客户端 12 项一致；高频写入不阻塞业务 |
-| R4-7 | 浏览历史同步（D7，可选） | `GET/POST /me/history`（增量上报/拉取/清空） | 多端合并正确；清空生效 |
-| R4-8 | 客户端切换前置修复 | §7.5 遗留 2 项：`fetchEvent` ended 绕过可见范围对齐服务端语义；`restoreSession`/`getCaptcha` http 分支接统一封装 | mock 模式行为不回归 |
-| R4-9 | **http 切换与全量回归** | `VITE_API_MODE=http` 全量切换；mock 快照停用；全量 app-* e2e + 既有 25 套件回归 + 移动端 Playwright 走查（64 页基线复用 v42 场景） | e2e 全绿；走查零控制台错误；mock 模式仍可切回（演示保留） |
+| R4-1 | 积分任务中心（E4） | ✅ `PointsTask`（配置化：每日/一次性/条件任务）+ `UserTaskRecord`；`GET /me/tasks`（进度）+ `POST /me/tasks/:code/claim`（**领取幂等**、每日重置）；admin 配置联动 A16 | ✅ 并发仅一次成功；领取与积分流水在同一事务 |
+| R4-2 | 个人看板（E5） | ✅ `GET /me/stats`（积分/经验/需求/响应/项目/活动/签到聚合口径） | ✅ 定向 e2e 与数据库聚合核对 |
+| R4-3 | 服务在线申请（E6） | ✅ `ServiceApplication` 模型 + 提交/我的申请/催办；admin A15 受理、派单、回执与状态机 | ✅ 状态回执可见；本人归属与每日催办限频已验证 |
+| R4-4 | 企业工作台（E7） | ✅ `GET /me/enterprise-workbench`（企业维度聚合：需求/响应/项目/成员统计）及兼容别名；企业成员状态鉴权收口 | ✅ 仅有效成员/负责人可看 |
+| R4-5 | 实名分级权益校验收口（E8） | ✅ 数据库权益规则及每日用量；需求发布/重提、投稿/重提、活动报名、空间预约同事务占用额度；admin A17 配置即时生效 | ✅ 并发不能突破，失败回滚额度；取消不返还 |
+| R4-6 | 埋点（§7.1-22 + B6） | ✅ 12 项枚举；11 项成功业务由全局拦截器旁路落库，搜索由客户端上报；不采集业务请求体，客户端上报失败不阻断交互 | ✅ 枚举/负载上限与业务自动落库已验证；管理看板仍为可选项 |
+| R4-7 | 浏览历史同步（D7，可选） | ⏸ 未实施，继续保留客户端本机历史 | 可选项，不阻塞 R4 核心交付 |
+| R4-8 | 客户端切换前置修复 | ✅ ended/cancelled 可见语义对齐；`restoreSession`/`getCaptcha` 已使用公共 HTTP 封装 | ✅ tsc/lint/build 通过，显式 mock 仍可构建 |
+| R4-9 | **http 切换与全量回归** | ✅ 默认 HTTP 且停用 mock 快照；收尾复查后 API 38 套件 / 264 用例全绿；三端检查与构建通过，复查复验 API/Admin | ✅ 此前 64 个入口加载走查 + 邀请/电子票/签到/访客页补测 + A6/A19 跨端交互；详见收口报告 |
 
 ### 2.6 Prisma 迁移清单汇总（R0 定稿，按批次执行）
 
@@ -163,6 +163,8 @@
 
 ### 3.1 必做项（A1~A19，随批次实施）
 
+> 2026-09-17 销号：A1~A5、A7~A18 已随 R2~R4 落地；A6 新增 `/member-governance` 双 Tab、冷静期后执行/驳回、实名人工复核、会话失效与审计；A19 新增 `/card-management`、`CardFieldConfig`、schema 下发与服务端白名单、移动端动态隐藏及部分更新。19 项必做范围销号，可选运营视图继续见 §3.2。
+
 | # | 面板项 | 实施要点 | 对应 API/批次 | 验收 checklist |
 |---|---|---|---|---|
 | A1 | 活动签到配置（§7.2-1，P0） | `EventFormDialog` + `EventPayload` 增场地坐标（经纬度手输）、签到半径、时间窗、取消时限字段；活动详情展示 | R2-4 | 配置后客户端签到围栏/时间窗生效 |
@@ -211,6 +213,8 @@
 
 ## 6. 修订记录
 
+2026-09-17 **最终收口及复查整改完成**：A6/A19 补齐；注销并发/撤回、隐私部分更新、举报恢复来源、展示姓名检索四项修复已验证。当前 72 模型 / 28 迁移 / 55 权限码；38 e2e 套件 / 264 用例、4 unit 套件 / 24 用例、admin UI contract 10 例通过，API/Admin 类型检查与构建、改动文件 lint 通过。此前三端类型检查与构建、移动 lint、64 入口 HTTP 加载走查及实名复核、注销驳回、名片字段配置跨端交互完成；本轮未重做浏览器检查。可选项后置。以下记录保留各批次当时的状态，最终状态以本段及 `m2-r-closeout.md` 为准。
+
 2026-09-16 举报处置规则补充（用户确认）：举报只入后台队列，不自动下架/冻结、不通知被举报人；工作人员可决定不调整、下架或处理账号。下架理由 `takedownReason` 选填，与反馈举报人的 `resolution` 分开，非空才给内容所属用户发站内信。文章与需求的主动下架入口同样支持该规则，不依赖举报。已完成 API/admin 类型检查与构建；临时数据库中 contents/demands 两套件通过，governance 补充用例修正必填测试参数后 5/5 通过，三个相关套件累计 23 例通过（非全量回归）。临时验证数据已清理，开发数据库未重置。
 
 | 日期 | 摘要 |
@@ -222,4 +226,5 @@
 | 2026-09-16 | **R2 独立验证通过（本次）**：①**迁移升级路径**——空库全量顺序升级 21 个 migration 全部成功（含 `ArticleComment`/`ApplicationFormConfig`），`migrate diff --from-migrations` 与 schema「No difference」；期间发现本地库因 `app_r2_core` 在被应用后又被编辑（校验和 2dd39131… ↔ 实际 574d1a5f…）而缺这 2 张表，已用 `migrate reset` 对齐（迁移文件本身正确，属本地库滞后；迁移尚未提交，编辑无扩散影响）。注：`app_r2_core`(092835) 时间戳早于 `app_r1_review_fixes`(093000)，空库回放顺序可行但语义顺序不直观，后续如需清理可重命名时间戳。②**全量 e2e**：32 套件 / 215 用例全绿（新增 `app-concurrency` 6 用例）。③**并发安全**（并发套件实证）：库存 1 商品 4 用户并发下单 → 仅 1 单成功、3 单 400 库存不足、库存 0/兑换数 1、仅 1 条扣分流水，无超卖；同用户 5 并发下单仅 1 单（Redis `acquireFlag` SET NX）；同用户 5 并发报名仅 1 条记录且 `dedupeKey=enroll:{uid}:{eventId}` 积分仅 1 条；4 并发签到仅 1 次生效、重复签到被拒、签到积分仅 1 条；容量 1 候补按序（先到先递补、后到仍候补）、两位已通过者并发取消时递补人数不超过释放名额。④**三端构建**：`build:api`/`build:admin`/`build:client-mobile` 全部成功，admin 与 client-mobile `tsc --noEmit`、client-mobile `lint` 全绿。⑤前一轮全量 e2e 曾出现 `users` 套件 1 次 503（`Can't reach database server`），单独复跑 11/11 通过、二次全量 215/215 通过，判定为本地 PG 瞬时连接抖动而非缺陷。 |
 | 2026-09-16 | **R3 整改复查**：补齐 admin 信任治理面板（举报处置、申诉复核、协议/政策版本管理）及 `/governance` RBAC；举报/收藏目标服务端校验；申诉记录与状态回写；企业八项成员权限在需求、响应、预约和投稿写端收口；屏蔽扩展至需求、文章、人才与企业；邀请/负责人转移增加并发约束；退驻纳入审核队列并回写企业状态；注册留存已发布协议版本。本轮已完成迁移、三端静态检查和构建，定向 e2e 由独立 agent 后续复跑，不能宣称全量用例已通过。 |
 | 2026-09-16 | **R3 整改独立验证通过（本次）**：①**迁移升级路径**——独立临时库空库回放 25 个 migration 全部成功、`migrate diff --from-migrations` 与 schema「empty migration」（零差异）、两次 seed 幂等且 Policy=5 正确。期间发现**主库缺 `Appeal` 表**（`app_r3_trust` 在复查补充 Appeal 模型前已应用于主库，`migrate status` 报 up-to-date 但物理表缺失 → 申诉 500 P2021），已 `migrate reset` 对齐，25 迁移重放 + seed 后新表齐全；这也说明复查新增的模型字段确实需要通过完整迁移对齐运行库。②**全量 e2e**：35 套件 / 239 用例全部通过（新增 `governance` 4 用例：举报处置 hide→需求下架/重复 409/user 冻结与恢复 restore、申诉写入 Appeal→复核 accepted 回 pending/rejected 分支保持、退驻审核 approve→企业 exited+展示 none、注册协议版本实际留痕）。期间修正：`system` 套件三处保存/校验 payload 补 `realnameRequired`（DTO 必填）；`app-trust` 收藏断言改为服务端快照标题（复查后标题由服务端生成）。③**seed 清理段补齐**：`Favorite`/`RestockSubscribe`/`EventFeedback` 无 FK、不随主表级联，此前未清理导致收藏跨 reseed 残留（单各自套件复现 toggle 幂等断言与真实状态翻转），已按顺序补 `deleteMany`。④多轮全量 e2e 中 `app-enterprises`/`app-me`/`app-concurrency` 曾有套件级 beforeAll 失败（`fetchAppCaptcha` 取不到 captchaId），单独复跑 25/25 全绿，与 R2 验证时 `users` 503 同因，判定为验证码请求瞬时抖动而非缺陷。⑤`build:api` 与 API `tsc --noEmit` 复核通过（admin/client-mobile 构建由复查方已验证）。 |
+| 2026-09-17 | **R4 核心实施与 API 回归**：新增 PointsTask/UserTaskRecord/ServiceApplication/AnalyticsEvent/RightsRule/RightsUsage，schema 达 71 模型 / 26 迁移；任务领取、服务办理、个人/企业聚合、权益额度、12 项埋点及 admin A15~A17 落地；移动端默认 HTTP，mock 仅显式启用。隔离临时库从空库回放 26 个迁移成功，API e2e 36 套件 / 246 用例全绿，三端静态检查/构建与 admin UI contract 10/10 通过。修复 e2e 套件共享验证码限流窗口导致的误失败，仅测试重种子清理限流键。R4-7 浏览历史同步为可选项暂缓，R4-9 的 64 页 Playwright 走查未执行，因此不宣称 R4 完整验收。 |
 | 2026-09-16 | **举报恢复流（用户拍板）**：内容类目标（需求/文章/企业）此前被 hide 后因目标校验无法再次成为举报对象，restore 仅对 user/comment 可达。本次落地「恢复动作不依赖新举报」——`governance.reviewReport` 对已处置（resolved）举报开放重开 review 流：请求 `action=restore` 时直接在事务内恢复对象（demand rejected→published、article withdrawn→published、enterprise rejected→published、user frozen→active），举报记录状态保持不变并记审计「恢复举报对象」；非 restore 动作对已处置举报仍 409；对象已恢复后再次恢复 409（条件更新 0 命中）。admin 治理面板「举报处置」列表对 resolved 且非 comment 目标提供「恢复对象」二次确认入口。`governance` e2e 扩展断言：恢复流 200 + 对象回 published + 重复恢复 409 + 非 restore 409。API/admin tsc、`build:api` 与治理套件全绿。 |

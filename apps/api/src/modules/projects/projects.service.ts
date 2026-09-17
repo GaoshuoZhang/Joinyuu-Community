@@ -482,11 +482,11 @@ export class ProjectsService {
           const enterprise = await tx.enterprise.findUnique({ where: { id: p.refId } })
           if (!enterprise) continue
           const balance = enterprise.experience + amount
-          const level = this.resolveLevel(tiers, balance)
+          const level = this.resolveLevel(tiers.filter(t => t.identityType === 'community_enterprise'), balance)
           await tx.enterprise.update({ where: { id: p.refId }, data: { experience: balance } })
           await tx.userIdentity.updateMany({
             where: { type: 'community_enterprise', enterpriseId: p.refId },
-            data: { level },
+            data: { experience: balance, level },
           })
           await tx.experienceRecord.create({
             data: {
@@ -507,7 +507,7 @@ export class ProjectsService {
           })
           if (!identity) continue
           const balance = (identity.experience ?? 0) + amount
-          const level = this.resolveLevel(tiers, balance)
+          const level = this.resolveLevel(tiers.filter(t => t.identityType === 'community_individual'), balance)
           await tx.userIdentity.update({
             where: { id: identity.id },
             data: { experience: balance, level },

@@ -397,10 +397,10 @@ function onClose() {
 
       <div class="form-row">
         <t-form-item label="场地纬度" name="venueLat">
-          <t-input v-model="form.venueLat" placeholder="如 30.2741；留空不校验位置" />
+          <t-input v-model="form.venueLat" placeholder="如 30.2741；留空不校验位置…" />
         </t-form-item>
         <t-form-item label="场地经度" name="venueLng">
-          <t-input v-model="form.venueLng" placeholder="如 120.1551；留空不校验位置" />
+          <t-input v-model="form.venueLng" placeholder="如 120.1551；留空不校验位置…" />
         </t-form-item>
       </div>
       <div class="form-row">

@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
-import { Button, DialogPlugin, Toast } from 'tdesign-mobile-vue'
+import { Button, DialogPlugin, Icon, Toast } from 'tdesign-mobile-vue'
 import { fetchMyResponses, withdrawDemandResponse } from '@/api/demands'
 import { useAsyncList } from '@/composables/useAsyncList'
 import EmptyBlock from '@/components/shared/EmptyBlock.vue'
@@ -51,7 +51,7 @@ function onWithdraw(item: MyResponseItem) {
           <StateTag kind="demand" :value="r.status === 'accepted' ? 'projected' : (r.status ?? 'pending')" />
           <span v-if="r.rejectReason">{{ r.rejectReason }}</span>
         </p>
-        <a class="chat-link" v-pressable @click.stop="router.push(`/demands/${r.demandId}/messages`)">沟通 ›</a>
+        <a class="chat-link" v-pressable @click.stop="router.push(`/demands/${r.demandId}/messages`)">沟通<Icon name="chevron-right" size="12px" /></a>
         <div v-if="(r.status ?? 'pending') === 'pending'" class="row-actions">
           <Button size="small" variant="outline" @click.stop="onWithdraw(r)">撤回响应</Button>
         </div>
@@ -81,7 +81,9 @@ function onWithdraw(item: MyResponseItem) {
 }
 
 .chat-link {
-  display: inline-block;
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
   margin-top: 6px;
   min-height: 32px;
   font-size: 13px;

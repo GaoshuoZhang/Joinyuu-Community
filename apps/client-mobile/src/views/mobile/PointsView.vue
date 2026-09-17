@@ -77,12 +77,11 @@ function loadMore() {
   <div class="page-fade-in points">
     <div class="balance-card">
       <span class="label">当前积分</span>
-      <b class="value">{{ auth.points.toLocaleString('zh-CN') }}</b>
+      <b class="value tabular-nums">{{ auth.points.toLocaleString('zh-CN') }}</b>
     </div>
 
     <Button theme="primary" variant="outline" block class="mall-link" @click="router.push('/mall')">去积分商城兑换</Button>
     <div class="quick-links">
-      <Button size="small" variant="text" @click="router.push('/me/tasks')">任务中心</Button>
       <Button size="small" variant="text" @click="router.push('/mall/rules')">积分规则</Button>
     </div>
 

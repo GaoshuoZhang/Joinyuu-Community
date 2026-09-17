@@ -139,7 +139,7 @@ describe('M2-R R3 信任治理闭环（admin 处置/复核/退驻/协议留痕�
     expect(frozen?.status).toBe('frozen')
     expect(frozen?.frozenReason).toContain('刷评')
 
-    // 用户目标可再次举报（无发布状态依赖）→ restore 解冻
+    // 新举报不能恢复其他举报或工作人员的冻结；恢复必须绑定原处置。
     const reportUser2 = await appPost(app, reporter, '/api/app/reports', {
       targetType: 'user',
       targetId: 'U1015',
@@ -158,7 +158,12 @@ describe('M2-R R3 信任治理闭环（admin 处置/复核/退驻/协议留痕�
       .post(`/api/admin/governance/reports/${userReport2.id}/review`)
       .set('Authorization', `Bearer ${admin}`)
       .send({ status: 'resolved', resolution: '经复核误报，恢复账号', action: 'restore' })
-    expect(restore.status).toBe(200)
+    expect(restore.status).toBe(409)
+    const originalRestore = await request(app.getHttpServer())
+      .post(`/api/admin/governance/reports/${userReport.id}/review`)
+      .set('Authorization', `Bearer ${admin}`)
+      .send({ status: 'resolved', resolution: '经复核误报，恢复账号', action: 'restore' })
+    expect(originalRestore.status).toBe(200)
     const restored = await prisma.user.findUnique({ where: { uid: 'U1015' } })
     expect(restored?.status).toBe('active')
     expect(restored?.frozenReason).toBeNull()
@@ -202,10 +207,49 @@ describe('M2-R R3 信任治理闭环（admin 处置/复核/退驻/协议留痕�
     expect(await articleNotices()).toBe(articleBefore)
     const withdraw = (body: object) => request(app.getHttpServer()).post(`/api/admin/contents/articles/${article.id}/withdraw`).set('Authorization', `Bearer ${admin}`).send(body)
     expect((await withdraw({})).status).toBe(200)
+    expect((await prisma.article.findUniqueOrThrow({ where: { id: article.id } })).status).toBe('closed')
     expect(await articleNotices()).toBe(articleBefore)
-    expect((await request(app.getHttpServer()).post(`/api/admin/contents/articles/${article.id}/publish`).set('Authorization', `Bearer ${admin}`)).status).toBe(200)
+    expect((await request(app.getHttpServer()).post(`/api/admin/contents/articles/${article.id}/restore`).set('Authorization', `Bearer ${admin}`)).status).toBe(200)
     expect((await withdraw({ takedownReason: '资料已过期，请更新' })).status).toBe(200)
     expect(await articleNotices()).toBe(articleBefore + 1)
+  })
+
+  it('文章举报下架使用 closed，并将举报下架记录与恢复信息写入详情', async () => {
+    const article = await prisma.article.findFirstOrThrow({ where: { status: 'published', deletedAt: null } })
+    expect((await appPost(app, reporter, '/api/app/reports', {
+      targetType: 'article',
+      targetId: article.id,
+      targetTitle: article.title,
+      reason: '举报治理下架测试',
+    })).status).toBe(200)
+    const report = await prisma.report.findFirstOrThrow({ where: { targetId: article.id, status: 'pending' } })
+    const review = (action: 'hide' | 'restore') => request(app.getHttpServer())
+      .post(`/api/admin/governance/reports/${report.id}/review`)
+      .set('Authorization', `Bearer ${admin}`)
+      .send({ status: 'resolved', action, resolution: action === 'hide' ? '确认违规' : '复核恢复', takedownReason: '治理下架原因' })
+
+    expect((await review('hide')).status).toBe(200)
+    expect((await prisma.article.findUniqueOrThrow({ where: { id: article.id } })).status).toBe('closed')
+    const hiddenDetail = await request(app.getHttpServer())
+      .get(`/api/admin/contents/articles/${article.id}`)
+      .set('Authorization', `Bearer ${admin}`)
+    expect(hiddenDetail.body.data.takedowns[0]).toEqual(expect.objectContaining({
+      source: 'governance',
+      reportId: report.id,
+      reason: '治理下架原因',
+      restoredAt: null,
+    }))
+
+    expect((await review('restore')).status).toBe(200)
+    expect((await prisma.article.findUniqueOrThrow({ where: { id: article.id } })).status).toBe('published')
+    const restoredDetail = await request(app.getHttpServer())
+      .get(`/api/admin/contents/articles/${article.id}`)
+      .set('Authorization', `Bearer ${admin}`)
+    expect(restoredDetail.body.data.takedowns[0]).toEqual(expect.objectContaining({
+      reportId: report.id,
+      restoredAt: expect.any(String),
+      restoredBy: expect.any(String),
+    }))
   })
 
   it('申诉复核：被驳回需求 → 申诉写入 Appeal → 复核通过回 pending；重复申诉/复核 409；驳回分支保持 rejected', async () => {

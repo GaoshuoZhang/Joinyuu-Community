@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
-import { Button, Toast } from 'tdesign-mobile-vue'
+import { Button, Icon, Toast } from 'tdesign-mobile-vue'
 import { cancelEnrollment, fetchMyEnrollments } from '@/api/events'
 import { useAsyncList } from '@/composables/useAsyncList'
 import EmptyBlock from '@/components/shared/EmptyBlock.vue'
@@ -60,10 +60,10 @@ async function doCancel(item: MyEnrollmentItem) {
       <p class="list-count">共 {{ (data ?? []).length }} 条报名</p>
       <div v-for="item in data" :key="item.id" class="m-card">
         <div class="row">
-          <a class="title" @click="router.push(`/events/${item.eventId}`)">{{ item.eventTitle }}</a>
+          <a class="title" v-pressable @click="router.push(`/events/${item.eventId}`)">{{ item.eventTitle }}</a>
           <StateTag kind="enroll" :value="item.status" />
         </div>
-        <p class="meta">🕐 {{ item.startTime }} · 📍 {{ item.location }}</p>
+        <p class="meta"><Icon name="time" size="14px" />{{ item.startTime }} · <Icon name="location" size="14px" />{{ item.location }}</p>
         <p v-if="item.status === 'waitlisted'" class="waitlist-note">
           候补中{{ item.waitlistOrder ? `（第 ${item.waitlistOrder} 位）` : '' }}，有空位将自动递补并通知你
         </p>
@@ -72,9 +72,9 @@ async function doCancel(item: MyEnrollmentItem) {
         <p v-if="item.rejectReason" class="reject-reason">驳回原因：{{ item.rejectReason }}</p>
         <div class="ops">
           <span v-if="item.checkedIn" class="checked">已签到</span>
-          <a v-else-if="item.status === 'approved'" class="checkin-link" v-pressable @click="router.push(`/events/${item.eventId}/check-in`)">去签到 ›</a>
+          <a v-else-if="item.status === 'approved'" class="checkin-link" v-pressable @click="router.push(`/events/${item.eventId}/check-in`)">去签到<Icon name="chevron-right" size="12px" /></a>
           <span v-else class="placeholder" />
-          <a v-if="item.status === 'approved' || item.checkedIn" class="checkin-link" v-pressable @click="router.push(`/events/${item.eventId}/ticket`)">电子票 ›</a>
+          <a v-if="item.status === 'approved' || item.checkedIn" class="checkin-link" v-pressable @click="router.push(`/events/${item.eventId}/ticket`)">电子票<Icon name="chevron-right" size="12px" /></a>
           <Button
             v-if="canCancel(item)"
             theme="danger"
@@ -90,7 +90,7 @@ async function doCancel(item: MyEnrollmentItem) {
     </template>
     <template v-else>
       <EmptyBlock text="暂无报名记录" />
-      <Button theme="primary" class="go-events" @click="router.push('/events')">去看看活动 ›</Button>
+      <Button theme="primary" class="go-events" @click="router.push('/events')">去看看活动<template #suffix><Icon name="chevron-right" size="14px" /></template></Button>
     </template>
   </div>
 </template>
@@ -131,6 +131,9 @@ async function doCancel(item: MyEnrollmentItem) {
 }
 
 .meta {
+  display: flex;
+  align-items: center;
+  gap: 4px;
   margin: 0 0 12px;
   font-size: 12px;
   color: var(--td-text-color-secondary);
@@ -167,6 +170,9 @@ async function doCancel(item: MyEnrollmentItem) {
 }
 
 .checkin-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
   font-size: 12px;
   color: var(--td-brand-color);
   cursor: pointer;

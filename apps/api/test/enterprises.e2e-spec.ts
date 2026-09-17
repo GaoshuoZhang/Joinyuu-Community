@@ -86,35 +86,6 @@ describe('M1-B 社区企业（enterprises）', () => {
     )
   })
 
-  it('PATCH showcase-status 驳回缺原因返回 400「请填写驳回原因」', async () => {
-    const res = await request(app.getHttpServer())
-      .patch('/api/admin/enterprises/E2001/showcase-status')
-      .set('Authorization', `Bearer ${token}`)
-      .send({ status: 'rejected' })
-    expect(res.status).toBe(400)
-    expect(res.body.message).toBe('请填写驳回原因')
-  })
-
-  it('PATCH showcase-status 审核流转（pending → published → 恢复 pending）', async () => {
-    const publish = await request(app.getHttpServer())
-      .patch('/api/admin/enterprises/E2004/showcase-status')
-      .set('Authorization', `Bearer ${token}`)
-      .send({ status: 'published' })
-    expect(publish.status).toBe(200)
-    expect(publish.body).toEqual({ code: 0, data: { code: 0 } })
-
-    const detail = await request(app.getHttpServer())
-      .get('/api/admin/enterprises/E2004')
-      .set('Authorization', `Bearer ${token}`)
-    expect(detail.body.data.enterprise.showcaseStatus).toBe('published')
-
-    const restore = await request(app.getHttpServer())
-      .patch('/api/admin/enterprises/E2004/showcase-status')
-      .set('Authorization', `Bearer ${token}`)
-      .send({ status: 'pending' })
-    expect(restore.status).toBe(200)
-  })
-
   /* ---------- M1.5 CRUD ---------- */
 
   it('POST /api/admin/enterprises 新增企业（E 前缀、正常态、展示页未提交）', async () => {

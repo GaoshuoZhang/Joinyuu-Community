@@ -70,6 +70,13 @@ onMounted(async () => {
   }
 })
 
+/* 响应积分标签配色：与积分规则默认值比较 —— 相等绿色、低于红色、高于橙色 */
+function respondPointsTheme(row: Demand): 'success' | 'danger' | 'warning' {
+  const value = row.respondPoints ?? rulePoints.value.respond
+  if (value === rulePoints.value.respond) return 'success'
+  return value < rulePoints.value.respond ? 'danger' : 'warning'
+}
+
 /* 代报名弹窗：管理员代成员响应需求（published / projected 可用）。
  * 报名方选择器 = 注册个人用户/企业 + 未注册自建（creatable），选中已注册自动填充联系电话 */
 const proxyVisible = ref(false)
@@ -214,6 +221,7 @@ const statusOptions = [
   { label: '待发布', value: 'pending_release' },
   { label: '定时发布中', value: 'scheduled' },
   { label: '已发布', value: 'published' },
+  { label: '已选定', value: 'selected' },
   { label: '已驳回', value: 'rejected' },
   { label: '已立项', value: 'projected' },
   { label: '已关闭', value: 'closed' },
@@ -743,8 +751,9 @@ onMounted(() => {
         <template #respondents="{ row }">
           <div class="stack-cell">
             <span>{{ row.respondents.length }}</span>
+            <!-- 标签色：等于积分规则默认值=绿色；低于=红色；高于=橙色 -->
             <t-tag
-              :theme="row.respondPoints != null ? 'warning' : 'success'"
+              :theme="respondPointsTheme(row)"
               variant="light"
               size="small"
               class="pts-tag"
@@ -787,6 +796,16 @@ onMounted(() => {
               </t-popconfirm>
               <t-button variant="text" size="small" @click="openSchedule(row)">定时发布</t-button>
             </template>
+            <!-- 已选定：发布者已选择意向承接方，等待管理员手动立项 -->
+            <t-button
+              v-if="row.status === 'selected'"
+              variant="text"
+              size="small"
+              theme="primary"
+              @click="openProject(row)"
+            >
+              立项
+            </t-button>
             <!-- 已发布：立项 / 撤回发布 / 关闭 / 代报名（关闭后） -->
             <template v-if="row.status === 'published'">
               <t-button variant="text" size="small" theme="primary" @click="openProject(row)">立项</t-button>

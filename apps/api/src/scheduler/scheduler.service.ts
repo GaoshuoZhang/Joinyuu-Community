@@ -4,6 +4,7 @@ import { PrismaService } from '../common/prisma/prisma.service'
 import { IdGeneratorService } from '../common/id-generator/id-generator.service'
 import { TrashService } from '../modules/system/trash/trash.service'
 import { formatNow, formatNowSec, formatToday } from '../common/utils/time'
+import { PointsEngineService } from '../common/engine/points-engine/points-engine.service'
 
 export interface SchedulerJobInfo {
   name: string
@@ -27,6 +28,7 @@ export class SchedulerService {
     private readonly prisma: PrismaService,
     private readonly ids: IdGeneratorService,
     private readonly trash: TrashService,
+    private readonly points: PointsEngineService,
   ) {}
 
   /** 任务注册表（监控页展示 + 手动触发入口） */
@@ -157,6 +159,7 @@ export class SchedulerService {
       }
 
       for (const d of demands) {
+        await this.points.issuePointsInTransaction(tx, d.publisherId, 'demand_published', '需求定时发布', `demand_published:${d.id}`)
         await tx.adminNotification.create({
           data: {
             id: await this.ids.next('N'),
@@ -200,6 +203,9 @@ export class SchedulerService {
         data: { status: 'published', publishedAt: now },
       })
       for (const a of articles) {
+        if (a.channel === 'submitted' && a.authorId) {
+          await this.points.issuePointsInTransaction(tx, a.authorId, 'article_accepted', '投稿定时发布', `article_accepted:${a.id}`)
+        }
         await tx.adminNotification.create({
           data: {
             id: await this.ids.next('N'),

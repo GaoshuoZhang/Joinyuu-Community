@@ -1,4 +1,15 @@
-import { IsArray, IsOptional, IsString, MaxLength } from 'class-validator'
+import { IsArray, IsBoolean, IsObject, IsOptional, IsString, MaxLength, ValidateIf, ValidateNested } from 'class-validator'
+import { Type } from 'class-transformer'
+
+export class IndividualCardVisibilityDto {
+  @ValidateIf((_object, value) => value !== undefined)
+  @IsBoolean()
+  age?: boolean
+
+  @ValidateIf((_object, value) => value !== undefined)
+  @IsBoolean()
+  politicalStatus?: boolean
+}
 
 /** 个人名片分段：教育经历 */
 export interface IndividualEducationSegment {
@@ -38,6 +49,11 @@ export interface IndividualLinkSegment {
 
 /** 个人名片保存入参（Q8 决：免审保存即公开；age 为字符串入参，服务端解析为整数存储） */
 export class UpdateIndividualCardDto {
+  @IsOptional()
+  @IsString()
+  @MaxLength(64, { message: '展示姓名过长' })
+  displayName?: string
+
   @IsOptional()
   @IsString()
   @MaxLength(500, { message: '个人简介过长' })
@@ -86,7 +102,10 @@ export class UpdateIndividualCardDto {
   @IsArray()
   customLinks?: IndividualLinkSegment[]
 
-  /** 隐私开关（age/politicalStatus 是否公开；缺省视为全部公开） */
-  @IsOptional()
-  visibility?: { age?: boolean; politicalStatus?: boolean }
+  /** 隐私开关：只更新显式传入的字段，省略时保留原设置。 */
+  @ValidateIf((_object, value) => value !== undefined)
+  @IsObject()
+  @ValidateNested()
+  @Type(() => IndividualCardVisibilityDto)
+  visibility?: IndividualCardVisibilityDto
 }

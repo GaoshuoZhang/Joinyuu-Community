@@ -121,13 +121,3 @@ export class ExitApplicationDto {
   @MaxLength(500, { message: '退驻原因过长' })
   reason?: string
 }
-
-/** 企业名片发布申请入参（需 edit_card 权限；→ 管理端审核联动 showcaseStatus） */
-export class ShowcaseRequestDto {
-  @IsString()
-  enterpriseId!: string
-
-  @IsString()
-  @MaxLength(255, { message: '申请说明过长' })
-  note!: string
-}

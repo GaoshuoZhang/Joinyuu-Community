@@ -46,8 +46,8 @@ const tabs = useTabsStore()
 const theme = useThemeStore()
 
 /* RBAC：分组至少含一个可见菜单项、且数据范围放行该域时才渲染（避免空分组标题） */
-function canSee(codes: string[], group: string): boolean {
-  if (!scopeAllowsGroup(auth.dataScope, auth.permissions, group)) return false
+function canSee(codes: string[], group: string, scopeDomain?: string): boolean {
+  if (!scopeAllowsGroup(auth.dataScope, auth.permissions, group, scopeDomain)) return false
   return codes.some((code) => auth.hasPerm(code))
 }
 
@@ -306,7 +306,7 @@ async function handleDropdown(item: { value?: string | number }) {
             工作台
           </t-menu-item>
 
-          <t-submenu v-if="canSee(['/users', '/individuals', '/enterprises', '/external-enterprises', '/approvals'], '社区成员')" value="group-members" title="社区成员">
+          <t-submenu v-if="canSee(['/users', '/individuals', '/enterprises', '/external-enterprises', '/approvals', '/card-management'], '社区成员')" value="group-members" title="社区成员">
             <template #icon><UserCircleIcon /></template>
             <t-menu-item value="/users" v-permission="'/users'">
               <template #icon><UserListIcon /></template>
@@ -328,10 +328,7 @@ async function handleDropdown(item: { value?: string | number }) {
               <template #icon><CheckCircleIcon /></template>
               申请审核
             </t-menu-item>
-            <t-menu-item value="/application-form-config" v-permission="'/approvals'">
-              <template #icon><CheckCircleIcon /></template>
-              申请表单配置
-            </t-menu-item>
+            <t-menu-item value="/card-management" v-permission="'/card-management'"><template #icon><UserListIcon /></template>名片管理</t-menu-item>
           </t-submenu>
 
           <t-submenu v-if="canSee(['/demands', '/demands/review', '/projects', '/events'], '业务运营')" value="group-biz" title="业务运营">
@@ -383,7 +380,7 @@ async function handleDropdown(item: { value?: string | number }) {
           </t-submenu>
 
           <t-submenu
-            v-if="canSee(['/contents/publish', '/contents/submissions', '/contents/columns', '/contents/stats', '/contents/showcase', '/contents/announcements'], '内容管理')"
+            v-if="canSee(['/contents/publish', '/contents/submissions', '/contents/columns', '/contents/stats', '/contents/policies', '/contents/banners', '/contents/announcements'], '内容管理')"
             value="group-contents"
             title="内容管理"
           >
@@ -404,9 +401,13 @@ async function handleDropdown(item: { value?: string | number }) {
               <template #icon><AppIcon /></template>
               阅读统计
             </t-menu-item>
-            <t-menu-item value="/contents/showcase" v-permission="'/contents/showcase'">
+            <t-menu-item value="/contents/policies" v-permission="'/contents/policies'">
               <template #icon><ViewListIcon /></template>
-              展示页发布
+              社区政策
+            </t-menu-item>
+            <t-menu-item value="/contents/banners" v-permission="'/contents/banners'">
+              <template #icon><ViewModuleIcon /></template>
+              轮播图管理
             </t-menu-item>
             <t-menu-item value="/contents/announcements" v-permission="'/contents/announcements'">
               <template #icon><NotificationIcon /></template>
@@ -414,7 +415,7 @@ async function handleDropdown(item: { value?: string | number }) {
             </t-menu-item>
           </t-submenu>
 
-          <t-submenu v-if="canSee(['/mall/goods', '/mall/orders'], '积分管理')" value="group-points" title="积分管理">
+          <t-submenu v-if="canSee(['/mall/goods', '/mall/orders'], '积分管理')" value="group-points" title="积分商城">
             <template #icon><CartIcon /></template>
             <t-menu-item value="/mall/goods" v-permission="'/mall/goods'">
               <template #icon><CartIcon /></template>
@@ -427,7 +428,7 @@ async function handleDropdown(item: { value?: string | number }) {
           </t-submenu>
 
           <t-submenu
-            v-if="canSee(['/rules/points', '/rules/experience', '/rules/levels', '/rules/ledger', '/rules/experience-records'], '规则管理')"
+            v-if="canSee(['/rules/points', '/rules/experience', '/rules/levels', '/rules/publishing-limits'], '规则管理')"
             value="group-rules"
             title="规则管理"
           >
@@ -444,18 +445,14 @@ async function handleDropdown(item: { value?: string | number }) {
               <template #icon><ViewModuleIcon /></template>
               等级规则
             </t-menu-item>
-            <t-menu-item value="/rules/ledger" v-permission="'/rules/ledger'">
-              <template #icon><AppIcon /></template>
-              积分发放记录
-            </t-menu-item>
-            <t-menu-item value="/rules/experience-records" v-permission="'/rules/experience-records'">
-              <template #icon><ViewListIcon /></template>
-              经验值发放记录
+            <t-menu-item value="/rules/publishing-limits" v-permission="'/rules/publishing-limits'">
+              <template #icon><SettingIcon /></template>
+              发布限制
             </t-menu-item>
           </t-submenu>
 
           <t-submenu
-            v-if="canSee(['/system/dicts', '/system/config', '/logs/audit', '/logs/login', '/system/roles', '/system/admins', '/system/sessions', '/system/assets', '/system/monitor', '/system/trash', '/governance'], '系统管理')"
+            v-if="canSee(['/system/dicts', '/system/config', '/logs/audit', '/logs/login', '/system/roles', '/system/admins', '/system/sessions', '/system/assets', '/system/monitor', '/system/trash', '/governance', '/system/policies'], '系统管理') || canSee(['/approvals', '/member-governance'], '系统管理', 'members')"
             value="group-system"
             title="系统管理"
           >
@@ -468,6 +465,12 @@ async function handleDropdown(item: { value?: string | number }) {
               <template #icon><SettingIcon /></template>
               系统配置
             </t-menu-item>
+            <t-menu-item v-if="canSee(['/approvals'], '系统管理', 'members')" value="/system/application-form-config" v-permission="'/approvals'">
+              <template #icon><CheckCircleIcon /></template>
+              申请表单配置
+            </t-menu-item>
+            <t-menu-item v-if="canSee(['/member-governance'], '系统管理', 'members')" value="/system/deletion-requests" v-permission="'/member-governance'"><template #icon><CheckCircleIcon /></template>注销工单</t-menu-item>
+            <t-menu-item v-if="canSee(['/member-governance'], '系统管理', 'members')" value="/system/realname-reviews" v-permission="'/member-governance'"><template #icon><UserListIcon /></template>实名复核</t-menu-item>
             <t-menu-item value="/system/logs" v-permission="['/logs/audit', '/logs/login']">
               <template #icon><ViewListIcon /></template>
               日志与审计
@@ -490,8 +493,9 @@ async function handleDropdown(item: { value?: string | number }) {
             </t-menu-item>
             <t-menu-item value="/system/governance" v-permission="'/governance'">
               <template #icon><CheckCircleIcon /></template>
-              信任治理
+              举报与申诉
             </t-menu-item>
+            <t-menu-item value="/system/policies" v-permission="'/system/policies'"><template #icon><Edit2Icon /></template>协议与政策</t-menu-item>
           </t-submenu>
         </t-menu>
       </div>

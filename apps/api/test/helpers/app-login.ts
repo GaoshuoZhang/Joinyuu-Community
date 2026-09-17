@@ -13,7 +13,7 @@ export function decodeAppCaptcha(image: string): string {
 export async function fetchAppCaptcha(
   app: INestApplication,
 ): Promise<{ captchaId: string; captchaCode: string }> {
-  const res = await request(app.getHttpServer()).get('/api/app/auth/captcha')
+  const res = await request(app.getHttpServer()).get('/api/app/auth/captcha').expect(200)
   return { captchaId: res.body.data.captchaId, captchaCode: decodeAppCaptcha(res.body.data.image) }
 }
 

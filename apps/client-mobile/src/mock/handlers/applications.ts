@@ -70,10 +70,13 @@ function normalizeApplication(uid: string, payload: ApplicationCreatePayload): {
     const nameField = schema.fields.find((f) => ['companyName', 'orgName', 'realName'].includes(f.key))
     const nameValue = nameField ? String(fields[nameField.key] ?? '').trim() : ''
     targetName = nameValue || label
-  } else if (payload.type === 'identity') {
-    if (payload.identityType !== 'community_individual' && payload.identityType !== 'community_enterprise') fail(400, '请选择要绑定的身份类型')
-    if (payload.identityType === 'community_enterprise' && !payload.organizationName?.trim()) fail(400, '请填写要绑定的社区企业名称')
-    targetName = payload.identityType === 'community_enterprise' ? `${payload.organizationName!.trim()} · 社区企业身份绑定` : '社区个体身份绑定'
+  }
+  if (payload.type === 'identity') {
+    const identityType = payload.identityType ?? payload.fields?.identityType
+    const organizationName = payload.organizationName?.trim() || String(payload.fields?.orgName ?? '').trim()
+    if (identityType !== 'community_individual' && identityType !== 'community_enterprise') fail(400, '请选择要绑定的身份类型')
+    if (identityType === 'community_enterprise' && !organizationName) fail(400, '请填写要绑定的社区企业名称')
+    targetName = identityType === 'community_enterprise' ? `${organizationName} · 社区企业身份绑定` : '社区个体身份绑定'
   }
 
   const mine = (applicationsByUid[uid] ??= [])

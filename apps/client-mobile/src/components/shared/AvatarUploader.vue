@@ -1,11 +1,12 @@
 <script setup lang="ts">
 import { ref } from 'vue'
-import { Avatar, Toast } from 'tdesign-mobile-vue'
+import { Avatar, Toast, Upload } from 'tdesign-mobile-vue'
+import type { UploadFile } from 'tdesign-mobile-vue'
 import { uploadFile } from '@/api/uploads'
 import { ApiError } from '@/api/http'
 
-/* 点击头像/Logo 直接上传替换（隐藏 file input）；成功后 emit 新图片地址。
- * 个人头像（圆形）与企业 Logo（方形）共用。 */
+/* 头像/Logo 上传：TDesign Upload 单图（addContent 插槽渲染头像触发区，requestMethod 走业务上传）。
+ * 个人头像（圆形）与企业 Logo（方形）共用；成功后 emit 新图片地址。 */
 const props = withDefaults(
   defineProps<{
     image?: string
@@ -22,70 +23,93 @@ const props = withDefaults(
 
 const emit = defineEmits<{ (e: 'update:image', url: string): void }>()
 
-const inputRef = ref<HTMLInputElement | null>(null)
+const files = ref<UploadFile[]>([])
 const uploading = ref(false)
 
-function pick() {
-  inputRef.value?.click()
-}
-
-async function onChange(event: Event) {
-  const input = event.target as HTMLInputElement
-  const file = input.files?.[0]
-  input.value = ''
-  if (!file) return
-  if (!file.type.startsWith('image/')) {
-    Toast('请选择图片文件')
-    return
-  }
-  if (file.size > 5 * 1024 * 1024) {
-    Toast('图片不能超过 5MB')
-    return
-  }
+async function requestUpload(file: UploadFile | UploadFile[]) {
+  const target = Array.isArray(file) ? file[0] : file
+  const raw = target?.raw as File | undefined
+  if (!raw) return { status: 'fail' as const, error: '文件读取失败，请重试', response: {} }
   uploading.value = true
   try {
-    const info = await uploadFile(file, props.bizType)
+    const info = await uploadFile(raw, props.bizType)
     emit('update:image', info.url)
-    Toast('上传成功')
+    return { status: 'success' as const, response: { url: info.url } }
   } catch (e) {
-    Toast(e instanceof ApiError ? e.message : '上传失败，请重试')
+    const message = e instanceof ApiError ? e.message : '上传失败，请重试'
+    return { status: 'fail' as const, error: message, response: { error: message } }
   } finally {
     uploading.value = false
   }
 }
+
+function onFail(context: { response?: { error?: string } }) {
+  files.value = []
+  Toast(context.response?.error ?? '上传失败，请重试')
+}
+
+function onValidate(context: { type?: string }) {
+  files.value = []
+  if (context.type === 'FILE_OVER_SIZE_LIMIT') Toast('图片不能超过 5MB')
+}
+
+function clearFiles() {
+  files.value = []
+}
 </script>
 
 <template>
-  <div
+  <Upload
     class="avatar-uploader"
-    :class="[`shape-${shape}`, { uploading }]"
-    role="button"
-    tabindex="0"
-    :aria-label="shape === 'round' ? '上传企业 Logo' : '更换头像'"
-    @click="pick"
-    @keydown.enter.prevent="pick"
-    @keydown.space.prevent="pick"
+    theme="grid"
+    accept="image/*"
+    :max="1"
+    :files="files"
+    :size-limit="{ size: 5, unit: 'MB' }"
+    :request-method="requestUpload"
+    @success="clearFiles"
+    @fail="onFail"
+    @validate="onValidate"
   >
-    <Avatar :size="size" :shape="shape" :image="image" class="avatar-el">{{ fallback }}</Avatar>
-    <span class="mask">{{ uploading ? '上传中…' : '更换' }}</span>
-    <input ref="inputRef" class="file-input" type="file" accept="image/*" @change="onChange" />
-  </div>
+    <template #addContent>
+      <span class="avatar-trigger" :class="`shape-${shape}`" :aria-label="shape === 'round' ? '上传企业 Logo' : '更换头像'">
+        <Avatar :size="size" :shape="shape" :image="image" class="avatar-el">{{ fallback }}</Avatar>
+        <span class="mask">{{ uploading ? '上传中…' : '更换' }}</span>
+      </span>
+    </template>
+  </Upload>
 </template>
 
 <style scoped>
 .avatar-uploader {
+  display: inline-block;
+  width: auto;
+  height: auto;
+}
+
+/* 单图上传：隐藏组件自带的文件项/进度，统一由头像触发区呈现（图片来自 props.image） */
+.avatar-uploader :deep(.t-upload__item),
+.avatar-uploader :deep(.t-upload__progress) {
+  display: none;
+}
+
+.avatar-uploader :deep(.t-upload__add-icon) {
+  width: auto;
+  height: auto;
+  min-width: 0;
+  border: 0;
+  background: transparent;
+}
+
+.avatar-trigger {
   position: relative;
   display: inline-flex;
   flex-shrink: 0;
-  cursor: pointer;
   overflow: hidden;
-}
-
-.avatar-uploader.shape-circle {
   border-radius: var(--td-radius-circle);
 }
 
-.avatar-uploader.shape-round {
+.avatar-trigger.shape-round {
   border-radius: var(--td-radius-default);
 }
 
@@ -103,16 +127,8 @@ async function onChange(event: Event) {
   text-align: center;
   font-size: 12px;
   line-height: 1.4;
-  color: #fff;
-  background: rgba(0, 0, 0, 0.4);
+  color: var(--td-text-color-anti);
+  background: var(--td-mask-active);
   pointer-events: none;
-}
-
-.avatar-uploader.uploading .mask {
-  background: rgba(0, 0, 0, 0.55);
-}
-
-.file-input {
-  display: none;
 }
 </style>

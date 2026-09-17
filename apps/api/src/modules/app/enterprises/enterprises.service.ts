@@ -17,6 +17,7 @@ import { PrismaService } from '../../../common/prisma/prisma.service'
 import { IdGeneratorService } from '../../../common/id-generator/id-generator.service'
 import { NotificationService } from '../../../common/notify/notification.service'
 import { formatNow } from '../../../common/utils/time'
+import { AuditService } from '../../../common/audit/audit.service'
 import {
   assertEnterprisePermission,
   ENTERPRISE_PERMISSIONS,
@@ -35,11 +36,11 @@ import type {
   InviteMemberDto,
   RemoveMemberDto,
   RespondActionDto,
-  ShowcaseRequestDto,
   TransferContactDto,
   UpdateEnterpriseDto,
   UpdateMemberDto,
 } from './dto/enterprise.dto'
+import { ENTERPRISE_CARD_FIELDS, INDIVIDUAL_CARD_FIELDS } from './dto/card-schema.dto'
 
 /** 企业成员 8 项权限（负责人隐式全量，成员按 UserIdentity.permissions 判定） */
 export { ENTERPRISE_PERMISSIONS, type EnterprisePermission } from '../../../common/enterprise/enterprise-permission'
@@ -183,13 +184,8 @@ export interface EnterpriseShowcaseDto {
   members: string[]
 }
 
-export interface EnterpriseWorkbenchDto {
-  responseCount: number
-  recentResponses: { id: string; demandId: string; demandTitle: string; at: string }[]
-}
-
 /* 企业治理（M2-R R3 /api/app/**）：名片/身份、企业详情与成员管理、邀请、负责人转移（请求制）、
- * 退驻与展示申请、公开企业名片与工作台。
+ * 退驻、公开企业名片与工作台（工作台统一由 engagement 模块 /me/enterprise-workbench 提供）。
  * 权限模型：contactUserId=负责人隐式全量；成员按 UserIdentity.permissions；
  * 非成员访问管理端点统一 404「企业不存在或你不是成员」，无权限 403「你没有该操作权限」。 */
 @Injectable()
@@ -198,7 +194,84 @@ export class AppEnterprisesService {
     private readonly prisma: PrismaService,
     private readonly ids: IdGeneratorService,
     private readonly notify: NotificationService,
+    private readonly audit: AuditService,
   ) {}
+
+  async cardSchema(type: string) {
+    const allowed = this.cardFields(type)
+    const config = await this.prisma.cardFieldConfig.findUnique({ where: { type } })
+    return { type, editableFields: config?.editableFields ?? [...allowed] }
+  }
+
+  async saveCardSchema(type: string, fields: string[], operator: string): Promise<{ code: number }> {
+    const allowed = this.cardFields(type)
+    const editableFields = [...new Set(fields)]
+    if (editableFields.some(field => !allowed.includes(field))) {
+      throw new BadRequestException('名片字段配置不合法')
+    }
+    await this.prisma.cardFieldConfig.upsert({
+      where: { type },
+      create: { type, editableFields, updatedAt: formatNow(), updatedBy: operator },
+      update: { editableFields, updatedAt: formatNow(), updatedBy: operator },
+    })
+    await this.audit.record({ module: '名片管理', action: '配置可编辑字段', target: type, detail: editableFields.join('、'), operator })
+    return { code: 0 }
+  }
+
+  async adminCards(type: string, page: number, pageSize: number, keyword?: string) {
+    this.cardFields(type)
+    const kw = keyword?.trim()
+    if (type === 'individual') {
+      const where: Prisma.IndividualCardWhereInput = kw ? { OR: [
+        { displayName: { contains: kw, mode: 'insensitive' } },
+        { user: { OR: [
+        { uid: { contains: kw, mode: 'insensitive' } },
+        { nickname: { contains: kw, mode: 'insensitive' } },
+        { realName: { contains: kw, mode: 'insensitive' } },
+      ] } },
+      ] } : {}
+      const [total, rows] = await Promise.all([
+        this.prisma.individualCard.count({ where }),
+        this.prisma.individualCard.findMany({ where, include: { user: { select: { nickname: true, realName: true, avatar: true } } }, orderBy: { userId: 'asc' }, skip: (page - 1) * pageSize, take: pageSize }),
+      ])
+      return { list: rows.map(row => ({ ...row, displayName: row.displayName || row.user.realName || row.user.nickname })), total }
+    }
+    const where: Prisma.EnterpriseWhereInput = { deletedAt: null, ...(kw ? { OR: [
+      { id: { contains: kw, mode: 'insensitive' } }, { name: { contains: kw, mode: 'insensitive' } },
+    ] } : {}) }
+    const [total, list] = await Promise.all([
+      this.prisma.enterprise.count({ where }),
+      this.prisma.enterprise.findMany({ where, orderBy: { id: 'asc' }, skip: (page - 1) * pageSize, take: pageSize }),
+    ])
+    return { list, total }
+  }
+
+  async adminCard(type: string, id: string) {
+    this.cardFields(type)
+    if (type === 'enterprise') {
+      const enterprise = await this.prisma.enterprise.findFirst({ where: { id, deletedAt: null } })
+      if (!enterprise) throw new NotFoundException('企业不存在')
+      return enterprise
+    }
+    const user = await this.prisma.user.findUnique({
+      where: { uid: id },
+      include: { identities: { where: { type: 'community_individual' }, take: 1 }, individualCard: true },
+    })
+    if (!user || user.identities.length === 0) throw new NotFoundException('个人名片不存在')
+    const card = user.individualCard
+    return {
+      userId: user.uid,
+      displayName: card?.displayName || user.realName || user.nickname,
+      intro: card?.intro ?? user.bio ?? '',
+      industryExperience: card?.industryExperience ?? '',
+      skills: card?.skills ?? [],
+      age: card?.age ?? null,
+      politicalStatus: card?.politicalStatus ?? null,
+      education: card?.education ?? [], work: card?.work ?? [], projects: card?.projects ?? [],
+      honors: card?.honors ?? [], socials: card?.socials ?? [], customLinks: card?.customLinks ?? [],
+      visibility: card?.visibility ?? { age: true, politicalStatus: true },
+    }
+  }
 
   /** 我的名片：社区个体 → 个人名片；社区企业 → 企业名片入口（都没有则省略对应键） */
   async myCards(uid: string): Promise<MyCardsDto> {
@@ -210,12 +283,12 @@ export class AppEnterprisesService {
       const [card, tier] = await Promise.all([
         this.prisma.individualCard.findUnique({ where: { userId: uid } }),
         individual.level != null
-          ? this.prisma.levelTier.findUnique({ where: { level: individual.level } })
+          ? this.prisma.levelTier.findUnique({ where: { identityType_level: { identityType: 'community_individual', level: individual.level } } })
           : Promise.resolve(null),
       ])
       const visibility = (card?.visibility ?? null) as unknown as { age?: boolean; politicalStatus?: boolean } | null
       result.individual = {
-        displayName: user.realName || user.nickname,
+        displayName: card?.displayName || user.realName || user.nickname,
         ...(user.avatar ? { avatar: user.avatar } : {}),
         ...(card?.age != null ? { age: String(card.age) } : {}),
         ...(card?.politicalStatus ? { politicalStatus: card.politicalStatus } : {}),
@@ -260,31 +333,60 @@ export class AppEnterprisesService {
       select: { id: true },
     })
     if (!identity) throw new ForbiddenException('当前账号没有社区个体身份')
+    await this.assertEditableFields('individual', dto)
 
-    const parsedAge = dto.age?.trim() ? Number.parseInt(dto.age, 10) : null
-    const data = {
-      intro: dto.intro?.trim() ?? '',
-      industryExperience: dto.industryExperience?.trim() || null,
-      skills: (dto.skills ?? []).map((s) => s.trim()).filter(Boolean),
-      age: parsedAge != null && Number.isFinite(parsedAge) ? parsedAge : null,
-      politicalStatus: dto.politicalStatus?.trim() || null,
-      education: (dto.education ?? []) as unknown as Prisma.InputJsonValue,
-      work: (dto.work ?? []) as unknown as Prisma.InputJsonValue,
-      projects: (dto.projects ?? []) as unknown as Prisma.InputJsonValue,
-      honors: (dto.honors ?? []) as unknown as Prisma.InputJsonValue,
-      socials: (dto.socials ?? []) as unknown as Prisma.InputJsonValue,
-      customLinks: (dto.customLinks ?? []) as unknown as Prisma.InputJsonValue,
-      ...(dto.visibility
-        ? { visibility: { age: dto.visibility.age ?? true, politicalStatus: dto.visibility.politicalStatus ?? true } as unknown as Prisma.InputJsonValue }
-        : {}),
-      updatedAt: formatNow(),
-    }
-    await this.prisma.individualCard.upsert({
-      where: { userId: uid },
-      create: { userId: uid, ...data },
-      update: data,
-    })
+    await this.saveIndividualCard(uid, dto)
     return { code: 0 }
+  }
+
+  async adminUpdateIndividualCard(uid: string, dto: UpdateIndividualCardDto, operator: string): Promise<{ code: number }> {
+    const user = await this.prisma.user.findUnique({ where: { uid }, select: { nickname: true, identities: true } })
+    if (!user || !user.identities.some(identity => identity.type === 'community_individual')) throw new NotFoundException('个人名片不存在')
+    await this.saveIndividualCard(uid, dto)
+    await this.audit.record({ module: '名片管理', action: '编辑个人名片', target: `${uid} · ${user.nickname}`, operator })
+    await this.notify.pushNotice(uid, { type: 'system', title: '个人名片已更新', content: '社区工作人员已更新您的个人名片。', link: '/me/cards/individual' })
+    return { code: 0 }
+  }
+
+  private async saveIndividualCard(uid: string, dto: UpdateIndividualCardDto) {
+    await this.prisma.$transaction(async tx => {
+      // Lock the parent even before a card exists; app/admin partial writes serialize together.
+      await tx.$queryRaw`SELECT uid FROM "User" WHERE uid = ${uid} FOR UPDATE`
+      const current = await tx.individualCard.findUnique({ where: { userId: uid } })
+      const data = this.individualCardData(dto)
+      if (dto.visibility !== undefined) {
+        const previous = (current?.visibility ?? {}) as { age?: boolean; politicalStatus?: boolean }
+        data.visibility = {
+          age: dto.visibility.age ?? previous.age ?? true,
+          politicalStatus: dto.visibility.politicalStatus ?? previous.politicalStatus ?? true,
+        }
+      }
+      await tx.individualCard.upsert({ where: { userId: uid }, create: { userId: uid, ...data }, update: data })
+    })
+  }
+
+  private individualCardData(dto: UpdateIndividualCardDto): Omit<Prisma.IndividualCardUncheckedCreateInput, 'userId'> {
+    const data: Omit<Prisma.IndividualCardUncheckedCreateInput, 'userId'> = { updatedAt: formatNow() }
+    if (dto.displayName !== undefined) data.displayName = dto.displayName.trim() || null
+    if (dto.intro !== undefined) data.intro = dto.intro.trim()
+    if (dto.industryExperience !== undefined) data.industryExperience = dto.industryExperience.trim() || null
+    if (dto.skills !== undefined) data.skills = dto.skills.map((s) => s.trim()).filter(Boolean)
+    if (dto.age !== undefined) {
+      const parsedAge = dto.age.trim() ? Number(dto.age) : null
+      if (parsedAge !== null && (!Number.isInteger(parsedAge) || parsedAge < 0 || parsedAge > 150)) throw new BadRequestException('年龄应为 0-150 的整数')
+      data.age = parsedAge
+    }
+    if (dto.politicalStatus !== undefined) data.politicalStatus = dto.politicalStatus.trim() || null
+    if (dto.education !== undefined) data.education = dto.education as unknown as Prisma.InputJsonValue
+    if (dto.work !== undefined) data.work = dto.work as unknown as Prisma.InputJsonValue
+    if (dto.projects !== undefined) data.projects = dto.projects as unknown as Prisma.InputJsonValue
+    if (dto.honors !== undefined) data.honors = dto.honors as unknown as Prisma.InputJsonValue
+    if (dto.socials !== undefined) data.socials = dto.socials as unknown as Prisma.InputJsonValue
+    if (dto.customLinks !== undefined) data.customLinks = dto.customLinks as unknown as Prisma.InputJsonValue
+    for (const link of [...(dto.socials ?? []), ...(dto.customLinks ?? [])]) {
+      if (!link || typeof link.url !== 'string' || (link.url && !/^https?:\/\//i.test(link.url))) throw new BadRequestException('名片链接需以 http(s):// 开头')
+    }
+    return data
   }
 
   /** 我的关联身份：社区个体 + 各社区企业 + 合作企业（无企业记录的合作企业组织展示为信息卡） */
@@ -420,19 +522,49 @@ export class AppEnterprisesService {
   async updateEnterprise(uid: string, id: string, dto: UpdateEnterpriseDto): Promise<{ code: number }> {
     const { ent } = await this.requireMemberEnterprise(uid, id)
     if (!(await this.hasPermission(uid, ent.id, 'edit_card'))) throw new ForbiddenException('你没有该操作权限')
+    await this.assertEditableFields('enterprise', dto)
 
+    const data = this.enterpriseCardData(dto)
+    await this.prisma.enterprise.update({ where: { id: ent.id }, data })
+    return { code: 0 }
+  }
+
+  async adminUpdateEnterpriseCard(id: string, dto: UpdateEnterpriseDto, operator: string): Promise<{ code: number }> {
+    const ent = await this.prisma.enterprise.findFirst({ where: { id, deletedAt: null } })
+    if (!ent) throw new NotFoundException('企业不存在')
+    await this.prisma.enterprise.update({ where: { id }, data: this.enterpriseCardData(dto) })
+    await this.audit.record({ module: '名片管理', action: '编辑企业名片', target: `${id} · ${ent.name}`, operator })
+    if (ent.contactUserId) await this.notify.pushNotice(ent.contactUserId, { type: 'system', title: '企业名片已更新', content: `社区工作人员已更新「${ent.name}」的企业名片。`, link: `/me/enterprises/${id}` })
+    return { code: 0 }
+  }
+
+  private enterpriseCardData(dto: UpdateEnterpriseDto): Prisma.EnterpriseUpdateInput {
     const data: Prisma.EnterpriseUpdateInput = {}
     if (dto.industry !== undefined) data.industry = dto.industry.trim()
     if (dto.size !== undefined) data.size = dto.size.trim()
     if (dto.description !== undefined) data.description = dto.description.trim()
     if (dto.logo !== undefined) data.logo = dto.logo.trim() || null
     if (dto.foundedAt !== undefined) data.foundedAt = dto.foundedAt.trim()
-    if (dto.website !== undefined) data.website = dto.website.trim() || null
+    if (dto.website !== undefined) {
+      if (dto.website.trim() && !/^https?:\/\//i.test(dto.website.trim())) throw new BadRequestException('官网需以 http(s):// 开头')
+      data.website = dto.website.trim() || null
+    }
     if (dto.address !== undefined) data.address = dto.address.trim() || null
     if (dto.services !== undefined) data.services = this.toArray(dto.services)
     if (dto.advantages !== undefined) data.advantages = this.toArray(dto.advantages)
-    await this.prisma.enterprise.update({ where: { id: ent.id }, data })
-    return { code: 0 }
+    return data
+  }
+
+  private cardFields(type: string): readonly string[] {
+    if (type === 'individual') return INDIVIDUAL_CARD_FIELDS
+    if (type === 'enterprise') return ENTERPRISE_CARD_FIELDS
+    throw new BadRequestException('名片类型不合法')
+  }
+
+  private async assertEditableFields(type: string, dto: object): Promise<void> {
+    const schema = await this.cardSchema(type)
+    const blocked = Object.entries(dto).filter(([key, value]) => value !== undefined && !schema.editableFields.includes(key)).map(([key]) => key)
+    if (blocked.length) throw new ForbiddenException(`以下名片字段暂不可编辑：${blocked.join('、')}`)
   }
 
   /** 邀请企业成员（需 invite_member 权限；EI 记录 7 天有效并通知被邀请人） */
@@ -491,7 +623,7 @@ export class AppEnterprisesService {
       type: 'invite',
       title: '您收到一条企业成员邀请',
       content: `${ent.name} 邀请您加入（${role}），7 天内有效`,
-      link: `/invitations/${invitationId}`,
+      link: `/me/invitations/${invitationId}`,
     })
     return { code: 0 }
   }
@@ -804,35 +936,6 @@ export class AppEnterprisesService {
     return { code: 0 }
   }
 
-  /** 企业名片发布申请（需 edit_card；同企业仅一条 pending，写 ShowcaseRequest） */
-  async createShowcaseRequest(uid: string, dto: ShowcaseRequestDto): Promise<{ code: number }> {
-    const { ent } = await this.requireMemberEnterprise(uid, dto.enterpriseId)
-    if (!(await this.hasPermission(uid, ent.id, 'edit_card'))) throw new ForbiddenException('你没有该操作权限')
-    const dup = await this.prisma.showcaseRequest.findFirst({
-      where: { targetType: 'enterprise', targetId: ent.id, status: 'pending' },
-      select: { id: true },
-    })
-    if (dup) throw new ConflictException('已存在待处理的展示申请')
-
-    const me = await this.requireUser(uid)
-    const now = formatNow()
-    await this.prisma.showcaseRequest.create({
-      data: {
-        id: await this.ids.next('SC'),
-        targetType: 'enterprise',
-        targetId: ent.id,
-        targetName: ent.name,
-        contentSummary: dto.note.trim(),
-        submitterName: me.nickname,
-        submitterPhone: me.phone,
-        submittedAt: now,
-        status: 'pending',
-        records: [{ action: '提交申请', at: now, operator: me.nickname }] as unknown as Prisma.InputJsonValue,
-      },
-    })
-    return { code: 0 }
-  }
-
   /** 公开企业名片（仅 published 且未删除可见；services/advantages 数组拼接为文本） */
   async enterpriseShowcase(id: string): Promise<EnterpriseShowcaseDto> {
     const ent = await this.prisma.enterprise.findFirst({ where: { id, deletedAt: null } })
@@ -859,36 +962,6 @@ export class AppEnterprisesService {
       description: ent.description,
       showcaseStatus: 'published' as const,
       members: identityRows.map((row) => row.user.nickname),
-    }
-  }
-
-  /** 企业工作台（成员/负责人）：以企业名义的需求响应统计与最近 5 条 */
-  async enterpriseWorkbench(uid: string, id: string): Promise<EnterpriseWorkbenchDto> {
-    const { ent } = await this.requireMemberEnterprise(uid, id)
-    const identityRows = await this.prisma.userIdentity.findMany({
-      where: { type: 'community_enterprise', enterpriseId: ent.id },
-      select: { userId: true },
-    })
-    const memberUids = [...new Set([ent.contactUserId, ...identityRows.map((r) => r.userId)].filter((x): x is string => !!x))]
-    const rows = memberUids.length
-      ? await this.prisma.demandRespondent.findMany({ where: { userId: { in: memberUids } }, orderBy: { at: 'desc' } })
-      : []
-    const mine = rows.filter(
-      (r) => (r.responderIdentity as unknown as Record<string, unknown> | null)?.enterpriseId === ent.id,
-    )
-    const recent = mine.slice(0, 5)
-    const demands = recent.length
-      ? await this.prisma.demand.findMany({ where: { id: { in: recent.map((r) => r.demandId) } }, select: { id: true, title: true } })
-      : []
-    const titles = new Map(demands.map((d) => [d.id, d.title]))
-    return {
-      responseCount: mine.length,
-      recentResponses: recent.map((r) => ({
-        id: String(r.id),
-        demandId: r.demandId,
-        demandTitle: titles.get(r.demandId) ?? '',
-        at: r.at,
-      })),
     }
   }
 

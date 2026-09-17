@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import ListErrorState from '@/components/ListErrorState.vue'
-import { nextTick, onMounted, reactive, ref } from 'vue'
+import { computed, nextTick, onMounted, reactive, ref } from 'vue'
+import { useRouter } from 'vue-router'
 import { MessagePlugin } from 'tdesign-vue-next'
 import type { FormProps } from 'tdesign-vue-next'
 import PageHeader from '@/components/PageHeader.vue'
@@ -13,10 +14,33 @@ const loading = ref(false)
 const loadError = ref('')
 const list = ref<PointsRule[]>([])
 const acting = ref('')
+const router = useRouter()
+
+const catalogue: Record<string, { category: string; beneficiary: string; cadence: string }> = {
+  activity_checkin: { category: '活动参与', beneficiary: '签到成员', cadence: '每场活动一次' },
+  activity_enroll_approved: { category: '活动参与', beneficiary: '报名成员', cadence: '每次通过报名' },
+  article_accepted: { category: '内容共建', beneficiary: '投稿方', cadence: '每篇采纳一次' },
+  demand_published: { category: '需求协作', beneficiary: '需求提交人', cadence: '每次成功发布' },
+  demand_responded: { category: '需求协作', beneficiary: '响应成员', cadence: '每次有效响应' },
+  demand_undertaken: { category: '需求协作', beneficiary: '承接方', cadence: '每次承接立项' },
+  project_milestone: { category: '项目履约', beneficiary: '负责承接方', cadence: '每个里程碑一次' },
+  identity_first_bind: { category: '身份成长', beneficiary: '首次绑定用户', cadence: '每位用户一次' },
+  daily_login: { category: '日常活跃', beneficiary: '登录用户', cadence: '每日首次登录' },
+}
+
+const rows = computed(() => list.value.map(rule => ({
+  ...rule,
+  category: catalogue[rule.code]?.category ?? '其他',
+  beneficiary: catalogue[rule.code]?.beneficiary ?? '行为用户',
+  cadence: catalogue[rule.code]?.cadence ?? '按触发事件',
+})))
 
 const columns = [
-  { colKey: 'name', title: '触发项', cell: 'name', width: 180, resizable: true , ellipsis: true},
-  { colKey: 'scene', title: '行为场景', ellipsis: true, width: 150 },
+  { colKey: 'category', title: '规则分类', width: 110 },
+  { colKey: 'name', title: '触发项', cell: 'name', width: 180, resizable: true, ellipsis: true },
+  { colKey: 'scene', title: '触发条件', ellipsis: true, width: 180 },
+  { colKey: 'beneficiary', title: '发放对象', width: 120 },
+  { colKey: 'cadence', title: '发放频次', width: 135 },
   { colKey: 'points', title: '积分', cell: 'points', width: 90, resizable: true , ellipsis: true},
   { colKey: 'description', title: '说明', ellipsis: true, width: 260, resizable: true },
   { colKey: 'status', title: '状态', cell: 'status', width: 95 , ellipsis: true},
@@ -96,7 +120,9 @@ onMounted(load)
 <template>
   <div class="rules-panel page-fade-in">
     <ListErrorState v-if="loadError" :message="loadError" :loading="loading" @retry="() => load()" />
-    <PageHeader title="积分规则" description="积分发放制度：触发项固定，发放自动；扣除积分由管理员手动调整" />
+    <PageHeader title="积分规则" description="积分发放制度：触发项固定，发放自动；扣除积分由管理员手动调整">
+      <template #actions><t-button variant="outline" @click="router.push('/rules/ledger')">积分发放记录</t-button></template>
+    </PageHeader>
 
     <div class="page-filter-bar">
       <span class="panel-tip">
@@ -110,7 +136,7 @@ onMounted(load)
         table-layout="fixed"
         hover
         resizable
-        :data="list"
+        :data="rows"
         :columns="columns"
         :loading="loading"
         empty="暂无积分规则"

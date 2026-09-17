@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
-import { Loading, Button, DialogPlugin, Tag, Toast } from 'tdesign-mobile-vue'
+import { Loading, Button, DialogPlugin, Icon, Tag, Toast } from 'tdesign-mobile-vue'
 import { fetchMyIdentities, fetchMyTransferRequests, respondEnterpriseTransfer } from '@/api/enterprises'
 import { useAsyncList } from '@/composables/useAsyncList'
 import EmptyBlock from '@/components/shared/EmptyBlock.vue'
@@ -99,7 +99,7 @@ function onTap(item: MyIdentitySummary) {
             <span v-else :class="item.showcaseStatus === 'published' ? 'ok' : 'off'">
               {{ item.showcaseStatus === 'published' ? '名片已发布' : '名片未发布' }}
             </span>
-            <span v-if="item.type === 'community_individual' || item.enterpriseId" class="arrow">›</span>
+            <Icon v-if="item.type === 'community_individual' || item.enterpriseId" name="chevron-right" size="14px" class="arrow" />
           </p>
         </article>
       </div>

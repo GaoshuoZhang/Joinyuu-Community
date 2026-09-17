@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, h, onMounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { Loading, Button, Cell, DialogPlugin, Popup, Toast } from 'tdesign-mobile-vue'
+import { Loading, Button, Cell, DialogPlugin, Popup, Tag, Toast } from 'tdesign-mobile-vue'
 import { createOrder, fetchGoodsDetail, subscribeRestock } from '@/api/mall'
 import { listAddresses } from '@/api/addresses'
 import { useAsyncList } from '@/composables/useAsyncList'
@@ -132,7 +132,7 @@ function goOrders() {
     <template v-else-if="goods">
       <section class="m-card main">
         <h1 class="name">{{ goods.name }}</h1>
-        <p class="cost">{{ goods.pointsCost }} <span>积分</span></p>
+        <p class="cost"><span class="tabular-nums">{{ goods.pointsCost.toLocaleString('zh-CN') }}</span> <span>积分</span></p>
         <p class="stock">库存 {{ goods.stock }} · {{ fulfillmentLabel }}</p>
         <div class="desc">
           <h3>商品说明</h3>
@@ -154,12 +154,12 @@ function goOrders() {
       <section class="m-card action">
         <template v-if="ordered">
           <p class="ordered-tip">
-            {{ orderedTip }}<span v-if="remainingPoints !== null"> · 剩余积分 {{ remainingPoints }}</span>
+            {{ orderedTip }}<span v-if="remainingPoints !== null"> · 剩余积分 <span class="tabular-nums">{{ remainingPoints.toLocaleString('zh-CN') }}</span></span>
           </p>
-          <Button theme="primary" variant="outline" block @click="goOrders">查看我的订单 ›</Button>
+          <Button theme="primary" variant="outline" block @click="goOrders">查看我的订单<template #suffix><Icon name="chevron-right" size="14px" /></template></Button>
         </template>
         <template v-else>
-          <p v-if="auth.isLogged" class="own-points">当前积分：{{ auth.points }}</p>
+          <p v-if="auth.isLogged" class="own-points">当前积分：<span class="tabular-nums">{{ auth.points.toLocaleString('zh-CN') }}</span></p>
           <Button theme="primary" block :disabled="submitting || soldOut" @click="onRedeem">
             {{ soldOut ? '已兑完' : submitting ? '兑换中…' : '立即兑换' }}
           </Button>
@@ -182,7 +182,7 @@ function goOrders() {
           :class="{ active: item.id === selectedAddressId }"
           @click="selectedAddressId = item.id; addressPickerVisible = false"
         >
-          <p class="addr-name">{{ item.name }} {{ item.phone }}<span v-if="item.isDefault" class="addr-tag">默认</span></p>
+          <p class="addr-name">{{ item.name }} {{ item.phone }}<Tag v-if="item.isDefault" class="addr-tag" size="small" variant="light" theme="primary">默认</Tag></p>
           <p class="addr-detail">{{ item.address }}</p>
         </div>
         <p v-if="!addresses.length" class="addr-empty">暂无收货地址</p>
@@ -237,12 +237,7 @@ function goOrders() {
 
 .addr-tag {
   margin-left: 6px;
-  padding: 1px 6px;
-  border-radius: var(--td-tag-square-border-radius, 4px);
-  background: var(--td-brand-color-1);
-  color: var(--td-brand-color);
-  font-size: 12px;
-  font-weight: 400;
+  vertical-align: middle;
 }
 
 .addr-detail {

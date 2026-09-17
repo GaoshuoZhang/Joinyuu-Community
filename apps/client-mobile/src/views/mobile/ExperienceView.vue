@@ -19,7 +19,7 @@ onMounted(run)
       <div class="level-card">
         <div class="level-head">
           <span class="identity">{{ data.identityLabel }}</span>
-          <span class="lv">Lv.{{ data.level }} {{ data.levelName }}</span>
+          <span class="lv tabular-nums">Lv.{{ data.level }} {{ data.levelName }}</span>
         </div>
         <div class="bar">
           <div
@@ -79,7 +79,7 @@ onMounted(run)
 .bar {
   height: 8px;
   border-radius: var(--td-radius-small);
-  background: rgba(255, 255, 255, 0.25);
+  background: color-mix(in srgb, var(--td-text-color-anti) 25%, transparent);
   overflow: hidden;
 }
 

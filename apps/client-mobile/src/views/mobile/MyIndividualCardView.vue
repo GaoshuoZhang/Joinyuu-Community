@@ -1,8 +1,8 @@
 <script setup lang="ts">
 import { computed, onMounted, reactive, ref } from 'vue'
 import { useRouter } from 'vue-router'
-import { Loading, Avatar, Button, Input, Switch, Tag, Textarea, Toast } from 'tdesign-mobile-vue'
-import { fetchMyCards, updateIndividualCard } from '@/api/enterprises'
+import { Loading, Avatar, Button, Icon, Input, Switch, Tag, Textarea, Toast } from 'tdesign-mobile-vue'
+import { fetchCardSchema, fetchMyCards, updateIndividualCard } from '@/api/enterprises'
 import { useAsyncList } from '@/composables/useAsyncList'
 import { useDraft } from '@/composables/useDraft'
 import { useUnsavedGuard } from '@/composables/useUnsavedGuard'
@@ -14,7 +14,13 @@ import EmptyBlock from '@/components/shared/EmptyBlock.vue'
  * 头像同步个人资料；保存即生效并公开到社区人才库；v35 支持敏感字段可见性与公开预览。 */
 const router = useRouter()
 const auth = useAuthStore()
-const { data, loading, error, run } = useAsyncList(fetchMyCards)
+const editableFields = ref<string[]>([])
+const editable = (key: string) => editableFields.value.includes(key)
+const { data, loading, error, run } = useAsyncList(async () => {
+  const [cards, schema] = await Promise.all([fetchMyCards(), fetchCardSchema('individual')])
+  editableFields.value = schema.editableFields
+  return cards
+})
 onMounted(async () => {
   await run()
   fillForm()
@@ -149,9 +155,9 @@ function removeEntry(key: (typeof LIST_SECTIONS)[number]['key'], index: number) 
 }
 
 async function onSave() {
-  formErrors.displayName = form.displayName.trim() ? '' : '请输入姓名'
-  formErrors.intro = form.intro.trim().length >= 10 ? '' : '个人简介至少 10 个字'
-  const links = [...form.socials, ...form.customLinks]
+  formErrors.displayName = !editable('displayName') || form.displayName.trim() ? '' : '请输入姓名'
+  formErrors.intro = !editable('intro') || form.intro.trim().length >= 10 ? '' : '个人简介至少 10 个字'
+  const links = [...(editable('socials') ? form.socials : []), ...(editable('customLinks') ? form.customLinks : [])]
   formErrors.links = links.some((l) => (l.url ?? '').trim() && !/^https?:\/\//.test(l.url.trim())) ? '链接需以 http(s):// 开头' : ''
   const first = Object.values(formErrors).find(Boolean)
   if (first) {
@@ -205,9 +211,9 @@ async function onSave() {
             <p class="name">{{ card.displayName }}<span v-if="card.age" class="age">{{ card.age }} 岁</span></p>
             <p v-if="card.levelName" class="level">Lv.{{ card.level }} {{ card.levelName }}</p>
           </div>
-          <span class="card-badge">个人名片</span>
+          <Tag class="card-badge" size="small" variant="light" theme="primary">个人名片</Tag>
         </div>
-        <p class="preview-link" @click="router.push(`/talents/${auth.uid}`)">预览公开名片效果 ›</p>
+        <p class="preview-link" v-pressable @click="router.push(`/talents/${auth.uid}`)">预览公开名片效果 <Icon name="chevron-right" size="14px" /></p>
         <div v-if="card.skills.length" class="skills">
           <Tag v-for="s in card.skills" :key="s" size="small" variant="light" theme="primary" class="skill">{{ s }}</Tag>
         </div>
@@ -216,35 +222,35 @@ async function onSave() {
 
       <section class="m-card">
         <h3 class="sec-title">基本信息</h3>
-        <div class="field">
+        <div v-if="editable('displayName')" class="field">
           <label>姓名</label>
           <Input v-model="form.displayName" :maxlength="20" placeholder="展示在社区人才库中的名称" clearable />
           <p v-if="formErrors.displayName" class="field-error">{{ formErrors.displayName }}</p>
         </div>
-        <div class="field">
+        <div v-if="editable('age')" class="field">
           <label>年龄</label>
           <Input v-model="form.age" type="number" :maxlength="3" placeholder="如：29" clearable />
         </div>
-        <div class="field">
+        <div v-if="editable('politicalStatus')" class="field">
           <label>政治面貌</label>
           <Input v-model="form.politicalStatus" :maxlength="20" placeholder="如：中共党员 / 共青团员 / 群众" clearable />
         </div>
-        <div class="field">
+        <div v-if="editable('skills')" class="field">
           <label>相关技能</label>
           <Input v-model="form.skillsText" :maxlength="60" placeholder="多个专长用、分隔，如：产品设计、用户研究" clearable />
         </div>
-        <div class="field">
+        <div v-if="editable('intro')" class="field">
           <label>个人简介</label>
           <Textarea v-model="form.intro" :autosize="{ minRows: 4, maxRows: 10 }" :maxlength="300" placeholder="介绍你的经历、专长与合作意向…" />
           <p v-if="formErrors.intro" class="field-error">{{ formErrors.intro }}</p>
         </div>
-        <div class="field">
+        <div v-if="editable('industryExperience')" class="field">
           <label>行业经验</label>
           <Textarea v-model="form.industryExperience" :autosize="{ minRows: 3, maxRows: 8 }" :maxlength="300" placeholder="所在行业、年限与代表成果…" />
         </div>
       </section>
 
-      <section class="m-card">
+      <section v-if="editable('visibility')" class="m-card">
         <h3 class="sec-title">公开可见性</h3>
         <p class="privacy-tip">关闭后该字段不会出现在公开人才名片中。</p>
         <div class="switch-row">
@@ -257,7 +263,7 @@ async function onSave() {
         </div>
       </section>
 
-      <section v-for="sec in LIST_SECTIONS" :key="sec.key" class="m-card">
+      <section v-for="sec in LIST_SECTIONS.filter(s => editable(s.key))" :key="sec.key" class="m-card">
         <div class="sec-head">
           <h3 class="sec-title no-margin">{{ sec.title }}</h3>
           <Button theme="primary" variant="outline" size="small" @click="addEntry(sec.key)">添加</Button>
@@ -275,11 +281,11 @@ async function onSave() {
 
       <section class="m-card">
         <p v-if="formErrors.links" class="field-error">{{ formErrors.links }}</p>
-        <Button theme="primary" size="large" block :loading="submitting" @click="onSave">
+        <Button theme="primary" size="large" block :disabled="!editableFields.length" :loading="submitting" @click="onSave">
           {{ submitting ? '保存中…' : '保存并公开到人才库' }}
         </Button>
-        <p class="tip">保存后立即公开（Mock 演示；真实环境为提交审核后发布）。</p>
-        <Button variant="text" theme="primary" block @click="router.push('/community')">去社区人才库查看 ›</Button>
+        <p class="tip">{{ editableFields.length ? '保存后立即公开，工作人员可维护名片内容。' : '当前名片由工作人员维护，暂未开放自助编辑。' }}</p>
+        <Button variant="text" theme="primary" block @click="router.push('/community')">去社区人才库查看<template #suffix><Icon name="chevron-right" size="14px" /></template></Button>
       </section>
     </template>
   </div>
@@ -361,16 +367,14 @@ async function onSave() {
 
 .card-badge {
   flex-shrink: 0;
-  font-size: 12px;
-  padding: 2px 8px;
-  border-radius: var(--td-tag-square-border-radius, 4px);
-  background: var(--td-brand-color-1);
-  color: var(--td-brand-color);
 }
 
 .preview-link {
   margin: 10px 0 0;
-  text-align: right;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 2px;
   font-size: 12px;
   color: var(--td-brand-color);
   cursor: pointer;

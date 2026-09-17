@@ -6,6 +6,7 @@ import request from 'supertest'
 import { AppModule } from '../src/app.module'
 import { reseed } from './helpers/reseed'
 import { appGet, appLoginAs, appPost } from './helpers/app-login'
+import { PrismaService } from '../src/common/prisma/prisma.service'
 
 describe('M2-R R2 app 空间/内容/申请/首页/搜索/上传', () => {
   let app: INestApplication
@@ -81,7 +82,7 @@ describe('M2-R R2 app 空间/内容/申请/首页/搜索/上传', () => {
       summary: '测试摘要',
       content: '<p>正文</p>',
       tags: ['测试'],
-      asIdentity: 'community_individual',
+      asIdentity: 'individual',
     })
     expect(posted.status).toBe(200)
     const articleId: string = posted.body.data.id
@@ -93,6 +94,21 @@ describe('M2-R R2 app 空间/内容/申请/首页/搜索/上传', () => {
     const like = await appPost(app, token, `/api/app/articles/${detail.body.data.id}/likes/toggle`, {})
     expect(like.status).toBe(200)
     expect(typeof like.body.data.likeCount).toBe('number')
+  })
+
+  it('文章关闭评论后 DTO 下发 false，评论 GET/POST 均返回 409', async () => {
+    const prisma = app.get(PrismaService)
+    const article = await prisma.article.findFirstOrThrow({ where: { status: 'published', deletedAt: null } })
+    await prisma.article.update({
+      where: { id: article.id },
+      data: { commentsEnabled: false } as never,
+    })
+
+    const detail = await appGet(app, token, `/api/app/articles/${article.id}`)
+    expect(detail.status).toBe(200)
+    expect(detail.body.data.commentsEnabled).toBe(false)
+    expect((await appGet(app, token, `/api/app/articles/${article.id}/comments`)).status).toBe(409)
+    expect((await appPost(app, token, `/api/app/articles/${article.id}/comments`, { content: '不应创建的评论' })).status).toBe(409)
   })
 
   it('申请：schema 下发 + 提交 + 我的申请', async () => {

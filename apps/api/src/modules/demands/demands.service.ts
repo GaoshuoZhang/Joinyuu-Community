@@ -14,6 +14,7 @@ import { formatNow } from '../../common/utils/time'
 import { sanitizeHtml } from '../../common/utils/sanitize-html'
 import { toIdentityDto } from '../users/user.mapper'
 import { ProjectsService } from '../projects/projects.service'
+import { PointsEngineService } from '../../common/engine/points-engine/points-engine.service'
 import type { QueryDemandsDto } from './dto/query-demands.dto'
 import type { CreateDemandDto } from './dto/create-demand.dto'
 import type { UpdateDemandDto } from './dto/update-demand.dto'
@@ -172,6 +173,7 @@ export class DemandsService {
     private readonly audit: AuditService,
     private readonly projects: ProjectsService,
     private readonly notify: NotificationService,
+    private readonly points: PointsEngineService,
   ) {}
 
   async findAll(query: QueryDemandsDto): Promise<{ list: DemandDto[]; total: number }> {
@@ -341,7 +343,6 @@ export class DemandsService {
       where: { id },
       data: { status: 'rejected', rejectedReason: reason, archivableAt: formatNow() },
     })
-
     await this.audit.record({
       module: '需求管理',
       action: '需求驳回',
@@ -386,6 +387,7 @@ export class DemandsService {
       where: { id },
       data: { status: 'published', scheduledAt: null, publishedAt: formatNow() },
     })
+    await this.points.issuePoints(demand.publisherId, 'demand_published', '需求审核通过并发布', `demand_published:${demand.id}`)
 
     await this.audit.record({
       module: '需求管理',
@@ -515,11 +517,20 @@ export class DemandsService {
     return { code: 0 }
   }
 
-  /* 立项：published → projected；项目新增与双向关联（demand.projectId ↔ project.sourceDemandId）置于同一事务 */
+  /* 立项：published|selected → projected；项目新增与双向关联（demand.projectId ↔ project.sourceDemandId）置于同一事务；
+   * 发布者已选定承接方（selected）时，向被选中的响应者补发立项积分/经验并通知。 */
   async initiateProject(id: string, dto: InitiateProjectDto, operator: string) {
     const demand = await this.prisma.demand.findUnique({ where: { id } })
     if (!demand) throw new NotFoundException('需求不存在')
-    if (demand.status !== 'published') throw new ConflictException('仅已发布的需求可立项')
+    if (demand.status !== 'published' && demand.status !== 'selected') {
+      throw new ConflictException('仅已发布或已选定承接方的需求可立项')
+    }
+
+    const selected = demand.status === 'selected'
+      ? await this.prisma.demandRespondent.findMany({
+          where: { demandId: demand.id, status: 'accepted', withdrawnAt: null },
+        })
+      : []
 
     const project = await this.prisma.$transaction(async (tx) => {
       const created = await this.projects.createProjectInHostTx(tx, dto)
@@ -528,6 +539,32 @@ export class DemandsService {
         where: { id: demand.id },
         data: { status: 'projected', archivableAt: formatNow(), projectId: created.id },
       })
+
+      /* 立项奖励：发起方 + 被选中的承接方（与需求承接规则一致，幂等键按需求维度去重） */
+      await this.points.issuePointsInTransaction(tx, demand.publisherId, 'demand_undertaken', '需求立项获得积分', `demand_undertaken:${demand.publisherId}:${demand.id}`)
+      /* 后台代发需求的发布者可能是企业 ID，站内信仅发给真实用户 */
+      const publisherUserId = await this.resolveNotifiableUser(tx, demand.publisherId)
+      if (publisherUserId) {
+        await this.notify.pushNoticeInTransaction(tx, publisherUserId, {
+          type: 'demand',
+          title: '需求已达成合作',
+          content: `您的需求「${demand.title}」已立项，协作项目已生成。`,
+          link: `/me/projects/${created.id}`,
+        })
+      }
+      for (const response of selected) {
+        if (response.userId) {
+          await this.points.issuePointsInTransaction(tx, response.userId, 'demand_undertaken', '承接需求立项获得积分', `demand_undertaken:${response.userId}:${demand.id}`)
+          await this.notify.pushNoticeInTransaction(tx, response.userId, {
+            type: 'demand',
+            title: '承接成功',
+            content: `您承接的需求「${demand.title}」已立项，协作项目已生成。`,
+            link: `/me/projects/${created.id}`,
+          })
+        }
+        const exp = this.respondentExperience(response)
+        if (exp) await this.points.issueExperienceInTransaction(tx, exp.targetType, exp.targetId, 'project_undertaken', '承接需求立项获得项目经验')
+      }
       return created
     })
 
@@ -542,6 +579,21 @@ export class DemandsService {
     })
 
     return { ...project, sourceDemandId: demand.id }
+  }
+
+  /** 站内信收件人：用户本人；企业 ID 落到企业联系人；无法解析时返回 null */
+  private async resolveNotifiableUser(tx: Prisma.TransactionClient, subjectId: string): Promise<string | null> {
+    if (await tx.user.findUnique({ where: { uid: subjectId }, select: { uid: true } })) return subjectId
+    const enterprise = await tx.enterprise.findUnique({ where: { id: subjectId }, select: { contactUserId: true } })
+    return enterprise?.contactUserId ?? null
+  }
+
+  /** 承接方项目经验投放目标（enterprise / individual） */
+  private respondentExperience(response: DemandRespondent): { targetType: 'enterprise' | 'individual'; targetId: string } | null {
+    const ri = response.responderIdentity as Record<string, unknown> | null
+    if (ri?.type === 'community_enterprise' && ri.enterpriseId) return { targetType: 'enterprise', targetId: ri.enterpriseId as string }
+    if (response.userId) return { targetType: 'individual', targetId: response.userId }
+    return null
   }
 
   async undertakerOptions(): Promise<UndertakerOptionDto[]> {

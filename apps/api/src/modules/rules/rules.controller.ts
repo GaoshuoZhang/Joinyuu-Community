@@ -1,4 +1,4 @@
-import { Body, Controller, Get, HttpCode, Param, Post, Put } from '@nestjs/common'
+import { Body, Controller, Get, HttpCode, Param, Post, Put, Query } from '@nestjs/common'
 import { RequirePermission } from '../../common/decorators/require-permission.decorator'
 import { RulesService } from './rules.service'
 import { SaveLevelTiersDto } from './dto/save-level-tiers.dto'
@@ -42,8 +42,8 @@ export class RulesController {
 
   @RequirePermission('/rules/levels')
   @Get('levels')
-  listLevelTiers() {
-    return this.rules.listLevelTiers()
+  listLevelTiers(@Query('identityType') identityType?: string) {
+    return this.rules.listLevelTiers(identityType)
   }
 
   @RequirePermission('/rules/levels')
@@ -51,5 +51,18 @@ export class RulesController {
   @Put('levels')
   saveLevelTiers(@Body() dto: SaveLevelTiersDto) {
     return this.rules.saveLevelTiers(dto)
+  }
+
+  @RequirePermission('/rules/publishing-limits')
+  @Get('publishing-limits')
+  listPublishingLimits(@Query('identityType') identityType?: string) {
+    return this.rules.listPublishingLimits(identityType)
+  }
+
+  @RequirePermission('/rules/publishing-limits')
+  @HttpCode(200)
+  @Put('publishing-limits')
+  savePublishingLimits(@Body() dto: { rules?: Array<Record<string, unknown>> }) {
+    return this.rules.savePublishingLimits(dto.rules ?? [])
   }
 }

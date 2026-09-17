@@ -16,6 +16,7 @@ import {
   deleteArticle,
   fetchArticles,
   publishArticleNow,
+  restoreArticle,
 } from '@/api/contents'
 import type { Article } from '@/types'
 
@@ -40,6 +41,7 @@ const statusOptions = [
   { label: '待发布', value: 'pending_release' },
   { label: '定时发布中', value: 'scheduled' },
   { label: '已发布', value: 'published' },
+  { label: '已关闭', value: 'closed' },
 ]
 
 const columns = [
@@ -148,6 +150,19 @@ async function onPublishNow(row: Article) {
     await load()
   } catch (e) {
     MessagePlugin.error(e instanceof Error ? e.message : '操作失败')
+  } finally {
+    acting.value = ''
+  }
+}
+
+async function onRestore(row: Article) {
+  acting.value = row.id + ':restore'
+  try {
+    await restoreArticle(row.id)
+    MessagePlugin.success('文章已恢复发布')
+    await load()
+  } catch (e) {
+    MessagePlugin.error(e instanceof Error ? e.message : '恢复失败')
   } finally {
     acting.value = ''
   }
@@ -286,6 +301,15 @@ onMounted(load)
             <t-button variant="text" size="small" theme="danger" @click="onWithdraw(row)">
               下架
             </t-button>
+          </template>
+          <template v-else-if="row.status === 'closed'">
+            <t-button variant="text" size="small" theme="primary" :loading="acting === row.id + ':restore'" @click="onRestore(row)">恢复</t-button>
+            <t-popconfirm content="确认归档该已关闭资讯？" @confirm="onDelete(row)">
+              <t-button variant="text" size="small" theme="danger" :loading="acting === row.id + ':delete'">
+                <template #icon><DeleteIcon /></template>
+                归档
+              </t-button>
+            </t-popconfirm>
           </template>
         </div>
       </template>

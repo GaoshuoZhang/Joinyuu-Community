@@ -9,6 +9,7 @@ export const systemConfig: SystemConfig = {
   mallOpen: true,
   demandOpen: true,
   reservationOpen: true,
+  homeCarouselOpen: true,
   leaseExpireRemindDays: 15,
   uploadMaxSizeMb: 10,
   passwordExpireDays: 90,

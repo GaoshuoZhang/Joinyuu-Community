@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { Loading, Button, DialogPlugin, Progress, Tag, Textarea, Toast, Upload } from 'tdesign-mobile-vue'
+import { Loading, Button, DialogPlugin, Icon, Image, Progress, Tag, Textarea, Toast, Upload } from 'tdesign-mobile-vue'
 import type { UploadFile } from 'tdesign-mobile-vue'
 import { acceptMilestone, fetchMyProject, returnMilestone, submitMilestone } from '@/api/projects'
 import { uploadFile } from '@/api/uploads'
@@ -155,7 +155,7 @@ async function onAcceptMilestone(m: Milestone) {
         </header>
         <div class="meta">
           <span class="role">{{ project.role }}</span>
-          <a v-if="project.sourceDemandId" class="source" @click="router.push(`/demands/${project.sourceDemandId}`)">来源需求 ›</a>
+          <a v-if="project.sourceDemandId" class="source" v-pressable @click="router.push(`/demands/${project.sourceDemandId}`)">来源需求<Icon name="chevron-right" size="12px" /></a>
         </div>
         <div class="participants">
           <p v-if="initiatorName !== '—'"><b>需求发起方：</b>{{ initiatorName }}</p>
@@ -176,7 +176,7 @@ async function onAcceptMilestone(m: Milestone) {
             </div>
             <p v-if="m.submitNote" class="m-note">交付说明：{{ m.submitNote }}</p>
             <div v-if="m.attachments?.length" class="m-evidence">
-              <img v-for="(file, index) in m.attachments" :key="index" :src="file.url" :alt="file.name" loading="lazy" decoding="async" @error="onImageError" />
+              <Image v-for="(file, index) in m.attachments" :key="index" :src="file.url" :alt="file.name" fit="cover" lazy @error="onImageError" />
             </div>
             <p v-if="m.returnReason" class="m-return">退回原因：{{ m.returnReason }}</p>
             <p v-if="m.submittedAt" class="m-time">提交于 {{ m.submittedAt }}<template v-if="m.acceptedAt"> · 验收于 {{ m.acceptedAt }}</template></p>
@@ -266,6 +266,9 @@ async function onAcceptMilestone(m: Milestone) {
 }
 
 .source {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
   color: var(--td-brand-color);
   cursor: pointer;
 }
@@ -358,10 +361,10 @@ async function onAcceptMilestone(m: Milestone) {
   margin-top: 8px;
 }
 
-.m-evidence img {
+.m-evidence :deep(.t-image) {
   width: 72px;
   height: 72px;
-  object-fit: cover;
+  overflow: hidden;
   border-radius: var(--td-radius-default);
   border: 1px solid var(--td-component-border);
 }

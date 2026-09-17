@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
 import { useRouter } from 'vue-router'
-import { Button, Icon } from 'tdesign-mobile-vue'
+import { Button, Icon, Radio } from 'tdesign-mobile-vue'
 
 /* 企业合作 hub（/intros/enterprise）：两种合作方式对比与选择，CTA 进入对应申请表单。
  * 企业入驻 → 需办公空间，对应后台「社区企业」；合作伙伴 → 无需入驻，对应「合作企业」。 */
@@ -70,12 +70,18 @@ function onConfirm() {
           <h2 class="opt-title">{{ opt.title }}</h2>
           <p class="opt-tagline">{{ opt.tagline }}</p>
         </div>
-        <span class="radio" :class="{ checked: selected === opt.key }" />
+        <Radio
+          class="opt-radio"
+          :checked="selected === opt.key"
+          :aria-label="`选择${opt.title}`"
+          @click.stop
+          @change="selected = opt.key"
+        />
       </div>
       <ul class="points">
         <li v-for="(p, i) in opt.points" :key="i">{{ p }}</li>
       </ul>
-      <a class="intro-link" @click.stop="router.push(opt.intro)">了解详细流程 ›</a>
+      <a class="intro-link" v-pressable @click.stop="router.push(opt.intro)">了解详细流程 <Icon name="chevron-right" size="14px" /></a>
     </article>
 
     <Button theme="primary" size="large" block :disabled="!selected" @click="onConfirm">{{ ctaLabel }}</Button>
@@ -150,19 +156,10 @@ function onConfirm() {
   color: var(--td-text-color-secondary);
 }
 
-.radio {
+.opt-radio {
+  display: inline-flex;
+  width: auto;
   flex-shrink: 0;
-  width: 18px;
-  height: 18px;
-  border-radius: 50%;
-  border: 1.5px solid var(--td-component-border);
-}
-
-.radio.checked {
-  border-color: var(--td-brand-color);
-  background:
-    radial-gradient(circle at center, var(--td-brand-color) 0 5px, transparent 6px),
-    var(--td-bg-color-container);
 }
 
 .points {
@@ -177,7 +174,9 @@ function onConfirm() {
 }
 
 .intro-link {
-  display: inline-block;
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
   margin-top: 8px;
   font-size: 12px;
   color: var(--td-brand-color);

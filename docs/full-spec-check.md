@@ -2,7 +2,7 @@
 
 > 跨会话/跨 agent 的进度唯一事实来源。每完成一个模块，同步勾选。
 > 细致契约见 [wiki-admin-web.md](./wiki-admin-web.md) 与 [wiki-backend.md](./wiki-backend.md)；实体字段见 [docs/entity-fields.md](./entity-fields.md)。
-> 最后更新：2026-09-16。M1.5 R1~R12 与后续治理增强已完成；M2 移动端 Mock-First 已交付至 v43；M2-R 已完成 R0/R1，R2~R4 待实施，规划见 [docs/m2-r-plan.md](./m2-r-plan.md)。本次实跑 API e2e **28 套件 / 195 用例全绿**。
+> 最后更新：2026-09-17。M2-R 必做范围及收尾四项复查整改已完成：A6/A19、默认 HTTP、此前 64 个入口浏览器走查及关键跨端操作已验证；最新 API e2e **38 套件 / 264 用例全绿**。证据及覆盖边界见 [m2-r-closeout.md](./m2-r-closeout.md)。
 
 ## 0. 项目定位
 
@@ -33,16 +33,16 @@
 | M1 | 后端服务（NestJS + Prisma + PG + Redis） | 已完成（A~E 全） |
 | **M1.5** | **后台治理增强（R1~R12）** | **已完成（R1~R12 全 + 本工作树增强，见 §7）** |
 | **M2-Mobile** | **移动端 Mock-First** | **v43 已交付（产品闭环与 UX 基线达成），转入 M2-R 接入期** |
-| M2-R | `/api/app/**` 真实接口接入 | **已立项（2026-09-16）**，规划见 [docs/m2-r-plan.md](./m2-r-plan.md) |
+| M2-R | `/api/app/**` 真实接口接入 | **必做范围已完成（2026-09-17）**，可选项后置，见 [收口记录](./m2-r-closeout.md) |
 | M2-Web | 桌面客户端 `client-web` | 未开始 |
 | M3 | 微信小程序 | 未开始 |
 
-### 2.1 当前代码规模（2026-09-15 静态清点）
+### 2.1 当前代码规模（2026-09-17 静态清点）
 
-- API：48 个 Prisma 模型、19 个迁移、225 个 HTTP 路由装饰器（既有 193 + app R1 32）。
-- Admin：56 条路由记录，其中 49 条 component-backed（48 个视图路由 + AdminLayout 壳），其余 7 条为重定向。
-- Client Mobile：61 条路由记录，其中 60 条 component-backed；58 个唯一视图文件、20 个 API 契约文件、20 个 mock handler 文件。
-- 测试：API e2e 28 套件 / 195 个用例已于 2026-09-16 全量通过；API unit 4 套件 / 25 个源码声明；Admin UI contract 2 文件 / 10 个源码声明。
+- API：69 个 Prisma 模型、34 个迁移、66 个 controller、365 个 HTTP 路由装饰器（对齐修复后移除 3 条重复/冗余路由）。
+- Admin：65 条路由记录、59 个视图文件、33 个 API 文件。
+- Client Mobile：72 条路由记录、66 个视图文件、21 个 API 契约文件；默认 HTTP，显式 `VITE_API_MODE=mock` 可回退演示。
+- 测试：API e2e 41 套件 / 282 个用例已于 2026-09-17 在隔离库全量通过（含 `journey-flows.e2e-spec.ts` 三端联调 12 例）；API unit 4 套件 / 24 用例；Admin UI contract 2 文件 / 10 用例。
 
 ## 3. M0 后台原型（已完成）
 
@@ -54,7 +54,7 @@
 
 ## 4. M1 后端服务（已完成）
 
-> M1.5 基线仍为 193 个端点；M2-R R1 在此基础上新增 32 个 `/api/app/**` 路由，Prisma schema 现为 **48 模型 / 19 个迁移**。后续接入进度见 `docs/m2-r-plan.md`。
+> M1.5 基线为 193 个端点；M2-R 在此基础上新增 `/api/app/**` 与配套管理端路由，Prisma schema 现为 **72 模型 / 28 个迁移**。接入进度见 `docs/m2-r-plan.md`。
 
 - **M1-A 底座**：NestJS 11 + 全局管线（包络/异常过滤/JWT 守卫/审计拦截器/前缀 ID 发号器）、Docker Compose（PG+Redis）、Prisma schema（M1 时 35 模型，M1.5 后 43）+ seed 骨架、认证（JWT + Redis 登出黑名单）、健康检查
 - **M1-B 社区成员域（23 端点）**：users / individuals / enterprises / external-enterprises / applications / ledgers；新增用户生成默认个人身份、管理员重置登录密码、grantIdentity 联动、账本事务、审计迁移、admin 五组页面接入
@@ -90,7 +90,7 @@
 - [√] v42 八大功能新增（纯客户端 Mock）：活动电子票、需求沟通、项目协作、积分任务/规则、个人看板、服务在线申请、企业工作台/代企业响应、实名分级权益；全场景 E2E 三轮 64 页零失败
 - [√] v41 移动端三轮复审整改（纯客户端）：URL query 同步与深链修复、订单评价、注销冷静期与撤回、图片兜底、对比度与预约约束、举报不预选、空态清除筛选；headed 实测零控制台错误
 - [√] v40 产品/UX 复审整改（纯客户端）：活动取消/改期运营模拟与取消失效链路、分享扩展、浏览历史页、首页公告、商城分类筛选（URL 同步）、物流单号、评论/用户举报、企业/人才收藏与筛选、搜索分类 chips 可点击、无障碍集中补丁（Toast aria-live、Dialog role）、滚动位置记忆与骨架屏一致性；项目页排序（最新/响应最多）与文章/活动/社区/广场筛选 URL 同步；首页「为你推荐」；投稿/评论/响应/地址/账号安全/邀请/退回原因表单行内错误；我的列表与通知/社区/广场计数补齐；修复首页推荐块误入样式区导致的渲染报错。Playwright headed 增量复测零控制台错误
-- [ ] 对接 `/api/app/**`（M2-R：**已立项，规划与进度见 [docs/m2-r-plan.md](./m2-r-plan.md)**——R0~R4 五批全量对齐；完成后勾选本条）
+- [√] 对接 `/api/app/**`（R0~R4 必做范围、A6/A19、默认 HTTP、API 全量回归和 64 入口浏览器走查完成；可选 R4-7 浏览历史跨端同步后置，不阻塞完成）
 
 ## 6. M3 微信小程序（未开始）
 
@@ -153,6 +153,6 @@
 ## 8. 横切约定
 
 - 设计契约冻结机制（M0 建立，见 wiki-admin-web.md）
-- 实体字段沉淀：docs/entity-fields.md（当前 48 模型，schema.prisma 为事实来源）
-- 后端测试：e2e 28 套件 / 195 个用例全量通过 + unit 4 套件 / 25 个源码声明；e2e 由 `test/helpers/reseed.ts` 套件级隔离
+- 实体字段沉淀：docs/entity-fields.md（当前 72 模型，schema.prisma 为事实来源）
+- 后端测试：e2e 38 套件 / 264 用例、unit 4 套件 / 24 用例全量通过；e2e 由 `test/helpers/reseed.ts` 套件级隔离
 - CI/CD 与部署方案：待规划

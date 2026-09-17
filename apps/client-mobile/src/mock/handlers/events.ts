@@ -57,9 +57,8 @@ export async function fetchEvents(query: { type?: string; keyword?: string } = {
 export async function fetchEvent(id: string): Promise<CommunityEvent> {
   return withLatency(() => {
     const ev = events.find((e) => e.id === id)
-    /* v40：已结束/已取消的活动对参与者可见（不按可见范围 404），便于查看取消与改期结果 */
-    const closed = ev ? ev.status === 'ended' || ev.status === 'cancelled' : false
-    if (!ev || (closed ? false : !visibleTo(ev))) fail(404, '活动不存在或已结束')
+    // 已结束活动仍校验可见范围，与 HTTP 详情保持一致。
+    if (!ev || ev.status === 'cancelled' || !visibleTo(ev)) fail(404, '活动不存在或已结束')
     return enrich(ev)
   }, 200)
 }

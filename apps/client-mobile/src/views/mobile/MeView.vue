@@ -46,9 +46,7 @@ const recordEntries = [
 
 const moreEntries = computed(() => {
   const entries: { path: string; label: string; note?: string }[] = [
-    { path: '/me/tasks', label: '积分任务', note: '完成任务领积分' },
     { path: '/me/stats', label: '数据看板' },
-    { path: '/me/services', label: '服务申请' },
     { path: '/me/profile/edit', label: '编辑资料' },
   ]
   const enterprise = auth.profileIdentities.find((i) => i.type === 'community_enterprise' && i.enterpriseId)

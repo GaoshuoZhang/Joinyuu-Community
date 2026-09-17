@@ -62,13 +62,14 @@ const ARCHIVE_OPERATOR = '系统自动归档'
 const DOMAIN_DEFS: Record<string, DomainDef> = {
   enterprise: { label: '社区企业', autoArchive: false, archiveStatuses: [] },
   externalEnterprise: { label: '合作企业', autoArchive: false, archiveStatuses: [] },
-  article: { label: '资讯发布', autoArchive: true, archiveStatuses: [{ value: 'pending_release', label: '待发布' }] },
+  article: { label: '资讯发布', autoArchive: true, archiveStatuses: [{ value: 'pending_release', label: '待发布' }, { value: 'closed', label: '已关闭' }] },
   submission: {
     label: '投稿内容',
     autoArchive: true,
     archiveStatuses: [
       { value: 'pending_release', label: '待发布' },
       { value: 'rejected', label: '已驳回' },
+      { value: 'closed', label: '已关闭' },
     ],
   },
   announcement: { label: '公告栏', autoArchive: true, archiveStatuses: [{ value: 'withdrawn', label: '已下架' }] },

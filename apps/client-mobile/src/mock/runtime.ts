@@ -18,6 +18,7 @@ interface StoredMockState {
 }
 
 const STORAGE_KEY = 'joinyuu_client_mock_v33'
+const mockEnabled = import.meta.env.VITE_API_MODE === 'mock'
 const SESSION_KEY = 'joinyuu_client_token'
 const DEFAULT_NOW_MS = new Date(2026, 8, 15, 10, 0, 0, 0).getTime()
 const DEFAULT_SEQUENCES: Record<string, number> = {
@@ -44,6 +45,7 @@ const DEFAULT_SEQUENCES: Record<string, number> = {
 }
 
 function readStored(): StoredMockState | null {
+  if (!mockEnabled) return null
   try {
     const raw = localStorage.getItem(STORAGE_KEY)
     if (!raw) return null
@@ -86,7 +88,7 @@ function stripInlineFiles(_key: string, value: unknown): unknown {
 }
 
 export function commitMockState(): void {
-  if (!exportData) return
+  if (!mockEnabled || !exportData) return
   try {
     const state: StoredMockState = { version: 33, revision: 1, runtime, data: exportData() }
     const snapshot = JSON.stringify(state, snapshotReplacer)
@@ -106,6 +108,7 @@ export function getPersistenceError(): string {
 }
 
 export function resetMockState(): void {
+  if (!mockEnabled) return
   localStorage.removeItem('joinyuu_client_mock_v32')
   localStorage.removeItem(STORAGE_KEY)
   localStorage.removeItem(SESSION_KEY)

@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { onMounted, ref } from 'vue'
 import { useRoute } from 'vue-router'
-import { Button, Input, Loading, TabPanel, Tabs, Textarea, Toast, Upload } from 'tdesign-mobile-vue'
+import { Button, Checkbox, Icon, Input, Loading, TabPanel, Tabs, Textarea, Toast, Upload } from 'tdesign-mobile-vue'
 import type { UploadFile } from 'tdesign-mobile-vue'
 import { addProjectFile, addProjectTask, downloadProjectFile, fetchProjectCollab, sendProjectMessage, toggleProjectTask } from '@/api/projects'
 import { uploadFile } from '@/api/uploads'
@@ -113,13 +113,21 @@ async function onDownloadFile(id: string, name: string) {
             </div>
             <EmptyBlock v-if="!(data?.tasks ?? []).length" text="暂无任务，添加第一条协作任务" />
             <div v-else class="list">
-              <article v-for="t in data?.tasks" :key="t.id" class="m-card task" v-pressable @click="onToggleTask(t.id)">
-                <span class="check" :class="{ done: t.done }">{{ t.done ? '✓' : '' }}</span>
-                <div class="task-main">
+              <Checkbox
+                v-for="t in data?.tasks"
+                :key="t.id"
+                class="m-card task"
+                :checked="t.done"
+                :borderless="true"
+                @change="onToggleTask(t.id)"
+              >
+                <template #label>
                   <p class="task-title" :class="{ done: t.done }">{{ t.title }}</p>
+                </template>
+                <template #content>
                   <p class="meta">{{ t.at }}</p>
-                </div>
-              </article>
+                </template>
+              </Checkbox>
             </div>
           </div>
         </TabPanel>
@@ -142,7 +150,7 @@ async function onDownloadFile(id: string, name: string) {
               <article v-for="f in data?.files" :key="f.id" class="m-card file">
                 <p class="file-name">{{ f.name }}</p>
                 <p class="meta">{{ f.at }}</p>
-                <Button class="file-link" variant="text" size="small" @click="onDownloadFile(f.id, f.name)">下载文件 ›</Button>
+                <Button class="file-link" variant="text" size="small" @click="onDownloadFile(f.id, f.name)">下载文件<template #suffix><Icon name="chevron-right" size="14px" /></template></Button>
               </article>
             </div>
           </div>
@@ -199,29 +207,10 @@ async function onDownloadFile(id: string, name: string) {
 }
 
 .task {
-  display: flex;
-  align-items: center;
-  gap: 10px;
+  padding: 12px 16px;
 }
 
-.check {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 22px;
-  height: 22px;
-  border: 1px solid var(--td-component-border);
-  border-radius: 50%;
-  color: #fff;
-  font-size: 13px;
-}
-
-.check.done {
-  background: var(--td-success-color);
-  border-color: var(--td-success-color);
-}
-
-.task-main {
+.task :deep(.t-checkbox__label) {
   flex: 1;
 }
 

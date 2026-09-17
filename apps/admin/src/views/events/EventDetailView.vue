@@ -537,7 +537,7 @@ onMounted(() => load())
           <t-tab-panel value="tickets" label="票务核销">
             <div class="tab-body">
               <div class="ticket-tools">
-                <t-input v-model="redeemCode" placeholder="输入 8 位核销码" clearable style="width: 260px" @enter="onRedeemTicket" />
+                <t-input v-model="redeemCode" placeholder="输入 8 位核销码…" clearable style="width: 260px" @enter="onRedeemTicket" />
                 <t-button theme="primary" :loading="redeeming" @click="onRedeemTicket">核销</t-button>
                 <t-button variant="outline" @click="exportTickets">导出票务名单</t-button>
               </div>
@@ -590,7 +590,7 @@ onMounted(() => load())
           </t-form-item>
         </div>
         <t-form-item label="改期原因" name="reason">
-          <t-textarea v-model="rescheduleForm.reason" :maxlength="200" placeholder="将随站内信通知报名者" />
+          <t-textarea v-model="rescheduleForm.reason" :maxlength="200" placeholder="将随站内信通知报名者…" />
         </t-form-item>
       </t-form>
       <template #footer>

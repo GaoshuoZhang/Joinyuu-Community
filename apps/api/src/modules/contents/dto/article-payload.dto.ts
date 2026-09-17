@@ -1,4 +1,4 @@
-import { ArrayMinSize, IsArray, IsIn, IsNotEmpty, IsOptional, IsString } from 'class-validator'
+import { ArrayMinSize, IsArray, IsBoolean, IsIn, IsNotEmpty, IsOptional, IsString } from 'class-validator'
 
 /* 文章新增/编辑载荷（对照 apps/admin/src/api/contents.ts ArticlePayload）
  * - channel：official 社区自行发布（新增即待发布）/ submitted 用户投稿（新增即待审核）
@@ -32,6 +32,10 @@ export class ArticlePayloadDto {
   @IsArray()
   @IsString({ each: true })
   tags!: string[]
+
+  @IsOptional()
+  @IsBoolean()
+  commentsEnabled: boolean = true
 
   @IsOptional()
   @IsIn(['official', 'submitted'])

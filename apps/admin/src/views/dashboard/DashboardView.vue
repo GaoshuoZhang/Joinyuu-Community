@@ -161,12 +161,11 @@ function resetCards() {
 const layoutVisible = ref(false)
 
 /* ---------- 数据与跳转 ---------- */
-/* 六域待办卡片的图标与跳转路由（数据来自 fetchDashboard().todos） */
+/* 待办卡片的图标与跳转路由（数据来自 fetchDashboard().todos） */
 const todoCardIcons: Record<string, unknown> = {
   settle: CheckCircleIcon,
   demand: ViewListIcon,
   reservation: MapIcon,
-  showcase: BuildingIcon,
   article: Edit2Icon,
   lease: TimeIcon,
 }

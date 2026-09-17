@@ -1,5 +1,5 @@
 import type { Demand, DemandCreatePayload, DemandKind, IdentityType, MyDemandItem, MyResponseItem } from '@/types'
-import { accountByUid, demandMessagesByDemand, demands, dictLabel, dicts, enterpriseResponsesByEnterprise, enterprises, grantEnterpriseExperience, grantExperience, grantPoints, nextDemandId, nextMockId, nowStamp, projectsByUid, pushNotice, responsesByUid, trackMockEvent } from '@/mock/db'
+import { accountByUid, demandMessagesByDemand, demands, dictLabel, dicts, enterpriseResponsesByEnterprise, enterprises, grantPoints, nextDemandId, nextMockId, nowStamp, pushNotice, responsesByUid, trackMockEvent } from '@/mock/db'
 import { permissionsOf } from '@/mock/handlers/enterprises'
 import { readPayload } from '@/mock/session'
 import { fail, withLatency } from '@/mock/latency'
@@ -126,11 +126,15 @@ export async function fetchDemands(query: { page?: number; pageSize?: number; ca
 
 export async function fetchDemand(id: string): Promise<Demand> {
   return withLatency(() => {
-    const d = demands.find((x) => x.id === id && (x.status === 'published' || x.status === 'projected'))
-    if (!d || !visibleTo(d, myIdentitiesOf())) fail(404, '需求不存在或已下架')
     const uid = readPayload()?.sub
-    const myResponses = uid ? (responsesByUid[uid] ?? []) : []
-    return { ...d, myResponse: myResponses.some((r) => r.demandId === id) }
+    /* 发布者可查看自身任意状态需求；其他成员仅可见已发布 / 已立项 */
+    const d = demands.find(
+      (x) => x.id === id && ((x.status === 'published' || x.status === 'projected') || (!!uid && x.publisherUid === uid)),
+    )
+    if (!d || !visibleTo(d, myIdentitiesOf())) fail(404, '需求不存在或已下架')
+    /* 撤回即从 mock 列表移除，因此存在记录即视为已响应 */
+    const mine = uid ? (responsesByUid[uid] ?? []).find((r) => r.demandId === id) : undefined
+    return { ...d, ...(mine ? { myResponse: { message: mine.note, at: mine.at, status: mine.status ?? 'pending' } } : {}) }
   })
 }
 
@@ -269,6 +273,7 @@ export async function fetchMyDemands(): Promise<MyDemandItem[]> {
       .map((d) => ({
         id: d.id, title: d.title, categoryLabel: d.categoryLabel, status: d.status, kind: d.kind,
         responseCount: d.responseCount, createdAt: d.createdAt, rejectReason: d.rejectReason,
+        appealed: d.appealed, appealReason: d.appealReason,
       }))
   })
 }
@@ -369,61 +374,41 @@ export async function fetchDemandResponses(id: string): Promise<MyResponseItem[]
   })
 }
 
-export async function reviewDemandResponse(id: string, responseId: string, action: 'accept' | 'reject', reason = ''): Promise<void> {
+/** 发布者多选意向承接方并提交立项（published → selected；由管理员手动立项，不在此生成项目）。 */
+export async function selectDemandResponders(id: string, responseIds: string[]): Promise<void> {
   await withLatency(() => {
     const uid = requireUid()
     const demand = demands.find((item) => item.id === id)
-    if (!demand || demand.publisherUid !== uid) fail(403, '仅需求发布者可处理响应')
-    if (demand.status !== 'published') fail(409, '该需求当前不可处理响应')
-    const entry = Object.entries(responsesByUid).find(([, records]) => records.some((item) => item.id === responseId && item.demandId === id))
-    if (!entry) fail(404, '响应记录不存在')
-    const [responderUid, records] = entry
-    const response = records.find((item) => item.id === responseId)!
-    if (response.status !== 'pending') fail(409, '该响应已处理')
-    if (action === 'reject') {
-      if (!reason.trim()) fail(400, '驳回响应时请填写原因')
-      response.status = 'rejected'
-      response.reviewedAt = nowStamp()
-      response.rejectReason = reason.trim()
-      pushNotice(responderUid, { type: 'audit_result', title: '需求响应未通过', content: `你对「${demand.title}」的响应未通过：${reason.trim()}`, link: '/me/responses' })
-      return
-    }
-    if (demand.projectId) fail(409, '该需求已完成立项')
-    demand.status = 'projected'
-    for (const candidate of Object.values(responsesByUid).flat()) {
-      if (candidate.demandId !== id) continue
-      if (candidate.id === responseId) {
-        candidate.status = 'accepted'
-        candidate.reviewedAt = nowStamp()
-      } else if (candidate.status === 'pending') {
-        candidate.status = 'rejected'
-        candidate.reviewedAt = nowStamp()
-        candidate.rejectReason = '需求已选择其他响应方'
-        if (candidate.responderUid) pushNotice(candidate.responderUid, { type: 'audit_result', title: '需求响应未通过', content: `「${demand.title}」已选择其他响应方。`, link: '/me/responses' })
+    if (!demand || demand.publisherUid !== uid) fail(403, '仅需求发布者可选择承接方')
+    if (demand.status !== 'published') fail(409, '该需求当前不可选择承接方')
+    const uniqueIds = [...new Set(responseIds)]
+    if (!uniqueIds.length) fail(400, '请至少选择一位意向承接方')
+    const all = Object.values(responsesByUid).flat().filter((item) => item.demandId === id)
+    const chosen = uniqueIds.map((rid) => all.find((item) => item.id === rid))
+    if (chosen.some((item) => !item)) fail(404, '响应记录不存在')
+    if (chosen.some((item) => (item!.status ?? 'pending') !== 'pending')) fail(409, '该响应已处理')
+    const names: string[] = []
+    for (const item of chosen) {
+      const record = item!
+      record.status = 'accepted'
+      record.reviewedAt = nowStamp()
+      const responderUid = record.responderUid ?? ''
+      names.push(record.responderName ?? accountByUid(responderUid)?.nickname ?? responderUid)
+      if (responderUid) {
+        pushNotice(responderUid, {
+          type: 'audit_result',
+          title: '你已成为意向承接方',
+          content: `「${demand.title}」发布者已选择你作为意向承接方，等待社区管理员确认立项。`,
+          link: '/me/responses',
+        })
       }
     }
-    const responderName = response.responderName ?? accountByUid(responderUid)?.nickname ?? responderUid
-    const projectId = nextMockId('P')
-    const milestones = [{ id: nextMockId('MS'), title: '合作方案确认', done: false }, { id: nextMockId('MS'), title: '项目交付', done: false }]
-    ;(projectsByUid[demand.publisherUid!] ??= []).unshift({
-      id: projectId, name: demand.title, role: '需求发起方', sourceDemandId: demand.id, partnerName: responderName,
-      progress: 0, milestones,
+    demand.status = 'selected'
+    pushNotice(uid, {
+      type: 'system',
+      title: '已提交立项',
+      content: `「${demand.title}」已选定：${names.join('、')}，等待社区管理员确认立项。`,
+      link: '/me/demands',
     })
-    const responderIdentity = accountByUid(responderUid)?.identities.find((item) => item.type === response.responderIdentity)
-    ;(projectsByUid[responderUid] ??= []).unshift({
-      id: projectId, name: demand.title, role: responderIdentity?.type === 'community_enterprise' ? '企业承接' : '本人承接',
-      enterpriseName: responderIdentity?.enterpriseName, enterpriseId: responderIdentity?.enterpriseId,
-      sourceDemandId: demand.id, partnerName: demand.publisherName,
-      progress: 0, milestones: milestones.map((item) => ({ ...item })),
-    })
-    demand.projectId = projectId
-    grantPoints(responderUid, 200, `承接需求：${demand.title}`, '项目立项')
-    if (responderIdentity?.type === 'community_enterprise' && responderIdentity.enterpriseId) {
-      grantEnterpriseExperience(responderIdentity.enterpriseId, 30, `承接项目：${demand.title}`)
-    } else {
-      grantExperience(responderUid, 30, `承接项目：${demand.title}`)
-    }
-    pushNotice(responderUid, { type: 'audit_result', title: '需求响应已被接受', content: `你已承接「${demand.title}」，项目已立项，积分 +200。`, link: '/me/projects' })
-    pushNotice(uid, { type: 'system', title: '需求已立项', content: `已接受「${responderName}」的响应，「${demand.title}」已生成协作项目。`, link: '/me/projects' })
   })
 }

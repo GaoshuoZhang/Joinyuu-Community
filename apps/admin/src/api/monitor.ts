@@ -1,4 +1,4 @@
-import { httpGet } from './http'
+import { httpGet, httpPost } from './http'
 
 /* 系统监控 API（/api/admin/monitor/*）
  * 服务名/定时任务取自后端 scheduler.service.ts */
@@ -62,4 +62,9 @@ export async function fetchMonitorOverview(): Promise<MonitorOverview> {
 export async function fetchCronLogs(jobName?: string): Promise<CronRunLog[]> {
   const qs = jobName ? `?jobName=${encodeURIComponent(jobName)}` : ''
   return httpGet<CronRunLog[]>(`/monitor/cron-logs${qs}`)
+}
+
+/** POST /api/admin/monitor/jobs/:name/run — 手动触发任务（调试/运维，失败透出 500） */
+export async function runCronJob(name: string): Promise<{ code: number }> {
+  return httpPost<{ code: number }>(`/monitor/jobs/${encodeURIComponent(name)}/run`)
 }

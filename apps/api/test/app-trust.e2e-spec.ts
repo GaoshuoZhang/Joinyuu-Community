@@ -272,7 +272,7 @@ describe('M2-R R3 实名/举报/收藏/协议/社区', () => {
 
     const cards = await appGet(app, tokenU5, '/api/app/me/cards')
     expect(cards.body.data.individual.intro).toBe('更新后的个人简介')
-    expect(cards.body.data.individual.politicalStatus).toBeUndefined()
+    expect(cards.body.data.individual.politicalStatus).toBe('群众') // 省略字段保留既有内容
 
     const card = await appGet(app, token, `/api/app/community/talents/U1005`)
     expect(card.body.data.intro).toBe('更新后的个人简介')

@@ -1,10 +1,10 @@
 <script setup lang="ts">
 import { reactive, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { Button, Input, Toast } from 'tdesign-mobile-vue'
+import { Button, Image, Input, Toast } from 'tdesign-mobile-vue'
 import { useAuthStore } from '@/stores/auth'
 import { useNoticesStore } from '@/stores/notices'
-import { ApiError } from '@/api/http'
+import { ApiError, apiMode } from '@/api/http'
 import { isCaptcha, isPhone, PHONE_MSG, REQUIRED } from '@/utils/validators'
 import { useCaptcha } from '@/composables/useCaptcha'
 import 'tdesign-mobile-vue/es/style/index.css'
@@ -59,23 +59,23 @@ async function onSubmit() {
     <div class="form">
       <div class="field">
         <label>手机号</label>
-        <Input v-model="form.phone" type="tel" :maxlength="11" placeholder="手机号" clearable @keyup.enter="onSubmit" />
+        <Input v-model="form.phone" type="tel" autocomplete="username" :maxlength="11" placeholder="手机号" clearable @keyup.enter="onSubmit" />
         <p v-if="errors.phone" class="error">{{ errors.phone }}</p>
       </div>
       <div class="field">
         <label>密码</label>
-        <Input v-model="form.password" type="password" placeholder="密码" clearable @keyup.enter="onSubmit" />
+        <Input v-model="form.password" type="password" autocomplete="current-password" placeholder="密码" clearable @keyup.enter="onSubmit" />
         <p v-if="errors.password" class="error">{{ errors.password }}</p>
         <p class="forgot"><router-link to="/forgot-password" class="link">忘记密码？</router-link></p>
       </div>
       <div class="field">
         <label>验证码</label>
         <div class="captcha-row">
-          <Input v-model="form.captchaCode" :maxlength="4" placeholder="请输入验证码" @keyup.enter="onSubmit" />
-          <button class="captcha-button" type="button" :disabled="captchaLoading" aria-label="刷新验证码" @click="refreshCaptcha">
-            <img v-if="captchaImage" :src="captchaImage" alt="图形验证码" />
+          <Input v-model="form.captchaCode" :maxlength="4" :spell-check="false" placeholder="请输入验证码" @keyup.enter="onSubmit" />
+          <Button class="captcha-button" theme="light" :disabled="captchaLoading" aria-label="刷新验证码" @click="refreshCaptcha">
+            <Image v-if="captchaImage" :src="captchaImage" fit="contain" class="captcha-img" alt="图形验证码" />
             <span v-else>刷新</span>
-          </button>
+          </Button>
         </div>
         <p v-if="errors.captchaCode" class="error">{{ errors.captchaCode }}</p>
       </div>
@@ -83,7 +83,7 @@ async function onSubmit() {
       <Button theme="primary" block size="large" :loading="submitting" @click="onSubmit">登录</Button>
       <p class="guest"><router-link to="/" replace class="guest-link">暂不登录</router-link></p>
       <p class="swap">还没有账号？<router-link to="/register" class="link">立即注册</router-link></p>
-      <p class="demo">演示：13800000001 / client123</p>
+      <p v-if="apiMode === 'mock'" class="demo">演示：13800000001 / client123</p>
     </div>
   </div>
 </template>
@@ -149,23 +149,16 @@ async function onSubmit() {
 
 .captcha-button {
   flex-shrink: 0;
-  padding: 0;
-  font-weight: 700;
-  letter-spacing: 2px;
-  color: var(--td-brand-color);
-  background: var(--td-brand-color-1);
-  border-radius: var(--td-radius-default);
-  user-select: none;
-  border: 0;
-  overflow: hidden;
   min-width: 96px;
   min-height: 40px;
+  padding: 0;
+  overflow: hidden;
 }
 
-.captcha-button img {
-  display: block;
+.captcha-img {
   width: 96px;
   height: 40px;
+  display: block;
 }
 
 .error {

@@ -1,4 +1,11 @@
-import type { ExperienceRecord, ExperienceRule, LevelTier } from '@/types'
+import type {
+  ExperienceRecord,
+  ExperienceRule,
+  LevelTier,
+  LevelTierScope,
+  PublishLimitRule,
+  ScopedLevelTiers,
+} from '@/types'
 import { httpGet, httpPost, httpPut } from './http'
 
 /* ---------- 经验值规则（触发项写死，仅可编辑经验值与启停） ---------- */
@@ -30,12 +37,23 @@ export async function fetchExperienceIssuanceRecords(): Promise<ExperienceRecord
 /* ---------- 等级梯度（整组保存，最低 1 级、最多 10 级，门槛严格递增） ---------- */
 
 /* GET /api/admin/rules/levels — 等级梯度（level 升序） */
-export async function fetchLevelTiers(): Promise<LevelTier[]> {
-  return httpGet<LevelTier[]>('/rules/levels')
+export async function fetchLevelTiers(scope: LevelTierScope): Promise<ScopedLevelTiers> {
+  const tiers = await httpGet<LevelTier[]>(`/rules/levels?identityType=${scope}`)
+  return { scope, tiers }
 }
 
 /* PUT /api/admin/rules/levels — 整组保存等级梯度 { tiers: [{ level, label, threshold }] }；
  * 保存后需重算存量社区个体/社区企业身份的等级（梯度变更仅影响后续结算） */
-export async function saveLevelTiers(tiers: LevelTier[]): Promise<{ code: number }> {
-  return httpPut<{ code: number }>('/rules/levels', { tiers })
+export async function saveLevelTiers(scope: LevelTierScope, tiers: LevelTier[]): Promise<{ code: number }> {
+  return httpPut<{ code: number }>('/rules/levels', { identityType: scope, tiers })
+}
+
+/* ---------- 发布限制（身份组固定，社区身份按动态等级展开） ---------- */
+
+export async function fetchPublishLimits(): Promise<PublishLimitRule[]> {
+  return httpGet<PublishLimitRule[]>('/rules/publishing-limits')
+}
+
+export async function savePublishLimits(rules: PublishLimitRule[]): Promise<{ code: number }> {
+  return httpPut<{ code: number }>('/rules/publishing-limits', { rules })
 }

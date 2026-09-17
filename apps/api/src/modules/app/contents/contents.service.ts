@@ -1,7 +1,6 @@
 import {
   BadRequestException,
   ConflictException,
-  ForbiddenException,
   Injectable,
   NotFoundException,
 } from '@nestjs/common'
@@ -13,6 +12,8 @@ import { formatNow } from '../../../common/utils/time'
 import type { CreateArticleDto } from './dto/create-article.dto'
 import { JwtService } from '@nestjs/jwt'
 import { assertEnterprisePermission } from '../../../common/enterprise/enterprise-permission'
+import { consumePublishingLimit } from '../../../common/enterprise/publishing-limits'
+import type { ArticleWithComments } from '../../contents/article-integration'
 
 /** 栏目 DTO（对齐客户端 ArticleColumn：code/label） */
 export interface ArticleColumnDto {
@@ -33,6 +34,7 @@ export interface ArticleDto {
   content: string
   likeCount: number
   commentCount: number
+  commentsEnabled: boolean
   liked?: boolean
 }
 
@@ -136,7 +138,9 @@ export class AppContentsService {
     }
 
     const id = await this.ids.next('SU')
-    await this.prisma.article.create({
+    await this.prisma.$transaction(async tx => {
+      await consumePublishingLimit(tx, user.uid, 'article_publish', { identityType: snapshot.type, enterpriseId: snapshot.enterpriseId })
+      await tx.article.create({
       data: {
         id,
         title,
@@ -150,8 +154,10 @@ export class AppContentsService {
         content: sanitizeHtml(content),
         summary: (dto.summary ?? '').trim().slice(0, 255),
         tags: dto.tags ?? [],
+        commentsEnabled: true,
         createdAt: formatNow(),
-      },
+      } as unknown as Prisma.ArticleUncheckedCreateInput,
+      })
     })
     return { id }
   }
@@ -176,13 +182,17 @@ export class AppContentsService {
   /** 修改重提：withdrawn/rejected → pending（保留编号，覆盖内容与栏目） */
   async resubmitArticle(uid: string, id: string, dto: CreateArticleDto): Promise<{ code: number }> {
     const article = await this.mine(uid, id)
+    const identity = article.authorIdentity as Snapshot | null
+    if (identity?.enterpriseId) await assertEnterprisePermission(this.prisma, uid, identity.enterpriseId, 'article_submit')
     if (article.status !== 'withdrawn' && article.status !== 'rejected') {
       throw new ConflictException('仅已驳回或已撤回的投稿可修改重提')
     }
     const column = await this.resolveArticleColumn(dto.columnId, dto.columnCode)
     if (!column) throw new BadRequestException('请选择有效的投稿栏目')
-    await this.prisma.article.update({
-      where: { id },
+    await this.prisma.$transaction(async tx => {
+      await consumePublishingLimit(tx, uid, 'article_publish', { identityType: identity?.type, enterpriseId: identity?.enterpriseId })
+      const changed = await tx.article.updateMany({
+      where: { id, status: { in: ['withdrawn', 'rejected'] }, deletedAt: null },
       data: {
         title: dto.title?.trim(),
         columnId: column.id,
@@ -193,6 +203,8 @@ export class AppContentsService {
         rejectedReason: null,
         status: 'pending',
       },
+      })
+      if (changed.count !== 1) throw new ConflictException('投稿状态已变化，请刷新后重试')
     })
     return { code: 0 }
   }
@@ -276,9 +288,10 @@ export class AppContentsService {
   async articleComments(articleId: string, authorization?: string) {
     const article = await this.prisma.article.findFirst({
       where: { id: articleId, status: 'published', deletedAt: null },
-      select: { id: true },
+      select: { id: true, commentsEnabled: true } as unknown as Prisma.ArticleSelect,
     })
     if (!article) throw new NotFoundException('文章不存在')
+    if (!(article as unknown as { commentsEnabled: boolean }).commentsEnabled) throw new ConflictException('文章评论已关闭')
     const viewerUid = await this.optionalUid(authorization)
     const blockedUids = await this.blockedUids(viewerUid)
     const rows = await this.prisma.articleComment.findMany({
@@ -306,6 +319,7 @@ export class AppContentsService {
       this.prisma.user.findUnique({ where: { uid } }),
     ])
     if (!article) throw new NotFoundException('文章不存在')
+    if (!(article as ArticleWithComments).commentsEnabled) throw new ConflictException('文章评论已关闭')
     if (!user) throw new NotFoundException('用户不存在')
     const created = await this.prisma.$transaction(async (tx) => {
       const row = await tx.articleComment.create({
@@ -361,7 +375,7 @@ export class AppContentsService {
 
 }
 
-function toArticleDto(a: Article, includeLiked: boolean, liked?: boolean): ArticleDto {
+function toArticleDto(a: Article | ArticleWithComments, includeLiked: boolean, liked?: boolean): ArticleDto {
   const dto: ArticleDto = {
     id: a.id,
     title: a.title,
@@ -373,6 +387,7 @@ function toArticleDto(a: Article, includeLiked: boolean, liked?: boolean): Artic
     content: a.content,
     likeCount: a.likeCount,
     commentCount: a.commentCount,
+    commentsEnabled: 'commentsEnabled' in a ? a.commentsEnabled : true,
   }
   const cover = firstImage(a.content)
   if (cover) dto.coverUrl = cover

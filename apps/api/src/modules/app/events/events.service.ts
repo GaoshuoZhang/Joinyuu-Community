@@ -14,6 +14,7 @@ import { PointsEngineService } from '../../../common/engine/points-engine/points
 import { NotificationService } from '../../../common/notify/notification.service'
 import { formatNow } from '../../../common/utils/time'
 import { assertRealnameAllowed } from '../realname/realname.service'
+import { consumePublishingLimit } from '../../../common/enterprise/publishing-limits'
 import { CheckInDto } from './dto/check-in.dto'
 import { SubmitFeedbackDto } from './dto/submit-feedback.dto'
 
@@ -130,6 +131,7 @@ export class AppEventsService {
     }
 
     return this.prisma.$transaction(async (tx) => {
+      await consumePublishingLimit(tx, uid, 'event_enroll')
       // 同一活动报名串行化，避免并发请求突破 capacity 或产生重复候补序号。
       await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${`event-enroll:${eventId}`}))`
       const existing = await tx.eventEnrollment.findUnique({
@@ -477,6 +479,7 @@ export class AppEventsService {
       id: e.id,
       title: e.title,
       type: e.type,
+      typeLabel: e.type,
       startTime: e.startTime,
       endTime: e.endTime,
       location: e.location,

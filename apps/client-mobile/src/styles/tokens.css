@@ -70,6 +70,40 @@
   box-sizing: border-box;
 }
 
+/* v44 移动端交互基线：消除双击缩放延迟与点击高亮，弹层内部滚动不穿透 */
+html {
+  -webkit-tap-highlight-color: transparent;
+}
+
+a,
+button,
+[role='button'],
+input,
+textarea,
+.t-button,
+.t-cell,
+.t-tag--checkable {
+  touch-action: manipulation;
+}
+
+.t-popup__content,
+.t-dialog,
+.t-action-sheet__content {
+  overscroll-behavior: contain;
+}
+
+/* 标题避免孤行；数字列使用等宽数字 */
+h1,
+h2,
+h3,
+.page-title {
+  text-wrap: balance;
+}
+
+.tabular-nums {
+  font-variant-numeric: tabular-nums;
+}
+
 html,
 body,
 #app {
@@ -244,77 +278,7 @@ a {
 }
 
 /* ---------- 登录/注册品牌区 ---------- */
-/* 与管理后台登录页同一套样式（apps/admin/src/styles/tokens.css） */
-
-.login-page {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  min-height: 100vh;
-}
-
-.login-brand {
-  position: relative;
-  overflow: hidden;
-  display: flex;
-  flex-direction: column;
-  justify-content: center;
-  padding: 64px;
-  color: #fff;
-  background: linear-gradient(152deg, #062a56 0%, #0052d9 58%, #0080c9 100%);
-}
-
-.login-brand::before,
-.login-brand::after {
-  content: '';
-  position: absolute;
-  border-radius: 50%;
-  border: 1px solid rgba(255, 255, 255, 0.16);
-  pointer-events: none;
-}
-
-.login-brand::before {
-  width: 420px;
-  height: 420px;
-  right: -140px;
-  bottom: -160px;
-}
-
-.login-brand::after {
-  width: 260px;
-  height: 260px;
-  right: 40px;
-  bottom: -80px;
-  border-style: dashed;
-}
-
-.login-form-side {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: 32px;
-  background: var(--td-bg-color-page);
-}
-
-.login-form-card {
-  width: 380px;
-  max-width: 100%;
-  padding: 40px 36px;
-  background: var(--td-bg-color-container);
-  border: 1px solid var(--td-component-border);
-  border-radius: var(--td-radius-large);
-  box-shadow: var(--td-shadow-1);
-}
-
-@media (max-width: 900px) {
-  .login-page {
-    grid-template-columns: 1fr;
-  }
-
-  .login-brand {
-    padding: 40px 32px;
-    min-height: 220px;
-  }
-}
+/* 移动端登录/注册页使用页面内自有样式（.m-login/.m-register），此处不再保留桌面版式死代码。 */
 
 /* v38 触控目标：小号操作按钮 ≥44px，超小号图标按钮 ≥36px（移动端最小可点面积） */
 .t-button--size-small {

@@ -20,6 +20,7 @@ export interface SiteConfigDto {
   mallOpen: boolean
   demandOpen: boolean
   reservationOpen: boolean
+  homeCarouselOpen: boolean
 }
 
 export interface DictItemDto {
@@ -56,6 +57,7 @@ export class ConfigService {
       mallOpen: Boolean(full.mallOpen),
       demandOpen: Boolean(full.demandOpen),
       reservationOpen: Boolean(full.reservationOpen),
+      homeCarouselOpen: Boolean(full.homeCarouselOpen),
     }
   }
 
@@ -103,6 +105,8 @@ function toFullSystemConfig(config: SystemConfig): Record<string, unknown> {
     mallOpen: config.mallOpen,
     demandOpen: config.demandOpen,
     reservationOpen: config.reservationOpen,
+    realnameRequired: config.realnameRequired,
+    homeCarouselOpen: config.homeCarouselOpen,
     leaseExpireRemindDays: config.leaseExpireRemindDays,
     uploadMaxSizeMb: config.uploadMaxSizeMb,
     passwordExpireDays: config.passwordExpireDays,

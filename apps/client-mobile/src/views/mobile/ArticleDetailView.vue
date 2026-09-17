@@ -1,7 +1,8 @@
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { Loading, Button, Textarea, Toast } from 'tdesign-mobile-vue'
+import { Loading, Button, Icon, Image, Tag, Textarea, Toast } from 'tdesign-mobile-vue'
+import DOMPurify from 'dompurify'
 import { useAsyncList } from '@/composables/useAsyncList'
 import { createArticleComment, fetchArticle, fetchArticleComments, toggleArticleLike } from '@/api/contents'
 import { listFavorites, toggleFavorite } from '@/api/favorites'
@@ -22,6 +23,8 @@ const auth = useAuthStore()
 
 const { data, loading, error, run } = useAsyncList<Article>(() => fetchArticle(String(route.params.id)))
 const article = computed(() => data.value)
+const isRichContent = computed(() => /<\/?[a-z][^>]*>/i.test(data.value?.content ?? ''))
+const richContent = computed(() => DOMPurify.sanitize(data.value?.content ?? ''))
 const contentBlocks = computed(() =>
   (data.value?.content ?? '')
     .split('\n')
@@ -64,7 +67,7 @@ async function onReport(text: string) {
 onMounted(async () => {
   await run()
   await loadFavorite()
-  await loadComments()
+  if (article.value?.commentsEnabled) await loadComments()
   const item = article.value
   if (item) addReadingHistory({ id: item.id, title: item.title })
 })
@@ -98,6 +101,10 @@ watch(article, (value) => {
 })
 
 async function loadComments() {
+  if (!article.value?.commentsEnabled) {
+    comments.value = []
+    return
+  }
   try {
     comments.value = await fetchArticleComments(String(route.params.id))
   } catch {
@@ -176,22 +183,27 @@ async function onToggleFavorite() {
     </template>
     <template v-else-if="article">
       <header class="head">
-        <span class="col-tag">{{ article.columnLabel }}</span>
+        <Tag class="col-tag" size="small" variant="light" theme="primary">{{ article.columnLabel }}</Tag>
         <h1 class="title">{{ article.title }}</h1>
        <p class="meta">{{ article.authorName }} · {{ article.publishedAt }} · {{ article.views }} 次浏览</p>
       </header>
-      <img v-if="article.coverUrl" class="cover" :src="article.coverUrl" :alt="article.title" loading="lazy" decoding="async" @error="onImageError" />
+      <Image v-if="article.coverUrl" class="cover" :src="article.coverUrl" :alt="article.title" fit="cover" lazy @error="onImageError" />
       <article class="m-card body">
-        <template v-for="(block, i) in contentBlocks" :key="i">
-          <img v-if="block.type === 'image'" class="content-image" :src="block.url" alt="文章配图" loading="lazy" decoding="async" @error="onImageError" />
-          <p v-else class="para">{{ block.text }}</p>
+        <div v-if="isRichContent" class="rich-content" v-html="richContent"></div>
+        <template v-else>
+          <template v-for="(block, i) in contentBlocks" :key="i">
+            <Image v-if="block.type === 'image'" class="content-image" :src="block.url" alt="文章配图" fit="contain" lazy @error="onImageError" />
+            <p v-else class="para">{{ block.text }}</p>
+          </template>
         </template>
       </article>
       <div class="foot-actions">
         <Button size="small" :theme="liked ? 'primary' : 'default'" variant="outline" @click="onLike">
-          {{ liked ? '♥' : '♡' }} 点赞 {{ likeCount }}
+          <Icon :name="liked ? 'heart-filled' : 'heart'" size="16px" />点赞 {{ likeCount }}
         </Button>
-        <Button size="small" variant="outline" @click="onToggleFavorite">{{ favorited ? '★ 已收藏' : '☆ 收藏' }}</Button>
+        <Button size="small" variant="outline" @click="onToggleFavorite">
+          <Icon :name="favorited ? 'star-filled' : 'star'" size="16px" />{{ favorited ? '已收藏' : '收藏' }}
+        </Button>
         <Button size="small" variant="outline" :loading="sharing" @click="onShare">分享</Button>
         <p class="report-link" v-pressable @click="openArticleReport">举报该内容</p>
       </div>
@@ -204,7 +216,7 @@ async function onToggleFavorite() {
         @submit="onReport"
       />
 
-      <section class="m-card comments">
+      <section v-if="article.commentsEnabled" class="m-card comments">
         <h3 class="sec-title">评论（{{ comments.length }}）</h3>
         <div v-if="comments.length" class="comment-list">
           <div v-for="item in comments" :key="item.id" class="comment">
@@ -221,6 +233,7 @@ async function onToggleFavorite() {
         <p v-if="commentError" class="field-error">{{ commentError }}</p>
         <Button theme="primary" size="small" class="comment-submit" :loading="commenting" @click="onComment">发表评论</Button>
       </section>
+      <section v-else class="m-card comments-disabled" aria-live="polite">该文章已关闭评论</section>
     </template>
   </div>
 </template>
@@ -316,12 +329,7 @@ async function onToggleFavorite() {
 }
 
 .col-tag {
-  display: inline-block;
-  font-size: 12px;
-  padding: 2px 7px;
-  border-radius: var(--td-tag-square-border-radius, 4px);
-  background: var(--td-brand-color-1);
-  color: var(--td-brand-color);
+  display: inline-flex;
 }
 
 .title {
@@ -345,11 +353,10 @@ async function onToggleFavorite() {
   display: block;
   width: 100%;
   border-radius: var(--td-radius-large);
-  object-fit: cover;
 }
 
-.cover { max-height: 240px; aspect-ratio: 16 / 9; object-fit: cover; }
-.content-image { margin: 0 0 12px; max-height: 420px; aspect-ratio: 4 / 3; object-fit: contain; background: var(--td-bg-color-secondarycontainer); }
+.cover { max-height: 240px; aspect-ratio: 16 / 9; }
+.content-image { margin: 0 0 12px; max-height: 420px; aspect-ratio: 4 / 3; background: var(--td-bg-color-secondarycontainer); }
 
 .para {
   margin: 0 0 12px;
@@ -361,6 +368,52 @@ async function onToggleFavorite() {
 .para:last-child {
   margin-bottom: 0;
 }
+
+.comments-disabled {
+  padding: 16px;
+  text-align: center;
+  color: var(--td-text-color-secondary);
+  font-size: 13px;
+}
+
+.rich-content {
+  overflow-wrap: anywhere;
+  font-size: 14px;
+  line-height: 1.85;
+  color: var(--td-text-color-primary);
+}
+
+.rich-content :deep(p),
+.rich-content :deep(ul),
+.rich-content :deep(ol),
+.rich-content :deep(blockquote),
+.rich-content :deep(pre) {
+  margin: 0 0 12px;
+}
+
+.rich-content :deep(h1),
+.rich-content :deep(h2),
+.rich-content :deep(h3),
+.rich-content :deep(h4) {
+  margin: 20px 0 8px;
+  line-height: 1.45;
+}
+
+.rich-content :deep(h1) { font-size: 20px; }
+.rich-content :deep(h2) { font-size: 18px; }
+.rich-content :deep(h3),
+.rich-content :deep(h4) { font-size: 16px; }
+.rich-content :deep(ul),
+.rich-content :deep(ol) { padding-left: 22px; }
+.rich-content :deep(blockquote) { padding-left: 12px; border-left: 3px solid var(--td-component-border); color: var(--td-text-color-secondary); }
+.rich-content :deep(a) { color: var(--td-brand-color); text-decoration: underline; }
+.rich-content :deep(img),
+.rich-content :deep(video) { display: block; width: auto; max-width: 100%; height: auto; margin: 0 auto 12px; border-radius: var(--td-radius-large); }
+.rich-content :deep(table) { display: block; max-width: 100%; overflow-x: auto; border-collapse: collapse; }
+.rich-content :deep(th),
+.rich-content :deep(td) { padding: 6px 8px; border: 1px solid var(--td-component-border); }
+.rich-content :deep(pre) { max-width: 100%; overflow-x: auto; padding: 12px; background: var(--td-bg-color-secondarycontainer); }
+.rich-content :deep(:last-child) { margin-bottom: 0; }
 
 .field-error {
   margin: 6px 0 0;

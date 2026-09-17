@@ -160,6 +160,9 @@ export class AppProjectsService {
 
     const respondentUid = await this.respondentUid(project.sourceDemandId)
     if (respondentUid) {
+      await this.points.issuePoints(respondentUid, 'project_milestone', '项目里程碑通过验收', `project_milestone:${mil.id}`)
+    }
+    if (respondentUid) {
       await this.notify.pushNotice(respondentUid, {
         type: 'project',
         title: '里程碑已验收',

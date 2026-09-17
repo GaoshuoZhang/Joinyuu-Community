@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { reactive, ref } from 'vue'
 import { useRouter } from 'vue-router'
-import { Button, Input, Toast } from 'tdesign-mobile-vue'
+import { Button, Image, Input, Toast } from 'tdesign-mobile-vue'
 import { resetPassword } from '@/api/auth'
 import { ApiError } from '@/api/http'
 import { useAuthStore } from '@/stores/auth'
@@ -52,28 +52,28 @@ async function onSubmit() {
     <div class="form">
       <div class="field">
         <label>手机号</label>
-        <Input v-model="form.phone" type="tel" :maxlength="11" placeholder="请输入注册手机号" clearable />
+        <Input v-model="form.phone" type="tel" autocomplete="tel" :maxlength="11" placeholder="请输入注册手机号" clearable />
         <p v-if="errors.phone" class="error">{{ errors.phone }}</p>
       </div>
       <div class="field">
         <label>图形验证码</label>
         <div class="captcha-row">
-          <Input v-model="form.captchaCode" :maxlength="4" placeholder="请输入验证码" />
-          <button class="captcha-button" type="button" :disabled="captchaLoading" aria-label="刷新验证码" @click="refreshCaptcha">
-            <img v-if="captchaImage" :src="captchaImage" alt="图形验证码" />
+          <Input v-model="form.captchaCode" :maxlength="4" :spell-check="false" placeholder="请输入验证码" />
+          <Button class="captcha-button" theme="light" :disabled="captchaLoading" aria-label="刷新验证码" @click="refreshCaptcha">
+            <Image v-if="captchaImage" :src="captchaImage" fit="contain" class="captcha-img" alt="图形验证码" />
             <span v-else>刷新</span>
-          </button>
+          </Button>
         </div>
         <p v-if="errors.captchaCode" class="error">{{ errors.captchaCode }}</p>
       </div>
       <div class="field">
         <label>新密码</label>
-        <Input v-model="form.password" type="password" placeholder="至少 8 位，含字母与数字" clearable />
+        <Input v-model="form.password" type="password" autocomplete="new-password" placeholder="至少 8 位，含字母与数字" clearable />
         <p v-if="errors.password" class="error">{{ errors.password }}</p>
       </div>
       <div class="field">
         <label>确认新密码</label>
-        <Input v-model="form.confirm" type="password" placeholder="再次输入新密码" clearable />
+        <Input v-model="form.confirm" type="password" autocomplete="new-password" placeholder="再次输入新密码" clearable />
         <p v-if="errors.confirm" class="error">{{ errors.confirm }}</p>
       </div>
 
@@ -119,8 +119,8 @@ async function onSubmit() {
 
 .captcha-row { display: flex; align-items: center; gap: 10px; }
 .captcha-row :deep(.t-input) { flex: 1; min-width: 0; }
-.captcha-button { min-width: 96px; min-height: 40px; padding: 0; border: 0; border-radius: var(--td-radius-default); overflow: hidden; }
-.captcha-button img { display: block; width: 96px; height: 40px; }
+.captcha-button { min-width: 96px; min-height: 40px; padding: 0; overflow: hidden; }
+.captcha-img { display: block; width: 96px; height: 40px; }
 
 .error {
   margin: 6px 0 0;

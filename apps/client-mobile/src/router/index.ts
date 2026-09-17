@@ -25,9 +25,7 @@ export const router = createRouter({
         { path: 'community', name: 'community', component: () => import('@/views/mobile/CommunityView.vue'), meta: { keepAlive: true } },
         { path: 'plaza', name: 'plaza', component: () => import('@/views/mobile/PlazaView.vue'), meta: { keepAlive: true } },
         { path: 'me', name: 'me', component: () => import('@/views/mobile/MeView.vue'), meta: { requiresAuth: true, keepAlive: true } },
-        { path: 'me/tasks', name: 'points-tasks', component: () => import('@/views/mobile/PointsTasksView.vue'), meta: { requiresAuth: true } },
         { path: 'me/stats', name: 'my-stats', component: () => import('@/views/mobile/MyStatsView.vue'), meta: { requiresAuth: true } },
-        { path: 'me/services', name: 'my-services', component: () => import('@/views/mobile/ServiceApplicationsView.vue'), meta: { requiresAuth: true } },
 
         /* ---- 需求发布（类型 hub + 独立表单）/ 详情（项目语境）---- */
         { path: 'demands/new', name: 'demand-new', component: () => import('@/views/mobile/DemandPublishHubView.vue'), meta: { requiresAuth: true } },
@@ -66,7 +64,6 @@ export const router = createRouter({
         { path: 'talents/:uid', name: 'talent-card', component: () => import('@/views/mobile/TalentCardView.vue') },
         /* talent-card: 公开人才名片（人才库点入） */
         { path: 'enterprises/:id', name: 'enterprise-showcase', component: () => import('@/views/mobile/EnterpriseShowcaseView.vue') },
-        { path: 'enterprises/:id/showcase-apply', name: 'showcase-apply', component: () => import('@/views/mobile/ShowcaseApplyView.vue'), meta: { requiresAuth: true } },
 
         /* ---- 站内信 [MOCK-ONLY] ---- */
         { path: 'notices', name: 'notices', component: () => import('@/views/mobile/NoticesView.vue'), meta: { requiresAuth: true } },

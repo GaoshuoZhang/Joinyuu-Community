@@ -1,12 +1,12 @@
 <script setup lang="ts">
 import { computed, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { Button, Loading, Tag } from 'tdesign-mobile-vue'
+import { Button, Icon, Loading, QRCode, Tag } from 'tdesign-mobile-vue'
 import { fetchEventTicket } from '@/api/events'
 import { useAsyncList } from '@/composables/useAsyncList'
 import EmptyBlock from '@/components/shared/EmptyBlock.vue'
 
-/* v42 活动电子票：报名成功后生成凭证（演示版二维码为确定性图案，接入期为动态核销码）。 */
+/* v42 活动电子票：报名成功后生成凭证（核销二维码使用 TDesign QRCode，接入期为动态核销码）。 */
 const route = useRoute()
 const router = useRouter()
 const { data: ticket, loading, error, run } = useAsyncList(() => fetchEventTicket(String(route.params.id)))
@@ -15,28 +15,16 @@ onMounted(run)
 const statusText = computed(() => {
   if (!ticket.value) return ''
   if (ticket.value.status === 'cancelled') return '已失效（活动取消）'
-  if (ticket.value.status === 'checked') return '已核销'
+  if (ticket.value.status === 'checked' || ticket.value.checkedIn) return '已核销'
   return ticket.value.waitlistOrder ? '候补中' : '有效'
 })
 const statusTheme = computed(() => {
   if (!ticket.value) return 'default'
   if (ticket.value.status === 'cancelled') return 'danger'
-  if (ticket.value.status === 'checked') return 'success'
+  if (ticket.value.status === 'checked' || ticket.value.checkedIn) return 'success'
   return ticket.value.waitlistOrder ? 'warning' : 'primary'
 })
 
-/* 演示二维码：由票号确定性生成 7×7 图案 */
-const qrCells = computed(() => {
-  const code = ticket.value?.ticketCode ?? ''
-  let h = 7
-  for (const ch of code) h = (h * 31 + ch.charCodeAt(0)) >>> 0
-  const cells: boolean[] = []
-  for (let i = 0; i < 49; i++) {
-    h = (Math.imul(h, 1103515245) + 12345) >>> 0
-    cells.push((h >>> 16) % 2 === 0)
-  }
-  return cells
-})
 </script>
 
 <template>
@@ -50,10 +38,10 @@ const qrCells = computed(() => {
           <Tag :theme="statusTheme" variant="light" size="medium">{{ statusText }}</Tag>
         </div>
         <h2 class="event-title">{{ ticket.eventTitle }}</h2>
-        <p class="info">🕐 {{ ticket.startTime }}</p>
-        <p class="info">📍 {{ ticket.location }}</p>
-        <div class="qr" aria-label="演示核销码">
-          <span v-for="(on, i) in qrCells" :key="i" class="qr-cell" :class="{ on }" />
+        <p class="info"><Icon name="time" size="16px" />{{ ticket.startTime }}</p>
+        <p class="info"><Icon name="location" size="16px" />{{ ticket.location }}</p>
+        <div class="qr-wrap">
+          <QRCode :value="ticket.ticketCode" :size="140" level="M" aria-label="活动核销二维码" />
         </div>
         <p class="code">核销码：<code>{{ ticket.ticketCode }}</code></p>
         <p class="hint">
@@ -112,29 +100,19 @@ const qrCells = computed(() => {
 
 .info {
   margin: 0;
+  display: flex;
+  align-items: center;
+  gap: 4px;
   font-size: 13px;
   color: var(--td-text-color-secondary);
 }
 
-.qr {
-  display: grid;
-  grid-template-columns: repeat(7, 24px);
-  grid-auto-rows: 24px;
-  gap: 3px;
+.qr-wrap {
   align-self: center;
   margin: 10px 0;
   padding: 10px;
-  background: #fff;
+  background: var(--td-bg-color-container);
   border-radius: var(--td-radius-default);
-}
-
-.qr-cell {
-  background: transparent;
-}
-
-.qr-cell.on {
-  background: #111;
-  border-radius: 2px;
 }
 
 .code {

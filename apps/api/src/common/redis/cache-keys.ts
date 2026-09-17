@@ -11,7 +11,7 @@ export const CACHE_KEYS = {
   systemConfig: 'config:system',
   pointsRules: 'rules:points',
   experienceRules: 'rules:experience',
-  levelTiers: 'rules:levels',
+  levelTiers: (identityType: string) => `rules:levels:${identityType}`,
   dashboardSummary: 'dashboard:summary',
 } as const
 
@@ -35,7 +35,8 @@ export const APP_CACHE_KEYS: readonly string[] = [
   CACHE_KEYS.systemConfig,
   CACHE_KEYS.pointsRules,
   CACHE_KEYS.experienceRules,
-  CACHE_KEYS.levelTiers,
+  CACHE_KEYS.levelTiers('community_individual'),
+  CACHE_KEYS.levelTiers('community_enterprise'),
   CACHE_KEYS.dashboardSummary,
   dictCacheKey('demand_category'),
   dictCacheKey('industry'),

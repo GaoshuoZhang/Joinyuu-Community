@@ -54,6 +54,7 @@ import { AppEnterprisesModule } from './modules/app/enterprises/enterprises.modu
 import { AppCommunityModule } from './modules/app/community/community.module'
 import { AppFavoritesModule } from './modules/app/favorites/favorites.module'
 import { AppPoliciesModule } from './modules/app/policies/policies.module'
+import { EngagementModule } from './modules/app/engagement/engagement.module'
 import { SchedulerModule } from './scheduler/scheduler.module'
 import { HealthController } from './health/health.controller'
 import { JwtAuthGuard } from './common/guards/jwt-auth.guard'
@@ -62,11 +63,13 @@ import { PermissionGuard } from './common/guards/permission.guard'
 import { DomainScopeGuard } from './common/guards/domain-scope.guard'
 import { EnvelopeInterceptor } from './common/interceptors/envelope.interceptor'
 import { AuditInterceptor } from './common/interceptors/audit.interceptor'
+import { AppAnalyticsInterceptor } from './common/interceptors/app-analytics.interceptor'
 import { HttpExceptionFilter } from './common/filters/http-exception.filter'
 
 @Module({
   imports: [
-    ScheduleModule.forRoot(),
+    // Tests invoke scheduler methods explicitly; wall-clock jobs race suite teardown/reseeding.
+    ScheduleModule.forRoot({ cronJobs: process.env.NODE_ENV !== 'test' }),
     PrismaModule,
     RedisModule,
     IdGeneratorModule,
@@ -120,6 +123,7 @@ import { HttpExceptionFilter } from './common/filters/http-exception.filter'
     AppCommunityModule,
     AppFavoritesModule,
     AppPoliciesModule,
+    EngagementModule,
     SchedulerModule,
   ],
   controllers: [HealthController],
@@ -131,6 +135,7 @@ import { HttpExceptionFilter } from './common/filters/http-exception.filter'
     { provide: APP_GUARD, useClass: DomainScopeGuard },
     { provide: APP_INTERCEPTOR, useClass: EnvelopeInterceptor },
     { provide: APP_INTERCEPTOR, useClass: AuditInterceptor },
+    { provide: APP_INTERCEPTOR, useClass: AppAnalyticsInterceptor },
     { provide: APP_FILTER, useClass: HttpExceptionFilter },
   ],
 })

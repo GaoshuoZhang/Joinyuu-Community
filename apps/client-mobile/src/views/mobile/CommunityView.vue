@@ -1,11 +1,10 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { Button, Popup, PullDownRefresh, Search, Tabs, TabPanel, Tag, Toast, Avatar } from 'tdesign-mobile-vue'
+import { Button, CheckTag, Icon, Popup, PullDownRefresh, Search, Tabs, TabPanel, Tag, Toast, Avatar } from 'tdesign-mobile-vue'
 import { fetchEnterpriseList, fetchPolicies, fetchTalents } from '@/api/community'
 import { useAsyncList } from '@/composables/useAsyncList'
 import ListSkeleton from '@/components/ListSkeleton.vue'
-import { useAuthStore } from '@/stores/auth'
 import EmptyBlock from '@/components/shared/EmptyBlock.vue'
 import type { CommunityPolicy, EnterpriseRecord, TalentMember } from '@/types'
 import { useAnimSuppress } from '@/composables/useAnimSuppress'
@@ -14,15 +13,9 @@ useAnimSuppress()
 
 /* 社区页（社区管理者视角）：顶部选项卡「社区服务 / 人才库 / 企业库」，
  * 每个 tab 自带搜索；切换 tab 时重置搜索并重新拉取。数据均经 @/api/community。
- * 企业库：已发布名片点入名片；成员对待发布名片可直达申请；其余提示未发布。 */
+ * 企业库：已发布名片点入名片；未发布名片保持不可访问。 */
 const router = useRouter()
 const route = useRoute()
-const auth = useAuthStore()
-
-function canApplyShowcase(e: EnterpriseRecord) {
-  return e.showcaseStatus !== 'published' && auth.isLogged && e.members.some((m) => m.name === auth.name)
-}
-
 /* v39：下拉刷新 */
 const refreshing = ref(false)
 
@@ -40,10 +33,6 @@ async function onRefresh() {
 function onEnterpriseTap(e: EnterpriseRecord) {
   if (e.showcaseStatus === 'published') {
     void router.push(`/enterprises/${e.id}`)
-    return
-  }
-  if (canApplyShowcase(e)) {
-    void router.push(`/enterprises/${e.id}/showcase-apply`)
     return
   }
   Toast('该企业名片尚未发布')
@@ -195,14 +184,6 @@ function openPolicy(p: CommunityPolicy) {
   policyVisible.value = true
 }
 
-/* v42：跳转我的服务申请并按 query 打开办理表单 */
-function onApplyPolicy() {
-  const policy = currentPolicy.value
-  if (!policy) return
-  policyVisible.value = false
-  void router.push({ path: '/me/services', query: { apply: policy.id, title: policy.title } })
-}
-
 watch(
   () => [route.query.tab, route.query.policy],
   () => {
@@ -232,8 +213,8 @@ watch(policies, () => {
         <Search v-model="serviceKeyword" class="tab-search" placeholder="搜索政策关键词" />
 
         <div v-if="serviceCategories.length" class="service-categories">
-          <Tag size="small" variant="light" :theme="selectedCategory ? 'default' : 'primary'" @click="selectedCategory = ''">全部</Tag>
-          <Tag v-for="category in serviceCategories" :key="category" size="small" variant="light" :theme="selectedCategory === category ? 'primary' : 'default'" @click="selectedCategory = category">{{ category }}</Tag>
+          <CheckTag size="small" variant="light" :checked="!selectedCategory" @change="selectedCategory = ''">全部</CheckTag>
+          <CheckTag v-for="category in serviceCategories" :key="category" size="small" variant="light" :checked="selectedCategory === category" @change="selectedCategory = category">{{ category }}</CheckTag>
         </div>
 
         <ListSkeleton v-if="policiesLoading && !(policies ?? []).length" />
@@ -244,7 +225,7 @@ watch(policies, () => {
             <span class="eyebrow">社区服务精选</span>
             <h2>{{ featuredPolicy.title }}</h2>
             <p>{{ featuredPolicy.summary }}</p>
-            <span class="service-link">查看服务详情 ›</span>
+            <span class="service-link">查看服务详情<Icon name="chevron-right" size="12px" /></span>
           </article>
           <div class="service-section-head"><h2>服务指引</h2><span>{{ policies?.length ?? 0 }} 条内容</span></div>
         <div class="list stagger">
@@ -255,7 +236,7 @@ watch(policies, () => {
             @click="openPolicy(p)"
           >
             <div class="row-head">
-              <span class="cat-tag">{{ p.category }}</span>
+              <Tag class="cat-tag" size="small" variant="light" theme="primary">{{ p.category }}</Tag>
               <span class="updated">更新 {{ p.updatedAt }}</span>
             </div>
             <h3 class="title">{{ p.title }}</h3>
@@ -280,7 +261,7 @@ watch(policies, () => {
                 <Avatar size="40px" :image="t.avatar" class="talent-avatar">{{ t.name.slice(0, 1) }}</Avatar>
                 <h3 class="title name">{{ t.name }}</h3>
               </span>
-              <span class="role-tag">{{ t.role }}</span>
+              <Tag class="role-tag" size="small" variant="light" theme="primary">{{ t.role }}</Tag>
             </div>
             <p class="intro">{{ t.intro }}</p>
             <div v-if="t.skills.length" class="skills">
@@ -309,9 +290,7 @@ watch(policies, () => {
           >
             <div class="row-head">
               <h3 class="title name">{{ e.name }}</h3>
-              <span v-if="e.showcaseStatus === 'published'" class="showcase-tag">入驻展示</span>
-              <span v-else-if="canApplyShowcase(e)" class="apply-tag">申请企业名片 ›</span>
-              <span v-else class="unpublished-tag">企业名片未发布</span>
+              <Tag v-if="e.level" size="small" variant="light" theme="primary">Lv.{{ e.level }}<template v-if="e.levelName"> {{ e.levelName }}</template></Tag>
             </div>
             <p class="meta">{{ e.industry }} · {{ e.size }}</p>
             <p class="intro">{{ e.description }}</p>
@@ -323,7 +302,7 @@ watch(policies, () => {
     <!-- 政策正文弹层 -->
     <Popup v-model:visible="policyVisible" placement="bottom" class="policy-pop">
       <div v-if="currentPolicy" class="pop-body">
-        <span class="cat-tag">{{ currentPolicy.category }}</span>
+        <Tag size="small" variant="light" theme="primary">{{ currentPolicy.category }}</Tag>
         <h3 class="p-title">{{ currentPolicy.title }}</h3>
         <p class="p-summary">{{ currentPolicy.summary }}</p>
         <p class="p-content">{{ currentPolicy.content }}</p>
@@ -336,7 +315,6 @@ watch(policies, () => {
           <a v-for="file in currentPolicy.attachments" :key="file.url" :href="file.url" target="_blank" rel="noopener">{{ file.name }}</a>
         </div>
         <p class="p-updated">更新时间：{{ currentPolicy.updatedAt }}</p>
-        <Button v-if="currentPolicy" theme="primary" block @click="onApplyPolicy">在线申请</Button>
         <Button variant="outline" block @click="policyVisible = false">关闭</Button>
       </div>
     </Popup>
@@ -383,21 +361,10 @@ watch(policies, () => {
   cursor: pointer;
 }
 
-.service-feature::after {
-  position: absolute;
-  top: -34px;
-  right: -22px;
-  width: 96px;
-  height: 96px;
-  border: 1px solid var(--td-brand-color-3);
-  border-radius: var(--td-radius-circle);
-  content: '';
-}
-
 .service-feature .eyebrow { color: var(--td-brand-color); font-size: 12px; font-weight: 600; }
 .service-feature h2 { position: relative; z-index: 1; margin: 8px 0; font-size: 17px; line-height: 1.45; }
 .service-feature p { position: relative; z-index: 1; display: -webkit-box; overflow: hidden; margin: 0; color: var(--td-text-color-secondary); font-size: 12px; line-height: 1.7; -webkit-box-orient: vertical; -webkit-line-clamp: 2; }
-.service-link { display: inline-block; margin-top: 12px; color: var(--td-brand-color); font-size: 12px; font-weight: 600; }
+.service-link { display: inline-flex; align-items: center; gap: 2px; margin-top: 12px; color: var(--td-brand-color); font-size: 12px; font-weight: 600; }
 
 .service-section-head { display: flex; align-items: baseline; justify-content: space-between; margin: 0 2px 8px; }
 .service-section-head h2 { margin: 0; font-size: 15px; }
@@ -445,30 +412,8 @@ watch(policies, () => {
 
 .cat-tag,
 .role-tag,
-.showcase-tag {
+.level-tag {
   flex-shrink: 0;
-  font-size: 12px;
-  padding: 2px 8px;
-  border-radius: var(--td-radius-small);
-  background: var(--td-brand-color-1);
-  color: var(--td-brand-color);
-}
-
-.showcase-tag {
-  background: var(--td-success-color-light);
-  color: var(--td-success-color);
-}
-
-.apply-tag {
-  flex-shrink: 0;
-  font-size: 12px;
-  color: var(--td-brand-color);
-}
-
-.unpublished-tag {
-  flex-shrink: 0;
-  font-size: 12px;
-  color: var(--td-text-color-placeholder);
 }
 
 .updated,
@@ -522,7 +467,8 @@ watch(policies, () => {
   width: 100%;
   max-height: 70vh;
   overflow-y: auto;
-  padding: 18px 16px 20px;
+  overscroll-behavior: contain;
+  padding: 18px 16px calc(20px + env(safe-area-inset-bottom));
   display: flex;
   flex-direction: column;
   gap: 10px;

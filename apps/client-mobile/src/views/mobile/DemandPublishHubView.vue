@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
-import { Button } from 'tdesign-mobile-vue'
+import { Button, Icon, Radio, Tag } from 'tdesign-mobile-vue'
 import { useConfigStore } from '@/stores/config'
 import EmptyBlock from '@/components/shared/EmptyBlock.vue'
 import { DEMAND_KINDS } from '@/constants/demand'
@@ -57,13 +57,19 @@ function goForm() {
       >
         <div class="card-head">
           <h2 class="kind-title">{{ item.title }}</h2>
-          <span class="radio" :class="{ on: selected === item.kind }" />
+          <Radio
+            class="kind-radio"
+            :checked="selected === item.kind"
+            :aria-label="`选择${item.title}`"
+            @click.stop
+            @change="selected = item.kind"
+          />
         </div>
         <p class="tagline">{{ item.tagline }}</p>
         <div class="process">
           <template v-for="(s, i) in item.process" :key="s">
-            <span class="step">{{ s }}</span>
-            <span v-if="i < item.process.length - 1" class="arrow">›</span>
+            <Tag class="step" size="small" variant="light" theme="primary">{{ s }}</Tag>
+            <Icon v-if="i < item.process.length - 1" name="chevron-right" size="12px" class="arrow" />
           </template>
         </div>
         <ul class="bullets">
@@ -74,7 +80,9 @@ function goForm() {
       <Button theme="primary" block size="large" class="cta" :disabled="!selected" @click="goForm">
         {{ ctaText }}
       </Button>
-      <Button theme="primary" variant="text" block @click="router.push('/me/demands')">查看我的需求 ›</Button>
+      <Button theme="primary" variant="text" block @click="router.push('/me/demands')">
+        查看我的需求<Icon name="chevron-right" size="14px" />
+      </Button>
     </template>
   </div>
 </template>
@@ -125,18 +133,10 @@ function goForm() {
   font-size: 16px;
 }
 
-.radio {
+.kind-radio {
+  display: inline-flex;
+  width: auto;
   flex-shrink: 0;
-  width: 18px;
-  height: 18px;
-  border-radius: var(--td-radius-circle);
-  border: 1px solid var(--td-component-border);
-  background: var(--td-bg-color-container);
-}
-
-.radio.on {
-  border-color: var(--td-brand-color);
-  box-shadow: inset 0 0 0 4px var(--td-brand-color);
 }
 
 .tagline {
@@ -156,16 +156,11 @@ function goForm() {
 }
 
 .step {
-  font-size: 12px;
-  line-height: 1;
   padding: 5px 8px;
-  border-radius: var(--td-radius-default);
-  background: var(--td-brand-color-light);
-  color: var(--td-brand-color);
+  line-height: 1;
 }
 
 .arrow {
-  font-size: 12px;
   color: var(--td-text-color-placeholder);
 }
 

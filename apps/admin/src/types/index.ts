@@ -1,6 +1,6 @@
 /* 聚屿社区 · 实体类型定义 */
 
-export type UserStatus = 'active' | 'frozen'
+export type UserStatus = 'active' | 'frozen' | 'deleted'
 
 /* 身份类型：individual 个人用户为注册默认身份，人手一份，关联其他身份时保留（积分挂靠）
  * external_individual / external_company 仅用于社区代录需求的「需求方身份」快照（外部个人/外部企业） */
@@ -63,7 +63,7 @@ export interface User {
 }
 
 export type EnterpriseStatus = 'active' | 'exited' | 'disabled'
-export type ShowcaseStatus = 'none' | 'pending' | 'published' | 'rejected'
+export type ShowcaseStatus = 'none' | 'published' | 'rejected'
 
 export interface Enterprise {
   id: string
@@ -75,9 +75,11 @@ export interface Enterprise {
   leaseType: string
   status: EnterpriseStatus
   showcaseStatus: ShowcaseStatus
-  showcaseComment?: string
   /** 经验值余额（社区企业持有；参加活动、承接项目累积） */
   experience?: number
+  /** 企业等级（按 community_enterprise 等级梯度由经验值推导，列表接口下发） */
+  level?: number
+  levelName?: string
   /** 关联用户 UID（社区企业必须关联一个个人用户，作为企业联系人） */
   contactUserId?: string
   /** 联系人职位（展示于成员管理） */
@@ -123,6 +125,7 @@ export type DemandStatus =
   | 'pending_release'
   | 'scheduled'
   | 'published'
+  | 'selected'
   | 'rejected'
   | 'projected'
   | 'closed'
@@ -138,7 +141,7 @@ export interface DemandRespondent {
   quote?: string
   message: string
   at: string
-  status: 'pending' | 'contacted' | 'closed'
+  status: 'pending' | 'contacted' | 'accepted' | 'rejected' | 'closed'
 }
 
 export interface Demand {
@@ -427,7 +430,7 @@ export interface ExternalEnterprise {
    运营设施域 — 实体类型
    命名前缀：商品 G1001+ / 兑换订单 RO2001+ / 积分规则 R01+
    办公位 WS1001+ / 租约 LS2001+ / 空间 S1001+ / 空间预约 SR2001+
-   文章 A1001+（投稿内容 SU1001+） / 栏目 CL2001+ / 展示页发布申请 SC1001+
+   文章 A1001+（投稿内容 SU1001+） / 栏目 CL2001+
    ============================================================ */
 
 /* ---------- 积分商城 ---------- */
@@ -532,6 +535,30 @@ export interface LevelTier {
   label: string
   /** 达到该等级所需累计经验值门槛 */
   threshold: number
+}
+
+export type LevelTierScope = 'community_individual' | 'community_enterprise'
+
+export interface ScopedLevelTiers {
+  scope: LevelTierScope
+  tiers: LevelTier[]
+}
+
+export type PublishLimitScope =
+  | 'personal_unverified'
+  | 'personal_verified'
+  | 'community_individual'
+  | 'community_enterprise'
+
+export interface PublishLimitRule {
+  scope: PublishLimitScope
+  /** Community scopes are configured per dynamic level; personal scopes omit level. */
+  level?: number
+  levelLabel?: string
+  demandPublishLimit: number
+  articleSubmitLimit: number
+  eventEnrollLimit: number
+  spaceReserveLimit: number
 }
 
 /* ---------- 办公位管理 ---------- */
@@ -674,13 +701,23 @@ export interface SpaceReservation {
 
 /* ---------- 资讯内容 ---------- */
 
-/** 文章状态：
- * 投稿内容：pending=待审核 / rejected=已驳回 / pending_release=待发布 / scheduled=定时发布中 / published=已发布
- * 资讯发布：pending_release / scheduled / published（无需审核） */
-export type ArticleStatus = 'pending' | 'rejected' | 'pending_release' | 'scheduled' | 'published'
+/** 文章状态：closed 为管理员或举报治理下架；withdrawn 仅用于成员主动撤回投稿。 */
+export type ArticleStatus = 'pending' | 'rejected' | 'pending_release' | 'scheduled' | 'published' | 'closed'
 
 /** 文章来源：official=社区自行发布（资讯发布）/ submitted=用户投稿（投稿内容） */
 export type ArticleChannel = 'official' | 'submitted'
+
+export interface ArticleTakedown {
+  id: number
+  articleId: string
+  source: 'manual' | 'governance'
+  reportId?: string | null
+  reason?: string | null
+  takenDownAt: string
+  takenDownBy: string
+  restoredAt?: string | null
+  restoredBy?: string | null
+}
 
 export interface Article {
   id: string
@@ -700,6 +737,7 @@ export interface Article {
   /** 正文（富文本 HTML） */
   content: string
   tags: string[]
+  commentsEnabled: boolean
   /** 定时发布时间（scheduled 时存在） */
   scheduledAt?: string
   /** 发布时间（published 时存在） */
@@ -709,6 +747,7 @@ export interface Article {
   createdAt: string
   /** 驳回原因（rejected 时存在） */
   rejectedReason?: string
+  takedowns?: ArticleTakedown[]
 }
 
 export type ColumnStatus = 'enabled' | 'disabled'
@@ -727,8 +766,6 @@ export interface ArticleColumn {
   createdAt: string
 }
 
-export type ShowcaseTargetType = 'enterprise' | 'individual'
-
 /* ============================================================
    系统管理域 — 实体类型（通知 / 操作日志 / 系统配置 / 数据字典）
    命名前缀：通知 N9001+ / 操作日志 AL1001+
@@ -736,7 +773,7 @@ export type ShowcaseTargetType = 'enterprise' | 'individual'
 
 export interface AdminNotification {
   id: string
-  /** 业务类型：approval 入驻/身份审核 | demand_review 需求审核 | reservation 空间预约 | showcase 展示页发布 | article 文章审核 | lease 租约临期 | schedule 定时发布 */
+  /** 业务类型：approval 入驻/身份审核 | demand_review 需求审核 | reservation 空间预约 | article 文章审核 | lease 租约临期 | schedule 定时发布 */
   type: string
   title: string
   content: string
@@ -789,6 +826,8 @@ export interface SystemConfig {
   reservationOpen: boolean
   /** 开启后未实名用户不能发布需求或报名活动 */
   realnameRequired: boolean
+  /** 首页轮播图总开关：关闭后客户端首页不展示轮播区域 */
+  homeCarouselOpen: boolean
   /** 租约临期提醒窗口（天；派生逻辑见 api/workstations EXPIRING_WINDOW_DAYS） */
   leaseExpireRemindDays: number
   /** 上传文件大小限制（MB，素材库/富文本图片上传共用） */
@@ -819,6 +858,24 @@ export interface DictEntry {
   status: 'enabled' | 'disabled'
 }
 
+/* ---------- 首页轮播图（内容管理） ---------- */
+
+export interface HomeBanner {
+  id: string
+  title: string
+  subtitle: string
+  /** 图片地址（可空；为空时客户端使用品牌渐变文字卡展示） */
+  imageUrl: string | null
+  /** 跳转的移动端站内路径，如 /events */
+  link: string | null
+  /** 排序权重（升序展示） */
+  sort: number
+  /** 单条是否展示 */
+  enabled: boolean
+  createdAt: string
+  updatedAt: string
+}
+
 /* ---------- 公告栏（内容管理） ---------- */
 
 export type AnnouncementStatus = 'published' | 'withdrawn'
@@ -836,19 +893,4 @@ export interface Announcement {
   updatedAt?: string
   expireAt?: string
   link?: string
-}
-
-export interface ShowcaseRequest {
-  id: string
-  targetType: ShowcaseTargetType
-  /** 企业 ID（targetType=enterprise 时存在） */
-  targetId?: string
-  targetName: string
-  contentSummary: string
-  submitterName: string
-  submitterPhone: string
-  submittedAt: string
-  status: ReservationStatus
-  records: ApprovalRecord[]
-  rejectReason?: string
 }

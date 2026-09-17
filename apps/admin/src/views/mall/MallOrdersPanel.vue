@@ -391,7 +391,7 @@ onMounted(load)
         </t-descriptions>
         <t-form label-align="top" class="ship-form">
           <t-form-item label="运单号">
-            <t-input v-model="trackingNo" clearable placeholder="自提订单可留空" />
+            <t-input v-model="trackingNo" clearable placeholder="自提订单可留空…" />
           </t-form-item>
         </t-form>
       </template>

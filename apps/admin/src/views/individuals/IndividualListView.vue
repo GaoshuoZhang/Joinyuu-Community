@@ -35,7 +35,7 @@ const statusOptions = [
 const columns = [
   { colKey: 'user', title: '成员', cell: 'user', width: 190 , ellipsis: true},
   { colKey: 'title', title: '社区个体头衔', cell: 'title', width: 200 , ellipsis: true},
-  { colKey: 'level', title: '经验值等级', cell: 'level', width: 90 , ellipsis: true},
+  { colKey: 'level', title: '个体等级', cell: 'level', width: 90 , ellipsis: true},
   { colKey: 'others', title: '其他关联身份', cell: 'others' , ellipsis: true},
   { colKey: 'points', title: '积分', width: 85 , ellipsis: true},
   { colKey: 'status', title: '状态', cell: 'status', width: 95 , ellipsis: true},
@@ -113,7 +113,7 @@ function goDetail(row: User) {
 function onExport() {
   exportCsv(
     '社区个体列表',
-    ['编号', '昵称', '联系电话', '社区个体头衔', '经验值等级', '积分', '状态', '注册时间'],
+    ['编号', '昵称', '联系电话', '社区个体头衔', '个体等级', '积分', '状态', '注册时间'],
     list.value.map((u) => [
       u.uid,
       `${u.nickname} [${u.uid}]`,

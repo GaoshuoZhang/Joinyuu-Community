@@ -35,12 +35,16 @@ export class LedgersService {
 
     return this.prisma.$transaction(async (tx) => {
       let balance: number
+      let level: number
       if (targetType === 'enterprise') {
         const enterprise = await tx.enterprise.findUnique({ where: { id: targetId } })
         if (!enterprise) throw new NotFoundException('企业不存在')
         balance = enterprise.experience + delta
         if (balance < 0) throw new BadRequestException('扣减后经验值不能为负')
+        const tiers = await tx.levelTier.findMany({ where: { identityType: 'community_enterprise' }, orderBy: { threshold: 'desc' } })
+        level = tiers.find(t => t.threshold <= balance)?.level ?? 1
         await tx.enterprise.update({ where: { id: targetId }, data: { experience: balance } })
+        await tx.userIdentity.updateMany({ where: { type: 'community_enterprise', enterpriseId: targetId }, data: { experience: balance, level } })
       } else {
         const identity = await tx.userIdentity.findFirst({
           where: { userId: targetId, type: 'community_individual' },
@@ -48,9 +52,11 @@ export class LedgersService {
         if (!identity) throw new NotFoundException('该用户的社区个体身份不存在')
         balance = (identity.experience ?? 0) + delta
         if (balance < 0) throw new BadRequestException('扣减后经验值不能为负')
+        const tiers = await tx.levelTier.findMany({ where: { identityType: 'community_individual' }, orderBy: { threshold: 'desc' } })
+        level = tiers.find(t => t.threshold <= balance)?.level ?? 1
         await tx.userIdentity.update({
           where: { id: identity.id },
-          data: { experience: balance },
+          data: { experience: balance, level },
         })
       }
 

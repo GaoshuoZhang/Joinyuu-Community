@@ -8,9 +8,11 @@ function onKeydown(event: KeyboardEvent): void {
   target.click()
 }
 
-/** v38：为 div/article 点击卡片补齐 role/tabindex/键盘激活（不改变既有 @click 逻辑）。 */
-export const pressable: Directive<HTMLElement> = {
-  mounted(el) {
+/** v38：为 div/article 点击卡片补齐 role/tabindex/键盘激活（不改变既有 @click 逻辑）。
+ * 传 `false` 时不增强（用于同一列表中仅部分可点的场景）。 */
+export const pressable: Directive<HTMLElement, boolean | undefined> = {
+  mounted(el, binding) {
+    if (binding.value === false) return
     if (!el.hasAttribute('role')) el.setAttribute('role', 'button')
     if (!el.hasAttribute('tabindex')) el.tabIndex = 0
     el.addEventListener('keydown', onKeydown)

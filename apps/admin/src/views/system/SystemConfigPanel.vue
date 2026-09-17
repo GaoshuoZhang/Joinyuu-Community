@@ -22,6 +22,7 @@ const form = reactive<SystemConfig>({
   demandOpen: true,
   reservationOpen: true,
   realnameRequired: false,
+  homeCarouselOpen: true,
   leaseExpireRemindDays: 15,
   uploadMaxSizeMb: 10,
   passwordExpireDays: 90,
@@ -158,6 +159,13 @@ onBeforeRouteLeave(async () => {
                 <div class="switch-tip">开启后，未完成实名认证的用户不能发布需求或报名活动</div>
               </div>
               <t-switch v-model="form.realnameRequired" />
+            </div>
+            <div class="switch-row">
+              <div class="switch-text">
+                <div class="switch-label">首页轮播图</div>
+                <div class="switch-tip">关闭后客户端首页不展示轮播区域（与「轮播图管理」共用开关）</div>
+              </div>
+              <t-switch v-model="form.homeCarouselOpen" />
             </div>
           </div>
 

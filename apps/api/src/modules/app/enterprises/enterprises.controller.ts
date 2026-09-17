@@ -1,5 +1,7 @@
-import { Body, Controller, Get, HttpCode, Param, Post, Put, Req, UnauthorizedException } from '@nestjs/common'
+import { Body, Controller, Get, HttpCode, Param, Post, Put, Query, Req, UnauthorizedException } from '@nestjs/common'
 import type { AppAuthenticatedRequest } from '../../../common/interfaces/app-authenticated-request'
+import type { AuthenticatedRequest } from '../../../common/interfaces/authenticated-request'
+import { RequirePermission } from '../../../common/decorators/require-permission.decorator'
 import { AppEnterprisesService } from './enterprises.service'
 import { UpdateIndividualCardDto } from './dto/individual-card.dto'
 import {
@@ -7,14 +9,14 @@ import {
   InviteMemberDto,
   RemoveMemberDto,
   RespondActionDto,
-  ShowcaseRequestDto,
   TransferContactDto,
   UpdateEnterpriseDto,
   UpdateMemberDto,
 } from './dto/enterprise.dto'
+import { SaveCardSchemaDto } from './dto/card-schema.dto'
 
 /* 企业治理（M2-R R3 /api/app/**）：名片/身份、企业详情与成员管理、邀请、负责人转移、
- * 退驻与展示申请、公开企业名片与工作台。全局 AppJwtGuard 注入登录态。 */
+ * 退驻、公开企业名片与工作台。全局 AppJwtGuard 注入登录态。 */
 @Controller('api/app')
 export class AppEnterprisesController {
   constructor(private readonly enterprises: AppEnterprisesService) {}
@@ -23,6 +25,12 @@ export class AppEnterprisesController {
   @Get('me/cards')
   myCards(@Req() req: AppAuthenticatedRequest) {
     return this.enterprises.myCards(this.uid(req))
+  }
+
+  /** 当前名片类型允许用户编辑的字段白名单。 */
+  @Get('card-schema/:type')
+  cardSchema(@Param('type') type: string) {
+    return this.enterprises.cardSchema(type)
   }
 
   /** 保存个人名片（免审保存即公开） */
@@ -161,23 +169,10 @@ export class AppEnterprisesController {
     return this.enterprises.submitExitApplication(this.uid(req), id, dto)
   }
 
-  /** 企业名片发布申请（需 edit_card，写 ShowcaseRequest → 管理端审核联动） */
-  @HttpCode(200)
-  @Post('showcase-requests')
-  createShowcaseRequest(@Req() req: AppAuthenticatedRequest, @Body() dto: ShowcaseRequestDto): Promise<{ code: number }> {
-    return this.enterprises.createShowcaseRequest(this.uid(req), dto)
-  }
-
   /** 公开企业名片（仅 published 且未删除可见） */
   @Get('enterprises/:id')
   enterpriseShowcase(@Param('id') id: string) {
     return this.enterprises.enterpriseShowcase(id)
-  }
-
-  /** 企业工作台（成员/负责人）：企业名义需求响应统计 */
-  @Get('enterprises/:id/workbench')
-  enterpriseWorkbench(@Req() req: AppAuthenticatedRequest, @Param('id') id: string) {
-    return this.enterprises.enterpriseWorkbench(this.uid(req), id)
   }
 
   /** 从请求中取当前用户 uid（AppJwtGuard 注入 request.user） */
@@ -185,5 +180,43 @@ export class AppEnterprisesController {
     const payload = req.user
     if (!payload) throw new UnauthorizedException('未登录或登录已过期')
     return payload.sub
+  }
+}
+
+
+@RequirePermission('/card-management')
+@Controller('api/admin/cards')
+export class CardsAdminController {
+  constructor(private readonly enterprises: AppEnterprisesService) {}
+
+  @Get('schema/:type')
+  schema(@Param('type') type: string) { return this.enterprises.cardSchema(type) }
+
+  @Put('schema/:type')
+  saveSchema(@Param('type') type: string, @Body() dto: SaveCardSchemaDto, @Req() req: AuthenticatedRequest) {
+    return this.enterprises.saveCardSchema(type, dto.editableFields, req.user?.name ?? '社区管理员')
+  }
+
+  @Get('individual/:uid')
+  @RequirePermission(['/card-management', '/users'])
+  individualCard(@Param('uid') uid: string) { return this.enterprises.adminCard('individual', uid) }
+
+  @Get('enterprise/:id')
+  @RequirePermission(['/card-management', '/enterprises'])
+  enterpriseCard(@Param('id') id: string) { return this.enterprises.adminCard('enterprise', id) }
+
+  @Get(':type')
+  cards(@Param('type') type: string, @Query('page') page?: string, @Query('pageSize') pageSize?: string, @Query('keyword') keyword?: string) {
+    return this.enterprises.adminCards(type, Math.max(1, Number(page) || 1), Math.max(1, Math.min(100, Number(pageSize) || 20)), keyword)
+  }
+
+  @Put('individual/:uid')
+  updateIndividual(@Param('uid') uid: string, @Body() dto: UpdateIndividualCardDto, @Req() req: AuthenticatedRequest) {
+    return this.enterprises.adminUpdateIndividualCard(uid, dto, req.user?.name ?? '社区管理员')
+  }
+
+  @Put('enterprise/:id')
+  updateEnterprise(@Param('id') id: string, @Body() dto: UpdateEnterpriseDto, @Req() req: AuthenticatedRequest) {
+    return this.enterprises.adminUpdateEnterpriseCard(id, dto, req.user?.name ?? '社区管理员')
   }
 }

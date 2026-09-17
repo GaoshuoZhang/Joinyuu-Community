@@ -26,6 +26,10 @@ export class SystemConfigPayloadDto {
   @IsBoolean()
   realnameRequired!: boolean
 
+  /** 首页轮播图总开关：关闭后客户端首页不展示轮播区域。 */
+  @IsBoolean()
+  homeCarouselOpen!: boolean
+
   @Type(() => Number)
   @IsInt({ message: '租约临期提醒窗口须为 1-90 的整数' })
   @Min(1, { message: '租约临期提醒窗口须为 1-90 的整数' })

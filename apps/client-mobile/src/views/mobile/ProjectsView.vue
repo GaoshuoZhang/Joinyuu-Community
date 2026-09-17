@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { Button, PullDownRefresh, Search, Tabs, TabPanel, Tag, Toast } from 'tdesign-mobile-vue'
+import { Button, CheckTag, PullDownRefresh, Search, Tabs, TabPanel, Tag, Toast } from 'tdesign-mobile-vue'
 import { fetchDemands, fetchMyResponses } from '@/api/demands'
 import { useAuthStore } from '@/stores/auth'
 import { useRefreshOnActivate } from '@/composables/useRefreshOnActivate'
@@ -282,37 +282,37 @@ function onPublish() {
     <Search v-model="keywordInput" class="search" :placeholder="kind.searchPlaceholder" />
 
     <div class="chips">
-      <Tag :theme="category === '' ? 'primary' : 'default'" variant="light" size="medium" @click="selectCategory('')">
+      <CheckTag variant="light" size="medium" :checked="category === ''" @change="selectCategory('')">
         全部
-      </Tag>
-      <Tag
+      </CheckTag>
+      <CheckTag
         v-for="c in categories"
         :key="c.code"
-        :theme="category === c.label ? 'primary' : 'default'"
         variant="light"
         size="medium"
-        @click="selectCategory(c.label)"
+        :checked="category === c.label"
+        @change="selectCategory(c.label)"
       >
         {{ c.label }}
-      </Tag>
+      </CheckTag>
     </div>
     <p v-if="filterDictError" class="dict-error">
       筛选项加载失败
-      <a @click="retryFilterDict">重试</a>
+      <a v-pressable @click="retryFilterDict">重试</a>
     </p>
 
     <div class="sorts">
       <span class="sorts-label">排序</span>
-      <Tag
+      <CheckTag
         v-for="s in SORTS"
         :key="s.value"
-        :theme="sort === s.value ? 'primary' : 'default'"
         variant="light"
         size="medium"
-        @click="selectSort(s.value)"
+        :checked="sort === s.value"
+        @change="selectSort(s.value)"
       >
         {{ s.label }}
-      </Tag>
+      </CheckTag>
     </div>
 
     <ListSkeleton v-if="firstLoading" :rows="3" />
@@ -323,7 +323,7 @@ function onPublish() {
       <p class="list-count">共 {{ total }} 条</p>
       <article v-for="d in items" :key="d.id" class="demand-item m-card" v-pressable @click="router.push(`/demands/${d.id}`)">
         <div class="d-head">
-          <span class="d-cat">{{ d.categoryLabel }}</span>
+          <Tag class="d-cat" size="small" variant="light" theme="primary">{{ d.categoryLabel }}</Tag>
           <h3 class="d-title">{{ d.title }}</h3>
         </div>
         <div class="d-meta">
@@ -333,7 +333,7 @@ function onPublish() {
           </span>
           <span v-if="demandDateText(d)">{{ demandDateText(d) }}</span>
         </div>
-        <span v-if="respondedIds.has(d.id)" class="d-flag">已响应</span>
+        <Tag v-if="respondedIds.has(d.id)" class="d-flag" size="small" variant="light" theme="success">已响应</Tag>
         <p class="d-resp">{{ d.responseCount }} 人响应</p>
       </article>
     </div>
@@ -429,11 +429,6 @@ function onPublish() {
 
 .d-cat {
   flex-shrink: 0;
-  font-size: 12px;
-  padding: 2px 7px;
-  border-radius: var(--td-tag-square-border-radius, 4px);
-  background: var(--td-brand-color-light);
-  color: var(--td-brand-color);
 }
 
 .d-title {
@@ -462,11 +457,8 @@ function onPublish() {
 }
 
 .d-flag {
-  font-size: 11px;
-  padding: 1px 6px;
-  border-radius: var(--td-tag-square-border-radius, 4px);
-  background: var(--td-success-color-1, #e8f8f0);
-  color: var(--td-success-color);
+  align-self: flex-start;
+  margin-top: 6px;
 }
 
 .d-resp {

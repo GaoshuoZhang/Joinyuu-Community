@@ -43,6 +43,16 @@ export async function saveAddress(id: string | undefined, payload: AddressPayloa
   }, 160)
 }
 
+export async function setDefaultAddress(id: string): Promise<void> {
+  await withLatency(() => {
+    const uid = requireUid()
+    const list = (addressesByUid[uid] ??= [])
+    const target = list.find((item) => item.id === id)
+    if (!target) fail(404, '地址不存在')
+    for (const item of list) item.isDefault = item.id === id
+  }, 120)
+}
+
 export async function removeAddress(id: string): Promise<void> {
   await withLatency(() => {
     const uid = requireUid()

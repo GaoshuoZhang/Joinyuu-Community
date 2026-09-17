@@ -122,7 +122,7 @@ function onClose() {
           <t-date-picker v-model="form.expireAt" valueType="YYYY-MM-DD HH:mm" enable-time-picker clearable style="width: 100%" />
         </t-form-item>
         <t-form-item label="跳转链接" name="link">
-          <t-input v-model="form.link" clearable placeholder="如 /events/EV1001；留空不跳转" />
+          <t-input v-model="form.link" clearable placeholder="如 /events/EV1001；留空不跳转…" />
         </t-form-item>
       </div>
       <p v-if="mode === 'create'" class="publish-tip">确认后公告立即发布至客户端公告位，可随时下架或重新编辑。</p>

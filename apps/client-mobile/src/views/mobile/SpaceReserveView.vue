@@ -1,8 +1,8 @@
 <script setup lang="ts">
 import { computed, onMounted, reactive, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { Loading, Button, Cell, DateTimePicker, Input, NoticeBar, Popup, Tag, Toast } from 'tdesign-mobile-vue'
-import { fetchAvailability, fetchSpaces, createReservation } from '@/api/spaces'
+import { Loading, Button, Cell, CheckTag, DateTimePicker, Input, NoticeBar, Popup, Toast } from 'tdesign-mobile-vue'
+import { fetchAvailability, fetchSpaceDetail, createReservation } from '@/api/spaces'
 import { fetchMyIdentities } from '@/api/enterprises'
 import { ApiError } from '@/api/http'
 import { useAuthStore, identityOptionLabel } from '@/stores/auth'
@@ -80,17 +80,12 @@ onMounted(async () => {
   }
 })
 
-/* v38：空间加载失败可重试（此前静默失败会显示空白页） */
+/* v38：空间加载失败可重试（此前静默失败会显示空白页）；按 id 读取详情，避免整表拉取 */
 async function loadSpace() {
   spaceLoading.value = true
   spaceError.value = ''
   try {
-    const list = await fetchSpaces()
-    space.value = list.find((s) => s.id === spaceId) ?? null
-    if (!space.value) {
-      spaceError.value = '空间不存在或已下架'
-      return
-    }
+    space.value = await fetchSpaceDetail(spaceId)
     await loadSlots()
   } catch (e) {
     spaceError.value = e instanceof Error ? e.message : '加载失败，请稍后重试'
@@ -217,18 +212,18 @@ function goMine() {
         <Button size="small" variant="outline" @click="loadSlots">重新加载时段</Button>
       </template>
       <div v-else class="slots">
-        <Tag
+        <CheckTag
           v-for="slot in slots"
           :key="slot.start"
           class="slot"
           size="medium"
-          :theme="form.selected === slot.start ? 'primary' : 'default'"
           variant="light"
+          :checked="form.selected === slot.start"
           :disabled="slot.occupied"
-          @click="form.selected = slot.start"
+          @change="form.selected = slot.start"
         >
           {{ slot.start }}
-        </Tag>
+        </CheckTag>
       </div>
       <p class="field-help">灰色为已占用时段</p>
     </div>
@@ -236,16 +231,16 @@ function goMine() {
     <div class="m-card">
       <span class="field-label">预约时长</span>
       <div class="chips">
-        <Tag
+        <CheckTag
           v-for="h in maxSelectableHours"
           :key="h"
           size="medium"
-          :theme="hours === h ? 'primary' : 'default'"
           variant="light"
-          @click="hours = h"
+          :checked="hours === h"
+          @change="hours = h"
         >
           {{ h }} 小时
-        </Tag>
+        </CheckTag>
       </div>
       <p v-if="slotConflict" class="slots-error">所选时长与已占用时段冲突，请调整开始时间或时长。</p>
     </div>
@@ -258,16 +253,16 @@ function goMine() {
     <div class="m-card">
       <span class="field-label">以哪个身份预约</span>
       <div class="chips">
-        <Tag
+        <CheckTag
           v-for="i in identityOptions"
           :key="`${i.type}:${i.enterpriseId ?? ''}`"
-          :theme="isIdentityPicked(i) ? 'primary' : 'default'"
           variant="light"
           size="medium"
-          @click="pickIdentity(i)"
+          :checked="isIdentityPicked(i)"
+          @change="pickIdentity(i)"
         >
           {{ identityOptionLabel(i, auth.name) }}
-        </Tag>
+        </CheckTag>
       </div>
       <p v-if="identityError" class="field-error">{{ identityError }}</p>
       <p class="field-help">企业身份预约将计为企业主体的预约记录</p>
@@ -282,7 +277,7 @@ function goMine() {
       v-if="resultStatus"
       visible
       :theme="resultStatus === 'approved' ? 'success' : 'warning'"
-      :content="resultStatus === 'approved' ? '✅ 预约成功！' : '🕐 预约已提交，等待社区运营审核。'"
+      :content="resultStatus === 'approved' ? '预约成功！' : '预约已提交，等待社区运营审核。'"
     />
 
     <Popup v-model:visible="datePickerVisible" placement="bottom">

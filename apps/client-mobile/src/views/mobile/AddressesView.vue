@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { onMounted, reactive, ref, watch } from 'vue'
 import { Loading, Button, DialogPlugin, Input, Popup, Switch, Tag, Toast } from 'tdesign-mobile-vue'
-import { listAddresses, removeAddress, saveAddress } from '@/api/addresses'
+import { listAddresses, removeAddress, saveAddress, setDefaultAddress } from '@/api/addresses'
 import { ApiError } from '@/api/http'
 import EmptyBlock from '@/components/shared/EmptyBlock.vue'
 import type { AddressItem } from '@/types'
@@ -77,6 +77,22 @@ async function onSave() {
   }
 }
 
+const defaultingId = ref('')
+
+async function onSetDefault(item: AddressItem) {
+  if (item.isDefault || defaultingId.value) return
+  defaultingId.value = item.id
+  try {
+    await setDefaultAddress(item.id)
+    Toast('已设为默认地址')
+    await load()
+  } catch (e) {
+    Toast(e instanceof ApiError ? e.message : '设置失败，请稍后重试')
+  } finally {
+    defaultingId.value = ''
+  }
+}
+
 function onRemove(item: AddressItem) {
   DialogPlugin.confirm({
     title: '删除地址',
@@ -116,6 +132,15 @@ function onRemove(item: AddressItem) {
         </div>
         <p class="detail">{{ item.address }}</p>
         <div class="ops">
+          <Button
+            v-if="!item.isDefault"
+            size="small"
+            variant="outline"
+            :loading="defaultingId === item.id"
+            @click="onSetDefault(item)"
+          >
+            设为默认
+          </Button>
           <Button size="small" variant="outline" @click="openEditor(item)">编辑</Button>
           <Button size="small" variant="outline" theme="danger" @click="onRemove(item)">删除</Button>
         </div>

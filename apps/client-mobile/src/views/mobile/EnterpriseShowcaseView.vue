@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
 import { useRoute } from 'vue-router'
-import { Loading, Button, Toast } from 'tdesign-mobile-vue'
+import { Loading, Button, Icon, Image, Toast } from 'tdesign-mobile-vue'
 import { useAsyncList } from '@/composables/useAsyncList'
 import { fetchEnterpriseShowcase } from '@/api/enterprises'
 import { listFavorites, toggleFavorite } from '@/api/favorites'
@@ -13,8 +13,9 @@ import EmptyBlock from '@/components/shared/EmptyBlock.vue'
 import ReasonSheet from '@/components/ReasonSheet.vue'
 import type { EnterpriseShowcase } from '@/types'
 
-/* 移动企业名片：品牌横幅（渐变 + 企业名首字）+ 介绍 + 成员列表；
- * 仅 published 可见（404 → 空态 + 返回）；名片申请入口在社区·企业库卡片（成员可见）；v35 支持举报。 */
+/* 移动企业名片：品牌横幅（渐变 + 企业名首字）+ 介绍 + 企业信息；
+ * 仅 published 可见（404 → 空态 + 返回）；名片申请入口在社区·企业库卡片（成员可见）；v35 支持举报。
+ * 2026-09-17 起不再公示企业成员。 */
 const route = useRoute()
 const auth = useAuthStore()
 
@@ -87,7 +88,7 @@ onMounted(async () => {
     <template v-else-if="showcase">
       <section class="banner">
         <span class="badge">
-          <img v-if="showcase.logo" class="badge-img" :src="showcase.logo" alt="" loading="lazy" decoding="async" @error="onImageError" />
+          <Image v-if="showcase.logo" class="badge-img" :src="showcase.logo" alt="" fit="cover" lazy @error="onImageError" />
           <template v-else>{{ firstChar }}</template>
         </span>
         <div class="banner-info">
@@ -126,16 +127,11 @@ onMounted(async () => {
         </p>
       </section>
 
-      <section class="m-card">
-        <h3 class="sec-title">成员（{{ showcase.members.length }}）</h3>
-        <div v-if="showcase.members.length" class="members">
-          <span v-for="m in showcase.members" :key="m" class="member">{{ m }}</span>
-        </div>
-        <p v-else class="members-empty">暂未公示成员</p>
-      </section>
       <div class="foot-actions">
-        <Button size="small" variant="outline" @click="onToggleFavorite">{{ favorited ? '★ 已收藏' : '☆ 收藏' }}</Button>
-        <Button size="small" variant="outline" @click="onShare">分享</Button>
+        <Button size="small" variant="outline" @click="onToggleFavorite">
+          <Icon :name="favorited ? 'star-filled' : 'star'" size="16px" />{{ favorited ? '已收藏' : '收藏' }}
+        </Button>
+        <Button size="small" variant="outline" @click="onShare"><Icon name="share" size="16px" />分享</Button>
         <p class="report-link" v-pressable @click="reportVisible = true">举报该企业名片</p>
       </div>
       <ReasonSheet v-model:visible="reportVisible" title="举报企业名片" :reasons="REPORT_REASONS" placeholder="补充说明（选填）…" submit-label="提交举报" @submit="onReport" />
@@ -193,7 +189,7 @@ onMounted(async () => {
   display: grid;
   place-items: center;
   border-radius: var(--td-radius-large);
-  background: rgba(255, 255, 255, 0.2);
+  background: color-mix(in srgb, var(--td-text-color-anti) 20%, transparent);
   font-size: 26px;
   font-weight: 700;
   overflow: hidden;
@@ -202,7 +198,6 @@ onMounted(async () => {
 .badge-img {
   width: 100%;
   height: 100%;
-  object-fit: cover;
 }
 
 .banner-info {
@@ -256,23 +251,4 @@ onMounted(async () => {
   word-break: break-all;
 }
 
-.members {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-}
-
-.member {
-  font-size: 12px;
-  padding: 3px 11px;
-  border-radius: var(--td-radius-small);
-  background: var(--td-brand-color-1);
-  color: var(--td-brand-color);
-}
-
-.members-empty {
-  margin: 0;
-  font-size: 12px;
-  color: var(--td-text-color-placeholder);
-}
 </style>

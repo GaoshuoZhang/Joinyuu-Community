@@ -1,4 +1,4 @@
-import { httpGet, httpPost, httpPut } from './http'
+import { httpGet, httpPost } from './http'
 
 export type GovernanceReportStatus = 'pending' | 'resolved' | 'rejected'
 export type GovernanceAppealStatus = 'pending' | 'resolved' | 'rejected'
@@ -12,6 +12,7 @@ export interface GovernanceReport {
   reason: string
   detail?: string | null
   status: GovernanceReportStatus
+  canRestore: boolean
   at: string
   handledAt?: string | null
   handledBy?: string | null
@@ -30,23 +31,6 @@ export interface GovernanceAppeal {
   handledBy?: string | null
   resolution?: string | null
 }
-
-export interface CommunityPolicy {
-  id: string
-  kind: 'agreement_user' | 'agreement_privacy' | 'community'
-  category: string
-  title: string
-  summary: string
-  content: string
-  version: string
-  effectiveAt?: string | null
-  status: 'published' | 'archived'
-  publishedAt: string
-  updatedAt: string
-  publisher: string
-}
-
-export type PolicyPayload = Pick<CommunityPolicy, 'kind' | 'category' | 'title' | 'summary' | 'content' | 'version' | 'effectiveAt' | 'status'>
 
 function pageQuery(page: number, pageSize: number, filters: Record<string, string | undefined>) {
   const qs = new URLSearchParams({ page: String(page), pageSize: String(pageSize) })
@@ -68,16 +52,4 @@ export function fetchGovernanceAppeals(page: number, pageSize: number, status?: 
 
 export function reviewGovernanceAppeal(id: number, payload: { decision: 'accepted' | 'rejected'; resolution: string }) {
   return httpPost<{ code: number }>(`/governance/appeals/${id}/review`, payload)
-}
-
-export function fetchCommunityPolicies() {
-  return httpGet<CommunityPolicy[]>('/governance/policies')
-}
-
-export function createCommunityPolicy(payload: PolicyPayload) {
-  return httpPost<CommunityPolicy>('/governance/policies', payload)
-}
-
-export function updateCommunityPolicy(id: string, payload: PolicyPayload) {
-  return httpPut<{ code: number }>(`/governance/policies/${id}`, payload)
 }

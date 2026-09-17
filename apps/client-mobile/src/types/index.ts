@@ -24,6 +24,8 @@ export interface AppConfig {
   mallOpen: boolean
   demandOpen: boolean
   reservationOpen: boolean
+  /** 首页轮播图总开关：关闭后首页不展示轮播区域 */
+  homeCarouselOpen: boolean
 }
 
 /* ---------- 字典项（GET /api/app/dicts/:type） ---------- */
@@ -73,6 +75,8 @@ export interface UserProfile {
 
 export interface RealNameInfo {
   verified: boolean
+  reviewStatus?: 'unverified' | 'pending' | 'approved' | 'rejected'
+  reviewNote?: string
   /** 脱敏展示：首字保留（如 苏*） */
   realName?: string
   /** 脱敏证件号：前 4 + 后 4（如 3301**********1234） */
@@ -84,6 +88,18 @@ export interface RealNameInfo {
 export interface RealNamePayload {
   realName: string
   citizenId: string
+}
+
+/** 实名分级权益分组（GET /api/app/me/realname-rights） */
+export interface RealnameRightsGroup {
+  identityType: string
+  level: number
+  /** 如「已实名个人」「社区企业 · 等级 3」 */
+  title: string
+  /** 是否为当前用户所处层级 */
+  active: boolean
+  items: string[]
+  limits: Record<string, number>
 }
 
 /* ---------- 积分流水（GET /api/app/me/points-records） ---------- */
@@ -99,7 +115,20 @@ export interface PointsRecord {
 
 /* ---------- 站内信 [MOCK-ONLY]（缺口 §7-1） ---------- */
 
-export type NoticeType = 'audit_result' | 'enroll_result' | 'order' | 'points' | 'system'
+export type NoticeType =
+  | 'audit_result'
+  | 'enroll_result'
+  | 'order'
+  | 'points'
+  | 'system'
+  | 'invite'
+  | 'transfer'
+  | 'report'
+  | 'article'
+  | 'demand'
+  | 'project'
+  | 'mall'
+  | 'service'
 
 export interface UserNotice {
   id: string
@@ -110,8 +139,6 @@ export interface UserNotice {
   read: boolean
   /** 点击跳转的业务路由（可选） */
   link?: string
-  /** v39：归档标记（归档后默认不在列表显示） */
-  archived?: boolean
 }
 
 /* ---------- 首页聚合 [MOCK-ONLY]（缺口 §7-3 GET /api/app/home） ---------- */
@@ -120,6 +147,8 @@ export interface HomeFeed {
   siteName: string
   siteSlogan: string
   noticesUnread: number
+  /** 后台「轮播图管理」总开关；false 时首页不展示轮播区域 */
+  carouselEnabled: boolean
   banners: HomeBanner[]
   hotEvents: HomeEventCard[]
   latestDemands: HomeDemandCard[]
@@ -129,15 +158,13 @@ export interface HomeFeed {
 }
 
 /* ===== v42 新功能类型 ===== */
-export interface PointsTask { key: string; title: string; desc: string; points: number; done: boolean; claimed: boolean }
-export interface MyStats { pointsEarned: number; pointsSpent: number; demands: number; responses: number; enrollments: number; articles: number; projects: number; orders: number }
-export interface ServiceApplication { id: string; policyId: string; policyTitle: string; applicantName: string; phone: string; note?: string; status: 'pending' | 'processing' | 'done'; at: string }
+export interface MyStats { pointsEarned: number; pointsSpent: number; demands: number; responses: number; enrollments: number; articles: number; projects: number; orders: number; checkedIn?: number; experience?: number }
 export interface EventTicket { eventId: string; eventTitle: string; startTime: string; location: string; ticketCode: string; status: 'valid' | 'checked' | 'cancelled'; checkedIn: boolean; waitlistOrder?: number }
 export interface DemandMessage { id: string; uid: string; name: string; content: string; at: string; mine: boolean }
 export interface ProjectTask { id: string; title: string; done: boolean; at: string }
 export interface ProjectFileItem { id: string; name: string; url: string; at: string }
 export interface ProjectMessage { id: string; uid: string; name: string; content: string; at: string; mine: boolean }
-export interface EnterpriseWorkbench { responseCount: number; recentResponses: { id: string; demandId: string; demandTitle: string; at: string }[] }
+export interface EnterpriseWorkbench { responseCount: number; demandCount?: number; projectCount?: number; memberCount?: number; recentResponses: { id: string; demandId: string; demandTitle: string; at: string }[] }
 export interface RealNameBenefit { tier: string; title: string; items: string[]; active: boolean }
 
 /** [MOCK-ONLY] v40 首页公告 */
@@ -153,6 +180,10 @@ export interface HomeBanner {
   id: string
   title: string
   subtitle: string
+  /** 轮播图片（可空；为空时使用品牌渐变文字卡） */
+  imageUrl?: string
+  /** 点击跳转的站内路径，如 /events */
+  link?: string
 }
 
 /* ---------- 社区（社区服务 / 人才库 / 企业库） ---------- */
@@ -255,6 +286,9 @@ export interface EnterpriseRecord {
   advantages?: string
   description: string
   showcaseStatus: 'published' | 'none'
+  /** 企业等级（社区企业等级梯度，按经验值推导；企业库列表下发） */
+  level?: number
+  levelName?: string
   members: EnterpriseMember[]
   /** 企业联系人（负责人，对应后台 Enterprise.contactUserId） */
   contactUid?: string
@@ -342,7 +376,17 @@ export interface ExperienceProfile {
 
 /* ---------- 需求广场 ---------- */
 
-export type DemandStatus = 'pending' | 'published' | 'projected' | 'rejected' | 'withdrawn' | 'closed'
+export type DemandStatus =
+  | 'pending'
+  | 'pending_release'
+  | 'scheduled'
+  | 'published'
+  | 'selected'
+  | 'projected'
+  | 'rejected'
+  | 'withdrawn'
+  | 'closed'
+  | 'appealed'
 
 /** 需求类型（[MOCK-ONLY] 缺口 §7.1-15：后端待增 demandType 字段）
  * task = 找服务（寻找项目执行与交付服务）；investment = 找投资（有规划找投资人与伙伴）；
@@ -388,7 +432,8 @@ export interface Demand {
   appealed?: boolean
   appealReason?: string
   /** 我是否已响应（详情页用） */
-  myResponse?: boolean
+  /** 本人响应快照（撤回后不返回，可重新响应） */
+  myResponse?: { message: string; at: string; status: string }
 }
 
 export interface DemandCreatePayload {
@@ -422,6 +467,15 @@ export interface DemandCreatePayload {
   returnOffer?: string
 }
 
+/** 已发布的用户协议 / 隐私政策（GET /api/app/policies/:kind） */
+export interface AgreementPolicy {
+  kind: 'user_agreement' | 'privacy_policy'
+  title: string
+  version: string
+  content: string
+  publishedAt: string
+}
+
 export interface MyDemandItem {
   id: string
   title: string
@@ -431,6 +485,9 @@ export interface MyDemandItem {
   responseCount: number
   createdAt: string
   rejectReason?: string
+  /** 已驳回后是否已申诉 */
+  appealed?: boolean
+  appealReason?: string
 }
 
 export interface MyResponseItem {
@@ -656,6 +713,8 @@ export interface Article {
   /** 文章封面（投稿时上传，可选） */
   coverUrl?: string
   content: string
+  commentCount?: number
+  commentsEnabled: boolean
   /** [MOCK-ONLY] v38 点赞数与我的点赞状态 */
   likeCount?: number
   liked?: boolean

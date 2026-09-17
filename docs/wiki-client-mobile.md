@@ -14,9 +14,13 @@
 - 实体与 API 类型在 `src/types/` 独立声明，字段口径对齐 `docs/api-app-design.md` 与 `entity-fields.md`；`[MOCK-ONLY]` 成员标注缺口编号。
 - 根脚本：`pnpm dev:client-mobile` / `pnpm build:client-mobile`。
 
-## 2. Mock-First 架构（冻结）
+## 2. API 契约层与双模式
 
-- `VITE_API_MODE=mock|http`（默认 mock）：`src/api/*.ts` 函数为唯一契约层，mock 模式内部分流到 `src/mock/handlers/*`；http 模式走 `http.ts` 真实请求。**视图层禁止绕过 api 层直接访问 mock**。
+> 2026-09-17 收尾复查：HTTP 注销申请并发仅一份有效，撤回后不可执行；个人名片 visibility 只更新明确传入的布尔键，省略键不会重新公开字段。人才库和全域人才搜索支持展示姓名并与公开名片名称一致。
+
+> 2026-09-17：M2-R 必做范围已完成。64 个入口 HTTP 加载检查与名片字段配置、实名人工复核、注销驳回通知跨端操作通过；浏览器覆盖边界见 `m2-r-closeout.md`。两个名片编辑页读取 `card-schema`，禁用字段隐藏并保留旧内容。实名页展示复核状态/原因；HTTP 电子票展示真实核销码，演示图案仅 Mock。默认 API 端口 7757，Vite 实际访问以启动输出为准（当前 localhost）。
+
+- `VITE_API_MODE=mock|http`（2026-09-17 R4 起默认 http）：`src/api/*.ts` 函数为唯一契约层，显式 mock 模式内部分流到 `src/mock/handlers/*`；http 模式走 `http.ts` 真实请求。**视图层禁止绕过 api 层直接访问 mock**。HTTP 模式不读取、写入或重置 Mock 业务快照；切回 mock 保留演示快照。
 - Mock 响应与真实后端同形态：包络 `{ code: 0, data }`、错误 `{ code, message }`、分页 `{ list, total }`、时间 `YYYY-MM-DD HH:mm`；错误文案与 wiki 中文口径一致。
 - Mock 数据从 `apps/api/prisma/seed-data/` 派生（同 ID 体系 U/E/AP/D/P/EV/XE/EX/PT/G/RO/R/WS/WA/LS/S/SR/A/SU/CL/SC/AN/N/AL）；v33 起可变状态写入 `joinyuu_client_mock_v33` 版本化快照并跨刷新恢复（v38 新增地址、通知偏好、屏蔽、账号申请、活动反馈、点赞评论等状态在同一快照内向后兼容），业务 ID 使用持久序列号，业务时钟可由 DevTools 控制。需求响应在发布者接受后生成双方共享的项目记录。
 - 超出当前后端边界的功能（站内信 / 签到 / 首页聚合等）以 `// [MOCK-ONLY]` 标记，并在 `m2-client-plan.md` §7 缺口表与 §0.3/0.4 看板登记；接入期（M2-R）逐条销号。
@@ -32,7 +36,7 @@
 
 ## 4. 鉴权与多身份
 
-- Mock 会话：假 JWT（`{ sub, scope:'app', identities, jti, exp }`，TTL 2h）存 `joinyuu_client_token`；真实签发为后端缺口（plan §7.1-4）。
+- HTTP 会话由 `/api/app/auth/**` 签发并由服务端鉴权；`restoreSession` 和图形验证码均经公共 HTTP 封装。显式 Mock 模式使用演示 JWT；两种模式共用 `joinyuu_client_token` 键，切换后如收到 401 需重新登录。
 - 守卫：`guestOnly`（已登录回首页）、`requiresAuth`（未登录跳 `/login?redirect=`，M2-M2 起挂 /me/**）；401 统一清态回登录。
 - 演示账号矩阵见 `src/mock/db.ts`（单/双/三身份、企业成员、新注册空态、冻结号）；验证码固定 `8888`（[MOCK-ONLY]）。
 - 功能开关：`GET /api/app/config` 下发，`config` store 承载；入口隐藏 + 写端点 400 双保险。
@@ -74,10 +78,14 @@
 
 底部 5 Tab（`AppShell.vue`）+ 二级页（详情/提交/我的族/站内信/入驻说明）：
 
-- **首页** `/`：搜索框 → Swiper 轮播（banner）→ 需求发布（独占行）→ 双入口（企业入驻/人才登记）→ 四宫格（文章投稿/积分商城/空间预约/活动计划）→ 最新项目 → 精选文章。
+- **首页** `/`：搜索框 → Swiper 轮播（数据来自后台 `HomeBanner`，`carouselEnabled` 为 false 或列表为空时整块区域不渲染；点击按 `banner.link` 跳转，可带图片，缺图用品牌渐变文字卡）→ 需求发布（独占行）→ 双入口（企业入驻/人才登记）→ 四宫格（文章投稿/积分商城/空间预约/活动计划）→ 最新项目 → 精选文章。
 - **项目** `/projects`：搜索 + 分类 Tag + 需求（项目）列表，排版沿用原需求页；发布入口「需求发布」→ `/demands/new`，详情 `/demands/:id`。
 - **社区** `/community`：3 个二级 Tab（社区服务=政策/指引列表 + 详情，人才库=社区个体（带头像，点入 `/talents/:uid` 简历式公开名片），企业库=社区企业），每个 Tab 带搜索；企业点入 `/enterprises/:id`（精致企业名片）。
 - **广场** `/plaza`：2 个二级 Tab（活动=活动列表，资讯=按栏目分组的文章）。
+- **站内信** `/notices`：单一列表（无分类标签、无归档操作），支持标记已读与全部已读；未读数与首页角标一致。
+- **文章详情** `/articles/:id`：正文兼容后台富文本 HTML（客户端 DOMPurify 清洗后渲染）与客户端纯文本/Markdown 图片行；`commentsEnabled=false` 时隐藏评论区且不请求评论接口。
+- **需求详情** `/demands/:id`（标题「需求详情」，原「项目详情」）：本人已响应时底部显示「我的响应」（响应说明 + 时间 + 状态），不再展示响应入口；撤回响应后恢复可响应状态。发布者查看本人任意状态需求：已发布时展示响应列表并多选意向承接方（可取消选择，「提交立项」后需求转 `selected`，等待社区管理员确认立项，不在客户端生成项目）；已选定/已立项时展示被选中承接方与状态提示；待发布/定时发布/已选定对非发布者提示暂不接受响应。
+- **我的需求** `/me/demands`：列表行可点击进入 `/demands/:id`（响应情况与承接方选择均在详情页操作）；审核中可撤回，已驳回可申诉、驳回/撤回后可修改重提。
 - **我的** `/me`：个人中心族（资料/积分/等级/我的项目/申请/订单/预约/投稿/需求/响应/报名/站内信）；社区个体另有「个人名片」；有关联身份时显示「关联身份」→ `/me/identities`（卡片列出社区个体与全部关联社区企业/合作企业：社区个体 → 个人名片；企业 → `/me/enterprises/:id` 按角色操作，负责人可编辑/邀请/转移/退驻，成员只读）。
 - 入驻说明 `/intros/:kind`：企业入驻/人才登记政策说明 + 引导登录，跳 `/applications/new?type=settle|individual`。
 
@@ -141,3 +149,6 @@
 | 2026-09-16 | **八大功能新增（v42，纯客户端 Mock）**：①活动电子票 `/events/:id/ticket`（演示二维码、候补位次、取消失效）与「我的报名」入口；②需求沟通 `/demands/:id/messages`（发布方/响应者留言板，「我的响应」沟通入口）；③项目协作 `/me/projects/:id/collab`（任务清单 / 文件链接 / 讨论区）；④积分任务中心 `/me/tasks`（5 项任务、领取积分、Mock 通知）与积分规则 `/mall/rules`；⑤个人数据看板 `/me/stats`（积分收支与参与度）；⑥社区服务在线申请（政策弹层「在线申请」→ `/me/services` 表单与进度）；⑦企业工作台 `/me/enterprises/:id/workbench`（企业名义响应记录）与需求「代企业响应」；⑧实名认证分级权益展示；「我的」新增任务/看板/服务申请/企业工作台入口；全场景 headed E2E 三轮覆盖 64 页零失败（截图 `/tmp/opencode/e2e/roundN`）；tsc/lint/build 全绿 |
 | 2026-09-16 | **三轮复审整改（v41，纯客户端）**：KeepAlive 列表页响应 URL query（搜索「查看更多项目」带关键词）、社区 `?tab=talent/enterprise` 深链首屏加载、服务分类全量派生、活动重复计数、登录页忘记密码入口、积分流水加载更多失败回退并保留列表、邀请有效期接 Mock 时钟、预约时长受开放时段约束、占位文本对比度提升；新增商城订单评价（1~5 星+文字，每单一次）、账号注销 7 天冷静期与撤回、图片失败兜底；举报原因不预选、项目空态一键清除筛选；headed 实测零控制台错误，tsc/lint/build 全绿 |
 | 2026-09-16 | **产品/UX 复审整改（v40，纯客户端）**：①活动——DevTools 运营模拟「取消活动并通知报名者 / 活动改期 +1 天并通知」（`mock/operations.ts` `cancelEventAsOps/postponeEventAsOps`），`EventStatus` 增 `cancelled`，详情页取消横幅（"该活动已被取消，报名已同步取消"），报名列表 `eventStatus/rescheduledTo` 标记；②分享——`utils/share.ts` 接入需求/活动/企业名片/人才名片详情；③浏览历史——新增 `/me/history` 页（`utils/readingHistory.ts` 支持删除单条/清空），Me 页入口；④首页公告——`HomeAnnouncement` + Mock 公告数据 + NoticeBar/弹窗；⑤商城——`Goods.category`（字典 goods_category）分类 chips 筛选并同步 URL、列表计数；⑥订单——`MyOrder.trackingNo`（发起发货写入并随通知下发）展示；⑦举报——`ReportTargetType` 扩展 `comment/user`（文章评论行内举报、人才名片举报用户）；⑧收藏——类型扩展企业/人才，`MyFavoritesView` 类型筛选 chips，企业名片/人才名片收藏按钮；⑨搜索——分类 chips 可点击过滤、「查看更多项目」跳项目页关键词；⑩无障碍与体验——main.ts 集中补丁（Toast aria-live、Dialog/Popup role/aria-modal、表单 id/name 只扫描新增子树）、路由按名记忆滚动位置、小号 Tag ≥12px 与交互 chips ≥32px、列表 Loading→ListSkeleton、更多卡片补 `v-pressable`；⑪复审补齐——项目页排序（最新/响应最多）与文章/活动/社区/广场筛选 URL 同步；首页「为你推荐」；投稿/评论/响应/地址/账号安全/邀请/退回原因表单行内错误；我的列表与通知/社区/广场计数补齐；修复首页推荐块误入样式区导致的渲染报错。Playwright headed 增量复测（商城分类 URL=GC002→2 件、收藏 6 类筛选、搜索 chips 6→1、活动取消失效横幅、浏览历史空态）零控制台错误；tsc/lint/build 全绿 |
+| 2026-09-17 | **需求撮合口径调整（纯客户端 + 后端契约同步）**：需求状态机新增 `selected`（已选定）——发布者在需求详情页查看响应情况并多选意向承接方，「提交立项」后状态转 `selected`（不再由发布者直接生成项目，也不提供单个驳回），未选中响应保持待处理；管理员在后台「已选定」需求上手动立项（补发承接方积分/经验并通知双方）。「我的需求」行点击进入需求详情（响应列表与选择操作从列表页移除），状态标签补齐待发布/定时发布中/已选定/申诉中；发布者可查看本人任意状态需求详情（`GET /api/app/demands/:id`）。`POST /api/app/me/demands/:id/responses/:responseId/review` 由 `POST /api/app/me/demands/:id/select`（body `responseIds[]`）取代；tsc/lint/build 全绿 |
+| 2026-09-17 | **企业信息展示调整**：社区「企业库」卡片右上角由「入驻展示」标签改为企业等级（`Lv.n 等级名`，服务端按社区企业等级梯度由企业经验值推导后随列表下发，契约 `GET /api/app/community/enterprises` 增 `level/levelName`）；企业名片（`/enterprises/:id`）不再公示成员卡片。后台同步：社区企业列表新增「企业等级」列、「展示页状态」更名「名片状态」，社区个体列表「经验值等级」更名「个体等级」。tsc/lint/build 与全量 e2e（41 套件 / 282 用例）通过 |
+| 2026-09-17 | **接口对齐审计整改（客户端接入）**：①隐私政策页由静态演示文本改为读取后台已发布协议（`GET /api/app/policies/user_agreement|privacy_policy`，版本号/发布时间 + 富文本经 DOMPurify 清洗），接口不可用时回退演示文本；②实名页「认证权益」改读 `GET /api/app/me/realname-rights`（按身份/等级分组，当前层级高亮，失败回退静态说明）；③收货地址新增「设为默认」行内操作（`POST /api/app/me/addresses/:id/default`），保留编辑弹窗内 Switch；④预约页空间信息改为按 id 读取 `GET /api/app/spaces/:id`（不再拉全量列表）；⑤企业工作台统一走 `GET /api/app/me/enterprise-workbench`（后端已移除重复的 `/enterprises/:id/workbench`）。tsc/lint/build 全绿 |

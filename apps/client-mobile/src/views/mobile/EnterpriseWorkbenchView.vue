@@ -24,6 +24,9 @@ onMounted(run)
           <b>{{ data?.responseCount ?? 0 }}</b>
           <span>企业名义响应</span>
         </div>
+        <div v-if="data?.demandCount !== undefined" class="summary-item"><b>{{ data.demandCount }}</b><span>企业需求</span></div>
+        <div v-if="data?.projectCount !== undefined" class="summary-item"><b>{{ data.projectCount }}</b><span>参与项目</span></div>
+        <div v-if="data?.memberCount !== undefined" class="summary-item"><b>{{ data.memberCount }}</b><span>企业成员</span></div>
       </section>
 
       <section class="m-card">

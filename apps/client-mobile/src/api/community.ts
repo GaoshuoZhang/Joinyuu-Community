@@ -1,6 +1,12 @@
-import { apiMode, httpGet, httpPost } from './http'
-import type { CommunityPolicy, EnterpriseRecord, ServiceApplication, TalentCard, TalentMember } from '@/types'
+import { apiMode, httpGet } from './http'
+import type { AgreementPolicy, CommunityPolicy, EnterpriseRecord, TalentCard, TalentMember } from '@/types'
 import * as mock from '@/mock/handlers/community'
+
+/** GET /api/app/policies/:kind — 已发布的用户协议 / 隐私政策（注册与政策页） */
+export async function fetchAgreementPolicy(kind: 'user_agreement' | 'privacy_policy'): Promise<AgreementPolicy> {
+  if (apiMode === 'mock') return mock.fetchAgreementPolicy(kind)
+  return httpGet<AgreementPolicy>(`/policies/${kind}`)
+}
 
 /* 社区域契约（社区服务 / 人才库 / 企业库）。
  * [MOCK-ONLY]：社区服务与人才库为当前后端边界外，接入期补充 /api/app/** 端点（见 m2-client-plan §7.1）。
@@ -29,18 +35,6 @@ export async function fetchTalents(params?: { keyword?: string }): Promise<Talen
 export async function fetchTalentCard(uid: string): Promise<TalentCard> {
   if (apiMode === 'mock') return mock.fetchTalentCard(uid)
   return httpGet<TalentCard>(`/community/talents/${uid}`)
-}
-
-/** POST /api/app/community/services/:policyId/apply — 社区服务在线申请（v42 [MOCK-ONLY]） */
-export async function applyCommunityService(payload: { policyId: string; applicantName: string; phone: string; note?: string }): Promise<{ id: string }> {
-  if (apiMode === 'mock') return mock.applyCommunityService(payload)
-  return httpPost<{ id: string }>(`/community/services/${payload.policyId}/apply`, payload)
-}
-
-/** GET /api/app/me/service-applications — 我的服务申请 */
-export async function listMyServiceApplications(): Promise<ServiceApplication[]> {
-  if (apiMode === 'mock') return mock.listMyServiceApplications()
-  return httpGet<ServiceApplication[]>('/me/service-applications')
 }
 
 export async function fetchEnterpriseList(params?: { keyword?: string; industry?: string }): Promise<EnterpriseRecord[]> {

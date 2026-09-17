@@ -4,7 +4,6 @@ import type {
   ArticleChannel,
   ArticleStatus,
   ArticleColumn,
-  ShowcaseRequest,
 } from '@/types'
 import { httpDelete, httpGet, httpPost, httpPut } from './http'
 
@@ -41,6 +40,7 @@ export interface ArticlePayload {
   /** 正文（富文本 HTML） */
   content: string
   tags: string[]
+  commentsEnabled?: boolean
 }
 
 /** GET /api/admin/contents/articles */
@@ -55,6 +55,11 @@ export async function fetchArticles(query: ArticleQuery): Promise<PageResult<Art
   if (query.sortBy) qs.set('sortBy', query.sortBy)
   if (query.sortOrder) qs.set('sortOrder', query.sortOrder)
   return httpGet<PageResult<Article>>(`/contents/articles?${qs}`)
+}
+
+/** GET /api/admin/contents/articles/:id，含完整下架/恢复历史。 */
+export async function fetchArticleDetail(id: string): Promise<Article> {
+  return httpGet<Article>(`/contents/articles/${id}`)
 }
 
 /** POST /api/admin/contents/articles（资讯发布新增即「待发布」，投稿新增即「待审核」） */
@@ -92,9 +97,14 @@ export async function cancelArticleSchedule(id: string): Promise<{ code: number 
   return httpPost<{ code: number }>(`/contents/articles/${id}/cancel-schedule`)
 }
 
-/** POST /api/admin/contents/articles/:id/withdraw — 已发布 → 待发布（下架转待发布） */
+/** POST /api/admin/contents/articles/:id/withdraw — 已发布 → 已关闭 */
 export async function withdrawArticle(id: string, takedownReason?: string): Promise<{ code: number }> {
   return httpPost<{ code: number }>(`/contents/articles/${id}/withdraw`, { takedownReason })
+}
+
+/** POST /api/admin/contents/articles/:id/restore — 恢复管理员主动下架的文章。 */
+export async function restoreArticle(id: string): Promise<{ code: number }> {
+  return httpPost<{ code: number }>(`/contents/articles/${id}/restore`)
 }
 
 /** DELETE /api/admin/contents/articles/:id（仅待审核/已驳回投稿可删） */
@@ -147,33 +157,4 @@ export async function toggleColumnSubmission(id: string): Promise<{ code: number
 /** DELETE /api/admin/contents/columns/:id — 删除栏目，其文章自动转移到「未指定」栏目 */
 export async function deleteColumn(id: string): Promise<{ code: number }> {
   return httpDelete<{ code: number }>(`/contents/columns/${id}`)
-}
-
-/* ---------- 展示页发布申请（迁移自申请审核） ---------- */
-
-export interface ShowcaseQuery {
-  page: number
-  pageSize: number
-  targetType?: string
-  status?: string
-}
-
-/** GET /api/admin/contents/showcase-requests?page&pageSize&targetType&status */
-export async function fetchShowcaseRequests(query: ShowcaseQuery): Promise<PageResult<ShowcaseRequest>> {
-  const qs = new URLSearchParams()
-  qs.set('page', String(query.page))
-  qs.set('pageSize', String(query.pageSize))
-  if (query.targetType) qs.set('targetType', query.targetType)
-  if (query.status) qs.set('status', query.status)
-  return httpGet<PageResult<ShowcaseRequest>>(`/contents/showcase-requests?${qs}`)
-}
-
-/** POST /api/admin/contents/showcase-requests/:id/review，入参 { status: approved | rejected, comment? }
- * 企业目标：审核结果联动企业展示页状态；个人目标：仅记录审核结果 */
-export async function reviewShowcaseRequest(
-  id: string,
-  status: 'approved' | 'rejected',
-  comment?: string,
-): Promise<{ code: number }> {
-  return httpPost<{ code: number }>(`/contents/showcase-requests/${id}/review`, { status, comment })
 }

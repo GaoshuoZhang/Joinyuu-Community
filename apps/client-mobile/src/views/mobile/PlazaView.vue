@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { Search, Tabs, TabPanel, PullDownRefresh, Tag } from 'tdesign-mobile-vue'
+import { CheckTag, Icon, Search, Tabs, TabPanel, PullDownRefresh, Tag } from 'tdesign-mobile-vue'
 import { fetchEvents, fetchMyEnrollments } from '@/api/events'
 import { useAuthStore } from '@/stores/auth'
 import { fetchArticles, fetchColumns } from '@/api/contents'
@@ -136,12 +136,12 @@ function pickColumn(label: string) {
             @click="router.push(`/events/${ev.id}`)"
           >
             <div class="row-head">
-              <span class="type-tag">{{ ev.typeLabel }}</span>
-              <span v-if="enrolledIds.has(ev.id)" class="enrolled-flag">已报名</span>
+              <Tag class="type-tag" size="small" variant="light" theme="primary">{{ ev.typeLabel }}</Tag>
+              <Tag v-if="enrolledIds.has(ev.id)" class="enrolled-flag" size="small" variant="light" theme="success">已报名</Tag>
               <span class="capacity">已报名 {{ ev.approvedCount }}/{{ ev.capacity }}</span>
             </div>
             <h3 class="title">{{ ev.title }}</h3>
-            <p class="meta">🕐 {{ ev.startTime }} · 📍 {{ ev.location }}</p>
+            <p class="meta"><Icon name="time" size="14px" />{{ ev.startTime }} · <Icon name="location" size="14px" />{{ ev.location }}</p>
           </article>
         </div>
       </TabPanel>
@@ -149,26 +149,26 @@ function pickColumn(label: string) {
       <TabPanel value="articles" label="资讯">
         <Search v-model="articleKeywordInput" class="tab-search" placeholder="搜索资讯关键词" />
         <div class="chips">
-          <Tag
+          <CheckTag
             class="chip"
             size="medium"
-            :theme="activeColumn === '' ? 'primary' : 'default'"
             variant="light"
-            @click="pickColumn('')"
+            :checked="activeColumn === ''"
+            @change="pickColumn('')"
           >
             全部
-          </Tag>
-          <Tag
+          </CheckTag>
+          <CheckTag
             v-for="c in columns"
             :key="c.code"
             class="chip"
             size="medium"
-            :theme="activeColumn === c.label ? 'primary' : 'default'"
             variant="light"
-            @click="pickColumn(c.label)"
+            :checked="activeColumn === c.label"
+            @change="pickColumn(c.label)"
           >
             {{ c.label }}
-          </Tag>
+          </CheckTag>
         </div>
 
         <ListSkeleton v-if="articlesLoading && !articles.length" />
@@ -182,7 +182,7 @@ function pickColumn(label: string) {
             class="item m-card" v-pressable
             @click="router.push(`/articles/${a.id}`)"
           >
-            <span class="col-tag">{{ a.columnLabel }}</span>
+            <Tag class="col-tag" size="small" variant="light" theme="primary">{{ a.columnLabel }}</Tag>
             <p class="title">{{ a.title }}</p>
             <p class="summary">{{ a.summary }}</p>
             <p class="meta">{{ a.authorName }} · {{ a.publishedAt }} · {{ a.views }} 次浏览</p>
@@ -252,24 +252,16 @@ function pickColumn(label: string) {
 }
 
 .enrolled-flag {
-  font-size: 11px;
-  padding: 1px 6px;
-  border-radius: var(--td-tag-square-border-radius, 4px);
-  background: var(--td-success-color-1, #e8f8f0);
-  color: var(--td-success-color);
+  flex-shrink: 0;
 }
 
 .type-tag,
 .col-tag {
-  display: inline-block;
-  font-size: 12px;
-  padding: 2px 8px;
-  border-radius: var(--td-tag-square-border-radius, 4px);
-  background: var(--td-brand-color-1);
-  color: var(--td-brand-color);
+  flex-shrink: 0;
 }
 
 .capacity {
+  margin-left: auto;
   font-size: 12px;
   color: var(--td-brand-color);
 }

@@ -7,6 +7,7 @@
  * 因此这里用 require（返回 any，tsc 不追踪数据文件），运行时由 tsx 正确加载；
  * seed-data 目录已在 tsconfig exclude 中排除（M1-E 起 admin mock 已删除，此处为唯一数据源）。 */
 import { PrismaClient, Prisma } from '@prisma/client'
+import { levelPublishingLimitSeeds, personalPublishingLimitSeeds } from './seed-data/engagement'
 import { hash } from 'bcryptjs'
 import Redis from 'ioredis'
 import { APP_CACHE_KEYS } from '../src/common/redis/cache-keys'
@@ -31,6 +32,10 @@ async function clearAppCache(): Promise<void> {
       ...(await redis.keys('captcha:*')),
       'auth:admin:sessions',
     ]
+    // Each serial e2e suite gets a fresh rate window; ordinary seed keeps production limits intact.
+    if (process.env.E2E_SEED_RESET_RATES === '1') {
+      dynamicKeys.push(...await redis.keys('auth:app:captcha:rate:*'))
+    }
     if (dynamicKeys.length > 0) await redis.del(...dynamicKeys)
     console.log(`[seed] 应用缓存已清理（${APP_CACHE_KEYS.length + dynamicKeys.length} 键）`)
   } catch (e) {
@@ -53,12 +58,13 @@ const { goods, pointsRules, redemptionOrders } = require('./seed-data/mall')
 const { experienceRules, levelTiers } = require('./seed-data/rules')
 const { leases, workstationAreas, workstations } = require('./seed-data/workstations')
 const { reservations, spaces } = require('./seed-data/spaces')
-const { articles, columns, showcaseRequests } = require('./seed-data/contents')
+const { articles, columns } = require('./seed-data/contents')
 const { notifications } = require('./seed-data/notifications')
 const { auditLogs } = require('./seed-data/auditLogs')
 const { systemConfig } = require('./seed-data/systemConfig')
 const { dicts } = require('./seed-data/dict')
 const { announcements } = require('./seed-data/announcements')
+const { banners } = require('./seed-data/banners')
 const { adminAccounts, adminRoles, permissionCatalog } = require('./seed-data/rbac')
 /* eslint-enable @typescript-eslint/no-var-requires */
 
@@ -141,6 +147,20 @@ const policySeeds: Array<Record<string, unknown>> = [
 
 async function main() {
   // ---------- 清空（FK 逆序） ----------
+  await prisma.applicationFormConfig.deleteMany()
+  await prisma.analyticsEvent.deleteMany()
+  await prisma.publishingLimitUsage.deleteMany()
+  await prisma.publishingLimitRule.deleteMany()
+  await prisma.cardFieldConfig.deleteMany()
+  await prisma.publishingLimitRule.createMany({ data: [
+    ...personalPublishingLimitSeeds,
+    ...levelPublishingLimitSeeds('community_individual', levelTiers.filter((t: { identityType: string }) => t.identityType === 'community_individual').map((t: { level: number }) => t.level)),
+    ...levelPublishingLimitSeeds('community_enterprise', levelTiers.filter((t: { identityType: string }) => t.identityType === 'community_enterprise').map((t: { level: number }) => t.level)),
+  ] })
+  await prisma.cardFieldConfig.createMany({ data: [
+    { type: 'individual', editableFields: ['displayName', 'age', 'politicalStatus', 'intro', 'industryExperience', 'skills', 'education', 'work', 'projects', 'honors', 'socials', 'customLinks', 'visibility'], updatedAt: '2026-09-17 00:00', updatedBy: '系统初始化' },
+    { type: 'enterprise', editableFields: ['logo', 'industry', 'size', 'foundedAt', 'website', 'address', 'description', 'services', 'advantages'], updatedAt: '2026-09-17 00:00', updatedBy: '系统初始化' },
+  ] })
   await prisma.leaseWorkstation.deleteMany()
   await prisma.eventEnrollment.deleteMany()
   /* M2-R R2/R3：无 FK 的挂靠表（userId/eventId/goodsId 仅为字符串列，不随主表级联，必须显式清理防跨 reseed 残留） */
@@ -150,7 +170,6 @@ async function main() {
   await prisma.pointsRecord.deleteMany()
   /* M2-R R1 新增表（挂靠 user 的可变状态；必须随 User 一起清，避免孤儿残留导致 next 重号 P2002） */
   await prisma.userNotification.deleteMany()
-  await prisma.userNotificationPreference.deleteMany()
   await prisma.address.deleteMany()
   await prisma.agreementConsent.deleteMany()
   await prisma.accountDeletionRequest.deleteMany()
@@ -185,7 +204,6 @@ async function main() {
   await prisma.levelTier.deleteMany()
   await prisma.space.deleteMany()
   await prisma.articleColumn.deleteMany()
-  await prisma.showcaseRequest.deleteMany()
   await prisma.announcement.deleteMany()
   await prisma.adminNotification.deleteMany()
   await prisma.auditLog.deleteMany()
@@ -260,6 +278,7 @@ async function main() {
       mallOpen: systemConfig.mallOpen,
       demandOpen: systemConfig.demandOpen,
       reservationOpen: systemConfig.reservationOpen,
+      homeCarouselOpen: systemConfig.homeCarouselOpen,
       leaseExpireRemindDays: systemConfig.leaseExpireRemindDays,
       uploadMaxSizeMb: systemConfig.uploadMaxSizeMb,
       passwordExpireDays: systemConfig.passwordExpireDays,
@@ -318,6 +337,9 @@ async function main() {
         status: u.status,
         realName: u.realName ?? null,
         citizenId: u.citizenId ?? null,
+        realnameReviewStatus: u.realName && u.citizenId ? 'approved' : 'unverified',
+        realnameReviewedAt: u.realName && u.citizenId ? u.registeredAt : null,
+        realnameReviewedBy: u.realName && u.citizenId ? '种子数据' : null,
         wechatOpenid: u.wechatOpenid ?? null,
         wechatUnionid: u.wechatUnionid ?? null,
         wechatVerified: u.wechatVerified ?? false,
@@ -356,6 +378,7 @@ async function main() {
       await prisma.individualCard.create({
         data: {
           userId: u.uid,
+          displayName: (cardSeed.displayName as string) ?? u.realName ?? u.nickname,
           intro: cardSeed.intro as string,
           industryExperience: (cardSeed.industryExperience as string) ?? null,
           skills: (cardSeed.skills as string[]) ?? [],
@@ -388,7 +411,6 @@ async function main() {
         leaseType: e.leaseType,
         status: e.status,
         showcaseStatus: e.showcaseStatus,
-        showcaseComment: e.showcaseComment ?? null,
         experience: e.experience ?? 0,
         contactUserId: e.contactUserId ?? null,
         contactTitle: e.contactTitle ?? '',
@@ -716,7 +738,20 @@ async function main() {
 
   for (const t of levelTiers) {
     await prisma.levelTier.create({
-      data: { level: t.level, label: t.label, threshold: t.threshold },
+      data: { identityType: t.identityType, level: t.level, label: t.label, threshold: t.threshold },
+    })
+  }
+  const resolveLevel = (tiers: Array<{ level: number; threshold: number }>, experience: number) =>
+    [...tiers].sort((a, b) => b.threshold - a.threshold).find((tier) => tier.threshold <= experience)?.level ?? 1
+  const individualTiers = levelTiers.filter((tier: { identityType: string }) => tier.identityType === 'community_individual')
+  const enterpriseTiers = levelTiers.filter((tier: { identityType: string }) => tier.identityType === 'community_enterprise')
+  for (const identity of await prisma.userIdentity.findMany({ where: { type: 'community_individual' }, select: { id: true, experience: true } })) {
+    await prisma.userIdentity.update({ where: { id: identity.id }, data: { level: resolveLevel(individualTiers, identity.experience ?? 0) } })
+  }
+  for (const enterprise of await prisma.enterprise.findMany({ select: { id: true, experience: true } })) {
+    await prisma.userIdentity.updateMany({
+      where: { type: 'community_enterprise', enterpriseId: enterprise.id },
+      data: { experience: enterprise.experience, level: resolveLevel(enterpriseTiers, enterprise.experience) },
     })
   }
   counts.LevelTier = levelTiers.length
@@ -870,25 +905,6 @@ async function main() {
   }
   counts.Article = articles.length
 
-  for (const s of showcaseRequests) {
-    await prisma.showcaseRequest.create({
-      data: {
-        id: s.id,
-        targetType: s.targetType,
-        targetId: s.targetId ?? null,
-        targetName: s.targetName,
-        contentSummary: s.contentSummary,
-        submitterName: s.submitterName,
-        submitterPhone: s.submitterPhone,
-        submittedAt: s.submittedAt,
-        status: s.status,
-        records: s.records ?? [],
-        rejectReason: s.rejectReason ?? null,
-      },
-    })
-  }
-  counts.ShowcaseRequest = showcaseRequests.length
-
   for (const a of announcements) {
     await prisma.announcement.create({
       data: {
@@ -904,6 +920,25 @@ async function main() {
     })
   }
   counts.Announcement = announcements.length
+
+  /* 首页轮播图（内容管理维护；受 SystemConfig.homeCarouselOpen 总开关控制） */
+  await prisma.homeBanner.deleteMany()
+  for (const b of banners) {
+    await prisma.homeBanner.create({
+      data: {
+        id: b.id,
+        title: b.title,
+        subtitle: b.subtitle ?? '',
+        imageUrl: b.imageUrl ?? null,
+        link: b.link ?? null,
+        sort: b.sort ?? 0,
+        enabled: b.enabled ?? true,
+        createdAt: b.createdAt,
+        updatedAt: b.updatedAt,
+      },
+    })
+  }
+  counts.HomeBanner = banners.length
 
   /* M2-R R3：政策与协议 */
   for (const p of policySeeds) {
@@ -981,8 +1016,8 @@ async function main() {
     ['A', articles.filter((x: any) => x.channel !== 'submitted').map((x: any) => x.id)],
     ['SU', articles.filter((x: any) => x.channel === 'submitted').map((x: any) => x.id)],
     ['CL', columns.map((x: any) => x.id)],
-    ['SC', showcaseRequests.map((x: any) => x.id)],
     ['AN', announcements.map((x: any) => x.id)],
+    ['BN', banners.map((x: any) => x.id)],
     ['N', notifications.map((x: any) => x.id)],
     ['AL', auditLogs.map((x: any) => x.id)],
   ]

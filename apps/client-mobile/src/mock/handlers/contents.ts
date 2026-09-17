@@ -64,7 +64,7 @@ export async function fetchArticle(id: string): Promise<Article> {
     /* v38：点赞聚合（跨账号）与我的点赞状态 */
     const likeCount = Object.values(articleLikesByUid).reduce((sum, list) => sum + (list.includes(a.id) ? 1 : 0), 0)
     const uid = readPayload()?.sub
-    return { ...a, likeCount, liked: uid ? (articleLikesByUid[uid] ?? []).includes(a.id) : false }
+    return { ...a, commentsEnabled: a.commentsEnabled ?? true, likeCount, liked: uid ? (articleLikesByUid[uid] ?? []).includes(a.id) : false }
   }, 180)
 }
 
@@ -86,6 +86,9 @@ export async function toggleArticleLike(articleId: string): Promise<{ liked: boo
 
 export async function fetchArticleComments(articleId: string): Promise<ArticleComment[]> {
   return withLatency(() => {
+    const article = articles.find((item) => item.id === articleId)
+    if (!article) fail(404, '文章不存在或未发布')
+    if (article.commentsEnabled === false) fail(409, '文章评论已关闭')
     const uid = readPayload()?.sub
     const blocked = uid ? (blockedByUid[uid] ?? []) : []
     return articleComments
@@ -100,6 +103,7 @@ export async function createArticleComment(articleId: string, content: string): 
     const uid = requireUid()
     const article = articles.find((item) => item.id === articleId)
     if (!article) fail(404, '文章不存在或未发布')
+    if (article.commentsEnabled === false) fail(409, '文章评论已关闭')
     const text = content.trim()
     if (text.length < 2) fail(400, '评论至少 2 个字')
     if (text.length > 200) fail(400, '评论最多 200 个字')

@@ -160,7 +160,12 @@ export interface ApplicationPayloadStorage {
 
 /** 判定 upload 字段值是否为附件数组 */
 function isAttachmentList(value: unknown): value is { name: string; size: number; url?: string }[] {
-  return Array.isArray(value) && value.every((v) => !!v && typeof v === 'object' && 'name' in (v as object))
+  return Array.isArray(value) && value.every((item) => {
+    if (!item || typeof item !== 'object') return false
+    const file = item as Record<string, unknown>
+    return typeof file.name === 'string' && !!file.name.trim()
+      && typeof file.size === 'number' && Number.isFinite(file.size) && file.size >= 0
+  })
 }
 
 /* 申请（M2-R R2 /api/app/applications）：
@@ -355,12 +360,18 @@ export class AppApplicationsService {
       const value = fields[field.key]
       if (field.type === 'upload') {
         const list = isAttachmentList(value) ? value : []
+        if (value !== undefined && !isAttachmentList(value)) throw new BadRequestException(`${field.label}的附件数据无效`)
         if (field.required && list.length === 0) throw new BadRequestException(`请上传${field.label}`)
+        const maxCount = field.multiple === true ? (field.maxCount ?? 20) : 1
+        if (list.length > maxCount) throw new BadRequestException(`${field.label}最多上传 ${maxCount} 个文件`)
         attachments.push(...list.map((a) => ({ name: a.name, size: a.size })))
         continue
       }
       const text = value === undefined || value === null ? '' : String(value).trim()
       if (field.required && !text) throw new BadRequestException(`请填写${field.label}`)
+      if (field.maxlength && text.length > field.maxlength) throw new BadRequestException(`${field.label}不能超过 ${field.maxlength} 字`)
+      if (field.type === 'number' && text && !Number.isFinite(Number(text))) throw new BadRequestException(`${field.label}必须是有效数字`)
+      if (field.type === 'select' && text && !field.options?.some((option) => option.value === text)) throw new BadRequestException(`${field.label}的选项无效`)
       if (text) parts.push(`${field.label}：${text}`)
     }
 
@@ -369,7 +380,8 @@ export class AppApplicationsService {
       if (bindType !== 'community_individual' && bindType !== 'community_enterprise') {
         throw new BadRequestException('请选择要绑定的身份类型')
       }
-      if (bindType === 'community_enterprise' && !dto.organizationName?.trim()) {
+      const organizationName = dto.organizationName?.trim() || String(fields.orgName ?? '').trim()
+      if (bindType === 'community_enterprise' && !organizationName) {
         throw new BadRequestException('请填写要绑定的社区企业名称')
       }
     }

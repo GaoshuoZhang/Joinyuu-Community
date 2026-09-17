@@ -51,6 +51,7 @@ export class AppJwtGuard implements CanActivate {
       const user = await this.prisma.user.findUnique({ where: { uid: payload.sub }, select: { status: true } })
       if (!user) throw new UnauthorizedException('登录已过期，请重新登录')
       if (user.status === 'frozen') throw new ForbiddenException('账号已冻结，请联系社区运营')
+      if (user.status !== 'active') throw new UnauthorizedException('账号已注销或停用')
       request.user = payload
       return true
     } catch (error) {

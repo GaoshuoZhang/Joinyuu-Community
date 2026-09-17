@@ -1,5 +1,5 @@
-import type { MyStats, PageQuery, PageResult, PointsRecord, PointsTask, RealNameInfo, RealNamePayload, ReportPayload, UserProfile } from '@/types'
-import { accountByUid, accountRequestsByUid, accounts, articles, blockedByUid, demands, enrollmentsByUid, favoritesByUid, grantPoints, nowStamp, ordersByUid, pointsRecordsByUid, pointsTaskClaimsByUid, pushNotice, reports, responsesByUid } from '@/mock/db'
+import type { MyStats, PageQuery, PageResult, PointsRecord, RealNameInfo, RealNamePayload, ReportPayload, UserProfile } from '@/types'
+import { accountByUid, accountRequestsByUid, accounts, articles, blockedByUid, demands, enrollmentsByUid, nowStamp, ordersByUid, pointsRecordsByUid, pushNotice, reports, responsesByUid } from '@/mock/db'
 import { formatMockStamp, parseMockStamp } from '@/mock/runtime'
 import { readPayload } from '@/mock/session'
 import { fail, withLatency } from '@/mock/latency'
@@ -98,6 +98,27 @@ export async function fetchRealName(): Promise<RealNameInfo> {
   })
 }
 
+/* [MOCK-ONLY] 实名分级权益：静态两条分级，按当前账号实名状态标注 active（接入期读发布限制配置） */
+export async function fetchRealnameRights(): Promise<import('@/types').RealnameRightsGroup[]> {
+  return withLatency(() => {
+    const account = accounts.find((a) => a.uid === requireUid())
+    if (!account) fail(404, '用户不存在')
+    const verified = !!(account.realName && account.citizenId)
+    const label = (n: number) => (n < 0 ? '不限' : `${n} 次/日`)
+    const limits = { demand_publish: verified ? 5 : 1, article_publish: verified ? 3 : 1, event_enroll: verified ? 5 : 3, space_reserve: verified ? 3 : 1 }
+    const items = (l: Record<string, number>) => [
+      `需求发布：${label(l.demand_publish)}`,
+      `文章投稿：${label(l.article_publish)}`,
+      `活动报名：${label(l.event_enroll)}`,
+      `空间预约：${label(l.space_reserve)}`,
+    ]
+    return [
+      { identityType: 'personal_unverified', level: 0, title: '未实名个人', active: !verified, items: verified ? items({ demand_publish: 1, article_publish: 1, event_enroll: 3, space_reserve: 1 }) : ['当前社区要求先完成实名认证后再操作'], limits: { demand_publish: 1, article_publish: 1, event_enroll: 3, space_reserve: 1 } },
+      { identityType: 'personal_verified', level: 0, title: '已实名个人', active: verified, items: items(limits), limits },
+    ]
+  })
+}
+
 export async function submitRealName(payload: RealNamePayload): Promise<void> {
   await withLatency(() => {
     const uid = requireUid()
@@ -183,49 +204,6 @@ export async function cancelAccountDeletion(): Promise<void> {
     delete requests.deletion
     pushNotice(uid, { type: 'system', title: '注销申请已撤回', content: '你的账号将恢复正常使用，感谢留下。' })
   }, 200)
-}
-
-/* ===== v42 积分任务中心 / 个人数据看板 ===== */
-const TASK_DEFS = [
-  { key: 'publish', title: '发布一条需求', desc: '发布需求并进入审核', points: 10 },
-  { key: 'respond', title: '响应一条需求', desc: '对感兴趣的需求提交响应', points: 10 },
-  { key: 'enroll', title: '报名一场活动', desc: '报名社区活动', points: 10 },
-  { key: 'order', title: '兑换一件商品', desc: '在积分商城完成一次兑换', points: 5 },
-  { key: 'favorite', title: '收藏一次内容', desc: '收藏需求 / 文章 / 活动 / 企业 / 人才', points: 5 },
-] as const
-
-function taskDoneMap(uid: string): Record<string, boolean> {
-  return {
-    publish: demands.some((d) => d.publisherUid === uid),
-    respond: (responsesByUid[uid] ?? []).length > 0,
-    enroll: (enrollmentsByUid[uid] ?? []).length > 0,
-    order: (ordersByUid[uid] ?? []).length > 0,
-    favorite: (favoritesByUid[uid] ?? []).length > 0,
-  }
-}
-
-export async function fetchPointsTasks(): Promise<PointsTask[]> {
-  return withLatency(() => {
-    const uid = requireUid()
-    const claims = pointsTaskClaimsByUid[uid] ?? {}
-    const done = taskDoneMap(uid)
-    return TASK_DEFS.map((t) => ({ key: t.key, title: t.title, desc: t.desc, points: t.points, done: done[t.key] ?? false, claimed: Boolean(claims[t.key]) }))
-  }, 120)
-}
-
-export async function claimPointsTask(key: string): Promise<{ points: number }> {
-  return withLatency(() => {
-    const uid = requireUid()
-    const def = TASK_DEFS.find((t) => t.key === key)
-    if (!def) fail(404, '任务不存在')
-    const claims = (pointsTaskClaimsByUid[uid] ??= {})
-    if (claims[key]) fail(409, '该任务奖励已领取')
-    if (!taskDoneMap(uid)[key]) fail(409, '任务尚未完成')
-    claims[key] = nowStamp()
-    grantPoints(uid, def.points, `积分任务：${def.title}`, '任务奖励')
-    pushNotice(uid, { type: 'system', title: '任务奖励已到账', content: `${def.title} +${def.points} 积分。`, link: '/me/points' })
-    return { points: def.points }
-  }, 160)
 }
 
 export async function fetchMyStats(): Promise<MyStats> {

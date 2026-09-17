@@ -43,7 +43,7 @@ function onClear() {
 
     <EmptyBlock v-if="!items.length" text="暂无浏览记录，去社区内容逛逛" />
     <div v-else class="list">
-      <article v-for="item in items" :key="item.id" class="m-card row" @click="router.push(`/articles/${item.id}`)">
+      <article v-for="item in items" :key="item.id" class="m-card row" v-pressable @click="router.push(`/articles/${item.id}`)">
         <div class="main">
           <p class="title">{{ item.title }}</p>
           <p class="at">浏览于 {{ item.at }}</p>

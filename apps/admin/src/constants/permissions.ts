@@ -32,6 +32,8 @@ export const permissionGroups: PermissionGroup[] = [
       { code: 'perm:external-enterprise:enable', name: '启用合作企业' },
       { code: 'perm:external-enterprise:delete', name: '删除合作企业' },
       { code: '/approvals', name: '申请审核' },
+      { code: '/member-governance', name: '注销与实名治理' },
+      { code: '/card-management', name: '名片管理' },
     ],
   },
   {
@@ -60,7 +62,8 @@ export const permissionGroups: PermissionGroup[] = [
       { code: '/contents/submissions', name: '投稿内容' },
       { code: '/contents/columns', name: '栏目管理' },
       { code: '/contents/stats', name: '阅读统计' },
-      { code: '/contents/showcase', name: '展示页发布' },
+      { code: '/contents/policies', name: '社区政策' },
+      { code: '/contents/banners', name: '轮播图管理' },
       { code: '/contents/announcements', name: '公告栏' },
     ],
   },
@@ -79,6 +82,7 @@ export const permissionGroups: PermissionGroup[] = [
       { code: '/rules/levels', name: '等级规则' },
       { code: '/rules/ledger', name: '积分发放记录' },
       { code: '/rules/experience-records', name: '经验值发放记录' },
+      { code: '/rules/publishing-limits', name: '发布限制' },
     ],
   },
   {
@@ -96,6 +100,7 @@ export const permissionGroups: PermissionGroup[] = [
       { code: '/system/trash', name: '归档管理' },
       { code: '/system/export', name: '数据导出' },
       { code: '/governance', name: '信任治理' },
+      { code: '/system/policies', name: '协议与政策' },
     ],
   },
 ]

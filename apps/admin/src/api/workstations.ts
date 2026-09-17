@@ -111,6 +111,11 @@ export async function fetchLeases(): Promise<Lease[]> {
   return httpGet<Lease[]>('/workstation-leases')
 }
 
+/** GET /api/admin/leases/:id/print — 租约打印单数据（标题/生成时间/租约 + 条款） */
+export async function fetchLeasePrint(id: string): Promise<{ title: string; generatedAt: string; lease: Lease; clauses: string[] }> {
+  return httpGet<{ title: string; generatedAt: string; lease: Lease; clauses: string[] }>(`/leases/${id}/print`)
+}
+
 /* 租约详情：后端无 by-id 端点，列表查找（租约量级小，与打印页同口径） */
 export async function fetchLease(id: string): Promise<Lease | null> {
   try {

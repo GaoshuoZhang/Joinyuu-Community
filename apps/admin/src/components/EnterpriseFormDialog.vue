@@ -242,7 +242,7 @@ function onClose() {
           <t-input v-model="form.contactPhone" name="contact-phone" type="tel" inputmode="tel" autocomplete="tel" disabled placeholder="选择联系人后自动填充…" />
         </t-form-item>
         <t-form-item label="联系邮箱" name="contactEmail">
-          <t-input v-model="form.contactEmail" name="contact-email" type="email" inputmode="email" autocomplete="email" disabled placeholder="选择联系人后自动填充…" />
+          <t-input v-model="form.contactEmail" name="contact-email" inputmode="email" autocomplete="email" disabled placeholder="选择联系人后自动填充…" />
         </t-form-item>
       </div>
       <t-form-item label="企业简介" name="description">

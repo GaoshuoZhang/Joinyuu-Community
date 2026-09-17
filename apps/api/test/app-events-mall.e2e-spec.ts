@@ -31,6 +31,11 @@ describe('M2-R R2 app 活动与商城', () => {
     expect(res.status).toBe(200)
     expect(res.body.code).toBe(0)
     expect(Array.isArray(res.body.data.list)).toBe(true)
+    expect(res.body.data.list[0]).toEqual(expect.objectContaining({ typeLabel: expect.any(String) }))
+
+    const detail = await request(app.getHttpServer()).get(`/api/app/events/${res.body.data.list[0].id}`)
+    expect(detail.status).toBe(200)
+    expect(detail.body.data).toEqual(expect.objectContaining({ typeLabel: res.body.data.list[0].typeLabel }))
   })
 
   it('报名已发布开放报名的活动 → 我的报名 → 取消', async () => {
@@ -87,10 +92,11 @@ describe('M2-R R2 app 活动与商城', () => {
     expect(myEnroll).toBeTruthy()
     const enrollId: number = myEnroll.id
 
-    const ticket = await appGet(app, token, `/api/app/me/enrollments/${enrollId}/ticket`)
+    const ticket = await appGet(app, token, `/api/app/events/${event.id}/ticket`)
     expect(ticket.status).toBe(200)
-    expect(ticket.body.data.ticketNo).toBeTruthy()
-    expect(ticket.body.data.redeemCode).toMatch(/^[0-9A-F]{8}$/)
+    expect(ticket.body.data.eventId).toBe(event.id)
+    expect(ticket.body.data.ticketCode).toMatch(/^[0-9A-F]{8}$/)
+    expect(ticket.body.data.status).toBe('valid')
 
     const checkin = await appPost(app, token, `/api/app/events/${event.id}/check-in`, { lat: 31.23, lng: 121.47 })
     expect(checkin.status).toBe(200)

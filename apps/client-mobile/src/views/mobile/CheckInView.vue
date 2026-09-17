@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { onMounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { Loading, Button, Toast } from 'tdesign-mobile-vue'
+import { Loading, Button, Icon, Result, Toast } from 'tdesign-mobile-vue'
 import { checkInEvent, fetchEvent } from '@/api/events'
 import { useAsyncList } from '@/composables/useAsyncList'
 import { getPosition } from '@/utils/geolocation'
@@ -17,7 +17,7 @@ const eventId = route.params.id as string
 const { data: event, loading, error, run } = useAsyncList<CommunityEvent>(() => fetchEvent(eventId))
 onMounted(async () => {
   await run()
-  silentLocate()
+  if (!event.value?.myCheckedIn) silentLocate()
 })
 
 const phase = ref<'idle' | 'locating' | 'verifying' | 'success' | 'failed'>('idle')
@@ -70,19 +70,23 @@ function backToDetail() {
     <template v-else-if="event">
       <section class="m-card info">
         <h1 class="title">{{ event.title }}</h1>
-        <p class="meta">⏰ 签到时间窗：{{ event.checkinOpenMin }} - {{ event.checkinCloseMin }}</p>
-        <p class="meta">🎯 签到半径：场地 {{ event.checkinRadiusM }} 米范围内</p>
+        <p class="meta"><Icon name="time" size="16px" />签到时间窗：活动开始前 {{ event.checkinOpenMin }} 分钟至开始后 {{ event.checkinCloseMin }} 分钟</p>
+        <p class="meta"><Icon name="location" size="16px" />签到半径：场地 {{ event.checkinRadiusM }} 米范围内</p>
       </section>
 
       <section class="m-card stage">
-        <template v-if="phase === 'success'">
-          <div class="success">
-            <span class="success-icon">✅</span>
-            <p class="success-title">签到成功</p>
-            <p class="success-points">积分 +{{ pointsAwarded }}</p>
-            <p class="success-tip">已记录本次签到，记得准时参加活动哦。</p>
-            <Button theme="default" variant="outline" @click="backToDetail">返回活动详情</Button>
-          </div>
+        <template v-if="event.myCheckedIn">
+          <p class="success-title">你已完成签到</p>
+          <Button variant="outline" @click="backToDetail">返回活动详情</Button>
+        </template>
+        <template v-else-if="phase === 'success'">
+          <Result theme="success" title="签到成功">
+            <template #description>
+              <p class="success-points">积分 +{{ pointsAwarded }}</p>
+              <p class="success-tip">已记录本次签到，记得准时参加活动哦。</p>
+            </template>
+          </Result>
+          <Button theme="default" variant="outline" @click="backToDetail">返回活动详情</Button>
         </template>
 
         <template v-else>
@@ -121,6 +125,9 @@ function backToDetail() {
 
 .meta {
   margin: 5px 0;
+  display: flex;
+  align-items: flex-start;
+  gap: 4px;
   font-size: 12px;
   color: var(--td-text-color-secondary);
 }
@@ -157,17 +164,6 @@ function backToDetail() {
   margin: 0;
   font-size: 12px;
   color: var(--td-text-color-placeholder);
-}
-
-.success {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 8px;
-}
-
-.success-icon {
-  font-size: 44px;
 }
 
 .success-title {

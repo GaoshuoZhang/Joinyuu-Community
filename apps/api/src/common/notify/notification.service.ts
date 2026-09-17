@@ -11,9 +11,7 @@ export interface NoticeInput {
   link?: string
 }
 
-/** 用户站内信统一出口（M2-R R1）：
- * 写入前按 UserNotificationPreference 过滤（"all" 或含该 type 才下发）；
- * 无偏好记录时默认全量下发。失败不抛错（通知为旁路，不影响主流程）。 */
+/** 用户站内信统一出口。失败不抛错，避免通知旁路影响主流程。 */
 @Injectable()
 export class NotificationService {
   constructor(
@@ -85,11 +83,6 @@ export class NotificationService {
     userId: string,
     input: NoticeInput,
   ): Promise<void> {
-    const pref = await tx.userNotificationPreference.findUnique({ where: { userId } })
-    if (pref) {
-      const enabled = (pref.enabledTypes ?? []) as string[]
-      if (!enabled.includes('all') && !enabled.includes(input.type)) return
-    }
     await tx.userNotification.create({
       data: {
         id: await this.ids.next('UN'),

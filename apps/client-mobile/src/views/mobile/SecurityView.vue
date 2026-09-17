@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { onMounted, reactive, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
-import { Button, Cell, CellGroup, DialogPlugin, Input, Popup, Tag, Textarea, Toast } from 'tdesign-mobile-vue'
+import { Button, Cell, CellGroup, DialogPlugin, Image, Input, Popup, Tag, Textarea, Toast } from 'tdesign-mobile-vue'
 import { changePhone } from '@/api/auth'
 import { cancelAccountDeletion, changePassword, downloadPersonalData, fetchAccountRequests, listBlockedUsers, listMyReports, requestAccountDeletion, requestDataExport, unblockUser } from '@/api/me'
 import { ApiError } from '@/api/http'
@@ -213,7 +213,7 @@ const REPORT_STATUS: Record<string, string> = { pending: '处理中', resolved: 
 
     <div v-if="requests.deletion" class="cooling m-card">
       <p class="cooling-text">
-        注销申请处理中（{{ requests.deletion.at }} 提交）<template v-if="requests.deletion.cancelableUntil">，{{ requests.deletion.cancelableUntil }} 前可撤回</template>
+        注销申请处理中（{{ requests.deletion.at }} 提交）<template v-if="requests.deletion.cancelableUntil">，冷静期于 {{ requests.deletion.cancelableUntil }} 届满，执行前可撤回</template>
       </p>
       <Button size="small" variant="outline" :loading="cancelDeleting" @click="onCancelDeletion">撤回注销申请</Button>
     </div>
@@ -244,9 +244,9 @@ const REPORT_STATUS: Record<string, string> = { pending: '处理中', resolved: 
     <Popup v-model:visible="pwdVisible" placement="bottom">
       <div class="sheet">
         <h3 class="sheet-title">修改登录密码</h3>
-        <div class="field"><label>原密码</label><Input v-model="pwdForm.oldPassword" type="password" placeholder="请输入原密码" clearable /><p v-if="pwdErrors.oldPassword" class="field-error">{{ pwdErrors.oldPassword }}</p></div>
-        <div class="field"><label>新密码</label><Input v-model="pwdForm.password" type="password" placeholder="至少 8 位，含字母与数字" clearable /><p v-if="pwdErrors.password" class="field-error">{{ pwdErrors.password }}</p></div>
-        <div class="field"><label>确认新密码</label><Input v-model="pwdForm.confirm" type="password" placeholder="再次输入新密码" clearable /><p v-if="pwdErrors.confirm" class="field-error">{{ pwdErrors.confirm }}</p></div>
+        <div class="field"><label>原密码</label><Input v-model="pwdForm.oldPassword" type="password" autocomplete="current-password" placeholder="请输入原密码" clearable /><p v-if="pwdErrors.oldPassword" class="field-error">{{ pwdErrors.oldPassword }}</p></div>
+        <div class="field"><label>新密码</label><Input v-model="pwdForm.password" type="password" autocomplete="new-password" placeholder="至少 8 位，含字母与数字" clearable /><p v-if="pwdErrors.password" class="field-error">{{ pwdErrors.password }}</p></div>
+        <div class="field"><label>确认新密码</label><Input v-model="pwdForm.confirm" type="password" autocomplete="new-password" placeholder="再次输入新密码" clearable /><p v-if="pwdErrors.confirm" class="field-error">{{ pwdErrors.confirm }}</p></div>
         <Button theme="primary" size="large" block :loading="pwdSaving" @click="onPwdSave">保存</Button>
       </div>
     </Popup>
@@ -254,8 +254,8 @@ const REPORT_STATUS: Record<string, string> = { pending: '处理中', resolved: 
     <Popup v-model:visible="phoneVisible" placement="bottom">
       <div class="sheet">
         <h3 class="sheet-title">更换绑定手机号</h3>
-        <div class="field"><label>新手机号</label><Input v-model="phoneForm.phone" type="tel" :maxlength="11" placeholder="请输入新手机号" clearable /><p v-if="phoneErrors.phone" class="field-error">{{ phoneErrors.phone }}</p></div>
-        <div class="field"><label>图形验证码</label><div class="captcha-row"><Input v-model="phoneForm.captchaCode" :maxlength="4" placeholder="请输入验证码" clearable /><button class="captcha-button" type="button" :disabled="captchaLoading" aria-label="刷新验证码" @click="refreshCaptcha"><img v-if="captchaImage" :src="captchaImage" alt="图形验证码" /><span v-else>刷新</span></button></div><p v-if="phoneErrors.captchaCode" class="field-error">{{ phoneErrors.captchaCode }}</p></div>
+        <div class="field"><label>新手机号</label><Input v-model="phoneForm.phone" type="tel" autocomplete="tel" :maxlength="11" placeholder="请输入新手机号" clearable /><p v-if="phoneErrors.phone" class="field-error">{{ phoneErrors.phone }}</p></div>
+        <div class="field"><label>图形验证码</label><div class="captcha-row"><Input v-model="phoneForm.captchaCode" :maxlength="4" :spell-check="false" placeholder="请输入验证码" clearable /><Button class="captcha-button" theme="light" :disabled="captchaLoading" aria-label="刷新验证码" @click="refreshCaptcha"><Image v-if="captchaImage" :src="captchaImage" fit="contain" class="captcha-img" alt="图形验证码" /><span v-else>刷新</span></Button></div><p v-if="phoneErrors.captchaCode" class="field-error">{{ phoneErrors.captchaCode }}</p></div>
         <Button theme="primary" size="large" block :loading="phoneSaving" @click="onPhoneSave">确认更换</Button>
       </div>
     </Popup>
@@ -332,6 +332,6 @@ const REPORT_STATUS: Record<string, string> = { pending: '处理中', resolved: 
 
 .captcha-row { display: flex; align-items: center; gap: 10px; }
 .captcha-row :deep(.t-input) { flex: 1; min-width: 0; }
-.captcha-button { min-width: 96px; min-height: 40px; padding: 0; border: 0; border-radius: var(--td-radius-default); overflow: hidden; }
-.captcha-button img { display: block; width: 96px; height: 40px; }
+.captcha-button { min-width: 96px; min-height: 40px; padding: 0; overflow: hidden; }
+.captcha-img { display: block; width: 96px; height: 40px; }
 </style>

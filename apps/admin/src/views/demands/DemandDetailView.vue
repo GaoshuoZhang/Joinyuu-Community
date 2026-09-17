@@ -238,6 +238,9 @@ onMounted(load)
                   <t-button variant="outline" theme="warning" :loading="cancelScheduling">取消定时发布</t-button>
                 </t-popconfirm>
               </template>
+              <template v-else-if="demand.status === 'selected'">
+                <t-button theme="primary" @click="projectVisible = true">立项</t-button>
+              </template>
               <template v-else-if="demand.status === 'published'">
                 <t-button theme="primary" @click="projectVisible = true">立项</t-button>
                 <t-button variant="outline" theme="warning" @click="onRetract">撤回发布</t-button>

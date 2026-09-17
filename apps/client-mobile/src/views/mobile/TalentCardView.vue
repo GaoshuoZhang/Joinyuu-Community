@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
 import { useRoute } from 'vue-router'
-import { Loading, Avatar, Button, DialogPlugin, Tag, Toast } from 'tdesign-mobile-vue'
+import { Loading, Avatar, Button, DialogPlugin, Icon, Tag, Toast } from 'tdesign-mobile-vue'
 import { useAsyncList } from '@/composables/useAsyncList'
 import { fetchTalentCard } from '@/api/community'
 import { listFavorites, toggleFavorite } from '@/api/favorites'
@@ -115,8 +115,10 @@ function onBlock() {
       </section>
 
       <div class="actions">
-        <Button size="small" variant="outline" @click="onToggleFavorite">{{ favorited ? '★ 已收藏' : '☆ 收藏' }}</Button>
-        <Button size="small" variant="outline" @click="onShare">分享</Button>
+        <Button size="small" variant="outline" @click="onToggleFavorite">
+          <Icon :name="favorited ? 'star-filled' : 'star'" size="16px" />{{ favorited ? '已收藏' : '收藏' }}
+        </Button>
+        <Button size="small" variant="outline" @click="onShare"><Icon name="share" size="16px" />分享</Button>
         <Button size="small" variant="outline" @click="reportVisible = true">举报</Button>
         <Button size="small" variant="outline" theme="danger" :disabled="blocked || !auth.isLogged" @click="onBlock">
           {{ blocked ? '已屏蔽' : auth.isLogged ? '屏蔽该用户' : '登录后可屏蔽' }}
@@ -188,7 +190,7 @@ function onBlock() {
           rel="noopener"
         >
           <span class="link-label">{{ l.label || l.url }}</span>
-          <span class="link-arrow">›</span>
+          <Icon name="chevron-right" size="16px" class="link-arrow" />
         </a>
       </section>
     </template>

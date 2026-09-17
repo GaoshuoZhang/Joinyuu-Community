@@ -49,7 +49,7 @@ function isExpired(expiresAt?: string): boolean {
   return expiresAt < formatMockStamp()
 }
 
-/* [MOCK-ONLY] 企业 handlers：名片发布/展示、个人名片、关联身份（社区个体 + 关联企业明细与操作）。 */
+/* [MOCK-ONLY] 企业 handlers：公开企业名片、个人名片、关联身份（社区个体 + 关联企业明细与操作）。 */
 
 /** v42 企业工作台：企业名义响应记录 */
 export async function fetchEnterpriseWorkbench(id: string): Promise<import('@/types').EnterpriseWorkbench> {
@@ -67,24 +67,6 @@ export async function fetchEnterpriseShowcase(id: string): Promise<EnterpriseSho
       description: e.description, showcaseStatus: e.showcaseStatus,
       members: e.members.map((m) => m.name),
     }
-  })
-}
-
-export async function createShowcaseRequest(enterpriseId: string, note: string): Promise<void> {
-  await withLatency(() => {
-    const payload = readPayload()
-    if (!payload) fail(401, '未登录或登录已过期')
-    if (!note.trim()) fail(400, '请输入申请说明')
-    const e = enterprises.find((x) => x.id === enterpriseId)
-    if (!e) fail(404, '企业不存在')
-    /* [MOCK-ONLY] 演示全链路：申请提交 → 立即通过并发布（真实后端为管理端审核联动） */
-    e.showcaseStatus = 'published'
-    pushNotice(payload.sub, {
-      type: 'audit_result',
-      title: '企业名片发布申请已通过',
-      content: `「${e.name}」企业名片已发布，可在客户端查看。`,
-      link: `/enterprises/${e.id}`,
-    })
   })
 }
 

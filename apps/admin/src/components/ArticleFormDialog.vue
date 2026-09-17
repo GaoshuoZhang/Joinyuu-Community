@@ -40,6 +40,7 @@ const form = reactive({
   columnId: '',
   summary: '',
   content: '',
+  commentsEnabled: true,
   /** 作者选中值（U:uid / E:id，空 = 未选） */
   authorValue: '',
 })
@@ -51,6 +52,7 @@ function resetForm() {
     form.columnId = props.article.columnIds[0] ?? ''
     form.summary = props.article.summary
     form.content = props.article.content
+    form.commentsEnabled = props.article.commentsEnabled ?? true
     tagsText.value = props.article.tags.join('，')
     form.authorValue = resolveAuthorValue(props.article.authorId)
   } else {
@@ -58,6 +60,7 @@ function resetForm() {
     form.columnId = ''
     form.summary = ''
     form.content = ''
+    form.commentsEnabled = true
     tagsText.value = ''
     form.authorValue = ''
   }
@@ -153,6 +156,7 @@ async function onConfirm() {
       summary: form.summary.trim(),
       content: form.content,
       tags: parseTags(),
+      commentsEnabled: form.commentsEnabled,
       /* 资讯发布作者可选；投稿编辑作者不可变更。
        * 编辑时原作者不在选项列表则保留原 authorId，避免静默丢失归属 */
       authorId:
@@ -235,6 +239,10 @@ function onClose() {
       <t-form-item label="标签" name="tags">
         <t-input v-model="tagsText" placeholder="多个标签用逗号分隔…" />
       </t-form-item>
+      <t-form-item label="评论功能" name="commentsEnabled">
+        <t-switch v-model="form.commentsEnabled" />
+        <span class="switch-tip">关闭后成员端不展示评论，也不接受评论读取或发布。</span>
+      </t-form-item>
     </t-form>
   </t-dialog>
 </template>
@@ -250,5 +258,11 @@ function onClose() {
   display: flex;
   justify-content: flex-end;
   gap: 8px;
+}
+
+.switch-tip {
+  margin-left: 8px;
+  color: var(--td-text-color-secondary);
+  font-size: 12px;
 }
 </style>

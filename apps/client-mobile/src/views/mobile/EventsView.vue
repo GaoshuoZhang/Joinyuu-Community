@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { onMounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { Button, Input, Tag } from 'tdesign-mobile-vue'
+import { Button, Icon, Input, Tag } from 'tdesign-mobile-vue'
 import { fetchEvents } from '@/api/events'
 import { useAsyncList } from '@/composables/useAsyncList'
 import { useRefreshOnActivate } from '@/composables/useRefreshOnActivate'
@@ -92,11 +92,11 @@ function search() {
       <p class="list-count">共 {{ (data ?? []).length }} 场活动</p>
       <article v-for="ev in data" :key="ev.id" class="event-card m-card" v-pressable @click="router.push(`/events/${ev.id}`)">
         <div class="event-top">
-          <span class="type-tag">{{ ev.typeLabel }}</span>
+          <Tag class="type-tag" size="small" variant="light" theme="primary">{{ ev.typeLabel }}</Tag>
           <span class="capacity">已报名 {{ ev.approvedCount }}/{{ ev.capacity }}</span>
         </div>
         <h3 class="title">{{ ev.title }}</h3>
-        <p class="meta">🕐 {{ ev.startTime }} · 📍 {{ ev.location }}</p>
+        <p class="meta"><Icon name="time" size="14px" />{{ ev.startTime }} · <Icon name="location" size="14px" />{{ ev.location }}</p>
       </article>
     </div>
   </div>
@@ -166,11 +166,7 @@ function search() {
 }
 
 .type-tag {
-  font-size: 12px;
-  padding: 2px 8px;
-  border-radius: var(--td-tag-square-border-radius, 4px);
-  background: var(--td-brand-color-1);
-  color: var(--td-brand-color);
+  flex-shrink: 0;
 }
 
 .capacity {

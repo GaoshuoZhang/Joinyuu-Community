@@ -21,3 +21,9 @@ export async function removeAddress(id: string): Promise<void> {
   if (apiMode === 'mock') return mock.removeAddress(id)
   await httpDelete(`/me/addresses/${id}`)
 }
+
+/** 设为默认收货地址（唯一默认）。 */
+export async function setDefaultAddress(id: string): Promise<void> {
+  if (apiMode === 'mock') return mock.setDefaultAddress(id)
+  await httpPost(`/me/addresses/${id}/default`)
+}

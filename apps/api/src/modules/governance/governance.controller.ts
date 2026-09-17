@@ -1,8 +1,8 @@
-import { Body, Controller, Get, HttpCode, Param, ParseIntPipe, Post, Put, Query, Req } from '@nestjs/common'
+import { Body, Controller, Get, HttpCode, Param, ParseIntPipe, Post, Query, Req } from '@nestjs/common'
 import { RequirePermission } from '../../common/decorators/require-permission.decorator'
 import type { AuthenticatedRequest } from '../../common/interfaces/authenticated-request'
 import { GovernanceService } from './governance.service'
-import { ReviewAppealDto, ReviewReportDto, SavePolicyDto } from './dto/governance.dto'
+import { ReviewAppealDto, ReviewReportDto } from './dto/governance.dto'
 
 @RequirePermission('/governance')
 @Controller('api/admin/governance')
@@ -31,14 +31,4 @@ export class GovernanceController {
     return this.governance.reviewAppeal(id, dto, req.user?.name ?? '社区管理员')
   }
 
-  @Get('policies')
-  policies() { return this.governance.policies() }
-
-  @HttpCode(200)
-  @Post('policies')
-  createPolicy(@Body() dto: SavePolicyDto, @Req() req: AuthenticatedRequest) { return this.governance.createPolicy(dto, req.user?.name ?? '社区管理员') }
-
-  @HttpCode(200)
-  @Put('policies/:id')
-  updatePolicy(@Param('id') id: string, @Body() dto: SavePolicyDto, @Req() req: AuthenticatedRequest) { return this.governance.updatePolicy(id, dto, req.user?.name ?? '社区管理员') }
 }

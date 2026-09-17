@@ -450,7 +450,7 @@ function onClose() {
       </div>
       <div v-if="form.demandType === 'task'" class="form-row">
         <t-form-item label="预期交付内容" name="deliverable">
-          <t-input v-model="form.deliverable" clearable placeholder="说明期望获得的成果" />
+          <t-input v-model="form.deliverable" clearable placeholder="说明期望获得的成果…" />
         </t-form-item>
         <t-form-item label="预期交付日期" name="deliverBy">
           <t-date-picker v-model="form.deliverBy" valueType="YYYY-MM-DD" clearable style="width: 100%" />
@@ -458,18 +458,18 @@ function onClose() {
       </div>
       <div v-else-if="form.demandType === 'investment'" class="form-row">
         <t-form-item label="合作需求" name="cooperationNeed">
-          <t-input v-model="form.cooperationNeed" clearable placeholder="说明融资或资源合作需求" />
+          <t-input v-model="form.cooperationNeed" clearable placeholder="说明融资或资源合作需求…" />
         </t-form-item>
         <t-form-item label="可提供回报" name="returnOffer">
-          <t-input v-model="form.returnOffer" clearable placeholder="说明可提供的合作回报" />
+          <t-input v-model="form.returnOffer" clearable placeholder="说明可提供的合作回报…" />
         </t-form-item>
       </div>
       <div v-else class="form-row">
         <t-form-item label="业务瓶颈" name="bottleneck">
-          <t-input v-model="form.bottleneck" clearable placeholder="说明当前需要解决的问题" />
+          <t-input v-model="form.bottleneck" clearable placeholder="说明当前需要解决的问题…" />
         </t-form-item>
         <t-form-item label="期望合作方式" name="partnershipMode">
-          <t-input v-model="form.partnershipMode" clearable placeholder="如联合研发、渠道合作" />
+          <t-input v-model="form.partnershipMode" clearable placeholder="如联合研发、渠道合作…" />
         </t-form-item>
       </div>
       <div class="form-row">

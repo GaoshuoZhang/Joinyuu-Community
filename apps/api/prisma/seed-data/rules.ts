@@ -1,4 +1,4 @@
-import type { ExperienceRule, LevelTier } from '@/types'
+import type { ExperienceRule } from '@/types'
 
 /* ---------- 规则管理：经验值规则（触发项写死） ---------- */
 
@@ -64,10 +64,15 @@ export const experienceRules: ExperienceRule[] = [
 /* ---------- 规则管理：等级梯度 ---------- */
 
 /* 等级梯度（默认 5 级）：门槛为累计经验值，整组保存；最低 1 级，最多 10 级 */
-export const levelTiers: LevelTier[] = [
-  { level: 1, label: '青铜', threshold: 0 },
-  { level: 2, label: '白银', threshold: 100 },
-  { level: 3, label: '黄金', threshold: 300 },
-  { level: 4, label: '铂金', threshold: 600 },
-  { level: 5, label: '钻石', threshold: 1000 },
+export const levelTiers = [
+  { identityType: 'community_individual', level: 1, label: '新芽', threshold: 0 },
+  { identityType: 'community_individual', level: 2, label: '成长', threshold: 100 },
+  { identityType: 'community_individual', level: 3, label: '骨干', threshold: 300 },
+  { identityType: 'community_individual', level: 4, label: '先锋', threshold: 600 },
+  { identityType: 'community_individual', level: 5, label: '领航', threshold: 1000 },
+  { identityType: 'community_enterprise', level: 1, label: '初创', threshold: 0 },
+  { identityType: 'community_enterprise', level: 2, label: '成长', threshold: 300 },
+  { identityType: 'community_enterprise', level: 3, label: '进阶', threshold: 1000 },
+  { identityType: 'community_enterprise', level: 4, label: '标杆', threshold: 3000 },
+  { identityType: 'community_enterprise', level: 5, label: '领军', threshold: 8000 },
 ]

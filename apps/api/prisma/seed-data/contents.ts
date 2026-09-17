@@ -1,10 +1,9 @@
-import type { Article, ArticleColumn, ShowcaseRequest } from '@/types'
+import type { Article, ArticleColumn } from '@/types'
 
-/* 资讯内容数据 — 命名前缀：资讯文章 A1001+ / 投稿内容 SU1001+ / 栏目 CL2001+ / 展示页发布申请 SC1001+
+/* 资讯内容数据 — 命名前缀：资讯文章 A1001+ / 投稿内容 SU1001+ / 栏目 CL2001+
  * M1.5 内容改造：文章分来源 channel（official 社区自行发布 / submitted 用户投稿）；
  *   状态机 pending 待审核 / rejected 已驳回 / pending_release 待发布 / scheduled 定时发布中 / published 已发布；
- *   栏目改为单选（columnId）+ submissionOpen 开放投稿开关，内置「未指定」保留栏目（COL_NONE）。
- * 展示页发布申请迁移自 applications 的 showcase 类型（SC1001 ← AP3002 等）。 */
+ *   栏目改为单选（columnId）+ submissionOpen 开放投稿开关，内置「未指定」保留栏目（COL_NONE）。 */
 
 export const columns: ArticleColumn[] = [
   { id: 'CL2001', name: '社区动态', description: '社区运营公告、月报与重要通知', sort: 1, submissionOpen: true, system: false, status: 'enabled', createdAt: '2025-03-10' },
@@ -191,81 +190,5 @@ export const articles: Article[] = [
     content: '<p>开放办公位区的使用礼仪与设备复位说明。</p>',
     tags: ['办公位', '使用指南'],
     createdAt: '2026-07-10 10:00',
-  },
-]
-
-export const showcaseRequests: ShowcaseRequest[] = [
-  {
-    id: 'SC1001',
-    targetType: 'enterprise',
-    targetId: 'E2001',
-    targetName: '星澜智能科技',
-    contentSummary: '企业展示页更新发布：新增 A 轮融资信息与 3 个客户案例，数据来源为公开新闻稿。',
-    submitterName: '陈屿',
-    submitterPhone: '13801210001',
-    submittedAt: '2026-08-25 14:30',
-    status: 'approved',
-    records: [
-      { step: '提交申请', operator: '陈屿', action: 'submit', comment: '展示页 v3 提交审核', at: '2026-08-25 14:30' },
-      { step: '内容审核', operator: '社区管理员', action: 'approve', comment: '信息真实准确，予以发布', at: '2026-08-28 09:15' },
-    ],
-  },
-  {
-    id: 'SC1002',
-    targetType: 'enterprise',
-    targetId: 'E2009',
-    targetName: '青柠健康',
-    contentSummary: '首次发布企业展示页：品牌介绍、服务说明与团队展示。',
-    submitterName: '何雨桐',
-    submitterPhone: '13801210013',
-    submittedAt: '2026-07-30 17:26',
-    status: 'approved',
-    records: [
-      { step: '提交申请', operator: '何雨桐', action: 'submit', comment: '', at: '2026-07-30 17:26' },
-      { step: '内容审核', operator: '社区管理员', action: 'approve', comment: '首次发布通过', at: '2026-08-01 09:48' },
-    ],
-  },
-  {
-    id: 'SC1003',
-    targetType: 'enterprise',
-    targetId: 'E2004',
-    targetName: '云径网络',
-    contentSummary: '首次发布企业展示页：品牌介绍、产品截图与增长里程碑，「注册团队 12,000+」来自后台统计。',
-    submitterName: '陆则铭',
-    submitterPhone: '13801210008',
-    submittedAt: '2026-09-06 15:36',
-    status: 'pending',
-    records: [
-      { step: '提交申请', operator: '陆则铭', action: 'submit', comment: '', at: '2026-09-06 15:36' },
-    ],
-  },
-  {
-    id: 'SC1004',
-    targetType: 'individual',
-    targetName: '顾北辰 · 独立设计师作品集',
-    contentSummary: '首次发布个人主页：收录近一年品牌与交互设计作品 12 件，附项目背景说明。',
-    submitterName: '顾北辰',
-    submitterPhone: '13801210005',
-    submittedAt: '2026-09-07 11:20',
-    status: 'pending',
-    records: [
-      { step: '提交申请', operator: '顾北辰', action: 'submit', comment: '个人作品集主页首发', at: '2026-09-07 11:20' },
-    ],
-  },
-  {
-    id: 'SC1005',
-    targetType: 'enterprise',
-    targetId: 'E2006',
-    targetName: '逐浪出行',
-    contentSummary: '展示页 v2 更新：新增「已覆盖 30 城市」运营数据与换电网络示意图。',
-    submitterName: '程一诺',
-    submitterPhone: '13801210010',
-    submittedAt: '2026-08-20 16:10',
-    status: 'rejected',
-    records: [
-      { step: '提交申请', operator: '程一诺', action: 'submit', comment: '展示页 v2 提交', at: '2026-08-20 16:10' },
-      { step: '内容审核', operator: '社区管理员', action: 'reject', comment: '展示页中「已覆盖 30 城市」的表述缺少数据来源，请补充说明后重新提交', at: '2026-08-24 10:30' },
-    ],
-    rejectReason: '展示页中「已覆盖 30 城市」的表述缺少数据来源，请补充说明后重新提交',
   },
 ]

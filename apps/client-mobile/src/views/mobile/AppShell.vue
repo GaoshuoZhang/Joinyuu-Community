@@ -2,7 +2,7 @@
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { Avatar, Badge, Icon, Navbar, NoticeBar, TabBar, TabBarItem } from 'tdesign-mobile-vue'
-import { ChevronLeftIcon, NotificationIcon } from 'tdesign-icons-vue-next'
+import { NotificationIcon } from 'tdesign-icons-vue-next'
 import { useAuthStore } from '@/stores/auth'
 import { useConfigStore } from '@/stores/config'
 import { useNoticesStore } from '@/stores/notices'
@@ -182,15 +182,12 @@ function onNotices() {
       :title="pageTitle || config.config.siteName || '聚屿社区'"
       fixed
       placeholder
+      :left-arrow="!isTab"
       :z-index="100"
       :safe-area-inset-top="true"
       :style="navbarStyle"
+      @left-click="goBack"
     >
-      <template #left>
-        <button v-if="!isTab" class="nav-back" type="button" aria-label="返回" @click="goBack">
-          <ChevronLeftIcon size="24px" />
-        </button>
-      </template>
       <template #right>
         <button v-if="auth.isLogged && !isMe" class="nav-me" type="button" aria-label="我的" @click="router.push('/me')">
           <Avatar size="30px" :image="auth.avatar">{{ auth.name.slice(0, 1) }}</Avatar>
@@ -281,10 +278,6 @@ function onNotices() {
   top: calc(8px + env(safe-area-inset-top));
 }
 
-.m-content:focus {
-  outline: none;
-}
-
 /* 页面切换过渡（v41：更快、仅淡入淡出；Tab 间切换走 none 无过渡） */
 .page-enter-active,
 .page-leave-active {
@@ -299,21 +292,6 @@ function onNotices() {
 .page-enter-from,
 .page-leave-to {
   opacity: 0;
-}
-
-.nav-back {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  /* v36：触控目标 ≥44×44px（作用于按钮容器，不拉伸图标本身） */
-  width: 44px;
-  height: 44px;
-  margin: -10px;
-  padding: 0;
-  border: none;
-  background: none;
-  color: var(--td-text-color-primary);
-  cursor: pointer;
 }
 
 /* 右上角：头像（点击进「我的」） */

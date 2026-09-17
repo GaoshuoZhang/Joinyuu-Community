@@ -53,11 +53,13 @@ export class AppCommunityService {
       where: {
         identities: { some: { type: 'community_individual' } },
         individualCard: { isNot: null },
+        status: 'active',
         ...(blockedUids.length ? { uid: { notIn: blockedUids } } : {}),
         ...(kw
           ? {
               OR: [
                 { nickname: { contains: kw } },
+                { individualCard: { displayName: { contains: kw } } },
                 { individualCard: { intro: { contains: kw } } },
                 { individualCard: { skills: { has: kw } } },
               ],
@@ -75,10 +77,10 @@ export class AppCommunityService {
       const card = u.individualCard
       if (!card) continue
       /* Prisma 列表 has 仅精确匹配，技能子串命中在内存复核（与客户端 Mock 行为一致） */
-      if (kw && !(u.nickname.includes(kw) || card.intro.includes(kw) || card.skills.some((s) => s.includes(kw)))) continue
+      if (kw && !(card.displayName?.includes(kw) || u.nickname.includes(kw) || card.intro.includes(kw) || card.skills.some((s) => s.includes(kw)))) continue
       list.push({
         uid: u.uid,
-        name: u.nickname,
+        name: card.displayName || u.nickname,
         role: u.identities[0]?.title ?? '',
         avatar: u.avatar ?? undefined,
         intro: card.intro,
@@ -100,15 +102,15 @@ export class AppCommunityService {
       },
     })
     const card = user?.individualCard
-    if (!user || !card || user.identities.length === 0) throw new NotFoundException('该用户尚未公开名片')
+    if (!user || user.status !== 'active' || !card || user.identities.length === 0) throw new NotFoundException('该用户尚未公开名片')
 
     const identity = user.identities[0]
-    const tier = identity?.level != null ? await this.prisma.levelTier.findUnique({ where: { level: identity.level } }) : null
+    const tier = identity?.level != null ? await this.prisma.levelTier.findUnique({ where: { identityType_level: { identityType: 'community_individual', level: identity.level } } }) : null
     const visibility = (card.visibility ?? {}) as { age?: boolean; politicalStatus?: boolean }
 
     return {
       uid: user.uid,
-      name: user.nickname,
+      name: card.displayName || user.nickname,
       avatar: user.avatar ?? undefined,
       level: identity?.level ?? undefined,
       levelName: tier?.label ?? undefined,
@@ -142,13 +144,20 @@ export class AppCommunityService {
       orderBy: { id: 'asc' },
     })
 
-    const identities = rows.length
-      ? await this.prisma.userIdentity.findMany({
-          where: { type: 'community_enterprise', enterpriseId: { in: rows.map((e) => e.id) } },
-          include: { user: { select: { uid: true, realName: true, nickname: true } } },
-          orderBy: { id: 'asc' },
-        })
-      : []
+    const [identities, tiers] = await Promise.all([
+      rows.length
+        ? this.prisma.userIdentity.findMany({
+            where: { type: 'community_enterprise', enterpriseId: { in: rows.map((e) => e.id) } },
+            include: { user: { select: { uid: true, realName: true, nickname: true } } },
+            orderBy: { id: 'asc' },
+          })
+        : Promise.resolve([]),
+      this.prisma.levelTier.findMany({
+        where: { identityType: 'community_enterprise' },
+        orderBy: { threshold: 'asc' },
+      }),
+    ])
+    const descTiers = [...tiers].reverse()
     const membersByEnterprise = new Map<string, { uid?: string; name: string; role?: string; phone?: string; permissions?: string[] }[]>()
     for (const identity of identities) {
       const key = identity.enterpriseId ?? ''
@@ -164,23 +173,29 @@ export class AppCommunityService {
       membersByEnterprise.set(key, list)
     }
 
-    return rows.filter((e) => !e.contactUserId || !blockedUids.includes(e.contactUserId)).map((e) => ({
-      id: e.id,
-      name: e.name,
-      logo: e.logo ?? undefined,
-      industry: e.industry,
-      size: e.size,
-      foundedAt: e.foundedAt || undefined,
-      website: e.website ?? undefined,
-      address: e.address ?? undefined,
-      services: e.services.length ? e.services.join('、') : undefined,
-      advantages: e.advantages.length ? e.advantages.join('、') : undefined,
-      description: e.description,
-      showcaseStatus: 'published' as const,
-      members: membersByEnterprise.get(e.id) ?? [],
-      contactUid: e.contactUserId ?? undefined,
-      contactName: e.contactName || undefined,
-    }))
+    return rows
+      .filter((e) => !e.contactUserId || !blockedUids.includes(e.contactUserId))
+      .map((e) => {
+        const tier = descTiers.find((t) => t.threshold <= e.experience)
+        return {
+          id: e.id,
+          name: e.name,
+          logo: e.logo ?? undefined,
+          industry: e.industry,
+          size: e.size,
+          ...(tier ? { level: tier.level, levelName: tier.label } : {}),
+          foundedAt: e.foundedAt || undefined,
+          website: e.website ?? undefined,
+          address: e.address ?? undefined,
+          services: e.services.length ? e.services.join('、') : undefined,
+          advantages: e.advantages.length ? e.advantages.join('、') : undefined,
+          description: e.description,
+          showcaseStatus: 'published' as const,
+          members: membersByEnterprise.get(e.id) ?? [],
+          contactUid: e.contactUserId ?? undefined,
+          contactName: e.contactName || undefined,
+        }
+      })
   }
 
   private async optionalUid(authorization?: string): Promise<string | undefined> {

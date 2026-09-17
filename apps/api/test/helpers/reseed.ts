@@ -7,5 +7,6 @@ export function reseed(): void {
   execSync('npx tsx prisma/seed.ts', {
     cwd: join(__dirname, '..', '..'),
     stdio: 'pipe',
+    env: { ...process.env, E2E_SEED_RESET_RATES: '1' },
   })
 }

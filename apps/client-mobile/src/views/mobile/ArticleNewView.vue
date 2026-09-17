@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, onMounted, reactive, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { Button, Icon, Input, Tag, Textarea, Toast, Upload } from 'tdesign-mobile-vue'
+import { Button, CheckTag, Icon, Image, Input, Textarea, Toast, Upload } from 'tdesign-mobile-vue'
 import type { UploadFile } from 'tdesign-mobile-vue'
 import { useAsyncList } from '@/composables/useAsyncList'
 import { useDraft } from '@/composables/useDraft'
@@ -212,7 +212,7 @@ async function onSubmit() {
 <template>
   <div class="page-fade-in m-new-article">
     <header class="head">
-      <h2 class="page-title">{{ revising ? '修改重提' : '投稿' }}</h2>
+      <h1 class="page-title">{{ revising ? '修改重提' : '投稿' }}</h1>
       <p class="page-desc">{{ revising ? '修改后将重新进入审核队列' : '图文内容将随投稿一并进入审核' }}</p>
     </header>
 
@@ -223,17 +223,32 @@ async function onSubmit() {
     </div>
     <div class="m-card form">
       <div class="field"><label>标题</label><Input v-model="form.title" :maxlength="50" placeholder="请输入文章标题…" clearable /><p v-if="errors.title" class="field-error">{{ errors.title }}</p></div>
-      <div class="field"><span class="field-label">栏目</span><div class="chips"><Tag v-for="c in columns" :key="c.code" class="chip" size="medium" :theme="form.columnCode === c.code ? 'primary' : 'default'" variant="light" @click="form.columnCode = c.code">{{ c.label }}</Tag></div><p v-if="errors.column" class="field-error">{{ errors.column }}</p></div>
-      <div class="field"><span class="field-label">投稿身份</span><div class="chips"><Tag v-for="identity in identityOptions" :key="`${identity.type}:${identity.enterpriseId ?? ''}`" size="medium" variant="light" :theme="isIdentityPicked(identity) ? 'primary' : 'default'" @click="pickIdentity(identity)">{{ identityOptionLabel(identity, auth.name) }}</Tag></div><p v-if="errors.identity" class="field-error">{{ errors.identity }}</p></div>
+      <div class="field"><span class="field-label">栏目</span><div class="chips"><CheckTag v-for="c in columns" :key="c.code" class="chip" size="medium" variant="light" :checked="form.columnCode === c.code" @change="form.columnCode = c.code">{{ c.label }}</CheckTag></div><p v-if="errors.column" class="field-error">{{ errors.column }}</p></div>
+      <div class="field"><span class="field-label">投稿身份</span><div class="chips"><CheckTag v-for="identity in identityOptions" :key="`${identity.type}:${identity.enterpriseId ?? ''}`" size="medium" variant="light" :checked="isIdentityPicked(identity)" @change="pickIdentity(identity)">{{ identityOptionLabel(identity, auth.name) }}</CheckTag></div><p v-if="errors.identity" class="field-error">{{ errors.identity }}</p></div>
       <div class="field"><span class="field-label">文章封面（选填）</span><p class="field-help">建议使用清晰的横版图片，将展示在文章列表中。</p><Upload v-model:files="coverFiles" theme="grid" accept="image/*" :max="1" :size-limit="{ size: 10, unit: 'MB' }" :request-method="requestImage" /></div>
       <div class="field"><span class="field-label">正文</span><p class="field-help">可在任意段落之后插入图片，图片会按内容顺序发布。</p>
         <div class="editor-blocks">
           <div v-for="block in blocks" :key="block.id" class="editor-block">
             <Button class="remove-block" size="extra-small" shape="circle" theme="danger" :aria-label="block.type === 'image' ? '删除图片' : '删除段落'" @click="removeBlock(block.id)"><Icon name="delete" size="16px" /></Button>
             <div v-if="block.type === 'text'" class="text-block"><Textarea v-model="block.text" :autosize="{ minRows: 4, maxRows: 12 }" placeholder="写下这一段内容…" /></div>
-            <figure v-else class="image-block"><img :src="block.url" alt="正文配图" decoding="async" /></figure>
+            <figure v-else class="image-block"><Image :src="block.url" alt="正文配图" fit="cover" /></figure>
           </div>
-          <div class="insert-actions"><Button size="small" theme="light" @click="addText"><Icon name="text" size="16px" />插入段落</Button><Upload v-model:files="bodyImageFiles" theme="grid" accept="image/*" :max="1" :add-btn="true" :preview="false" :size-limit="{ size: 10, unit: 'MB' }" :request-method="requestImage" @success="({ response }) => onBodyImageSuccess(response)"><template #addContent><Button size="small" theme="light"><Icon name="image" size="16px" />插入图片</Button></template></Upload></div>
+          <div class="insert-actions">
+            <Button size="small" theme="light" @click="addText"><Icon name="textbox" size="16px" />插入段落</Button>
+            <Upload
+              v-model:files="bodyImageFiles"
+              class="body-upload"
+              theme="grid"
+              accept="image/*"
+              :max="1"
+              :preview="false"
+              :size-limit="{ size: 10, unit: 'MB' }"
+              :request-method="requestImage"
+              @success="({ response }) => onBodyImageSuccess(response)"
+            >
+              <template #addContent><span class="sr-only">插入图片</span><Icon name="image" size="16px" /></template>
+            </Upload>
+          </div>
         </div>
         <p class="count" :class="{ ready: contentReady }">输入统计：{{ contentLength }}字 | {{ imageCount }}图</p>
         <p v-if="errors.content" class="field-error">{{ errors.content }}</p>
@@ -247,6 +262,6 @@ async function onSubmit() {
 .m-new-article { display: flex; flex-direction: column; gap: 12px; padding: 16px; }
 .head { padding: 0 2px; }.head .page-title { margin: 0 0 4px; font-size: 18px; }.head .page-desc { margin: 0; color: var(--td-text-color-secondary); font-size: 12px; }
 .field { margin-bottom: 18px; }.field label, .field .field-label { display: block; margin-bottom: 6px; color: var(--td-text-color-secondary); font-size: 12px; }.field-help { margin: -2px 0 8px; }
-.chips { display: flex; flex-wrap: wrap; gap: 8px; }.field-error { margin: 6px 0 0; font-size: 12px; color: var(--td-error-color); }.editor-blocks { display: flex; flex-direction: column; gap: 12px; }.editor-block { padding: 10px; border: 1px solid var(--td-component-border); border-radius: var(--td-radius-large); background: var(--td-bg-color-secondarycontainer); }.remove-block { display: flex; margin: -2px 0 6px auto; box-shadow: var(--td-shadow-1); }.insert-actions { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }.insert-actions :deep(.t-button), .insert-actions :deep(.t-upload), .insert-actions :deep(.t-upload__item), .insert-actions :deep(.t-upload__add-icon) { width: 100%; }.insert-actions :deep(.t-upload) { grid-template-columns: minmax(0, 1fr); gap: 0; padding: 0; }.insert-actions :deep(.t-upload), .insert-actions :deep(.t-upload__item), .insert-actions :deep(.t-upload__add-icon) { height: 44px; min-height: 44px; }.insert-actions :deep(.t-button--size-small) { min-height: 44px; }.insert-actions :deep(.t-upload__item) { margin: 0; padding: 0; border: 0; background: transparent; }.insert-actions :deep(.t-upload__add-icon) { position: static; transform: none; }.image-block { margin: 0; overflow: hidden; border-radius: var(--td-radius-default); background: var(--td-bg-color-container); }.image-block img { display: block; width: 100%; max-height: 280px; object-fit: cover; aspect-ratio: 16 / 9; }.count { margin: 8px 0 0; color: var(--td-error-color); font-size: 12px; text-align: center; }.count.ready { color: var(--td-text-color-placeholder); }
+.chips { display: flex; flex-wrap: wrap; gap: 8px; }.field-error { margin: 6px 0 0; font-size: 12px; color: var(--td-error-color); }.editor-blocks { display: flex; flex-direction: column; gap: 12px; }.editor-block { padding: 10px; border: 1px solid var(--td-component-border); border-radius: var(--td-radius-large); background: var(--td-bg-color-secondarycontainer); }.remove-block { display: flex; margin: -2px 0 6px auto; box-shadow: var(--td-shadow-1); }.insert-actions { display: flex; align-items: center; gap: 10px; }.insert-actions :deep(.t-button--size-small) { min-height: 44px; }.body-upload { --td-upload-width: 44px; --td-upload-height: 44px; --td-upload-add-color: var(--td-brand-color); display: inline-flex; }.image-block { margin: 0; overflow: hidden; border-radius: var(--td-radius-default); background: var(--td-bg-color-container); }.image-block img { display: block; width: 100%; max-height: 280px; object-fit: cover; aspect-ratio: 16 / 9; }.count { margin: 8px 0 0; color: var(--td-error-color); font-size: 12px; text-align: center; }.count.ready { color: var(--td-text-color-placeholder); }
 .draft-bar { display: flex; align-items: center; gap: 10px; padding: 10px 12px; border-radius: var(--td-radius-default); background: var(--td-warning-color-1, #fff1e9); font-size: 12px; color: var(--td-text-color-secondary); }.draft-bar a { color: var(--td-brand-color); cursor: pointer; }.draft-bar a:first-of-type { margin-left: auto; }
 </style>

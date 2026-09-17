@@ -27,7 +27,7 @@ export class QueryDemandsDto {
   demandType?: string
 
   @IsOptional()
-  @IsIn(['pending', 'pending_release', 'scheduled', 'published', 'rejected', 'projected', 'closed'])
+  @IsIn(['pending', 'pending_release', 'scheduled', 'published', 'selected', 'rejected', 'projected', 'closed'])
   status?: string
 
   @IsOptional()

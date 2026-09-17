@@ -1,7 +1,7 @@
 <script setup lang="ts">
-import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { Loading, Button, Search, Tag } from 'tdesign-mobile-vue'
+import { Loading, Button, CheckTag, Icon, Search, Tag } from 'tdesign-mobile-vue'
 import { fetchArticles } from '@/api/contents'
 import { fetchEnterpriseList, fetchPolicies, fetchTalents } from '@/api/community'
 import { fetchDemands } from '@/api/demands'
@@ -23,7 +23,6 @@ const loading = ref(false)
 const error = ref('')
 const partialError = ref('')
 const results = ref<SearchResult[]>([])
-const searchHost = ref<HTMLElement | null>(null)
 
 const hasKeyword = computed(() => Boolean(keyword.value.trim()))
 const counts = computed(() => {
@@ -152,9 +151,7 @@ function onSearchNow() {
 
 onBeforeUnmount(() => window.clearTimeout(searchTimer))
 
-onMounted(async () => {
-  await nextTick()
-  searchHost.value?.querySelector<HTMLInputElement>('input')?.focus()
+onMounted(() => {
   void search()
 })
 </script>
@@ -165,34 +162,35 @@ onMounted(async () => {
       <h1 class="page-title">全局搜索</h1>
       <p class="page-desc">查找项目、活动、文章、社区服务和人才</p>
     </header>
-    <div ref="searchHost"><Search v-model="keyword" placeholder="输入关键词后搜索" @search="onSearchNow" /></div>
+    <Search v-model="keyword" placeholder="输入关键词后搜索" @search="onSearchNow" />
 
     <Loading v-if="loading" class="state" text="搜索中…" />
     <EmptyBlock v-else-if="error" :text="error" action-text="重试" @action="onSearchNow" />
     <template v-else-if="hasKeyword">
       <p v-if="partialError" class="partial-error">{{ partialError }}</p>
       <div v-if="categoryOrder.length" class="count-chips">
-        <Tag
-          :theme="activeKind === '' ? 'primary' : 'default'"
+        <CheckTag
           size="small"
           variant="light"
-          @click="activeKind = ''"
+          :checked="activeKind === ''"
+          @change="activeKind = ''"
         >
           全部 {{ results.length }}
-        </Tag>
-        <Tag
+        </CheckTag>
+        <CheckTag
           v-for="c in categoryOrder"
           :key="c"
-          :theme="activeKind === c ? 'primary' : 'default'"
           size="small"
           variant="light"
-          @click="activeKind = activeKind === c ? '' : c"
+          :checked="activeKind === c"
+          @change="activeKind = activeKind === c ? '' : c"
         >
           {{ c }} {{ counts[c] }}
-        </Tag>
+        </CheckTag>
       </div>
       <Button v-if="demandHasResults" size="small" variant="outline" block @click="router.push(`/projects?q=${encodeURIComponent(keyword.trim())}`)">
-        查看更多项目 ›
+        查看更多项目
+        <template #suffix><Icon name="chevron-right" size="14px" /></template>
       </Button>
       <EmptyBlock v-if="!visibleResults.length" text="没有找到相关内容，换个关键词试试" />
       <div v-else class="result-list stagger">
@@ -206,10 +204,10 @@ onMounted(async () => {
       <div v-if="recent.length" class="recent">
         <div class="recent-head">
           <span>最近搜索</span>
-          <a @click="clearRecent">清空</a>
+          <a v-pressable @click="clearRecent">清空</a>
         </div>
         <div class="recent-chips">
-          <Tag v-for="r in recent" :key="r" size="medium" variant="light" @click="useRecent(r)">{{ r }}</Tag>
+          <CheckTag v-for="r in recent" :key="r" size="medium" variant="light" :checked="false" @change="useRecent(r)">{{ r }}</CheckTag>
         </div>
       </div>
       <div v-else class="search-guide">输入关键词，搜索社区内的公开内容</div>

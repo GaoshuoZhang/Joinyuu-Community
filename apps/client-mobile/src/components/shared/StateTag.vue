@@ -11,10 +11,14 @@ type Tone = 'default' | 'primary' | 'success' | 'warning' | 'danger'
 const map: Record<string, Record<string, { label: string; tone: Tone }>> = {
   demand: {
     pending: { label: '待审核', tone: 'warning' },
+    pending_release: { label: '待发布', tone: 'primary' },
+    scheduled: { label: '定时发布中', tone: 'primary' },
     published: { label: '已发布', tone: 'success' },
+    selected: { label: '已选定', tone: 'primary' },
     projected: { label: '已立项', tone: 'success' },
     withdrawn: { label: '已撤回', tone: 'default' },
     rejected: { label: '已驳回', tone: 'danger' },
+    appealed: { label: '申诉中', tone: 'warning' },
     closed: { label: '已关闭', tone: 'default' },
   },
   enroll: {

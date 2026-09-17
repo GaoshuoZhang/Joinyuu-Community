@@ -1,5 +1,7 @@
 # 聚屿社区 · 客户端 API 设计（/api/app/**）
 
+> 2026-09-17 收口补充：`GET /card-schema/:type`（individual/enterprise）返回 `{type, editableFields[]}`。个人/企业名片 PUT 为部分更新：省略保留，空串清空，用户提交禁用字段 403；后台 `/api/admin/cards/**` 可维护全部名片字段。个人展示名存于 `IndividualCard.displayName`。实名查询增加 `reviewStatus/reviewNote`，规则校验后生效并待人工复核，驳回清除实名后可重提。注销冷静期 7 天，届满由工作人员执行，执行前可撤回，已注销账号不可登录或恢复。管理端契约见 `wiki-backend.md` 收口段。
+
 > M2 客户端 Web（居民端）端点设计。依据：M0 冻结的实体模型与状态流（`docs/wiki-admin-web.md`）、
 > 后端既有契约与业务规则（`docs/wiki-backend.md` §4/§5/§8）、M1.5 已落地的数据模型（43 模型）。
 > 本文档为 M2 实施的契约基线：实施前如有调整，先改本文档（记录变更）再改代码（wiki-backend §14 契约变更流程）。
@@ -67,14 +69,14 @@
 | 方法 | 路径 | 说明 |
 |---|---|---|
 | GET | /api/app/demands | 浏览列表：仅 `published`；按可见范围过滤（§9）；分页/类别/关键词；可选 `kind=task\|investment\|cooperation` 按需求类型筛选（分页与 total 统计前执行，省略时不限；历史无 kind 数据按 task）；返回 `kind`（task 找服务 / investment 找投资 / cooperation 找合作）与类型专属字段（task 含 `deliverBy` 预期交付日期；各类型含联系人 `contactName/contactPhone/contactEmail`） |
-| GET | /api/app/demands/:id | 详情（不可见 → 404，不暴露存在性）；含响应数、`kind` 与类型专属字段（task: deliverable/budget/deliverBy；investment: cooperationNeed/returnOffer；cooperation: bottleneck/partnershipMode/returnOffer）与联系人信息 |
+| GET | /api/app/demands/:id | 详情（不可见 → 404，不暴露存在性；发布者可查看本人任意状态需求，其余人仅 `published` 且可见范围命中）；含响应数、`kind` 与类型专属字段（task: deliverable/budget/deliverBy；investment: cooperationNeed/returnOffer；cooperation: bottleneck/partnershipMode/returnOffer）与联系人信息；本人已响应时附 `myResponse: { message, at, status }`（`withdrawnAt` 非空即视为未响应，客户端据此隐藏响应入口并展示响应说明） |
 | POST | /api/app/demands | 提交需求：`demandOpen` 开关校验；`kind` 必填（task/investment/cooperation）；`categoryDict` 指定类目字典（task/cooperation→demand_category，investment→industry）；task 必填 `deliverable`（可选 `budget`）与 `deliverBy`（预期交付日期，希望在该日期前完成），investment 必填 `cooperationNeed`（可选 `returnOffer`），cooperation 必填 `bottleneck`（可选 `partnershipMode`/`returnOffer`）；`contactName`/`contactPhone` 必填、`contactEmail` 选填（校验格式）；`deadline` 不再收集（历史字段保留展示）；`asIdentity` 四类身份均可发布（含合作企业，类型不限），持有社区个体身份时不再单列个人用户选项；发布方身份快照按 wiki §8.7，`publisherName` 按主体取企业名/组织名（个人取昵称）；成员代企业发布时传 `asEnterpriseId`（服务端校验成员 `publish_demand` 权限，无权限 403）；创建即 `pending` → 管理端审核 |
 | GET | /api/app/me/demands | 我发布的需求（全状态，含 `kind`） |
 | POST | /api/app/demands/:id/respond | 响应需求：`published` 校验、不可响应自己的需求、防重复；通过后触发 `demand_responded` 积分（发放给响应成员，M2 批次） |
 | GET | /api/app/me/responses | 我的需求响应记录 |
 | POST | /api/app/me/responses/:id/withdraw | [MOCK-ONLY·缺口 §7.1-19] 响应者撤回待处理响应（撤回后可重新响应）；已处理 409 |
 | GET | /api/app/me/demands/:id/responses | [MOCK-ONLY·缺口 §7.1-19] 需求发布者查看响应列表（响应方快照 + `status=pending/accepted/rejected` + 审核时间/驳回原因）；非发布者 403 |
-| POST | /api/app/me/demands/:id/responses/:responseId/review | [MOCK-ONLY·缺口 §7.1-19] 发布者处理响应（`action=accept\|reject`，驳回必填原因）；接受后需求转 `projected` 并在事务内生成协作项目（双向记录 + 里程碑）、发放 `demand_undertaken` 积分与项目经验、通知双方、自动驳回其余待处理响应 |
+| POST | /api/app/me/demands/:id/select | 发布者选择意向承接方（`responseIds[]` 多选，去重且非空，全部须为本人需求下未撤回的待处理响应）；需求转 `selected`（`matchedRespondent` 记录被选人），被选响应转 `accepted` 并通知本人，未选中响应保持待处理（不可驳回）；不生成项目，由管理员在后台完成立项 |
 
 ## 7. 活动中心
 
@@ -110,7 +112,6 @@
 | POST | /api/app/articles | 投递文章（channel=submitted，编号 SU 前缀）：提交即待审核，审核通过转待发布（状态机同 wiki §8.1，作者身份快照） |
 | GET | /api/app/me/articles | 我投递的文章（含驳回原因，可再提交） |
 | GET | /api/app/enterprises/:id | 企业展示页（`showcaseStatus=published` 才可见；含 `logo`/`foundedAt`/`website`/`address`/`services`/`advantages` 精致名片字段） |
-| POST | /api/app/showcase-requests | 展示页发布申请提交 → 管理端审核联动企业 showcaseStatus |
 | POST | /api/app/uploads | 申请资料 / 配图上传：multipart（`file` + `bizType`），仅图片与 PDF（魔数嗅探），大小限制同系统配置；返回 `{ key, name, size, type, url }` |
 
 ### 8.1 v33~v37 Mock 超界端点（已转正为正式契约，2026-09-16）
@@ -120,7 +121,7 @@
 | 方法 | 路径 | 说明 |
 |---|---|---|
 | GET | /api/app/me/demands/:id/responses | 需求发布者查看响应（响应方快照 + `status=pending/accepted/rejected` + 审核时间/驳回原因）；非发布者 403 |
-| POST | /api/app/me/demands/:id/responses/:responseId/review | 发布者处理响应（`action=accept\|reject`，驳回必填原因）；接受后需求转 `projected` 并在事务内生成项目（双向记录 + 里程碑）、发放积分/经验、通知双方、自动驳回其余待处理响应 |
+| POST | /api/app/me/demands/:id/select | 发布者选择意向承接方（`responseIds[]` 多选）→ 需求转 `selected`、被选响应转 `accepted` 并通知；未选中响应保持待处理，不生成项目，由管理员后台立项 |
 | POST | /api/app/me/responses/:id/withdraw | 响应者撤回待处理响应（撤回后可重新响应） |
 | GET | /api/app/me/projects/:id | 项目详情（参与双方、来源需求、进度与里程碑交付验收状态） |
 | POST | /api/app/me/projects/:id/milestones/:milestoneId/submit | 承接方提交里程碑完成（可附说明）→ 待发起方验收；发起方调用 403 |
@@ -154,21 +155,17 @@
 | 方法 | 路径 | 说明 |
 |---|---|---|
 | GET | /api/app/search | 全域聚合搜索：`keyword` + 可选类型过滤（demand/event/article/enterprise/space/talent/community）+ 分类计数 + 分页 cursor；结果与首页/各列表一致 |
-| GET | /api/app/home | 首页聚合：siteInfo + 功能开关 + 公告 `announcements`（有效期内、置顶优先取 2，Announcement 增 `expireAt/link`）+ banner 运营位 + 精选活动/最新需求/置顶文章/未读数（缺口 §7.1-3 扩展） |
-| GET | /api/app/me/enrollments/:id/ticket | 电子票：报名 approved 签发 `ticketNo` + HMAC 确定性核销码（HMAC-SHA256(eventId+ticketId+secret) 截断）；签到成功即核销（E1） |
+| GET | /api/app/home | 首页聚合：siteInfo + 功能开关 + 公告 `announcements`（有效期内、置顶优先取 2，Announcement 增 `expireAt/link`）+ 轮播 `carouselEnabled` 与 `banners`（专用 `HomeBanner`，仅 enabled、按 sort 升序；受 SystemConfig.homeCarouselOpen 总开关控制，关闭时 `carouselEnabled=false` 且 `banners=[]`）+ 精选活动/最新需求/置顶文章/未读数（缺口 §7.1-3 扩展） |
+| GET | /api/app/events/:id/ticket | 电子票（按活动，移动端唯一入口）：报名 approved 签发 `ticketNo` + HMAC 确定性核销码（HMAC-SHA256(eventId+ticketId+secret) 截断），返回 `eventId/eventTitle/startTime/location/ticketCode/status(valid/checked/cancelled)/checkedIn/waitlistOrder`；签到成功即核销（E1）。原 `GET /me/enrollments/:id/ticket`（返回 ticketNo/redeemCode）已于对齐修复中移除 |
 | GET/POST | /api/app/me/demands/:id/messages | 需求沟通留言板：`GET` 消息列表（仅需求发布方与响应方可见，未读计数）+ `POST` 发言，消息可追溯（E2） |
 | GET/POST | /api/app/me/projects/:id/tasks | 项目协作·任务：任务 CRUD（名称/负责人/状态/截止），参与双方可见（E3） |
 | PUT | /api/app/me/projects/:id/tasks/:taskId | 更新任务状态/字段 |
 | GET/POST | /api/app/me/projects/:id/files | 项目协作·文件：对象存储 + 鉴权下载（仅参与双方） |
 | GET/POST | /api/app/me/projects/:id/discussions | 项目协作·讨论（参与双方） |
-| GET | /api/app/me/tasks | 积分任务中心：任务列表含进度（PointsTask + UserTaskRecord；每日/一次性/条件任务）（E4） |
-| POST | /api/app/me/tasks/:code/claim | 领取任务奖励：幂等（重复领取 409）、每日任务按自然日重置 |
+| GET | /api/app/me/realname-rights | 当前发布限制展示：个人实名状态、社区个体/社区企业等级对应的需求发布、文章投稿、活动报名与空间预约额度；企业额度按企业主体共享 |
 | GET | /api/app/me/stats | 个人数据看板：积分/经验/需求/响应/项目/活动/签到聚合口径（E5） |
-| POST | /api/app/service-applications | 社区公共服务在线申请提交（ServiceApplication，受理流转 → admin A15 队列）（E6） |
-| GET | /api/app/me/service-applications | 我的服务申请（状态回执；支持催办） |
-| POST | /api/app/me/service-applications/:id/urge | 催办（限频） |
 | GET | /api/app/me/enterprise-workbench | 企业工作台：企业维度聚合（需求/响应/项目/成员统计），仅成员/负责人可看（E7） |
-| GET | /api/app/me/realname-rights | 实名分级权益：权益规则下发（未实名发布/报名额度），写端点服务端校验（R3-1/E8） |
+| — | ~~/api/app/service-applications~~ | 社区公共服务申请已于 2026-09-17 下线（社区政策浏览与通用申请审核保留） |
 | POST | /api/app/mall/orders/:id/review | 订单评价：1~5 星 + 文字（每单一次；需订单 finished） |
 | GET/POST | /api/app/me/history | 浏览历史：本机阅读历史增量上报/拉取/分页；DELETE 清空（D7） |
 | GET | /api/app/card-schema/:type | 名片可编辑字段 schema 下发（`type=individual\|enterprise`；后台可配置用户可填字段，见 m2-r-plan §3.1 A19）——Q8 决策产物 |
@@ -197,20 +194,19 @@
 
 > 里程碑实施以 `docs/m2-r-plan.md` R0~R4 批次为准（2026-09-16 修订）。
 
-## 12. 站内信与通知偏好（R1 新增，正式契约）
+## 12. 站内信（R1 新增，正式契约；2026-09-17 简化为单一列表）
 
-> 缺口 §7.1-1 / §7.7 A5。`UserNotification` 模型（id UN；type audit_result/enroll_result/order/points/system/invite/transfer/report/article/demand/project/mall/service + link?；title/content/at/read/archived；userId）。
+> 缺口 §7.1-1。`UserNotification` 模型（id UN；type audit_result/enroll_result/order/points/system/invite/transfer/report/article/demand/project/mall/service + link?；title/content/at/read；userId）。**不再有归档与分类偏好**：全部消息同一列表，按时间倒序；`NotificationService` 始终写入。
 
 | 方法 | 路径 | 说明 |
 |---|---|---|
-| GET | /api/app/notices | 站内信列表：分页/类型筛选/`status=unread\|read\|archived`；返回未读数 |
+| GET | /api/app/notices | 站内信列表：分页（按时间倒序，可按类型查询但前端不分类）；返回未读数 |
 | GET | /api/app/notices/unread-count | 未读数（首页/顶栏角标） |
 | POST | /api/app/notices/:id/read | 标记已读（幂等） |
 | POST | /api/app/notices/read-all | 全部已读 |
-| POST | /api/app/notices/:id/archive | 归档/恢复归档（已读才可归档） |
-| GET/PUT | /api/app/me/notices/prefs | 通知偏好：启用类型集合（至少一种；关闭后列表与推送均不出现该类型；约束 `NotificationService` 触发） |
+| — | ~~/api/app/notices/:id/archive~~ · ~~/api/app/me/notices/prefs~~ | 归档与通知偏好端点已于 2026-09-17 移除（404） |
 
-**触发点**（R2/R3 各业务接线，均经 `NotificationService.pushNotice()`）：申请/需求/投稿/报名/预约审核结果、订单下单/发货/取消/补货、签到成功、注册欢迎、企业邀请/接受/拒绝/成员更新、负责人转移请求/结果、举报处置回执、活动候补递补、改期/取消通知、里程碑提交/验收/退回、服务申请受理/回执、数据导出完成。
+**触发点**（R2/R3 各业务接线，均经 `NotificationService.pushNotice()`）：申请/需求/投稿/报名/预约审核结果、订单下单/发货/取消/补货、签到成功、注册欢迎、企业邀请/接受/拒绝/成员更新、负责人转移请求/结果、举报处置回执、活动候补递补、改期/取消通知、里程碑提交/验收/退回、数据导出完成。
 
 ## 修订记录
 

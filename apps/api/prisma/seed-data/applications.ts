@@ -4,7 +4,7 @@ import type { Application } from '@/types'
  * 四类申请（2026-09-11 扩展）：企业入驻（settle）/ 个体入驻（individual）/
  * 企业合作（cooperation）/ 身份绑定（identity）
  * 迁移说明：空间预约（space）→ 公共空间模块 reservations（SR2001+）
- *           展示页发布（showcase）→ 资讯内容模块 showcaseRequests（SC1001+） */
+ *           企业名片由名片管理直接维护，保存后按可见性规则公开。 */
 export const applications: Application[] = [
   {
     id: 'AP3001',

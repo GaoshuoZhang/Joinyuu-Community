@@ -17,6 +17,8 @@ export interface HomeBannerDto {
   id: string
   title: string
   subtitle: string
+  imageUrl?: string
+  link?: string
 }
 
 export interface HomeEventCardDto {
@@ -53,6 +55,7 @@ export interface HomeFeedDto {
   siteName: string
   siteSlogan: string
   noticesUnread: number
+  carouselEnabled: boolean
   banners: HomeBannerDto[]
   hotEvents: HomeEventCardDto[]
   latestDemands: HomeDemandCardDto[]
@@ -62,7 +65,7 @@ export interface HomeFeedDto {
 
 /* 首页聚合（M2-R R2 GET /api/app/home，@Public 或登录皆可）：
  * 站点信息 + 公告（有效期内、置顶优先取 2）+ 运营 banner 位 + 精选活动/最新需求/置顶文章 + 未读数。
- * banner 运营位 R2 取自置顶公告的简化（无图则 title 占位）；未读数复用 notices 表（登录时）。
+ * banner 运营位由系统开关和 HomeBanner 配置共同控制；未读数复用 notices 表（登录时）。
  * 该端点 @Public 绕过 AppJwtGuard，未读数通过可选 Bearer 令牌 best-effort 判定。 */
 @Injectable()
 export class AppHomeService {
@@ -78,11 +81,15 @@ export class AppHomeService {
     const nowTime = `${nowStr} ${pad(now.getHours())}:${pad(now.getMinutes())}`
 
     const config = await this.prisma.systemConfig.findUnique({ where: { id: 1 } })
+    const carouselEnabled = Boolean((config as (typeof config & { homeCarouselOpen?: boolean }) | null)?.homeCarouselOpen)
 
-    const [announcements, events, demands, articles, unread] = await Promise.all([
+    const [announcements, banners, events, demands, articles, unread] = await Promise.all([
       this.prisma.announcement.findMany({
         where: { status: 'published', deletedAt: null, OR: [{ expireAt: null }, { expireAt: { gt: nowStr } }] },
       }),
+      carouselEnabled
+        ? this.homeBanners.findMany({ where: { enabled: true }, orderBy: [{ sort: 'asc' }, { id: 'asc' }] })
+        : Promise.resolve([]),
       this.prisma.communityEvent.findMany({
         where: { status: 'published', deletedAt: null, endTime: { gt: nowTime } },
         orderBy: { startTime: 'asc' },
@@ -99,7 +106,7 @@ export class AppHomeService {
         take: 3,
       }),
       uid
-        ? this.prisma.userNotification.count({ where: { userId: uid, read: false, archived: false } })
+        ? this.prisma.userNotification.count({ where: { userId: uid, read: false } })
         : Promise.resolve(0),
     ])
 
@@ -108,18 +115,22 @@ export class AppHomeService {
     const responseCounts = await this.countResponses(demands.map((d) => d.id))
     const categoryLabels = await this.resolveCategoryLabels([...new Set(demands.map((d) => d.category))])
 
-    /* 榜单排序：置顶优先，其次时间倒序；公告取前 2；运营位取置顶公告 3 条 */
+    /* 榜单排序：置顶优先，其次时间倒序；公告取前 2。 */
     const sortedAnnouncements = [...announcements].sort(
       (a, b) => Number(b.pinned ?? false) - Number(a.pinned ?? false) || b.publishedAt.localeCompare(a.publishedAt),
     )
-    const pinned = announcements.filter((a) => a.pinned)
-    const banners = pinned.slice(0, 3).map((a) => ({ id: a.id, title: a.title, subtitle: '' }))
-
     return {
       siteName: config?.siteName ?? '聚屿社区',
       siteSlogan: config?.siteSlogan ?? '',
       noticesUnread: unread,
-      banners,
+      carouselEnabled,
+      banners: banners.map((banner) => ({
+        id: banner.id,
+        title: banner.title,
+        subtitle: banner.subtitle,
+        imageUrl: banner.imageUrl ?? undefined,
+        link: banner.link ?? undefined,
+      })),
       hotEvents: hotEvents.map((e) => ({
         id: e.id,
         title: e.title,
@@ -160,6 +171,15 @@ export class AppHomeService {
   }
 
   /* ---------- 私有辅助 ---------- */
+
+  private get homeBanners(): {
+    findMany(args: {
+      where: { enabled: boolean }
+      orderBy: Array<Record<string, 'asc' | 'desc'>>
+    }): Promise<Array<{ id: string; title: string; subtitle: string; imageUrl: string | null; link: string | null }>>
+  } {
+    return (this.prisma as unknown as { homeBanner: AppHomeService['homeBanners'] }).homeBanner
+  }
 
   /** @Public 端点：可选令牌判定登录 uid（best-effort，失败按未登录） */
   private async resolveOptionalUid(authorization?: string): Promise<string | undefined> {

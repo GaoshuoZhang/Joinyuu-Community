@@ -7,6 +7,7 @@ import { INestApplication } from '@nestjs/common'
 import { Test } from '@nestjs/testing'
 import request from 'supertest'
 import { AppModule } from '../src/app.module'
+import { PrismaService } from '../src/common/prisma/prisma.service'
 import { reseed } from './helpers/reseed'
 import { loginAs } from './helpers/login'
 
@@ -114,5 +115,57 @@ describe('M1-C demands（状态机 + 立项联动）', () => {
     expect(detail.body.code).toBe(0)
     expect(detail.body.data.status).toBe('projected')
     expect(detail.body.data.projectId).toBe(project.id)
+  })
+
+  it('立项（已选定）：selected → projected，为被选中的承接方补发积分与项目经验', async () => {
+    const prisma = app.get(PrismaService)
+    /* D4002 种子为 published：模拟发布者已选定承接方（顾北辰 U1005）并提交立项，等待管理员确认 */
+    await prisma.demand.update({ where: { id: 'D4002' }, data: { status: 'selected', matchedRespondent: '顾北辰' } })
+    await prisma.demandRespondent.updateMany({ where: { demandId: 'D4002' }, data: { withdrawnAt: '2026-09-17 09:00' } })
+    const selected = await prisma.demandRespondent.create({
+      data: {
+        demandId: 'D4002',
+        userId: 'U1005',
+        responderIdentity: { type: 'individual', title: '个人用户' },
+        name: '顾北辰',
+        enterprise: '',
+        phone: '13801210005',
+        message: '可承接设计系统升级',
+        at: '2026-09-17 09:10',
+        status: 'accepted',
+        reviewAt: '2026-09-17 09:20',
+      },
+    })
+
+    const res = await request(app.getHttpServer())
+      .post('/api/admin/demands/D4002/initiate-project')
+      .set('Authorization', `Bearer ${token}`)
+      .send({
+        projectName: 'SaaS 控制台 UI 设计专项',
+        undertakers: [{ type: 'individual', id: 'U1005', share: 100 }],
+        description: '需求 D4002 立项承接控制台设计系统升级',
+        milestones: [
+          { name: '设计系统交付', date: '2026-10-10', owners: [] },
+          { name: '核心页面交付', date: '2026-10-25', owners: [] },
+        ],
+        expReward: 100,
+      })
+    expect(res.status).toBe(200)
+    expect(res.body.code).toBe(0)
+    expect(res.body.data.sourceDemandId).toBe('D4002')
+
+    const demand = await prisma.demand.findUnique({ where: { id: 'D4002' } })
+    expect(demand?.status).toBe('projected')
+    expect(demand?.projectId).toBe(res.body.data.id)
+
+    const points = await prisma.pointsRecord.findFirst({
+      where: { userId: 'U1005', dedupeKey: 'demand_undertaken:U1005:D4002' },
+    })
+    expect(points?.delta).toBe(200)
+    const experience = await prisma.experienceRecord.findFirst({
+      where: { targetType: 'individual', targetId: 'U1005', reason: '承接需求立项获得项目经验' },
+    })
+    expect(experience?.delta).toBe(30)
+    expect(selected.status).toBe('accepted')
   })
 })

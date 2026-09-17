@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, reactive, ref } from 'vue'
 import { useRouter } from 'vue-router'
-import { Button, Checkbox, Input, NoticeBar, Toast } from 'tdesign-mobile-vue'
+import { Button, Checkbox, Image, Input, NoticeBar, Toast } from 'tdesign-mobile-vue'
 import { useAuthStore } from '@/stores/auth'
 import { useConfigStore } from '@/stores/config'
 import { useNoticesStore } from '@/stores/notices'
@@ -75,6 +75,7 @@ async function onSubmit() {
         <Input
           v-model="form.phone"
           type="tel"
+          autocomplete="tel"
           :maxlength="11"
           placeholder="手机号"
           :disabled="closed"
@@ -87,6 +88,7 @@ async function onSubmit() {
         <Input
           v-model="form.password"
           type="password"
+          autocomplete="new-password"
           placeholder="密码（至少 8 位，含字母与数字）"
           :disabled="closed"
           @keyup.enter="onSubmit"
@@ -98,6 +100,7 @@ async function onSubmit() {
         <Input
           v-model="form.confirmPassword"
           type="password"
+          autocomplete="new-password"
           placeholder="确认密码"
           :disabled="closed"
           @keyup.enter="onSubmit"
@@ -110,21 +113,23 @@ async function onSubmit() {
           v-model="form.captchaCode"
           class="captcha-input"
           :maxlength="4"
+          :spell-check="false"
           placeholder="请输入验证码"
           :disabled="closed"
           @keyup.enter="onSubmit"
         />
-        <button class="captcha-button" type="button" :disabled="captchaLoading || closed" aria-label="刷新验证码" @click="refreshCaptcha">
-          <img v-if="captchaImage" :src="captchaImage" alt="图形验证码" />
+        <Button class="captcha-button" theme="light" :disabled="captchaLoading || closed" aria-label="刷新验证码" @click="refreshCaptcha">
+          <Image v-if="captchaImage" :src="captchaImage" fit="contain" class="captcha-img" alt="图形验证码" />
           <span v-else>刷新</span>
-        </button>
+        </Button>
       </div>
       <div class="agreement">
-        <Checkbox :checked="agreed" @change="(value: unknown) => (agreed = Boolean(value))" />
-        <span>
-          我已阅读并同意
-          <router-link to="/privacy" class="link">《用户协议》与《隐私政策》</router-link>
-        </span>
+        <Checkbox :checked="agreed" :borderless="true" @change="(value: unknown) => (agreed = Boolean(value))">
+          <template #label>
+            我已阅读并同意
+            <router-link to="/privacy" class="link" @click.stop>《用户协议》与《隐私政策》</router-link>
+          </template>
+        </Checkbox>
       </div>
       <p v-if="errors.agreed" class="error agreement-error">{{ errors.agreed }}</p>
       <Button theme="primary" size="large" block :loading="submitting" :disabled="submitting || closed" @click="onSubmit">
@@ -204,20 +209,13 @@ async function onSubmit() {
 
 .captcha-button {
   flex-shrink: 0;
-  font-weight: 700;
-  letter-spacing: 2px;
-  color: var(--td-brand-color);
-  background: var(--td-brand-color-1);
-  padding: 0;
-  border-radius: var(--td-radius-default);
-  user-select: none;
-  border: 0;
-  overflow: hidden;
   min-width: 96px;
   min-height: 40px;
+  padding: 0;
+  overflow: hidden;
 }
 
-.captcha-button img {
+.captcha-img {
   display: block;
   width: 96px;
   height: 40px;

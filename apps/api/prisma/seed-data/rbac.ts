@@ -47,6 +47,8 @@ export const permissionCatalog: SeedPermission[] = [
   { code: 'perm:external-enterprise:enable', name: '启用合作企业', module: '社区成员', authType: 'button', sort: 22 },
   { code: 'perm:external-enterprise:delete', name: '删除合作企业', module: '社区成员', authType: 'button', sort: 23 },
   { code: '/approvals', name: '申请审核', module: '社区成员', authType: 'menu', sort: 24 },
+  { code: '/member-governance', name: '注销与实名治理', module: '社区成员', authType: 'menu', sort: 25 },
+  { code: '/card-management', name: '名片管理', module: '社区成员', authType: 'menu', sort: 26 },
 
   { code: '/demands', name: '需求管理', module: '业务运营', authType: 'menu', sort: 30 },
   { code: '/demands/review', name: '需求审核', module: '业务运营', authType: 'menu', sort: 31 },
@@ -63,8 +65,9 @@ export const permissionCatalog: SeedPermission[] = [
   { code: '/contents/submissions', name: '投稿内容', module: '内容管理', authType: 'menu', sort: 51 },
   { code: '/contents/columns', name: '栏目管理', module: '内容管理', authType: 'menu', sort: 52 },
   { code: '/contents/stats', name: '阅读统计', module: '内容管理', authType: 'menu', sort: 53 },
-  { code: '/contents/showcase', name: '展示页发布', module: '内容管理', authType: 'menu', sort: 54 },
-  { code: '/contents/announcements', name: '公告栏', module: '内容管理', authType: 'menu', sort: 55 },
+  { code: '/contents/policies', name: '社区政策', module: '内容管理', authType: 'menu', sort: 54 },
+  { code: '/contents/banners', name: '轮播图管理', module: '内容管理', authType: 'menu', sort: 55 },
+  { code: '/contents/announcements', name: '公告栏', module: '内容管理', authType: 'menu', sort: 56 },
 
   { code: '/mall/goods', name: '商品管理', module: '积分管理', authType: 'menu', sort: 60 },
   { code: '/mall/orders', name: '订单管理', module: '积分管理', authType: 'menu', sort: 61 },
@@ -74,6 +77,7 @@ export const permissionCatalog: SeedPermission[] = [
   { code: '/rules/levels', name: '等级规则', module: '规则管理', authType: 'menu', sort: 72 },
   { code: '/rules/ledger', name: '积分发放记录', module: '规则管理', authType: 'menu', sort: 73 },
   { code: '/rules/experience-records', name: '经验值发放记录', module: '规则管理', authType: 'menu', sort: 74 },
+  { code: '/rules/publishing-limits', name: '发布限制', module: '规则管理', authType: 'menu', sort: 75 },
 
   { code: '/system/dicts', name: '数据字典', module: '系统管理', authType: 'menu', sort: 80 },
   { code: '/system/config', name: '系统配置', module: '系统管理', authType: 'menu', sort: 81 },
@@ -87,6 +91,7 @@ export const permissionCatalog: SeedPermission[] = [
   { code: '/system/trash', name: '归档管理', module: '系统管理', authType: 'menu', sort: 89 },
   { code: '/system/export', name: '数据导出', module: '系统管理', authType: 'menu', sort: 90 },
   { code: '/governance', name: '信任治理', module: '系统管理', authType: 'menu', sort: 91 },
+  { code: '/system/policies', name: '协议与政策', module: '系统管理', authType: 'menu', sort: 94 },
 ]
 
 /* 内置角色（超级管理员 '*' 全量；其余按模块授予） */
@@ -115,13 +120,15 @@ export const adminRoles: SeedRole[] = [
       '/contents/submissions',
       '/contents/columns',
       '/contents/stats',
-      '/contents/showcase',
+      '/contents/policies',
+      '/contents/banners',
       '/contents/announcements',
       '/mall/goods',
       '/mall/orders',
       '/rules/points',
       '/rules/ledger',
       '/governance',
+      '/card-management',
     ],
   },
   {
@@ -130,7 +137,7 @@ export const adminRoles: SeedRole[] = [
     name: '审核',
     description: '审核与审核类操作',
     sort: 3,
-    permCodes: ['/dashboard', '/approvals', '/demands/review', '/spaces/reservations', '/contents/showcase', '/logs/audit', '/governance'],
+    permCodes: ['/dashboard', '/approvals', '/member-governance', '/demands/review', '/spaces/reservations', '/logs/audit', '/governance'],
   },
   {
     id: 'R4',

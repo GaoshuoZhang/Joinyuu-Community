@@ -1,18 +1,6 @@
 import { apiMode, httpDownload, httpGet, httpPost, httpPut } from './http'
-import type { MyStats, PageQuery, PageResult, PointsRecord, PointsTask, RealNameInfo, RealNamePayload, ReportPayload, UserProfile } from '@/types'
+import type { MyStats, PageQuery, PageResult, PointsRecord, RealNameInfo, RealNamePayload, RealnameRightsGroup, ReportPayload, UserProfile } from '@/types'
 import * as mock from '@/mock/handlers/me'
-
-/** GET /api/app/me/points/tasks — 积分任务中心（v42 [MOCK-ONLY]） */
-export async function fetchPointsTasks(): Promise<PointsTask[]> {
-  if (apiMode === 'mock') return mock.fetchPointsTasks()
-  return httpGet<PointsTask[]>('/me/points/tasks')
-}
-
-/** POST /api/app/me/points/tasks/:key/claim — 领取任务积分 */
-export async function claimPointsTask(key: string): Promise<{ points: number }> {
-  if (apiMode === 'mock') return mock.claimPointsTask(key)
-  return httpPost<{ points: number }>(`/me/points/tasks/${key}/claim`)
-}
 
 /** GET /api/app/me/stats — 个人数据看板（v42 [MOCK-ONLY]） */
 export async function fetchMyStats(): Promise<MyStats> {
@@ -42,6 +30,12 @@ export async function fetchRealName(): Promise<RealNameInfo> {
 export async function submitRealName(payload: RealNamePayload): Promise<void> {
   if (apiMode === 'mock') return mock.submitRealName(payload)
   await httpPut('/me/realname', payload)
+}
+
+/** GET /api/app/me/realname-rights — 实名分级权益（按身份/等级分组的每日额度，active 标注当前层级） */
+export async function fetchRealnameRights(): Promise<RealnameRightsGroup[]> {
+  if (apiMode === 'mock') return mock.fetchRealnameRights()
+  return httpGet<RealnameRightsGroup[]>('/me/realname-rights')
 }
 
 /** GET /api/app/me/points-records — 我的积分流水（分页，含 balance） */

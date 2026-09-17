@@ -80,9 +80,16 @@ export class AppSearchService {
   }
 
   private countTalents(kw: string): Promise<number> {
-    return this.prisma.userIdentity.count({
-      where: { type: 'community_individual', user: { nickname: { contains: kw } } },
-    })
+    return this.prisma.user.count({ where: this.talentWhere(kw) })
+  }
+
+  private talentWhere(kw: string): Prisma.UserWhereInput {
+    return {
+      status: 'active',
+      identities: { some: { type: 'community_individual' } },
+      individualCard: { isNot: null },
+      OR: [{ nickname: { contains: kw } }, { individualCard: { displayName: { contains: kw } } }],
+    }
   }
 
   /* ---------- 各域分页 list ---------- */
@@ -150,12 +157,14 @@ export class AppSearchService {
           })
         ).map((s) => ({ id: s.id, name: s.name, location: s.location, capacity: s.capacity, status: 'open' }))
       case 'talent': {
-        const rows = await this.prisma.userIdentity.findMany({
-          where: { type: 'community_individual', user: { nickname: { contains: kw } } },
-          include: { user: { select: { uid: true, nickname: true, avatar: true, realName: true } } },
+        const rows = await this.prisma.user.findMany({
+          where: this.talentWhere(kw),
+          select: { uid: true, nickname: true, avatar: true, individualCard: { select: { displayName: true } } },
+          orderBy: { uid: 'asc' },
+          skip: (page - 1) * pageSize,
           take: pageSize,
         })
-        return rows.map((t) => ({ uid: t.user.uid, name: t.user.realName || t.user.nickname, avatar: t.user.avatar || undefined }))
+        return rows.map((t) => ({ uid: t.uid, name: t.individualCard?.displayName || t.nickname, avatar: t.avatar || undefined }))
       }
     }
   }

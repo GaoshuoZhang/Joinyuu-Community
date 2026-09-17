@@ -41,11 +41,14 @@ export class PointsEngineService {
   ): Promise<void> {
     const rule = (await this.pointsRules()).find((r) => r.code === code)
     if (!rule || rule.status !== 'enabled') return
-    const user = await tx.user.update({ where: { uid: userId }, data: { points: { increment: rule.points } } })
+    if (dedupeKey && await tx.pointsRecord.findUnique({ where: { dedupeKey }, select: { id: true } })) return
+    const recipientId = await this.resolvePointsRecipient(tx, userId)
+    if (!recipientId) return
+    const user = await tx.user.update({ where: { uid: recipientId }, data: { points: { increment: rule.points } } })
     await tx.pointsRecord.create({
       data: {
         id: await this.ids.next('PT'),
-        userId,
+        userId: recipientId,
         delta: rule.points,
         balance: user.points,
         reason,
@@ -78,11 +81,14 @@ export class PointsEngineService {
     dedupeKey: string,
   ): Promise<void> {
     if (!Number.isInteger(amount) || amount <= 0) return
-    const user = await tx.user.update({ where: { uid: userId }, data: { points: { increment: amount } } })
+    if (await tx.pointsRecord.findUnique({ where: { dedupeKey }, select: { id: true } })) return
+    const recipientId = await this.resolvePointsRecipient(tx, userId)
+    if (!recipientId) return
+    const user = await tx.user.update({ where: { uid: recipientId }, data: { points: { increment: amount } } })
     await tx.pointsRecord.create({
       data: {
         id: await this.ids.next('PT'),
-        userId,
+        userId: recipientId,
         delta: amount,
         balance: user.points,
         reason,
@@ -116,7 +122,8 @@ export class PointsEngineService {
   ): Promise<void> {
     const rule = (await this.experienceRules()).find((r) => r.code === code)
     if (!rule || rule.status !== 'enabled') return
-    const tiers = await this.levelTiers()
+    const identityType = targetType === 'enterprise' ? 'community_enterprise' : 'community_individual'
+    const tiers = await this.levelTiers(identityType)
 
     if (targetType === 'enterprise') {
       const enterprise = await tx.enterprise.findUnique({ where: { id: targetId } })
@@ -126,7 +133,7 @@ export class PointsEngineService {
       await tx.enterprise.update({ where: { id: targetId }, data: { experience: balance } })
       await tx.userIdentity.updateMany({
         where: { type: 'community_enterprise', enterpriseId: targetId },
-        data: { level },
+        data: { experience: balance, level },
       })
       await tx.experienceRecord.create({
         data: {
@@ -184,9 +191,9 @@ export class PointsEngineService {
   }
 
   /** 等级梯度按 threshold 降序（门槛最高的、threshold <= experience 的等级） */
-  private async levelTiers(): Promise<LevelTier[]> {
-    const tiers = await this.redis.remember(CACHE_KEYS.levelTiers, CACHE_TTL.stable, () =>
-      this.prisma.levelTier.findMany({ orderBy: { level: 'asc' } }),
+  private async levelTiers(identityType: 'community_individual' | 'community_enterprise'): Promise<LevelTier[]> {
+    const tiers = await this.redis.remember(CACHE_KEYS.levelTiers(identityType), CACHE_TTL.stable, () =>
+      this.prisma.levelTier.findMany({ where: { identityType }, orderBy: { level: 'asc' } }),
     )
     return [...tiers].sort((a, b) => b.threshold - a.threshold)
   }
@@ -195,5 +202,20 @@ export class PointsEngineService {
   private resolveLevel(tiers: Array<{ level: number; threshold: number }>, experience: number): number {
     const tier = tiers.find((t) => t.threshold <= experience)
     return tier ? tier.level : 1
+  }
+
+  /** Legacy management data can retain an enterprise as its publisher ID. Points
+   * remain personal, so award the enterprise contact (or first active member). */
+  private async resolvePointsRecipient(tx: Prisma.TransactionClient, subjectId: string): Promise<string | null> {
+    if (await tx.user.findUnique({ where: { uid: subjectId }, select: { uid: true } })) return subjectId
+    const enterprise = await tx.enterprise.findUnique({ where: { id: subjectId }, select: { contactUserId: true } })
+    if (!enterprise) return null
+    if (enterprise.contactUserId) return enterprise.contactUserId
+    const member = await tx.userIdentity.findFirst({
+      where: { type: 'community_enterprise', enterpriseId: subjectId },
+      select: { userId: true },
+      orderBy: { id: 'asc' },
+    })
+    return member?.userId ?? null
   }
 }

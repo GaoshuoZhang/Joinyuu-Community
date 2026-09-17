@@ -1,4 +1,4 @@
-import { IsIn, IsOptional, IsString, MaxLength } from 'class-validator'
+import { ArrayMaxSize, IsArray, IsBoolean, IsIn, IsOptional, IsString, MaxLength } from 'class-validator'
 import { TakedownDto } from '../../../common/dto/takedown.dto'
 
 export class ReviewReportDto extends TakedownDto {
@@ -24,9 +24,6 @@ export class ReviewAppealDto {
 }
 
 export class SavePolicyDto {
-  @IsIn(['agreement_user', 'agreement_privacy', 'community'])
-  kind!: string
-
   @IsOptional()
   @IsString()
   @MaxLength(32)
@@ -55,4 +52,20 @@ export class SavePolicyDto {
   @IsOptional()
   @IsIn(['published', 'archived'])
   status?: 'published' | 'archived'
+}
+
+export class SaveCommunityPolicyDto extends SavePolicyDto {
+  @IsOptional()
+  @IsArray()
+  @ArrayMaxSize(10)
+  attachments?: Array<{ name: string; url: string }>
+
+  @IsOptional()
+  @IsBoolean()
+  featured?: boolean
+}
+
+export class SaveAgreementPolicyDto extends SavePolicyDto {
+  @IsIn(['agreement_user', 'agreement_privacy'])
+  kind!: 'agreement_user' | 'agreement_privacy'
 }

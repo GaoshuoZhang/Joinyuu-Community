@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
-import { Tag } from 'tdesign-mobile-vue'
+import { CheckTag, Tag } from 'tdesign-mobile-vue'
 import { listFavorites } from '@/api/favorites'
 import { useAsyncList } from '@/composables/useAsyncList'
 import EmptyBlock from '@/components/shared/EmptyBlock.vue'
@@ -37,22 +37,22 @@ function go(item: FavoriteItem) {
 
 <template>
   <div class="page-fade-in m-favorites">
-    <h2 class="page-title">我的收藏</h2>
+    <h1 class="page-title">我的收藏</h1>
 
     <ListSkeleton v-if="loading" />
     <EmptyBlock v-else-if="error" :text="error" action-text="重试" @action="run" />
     <template v-else-if="all.length">
       <div class="chips">
-        <Tag
+        <CheckTag
           v-for="f in FILTERS"
           :key="f.value"
-          :theme="activeType === f.value ? 'primary' : 'default'"
           variant="light"
           size="medium"
-          @click="activeType = f.value"
+          :checked="activeType === f.value"
+          @change="activeType = f.value"
         >
           {{ f.label }}
-        </Tag>
+        </CheckTag>
       </div>
       <EmptyBlock v-if="!items.length" text="该类型下暂无收藏" />
       <div v-else class="stagger list">

@@ -1,5 +1,5 @@
 /* 请求封装：包络解包 + 统一错误 + 401 拦截。
- * Mock 模式（VITE_API_MODE 缺省为 mock）下由 src/mock/handlers 提供实现；
+ * Mock 模式（VITE_API_MODE=mock）下由 src/mock/handlers 提供实现；
  * http 模式走 /api 真实请求（M2-R 接入期启用）。视图层只依赖 src/api/*.ts 的函数签名。 */
 
 export class ApiError extends Error {
@@ -98,4 +98,4 @@ export function httpUpload<T>(path: string, form: FormData): Promise<T> {
   return request<T>(path, { method: 'POST', body: form })
 }
 
-export const apiMode: 'mock' | 'http' = import.meta.env.VITE_API_MODE === 'http' ? 'http' : 'mock'
+export const apiMode: 'mock' | 'http' = import.meta.env.VITE_API_MODE === 'mock' ? 'mock' : 'http'

@@ -34,10 +34,10 @@ export const GROUP_DOMAIN: Record<string, string> = {
 }
 
 /** 数据范围是否放行某菜单分组：超管/空范围/无分组路由放行，否则域须命中 */
-export function scopeAllowsGroup(scopeCodes: string[], permissions: string[], group?: string): boolean {
+export function scopeAllowsGroup(scopeCodes: string[], permissions: string[], group?: string, scopeDomain?: string): boolean {
   if (permissions.includes('*')) return true
   if (scopeCodes.length === 0) return true
-  const domain = group ? GROUP_DOMAIN[group] : undefined
+  const domain = scopeDomain ?? (group ? GROUP_DOMAIN[group] : undefined)
   if (!domain) return true
   return scopeCodes.includes(domain)
 }

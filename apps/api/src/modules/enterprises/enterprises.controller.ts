@@ -1,9 +1,8 @@
-import { Body, Controller, Delete, Get, HttpCode, Param, Patch, Post, Put, Query, Req } from '@nestjs/common'
+import { Body, Controller, Delete, Get, HttpCode, Param, Post, Put, Query, Req } from '@nestjs/common'
 import type { AuthenticatedRequest } from '../../common/interfaces/authenticated-request'
 import { RequirePermission } from '../../common/decorators/require-permission.decorator'
 import { EnterprisesService, type EnterpriseDto } from './enterprises.service'
 import { QueryEnterprisesDto } from './dto/query-enterprises.dto'
-import { ReviewShowcaseDto } from './dto/review-showcase.dto'
 import { CreateEnterpriseDto } from './dto/create-enterprise.dto'
 import { UpdateEnterpriseDto } from './dto/update-enterprise.dto'
 
@@ -70,9 +69,4 @@ export class EnterprisesController {
     return this.enterprises.remove(id, req.user?.name ?? '社区管理员')
   }
 
-  @RequirePermission('perm:enterprise:update')
-  @Patch(':id/showcase-status')
-  reviewShowcase(@Param('id') id: string, @Body() dto: ReviewShowcaseDto): Promise<{ code: number }> {
-    return this.enterprises.reviewShowcase(id, dto)
-  }
 }

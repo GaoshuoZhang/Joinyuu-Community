@@ -1,7 +1,7 @@
 <script setup lang="ts">
-import { computed, nextTick, onActivated, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { computed, onMounted, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
-import { Icon, Button, Grid, GridItem, NoticeBar, Popup, PullDownRefresh, Search, Swiper, SwiperItem, Toast } from 'tdesign-mobile-vue'
+import { Icon, Button, Grid, GridItem, Image, NoticeBar, Popup, PullDownRefresh, Search, Swiper, SwiperItem, Tag, Toast } from 'tdesign-mobile-vue'
 import { useAuthStore } from '@/stores/auth'
 import { useConfigStore } from '@/stores/config'
 import { useNoticesStore } from '@/stores/notices'
@@ -15,6 +15,7 @@ import { fetchMe } from '@/api/me'
 import EmptyBlock from '@/components/shared/EmptyBlock.vue'
 import ListSkeleton from '@/components/ListSkeleton.vue'
 import { demandDateText } from '@/constants/demand'
+import { onImageError } from '@/utils/imageFallback'
 import type { HomeAnnouncement } from '@/types'
 
 useAnimSuppress()
@@ -28,24 +29,9 @@ const auth = useAuthStore()
 const notices = useNoticesStore()
 const { data: feed, loading, error, run } = useAsyncList(fetchHomeFeed)
 
-/* v43：KeepAlive 返回首页时修复 Swiper 高度——组件在隐藏期间会被 SwiperItem 上报的 0 高度覆盖，
- * 激活后持续几帧强制恢复容器高度（之后自动播放的 currentIndex 变更会用 :height 重新校正）。 */
+/* v43：KeepAlive 返回首页时 Swiper 高度可能被 SwiperItem 上报为 0；
+ * 由 CSS 固定容器高度（不再用 JS 改写组件内联样式）。 */
 const BANNER_HEIGHT = 130
-const bannerRef = ref()
-let bannerFixTimers: number[] = []
-function fixBannerHeight() {
-  const root = bannerRef.value?.$el as HTMLElement | undefined
-  const container = root?.querySelector?.('.t-swiper__container') as HTMLElement | null
-  if (container) container.style.height = `${BANNER_HEIGHT}px`
-}
-onActivated(() => {
-  bannerFixTimers.forEach((t) => window.clearTimeout(t))
-  bannerFixTimers = []
-  void nextTick(fixBannerHeight)
-  bannerFixTimers.push(window.setTimeout(fixBannerHeight, 150))
-  bannerFixTimers.push(window.setTimeout(fixBannerHeight, 450))
-})
-onBeforeUnmount(() => bannerFixTimers.forEach((t) => window.clearTimeout(t)))
 
 /* v40：为你推荐（按身份/登录态给出 1~2 条，弱规则但可解释） */
 const recommendations = computed(() => {
@@ -140,12 +126,6 @@ function onSearch() {
   void router.push({ path: '/search', query: searchKeyword.value.trim() ? { q: searchKeyword.value.trim() } : undefined })
 }
 
-const bannerLinks: Record<string, string> = {
-  BN1: '/intros/enterprise',
-  BN2: '/events',
-  BN3: '/mall',
-}
-
 /* v38：遵守系统「减少动态效果」设置，关闭轮播自动播放 */
 const reduceMotion =
   typeof window.matchMedia === 'function' && window.matchMedia('(prefers-reduced-motion: reduce)').matches
@@ -161,8 +141,8 @@ function onAnnouncement(item: HomeAnnouncement) {
 
 function onBannerClick(index: number) {
   const b = feed.value?.banners?.[index]
-  if (b?.id && bannerLinks[b.id]) {
-    void router.push(bannerLinks[b.id])
+  if (b?.link) {
+    void router.push(b.link)
     return
   }
   /* v38：新增 banner 未配置跳转时给出反馈，避免点了没反应 */
@@ -214,12 +194,15 @@ const quickEntries = [
     <EmptyBlock v-else-if="error" :text="error" action-text="重试" @action="run" />
 
     <template v-else>
-      <!-- 轮播 -->
-      <Swiper v-if="feed?.banners?.length" ref="bannerRef" class="banner" :height="BANNER_HEIGHT" :loop="true" :autoplay="!reduceMotion" :interval="4500" @click="onBannerClick">
+      <!-- 轮播（后台总开关关闭或无可展示条目时不渲染该区域） -->
+      <Swiper v-if="feed?.carouselEnabled !== false && feed?.banners?.length" class="banner" :height="BANNER_HEIGHT" :loop="true" :autoplay="!reduceMotion" :interval="4500" @click="onBannerClick">
         <SwiperItem v-for="b in feed.banners" :key="b.id">
           <div class="banner-card" :style="{ background: 'var(--client-brand-gradient)' }">
-            <p class="banner-title">{{ b.title }}</p>
-            <p class="banner-sub">{{ b.subtitle }}</p>
+            <Image v-if="b.imageUrl" class="banner-img" :src="b.imageUrl" alt="" fit="cover" lazy @error="onImageError" />
+            <div class="banner-text">
+              <p class="banner-title">{{ b.title }}</p>
+              <p class="banner-sub">{{ b.subtitle }}</p>
+            </div>
           </div>
         </SwiperItem>
       </Swiper>
@@ -227,14 +210,15 @@ const quickEntries = [
       <!-- 需求发布（独占一行，主题主色） -->
       <Button theme="primary" block size="large" class="publish-entry pressable" @click="goPublish">
         <template #icon><Icon name="flag" size="20px" /></template>
-        {{ auth.isLogged ? '发布需求 · 让社区一起帮你完成 ›' : '登录后发布需求 ›' }}
+        {{ auth.isLogged ? '发布需求 · 让社区一起帮你完成' : '登录后发布需求' }}
+        <template #suffix><Icon name="chevron-right" size="16px" /></template>
       </Button>
 
       <!-- v37 新手任务清单 -->
       <section v-if="activationSteps.length && !activationDone && !activationDismissed" class="m-card activation">
         <div class="activation-head">
           <h2>新手任务</h2>
-          <a @click="dismissActivation">不再提示</a>
+          <a v-pressable @click="dismissActivation">不再提示</a>
         </div>
         <p class="activation-desc">完成以下任务，解锁社区完整能力</p>
         <ul class="activation-list">
@@ -242,9 +226,11 @@ const quickEntries = [
             v-for="step in activationSteps"
             :key="step.key"
             :class="{ done: step.done }"
+            v-pressable
             @click="!step.done && router.push(step.path)"
           >
-            <span class="mark">{{ step.done ? '✅' : '○' }}</span>{{ step.label }}
+            <Icon v-if="step.done" name="check-circle-filled" size="16px" class="mark done" />
+            <Icon v-else name="circle" size="16px" class="mark" />{{ step.label }}
           </li>
         </ul>
       </section>
@@ -276,7 +262,7 @@ const quickEntries = [
       <section class="block">
         <div class="block-head">
           <h2>进行中活动</h2>
-          <a class="more" v-pressable @click="router.push('/events')">更多 ›</a>
+          <a class="more" v-pressable @click="router.push('/events')">更多<Icon name="chevron-right" size="12px" /></a>
         </div>
         <EmptyBlock v-if="!(feed?.hotEvents ?? []).length" text="暂无进行中活动" />
         <div v-else class="hot-scroll">
@@ -286,10 +272,10 @@ const quickEntries = [
             class="m-card hot-card pressable" v-pressable
             @click="router.push(`/events/${e.id}`)"
           >
-            <span class="d-cat">{{ e.type }}</span>
+            <Tag class="d-cat" size="small" variant="light" theme="primary">{{ e.type }}</Tag>
             <h3 class="hot-title">{{ e.title }}</h3>
-            <p class="hot-meta">🕐 {{ e.startTime }}</p>
-            <p class="hot-meta">📍 {{ e.location }}</p>
+            <p class="hot-meta"><Icon name="time" size="13px" />{{ e.startTime }}</p>
+            <p class="hot-meta"><Icon name="location" size="13px" />{{ e.location }}</p>
             <p class="hot-enrolled">{{ e.enrolled }}/{{ e.capacity }} 人已报名</p>
           </article>
         </div>
@@ -309,7 +295,7 @@ const quickEntries = [
           >
             <div class="d-head">
               <h3 class="d-title">{{ r.title }}</h3>
-              <span class="d-cat">{{ r.reason }}</span>
+              <Tag class="d-cat" size="small" variant="light" theme="primary">{{ r.reason }}</Tag>
             </div>
             <div class="d-meta">
               <span>{{ r.summary }}</span>
@@ -322,14 +308,14 @@ const quickEntries = [
       <section class="block">
         <div class="block-head">
           <h2>最新项目</h2>
-          <a class="more" v-pressable @click="router.push('/projects')">更多 ›</a>
+          <a class="more" v-pressable @click="router.push('/projects')">更多<Icon name="chevron-right" size="12px" /></a>
         </div>
         <EmptyBlock v-if="!(feed?.latestDemands ?? []).length" text="暂无进行中的项目" />
         <div v-else class="list">
           <article v-for="d in feed.latestDemands" :key="d.id" class="m-card demand-item pressable" v-pressable @click="router.push(`/demands/${d.id}`)">
             <div class="d-head">
               <h3 class="d-title">{{ d.title }}</h3>
-              <span class="d-cat">{{ d.categoryLabel }}</span>
+              <Tag class="d-cat" size="small" variant="light" theme="primary">{{ d.categoryLabel }}</Tag>
             </div>
             <div class="d-meta">
               <span class="d-pub">{{ d.publisherName }}</span>
@@ -344,14 +330,14 @@ const quickEntries = [
       <section class="block">
         <div class="block-head">
           <h2>精选文章</h2>
-          <a class="more" v-pressable @click="router.push('/plaza?tab=articles')">更多 ›</a>
+          <a class="more" v-pressable @click="router.push('/plaza?tab=articles')">更多<Icon name="chevron-right" size="12px" /></a>
         </div>
         <EmptyBlock v-if="!(feed?.topArticles ?? []).length" text="暂无精选文章" />
         <div v-else class="list">
           <article v-for="a in feed.topArticles" :key="a.id" class="m-card article-item pressable" v-pressable @click="router.push(`/articles/${a.id}`)">
             <div class="d-head">
               <h3 class="d-title">{{ a.title }}</h3>
-              <span class="d-cat">{{ a.columnLabel }}</span>
+              <Tag class="d-cat" size="small" variant="light" theme="primary">{{ a.columnLabel }}</Tag>
             </div>
             <div class="d-meta">
               <span>{{ a.publishedAt }}</span>
@@ -392,6 +378,10 @@ const quickEntries = [
   overflow: hidden;
 }
 
+.banner :deep(.t-swiper__container) {
+  height: 130px;
+}
+
 .banner-card {
   position: relative;
   height: 130px;
@@ -400,30 +390,17 @@ const quickEntries = [
   overflow: hidden;
 }
 
-/* 氛围装饰：半透明白圆环，呼应 admin login 品牌区语言 */
-.banner-card::before,
-.banner-card::after {
-  content: '';
+.banner-img {
   position: absolute;
-  border-radius: 50%;
-  border: 1px solid rgba(255, 255, 255, 0.22);
-  pointer-events: none;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
 }
 
-.banner-card::before {
-  width: 150px;
-  height: 150px;
-  right: -40px;
-  bottom: -70px;
-}
-
-.banner-card::after {
-  width: 84px;
-  height: 84px;
-  right: 62px;
-  bottom: -24px;
-  border-style: dashed;
-  opacity: 0.8;
+.banner-text {
+  position: relative;
+  z-index: 1;
 }
 
 .banner-title {
@@ -502,6 +479,9 @@ const quickEntries = [
 
 .hot-meta {
   margin: 0 0 4px;
+  display: flex;
+  align-items: center;
+  gap: 3px;
   font-size: 12px;
   color: var(--td-text-color-secondary);
 }
@@ -584,6 +564,9 @@ const quickEntries = [
 }
 
 .more {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
   font-size: 12px;
   color: var(--td-brand-color);
   cursor: pointer;
@@ -616,11 +599,6 @@ const quickEntries = [
 
 .d-cat {
   flex-shrink: 0;
-  padding: 2px 8px;
-  border-radius: var(--td-tag-square-border-radius, 4px);
-  font-size: 12px;
-  color: var(--td-brand-color);
-  background: var(--td-brand-color-light);
 }
 
 .d-meta {
@@ -687,5 +665,9 @@ const quickEntries = [
 
 .activation-list .mark {
   flex-shrink: 0;
+}
+
+.activation-list .mark.done {
+  color: var(--td-success-color);
 }
 </style>

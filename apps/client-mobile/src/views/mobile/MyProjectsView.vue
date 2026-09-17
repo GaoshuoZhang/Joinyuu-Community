@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
-import { Progress, Tag } from 'tdesign-mobile-vue'
+import { Icon, Progress, Tag } from 'tdesign-mobile-vue'
 import { useAsyncList } from '@/composables/useAsyncList'
 import { fetchMyProjects } from '@/api/projects'
 import EmptyBlock from '@/components/shared/EmptyBlock.vue'
@@ -15,11 +15,11 @@ const { data, loading, error, run } = useAsyncList<MyProject[]>(fetchMyProjects)
 const projects = computed(() => data.value ?? [])
 const empty = computed(() => !loading.value && !error.value && projects.value.length === 0)
 
-function milestoneMark(m: Milestone): string {
+function milestoneState(m: Milestone): { icon: string; accepted: boolean } {
   const status = m.status ?? (m.done ? 'accepted' : 'todo')
-  if (status === 'accepted') return '✅'
-  if (status === 'submitted') return '⏳'
-  return '○'
+  if (status === 'accepted') return { icon: 'check-circle-filled', accepted: true }
+  if (status === 'submitted') return { icon: 'time', accepted: false }
+  return { icon: 'circle', accepted: false }
 }
 
 onMounted(run)
@@ -27,7 +27,7 @@ onMounted(run)
 
 <template>
   <div class="page-fade-in m-my-projects">
-    <h2 class="page-title">我的项目</h2>
+    <h1 class="page-title">我的项目</h1>
 
     <ListSkeleton v-if="loading" />
     <EmptyBlock v-else-if="error" :text="error" action-text="重试" @action="run" />
@@ -52,7 +52,12 @@ onMounted(run)
 
         <ul v-if="p.milestones.length" class="milestones">
           <li v-for="m in p.milestones" :key="m.id" class="milestone" :class="{ done: m.done }">
-            <span class="mark">{{ milestoneMark(m) }}</span>
+            <Icon
+              :name="milestoneState(m).icon"
+              size="16px"
+              class="mark"
+              :class="{ accepted: milestoneState(m).accepted }"
+            />
             <span class="m-title">{{ m.title }}</span>
           </li>
         </ul>
@@ -144,6 +149,10 @@ onMounted(run)
 
 .milestone .mark {
   flex-shrink: 0;
+}
+
+.milestone .mark.accepted {
+  color: var(--td-success-color);
 }
 
 .milestones-empty {

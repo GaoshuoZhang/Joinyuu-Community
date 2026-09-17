@@ -8,6 +8,7 @@ import { ArrowLeftIcon } from 'tdesign-icons-vue-next'
 import StatusTag from '@/components/StatusTag.vue'
 import IdentityTags from '@/components/IdentityTags.vue'
 import AdjustValueDialog from '@/components/AdjustValueDialog.vue'
+import UserCardTab from '@/components/UserCardTab.vue'
 import { identityTypeMap, roleLabelMap } from '@/constants/identity'
 import { applicationTypeMap } from '@/constants/status'
 import {
@@ -39,7 +40,7 @@ const loading = ref(true)
 const user = ref<User | null>(null)
 /** 合作企业档案缓存：external_enterprise 身份经"档案名 + 成员 uid"反查档案 ID */
 const externalArchives = ref<ExternalEnterprise[]>([])
-const activeTab = useQueryTab('identities', ['identities', 'applications', 'demands', 'projects', 'events', 'leases', 'submissions', 'reservations', 'experience', 'points', 'activities'] as const)
+const activeTab = useQueryTab('identities', ['identities', 'card', 'applications', 'demands', 'projects', 'events', 'leases', 'submissions', 'reservations', 'experience', 'points', 'activities'] as const)
 
 function maskCitizenId(value?: string | null): string {
   if (!value) return '—'
@@ -542,7 +543,7 @@ onMounted(async () => {
             <span class="profile-id">用户ID: <t-tag class="id-tag" size="small" variant="light">{{ user.uid }}</t-tag></span>
             <IdentityTags v-if="headerIdentities.length" :identities="headerIdentities" :show-id="false" />
           </div>
-          <div class="profile-actions">
+          <div v-if="user.status !== 'deleted'" class="profile-actions">
             <t-button variant="outline" @click="openEdit">编辑</t-button>
             <t-button variant="outline" @click="openResetPwd">重置密码</t-button>
             <t-popconfirm
@@ -619,6 +620,10 @@ onMounted(async () => {
                 </div>
               </t-link>
             </div>
+          </t-tab-panel>
+
+          <t-tab-panel v-if="communityIndividualIdentity" value="card" label="名片">
+            <UserCardTab :uid="user.uid" />
           </t-tab-panel>
 
           <!-- 申请记录 -->
@@ -1267,6 +1272,11 @@ onMounted(async () => {
   line-height: 22px;
   color: var(--td-text-color-secondary);
 }
+.card-edit { margin-top: 16px; }
+.card-edit { margin-top: 16px; }
+.card-edit { margin-top: 16px; }
+.card-edit { margin-top: 16px; }
+.card-edit { margin-top: 16px; }
 
 .identity-list {
   display: grid;

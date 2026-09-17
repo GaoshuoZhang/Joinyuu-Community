@@ -1,10 +1,10 @@
-import { Body, Controller, ForbiddenException, Get, HttpCode, Param, Post, Put, Query, Req } from '@nestjs/common'
+import { Body, Controller, ForbiddenException, Get, HttpCode, Param, Post, Query, Req } from '@nestjs/common'
 import type { AppAuthenticatedRequest } from '../../../common/interfaces/app-authenticated-request'
 import { Public } from '../../../common/decorators/public.decorator'
 import { AppDemandsService } from './demands.service'
 import { CreateDemandDto } from './dto/create-demand.dto'
 import { RespondDemandDto } from './dto/respond-demand.dto'
-import { ReviewResponseDto } from './dto/review-response.dto'
+import { SelectRespondersDto } from './dto/select-responders.dto'
 import { DemandMessageDto } from './dto/demand-message.dto'
 
 /* 需求广场（M2-R R2，/api/app/demands + /me/demands、/me/responses）：
@@ -75,14 +75,13 @@ export class AppDemandsController {
   }
 
   @HttpCode(200)
-  @Post('me/demands/:id/responses/:responseId/review')
-  reviewResponse(
+  @Post('me/demands/:id/select')
+  selectResponders(
     @Req() req: AppAuthenticatedRequest,
     @Param('id') id: string,
-    @Param('responseId') responseId: string,
-    @Body() dto: ReviewResponseDto,
+    @Body() dto: SelectRespondersDto,
   ) {
-    return this.demands.reviewResponse(this.uid(req), id, responseId, dto)
+    return this.demands.selectResponders(this.uid(req), id, dto)
   }
 
   @HttpCode(200)

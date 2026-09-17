@@ -14,6 +14,12 @@ export async function fetchAvailability(spaceId: string, date: string): Promise<
   return httpGet<SpaceSlot[]>(`/spaces/${spaceId}/availability?date=${date}`)
 }
 
+/** GET /api/app/spaces/:id — 空间详情（设备/预约规则；预约页单条读取） */
+export async function fetchSpaceDetail(id: string): Promise<Space> {
+  if (apiMode === 'mock') return mock.fetchSpaceDetail(id)
+  return httpGet<Space>(`/spaces/${id}`)
+}
+
 /** POST /api/app/spaces/reservations — 提交预约（开关校验 + 冲突预检 409；needApproval 进 pending） */
 export async function createReservation(payload: ReservationCreatePayload): Promise<{ status: 'pending' | 'approved' }> {
   if (apiMode === 'mock') return mock.createReservation(payload)

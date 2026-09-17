@@ -174,10 +174,10 @@ describe('M1-E system 系统管理域', () => {
       expect(Array.isArray(data.upcomingEvents[0].enrollments)).toBe(true)
     }
 
-    /* 六域待办（dashboard 内嵌与 /todos 一致） */
+    /* 五域待办（dashboard 内嵌与 /todos 一致） */
     expect(todos.status).toBe(200)
     const keys = (todos.body.data as Array<{ key: string }>).map((t) => t.key)
-    expect(keys).toEqual(['settle', 'demand', 'reservation', 'showcase', 'article', 'lease'])
+    expect(keys).toEqual(['settle', 'demand', 'reservation', 'article', 'lease'])
     expect(data.todos.map((t: { key: string }) => t.key)).toEqual(keys)
     expect(data.todos.every((t: { count: number }) => typeof t.count === 'number')).toBe(true)
 
@@ -210,6 +210,7 @@ describe('M1-E system 系统管理域', () => {
       demandOpen: true,
       reservationOpen: true,
       realnameRequired: false,
+      homeCarouselOpen: true,
       leaseExpireRemindDays: 20,
       uploadMaxSizeMb: 30,
       passwordExpireDays: 120,
@@ -227,6 +228,7 @@ describe('M1-E system 系统管理域', () => {
     const after = await get('/api/admin/system/config')
     expect(after.body.data.siteName).toBe('聚屿社区（测试）')
     expect(after.body.data.mallOpen).toBe(false)
+    expect(after.body.data.homeCarouselOpen).toBe(true)
     expect(after.body.data.leaseExpireRemindDays).toBe(20)
     expect(after.body.data.uploadMaxSizeMb).toBe(30)
     expect(after.body.data.passwordExpireDays).toBe(120)
@@ -252,6 +254,7 @@ describe('M1-E system 系统管理域', () => {
       demandOpen: true,
       reservationOpen: true,
       realnameRequired: false,
+      homeCarouselOpen: true,
       leaseExpireRemindDays: 15,
       uploadMaxSizeMb: 10,
       passwordExpireDays: 90,
@@ -274,6 +277,7 @@ describe('M1-E system 系统管理域', () => {
       demandOpen: true,
       reservationOpen: true,
       realnameRequired: false,
+      homeCarouselOpen: true,
       leaseExpireRemindDays: 0,
       uploadMaxSizeMb: 10,
       passwordExpireDays: 90,
@@ -296,6 +300,7 @@ describe('M1-E system 系统管理域', () => {
       demandOpen: true,
       reservationOpen: true,
       realnameRequired: false,
+      homeCarouselOpen: true,
       leaseExpireRemindDays: 15,
       uploadMaxSizeMb: 0,
       passwordExpireDays: 90,

@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
-import { Button, DialogPlugin, Popup, Rate, Textarea, Toast } from 'tdesign-mobile-vue'
+import { Button, DialogPlugin, Icon, Popup, Rate, Textarea, Toast } from 'tdesign-mobile-vue'
 import { confirmOrder, fetchMyOrders, useOrder, cancelOrder, reviewOrder } from '@/api/mall'
 import { useAsyncList } from '@/composables/useAsyncList'
 import { formatMockStamp } from '@/mock/runtime'
@@ -155,7 +155,7 @@ function onCancelOrder(o: MyOrder) {
         </p>
         <div v-if="o.status === 'completed'" class="ops">
           <Button v-if="!o.rating" theme="primary" size="small" @click="openReview(o)">评价</Button>
-          <span v-else class="reviewed">已评价 {{ '★'.repeat(o.rating) }}<template v-if="o.review"> · {{ o.review }}</template></span>
+          <span v-else class="reviewed">已评价 <Icon v-for="n in o.rating" :key="n" name="star-filled" size="14px" class="review-star" /><template v-if="o.review"> · {{ o.review }}</template></span>
         </div>
         <div v-if="o.status === 'shipped' || o.status === 'pending_use' || o.status === 'pending_shipment'" class="ops">
           <Button
@@ -190,13 +190,13 @@ function onCancelOrder(o: MyOrder) {
     </template>
     <template v-else>
       <EmptyBlock text="暂无兑换订单" />
-      <Button theme="primary" class="go-mall" @click="router.push('/mall')">去兑换 ›</Button>
+      <Button theme="primary" class="go-mall" @click="router.push('/mall')">去兑换<template #suffix><Icon name="chevron-right" size="14px" /></template></Button>
     </template>
 
     <Popup :visible="!!reviewFor" placement="bottom" @update:visible="(v: boolean) => { if (!v) reviewFor = null }">
       <div v-if="reviewFor" class="review-sheet">
         <h3 class="review-title">评价「{{ reviewFor.goodsName }}」</h3>
-        <Rate v-model="reviewRating" :count="5" />
+        <Rate v-model="reviewRating" :count="5" aria-label="订单评分" />
         <Textarea v-model="reviewText" :maxlength="100" :autosize="{ minRows: 2, maxRows: 4 }" placeholder="说说兑换体验（选填，100 字内）" />
         <Button theme="primary" block :loading="reviewing" @click="onReviewSubmit">提交评价</Button>
       </div>
@@ -209,7 +209,7 @@ function onCancelOrder(o: MyOrder) {
   display: flex;
   flex-direction: column;
   gap: 12px;
-  padding: 16px;
+  padding: 16px 16px calc(16px + env(safe-area-inset-bottom));
 }
 
 .review-title {
@@ -220,6 +220,11 @@ function onCancelOrder(o: MyOrder) {
 .reviewed {
   font-size: 12px;
   color: var(--td-text-color-secondary);
+}
+
+.review-star {
+  color: var(--td-warning-color);
+  vertical-align: -2px;
 }
 
 .m-orders {

@@ -7,6 +7,11 @@ import { formatNow } from '../../common/utils/time'
 import type { SaveLevelTiersDto } from './dto/save-level-tiers.dto'
 import type { UpdateExperienceRuleDto } from './dto/update-experience-rule.dto'
 
+const LEVEL_IDENTITIES = ['community_individual', 'community_enterprise'] as const
+const PUBLISHING_IDENTITIES = ['personal_unverified', 'personal_verified', ...LEVEL_IDENTITIES] as const
+const PUBLISHING_ACTIONS = ['demand_publish', 'article_publish', 'event_enroll', 'space_reserve'] as const
+type LevelIdentity = typeof LEVEL_IDENTITIES[number]
+
 /* 返回形状与 apps/admin/src/types/index.ts 逐字段一致（可空字段 null → undefined） */
 export interface ExperienceRuleDto {
   code: string
@@ -79,14 +84,16 @@ export class RulesService {
 
   /* ---------- 等级梯度 ---------- */
 
-  async listLevelTiers(): Promise<LevelTier[]> {
+  async listLevelTiers(identityType: string = 'community_individual'): Promise<LevelTier[]> {
+    const scope = this.levelIdentity(identityType)
     /* 与积分引擎共用 rules:levels（按 level 升序；引擎内部再按 threshold 降序解析等级） */
-    return this.redis.remember(CACHE_KEYS.levelTiers, CACHE_TTL.stable, () =>
-      this.prisma.levelTier.findMany({ orderBy: { level: 'asc' } }),
+    return this.redis.remember(CACHE_KEYS.levelTiers(scope), CACHE_TTL.stable, () =>
+      this.prisma.levelTier.findMany({ where: { identityType: scope }, orderBy: { level: 'asc' } }),
     )
   }
 
   async saveLevelTiers(dto: SaveLevelTiersDto): Promise<{ code: number }> {
+    const identityType = this.levelIdentity(dto.identityType ?? 'community_individual')
     const tiers = dto.tiers
     if (!Array.isArray(tiers) || tiers.length === 0) throw new BadRequestException('至少保留 1 个等级')
     if (tiers.length > 10) throw new BadRequestException('等级最多 10 级')
@@ -101,18 +108,123 @@ export class RulesService {
     }
 
     await this.prisma.$transaction(async (tx) => {
-      await tx.levelTier.deleteMany()
+      await tx.levelTier.deleteMany({ where: { identityType } })
       await tx.levelTier.createMany({
         data: tiers.map((t, i) => ({
+          identityType,
           level: i + 1,
           label: t.label!,
           threshold: t.threshold!,
         })),
       })
+      await tx.publishingLimitRule.deleteMany({ where: { identityType, level: { gt: tiers.length } } })
+      for (let level = 1; level <= tiers.length; level++) {
+        for (const action of PUBLISHING_ACTIONS) {
+          await tx.publishingLimitRule.upsert({
+            where: { identityType_level_action: { identityType, level, action } },
+            create: { identityType, level, action, dailyLimit: this.defaultPublishingLimit(action, level) },
+            update: {},
+          })
+        }
+      }
+      if (identityType === 'community_enterprise') {
+        const enterprises = await tx.enterprise.findMany({ select: { id: true, experience: true } })
+        for (const enterprise of enterprises) {
+          const level = this.resolveLevel(tiers, enterprise.experience)
+          await tx.userIdentity.updateMany({ where: { type: identityType, enterpriseId: enterprise.id }, data: { experience: enterprise.experience, level } })
+        }
+      } else {
+        const identities = await tx.userIdentity.findMany({ where: { type: identityType }, select: { id: true, experience: true } })
+        for (const identity of identities) {
+          await tx.userIdentity.update({ where: { id: identity.id }, data: { level: this.resolveLevel(tiers, identity.experience ?? 0) } })
+        }
+      }
     })
 
-    await this.redis.delCache(CACHE_KEYS.levelTiers)
+    await this.redis.delCache(CACHE_KEYS.levelTiers(identityType))
     return { code: 0 }
+  }
+
+  async listPublishingLimits(identityType?: string) {
+    if (identityType && !PUBLISHING_IDENTITIES.includes(identityType as typeof PUBLISHING_IDENTITIES[number])) {
+      throw new BadRequestException('发布额度身份类型无效')
+    }
+    const rows = await this.prisma.publishingLimitRule.findMany({
+      where: identityType ? { identityType } : undefined,
+      orderBy: [{ identityType: 'asc' }, { level: 'asc' }, { action: 'asc' }],
+    })
+    const tiers = await this.prisma.levelTier.findMany({ orderBy: { level: 'asc' } })
+    const labels = new Map(tiers.map((tier) => [`${tier.identityType}:${tier.level}`, tier.label]))
+    const grouped = new Map<string, Record<string, number | string>>()
+    for (const row of rows) {
+      const key = `${row.identityType}:${row.level}`
+      const entry = grouped.get(key) ?? {
+        scope: row.identityType,
+        ...(row.level > 0 ? { level: row.level, levelLabel: labels.get(key) ?? `${row.level} 级` } : {}),
+        demandPublishLimit: -1,
+        articleSubmitLimit: -1,
+        eventEnrollLimit: -1,
+        spaceReserveLimit: -1,
+      }
+      const field = {
+        demand_publish: 'demandPublishLimit',
+        article_publish: 'articleSubmitLimit',
+        event_enroll: 'eventEnrollLimit',
+        space_reserve: 'spaceReserveLimit',
+      }[row.action]
+      if (field) entry[field] = row.dailyLimit
+      grouped.set(key, entry)
+    }
+    return [...grouped.values()]
+  }
+
+  async savePublishingLimits(rows: Array<Record<string, unknown>>) {
+    if (!Array.isArray(rows) || rows.length === 0) throw new BadRequestException('发布限制不能为空')
+    const actionFields = {
+      demandPublishLimit: 'demand_publish',
+      articleSubmitLimit: 'article_publish',
+      eventEnrollLimit: 'event_enroll',
+      spaceReserveLimit: 'space_reserve',
+    } as const
+    await this.prisma.$transaction(async (tx) => {
+      for (const row of rows) {
+        const identityType = String(row.scope ?? '')
+        const level = Number(row.level ?? 0)
+        if (!PUBLISHING_IDENTITIES.includes(identityType as typeof PUBLISHING_IDENTITIES[number])) throw new BadRequestException('发布额度身份类型无效')
+        const dynamic = LEVEL_IDENTITIES.includes(identityType as LevelIdentity)
+        if ((!dynamic && level !== 0) || !Number.isInteger(level) || level < 0) throw new BadRequestException('发布额度等级无效')
+        if (dynamic && !await tx.levelTier.findUnique({ where: { identityType_level: { identityType, level } } })) {
+          throw new BadRequestException('发布额度等级不存在')
+        }
+        for (const [field, action] of Object.entries(actionFields)) {
+          const dailyLimit = Number(row[field])
+          if (!Number.isInteger(dailyLimit) || dailyLimit < -1 || dailyLimit > 10000) throw new BadRequestException('限制次数只能填写 -1 或 0 至 10000 的整数')
+          await tx.publishingLimitRule.upsert({
+            where: { identityType_level_action: { identityType, level, action } },
+            create: { identityType, level, action, dailyLimit },
+            update: { dailyLimit },
+          })
+        }
+      }
+    })
+    return { code: 0 }
+  }
+
+  private levelIdentity(value: string): LevelIdentity {
+    if (!LEVEL_IDENTITIES.includes(value as LevelIdentity)) throw new BadRequestException('等级身份类型无效')
+    return value as LevelIdentity
+  }
+
+  private resolveLevel(tiers: Array<{ threshold?: number }>, experience: number): number {
+    let level = 1
+    tiers.forEach((tier, index) => { if ((tier.threshold ?? 0) <= experience) level = index + 1 })
+    return level
+  }
+
+  private defaultPublishingLimit(action: typeof PUBLISHING_ACTIONS[number], level: number): number {
+    void action
+    void level
+    return -1
   }
 }
 

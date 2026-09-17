@@ -1,14 +1,16 @@
 <script setup lang="ts">
 import { onMounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { fetchLeases, deriveLeaseStatus } from '@/api/workstations'
+import { deriveLeaseStatus, fetchLeasePrint } from '@/api/workstations'
 import type { Lease } from '@/types'
 
-/* 租约打印页：独立于 AdminLayout 的裸页，window.print + 打印样式；可从租约列表操作列进入 */
+/* 租约打印页：独立于 AdminLayout 的裸页，window.print + 打印样式；可从租约列表操作列进入。
+ * 单据数据取自 GET /api/admin/leases/:id/print（标题 + 租约 + 条款），不再拉取整表。 */
 const route = useRoute()
 const router = useRouter()
 
 const lease = ref<Lease | null>(null)
+const clauses = ref<string[]>([])
 const loading = ref(true)
 const notFound = ref(false)
 
@@ -38,9 +40,12 @@ function doPrint() {
 
 onMounted(async () => {
   try {
-    const list = await fetchLeases()
-    lease.value = list.find((l) => l.id === String(route.params.id)) ?? null
+    const payload = await fetchLeasePrint(String(route.params.id))
+    lease.value = payload.lease
+    clauses.value = payload.clauses ?? []
     notFound.value = !lease.value
+  } catch {
+    notFound.value = true
   } finally {
     loading.value = false
   }
@@ -104,9 +109,7 @@ onMounted(async () => {
 
         <h3 class="doc-section">条款说明</h3>
         <ol class="doc-tips">
-          <li>本确认单为租赁双方就办公位使用权达成的书面约定，自办公位交付之日起生效。</li>
-          <li>租金按租赁周期支付，逾期未缴将按社区《办公位管理办法》处理。</li>
-          <li>如需终止租约，请与空间运营联系办理交接手续，终止后办公位即时释放。</li>
+          <li v-for="(clause, index) in clauses" :key="index">{{ clause }}</li>
         </ol>
 
         <div class="sign-row">

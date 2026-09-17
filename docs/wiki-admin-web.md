@@ -2,9 +2,15 @@
 
 > 本文档沉淀管理后台（admin web）开发的细致描述与全部工程契约，是所有页面/子代理的唯一视觉与结构依据。
 > 冻结后不得私自发明颜色、字号、圆角、间距；不得重写导航。
-> 技术栈由用户指定：Vue 3 + Vite + TypeScript + TDesign Vue Next + Pinia + Vue Router（M0 原型交付；M1 起全部 API 文件接入真实 HTTP，`src/mock/` 已删除；M1.5 完成后台治理增强 R1~R12，见 §9/§10；2026-09-12 后续增强：数据范围（R1）/密码周期（R3）/MinIO 对象存储（R4）/系统管理菜单聚合（角色与账号、日志与审计）/新增角色（RBAC）/一键强制下线（在线会话）/角色与账号三 Tab 统一筛选栏结构/工作台视觉修复）。
+> 技术栈由用户指定：Vue 3 + Vite + TypeScript + TDesign Vue Next + Pinia + Vue Router（M0 原型交付；M1 起全部 API 文件接入真实 HTTP，`src/mock/` 已删除；M1.5 完成后台治理增强 R1~R12，见 §9/§10；M2-R 已新增举报与申诉、社区政策、轮播图管理、协议与政策及发布限制面板，均纳入 RBAC、持久错误态和列表查询状态约定；服务申请面板已于 2026-09-17 下线）。
+
+> 2026-09-17 收尾复查：举报列表按服务端 `canRestore` 显示恢复入口；待处理举报不提供恢复选项。恢复只针对该举报自己的下架/冻结且未被后续处置覆盖，一次生效；独立处置及缺少来源的历史记录通过原业务管理入口人工复核。个人名片列表支持展示姓名检索，部分隐私开关保存保留未提交项。
+>
+> 2026-09-17 后续调整：文章后台/举报下架统一进入「已关闭」（`closed`，可归档、可从原举报恢复），成员主动撤回投稿仍为 `withdrawn`；文章详情抽屉展示每次下架记录与原因；文章编辑新增「评论功能」开关（默认开启）。内容管理新增「轮播图管理」。申请表单配置、注销工单、实名复核迁入系统管理；积分/经验发放记录入口移入对应规则页右上角。服务申请（后台面板与客户端入口）整体下线。
 
 ## 1. Style Tier & Aesthetic Direction
+
+> 2026-09-17 M2-R 收口：社区成员组新增 `/member-governance` 注销与实名治理、`/card-management` 名片管理。均使用独立权限码、members 数据范围、URL 筛选状态、持久错误态和列设置。名片支持个人简历分段/企业字段维护与用户编辑字段白名单；注销冷静期内禁用确认执行，复核弹窗必填说明。验收见 `m2-r-closeout.md`。
 
 - style: **business-international**（管理后台 / SaaS / 高信息密度 / 整齐网格）
 - aesthetic: **industrial-utilitarian，冷静克制**——贴近 TDesign 默认规范，靠间距/层级/状态色取胜，不做花哨装饰
@@ -67,15 +73,18 @@
 | 内容管理 | 投稿内容 | /contents/submissions | `ViewListIcon` |
 | 内容管理 | 栏目管理 | /contents/columns | `ViewModuleIcon` |
 | 内容管理 | 阅读统计 | /contents/stats | `AppIcon` |
-| 内容管理 | 展示页发布 | /contents/showcase | `ViewListIcon` |
+| 内容管理 | 社区政策 | /contents/policies | `ViewListIcon` |
+| 内容管理 | 轮播图管理 | /contents/banners | `ViewModuleIcon` |
 | 内容管理 | 公告栏 | /contents/announcements | `NotificationIcon` |
 | 积分商城 | 商品管理 | /mall/goods | `CartIcon` |
 | 积分商城 | 订单管理 | /mall/orders | `ViewListIcon` |
 | 规则管理 | 积分规则 | /rules/points | `Edit2Icon` |
 | 规则管理 | 经验值规则 | /rules/experience | `ViewListIcon` |
 | 规则管理 | 等级规则 | /rules/levels | `ViewModuleIcon` |
-| 规则管理 | 积分发放记录 | /rules/ledger | `AppIcon` |
-| 规则管理 | 经验值发放记录 | /rules/experience-records | `ViewListIcon` |
+| 规则管理 | 发布限制 | /rules/publishing-limits | `SettingIcon` |
+| 系统管理 | 申请表单配置 | /system/application-form-config | `CheckCircleIcon` |
+| 系统管理 | 注销工单 | /system/deletion-requests | `CheckCircleIcon` |
+| 系统管理 | 实名复核 | /system/realname-reviews | `UserListIcon` |
 | 系统管理 | 数据字典 | /system/dicts | `AppIcon` |
 | 系统管理 | 系统配置 | /system/config | `SettingIcon` |
 | 系统管理 | 日志与审计 | /system/logs | `ViewListIcon` |
@@ -86,9 +95,9 @@
 
 - **菜单渲染受 RBAC 约束（R1，2026-09-11/12）**：除工作台外的每个菜单项挂 `v-permission="'<code>'"`，分组以 `canSee(codes)` 判定「至少一个可见菜单项才渲染」；菜单 code 即路由路径（如 `/users`），按钮级权限用 `perm:<域>:<动作>`（企业/合作企业的 create/update/disable/enable/delete 共 10 个）；`v-permission`/`meta.perm`/`hasPerm` 均支持 `string | string[]`（any-of，聚合页按多权限码渲染）
 - 菜单顺序（2026-09-10 契约，2026-09-12 内容管理二级扩为 6 项）：工作台 → 社区成员 → 业务运营 → 空间管理 → 内容管理 → 积分商城 → 规则管理 → 系统管理；**默认折叠**积分商城/规则管理/系统管理三组（expandedMenus 受控初始值，"全部展开/全部折叠"按钮切换）；**跳转自动展开**：路由 meta.group 变化时（含刷新直达/通知跳转/标签切换）自动展开页面所属分组，仅追加不收起其他组（GROUP_KEY_BY_META 映射，immediate，注意 group-points 的 meta 值为「积分管理」而菜单标题为「积分商城」）
-- 内容管理为一级菜单（2026-09-12 拆分，替代原「资讯内容」单页三 tab）：资讯发布（/contents/publish，官方文章）+ 投稿内容（/contents/submissions，用户投稿审核）+ 栏目管理（/contents/columns）+ 阅读统计（/contents/stats）+ 展示页发布（/contents/showcase）+ 公告栏（/contents/announcements）；原 ArticlePanel / ContentsView 已删除
+- 内容管理为一级菜单：资讯发布（/contents/publish，官方文章）+ 投稿内容（/contents/submissions，用户投稿审核）+ 栏目管理（/contents/columns）+ 阅读统计（/contents/stats）+ 社区政策（/contents/policies）+ 轮播图管理（/contents/banners）+ 公告栏（/contents/announcements）；社区政策独立维护服务内容、附件、精选与发布状态，轮播图管理维护客户端首页轮播并含总开关。
 - 系统管理为一级菜单：数据字典 + 系统配置 + 日志与审计 + 角色与账号 + 素材库 + 系统监控 + 归档管理（2026-09-12 菜单聚合：原「审计日志/登录日志/角色权限/管理员账号/在线会话」5 项合并为 2 个选项卡聚合页，子页不再独立路由）；「日志与审计」= 操作日志（原「审计日志」更名）+ 登录日志，「角色与账号」= 管理员账号 + 角色权限 + 在线会话，tab 与 `?tab=` 双向同步且旧路径（/logs/audit、/logs/login、/system/roles、/system/admins、/system/sessions）重定向对应 tab；原「回收站」升级为「归档管理」；通知中心为顶栏铃铛（NotificationIcon + t-badge 未读数，点击跳转关联页面）；六域待办卡片并入工作台顶部
-- 规则管理为一级菜单：积分规则（/rules/points）+ 经验值规则（/rules/experience）+ 等级规则（/rules/levels）+ 积分发放记录（/rules/ledger）+ 经验值发放记录（/rules/experience-records）；
+- 规则管理为一级菜单：积分规则（右上角进入积分发放记录）+ 经验值规则（右上角进入经验值发放记录）+ 等级规则 + 发布限制；两个记录页保留路由，但不占侧栏菜单入口。
 - 积分商城为一级菜单：/mall 重定向至 /mall/goods，商品/订单两个二级页面直接以面板组件作为路由页面（各含 PageHeader）
 - 空间管理为一级菜单：办公位管理=开放/半开放办公位平面图（独立办公室移出）、办公室管理=独立办公室卡片视图（占用企业+租期+租金）、租赁管理=租约列表+详情页；公共空间管理=空间列表+详情页（预约日历），公共空间预约=预约审核面板
 
@@ -150,7 +159,7 @@
   - 企业 enterprise：active=正常/success，exited=已退出/default，disabled=已停用/default（**入驻审核中 pending 已移除**，M1.5 起新增/启停/归档由后台维护）
   - 企业展示页 showcase：published=已发布/success，pending=待审核/warning，rejected=已驳回/danger，none=未提交/default
   - 申请 application：pending=待审核/warning，approved=已通过/success，rejected=已驳回/danger；申请类型 applicationTypeMap：settle=企业入驻 / individual=个体入驻 / cooperation=企业合作 / identity=身份绑定
-  - 需求 demand：pending=待审核/warning，pending_release=待发布/primary，scheduled=定时发布中/primary（直接显示时间），published=已发布/success，rejected=已驳回/danger，projected=已立项/success，closed=已关闭/default（已匹配状态已移除；草稿状态已移除）
+  - 需求 demand：pending=待审核/warning，pending_release=待发布/primary，scheduled=定时发布中/primary（直接显示时间），published=已发布/success，selected=已选定/primary（发布者已选意向承接方，等待管理员立项），rejected=已驳回/danger，projected=已立项/success，closed=已关闭/default（草稿状态已移除）
   - 项目 project：running=进行中/success，paused=已暂停/warning，closed=已关闭/danger，finished=已结项/default（已移除 recruiting 招募中）
   - 活动 event：pending_release=待发布/warning，scheduled=定时发布中/primary（直接显示时间），published=已发布/success（已发布（报名中）/已发布（暂停报名）拼接），ended=已结束/default，cancelled=已取消/danger（已移除 草稿/进行中）
   - 报名 enrollment：pending=待审核/warning，approved=已通过/success，rejected=已驳回/danger
@@ -183,15 +192,15 @@
 | 工作台 | /dashboard | 六域待办卡片（有待办高亮）+ 平台数据 6 卡 + 系统公告 + 待办审核 + 近期活动 + 运营趋势 + 快捷入口 | 待办/平台数据/公告/审核/活动点击直达；趋势支持 新增成员/新增需求/新增活动/发放积分 四指标 × 3/7/15/30 天，顶部显示**区间累计值**；「编辑布局」popup 控制 7 个区块显隐（localStorage 持久化），与 ColumnController 一样支持 ESC 关闭；2026-09-12 视觉修复：待办 StatCard（`t-link` 渲染）补内边距与左对齐（TDesign `.t-link` 基础样式 `padding:0`/`justify-content:center` 会覆盖自定义卡片样式，组件内需以 `.stat-card.t-link` 提升特异性回写）、系统公告条目 `.dash-item` 补 `align-items: flex-start`（column 布局下 `t-link` 的 `align-items:center` 会使文字水平居中） |
 | 用户列表 | /users | 筛选（关键词/身份/状态/实名状态）+ 列设置 + 导出 + 新增用户 | 新增时填写昵称/联系电话/邮箱/性别及可选实名资料，服务端生成 UID 与默认个人身份；行点击/详情按钮进用户详情；冻结/解冻在详情页执行 |
 | 用户详情 | /users/:id | 资料头（昵称/用户ID/身份标签/状态）+ 编辑/冻结/恢复 + tabs | tabs：身份信息 / 申请·需求·项目·活动·租赁·投稿·预约 7 个记录页（各分「进行中/历史记录」，已归档条目标「已归档」）/ 经验值（仅社区个体）/ 积分 / 活跃记录；需求/项目/活动/租赁记录行可点击跳详情；社区企业/合作企业身份卡跳企业详情 |
-| 社区个体 | /individuals | 社区个体身份成员列表（关键词/状态筛选）+ 列设置 + 导出 | 行点击进用户详情 |
-| 企业列表 | /enterprises | 社区企业筛选（关键词/行业/状态）+ 列设置 + 导出 + 新增企业 | 新增需权限 `perm:enterprise:create`；行点击进详情 |
+| 社区个体 | /individuals | 社区个体身份成员列表（关键词/状态筛选）+ 列设置 + 导出；等级列名为「个体等级」 | 行点击进用户详情 |
+| 企业列表 | /enterprises | 社区企业筛选（关键词/行业/状态）+ 列设置 + 导出 + 新增企业；列含「企业等级」（Lv.n 等级名，由企业经验值按社区企业等级梯度推导）与「名片状态」（原展示页状态） | 新增需权限 `perm:enterprise:create`；行点击进详情 |
 | 企业详情 | /enterprises/:id | 头部企业名 + **企业ID 标签** + 状态/展示页状态；tabs：企业信息 / 关联租赁 / 数据概览 / 成员管理 / 经验值 / 展示页审核 | 编辑/停用/启用；**归档仅「已停用」态出现**；数据概览卡片按企业 ID 跳需求/项目列表；成员行跳用户详情；展示页通过/驳回（驳回必填原因）；关联租赁行跳租约列表按企业筛选 |
 | 合作企业 | /external-enterprises | 合作企业聚合列表（关键词/行业/状态 + 累计合作/首次合作排序）+ 列设置 + 导出 + 新增合作企业 | 行点击进详情 |
 | 合作企业详情 | /external-enterprises/:id | 头部企业名 + **企业ID 标签**；tabs：企业信息 / 数据概览 / 关联成员 | 编辑/停用/启用；**归档仅「已停用」态出现**；数据概览按 ID 跳需求/项目列表；成员行跳用户详情 |
 | 申请审核 | /approvals | 四类申请（企业入驻/个体入驻/企业合作/身份绑定）状态 Tab + 类型筛选 + 列设置 + 一键归档 | 行点击/按钮进详情抽屉（审核时间线）；**待审核=「审核」，已通过/已驳回=「详情」+「归档」**；通过/驳回（意见 dialog）；抽屉内「打印」开打印视图 |
-| 需求列表 | /demands | 筛选（关键词/类别/状态）+ 创建/发布时间排序 + 列设置 + 一键归档/导出/导出全部/新增需求 | 行点击进详情；待审核→审核；待发布→编辑/立即发布/定时发布/关闭；定时发布中→取消定时发布；已发布→立项/撤回发布/代报名；已立项→查看关联项目/代报名/归档；已驳回/已关闭→归档；query `publisher`/`enterprise` 以可关闭标签展示筛选 |
+| 需求列表 | /demands | 筛选（关键词/类别/状态）+ 创建/发布时间排序 + 列设置 + 一键归档/导出/导出全部/新增需求 | 行点击进详情；待审核→审核；待发布→编辑/立即发布/定时发布/关闭；定时发布中→取消定时发布；已发布→立项/撤回发布/代报名；已选定→立项（发布者已选意向承接方，待管理员确认）；已立项→查看关联项目/代报名/归档；已驳回/已关闭→归档；响应列积分标签按「（需求自定义 respondPoints ?? 规则默认 demand_responded）」与规则默认值比较配色（相等绿 / 低于红 / 高于橙）；query `publisher`/`enterprise` 以可关闭标签展示筛选 |
 | 需求审核 | /demands/review | 固定「待审核」需求集中审核（关键词/类别筛选 + 创建时间排序）+ 列设置 | 表格「**需求方**」列=名称 + ID + 身份纯文本；行点击进详情；审核（只读对话框：取消/驳回/通过，通过=转待发布，驳回必填原因） |
-| 需求详情 | /demands/:id | 头部（状态/已归档/类别 + 可见与可报名范围同行）+ descriptions（编号/需求方/创建人/需求方身份/联系电话/预算/时间等）+ tabs 需求详情/响应记录 | 头部按状态操作（已发布另有「关闭」）；**创建人显示姓名 + ID 并可点击跳转**（仅 U 前缀注册用户），需求方身份为纯文本；已归档显示「已归档」标签并隐藏全部写操作 |
+| 需求详情 | /demands/:id | 头部（状态/已归档/类别 + 可见与可报名范围同行）+ descriptions（编号/需求方/创建人/需求方身份/联系电话/预算/时间等）+ tabs 需求详情/响应记录 | 头部按状态操作（已发布另有「关闭」；已选定仅「立项」）；**创建人显示姓名 + ID 并可点击跳转**（仅 U 前缀注册用户），需求方身份为纯文本；已归档显示「已归档」标签并隐藏全部写操作 |
 | 项目列表 | /projects | 筛选 + 承接方占比/进度列 + 立项日期排序 + 列设置 + 一键归档/导出/新增项目 | 行点击进详情；running→暂停/编辑；paused→恢复/关闭（必填原因）/编辑；closed→重新新增/归档；finished→归档；query `participant`/`enterprise` 标签筛选 |
 | 项目详情 | /projects/:id | 项目信息（承接方占比/说明/来源需求）+ 进度节点（含负责承接方）（tabs） | 来源需求跳转需求详情；已归档显示「已归档」并隐藏写操作 |
 | 活动列表 | /events | 筛选（类型/状态）+ 活动开始/创建时间排序 + 列设置 + 一键归档/导出/新增活动 | 行点击进详情；待发布→编辑/立即发布/定时发布/取消活动；定时发布中→取消定时；已发布→暂停/开放报名、编辑、取消；已取消→转为待发布；已结束/已取消→归档；报名/签到列下方积分 tag |
@@ -200,7 +209,8 @@
 | 订单管理 | /mall/orders | 兑换订单列表（关键词/状态筛选）+ 列设置 + 一键归档 + 导出 + 详情抽屉 | 待发货→发货/取消订单（退积分+回补库存）；已发货→标记完成；已完成→归档；行点击开详情抽屉（收件信息） |
 | 积分规则 | /rules/points | **积分发放制度（2026-09-11 修订）**：9 条固定发放触发项（code 写死）+ 积分值 + 状态，扣除积分走手动调整不设规则 | **仅可编辑积分值（正整数）或启停规则，不可新增/删除** |
 | 经验值规则 | /rules/experience | **经验值发放制度（2026-09-11，新增投稿采纳）**：6 条固定发放触发项（activity_checkin +5 / activity_enroll_approved +2 / article_accepted 投稿采纳 +20 / project_undertaken +30 / project_completed 项目结项 +100 / identity_first_bind +10，code 写死；**project_milestone 项目里程碑达成已移除**，2026-09-09）+ 经验值 + 状态；经验仅社区个体/社区企业身份累积 | **仅可编辑经验值（正整数）或启停规则，不可新增/删除**；api/rules.ts |
-| 等级规则 | /rules/levels | 等级梯度设定：等级数动态（最低 1 级、默认 5 级、最多 10 级），每级编辑标签（默认 青铜/白银/黄金/铂金/钻石）与门槛经验值（须逐级递增），整组保存；梯度变更仅影响后续结算，历史身份数据不迁移 | 添加/删除等级行（≥1 级）、编辑标签与门槛、保存梯度（saveLevelTiers 校验递增/非空/≤10 级）；api/rules.ts |
+| 等级规则 | /rules/levels | 社区个体、社区企业两个选项卡分别维护动态等级梯度（最低 1 级、最多 10 级）；保存后重算对应身份的当前等级 | 添加/删除等级行、编辑标签与门槛、保存当前身份梯度；api/rules.ts |
+| 发布限制 | /rules/publishing-limits | 按个人用户（未实名/已实名）、社区个体等级、社区企业等级配置需求发布、文章投稿、活动报名、空间预约四类每日限制 | 默认均为 `-1` 不限；`0` 禁止；等级列分两行显示“n 级”与等级标签；社区企业成员共享企业主体额度 |
 | 积分发放记录 | /rules/ledger | **仅展示系统按积分规则自动发放的积分记录**（source=rule；手动调整/兑换扣减不在此列），顶部汇总累计发放/笔数/覆盖用户数 | 无编辑操作（只读） |
 | 经验值发放记录 | /rules/experience-records | **仅展示系统按经验值规则自动发放的经验值记录**（source=rule），归属区分企业/个人 tag + 名称解析 | 无编辑操作（只读）；api/rules.ts fetchExperienceIssuanceRecords |
 | 办公位管理 | /workstations | 开放办公位/半开放办公位平面图（按区域分组网格+状态图例+状态底色卡片+汇总卡片；独立办公室移至办公室管理页） | 筛选栏：区域下拉（仅开放/半开放区域，含全部）+ 状态下拉，与**状态卡片点击筛选**联动；区域规划弹窗（保存后静默刷新）；创建办公位；卡片操作：编辑（含"维护中"开关、删除——已分配禁用）、**查看租赁**（跳租约详情）、**关联租赁**（跳租赁管理并预选该办公位） |
@@ -210,14 +220,16 @@
 | 公共空间管理 | /spaces | 空间列表（类型/容量/预约方式/开放时段/设备/状态）+ 列设置 | 新增/编辑空间、维护登记/停用/恢复；行点击进空间详情（预约日历 + 当月明细） |
 | 空间详情 | /spaces/:id | 空间信息 + 预约日历（2/3 宽，cellAppend 当日摘要）+ 当月预约明细（1/3 宽） | 已归档显示「已归档」并隐藏写操作；日历与明细联动按月切换 |
 | 公共空间预约 | /spaces/reservations | 六态 Tab（待审核/待使用/使用中/已结束/已驳回/已取消）+ 空间/日期筛选 + 列设置 + 一键归档 | 行点击/详情开抽屉（时间线）；待审核→通过/驳回；待审核/已通过→取消；已结束/已驳回/已取消→归档；通过前服务端校验时段冲突（已通过预约与活动占用） |
-| 资讯发布 | /contents/publish | 官方文章（channel=official）：待发布/定时发布中/已发布 + 列设置 + 发布资讯 | 任意状态「详情」只读；待发布→编辑/定时发布/立即发布/归档；定时发布中→取消定时/立即发布；已发布→下架（转待发布） |
-| 投稿内容 | /contents/submissions | 用户投稿（channel=submitted）：待审核/已驳回/待发布/定时发布中/已发布 + 列设置 + 一键归档 | 待审核→详情即审核（通过/驳回必填原因）；已驳回→详情/归档；待发布→编辑/定时/立即/归档；定时发布中→详情/取消/立即；已发布→下架 |
+| 资讯发布 | /contents/publish | 官方文章（channel=official）：待发布/定时发布中/已发布/**已关闭** + 列设置 + 发布资讯 | 任意状态「详情」只读；待发布→编辑/定时发布/立即发布/归档；定时发布中→取消定时/立即发布；已发布→下架（转**已关闭**）；**已关闭→归档**；编辑弹窗含「评论功能」开关（默认开启），详情抽屉展示下架记录与原因 |
+| 投稿内容 | /contents/submissions | 用户投稿（channel=submitted）：待审核/已驳回/待发布/定时发布中/已发布/**已关闭** + 列设置 + 一键归档 | 待审核→详情即审核（通过/驳回必填原因）；已驳回→详情/归档；待发布→编辑/定时/立即/归档；定时发布中→详情/取消/立即；已发布→下架（转**已关闭**）；**已关闭→详情（含下架记录）/归档**；成员主动撤回的投稿仍为 withdrawn 且可重提 |
 | 栏目管理 | /contents/columns | 栏目增改/排序权重/开放投稿开关/启停/删除 + 列设置 | 系统保留栏目「未指定」不可编辑/停用/删除；删除栏目文章自动转移至「未指定」；文章数从文章列表聚合 |
 | 阅读统计 | /contents/stats | 阅读量汇总卡（总阅读/已发布文章/篇均/单篇最高）+ 排行榜 + 列设置 | 只读；标题 ID 置于标题下方 |
-| 展示页发布 | /contents/showcase | 展示页申请：状态 Tab + 目标类型筛选 + 列设置 | 行点击/详情抽屉（审核时间线）；待审核→通过/驳回；通过联动企业展示页状态 |
+| 社区政策 | /contents/policies | 社区服务政策、办事指引、附件与精选状态列表 | 新增/编辑；仅维护 `community` 类型并同步移动端社区服务页 |
+| 轮播图管理 | /contents/banners | 首页轮播图列表（排序/标题/副标题/图片/跳转/展示）+ **首页轮播图总开关** | 新增/编辑/删除；排序值升序展示；单条启停；关闭总开关后客户端首页不展示轮播区域 |
+| 协议与政策 | /system/policies | 用户协议与隐私政策的独立版本列表 | 新增/编辑；仅维护用户协议和隐私政策，注册及隐私设置按已发布版本读取 |
 | 公告栏 | /contents/announcements | 站点公告管理：新增即发布，置顶优先排序（AN1001+）+ 列设置 | 发布/编辑/下架/重新发布/置顶/归档（归档后可恢复）；AnnouncementFormDialog 双模式 |
 | 数据字典 | /system/dicts | 四类字典项（需求类别/行业/活动类型/**商品类型**）新增/启停/删除 | 字典项 label 即业务存储值，暂不支持改名；各业务下拉统一从字典拉取（失败回退 dictFallback 词表） |
-| 系统配置 | /system/config | 站点信息 + 功能开关（注册/积分商城/需求广场/空间预约）+ 运营参数（临期提醒窗口 1-90 天、**上传文件大小限制 1-100MB**、**密码有效期 0-3650 天（0=不启用）**）+ **MinIO 对象存储**分区（启用开关 + endpoint/端口/SSL/AccessKey/SecretKey/Bucket） | 保存即生效（MinIO 配置保存后即时切换存储驱动），记录更新时间与操作人 |
+| 系统配置 | /system/config | 站点信息 + 功能开关（注册/积分商城/需求广场/空间预约/实名认证要求/**首页轮播图**）+ 运营参数（临期提醒窗口 1-90 天、**上传文件大小限制 1-100MB**、**密码有效期 0-3650 天（0=不启用）**）+ **MinIO 对象存储**分区（启用开关 + endpoint/端口/SSL/AccessKey/SecretKey/Bucket） | 保存即生效（MinIO 配置保存后即时切换存储驱动），记录更新时间与操作人 |
 | 日志与审计 | /system/logs | 选项卡聚合页：操作日志 + 登录日志（按权限过滤 tab；tab 与 `?tab=` 同步；子页标题隐藏） | 由「日志与审计」菜单进入；旧路径 /logs/audit、/logs/login 重定向对应 tab |
 | 操作日志（日志与审计 Tab，原「审计日志」） | /system/logs?tab=audit | 服务端写操作留痕（操作时间/操作人/模块/动作/对象/详情，含 before/after 快照） | 模块筛选 + 关键词搜索；只读 |
 | 登录日志（日志与审计 Tab） | /system/logs?tab=login | 管理员登录成功/失败/锁定三态记录（账号/姓名/IP/归属地/设备/失败原因） | 关键词 + 状态 + 日期区间筛选；只读 |
@@ -227,15 +239,15 @@
 | 修改密码 | /system/change-password | 原密码 + 新密码（≥8 位含字母与数字）+ 确认 | 改密成功即登出跳登录页（后端黑名单当前账号全部会话）；**密码过期后登录会被引导到本页**（其它接口 403「密码已过期，请先修改密码」，改密即解除） |
 | 在线会话（角色与账号 Tab） | /system/account?tab=sessions | 当前在线管理员会话（账号/姓名/IP/设备/登录时间）+ 筛选栏（关键词过滧行内，2026-09-12）+ **一键强制下线**（右端危险色，popconfirm 确认） | 单会话强制下线与一键下线均走 Redis 黑名单即时生效；一键下线**保留当前操作者会话**，成功提示实际下线数（0 时提示无其他会话）；接口 `POST /auth/sessions/kick-all` |
 | 素材库 | /assets/library | 图片素材网格：来源筛选（全部/资讯发布/投稿内容/未关联）+ 文件名搜索 + 数量/总大小统计 | 上传（受系统配置限制）；复制 URL；**替换**（同 URL 覆盖，引用方即时生效）；删除；来源标签 `资讯发布-A1010`/`投稿内容-SU1006`/`未关联` |
-| 系统监控 | /system/monitor | 服务健康/运行时长/接口平均延迟/DB·Redis 延迟 + Redis 概览（内存/命中率/键数/版本）+ 定时任务表 | 执行日志抽屉；lastResult 三态 success/failed/unknown |
+| 系统监控 | /system/monitor | 服务健康/运行时长/接口平均延迟/DB·Redis 延迟 + Redis 概览（内存/命中率/键数/版本）+ 定时任务表 | 执行日志抽屉；**手动执行**（popconfirm 确认，`POST /monitor/jobs/:name/run`，执行后刷新概览并重载该任务日志）；lastResult 三态 success/failed/unknown |
 | 归档管理 | /system/trash | 13 域 Tab（社区企业/合作企业/资讯发布/投稿内容/公告栏/需求/项目/活动/租赁/空间预约/商品/商城订单/申请审核）+ 关键词搜索 + 每页独立「归档设置」 | 恢复；彻底删除（普通域 popconfirm；**用户历史域三连确认**：两次确认 + 输入「永久删除」）；归档设置：自动归档开关/延时/可归档状态、自动删除开关/延时（用户历史域开启自动删除需三连确认） |
 | 403 无权限 | /403 | RBAC 无权限落地页 | 返回工作台 |
-| 租约打印 | /prints/lease/:id | 独立于 AdminLayout 的裸页（window.print 干净纸张） | 打印/返回；从租赁列表或详情进入 |
+| 租约打印 | /prints/lease/:id | 独立于 AdminLayout 的裸页（window.print 干净纸张）；单据数据取 `GET /admin/leases/:id/print`（标题 + 租约 + 条款，不再拉取整表） | 打印/返回；从租赁列表或详情进入 |
 | 审核单打印 | /prints/approval/:id | 独立裸页；专用打印接口直取详情（不受列表分页限制） | 打印/返回；从申请抽屉进入 |
 
 ## 6. 种子数据模式（唯一来源 `apps/api/prisma/seed-data/`，2026-09-12 修订）
 
-- M1-E 起 admin `src/mock/` 已删除；演示数据唯一来源 = 后端 Prisma 种子（`prisma/seed.ts` + `prisma/seed-data/`，`pnpm db:reset` 幂等重建）；实体覆盖 users / enterprises / externalEnterpriseProfiles / applications / demands / projects / events / goods / redemptionOrders / pointsRules(9) / experienceRules(6) / levelTiers / workstationAreas / workstations / leases / spaces / reservations / columns / articles / announcements / showcaseRequests / adminUsers / adminRoles 等
+- M1-E 起 admin `src/mock/` 已删除；演示数据唯一来源 = 后端 Prisma 种子（`prisma/seed.ts` + `prisma/seed-data/`，`pnpm db:reset` 幂等重建）；实体覆盖 users / enterprises / externalEnterpriseProfiles / applications / demands / projects / events / goods / redemptionOrders / pointsRules(9) / experienceRules(6) / levelTiers / workstationAreas / workstations / leases / spaces / reservations / columns / articles / banners / announcements / adminUsers / adminRoles 等
 - 跨页一致性由服务端保证：用户的 `identities[].enterpriseId`（社区企业身份）↔ 企业详情成员列表（由身份派生计算）；申请申请人 ↔ 用户表；需求发布方 ↔ 用户+企业；项目承接方 ↔ 企业/用户表（share 合计 100）；活动报名/签到记录引用同一批人名；办公位分配 ↔ 入驻记录与租约；兑换订单 ↔ 积分流水 ↔ 用户余额（末笔 balance 一致）；空间预约/活动场地 ↔ 空间名称；办公位.area ↔ 区域名称
 - 积分/经验流水 source 字段（2026-09-09 起）：PointsRecord/ExperienceRecord 均含 `source: rule | manual | redemption`（经验无 redemption）——rule=规则自动发放（operator=系统）、manual=管理员手动调整（adjustPoints/adjustExperience 产生）、redemption=商城兑换扣减（仅积分）；"发放记录"页只取 rule；详情流水仍全量展示
 - 命名前缀（seed 预置 23 个 IdSequence，素材在运行期发号）：用户 U1001+ / 企业 E2001+ / 申请 AP3001+（审批单编号沿用）/ 需求 D4001+ / 项目 P5001+ / 活动 EV6001+ / 合作企业 XE7001+ / 经验流水 EX8001+ / 积分流水 PT9001+ / 商品 G1001+ / 兑换订单 RO2001+ / 办公位 WS1001+ / 办公位区域 WA1001+ / 租约 LS2001+ / 空间 S1001+ / 空间预约 SR2001+ / 文章 A1001+ / 投稿 SU1001+ / 栏目 CL2001+ / 展示页申请 SC1001+ / 公告 AN1001+ / 通知 N9001+ / 审计 AL；素材 AST（运行期发号）；积分/经验规则 = 触发项语义 code（写死，无独立编号）；项目另有 per-year `CODE-<year>` 项目代号

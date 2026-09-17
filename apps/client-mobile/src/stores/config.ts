@@ -12,6 +12,7 @@ export const useConfigStore = defineStore('config', () => {
     mallOpen: true,
     demandOpen: true,
     reservationOpen: true,
+    homeCarouselOpen: true,
   })
   let loaded = false
 

@@ -29,13 +29,17 @@ window.addEventListener('joinyuu:unauthorized', (event) => {
 
 /* a11y 修补（v40：仅扫描新增子树，避免长列表下全文档查询造成输入卡顿）：
  * 1）TDesign 表单组件的内层 input/textarea 不携带 id/name、label 也未关联，统一补齐；
- * 2）Toast 文本播报到 aria-live（屏幕阅读器可感知操作结果）；
- * 3）Dialog/Popup 补 role="dialog" 与 aria-modal。 */
+ * 2）无显式 aria-label 的输入用 placeholder 兜底；
+ * 3）Toast / 行内表单错误播报到 aria-live（去重，避免同一文案播报两次）；
+ * 4）Dialog/Popup 补 role="dialog" 与 aria-modal。 */
 let a11yFieldSeq = 0
 function patchA11yFields(root: ParentNode = document) {
   root.querySelectorAll('input, textarea').forEach((el) => {
     if (!el.id) el.id = `fld-${++a11yFieldSeq}-${el.tagName.toLowerCase()}`
     if (!el.getAttribute('name')) el.setAttribute('name', el.id)
+    if (!el.getAttribute('aria-label') && el.getAttribute('placeholder')) {
+      el.setAttribute('aria-label', el.getAttribute('placeholder') as string)
+    }
   })
   root.querySelectorAll('label:not([for])').forEach((label) => {
     const field = label.parentElement?.querySelector<HTMLElement>('input:not([type="hidden"]):not([type="file"]), textarea')
@@ -43,10 +47,27 @@ function patchA11yFields(root: ParentNode = document) {
   })
 }
 
+let lastAnnounced = { text: '', at: 0 }
+function announceOnce(text: string) {
+  const now = Date.now()
+  if (text === lastAnnounced.text && now - lastAnnounced.at < 1500) return
+  lastAnnounced = { text, at: now }
+  announce(text)
+}
+
 function announceToast(node: HTMLElement) {
   const toast = node.matches('.t-toast') ? node : node.querySelector<HTMLElement>('.t-toast')
   const text = toast?.innerText.trim()
-  if (text) announce(text)
+  if (text) announceOnce(text)
+}
+
+function announceFieldError(node: HTMLElement) {
+  const fields = [
+    ...(node.matches('.field-error, .error') ? [node] : []),
+    ...node.querySelectorAll<HTMLElement>('.field-error, .error'),
+  ]
+  const text = fields.map((el) => el.innerText.trim()).find(Boolean)
+  if (text) announceOnce(text)
 }
 
 function patchDialogRoles(node: HTMLElement) {
@@ -67,6 +88,7 @@ new MutationObserver((mutations) => {
       if (!(added instanceof HTMLElement)) continue
       patchA11yFields(added)
       announceToast(added)
+      announceFieldError(added)
       patchDialogRoles(added)
     }
   }

@@ -58,15 +58,6 @@ export const notifications: AdminNotification[] = [
     link: '/demands',
   },
   {
-    id: 'N9007',
-    type: 'showcase',
-    title: '展示页发布申请待审核',
-    content: '木白设计工作室提交了企业展示页发布申请，审核结果将联动企业展示页状态。',
-    at: '2026-09-04 11:00',
-    read: true,
-    link: '/contents/showcase',
-  },
-  {
     id: 'N9008',
     type: 'approval',
     title: '身份绑定申请待审核',

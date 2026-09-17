@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { Loading, Button, DialogPlugin, Progress, Rate, Textarea, Toast } from 'tdesign-mobile-vue'
+import { Loading, Button, DialogPlugin, Icon, Progress, Rate, Tag, Textarea, Toast } from 'tdesign-mobile-vue'
 import { cancelEnrollment, enrollEvent, fetchEvent, fetchMyEventFeedback, submitEventFeedback } from '@/api/events'
 import { listFavorites, toggleFavorite } from '@/api/favorites'
 import { useAsyncList } from '@/composables/useAsyncList'
@@ -200,25 +200,27 @@ async function onShare() {
 
       <section class="m-card">
         <div class="head">
-          <span class="type-tag">{{ event.typeLabel }}</span>
+          <Tag class="type-tag" size="small" variant="light" theme="primary">{{ event.typeLabel }}</Tag>
           <StateTag v-if="myStatus === 'pending'" kind="enroll" value="pending" />
           <StateTag v-else-if="myStatus === 'approved'" kind="enroll" value="approved" />
           <StateTag v-else-if="myStatus === 'waitlisted'" kind="enroll" value="waitlisted" />
           <StateTag v-else-if="myStatus === 'rejected'" kind="enroll" value="rejected" />
         </div>
         <h1 class="title">{{ event.title }}</h1>
-        <p class="meta">🕐 {{ event.startTime }} ~ {{ event.endTime }}</p>
-        <p class="meta">📍 {{ event.location }}</p>
-        <p class="meta">⏳ 报名截止：{{ event.enrollmentDeadline }}<span v-if="event.requireReview"> · 报名需审核</span></p>
+        <p class="meta"><Icon name="time" size="14px" />{{ event.startTime }} ~ {{ event.endTime }}</p>
+        <p class="meta"><Icon name="location" size="14px" />{{ event.location }}</p>
+        <p class="meta"><Icon name="alarm" size="14px" />报名截止：{{ event.enrollmentDeadline }}<span v-if="event.requireReview"> · 报名需审核</span></p>
         <div class="progress-block">
           <div class="progress-head">
             <span>报名进度</span>
             <span class="progress-num">{{ event.approvedCount }}/{{ event.capacity }}</span>
           </div>
-          <Progress :percentage="progressPct" />
+          <Progress :percentage="progressPct" :label="false" />
         </div>
         <div class="fav-row">
-          <Button size="small" variant="outline" @click="onToggleFavorite">{{ favorited ? '★ 已收藏' : '☆ 收藏' }}</Button>
+          <Button size="small" variant="outline" @click="onToggleFavorite">
+            <Icon :name="favorited ? 'star-filled' : 'star'" size="16px" />{{ favorited ? '已收藏' : '收藏' }}
+          </Button>
           <Button size="small" variant="outline" @click="onAddToCalendar">添加到日历</Button>
           <Button size="small" variant="outline" @click="onShare">分享</Button>
         </div>
@@ -238,11 +240,11 @@ async function onShare() {
           <p class="hint">活动已结束，感谢关注。</p>
           <template v-if="auth.isLogged && myStatus === 'approved'">
             <template v-if="feedbackSubmitted">
-              <p class="status-line ok">✅ 已提交反馈，感谢你的评价</p>
+              <p class="status-line ok"><Icon name="check-circle" size="16px" />已提交反馈，感谢你的评价</p>
             </template>
             <template v-else>
               <p class="fb-label">活动反馈</p>
-              <Rate v-model="feedbackRating" :count="5" />
+              <Rate v-model="feedbackRating" :count="5" aria-label="活动评分" />
               <Textarea v-model="feedbackComment" :autosize="{ minRows: 2, maxRows: 4 }" :maxlength="200" placeholder="活动体验如何？欢迎留下建议（选填）…" />
               <Button theme="primary" block :loading="feedbackSubmitting" @click="onSubmitFeedback">提交反馈</Button>
             </template>
@@ -256,7 +258,7 @@ async function onShare() {
         </template>
 
         <template v-else-if="myStatus === 'approved'">
-          <p v-if="myCheckedIn" class="status-line ok">✅ 已签到</p>
+          <p v-if="myCheckedIn" class="status-line ok"><Icon name="check-circle" size="16px" />已签到</p>
           <p v-else class="status-line"><span>报名已通过，记得准时参加</span></p>
           <Button v-if="!myCheckedIn" theme="primary" block :disabled="acting" @click="goCheckIn">签到</Button>
           <Button v-if="!cancelBlocked" theme="default" variant="outline" block :disabled="acting" @click="onCancelEnrollment">取消报名</Button>
@@ -338,11 +340,7 @@ async function onShare() {
 }
 
 .type-tag {
-  font-size: 12px;
-  padding: 2px 8px;
-  border-radius: var(--td-tag-square-border-radius, 4px);
-  background: var(--td-brand-color-1);
-  color: var(--td-brand-color);
+  flex-shrink: 0;
 }
 
 .title {
@@ -353,6 +351,9 @@ async function onShare() {
 
 .meta {
   margin: 5px 0;
+  display: flex;
+  align-items: center;
+  gap: 4px;
   font-size: 12px;
   color: var(--td-text-color-secondary);
 }

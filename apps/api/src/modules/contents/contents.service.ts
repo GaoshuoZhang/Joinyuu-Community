@@ -1,6 +1,6 @@
 import { BadRequestException, ConflictException, Injectable, NotFoundException } from '@nestjs/common'
 import { Prisma } from '@prisma/client'
-import type { Article, ShowcaseRequest } from '@prisma/client'
+import type { Article } from '@prisma/client'
 import { PrismaService } from '../../common/prisma/prisma.service'
 import { IdGeneratorService } from '../../common/id-generator/id-generator.service'
 import { AuditService } from '../../common/audit/audit.service'
@@ -8,22 +8,13 @@ import { NotificationService } from '../../common/notify/notification.service'
 import { formatNow, formatToday } from '../../common/utils/time'
 import { sanitizeHtml } from '../../common/utils/sanitize-html'
 import { toIdentityDto } from '../users/user.mapper'
+import { PointsEngineService } from '../../common/engine/points-engine/points-engine.service'
 import type { ArticlePayloadDto } from './dto/article-payload.dto'
 import type { ReviewArticleDto } from './dto/review-article.dto'
 import type { ScheduleArticleDto } from './dto/schedule-article.dto'
 import type { ColumnPayloadDto } from './dto/column-payload.dto'
 import type { QueryArticlesDto } from './dto/query-articles.dto'
-import type { QueryShowcaseRequestsDto } from './dto/query-showcase-requests.dto'
-import type { ReviewShowcaseRequestDto } from './dto/review-showcase-request.dto'
-
-/* 展示页申请审核时间线（ApprovalRecord） */
-interface ApprovalRecord {
-  step: string
-  operator: string
-  action: 'submit' | 'approve' | 'reject'
-  comment: string
-  at: string
-}
+import { articleTakedowns, type ArticleWithComments } from './article-integration'
 
 /* 栏目列表 DTO（含文章数聚合） */
 interface ColumnDto {
@@ -49,7 +40,7 @@ function numericSuffix(id: string): number {
 }
 
 /* Prisma 行 → Article 形状：栏目以数组契约承载单选；可空字段缺失时省略（对齐 undefined） */
-function toArticleDto(a: Article): Record<string, unknown> {
+function toArticleDto(a: Article | ArticleWithComments): Record<string, unknown> {
   const dto: Record<string, unknown> = {
     id: a.id,
     title: a.title,
@@ -66,6 +57,7 @@ function toArticleDto(a: Article): Record<string, unknown> {
     summary: a.summary,
     content: a.content,
     tags: a.tags,
+    commentsEnabled: 'commentsEnabled' in a ? a.commentsEnabled : true,
     createdAt: a.createdAt,
   }
   if (a.scheduledAt != null) dto.scheduledAt = a.scheduledAt
@@ -74,29 +66,12 @@ function toArticleDto(a: Article): Record<string, unknown> {
   return dto
 }
 
-function toShowcaseRequestDto(s: ShowcaseRequest): Record<string, unknown> {
-  const dto: Record<string, unknown> = {
-    id: s.id,
-    targetType: s.targetType,
-    targetName: s.targetName,
-    contentSummary: s.contentSummary,
-    submitterName: s.submitterName,
-    submitterPhone: s.submitterPhone,
-    submittedAt: s.submittedAt,
-    status: s.status,
-    records: s.records,
-  }
-  if (s.targetId != null) dto.targetId = s.targetId
-  if (s.rejectReason != null) dto.rejectReason = s.rejectReason
-  return dto
-}
-
 /* 内容管理（wiki-backend.md §7.14/§8.1/§8.9）：
  * 文章分来源 channel：official 社区自行发布（新增即待发布）/ submitted 用户投稿（新增即待审核）；
  * 状态机 pending →(review approved)→ pending_release | (rejected)→ rejected；
  *   pending_release →(publish)→ published | (schedule)→ scheduled；scheduled →(cancel)→ pending_release | (publish)→ published；
- *   published →(withdraw)→ pending_release；pending/rejected/pending_release →(delete)→ 软删；
- * 栏目改名 → 级联刷新文章 columnName 快照；展示页审核 → 企业目标联动 Enterprise.showcaseStatus。 */
+ *   published →(staff takedown)→ closed →(restore)→ published；pending/rejected/pending_release/closed →(archive)→ 软删；
+ * 栏目改名 → 级联刷新文章 columnName 快照。 */
 @Injectable()
 export class ContentsService {
   constructor(
@@ -104,6 +79,7 @@ export class ContentsService {
     private readonly ids: IdGeneratorService,
     private readonly audit: AuditService,
     private readonly notify: NotificationService,
+    private readonly points: PointsEngineService,
   ) {}
 
   /* ---------- 文章管理 ---------- */
@@ -144,6 +120,13 @@ export class ContentsService {
     return { list: rows.slice(start, start + query.pageSize).map(toArticleDto), total }
   }
 
+  async article(id: string): Promise<Record<string, unknown>> {
+    const article = await this.prisma.article.findFirst({ where: { id, deletedAt: null } })
+    if (!article) throw new NotFoundException('文章不存在')
+    const takedowns = await articleTakedowns(this.prisma).findMany({ where: { articleId: id }, orderBy: { id: 'desc' } })
+    return { ...toArticleDto(article), takedowns }
+  }
+
   async createArticle(payload: ArticlePayloadDto): Promise<Record<string, unknown>> {
     const channel = payload.channel ?? 'official'
     const columnId = payload.columnIds?.[0]
@@ -171,9 +154,10 @@ export class ContentsService {
         views: 0,
         summary: payload.summary,
         tags: payload.tags,
+        commentsEnabled: payload.commentsEnabled ?? true,
         createdAt: formatNow(),
         rejectedReason: null,
-      },
+      } as unknown as Prisma.ArticleUncheckedCreateInput,
     })
     await this.bindAssets(article.content, channel, article.id)
     return toArticleDto(article)
@@ -204,10 +188,11 @@ export class ContentsService {
         summary: payload.summary,
         content,
         tags: payload.tags,
+        commentsEnabled: payload.commentsEnabled ?? true,
         status: nextStatus,
         rejectedReason: null,
         ...(nextStatus !== 'scheduled' ? { scheduledAt: null } : {}),
-      },
+      } as unknown as Prisma.ArticleUncheckedUpdateInput,
     })
     await this.bindAssets(content, article.channel, article.id)
     return { code: 0 }
@@ -265,6 +250,9 @@ export class ContentsService {
       where: { id },
       data: { status: 'published', scheduledAt: null, publishedAt: formatNow() },
     })
+    if (article.channel === 'submitted' && article.authorId) {
+      await this.points.issuePoints(article.authorId, 'article_accepted', '投稿审核通过并发布', `article_accepted:${article.id}`)
+    }
     await this.audit.record({
       module: '内容管理',
       action: '文章发布',
@@ -314,17 +302,22 @@ export class ContentsService {
     return { code: 0 }
   }
 
-  /** 下架：已发布 → 待发布 */
+  /** 管理员下架：已发布 → 已关闭，并持久记录下架原因。 */
   async withdrawArticle(id: string, operator: string, takedownReason?: string): Promise<{ code: number }> {
     const article = await this.prisma.article.findUnique({ where: { id } })
     if (!article || article.deletedAt) throw new NotFoundException('文章不存在')
     if (article.status !== 'published') throw new ConflictException('仅已发布的文章可下架')
+    const now = formatNow()
+    const reason = takedownReason?.trim() || null
     await this.prisma.$transaction(async (tx) => {
       const changed = await tx.article.updateMany({
         where: { id, deletedAt: null, status: 'published' },
-        data: { status: 'pending_release', publishedAt: null, scheduledAt: null },
+        data: { status: 'closed', scheduledAt: null, archivableAt: now },
       })
       if (changed.count !== 1) throw new ConflictException('文章状态已变化，请刷新后重试')
+      await articleTakedowns(tx).create({
+        data: { articleId: id, source: 'manual', reportId: null, reason, takenDownAt: now, takenDownBy: operator },
+      })
       await this.notify.notifyContentTakedown(tx, 'article', id, takedownReason)
     })
     await this.audit.record({
@@ -333,18 +326,52 @@ export class ContentsService {
       target: `${article.id} · ${article.title}`,
       detail: takedownReason?.trim() || undefined,
       before: { status: article.status },
-      after: { status: 'pending_release' },
+      after: { status: 'closed' },
       operator,
     })
     return { code: 0 }
   }
 
-  /** 删除文章（软删）：投稿允许已驳回 / 待审核；官方资讯允许待发布 */
+  /** 恢复管理员主动下架的文章；举报处置下架必须从原举报恢复。 */
+  async restoreArticle(id: string, operator: string): Promise<{ code: number }> {
+    const article = await this.prisma.article.findUnique({ where: { id } })
+    if (!article || article.deletedAt) throw new NotFoundException('文章不存在')
+    if (article.status !== 'closed') throw new ConflictException('仅已关闭的文章可恢复')
+    const now = formatNow()
+    await this.prisma.$transaction(async (tx) => {
+      const takedown = await articleTakedowns(tx).findFirst({
+        where: { articleId: id, source: 'manual', restoredAt: null },
+        orderBy: { id: 'desc' },
+      })
+      if (!takedown) throw new ConflictException('请从原举报记录恢复该文章')
+      const changed = await tx.article.updateMany({
+        where: { id, deletedAt: null, status: 'closed' },
+        data: { status: 'published', publishedAt: article.publishedAt ?? now, archivableAt: null },
+      })
+      if (changed.count !== 1) throw new ConflictException('文章状态已变化，请刷新后重试')
+      const restored = await articleTakedowns(tx).updateMany({
+        where: { id: takedown.id, restoredAt: null },
+        data: { restoredAt: now, restoredBy: operator },
+      })
+      if (restored.count !== 1) throw new ConflictException('文章下架记录已恢复')
+    })
+    await this.audit.record({
+      module: '内容管理',
+      action: '恢复文章',
+      target: `${article.id} · ${article.title}`,
+      before: { status: article.status },
+      after: { status: 'published' },
+      operator,
+    })
+    return { code: 0 }
+  }
+
+  /** 归档文章（软删）：待审核、已驳回、待发布和已关闭可归档。 */
   async deleteArticle(id: string, operator: string): Promise<{ code: number }> {
     const article = await this.prisma.article.findUnique({ where: { id } })
     if (!article || article.deletedAt) throw new NotFoundException('文章不存在')
-    if (!['pending', 'rejected', 'pending_release'].includes(article.status)) {
-      throw new ConflictException('仅待审核、已驳回或待发布的文章可删除')
+    if (!['pending', 'rejected', 'pending_release', 'closed'].includes(article.status)) {
+      throw new ConflictException('仅待审核、已驳回、待发布或已关闭的文章可归档')
     }
     await this.prisma.article.update({
       where: { id },
@@ -524,74 +551,4 @@ export class ContentsService {
     return { code: 0 }
   }
 
-  /* ---------- 展示页发布申请 ---------- */
-
-  async showcaseRequests(query: QueryShowcaseRequestsDto): Promise<{ list: Record<string, unknown>[]; total: number }> {
-    const where: Prisma.ShowcaseRequestWhereInput = {}
-    if (query.targetType) where.targetType = query.targetType
-    if (query.status) where.status = query.status
-
-    const [rows, total] = await Promise.all([
-      this.prisma.showcaseRequest.findMany({
-        where,
-        orderBy: { id: 'desc' },
-        skip: (query.page - 1) * query.pageSize,
-        take: query.pageSize,
-      }),
-      this.prisma.showcaseRequest.count({ where }),
-    ])
-    return { list: rows.map(toShowcaseRequestDto), total }
-  }
-
-  async reviewShowcaseRequest(
-    id: string,
-    dto: ReviewShowcaseRequestDto,
-    operator: string,
-  ): Promise<{ code: number }> {
-    const request = await this.prisma.showcaseRequest.findUnique({ where: { id } })
-    if (!request) throw new NotFoundException('展示页申请不存在')
-    if (request.status !== 'pending') throw new ConflictException('该申请已处理，请勿重复审核')
-
-    const comment = (dto.comment ?? '').trim()
-
-    /* 企业目标联动（先校验目标存在，避免写入后联动失败的部分状态） */
-    if (request.targetType === 'enterprise' && request.targetId) {
-      const ent = await this.prisma.enterprise.findUnique({ where: { id: request.targetId } })
-      if (!ent) throw new NotFoundException('企业不存在')
-    }
-
-    const record: ApprovalRecord = {
-      step: '管理员审核',
-      operator,
-      action: dto.status === 'approved' ? 'approve' : 'reject',
-      comment: comment || (dto.status === 'approved' ? '审核通过' : ''),
-      at: formatNow(),
-    }
-    const records = this.appendRecord(request.records, record)
-
-    await this.prisma.showcaseRequest.update({
-      where: { id },
-      data: {
-        status: dto.status,
-        records,
-        ...(dto.status === 'rejected' ? { rejectReason: comment } : {}),
-      },
-    })
-
-    if (request.targetType === 'enterprise' && request.targetId) {
-      await this.prisma.enterprise.update({
-        where: { id: request.targetId },
-        data: {
-          showcaseStatus: dto.status === 'approved' ? 'published' : 'rejected',
-          ...(dto.status === 'rejected' ? { showcaseComment: comment } : {}),
-        },
-      })
-    }
-    return { code: 0 }
-  }
-
-  private appendRecord(raw: Prisma.JsonValue, record: ApprovalRecord): Prisma.InputJsonValue {
-    const list: ApprovalRecord[] = Array.isArray(raw) ? (raw as unknown as ApprovalRecord[]) : []
-    return [...list, record] as unknown as Prisma.InputJsonValue
-  }
 }
