@@ -42,6 +42,14 @@ export class GoodsPayloadDto {
   @Min(0)
   stock!: number
 
+  /** 权益券有效期（天）：仅 fulfillment=voucher 有效；空值按 30 天兜底 */
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  @Max(3650)
+  validDays?: number
+
   @IsString()
   description!: string
 

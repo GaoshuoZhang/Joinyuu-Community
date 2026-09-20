@@ -1,0 +1,73 @@
+- main [ref=f1e244]:
+  - generic [ref=f1e353]:
+    - generic [ref=f1e354]:
+      - generic [ref=f1e355]:
+        - heading "系统配置" [level=2] [ref=f1e356]
+        - paragraph [ref=f1e357]: 站点信息与运行时开关，保存后立即生效
+      - generic [ref=f1e358]: 最近保存：2026-09-01 09:00（系统初始化）
+    - generic [ref=f1e363]:
+      - generic [ref=f1e364]:
+        - generic [ref=f1e365]: 站点信息
+        - generic [ref=f1e366]:
+          - generic [ref=f1e367]:
+            - generic [ref=f1e368]: "* 站点名称"
+            - textbox "如 聚屿社区…" [ref=f1e373]: 聚屿社区
+          - generic [ref=f1e374]:
+            - generic [ref=f1e375]: 站点标语
+            - textbox "客户端登录页展示…" [ref=f1e380]: 让每一座创业孤岛，在这里连成群岛。
+        - generic [ref=f1e381]: 功能开关
+        - generic [ref=f1e382]:
+          - generic [ref=f1e383]:
+            - generic [ref=f1e384]:
+              - generic [ref=f1e385]: 客户端注册
+              - generic [ref=f1e386]: 关闭后客户端暂停新用户注册
+            - generic [ref=f1e387] [cursor=pointer]
+          - generic [ref=f1e389]:
+            - generic [ref=f1e390]:
+              - generic [ref=f1e391]: 积分商城
+              - generic [ref=f1e392]: 关闭后客户端隐藏商城入口，已下单订单不受影响
+            - generic [ref=f1e393] [cursor=pointer]
+          - generic [ref=f1e395]:
+            - generic [ref=f1e396]:
+              - generic [ref=f1e397]: 需求广场
+              - generic [ref=f1e398]: 关闭后客户端暂停需求提交与响应
+            - generic [ref=f1e399] [cursor=pointer]
+          - generic [ref=f1e401]:
+            - generic [ref=f1e402]:
+              - generic [ref=f1e403]: 空间预约
+              - generic [ref=f1e404]: 关闭后客户端暂停提交新的空间预约
+            - generic [ref=f1e405] [cursor=pointer]
+          - generic [ref=f1e407]:
+            - generic [ref=f1e408]:
+              - generic [ref=f1e409]: 实名认证要求
+              - generic [ref=f1e410]: 开启后，未完成实名认证的用户不能发布需求或报名活动
+            - generic [ref=f1e411] [cursor=pointer]
+          - generic [ref=f1e413]:
+            - generic [ref=f1e414]:
+              - generic [ref=f1e415]: 首页轮播图
+              - generic [ref=f1e416]: 关闭后客户端首页不展示轮播区域（与「轮播图管理」共用开关）
+            - generic [ref=f1e417] [cursor=pointer]
+        - generic [ref=f1e419]: 运营参数
+        - generic [ref=f1e420]:
+          - generic [ref=f1e421]:
+            - generic [ref=f1e422]: "* 租约临期提醒窗口（天）"
+            - generic [ref=f1e423]:
+              - textbox "请输入" [ref=f1e428]: "15"
+              - generic [ref=f1e429]: 距到期不足该天数的租约将标记为「即将到期」并推送通知
+          - generic [ref=f1e430]:
+            - generic [ref=f1e431]: "* 上传文件大小限制（MB）"
+            - generic [ref=f1e432]:
+              - textbox "请输入" [ref=f1e437]: "10"
+              - generic [ref=f1e438]: 素材库与富文本图片上传的单文件大小上限（1-100 MB）
+          - generic [ref=f1e439]:
+            - generic [ref=f1e440]: "* 密码有效期（天）"
+            - generic [ref=f1e441]:
+              - textbox "请输入" [ref=f1e446]: "90"
+              - generic [ref=f1e447]: 0 表示不启用；超过有效期后登录将强制修改密码
+        - generic [ref=f1e448]: MinIO 对象存储
+        - generic [ref=f1e450]:
+          - generic [ref=f1e451]:
+            - generic [ref=f1e452]: 启用 MinIO
+            - generic [ref=f1e453]: 启用后素材/富文本图片上传写入 MinIO；停用则回退本地磁盘（UPLOAD_DIR）
+          - generic [ref=f1e454] [cursor=pointer]
+      - button "保存配置" [ref=f1e457] [cursor=pointer]

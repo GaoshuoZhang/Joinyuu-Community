@@ -6,7 +6,7 @@ import type { ArticleComment, UserIdentity } from '@/types'
 import { useIncrementalList } from '@/composables/useIncrementalList'
 import { formatLocalDateTime, formatZhNumber } from '@/utils/format'
 
-/* 文章评论区：列表（头像 + 昵称 + 发表身份）+ 评论输入（可选发表身份）。 */
+/* 文章评论区：列表（头像 + 昵称 + 发表身份）+ 评论输入（可选发表身份）；本人评论可删除。 */
 const props = defineProps<{
   comments: ArticleComment[]
   identities: UserIdentity[]
@@ -14,11 +14,14 @@ const props = defineProps<{
   modelValue: string
   submitting: boolean
   error?: string
+  /** 当前登录用户 uid：用于展示「删除」按钮 */
+  currentUid?: string
 }>()
 
 const emit = defineEmits<{
   'update:modelValue': [string]
   submit: [identity: UserIdentity | null]
+  delete: [comment: ArticleComment]
 }>()
 
 const identityOptions = computed(() => actionIdentityOptions(props.identities))
@@ -54,6 +57,9 @@ function pick(identity: UserIdentity) {
           <span class="comment-at">{{ formatLocalDateTime(item.at) }}</span>
         </div>
         <p class="comment-content">{{ item.content }}</p>
+        <div v-if="currentUid && item.uid === currentUid" class="comment-ops">
+          <Button variant="text" size="extra-small" theme="danger" @click="emit('delete', item)">删除</Button>
+        </div>
       </div>
       <Button v-if="hasMore" block variant="outline" @click="showMore">加载更多评论（剩余 {{ formatZhNumber(comments.length - visibleItems.length) }} 条）</Button>
     </div>
@@ -153,6 +159,12 @@ function pick(identity: UserIdentity) {
   font-size: var(--app-font-body);
   line-height: 1.6;
   color: var(--td-text-color-secondary);
+}
+
+.comment-ops {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: var(--app-space-1);
 }
 
 .comment-empty {

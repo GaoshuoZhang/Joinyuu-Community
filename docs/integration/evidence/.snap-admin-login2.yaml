@@ -1,0 +1,33 @@
+- generic [ref=e568]:
+  - generic [ref=e574]:
+    - heading "聚屿社区" [level=1] [ref=e581]
+    - paragraph [ref=e582]: Joinyuu Community · 数字化运营平台
+    - paragraph [ref=e583]: 让每一座创业孤岛，在这里连成群岛。
+    - list [ref=e584]:
+      - listitem [ref=e585]:
+        - generic [ref=e588]: 企业与需求双向连接
+      - listitem [ref=e589]:
+        - generic [ref=e592]: 活动运营与签到管理
+      - listitem [ref=e593]:
+        - generic [ref=e596]: 跨企业项目协作
+      - listitem [ref=e597]:
+        - generic [ref=e600]: 积分与空间运营
+  - generic [ref=e602]:
+    - heading "欢迎回来" [level=2] [ref=e603]
+    - paragraph [ref=e604]: 登录聚屿社区管理后台
+    - generic [ref=e605]:
+      - textbox "请输入用户名…" [ref=e611]
+      - generic [ref=e616]:
+        - textbox "请输入密码…" [ref=e617]
+        - img [ref=e619] [cursor=pointer]
+      - generic [ref=e626]:
+        - textbox "验证码…" [ref=e629]
+        - button "刷新验证码" [ref=e630] [cursor=pointer]:
+          - img "验证码" [ref=e631]
+        - button "刷新验证码" [ref=e632] [cursor=pointer]
+      - button "登 录" [ref=e638] [cursor=pointer]
+    - generic [ref=e640]:
+      - text: 演示账号：
+      - code [ref=e641]: admin
+      - text: /
+      - code [ref=e642]: admin123

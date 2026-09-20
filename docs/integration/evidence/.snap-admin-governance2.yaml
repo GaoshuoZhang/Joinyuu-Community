@@ -1,0 +1,183 @@
+- generic [ref=e1701]:
+  - link "跳到主要内容" [ref=e1702] [cursor=pointer]:
+    - /url: "#main-content"
+  - complementary "主导航" [ref=e1703]:
+    - link "返回工作台" [ref=e1704] [cursor=pointer]:
+      - /url: "#/dashboard"
+      - generic [ref=e1710]: 聚屿社区
+    - list [ref=e1714]:
+      - listitem [ref=e1715] [cursor=pointer]:
+        - generic [ref=e1718]: 工作台
+      - listitem [ref=e1719]:
+        - generic [ref=e1720] [cursor=pointer]: 社区成员
+        - list [ref=e1726]:
+          - listitem [ref=e1727] [cursor=pointer]:
+            - generic [ref=e1730]: 用户管理
+          - listitem [ref=e1731] [cursor=pointer]:
+            - generic [ref=e1734]: 社区个体
+          - listitem [ref=e1735] [cursor=pointer]:
+            - generic [ref=e1738]: 社区企业
+          - listitem [ref=e1739] [cursor=pointer]:
+            - generic [ref=e1742]: 合作企业
+          - listitem [ref=e1743] [cursor=pointer]:
+            - generic [ref=e1746]: 申请审核
+          - listitem [ref=e1747] [cursor=pointer]:
+            - generic [ref=e1750]: 名片管理
+      - listitem [ref=e1751]:
+        - generic [ref=e1752] [cursor=pointer]: 业务运营
+        - list [ref=e1758]:
+          - listitem [ref=e1759] [cursor=pointer]:
+            - generic [ref=e1762]: 需求管理
+          - listitem [ref=e1763] [cursor=pointer]:
+            - generic [ref=e1766]: 需求审核
+          - listitem [ref=e1767] [cursor=pointer]:
+            - generic [ref=e1770]: 项目管理
+          - listitem [ref=e1771] [cursor=pointer]:
+            - generic [ref=e1774]: 活动管理
+          - listitem [ref=e1775] [cursor=pointer]:
+            - generic [ref=e1778]: 活动报名
+      - listitem [ref=e1779]:
+        - generic [ref=e1780] [cursor=pointer]: 空间管理
+        - list [ref=e1786]:
+          - listitem [ref=e1787] [cursor=pointer]:
+            - generic [ref=e1790]: 办公位管理
+          - listitem [ref=e1791] [cursor=pointer]:
+            - generic [ref=e1794]: 办公室管理
+          - listitem [ref=e1795] [cursor=pointer]:
+            - generic [ref=e1798]: 租赁管理
+          - listitem [ref=e1799] [cursor=pointer]:
+            - generic [ref=e1802]: 公共空间管理
+          - listitem [ref=e1803] [cursor=pointer]:
+            - generic [ref=e1806]: 公共空间预约
+      - listitem [ref=e1807]:
+        - generic [ref=e1808] [cursor=pointer]: 内容管理
+        - list [ref=e1814]:
+          - listitem [ref=e1815] [cursor=pointer]:
+            - generic [ref=e1818]: 资讯发布
+          - listitem [ref=e1819] [cursor=pointer]:
+            - generic [ref=e1822]: 投稿内容
+          - listitem [ref=e1823] [cursor=pointer]:
+            - generic [ref=e1826]: 栏目管理
+          - listitem [ref=e1827] [cursor=pointer]:
+            - generic [ref=e1830]: 阅读统计
+          - listitem [ref=e1831] [cursor=pointer]:
+            - generic [ref=e1834]: 社区政策
+          - listitem [ref=e1835] [cursor=pointer]:
+            - generic [ref=e1838]: 轮播图管理
+          - listitem [ref=e1839] [cursor=pointer]:
+            - generic [ref=e1842]: 首页公告
+      - listitem [ref=e1843]:
+        - generic [ref=e1844] [cursor=pointer]: 积分商城
+      - listitem [ref=e1850]:
+        - generic [ref=e1851] [cursor=pointer]: 规则管理
+      - listitem [ref=e1857]:
+        - generic [ref=e1858] [cursor=pointer]: 系统管理
+        - list [ref=e2198]:
+          - listitem [ref=e2199] [cursor=pointer]:
+            - generic [ref=e2202]: 数据字典
+          - listitem [ref=e2203] [cursor=pointer]:
+            - generic [ref=e2206]: 系统配置
+          - listitem [ref=e2207] [cursor=pointer]:
+            - generic [ref=e2210]: 申请表单配置
+          - listitem [ref=e2211] [cursor=pointer]:
+            - generic [ref=e2214]: 注销工单
+          - listitem [ref=e2215] [cursor=pointer]:
+            - generic [ref=e2218]: 日志与审计
+          - listitem [ref=e2219] [cursor=pointer]:
+            - generic [ref=e2222]: 角色与账号
+          - listitem [ref=e2223] [cursor=pointer]:
+            - generic [ref=e2226]: 素材库
+          - listitem [ref=e2227] [cursor=pointer]:
+            - generic [ref=e2230]: 系统监控
+          - listitem [ref=e2231] [cursor=pointer]:
+            - generic [ref=e2234]: 归档管理
+          - listitem [ref=e2235] [cursor=pointer]:
+            - generic [ref=e2238]: 协议与政策
+    - generic [ref=e1864]:
+      - button "全部展开" [ref=e1865] [cursor=pointer]
+      - button "收起菜单" [ref=e1869] [cursor=pointer]
+  - generic [ref=e1873]:
+    - banner [ref=e1874]:
+      - button "全部关闭" [ref=e1875] [cursor=pointer]
+      - navigation "已打开页面" [ref=e1879]:
+        - generic [ref=e1880]:
+          - link "工作台" [ref=e1882] [cursor=pointer]:
+            - /url: "#/dashboard"
+          - generic [ref=e1883] [cursor=pointer]:
+            - link "需求管理" [ref=e1884]:
+              - /url: "#/demands"
+            - button "关闭需求管理" [ref=e1885]
+          - generic [ref=e1888] [cursor=pointer]:
+            - link "用户管理" [ref=e1889]:
+              - /url: "#/users"
+            - button "关闭用户管理" [ref=e1890]
+          - generic [ref=e2239] [cursor=pointer]:
+            - link "注销工单" [ref=e2240]:
+              - /url: "#/system/deletion-requests"
+            - button "关闭注销工单" [ref=e2241]
+      - generic [ref=e1893]:
+        - button "切换暗色模式" [ref=e1894] [cursor=pointer]
+        - generic [ref=e1897]:
+          - button "通知中心" [ref=e1898] [cursor=pointer]
+          - superscript [ref=e1901]: "5"
+        - button "管理员菜单" [ref=e1902] [cursor=pointer]:
+          - generic [ref=e1903]: 社
+          - generic [ref=e1905]: 社区管理员
+    - main [ref=e1906]:
+      - generic [ref=e2244]:
+        - generic [ref=e2246]:
+          - heading "注销工单" [level=2] [ref=e2247]
+          - paragraph [ref=e2248]: 注销申请须经过 7 天冷静期，届满后由工作人员确认执行或驳回
+        - generic [ref=e2249]:
+          - generic [ref=e2250]:
+            - generic "筛选状态" [ref=e2251]:
+              - textbox "请选择" [ref=e2255] [cursor=pointer]: 全部状态
+            - button "列设置" [ref=e2259] [cursor=pointer]
+          - generic [ref=e2262]:
+            - table [ref=e2264]:
+              - rowgroup [ref=e2274]:
+                - row [ref=e2275]:
+                  - columnheader "工单编号" [ref=e2276]
+                  - columnheader "用户" [ref=e2278]
+                  - columnheader "申请原因" [ref=e2280]
+                  - columnheader "申请时间" [ref=e2282]
+                  - columnheader "冷静期届满" [ref=e2284]
+                  - columnheader "状态" [ref=e2286]
+                  - columnheader "复核说明" [ref=e2288]
+                  - columnheader "操作" [ref=e2290]
+              - rowgroup [ref=e2292]:
+                - row [ref=e2293]:
+                  - cell "DR2" [ref=e2294]:
+                    - generic "DR2" [ref=e2296]
+                  - cell "联调小屿 U1016" [ref=e2297]:
+                    - text: 联调小屿
+                    - generic "U1016" [ref=e2299]
+                  - cell "联调测试：请运营驳回本次注销申请" [ref=e2300]
+                  - cell "2026-09-20 17:53" [ref=e2301]
+                  - cell [ref=e2302]:
+                    - text: 2026-09-27 17:53
+                    - paragraph [ref=e2303]: 剩余 168 小时
+                  - cell "待处理" [ref=e2304]:
+                    - generic "待处理" [ref=e2306]
+                  - cell [ref=e2307]
+                  - cell [ref=e2308]:
+                    - button "确认注销" [disabled] [ref=e2309]
+                    - button "驳回" [ref=e2311] [cursor=pointer]
+                - row [ref=e2313]:
+                  - cell "DR1" [ref=e2314]:
+                    - generic "DR1" [ref=e2316]
+                  - cell "联调小屿 U1016" [ref=e2317]:
+                    - text: 联调小屿
+                    - generic "U1016" [ref=e2319]
+                  - cell "联调测试：验证注销申请与撤回流程" [ref=e2320]
+                  - cell "2026-09-20 17:52" [ref=e2321]
+                  - cell "2026-09-27 17:52" [ref=e2322]
+                  - cell "已撤回" [ref=e2323]:
+                    - generic "已撤回" [ref=e2325]
+                  - cell [ref=e2326]
+                  - cell "—" [ref=e2327]
+            - generic [ref=e2330]:
+              - generic [ref=e2331]: 共 2 条数据
+              - list [ref=e2336]:
+                - listitem [ref=e2337] [cursor=pointer]: "1"
+        - text: "*"

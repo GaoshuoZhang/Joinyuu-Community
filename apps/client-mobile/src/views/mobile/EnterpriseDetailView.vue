@@ -263,11 +263,17 @@ async function doExit() {
 
       <section v-if="isContact || data.exitApplication" class="m-card">
         <h2 class="sec-title">退驻 / 注销</h2>
-        <template v-if="data.exitApplication">
+        <template v-if="data.exitApplication && data.exitApplication.status === 'pending'">
           <NoticeBar visible theme="warning" :content="`退驻/注销申请处理中（提交于 ${formatLocalDateTime(data.exitApplication.at)}）`" />
           <p v-if="data.exitApplication.reason" class="exit-reason">申请说明：{{ data.exitApplication.reason }}</p>
         </template>
         <template v-else>
+          <NoticeBar
+            v-if="data.exitApplication && data.exitApplication.status === 'rejected'"
+            visible
+            theme="danger"
+            :content="`退驻/注销申请已被驳回（${formatLocalDateTime(data.exitApplication.at)}）${data.exitApplication.reason ? `：${data.exitApplication.reason}` : ''}`"
+          />
           <p class="exit-desc">退驻后企业将失去社区企业身份与相关权益；注销后企业档案将被归档。提交后由社区运营审核确认。</p>
           <Button theme="danger" variant="outline" block @click="onExitApply">申请退驻 / 注销</Button>
         </template>

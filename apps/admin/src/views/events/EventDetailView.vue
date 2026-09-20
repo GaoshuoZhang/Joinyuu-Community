@@ -20,7 +20,7 @@ import {
   rescheduleEvent,
   restoreCancelledEvent,
   reviewEventEnrollment,
-  toggleEventEnrollment,
+  setEventEnrollment,
 } from '@/api/events'
 import type { EventTicketRow } from '@/api/events'
 import type { CommunityEvent, EventEnrollment } from '@/types'
@@ -108,10 +108,9 @@ async function onCancelSchedule() {
 async function onToggleEnrollment() {
   if (!event.value) return
   acting.value = 'enrollment'
-  /* 先取旧状态再调接口：接口原地翻转了 enrollmentOpen，后再判断会拿到新值导致提示反转 */
   const wasOpen = event.value.enrollmentOpen
   try {
-    await toggleEventEnrollment(event.value.id)
+    await setEventEnrollment(event.value.id, !wasOpen)
     MessagePlugin.success(wasOpen ? '已暂停报名' : '已开放报名')
     await load(true)
   } catch (e) {

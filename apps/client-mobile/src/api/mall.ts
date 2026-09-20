@@ -2,7 +2,7 @@ import { apiMode, httpGet, httpPost } from './http'
 import type { Goods, MyOrder } from '@/types'
 import * as mock from '@/mock/handlers/mall'
 
-/** GET /api/app/mall/goods — 商品列表（on 且库存>0；mallOpen 关闭 → 400） */
+/** GET /api/app/mall/goods — 商品列表（on/restock 均可见，库存 0 展示售罄；mallOpen 关闭 → 400） */
 export async function fetchGoods(query: { category?: string } = {}): Promise<Goods[]> {
   if (apiMode === 'mock') return mock.fetchGoods(query)
   const qs = query.category ? `?category=${encodeURIComponent(query.category)}` : ''
@@ -43,12 +43,6 @@ export async function confirmOrder(id: string): Promise<void> {
 export async function useOrder(id: string): Promise<void> {
   if (apiMode === 'mock') return mock.useOrder(id)
   await httpPost(`/mall/orders/${id}/use`)
-}
-
-/** 缺货商品到货提醒订阅。 */
-export async function subscribeRestock(goodsId: string): Promise<void> {
-  if (apiMode === 'mock') return mock.subscribeRestock(goodsId)
-  await httpPost(`/mall/goods/${goodsId}/restock-subscribe`)
 }
 
 /** 取消待发货订单（退积分 + 回补库存）。 */

@@ -1,10 +1,11 @@
 import { Body, Controller, Get, HttpCode, Param, Post, Query, Req } from '@nestjs/common'
 import type { AppAuthenticatedRequest } from '../../../common/interfaces/app-authenticated-request'
+import { PageQueryDto } from '../../../common/dto/page-query.dto'
 import { AppMallService } from './mall.service'
 import { CreateOrderDto } from './dto/create-order.dto'
 import { ReviewOrderDto } from './dto/review-order.dto'
 
-/* 积分商城（M2-R R2）：商品浏览/详情、下单、取消/核销/收货/评价、到货提醒订阅 */
+/* 积分商城（M2-R R2）：商品浏览/详情、下单、取消/核销/收货/评价 */
 @Controller('api/app/mall')
 export class AppMallController {
   constructor(private readonly mall: AppMallService) {}
@@ -12,12 +13,11 @@ export class AppMallController {
   @Get('goods')
   listGoods(
     @Req() req: AppAuthenticatedRequest,
-    @Query('page') page?: string,
-    @Query('pageSize') pageSize?: string,
+    @Query() query: PageQueryDto,
     @Query('category') category?: string,
     @Query('keyword') keyword?: string,
   ) {
-    return this.mall.listGoods(this.page(page), this.page(pageSize, 10), category, keyword)
+    return this.mall.listGoods(query.page, query.pageSize, category, keyword)
   }
 
   @Get('goods/:id')
@@ -55,19 +55,8 @@ export class AppMallController {
     return this.mall.reviewOrder(this.uid(req), id, dto)
   }
 
-  @HttpCode(200)
-  @Post('goods/:id/restock-subscribe')
-  subscribe(@Req() req: AppAuthenticatedRequest, @Param('id') id: string) {
-    return this.mall.subscribeRestock(this.uid(req), id)
-  }
-
   private uid(req: AppAuthenticatedRequest): string {
     return req.user?.sub ?? ''
-  }
-
-  private page(raw?: string, fallback = 1): number {
-    const n = Number.parseInt(raw ?? '', 10)
-    return Number.isFinite(n) && n > 0 ? n : fallback
   }
 }
 

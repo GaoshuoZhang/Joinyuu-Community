@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, defineAsyncComponent, nextTick, onMounted, reactive, ref, watch } from 'vue'
+import { computed, defineAsyncComponent, nextTick, reactive, ref, watch } from 'vue'
 import { MessagePlugin } from 'tdesign-vue-next'
 import type { FormProps } from 'tdesign-vue-next'
 import { focusFirstInvalid } from '@/utils/form'
@@ -43,16 +43,6 @@ const ruleExp = ref(100)
 
 /* 自定义新增承接方的联系人信息（key = 表单值） */
 const customContacts = reactive<Record<string, { contactName: string; phone: string }>>({})
-
-onMounted(async () => {
-  try {
-    const rules = await fetchExperienceRules()
-    ruleExp.value = rules.find((r) => r.code === 'project_completed')?.exp ?? 100
-  } catch {
-    /* 规则加载失败时保留默认值 */
-  }
-})
-
 
 /* 自定义新增的承接方（不在预设选项内的值） */
 const customRows = computed(() =>
@@ -129,6 +119,7 @@ function evenShares(n: number): number[] {
 watch(
   () => props.visible,
   (v) => {
+    if (v) void ensureOptions()
     if (v && props.mode === 'edit' && props.project) {
       /* 编辑：回填项目现有数据（承接方 value = type:id 与选项格式对齐） */
       form.projectName = props.project.name
@@ -206,10 +197,33 @@ const rules: FormProps['rules'] = {
   ],
 }
 
-async function loadOptions() {
-  undertakerOptions.value = await fetchUndertakerOptions()
+/* 选项与规则值改为「首次打开弹窗时」按需加载：避免登录页/未打开时携带旧令牌请求（D-101） */
+const optionsLoaded = ref(false)
+let optionsPromise: Promise<void> | null = null
+function ensureOptions(): Promise<void> {
+  if (optionsLoaded.value) return Promise.resolve()
+  if (!optionsPromise) {
+    optionsPromise = Promise.all([
+      fetchUndertakerOptions()
+        .then((rows) => {
+          undertakerOptions.value = rows
+        })
+        .catch(() => undefined),
+      fetchExperienceRules()
+        .then((rules) => {
+          ruleExp.value = rules.find((r) => r.code === 'project_completed')?.exp ?? 100
+        })
+        .catch(() => undefined),
+    ])
+      .then(() => {
+        optionsLoaded.value = true
+      })
+      .finally(() => {
+        optionsPromise = null
+      })
+  }
+  return optionsPromise
 }
-loadOptions()
 
 function addMilestone() {
   /* 新增节点插入到两个固定节点之间（固定「预期交付」之前） */

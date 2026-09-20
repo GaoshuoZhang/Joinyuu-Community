@@ -40,7 +40,7 @@ const visibleColumns = computed(() => {
 async function load() {
   loading.value = true
   try {
-    const res = await fetchArticles({ page: 1, pageSize: 999, sortBy: 'views', sortOrder: 'descend' })
+    const res = await fetchArticles({ page: 1, pageSize: 100, sortBy: 'views', sortOrder: 'descend' })
     list.value = res.list
     loadError.value = ''
   } catch (e) {

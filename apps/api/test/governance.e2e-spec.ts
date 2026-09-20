@@ -14,7 +14,7 @@ describe('M2-R R3 管理端下架/退驻/协议留痕', () => {
   let app: INestApplication
   let prisma: PrismaService
   let admin: string // 超管（* 权限，含 /governance）
-  let publisher: string // U1005 顾北辰（需求发布者）
+  let _publisher: string // U1005 顾北辰（需求发布者）
   let founderB: string // U1004 周慕深（E2002 芯启半导体负责人，退驻申请人）
 
   beforeAll(async () => {
@@ -24,7 +24,7 @@ describe('M2-R R3 管理端下架/退驻/协议留痕', () => {
     await app.init()
     prisma = app.get(PrismaService)
     admin = await loginAs(app)
-    publisher = await appLoginAs(app, '13801210005', 'user123')
+    _publisher = await appLoginAs(app, '13801210005', 'user123')
     founderB = await appLoginAs(app, '13801210004', 'user123')
   })
 

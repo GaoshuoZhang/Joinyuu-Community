@@ -1,0 +1,9 @@
+- main [ref=f4e2]:
+  - generic [ref=f4e4]:
+    - paragraph [ref=f4e5]: 共 1 条
+    - link [ref=f4e6] [cursor=pointer]:
+      - heading "联调测试：小程序数据看板开发合作" [level=2] [ref=f4e7]
+      - paragraph [ref=f4e8]: 联调响应：团队有 3 个小程序看板交付案例，可 3 周内交付并支持验收调整。
+      - paragraph [ref=f4e9]:
+        - button "待处理" [ref=f4e10]
+      - paragraph [ref=f4e12]: 响应于 2026-09-20 18:35

@@ -15,7 +15,7 @@ export class AppAnalyticsInterceptor implements NestInterceptor {
       [/^\/demands\/[^/]+\/respond$/, 'demand_respond'], [/^\/events\/[^/]+\/enroll$/, 'event_enroll'],
       [/^\/events\/[^/]+\/check-in$/, 'checkin'], [/^\/mall\/orders$/, 'mall_order'],
       [/^\/articles$/, 'article_submit'], [/^\/spaces\/reservations$/, 'space_reserve'],
-      [/^\/me\/favorites\/toggle$/, 'favorite'], [/^\/reports$/, 'report'],
+      [/^\/me\/favorites\/toggle$/, 'favorite'],
     ]
     const eventType = req.path?.startsWith('/api/app/') && req.method === 'POST' ? routes.find(([pattern]) => pattern.test(path))?.[1] : undefined
     if (!eventType) return next.handle()

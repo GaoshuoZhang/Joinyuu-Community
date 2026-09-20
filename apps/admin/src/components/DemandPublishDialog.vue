@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, defineAsyncComponent, nextTick, onMounted, reactive, ref, watch } from 'vue'
+import { computed, defineAsyncComponent, nextTick, reactive, ref, watch } from 'vue'
 import { MessagePlugin } from 'tdesign-vue-next'
 import type { FormProps } from 'tdesign-vue-next'
 import { focusFirstInvalid } from '@/utils/form'
@@ -161,40 +161,54 @@ watch(
   (v) => applyPublisherContact(v),
 )
 
-/* 选项加载放在 form 声明之后（避免引用 form 的时序隐患） */
-loadPublisherOptions()
+/* 选项加载放在 form 声明之后（避免引用 form 的时序隐患），改为首次打开弹窗时按需加载（D-101） */
 
 /* 积分规则默认分值：响应需求奖励 */
 const rulePoints = reactive({ respond: 20 })
 
-onMounted(async () => {
-  try {
-    const rules = await fetchPointsRules()
-    rulePoints.respond = rules.find((r) => r.code === 'demand_responded')?.points ?? 20
-    if (props.visible && props.mode === 'create') form.respondPoints = rulePoints.respond
-  } catch {
-    /* 规则加载失败时保留默认值 */
+const optionsLoaded = ref(false)
+let optionsPromise: Promise<void> | null = null
+function ensureOptions(): Promise<void> {
+  if (optionsLoaded.value) return Promise.resolve()
+  if (!optionsPromise) {
+    optionsPromise = Promise.all([
+      loadPublisherOptions(),
+      fetchPointsRules()
+        .then((rules) => {
+          rulePoints.respond = rules.find((r) => r.code === 'demand_responded')?.points ?? 20
+          if (props.visible && props.mode === 'create') form.respondPoints = rulePoints.respond
+        })
+        .catch(() => undefined),
+      fetchDictEntries('demand_category')
+        .then((entries) => {
+          const enabled = entries.filter((e) => e.status === 'enabled')
+          categoryCodeByLabel.value = Object.fromEntries(entries.map((entry) => [entry.label, entry.code]))
+          const options = enabled.map((entry) => ({ label: entry.label, value: entry.code }))
+          if (options.length) categoryOptions.value = options
+          /* 字典晚于编辑抽屉加载时，也将历史标签值归一为 code。 */
+          if (props.visible && props.demand && form.category === props.demand.category) {
+            form.category = categoryCodeByLabel.value[props.demand.category] ?? props.demand.category
+          }
+        })
+        .catch(() => {
+          /* 字典加载失败保留回退词表 */
+        }),
+    ])
+      .then(() => {
+        optionsLoaded.value = true
+      })
+      .finally(() => {
+        optionsPromise = null
+      })
   }
-  fetchDictEntries('demand_category')
-    .then((entries) => {
-      const enabled = entries.filter((e) => e.status === 'enabled')
-      categoryCodeByLabel.value = Object.fromEntries(entries.map((entry) => [entry.label, entry.code]))
-      const options = enabled.map((entry) => ({ label: entry.label, value: entry.code }))
-      if (options.length) categoryOptions.value = options
-      /* 字典晚于编辑抽屉加载时，也将历史标签值归一为 code。 */
-      if (props.visible && props.demand && form.category === props.demand.category) {
-        form.category = categoryCodeByLabel.value[props.demand.category] ?? props.demand.category
-      }
-    })
-    .catch(() => {
-      /* 字典加载失败保留回退词表 */
-    })
-})
+  return optionsPromise
+}
 
 watch(
   () => props.visible,
   async (v) => {
     if (!v) return
+    void ensureOptions()
     if (props.mode === 'create' || !props.demand) {
       form.title = ''
       form.category = ''

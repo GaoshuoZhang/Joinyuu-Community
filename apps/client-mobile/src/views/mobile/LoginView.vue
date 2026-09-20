@@ -57,7 +57,7 @@ async function onSubmit() {
       <p class="slogan">让每一座创业孤岛，在这里连成群岛。</p>
     </div>
 
-    <div class="form">
+    <form class="form" @submit.prevent="onSubmit">
       <div class="field">
         <label>手机号</label>
         <Input v-model="form.phone" type="tel" autocomplete="username" :maxlength="11" placeholder="请输入手机号…" clearable @keyup.enter="onSubmit" />
@@ -82,7 +82,7 @@ async function onSubmit() {
       <p class="guest"><router-link to="/" replace class="guest-link">暂不登录</router-link></p>
       <p class="swap">还没有账号？<router-link to="/register" class="link">立即注册</router-link></p>
       <p v-if="apiMode === 'mock'" class="demo">演示：13800000001 / client123</p>
-    </div>
+    </form>
   </main>
 </template>
 

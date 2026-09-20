@@ -17,6 +17,8 @@ import { PointsEngineService } from '../../../common/engine/points-engine/points
 import { NotificationService } from '../../../common/notify/notification.service'
 import { AppSessionService } from '../../../common/app-session/app-session.service'
 import { formatNow } from '../../../common/utils/time'
+import { normalizeGender } from '../../../common/utils/gender'
+import { BUILTIN_AGREEMENTS, BUILTIN_AGREEMENT_VERSION } from '../policies/builtin-agreements'
 import { buildCaptcha } from '../../auth/captcha.util'
 import type { AppJwtPayload } from '../../../common/interfaces/app-jwt-payload'
 import type { RegisterDto } from './dto/register.dto'
@@ -116,8 +118,9 @@ export class AuthService {
     for (const policy of agreements) {
       if (!agreementVersions.has(policy.kind)) agreementVersions.set(policy.kind, policy.version)
     }
-    if (!agreementVersions.has('agreement_user') || !agreementVersions.has('agreement_privacy')) {
-      throw new BadRequestException('用户协议或隐私政策尚未发布')
+    /* 正式部署未导入种子/未发布协议时回退内置 V1.0（与 /api/app/policies/:kind 口径一致），保证注册不被阻断 */
+    for (const builtin of Object.values(BUILTIN_AGREEMENTS)) {
+      if (!agreementVersions.has(builtin.policyKind)) agreementVersions.set(builtin.policyKind, BUILTIN_AGREEMENT_VERSION)
     }
 
     try {
@@ -128,7 +131,7 @@ export class AuthService {
           nickname,
           phone,
           email: dto.email?.trim() ?? '',
-          gender: dto.gender || 'unknown',
+          gender: normalizeGender(dto.gender),
           status: 'active',
           passwordHash: await hash(dto.password, 10),
           points: 0,
@@ -229,7 +232,8 @@ export class AuthService {
     if (!captchaOk) throw new BadRequestException('验证码错误或已过期')
 
     const user = await this.prisma.user.findFirst({ where: { phone: dto.phone.trim() } })
-    if (!user) throw new UnauthorizedException('该手机号未注册')
+    /* D-105：未注册手机号是业务校验失败而非登录失效，用 400 避免触发客户端全局 401 登出跳转 */
+    if (!user) throw new BadRequestException('该手机号未注册')
 
     await this.prisma.user.update({
       where: { uid: user.uid },

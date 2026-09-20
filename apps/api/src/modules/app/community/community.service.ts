@@ -1,6 +1,5 @@
 import { Injectable, NotFoundException } from '@nestjs/common'
 import type { Prisma } from '@prisma/client'
-import { JwtService } from '@nestjs/jwt'
 import { PrismaService } from '../../../common/prisma/prisma.service'
 
 /** Json 列读取为数组（空/非数组回退 []，原样返回） */
@@ -11,10 +10,7 @@ function asArray(value: Prisma.JsonValue): unknown[] {
 /** 社区域（M2-R R3 /api/app/community）：社区政策 / 人才库 / 公开人才名片 / 企业库 */
 @Injectable()
 export class AppCommunityService {
-  constructor(
-    private readonly prisma: PrismaService,
-    private readonly jwt: JwtService,
-  ) {}
+  constructor(private readonly prisma: PrismaService) {}
 
   /** 社区政策列表（kind=community 且已发布；featured 优先、发布时间倒序；数组非分页） */
   async policies(keyword?: string, category?: string) {
@@ -46,15 +42,13 @@ export class AppCommunityService {
   }
 
   /** 人才库：有社区个体身份且存在 IndividualCard 的用户（keyword 模糊匹配昵称/简介/技能） */
-  async talents(keyword?: string, authorization?: string) {
+  async talents(keyword?: string) {
     const kw = keyword?.trim()
-    const blockedUids = await this.blockedUids(await this.optionalUid(authorization))
     const users = await this.prisma.user.findMany({
       where: {
         identities: { some: { type: 'community_individual' } },
         individualCard: { isNot: null },
         status: 'active',
-        ...(blockedUids.length ? { uid: { notIn: blockedUids } } : {}),
         ...(kw
           ? {
               OR: [
@@ -91,9 +85,7 @@ export class AppCommunityService {
   }
 
   /** 公开人才名片（简历式分段；visibility 隐私开关为 false 的字段整体不下发） */
-  async talentCard(uid: string, authorization?: string) {
-    const blockedUids = await this.blockedUids(await this.optionalUid(authorization))
-    if (blockedUids.includes(uid)) throw new NotFoundException('该用户尚未公开名片')
+  async talentCard(uid: string) {
     const user = await this.prisma.user.findUnique({
       where: { uid },
       include: {
@@ -130,10 +122,9 @@ export class AppCommunityService {
   }
 
   /** 企业库：未归档的社区企业（成员由 community_enterprise 身份派生） */
-  async enterprises(keyword?: string, industry?: string, authorization?: string) {
+  async enterprises(keyword?: string, industry?: string) {
     const kw = keyword?.trim()
     const ind = industry?.trim()
-    const blockedUids = await this.blockedUids(await this.optionalUid(authorization))
     const rows = await this.prisma.enterprise.findMany({
       where: {
         deletedAt: null,
@@ -173,7 +164,6 @@ export class AppCommunityService {
     }
 
     return rows
-      .filter((e) => !e.contactUserId || !blockedUids.includes(e.contactUserId))
       .map((e) => {
         const tier = descTiers.find((t) => t.threshold <= e.experience)
         return {
@@ -194,21 +184,5 @@ export class AppCommunityService {
           contactName: e.contactName || undefined,
         }
       })
-  }
-
-  private async optionalUid(authorization?: string): Promise<string | undefined> {
-    if (!authorization?.startsWith('Bearer ')) return undefined
-    try {
-      const payload = await this.jwt.verifyAsync<{ sub: string; scope?: string }>(authorization.slice(7))
-      return payload.scope === 'app' ? payload.sub : undefined
-    } catch {
-      return undefined
-    }
-  }
-
-  private async blockedUids(uid?: string): Promise<string[]> {
-    if (!uid) return []
-    const rows = await this.prisma.userBlock.findMany({ where: { userId: uid }, select: { blockedUid: true } })
-    return rows.map((row) => row.blockedUid)
   }
 }

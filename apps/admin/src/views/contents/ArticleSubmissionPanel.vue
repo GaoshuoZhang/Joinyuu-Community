@@ -11,6 +11,7 @@ import ArticleFormDialog from '@/components/ArticleFormDialog.vue'
 import ArticleScheduleDialog from '@/components/ArticleScheduleDialog.vue'
 import ContentTakedownDialog from '@/components/ContentTakedownDialog.vue'
 import ArticleReviewDialog from '@/components/ArticleReviewDialog.vue'
+import ArticleCommentsDialog from '@/components/ArticleCommentsDialog.vue'
 import BulkArchiveDialog from '@/components/BulkArchiveDialog.vue'
 import {
   cancelArticleSchedule,
@@ -237,6 +238,7 @@ async function onRestore(row: Article) {
 }
 
 const takedownDialog = ref<InstanceType<typeof ContentTakedownDialog>>()
+const commentsRef = ref<InstanceType<typeof ArticleCommentsDialog>>()
 function onWithdraw(row: Article) {
   takedownDialog.value?.open('article', row)
 }
@@ -359,8 +361,9 @@ onMounted(load)
             </t-popconfirm>
           </template>
 
-          <!-- 已发布：下架（转待发布） -->
+          <!-- 已发布：评论治理 / 下架（转待发布） -->
           <template v-else-if="row.status === 'published'">
+            <t-button variant="text" size="small" @click="commentsRef?.open(row)">评论</t-button>
             <t-button variant="text" size="small" theme="danger" @click="onWithdraw(row)">
               下架
             </t-button>
@@ -393,6 +396,7 @@ onMounted(load)
     <ArticleFormDialog v-model:visible="formVisible" mode="edit" :article="currentEdit" channel="submitted" @success="load" />
     <ArticleScheduleDialog v-model:visible="scheduleVisible" :article="current" @success="load" />
     <ContentTakedownDialog ref="takedownDialog" @success="load" />
+    <ArticleCommentsDialog ref="commentsRef" @success="load" />
 
     <!-- 一键归档：状态选择二次确认对话框 -->
     <BulkArchiveDialog

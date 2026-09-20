@@ -13,7 +13,7 @@ import EventFormDialog from '@/components/EventFormDialog.vue'
 import { dictFallback, fetchDictEntries } from '@/api/dicts'
 import { exportCsv, statusLabel } from '@/utils/exportCsv'
 import EventScheduleDialog from '@/components/EventScheduleDialog.vue'
-import { archiveEvent, cancelEvent, cancelEventSchedule, fetchEvents, publishEventNow, toggleEventEnrollment, restoreCancelledEvent } from '@/api/events'
+import { archiveEvent, cancelEvent, cancelEventSchedule, fetchEvents, publishEventNow, setEventEnrollment, restoreCancelledEvent } from '@/api/events'
 import { fetchUser } from '@/api/users'
 import type { CommunityEvent } from '@/types'
 
@@ -277,10 +277,9 @@ async function onCancelSchedule(row: CommunityEvent) {
 /* 已发布 → 暂停报名 / 开放报名 */
 async function onToggleEnrollment(row: CommunityEvent) {
   acting.value = `${row.id}:enrollment`
-  /* 先取旧状态再调接口：接口原地翻转了 row.enrollmentOpen，后再判断会拿到新值导致提示反转 */
   const wasOpen = row.enrollmentOpen
   try {
-    await toggleEventEnrollment(row.id)
+    await setEventEnrollment(row.id, !wasOpen)
     MessagePlugin.success(wasOpen ? '已暂停报名' : '已开放报名')
     await load()
   } catch (e) {

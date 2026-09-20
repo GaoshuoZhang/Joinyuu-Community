@@ -14,6 +14,7 @@ import { NotificationService } from '../../../common/notify/notification.service
 import { AppSessionService } from '../../../common/app-session/app-session.service'
 import { StorageService } from '../../../common/storage/storage.service'
 import { formatNow } from '../../../common/utils/time'
+import { normalizeGender } from '../../../common/utils/gender'
 import type { UpdateMeDto } from './dto/update-me.dto'
 import type { ChangePasswordDto } from './dto/change-password.dto'
 import type { ChangePhoneDto } from './dto/change-phone.dto'
@@ -56,7 +57,7 @@ export class MeService {
     return {
       uid: user.uid,
       nickname: user.nickname,
-      gender: user.gender,
+      gender: normalizeGender(user.gender),
       email: user.email,
       phone: user.phone,
       bio: user.bio,
@@ -84,7 +85,7 @@ export class MeService {
 
     const data: Prisma.UserUpdateInput = {}
     if (dto.nickname !== undefined && dto.nickname.trim()) data.nickname = dto.nickname.trim()
-    if (dto.gender !== undefined) data.gender = dto.gender
+    if (dto.gender !== undefined) data.gender = normalizeGender(dto.gender)
     if (dto.bio !== undefined) data.bio = dto.bio.trim()
     if (dto.email !== undefined) data.email = dto.email.trim()
     if (dto.avatar !== undefined) data.avatar = dto.avatar.trim() || null

@@ -10,6 +10,7 @@ import { ReviewEnrollmentDto } from './dto/review-enrollment.dto'
 import { CheckinEventDto } from './dto/checkin-event.dto'
 import { RescheduleEventDto } from './dto/reschedule-event.dto'
 import { RedeemTicketDto } from './dto/redeem-ticket.dto'
+import { UpdateEnrollmentDto } from './dto/update-enrollment.dto'
 
 @RequirePermission('/events')
 @Controller('api/admin/events')
@@ -68,8 +69,12 @@ export class EventsController {
 
   @HttpCode(200)
   @Patch(':id/enrollment')
-  toggleEnrollment(@Param('id') id: string, @Req() req: AuthenticatedRequest) {
-    return this.events.toggleEnrollment(id, req.user?.name ?? '社区管理员')
+  setEnrollment(
+    @Param('id') id: string,
+    @Body() dto: UpdateEnrollmentDto,
+    @Req() req: AuthenticatedRequest,
+  ) {
+    return this.events.setEnrollment(id, dto.enrollmentOpen, req.user?.name ?? '社区管理员')
   }
 
   @HttpCode(200)

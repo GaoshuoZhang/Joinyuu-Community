@@ -270,6 +270,8 @@ export interface Project {
   expReward?: number
   /** 关闭原因（status = closed 时存在） */
   closeReason?: string
+  /** 结项时间（status = finished 时存在） */
+  finishedAt?: string
   /** 归档时间（非空表示已归档，详情页写操作隐藏） */
   deletedAt?: string | null
 }
@@ -490,7 +492,8 @@ export interface MallGoods {
   description: string
   /** 累计兑换次数 */
   redeemedCount: number
-  subscriberCount?: number
+  /** 权益券有效期（天）：仅权益券有效，空值按 30 天兜底 */
+  validDays?: number | null
   createdAt: string
   /** 发货方式（仅实物商品）：pickup 自提 / delivery 邮寄 */
   shippingMethods?: Array<'pickup' | 'delivery'>
@@ -530,6 +533,10 @@ export interface RedemptionOrder {
   /** 取消原因（cancelled 时存在，积分原路退回） */
   cancelReason?: string
   trackingNo?: string
+  /** 权益券：券码 / 有效期 / 核销时间 */
+  voucherCode?: string
+  voucherExpiresAt?: string
+  usedAt?: string
 }
 
 export type RuleStatus = 'enabled' | 'disabled'
@@ -746,8 +753,7 @@ export type ArticleChannel = 'official' | 'submitted'
 export interface ArticleTakedown {
   id: number
   articleId: string
-  source: 'manual' | 'governance'
-  reportId?: string | null
+  source: 'manual'
   reason?: string | null
   takenDownAt: string
   takenDownBy: string

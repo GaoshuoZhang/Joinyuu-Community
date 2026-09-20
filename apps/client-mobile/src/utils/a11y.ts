@@ -12,3 +12,9 @@ export function announce(message: string): void {
   }
   el.textContent = message
 }
+
+/** 清空播报区域：组件卸载 / 状态恢复时调用，避免残留文案被读屏重复播报（D-103）。 */
+export function clearAnnounce(): void {
+  const el = document.getElementById('a11y-live')
+  if (el) el.textContent = ''
+}

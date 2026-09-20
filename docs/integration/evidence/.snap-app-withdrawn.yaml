@@ -1,0 +1,13 @@
+- main [ref=f39e2]:
+  - generic [ref=f39e3]:
+    - paragraph [ref=f39e4]: 企业入驻 / 合作伙伴 / 人才登记请从首页「企业合作 · 人才登记」入口提交
+    - generic [ref=f39e51]:
+      - paragraph [ref=f39e52]: 共 1 条
+      - link "人才登记 已撤回 陈屿 真实姓名：陈屿 · 擅长领域：大模型应用 / 创业辅导 · 从业年限：8 提交于 2026-09-20 18:09 修改重提" [ref=f39e53] [cursor=pointer]:
+        - generic [ref=f39e54]:
+          - generic [ref=f39e55]: 人才登记
+          - button "已撤回" [ref=f39e56]
+        - paragraph [ref=f39e58]: 陈屿
+        - paragraph [ref=f39e59]: 真实姓名：陈屿 · 擅长领域：大模型应用 / 创业辅导 · 从业年限：8
+        - paragraph [ref=f39e60]: 提交于 2026-09-20 18:09
+        - button "修改重提" [ref=f39e62]

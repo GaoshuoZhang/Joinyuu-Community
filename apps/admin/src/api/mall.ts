@@ -43,6 +43,8 @@ export interface GoodsPayload {
   fulfillment: GoodsFulfillment
   points: number
   stock: number
+  /** 权益券有效期（天）：仅权益券有效，空值按 30 天兜底 */
+  validDays?: number
   description: string
   /** 发货方式（仅实物商品）：pickup 自提 / delivery 邮寄 */
   shippingMethods?: Array<'pickup' | 'delivery'>

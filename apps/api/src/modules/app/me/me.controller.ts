@@ -1,6 +1,7 @@
 import { Body, Controller, Get, HttpCode, NotFoundException, Param, Post, Put, Query, Req, Res, UnauthorizedException } from '@nestjs/common'
 import type { Response } from 'express'
 import type { AppAuthenticatedRequest } from '../../../common/interfaces/app-authenticated-request'
+import { PageQueryDto } from '../../../common/dto/page-query.dto'
 import { MeService } from './me.service'
 import { UpdateMeDto } from './dto/update-me.dto'
 import { ChangePasswordDto } from './dto/change-password.dto'
@@ -24,10 +25,8 @@ export class MeController {
 
   /** 我的积分流水（分页倒序，含 balance） */
   @Get('points-records')
-  pointsRecords(@Req() req: AppAuthenticatedRequest, @Query('page') page?: string, @Query('pageSize') pageSize?: string) {
-    const p = Math.max(1, Number.parseInt(page ?? '1', 10) || 1)
-    const s = Math.min(50, Math.max(1, Number.parseInt(pageSize ?? '10', 10) || 10))
-    return this.me.pointsRecords(this.uid(req), p, s)
+  pointsRecords(@Req() req: AppAuthenticatedRequest, @Query() query: PageQueryDto) {
+    return this.me.pointsRecords(this.uid(req), query.page, query.pageSize)
   }
 
   /** 我的经验与等级（走社区个体个人维度） */

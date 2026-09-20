@@ -1,17 +1,8 @@
-import { Type } from 'class-transformer'
-import { IsIn, IsInt, IsOptional, IsString, Min } from 'class-validator'
+import { IsIn, IsOptional, IsString } from 'class-validator'
+import { PageQueryDto } from '../../../common/dto/page-query.dto'
 
 /* GET /api/admin/users 查询参数（与列表筛选口径一致） */
-export class QueryUsersDto {
-  @Type(() => Number)
-  @IsInt()
-  @Min(1)
-  page!: number
-
-  @Type(() => Number)
-  @IsInt()
-  @Min(1)
-  pageSize!: number
+export class QueryUsersDto extends PageQueryDto {
 
   @IsOptional()
   @IsString()

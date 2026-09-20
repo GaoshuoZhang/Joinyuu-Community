@@ -70,6 +70,7 @@ export interface ProjectDto {
   sourceDemandId?: string
   expReward?: number
   closeReason?: string
+  finishedAt?: string
   deletedAt?: string
 }
 
@@ -445,7 +446,7 @@ export class ProjectsService {
     await this.prisma.$transaction(async (tx) => {
       await tx.project.update({
         where: { id },
-        data: { status: 'finished', progress: 100, archivableAt: formatNow() },
+        data: { status: 'finished', progress: 100, archivableAt: formatNow(), finishedAt: formatNow() },
       })
       if (totalExp == null || totalExp <= 0) return
 
@@ -618,6 +619,7 @@ function toProjectDto(project: ProjectWithRelations): ProjectDto {
     memberCount: project.memberCount,
   }
   if (project.sourceDemandId != null) dto.sourceDemandId = project.sourceDemandId
+  if (project.finishedAt != null) dto.finishedAt = project.finishedAt
   if (project.expReward != null) dto.expReward = project.expReward
   if (project.closeReason != null) dto.closeReason = project.closeReason
   if (project.deletedAt != null) dto.deletedAt = project.deletedAt

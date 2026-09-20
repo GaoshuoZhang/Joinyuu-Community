@@ -1,0 +1,51 @@
+- generic [ref=f4e1]:
+  - generic [ref=f4e2]:
+    - link "跳到主要内容" [ref=f4e3] [cursor=pointer]:
+      - /url: "#main"
+    - generic [ref=f4e46]:
+      - generic [ref=f4e48]:
+        - heading "聚屿社区" [level=1] [ref=f4e50]
+        - button "站内信" [ref=f4e54] [cursor=pointer]
+      - main [active] [ref=f4e58]:
+        - generic [ref=f4e62]:
+          - button "陈 陈屿 UID U1001 社区企业 合作企业" [ref=f4e63] [cursor=pointer]:
+            - generic [ref=f4e64]: 陈
+            - generic [ref=f4e69]:
+              - paragraph [ref=f4e70]: 陈屿
+              - paragraph [ref=f4e71]: UID U1001
+              - generic [ref=f4e72]:
+                - button "社区企业" [ref=f4e73]
+                - button "合作企业" [ref=f4e75]
+          - generic [ref=f4e79]:
+            - generic [ref=f4e80]: 关联身份
+            - generic [ref=f4e82]: 2 个
+          - paragraph [ref=f4e88]: 我的资产
+          - generic [ref=f4e90]:
+            - generic [ref=f4e91]:
+              - generic [ref=f4e92]: 我的积分
+              - generic [ref=f4e94]: 2,710 分
+            - generic [ref=f4e101]:
+              - generic [ref=f4e102]: 我的订单
+              - generic [ref=f4e104]: 券码 / 物流 / 评价
+            - generic [ref=f4e110]:
+              - generic [ref=f4e111]: 我的租约
+              - generic [ref=f4e113]: 办公位 / 租期 / 租金
+          - paragraph [ref=f4e119]: 更多
+          - generic [ref=f4e121]:
+            - generic [ref=f4e122]:
+              - generic [ref=f4e123]: 人才登记
+              - generic [ref=f4e125]: 提交申请，加入社区人才库
+            - generic [ref=f4e131]:
+              - generic [ref=f4e132]: 我的记录
+              - generic [ref=f4e134]: 需求 / 报名 / 订单等
+            - generic [ref=f4e140]:
+              - generic [ref=f4e141]: 设置
+              - generic [ref=f4e143]: 资料 / 地址 / 账号安全
+            - generic [ref=f4e149]: 站内信
+      - tablist [ref=f4e157]:
+        - tab "首页" [ref=f4e159]
+        - tab "需求" [ref=f4e165]
+        - tab "社区" [ref=f4e171]
+        - tab "广场" [ref=f4e177]
+        - tab "我的" [selected] [ref=f4e183]
+  - status [ref=f4e190]: 欢迎回来，陈屿

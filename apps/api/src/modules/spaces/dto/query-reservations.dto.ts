@@ -1,17 +1,8 @@
-import { Type } from 'class-transformer'
-import { IsIn, IsInt, IsOptional, IsString, Min } from 'class-validator'
+import { IsIn, IsOptional, IsString } from 'class-validator'
+import { PageQueryDto } from '../../../common/dto/page-query.dto'
 
 /* 空间预约列表查询（对照 apps/admin/src/api/spaces.ts ReservationQuery） */
-export class QueryReservationsDto {
-  @Type(() => Number)
-  @IsInt()
-  @Min(1)
-  page!: number
-
-  @Type(() => Number)
-  @IsInt()
-  @Min(1)
-  pageSize!: number
+export class QueryReservationsDto extends PageQueryDto {
 
   @IsOptional()
   @IsString()

@@ -2,6 +2,7 @@ import { Injectable } from '@nestjs/common'
 import { PrismaService } from '../prisma/prisma.service'
 import { IdGeneratorService } from '../id-generator/id-generator.service'
 import { formatNow } from '../utils/time'
+import { MUTABLE_NOTICE_TYPES } from './notification-types'
 import type { Prisma } from '@prisma/client'
 
 export interface NoticeInput {
@@ -77,12 +78,14 @@ export class NotificationService {
     })
   }
 
-  /** 事务版通知写入：业务要求通知与状态原子提交时使用，错误交给调用方回滚。 */
+  /** 事务版通知写入：业务要求通知与状态原子提交时使用，错误交给调用方回滚。
+   * 用户可在「通知设置」中按类型静音（system 等安全通知不在可静音目录中）。 */
   async pushNoticeInTransaction(
     tx: Prisma.TransactionClient | PrismaService,
     userId: string,
     input: NoticeInput,
   ): Promise<void> {
+    if (await this.isMuted(tx, userId, input.type)) return
     await tx.userNotification.create({
       data: {
         id: await this.ids.next('UN'),
@@ -94,5 +97,23 @@ export class NotificationService {
         at: formatNow(),
       },
     })
+  }
+
+  /** 该用户是否已静音此类型（仅可静音类型参与判断；查询异常时放行，正常送达） */
+  private async isMuted(
+    tx: Prisma.TransactionClient | PrismaService,
+    userId: string,
+    type: string,
+  ): Promise<boolean> {
+    if (!MUTABLE_NOTICE_TYPES.includes(type)) return false
+    try {
+      const row = await tx.userNotificationPreference.findUnique({
+        where: { userId },
+        select: { mutedTypes: true },
+      })
+      return (row?.mutedTypes ?? []).includes(type)
+    } catch {
+      return false
+    }
   }
 }

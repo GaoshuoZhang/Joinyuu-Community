@@ -86,6 +86,12 @@ export class AppProjectsService {
       role,
       ...(enterpriseName ? { enterpriseName } : {}),
       ...(enterpriseId ? { enterpriseId } : {}),
+      ...(project.sourceDemandId ? { sourceDemandId: project.sourceDemandId } : {}),
+      ...(project.finishedAt ? { finishedAt: project.finishedAt } : {}),
+      /* 对端展示名（D-108）：发起方看承接方，承接方看需求发布者（历史项目无来源需求时为 undefined） */
+      ...(isInit
+        ? { partnerName: project.undertakers.map((u) => u.name).join('、') || undefined }
+        : { partnerName: sourceDemand?.publisherName ?? undefined }),
       sourceDemand: sourceDemand
         ? {
             id: sourceDemand.id,
@@ -165,7 +171,7 @@ export class AppProjectsService {
     if (all.length > 0 && acceptedCount === all.length) {
       await this.prisma.project.update({
         where: { id: project.id },
-        data: { status: 'finished', progress: 100, archivableAt: now },
+        data: { status: 'finished', progress: 100, archivableAt: now, finishedAt: now },
       })
       const title = '项目已结项'
       if (initiatorUid) {
@@ -298,7 +304,10 @@ export class AppProjectsService {
       ...(partner ? { partnerName: partner.name } : {}),
       progress: project.progress,
       milestones: project.milestones.map((m) => this.toMilestone(m, project.id)),
-      ...(project.status === 'finished' && project.archivableAt ? { finishedAt: project.archivableAt } : {}),
+      /* 结项时间优先取真实结项时间；历史数据回退到归档计时（D-109） */
+      ...(project.status === 'finished'
+        ? { finishedAt: project.finishedAt ?? project.archivableAt ?? undefined }
+        : {}),
     }
   }
 

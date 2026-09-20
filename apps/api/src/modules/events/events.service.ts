@@ -318,22 +318,24 @@ export class EventsService {
     return { code: 0 }
   }
 
-  async toggleEnrollment(id: string, operator: string): Promise<{ code: number }> {
+  /** 显式设置报名开关（幂等）：重放/重复请求不会反向翻转。 */
+  async setEnrollment(id: string, enrollmentOpen: boolean, operator: string): Promise<{ code: number }> {
     const event = await this.prisma.communityEvent.findUnique({ where: { id } })
     if (!event) throw new NotFoundException('活动不存在')
     if (event.status !== 'published') throw new ConflictException('仅已发布的活动可调整报名')
+    if (event.enrollmentOpen === enrollmentOpen) return { code: 0 }
 
     await this.prisma.communityEvent.update({
       where: { id },
-      data: { enrollmentOpen: !event.enrollmentOpen },
+      data: { enrollmentOpen },
     })
 
     await this.audit.record({
       module: '活动管理',
-      action: event.enrollmentOpen ? '暂停报名' : '开放报名',
+      action: enrollmentOpen ? '开放报名' : '暂停报名',
       target: `${event.id} · ${event.title}`,
       before: { enrollmentOpen: event.enrollmentOpen },
-      after: { enrollmentOpen: !event.enrollmentOpen },
+      after: { enrollmentOpen },
       operator,
     })
     return { code: 0 }

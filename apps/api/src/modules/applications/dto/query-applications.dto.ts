@@ -1,16 +1,7 @@
-import { Type } from 'class-transformer'
-import { IsIn, IsInt, IsOptional, Min } from 'class-validator'
+import { IsIn, IsOptional } from 'class-validator'
+import { PageQueryDto } from '../../../common/dto/page-query.dto'
 
-export class QueryApplicationsDto {
-  @Type(() => Number)
-  @IsInt()
-  @Min(1)
-  page!: number
-
-  @Type(() => Number)
-  @IsInt()
-  @Min(1)
-  pageSize!: number
+export class QueryApplicationsDto extends PageQueryDto {
 
   @IsOptional()
   @IsIn(['settle', 'individual', 'cooperation', 'exit'])

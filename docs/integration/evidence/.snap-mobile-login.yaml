@@ -1,0 +1,32 @@
+- generic [ref=e3]:
+  - link "跳到主要内容" [ref=e1] [cursor=pointer]:
+    - /url: "#main"
+  - main [ref=e4]:
+    - generic [ref=e5]:
+      - generic [ref=e6]: 聚
+      - heading "登录" [level=1] [ref=e7]
+      - paragraph [ref=e8]: 让每一座创业孤岛，在这里连成群岛。
+    - generic [ref=e9]:
+      - generic [ref=e10]:
+        - generic [ref=e11]: 手机号
+        - textbox "请输入手机号…" [ref=e15]
+      - generic [ref=e16]:
+        - generic [ref=e17]: 密码
+        - textbox "请输入密码…" [ref=e21]
+        - paragraph [ref=e27]:
+          - link "忘记密码？" [ref=e28] [cursor=pointer]:
+            - /url: /forgot-password
+      - generic [ref=e29]:
+        - generic [ref=e30]: 验证码
+        - generic [ref=e31]:
+          - textbox "请输入验证码…" [ref=e35]
+          - button "刷新验证码" [ref=e36] [cursor=pointer]:
+            - img "图形验证码" [ref=e39]
+      - button "登录" [ref=e40] [cursor=pointer]
+      - paragraph [ref=e42]:
+        - link "暂不登录" [ref=e43] [cursor=pointer]:
+          - /url: /
+      - paragraph [ref=e44]:
+        - text: 还没有账号？
+        - link "立即注册" [ref=e45] [cursor=pointer]:
+          - /url: /register

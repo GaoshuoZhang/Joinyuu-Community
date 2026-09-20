@@ -1,5 +1,5 @@
-/* M2-R R3 验收：实名认证、举报/屏蔽、收藏、协议版本下发、社区（政策/人才/企业库）
- * 前置：docker compose up + prisma migrate reset（22 迁移全量）+ seed；用户密码 user123 */
+/* M2-R R3 验收：实名认证、收藏、协议版本下发、社区（政策/人才/企业库）
+ * 前置：docker compose up + prisma migrate reset（全量迁移）+ seed；用户密码 user123 */
 import { INestApplication } from '@nestjs/common'
 import { Test } from '@nestjs/testing'
 import request from 'supertest'
@@ -8,7 +8,7 @@ import { PrismaService } from '../src/common/prisma/prisma.service'
 import { reseed } from './helpers/reseed'
 import { appGet, appLoginAs, appPost } from './helpers/app-login'
 
-describe('M2-R R3 实名/举报/收藏/协议/社区', () => {
+describe('M2-R R3 实名/收藏/协议/社区', () => {
   let app: INestApplication
   let prisma: PrismaService
   let token: string // U1001 陈屿（seed 已实名）
@@ -117,61 +117,6 @@ describe('M2-R R3 实名/举报/收藏/协议/社区', () => {
     expect(ok.status).toBe(200)
     // 恢复 U1005 实名信息
     await prisma.user.update({ where: { uid: 'U1005' }, data: { realName: '顾北辰', citizenId: '1101011990011018515X' } })
-  })
-
-  it('举报：提交 → 我的举报可见 pending → 重复 pending 409', async () => {
-    const res = await appPost(app, token, '/api/app/reports', {
-      targetType: 'demand',
-      targetId: 'D4002',
-      targetTitle: 'SaaS 控制台 UI 设计外包',
-      reason: '涉嫌虚假信息',
-      detail: '描述与实际不符',
-    })
-    expect(res.status).toBe(200)
-
-    const dup = await appPost(app, token, '/api/app/reports', {
-      targetType: 'demand',
-      targetId: 'D4002',
-      targetTitle: 'SaaS 控制台 UI 设计外包',
-      reason: '重复举报',
-    })
-    expect(dup.status).toBe(409)
-
-    const mine = await appGet(app, token, '/api/app/me/reports')
-    expect(mine.status).toBe(200)
-    const row = mine.body.data.find((r: { targetId: string }) => r.targetId === 'D4002')
-    expect(row).toBeTruthy()
-    expect(row.status).toBe('pending')
-  })
-
-  it('屏蔽：加入 → 列表 → 被屏蔽用户评论不可见 → 移除后恢复', async () => {
-    const block = await appPost(app, token, '/api/app/me/blocklist', { uid: 'U1003' })
-    expect(block.status).toBe(200)
-    const self = await appPost(app, token, '/api/app/me/blocklist', { uid: 'U1001' })
-    expect(self.status).toBe(400)
-
-    const list = await appGet(app, token, '/api/app/me/blocklist')
-    expect(list.body.data.some((b: { uid: string }) => b.uid === 'U1003')).toBe(true)
-
-    // U1003 在某文章下发评论 → U1001 的评论列表应过滤掉
-    const arts = await appGet(app, token, '/api/app/articles')
-    const article = Array.isArray(arts.body.data) ? arts.body.data[0] : arts.body.data.list[0]
-    await appPost(app, tokenU5, `/api/app/articles/${article.id}/comments`, { content: 'U1005 的正常评论' })
-    await appPost(
-      app,
-      await appLoginAs(app, '13801210003', 'user123'),
-      `/api/app/articles/${article.id}/comments`,
-      { content: 'U1003 被屏蔽后的评论' },
-    )
-    const comments = await appGet(app, token, `/api/app/articles/${article.id}/comments`)
-    const contents: string[] = (Array.isArray(comments.body.data) ? comments.body.data : comments.body.data.list ?? []).map(
-      (c: { content: string }) => c.content,
-    )
-    expect(contents.some((c) => c.includes('U1003 被屏蔽'))).toBe(false)
-    expect(contents.some((c) => c.includes('U1005 的正常评论'))).toBe(true)
-
-    const remove = await appPost(app, token, '/api/app/me/blocklist/U1003/remove', {})
-    expect(remove.status).toBe(200)
   })
 
   it('收藏：toggle 幂等 + 列表含服务端快照 + 类型筛选', async () => {

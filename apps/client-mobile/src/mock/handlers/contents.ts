@@ -143,6 +143,16 @@ export async function createArticleComment(articleId: string, content: string, a
   }, 160)
 }
 
+export async function deleteArticleComment(articleId: string, commentId: string): Promise<void> {
+  await withLatency(() => {
+    const uid = requireUid()
+    const index = articleComments.findIndex((item) => item.id === commentId && item.articleId === articleId)
+    if (index < 0) fail(404, '评论不存在或已删除')
+    if (articleComments[index].uid !== uid) fail(403, '只能删除自己的评论')
+    articleComments.splice(index, 1)
+  }, 120)
+}
+
 export async function createArticle(payload: ArticleCreatePayload): Promise<{ id: string }> {
   return withLatency(() => {
     const uid = requireUid()

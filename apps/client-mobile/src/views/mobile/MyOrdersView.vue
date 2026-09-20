@@ -12,18 +12,20 @@ import type { MyOrder } from '@/types'
 import StateTag from '@/components/shared/StateTag.vue'
 import { formatLocalDateTime, formatZhNumber } from '@/utils/format'
 
-/* 我的订单：整页左右滑动切换「全部 / 未完成 / 已完成」（默认未完成）；
+/* 我的订单：整页左右滑动切换「全部 / 未完成 / 已过期 / 已完成」（默认未完成）；
  * 未完成含数字券与实物订单（发货后仍留在未完成，确认收货后转入已完成）。
+ * 权益券过期后进入「已过期」（不可核销，可查看券码与有效期）。
  * 点击进入订单详情查看券码与二维码。 */
 const router = useRouter()
 const { data, loading, error, run } = useAsyncList(fetchMyOrders)
 onMounted(run)
 
-type OrderTab = 'all' | 'unfinished' | 'completed'
-const TAB_VALUES = ['all', 'unfinished', 'completed'] as const
+type OrderTab = 'all' | 'unfinished' | 'expired' | 'completed'
+const TAB_VALUES = ['all', 'unfinished', 'expired', 'completed'] as const
 const TABS: { value: OrderTab; label: string }[] = [
   { value: 'all', label: '全部' },
   { value: 'unfinished', label: '未完成' },
+  { value: 'expired', label: '已过期' },
   { value: 'completed', label: '已完成' },
 ]
 /* 默认展示未完成（券码核销与待收货主场景） */
@@ -35,6 +37,7 @@ const orders = computed(() => data.value ?? [])
 const filtered = computed(() => {
   if (activeTab.value === 'all') return orders.value
   if (activeTab.value === 'completed') return orders.value.filter((order) => String(order.status) === 'completed')
+  if (activeTab.value === 'expired') return orders.value.filter((order) => String(order.status) === 'expired')
   return orders.value.filter((order) => UNFINISHED_STATUSES.includes(String(order.status)))
 })
 const { visibleItems, hasMore, showMore } = useIncrementalList(filtered)

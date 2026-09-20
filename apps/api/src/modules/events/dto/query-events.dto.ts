@@ -1,17 +1,8 @@
-import { Type } from 'class-transformer'
-import { IsIn, IsInt, IsOptional, IsString, Min } from 'class-validator'
+import { IsIn, IsOptional, IsString } from 'class-validator'
+import { PageQueryDto } from '../../../common/dto/page-query.dto'
 
 /* 活动列表查询（wiki-backend.md §7.8）：keyword 匹配标题/ID；participant 按报名人筛选 */
-export class QueryEventsDto {
-  @Type(() => Number)
-  @IsInt()
-  @Min(1)
-  page!: number
-
-  @Type(() => Number)
-  @IsInt()
-  @Min(1)
-  pageSize!: number
+export class QueryEventsDto extends PageQueryDto {
 
   @IsOptional()
   @IsString()

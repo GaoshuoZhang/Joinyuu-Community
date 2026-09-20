@@ -1,5 +1,6 @@
 import { Body, Controller, Get, HttpCode, Param, Post, Query, Req } from '@nestjs/common'
 import { Public } from '../../../common/decorators/public.decorator'
+import { PageQueryDto } from '../../../common/dto/page-query.dto'
 import type { AppAuthenticatedRequest } from '../../../common/interfaces/app-authenticated-request'
 import { AppEventsService } from './events.service'
 import { CheckInDto } from './dto/check-in.dto'
@@ -14,12 +15,11 @@ export class AppEventsController {
   @Get()
   list(
     @Req() req: AppAuthenticatedRequest,
-    @Query('page') page?: string,
-    @Query('pageSize') pageSize?: string,
+    @Query() query: PageQueryDto,
     @Query('type') type?: string,
     @Query('keyword') keyword?: string,
   ) {
-    return this.events.list(req.headers.authorization, this.page(page), this.page(pageSize, 10), type, keyword)
+    return this.events.list(req.headers.authorization, query.page, query.pageSize, type, keyword)
   }
 
   @Public()
@@ -68,11 +68,6 @@ export class AppEventsController {
 
   private uid(req: AppAuthenticatedRequest): string {
     return req.user?.sub ?? ''
-  }
-
-  private page(raw?: string, fallback = 1): number {
-    const n = Number.parseInt(raw ?? '', 10)
-    return Number.isFinite(n) && n > 0 ? n : fallback
   }
 }
 

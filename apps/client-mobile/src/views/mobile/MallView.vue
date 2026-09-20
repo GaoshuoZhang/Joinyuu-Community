@@ -101,7 +101,10 @@ useRefreshOnActivate(() => {
           <span class="cost">{{ formatZhNumber(g.pointsCost) }} 积分</span>
         </div>
         <p class="desc">{{ g.description }}</p>
-        <p class="stock">库存 {{ formatZhNumber(g.stock) }}</p>
+        <p class="stock">
+          <template v-if="g.stock > 0">库存 {{ formatZhNumber(g.stock) }}</template>
+          <template v-else>已售罄</template>
+        </p>
       </router-link>
     </div>
   </div>

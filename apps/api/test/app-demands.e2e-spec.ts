@@ -73,6 +73,54 @@ describe('M2-R R2 app 需求撮合', () => {
     expect(row).toBeTruthy()
   })
 
+  it('撤回响应（D-107）：待处理可撤回 → 可重新响应 → 已选定后不可撤回', async () => {
+    /* 选一条 U1005 尚未响应且非本人发布的已发布需求（列表 DTO 不含 myResponse，需排除已响应集合） */
+    const responded = await appGet(app, tokenB, '/api/app/me/responses')
+    const respondedRows = Array.isArray(responded.body.data) ? responded.body.data : responded.body.data.list
+    const respondedIds = new Set(respondedRows.map((r: { demandId: string }) => r.demandId))
+    const list = await appGet(app, tokenB, '/api/app/demands?pageSize=50')
+    const target = list.body.data.list.find(
+      (d: { id: string; publisherId?: string }) => d.publisherId !== 'U1005' && !respondedIds.has(d.id),
+    )
+    expect(target).toBeTruthy()
+    const demandId: string = target.id
+
+    const respond = await appPost(app, tokenB, `/api/app/demands/${demandId}/respond`, { note: '撤回测试响应' })
+    expect(respond.status).toBe(200)
+    const mineBefore = await appGet(app, tokenB, '/api/app/me/responses')
+    const rowsBefore = Array.isArray(mineBefore.body.data) ? mineBefore.body.data : mineBefore.body.data.list
+    const rowBefore = rowsBefore.find((r: { demandId: string }) => r.demandId === demandId)
+    expect(rowBefore.withdrawnAt).toBeUndefined()
+
+    /* 撤回 → 视为未响应（可重新响应） */
+    const withdraw = await appPost(app, tokenB, `/api/app/me/responses/${rowBefore.id}/withdraw`, {})
+    expect(withdraw.status).toBe(200)
+    const detailAfterWithdraw = await appGet(app, tokenB, `/api/app/demands/${demandId}`)
+    expect(detailAfterWithdraw.body.data.myResponse).toBeUndefined()
+    const mineAfter = await appGet(app, tokenB, '/api/app/me/responses')
+    const rowsAfter = Array.isArray(mineAfter.body.data) ? mineAfter.body.data : mineAfter.body.data.list
+    const rowAfter = rowsAfter.find((r: { demandId: string }) => r.demandId === demandId)
+    expect(rowAfter.withdrawnAt).toBeTruthy()
+
+    /* 重复撤回 → 404 */
+    const again = await appPost(app, tokenB, `/api/app/me/responses/${rowBefore.id}/withdraw`, {})
+    expect(again.status).toBe(404)
+
+    /* 重新响应 → 发布者（测试账号 U1001）选定后不可再撤回（409） */
+    const reRespond = await appPost(app, tokenB, `/api/app/demands/${demandId}/respond`, { note: '重新响应' })
+    expect(reRespond.status).toBe(200)
+    const mineAgain = await appGet(app, tokenB, '/api/app/me/responses')
+    const rowsAgain = Array.isArray(mineAgain.body.data) ? mineAgain.body.data : mineAgain.body.data.list
+    const newRow = rowsAgain.find((r: { demandId: string; withdrawnAt?: string }) => r.demandId === demandId && !r.withdrawnAt)
+    if (target.publisherId === 'U1001') {
+      const select = await appPost(app, tokenA, `/api/app/me/demands/${demandId}/select`, { responseIds: [newRow.id] })
+      expect(select.status).toBe(200)
+      const blocked = await appPost(app, tokenB, `/api/app/me/responses/${newRow.id}/withdraw`, {})
+      expect(blocked.status).toBe(409)
+      expect(blocked.body.message).toContain('立项')
+    }
+  })
+
   it('发布需求（pending→管理端置 published）→ 应者响应 → 发布者选定承接方 → 管理员立项 → 里程碑验收结项', async () => {
     const adminToken = await loginAs(app)
 
@@ -208,5 +256,21 @@ describe('M2-R R2 app 需求撮合', () => {
     }
     const after = await prisma.project.findUnique({ where: { id: projectId } })
     expect(after?.status).toBe('finished')
+    expect(after?.finishedAt).toBeTruthy()
+
+    /* D-108/D-109：详情回填对端名称、来源需求 ID 与结项时间 */
+    const detailInitiator = await appGet(app, tokenA, `/api/app/me/projects/${projectId}`)
+    expect(detailInitiator.body.data.role).toBe('需求发起方')
+    expect(detailInitiator.body.data.partnerName).toBeTruthy()
+    expect(detailInitiator.body.data.sourceDemandId).toBe(demandId)
+    expect(detailInitiator.body.data.finishedAt).toBe(after?.finishedAt)
+
+    const detailUndertaker = await appGet(app, tokenB, `/api/app/me/projects/${projectId}`)
+    expect(detailUndertaker.body.data.partnerName).toBe('陈屿')
+    expect(detailUndertaker.body.data.finishedAt).toBe(after?.finishedAt)
+
+    const listInitiator = await appGet(app, tokenA, '/api/app/me/projects')
+    const row = listInitiator.body.data.find((p: { id: string }) => p.id === projectId)
+    expect(row.finishedAt).toBe(after?.finishedAt)
   })
 })

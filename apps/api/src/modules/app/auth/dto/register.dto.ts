@@ -31,7 +31,7 @@ export class RegisterDto {
   agreed!: boolean
 
   @IsOptional()
-  @IsIn(['male', 'female', 'unknown'])
+  @IsIn(['male', 'female', 'unknown', '男', '女', '保密'])
   gender?: string
 
   @IsOptional()

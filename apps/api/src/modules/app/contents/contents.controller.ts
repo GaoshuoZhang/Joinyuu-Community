@@ -1,4 +1,4 @@
-import { Body, Controller, Get, HttpCode, Param, Post, Query, Req, UnauthorizedException } from '@nestjs/common'
+import { Body, Controller, Delete, Get, HttpCode, Param, Post, Query, Req, UnauthorizedException } from '@nestjs/common'
 import type { AppAuthenticatedRequest } from '../../../common/interfaces/app-authenticated-request'
 import { AppContentsService, type ArticleColumnDto, type ArticleDto, type ArticlePayloadDto, type MySubmittedArticleDetailDto, type MySubmittedArticleDto } from './contents.service'
 import { CreateArticleDto } from './dto/create-article.dto'
@@ -19,8 +19,8 @@ export class AppContentsController {
   /** 文章列表（published，栏目/关键词；客户端传 column=栏目 id，兼容 columnId） */
   @Public()
   @Get('articles')
-  list(@Req() req: AppAuthenticatedRequest, @Query('column') column?: string, @Query('columnId') columnId?: string, @Query('keyword') keyword?: string): Promise<ArticleDto[]> {
-    return this.contents.articles(column || columnId, keyword, req.headers.authorization)
+  list(@Query('column') column?: string, @Query('columnId') columnId?: string, @Query('keyword') keyword?: string): Promise<ArticleDto[]> {
+    return this.contents.articles(column || columnId, keyword)
   }
 
   /** 文章详情（浏览量 +1） */
@@ -78,8 +78,8 @@ export class AppContentsController {
 
   @Public()
   @Get('articles/:id/comments')
-  comments(@Req() req: AppAuthenticatedRequest, @Param('id') id: string) {
-    return this.contents.articleComments(id, req.headers.authorization)
+  comments(@Param('id') id: string) {
+    return this.contents.articleComments(id)
   }
 
   @HttpCode(200)
@@ -90,6 +90,17 @@ export class AppContentsController {
     @Body() dto: CreateCommentDto,
   ) {
     return this.contents.createArticleComment(this.user(req).uid, id, dto.content, dto)
+  }
+
+  /** 删除自己的评论 */
+  @HttpCode(200)
+  @Delete('articles/:id/comments/:commentId')
+  deleteComment(
+    @Req() req: AppAuthenticatedRequest,
+    @Param('id') id: string,
+    @Param('commentId') commentId: string,
+  ) {
+    return this.contents.deleteMyArticleComment(this.user(req).uid, id, commentId)
   }
 
   private user(req: AppAuthenticatedRequest): { uid: string; name: string } {

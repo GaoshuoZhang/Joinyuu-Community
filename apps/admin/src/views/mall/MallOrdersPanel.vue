@@ -370,6 +370,12 @@ onMounted(load)
           <t-descriptions-item label="下单时间">{{ current.createdAt }}</t-descriptions-item>
           <t-descriptions-item v-if="current.shippedAt" label="发货时间">{{ current.shippedAt }}</t-descriptions-item>
           <t-descriptions-item v-if="current.trackingNo" label="运单号">{{ current.trackingNo }}</t-descriptions-item>
+          <t-descriptions-item v-if="current.voucherCode" label="券码">
+            {{ current.voucherCode }}
+            <t-tag v-if="current.usedAt" class="id-tag" size="small" theme="success" variant="light">已核销</t-tag>
+          </t-descriptions-item>
+          <t-descriptions-item v-if="current.voucherExpiresAt" label="券码有效期至">{{ current.voucherExpiresAt }}</t-descriptions-item>
+          <t-descriptions-item v-if="current.usedAt" label="核销时间">{{ current.usedAt }}</t-descriptions-item>
           <t-descriptions-item v-if="current.finishedAt" label="完成时间">{{ current.finishedAt }}</t-descriptions-item>
           <t-descriptions-item v-if="current.recipientName" label="收件人">
             {{ current.recipientName }}（{{ current.recipientPhone }}）

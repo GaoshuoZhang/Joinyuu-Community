@@ -8,7 +8,7 @@ export class UpdateMeDto {
   nickname?: string
 
   @IsOptional()
-  @IsIn(['male', 'female', 'unknown'])
+  @IsIn(['male', 'female', 'unknown', '男', '女', '保密'])
   gender?: string
 
   @IsOptional()

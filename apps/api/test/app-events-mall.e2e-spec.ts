@@ -250,4 +250,67 @@ describe('M2-R R2 app 活动与商城', () => {
       expect(completed.status).toBe('completed')
     }
   })
+
+  it('商城：缺货商品保持可见且下单拦截；权益券按商品有效期签发并过期拦截核销', async () => {
+    /* 缺货（restock, stock 0）：列表/详情可见，下单报库存不足（O-07 修复） */
+    await prisma.mallGoods.create({
+      data: {
+        id: 'G9002',
+        name: '缺货验收券',
+        category: 'GC003',
+        fulfillment: 'voucher',
+        points: 10,
+        stock: 0,
+        status: 'restock',
+        description: '缺货可见性验收',
+        redeemedCount: 0,
+        createdAt: '2026-09-16 10:00',
+      },
+    })
+    const list = await appGet(app, token, '/api/app/mall/goods')
+    expect(list.body.data.list.some((g: { id: string }) => g.id === 'G9002')).toBe(true)
+    const detail = await appGet(app, token, '/api/app/mall/goods/G9002')
+    expect(detail.status).toBe(200)
+    expect(detail.body.data.stock).toBe(0)
+    const orderOOS = await appPost(app, token, '/api/app/mall/orders', { goodsId: 'G9002' })
+    expect(orderOOS.status).toBe(400)
+    expect(orderOOS.body.message).toBe('库存不足')
+
+    /* 权益券有效期 = 商品 validDays（天） */
+    const goodsId = 'G9003'
+    await prisma.mallGoods.create({
+      data: {
+        id: goodsId,
+        name: '有效期验收券',
+        category: 'GC003',
+        fulfillment: 'voucher',
+        points: 10,
+        stock: 5,
+        status: 'on',
+        description: '有效期验收',
+        redeemedCount: 0,
+        validDays: 2,
+        createdAt: '2026-09-16 10:00',
+      },
+    })
+    const order = await appPost(app, token, '/api/app/mall/orders', { goodsId })
+    expect(order.status).toBe(200)
+    const row = await prisma.redemptionOrder.findUnique({ where: { id: order.body.data.id } })
+    expect(row?.voucherCode).toMatch(/^V[0-9A-Z]{8}$/)
+    const created = new Date(String(row?.createdAt).replace(' ', 'T'))
+    const expires = new Date(String(row?.voucherExpiresAt).replace(' ', 'T'))
+    expect(Math.round((expires.getTime() - created.getTime()) / 86_400_000)).toBe(2)
+
+    /* 过期后核销被拒绝，且我的订单派生 expired 状态 */
+    await prisma.redemptionOrder.update({
+      where: { id: order.body.data.id },
+      data: { voucherExpiresAt: '2026-09-01 00:00' },
+    })
+    const use = await appPost(app, token, `/api/app/mall/orders/${order.body.data.id}/use`, {})
+    expect(use.status).toBe(409)
+    expect(use.body.message).toContain('过期')
+    const mine = await appGet(app, token, '/api/app/me/orders')
+    const expired = mine.body.data.list.find((item: { id: string }) => item.id === order.body.data.id)
+    expect(expired.status).toBe('expired')
+  })
 })

@@ -1,13 +1,14 @@
 import {
   BadRequestException,
   ConflictException,
+  ForbiddenException,
   Injectable,
   NotFoundException,
 } from '@nestjs/common'
 import type { Article, ArticleColumn, Prisma } from '@prisma/client'
 import { PrismaService } from '../../../common/prisma/prisma.service'
 import { IdGeneratorService } from '../../../common/id-generator/id-generator.service'
-import { sanitizeHtml } from '../../../common/utils/sanitize-html'
+import { sanitizeHtml, sanitizePlainText } from '../../../common/utils/sanitize-html'
 import { formatNow } from '../../../common/utils/time'
 import type { CreateArticleDto } from './dto/create-article.dto'
 import { JwtService } from '@nestjs/jwt'
@@ -99,11 +100,8 @@ export class AppContentsService {
   }
 
   /** published 文章列表（栏目/关键词过滤，publishedAt 倒序） */
-  async articles(columnId?: string, keyword?: string, authorization?: string): Promise<ArticleDto[]> {
-    const viewerUid = await this.optionalUid(authorization)
-    const blockedUids = await this.blockedUids(viewerUid)
+  async articles(columnId?: string, keyword?: string): Promise<ArticleDto[]> {
     const where: Prisma.ArticleWhereInput = { status: 'published', deletedAt: null }
-    if (blockedUids.length) where.authorId = { notIn: blockedUids }
     if (columnId) where.columnId = columnId
     if (keyword) where.OR = [{ title: { contains: keyword } }, { summary: { contains: keyword } }]
     const rows = await this.prisma.article.findMany({
@@ -116,9 +114,8 @@ export class AppContentsService {
   /** 文章详情：published；浏览量 +1；返回 likeCount/commentCount/myLiked */
   async articleDetail(id: string, authorization?: string): Promise<ArticleDto> {
     const uid = await this.optionalUid(authorization)
-    const blockedUids = await this.blockedUids(uid)
     const article = await this.prisma.article.findFirst({
-      where: { id, status: 'published', deletedAt: null, ...(blockedUids.length ? { authorId: { notIn: blockedUids } } : {}) },
+      where: { id, status: 'published', deletedAt: null },
     })
     if (!article) throw new NotFoundException('文章不存在')
     await this.prisma.article.updateMany({ where: { id, status: 'published' }, data: { views: { increment: 1 } } })
@@ -282,18 +279,16 @@ export class AppContentsService {
     return { liked: true, likeCount: article.likeCount + 1 }
   }
 
-  /** 已发布文章评论列表；R3 屏蔽联动：登录态下排除「我屏蔽的用户」的评论（游客不过滤）。 */
-  async articleComments(articleId: string, authorization?: string) {
+  /** 已发布文章评论列表（升序） */
+  async articleComments(articleId: string) {
     const article = await this.prisma.article.findFirst({
       where: { id: articleId, status: 'published', deletedAt: null },
       select: { id: true, commentsEnabled: true } as unknown as Prisma.ArticleSelect,
     })
     if (!article) throw new NotFoundException('文章不存在')
     if (!(article as unknown as { commentsEnabled: boolean }).commentsEnabled) throw new ConflictException('文章评论已关闭')
-    const viewerUid = await this.optionalUid(authorization)
-    const blockedUids = await this.blockedUids(viewerUid)
     const rows = await this.prisma.articleComment.findMany({
-      where: blockedUids.length ? { articleId, userId: { notIn: blockedUids } } : { articleId },
+      where: { articleId },
       include: { user: { select: { avatar: true } } },
       orderBy: [{ at: 'asc' }, { id: 'asc' }],
     })
@@ -313,14 +308,14 @@ export class AppContentsService {
     })
   }
 
-  /** 发布评论并原子更新冗余计数；支持选择发表身份。 */
+  /** 发布评论并原子更新冗余计数；支持选择发表身份。内容按纯文本清洗（D-111）。 */
   async createArticleComment(
     uid: string,
     articleId: string,
     rawContent: string,
     identityInput?: { asIdentity?: string; asEnterpriseId?: string },
   ): Promise<{ id: string }> {
-    const content = rawContent.trim()
+    const content = sanitizePlainText(rawContent)
     if (content.length < 2 || content.length > 200) throw new BadRequestException('评论需为 2-200 字')
     const [article, user] = await Promise.all([
       this.prisma.article.findFirst({ where: { id: articleId, status: 'published', deletedAt: null } }),
@@ -338,6 +333,20 @@ export class AppContentsService {
       return row
     })
     return { id: String(created.id) }
+  }
+
+  /** 删除自己的评论（物理删除 + 原子递减计数）；评论关闭不影响删除自己的历史评论。 */
+  async deleteMyArticleComment(uid: string, articleId: string, commentId: string): Promise<{ code: number }> {
+    const id = Number.parseInt(commentId, 10)
+    if (!Number.isInteger(id) || id <= 0) throw new NotFoundException('评论不存在或已删除')
+    const row = await this.prisma.articleComment.findFirst({ where: { id, articleId } })
+    if (!row) throw new NotFoundException('评论不存在或已删除')
+    if (row.userId !== uid) throw new ForbiddenException('只能删除自己的评论')
+    await this.prisma.$transaction(async (tx) => {
+      await tx.articleComment.delete({ where: { id } })
+      await tx.article.updateMany({ where: { id: articleId, commentCount: { gt: 0 } }, data: { commentCount: { decrement: 1 } } })
+    })
+    return { code: 0 }
   }
 
   /** 评论发表身份快照：按所选身份校验归属（企业评论要求已关联该企业） */
@@ -385,12 +394,6 @@ export class AppContentsService {
     } catch {
       return undefined
     }
-  }
-
-  private async blockedUids(uid?: string): Promise<string[]> {
-    if (!uid) return []
-    const rows = await this.prisma.userBlock.findMany({ where: { userId: uid }, select: { blockedUid: true } })
-    return rows.map((row) => row.blockedUid)
   }
 
   private async mine(uid: string, id: string): Promise<Article> {

@@ -384,15 +384,14 @@ export const enrollmentsByUid: Record<string, MockEnrollment[]> = {
 export type MockGoods = Goods & { status: 'on' | 'off' | 'restock' }
 
 export const goods: MockGoods[] = [
-  { id: 'G1001', name: '会议室优先预约卡', pointsCost: 500, stock: 12, description: '权益券：未来 7 天内任意会议室时段优先预约权一张。', fulfillment: 'voucher', category: 'GC003', coverUrl: demoCover('会议室预约卡', 204), status: 'on' },
-  { id: 'G1002', name: '精品咖啡券（单杯）', pointsCost: 150, stock: 30, description: '权益券：岛屿咖啡区任意现制咖啡一杯。', fulfillment: 'voucher', category: 'GC003', coverUrl: demoCover('精品咖啡券', 30), status: 'on' },
+  { id: 'G1001', name: '会议室优先预约卡', pointsCost: 500, stock: 12, description: '权益券：未来 7 天内任意会议室时段优先预约权一张。', fulfillment: 'voucher', category: 'GC003', validDays: 30, coverUrl: demoCover('会议室预约卡', 204), status: 'on' },
+  { id: 'G1002', name: '精品咖啡券（单杯）', pointsCost: 150, stock: 30, description: '权益券：岛屿咖啡区任意现制咖啡一杯。', fulfillment: 'voucher', category: 'GC003', validDays: 7, coverUrl: demoCover('精品咖啡券', 30), status: 'on' },
   { id: 'G1003', name: '聚屿周边帆布袋', pointsCost: 300, stock: 8, description: '社区联名帆布袋，路演日同款。', fulfillment: 'physical', category: 'GC001', coverUrl: demoCover('聚屿帆布袋', 132), status: 'on' },
-  { id: 'G1004', name: '独立办公位体验日', pointsCost: 800, stock: 3, description: '权益券：独立办公室体验一日（工作日有效，需提前预约）。', fulfillment: 'voucher', category: 'GC003', coverUrl: demoCover('办公位体验日', 258), status: 'on' },
-  { id: 'G1005', name: '打印机 A4 纸包月', pointsCost: 220, stock: 0, description: '公共打印机 A4 纸包月额度（补货中，可订阅到货提醒）。', fulfillment: 'physical', category: 'GC001', coverUrl: demoCover('A4 纸包月', 12), status: 'restock' },
+  { id: 'G1004', name: '独立办公位体验日', pointsCost: 800, stock: 3, description: '权益券：独立办公室体验一日（工作日有效，需提前预约）。', fulfillment: 'voucher', category: 'GC003', validDays: 30, coverUrl: demoCover('办公位体验日', 258), status: 'on' },
+  { id: 'G1005', name: '打印机 A4 纸包月', pointsCost: 220, stock: 0, description: '公共打印机 A4 纸包月额度（补货中，暂不可兑换）。', fulfillment: 'physical', category: 'GC001', coverUrl: demoCover('A4 纸包月', 12), status: 'restock' },
   { id: 'G1006', name: '已下架 · 周年纪念徽章', pointsCost: 100, stock: 5, description: '已下架商品（不展示）。', fulfillment: 'physical', category: 'GC001', coverUrl: demoCover('周年徽章', 0), status: 'off' },
 ]
 export const goodsOffIds = ['G1006']
-export const goodsHiddenZeroStock = true
 
 export const ordersByUid: Record<string, MyOrder[]> = {
   U1001: [
@@ -566,9 +565,6 @@ export const enterpriseTransferRequests: EnterpriseTransferRequest[] = []
 
 /* [MOCK-ONLY] v37 收藏（按用户） */
 export const favoritesByUid: Record<string, FavoriteItem[]> = {}
-
-/* [MOCK-ONLY] v37 到货提醒订阅（goods id 列表） */
-export const restockSubscriptions: Record<string, string[]> = {}
 
 /* [MOCK-ONLY] v37 Mock 埋点计数（漏斗观察，DevTools 可见） */
 export const analyticsCounters: Record<string, number> = {}
@@ -843,8 +839,13 @@ export function unreadCount(uid: string): number {
   return (noticesByUid[uid] ?? []).filter((n) => !n.read).length
 }
 
-/** [MOCK-ONLY] 通知触发点（与未来后端触发点一一对应） */
+/** [MOCK-ONLY] 通知偏好：按类型静音（system 账号与安全类不可静音） */
+const MUTABLE_NOTICE_TYPES = ['audit_result', 'demand', 'project', 'event', 'mall', 'invite', 'transfer', 'content']
+export const noticePreferencesByUid: Record<string, string[]> = {}
+
+/** [MOCK-ONLY] 通知触发点（与后端触发点一一对应；已静音类型不写入） */
 export function pushNotice(uid: string, notice: Omit<UserNotice, 'id' | 'read' | 'at'>): void {
+  if (MUTABLE_NOTICE_TYPES.includes(notice.type) && (noticePreferencesByUid[uid] ?? []).includes(notice.type)) return
   const at = nowStamp()
   ;(noticesByUid[uid] ??= []).unshift({ id: nextMockId('UN'), at, read: false, ...notice })
 }
@@ -1054,7 +1055,6 @@ type PersistedMockData = {
   enterpriseInvitations: EnterpriseInvitation[]
   enterpriseTransferRequests: EnterpriseTransferRequest[]
   favoritesByUid: typeof favoritesByUid
-  restockSubscriptions: typeof restockSubscriptions
   analyticsCounters: typeof analyticsCounters
   addressesByUid: typeof addressesByUid
   accountRequestsByUid: typeof accountRequestsByUid
@@ -1069,6 +1069,7 @@ type PersistedMockData = {
   enterpriseExperienceByEid: typeof enterpriseExperienceByEid
   pointsRecordsByUid: typeof pointsRecordsByUid
   noticesByUid: typeof noticesByUid
+  noticePreferencesByUid: typeof noticePreferencesByUid
   talentMembers: TalentMember[]
   individualShowcases: typeof individualShowcases
 }
@@ -1108,7 +1109,6 @@ if (persisted) {
   replaceArray(enterpriseInvitations, persisted.enterpriseInvitations)
   replaceArray(enterpriseTransferRequests, persisted.enterpriseTransferRequests)
   replaceRecord(favoritesByUid, persisted.favoritesByUid)
-  replaceRecord(restockSubscriptions, persisted.restockSubscriptions)
   replaceRecord(analyticsCounters, persisted.analyticsCounters)
   replaceRecord(addressesByUid, persisted.addressesByUid)
   replaceRecord(accountRequestsByUid, persisted.accountRequestsByUid)
@@ -1123,6 +1123,7 @@ if (persisted) {
   replaceRecord(enterpriseExperienceByEid, persisted.enterpriseExperienceByEid)
   replaceRecord(pointsRecordsByUid, persisted.pointsRecordsByUid)
   replaceRecord(noticesByUid, persisted.noticesByUid)
+  replaceRecord(noticePreferencesByUid, persisted.noticePreferencesByUid)
   replaceArray(talentMembers, persisted.talentMembers)
   replaceRecord(individualShowcases, persisted.individualShowcases)
 }
@@ -1131,10 +1132,10 @@ registerMockStateExporter((): PersistedMockData => ({
   appConfig, accounts, demands, responsesByUid, events, enrollmentsByUid, goods, ordersByUid,
   reservationsByUid, articles, myArticlesByUid, enterprises, leases, enterpriseExitApplications,
   enterpriseInvitations, enterpriseTransferRequests,
-  favoritesByUid, restockSubscriptions, analyticsCounters,
+  favoritesByUid, analyticsCounters,
   addressesByUid, accountRequestsByUid, eventFeedbackByUid,
   articleLikesByUid, articleComments,
   projectsByUid, applicationsByUid, applicationPayloadById, articlePayloadById,
-  experienceByUid, enterpriseExperienceByEid, pointsRecordsByUid, noticesByUid, talentMembers,
+  experienceByUid, enterpriseExperienceByEid, pointsRecordsByUid, noticesByUid, noticePreferencesByUid, talentMembers,
   individualShowcases,
 }))

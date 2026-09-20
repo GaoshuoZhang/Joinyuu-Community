@@ -130,15 +130,14 @@ function onCancel() {
          <div class="takedown-list">
            <div v-for="item in detail.takedowns" :key="item.id" class="takedown-item">
              <div class="takedown-head">
-               <span>{{ item.source === 'governance' ? '举报治理下架' : '管理员下架' }}</span>
+               <span>管理员下架</span>
                <t-tag :theme="item.restoredAt ? 'success' : 'default'" variant="light" size="small">
                  {{ item.restoredAt ? '已恢复' : '生效中' }}
                </t-tag>
              </div>
              <p>下架：{{ item.takenDownAt }} · {{ item.takenDownBy }}</p>
-             <p>理由：{{ item.reason || '未填写理由' }}</p>
-             <p v-if="item.reportId">举报编号：{{ item.reportId }}</p>
-             <p v-if="item.restoredAt">恢复：{{ item.restoredAt }} · {{ item.restoredBy || '—' }}</p>
+            <p>理由：{{ item.reason || '未填写理由' }}</p>
+            <p v-if="item.restoredAt">恢复：{{ item.restoredAt }} · {{ item.restoredBy || '—' }}</p>
            </div>
          </div>
        </template>

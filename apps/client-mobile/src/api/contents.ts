@@ -1,4 +1,4 @@
-import { apiMode, httpGet, httpPost } from './http'
+import { apiMode, httpDelete, httpGet, httpPost } from './http'
 import type { Article, ArticleColumn, ArticleComment, ArticleCreatePayload, IdentityType, MySubmittedArticle, MySubmittedArticleDetail } from '@/types'
 import * as mock from '@/mock/handlers/contents'
 
@@ -29,7 +29,7 @@ export async function toggleArticleLike(articleId: string): Promise<{ liked: boo
   return httpPost<{ liked: boolean; likeCount: number }>(`/articles/${articleId}/likes/toggle`)
 }
 
-/** 评论列表（屏蔽用户评论不可见）。 */
+/** 评论列表。 */
 export async function fetchArticleComments(articleId: string): Promise<ArticleComment[]> {
   if (apiMode === 'mock') return mock.fetchArticleComments(articleId)
   return httpGet<ArticleComment[]>(`/articles/${articleId}/comments`)
@@ -39,6 +39,12 @@ export async function fetchArticleComments(articleId: string): Promise<ArticleCo
 export async function createArticleComment(articleId: string, content: string, asIdentity?: IdentityType, asEnterpriseId?: string): Promise<void> {
   if (apiMode === 'mock') return mock.createArticleComment(articleId, content, asIdentity, asEnterpriseId)
   await httpPost(`/articles/${articleId}/comments`, { content, asIdentity, asEnterpriseId })
+}
+
+/** 删除自己的评论。 */
+export async function deleteArticleComment(articleId: string, commentId: string): Promise<void> {
+  if (apiMode === 'mock') return mock.deleteArticleComment(articleId, commentId)
+  await httpDelete(`/articles/${articleId}/comments/${commentId}`)
 }
 
 /** POST /api/app/articles — 投递文章（SU 前缀；提交即待审核） */

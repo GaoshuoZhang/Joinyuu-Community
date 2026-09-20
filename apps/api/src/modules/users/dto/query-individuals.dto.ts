@@ -1,17 +1,8 @@
-import { Type } from 'class-transformer'
-import { IsIn, IsInt, IsOptional, IsString, Min } from 'class-validator'
+import { IsIn, IsOptional, IsString } from 'class-validator'
+import { PageQueryDto } from '../../../common/dto/page-query.dto'
 
 /* GET /api/admin/individuals 查询参数（社区个体 = 持 community_individual 身份的用户） */
-export class QueryIndividualsDto {
-  @Type(() => Number)
-  @IsInt()
-  @Min(1)
-  page!: number
-
-  @Type(() => Number)
-  @IsInt()
-  @Min(1)
-  pageSize!: number
+export class QueryIndividualsDto extends PageQueryDto {
 
   @IsOptional()
   @IsString()

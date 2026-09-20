@@ -44,7 +44,7 @@ async function load() {
   try {
     const [cols, articlesRes] = await Promise.all([
       fetchColumns(),
-      import('@/api/contents').then((m) => m.fetchArticles({ page: 1, pageSize: 999 })),
+      import('@/api/contents').then((m) => m.fetchArticles({ page: 1, pageSize: 100 })),
     ])
     list.value = cols
     const counts: Record<string, number> = {}

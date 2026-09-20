@@ -1,5 +1,5 @@
-import { apiMode, httpGet, httpPost } from './http'
-import type { UserNotice } from '@/types'
+import { apiMode, httpGet, httpPost, httpPut } from './http'
+import type { NoticePreferences, UserNotice } from '@/types'
 import * as mock from '@/mock/handlers/notices'
 
 /** R1 站内信真实接口；mock/http 双模式保持同一视图层形状。 */
@@ -26,4 +26,16 @@ export async function markNoticeRead(id: string): Promise<void> {
 export async function markAllNoticesRead(): Promise<void> {
   if (apiMode === 'mock') return mock.markAllNoticesRead()
   await httpPost('/notices/read-all')
+}
+
+/** GET /api/app/notices/preferences — 通知偏好（类型目录 + 静音集合） */
+export async function fetchNoticePreferences(): Promise<NoticePreferences> {
+  if (apiMode === 'mock') return mock.fetchNoticePreferences()
+  return httpGet<NoticePreferences>('/notices/preferences')
+}
+
+/** PUT /api/app/notices/preferences — 保存静音集合 */
+export async function updateNoticePreferences(mutedTypes: string[]): Promise<NoticePreferences> {
+  if (apiMode === 'mock') return mock.updateNoticePreferences(mutedTypes)
+  return httpPut<NoticePreferences>('/notices/preferences', { mutedTypes })
 }

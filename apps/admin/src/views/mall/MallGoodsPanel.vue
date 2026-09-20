@@ -48,7 +48,6 @@ const dataColumns = [
   { colKey: 'stock', title: '库存', cell: 'stock', width: 90, resizable: true , ellipsis: true},
   { colKey: 'redeemedCount', title: '累计兑换', width: 100, resizable: true , ellipsis: true},
   { colKey: 'status', title: '状态', cell: 'status', width: 100, resizable: true , ellipsis: true},
-  { colKey: 'subscriberCount', title: '到货提醒', width: 100, resizable: true, ellipsis: true },
   { colKey: 'createdAt', title: '创建时间', width: 150, resizable: true , ellipsis: true},
   { colKey: 'op', title: '操作', cell: 'op', width: 170 },
 ]

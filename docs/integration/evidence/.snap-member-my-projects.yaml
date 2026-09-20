@@ -1,0 +1,94 @@
+- main [ref=f5e2]:
+  - generic [ref=f5e4]:
+    - paragraph [ref=f5e5]: 共 6 个
+    - button "联调测试：小程序数据看板开发合作 企业承接 星澜智能科技 0% 项目立项 预期交付" [ref=f5e6] [cursor=pointer]:
+      - generic [ref=f5e7]:
+        - heading "联调测试：小程序数据看板开发合作" [level=2] [ref=f5e8]
+        - button "企业承接" [ref=f5e9]
+        - generic [ref=f5e11]: 星澜智能科技
+      - generic [ref=f5e12]: 0%
+      - list [ref=f5e16]:
+        - listitem [ref=f5e17]:
+          - generic [ref=f5e20]: 项目立项
+        - listitem [ref=f5e21]:
+          - generic [ref=f5e24]: 预期交付
+    - button "跨企业 AI 路演季 企业承接 星澜智能科技 协作方：云径网络 15% 活动策划定稿 参与企业招募 路演集训营 路演日与闭门会" [ref=f5e25] [cursor=pointer]:
+      - generic [ref=f5e26]:
+        - heading "跨企业 AI 路演季" [level=2] [ref=f5e27]
+        - button "企业承接" [ref=f5e28]
+        - generic [ref=f5e30]: 星澜智能科技
+      - paragraph [ref=f5e31]: 协作方：云径网络
+      - generic [ref=f5e32]: 15%
+      - list [ref=f5e37]:
+        - listitem [ref=f5e38]:
+          - generic [ref=f5e41]: 活动策划定稿
+        - listitem [ref=f5e42]:
+          - generic [ref=f5e45]: 参与企业招募
+        - listitem [ref=f5e46]:
+          - generic [ref=f5e49]: 路演集训营
+        - listitem [ref=f5e50]:
+          - generic [ref=f5e53]: 路演日与闭门会
+    - button "青年创业者导师计划 企业承接 星澜智能科技 协作方：云径网络 10% 导师招募 团队遴选 首期开营 结营路演" [ref=f5e54] [cursor=pointer]:
+      - generic [ref=f5e55]:
+        - heading "青年创业者导师计划" [level=2] [ref=f5e56]
+        - button "企业承接" [ref=f5e57]
+        - generic [ref=f5e59]: 星澜智能科技
+      - paragraph [ref=f5e60]: 协作方：云径网络
+      - generic [ref=f5e61]: 10%
+      - list [ref=f5e66]:
+        - listitem [ref=f5e67]:
+          - generic [ref=f5e70]: 导师招募
+        - listitem [ref=f5e71]:
+          - generic [ref=f5e74]: 团队遴选
+        - listitem [ref=f5e75]:
+          - generic [ref=f5e78]: 首期开营
+        - listitem [ref=f5e79]:
+          - generic [ref=f5e82]: 结营路演
+    - button "聚屿小程序共研计划 企业承接 星澜智能科技 协作方：木白设计工作室 62% 需求梳理与立项 UI 设计定稿 开发与联调 社区内测 正式发布" [ref=f5e83] [cursor=pointer]:
+      - generic [ref=f5e84]:
+        - heading "聚屿小程序共研计划" [level=2] [ref=f5e85]
+        - button "企业承接" [ref=f5e86]
+        - generic [ref=f5e88]: 星澜智能科技
+      - paragraph [ref=f5e89]: 协作方：木白设计工作室
+      - generic [ref=f5e90]: 62%
+      - list [ref=f5e95]:
+        - listitem [ref=f5e96]:
+          - generic [ref=f5e99]: 需求梳理与立项
+        - listitem [ref=f5e100]:
+          - generic [ref=f5e103]: UI 设计定稿
+        - listitem [ref=f5e104]:
+          - generic [ref=f5e107]: 开发与联调
+        - listitem [ref=f5e108]:
+          - generic [ref=f5e111]: 社区内测
+        - listitem [ref=f5e112]:
+          - generic [ref=f5e115]: 正式发布
+    - button "社区开源组件库 企业承接 星澜智能科技 协作方：云径网络 45% 组件规范制定 基础组件 20 个 业务组件 20 个 v1.0 发布" [ref=f5e116] [cursor=pointer]:
+      - generic [ref=f5e117]:
+        - heading "社区开源组件库" [level=2] [ref=f5e118]
+        - button "企业承接" [ref=f5e119]
+        - generic [ref=f5e121]: 星澜智能科技
+      - paragraph [ref=f5e122]: 协作方：云径网络
+      - generic [ref=f5e123]: 45%
+      - list [ref=f5e128]:
+        - listitem [ref=f5e129]:
+          - generic [ref=f5e132]: 组件规范制定
+        - listitem [ref=f5e133]:
+          - generic [ref=f5e136]: 基础组件 20 个
+        - listitem [ref=f5e137]:
+          - generic [ref=f5e140]: 业务组件 20 个
+        - listitem [ref=f5e141]:
+          - generic [ref=f5e144]: v1.0 发布
+    - button "社区知识库共建 企业承接 星澜智能科技 协作方：云径网络 100% 板块规划 内容征集与评审 知识库上线" [ref=f5e145] [cursor=pointer]:
+      - generic [ref=f5e146]:
+        - heading "社区知识库共建" [level=2] [ref=f5e147]
+        - button "企业承接" [ref=f5e148]
+        - generic [ref=f5e150]: 星澜智能科技
+      - paragraph [ref=f5e151]: 协作方：云径网络
+      - generic [ref=f5e152]: 100%
+      - list [ref=f5e157]:
+        - listitem [ref=f5e158]:
+          - generic [ref=f5e161]: 板块规划
+        - listitem [ref=f5e162]:
+          - generic [ref=f5e165]: 内容征集与评审
+        - listitem [ref=f5e166]:
+          - generic [ref=f5e169]: 知识库上线

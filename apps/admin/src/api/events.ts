@@ -100,9 +100,9 @@ export async function cancelEventSchedule(id: string): Promise<{ code: number }>
   return httpPost<{ code: number }>(`/events/${id}/cancel-schedule`)
 }
 
-/* PATCH /api/admin/events/:id/enrollment — 已发布活动暂停/开放报名 */
-export async function toggleEventEnrollment(id: string): Promise<{ code: number }> {
-  return httpPatch<{ code: number }>(`/events/${id}/enrollment`)
+/* PATCH /api/admin/events/:id/enrollment — 已发布活动显式设置报名开关（幂等） */
+export async function setEventEnrollment(id: string, enrollmentOpen: boolean): Promise<{ code: number }> {
+  return httpPatch<{ code: number }>(`/events/${id}/enrollment`, { enrollmentOpen })
 }
 
 /* POST /api/admin/events/:id/cancel — 取消活动（待发布/已发布 → 已取消） */

@@ -66,7 +66,7 @@ async function onSubmit() {
 
     <NoticeBar v-if="closed" visible theme="warning" content="注册暂未开放，请稍后再试。" class="closed-tip" />
 
-    <div class="form">
+    <form class="form" @submit.prevent="onSubmit">
       <div class="field">
         <label>昵称</label>
         <Input v-model="form.nickname" autocomplete="off" :spell-check="false" :maxlength="20" placeholder="请输入昵称…" :disabled="closed" />
@@ -133,7 +133,7 @@ async function onSubmit() {
         {{ closed ? '注册暂未开放' : submitting ? '注册中…' : '注 册' }}
       </Button>
       <p class="swap">已有账号？<router-link to="/login" class="link">直接登录</router-link></p>
-    </div>
+    </form>
   </main>
 </template>
 

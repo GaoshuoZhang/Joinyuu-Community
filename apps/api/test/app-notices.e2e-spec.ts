@@ -65,14 +65,50 @@ describe('M2-R R1 站内信', () => {
     expect(after.body.data.count).toBe(0)
   })
 
-  it('偏好与归档端点已移除，站内信单一列表且始终写入', async () => {
-    expect((await appGet(app, token, '/api/app/me/notices/prefs')).status).toBe(404)
-    expect((await request(app.getHttpServer()).put('/api/app/me/notices/prefs').set('Authorization', `Bearer ${token}`).send({ enabledTypes: ['system'] })).status).toBe(404)
-    expect((await appPost(app, token, '/api/app/notices/UN1/archive', { archived: true })).status).toBe(404)
+  it('通知偏好：默认全部开启 → 静音后不再写入该类通知 → 安全类不可静音 → 恢复后送达', async () => {
+    const initial = await appGet(app, token, '/api/app/notices/preferences')
+    expect(initial.status).toBe(200)
+    expect(initial.body.data.types.length).toBeGreaterThan(0)
+    expect(initial.body.data.mutedTypes).toEqual([])
 
-    await notify.pushNotice('U1001', { type: 'demand', title: '始终写入', content: '站内信不再受分类偏好影响' })
-    const list = await appGet(app, token, '/api/app/notices?type=system&status=archived')
-    expect(list.body.data.list.some((item: { title: string }) => item.title === '始终写入')).toBe(true)
+    /* system 为安全类通知，不可静音 */
+    const invalid = await request(app.getHttpServer())
+      .put('/api/app/notices/preferences')
+      .set('Authorization', `Bearer ${token}`)
+      .send({ mutedTypes: ['system'] })
+    expect(invalid.status).toBe(400)
+
+    /* 静音 demand 后该类通知不再写入 */
+    const mute = await request(app.getHttpServer())
+      .put('/api/app/notices/preferences')
+      .set('Authorization', `Bearer ${token}`)
+      .send({ mutedTypes: ['demand'] })
+    expect(mute.status).toBe(200)
+    expect(mute.body.data.mutedTypes).toEqual(['demand'])
+
+    await notify.pushNotice('U1001', { type: 'demand', title: '应被静音', content: '静音后不写入' })
+    const listAfterMute = await appGet(app, token, '/api/app/notices?page=1&pageSize=50')
+    expect(listAfterMute.body.data.list.some((item: { title: string }) => item.title === '应被静音')).toBe(false)
+
+    /* system 通知不受影响 */
+    await notify.pushNotice('U1001', { type: 'system', title: '安全通知必达', content: '始终写入' })
+    const listSystem = await appGet(app, token, '/api/app/notices?page=1&pageSize=50')
+    expect(listSystem.body.data.list.some((item: { title: string }) => item.title === '安全通知必达')).toBe(true)
+
+    /* 恢复后 demand 通知再次写入 */
+    await request(app.getHttpServer())
+      .put('/api/app/notices/preferences')
+      .set('Authorization', `Bearer ${token}`)
+      .send({ mutedTypes: [] })
+    await notify.pushNotice('U1001', { type: 'demand', title: '恢复后送达', content: '恢复接收' })
+    const listRestored = await appGet(app, token, '/api/app/notices?page=1&pageSize=50')
+    expect(listRestored.body.data.list.some((item: { title: string }) => item.title === '恢复后送达')).toBe(true)
+
     expect(await prisma.userNotification.count({ where: { userId: 'U1001' } })).toBeGreaterThan(0)
+  })
+
+  it('归档端点已移除，站内信单一列表', async () => {
+    expect((await appGet(app, token, '/api/app/me/notices/prefs')).status).toBe(404)
+    expect((await appPost(app, token, '/api/app/notices/UN1/archive', { archived: true })).status).toBe(404)
   })
 })

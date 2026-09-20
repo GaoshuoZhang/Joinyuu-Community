@@ -90,6 +90,7 @@ export const projects: Project[] = [
     progress: 100,
     startDate: '2025-09-01',
     endDate: '2026-09-01',
+    finishedAt: '2026-09-01',
     initiatedAt: '2025-08-20',
     description:
       '围绕硬科技企业的供应链互认专项：建立社区企业供应商互认清单与联合采购机制，共完成 3 轮对接，沉淀供应商 47 家。',
@@ -161,6 +162,7 @@ export const projects: Project[] = [
     progress: 100,
     startDate: '2025-11-01',
     endDate: '2026-06-30',
+    finishedAt: '2026-06-30',
     initiatedAt: '2025-10-24',
     description:
       '沉淀社区方法论：融资、法务、增长、组织四大板块共 86 篇实战文档，全部向社区成员开放，累计阅读 12,000+。',

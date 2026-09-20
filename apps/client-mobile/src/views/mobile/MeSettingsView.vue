@@ -15,6 +15,7 @@ const entries: { path: string; label: string }[] = [
   { path: '/me/profile/edit', label: '编辑资料' },
   { path: '/me/addresses', label: '收货地址' },
   { path: '/me/security', label: '账号与安全' },
+  { path: '/me/notification-settings', label: '通知设置' },
   { path: '/me/stats', label: '数据看板' },
 ]
 

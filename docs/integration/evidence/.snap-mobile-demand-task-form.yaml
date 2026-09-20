@@ -1,0 +1,51 @@
+- main [ref=f56e2]:
+  - generic [ref=f56e3]:
+    - paragraph [ref=f56e5]: 先选择需求类型，再填写对应表单；提交后进入审核，通过后公开展示
+    - button [active] [ref=f56e6] [cursor=pointer]:
+      - generic [ref=f56e7]:
+        - heading "找服务" [level=2] [ref=f56e8]
+        - generic "选择找服务" [ref=f56e9]:
+          - radio [checked]
+      - paragraph [ref=f56e13]: 有想法、有项目，只差一位靠谱的人把它做出来
+      - generic [ref=f56e14]:
+        - button "发布需求" [ref=f56e15]
+        - button "响应接单" [ref=f56e19]
+        - button "立项协作" [ref=f56e23]
+        - button "结项交付" [ref=f56e27]
+      - list [ref=f56e29]:
+        - listitem [ref=f56e30]: 适合外包承接、专项执行与合伙落地
+        - listitem [ref=f56e31]: 说清期望交付与预算范围，沟通更高效
+        - listitem [ref=f56e32]: 社区成员与企业可直接响应联系
+        - listitem [ref=f56e33]: 审核通过后展示在项目列表
+    - button [ref=f56e34] [cursor=pointer]:
+      - generic [ref=f56e35]:
+        - heading "找投资" [level=2] [ref=f56e36]
+        - generic "选择找投资" [ref=f56e37]:
+          - radio
+      - paragraph [ref=f56e41]: 有方向、有规划，正在寻找同频的投资人与资源伙伴
+      - generic [ref=f56e42]:
+        - button "发布需求" [ref=f56e43]
+        - button "投资洽谈" [ref=f56e47]
+        - button "立项协作" [ref=f56e51]
+        - button "结项交付" [ref=f56e55]
+      - list [ref=f56e57]:
+        - listitem [ref=f56e58]: 适合天使轮、战略融资与资源型合作
+        - listitem [ref=f56e59]: 展示项目行业与所需支持，精准触达
+        - listitem [ref=f56e60]: 对接社区内的投资人、企业与机构
+        - listitem [ref=f56e61]: 审核通过后公开展示，等待洽谈
+    - button [ref=f56e62] [cursor=pointer]:
+      - generic [ref=f56e63]:
+        - heading "找合作" [level=2] [ref=f56e64]
+        - generic "选择找合作" [ref=f56e65]:
+          - radio
+      - paragraph [ref=f56e69]: 业务遇到瓶颈，希望找到互补的团队一起破局
+      - generic [ref=f56e70]:
+        - button "发布需求" [ref=f56e71]
+        - button "建立联系" [ref=f56e75]
+        - button "达成合作" [ref=f56e79]
+      - list [ref=f56e81]:
+        - listitem [ref=f56e82]: 适合渠道、供应链、技术与资源互补
+        - listitem [ref=f56e83]: 讲清业务瓶颈与合作诉求，降低沟通成本
+        - listitem [ref=f56e84]: 合作方主动联系，确认意向即可启动
+        - listitem [ref=f56e85]: 轻量协作，找到合作方即达成目标
+    - button "查看我的需求" [ref=f56e86] [cursor=pointer]

@@ -50,7 +50,7 @@ async function onSubmit() {
       <p class="subtitle">验证手机号后设置新密码</p>
     </header>
 
-    <div class="form">
+    <form class="form" @submit.prevent="onSubmit">
       <div class="field">
         <label>手机号</label>
         <Input v-model="form.phone" type="tel" autocomplete="tel" :maxlength="11" placeholder="请输入注册手机号…" clearable />
@@ -77,7 +77,7 @@ async function onSubmit() {
 
       <Button theme="primary" size="large" block :loading="submitting" @click="onSubmit">重置密码</Button>
       <p class="swap">想起密码了？<router-link to="/login" class="link">返回登录</router-link></p>
-    </div>
+    </form>
   </main>
 </template>
 

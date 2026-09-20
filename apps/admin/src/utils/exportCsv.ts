@@ -35,7 +35,7 @@ export async function exportAllRows<T>(
   mapper: (item: T) => (string | number)[],
   fetchPage: (page: number, pageSize: number) => Promise<{ list: T[]; total: number }>,
 ): Promise<number> {
-  const pageSize = 500
+  const pageSize = 100
   const rows: (string | number)[][] = []
   const first = await fetchPage(1, pageSize)
   rows.push(...first.list.map(mapper))

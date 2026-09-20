@@ -11,6 +11,7 @@ import type { UpdateUserDto } from './dto/update-user.dto'
 import type { CreateUserDto } from './dto/create-user.dto'
 import { IdGeneratorService } from '../../common/id-generator/id-generator.service'
 import { formatNow, formatToday } from '../../common/utils/time'
+import { normalizeGender } from '../../common/utils/gender'
 import { NotificationService } from '../../common/notify/notification.service'
 import { AppSessionService } from '../../common/app-session/app-session.service'
 import type { ReviewDeletionDto } from './dto/review-member-governance.dto'
@@ -64,7 +65,7 @@ export class UsersService {
         nickname,
         phone,
         email,
-        gender: dto.gender,
+        gender: normalizeGender(dto.gender),
         realName,
         citizenId,
         verifiedAt: realName && citizenId ? formatNow() : null,
@@ -249,7 +250,7 @@ export class UsersService {
       changed.push('邮箱')
     }
     if (dto.gender !== undefined && dto.gender.trim()) {
-      data.gender = dto.gender.trim()
+      data.gender = normalizeGender(dto.gender)
       changed.push('性别')
     }
     if (dto.realName !== undefined) {

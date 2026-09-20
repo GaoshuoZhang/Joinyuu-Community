@@ -2,7 +2,7 @@
 import { computed, h, onMounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { Button, Cell, DialogPlugin, Image, Popup, Tag, Toast } from 'tdesign-mobile-vue'
-import { createOrder, fetchGoodsDetail, subscribeRestock } from '@/api/mall'
+import { createOrder, fetchGoodsDetail } from '@/api/mall'
 import { listAddresses } from '@/api/addresses'
 import { useAsyncList } from '@/composables/useAsyncList'
 import { useAuthStore } from '@/stores/auth'
@@ -55,22 +55,11 @@ const soldOut = computed(() => (goods.value?.stock ?? 0) <= 0)
 const fulfillmentLabel = computed(() =>
   goods.value?.fulfillment === 'voucher' ? '权益券' : '实物商品',
 )
-
-/* v37 到货提醒 */
-const subscribed = ref(false)
-async function onSubscribeRestock() {
-  if (!auth.isLogged) {
-    await router.push({ path: '/login', query: { redirect: route.fullPath } })
-    return
-  }
-  try {
-    await subscribeRestock(goodsId)
-    subscribed.value = true
-    Toast('补货后将第一时间通知你')
-  } catch (e) {
-    Toast(e instanceof Error ? e.message : '订阅失败，请稍后重试')
-  }
-}
+const validDaysText = computed(() =>
+  goods.value?.fulfillment === 'voucher' && goods.value.validDays
+    ? `兑换后 ${goods.value.validDays} 天内有效`
+    : '',
+)
 
 function onRedeem() {
   if (!auth.isLogged) {
@@ -151,6 +140,7 @@ function goOrders() {
         <h2 class="name">{{ goods.name }}</h2>
         <p class="cost"><span class="tabular-nums">{{ formatZhNumber(goods.pointsCost) }}</span> <span>积分</span></p>
         <p class="stock">库存 {{ formatZhNumber(goods.stock) }} · {{ fulfillmentLabel }}</p>
+        <p v-if="validDaysText" class="valid-days">{{ validDaysText }}</p>
         <div class="desc">
           <h3>商品说明</h3>
           <RichTextBlock :html="goods.description" />
@@ -172,12 +162,9 @@ function goOrders() {
         <section class="mobile-fixed-action-bar goods-actions">
           <p v-if="auth.isLogged" class="own-points">当前积分：<span class="tabular-nums">{{ formatZhNumber(auth.points) }}</span></p>
           <Button theme="primary" block :disabled="submitting || soldOut" @click="onRedeem">
-            {{ soldOut ? '已兑完' : submitting ? '兑换中…' : '立即兑换' }}
+            {{ soldOut ? '已售罄' : submitting ? '兑换中…' : '立即兑换' }}
           </Button>
-          <p v-if="soldOut" class="hint">商品库存不足，可开启到货提醒。</p>
-          <Button v-if="soldOut" size="small" variant="outline" :disabled="subscribed" @click="onSubscribeRestock">
-            {{ subscribed ? '已开启到货提醒' : '到货提醒' }}
-          </Button>
+          <p v-if="soldOut" class="hint">商品暂时缺货，请稍后再来看看。</p>
         </section>
       </Teleport>
     </template>

@@ -140,7 +140,6 @@ export type NoticeType =
   | 'system'
   | 'invite'
   | 'transfer'
-  | 'report'
   | 'article'
   | 'demand'
   | 'project'
@@ -156,6 +155,19 @@ export interface UserNotice {
   read: boolean
   /** 点击跳转的业务路由（可选） */
   link?: string
+}
+
+/** 通知偏好：类型目录 + 已静音集合（mutable=false 的类型不可关闭） */
+export interface NoticePreferenceType {
+  type: string
+  label: string
+  mutable: boolean
+  muted: boolean
+}
+
+export interface NoticePreferences {
+  types: NoticePreferenceType[]
+  mutedTypes: string[]
 }
 
 /* ---------- 首页聚合（GET /api/app/home） ---------- */
@@ -482,6 +494,8 @@ export interface AgreementPolicy {
   version: string
   content: string
   publishedAt: string
+  /** true=后台尚未发布协议，当前为系统内置 V1.0（正式部署兜底） */
+  builtIn?: boolean
 }
 
 export interface MyDemandItem {
@@ -508,6 +522,8 @@ export interface MyResponseItem {
   status?: 'pending' | 'contacted' | 'accepted' | 'rejected' | 'closed'
   reviewedAt?: string
   rejectReason?: string
+  /** 已撤回时间（撤回后视为未响应，可重新响应） */
+  withdrawnAt?: string
 }
 
 /* ---------- 活动中心 ---------- */
@@ -608,6 +624,8 @@ export interface Goods {
   fulfillment: GoodsFulfillment
   /** 商品分类（字典 goods_category） */
   category?: string
+  /** 权益券有效期（天）：仅权益券下发，空值按 30 天兜底 */
+  validDays?: number
 }
 
 export interface MyOrder {
@@ -944,7 +962,7 @@ export interface EnterpriseMemberInfo {
 }
 
 export interface EnterpriseExitApplication {
-  status: 'pending'
+  status: 'pending' | 'approved' | 'rejected'
   reason?: string
   at: string
 }

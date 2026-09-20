@@ -17,10 +17,14 @@ import { ReviewOrderDto } from './dto/review-order.dto'
 /* 重复点击去重标记 TTL（秒）：同一用户对同一商品短时间内多次提交判定为重复 */
 const ORDER_DEDUPE_TTL = 3
 
+/* 券码默认有效期（天）：商品未配置 validDays 时兜底 */
+const DEFAULT_VOUCHER_VALID_DAYS = 30
+
 /* 积分商城（M2-R R2，/api/app/mall + /api/app/me/orders）：
- * 商品列表/详情（mallOpen 开关 + on 且库存>0）、兑换下单（单事务：校验库存→扣积分+流水→扣库存→建单，
- * physical 必带地址快照 / voucher 签发券码+30 天有效期 / service 待核销）、取消（仅实物待发货，退积分+回补库存）、
- * 服务核销、确认收货、订单评价、到货提醒订阅（幂等）。 */
+ * 商品列表/详情（mallOpen 开关 + on/restock 均可见，库存为 0 时前端展示售罄）、
+ * 兑换下单（单事务：校验库存→扣积分+流水→扣库存→建单，physical 必带地址快照 /
+ * voucher 签发券码并按商品 validDays 计算有效期）、取消（仅实物待发货，退积分+回补库存）、
+ * 券码核销（过期拦截）、确认收货、订单评价。 */
 @Injectable()
 export class AppMallService {
   constructor(
@@ -35,9 +39,8 @@ export class AppMallService {
   async listGoods(page: number, pageSize: number, category?: string, keyword?: string) {
     await this.assertMallOpen()
     const where: Prisma.MallGoodsWhereInput = {
-      status: 'on',
+      status: { in: ['on', 'restock'] },
       deletedAt: null,
-      stock: { gt: 0 },
     }
     const kw = keyword?.trim()
     if (kw) where.OR = [{ name: { contains: kw, mode: 'insensitive' } }]
@@ -58,7 +61,7 @@ export class AppMallService {
   async goodsDetail(id: string) {
     await this.assertMallOpen()
     const goods = await this.prisma.mallGoods.findFirst({
-      where: { id, deletedAt: null, status: 'on', stock: { gt: 0 } },
+      where: { id, deletedAt: null, status: { in: ['on', 'restock'] } },
     })
     if (!goods) throw new NotFoundException('商品不存在')
     return this.toGoodsDto(goods)
@@ -71,7 +74,8 @@ export class AppMallService {
     const goods = await this.prisma.mallGoods.findFirst({
       where: { id: dto.goodsId, deletedAt: null },
     })
-    if (!goods || goods.status !== 'on') throw new NotFoundException('商品不存在')
+    /* 缺货商品保持可见（restock），下单由事务内库存条件拦截为「库存不足」 */
+    if (!goods || (goods.status !== 'on' && goods.status !== 'restock')) throw new NotFoundException('商品不存在')
 
     const user = await this.prisma.user.findUnique({ where: { uid } })
     if (!user) throw new BadRequestException('用户不存在')
@@ -99,10 +103,15 @@ export class AppMallService {
       await this.prisma.$transaction(async (tx) => {
         /* 条件扣库存（并发安全）：库存不足则不扣并报错 */
         const stockUpd = await tx.mallGoods.updateMany({
-          where: { id: dto.goodsId, status: 'on', deletedAt: null, stock: { gt: 0 } },
+          where: { id: dto.goodsId, status: { in: ['on', 'restock'] }, deletedAt: null, stock: { gt: 0 } },
           data: { stock: { decrement: 1 }, redeemedCount: { increment: 1 } },
         })
         if (stockUpd.count === 0) throw new BadRequestException('库存不足')
+        /* 库存售罄时同步状态为 restock，保证后台列表与客户端「售罄」一致 */
+        await tx.mallGoods.updateMany({
+          where: { id: dto.goodsId, status: 'on', stock: 0 },
+          data: { status: 'restock' },
+        })
 
         /* 事务内复核积分并扣减 */
         const fresh = await tx.user.findUnique({ where: { uid } })
@@ -183,11 +192,11 @@ export class AppMallService {
           source: 'redemption',
         },
       })
-      /* 回补库存 */
+      /* 回补库存：售罄商品回补后恢复上架（保持客户端可见与可下单一致） */
       const goods = await tx.mallGoods.findUnique({ where: { id: order.goodsId } })
       if (goods) {
         const newStock = goods.stock + 1
-        const restoreStatus = goods.status === 'restock' && newStock > 0 ? { status: 'off' } : {}
+        const restoreStatus = goods.status === 'restock' ? { status: 'on' } : {}
         await tx.mallGoods.update({
           where: { id: order.goodsId },
           data: { stock: newStock, redeemedCount: Math.max(0, goods.redeemedCount - 1), ...restoreStatus },
@@ -246,26 +255,6 @@ export class AppMallService {
     return { code: 0 }
   }
 
-  /* ---------- 到货提醒 ---------- */
-
-  async subscribeRestock(uid: string, goodsId: string): Promise<{ already: boolean }> {
-    const goods = await this.prisma.mallGoods.findFirst({
-      where: { id: goodsId, deletedAt: null },
-    })
-    if (!goods) throw new NotFoundException('商品不存在')
-    if (goods.stock > 0 && goods.status !== 'restock') {
-      throw new BadRequestException('该商品尚有库存，无需到货提醒')
-    }
-    const existing = await this.prisma.restockSubscribe.findUnique({
-      where: { goodsId_userId: { goodsId, userId: uid } },
-    })
-    if (existing) return { already: true }
-    await this.prisma.restockSubscribe.create({
-      data: { goodsId, userId: uid, createdAt: formatNow() },
-    })
-    return { already: false }
-  }
-
   /* ---------- 内部工具 ---------- */
 
   private async assertMallOpen(): Promise<void> {
@@ -277,7 +266,7 @@ export class AppMallService {
     id: string,
     userId: string,
     userName: string,
-    goods: { id: string; name: string; points: number; fulfillment: string },
+    goods: { id: string; name: string; points: number; fulfillment: string; validDays: number | null },
     dto: CreateOrderDto,
     address: { name: string; phone: string; region: string; detail: string } | null,
   ): Prisma.RedemptionOrderCreateInput {
@@ -303,8 +292,9 @@ export class AppMallService {
       data.addressId = dto.addressId ?? null
     }
     if (fulfillment === 'voucher') {
+      const validDays = goods.validDays && goods.validDays > 0 ? goods.validDays : DEFAULT_VOUCHER_VALID_DAYS
       data.voucherCode = generateVoucherCode()
-      data.voucherExpiresAt = this.addDaysTime(now, 30)
+      data.voucherExpiresAt = this.addDaysTime(now, validDays)
     }
     return data
   }
@@ -317,6 +307,7 @@ export class AppMallService {
     fulfillment: string
     points: number
     stock: number
+    validDays: number | null
     description: string
   }) {
     return {
@@ -328,6 +319,7 @@ export class AppMallService {
       points: g.points,
       pointsCost: g.points,
       stock: g.stock,
+      validDays: g.fulfillment === 'voucher' ? g.validDays ?? DEFAULT_VOUCHER_VALID_DAYS : undefined,
       description: g.description,
     }
   }

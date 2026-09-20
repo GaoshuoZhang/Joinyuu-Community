@@ -32,3 +32,13 @@ export function sanitizeHtml(html: string): string {
   if (!html) return ''
   return sanitizeHtmlLib(html, OPTIONS)
 }
+
+/** 纯文本入参清洗（评论等）：剥离全部标签与危险块，仅保留文字内容，防止存储型 XSS。 */
+export function sanitizePlainText(text: string): string {
+  if (!text) return ''
+  return sanitizeHtmlLib(text, {
+    allowedTags: [],
+    allowedAttributes: {},
+    nonTextTags: ['script', 'style', 'iframe', 'object', 'embed', 'link', 'meta', 'textarea', 'option', 'noscript'],
+  }).trim()
+}

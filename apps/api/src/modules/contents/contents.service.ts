@@ -127,6 +127,60 @@ export class ContentsService {
     return { ...toArticleDto(article), takedowns }
   }
 
+  /** 文章评论列表（后台治理视图：含发表身份快照，按时间升序） */
+  async articleComments(articleId: string): Promise<Record<string, unknown>> {
+    const article = await this.prisma.article.findFirst({ where: { id: articleId, deletedAt: null }, select: { id: true, title: true, commentsEnabled: true } })
+    if (!article) throw new NotFoundException('文章不存在')
+    const rows = await this.prisma.articleComment.findMany({
+      where: { articleId },
+      include: { user: { select: { nickname: true, avatar: true } } },
+      orderBy: [{ at: 'asc' }, { id: 'asc' }],
+    })
+    return {
+      articleId,
+      commentsEnabled: article.commentsEnabled,
+      list: rows.map((row) => {
+        const identity = row.identity as { type?: string; enterpriseName?: string; organizationName?: string } | null
+        return {
+          id: String(row.id),
+          articleId: row.articleId,
+          uid: row.userId,
+          userName: row.userName,
+          nickname: row.user.nickname,
+          avatar: row.user.avatar ?? undefined,
+          content: row.content,
+          at: row.at,
+          identityType: identity?.type ?? 'individual',
+          identityName: identity?.enterpriseName ?? identity?.organizationName ?? undefined,
+        }
+      }),
+    }
+  }
+
+  /** 治理性删除评论（物理删除 + 计数回落 + 审计；填写原因时站内信通知评论作者） */
+  async removeArticleComment(commentId: string, reason: string | undefined, operator: string): Promise<{ code: number }> {
+    const id = Number.parseInt(commentId, 10)
+    if (!Number.isInteger(id) || id <= 0) throw new NotFoundException('评论不存在或已删除')
+    const comment = await this.prisma.articleComment.findUnique({ where: { id } })
+    if (!comment) throw new NotFoundException('评论不存在或已删除')
+    await this.prisma.$transaction(async (tx) => {
+      /* 通知需在删除前读取评论作者（notifyContentTakedown 依赖评论行） */
+      if (reason?.trim()) {
+        await this.notify.notifyContentTakedown(tx, 'comment', String(id), reason.trim())
+      }
+      await tx.articleComment.delete({ where: { id } })
+      await tx.article.updateMany({ where: { id: comment.articleId, commentCount: { gt: 0 } }, data: { commentCount: { decrement: 1 } } })
+    })
+    await this.audit.record({
+      module: '内容管理',
+      action: '删除评论',
+      target: `评论 ${id} · ${comment.userName}`,
+      detail: reason?.trim() || undefined,
+      operator,
+    })
+    return { code: 0 }
+  }
+
   async createArticle(payload: ArticlePayloadDto): Promise<Record<string, unknown>> {
     const channel = payload.channel ?? 'official'
     const columnId = payload.columnIds?.[0]
@@ -341,7 +395,7 @@ export class ContentsService {
       })
       if (changed.count !== 1) throw new ConflictException('文章状态已变化，请刷新后重试')
       await articleTakedowns(tx).create({
-        data: { articleId: id, source: 'manual', reportId: null, reason, takenDownAt: now, takenDownBy: operator },
+        data: { articleId: id, source: 'manual', reason, takenDownAt: now, takenDownBy: operator },
       })
       await this.notify.notifyContentTakedown(tx, 'article', id, takedownReason)
     })
@@ -368,7 +422,7 @@ export class ContentsService {
         where: { articleId: id, source: 'manual', restoredAt: null },
         orderBy: { id: 'desc' },
       })
-      if (!takedown) throw new ConflictException('请从原举报记录恢复该文章')
+      if (!takedown) throw new ConflictException('未找到可恢复的下架记录，请刷新后重试')
       const changed = await tx.article.updateMany({
         where: { id, deletedAt: null, status: 'closed' },
         data: { status: 'published', publishedAt: article.publishedAt ?? now, archivableAt: null },

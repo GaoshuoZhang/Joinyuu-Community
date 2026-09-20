@@ -1,0 +1,25 @@
+- main [ref=f75e2]:
+  - generic [ref=f75e4]:
+    - generic [ref=f75e9]:
+      - generic [ref=f75e10]: 全部
+      - generic [ref=f75e14]: 未完成
+      - generic [ref=f75e18]: 已完成
+    - generic [ref=f75e25]:
+      - paragraph [ref=f75e26]: 共 2 笔订单
+      - button [ref=f75e27] [cursor=pointer]:
+        - generic [ref=f75e28]:
+          - heading "社区定制帆布包" [level=2] [ref=f75e29]
+          - button "已发货" [ref=f75e30]
+        - paragraph [ref=f75e32]: 260 积分
+        - paragraph [ref=f75e33]: 下单时间：2026-09-20 18:51
+        - generic [ref=f75e34]: 查看详情
+      - button [ref=f75e37] [cursor=pointer]:
+        - generic [ref=f75e38]:
+          - heading "精品咖啡月卡" [level=2] [ref=f75e39]
+          - button "待使用" [ref=f75e40]
+        - paragraph [ref=f75e42]: 150 积分
+        - paragraph [ref=f75e43]:
+          - text: 兑换码：
+          - code [ref=f75e44]: V20260906B
+        - paragraph [ref=f75e45]: 下单时间：2026-09-06 20:15
+        - generic [ref=f75e46]: 查看详情

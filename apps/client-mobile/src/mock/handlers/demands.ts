@@ -330,6 +330,21 @@ export async function fetchMyResponses(): Promise<MyResponseItem[]> {
   })
 }
 
+/** 撤回本人响应（仅待处理且需求发布中；撤回后可重新响应） */
+export async function withdrawResponse(id: string): Promise<void> {
+  await withLatency(() => {
+    const uid = requireUid()
+    const list = responsesByUid[uid] ?? []
+    const record = list.find((item) => item.id === id)
+    if (!record || record.withdrawnAt) fail(404, '响应不存在或已撤回')
+    const demand = demands.find((item) => item.id === record.demandId)
+    if (!demand) fail(404, '需求不存在')
+    if (demand.status !== 'published') fail(409, '需求已进入立项流程，响应不可撤回')
+    if ((record.status ?? 'pending') !== 'pending') fail(409, '该响应已被处理，不可撤回')
+    record.withdrawnAt = nowStamp()
+  }, 160)
+}
+
 export async function fetchDemandResponses(id: string): Promise<MyResponseItem[]> {
   return withLatency(() => {
     const uid = requireUid()

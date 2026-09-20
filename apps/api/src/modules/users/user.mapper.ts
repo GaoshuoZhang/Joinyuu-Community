@@ -1,5 +1,6 @@
 import type { User as PrismaUser, UserIdentity } from '@prisma/client'
 import type { PrismaService } from '../../common/prisma/prisma.service'
+import { normalizeGender } from '../../common/utils/gender'
 
 /* Prisma 基础模型类型不含关系字段，需显式叠加 identities（include 后返回的形状） */
 type UserWithIdentities = PrismaUser & { identities: UserIdentity[] }
@@ -96,7 +97,7 @@ export function toUserDto(user: UserWithIdentities, stats: UserStats): UserDto {
     nickname: user.nickname,
     phone: user.phone,
     email: user.email,
-    gender: user.gender,
+    gender: normalizeGender(user.gender),
     status: user.status,
     points: user.points,
     registeredAt: user.registeredAt,

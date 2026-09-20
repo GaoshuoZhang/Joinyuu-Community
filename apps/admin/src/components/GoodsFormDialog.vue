@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { defineAsyncComponent, nextTick, onMounted, reactive, ref, watch } from 'vue'
+import { defineAsyncComponent, nextTick, reactive, ref, watch } from 'vue'
 import { MessagePlugin } from 'tdesign-vue-next'
 import type { FormProps } from 'tdesign-vue-next'
 import { focusFirstInvalid } from '@/utils/form'
@@ -26,16 +26,21 @@ const emit = defineEmits<{
 
 const categoryOptions = ref(Object.entries(goodsCategoryMap).map(([value, label]) => ({ label, value })))
 
-onMounted(() => {
-  fetchDictEntries('goods_category')
-    .then((entries) => {
-      const mapped = entries
-        .filter((e) => e.status === 'enabled')
-        .map((e) => ({ label: e.label, value: e.code }))
-      if (mapped.length) categoryOptions.value = mapped
-    })
-    .catch(() => undefined)
-})
+/* 分类字典改为首次打开弹窗时按需加载：避免登录页/未打开时携带旧令牌请求（D-101） */
+let categoryPromise: Promise<void> | null = null
+function ensureCategories(): Promise<void> {
+  if (!categoryPromise) {
+    categoryPromise = fetchDictEntries('goods_category')
+      .then((entries) => {
+        const mapped = entries
+          .filter((e) => e.status === 'enabled')
+          .map((e) => ({ label: e.label, value: e.code }))
+        if (mapped.length) categoryOptions.value = mapped
+      })
+      .catch(() => undefined)
+  }
+  return categoryPromise
+}
 
 const shippingMethodOptions = [
   { label: '自提', value: 'pickup' },
@@ -60,6 +65,7 @@ const form = reactive({
   fulfillment: 'physical' as GoodsFulfillment,
   points: 100,
   stock: 50,
+  validDays: 30,
   description: '',
   shippingMethods: [] as Array<'pickup' | 'delivery'>,
   pickupAddress: '',
@@ -74,6 +80,7 @@ watch(
   () => props.visible,
   (v) => {
     if (!v) return
+    void ensureCategories()
     if (props.mode === 'edit' && props.goods) {
       form.name = props.goods.name
       form.coverUrl = props.goods.coverUrl ?? ''
@@ -81,6 +88,7 @@ watch(
       form.fulfillment = props.goods.fulfillment
       form.points = props.goods.points
       form.stock = props.goods.stock
+      form.validDays = props.goods.validDays ?? 30
       form.description = props.goods.description
       form.shippingMethods = [...(props.goods.shippingMethods ?? [])]
       form.pickupAddress = props.goods.pickupAddress ?? ''
@@ -98,6 +106,7 @@ watch(
       form.fulfillment = 'physical'
       form.points = 100
       form.stock = 50
+      form.validDays = 30
       form.description = ''
       form.shippingMethods = []
       form.pickupAddress = ''
@@ -145,6 +154,7 @@ async function onConfirm() {
       fulfillment: form.fulfillment,
       points: form.points,
       stock: form.stock,
+      validDays: form.fulfillment === 'voucher' ? form.validDays : undefined,
       description: form.description,
       shippingMethods: physical ? form.shippingMethods : [],
       pickupAddress: physical && form.shippingMethods.includes('pickup') ? form.pickupAddress : undefined,
@@ -215,6 +225,11 @@ function onClose() {
       </div>
       <t-form-item label="库存" name="stock">
         <t-input-number v-model="form.stock" :min="0" theme="column" style="width: 100%" />
+      </t-form-item>
+
+      <!-- 权益券：券码有效期（天下单时写入券码到期时间） -->
+      <t-form-item v-if="form.fulfillment === 'voucher'" label="有效期（天）" name="validDays" help="兑换后券码有效期，到期后不可核销；留空按 30 天处理">
+        <t-input-number v-model="form.validDays" :min="1" :max="3650" theme="column" style="width: 100%" />
       </t-form-item>
 
       <!-- 实物商品：发货方式（自提/邮寄），按选择显示自提地址或邮费 -->

@@ -1,0 +1,58 @@
+- main [ref=e1906]:
+  - generic [ref=e2244]:
+    - generic [ref=e2246]:
+      - heading "注销工单" [level=2] [ref=e2247]
+      - paragraph [ref=e2248]: 注销申请须经过 7 天冷静期，届满后由工作人员确认执行或驳回
+    - generic [ref=e2249]:
+      - generic [ref=e2250]:
+        - generic "筛选状态" [ref=e2251]:
+          - textbox "请选择" [ref=e2255] [cursor=pointer]: 全部状态
+        - button "列设置" [ref=e2259] [cursor=pointer]
+      - generic [ref=e2262]:
+        - table [ref=e2264]:
+          - rowgroup [ref=e2274]:
+            - row [ref=e2275]:
+              - columnheader "工单编号" [ref=e2276]
+              - columnheader "用户" [ref=e2278]
+              - columnheader "申请原因" [ref=e2280]
+              - columnheader "申请时间" [ref=e2282]
+              - columnheader "冷静期届满" [ref=e2284]
+              - columnheader "状态" [ref=e2286]
+              - columnheader "复核说明" [ref=e2288]
+              - columnheader "操作" [ref=e2290]
+          - rowgroup [ref=e2292]:
+            - row [ref=e2293]:
+              - cell "DR2" [ref=e2294]:
+                - generic "DR2" [ref=e2296]
+              - cell "联调小屿 U1016" [ref=e2297]:
+                - text: 联调小屿
+                - generic "U1016" [ref=e2299]
+              - cell "联调测试：请运营驳回本次注销申请" [ref=e2300]
+              - cell "2026-09-20 17:53" [ref=e2301]
+              - cell [ref=e2302]:
+                - text: 2026-09-27 17:53
+                - paragraph [ref=e2303]: 剩余 168 小时
+              - cell "待处理" [ref=e2304]:
+                - generic "待处理" [ref=e2306]
+              - cell [ref=e2307]
+              - cell [ref=e2308]:
+                - button "确认注销" [disabled] [ref=e2309]
+                - button "驳回" [ref=e2311] [cursor=pointer]
+            - row [ref=e2313]:
+              - cell "DR1" [ref=e2314]:
+                - generic "DR1" [ref=e2316]
+              - cell "联调小屿 U1016" [ref=e2317]:
+                - text: 联调小屿
+                - generic "U1016" [ref=e2319]
+              - cell "联调测试：验证注销申请与撤回流程" [ref=e2320]
+              - cell "2026-09-20 17:52" [ref=e2321]
+              - cell "2026-09-27 17:52" [ref=e2322]
+              - cell "已撤回" [ref=e2323]:
+                - generic "已撤回" [ref=e2325]
+              - cell [ref=e2326]
+              - cell "—" [ref=e2327]
+        - generic [ref=e2330]:
+          - generic [ref=e2331]: 共 2 条数据
+          - list [ref=e2336]:
+            - listitem [ref=e2337] [cursor=pointer]: "1"
+    - text: "*"

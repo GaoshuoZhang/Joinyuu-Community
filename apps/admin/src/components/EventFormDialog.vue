@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { defineAsyncComponent, nextTick, onMounted, reactive, ref, watch } from 'vue'
+import { defineAsyncComponent, nextTick, reactive, ref, watch } from 'vue'
 import { MessagePlugin } from 'tdesign-vue-next'
 import type { FormProps } from 'tdesign-vue-next'
 import { focusFirstInvalid } from '@/utils/form'
@@ -66,32 +66,47 @@ const rulePoints = reactive({ enroll: 5, checkin: 10 })
 const customVisibility = ref(false)
 const customEnrollment = ref(false)
 
-onMounted(async () => {
-  try {
-    const rules = await fetchPointsRules()
-    rulePoints.enroll = rules.find((r) => r.code === 'activity_enroll_approved')?.points ?? 5
-    rulePoints.checkin = rules.find((r) => r.code === 'activity_checkin')?.points ?? 10
-    if (props.visible && props.mode === 'create') {
-      form.enrollPoints = rulePoints.enroll
-      form.checkinPoints = rulePoints.checkin
-    }
-  } catch {
-    /* 规则加载失败时保留默认值 */
+/* 字典与积分规则默认值改为首次打开弹窗时按需加载：避免登录页/未打开时携带旧令牌请求（D-101） */
+const optionsLoaded = ref(false)
+let optionsPromise: Promise<void> | null = null
+function ensureOptions(): Promise<void> {
+  if (optionsLoaded.value) return Promise.resolve()
+  if (!optionsPromise) {
+    optionsPromise = Promise.all([
+      fetchPointsRules()
+        .then((rules) => {
+          rulePoints.enroll = rules.find((r) => r.code === 'activity_enroll_approved')?.points ?? 5
+          rulePoints.checkin = rules.find((r) => r.code === 'activity_checkin')?.points ?? 10
+          if (props.visible && props.mode === 'create') {
+            form.enrollPoints = rulePoints.enroll
+            form.checkinPoints = rulePoints.checkin
+          }
+        })
+        .catch(() => undefined),
+      fetchDictEntries('event_type')
+        .then((entries) => {
+          const labels = entries.filter((e) => e.status === 'enabled').map((e) => ({ label: e.label, value: e.label }))
+          if (labels.length) typeOptions.value = labels
+        })
+        .catch(() => {
+          /* 字典加载失败保留回退词表 */
+        }),
+    ])
+      .then(() => {
+        optionsLoaded.value = true
+      })
+      .finally(() => {
+        optionsPromise = null
+      })
   }
-  fetchDictEntries('event_type')
-    .then((entries) => {
-      const labels = entries.filter((e) => e.status === 'enabled').map((e) => ({ label: e.label, value: e.label }))
-      if (labels.length) typeOptions.value = labels
-    })
-    .catch(() => {
-      /* 字典加载失败保留回退词表 */
-    })
-})
+  return optionsPromise
+}
 
 watch(
   () => props.visible,
   (v) => {
     if (!v) return
+    void ensureOptions()
     if (props.mode === 'edit' && props.event) {
       form.title = props.event.title
       form.coverUrl = props.event.coverUrl ?? ''

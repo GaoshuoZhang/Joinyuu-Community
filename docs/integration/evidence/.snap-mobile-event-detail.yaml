@@ -1,0 +1,18 @@
+- main [ref=f69e2]:
+  - generic [ref=f69e3]:
+    - generic [ref=f69e4]:
+      - button "培训" [ref=f69e6]
+      - heading "联调测试：社区协作工作坊" [level=2] [ref=f69e8]
+      - paragraph [ref=f69e9]: 2026-09-25 14:00 ~ 2026-09-25 17:00
+      - paragraph [ref=f69e12]: 共享会议室 B
+      - paragraph [ref=f69e15]:
+        - text: 报名截止：2026-09-24 18:00
+        - generic [ref=f69e18]: · 报名需审核
+      - paragraph [ref=f69e19]: 人数限制 2 人
+      - generic [ref=f69e22]:
+        - button "收藏" [ref=f69e23] [cursor=pointer]
+        - button "添加到日历" [ref=f69e27] [cursor=pointer]
+        - button "分享" [ref=f69e31] [cursor=pointer]
+    - generic [ref=f69e35]:
+      - heading "活动介绍" [level=3] [ref=f69e36]
+      - generic [ref=f69e37]: 联调测试活动：验证人工审核报名、名额与候补、签到与积分、结束后反馈。

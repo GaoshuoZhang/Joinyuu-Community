@@ -43,6 +43,12 @@ export async function fetchMyResponses(): Promise<MyResponseItem[]> {
   return httpGet<MyResponseItem[]>('/me/responses')
 }
 
+/** POST /api/app/me/responses/:id/withdraw — 撤回本人响应（仅待处理且需求发布中） */
+export async function withdrawResponse(id: string): Promise<void> {
+  if (apiMode === 'mock') return mock.withdrawResponse(id)
+  await httpPost(`/me/responses/${id}/withdraw`)
+}
+
 /** 撤回审核中的需求。 */
 export async function withdrawDemand(id: string): Promise<void> {
   if (apiMode === 'mock') return mock.withdrawDemand(id)

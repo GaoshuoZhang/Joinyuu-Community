@@ -1,22 +1,54 @@
 <script setup lang="ts">
-import { computed, onMounted } from 'vue'
+import { computed, onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
-import { Button } from 'tdesign-mobile-vue'
-import { fetchMyResponses } from '@/api/demands'
+import { Button, DialogPlugin, Toast } from 'tdesign-mobile-vue'
+import { fetchMyResponses, withdrawResponse } from '@/api/demands'
 import { useAsyncList } from '@/composables/useAsyncList'
 import EmptyBlock from '@/components/shared/EmptyBlock.vue'
 import ListSkeleton from '@/components/ListSkeleton.vue'
 import StateTag from '@/components/shared/StateTag.vue'
 import { useIncrementalList } from '@/composables/useIncrementalList'
 import { formatLocalDateTime, formatZhNumber } from '@/utils/format'
+import type { MyResponseItem } from '@/types'
 
 const router = useRouter()
 const { data, loading, error, run } = useAsyncList(fetchMyResponses)
+const withdrawing = ref('')
 
 onMounted(run)
 
 const items = computed(() => data.value ?? [])
 const { visibleItems, hasMore, showMore } = useIncrementalList(items)
+
+function statusOf(item: MyResponseItem): string {
+  return item.withdrawnAt ? 'withdrawn' : item.status ?? 'pending'
+}
+
+function canWithdraw(item: MyResponseItem): boolean {
+  return !item.withdrawnAt && (item.status ?? 'pending') === 'pending'
+}
+
+function onWithdraw(item: MyResponseItem) {
+  const dialog = DialogPlugin.confirm({
+    title: '撤回响应',
+    content: '撤回后该响应不再计入发布者选择；如需求仍在进行中，可重新响应。',
+    cancelBtn: '再想想',
+    confirmBtn: '确认撤回',
+    onConfirm: async () => {
+      dialog.hide()
+      withdrawing.value = item.id
+      try {
+        await withdrawResponse(item.id)
+        Toast('响应已撤回')
+        await run()
+      } catch (e) {
+        Toast(e instanceof Error ? e.message : '撤回失败，请稍后重试')
+      } finally {
+        withdrawing.value = ''
+      }
+    },
+  })
+}
 </script>
 
 <template>
@@ -37,11 +69,17 @@ const { visibleItems, hasMore, showMore } = useIncrementalList(items)
       >
         <h2 class="row-title">{{ r.demandTitle }}</h2>
         <p class="row-note">{{ r.note }}</p>
-        <p v-if="r.status" class="row-status">
-          <StateTag kind="response" :value="r.status ?? 'pending'" />
+        <p v-if="r.status || r.withdrawnAt" class="row-status">
+          <StateTag kind="response" :value="statusOf(r)" />
           <span v-if="r.rejectReason">{{ r.rejectReason }}</span>
         </p>
         <p class="row-at">响应于 {{ formatLocalDateTime(r.at) }}</p>
+        <div v-if="r.withdrawnAt" class="row-ops">
+          <Button size="small" variant="outline" @click.stop="router.push(`/demands/${r.demandId}`)">重新响应</Button>
+        </div>
+        <div v-else-if="canWithdraw(r)" class="row-ops">
+          <Button size="small" variant="outline" theme="danger" :loading="withdrawing === r.id" @click.stop="onWithdraw(r)">撤回响应</Button>
+        </div>
       </article>
       <Button v-if="hasMore" block variant="outline" @click="showMore">加载更多（剩余 {{ formatZhNumber(items.length - visibleItems.length) }} 条）</Button>
     </div>
@@ -70,6 +108,12 @@ const { visibleItems, hasMore, showMore } = useIncrementalList(items)
 
 .resp-row { cursor: pointer; }
 .resp-row:focus-visible { outline: 2px solid var(--td-brand-color); outline-offset: 2px; }
+
+.row-ops {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: var(--app-space-2);
+}
 
 .row-note {
   margin:var(--app-space-3) 0 0;

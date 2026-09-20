@@ -26,6 +26,7 @@ const map: Record<string, Record<string, { label: string; tone: Tone }>> = {
     accepted: { label: '已选定', tone: 'success' },
     rejected: { label: '已驳回', tone: 'danger' },
     closed: { label: '已结束', tone: 'default' },
+    withdrawn: { label: '已撤回', tone: 'default' },
   },
   enroll: {
     pending: { label: '待审核', tone: 'warning' },

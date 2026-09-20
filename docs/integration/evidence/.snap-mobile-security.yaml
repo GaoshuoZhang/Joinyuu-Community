@@ -1,0 +1,24 @@
+- generic [ref=f14e3]:
+  - link "跳到主要内容" [ref=f14e1] [cursor=pointer]:
+    - /url: "#main"
+  - generic [ref=f14e4]:
+    - generic [ref=f14e6]:
+      - heading "账号与安全" [level=1] [ref=f14e12]
+      - button "我的" [ref=f14e14] [cursor=pointer]:
+        - generic [ref=f14e15]: 联
+    - main [ref=f14e21]:
+      - generic [ref=f14e22]:
+        - paragraph [ref=f14e23]: 账号安全
+        - generic [ref=f14e25]:
+          - generic [ref=f14e26]: 修改登录密码
+          - generic [ref=f14e34]: 更换绑定手机号
+          - generic [ref=f14e42]:
+            - generic [ref=f14e43]: 找回密码说明
+            - generic [ref=f14e45]: 退出登录后可在登录页操作
+        - paragraph [ref=f14e51]: 隐私与数据
+        - generic [ref=f14e53]:
+          - generic [ref=f14e54]: 用户协议与隐私政策
+          - generic [ref=f14e62]:
+            - generic [ref=f14e63]: 导出个人数据
+            - generic [ref=f14e65]: 生成后站内信通知
+          - generic [ref=f14e71]: 注销账号

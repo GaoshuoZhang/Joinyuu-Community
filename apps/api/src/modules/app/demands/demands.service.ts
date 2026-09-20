@@ -47,13 +47,11 @@ export class AppDemandsService {
   async list(query: { kind?: string; category?: string; keyword?: string; page?: number; pageSize?: number }, req: Request) {
     const uid = await this.optionalUid(req)
     const identities = await this.identitySet(uid)
-    const blockedUids = await this.blockedUids(uid)
 
     const where: Prisma.DemandWhereInput = {
       status: 'published',
       deletedAt: null,
       AND: [this.visibilityCond(identities)],
-      ...(blockedUids.length ? { publisherId: { notIn: blockedUids } } : {}),
     }
     if (query.kind) where.demandType = query.kind
     if (query.keyword) {
@@ -88,7 +86,6 @@ export class AppDemandsService {
   async detail(id: string, req: Request) {
     const uid = await this.optionalUid(req)
     const identities = await this.identitySet(uid)
-    const blockedUids = await this.blockedUids(uid)
 
     const demand = await this.prisma.demand.findFirst({
       where: { id, deletedAt: null },
@@ -101,7 +98,6 @@ export class AppDemandsService {
     const isRespondent = !!participation
     const isPubliclyVisible = !!demand
       && demand.status === 'published'
-      && !blockedUids.includes(demand.publisherId)
       && this.visibly(identities, demand)
     if (!demand || (!isPublisher && !isRespondent && !isPubliclyVisible)) {
       throw new NotFoundException('需求不存在或不可见')
@@ -213,7 +209,7 @@ export class AppDemandsService {
     if (!this.visibly(identities, demand)) throw new NotFoundException('需求不存在或不可见')
 
     const dup = await this.prisma.demandRespondent.findFirst({
-      where: { demandId: demand.id, userId: uid, status: { in: ['pending', 'accepted'] } },
+      where: { demandId: demand.id, userId: uid, status: { in: ['pending', 'accepted'] }, withdrawnAt: null },
       select: { id: true },
     })
     if (dup) throw new ConflictException('您已响应过该需求')
@@ -221,10 +217,10 @@ export class AppDemandsService {
     const user = await this.requireUser(uid)
     const responder = await this.resolveResponder(uid, user, dto)
 
-    /* 已响应后不可更换身份重复响应；同一公司（社区/合作企业）其他成员不可再次响应 */
+    /* 已响应后不可更换身份重复响应；同一公司（社区/合作企业）其他成员不可再次响应（撤回视为未响应） */
     const requestedSubject = this.subjectKey(responder.identity)
     const mine = await this.prisma.demandRespondent.findMany({
-      where: { demandId: demand.id, userId: uid },
+      where: { demandId: demand.id, userId: uid, withdrawnAt: null },
       select: { responderIdentity: true },
     })
     if (mine.some((row) => this.subjectKey(row.responderIdentity) !== requestedSubject)) {
@@ -233,7 +229,7 @@ export class AppDemandsService {
     const isCompany = requestedSubject.startsWith('community_enterprise:') || requestedSubject.startsWith('external_enterprise:')
     if (isCompany) {
       const others = await this.prisma.demandRespondent.findMany({
-        where: { demandId: demand.id, userId: { not: uid } },
+        where: { demandId: demand.id, userId: { not: uid }, withdrawnAt: null },
         select: { responderIdentity: true },
       })
       if (others.some((row) => this.subjectKey(row.responderIdentity) === requestedSubject)) {
@@ -293,7 +289,24 @@ export class AppDemandsService {
       at: r.at,
       status: r.status,
       ...(r.quote != null ? { quote: r.quote } : {}),
+      ...(r.withdrawnAt != null ? { withdrawnAt: r.withdrawnAt } : {}),
     }))
+  }
+
+  /** 撤回本人响应（D-107）：需求仍为 published 且响应待处理时可撤回，撤回后视为未响应可重新响应。 */
+  async withdrawResponse(uid: string, responseId: string): Promise<{ code: number }> {
+    const id = Number.parseInt(responseId, 10)
+    if (!Number.isInteger(id) || id <= 0) throw new NotFoundException('响应不存在或已撤回')
+    const response = await this.prisma.demandRespondent.findFirst({
+      where: { id, userId: uid, withdrawnAt: null },
+    })
+    if (!response) throw new NotFoundException('响应不存在或已撤回')
+    const demand = await this.prisma.demand.findUnique({ where: { id: response.demandId } })
+    if (!demand) throw new NotFoundException('需求不存在')
+    if (demand.status !== 'published') throw new ConflictException('需求已进入立项流程，响应不可撤回')
+    if (response.status !== 'pending') throw new ConflictException('该响应已被处理，不可撤回')
+    await this.prisma.demandRespondent.update({ where: { id }, data: { withdrawnAt: formatNow() } })
+    return { code: 0 }
   }
 
   /** 需求发布者查看响应列表（非发布者 403） */
@@ -315,6 +328,7 @@ export class AppDemandsService {
       status: r.status === 'pending' || r.status === 'accepted' || r.status === 'rejected' ? (r.status as 'pending' | 'accepted' | 'rejected') : undefined,
       ...(r.reviewAt != null ? { reviewedAt: r.reviewAt } : {}),
       ...(r.rejectReason != null ? { rejectReason: r.rejectReason } : {}),
+      ...(r.withdrawnAt != null ? { withdrawnAt: r.withdrawnAt } : {}),
     }))
   }
 
@@ -449,12 +463,6 @@ export class AppDemandsService {
     if (cfg && cfg.demandOpen === false) {
       throw new BadRequestException(action === '响应' ? '需求响应暂未开放' : '需求发布暂未开放')
     }
-  }
-
-  private async blockedUids(uid?: string | null): Promise<string[]> {
-    if (!uid) return []
-    const rows = await this.prisma.userBlock.findMany({ where: { userId: uid }, select: { blockedUid: true } })
-    return rows.map((row) => row.blockedUid)
   }
 
   /** 站内信收件人解析：用户本人；企业 ID 落到企业联系人；无法解析返回 null（不阻断主流程） */

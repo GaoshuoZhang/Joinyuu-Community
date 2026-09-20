@@ -6,7 +6,6 @@ export interface ArticleTakedownRecord {
   id: number
   articleId: string
   source: string
-  reportId: string | null
   reason: string | null
   takenDownAt: string
   takenDownBy: string
@@ -27,7 +26,7 @@ interface ArticleTakedownDelegate {
     orderBy: { id: 'desc' }
   }): Promise<ArticleTakedownRecord[]>
   updateMany(args: {
-    where: { id?: number; articleId?: string; reportId?: string; restoredAt: null }
+    where: { id?: number; articleId?: string; restoredAt: null }
     data: { restoredAt: string; restoredBy: string }
   }): Promise<{ count: number }>
 }

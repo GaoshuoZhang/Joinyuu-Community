@@ -19,7 +19,7 @@ const form = reactive({
   nickname: '',
   phone: '',
   email: '',
-  gender: '男' as User['gender'],
+  gender: 'male' as User['gender'],
   realName: '',
   citizenId: '',
   bio: '',
@@ -39,7 +39,7 @@ watch(
     form.nickname = ''
     form.phone = ''
     form.email = ''
-    form.gender = '男'
+    form.gender = 'male'
     form.realName = ''
     form.citizenId = ''
     form.bio = ''
@@ -99,8 +99,9 @@ async function onConfirm() {
         </t-form-item>
         <t-form-item label="性别" name="gender">
           <t-radio-group v-model="form.gender" variant="default-filled">
-            <t-radio-button value="男">男</t-radio-button>
-            <t-radio-button value="女">女</t-radio-button>
+            <t-radio-button value="male">男</t-radio-button>
+            <t-radio-button value="female">女</t-radio-button>
+            <t-radio-button value="unknown">保密</t-radio-button>
           </t-radio-group>
         </t-form-item>
       </div>

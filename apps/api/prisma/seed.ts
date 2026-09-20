@@ -165,7 +165,6 @@ async function main() {
   await prisma.eventEnrollment.deleteMany()
   /* M2-R R2/R3：无 FK 的挂靠表（userId/eventId/goodsId 仅为字符串列，不随主表级联，必须显式清理防跨 reseed 残留） */
   await prisma.eventFeedback.deleteMany()
-  await prisma.restockSubscribe.deleteMany()
   await prisma.favorite.deleteMany()
   await prisma.pointsRecord.deleteMany()
   /* M2-R R1 新增表（挂靠 user 的可变状态；必须随 User 一起清，避免孤儿残留导致 next 重号 P2002） */
@@ -174,10 +173,8 @@ async function main() {
   await prisma.agreementConsent.deleteMany()
   await prisma.accountDeletionRequest.deleteMany()
   /* M2-R R3 新增表 */
-  await prisma.report.deleteMany()
-  await prisma.userBlock.deleteMany()
-  await prisma.enterpriseInvitation.deleteMany()
   await prisma.transferRequest.deleteMany()
+  await prisma.enterpriseInvitation.deleteMany()
   await prisma.policy.deleteMany()
   await prisma.individualCard.deleteMany()
   await prisma.redemptionOrder.deleteMany()
@@ -549,6 +546,7 @@ async function main() {
         sourceDemandId: p.sourceDemandId ?? null,
         expReward: p.expReward ?? null,
         closeReason: p.closeReason ?? null,
+        finishedAt: p.finishedAt ?? null,
       },
     })
     for (const u of p.undertakers) {
@@ -696,6 +694,7 @@ async function main() {
         status: g.status ?? 'on',
         description: g.description,
         redeemedCount: g.redeemedCount ?? 0,
+        validDays: g.validDays ?? null,
         shippingMethods: g.shippingMethods ?? [],
         pickupAddress: g.pickupAddress ?? null,
         shippingFee: g.shippingFee ?? null,

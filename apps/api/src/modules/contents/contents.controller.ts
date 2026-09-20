@@ -28,6 +28,24 @@ export class ContentsController {
     return this.contents.article(id)
   }
 
+  /* 评论治理：列表 + 治理性删除（两码任一可查，删除需内容发布权限） */
+  @RequirePermission(['/contents/publish', '/contents/submissions'])
+  @Get('articles/:id/comments')
+  articleComments(@Param('id') id: string) {
+    return this.contents.articleComments(id)
+  }
+
+  @RequirePermission('/contents/publish')
+  @HttpCode(200)
+  @Post('articles/:id/comments/:commentId/remove')
+  removeComment(
+    @Param('commentId') commentId: string,
+    @Body() dto: TakedownDto,
+    @Req() req: AuthenticatedRequest,
+  ) {
+    return this.contents.removeArticleComment(commentId, dto.takedownReason, req.user?.name ?? '社区管理员')
+  }
+
   @RequirePermission('/contents/publish')
   @HttpCode(200)
   @Post('articles')

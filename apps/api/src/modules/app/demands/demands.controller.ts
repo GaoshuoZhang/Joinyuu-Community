@@ -1,6 +1,7 @@
 import { Body, Controller, ForbiddenException, Get, HttpCode, Param, Post, Query, Req } from '@nestjs/common'
 import type { AppAuthenticatedRequest } from '../../../common/interfaces/app-authenticated-request'
 import { Public } from '../../../common/decorators/public.decorator'
+import { PageQueryDto } from '../../../common/dto/page-query.dto'
 import { AppDemandsService } from './demands.service'
 import { CreateDemandDto } from './dto/create-demand.dto'
 import { RespondDemandDto } from './dto/respond-demand.dto'
@@ -15,11 +16,10 @@ export class AppDemandsController {
   @Public()
   @Get('demands')
   list(
+    @Query() query: PageQueryDto,
     @Query('kind') kind?: string,
     @Query('category') category?: string,
     @Query('keyword') keyword?: string,
-    @Query('page') page?: string,
-    @Query('pageSize') pageSize?: string,
     @Req() req?: AppAuthenticatedRequest,
   ) {
     return this.demands.list(
@@ -27,8 +27,8 @@ export class AppDemandsController {
         kind,
         category,
         keyword,
-        page: parseInt(page ?? '1', 10) || 1,
-        pageSize: Math.min(50, parseInt(pageSize ?? '10', 10) || 10),
+        page: query.page,
+        pageSize: query.pageSize,
       },
       req!,
     )
@@ -60,6 +60,13 @@ export class AppDemandsController {
   @Get('me/responses')
   myResponses(@Req() req: AppAuthenticatedRequest) {
     return this.demands.myResponses(this.uid(req))
+  }
+
+  /** 撤回本人响应（仅待处理且需求仍发布中） */
+  @HttpCode(200)
+  @Post('me/responses/:id/withdraw')
+  withdrawResponse(@Req() req: AppAuthenticatedRequest, @Param('id') id: string) {
+    return this.demands.withdrawResponse(this.uid(req), id)
   }
 
   @Get('me/demands/:id/responses')

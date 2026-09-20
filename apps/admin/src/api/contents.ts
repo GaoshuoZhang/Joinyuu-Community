@@ -123,6 +123,43 @@ export async function fetchArticleColumns(): Promise<ArticleColumn[]> {
   return columns.filter((c) => c.status === 'enabled' && !c.system)
 }
 
+/* ---------- 评论治理（/api/admin/contents/articles/:id/comments） ---------- */
+
+export interface ArticleCommentItem {
+  id: string
+  articleId: string
+  uid: string
+  userName: string
+  nickname: string
+  avatar?: string
+  content: string
+  at: string
+  identityType: string
+  identityName?: string
+}
+
+export interface ArticleCommentsResult {
+  articleId: string
+  commentsEnabled: boolean
+  list: ArticleCommentItem[]
+}
+
+/** GET /api/admin/contents/articles/:id/comments — 文章评论（含发表身份快照） */
+export async function fetchArticleComments(articleId: string): Promise<ArticleCommentsResult> {
+  return httpGet<ArticleCommentsResult>(`/contents/articles/${articleId}/comments`)
+}
+
+/** POST /api/admin/contents/articles/:id/comments/:commentId/remove — 治理性删除评论（原因非空时通知作者） */
+export async function removeArticleComment(
+  articleId: string,
+  commentId: string,
+  reason?: string,
+): Promise<{ code: number }> {
+  return httpPost<{ code: number }>(`/contents/articles/${articleId}/comments/${commentId}/remove`, {
+    takedownReason: reason,
+  })
+}
+
 /* ---------- 栏目管理（/api/admin/contents/columns）
  * 「开放投稿」开关 submissionOpen：控制成员端该栏目是否可投稿 ---------- */
 

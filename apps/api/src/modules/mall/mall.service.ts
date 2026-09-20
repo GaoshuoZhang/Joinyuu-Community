@@ -36,6 +36,9 @@ export interface RedemptionOrderDto {
   note?: string
   cancelReason?: string
   trackingNo?: string
+  voucherCode?: string
+  voucherExpiresAt?: string
+  usedAt?: string
 }
 
 export interface PointsRuleDto {
@@ -66,7 +69,7 @@ export class MallService {
 
   /* ---------- 商品管理 ---------- */
 
-  async listGoods(query: QueryGoodsDto): Promise<{ list: Array<MallGoods & { subscriberCount: number }>; total: number }> {
+  async listGoods(query: QueryGoodsDto): Promise<{ list: MallGoods[]; total: number }> {
     const where: Prisma.MallGoodsWhereInput = { deletedAt: null }
     if (query.keyword) {
       const kw = query.keyword.trim()
@@ -94,14 +97,7 @@ export class MallService {
     })
 
     const start = (query.page - 1) * query.pageSize
-    const pageRows = sorted.slice(start, start + query.pageSize)
-    const counts = await this.prisma.restockSubscribe.groupBy({
-      by: ['goodsId'],
-      where: { goodsId: { in: pageRows.map((item) => item.id) }, notifiedAt: null },
-      _count: { _all: true },
-    })
-    const countMap = new Map(counts.map((item) => [item.goodsId, item._count._all]))
-    return { list: pageRows.map((item) => ({ ...item, subscriberCount: countMap.get(item.id) ?? 0 })), total }
+    return { list: sorted.slice(start, start + query.pageSize), total }
   }
 
   async createGoods(dto: GoodsPayloadDto): Promise<MallGoods> {
@@ -117,6 +113,7 @@ export class MallService {
         status: dto.stock === 0 ? 'restock' : 'off',
         description: sanitizeHtml(dto.description),
         redeemedCount: 0,
+        validDays: this.resolveValidDays(dto),
         ...this.resolveShipping(dto),
         visibilityIdentities: dto.visibilityIdentities ?? [],
         visibilityLevels: dto.visibilityLevels ?? [],
@@ -145,6 +142,7 @@ export class MallService {
         stock: dto.stock,
         status,
         description: sanitizeHtml(dto.description),
+        validDays: this.resolveValidDays(dto),
         ...this.resolveShipping(dto),
         visibilityIdentities: dto.visibilityIdentities ?? [],
         visibilityLevels: dto.visibilityLevels ?? [],
@@ -152,7 +150,6 @@ export class MallService {
         orderLevels: dto.orderLevels ?? [],
       },
     })
-    if (goods.stock === 0 && dto.stock > 0) await this.notifyRestocked(goods.id, goods.name)
     return { code: 0 }
   }
 
@@ -236,26 +233,13 @@ export class MallService {
     return category === 'GC001' ? 'physical' : 'voucher'
   }
 
-  /** 补货后向尚未通知的订阅者发送站内信，并记录 notifiedAt 防重复。 */
-  private async notifyRestocked(goodsId: string, goodsName: string): Promise<void> {
-    const subscriptions = await this.prisma.restockSubscribe.findMany({
-      where: { goodsId, notifiedAt: null },
-      select: { id: true, userId: true },
-    })
-    if (!subscriptions.length) return
-    const at = formatNow()
-    await this.prisma.restockSubscribe.updateMany({
-      where: { id: { in: subscriptions.map((item) => item.id) }, notifiedAt: null },
-      data: { notifiedAt: at },
-    })
-    for (const subscription of subscriptions) {
-      await this.notify.pushNotice(subscription.userId, {
-        type: 'mall',
-        title: '到货提醒',
-        content: `您关注的商品「${goodsName}」已补货，欢迎前往积分商城查看。`,
-        link: `/mall/${goodsId}`,
-      })
-    }
+  /* ---------- 内部工具 ---------- */
+
+  /** 权益券有效期（天）：仅 voucher 有效，空值落库为 null（下单按 30 天兜底） */
+  private resolveValidDays(dto: GoodsPayloadDto): number | null {
+    if (this.resolveFulfillment(dto) !== 'voucher') return null
+    if (dto.validDays == null) return null
+    return dto.validDays > 0 ? dto.validDays : null
   }
 
   /* ---------- 兑换订单 ---------- */
@@ -476,6 +460,9 @@ function toOrderDto(order: RedemptionOrder): RedemptionOrderDto {
   }
   if (order.shippedAt != null) dto.shippedAt = order.shippedAt
   if (order.finishedAt != null) dto.finishedAt = order.finishedAt
+  if (order.voucherCode != null) dto.voucherCode = order.voucherCode
+  if (order.voucherExpiresAt != null) dto.voucherExpiresAt = order.voucherExpiresAt
+  if (order.usedAt != null) dto.usedAt = order.usedAt
   if (order.recipientName != null) dto.recipientName = order.recipientName
   if (order.recipientPhone != null) dto.recipientPhone = order.recipientPhone
   if (order.address != null) dto.address = order.address

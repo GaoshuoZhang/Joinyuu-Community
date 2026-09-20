@@ -1,17 +1,8 @@
-import { Type } from 'class-transformer'
-import { IsInt, IsOptional, IsString, Min } from 'class-validator'
+import { IsOptional, IsString } from 'class-validator'
+import { PageQueryDto } from '../../../common/dto/page-query.dto'
 
 /* GET /api/admin/audit-logs 查询参数（module 精确筛选 + keyword 跨 target/action/detail/operator 模糊） */
-export class QueryAuditLogsDto {
-  @Type(() => Number)
-  @IsInt()
-  @Min(1)
-  page!: number
-
-  @Type(() => Number)
-  @IsInt()
-  @Min(1)
-  pageSize!: number
+export class QueryAuditLogsDto extends PageQueryDto {
 
   @IsOptional()
   @IsString()

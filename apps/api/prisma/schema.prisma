@@ -175,7 +175,6 @@ model IdSequence {
 // ---------- 社区成员域 ----------
 
 model User {
-  moderationVersion Int @default(0) // DB trigger increments on moderation writes
   uid                    String                      @id @db.VarChar(16)
   nickname               String                      @db.VarChar(64)
   phone                  String                      @unique @db.VarChar(32)
@@ -209,9 +208,8 @@ model User {
   deletionRequests       AccountDeletionRequest[]
   articleComments        ArticleComment[]
   demandResponses        DemandRespondent[]
-  reports                Report[]
-  blocksCreated          UserBlock[]
   individualCard         IndividualCard?
+  notificationPreference UserNotificationPreference?
 
   @@index([status])
 }
@@ -238,7 +236,6 @@ model UserIdentity {
 }
 
 model Enterprise {
-  moderationVersion Int @default(0)
   id              String   @id @db.VarChar(16)
   name            String   @db.VarChar(128)
   industry        String   @db.VarChar(64)
@@ -318,7 +315,6 @@ model ApplicationFormConfig {
 // ---------- 业务运营域 ----------
 
 model Demand {
-  moderationVersion Int @default(0)
   id                   String             @id @db.VarChar(16)
   title                String             @db.VarChar(128)
   category             String             @db.VarChar(64)
@@ -408,6 +404,7 @@ model Project {
   sourceDemandId String?             @db.VarChar(16)
   expReward      Int?
   closeReason    String?             @db.VarChar(255)
+  finishedAt     String?             @db.VarChar(16)
   undertakers    ProjectUndertaker[]
   milestones     Milestone[]
   deletedAt      String?             @db.VarChar(16)
@@ -591,6 +588,8 @@ model MallGoods {
   shippingMethods      String[] // physical 商品的发货方式：pickup | delivery
   pickupAddress        String?  @db.VarChar(255)
   shippingFee          Int? // 邮寄运费（元，0=包邮）
+  /** 权益券有效期（天）：下单时据此计算券码到期时间；仅 fulfillment=voucher 使用，空值按 30 天 */
+  validDays            Int?
   visibilityIdentities String[] // 自定义可见范围：身份类型
   visibilityLevels     String[] // 自定义可见范围：等级
   orderIdentities      String[] // 自定义可下单范围：身份类型
@@ -639,16 +638,6 @@ model RedemptionOrder {
 }
 
 // M2-R R2：到货提醒订阅（缺货商品，补货联动通知）
-model RestockSubscribe {
-  id         Int     @id @default(autoincrement())
-  goodsId    String  @db.VarChar(16)
-  userId     String  @db.VarChar(16)
-  notifiedAt String? @db.VarChar(16)
-  createdAt  String  @db.VarChar(16)
-
-  @@unique([goodsId, userId])
-}
-
 // 积分规则：9 条固定触发项（code 为 PK），发放自动、扣除手动（不设扣分规则）
 model PointsRule {
   code        String  @id @db.VarChar(32)
@@ -801,7 +790,6 @@ model SpaceReservation {
 // 文章（M1.5 内容改造）：channel=official 社区自行发布 / submitted 用户投稿
 // status：pending 待审核 / rejected 已驳回 / pending_release 待发布 / scheduled 定时发布中 / published 已发布
 model Article {
-  moderationVersion Int @default(0)
   id             String           @id @db.VarChar(16)
   title          String           @db.VarChar(128)
   channel        String           @default("official") @db.VarChar(16)
@@ -850,8 +838,7 @@ model Article {
 model ArticleTakedown {
   id          Int      @id @default(autoincrement())
   articleId   String   @db.VarChar(16)
-  source      String   @db.VarChar(16) // manual 后台主动下架 | governance 举报处置
-  reportId    String?  @db.VarChar(16)
+  source      String   @db.VarChar(16) // manual 后台主动下架
   reason      String?  @db.VarChar(255)
   takenDownAt String   @db.VarChar(16)
   takenDownBy String   @db.VarChar(64)
@@ -1098,40 +1085,14 @@ model AccountDeletionRequest {
 
 // ---------- M2-R R3 批：信任治理（2026-09-16，/api/app/**） ----------
 
-// 举报（targetType：demand | article | enterprise | comment | user；状态由 admin 处置回写）
-model Report {
-  action                  String  @default("none") @db.VarChar(16)
-  targetModerationVersion Int?
-  restoredAt              String? @db.VarChar(16)
-  id          String  @id @db.VarChar(16) // RP 前缀
-  reporterId  String  @db.VarChar(16)
-  targetType  String  @db.VarChar(16)
-  targetId    String  @db.VarChar(16)
-  targetTitle String  @db.VarChar(128)
-  reason      String  @db.VarChar(64)
-  detail      String? @db.VarChar(500)
-  status      String  @default("pending") @db.VarChar(16) // pending | resolved | rejected
-  at          String  @db.VarChar(16)
-  handledAt   String? @db.VarChar(16)
-  handledBy   String? @db.VarChar(64)
-  resolution  String? @db.VarChar(255)
-  user        User    @relation(fields: [reporterId], references: [uid], onDelete: Cascade)
-
-  @@index([reporterId, status])
-  @@index([status])
+// 用户通知偏好（mutedTypes：被静音的通知类型；system 账号与安全通知不可静音）
+model UserNotificationPreference {
+  userId     String   @id @db.VarChar(16)
+  mutedTypes String[] @default([])
+  updatedAt  String   @db.VarChar(16)
+  user       User     @relation(fields: [userId], references: [uid], onDelete: Cascade)
 }
 
-// 屏蔽名单（屏蔽后对方的内容/评论在列表中不可见；blockedUid 不设外键便于解耦）
-model UserBlock {
-  id         Int    @id @default(autoincrement())
-  userId     String @db.VarChar(16) // 屏蔽发起人
-  blockedUid String @db.VarChar(16) // 被屏蔽用户
-  createdAt  String @db.VarChar(16)
-  user       User   @relation(fields: [userId], references: [uid], onDelete: Cascade)
-
-  @@unique([userId, blockedUid])
-  @@index([userId])
-}
 
 // 企业成员邀请（7 天有效期；被邀请人经站内信链接查看并接受/拒绝）
 model EnterpriseInvitation {

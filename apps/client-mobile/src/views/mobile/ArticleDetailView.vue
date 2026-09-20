@@ -1,9 +1,9 @@
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { Button, Icon, Image, Tag, Toast } from 'tdesign-mobile-vue'
+import { Button, DialogPlugin, Icon, Image, Tag, Toast } from 'tdesign-mobile-vue'
 import { useAsyncList } from '@/composables/useAsyncList'
-import { createArticleComment, fetchArticle, fetchArticleComments, toggleArticleLike } from '@/api/contents'
+import { createArticleComment, deleteArticleComment, fetchArticle, fetchArticleComments, toggleArticleLike } from '@/api/contents'
 import { listFavorites, toggleFavorite } from '@/api/favorites'
 import { shareContent } from '@/utils/share'
 import { onImageError } from '@/utils/imageFallback'
@@ -117,6 +117,26 @@ async function onComment(identity: UserIdentity | null) {
   }
 }
 
+/* 删除自己的评论（二次确认） */
+function onDeleteComment(item: ArticleComment) {
+  const dialog = DialogPlugin.confirm({
+    title: '删除评论',
+    content: '确认删除这条评论？删除后无法恢复。',
+    cancelBtn: '取消',
+    confirmBtn: '确认删除',
+    onConfirm: async () => {
+      dialog.hide()
+      try {
+        await deleteArticleComment(String(route.params.id), item.id)
+        Toast('评论已删除')
+        await loadComments()
+      } catch (e) {
+        Toast(e instanceof Error ? e.message : '删除失败，请稍后重试')
+      }
+    },
+  })
+}
+
 /* v37 收藏 */
 const favorited = ref(false)
 async function loadFavorite() {
@@ -183,7 +203,9 @@ async function onToggleFavorite() {
         :user-name="auth.name"
         :submitting="commenting"
         :error="commentError"
+        :current-uid="auth.uid || undefined"
         @submit="onComment"
+        @delete="onDeleteComment"
       />
       <section v-else class="m-card comments-disabled" aria-live="polite">该文章已关闭评论</section>
     </template>

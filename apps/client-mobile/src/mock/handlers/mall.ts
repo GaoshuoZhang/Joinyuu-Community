@@ -1,11 +1,12 @@
 import type { Goods, MyOrder } from '@/types'
-import { accountByUid, addressesByUid, appConfig, goods, goodsOffIds, grantPoints, nextMockId, nowStamp, ordersByUid, pushNotice, restockSubscriptions, trackMockEvent } from '@/mock/db'
+import { accountByUid, addressesByUid, appConfig, goods, goodsOffIds, grantPoints, nextMockId, nowStamp, ordersByUid, pushNotice, trackMockEvent } from '@/mock/db'
 import { readPayload } from '@/mock/session'
 import { fail, withLatency } from '@/mock/latency'
 import { formatMockStamp, mockNowMs } from '@/mock/runtime'
 
 /* [MOCK-ONLY] 积分商城 handlers。下单事务语义：校验库存→扣积分+流水→扣库存→建单（与后端 AppMallService.createOrder 一致）。
- * 履约模型：physical 待发货→已发货→确认收货；voucher 下单即发券码，待使用→核销；券码过期由 fetchMyOrders 派生 expired。 */
+ * 履约模型：physical 待发货→已发货→确认收货；voucher 下单即发券码（有效期取商品 validDays，默认 30 天），
+ * 待使用→核销；券码过期由 fetchMyOrders 派生 expired。缺货（restock）商品保持可见并展示售罄。 */
 
 function requireUid(): string {
   const payload = readPayload()
@@ -16,18 +17,20 @@ function requireUid(): string {
 /** 同一用户同一商品 3 秒内重复提交去重（对齐后端 Redis acquireFlag） */
 const ORDER_DEDUPE_TTL_MS = 3000
 const orderDedupe = new Map<string, number>()
+/* 券码默认有效期（天）：商品未配置 validDays 时兜底（对齐后端） */
+const DEFAULT_VOUCHER_VALID_DAYS = 30
 
 export async function fetchGoods(query: { category?: string } = {}): Promise<Goods[]> {
   return withLatency(() => {
     if (!appConfig.mallOpen) fail(400, '积分商城暂未开放')
-    return goods.filter((g) => g.status === 'on' && g.stock > 0 && !goodsOffIds.includes(g.id) && (!query.category || g.category === query.category))
+    return goods.filter((g) => g.status !== 'off' && !goodsOffIds.includes(g.id) && (!query.category || g.category === query.category))
   })
 }
 
 export async function fetchGoodsDetail(id: string): Promise<Goods> {
   return withLatency(() => {
     if (!appConfig.mallOpen) fail(400, '积分商城暂未开放')
-    const g = goods.find((x) => x.id === id && x.status === 'on' && x.stock > 0)
+    const g = goods.find((x) => x.id === id && x.status !== 'off')
     if (!g) fail(404, '商品不存在')
     return g
   })
@@ -38,7 +41,7 @@ export async function createOrder(goodsId: string, addressId?: string): Promise<
     const uid = requireUid()
     if (!appConfig.mallOpen) fail(400, '积分商城暂未开放')
     const g = goods.find((x) => x.id === goodsId)
-    if (!g || g.status !== 'on') fail(404, '商品不存在')
+    if (!g || g.status === 'off') fail(404, '商品不存在')
     const account = accountByUid(uid)
     if (!account) fail(401, '未登录或登录已过期')
     if (account.points < g.pointsCost) fail(400, `积分不足，还差 ${g.pointsCost - account.points} 积分`)
@@ -71,12 +74,12 @@ export async function createOrder(goodsId: string, addressId?: string): Promise<
         base.recipientAddress = address.address
       }
       if (g.fulfillment === 'voucher') {
+        const validDays = g.validDays && g.validDays > 0 ? g.validDays : DEFAULT_VOUCHER_VALID_DAYS
         orders.unshift({
           ...base,
           status: 'pending_use',
           voucherCode: `JYV-${id.slice(2)}`,
-          /* v38：券码 30 天有效 */
-          voucherExpiresAt: formatMockStamp(mockNowMs() + 30 * 24 * 60 * 60 * 1000),
+          voucherExpiresAt: formatMockStamp(mockNowMs() + validDays * 24 * 60 * 60 * 1000),
         })
         pushNotice(uid, { type: 'order', title: '兑换成功，券码已发放', content: `「${g.name}」券码已生成，可在我的订单查看。`, link: '/me/orders' })
       } else {
@@ -178,25 +181,10 @@ export async function cancelOrder(id: string): Promise<void> {
     const g = goods.find((x) => x.id === order.goodsId)
     if (g) {
       g.stock += 1
-      /* 补货状态商品回补库存后恢复上架（对齐后端取消订单逻辑） */
-      if (g.status === 'restock' && g.stock > 0) g.status = 'off'
+      /* 售罄商品回补库存后恢复上架（对齐后端取消订单逻辑） */
+      if (g.status === 'restock') g.status = 'on'
     }
     grantPoints(uid, order.pointsCost, `取消兑换退款：${order.goodsName}`, '商城退款')
     pushNotice(uid, { type: 'order', title: '订单已取消，积分已退回', content: `「${order.goodsName}」已取消，${order.pointsCost} 积分已退回。`, link: '/me/orders' })
   }, 160)
-}
-
-/** [MOCK-ONLY] v37 到货提醒：缺货或补货中商品可订阅，补货后由运营/调度通知（Mock 记录订阅）。 */
-export async function subscribeRestock(goodsId: string): Promise<void> {
-  await withLatency(() => {
-    const uid = requireUid()
-    const g = goods.find((x) => x.id === goodsId)
-    if (!g) fail(404, '商品不存在')
-    if (g.stock > 0 && g.status !== 'restock') fail(400, '该商品尚有库存，无需到货提醒')
-    const list = (restockSubscriptions[uid] ??= [])
-    if (list.includes(goodsId)) return
-    list.push(goodsId)
-    pushNotice(uid, { type: 'system', title: '到货提醒已开启', content: `「${g.name}」补货后将第一时间通知你。`, link: '/mall' })
-    trackMockEvent('restock_subscribe')
-  }, 140)
 }

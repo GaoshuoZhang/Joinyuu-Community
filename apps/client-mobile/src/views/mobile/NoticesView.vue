@@ -19,7 +19,6 @@ const TYPE_LABELS: Record<NoticeType, string> = {
   system: '系统通知',
   invite: '企业邀请',
   transfer: '负责人转移',
-  report: '举报处理',
   article: '资讯与投稿',
   demand: '需求',
   project: '项目',

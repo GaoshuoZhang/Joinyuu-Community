@@ -50,7 +50,6 @@ import { AppHomeModule } from './modules/app/home/home.module'
 import { AppSearchModule } from './modules/app/search/search.module'
 import { AppUploadsModule } from './modules/app/uploads/uploads.module'
 import { AppRealnameModule } from './modules/app/realname/realname.module'
-import { AppReportsModule } from './modules/app/reports/reports.module'
 import { AppEnterprisesModule } from './modules/app/enterprises/enterprises.module'
 import { AppCommunityModule } from './modules/app/community/community.module'
 import { AppFavoritesModule } from './modules/app/favorites/favorites.module'
@@ -120,7 +119,6 @@ import { HttpExceptionFilter } from './common/filters/http-exception.filter'
     AppSearchModule,
     AppUploadsModule,
     AppRealnameModule,
-    AppReportsModule,
     AppEnterprisesModule,
     AppCommunityModule,
     AppFavoritesModule,

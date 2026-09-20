@@ -1,21 +1,30 @@
 <script setup lang="ts">
-import { watch } from 'vue'
+import { onBeforeUnmount, watch } from 'vue'
 import { Button, Empty } from 'tdesign-mobile-vue'
-import { announce } from '@/utils/a11y'
+import { announce, clearAnnounce } from '@/utils/a11y'
 
 /* 空状态 / 错误态占位：TDesign Empty 封装（action 插槽放 Button）。
  * v36：可选 actionText 提供重试或替代路径入口（错误态不再是无出路的死胡同）。
- * v38：文本变化时向屏幕阅读器播报（aria-live）。 */
+ * v38：文本变化时向屏幕阅读器播报（aria-live）。
+ * D-103：占位卸载时清空播报区域，避免「暂无…」残留在读屏输出中。 */
 const props = defineProps<{ text?: string; actionText?: string }>()
 defineEmits<{ action: [] }>()
 
+let announced = false
 watch(
   () => props.text,
   (value) => {
-    if (value) announce(value)
+    if (value) {
+      announced = true
+      announce(value)
+    }
   },
   { immediate: true },
 )
+
+onBeforeUnmount(() => {
+  if (announced) clearAnnounce()
+})
 </script>
 
 <template>

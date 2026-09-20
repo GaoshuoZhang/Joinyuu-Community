@@ -11,6 +11,7 @@ import ArticleFormDialog from '@/components/ArticleFormDialog.vue'
 import ArticleScheduleDialog from '@/components/ArticleScheduleDialog.vue'
 import ContentTakedownDialog from '@/components/ContentTakedownDialog.vue'
 import ArticleReviewDialog from '@/components/ArticleReviewDialog.vue'
+import ArticleCommentsDialog from '@/components/ArticleCommentsDialog.vue'
 import {
   cancelArticleSchedule,
   deleteArticle,
@@ -169,6 +170,7 @@ async function onRestore(row: Article) {
 }
 
 const takedownDialog = ref<InstanceType<typeof ContentTakedownDialog>>()
+const commentsRef = ref<InstanceType<typeof ArticleCommentsDialog>>()
 function onWithdraw(row: Article) {
   takedownDialog.value?.open('article', row)
 }
@@ -296,8 +298,9 @@ onMounted(load)
             </t-popconfirm>
           </template>
 
-          <!-- 已发布：下架（转待发布） -->
+          <!-- 已发布：评论治理 / 下架（转待发布） -->
           <template v-else-if="row.status === 'published'">
+            <t-button variant="text" size="small" @click="commentsRef?.open(row)">评论</t-button>
             <t-button variant="text" size="small" theme="danger" @click="onWithdraw(row)">
               下架
             </t-button>
@@ -319,6 +322,7 @@ onMounted(load)
     <ArticleScheduleDialog v-model:visible="scheduleVisible" :article="current" @success="load" />
     <ContentTakedownDialog ref="takedownDialog" @success="load" />
     <ArticleReviewDialog v-model:visible="viewVisible" :article="current" readonly title="文章详情" />
+    <ArticleCommentsDialog ref="commentsRef" @success="load" />
   </div>
 </template>
 
