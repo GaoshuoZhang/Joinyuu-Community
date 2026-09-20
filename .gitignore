@@ -19,3 +19,4 @@ uploads/
 apps/api/.tmp/
 !apps/api/src/modules/app/uploads/
 !apps/api/src/modules/app/uploads/**
+.trae
