@@ -5,9 +5,9 @@ import type { HomeBanner } from '@/types'
 export const banners: HomeBanner[] = [
   {
     id: 'BN1001',
-    title: '2026 春季创业路演周',
+    title: '2026 秋季创业路演周',
     subtitle: '18 个项目集中路演，投资人现场对接',
-    link: '/events',
+    link: '/plaza?tab=events',
     sort: 1,
     enabled: true,
     createdAt: '2026-09-01 09:00',

@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { Loading, Button, CheckTag, Icon, Search, Tag } from 'tdesign-mobile-vue'
+import { Button, CheckTag, Icon, Search, Tag } from 'tdesign-mobile-vue'
 import { fetchArticles } from '@/api/contents'
 import { fetchEnterpriseList, fetchPolicies, fetchTalents } from '@/api/community'
 import { fetchDemands } from '@/api/demands'
@@ -9,7 +9,10 @@ import { fetchEvents } from '@/api/events'
 import { fetchSpaces } from '@/api/spaces'
 import { trackEvent } from '@/api/analytics'
 import EmptyBlock from '@/components/shared/EmptyBlock.vue'
+import ListSkeleton from '@/components/ListSkeleton.vue'
 import { useAnimSuppress } from '@/composables/useAnimSuppress'
+import { useRouteQuerySync } from '@/composables/useRouteQuerySync'
+import { formatLocalDateTime, formatZhNumber } from '@/utils/format'
 
 useAnimSuppress()
 
@@ -97,16 +100,15 @@ async function search() {
     demandHasResults.value = (demandRes?.list.length ?? 0) > 0
     results.value = [
       ...(demandRes?.list ?? []).map((item) => ({ id: item.id, kind: '项目', title: item.title, summary: item.description, path: `/demands/${item.id}` })),
-      ...events.map((item) => ({ id: item.id, kind: '活动', title: item.title, summary: `${item.startTime} · ${item.location}`, path: `/events/${item.id}` })),
+      ...events.map((item) => ({ id: item.id, kind: '活动', title: item.title, summary: `${formatLocalDateTime(item.startTime)} · ${item.location}`, path: `/events/${item.id}` })),
       ...articles.map((item) => ({ id: item.id, kind: '文章', title: item.title, summary: item.summary, path: `/articles/${item.id}` })),
       ...policies.map((item) => ({ id: item.id, kind: '社区服务', title: item.title, summary: item.summary, path: `/community?tab=service&policy=${item.id}` })),
       ...talents.map((item) => ({ id: item.uid, kind: '人才', title: item.name, summary: `${item.role} · ${item.intro}`, path: `/talents/${item.uid}` })),
       ...enterprises
-        .filter((item) => item.showcaseStatus === 'published')
         .map((item) => ({ id: item.id, kind: '企业', title: item.name, summary: `${item.industry} · ${item.description}`, path: `/enterprises/${item.id}` })),
       ...spaces
         .filter((item) => item.name.includes(q) || item.location.includes(q))
-        .map((item) => ({ id: item.id, kind: '空间', title: item.name, summary: `${item.location} · 可容纳 ${item.capacity} 人`, path: `/spaces/${item.id}/reserve` })),
+        .map((item) => ({ id: item.id, kind: '空间', title: item.name, summary: `${item.location} · 可容纳 ${formatZhNumber(item.capacity)} 人`, path: `/spaces/${item.id}/reserve` })),
     ]
     if (failed.length) partialError.value = `${failed.join('、')}暂时无法加载，已展示其余结果`
     recordRecent(q)
@@ -121,13 +123,10 @@ async function search() {
   }
 }
 
-function go(item: SearchResult) {
-  void router.push(item.path)
-}
-
 let searchTimer: number | undefined
 watch(keyword, () => {
   window.clearTimeout(searchTimer)
+  searchId += 1
   /* 清空仅重置本地结果，不更新路由 */
   if (!keyword.value.trim()) {
     searchId += 1
@@ -151,6 +150,13 @@ function onSearchNow() {
 
 onBeforeUnmount(() => window.clearTimeout(searchTimer))
 
+useRouteQuerySync('/search', (query) => {
+  const nextKeyword = query.q ?? ''
+  if (nextKeyword === keyword.value) return
+  window.clearTimeout(searchTimer)
+  keyword.value = nextKeyword
+})
+
 onMounted(() => {
   void search()
 })
@@ -159,52 +165,51 @@ onMounted(() => {
 <template>
   <div class="page-fade-in global-search">
     <header class="head">
-      <h1 class="page-title">全局搜索</h1>
       <p class="page-desc">查找项目、活动、文章、社区服务和人才</p>
     </header>
-    <Search v-model="keyword" placeholder="输入关键词后搜索" @search="onSearchNow" />
+    <Search v-model="keyword" placeholder="输入关键词后搜索…" @search="onSearchNow" />
 
-    <Loading v-if="loading" class="state" text="搜索中…" />
+    <ListSkeleton v-if="loading" :rows="2" />
     <EmptyBlock v-else-if="error" :text="error" action-text="重试" @action="onSearchNow" />
     <template v-else-if="hasKeyword">
       <p v-if="partialError" class="partial-error">{{ partialError }}</p>
       <div v-if="categoryOrder.length" class="count-chips">
         <CheckTag
-          size="small"
+          size="medium"
           variant="light"
           :checked="activeKind === ''"
           @change="activeKind = ''"
         >
-          全部 {{ results.length }}
+          全部 {{ formatZhNumber(results.length) }}
         </CheckTag>
         <CheckTag
           v-for="c in categoryOrder"
           :key="c"
-          size="small"
+          size="medium"
           variant="light"
           :checked="activeKind === c"
           @change="activeKind = activeKind === c ? '' : c"
         >
-          {{ c }} {{ counts[c] }}
+          {{ c }} {{ formatZhNumber(counts[c] ?? 0) }}
         </CheckTag>
       </div>
       <Button v-if="demandHasResults" size="small" variant="outline" block @click="router.push(`/projects?q=${encodeURIComponent(keyword.trim())}`)">
         查看更多项目
-        <template #suffix><Icon name="chevron-right" size="14px" /></template>
+        <template #suffix><Icon aria-hidden="true" name="chevron-right" size="14px" /></template>
       </Button>
       <EmptyBlock v-if="!visibleResults.length" text="没有找到相关内容，换个关键词试试" />
       <div v-else class="result-list stagger">
-        <article v-for="item in visibleResults" :key="`${item.kind}-${item.id}`" class="m-card result pressable" v-pressable @click="go(item)">
+        <router-link v-for="item in visibleResults" :key="`${item.kind}-${item.id}`" class="m-card result pressable" :to="item.path">
           <div class="result-head"><Tag size="small" variant="light">{{ item.kind }}</Tag><h2>{{ item.title }}</h2></div>
           <p>{{ item.summary }}</p>
-        </article>
+        </router-link>
       </div>
     </template>
     <template v-else>
       <div v-if="recent.length" class="recent">
         <div class="recent-head">
           <span>最近搜索</span>
-          <a v-pressable @click="clearRecent">清空</a>
+          <Button size="small" variant="text" theme="default" @click="clearRecent">清空</Button>
         </div>
         <div class="recent-chips">
           <CheckTag v-for="r in recent" :key="r" size="medium" variant="light" :checked="false" @change="useRecent(r)">{{ r }}</CheckTag>
@@ -216,21 +221,20 @@ onMounted(() => {
 </template>
 
 <style scoped>
-.global-search { display: flex; flex-direction: column; gap: 12px; padding: 16px; }
-.head { padding: 0 2px; }
-.head .page-title { margin: 0 0 4px; font-size: 20px; }
-.head .page-desc { margin: 0; font-size: 12px; color: var(--td-text-color-secondary); }
-.state { display: flex; align-items: center; justify-content: center; width: 100%; min-height: 120px; padding: 32px 0; }
-.result-list { display: flex; flex-direction: column; gap: 10px; }
-.result { cursor: pointer; }
-.result-head { display: flex; align-items: center; gap: 8px; }
-.result h2 { overflow: hidden; margin: 0; font-size: 15px; text-overflow: ellipsis; white-space: nowrap; }
-.result p { display: -webkit-box; overflow: hidden; margin: 8px 0 0; color: var(--td-text-color-secondary); font-size: 12px; line-height: 1.7; -webkit-box-orient: vertical; -webkit-line-clamp: 2; }
-.search-guide { padding: 32px 0; color: var(--td-text-color-placeholder); font-size: 13px; text-align: center; }
-.partial-error { margin: 0; padding: 8px 10px; border-radius: var(--td-radius-default); background: var(--td-warning-color-1, #fff1e9); color: var(--td-text-color-secondary); font-size: 12px; }
-.count-chips { display: flex; flex-wrap: wrap; gap: 6px; }
-.recent { display: flex; flex-direction: column; gap: 8px; }
-.recent-head { display: flex; align-items: center; justify-content: space-between; font-size: 12px; color: var(--td-text-color-secondary); }
-.recent-head a { color: var(--td-brand-color); cursor: pointer; }
-.recent-chips { display: flex; flex-wrap: wrap; gap: 8px; }
+.global-search { display: flex; flex-direction: column; gap:var(--app-space-6); padding:var(--app-space-8); }
+.head { padding:0 var(--app-space-1); }
+.head .page-desc { margin:0; font-size: var(--app-font-caption); color: var(--td-text-color-secondary); }
+.state { display: flex; align-items: center; justify-content: center; width: 100%; min-height: 120px; padding:var(--app-space-12) 0; }
+.result-list { display: flex; flex-direction: column; gap:var(--app-space-5); }
+.result { color: inherit; text-decoration: none; cursor: pointer; }
+.result-head { display: flex; align-items: center; gap:var(--app-space-4); }
+.result h2 { overflow: hidden; margin:0; font-size: var(--app-font-subtitle); text-overflow: ellipsis; white-space: nowrap; }
+.result p { display: -webkit-box; overflow: hidden; margin:var(--app-space-4) 0 0; color: var(--td-text-color-secondary); font-size: var(--app-font-caption); line-height: 1.7; -webkit-box-orient: vertical; -webkit-line-clamp: 2; }
+.search-guide { padding:var(--app-space-12) 0; color: var(--td-text-color-placeholder); font-size: var(--app-font-body); text-align: center; }
+.partial-error { margin:0; padding:var(--app-space-4) var(--app-space-5); border-radius: var(--td-radius-default); background: var(--td-warning-color-1, #fff1e9); color: var(--td-text-color-secondary); font-size: var(--app-font-caption); }
+.count-chips { display: flex; flex-wrap: wrap; gap:var(--app-space-3); }
+.recent { display: flex; flex-direction: column; gap:var(--app-space-4); }
+.recent-head { display: flex; align-items: center; justify-content: space-between; font-size: var(--app-font-caption); color: var(--td-text-color-secondary); }
+.recent-head :deep(.t-button) { color: var(--td-brand-color); }
+.recent-chips { display: flex; flex-wrap: wrap; gap:var(--app-space-4); }
 </style>

@@ -6,11 +6,11 @@
 
 > 2026-09-17 收尾复查：举报列表按服务端 `canRestore` 显示恢复入口；待处理举报不提供恢复选项。恢复只针对该举报自己的下架/冻结且未被后续处置覆盖，一次生效；独立处置及缺少来源的历史记录通过原业务管理入口人工复核。个人名片列表支持展示姓名检索，部分隐私开关保存保留未提交项。
 >
-> 2026-09-17 后续调整：文章后台/举报下架统一进入「已关闭」（`closed`，可归档、可从原举报恢复），成员主动撤回投稿仍为 `withdrawn`；文章详情抽屉展示每次下架记录与原因；文章编辑新增「评论功能」开关（默认开启）。内容管理新增「轮播图管理」。申请表单配置、注销工单、实名复核迁入系统管理；积分/经验发放记录入口移入对应规则页右上角。服务申请（后台面板与客户端入口）整体下线。
+> 2026-09-20 后续调整：实名认证取消后台人工复核，保留注销工单治理；文章后台/举报下架统一进入「已关闭」（`closed`，可归档、可从原举报恢复），成员主动撤回投稿仍为 `withdrawn`；文章详情抽屉展示每次下架记录与原因；文章编辑新增「评论功能」开关（默认开启）。内容管理新增「轮播图管理」。申请表单配置、注销工单迁入系统管理；积分/经验发放记录入口移入对应规则页右上角。服务申请（后台面板与客户端入口）整体下线。
 
 ## 1. Style Tier & Aesthetic Direction
 
-> 2026-09-17 M2-R 收口：社区成员组新增 `/member-governance` 注销与实名治理、`/card-management` 名片管理。均使用独立权限码、members 数据范围、URL 筛选状态、持久错误态和列设置。名片支持个人简历分段/企业字段维护与用户编辑字段白名单；注销冷静期内禁用确认执行，复核弹窗必填说明。验收见 `m2-r-closeout.md`。
+> 2026-09-20 M2-R 调整：社区成员组保留 `/member-governance` 注销治理、`/card-management` 名片管理。均使用独立权限码和 members 数据范围。名片支持个人简历分段/企业字段维护与用户编辑字段白名单；注销冷静期内禁用确认执行，复核弹窗必填说明。验收见 `m2-r-closeout.md`。
 
 - style: **business-international**（管理后台 / SaaS / 高信息密度 / 整齐网格）
 - aesthetic: **industrial-utilitarian，冷静克制**——贴近 TDesign 默认规范，靠间距/层级/状态色取胜，不做花哨装饰
@@ -64,6 +64,7 @@
 | 业务运营 | 需求审核 | /demands/review | `CheckCircleIcon` |
 | 业务运营 | 项目管理 | /projects | `AppIcon` |
 | 业务运营 | 活动管理 | /events | `CalendarIcon` |
+| 业务运营 | 活动报名 | /events/enrollments | `CheckCircleIcon` |
 | 空间管理 | 办公位管理 | /workstations | `ViewModuleIcon` |
 | 空间管理 | 办公室管理 | /workstations/offices | `BuildingIcon` |
 | 空间管理 | 租赁管理 | /workstations/leases | `ViewListIcon` |
@@ -84,7 +85,6 @@
 | 规则管理 | 发布限制 | /rules/publishing-limits | `SettingIcon` |
 | 系统管理 | 申请表单配置 | /system/application-form-config | `CheckCircleIcon` |
 | 系统管理 | 注销工单 | /system/deletion-requests | `CheckCircleIcon` |
-| 系统管理 | 实名复核 | /system/realname-reviews | `UserListIcon` |
 | 系统管理 | 数据字典 | /system/dicts | `AppIcon` |
 | 系统管理 | 系统配置 | /system/config | `SettingIcon` |
 | 系统管理 | 日志与审计 | /system/logs | `ViewListIcon` |
@@ -119,7 +119,7 @@
 - **全站交互减法（2026-09-12）**：列表页**不设刷新按钮**（路由切换/操作成功后自动 `load()`）与**表格批量选择操作**（`row-select` 已全站移除）；批量场景统一改用「一键归档」+ `BulkArchiveDialog`；表格 `table-layout="fixed"`（resizable 必须 fixed，列宽显式声明）
 - **列表 URL 状态与错误恢复（2026-09-12）**：`src/utils/listQuery.ts` 统一服务端列表的 URL 查询状态（25 页接入；聚合页用 `audit.*` / `login.*` / `admins.*` 命名空间隔离并保留父级 `tab`；需求 `publisher` 深链别名兼容）——查询/重置/翻页/排序实际加载时同步 URL（输入关键词不触发）、computed 前端筛选列表用 live 模式实时同步、setup 恢复不重复首载、前进后退与外部 query 变化可恢复、分页正整数校验（pageSize 上限 100，非法回退默认）；只读列表（积分发放/阅读统计）保持固定 URL，不造无业务意义的参数。`src/components/ListErrorState.vue` 统一持久错误恢复（TDesign Alert + 错误原因 + 重试按钮 + 加载中禁用），36 个加载入口（含通知列表与监控执行日志）全部接入；契约由 `apps/admin/test/listQuery.test.mjs` 与 `uiContracts.test.mjs` 固化（Node test 运行）
 - **术语统一（2026-09-12）**：联系电话 / 办公位 / 社区企业 / 合作企业 / 经验值 / 审核 / 新增 / 归档；禁止再出现 联系方式 / 工位 / 外部企业 / 审批 / 新建 / 回收站 等旧词
-- 用户模型与微信登录预备（冻结，2026-09-09）：**UserStatus 仅剩 active/frozen**（待激活 pending 移除，种子样例已转 active）；字段改名 **`id`→`uid`、`name`→`nickname`**（昵称语义，微信登录预备；全站 User 引用同步：fetchUserOptions/fetchPublisherOptions/fetchRenterOptions 返回结构、 undertaker 立项候选、用户详情路由传参等；**业务快照字段名不改**——demand.publisherName、spaceReservation.userName、project.undertakers[].name、external 成员 name 等仍是展示快照，仅取值源改 nickname）；新增 `realName?`/`citizenId?`（实名信息）、`wechatOpenid?`/`wechatUnionid?`/`wechatVerified?`（微信登录预留，默认未认证）、`frozenUntil?`/`frozenReason?`（冻结信息，解冻时清除）；**实名状态 = 派生值**（realName 与 citizenId 均填写=已实名，否则未实名），列表列/筛选/详情均按此规则，不落独立字段；**社区个体（community_individual）身份要求已实名**——不存在未实名的社区个体，种子数据保证（未实名用户仅持有 individual 基础身份）
+- 用户模型与微信登录预备（冻结，2026-09-09；2026-09-20 实名调整）：**UserStatus 仅剩 active/frozen**（待激活 pending 移除，种子样例已转 active）；字段改名 **`id`→`uid`、`name`→`nickname`**（昵称语义，微信登录预备；全站 User 引用同步：fetchUserOptions/fetchPublisherOptions/fetchRenterOptions 返回结构、 undertaker 立项候选、用户详情路由传参等；**业务快照字段名不改**——demand.publisherName、spaceReservation.userName、project.undertakers[].name、external 成员 name 等仍是展示快照，仅取值源改 nickname）；实名信息使用 `realName?`/`citizenId?`/`verifiedAt?`，`wechatOpenid?`/`wechatUnionid?`/`wechatVerified?` 为微信登录预留，另有 `frozenUntil?`/`frozenReason?`（解冻时清除）；**实名状态 = 派生值**（realName 与 citizenId 均填写=已实名，否则未实名），`verifiedAt` 仅记录通过规则校验的时间，不设审核状态列；**社区个体（community_individual）身份要求已实名**——不存在未实名的社区个体，种子数据保证（未实名用户仅持有 individual 基础身份）
 
 - 用户身份模型（冻结）：`identities: UserIdentity[]`，一人多身份——`individual` 个人用户（注册默认身份，人手一份，关联其他身份时保留，积分挂靠此身份）、`community_individual` 社区个体（至多一个，持有经验等级）、`community_enterprise` 社区企业（可多个，关联入驻企业，持有经验等级）、`external_enterprise` 合作企业（可多个，自由填写）；身份标签配色：社区身份=品牌蓝 light、个人用户/合作企业=灰（合作企业 outline）；「个人用户」快捷筛选 = 仅持有基础个人身份的用户
 - 经验与积分（冻结）：经验等级 1-5 级，仅社区个体/社区企业身份拥有，通过参加活动、承接项目累积升级；积分仅挂靠个人用户身份（人人可有），获取途径同前，可在积分商城兑换礼品/权益
@@ -149,7 +149,7 @@
 - 办公位与租约计费模型（冻结，2026-09-08）：Workstation 新增 `defaultMonthlyRent?`（默认月租，元）与 `areaSqm?`（面积㎡，仅独立办公室表单出现）；Lease 新增 `rentPeriod?: RentPeriod`（day/week/month/year，**缺省按月租处理**）与 `longTerm?`（**长期租约：无结束日期 endDate 为空串，不参与临期/到期派生**，列表/办公室卡片显示"startDate ~ 长期"）；创建/编辑租约表单含"付款周期"**按钮形态单选**（t-radio-group `theme="button"` + `variant="primary-filled"`，日付/周付/月付/年付，默认月付），租金标签动态为"租金（元）/ 日|周|月|年"；**租金联动**：周期≠月租时清空租金输入框（必填规则兜底），周期=月租且所选办公位存在默认月租时自动累加填入（仅创建模式、求和>0 才覆盖）；**选择办公位用 t-tree-select**（multiple+filterable+clearable+minCollapsedNum=3，一级=已有区域、二级=区域下空闲办公位编号）；租赁管理列表"租金（元）"列显示"金额 / 单位"，办公室卡片租约行同格式；表单日期标签为"租赁开始日期/租赁结束日期"，结束日期旁带"长期"开关（开启禁用日期选择，非长期必填结束日期）
 - 空间表单（2026-09-08）：配备设备栏改用 **t-tag-input（clearable）**，值即 equipment string[]（回车添加标签、可整体清空），替代原"逗号分隔文本 + parseEquipment"方案；设备名多词直接建一个标签（如"智能投屏"）
 - 表单弹窗校验时机（冻结）：规则 trigger 一律 `submit`——change/blur 自动校验会提前红框（值变化触发 change、DatePicker 面板交互引发失焦触发 blur）；`submit` 不匹配任何自动触发，确认时 `formRef.validate()`（trigger='all'）命中全部规则才红框提示；弹窗打开时 `nextTick` 调 `formRef.clearValidate()` 清除上次残留（仅清状态不动值）；带草稿按钮的弹窗用自定义 footer——**直接用 #footer 插槽且不设 footer prop**（TDesign 源码 `!!props.footer && renderFooter()`：`footer=false` 会连插槽一起禁用，导致按钮全部消失）；也不设 confirm-btn/cancel-btn props（避免与插槽重复渲染）
-- 表格规范（冻结；2026-09-12 修订为 fixed）：所有列表页 t-table 统一 `table-layout="fixed"` + `hover` + `resizable`（列宽可手动拖拽调整，数据列加 `resizable: true` 且显式声明 width；少数无 resizable 的详情内嵌明细表可保留 auto，如空间详情预约明细）；服务端排序列 `sorter: true, sortType: 'all'` + 受控 `:sort` 绑定 + `@sort-change`（远程排序：更新 sortBy/sortOrder 后重新加载，切排序回第 1 页）——活动列表（默认 ID 倒序，活动开始时间/创建时间列；编号列已移除，编号置于标题下方）、需求列表（默认创建时间倒序，创建时间/发布时间列）、项目列表（默认立项日期倒序，立项日期列）、合作企业列表（默认累计合作倒序，累计合作/首次合作列）、需求审核列表（默认创建时间倒序）；本地排序与服务端结果一致（定长 ID/时间格式），受控 sort 保证表头指示器正确
+- 表格规范（冻结；2026-09-12 修订为 fixed）：所有列表页 t-table 统一 `table-layout="fixed"` + `hover` + `resizable`（列宽可手动拖拽调整，数据列加 `resizable: true` 且显式声明 width；少数无 resizable 的详情内嵌明细表可保留 auto，如空间详情预约明细）；服务端排序列 `sorter: true, sortType: 'all'` + 受控 `:sort` 绑定 + `@sort-change`（远程排序：更新 sortBy/sortOrder 后重新加载，切排序回第 1 页）——活动列表（默认 ID 倒序，活动开始时间/创建时间列；编号列已移除，编号置于标题下方）、需求列表（默认创建时间倒序，创建时间/发布时间列）、项目列表（默认立项日期倒序，立项日期列）、合作企业列表（默认登记日期倒序，登记日期列）、需求审核列表（默认创建时间倒序）；本地排序与服务端结果一致（定长 ID/时间格式），受控 sort 保证表头指示器正确
 - 草稿与定时发布（冻结；2026-09-12 修订）：**全站已无草稿状态**——项目「存草稿」按钮与 saveProjectDraft 已移除（创建即正式项目，2026-09-09），需求草稿（2026-09-09）、活动草稿均不可再创建；DemandPublishDialog 仅 create/edit 双模式（publish 模式已删除）；**需求/活动/文章定时发布中均不可编辑**，仅可「取消定时发布」转回对应待发布状态；scheduled 状态的列表/详情状态标签**直接显示定时发布时间**（hover 提示"到点自动发布"），不显示"定时发布中"文案
 - 详情页范围展示（冻结）：可见范围与可报名范围标签同行展示（`scope-row` 容器，两组之间竖线分隔，窄屏自动换行）
 - 时间线组件约束（冻结）：`t-timeline` 必须显式 `mode="same"`——TDesign 默认 mode=alternate 且 label 类恒生效（hasLabelItem 硬编码为 1），alternate+left 布局会给圆点列加 margin-left:100px，导致内容整体缩进居中；时间不放 label 属性（绝对定位会与内容重叠），放内容块内独立一行
@@ -158,7 +158,7 @@
   - 用户 user：active=正常/success，frozen=已冻结/danger（hover 显示冻结期限与原因；**待激活 pending 状态已移除**，2026-09-09）
   - 企业 enterprise：active=正常/success，exited=已退出/default，disabled=已停用/default（**入驻审核中 pending 已移除**，M1.5 起新增/启停/归档由后台维护）
   - 企业展示页 showcase：published=已发布/success，pending=待审核/warning，rejected=已驳回/danger，none=未提交/default
-  - 申请 application：pending=待审核/warning，approved=已通过/success，rejected=已驳回/danger；申请类型 applicationTypeMap：settle=企业入驻 / individual=个体入驻 / cooperation=企业合作 / identity=身份绑定
+  - 申请 application：pending=待审核/warning，approved=已通过/success，rejected=已驳回/danger；申请类型 applicationTypeMap：settle=企业入驻 / individual=个体入驻 / cooperation=企业合作 / exit=企业退驻
   - 需求 demand：pending=待审核/warning，pending_release=待发布/primary，scheduled=定时发布中/primary（直接显示时间），published=已发布/success，selected=已选定/primary（发布者已选意向承接方，等待管理员立项），rejected=已驳回/danger，projected=已立项/success，closed=已关闭/default（草稿状态已移除）
   - 项目 project：running=进行中/success，paused=已暂停/warning，closed=已关闭/danger，finished=已结项/default（已移除 recruiting 招募中）
   - 活动 event：pending_release=待发布/warning，scheduled=定时发布中/primary（直接显示时间），published=已发布/success（已发布（报名中）/已发布（暂停报名）拼接），ended=已结束/default，cancelled=已取消/danger（已移除 草稿/进行中）
@@ -179,7 +179,7 @@
   - 租约 lease：active=生效中/success，expiring=即将到期/warning（15 天内派生，`EXPIRING_WINDOW_DAYS=15`），expired=已到期/danger（过期派生），terminated=已终止/default
   - 空间 space：available=可用/success，maintenance=维护中/warning，disabled=已停用/default
   - 栏目 column：enabled=启用/success，disabled=停用/default
-- 选项词汇表（`constants/status.ts`；2026-09-12 修订）：goodsCategoryMap（实物商品/虚拟服务/权益券，商品类型已字典化，历史值 physical/virtual/voucher 经 `isPhysicalCategory` 兼容）、workstationTypeMap（open 开放办公位/office 独立办公室/semi 半开放办公位）、spaceTypeMap（meeting 会议室/roadshow 路演厅/meeting_room 洽谈室/multi 多功能厅/study 自习室）、spaceStatusOptions、showcaseTargetTypeMap（enterprise 企业展示页/individual 个人主页）
+- 选项词汇表（`constants/status.ts`；2026-09-12 修订）：goodsCategoryMap（实物商品/权益券，商品类型已字典化，历史值 physical/voucher 经 `isPhysicalCategory` 兼容）、workstationTypeMap（open 开放办公位/office 独立办公室/semi 半开放办公位）、spaceTypeMap（meeting 会议室/roadshow 路演厅/meeting_room 洽谈室/multi 多功能厅/study 自习室）、spaceStatusOptions、showcaseTargetTypeMap（enterprise 企业展示页/individual 个人主页）
 - 共享表单/功能弹窗：GoodsFormDialog / LeaseFormDialog / SpaceFormDialog / ArticleFormDialog / WorkstationFormDialog（办公位创建+资料编辑）/ AreaPlanDialog（区域规划）/ EnterpriseFormDialog / ExternalEnterpriseFormDialog / AnnouncementFormDialog / AdjustValueDialog / ArticleReviewDialog / ArticleScheduleDialog / BulkArchiveDialog，均遵循表单弹窗契约
 
 ## 5. 页面清单（M1.5 全量，2026-09-12）
@@ -193,11 +193,11 @@
 | 用户列表 | /users | 筛选（关键词/身份/状态/实名状态）+ 列设置 + 导出 + 新增用户 | 新增时填写昵称/联系电话/邮箱/性别及可选实名资料，服务端生成 UID 与默认个人身份；行点击/详情按钮进用户详情；冻结/解冻在详情页执行 |
 | 用户详情 | /users/:id | 资料头（昵称/用户ID/身份标签/状态）+ 编辑/冻结/恢复 + tabs | tabs：身份信息 / 申请·需求·项目·活动·租赁·投稿·预约 7 个记录页（各分「进行中/历史记录」，已归档条目标「已归档」）/ 经验值（仅社区个体）/ 积分 / 活跃记录；需求/项目/活动/租赁记录行可点击跳详情；社区企业/合作企业身份卡跳企业详情 |
 | 社区个体 | /individuals | 社区个体身份成员列表（关键词/状态筛选）+ 列设置 + 导出；等级列名为「个体等级」 | 行点击进用户详情 |
-| 企业列表 | /enterprises | 社区企业筛选（关键词/行业/状态）+ 列设置 + 导出 + 新增企业；列含「企业等级」（Lv.n 等级名，由企业经验值按社区企业等级梯度推导）与「名片状态」（原展示页状态） | 新增需权限 `perm:enterprise:create`；行点击进详情 |
-| 企业详情 | /enterprises/:id | 头部企业名 + **企业ID 标签** + 状态/展示页状态；tabs：企业信息 / 关联租赁 / 数据概览 / 成员管理 / 经验值 / 展示页审核 | 编辑/停用/启用；**归档仅「已停用」态出现**；数据概览卡片按企业 ID 跳需求/项目列表；成员行跳用户详情；展示页通过/驳回（驳回必填原因）；关联租赁行跳租约列表按企业筛选 |
-| 合作企业 | /external-enterprises | 合作企业聚合列表（关键词/行业/状态 + 累计合作/首次合作排序）+ 列设置 + 导出 + 新增合作企业 | 行点击进详情 |
+| 企业列表 | /enterprises | 社区企业筛选（关键词/行业/状态）+ 列设置 + 导出 + 新增企业；列含「企业等级」（Lv.n 等级名，由企业经验值按社区企业等级梯度推导） | 新增需权限 `perm:enterprise:create`；行点击进详情 |
+| 企业详情 | /enterprises/:id | 头部企业名 + **企业ID 标签** + 状态；tabs：企业信息 / 关联租赁 / 数据概览 / 成员管理 / 经验值 | 编辑/停用/启用；**归档仅「已停用」态出现**；数据概览卡片按企业 ID 跳需求/项目列表；成员行跳用户详情；关联租赁行跳租约列表按企业筛选 |
+| 合作企业 | /external-enterprises | 合作企业聚合列表（关键词/行业/状态 + 登记日期排序）+ 列设置 + 导出 + 新增合作企业 | 行点击进详情 |
 | 合作企业详情 | /external-enterprises/:id | 头部企业名 + **企业ID 标签**；tabs：企业信息 / 数据概览 / 关联成员 | 编辑/停用/启用；**归档仅「已停用」态出现**；数据概览按 ID 跳需求/项目列表；成员行跳用户详情 |
-| 申请审核 | /approvals | 四类申请（企业入驻/个体入驻/企业合作/身份绑定）状态 Tab + 类型筛选 + 列设置 + 一键归档 | 行点击/按钮进详情抽屉（审核时间线）；**待审核=「审核」，已通过/已驳回=「详情」+「归档」**；通过/驳回（意见 dialog）；抽屉内「打印」开打印视图 |
+| 申请审核 | /approvals | 四类申请（企业入驻/个体入驻/企业合作/企业退驻）状态 Tab + 类型筛选 + 列设置 + 一键归档 | 行点击/按钮进详情抽屉（审核时间线）；**待审核=「审核」，已通过/已驳回=「详情」+「归档」**；通过/驳回（意见 dialog）；抽屉内「打印」开打印视图 |
 | 需求列表 | /demands | 筛选（关键词/类别/状态）+ 创建/发布时间排序 + 列设置 + 一键归档/导出/导出全部/新增需求 | 行点击进详情；待审核→审核；待发布→编辑/立即发布/定时发布/关闭；定时发布中→取消定时发布；已发布→立项/撤回发布/代报名；已选定→立项（发布者已选意向承接方，待管理员确认）；已立项→查看关联项目/代报名/归档；已驳回/已关闭→归档；响应列积分标签按「（需求自定义 respondPoints ?? 规则默认 demand_responded）」与规则默认值比较配色（相等绿 / 低于红 / 高于橙）；query `publisher`/`enterprise` 以可关闭标签展示筛选 |
 | 需求审核 | /demands/review | 固定「待审核」需求集中审核（关键词/类别筛选 + 创建时间排序）+ 列设置 | 表格「**需求方**」列=名称 + ID + 身份纯文本；行点击进详情；审核（只读对话框：取消/驳回/通过，通过=转待发布，驳回必填原因） |
 | 需求详情 | /demands/:id | 头部（状态/已归档/类别 + 可见与可报名范围同行）+ descriptions（编号/需求方/创建人/需求方身份/联系电话/预算/时间等）+ tabs 需求详情/响应记录 | 头部按状态操作（已发布另有「关闭」；已选定仅「立项」）；**创建人显示姓名 + ID 并可点击跳转**（仅 U 前缀注册用户），需求方身份为纯文本；已归档显示「已归档」标签并隐藏全部写操作 |
@@ -205,6 +205,7 @@
 | 项目详情 | /projects/:id | 项目信息（承接方占比/说明/来源需求）+ 进度节点（含负责承接方）（tabs） | 来源需求跳转需求详情；已归档显示「已归档」并隐藏写操作 |
 | 活动列表 | /events | 筛选（类型/状态）+ 活动开始/创建时间排序 + 列设置 + 一键归档/导出/新增活动 | 行点击进详情；待发布→编辑/立即发布/定时发布/取消活动；定时发布中→取消定时；已发布→暂停/开放报名、编辑、取消；已取消→转为待发布；已结束/已取消→归档；报名/签到列下方积分 tag |
 | 活动详情 | /events/:id | 信息（双范围/报名审核/报名截止/定时发布）/ 报名管理 / 签到管理（tabs） | 编辑活动、报名审核、手动签到；已归档显示「已归档」并隐藏写操作 |
+| 活动报名 | /events/enrollments | 状态 tabs（待审核/已通过/已驳回/候补中/已取消/全部）+ 关键词（报名人/企业/电话/活动）+ 列设置 + 导出 | 通过/驳回待审核报名；行点击进活动详情「报名管理」 |
 | 商品管理 | /mall/goods | 商品列表（关键词/类型/状态筛选）+ 列设置 + 导出 + 新增商品 | **新增商品默认「已下架」**；编辑（类型/积分/库存/发货方式（自提/邮寄）/自提地址/邮费/自定义可见与可下单范围/富文本说明）；上架/下架；**归档仅「已下架」**；0 库存红字 |
 | 订单管理 | /mall/orders | 兑换订单列表（关键词/状态筛选）+ 列设置 + 一键归档 + 导出 + 详情抽屉 | 待发货→发货/取消订单（退积分+回补库存）；已发货→标记完成；已完成→归档；行点击开详情抽屉（收件信息） |
 | 积分规则 | /rules/points | **积分发放制度（2026-09-11 修订）**：9 条固定发放触发项（code 写死）+ 积分值 + 状态，扣除积分走手动调整不设规则 | **仅可编辑积分值（正整数）或启停规则，不可新增/删除** |
@@ -234,10 +235,10 @@
 | 操作日志（日志与审计 Tab，原「审计日志」） | /system/logs?tab=audit | 服务端写操作留痕（操作时间/操作人/模块/动作/对象/详情，含 before/after 快照） | 模块筛选 + 关键词搜索；只读 |
 | 登录日志（日志与审计 Tab） | /system/logs?tab=login | 管理员登录成功/失败/锁定三态记录（账号/姓名/IP/归属地/设备/失败原因） | 关键词 + 状态 + 日期区间筛选；只读 |
 | 角色与账号 | /system/account | 选项卡聚合页：管理员账号 + 角色权限 + 在线会话（按权限过滤 tab；tab 与 `?tab=` 同步；子页标题隐藏） | 由「角色与账号」菜单进入；旧路径 /system/roles、/system/admins、/system/sessions 重定向对应 tab |
-| 角色权限（角色与账号 Tab） | /system/account?tab=roles | 角色列表 + 权限点分配矩阵（按权限目录分组渲染，后端目录失败回退内置 49 码目录）+ **数据范围**列 + **筛选栏（关键词过滧行内，2026-09-12）+ 新增角色** | 超管角色强制全量 `*` 且不可限制数据范围；分组全选/全不选；保存角色权限集合；数据范围弹窗 7 域多选（members/biz/space/contents/mall/rules/system，空=全部）；新增角色弹窗（编码小写字母开头唯一/名称必填唯一/说明选填，创建后初始无权限点，走「权限配置」分配；错误提示以后端 400/409 为准） |
+| 角色权限（角色与账号 Tab） | /system/account?tab=roles | 角色列表 + 权限点分配矩阵（按权限目录分组渲染，后端目录失败回退内置 55 码目录）+ **数据范围**列 + **筛选栏（关键词筛选行内，2026-09-12）+ 新增角色** | 超管角色强制全量 `*` 且不可限制数据范围；分组全选/全不选；保存角色权限集合；数据范围弹窗 7 域多选（members/biz/space/contents/mall/rules/system，空=全部）；新增角色弹窗（编码小写字母开头唯一/名称必填唯一/说明选填，创建后初始无权限点，走「权限配置」分配；错误提示以后端 400/409 为准） |
 | 管理员账号（角色与账号 Tab） | /system/account?tab=admins | 管理员列表（账号/姓名/角色/状态/最后登录/创建时间）+ 筛选栏（搜索/查询/重置 + 右端**新增管理员**，2026-09-12 从独立按钮行移入筛选栏） | 新增/编辑（账号、姓名、角色）；启停；重置密码（≥8 位）；新增未传密码时后端返回随机初始密码一次性提示 |
 | 修改密码 | /system/change-password | 原密码 + 新密码（≥8 位含字母与数字）+ 确认 | 改密成功即登出跳登录页（后端黑名单当前账号全部会话）；**密码过期后登录会被引导到本页**（其它接口 403「密码已过期，请先修改密码」，改密即解除） |
-| 在线会话（角色与账号 Tab） | /system/account?tab=sessions | 当前在线管理员会话（账号/姓名/IP/设备/登录时间）+ 筛选栏（关键词过滧行内，2026-09-12）+ **一键强制下线**（右端危险色，popconfirm 确认） | 单会话强制下线与一键下线均走 Redis 黑名单即时生效；一键下线**保留当前操作者会话**，成功提示实际下线数（0 时提示无其他会话）；接口 `POST /auth/sessions/kick-all` |
+| 在线会话（角色与账号 Tab） | /system/account?tab=sessions | 当前在线管理员会话（账号/姓名/IP/设备/登录时间）+ 筛选栏（关键词筛选行内，2026-09-12）+ **一键强制下线**（右端危险色，popconfirm 确认） | 单会话强制下线与一键下线均走 Redis 黑名单即时生效；一键下线**保留当前操作者会话**，成功提示实际下线数（0 时提示无其他会话）；接口 `POST /auth/sessions/kick-all` |
 | 素材库 | /assets/library | 图片素材网格：来源筛选（全部/资讯发布/投稿内容/未关联）+ 文件名搜索 + 数量/总大小统计 | 上传（受系统配置限制）；复制 URL；**替换**（同 URL 覆盖，引用方即时生效）；删除；来源标签 `资讯发布-A1010`/`投稿内容-SU1006`/`未关联` |
 | 系统监控 | /system/monitor | 服务健康/运行时长/接口平均延迟/DB·Redis 延迟 + Redis 概览（内存/命中率/键数/版本）+ 定时任务表 | 执行日志抽屉；**手动执行**（popconfirm 确认，`POST /monitor/jobs/:name/run`，执行后刷新概览并重载该任务日志）；lastResult 三态 success/failed/unknown |
 | 归档管理 | /system/trash | 13 域 Tab（社区企业/合作企业/资讯发布/投稿内容/公告栏/需求/项目/活动/租赁/空间预约/商品/商城订单/申请审核）+ 关键词搜索 + 每页独立「归档设置」 | 恢复；彻底删除（普通域 popconfirm；**用户历史域三连确认**：两次确认 + 输入「永久删除」）；归档设置：自动归档开关/延时/可归档状态、自动删除开关/延时（用户历史域开启自动删除需三连确认） |
@@ -277,7 +278,7 @@
 - **列表导出（R9）**：`utils/exportCsv.ts` 的 `exportCsv(filename, headers, rows)` 前端直出 CSV（带 BOM 防乱码）+ `statusLabel(entity, value)` 状态转文案 + `exportAllRows`（按现有筛选逐页拉取后导出，返回行数）；导出按钮统一放 PageHeader #actions（DownloadIcon），导出后 toast 提示条数；已接入 10 页（用户/社区个体/社区企业/合作企业/需求/项目/活动/商品/订单/租约），其中需求列表另有「导出全部」；导出 CSV 中人员/企业列同样使用 `名称 [ID]` 格式
 - **一键归档（替代原表格批量操作）**：`BulkArchiveDialog`（复选框列出可归档状态，默认全选 + 二次确认）接入 8 页——申请审核、需求、项目、活动、租赁、空间预约、投稿内容、订单；单条归档按钮在对应行的终态出现；归档对象进入「归档管理」可恢复/彻底删除
 - **归档管理（R12）**：13 域 Tab + 关键词搜索；恢复（popconfirm）与彻底删除（普通域 popconfirm；8 个用户历史域 `application/demand/project/event/lease/submission/reservation/order` 为三连确认：弹窗确认 ×2 + 强确认输入「永久删除」）；每域独立「归档设置」（自动归档开关/延时/可归档状态多开关、自动删除开关/延时；用户历史域开启自动删除时同样要求三连确认）；用户历史域的「彻底删除」按钮不走 popconfirm 而直接弹出三连确认流程
-- **RBAC（R1）**：权限码沿用菜单路径（如 `/users`）+ 按钮级 `perm:<域>:<动作>`，前端目录 `constants/permissions.ts`（49 码）与后端 `/permissions/catalog` 对齐（目录加载失败回退内置副本）；`v-permission` 为 display 方案（mounted + updated 双钩子，支持 `string | string[]` any-of）；路由守卫按 `meta.perm`（支持数组）优先、逐级回退推导权限码，无权限落地 `/403`；登录响应携带 `permissions`（无角色=空集合，前端不再兜底全量），权限缓存 `joinyuu_admin_perm_codes` 随 401 清理
+- **RBAC（R1）**：权限码沿用菜单路径（如 `/users`）+ 按钮级 `perm:<域>:<动作>`，前端目录 `constants/permissions.ts`（当前 55 码）与后端 `/permissions/catalog` 对齐（目录加载失败回退内置副本）；`v-permission` 为 display 方案（mounted + updated 双钩子，支持 `string | string[]` any-of）；路由守卫按 `meta.perm`（支持数组）优先、逐级回退推导权限码，无权限落地 `/403`；登录响应携带 `permissions`（无角色=空集合，前端不再兜底全量），权限缓存 `joinyuu_admin_perm_codes` 随 401 清理
 - **数据范围（域维度，R1，2026-09-12 实装）**：`AdminRole.dataScope`（7 域 members/biz/space/contents/mall/rules/system，空数组=全部）；登录响应携带 `dataScope` → localStorage `joinyuu_admin_scope_codes`（401 清理）；`constants/scopes.ts` 提供域标签与 `GROUP_DOMAIN`/`scopeAllowsGroup` 共享映射；菜单 `canSee` 合并范围判断、路由按 `meta.group` 域校验 → `/403`；RolePanel 提供「数据范围」列 + 7 域多选弹窗（超管不可限制）；后端 `DomainScopeGuard` 按 URL 首段域拦截（域外 403「无权限访问该数据范围」）
 - **管理员与角色（R1/R2）**：角色权限页（角色列表 + 权限点分配矩阵，超管角色强制 `*`）；管理员账号页新增/编辑/启停/重置密码，新增未传密码时后端随机生成 12 位初始密码并一次性展示
 - **登录安全（R3/R8）**：登录图形验证码必填（`GET /auth/captcha`，SVG dataURL，点击图片/刷新按钮换一张，失败自动刷新）；修改密码页（原密码 + 新密码 ≥8 位含字母数字，改密后当前账号全部会话强制下线并回登录页）；在线会话页（强制下线即时生效）；登录日志三态 success/failed/locked + 失败原因，支持关键词/状态/日期区间筛选；**密码周期**：系统配置「密码有效期」（0-3650 天，默认 90，0=不启用），超期登录响应 `passwordExpired=true` 并强制改密（其它接口 403「密码已过期，请先修改密码」，改密即解除）；验证码接口同 IP 限流 30 次/分钟

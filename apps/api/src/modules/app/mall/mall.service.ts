@@ -312,6 +312,7 @@ export class AppMallService {
   private toGoodsDto(g: {
     id: string
     name: string
+    coverUrl: string | null
     category: string
     fulfillment: string
     points: number
@@ -321,6 +322,7 @@ export class AppMallService {
     return {
       id: g.id,
       name: g.name,
+      coverUrl: g.coverUrl ?? undefined,
       category: g.category,
       fulfillment: g.fulfillment,
       points: g.points,
@@ -336,7 +338,7 @@ export class AppMallService {
       goodsId: o.goodsId,
       goodsName: o.goodsName,
       pointsCost: o.points,
-      status: o.status,
+      status: o.status === 'finished' ? 'completed' : o.status,
       fulfillment: o.fulfillment,
       createdAt: o.createdAt,
     }

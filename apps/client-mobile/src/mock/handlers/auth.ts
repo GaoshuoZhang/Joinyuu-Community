@@ -42,7 +42,8 @@ export async function register(payload: RegisterPayload): Promise<AuthResult> {
     if (!/^1\d{10}$/.test(phone)) fail(400, '请输入正确的手机号')
     if (accounts.some((a) => a.phone === phone)) fail(409, '该手机号已注册')
     const uid = nextMockId('U')
-    const nickname = payload.nickname?.trim() || `岛民${uid.slice(1)}`
+    const nickname = payload.nickname.trim()
+    if (!nickname) fail(400, '请输入昵称')
     accounts.push({
       uid,
       phone,

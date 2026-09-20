@@ -44,13 +44,13 @@ describe('M1-B 合作企业（external-enterprises）', () => {
     expect(res.body.data.list[0].name).toBe('远见资本')
   })
 
-  it('GET /api/admin/external-enterprises 按累计合作正序排序', async () => {
+  it('GET /api/admin/external-enterprises 按登记日期正序排序', async () => {
     const res = await request(app.getHttpServer())
-      .get('/api/admin/external-enterprises?page=1&pageSize=10&sortBy=cooperationCount&sortOrder=ascend')
+      .get('/api/admin/external-enterprises?page=1&pageSize=10&sortBy=registeredAt&sortOrder=ascend')
       .set('Authorization', `Bearer ${token}`)
     expect(res.body.code).toBe(0)
-    const counts = res.body.data.list.map((e: { cooperationCount: number }) => e.cooperationCount)
-    expect([...counts].sort((a: number, b: number) => a - b)).toEqual(counts)
+    const dates = res.body.data.list.map((e: { registeredAt: string }) => e.registeredAt)
+    expect([...dates].sort()).toEqual(dates)
   })
 
   it('GET /api/admin/external-enterprises/:id 详情含派生成员（name=realName‖nickname）', async () => {
@@ -93,7 +93,7 @@ describe('M1-B 合作企业（external-enterprises）', () => {
 
   /* ---------- M1.5 CRUD / 成员 ---------- */
 
-  it('POST /api/admin/external-enterprises 新增（XE 前缀、合作 0、当月首次合作）', async () => {
+  it('POST /api/admin/external-enterprises 新增（XE 前缀、登记日期为当天）', async () => {
     const res = await request(app.getHttpServer())
       .post('/api/admin/external-enterprises')
       .set('Authorization', `Bearer ${token}`)
@@ -106,7 +106,7 @@ describe('M1-B 合作企业（external-enterprises）', () => {
       .get(`/api/admin/external-enterprises/${res.body.data.id}`)
       .set('Authorization', `Bearer ${token}`)
     expect(detail.body.data.status).toBe('active')
-    expect(detail.body.data.cooperationCount).toBe(0)
+    expect(detail.body.data.registeredAt).toMatch(/^\d{4}-\d{2}-\d{2}$/)
   })
 
   it('PUT /api/admin/external-enterprises/:id 编辑档案基本信息', async () => {

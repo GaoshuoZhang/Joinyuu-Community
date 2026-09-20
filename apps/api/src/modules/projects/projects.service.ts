@@ -49,7 +49,7 @@ export interface ProjectUndertakerDto {
 
 export interface MilestoneDto {
   name: string
-  status: 'done' | 'active' | 'todo'
+  status: 'todo' | 'submitted' | 'accepted' | 'returned'
   date: string
   owners?: string[]
 }
@@ -424,7 +424,7 @@ export class ProjectsService {
   }
 
   /* 项目结项（wiki-backend.md §8.5）——非端点，供后续触发接线：
-   * 里程碑全 done → finished；总经验值 = expReward ?? project_completed 规则值（启用时）；
+   * 里程碑全 accepted → finished；总经验值 = expReward ?? project_completed 规则值（启用时）；
    * 按承接占比向下取整分配（余数给首个参与方），仅社区企业与持社区个体身份的用户参与，
    * 合作企业/无社区个体身份个人/自定义承接方份额丢弃；事务写经验值流水 + 等级重算 */
   async finishProject(id: string, operator: string): Promise<void> {
@@ -434,7 +434,7 @@ export class ProjectsService {
     })
     if (!project) throw new NotFoundException('项目不存在')
     if (project.status === 'finished') return
-    if (project.milestones.length === 0 || !project.milestones.every((m) => m.status === 'done')) return
+    if (project.milestones.length === 0 || !project.milestones.every((m) => m.status === 'accepted')) return
 
     let totalExp = project.expReward
     if (totalExp == null) {
@@ -554,7 +554,7 @@ export class ProjectsService {
     return { code: 0 }
   }
 
-  /* 承接方展示名：企业→企业名；个人→「昵称 · 社区个体头衔」；自定义→name||id
+  /* 承接方展示名：企业→企业名；个人→昵称；自定义→name||id
    * db 为 PrismaService 或事务客户端，供列表校验与事务内新增复用 */
   private async resolveUndertakers(
     db: Prisma.TransactionClient | PrismaService,
@@ -568,10 +568,9 @@ export class ProjectsService {
           return { type: u.type, refId: u.id, name: enterprise.name, share: u.share }
         }
         if (u.type === 'individual') {
-          const user = await db.user.findUnique({ where: { uid: u.id }, include: { identities: true } })
+          const user = await db.user.findUnique({ where: { uid: u.id } })
           if (!user) throw new NotFoundException('承接人不存在')
-          const identity = user.identities.find((i) => i.type === 'community_individual')
-          return { type: u.type, refId: u.id, name: `${user.nickname} · ${identity?.title ?? ''}`, share: u.share }
+          return { type: u.type, refId: u.id, name: user.nickname, share: u.share }
         }
         return {
           type: u.type,

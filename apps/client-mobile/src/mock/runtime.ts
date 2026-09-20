@@ -1,6 +1,6 @@
 import { ref } from 'vue'
 
-/* [MOCK-ONLY] v33 运行时：版本化快照、可控业务时钟、稳定发号与网络场景。 */
+/* [MOCK-ONLY] v34 运行时：版本化快照、可控业务时钟、稳定发号与网络场景。 */
 
 export type MockNetworkMode = 'normal' | 'slow' | 'offline' | 'error' | 'timeout'
 
@@ -11,13 +11,13 @@ export interface MockRuntimeState {
 }
 
 interface StoredMockState {
-  version: 33
+  version: 34
   revision: 1
   runtime: MockRuntimeState
   data: unknown
 }
 
-const STORAGE_KEY = 'joinyuu_client_mock_v33'
+const STORAGE_KEY = 'joinyuu_client_mock_v34'
 const mockEnabled = import.meta.env.VITE_API_MODE === 'mock'
 const SESSION_KEY = 'joinyuu_client_token'
 const DEFAULT_NOW_MS = new Date(2026, 8, 15, 10, 0, 0, 0).getTime()
@@ -42,6 +42,11 @@ const DEFAULT_SEQUENCES: Record<string, number> = {
   ET: 1,
   FV: 1,
   AD: 1,
+  CM: 1,
+  AN: 1,
+  BN: 1,
+  PL: 1,
+  JTI: 1,
 }
 
 function readStored(): StoredMockState | null {
@@ -50,7 +55,7 @@ function readStored(): StoredMockState | null {
     const raw = localStorage.getItem(STORAGE_KEY)
     if (!raw) return null
     const parsed = JSON.parse(raw) as Partial<StoredMockState>
-    if (parsed.version !== 33 || parsed.revision !== 1 || !parsed.runtime || !parsed.data) return null
+    if (parsed.version !== 34 || parsed.revision !== 1 || !parsed.runtime || !parsed.data) return null
     return parsed as StoredMockState
   } catch {
     return null
@@ -62,6 +67,14 @@ const runtime: MockRuntimeState = {
   nowMs: stored?.runtime.nowMs ?? DEFAULT_NOW_MS,
   networkMode: stored?.runtime.networkMode ?? 'normal',
   sequences: { ...DEFAULT_SEQUENCES, ...(stored?.runtime.sequences ?? {}) },
+}
+
+/**
+ * Mock 模式使用可控业务时钟；真实 HTTP 模式必须跟随设备当前时间。
+ * 页面层仍复用这些格式化函数，因此不能在 HTTP 模式返回演示基准时间。
+ */
+function effectiveNowMs(): number {
+  return mockEnabled ? runtime.nowMs : Date.now()
 }
 
 let exportData: (() => unknown) | null = null
@@ -90,7 +103,7 @@ function stripInlineFiles(_key: string, value: unknown): unknown {
 export function commitMockState(): void {
   if (!mockEnabled || !exportData) return
   try {
-    const state: StoredMockState = { version: 33, revision: 1, runtime, data: exportData() }
+    const state: StoredMockState = { version: 34, revision: 1, runtime, data: exportData() }
     const snapshot = JSON.stringify(state, snapshotReplacer)
     try {
       localStorage.setItem(STORAGE_KEY, snapshot)
@@ -110,16 +123,17 @@ export function getPersistenceError(): string {
 export function resetMockState(): void {
   if (!mockEnabled) return
   localStorage.removeItem('joinyuu_client_mock_v32')
+  localStorage.removeItem('joinyuu_client_mock_v33')
   localStorage.removeItem(STORAGE_KEY)
   localStorage.removeItem(SESSION_KEY)
 }
 
 export function mockNowMs(): number {
-  return runtime.nowMs
+  return effectiveNowMs()
 }
 
 export function mockNowDate(): Date {
-  return new Date(runtime.nowMs)
+  return new Date(effectiveNowMs())
 }
 
 export function setMockNow(value: number): void {
@@ -132,13 +146,13 @@ export function advanceMockNow(minutes: number): void {
   setMockNow(runtime.nowMs + minutes * 60_000)
 }
 
-export function formatMockStamp(value = runtime.nowMs): string {
+export function formatMockStamp(value = effectiveNowMs()): string {
   const d = new Date(value)
   const pad = (n: number) => String(n).padStart(2, '0')
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`
 }
 
-export function formatMockDate(value = runtime.nowMs): string {
+export function formatMockDate(value = effectiveNowMs()): string {
   return formatMockStamp(value).slice(0, 10)
 }
 

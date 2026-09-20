@@ -1,12 +1,14 @@
 <script setup lang="ts">
-import { onMounted, reactive, ref, watch } from 'vue'
-import { Loading, Button, DialogPlugin, Input, Popup, Switch, Tag, Toast } from 'tdesign-mobile-vue'
+import { computed, onMounted, reactive, ref, watch } from 'vue'
+import { Button, DialogPlugin, Input, Popup, Switch, Tag, Toast } from 'tdesign-mobile-vue'
 import { listAddresses, removeAddress, saveAddress, setDefaultAddress } from '@/api/addresses'
 import { ApiError } from '@/api/http'
 import EmptyBlock from '@/components/shared/EmptyBlock.vue'
+import ListSkeleton from '@/components/ListSkeleton.vue'
 import type { AddressItem } from '@/types'
+import { useUnsavedGuard } from '@/composables/useUnsavedGuard'
 
-/* 收货地址（v38 [MOCK-ONLY]）：实物兑换所需；支持新增/编辑/删除/默认地址。 */
+/* 收货地址：实物兑换所需；支持新增/编辑/删除/默认地址。 */
 const loading = ref(true)
 const error = ref('')
 const items = ref<AddressItem[]>([])
@@ -24,9 +26,13 @@ async function load() {
 }
 onMounted(load)
 
-const editorVisible = ref(false)
+const editorOpen = ref(false)
 const editingId = ref('')
 const form = reactive({ name: '', phone: '', address: '', isDefault: false })
+const editorBaseline = ref('')
+const editorSnapshot = computed(() => JSON.stringify(form))
+const editorDirty = computed(() => editorOpen.value && editorSnapshot.value !== editorBaseline.value)
+useUnsavedGuard(() => editorDirty.value)
 /* v40：行内校验错误 */
 const errors = reactive({ name: '', phone: '', address: '' })
 watch(() => form.name, () => (errors.name = ''))
@@ -40,7 +46,24 @@ function openEditor(item?: AddressItem) {
   form.phone = item?.phone ?? ''
   form.address = item?.address ?? ''
   form.isDefault = item?.isDefault ?? items.value.length === 0
-  editorVisible.value = true
+  editorBaseline.value = editorSnapshot.value
+  editorOpen.value = true
+}
+
+function setEditorVisible(visible: boolean) {
+  if (visible || !editorDirty.value) {
+    editorOpen.value = visible
+    return
+  }
+  DialogPlugin.confirm({
+    title: '放弃地址修改？',
+    content: '当前地址尚未保存，关闭后需要重新填写。',
+    cancelBtn: '继续编辑',
+    confirmBtn: '放弃修改',
+    onConfirm: () => {
+      editorOpen.value = false
+    },
+  })
 }
 
 async function onSave() {
@@ -52,7 +75,7 @@ async function onSave() {
     return void Toast(errors.name)
   }
   if (!/^1\d{10}$/.test(form.phone.trim())) {
-    errors.phone = '请输入正确的联系电话'
+    errors.phone = '请输入 11 位手机号'
     return void Toast(errors.phone)
   }
   if (form.address.trim().length < 5) {
@@ -68,7 +91,8 @@ async function onSave() {
       isDefault: form.isDefault,
     })
     Toast('地址已保存')
-    editorVisible.value = false
+    editorBaseline.value = editorSnapshot.value
+    editorOpen.value = false
     await load()
   } catch (e) {
     Toast(e instanceof ApiError ? e.message : '保存失败，请稍后重试')
@@ -115,11 +139,10 @@ function onRemove(item: AddressItem) {
 <template>
   <div class="page-fade-in m-addresses">
     <header class="head">
-      <h1 class="page-title">收货地址</h1>
       <p class="page-desc">实物兑换将寄送到默认地址</p>
     </header>
 
-    <Loading v-if="loading" class="state" text="加载中…" />
+    <ListSkeleton v-if="loading" />
     <EmptyBlock v-else-if="error" :text="error" action-text="重试" @action="load" />
     <EmptyBlock v-else-if="!items.length" text="暂无收货地址，添加后可用于实物兑换" />
 
@@ -149,20 +172,20 @@ function onRemove(item: AddressItem) {
 
     <Button theme="primary" block class="add-btn" @click="openEditor()">新增收货地址</Button>
 
-    <Popup v-model:visible="editorVisible" placement="bottom">
+    <Popup :visible="editorOpen" placement="bottom" :close-btn="true" @update:visible="setEditorVisible">
       <div class="editor">
-        <h3 class="editor-title">{{ editingId ? '编辑地址' : '新增地址' }}</h3>
+        <h2 class="editor-title">{{ editingId ? '编辑地址' : '新增地址' }}</h2>
         <div class="field">
           <label>收货人</label>
-          <Input v-model="form.name" :maxlength="20" placeholder="请输入收货人姓名" clearable /><p v-if="errors.name" class="field-error">{{ errors.name }}</p>
+          <Input v-model="form.name" autocomplete="off" :maxlength="20" placeholder="请输入收货人姓名…" clearable /><p v-if="errors.name" class="field-error">{{ errors.name }}</p>
         </div>
         <div class="field">
           <label>联系电话</label>
-          <Input v-model="form.phone" type="tel" :maxlength="11" placeholder="请输入 11 位手机号" clearable /><p v-if="errors.phone" class="field-error">{{ errors.phone }}</p>
+          <Input v-model="form.phone" type="tel" autocomplete="tel" :maxlength="11" placeholder="请输入 11 位手机号…" clearable /><p v-if="errors.phone" class="field-error">{{ errors.phone }}</p>
         </div>
         <div class="field">
           <label>详细地址</label>
-          <Input v-model="form.address" :maxlength="80" placeholder="省市区 + 详细门牌" clearable /><p v-if="errors.address" class="field-error">{{ errors.address }}</p>
+          <Input v-model="form.address" autocomplete="street-address" :maxlength="80" placeholder="省市区 + 详细门牌…" clearable /><p v-if="errors.address" class="field-error">{{ errors.address }}</p>
         </div>
         <div class="switch-row">
           <span>设为默认地址</span>
@@ -176,47 +199,39 @@ function onRemove(item: AddressItem) {
 
 <style scoped>
 .m-addresses {
-  padding: 16px;
+  padding:var(--app-space-8);
   display: flex;
   flex-direction: column;
-  gap: 12px;
-}
-
-.head .page-title {
-  margin: 0 0 4px;
-  font-size: 18px;
+  gap:var(--app-space-6);
 }
 
 .head .page-desc {
-  margin: 0;
-  font-size: 12px;
+  margin:0;
+  font-size: var(--app-font-caption);
   color: var(--td-text-color-secondary);
 }
 
-.state {
-  padding: 20px 0;
-}
 
 .list {
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap:var(--app-space-5);
 }
 
 .row {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap:var(--app-space-4);
 }
 
 .phone {
-  font-size: 12px;
+  font-size: var(--app-font-caption);
   color: var(--td-text-color-secondary);
 }
 
 .detail {
-  margin: 8px 0 0;
-  font-size: 13px;
+  margin:var(--app-space-4) 0 0;
+  font-size: var(--app-font-body);
   line-height: 1.7;
   color: var(--td-text-color-primary);
 }
@@ -224,30 +239,30 @@ function onRemove(item: AddressItem) {
 .ops {
   display: flex;
   justify-content: flex-end;
-  gap: 8px;
-  margin-top: 10px;
+  gap:var(--app-space-4);
+  margin-top:var(--app-space-5);
 }
 
 .add-btn {
-  margin-top: 4px;
+  margin-top:var(--app-space-2);
 }
 
 .editor {
   display: flex;
   flex-direction: column;
-  gap: 12px;
-  padding: 16px 16px calc(16px + env(safe-area-inset-bottom));
+  gap:var(--app-space-6);
+  padding: var(--app-space-8) var(--app-space-8) calc(var(--app-space-8) + env(safe-area-inset-bottom));
 }
 
 .editor-title {
-  margin: 0;
-  font-size: 15px;
+  margin:0;
+  font-size: var(--app-font-subtitle);
 }
 
 .field label {
   display: block;
-  margin-bottom: 6px;
-  font-size: 12px;
+  margin-bottom:var(--app-space-3);
+  font-size: var(--app-font-caption);
   color: var(--td-text-color-secondary);
 }
 
@@ -255,12 +270,12 @@ function onRemove(item: AddressItem) {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  font-size: 13px;
+  font-size: var(--app-font-body);
 }
 
 .field-error {
-  margin: 6px 0 0;
-  font-size: 12px;
+  margin:var(--app-space-3) 0 0;
+  font-size: var(--app-font-caption);
   color: var(--td-error-color);
 }
 </style>

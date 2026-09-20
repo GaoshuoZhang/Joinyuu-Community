@@ -7,6 +7,7 @@
     "dev:admin": "pnpm --filter @joinyuu/admin dev",
     "build:admin": "pnpm --filter @joinyuu/admin build",
     "dev:client-mobile": "pnpm --filter @joinyuu/client-mobile dev",
+    "dev:it": "node scripts/integration.mjs start",
     "build:client-mobile": "pnpm --filter @joinyuu/client-mobile build",
     "dev:api": "pnpm --filter @joinyuu/api dev",
     "build:api": "pnpm --filter @joinyuu/api build",
@@ -15,7 +16,8 @@
     "db:migrate": "pnpm --filter @joinyuu/api db:migrate",
     "db:seed": "pnpm --filter @joinyuu/api db:seed",
     "db:reset": "pnpm --filter @joinyuu/api db:reset",
-    "lint": "eslint .",
+    "test:e2e:it": "node scripts/integration.mjs test",
+    "lint": "eslint . --max-warnings 0",
     "lint:fix": "eslint . --fix"
   },
   "devDependencies": {

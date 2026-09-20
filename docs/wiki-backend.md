@@ -4,7 +4,7 @@
 > 契约来源：M0 冻结的 `apps/admin/src/types/index.ts` 实体模型 + `apps/admin/src/api/` 全部 stub 的 TODO 注释（API Stub 即接口契约）。
 > **M1.5 后台治理增强（R1~R12）落地后，本文档已按当前代码（`schema.prisma` / 全部 controller / `src/common` / `prisma/seed*` / `test`）全面修订；文档与代码冲突时以代码为准并回写本文档。**
 > 与 [wiki-admin-web.md](./wiki-admin-web.md) 同级：admin wiki 管前端契约，本文档管后端契约；两者冲突时以 M0 冻结代码为准并提出修订。
-> 已确认的三项基础决策（2026-09-10）：**ORM = Prisma**；**M1 范围 = 后端 + admin 全量接入真实接口**（`/api/app/**` 仅设计不实现）；**主键 = 前缀字符串 ID（U1001/E2001/...）**。
+> 当前事实：ORM = Prisma；admin 与 mobile 均已接入真实接口；主键使用前缀字符串 ID（U1001/E2001/...）。
 
 ## 1. 定位与范围
 
@@ -15,19 +15,19 @@
 **范围内**：
 
 - `apps/api`：NestJS 11 + Prisma 6 + PostgreSQL 17 + Redis 7.4 的后端应用（Monorepo 内新包）
-- `/api/admin/**` 全量端点（**244 个**，见第 7 节清单；含 M1.5 权限/会话/监控/素材/归档/导出/打印与 M2-R 治理/规则/内容等），`/api/app/**` 移动端端点 **122 个**，另加 `/api/health` 与 `/api/public/files/:key` 两个公开端点（路由装饰器合计 368）
+- `/api/admin/**` 225 条、`/api/app/**` 138 条，另有 `/api/health` 与 `/api/public/files/:key` 两条公开路由（路由装饰器合计 365）
 - 管理端认证（图形验证码 + JWT + 登出黑名单 + Redis 登录锁定 + 会话索引/强制下线/改密踢线）、审计日志服务端化、业务事件驱动通知、定时任务（定时发布/活动结束/租约临期/自动归档/自动删除，共 6 个）
-- RBAC：**56 个权限码** + 4 个内置角色（super/operator/auditor/space-ops），40 个 admin controller 中除 notifications（有意仅登录）外均挂 `@RequirePermission`；health/files 为公开 controller
+- RBAC：**55 个权限码** + 4 个内置角色（super/operator/auditor/space-ops），40 个 admin controller 中除 notifications（有意仅登录）外均挂 `@RequirePermission`；health/files 为公开 controller
 - 归档体系：13 个业务域软删除（`deletedAt`/`deletedBy`）+ 可归档时间戳（`archivableAt`）+ 归档管理恢复/彻底删除 + 自动归档/自动删除
 - 文件上传与素材库（MinIO/本地磁盘双驱动；上传魔数嗅探禁 SVG；大小上限由系统配置，1-100MB 默认 10）
 - 积分/经验发放引擎（按规则 code 触发，事务写流水）
 - admin web 接入：`src/api/` 层 HTTP 化改造（函数签名不变，视图零改动），M1-E 起删除共享 mock
 - 种子数据：从 M0 mock 迁移并按 M1.5 改造，保持全部编号与跨模块引用一致（见第 11 节）
-- `/api/app/**` 客户端接口**仅输出设计文档**（M1-E 交付 `docs/api-app-design.md`），不实现
+- `/api/app/**` 客户端接口已经按 `docs/api-app-design.md` 实现并完成 M2-R 验收
 
-**当前增量范围**：M2-R 必做范围及收尾复查整改已完成，72 模型 / 28 迁移 / 371 HTTP 路由装饰器。38 e2e 套件 / 264 用例、4 unit 套件 / 24 用例通过；详见 `docs/m2-r-closeout.md`。桌面客户端、微信小程序、微信登录、支付、CI/CD、分布式部署仍在范围外。
+**当前增量范围**：M2-R 必做范围及联调整改已完成，69 模型 / 34 迁移 / 365 HTTP 路由装饰器。最新完整验证为 41 套 e2e / 282 用例、5 套 unit / 28 用例；详见 `docs/m2-r-closeout.md`。桌面客户端、微信小程序、微信登录、支付、CI/CD、分布式部署仍在范围外。
 
-**收口端点（2026-09-17）**：`/api/admin/member-governance/deletions`、`/realnames` 分页列表及 `/:id/review`（POST `{action:'approve'|'reject',note}`），权限 `/member-governance`。注销冷静期届满后人工执行，User 置 deleted、密码与基础实名资料清除、会话失效、保留业务历史；驳回有通知。实名规则校验后 pending 即时生效，人工通过 approved，驳回 rejected 并清实名允许重提。`/api/admin/cards/:type` 列表、`/schema/:type` GET/PUT、`/individual/:uid` PUT、`/enterprise/:id` PUT，权限 `/card-management`。对应 app `GET /card-schema/:type` 下发可编辑字段，空白名单合法；名片 PUT 省略保留、空串清空，禁用字段 403。两类新增管理端路径均归属 members 数据范围。
+**收口端点（2026-09-20 调整）**：`/api/admin/member-governance/deletions` 分页列表及 `/:id/review`（POST `{action:'approve'|'reject',note}`），权限 `/member-governance`。注销冷静期届满后人工执行，User 置 deleted、密码与基础实名资料清除、会话失效、保留业务历史；驳回有通知。实名认证通过规则校验后立即生效并记录 `verifiedAt`，不设后台人工复核。`/api/admin/cards/:type` 列表、`/schema/:type` GET/PUT、`/individual/:uid` PUT、`/enterprise/:id` PUT，权限 `/card-management`。对应 app `GET /card-schema/:type` 下发可编辑字段，空白名单合法；名片 PUT 省略保留、空串清空，禁用字段 403。两类新增管理端路径均归属 members 数据范围。
 
 **收尾复查约束（2026-09-17）**：注销提交、撤回、后台执行共用 User 行锁；`AccountDeletionRequest_one_cooling_per_user` 为 SQL 部分唯一索引（Prisma schema 无法表达），每人最多一份 cooling 申请。增量迁移将历史重复组全部撤销并记录原因，单份申请不变。个人名片 visibility 为嵌套布尔对象，省略键保留当前值，前后台共用事务合并；展示姓名参与人才库、全域人才搜索和后台名片搜索。举报恢复只允许原 `action=hide`、未恢复且目标 `moderationVersion` 与处置快照相同的记录；状态/归档及用户冻结字段写入由 PostgreSQL 触发器递增版本，包含同值重新处置。旧版无来源快照的举报不可自动恢复；后续人工处理优先。迁移中的部分索引与触发器必须随库部署，不可只执行 `db push`。
 
@@ -46,15 +46,15 @@
 | 对象存储 | `StorageService` 双驱动：MinIO 或本地磁盘回退（`UPLOAD_DIR` 可配，默认 `apps/api/uploads`） |
 | 验证码 | 自研 SVG dataURL（`captcha.util.ts`，4 位去易混字符，无第三方依赖） |
 | 时间 | 原生 Date + `common/utils/time.ts` 统一格式化（`TZ=Asia/Shanghai`） |
-| 测试 | Jest + supertest（当前 e2e 28 套件 / 195 用例全量通过；unit 4 套件 / 25 声明） |
+| 测试 | Jest + supertest（最新完整记录：e2e 41 套件 / 282 用例；unit 5 套件 / 28 用例） |
 
 **目录结构**（`apps/api/`）：
 
 ```
 apps/api/
   prisma/
-    schema.prisma        # 全量实体建模（72 模型，见 entity-fields.md）
-    migrations/          # prisma migrate 产出（28 个迁移）
+    schema.prisma        # 全量实体建模（69 模型，见 entity-fields.md）
+    migrations/          # prisma migrate 产出（34 个迁移）
     seed.ts              # M0 mock 迁移 + M1.5 治理种子（见第 11 节）
     seed-data/           # 各域种子数据（seed 唯一数据源；api tsconfig exclude）
   src/
@@ -66,7 +66,7 @@ apps/api/
       users/             # 用户 + 社区个体（含身份 identities）
       enterprises/       # 社区企业
       external-enterprises/  # 合作企业聚合视图 + 档案
-      applications/      # 入驻/合作/身份绑定审核（四类）
+      applications/      # 入驻/合作/退驻审核（四类）
       demands/           # 需求（含代报名/立项）
       projects/          # 项目（承接方/里程碑/状态机）
       events/            # 活动（发布/报名/签到/状态机）
@@ -196,24 +196,24 @@ TZ=Asia/Shanghai
 - **派生值不落列**（M0 明确口径）：用户实名状态（realName+citizenId 均填）、用户 stats（详情接口实时 COUNT）、租约 expiring/expired（读取派生）、"个人用户"筛选（仅持 individual 身份）、工作台趋势（按日聚合）。
 - 金额/积分为整数（分或元按 M0 现状：租金/预算为元字符串或整数、积分为整数）；枚举一律 String + 应用层枚举校验（保持与前端字符串契约一致，不用 PG enum，降低迁移摩擦）。
 
-### 5.2 表清单（48 模型）
+### 5.2 核心表摘要（完整 69 模型见 `entity-fields.md`）
 
 | 分组 | Prisma 模型 | 主键前缀 | 要点 |
 |---|---|---|---|
 | 认证 | AdminUser | 自增 | username 唯一、passwordHash（bcryptjs）、name（展示名）、status(active/disabled)、lastLoginAt?；种子 4 账号 admin/operator/auditor/space-ops（初始密码 admin123） |
 | 认证 | AdminRole | R1~R4 | code 唯一、name/description/sort/createdAt；内置 super/operator/auditor/space-ops 四角色 |
-| 认证 | AdminPermission | code（PK） | RBAC 权限点目录（49 码）：菜单路径或 `perm:xxx` 按钮码 + name/module/authType(menu/button)/sort |
+| 认证 | AdminPermission | code（PK） | RBAC 权限点目录（当前 55 码）：菜单路径或 `perm:xxx` 按钮码 + name/module/authType(menu/button)/sort |
 | 认证 | AdminUserRole | 自增 | 管理员-角色关联，唯一 (adminUserId, roleId) |
 | 认证 | AdminRolePermission | 自增 | 角色-权限点关联，唯一 (roleId, permissionCode)；角色变更即时失效权限缓存 |
 | 认证 | LoginLog | LL | loginAt/username/ip/device/status(success/fail/locked)/failReason?；登录成功/失败/锁定均写 |
 | 认证 | SchedulerLog | SL | jobName/startedAt/finishedAt/durationMs/status(ok/error)/detail?/rowsAffected；监控页与手动触发数据源 |
 | 认证 | MallAsset | AST | 素材库：fileName/mime/size/url/storeKey/bizType?/sourceType?(article/submission)/sourceId?(文章 ID)/createdBy/createdAt；上传魔数嗅探、替换为同键覆盖 |
 | 认证 | IdSequence | entityType（PK） | 前缀 ID 发号器（见 5.1） |
-| 成员 | User | U | uid 昵称 nickname、phone 唯一、email/gender/avatar?/status(active/frozen)、realName?/citizenId?（实名派生）、wechatOpenid?/wechatUnionid?/wechatVerified?（M3 预留）、frozenUntil?/frozenReason?（解冻清空）、points（挂靠个人身份）、registeredAt/lastActiveAt、bio、activities Json |
+| 成员 | User | U | uid 昵称 nickname、phone 唯一、email/gender/avatar?/status(active/frozen)、realName?/citizenId?（实名派生）、verifiedAt?（认证时间）、wechatOpenid?/wechatUnionid?/wechatVerified?（M3 预留）、frozenUntil?/frozenReason?（解冻清空）、points（挂靠个人身份）、registeredAt/lastActiveAt、bio、activities Json |
 | 成员 | UserIdentity | 自增 | userId FK + type(individual/community_individual/community_enterprise/external_enterprise) + enterpriseId?/enterpriseName?/role?/title/level?/experience?；唯一约束 (userId, type, enterpriseId)；社区个体每人至多一条（应用层保证） |
-| 成员 | Enterprise | E | industry/size/foundedAt/settledAt/leaseType/status(active/pending/exited/disabled)/showcaseStatus(none/pending/published/rejected)/showcaseComment?/experience?/**contactUserId?（关联个人用户，社区企业必须关联）**/contactTitle/contact*/description/tags/**deletedAt?/deletedBy?**；M1.5 删除=软删归档（存在进行中租约时 409），可在归档管理恢复/彻底删除；不支持自动归档 |
-| 成员 | ExternalEnterpriseProfile | XE | 合作企业档案（name/industry/status(active/disabled)/size/foundedAt/description/cooperationCount/firstCooperationAt/**deletedAt?/deletedBy?**）；**ExternalEnterprise 聚合视图 = 档案 + identities(type=external_enterprise 且 enterpriseName 匹配) 派生成员，不建独立表**；删除=软删归档；不支持自动归档 |
-| 审核 | Application | AP | type(**settle/individual/cooperation/identity 四类**)/applicantName/applicantPhone/targetName/submittedAt/status/summary/details Json/records Json/**deletedAt?/deletedBy?/archivableAt?**；通过时授予身份（见 8.6） |
+| 成员 | Enterprise | E | industry/size/foundedAt/settledAt/leaseType/status(active/pending/exited/disabled)/experience?/**contactUserId?（关联个人用户，社区企业必须关联）**/contactTitle/contact*/description/tags/**deletedAt?/deletedBy?**；M1.5 删除=软删归档（存在进行中租约时 409），可在归档管理恢复/彻底删除；不支持自动归档 |
+| 成员 | ExternalEnterpriseProfile | XE | 合作企业档案（name/industry/status(active/disabled)/size/foundedAt/description/registeredAt（登记日期）/**deletedAt?/deletedBy?**）；**ExternalEnterprise 聚合视图 = 档案 + identities(type=external_enterprise 且 enterpriseName 匹配) 派生成员，不建独立表**；删除=软删归档；不支持自动归档 |
+| 审核 | Application | AP | type(**settle/individual/cooperation/exit 四类**)/applicantName/applicantPhone/targetName/submittedAt/status/summary/details Json/records Json/**deletedAt?/deletedBy?/archivableAt?**；通过时授予身份（见 8.6） |
 | 需求 | Demand | D | 状态机字段 + publisherId/publisherName/publisherIdentity(Json)/contactName?/contactPhone?/contactEmail?/budget/period/deadline/scheduledAt?/publishedAt?/visibilityIdentities[]/visibilityLevels[]/enrollmentIdentities[]/enrollmentLevels[]/respondPoints?/rejectedReason?/projectId?/tags[]/**creatorName?/creatorId?（创建人展示名 / 用户 ID，用户记录聚合按 creatorId∪publisherId）**/**deletedAt?/deletedBy?/archivableAt?** |
 | 需求 | DemandRespondent | 自增 | demandId FK + name/enterprise/phone?/email?/quote?/message/at/status(pending/contacted/closed) |
 | 项目 | Project | P | code（JY-YYYY-NN）/status(running/paused/closed/finished)/progress/startDate/endDate/initiatedAt/description/memberCount/sourceDemandId?/expReward?/closeReason?/**deletedAt?/deletedBy?/archivableAt?** |
@@ -223,7 +223,7 @@ TZ=Asia/Shanghai
 | 活动 | EventEnrollment | 自增 | 复合唯一 (eventId, userId)；userId/name/enterprise/phone/appliedAt/status(pending/approved/rejected)/checkedIn/checkInAt? |
 | 账本 | ExperienceRecord | EX | targetType(enterprise/individual)/targetId/delta/balance/reason/at/operator/source(rule/manual) |
 | 账本 | PointsRecord | PT | userId FK/delta/balance/reason/at/operator/source(rule/manual/redemption)/dedupeKey? 唯一（积分发放幂等） |
-| 商城 | MallGoods | G | name/category(physical/virtual/voucher；字典 goods_category)/points/stock/**status(on/off/restock 三态，库存为 0 记 restock)**/description/redeemedCount/createdAt/**shippingMethods[]/pickupAddress?/shippingFee?（实物发货）**/**visibilityIdentities[]/visibilityLevels[]/orderIdentities[]/orderLevels[]（可见/可下单范围）**/**deletedAt?/deletedBy?/archivableAt?** |
+| 商城 | MallGoods | G | name/category(GC001 实物商品 / GC003 权益券；字典 goods_category)/points/stock/**status(on/off/restock 三态，库存为 0 记 restock)**/description/redeemedCount/createdAt/**shippingMethods[]/pickupAddress?/shippingFee?（实物发货）**/**visibilityIdentities[]/visibilityLevels[]/orderIdentities[]/orderLevels[]（可见/可下单范围）**/**deletedAt?/deletedBy?/archivableAt?** |
 | 商城 | RedemptionOrder | RO | userId/userName(快照)/goodsId/goodsName(快照)/points/status(pending_shipment/shipped/finished/cancelled)/createdAt/shippedAt?/finishedAt?/recipientName?/recipientPhone?/address?/note?/cancelReason?/**deletedAt?/deletedBy?/archivableAt?** |
 | 规则 | PointsRule | code（PK） | 9 条固定触发项（见 8.4）；name/scene/description 写死；points 可编辑；status |
 | 规则 | ExperienceRule | code（PK） | 6 条固定触发项；同上 |
@@ -268,7 +268,7 @@ TZ=Asia/Shanghai
 
 ### 6.2 RBAC 权限模型（M1.5 R1/R2）
 
-- **权限码 = 菜单路径或 `perm:xxx` 按钮码**，共 **49 码**（种子 `permissionCatalog` 为唯一目录），`*` 为超级管理员全量标记；`@RequirePermission(code | code[])` 支持 any-of 语义；`PermissionGuard` 叠加在 `JwtAuthGuard` 之后，权限集合命中任一所需码或含 `*` 放行，否则 403「无权限执行该操作」；未声明 `@RequirePermission` 的端点仅需登录。
+- **权限码 = 菜单路径或 `perm:xxx` 按钮码**，当前共 **55 码**（种子 `permissionCatalog` 为唯一目录），`*` 为超级管理员全量标记；`@RequirePermission(code | code[])` 支持 any-of 语义；`PermissionGuard` 叠加在 `JwtAuthGuard` 之后，权限集合命中任一所需码或含 `*` 放行，否则 403「无权限执行该操作」；未声明 `@RequirePermission` 的端点仅需登录。
 - **覆盖范围**：36 个 controller 中，34 个属于 admin；其中 33 个挂 `@RequirePermission`，`notifications` 有意仅登录。`health` 与 `files`（公开文件读取）为公开 controller。无声明 controller 内的个别端点（如 `GET /enterprises/options`、`GET /users/options`）仅需登录。
 - **权限目录（按模块）**：工作台 `/dashboard`；社区成员 `/users`、`/individuals`、`/enterprises`、`/external-enterprises`、`/approvals` + 企业按钮码 `perm:enterprise:create|update|disable|enable|delete`、`perm:external-enterprise:create|update|disable|enable|delete`；业务运营 `/demands`、`/demands/review`、`/projects`、`/events`；空间管理 `/workstations`、`/workstations/offices`、`/workstations/leases`、`/spaces`、`/spaces/reservations`；内容管理 `/contents/publish`、`/contents/submissions`、`/contents/columns`、`/contents/stats`、`/contents/policies`、`/contents/banners`、`/contents/announcements`；积分商城 `/mall/goods`、`/mall/orders`；规则管理 `/rules/points`、`/rules/experience`、`/rules/levels`、`/rules/publishing-limits`、`/rules/ledger`、`/rules/experience-records`；系统管理 `/system/dicts`、`/system/config`、`/system/policies`、`/logs/audit`、`/system/roles`、`/system/admins`、`/system/sessions`、`/system/assets`、`/system/monitor`、`/logs/login`、`/system/trash`、`/system/export`、`/governance`、`/card-management`、`/member-governance`（服务申请 `/engagement/services` 已随功能下线移除）。
 - **内置角色**（`AdminRole` + `AdminRolePermission`）：`super`（`*` 全量）、`operator`（业务运营+内容+商城）、`auditor`（审核类）、`space-ops`（空间域）；角色权限保存即时失效关联管理员的权限缓存（`auth:admin:perms:<username>`，TTL 2h）。
@@ -334,8 +334,8 @@ TZ=Asia/Shanghai
 
 | 方法 | 路径 | 说明 |
 |---|---|---|
-| GET | /api/admin/external-enterprises | 聚合视图（档案 + 派生成员）；query：page/pageSize/keyword/industry/status(active/disabled)/sortBy(cooperationCount/firstCooperationAt)；默认过滤已归档 |
-| POST | /api/admin/external-enterprises | 权限 `perm:external-enterprise:create`：body name/industry 必填 + size?/foundedAt?/description?；返回 `{ id }`（XE 前缀、合作 0、首次合作为当月） |
+| GET | /api/admin/external-enterprises | 聚合视图（档案 + 派生成员）；query：page/pageSize/keyword/industry/status(active/disabled)/sortBy(registeredAt)；默认过滤已归档 |
+| POST | /api/admin/external-enterprises | 权限 `perm:external-enterprise:create`：body name/industry 必填 + size?/foundedAt?/description?；返回 `{ id }`（XE 前缀、登记日期为当天） |
 | GET | /api/admin/external-enterprises/:id | 详情含关联成员（external_enterprise 身份 enterpriseName 匹配档案名） |
 | GET | /api/admin/external-enterprises/:id/stats | 需求（publisherIdentity.enterpriseName 匹配）/项目（成员以个人身份承接） |
 | PUT | /api/admin/external-enterprises/:id | 权限 `perm:external-enterprise:update`：name/industry/size/foundedAt/description；改名时成员身份 enterpriseName 同步迁移 |
@@ -396,6 +396,7 @@ TZ=Asia/Shanghai
 | 方法 | 路径 | 说明 |
 |---|---|---|
 | GET | /api/admin/events | query：page/pageSize/keyword(标题/ID)/type/status/participant(报名记录含该用户)/sortBy(id 默认倒序、startTime、createdAt)/sortOrder；默认过滤已归档 |
+| GET | /api/admin/events/enrollments | 活动报名审核列表（跨活动）：query page/pageSize/keyword(报名人/企业/电话/活动标题与编号)/status(pending/approved/rejected/waitlisted/cancelled)/eventId；按报名时间倒序 |
 | GET | /api/admin/events/:id | 详情含 enrollments（到点状态流转先行派生） |
 | POST | /api/admin/events | 创建即 pending_release、enrollmentOpen=false；表单无定时发布选项 |
 | PUT | /api/admin/events/:id | 编辑（pending_release/published 可编辑，published 不动状态/已有报名；scheduled/ended/cancelled 不可） |
@@ -627,9 +628,9 @@ TZ=Asia/Shanghai
 
 - 按申请人 phone 匹配 User（未注册申请者不授予，仅改申请状态）。
 - `settle`：企业不存在则**自动创建**（industry="综合"、status=active、contactUserId=申请人、leaseType 由「申请空间」推算、settledAt=当天）→ 存在则 active + 补 settledAt → 申请人追加 community_enterprise 身份（role=member、level=1、experience=0，去重）。
-- `individual`：申请人追加 community_individual 身份（title 取 targetName 头衔或「社区个体」，去重）。
+- `individual`：申请人追加 community_individual 身份（去重；社区个体不再设置头衔，title 为空）。
 - `cooperation`：按 targetName 企业名**复用或新增合作企业档案**（industry/规模/成立时间取自申请表单）→ 申请人追加 external_enterprise 身份（去重）。
-- `identity`：targetName 按"企业名 · 头衔"解析 → 目标在社区企业名单则追加 community_enterprise 身份；否则追加 external_enterprise 身份（档案缺失自动新增）。
+- `identity`：targetName 按"企业名 · 头衔"解析（绑定 community_individual 时不再设置头衔）→ 目标在社区企业名单则追加 community_enterprise 身份；否则追加 external_enterprise 身份（档案缺失自动新增）。
 - 首次授予任意非 individual 身份（即真正新增身份行）→ 触发 `identity_first_bind` 积分 + 经验值（启用时）；企业类同时给企业发首绑经验值。
 
 ### 8.7 需求发布方身份快照（resolvePublisherIdentity 服务端化）
@@ -645,7 +646,7 @@ TZ=Asia/Shanghai
 
 ### 8.9 快照与联动的既有口径（服务端保持）
 
-- 栏目改名 → 刷新文章 columnName；栏目删除 → 文章转移至保留栏目「未指定」；办公位区域改名 → 无需级联（外键化）；企业展示页审核 → Enterprise.showcaseStatus + comment；解冻 → 清冻结字段；撤回发布 → 清 publishedAt/scheduledAt；终止租约 → 释放办公位并清 enterprise/lease 冗余。
+- 栏目改名 → 刷新文章 columnName；栏目删除 → 文章转移至保留栏目「未指定」；办公位区域改名 → 无需级联（外键化）；企业展示页仅保留富字段展示（名片状态已移除）；解冻 → 清冻结字段；撤回发布 → 清 publishedAt/scheduledAt；终止租约 → 释放办公位并清 enterprise/lease 冗余。
 
 ### 8.10 归档体系（M1.5 R12，归档管理）
 
@@ -679,7 +680,7 @@ TZ=Asia/Shanghai
 
 | type | 触发事件 | link |
 |---|---|---|
-| approval | 入驻/合作/身份绑定申请提交（M2 客户端写入；种子数据存在） | /approvals |
+| approval | 入驻/合作/退驻申请提交（M2 客户端写入；种子数据存在） | /approvals |
 | demand_review | 需求提交待审核（M2 客户端） | /demands/review |
 | reservation | 空间预约提交（M2 客户端） | /spaces/reservations |
 | article | 文章提交审核（M2 客户端） | /contents/submissions |
@@ -715,7 +716,7 @@ TZ=Asia/Shanghai
   - 空间：workstationAreas 3 / workstations 20 / leases 8 / spaces 6 / reservations 12
   - 内容：columns 6（含系统保留「未指定」COL_NONE）/ articles 10（官方 A×2 + 投稿 SU×8）/ showcaseRequests 5 / announcements 6
   - 系统：dicts 25（demand_category 6 / industry 11 / event_type 5 / goods_category 3）/ notifications 10（N9001+）/ auditLogs 25（AL1001+）/ systemConfig 1
-  - M1.5 治理：AdminPermission **49** / AdminRole **4**（super/operator/auditor/space-ops）/ AdminUser **4**（admin/operator/auditor/space-ops，初始密码 admin123，space-ops 为 disabled 示例）/ ArchiveSetting **13**（各标签页默认关闭自动归档/自动删除）
+  - 治理：AdminPermission **55** / AdminRole **4**（super/operator/auditor/space-ops）/ AdminUser **4**（初始密码 admin123，space-ops 为 disabled 示例）/ ArchiveSetting **13**。
 - **ID 序列**：`IdSequence` 初始化 24 个前缀（U/E/AP/D/P/EV/XE/EX/PT/G/RO/R/WS/WA/LS/S/SR/A/SU/CL/SC/AN/N/AL）为各前缀当前最大值（R = 角色，内置 R1~R4，运行时新增角色自 R5 续号）；项目编号另按 `CODE-<year>` 初始化（JY-YYYY-NN 按年独立发号）；素材 AST 不预置（运行时发号）。**投稿文章使用 SU 前缀**（官方文章 A 前缀）。
 - **要求**：编号前缀与源数据一致；跨模块引用一致（末笔流水 balance=实体当前值、办公位↔租约↔企业、预约/活动场地等）；`db:seed` 幂等（按 FK 逆序清空后重建）；种子运行后清理 Redis 应用缓存与动态鉴权键（§10）。
 - 种子数据中已知历史 mock 瑕疵若仍存在则保持原样迁移，不做"顺手修正"（M1.5 内容/申请改造已同步调整相关数据，如旧 XE7004 档案已移除）。

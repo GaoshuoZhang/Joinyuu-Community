@@ -14,7 +14,6 @@ describe('M2-R 收尾复查回归', () => {
   let db: PrismaService
   let admin: string
   let member: string
-  let sequence = 0
   beforeAll(async () => {
     reseed()
     app = (await Test.createTestingModule({ imports: [AppModule] }).compile()).createNestApplication()
@@ -27,11 +26,6 @@ describe('M2-R 收尾复查回归', () => {
   const get = (path: string, token = admin) => request(app.getHttpServer()).get(path).set('Authorization', `Bearer ${token}`)
   const post = (path: string, data: object, token = admin) => request(app.getHttpServer()).post(path).set('Authorization', `Bearer ${token}`).send(data)
   const put = (path: string, data: object, token = admin) => request(app.getHttpServer()).put(path).set('Authorization', `Bearer ${token}`).send(data)
-  const review = (id: string, action: string) => post(`/api/admin/governance/reports/${id}/review`, { status: 'resolved', action, resolution: '复查处置' })
-  const report = (targetType: string, targetId: string) => db.report.create({ data: {
-    id: `RPFIX${++sequence}`, reporterId: 'U1001', targetType, targetId, targetTitle: '复查对象', reason: '待核实', at: '2026-09-17 10:00',
-  } })
-  const canRestore = async (id: string) => (await get('/api/admin/governance/reports?pageSize=100')).body.data.list.find((r: { id: string }) => r.id === id)?.canRestore
 
   it('并发提交只创建一份注销申请和通知；撤销后全部失效且不可审批', async () => {
     const before = await db.userNotification.count({ where: { userId: 'U1005', title: '注销申请已提交' } })
@@ -114,45 +108,4 @@ describe('M2-R 收尾复查回归', () => {
     expect((await get(`/api/app/search?keyword=${kw}&type=talent&page=2&pageSize=1`, member)).body.data.list).toEqual([])
   })
 
-  it('未下架的已结案举报不能恢复独立处置，旧版无来源记录同样不可恢复', async () => {
-    const row = await report('demand', 'D4002')
-    expect((await review(row.id, 'none')).status).toBe(200)
-    await db.demand.update({ where: { id: 'D4002' }, data: { status: 'rejected' } })
-    expect(await canRestore(row.id)).toBe(false)
-    expect((await review(row.id, 'restore')).status).toBe(409)
-    const legacy = await report('demand', 'D4002')
-    await db.report.update({ where: { id: legacy.id }, data: { status: 'resolved' } })
-    expect((await review(legacy.id, 'restore')).status).toBe(409)
-    expect((await db.demand.findUniqueOrThrow({ where: { id: 'D4002' } })).status).toBe('rejected')
-  })
-
-  it.each(['demand', 'article', 'enterprise', 'user'])('%s 只有原举报能恢复一次，后续独立处置使恢复资格失效', async type => {
-    const article = type === 'article' ? await db.article.findFirstOrThrow({ where: { status: 'published', deletedAt: null } }) : null
-    const id = type === 'demand' ? 'D4002' : type === 'enterprise' ? 'E2001' : type === 'user' ? 'U1004' : article!.id
-    const setState = async (hidden: boolean) => {
-      if (type === 'demand') await db.demand.update({ where: { id }, data: { status: hidden ? 'rejected' : 'published' } })
-      if (type === 'article') await db.article.update({ where: { id }, data: { status: hidden ? 'closed' : 'published' } })
-      if (type === 'enterprise') await db.enterprise.update({ where: { id }, data: { showcaseStatus: hidden ? 'rejected' : 'published' } })
-      if (type === 'user') await db.user.update({ where: { uid: id }, data: { status: hidden ? 'frozen' : 'active' } })
-    }
-    await setState(false)
-    const first = await report(type, id)
-    expect((await review(first.id, 'hide')).status).toBe(200)
-    expect(await canRestore(first.id)).toBe(true)
-    const results = await Promise.all([review(first.id, 'restore'), review(first.id, 'restore')])
-    expect(results.map(r => r.status).sort()).toEqual([200, 409])
-    expect(await canRestore(first.id)).toBe(false)
-    await setState(true)
-    expect((await review(first.id, 'restore')).status).toBe(409)
-
-    await setState(false)
-    const second = await report(type, id)
-    expect((await review(second.id, 'hide')).status).toBe(200)
-    // Reasserting the same hidden state is an independent staff decision.
-    await setState(true)
-    expect(await canRestore(second.id)).toBe(false)
-    expect((await review(second.id, 'restore')).status).toBe(409)
-    expect((await db.report.findUniqueOrThrow({ where: { id: second.id } })).restoredAt).toBeNull()
-    await setState(false)
-  })
 })

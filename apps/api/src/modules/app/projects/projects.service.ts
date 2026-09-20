@@ -13,9 +13,6 @@ import { PointsEngineService } from '../../../common/engine/points-engine/points
 import { formatNow } from '../../../common/utils/time'
 import type { SubmitMilestoneDto } from './dto/submit-milestone.dto'
 import type { ReturnMilestoneDto } from './dto/return-milestone.dto'
-import type { CreateTaskDto, UpdateTaskDto } from './dto/task.dto'
-import type { AddFileDto } from './dto/add-file.dto'
-import type { AddDiscussionDto } from './dto/add-discussion.dto'
 import { StorageService } from '../../../common/storage/storage.service'
 
 interface LoadedProject {
@@ -24,8 +21,8 @@ interface LoadedProject {
   initiatorUid: string | null
 }
 
-/* 项目协作（M2-R R2，/api/app/me/projects）：
- * 我发起的/承接的项目列表与详情、里程碑提交/验收/退回（验收自动结项并发经验）、协作任务/文件/讨论。 */
+/* 项目履约（/api/app/me/projects）：
+ * 我发起的/承接的项目列表与详情、里程碑提交/验收/退回（验收自动结项并发经验）。 */
 
 @Injectable()
 export class AppProjectsService {
@@ -65,17 +62,12 @@ export class AppProjectsService {
     )
   }
 
-  /** 项目详情（参与双方可看；含来源需求、参与人快照、里程碑、任务、文件、讨论统计） */
+  /** 项目详情（参与双方可看；含来源需求、参与人快照与里程碑） */
   async projectDetail(uid: string, id: string) {
     const { project, isInit } = await this.loadProject(uid, id)
-    const [sourceDemand, tasks, files, discussions] = await Promise.all([
-      project.sourceDemandId
-        ? this.prisma.demand.findUnique({ where: { id: project.sourceDemandId } })
-        : Promise.resolve(null),
-      this.prisma.projectTask.findMany({ where: { projectId: project.id }, orderBy: { id: 'asc' } }),
-      this.prisma.projectFile.findMany({ where: { projectId: project.id }, orderBy: { id: 'asc' } }),
-      this.prisma.projectDiscussion.findMany({ where: { projectId: project.id }, orderBy: { id: 'asc' } }),
-    ])
+    const sourceDemand = project.sourceDemandId
+      ? await this.prisma.demand.findUnique({ where: { id: project.sourceDemandId } })
+      : null
     const myEntIds = await this.myEnterpriseIds(uid)
     const { role, enterpriseName, enterpriseId } = isInit
       ? { role: '需求发起方' as const, enterpriseName: undefined, enterpriseId: undefined }
@@ -112,9 +104,6 @@ export class AppProjectsService {
         ...(u.phone ? { phone: u.phone } : {}),
       })),
       milestones: project.milestones.map((m) => this.toMilestone(m, project.id)),
-      tasks: tasks.map((t) => this.toTask(t)),
-      files: files.map((f) => this.toFile(f)),
-      discussionCount: discussions.length,
     }
   }
 
@@ -221,75 +210,6 @@ export class AppProjectsService {
     return { code: 0 }
   }
 
-  /** 协作任务列表 */
-  async listTasks(uid: string, projectId: string) {
-    const { project } = await this.loadProject(uid, projectId)
-    const rows = await this.prisma.projectTask.findMany({ where: { projectId: project.id }, orderBy: { id: 'asc' } })
-    return rows.map((t) => this.toTask(t))
-  }
-
-  /** 新增协作任务 */
-  async createTask(uid: string, projectId: string, dto: CreateTaskDto) {
-    const { project } = await this.loadProject(uid, projectId)
-    const name = (dto.name ?? '').trim()
-    if (!name) throw new BadRequestException('请输入任务名称')
-    const created = await this.prisma.projectTask.create({
-      data: { projectId: project.id, name, assignee: dto.assignee?.trim() || null, duedAt: dto.duedAt || null, createdAt: formatNow() },
-    })
-    return { id: created.id }
-  }
-
-  /** 更新协作任务（仅 name/assignee/status/duedAt） */
-  async updateTask(uid: string, projectId: string, taskId: string, dto: UpdateTaskDto) {
-    const { project } = await this.loadProject(uid, projectId)
-    const task = await this.prisma.projectTask.findFirst({ where: { id: this.toNum(taskId), projectId: project.id } })
-    if (!task) throw new NotFoundException('任务不存在')
-    const data: Record<string, unknown> = {}
-    if (dto.name !== undefined) {
-      const name = dto.name.trim()
-      if (!name) throw new BadRequestException('任务名称不能为空')
-      data.name = name
-    }
-    if (dto.assignee !== undefined) data.assignee = dto.assignee?.trim() || null
-    if (dto.status !== undefined) data.status = dto.status
-    if (dto.duedAt !== undefined) data.duedAt = dto.duedAt || null
-    await this.prisma.projectTask.update({ where: { id: task.id }, data })
-    return { code: 0 }
-  }
-
-  /** 协作文件列表（url 为参与方鉴权后的下载地址）。 */
-  async listFiles(uid: string, projectId: string) {
-    const { project } = await this.loadProject(uid, projectId)
-    const rows = await this.prisma.projectFile.findMany({ where: { projectId: project.id }, orderBy: { id: 'asc' } })
-    return rows.map((f) => this.toFile(f))
-  }
-
-  /** 新增协作文件元数据 */
-  async addFile(uid: string, projectId: string, dto: AddFileDto) {
-    const { project } = await this.loadProject(uid, projectId)
-    if (!/^[0-9a-f-]+\.(?:png|jpe?g|gif|webp|pdf)$/i.test(dto.storeKey)) {
-      throw new BadRequestException('文件存储键无效')
-    }
-    const stored = await this.storage.read(dto.storeKey)
-    if (!stored) throw new BadRequestException('上传文件不存在或已失效')
-    const created = await this.prisma.projectFile.create({
-      data: { projectId: project.id, storeKey: dto.storeKey, name: dto.name, size: stored.length, uploaderId: uid, at: formatNow() },
-    })
-    return { id: created.id }
-  }
-
-  /** 参与方鉴权后读取协作文件，禁止经 public files 绕过项目权限。 */
-  async readFile(uid: string, projectId: string, fileId: string) {
-    const { project } = await this.loadProject(uid, projectId)
-    const file = await this.prisma.projectFile.findFirst({
-      where: { id: this.toNum(fileId), projectId: project.id },
-    })
-    if (!file) throw new NotFoundException('文件不存在')
-    const buffer = await this.storage.read(file.storeKey)
-    if (!buffer) throw new NotFoundException('文件不存在')
-    return { buffer, name: file.name }
-  }
-
   /** 里程碑证据同样按项目参与方鉴权，避免上传后经 public files 绕过权限。 */
   async readAttachment(uid: string, projectId: string, storeKey: string) {
     const { project } = await this.loadProject(uid, projectId)
@@ -299,32 +219,6 @@ export class AppProjectsService {
     const buffer = await this.storage.read(storeKey)
     if (!buffer) throw new NotFoundException('附件不存在')
     return { buffer, name: storeKey }
-  }
-
-  /** 协作讨论列表 */
-  async listDiscussions(uid: string, projectId: string) {
-    const { project } = await this.loadProject(uid, projectId)
-    const rows = await this.prisma.projectDiscussion.findMany({ where: { projectId: project.id }, orderBy: { id: 'asc' } })
-    return rows.map((m) => ({
-      id: m.id,
-      uid: m.senderId,
-      name: m.senderName,
-      content: m.content,
-      at: m.at,
-      mine: m.senderId === uid,
-    }))
-  }
-
-  /** 新增讨论 */
-  async addDiscussion(uid: string, name: string, projectId: string, dto: AddDiscussionDto) {
-    const { project } = await this.loadProject(uid, projectId)
-    const content = (dto.content ?? '').trim()
-    if (!content) throw new BadRequestException('讨论内容不能为空')
-    if (content.length > 500) throw new BadRequestException('讨论内容不能超过 500 字')
-    await this.prisma.projectDiscussion.create({
-      data: { projectId: project.id, senderId: uid, senderName: name || '用户', content, at: formatNow() },
-    })
-    return { code: 0 }
   }
 
   /* ---------- 内部工具 ---------- */
@@ -435,22 +329,6 @@ export class AppProjectsService {
     return result
   }
 
-  private toTask(t: { id: number; name: string; status: string; assignee: string | null; duedAt: string | null; createdAt: string }) {
-    return {
-      id: String(t.id),
-      title: t.name,
-      done: t.status === 'done',
-      status: t.status,
-      ...(t.assignee ? { assignee: t.assignee } : {}),
-      ...(t.duedAt ? { duedAt: t.duedAt } : {}),
-      at: t.createdAt,
-    }
-  }
-
-  private toFile(f: { id: number; projectId: string; name: string; storeKey: string; size: number; at: string }) {
-    return { id: String(f.id), name: f.name, url: `/api/app/me/projects/${f.projectId}/files/${f.id}/download`, size: f.size, at: f.at }
-  }
-
   /** 承接方 uid（由需求已接受的响应反查） */
   private async respondentUid(sourceDemandId: string | null): Promise<string | null> {
     if (!sourceDemandId) return null
@@ -478,10 +356,5 @@ export class AppProjectsService {
     } catch {
       /* noop */
     }
-  }
-
-  private toNum(id: string): number {
-    const n = Number.parseInt(id, 10)
-    return Number.isNaN(n) ? -1 : n
   }
 }

@@ -25,7 +25,7 @@ export const dictFallback: Record<DictType, string[]> = {
     '财务咨询',
   ],
   event_type: ['沙龙', '培训', '路演', '社交', '赛事'],
-  goods_category: ['实物商品', '虚拟服务', '权益券'],
+  goods_category: ['实物商品', '权益券'],
 }
 
 /* GET /api/admin/dicts/:type — 字典项列表（按 sort 升序，管理页返回全量，

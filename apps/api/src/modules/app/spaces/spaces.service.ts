@@ -53,6 +53,20 @@ export interface MyReservationDto {
   rejectReason?: string
 }
 
+export interface ReservationTimelineDto {
+  at: string
+  action: string
+  title: string
+  text?: string
+  operator?: string
+}
+
+export interface MyReservationDetailDto extends MyReservationDto {
+  purpose: string
+  attendees: number
+  records: ReservationTimelineDto[]
+}
+
 /** 某日可用时段项（对齐客户端 SpaceSlot：start/end/occupied；type 附加来源标注） */
 export interface SpaceSlotDto {
   start: string
@@ -87,12 +101,12 @@ export class AppSpacesService {
     return toSpaceDto(space)
   }
 
-  /** 某日可用时段：已通过预约 + 已发布活动占用（口径同 wiki §8.8） */
+  /** 某日可用时段：待审核/已通过预约 + 已发布活动占用。 */
   async availability(id: string, date: string): Promise<SpaceSlotDto[]> {
     const space = await this.findReservable(id)
     const [reserved, events] = await Promise.all([
       this.prisma.spaceReservation.findMany({
-        where: { spaceId: space.id, date, status: 'approved', deletedAt: null },
+        where: { spaceId: space.id, date, status: { in: ['pending', 'approved'] }, deletedAt: null },
       }),
       this.publishedEventsOn(date),
     ])
@@ -113,8 +127,10 @@ export class AppSpacesService {
     return slots
   }
 
-  /** 提交预约：规则校验（维护/提前天数/最长时长/开放时段）+ 冲突预检（approved 预约或活动 409） */
+  /** 提交预约：规则校验（维护/提前天数/最长时长/开放时段）+ 冲突预检（pending/approved 预约或活动 409） */
   async create(user: { uid: string; name: string }, dto: CreateReservationDto): Promise<{ status: 'pending' | 'approved' }> {
+    const cfg = await this.prisma.systemConfig.findUnique({ where: { id: 1 } })
+    if (cfg && cfg.reservationOpen === false) throw new BadRequestException('空间预约暂未开放')
     const account = await this.prisma.user.findUnique({ where: { uid: user.uid } })
     const phone = account?.phone ?? ''
     const name = account?.nickname || user.name
@@ -134,8 +150,8 @@ export class AppSpacesService {
       throw new BadRequestException(`仅支持提前 ${advanceDays} 天预约`)
     }
 
-    const start = dto.start ?? dto.startTime
-    const end = dto.end ?? dto.endTime
+    const start = dto.start
+    const end = dto.end
     if (!start || !end) throw new BadRequestException('请选择预约时段')
     if (!isTime(start) || !isTime(end)) throw new BadRequestException('预约时段格式不正确')
     if (start >= end) throw new BadRequestException('结束时间需晚于开始时间')
@@ -147,10 +163,10 @@ export class AppSpacesService {
     if (!Number.isInteger(attendees) || attendees < 1) throw new BadRequestException('参与人数至少为 1 人')
     if (attendees > space.capacity) throw new BadRequestException(`参与人数不能超过空间容量 ${space.capacity} 人`)
 
-    /* 提交前冲突预检：已通过预约或已发布活动占用时间重叠 → 409 */
+    /* 提交前冲突预检：待审核/已通过预约或已发布活动占用时间重叠 → 409 */
     const [reserved, events] = await Promise.all([
       this.prisma.spaceReservation.findMany({
-        where: { spaceId: space.id, date, status: 'approved', deletedAt: null },
+        where: { spaceId: space.id, date, status: { in: ['pending', 'approved'] }, deletedAt: null },
       }),
       this.publishedEventsOn(date),
     ])
@@ -175,8 +191,8 @@ export class AppSpacesService {
     }
 
     /* 主体快照：代企业 → 校验 space_reserve 权限并记企业名；否则按身份推导 */
-    let identityType = dto.asIdentity || dto.identityType || 'individual'
-    let subjectName = dto.subjectName?.trim()
+    let identityType = dto.asIdentity || 'individual'
+    let subjectName = ''
     if (dto.asEnterpriseId) {
       const enterprise = await this.prisma.enterprise.findUnique({ where: { id: dto.asEnterpriseId } })
       if (!enterprise) throw new NotFoundException('企业不存在')
@@ -218,7 +234,7 @@ export class AppSpacesService {
           date,
           startTime: start,
           endTime: end,
-          purpose: (dto.topic || dto.purpose || '').trim(),
+          purpose: (dto.topic || '').trim(),
           attendees,
           status,
           submittedAt: now,
@@ -246,6 +262,20 @@ export class AppSpacesService {
       orderBy: { submittedAt: 'desc' },
     })
     return rows.map(toMyReservationDto)
+  }
+
+  /** 预约详情：直接按 userId 收敛查询，非本人同样返回不存在。 */
+  async myReservationDetail(uid: string, id: string): Promise<MyReservationDetailDto> {
+    const reservation = await this.prisma.spaceReservation.findFirst({
+      where: { id, userId: uid, deletedAt: null },
+    })
+    if (!reservation) throw new NotFoundException('预约不存在')
+    return {
+      ...toMyReservationDto(reservation),
+      purpose: reservation.purpose,
+      attendees: reservation.attendees,
+      records: toReservationTimeline(reservation.records),
+    }
   }
 
   /** 取消预约：本人 + pending/approved 可取消（approved 释放占用） */
@@ -374,6 +404,28 @@ function toMyReservationDto(r: SpaceReservation): MyReservationDto {
   if (r.subjectName) dto.subjectName = r.subjectName
   if (r.rejectReason) dto.rejectReason = r.rejectReason
   return dto
+}
+
+function toReservationTimeline(raw: Prisma.JsonValue): ReservationTimelineDto[] {
+  if (!Array.isArray(raw)) return []
+  return raw.flatMap((entry) => {
+    if (!entry || typeof entry !== 'object' || Array.isArray(entry)) return []
+    const record = entry as Record<string, unknown>
+    const action = typeof record.action === 'string' ? record.action : 'update'
+    const text = typeof record.comment === 'string' && record.comment.trim()
+      ? record.comment.trim()
+      : typeof record.text === 'string' && record.text.trim() ? record.text.trim() : undefined
+    const operator = typeof record.operator === 'string' && record.operator.trim() ? record.operator.trim() : undefined
+    return [{
+      at: typeof record.at === 'string' ? record.at : '',
+      action,
+      title: typeof record.step === 'string' && record.step.trim()
+        ? record.step.trim()
+        : action === 'submit' ? '提交预约' : action === 'approve' ? '审核通过' : action === 'reject' ? '审核驳回' : action === 'cancel' ? '取消预约' : '状态更新',
+      ...(text ? { text } : {}),
+      ...(operator ? { operator } : {}),
+    }]
+  })
 }
 
 function toMinutes(time: string): number {

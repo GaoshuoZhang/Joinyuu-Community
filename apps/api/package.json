@@ -6,7 +6,7 @@
   "scripts": {
     "dev": "nest start --watch",
     "build": "nest build",
-    "lint": "eslint src test",
+    "lint": "eslint src test --max-warnings 0",
     "lint:fix": "eslint src test --fix",
     "start": "node dist/main.js",
     "test:e2e": "jest --config test/jest-e2e.json --runInBand",

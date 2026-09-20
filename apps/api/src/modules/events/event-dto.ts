@@ -7,6 +7,7 @@ export function toEventDto(event: CommunityEvent, enrollments: EventEnrollment[]
     id: event.id,
     createdAt: event.createdAt,
     title: event.title,
+    coverUrl: event.coverUrl ?? undefined,
     type: event.type,
     startTime: event.startTime,
     endTime: event.endTime,

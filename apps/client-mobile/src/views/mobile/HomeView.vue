@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
-import { Icon, Button, Grid, GridItem, Image, NoticeBar, Popup, PullDownRefresh, Search, Swiper, SwiperItem, Tag, Toast } from 'tdesign-mobile-vue'
+import { Button, Icon, NoticeBar, PullDownRefresh, Search, Toast } from 'tdesign-mobile-vue'
 import { useAuthStore } from '@/stores/auth'
 import { useConfigStore } from '@/stores/config'
 import { useNoticesStore } from '@/stores/notices'
@@ -14,66 +14,94 @@ import { fetchMyEnrollments } from '@/api/events'
 import { fetchMe } from '@/api/me'
 import EmptyBlock from '@/components/shared/EmptyBlock.vue'
 import ListSkeleton from '@/components/ListSkeleton.vue'
+import HomeBanner from '@/components/home/HomeBanner.vue'
+import ActivationChecklist from '@/components/home/ActivationChecklist.vue'
+import HomeEntryGrids from '@/components/home/HomeEntryGrids.vue'
+import HotEventStrip from '@/components/home/HotEventStrip.vue'
+import HomeFeedSection from '@/components/home/HomeFeedSection.vue'
+import HomeAnnouncementSheet from '@/components/home/HomeAnnouncementSheet.vue'
+import type { FeedItem } from '@/components/home/HomeFeedSection.vue'
 import { demandDateText } from '@/constants/demand'
-import { onImageError } from '@/utils/imageFallback'
 import type { HomeAnnouncement } from '@/types'
+import { formatLocalDateTime, formatZhNumber } from '@/utils/format'
 
 useAnimSuppress()
 
-/* 首页（社区运营入口导向，2026-09-13 重构）：
- * 搜索框 → 站点标语 → 轮播 → 需求发布 → 双入口(企业合作/人才登记) → 四宫格(文章投稿/积分商城/空间预约/活动计划)
- * → 进行中活动（横滑） → 最新项目 → 精选文章。 */
+/* 首页（社区运营入口导向）：搜索 → 公告 → 轮播 → 发布 → 入口宫格 → 近期活动 → 最新需求/资讯。 */
 const router = useRouter()
 const config = useConfigStore()
 const auth = useAuthStore()
 const notices = useNoticesStore()
 const { data: feed, loading, error, run } = useAsyncList(fetchHomeFeed)
 
-/* v43：KeepAlive 返回首页时 Swiper 高度可能被 SwiperItem 上报为 0；
- * 由 CSS 固定容器高度（不再用 JS 改写组件内联样式）。 */
-const BANNER_HEIGHT = 130
-
-/* v40：为你推荐（按身份/登录态给出 1~2 条，弱规则但可解释） */
-const recommendations = computed(() => {
-  const f = feed.value
-  if (!f) return [] as { key: string; reason: string; title: string; summary: string; path: string }[]
-  if (auth.profileIdentities.length) {
-    return [...(f.latestDemands ?? [])]
-      .sort((a, b) => (b.responseCount ?? 0) - (a.responseCount ?? 0))
-      .slice(0, 2)
-      .map((d) => ({ key: `demand-${d.id}`, reason: '企业在找合作', title: d.title, summary: `${d.responseCount ?? 0} 人响应 · ${d.categoryLabel}`, path: `/demands/${d.id}` }))
-  }
-  if (auth.hasCommunityIndividual) {
-    return (f.hotEvents ?? []).slice(0, 2).map((e) => ({ key: `event-${e.id}`, reason: '近期热报活动', title: e.title, summary: `${e.startTime} · ${e.enrolled}/${e.capacity} 人已报名`, path: `/events/${e.id}` }))
-  }
-  const list: { key: string; reason: string; title: string; summary: string; path: string }[] = []
-  const firstEvent = (f.hotEvents ?? [])[0]
-  const firstArticle = (f.topArticles ?? [])[0]
-  if (firstEvent) list.push({ key: `event-${firstEvent.id}`, reason: '近期热门活动', title: firstEvent.title, summary: `${firstEvent.startTime} · ${firstEvent.location}`, path: `/events/${firstEvent.id}` })
-  if (firstArticle) list.push({ key: `article-${firstArticle.id}`, reason: '编辑精选', title: firstArticle.title, summary: `${firstArticle.columnLabel} · ${firstArticle.views} 次浏览`, path: `/articles/${firstArticle.id}` })
-  return list
-})
+/* 最新需求 / 最新资讯卡片数据 */
+const demandItems = computed<FeedItem[]>(() =>
+  (feed.value?.latestDemands ?? []).map((d) => ({
+    key: d.id,
+    title: d.title,
+    tag: d.categoryLabel,
+    path: `/demands/${d.id}`,
+    metas: [
+      { text: d.publisherName },
+      ...(demandDateText(d) ? [{ text: demandDateText(d) as string }] : []),
+      { text: `${formatZhNumber(d.responseCount)} 人响应`, accent: true },
+    ],
+  })),
+)
+const articleItems = computed<FeedItem[]>(() =>
+  (feed.value?.topArticles ?? []).map((a) => ({
+    key: a.id,
+    title: a.title,
+    tag: a.columnLabel,
+    path: `/articles/${a.id}`,
+    metas: [{ text: formatLocalDateTime(a.publishedAt) }, { text: `${formatZhNumber(a.views)} 次浏览` }],
+  })),
+)
 
 onMounted(() => {
   config.ensureLoaded()
   run()
-  void loadActivation()
 })
 
-/* v43：进入不再自动重载聚合与激活任务（下拉刷新已覆盖），仅同步未读角标 */
+/* KeepAlive 返回首页时刷新新手任务完成状态，并同步未读角标。 */
 useRefreshOnActivate(() => {
+  void loadActivation()
   if (auth.isLogged) void notices.refreshUnread()
 })
 
 /* v37 新手任务清单：目标选择与激活引导（完成即自动隐藏，可手动不再提示） */
-const ACTIVATION_KEY = 'joinyuu_activation_dismissed'
+const ACTIVATION_KEY_PREFIX = 'joinyuu_activation_dismissed:'
 interface ActivationStep { key: string; label: string; done: boolean; path: string }
-const activationDismissed = ref(localStorage.getItem(ACTIVATION_KEY) === '1')
+const activationDismissed = ref(false)
 const activationSteps = ref<ActivationStep[]>([])
-const activationDone = computed(() => activationSteps.value.length > 0 && activationSteps.value.every((step) => step.done))
+/* v41：新手任务清单完成态判断基于可见步骤 */
+const visibleActivationSteps = computed(() =>
+  config.config.demandOpen
+    ? activationSteps.value
+    : activationSteps.value.filter((step) => step.key !== 'publish' && step.key !== 'respond'),
+)
+const activationDone = computed(
+  () => visibleActivationSteps.value.length > 0 && visibleActivationSteps.value.every((step) => step.done),
+)
+const showActivation = computed(
+  () => visibleActivationSteps.value.length > 0 && !activationDone.value && !activationDismissed.value,
+)
+
+watch(
+  () => auth.uid,
+  (uid) => {
+    activationDismissed.value = uid
+      ? localStorage.getItem(`${ACTIVATION_KEY_PREFIX}${uid}`) === '1'
+      : false
+    activationSteps.value = []
+    if (uid && !activationDismissed.value) void loadActivation()
+  },
+  { immediate: true },
+)
 
 async function loadActivation() {
-  if (!auth.isLogged || activationDismissed.value) return
+  if (!auth.isLogged || !auth.uid || activationDismissed.value) return
+  const uid = auth.uid
   try {
     const [me, demands, responses, enrollments] = await Promise.all([
       fetchMe(),
@@ -81,15 +109,16 @@ async function loadActivation() {
       fetchMyResponses(),
       fetchMyEnrollments(),
     ])
+    if (auth.uid !== uid || activationDismissed.value) return
     activationSteps.value = [
-      { key: 'identity', label: '绑定社区身份', done: auth.identities.some((item) => item.type !== 'individual'), path: '/intros/talent' },
+      { key: 'identity', label: '绑定社区身份', done: me.identities.some((item) => item.type !== 'individual'), path: '/intros/talent' },
       { key: 'realname', label: '完成实名认证', done: !!me.realNameVerified, path: '/me/realname' },
       { key: 'publish', label: '发布一条需求', done: demands.length > 0, path: '/demands/new' },
       { key: 'respond', label: '响应一次需求', done: responses.length > 0, path: '/projects' },
-      { key: 'enroll', label: '报名一场活动', done: enrollments.length > 0, path: '/events' },
+      { key: 'enroll', label: '报名一场活动', done: enrollments.length > 0, path: '/plaza?tab=events' },
     ]
   } catch {
-    activationSteps.value = []
+    if (auth.uid === uid) activationSteps.value = []
   }
 }
 
@@ -110,8 +139,9 @@ async function onRefresh() {
 }
 
 function dismissActivation() {
+  if (!auth.uid) return
   activationDismissed.value = true
-  localStorage.setItem(ACTIVATION_KEY, '1')
+  localStorage.setItem(`${ACTIVATION_KEY_PREFIX}${auth.uid}`, '1')
 }
 
 /* 铃铛未读角标：登录态以首页聚合未读数初始化（AppShell 冷启动另有轻量兜底刷新） */
@@ -166,198 +196,83 @@ const featureEntries = computed(() => {
   return list
 })
 
-const quickEntries = [
-  { path: '/articles/new', icon: 'edit-1', label: '文章投稿' },
-  { path: '/mall', icon: 'shop', label: '积分商城' },
-  { path: '/spaces', icon: 'building', label: '空间预约' },
-  { path: '/events', icon: 'calendar', label: '活动计划' },
-] as const
+/* 快捷入口按功能开关收敛（D-008）：商城/空间预约关闭时同步隐藏入口 */
+const quickEntries = computed(() => {
+  const list: { path: string; icon: string; label: string }[] = [
+    { path: '/articles/new', icon: 'edit-1', label: '文章投稿' },
+  ]
+  if (config.config.mallOpen) list.push({ path: '/mall', icon: 'shop', label: '积分商城' })
+  if (config.config.reservationOpen) list.push({ path: '/spaces', icon: 'building', label: '空间预约' })
+  list.push({ path: '/plaza?tab=events', icon: 'calendar', label: '活动计划' })
+  return list
+})
 </script>
 
 <template>
   <PullDownRefresh :value="refreshing" @refresh="onRefresh">
-  <div class="home page-fade-in">
-    <!-- 顶部搜索：进入全局搜索页，覆盖项目、活动、文章与社区内容 -->
-    <Search v-model="searchKeyword" placeholder="搜索项目、活动、文章或社区服务" @focus="onSearch" @search="onSearch" />
+    <div class="home page-fade-in">
+      <!-- 顶部搜索：点击进入全局搜索页（focus 不跳转，保证键盘可达） -->
+      <Search v-model="searchKeyword" placeholder="搜索项目、活动、文章或社区服务…" @click="onSearch" @search="onSearch" />
 
-    <!-- v40 运营公告：置顶优先，滚动展示，点击查看全文 -->
-    <NoticeBar
-      v-if="feed?.announcements?.length"
-      visible
-      theme="info"
-      class="announce-bar"
-      :content="feed.announcements[0].title"
-      @click="onAnnouncement(feed.announcements[0])"
-    />
+      <NoticeBar
+        v-if="feed?.announcements?.length"
+        visible
+        theme="info"
+        class="announce-bar"
+        :content="feed.announcements[0].title"
+        @click="onAnnouncement(feed.announcements[0])"
+      />
 
-    <ListSkeleton v-if="loading && !feed" :rows="4" />
-    <EmptyBlock v-else-if="error" :text="error" action-text="重试" @action="run" />
+      <ListSkeleton v-if="loading && !feed" :rows="4" />
+      <EmptyBlock v-else-if="error" :text="error" action-text="重试" @action="run" />
 
-    <template v-else>
-      <!-- 轮播（后台总开关关闭或无可展示条目时不渲染该区域） -->
-      <Swiper v-if="feed?.carouselEnabled !== false && feed?.banners?.length" class="banner" :height="BANNER_HEIGHT" :loop="true" :autoplay="!reduceMotion" :interval="4500" @click="onBannerClick">
-        <SwiperItem v-for="b in feed.banners" :key="b.id">
-          <div class="banner-card" :style="{ background: 'var(--client-brand-gradient)' }">
-            <Image v-if="b.imageUrl" class="banner-img" :src="b.imageUrl" alt="" fit="cover" lazy @error="onImageError" />
-            <div class="banner-text">
-              <p class="banner-title">{{ b.title }}</p>
-              <p class="banner-sub">{{ b.subtitle }}</p>
-            </div>
-          </div>
-        </SwiperItem>
-      </Swiper>
+      <template v-else>
+        <HomeBanner
+          v-if="feed?.carouselEnabled !== false && feed?.banners?.length"
+          :banners="feed.banners"
+          :reduce-motion="reduceMotion"
+          @select="onBannerClick"
+        />
 
-      <!-- 需求发布（独占一行，主题主色） -->
-      <Button theme="primary" block size="large" class="publish-entry pressable" @click="goPublish">
-        <template #icon><Icon name="flag" size="20px" /></template>
-        {{ auth.isLogged ? '发布需求 · 让社区一起帮你完成' : '登录后发布需求' }}
-        <template #suffix><Icon name="chevron-right" size="16px" /></template>
-      </Button>
+        <Button v-if="config.config.demandOpen" theme="primary" block size="large" class="publish-entry pressable" @click="goPublish">
+          <template #icon><Icon aria-hidden="true" name="flag" size="20px" /></template>
+          {{ auth.isLogged ? '发布需求 · 让社区一起帮你完成' : '登录后发布需求' }}
+          <template #suffix><Icon aria-hidden="true" name="chevron-right" size="16px" /></template>
+        </Button>
 
-      <!-- v37 新手任务清单 -->
-      <section v-if="activationSteps.length && !activationDone && !activationDismissed" class="m-card activation">
-        <div class="activation-head">
-          <h2>新手任务</h2>
-          <a v-pressable @click="dismissActivation">不再提示</a>
-        </div>
-        <p class="activation-desc">完成以下任务，解锁社区完整能力</p>
-        <ul class="activation-list">
-          <li
-            v-for="step in activationSteps"
-            :key="step.key"
-            :class="{ done: step.done }"
-            v-pressable
-            @click="!step.done && router.push(step.path)"
-          >
-            <Icon v-if="step.done" name="check-circle-filled" size="16px" class="mark done" />
-            <Icon v-else name="circle" size="16px" class="mark" />{{ step.label }}
-          </li>
-        </ul>
-      </section>
+        <ActivationChecklist
+          v-if="showActivation"
+          :steps="visibleActivationSteps"
+          @dismiss="dismissActivation"
+        />
 
-      <!-- 两个重要快捷入口 -->
-      <Grid :column="2" :gutter="10" hover class="feature-grid stagger">
-        <GridItem
-          v-for="f in featureEntries"
-          :key="f.path"
-          class="feature-item"
-          v-pressable
-          @click="router.push(f.path)"
-        >
-          <template #image><Icon :name="f.icon" size="22px" /></template>
-          <template #text><span class="feature-label">{{ f.label }}</span></template>
-          <template #description><span class="feature-desc">{{ f.desc }}</span></template>
-        </GridItem>
-      </Grid>
+        <HomeEntryGrids
+          :features="featureEntries"
+          :quick="quickEntries"
+          @open="(path: string) => router.push(path)"
+        />
 
-      <!-- 四个普通快捷入口 -->
-      <Grid :column="4" :gutter="8" hover class="quick-grid stagger">
-        <GridItem v-for="q in quickEntries" :key="q.path" class="quick-item" v-pressable @click="router.push(q.path)">
-          <template #image><span class="quick-icon"><Icon :name="q.icon" size="22px" /></span></template>
-          <template #text>{{ q.label }}</template>
-        </GridItem>
-      </Grid>
+        <HotEventStrip
+          :events="feed?.hotEvents ?? []"
+        />
 
-      <!-- 进行中活动（横滑卡片） -->
-      <section class="block">
-        <div class="block-head">
-          <h2>进行中活动</h2>
-          <a class="more" v-pressable @click="router.push('/events')">更多<Icon name="chevron-right" size="12px" /></a>
-        </div>
-        <EmptyBlock v-if="!(feed?.hotEvents ?? []).length" text="暂无进行中活动" />
-        <div v-else class="hot-scroll">
-          <article
-            v-for="e in feed.hotEvents"
-            :key="e.id"
-            class="m-card hot-card pressable" v-pressable
-            @click="router.push(`/events/${e.id}`)"
-          >
-            <Tag class="d-cat" size="small" variant="light" theme="primary">{{ e.type }}</Tag>
-            <h3 class="hot-title">{{ e.title }}</h3>
-            <p class="hot-meta"><Icon name="time" size="13px" />{{ e.startTime }}</p>
-            <p class="hot-meta"><Icon name="location" size="13px" />{{ e.location }}</p>
-            <p class="hot-enrolled">{{ e.enrolled }}/{{ e.capacity }} 人已报名</p>
-          </article>
-        </div>
-      </section>
+        <HomeFeedSection
+          title="最新需求"
+          :items="demandItems"
+          empty-text="暂无最新需求"
+          more-path="/projects"
+        />
 
-      <!-- v40 为你推荐 -->
-      <section v-if="recommendations.length" class="block">
-        <div class="block-head">
-          <h2>为你推荐</h2>
-        </div>
-        <div class="list">
-          <article
-            v-for="r in recommendations"
-            :key="r.key"
-            class="m-card demand-item pressable" v-pressable
-            @click="router.push(r.path)"
-          >
-            <div class="d-head">
-              <h3 class="d-title">{{ r.title }}</h3>
-              <Tag class="d-cat" size="small" variant="light" theme="primary">{{ r.reason }}</Tag>
-            </div>
-            <div class="d-meta">
-              <span>{{ r.summary }}</span>
-            </div>
-          </article>
-        </div>
-      </section>
-
-      <!-- 最新项目 -->
-      <section class="block">
-        <div class="block-head">
-          <h2>最新项目</h2>
-          <a class="more" v-pressable @click="router.push('/projects')">更多<Icon name="chevron-right" size="12px" /></a>
-        </div>
-        <EmptyBlock v-if="!(feed?.latestDemands ?? []).length" text="暂无进行中的项目" />
-        <div v-else class="list">
-          <article v-for="d in feed.latestDemands" :key="d.id" class="m-card demand-item pressable" v-pressable @click="router.push(`/demands/${d.id}`)">
-            <div class="d-head">
-              <h3 class="d-title">{{ d.title }}</h3>
-              <Tag class="d-cat" size="small" variant="light" theme="primary">{{ d.categoryLabel }}</Tag>
-            </div>
-            <div class="d-meta">
-              <span class="d-pub">{{ d.publisherName }}</span>
-              <span v-if="demandDateText(d)">{{ demandDateText(d) }}</span>
-              <span class="d-resp">{{ d.responseCount }} 人响应</span>
-            </div>
-          </article>
-        </div>
-      </section>
-
-      <!-- 精选文章 -->
-      <section class="block">
-        <div class="block-head">
-          <h2>精选文章</h2>
-          <a class="more" v-pressable @click="router.push('/plaza?tab=articles')">更多<Icon name="chevron-right" size="12px" /></a>
-        </div>
-        <EmptyBlock v-if="!(feed?.topArticles ?? []).length" text="暂无精选文章" />
-        <div v-else class="list">
-          <article v-for="a in feed.topArticles" :key="a.id" class="m-card article-item pressable" v-pressable @click="router.push(`/articles/${a.id}`)">
-            <div class="d-head">
-              <h3 class="d-title">{{ a.title }}</h3>
-              <Tag class="d-cat" size="small" variant="light" theme="primary">{{ a.columnLabel }}</Tag>
-            </div>
-            <div class="d-meta">
-              <span>{{ a.publishedAt }}</span>
-              <span>{{ a.views }} 次浏览</span>
-            </div>
-          </article>
-        </div>
-      </section>
-    </template>
+        <HomeFeedSection
+          title="最新资讯"
+          :items="articleItems"
+          empty-text="暂无最新资讯"
+          more-path="/plaza?tab=articles"
+        />
+      </template>
     </div>
 
-    <!-- v40 公告详情（Popup 需保持在根节点内，多根会导致路由 Transition 无法挂载新页面） -->
-    <Popup v-model:visible="announcementVisible" placement="bottom">
-      <div v-if="announcement" class="announce-sheet">
-        <h3 class="announce-title">{{ announcement.title }}</h3>
-        <p class="announce-at">{{ announcement.at }}</p>
-        <p class="announce-content">{{ announcement.content }}</p>
-        <Button variant="outline" block @click="announcementVisible = false">关闭</Button>
-      </div>
-    </Popup>
+    <HomeAnnouncementSheet v-model:visible="announcementVisible" :announcement="announcement" />
   </PullDownRefresh>
 </template>
 
@@ -365,309 +280,14 @@ const quickEntries = [
 .home {
   display: flex;
   flex-direction: column;
-  gap: 12px;
-  padding: 16px;
+  gap: var(--app-space-6);
+  padding: var(--app-space-8);
 }
 
-.state {
-  padding: 32px 0;
-}
-
-.banner {
-  border-radius: var(--td-radius-large);
-  overflow: hidden;
-}
-
-.banner :deep(.t-swiper__container) {
-  height: 130px;
-}
-
-.banner-card {
-  position: relative;
-  height: 130px;
-  padding: 22px 20px;
-  color: var(--td-text-color-anti);
-  overflow: hidden;
-}
-
-.banner-img {
-  position: absolute;
-  inset: 0;
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
-}
-
-.banner-text {
-  position: relative;
-  z-index: 1;
-}
-
-.banner-title {
-  position: relative;
-  margin: 0 0 6px;
-  font-size: 18px;
-  font-weight: 700;
-}
-
-.banner-sub {
-  position: relative;
-  margin: 0;
-  font-size: 12px;
-  opacity: 0.85;
-}
 
 .announce-bar {
-  margin: 0;
-  border-radius: var(--td-radius-default);
-  cursor: pointer;
-}
-
-.announce-sheet {
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-  padding: 16px 16px calc(16px + env(safe-area-inset-bottom));
-}
-
-.announce-title {
-  margin: 0;
-  font-size: 15px;
-  line-height: 1.5;
-}
-
-.announce-at {
-  margin: 0;
-  font-size: 12px;
-  color: var(--td-text-color-placeholder);
-}
-
-.announce-content {
-  margin: 0;
-  font-size: 13px;
-  line-height: 1.9;
-  color: var(--td-text-color-secondary);
-}
-
-/* 进行中活动：横向滑动卡片 */
-.hot-scroll {
-  display: flex;
-  gap: 10px;
-  overflow-x: auto;
-  padding-bottom: 4px;
-  scrollbar-width: none;
-}
-
-.hot-scroll::-webkit-scrollbar {
-  display: none;
-}
-
-.hot-card {
-  flex: 0 0 76%;
-  cursor: pointer;
-}
-
-.hot-title {
-  margin: 8px 0;
-  font-size: 14px;
-  line-height: 1.4;
-  display: -webkit-box;
-  -webkit-line-clamp: 2;
-  -webkit-box-orient: vertical;
-  overflow: hidden;
-}
-
-.hot-meta {
-  margin: 0 0 4px;
-  display: flex;
-  align-items: center;
-  gap: 3px;
-  font-size: 12px;
-  color: var(--td-text-color-secondary);
-}
-
-.hot-enrolled {
-  margin: 6px 0 0;
-  font-size: 12px;
-  font-weight: 600;
-  color: var(--td-brand-color);
-}
-
-/* 双入口卡：GridItem 覆盖为品牌渐变色卡；清掉 Grid 根 gutter padding，使网格与卡片边缘对齐 */
-.feature-grid {
-  padding: 0 !important;
-  --td-grid-item-bg-color: transparent;
-}
-
-.feature-item {
-  --td-grid-item-bg-color: transparent;
-  --td-grid-item-image-bg-color: transparent;
-
+  margin:0;
   border-radius: var(--td-radius-large);
-  background: var(--client-brand-gradient);
-  box-shadow: var(--td-shadow-1);
-  color: var(--td-text-color-anti);
-  text-align: left;
-  padding: 14px 12px;
-}
-
-.feature-item :deep(.t-grid-item__content) {
-  align-items: flex-start;
-}
-
-.feature-label {
-  font-size: 15px;
-  font-weight: 700;
-  color: var(--td-text-color-anti);
-}
-
-.feature-desc {
-  font-size: 12px;
-  opacity: 0.85;
-  color: var(--td-text-color-anti);
-}
-
-/* 四宫格：白底卡片项 + 品牌浅底图标气泡；同样清掉根 padding 对齐卡片边缘 */
-.quick-grid {
-  padding: 0 !important;
-  --td-grid-item-bg-color: var(--td-bg-color-container);
-}
-
-.quick-item {
-  --td-grid-item-image-bg-color: transparent;
-
-  border-radius: var(--td-radius-large);
-  border: 1px solid var(--td-component-border);
-  overflow: hidden;
-}
-
-.quick-icon {
-  display: grid;
-  place-items: center;
-  width: 36px;
-  height: 36px;
-  border-radius: var(--td-radius-circle);
-  color: var(--td-brand-color);
-  background: var(--td-brand-color-light);
-}
-
-.block-head {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  margin-bottom: 10px;
-}
-
-.block-head h2 {
-  margin: 0;
-  font-size: 16px;
-}
-
-.more {
-  display: inline-flex;
-  align-items: center;
-  gap: 2px;
-  font-size: 12px;
-  color: var(--td-brand-color);
   cursor: pointer;
-}
-
-.list {
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-}
-
-.demand-item {
-  cursor: pointer;
-}
-
-.d-head {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-
-.d-title {
-  margin: 0;
-  flex: 1;
-  font-size: 14px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.d-cat {
-  flex-shrink: 0;
-}
-
-.d-meta {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  margin-top: 8px;
-  font-size: 12px;
-  color: var(--td-text-color-secondary);
-}
-
-.d-resp {
-  margin-left: auto;
-  color: var(--td-brand-color);
-  font-weight: 600;
-}
-
-/* v37 新手任务清单 */
-.activation-head {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-}
-
-.activation-head h2 {
-  margin: 0;
-  font-size: 15px;
-}
-
-.activation-head a {
-  font-size: 12px;
-  color: var(--td-text-color-placeholder);
-  cursor: pointer;
-}
-
-.activation-desc {
-  margin: 6px 0 10px;
-  font-size: 12px;
-  color: var(--td-text-color-secondary);
-}
-
-.activation-list {
-  margin: 0;
-  padding: 0;
-  list-style: none;
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
-
-.activation-list li {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  font-size: 13px;
-  color: var(--td-text-color-primary);
-  cursor: pointer;
-}
-
-.activation-list li.done {
-  color: var(--td-text-color-placeholder);
-  cursor: default;
-}
-
-.activation-list .mark {
-  flex-shrink: 0;
-}
-
-.activation-list .mark.done {
-  color: var(--td-success-color);
 }
 </style>

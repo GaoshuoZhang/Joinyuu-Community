@@ -56,6 +56,10 @@ function onValidate(context: { type?: string }) {
 function clearFiles() {
   files.value = []
 }
+
+function updateFiles(value: UploadFile[]) {
+  files.value = value
+}
 </script>
 
 <template>
@@ -67,12 +71,13 @@ function clearFiles() {
     :files="files"
     :size-limit="{ size: 5, unit: 'MB' }"
     :request-method="requestUpload"
+    @update:files="updateFiles"
     @success="clearFiles"
     @fail="onFail"
     @validate="onValidate"
   >
     <template #addContent>
-      <span class="avatar-trigger" :class="`shape-${shape}`" :aria-label="shape === 'round' ? '上传企业 Logo' : '更换头像'">
+      <span class="avatar-trigger" :class="`shape-${shape}`" :style="{ '--avatar-size': size }" :aria-label="shape === 'round' ? '上传企业 Logo' : '更换头像'">
         <Avatar :size="size" :shape="shape" :image="image" class="avatar-el">{{ fallback }}</Avatar>
         <span class="mask">{{ uploading ? '上传中…' : '更换' }}</span>
       </span>
@@ -85,15 +90,28 @@ function clearFiles() {
   display: inline-block;
   width: auto;
   height: auto;
+  padding: 0;
 }
 
 /* 单图上传：隐藏组件自带的文件项/进度，统一由头像触发区呈现（图片来自 props.image） */
-.avatar-uploader :deep(.t-upload__item),
+.avatar-uploader :deep(.t-upload__item:not(.t-upload__item--add)),
 .avatar-uploader :deep(.t-upload__progress) {
   display: none;
 }
 
+/* 加号占位块还原为头像尺寸：去掉默认 80×80 灰底方块 */
+.avatar-uploader :deep(.t-upload__item--add) {
+  width: auto;
+  height: auto;
+  min-width: 0;
+  background: transparent;
+  color: inherit;
+}
+
 .avatar-uploader :deep(.t-upload__add-icon) {
+  position: static;
+  transform: none;
+  display: block;
   width: auto;
   height: auto;
   min-width: 0;
@@ -104,9 +122,12 @@ function clearFiles() {
 .avatar-trigger {
   position: relative;
   display: inline-flex;
+  width: var(--avatar-size, 56px);
+  height: var(--avatar-size, 56px);
   flex-shrink: 0;
   overflow: hidden;
   border-radius: var(--td-radius-circle);
+  line-height: 0;
 }
 
 .avatar-trigger.shape-round {
@@ -114,8 +135,10 @@ function clearFiles() {
 }
 
 .avatar-el {
-  font-size: 20px;
-  font-weight: 700;
+  width: 100%;
+  height: 100%;
+  font-size: var(--app-font-title);
+  font-weight: 600;
 }
 
 .mask {
@@ -123,9 +146,9 @@ function clearFiles() {
   left: 0;
   right: 0;
   bottom: 0;
-  padding: 1px 0 2px;
+  padding:1px 0 var(--app-space-1);
   text-align: center;
-  font-size: 12px;
+  font-size: var(--app-font-caption);
   line-height: 1.4;
   color: var(--td-text-color-anti);
   background: var(--td-mask-active);

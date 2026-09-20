@@ -1,6 +1,7 @@
 import { Module, ValidationPipe } from '@nestjs/common'
 import { APP_FILTER, APP_GUARD, APP_INTERCEPTOR, APP_PIPE } from '@nestjs/core'
 import { ScheduleModule } from '@nestjs/schedule'
+import { validationExceptionFactory } from './common/pipes/validation-exception.factory'
 import { PrismaModule } from './common/prisma/prisma.module'
 import { RedisModule } from './common/redis/redis.module'
 import { IdGeneratorModule } from './common/id-generator/id-generator.module'
@@ -54,6 +55,7 @@ import { AppEnterprisesModule } from './modules/app/enterprises/enterprises.modu
 import { AppCommunityModule } from './modules/app/community/community.module'
 import { AppFavoritesModule } from './modules/app/favorites/favorites.module'
 import { AppPoliciesModule } from './modules/app/policies/policies.module'
+import { AppLeasesModule } from './modules/app/leases/leases.module'
 import { EngagementModule } from './modules/app/engagement/engagement.module'
 import { SchedulerModule } from './scheduler/scheduler.module'
 import { HealthController } from './health/health.controller'
@@ -123,12 +125,16 @@ import { HttpExceptionFilter } from './common/filters/http-exception.filter'
     AppCommunityModule,
     AppFavoritesModule,
     AppPoliciesModule,
+    AppLeasesModule,
     EngagementModule,
     SchedulerModule,
   ],
   controllers: [HealthController],
   providers: [
-    { provide: APP_PIPE, useValue: new ValidationPipe({ transform: true, whitelist: true }) },
+    {
+      provide: APP_PIPE,
+      useValue: new ValidationPipe({ transform: true, whitelist: true, exceptionFactory: validationExceptionFactory }),
+    },
     { provide: APP_GUARD, useClass: JwtAuthGuard },
     { provide: APP_GUARD, useClass: AppJwtGuard },
     { provide: APP_GUARD, useClass: PermissionGuard },

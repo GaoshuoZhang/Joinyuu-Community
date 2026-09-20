@@ -1,6 +1,7 @@
 import {
   BadRequestException,
   ConflictException,
+  ForbiddenException,
   Injectable,
   NotFoundException,
 } from '@nestjs/common'
@@ -11,8 +12,8 @@ import { NotificationService } from '../../../common/notify/notification.service
 import { formatNow } from '../../../common/utils/time'
 import type { CreateApplicationDto } from './dto/create-application.dto'
 
-/** 申请类型（对齐客户端 ApplicationType：settle/cooperation/individual/identity） */
-export type AppApplicationType = 'settle' | 'cooperation' | 'individual' | 'identity'
+/** 申请类型（对齐客户端 ApplicationType：settle/cooperation/individual） */
+export type AppApplicationType = 'settle' | 'cooperation' | 'individual'
 
 export interface ApplicationField {
   key: string
@@ -47,14 +48,34 @@ export interface MyApplicationDto {
   summary?: string
   attachments?: { name: string; size: number }[]
   rejectReason?: string
-  records: Prisma.JsonArray
+  reviewedAt?: string
+  records: ApplicationTimelineDto[]
+}
+
+export interface ApplicationDetailFieldDto {
+  key?: string
+  label: string
+  value?: string
+  files?: { name: string; size?: number; url?: string }[]
+}
+
+export interface ApplicationTimelineDto {
+  at: string
+  action: string
+  title: string
+  text?: string
+  operator?: string
+}
+
+export interface MyApplicationDetailDto extends MyApplicationDto {
+  fields: ApplicationDetailFieldDto[]
+  note?: string
 }
 
 const TYPE_LABEL: Record<AppApplicationType, string> = {
   settle: '企业入驻',
   cooperation: '合作伙伴',
   individual: '人才登记',
-  identity: '身份绑定',
 }
 
 const INDUSTRY_OPTIONS = [
@@ -68,7 +89,7 @@ export const DEFAULT_APPLICATION_SCHEMAS: Record<AppApplicationType, Application
     title: '企业入驻申请',
     subtitle: '提交资料并通过审核后，成为「社区企业」并获得办公空间',
     submitLabel: '提交入驻申请',
-    tips: ['企业入驻需在社区拥有办公空间（工位或独立办公室）', '请准备营业执照；审核约 3 个工作日，结果站内信通知'],
+    tips: ['企业入驻需在社区拥有办公空间（办公位或独立办公室）', '请准备营业执照；审核约 3 个工作日，结果站内信通知'],
     fields: [
       { key: 'companyName', label: '企业名称', type: 'text', required: true, placeholder: '与营业执照一致', maxlength: 60 },
       { key: 'creditCode', label: '统一社会信用代码', type: 'text', required: true, placeholder: '18 位统一社会信用代码', maxlength: 18 },
@@ -80,8 +101,8 @@ export const DEFAULT_APPLICATION_SCHEMAS: Record<AppApplicationType, Application
         { label: '100 人以上', value: '100 人以上' },
       ] },
       { key: 'officeNeeds', label: '办公空间需求', type: 'select', required: true, help: '企业入驻需在社区拥有办公空间', options: [
-        { label: '1-2 个工位', value: '1-2 个工位' },
-        { label: '3-6 个工位', value: '3-6 个工位' },
+        { label: '1-2 个办公位', value: '1-2 个办公位' },
+        { label: '3-6 个办公位', value: '3-6 个办公位' },
         { label: '独立办公室', value: '独立办公室' },
         { label: '其他（在简介中说明）', value: '其他' },
       ] },
@@ -130,31 +151,11 @@ export const DEFAULT_APPLICATION_SCHEMAS: Record<AppApplicationType, Application
       { key: 'portfolio', label: '作品集或简历', type: 'upload', accept: 'image/*,application/pdf', multiple: true, maxCount: 2, help: '选填，最多 2 个文件' },
     ],
   },
-  identity: {
-    type: 'identity',
-    title: '身份绑定',
-    subtitle: '加入社区生态：绑定社区个体或社区企业身份',
-    submitLabel: '提交身份绑定',
-    tips: ['社区个体：面向个人专长展示', '社区企业：需填写要绑定并已在社区入驻的企业名称'],
-    fields: [
-      { key: 'identityType', label: '要绑定的身份', type: 'select', required: true, options: [
-        { label: '社区个体', value: 'community_individual' },
-        { label: '社区企业', value: 'community_enterprise' },
-      ] },
-      { key: 'orgName', label: '社区企业名称', type: 'text', maxlength: 60, help: '选择社区企业身份时填写' },
-      { key: 'industry', label: '所属行业', type: 'select', options: INDUSTRY_OPTIONS },
-      { key: 'contactName', label: '联系人', type: 'text', required: true, maxlength: 20 },
-      { key: 'contactPhone', label: '联系电话', type: 'text', required: true, maxlength: 11 },
-      { key: 'certifications', label: '相关材料', type: 'upload', accept: 'image/*,application/pdf', multiple: true, maxCount: 3, help: '选填，最多 3 个文件' },
-    ],
-  },
 }
 
 /** 存储于 Application.details 的载荷包装（供 payload 回填） */
 export interface ApplicationPayloadStorage {
   fields: Record<string, unknown>
-  identityType?: string
-  organizationName?: string
   note?: string
 }
 
@@ -204,11 +205,14 @@ export class AppApplicationsService {
     const phone = account?.phone ?? ''
     const name = account?.nickname || user.name
     const type = dto.type
+    if (type === 'individual' && (!account?.realName || !account.citizenId)) {
+      throw new ForbiddenException('完成实名认证后才能提交人才登记')
+    }
     const schema = await this.formSchema(type)
     if (!schema) throw new BadRequestException('申请类型无效')
 
     const fields = dto.fields ?? {}
-    const { targetName, summary } = await this.normalize(type as AppApplicationType, fields, dto)
+    const { targetName, summary } = await this.normalize(type as AppApplicationType, fields)
 
     /* 同类型审核中申请去重 */
     const dup = await this.prisma.application.findFirst({
@@ -217,7 +221,7 @@ export class AppApplicationsService {
     if (dup) throw new ConflictException('你已有同类型申请在审核中，请耐心等待')
 
     const now = formatNow()
-    const payload: ApplicationPayloadStorage = { fields, identityType: dto.identityType, organizationName: dto.organizationName, note: dto.note }
+    const payload: ApplicationPayloadStorage = { fields, note: dto.note }
     const application = await this.prisma.application.create({
       data: {
         id: await this.ids.next('AP'),
@@ -252,6 +256,23 @@ export class AppApplicationsService {
     return rows.map(toMyApplicationDto)
   }
 
+  /** 申请详情：手机号归属校验，兼容历史数组、平铺对象和新版 fields 包装。 */
+  async detail(uid: string, id: string): Promise<MyApplicationDetailDto> {
+    const phone = await this.phoneOf(uid)
+    const application = await this.mine(phone, id)
+    const configured = await this.prisma.applicationFormConfig.findUnique({ where: { type: application.type } })
+    const schemaFields = configured
+      ? configured.fields as unknown as ApplicationField[]
+      : DEFAULT_APPLICATION_SCHEMAS[application.type as AppApplicationType]?.fields ?? []
+    const stored = readStored(application)
+    const dto: MyApplicationDetailDto = {
+      ...toMyApplicationDto(application),
+      fields: toApplicationFields(application.details, schemaFields),
+    }
+    if (stored.note) dto.note = stored.note
+    return dto
+  }
+
   /** 撤回审核中的申请：pending → withdrawn */
   async withdraw(uid: string, id: string): Promise<{ code: number }> {
     const phone = await this.phoneOf(uid)
@@ -281,11 +302,12 @@ export class AppApplicationsService {
     if (application.status !== 'rejected' && application.status !== 'withdrawn') {
       throw new ConflictException('仅已驳回或已撤回的申请可修改重提')
     }
+    if (application.type === 'individual') await this.assertTalentApplicantVerified(uid)
     const schema = await this.formSchema(application.type)
     if (!schema) throw new BadRequestException('申请类型无效')
     const fields = dto.fields ?? (application.details as unknown as ApplicationPayloadStorage | null)?.fields ?? {}
-    const { targetName, summary } = await this.normalize(application.type as AppApplicationType, fields, dto)
-    const payload: ApplicationPayloadStorage = { fields, identityType: dto.identityType, organizationName: dto.organizationName, note: dto.note }
+    const { targetName, summary } = await this.normalize(application.type as AppApplicationType, fields)
+    const payload: ApplicationPayloadStorage = { fields, note: dto.note }
     const now = formatNow()
     const records = (application.records as Prisma.JsonArray) ?? []
     await this.prisma.application.update({
@@ -315,8 +337,6 @@ export class AppApplicationsService {
     const stored = readStored(application)
     const dto: CreateApplicationDto = { type: application.type }
     if (stored.fields) dto.fields = stored.fields
-    if (stored.identityType) dto.identityType = stored.identityType
-    if (stored.organizationName) dto.organizationName = stored.organizationName
     if (stored.note) dto.note = stored.note
     return dto
   }
@@ -326,6 +346,11 @@ export class AppApplicationsService {
   private async phoneOf(uid: string): Promise<string> {
     const user = await this.prisma.user.findUnique({ where: { uid }, select: { phone: true } })
     return user?.phone ?? ''
+  }
+
+  private async assertTalentApplicantVerified(uid: string): Promise<void> {
+    const user = await this.prisma.user.findUnique({ where: { uid }, select: { realName: true, citizenId: true } })
+    if (!user?.realName || !user.citizenId) throw new ForbiddenException('完成实名认证后才能提交人才登记')
   }
 
   private async mine(phone: string, id: string): Promise<Application> {
@@ -339,7 +364,6 @@ export class AppApplicationsService {
   private async normalize(
     type: AppApplicationType,
     fields: Record<string, unknown>,
-    dto: CreateApplicationDto,
   ): Promise<{ targetName: string; summary?: string; attachments: { name: string; size: number }[] }> {
     const label = TYPE_LABEL[type]
     const configured = await this.prisma.applicationFormConfig.findUnique({ where: { type } })
@@ -375,20 +399,9 @@ export class AppApplicationsService {
       if (text) parts.push(`${field.label}：${text}`)
     }
 
-    if (type === 'identity') {
-      const bindType = dto.identityType ?? String(fields.identityType ?? '')
-      if (bindType !== 'community_individual' && bindType !== 'community_enterprise') {
-        throw new BadRequestException('请选择要绑定的身份类型')
-      }
-      const organizationName = dto.organizationName?.trim() || String(fields.orgName ?? '').trim()
-      if (bindType === 'community_enterprise' && !organizationName) {
-        throw new BadRequestException('请填写要绑定的社区企业名称')
-      }
-    }
-
     const nameField = schema.fields.find((f) => ['companyName', 'orgName', 'realName'].includes(f.key))
     const nameValue = nameField ? String(fields[nameField.key] ?? '').trim() : ''
-    const targetName = nameValue || dto.organizationName?.trim() || label
+    const targetName = nameValue || label
     const summary = parts.slice(0, 3).join(' · ')
 
     return { targetName, summary, attachments }
@@ -403,22 +416,111 @@ function toMyApplicationDto(a: Application): MyApplicationDto {
       if (isAttachmentList(value)) attachments.push(...value.map((v) => ({ name: v.name, size: v.size })))
     }
   }
+  const records = toApplicationTimeline(a.records)
+  const review = [...records].reverse().find((record) => record.action === 'approve' || record.action === 'reject')
   const dto: MyApplicationDto = {
     id: a.id,
     type: a.type,
     targetName: a.targetName,
     status: a.status,
     submittedAt: a.submittedAt,
-    records: (a.records as Prisma.JsonArray) ?? [],
+    records,
   }
   if (a.summary) dto.summary = a.summary
   if (attachments.length) dto.attachments = attachments
+  if (review) dto.reviewedAt = review.at
+  if (a.status === 'rejected' && review?.text) dto.rejectReason = review.text
   return dto
 }
 
-/** 读取 Application.details 为标准化载荷（容错非对象/数组旧数据） */
+/** 读取 Application.details 为标准化载荷（兼容新版包装和平铺对象旧数据）。 */
 function readStored(a: Application): ApplicationPayloadStorage {
   const raw = a.details
-  if (raw && typeof raw === 'object' && !Array.isArray(raw)) return raw as unknown as ApplicationPayloadStorage
+  if (raw && typeof raw === 'object' && !Array.isArray(raw)) {
+    const object = raw as Record<string, unknown>
+    const fields = object.fields && typeof object.fields === 'object' && !Array.isArray(object.fields)
+      ? object.fields as Record<string, unknown>
+      : Object.fromEntries(Object.entries(object).filter(([key]) => key !== 'note'))
+    return {
+      fields,
+      ...(typeof object.note === 'string' && object.note.trim() ? { note: object.note } : {}),
+    }
+  }
   return {} as ApplicationPayloadStorage
+}
+
+function toApplicationFields(raw: Prisma.JsonValue, schemaFields: ApplicationField[]): ApplicationDetailFieldDto[] {
+  if (Array.isArray(raw)) {
+    const legacyEntries: ApplicationDetailFieldDto[] = []
+    for (const entry of raw) {
+      if (!entry || typeof entry !== 'object' || Array.isArray(entry)) continue
+      const item = entry as Record<string, unknown>
+      const label = typeof item.label === 'string' ? item.label.trim() : ''
+      if (!label) continue
+      if (Array.isArray(item.files)) {
+        const files = item.files.flatMap((file) => {
+          if (!file || typeof file !== 'object' || Array.isArray(file)) return []
+          const data = file as Record<string, unknown>
+          if (typeof data.name !== 'string' || !data.name.trim()) return []
+          return [{
+            name: data.name,
+            ...(typeof data.size === 'number' ? { size: data.size } : {}),
+            ...(typeof data.url === 'string' && data.url ? { url: data.url } : {}),
+          }]
+        })
+        legacyEntries.push({ label, files })
+        continue
+      }
+      const value = item.value == null ? '' : String(item.value)
+      legacyEntries.push({ label, ...(value ? { value } : {}) })
+    }
+    return legacyEntries
+  }
+  if (!raw || typeof raw !== 'object') return []
+  const object = raw as Record<string, unknown>
+  const fields = object.fields && typeof object.fields === 'object' && !Array.isArray(object.fields)
+    ? object.fields as Record<string, unknown>
+    : Object.fromEntries(Object.entries(object).filter(([key]) => key !== 'note'))
+  const labels = new Map(schemaFields.map((field) => [field.key, field.label]))
+  const entries: ApplicationDetailFieldDto[] = []
+  for (const [key, value] of Object.entries(fields)) {
+    const label = labels.get(key) ?? key
+    if (isAttachmentList(value)) {
+      entries.push({
+        key,
+        label,
+        files: value.map((file) => ({
+          name: file.name,
+          size: file.size,
+          ...(file.url ? { url: file.url } : {}),
+        })),
+      })
+      continue
+    }
+    if (value == null || value === '') continue
+    entries.push({ key, label, value: Array.isArray(value) ? value.map(String).join('、') : String(value) })
+  }
+  return entries
+}
+
+function toApplicationTimeline(raw: Prisma.JsonValue): ApplicationTimelineDto[] {
+  if (!Array.isArray(raw)) return []
+  return raw.flatMap((entry) => {
+    if (!entry || typeof entry !== 'object' || Array.isArray(entry)) return []
+    const record = entry as Record<string, unknown>
+    const at = typeof record.at === 'string' ? record.at : ''
+    const action = typeof record.action === 'string' ? record.action : 'update'
+    const step = typeof record.step === 'string' ? record.step : ''
+    const text = typeof record.comment === 'string' && record.comment.trim()
+      ? record.comment.trim()
+      : typeof record.text === 'string' && record.text.trim() ? record.text.trim() : undefined
+    const operator = typeof record.operator === 'string' && record.operator.trim() ? record.operator.trim() : undefined
+    return [{
+      at,
+      action,
+      title: step || (action === 'submit' ? '提交申请' : action === 'resubmit' ? '重新提交' : action === 'withdraw' ? '撤回申请' : action === 'approve' ? '审核通过' : action === 'reject' ? '审核驳回' : '状态更新'),
+      ...(text ? { text } : {}),
+      ...(operator ? { operator } : {}),
+    }]
+  })
 }

@@ -7,8 +7,8 @@ export interface ExternalEnterpriseQuery {
   keyword?: string
   industry?: string
   status?: string
-  /** 排序字段：cooperationCount（累计合作，默认倒序=合作最多在前）| firstCooperationAt（首次合作） */
-  sortBy?: 'cooperationCount' | 'firstCooperationAt'
+  /** 排序字段：registeredAt（登记日期，默认倒序=最新登记在前） */
+  sortBy?: 'registeredAt'
   sortOrder?: 'ascend' | 'descend'
 }
 

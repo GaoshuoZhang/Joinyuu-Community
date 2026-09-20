@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
-import { Button, Icon, Radio, Tag } from 'tdesign-mobile-vue'
+import { Button, Icon, Radio, Tag, Toast } from 'tdesign-mobile-vue'
 import { useConfigStore } from '@/stores/config'
 import EmptyBlock from '@/components/shared/EmptyBlock.vue'
 import { DEMAND_KINDS } from '@/constants/demand'
@@ -30,20 +30,22 @@ onMounted(async () => {
 })
 
 function goForm() {
-  if (!selected.value) return
+  if (!selected.value) {
+    Toast('请先选择需求类型')
+    return
+  }
   void router.push(FORM_ROUTES[selected.value])
 }
 </script>
 
 <template>
-  <div class="publish-hub page-fade-in">
+  <div class="publish-hub page-fade-in" :class="{ 'has-fixed-actions': demandOpen }">
     <div v-if="!demandOpen">
       <EmptyBlock text="发布功能暂未开放" />
     </div>
 
     <template v-else>
       <header class="head">
-        <h1 class="title">发布需求</h1>
         <p class="desc">先选择需求类型，再填写对应表单；提交后进入审核，通过后公开展示</p>
       </header>
 
@@ -69,7 +71,7 @@ function goForm() {
         <div class="process">
           <template v-for="(s, i) in item.process" :key="s">
             <Tag class="step" size="small" variant="light" theme="primary">{{ s }}</Tag>
-            <Icon v-if="i < item.process.length - 1" name="chevron-right" size="12px" class="arrow" />
+            <Icon aria-hidden="true" v-if="i < item.process.length - 1" name="chevron-right" size="12px" class="arrow" />
           </template>
         </div>
         <ul class="bullets">
@@ -77,36 +79,46 @@ function goForm() {
         </ul>
       </section>
 
-      <Button theme="primary" block size="large" class="cta" :disabled="!selected" @click="goForm">
-        {{ ctaText }}
-      </Button>
       <Button theme="primary" variant="text" block @click="router.push('/me/demands')">
-        查看我的需求<Icon name="chevron-right" size="14px" />
+        查看我的需求
+        <template #suffix><Icon aria-hidden="true" name="chevron-right" size="14px" /></template>
       </Button>
+      <Teleport to="body">
+        <div class="mobile-fixed-action-bar publish-actions">
+          <Button theme="primary" block size="large" :disabled="!selected" @click="goForm">
+            {{ ctaText }}
+          </Button>
+        </div>
+      </Teleport>
     </template>
   </div>
 </template>
 
 <style scoped>
 .publish-hub {
-  padding: 16px;
+  padding:var(--app-space-8);
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap:var(--app-space-6);
+}
+
+.publish-hub.has-fixed-actions {
+  padding-bottom: calc(88px + env(safe-area-inset-bottom));
+}
+
+.publish-actions {
+  background: var(--td-bg-color-container);
+  border-top: 1px solid var(--td-component-border);
+  box-shadow: var(--app-action-bar-shadow);
 }
 
 .head {
-  padding: 0 2px;
-}
-
-.head .title {
-  margin: 0 0 4px;
-  font-size: 18px;
+  padding:0 var(--app-space-1);
 }
 
 .head .desc {
-  margin: 0;
-  font-size: 12px;
+  margin:0;
+  font-size: var(--app-font-caption);
   color: var(--td-text-color-secondary);
 }
 
@@ -125,12 +137,12 @@ function goForm() {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 10px;
+  gap:var(--app-space-5);
 }
 
 .kind-title {
-  margin: 0;
-  font-size: 16px;
+  margin:0;
+  font-size: var(--app-font-subtitle);
 }
 
 .kind-radio {
@@ -140,8 +152,8 @@ function goForm() {
 }
 
 .tagline {
-  margin: 8px 0 0;
-  font-size: 13px;
+  margin:var(--app-space-4) 0 0;
+  font-size: var(--app-font-body);
   color: var(--td-text-color-secondary);
   line-height: 1.6;
 }
@@ -151,13 +163,8 @@ function goForm() {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: 4px;
-  margin-top: 10px;
-}
-
-.step {
-  padding: 5px 8px;
-  line-height: 1;
+  gap:var(--app-space-2);
+  margin-top:var(--app-space-5);
 }
 
 .arrow {
@@ -165,20 +172,17 @@ function goForm() {
 }
 
 .bullets {
-  margin: 10px 0 0;
-  padding-left: 18px;
+  margin:var(--app-space-5) 0 0;
+  padding-left:var(--app-space-9);
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap:var(--app-space-2);
 }
 
 .bullets li {
-  font-size: 12px;
+  font-size: var(--app-font-caption);
   color: var(--td-text-color-secondary);
   line-height: 1.6;
 }
 
-.cta {
-  margin-top: 4px;
-}
 </style>

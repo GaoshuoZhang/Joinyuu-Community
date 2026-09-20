@@ -254,7 +254,6 @@ describe('M2-R R3 实名/举报/收藏/协议/社区', () => {
 
     const ents = await appGet(app, token, '/api/app/community/enterprises')
     expect(ents.status).toBe(200)
-    expect(ents.body.data.every((e: { showcaseStatus: string }) => e.showcaseStatus === 'published')).toBe(true)
     const xinglan = ents.body.data.find((e: { id: string }) => e.id === 'E2001')
     expect(xinglan.website).toBeTruthy()
   })

@@ -48,7 +48,6 @@ const columns = [
   { colKey: 'leaseType', title: '入驻类型', width: 120 , ellipsis: true},
   { colKey: 'level', title: '企业等级', width: 130, cell: 'level' , ellipsis: true},
   { colKey: 'settledAt', title: '入驻时间', width: 120, cell: 'settledAt' , ellipsis: true},
-  { colKey: 'showcaseStatus', title: '名片状态', width: 110, cell: 'showcase' , ellipsis: true},
   { colKey: 'status', title: '状态', width: 100, cell: 'status' , ellipsis: true},
   { colKey: 'op', title: '操作', width: 80, cell: 'op' },
 ]
@@ -118,7 +117,7 @@ function openCreate() {
 function onExport() {
   exportCsv(
     '社区企业列表',
-    ['编号', '企业名称', '行业', '规模', '入驻类型', '企业等级', '名片状态', '企业状态', '入驻时间'],
+    ['编号', '企业名称', '行业', '规模', '入驻类型', '企业等级', '企业状态', '入驻时间'],
     list.value.map((e) => [
       e.id,
       `${e.name} [${e.id}]`,
@@ -126,7 +125,6 @@ function onExport() {
       e.size,
       e.leaseType,
       e.level ? `Lv.${e.level}${e.levelName ? ` ${e.levelName}` : ''}` : '—',
-      statusLabel('showcase', e.showcaseStatus),
       statusLabel('enterprise', e.status),
       e.settledAt ?? '—',
     ]),
@@ -232,9 +230,7 @@ onMounted(() => {
           <span v-else>—</span>
         </template>
         <template #settledAt="{ row }">{{ row.settledAt ?? '—' }}</template>
-        <template #showcase="{ row }">
-          <StatusTag entity="showcase" :value="row.showcaseStatus" />
-        </template>
+        
         <template #status="{ row }">
           <StatusTag entity="enterprise" :value="row.status" />
         </template>

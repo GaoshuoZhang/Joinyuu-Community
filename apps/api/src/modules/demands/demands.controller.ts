@@ -23,13 +23,14 @@ export class DemandsController {
     return this.demands.undertakerOptions()
   }
 
-  @RequirePermission('/demands')
+  /* 需求审核页与需求管理页共用列表/详情；两码任一即可 */
+  @RequirePermission(['/demands', '/demands/review'])
   @Get()
   findAll(@Query() query: QueryDemandsDto): Promise<{ list: DemandDto[]; total: number }> {
     return this.demands.findAll(query)
   }
 
-  @RequirePermission('/demands')
+  @RequirePermission(['/demands', '/demands/review'])
   @Get(':id')
   findOne(@Param('id') id: string): Promise<DemandDto> {
     return this.demands.findOne(id)

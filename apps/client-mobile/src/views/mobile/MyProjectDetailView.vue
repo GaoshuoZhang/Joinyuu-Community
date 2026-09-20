@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from 'vue'
-import { useRoute, useRouter } from 'vue-router'
-import { Loading, Button, DialogPlugin, Icon, Image, Progress, Tag, Textarea, Toast, Upload } from 'tdesign-mobile-vue'
+import { useRoute } from 'vue-router'
+import { Button, DialogPlugin, Icon, Image, Progress, Tag, Textarea, Toast, Upload } from 'tdesign-mobile-vue'
 import type { UploadFile } from 'tdesign-mobile-vue'
 import { acceptMilestone, fetchMyProject, returnMilestone, submitMilestone } from '@/api/projects'
 import { uploadFile } from '@/api/uploads'
@@ -10,11 +10,12 @@ import { onImageError } from '@/utils/imageFallback'
 import { useAsyncList } from '@/composables/useAsyncList'
 import { useAuthStore } from '@/stores/auth'
 import EmptyBlock from '@/components/shared/EmptyBlock.vue'
+import ListSkeleton from '@/components/ListSkeleton.vue'
 import type { Milestone, MyProject } from '@/types'
+import { formatLocalDateTime } from '@/utils/format'
 
 /* 项目详情：参与双方 + 进度 + 里程碑交付验收（承接方提交、发起方验收，全部通过自动结项）。 */
 const route = useRoute()
-const router = useRouter()
 const auth = useAuthStore()
 const projectId = String(route.params.id)
 
@@ -144,18 +145,18 @@ async function onAcceptMilestone(m: Milestone) {
 
 <template>
   <div class="page-fade-in m-project-detail">
-    <Loading v-if="loading" class="state" text="加载中…" />
+    <ListSkeleton v-if="loading" />
     <EmptyBlock v-else-if="error" :text="error" action-text="重试" @action="run" />
     <template v-else-if="project">
       <section class="m-card">
         <header class="head">
-          <h1 class="title">{{ project.name }}</h1>
+          <h2 class="title">{{ project.name }}</h2>
           <Tag v-if="project.finishedAt" theme="success" variant="light" size="small">已结项</Tag>
           <Tag v-else theme="primary" variant="light" size="small">进行中</Tag>
         </header>
         <div class="meta">
           <span class="role">{{ project.role }}</span>
-          <a v-if="project.sourceDemandId" class="source" v-pressable @click="router.push(`/demands/${project.sourceDemandId}`)">来源需求<Icon name="chevron-right" size="12px" /></a>
+          <router-link v-if="project.sourceDemandId" class="source" :to="`/demands/${project.sourceDemandId}`">来源需求<Icon aria-hidden="true" name="chevron-right" size="12px" /></router-link>
         </div>
         <div class="participants">
           <p v-if="initiatorName !== '—'"><b>需求发起方：</b>{{ initiatorName }}</p>
@@ -166,7 +167,7 @@ async function onAcceptMilestone(m: Milestone) {
       </section>
 
       <section class="m-card">
-        <h2 class="sub">里程碑</h2>
+        <h3 class="sub">里程碑</h3>
         <p v-if="!project.milestones.length" class="hint">暂无里程碑</p>
         <ul v-else class="milestones">
           <li v-for="m in project.milestones" :key="m.id" class="milestone">
@@ -179,7 +180,7 @@ async function onAcceptMilestone(m: Milestone) {
               <Image v-for="(file, index) in m.attachments" :key="index" :src="file.url" :alt="file.name" fit="cover" lazy @error="onImageError" />
             </div>
             <p v-if="m.returnReason" class="m-return">退回原因：{{ m.returnReason }}</p>
-            <p v-if="m.submittedAt" class="m-time">提交于 {{ m.submittedAt }}<template v-if="m.acceptedAt"> · 验收于 {{ m.acceptedAt }}</template></p>
+            <p v-if="m.submittedAt" class="m-time">提交于 {{ formatLocalDateTime(m.submittedAt) }}<template v-if="m.acceptedAt"> · 验收于 {{ formatLocalDateTime(m.acceptedAt) }}</template></p>
 
             <template v-if="!isFinished">
               <template v-if="!isInitiator && statusOf(m) === 'todo'">
@@ -227,39 +228,36 @@ async function onAcceptMilestone(m: Milestone) {
 
 <style scoped>
 .m-project-detail {
-  padding: 16px;
+  padding:var(--app-space-8);
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap:var(--app-space-6);
 }
 
-.state {
-  padding: 20px 0;
-}
 
 .head {
   display: flex;
   align-items: flex-start;
-  gap: 8px;
+  gap:var(--app-space-4);
 }
 
 .title {
   flex: 1;
-  margin: 0;
-  font-size: 17px;
+  margin:0;
+  font-size: var(--app-font-title);
   line-height: 1.45;
 }
 
 .meta {
   display: flex;
   align-items: center;
-  gap: 12px;
-  margin-top: 10px;
-  font-size: 12px;
+  gap:var(--app-space-6);
+  margin-top:var(--app-space-5);
+  font-size: var(--app-font-caption);
 }
 
 .role {
-  padding: 2px 7px;
+  padding:var(--app-space-1) 7px;
   border-radius: var(--td-tag-square-border-radius, 4px);
   background: var(--td-brand-color-1);
   color: var(--td-brand-color);
@@ -268,25 +266,27 @@ async function onAcceptMilestone(m: Milestone) {
 .source {
   display: inline-flex;
   align-items: center;
-  gap: 2px;
+  gap:var(--app-space-1);
+  min-height: 44px;
   color: var(--td-brand-color);
+  text-decoration: none;
   cursor: pointer;
 }
 
 .participants {
-  margin-top: 12px;
-  padding-top: 10px;
+  margin-top:var(--app-space-6);
+  padding-top:var(--app-space-5);
   border-top: 1px dashed var(--td-component-border);
 }
 
 .participants p {
-  margin: 0 0 6px;
-  font-size: 13px;
+  margin:0 0 var(--app-space-3);
+  font-size: var(--app-font-body);
   color: var(--td-text-color-secondary);
 }
 
 .participants p:last-child {
-  margin-bottom: 0;
+  margin-bottom:0;
 }
 
 .participants b {
@@ -299,31 +299,31 @@ async function onAcceptMilestone(m: Milestone) {
 }
 
 .progress {
-  margin-top: 12px;
+  margin-top:var(--app-space-6);
 }
 
 .sub {
-  margin: 0 0 8px;
-  font-size: 15px;
+  margin:0 0 var(--app-space-4);
+  font-size: var(--app-font-subtitle);
 }
 
 .hint {
-  margin: 0;
-  font-size: 12px;
+  margin:0;
+  font-size: var(--app-font-caption);
   color: var(--td-text-color-placeholder);
 }
 
 .milestones {
-  margin: 0;
-  padding: 0;
+  margin:0;
+  padding:0;
   list-style: none;
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap:var(--app-space-6);
 }
 
 .milestone {
-  padding: 10px;
+  padding:var(--app-space-5);
   border-radius: var(--td-radius-default);
   background: var(--td-bg-color-secondarycontainer);
 }
@@ -332,8 +332,8 @@ async function onAcceptMilestone(m: Milestone) {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 8px;
-  font-size: 13px;
+  gap:var(--app-space-4);
+  font-size: var(--app-font-body);
 }
 
 .m-title {
@@ -342,23 +342,23 @@ async function onAcceptMilestone(m: Milestone) {
 
 .m-note,
 .m-time {
-  margin: 6px 0 0;
-  font-size: 12px;
+  margin:var(--app-space-3) 0 0;
+  font-size: var(--app-font-caption);
   line-height: 1.6;
   color: var(--td-text-color-secondary);
 }
 
 .m-return {
-  margin: 6px 0 0;
-  font-size: 12px;
+  margin:var(--app-space-3) 0 0;
+  font-size: var(--app-font-caption);
   line-height: 1.6;
   color: var(--td-error-color);
 }
 
 .m-evidence {
   display: flex;
-  gap: 8px;
-  margin-top: 8px;
+  gap:var(--app-space-4);
+  margin-top:var(--app-space-4);
 }
 
 .m-evidence :deep(.t-image) {
@@ -370,13 +370,13 @@ async function onAcceptMilestone(m: Milestone) {
 }
 
 .m-upload {
-  margin-top: 8px;
+  margin-top:var(--app-space-4);
 }
 
 .m-upload-label {
   display: block;
-  margin-bottom: 6px;
-  font-size: 12px;
+  margin-bottom:var(--app-space-3);
+  font-size: var(--app-font-caption);
   color: var(--td-text-color-secondary);
 }
 
@@ -387,13 +387,13 @@ async function onAcceptMilestone(m: Milestone) {
 .m-actions {
   display: flex;
   justify-content: flex-end;
-  gap: 8px;
-  margin-top: 8px;
+  gap:var(--app-space-4);
+  margin-top:var(--app-space-4);
 }
 
 .field-error {
-  margin: 6px 0 0;
-  font-size: 12px;
+  margin:var(--app-space-3) 0 0;
+  font-size: var(--app-font-caption);
   color: var(--td-error-color);
 }
 </style>

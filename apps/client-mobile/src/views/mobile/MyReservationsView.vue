@@ -1,5 +1,6 @@
 <script setup lang="ts">
-import { onMounted, ref } from 'vue'
+import { computed, onMounted, ref } from 'vue'
+import { useRouter } from 'vue-router'
 import { Button, DialogPlugin, Toast } from 'tdesign-mobile-vue'
 import { useAsyncList } from '@/composables/useAsyncList'
 import { cancelReservation, fetchMyReservations } from '@/api/spaces'
@@ -8,9 +9,14 @@ import IdentityTag from '@/components/shared/IdentityTag.vue'
 import EmptyBlock from '@/components/shared/EmptyBlock.vue'
 import ListSkeleton from '@/components/ListSkeleton.vue'
 import type { SpaceReservation } from '@/types'
+import { useIncrementalList } from '@/composables/useIncrementalList'
+import { formatLocalDate, formatLocalDateTime, formatZhNumber } from '@/utils/format'
 
 /* 移动我的预约：预约卡片；pending/approved 可取消（Dialog 二次确认）+ Toast + 列表刷新 */
 const { data, loading, error, run } = useAsyncList(fetchMyReservations)
+const router = useRouter()
+const reservations = computed(() => data.value ?? [])
+const { visibleItems, hasMore, showMore } = useIncrementalList(reservations)
 onMounted(run)
 
 const actingId = ref('')
@@ -22,7 +28,7 @@ function canCancel(r: SpaceReservation) {
 function onCancelTap(r: SpaceReservation) {
   DialogPlugin.confirm({
     title: '取消预约',
-    content: `确认取消「${r.spaceName}」${r.date} ${r.start}-${r.end} 的预约？`,
+    content: `确认取消「${r.spaceName}」${formatLocalDate(r.date)} ${r.start}-${r.end} 的预约？`,
     cancelBtn: '保留预约',
     confirmBtn: '确认取消',
     onConfirm: () => {
@@ -47,89 +53,90 @@ async function doCancel(r: SpaceReservation) {
 
 <template>
   <div class="page-fade-in my-reservations">
-    <h2 class="page-title">我的预约</h2>
-
     <ListSkeleton v-if="loading" />
     <EmptyBlock v-else-if="error" :text="error" action-text="重试" @action="run" />
-    <EmptyBlock v-else-if="!data?.length" text="暂无预约记录" />
+    <EmptyBlock v-else-if="!reservations.length" text="暂无预约记录，选择合适的场地和时段开始预约" action-text="预约空间" @action="router.push('/spaces')" />
     <div v-else class="stagger list">
-      <p class="list-count">共 {{ (data ?? []).length }} 条</p>
-      <article v-for="r in data" :key="r.id" class="m-card">
+      <p class="list-count">共 {{ formatZhNumber(reservations.length) }} 条</p>
+      <article
+        v-for="r in visibleItems"
+        :key="r.id"
+        class="m-card record-card"
+        role="link"
+        tabindex="0"
+        @click="router.push(`/me/reservations/${r.id}`)"
+        @keydown.enter.self="router.push(`/me/reservations/${r.id}`)"
+      >
         <div class="row">
-          <h3 class="name">{{ r.spaceName }}</h3>
+          <h2 class="name">{{ r.spaceName }}</h2>
           <StateTag kind="reservation" :value="r.status" />
         </div>
         <p v-if="r.identityType" class="subject">
           <IdentityTag :type="r.identityType" />
           <span class="subject-name">{{ r.subjectName }}</span>
         </p>
-        <p class="meta">📅 {{ r.date }} · {{ r.start }} - {{ r.end }} · 提交于 {{ r.createdAt }}</p>
+        <p class="meta">📅 {{ formatLocalDate(r.date) }} · {{ r.start }} - {{ r.end }} · 提交于 {{ formatLocalDateTime(r.createdAt) }}</p>
         <p v-if="r.rejectReason" class="reject-reason">驳回原因：{{ r.rejectReason }}</p>
         <div v-if="canCancel(r)" class="ops">
-          <Button theme="danger" variant="outline" size="small" :disabled="actingId === r.id" @click="onCancelTap(r)">
+          <Button theme="danger" variant="outline" size="small" :disabled="actingId === r.id" @click.stop="onCancelTap(r)">
             {{ actingId === r.id ? '处理中…' : '取消预约' }}
           </Button>
         </div>
       </article>
+      <Button v-if="hasMore" block variant="outline" @click="showMore">加载更多（剩余 {{ formatZhNumber(reservations.length - visibleItems.length) }} 条）</Button>
     </div>
   </div>
 </template>
 
 <style scoped>
 .my-reservations {
-  padding: 16px;
+  padding:var(--app-space-8);
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap:var(--app-space-6);
 }
 
-.page-title {
-  margin: 0;
-  padding: 0 2px;
-  font-size: 18px;
-}
-
-.state {
-  padding: 20px 0;
-}
 
 .list {
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap:var(--app-space-5);
 }
+
+.record-card { cursor: pointer; }
+.record-card:focus-visible { outline: 2px solid var(--td-brand-color); outline-offset: 2px; }
 
 .row {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 10px;
+  gap:var(--app-space-5);
 }
 
 .name {
-  margin: 0;
-  font-size: 14px;
+  margin:0;
+  font-size: var(--app-font-body);
   min-width: 0;
 }
 
 .meta {
-  margin: 6px 0 0;
-  font-size: 12px;
+  margin:var(--app-space-3) 0 0;
+  font-size: var(--app-font-caption);
   color: var(--td-text-color-secondary);
 }
 
 .reject-reason {
-  margin: 8px 0 0;
+  margin:var(--app-space-4) 0 0;
   color: var(--td-error-color);
-  font-size: 12px;
+  font-size: var(--app-font-caption);
 }
 
 .subject {
   display: flex;
   align-items: center;
-  gap: 6px;
-  margin: 8px 0 0;
-  font-size: 12px;
+  gap:var(--app-space-3);
+  margin:var(--app-space-4) 0 0;
+  font-size: var(--app-font-caption);
 }
 
 .subject-name {
@@ -137,7 +144,7 @@ async function doCancel(r: SpaceReservation) {
 }
 
 .ops {
-  margin-top: 10px;
+  margin-top:var(--app-space-5);
   display: flex;
   justify-content: flex-end;
 }

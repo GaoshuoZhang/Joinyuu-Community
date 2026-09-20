@@ -170,6 +170,19 @@ export class ContentsService {
       throw new ConflictException('仅待发布、定时发布中或已驳回的文章可编辑')
     }
 
+    return this.applyArticleUpdate(article, payload)
+  }
+
+  async updateSubmissionArticle(id: string, payload: ArticlePayloadDto): Promise<{ code: number }> {
+    const article = await this.prisma.article.findUnique({ where: { id } })
+    if (!article || article.deletedAt) throw new NotFoundException('文章不存在')
+    if (article.channel !== 'submitted') throw new ConflictException('仅用户投稿可在投稿内容中编辑')
+    if (article.status !== 'pending_release') throw new ConflictException('仅待发布的投稿可编辑')
+
+    return this.applyArticleUpdate(article, payload)
+  }
+
+  private async applyArticleUpdate(article: Article, payload: ArticlePayloadDto): Promise<{ code: number }> {
     const columnId = payload.columnIds?.[0]
     if (!columnId) throw new BadRequestException('请选择所属栏目')
     const column = await this.prisma.articleColumn.findUnique({ where: { id: columnId } })
@@ -180,7 +193,7 @@ export class ContentsService {
     const content = sanitizeHtml(payload.content)
 
     await this.prisma.article.update({
-      where: { id },
+      where: { id: article.id },
       data: {
         title: payload.title,
         columnId: column.id,
@@ -226,6 +239,18 @@ export class ContentsService {
         : { status: 'rejected', rejectedReason: comment, archivableAt: formatNow() }
 
     await this.prisma.article.update({ where: { id }, data: after })
+
+    if (article.authorId) {
+      await this.notify.pushNotice(article.authorId, {
+        type: 'content',
+        title: dto.status === 'approved' ? '投稿已通过审核' : '投稿未通过审核',
+        content:
+          dto.status === 'approved'
+            ? `您的投稿「${article.title}」已通过审核，发布后将公开展示。`
+            : `您的投稿「${article.title}」未通过审核：${comment}`,
+        link: '/me/articles',
+      })
+    }
 
     await this.audit.record({
       module: '内容管理',

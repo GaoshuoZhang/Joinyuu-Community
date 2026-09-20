@@ -2,6 +2,7 @@ import {
   IsBoolean,
   IsEmail,
   IsIn,
+  IsNotEmpty,
   IsOptional,
   IsString,
   Matches,
@@ -15,9 +16,9 @@ export class RegisterDto {
   @Matches(/^(?=.*[A-Za-z])(?=.*\d).{8,}$/, { message: '密码至少 8 位且包含字母与数字' })
   password!: string
 
-  @IsOptional()
   @IsString()
-  nickname?: string
+  @IsNotEmpty({ message: '请输入昵称' })
+  nickname!: string
 
   @IsString()
   captchaId!: string

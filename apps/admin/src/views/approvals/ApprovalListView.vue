@@ -26,13 +26,12 @@ const query = reactive({
   status: 'pending',
 })
 
-/* 申请审核页处理入驻、身份绑定与企业退驻申请。 */
+/* 申请审核页处理企业入驻、个体入驻、企业合作与企业退驻申请。 */
 const typeOptions = [
   { label: '全部', value: '' },
   { label: '企业入驻', value: 'settle' },
   { label: '个体入驻', value: 'individual' },
   { label: '企业合作', value: 'cooperation' },
-  { label: '身份绑定', value: 'identity' },
   { label: '企业退驻', value: 'exit' },
 ]
 
@@ -107,6 +106,11 @@ const current = ref<Application | null>(null)
 function openDetail(row: Application) {
   current.value = row
   drawerVisible.value = true
+}
+
+/* 附件缩略图判定（图片后缀） */
+function isImageFile(name: string) {
+  return /\.(png|jpe?g|gif|webp|bmp)$/i.test(name)
 }
 
 /* 审核单打印：打开独立打印页 */
@@ -224,7 +228,7 @@ onMounted(load)
 <template>
   <div class="approval-list page-fade-in">
     <ListErrorState v-if="loadError" :message="loadError" :loading="loading" @retry="load" />
-    <PageHeader title="申请审核" description="入驻、身份绑定与企业退驻的统一审核">
+    <PageHeader title="申请审核" description="企业入驻、个体入驻、企业合作与企业退驻的统一审核">
       <template #actions>
         <ColumnController
           v-model="visibleColKeys"
@@ -334,7 +338,14 @@ onMounted(load)
         <h4 class="drawer-section-title">申请内容</h4>
         <t-descriptions :column="1" bordered>
           <t-descriptions-item v-for="d in current.details" :key="d.label" :label="d.label">
-            {{ d.value }}
+            <div v-if="d.files?.length" class="detail-files">
+              <div v-for="(f, i) in d.files" :key="i" class="detail-file">
+                <t-image v-if="f.url && isImageFile(f.name)" :src="f.url" fit="cover" class="detail-thumb" />
+                <a v-if="f.url" :href="f.url" target="_blank" rel="noopener noreferrer">{{ f.name }}</a>
+                <span v-else>{{ f.name }}</span>
+              </div>
+            </div>
+            <template v-else>{{ d.value }}</template>
           </t-descriptions-item>
         </t-descriptions>
 
@@ -457,6 +468,26 @@ onMounted(load)
   font-size: 14px;
   font-weight: 600;
   color: var(--td-text-color-primary);
+}
+
+.detail-files {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.detail-file {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.detail-thumb {
+  width: 48px;
+  height: 48px;
+  border-radius: var(--td-radius-default);
+  overflow: hidden;
+  flex-shrink: 0;
 }
 
 .record-timeline {

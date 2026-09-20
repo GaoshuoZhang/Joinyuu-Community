@@ -11,11 +11,12 @@ function requireUid(): string {
   return payload.sub
 }
 
-export async function fetchNotices(): Promise<UserNotice[]> {
+export async function fetchNotices(page = 1, pageSize = 20): Promise<{ list: UserNotice[]; total: number }> {
   return withLatency(() => {
     const uid = requireUid()
-    return [...(noticesByUid[uid] ?? [])]
-      .sort((a, b) => b.at.localeCompare(a.at))
+    const all = [...(noticesByUid[uid] ?? [])].sort((a, b) => b.at.localeCompare(a.at))
+    const start = (page - 1) * pageSize
+    return { list: all.slice(start, start + pageSize), total: all.length }
   })
 }
 

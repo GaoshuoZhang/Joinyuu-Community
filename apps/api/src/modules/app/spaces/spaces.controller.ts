@@ -1,6 +1,6 @@
 import { Body, Controller, Get, HttpCode, Param, Post, Query, Req, UnauthorizedException } from '@nestjs/common'
 import type { AppAuthenticatedRequest } from '../../../common/interfaces/app-authenticated-request'
-import { AppSpacesService, type MyReservationDto, type SpaceDto, type SpaceSlotDto } from './spaces.service'
+import { AppSpacesService, type MyReservationDetailDto, type MyReservationDto, type SpaceDto, type SpaceSlotDto } from './spaces.service'
 import { CreateReservationDto } from './dto/create-reservation.dto'
 
 @Controller('api/app')
@@ -19,7 +19,7 @@ export class AppSpacesController {
     return this.spaces.detail(id)
   }
 
-  /** 某日可用时段（已通过预约 + 已发布活动占用） */
+  /** 某日可用时段（待审核/已通过预约 + 已发布活动占用） */
   @Get('spaces/:id/availability')
   availability(@Param('id') id: string, @Query('date') date?: string): Promise<SpaceSlotDto[]> {
     return this.spaces.availability(id, date ?? '')
@@ -35,6 +35,12 @@ export class AppSpacesController {
   @Get('me/reservations')
   myReservations(@Req() req: AppAuthenticatedRequest): Promise<MyReservationDto[]> {
     return this.spaces.myReservations(this.user(req).uid)
+  }
+
+  /** 我的预约详情（仅预约人本人） */
+  @Get('me/reservations/:id')
+  myReservationDetail(@Req() req: AppAuthenticatedRequest, @Param('id') id: string): Promise<MyReservationDetailDto> {
+    return this.spaces.myReservationDetail(this.user(req).uid, id)
   }
 
   /** 取消预约（pending/approved 可取消） */

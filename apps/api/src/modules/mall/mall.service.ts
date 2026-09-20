@@ -109,6 +109,7 @@ export class MallService {
       data: {
         id: await this.ids.next('G'),
         name: dto.name,
+        coverUrl: dto.coverUrl?.trim() || null,
         category: this.resolveCategory(dto.category),
         fulfillment: this.resolveFulfillment(dto),
         points: dto.points,
@@ -137,6 +138,7 @@ export class MallService {
       where: { id },
       data: {
         name: dto.name,
+        coverUrl: dto.coverUrl?.trim() || null,
         category: this.resolveCategory(dto.category),
         fulfillment: this.resolveFulfillment(dto),
         points: dto.points,
@@ -217,26 +219,21 @@ export class MallService {
     return { shippingMethods, pickupAddress, shippingFee }
   }
 
-  /** 兼容 R1 旧管理端 category 值，同时把分类与履约方式彻底拆开。 */
+  /** 兼容 R1 旧管理端 category 值；仅保留实物商品（GC001）与权益券（GC003）。 */
   private resolveCategory(category: string): string {
     const aliases: Record<string, string> = {
       physical: 'GC001',
       '实物商品': 'GC001',
-      virtual: 'GC002',
-      service: 'GC002',
-      '虚拟服务': 'GC002',
       voucher: 'GC003',
       '权益券': 'GC003',
     }
     return aliases[category] ?? category
   }
 
-  private resolveFulfillment(dto: GoodsPayloadDto): 'physical' | 'voucher' | 'service' {
+  private resolveFulfillment(dto: GoodsPayloadDto): 'physical' | 'voucher' {
     if (dto.fulfillment) return dto.fulfillment
     const category = this.resolveCategory(dto.category)
-    if (category === 'GC001') return 'physical'
-    if (category === 'GC003') return 'voucher'
-    return 'service'
+    return category === 'GC001' ? 'physical' : 'voucher'
   }
 
   /** 补货后向尚未通知的订阅者发送站内信，并记录 notifiedAt 防重复。 */

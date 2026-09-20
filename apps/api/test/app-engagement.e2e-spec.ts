@@ -91,7 +91,7 @@ describe('M2-R 自动积分、发布额度、等级与埋点', () => {
     expect((await post(`/api/app/events/${event.id}/enroll`, {}, individualToken)).status).toBe(403)
     const space = await db.space.findFirstOrThrow({ where: { needReservation: true } })
     await db.space.update({ where: { id: space.id }, data: { status: 'available', advanceDays: 30, openHours: [{ start: '08:00', end: '22:00' }] } })
-    expect((await post('/api/app/spaces/reservations', { spaceId: space.id, date: addDays(formatToday(), 3), start: '09:00', end: '10:00', topic: '额度测试', attendees: 1, identityType: 'community_individual' }, individualToken)).status).toBe(403)
+    expect((await post('/api/app/spaces/reservations', { spaceId: space.id, date: addDays(formatToday(), 3), start: '09:00', end: '10:00', topic: '额度测试', attendees: 1, asIdentity: 'community_individual' }, individualToken)).status).toBe(403)
     expect(await db.publishingLimitUsage.count({ where: { subjectId: 'U1002', action: 'space_reserve' } })).toBe(0)
     const demandId = results.find(r => r.status === 200)!.body.data.id
     expect((await post(`/api/app/me/demands/${demandId}/withdraw`)).status).toBe(200)

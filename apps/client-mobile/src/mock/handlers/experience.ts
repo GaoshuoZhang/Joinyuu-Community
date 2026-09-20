@@ -7,8 +7,16 @@ import { fail, withLatency } from '@/mock/latency'
  * 按当前身份取数：社区个体→个人经验（experienceByUid）；社区企业→企业经验（enterpriseExperienceByEid）；
  * 个人用户/合作企业→空（经验与积分按身份隔离）。 */
 
-function emptyProfile(identityLabel: string): ExperienceProfile {
-  return { identityLabel, level: 0, levelName: '未绑定', nextLevelExp: 0, records: [] }
+function emptyProfile(identityLabel = '', enterprise = false): ExperienceProfile {
+  return {
+    identityLabel,
+    level: identityLabel ? 1 : null,
+    levelName: identityLabel ? enterprise ? '初创' : '新芽' : '',
+    currentExperience: 0,
+    currentLevelThreshold: 0,
+    nextLevelThreshold: identityLabel ? enterprise ? 300 : 100 : null,
+    records: [],
+  }
 }
 
 export async function fetchExperience(identityType?: IdentityType): Promise<ExperienceProfile> {
@@ -21,12 +29,14 @@ export async function fetchExperience(identityType?: IdentityType): Promise<Expe
       identityType ?? (account?.identities.some((i) => i.type === 'community_individual') ? 'community_individual' : 'individual')
     if (active === 'community_enterprise') {
       const enterpriseId = account?.identities.find((i) => i.type === 'community_enterprise')?.enterpriseId
+      if (!enterpriseId) return emptyProfile()
       const data = enterpriseId ? enterpriseExperienceByEid[enterpriseId] : undefined
-      return data ?? emptyProfile('社区企业')
+      return data ?? emptyProfile('社区企业', true)
     }
     if (active === 'community_individual') {
+      if (!account?.identities.some((i) => i.type === 'community_individual')) return emptyProfile()
       return experienceByUid[payload.sub] ?? emptyProfile('社区个体')
     }
-    return emptyProfile(active === 'external_enterprise' ? '合作企业' : '个人用户')
+    return emptyProfile()
   })
 }

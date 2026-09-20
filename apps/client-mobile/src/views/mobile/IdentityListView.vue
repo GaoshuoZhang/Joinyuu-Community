@@ -1,11 +1,13 @@
 <script setup lang="ts">
 import { onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
-import { Loading, Button, DialogPlugin, Icon, Tag, Toast } from 'tdesign-mobile-vue'
+import { Button, DialogPlugin, Icon, Tag, Toast } from 'tdesign-mobile-vue'
 import { fetchMyIdentities, fetchMyTransferRequests, respondEnterpriseTransfer } from '@/api/enterprises'
 import { useAsyncList } from '@/composables/useAsyncList'
 import EmptyBlock from '@/components/shared/EmptyBlock.vue'
+import ListSkeleton from '@/components/ListSkeleton.vue'
 import type { EnterpriseTransferRequest, MyIdentitySummary } from '@/types'
+import { formatLocalDateTime } from '@/utils/format'
 
 /* 关联身份：社区个体 + 我关联的社区企业/合作企业（可多个）；
  * 点入后按该身份查看/操作（社区个体 → 个人名片；企业 → 详情，负责人可编辑、成员只读）；
@@ -61,14 +63,14 @@ function onTap(item: MyIdentitySummary) {
 
 <template>
   <div class="page-fade-in m-identities">
-    <Loading v-if="loading" class="state" text="加载中…" />
+    <ListSkeleton v-if="loading" />
     <EmptyBlock v-else-if="error" :text="error" action-text="重试" @action="run" />
     <template v-else>
       <section v-if="transfers.length" class="transfer-block">
-        <h3 class="transfer-title">待确认的负责人转移</h3>
+        <h2 class="transfer-title">待确认的负责人转移</h2>
         <article v-for="item in transfers" :key="item.id" class="m-card transfer-card">
           <p class="transfer-ent">{{ item.enterpriseName }}</p>
-          <p class="transfer-desc">{{ item.fromName }} 邀请你接任企业负责人（{{ item.at }} 发起）</p>
+          <p class="transfer-desc">{{ item.fromName }} 邀请你接任企业负责人（{{ formatLocalDateTime(item.at) }} 发起）</p>
           <div class="transfer-actions">
             <Button size="small" theme="primary" @click="onRespond(item, 'accept')">接受</Button>
             <Button size="small" variant="outline" @click="onRespond(item, 'reject')">拒绝</Button>
@@ -96,10 +98,8 @@ function onTap(item: MyIdentitySummary) {
           <p v-if="item.subtitle" class="id-sub">{{ item.subtitle }}</p>
           <p class="id-foot">
             <span v-if="item.type === 'community_individual'" class="entry">查看 / 编辑个人名片</span>
-            <span v-else :class="item.showcaseStatus === 'published' ? 'ok' : 'off'">
-              {{ item.showcaseStatus === 'published' ? '名片已发布' : '名片未发布' }}
-            </span>
-            <Icon v-if="item.type === 'community_individual' || item.enterpriseId" name="chevron-right" size="14px" class="arrow" />
+            <span v-else class="entry">查看企业名片</span>
+            <Icon aria-hidden="true" v-if="item.type === 'community_individual' || item.enterpriseId" name="chevron-right" size="14px" class="arrow" />
           </p>
         </article>
       </div>
@@ -109,50 +109,47 @@ function onTap(item: MyIdentitySummary) {
 
 <style scoped>
 .m-identities {
-  padding: 16px;
+  padding:var(--app-space-8);
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap:var(--app-space-6);
 }
 
-.state {
-  padding: 20px 0;
-}
 
 .list {
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap:var(--app-space-5);
 }
 
 .transfer-block {
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap:var(--app-space-4);
 }
 
 .transfer-title {
-  margin: 0;
-  font-size: 14px;
+  margin:0;
+  font-size: var(--app-font-body);
 }
 
 .transfer-ent {
-  margin: 0;
-  font-size: 14px;
+  margin:0;
+  font-size: var(--app-font-body);
   font-weight: 600;
 }
 
 .transfer-desc {
-  margin: 6px 0 0;
-  font-size: 12px;
+  margin:var(--app-space-3) 0 0;
+  font-size: var(--app-font-caption);
   color: var(--td-text-color-secondary);
 }
 
 .transfer-actions {
   display: flex;
   justify-content: flex-end;
-  gap: 8px;
-  margin-top: 10px;
+  gap:var(--app-space-4);
+  margin-top:var(--app-space-5);
 }
 
 .id-card.linkable {
@@ -162,20 +159,20 @@ function onTap(item: MyIdentitySummary) {
 .id-head {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap:var(--app-space-4);
 }
 
 .id-label {
-  font-size: 12px;
-  padding: 2px 8px;
+  font-size: var(--app-font-caption);
+  padding:var(--app-space-1) var(--app-space-4);
   border-radius: var(--td-tag-square-border-radius, 4px);
   background: var(--td-brand-color-1);
   color: var(--td-brand-color);
 }
 
 .id-name {
-  margin: 8px 0 0;
-  font-size: 15px;
+  margin:var(--app-space-4) 0 0;
+  font-size: var(--app-font-subtitle);
   font-weight: 600;
   min-width: 0;
   overflow: hidden;
@@ -184,17 +181,18 @@ function onTap(item: MyIdentitySummary) {
 }
 
 .id-sub {
-  margin: 5px 0 0;
-  font-size: 12px;
+  margin:var(--app-space-3) 0 0;
+  font-size: var(--app-font-caption);
   color: var(--td-text-color-secondary);
 }
 
 .id-foot {
-  margin: 8px 0 0;
+  margin:var(--app-space-4) 0 0;
   display: flex;
   align-items: center;
   justify-content: space-between;
-  font-size: 12px;
+  gap:var(--app-space-4);
+  font-size: var(--app-font-caption);
 }
 
 .id-foot .entry {
@@ -210,7 +208,8 @@ function onTap(item: MyIdentitySummary) {
 }
 
 .id-foot .arrow {
+  flex-shrink: 0;
   color: var(--td-text-color-placeholder);
-  font-size: 16px;
+  font-size: var(--app-font-subtitle);
 }
 </style>

@@ -3,7 +3,7 @@ import { defineAsyncComponent, nextTick, reactive, ref, watch } from 'vue'
 import { MessagePlugin } from 'tdesign-vue-next'
 import type { FormProps } from 'tdesign-vue-next'
 import { focusFirstInvalid } from '@/utils/form'
-import { createArticle, fetchArticleColumns, updateArticle } from '@/api/contents'
+import { createArticle, fetchArticleColumns, updateArticle, updateSubmissionArticle } from '@/api/contents'
 import { fetchPublisherOptions } from '@/api/demands'
 import type { Article, ArticleChannel } from '@/types'
 
@@ -171,7 +171,11 @@ async function onConfirm() {
         props.channel === 'official' ? `资讯已保存为待发布（${item.id}）` : `投稿已新增（${item.id}）`,
       )
     } else if (props.article) {
-      await updateArticle(props.article.id, payload)
+      if (props.channel === 'submitted') {
+        await updateSubmissionArticle(props.article.id, payload)
+      } else {
+        await updateArticle(props.article.id, payload)
+      }
       MessagePlugin.success('修改已保存')
     }
     emit('update:visible', false)
@@ -190,11 +194,12 @@ function onClose() {
 
 <template>
   <t-dialog
+    lazy
+    destroy-on-close
     :close-on-overlay-click="true"
     :visible="visible"
     :header="mode === 'create' ? (channel === 'official' ? '发布资讯' : '新增投稿') : '编辑文章'"
     width="880px"
-    lazy
     :close-on-esc-keydown="false"
     @close="onClose"
   >

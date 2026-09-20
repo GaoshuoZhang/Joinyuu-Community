@@ -115,6 +115,7 @@ const activePath = computed(() => {
   if (p.startsWith('/spaces/')) return '/spaces'
   if (p.startsWith('/workstations/leases/')) return '/workstations/leases'
   if (p.startsWith('/projects')) return '/projects'
+  if (p === '/events/enrollments') return '/events/enrollments'
   if (p.startsWith('/events')) return '/events'
   if (p.startsWith('/assets')) return '/assets/library'
   if (p.startsWith('/system')) return p
@@ -331,7 +332,7 @@ async function handleDropdown(item: { value?: string | number }) {
             <t-menu-item value="/card-management" v-permission="'/card-management'"><template #icon><UserListIcon /></template>名片管理</t-menu-item>
           </t-submenu>
 
-          <t-submenu v-if="canSee(['/demands', '/demands/review', '/projects', '/events'], '业务运营')" value="group-biz" title="业务运营">
+          <t-submenu v-if="canSee(['/demands', '/demands/review', '/projects', '/events', '/events/enrollments'], '业务运营')" value="group-biz" title="业务运营">
             <template #icon><ViewListIcon /></template>
             <t-menu-item value="/demands" v-permission="'/demands'">
               <template #icon><ViewListIcon /></template>
@@ -348,6 +349,10 @@ async function handleDropdown(item: { value?: string | number }) {
             <t-menu-item value="/events" v-permission="'/events'">
               <template #icon><CalendarIcon /></template>
               活动管理
+            </t-menu-item>
+            <t-menu-item value="/events/enrollments" v-permission="'/events'">
+              <template #icon><CheckCircleIcon /></template>
+              活动报名
             </t-menu-item>
           </t-submenu>
 
@@ -411,7 +416,7 @@ async function handleDropdown(item: { value?: string | number }) {
             </t-menu-item>
             <t-menu-item value="/contents/announcements" v-permission="'/contents/announcements'">
               <template #icon><NotificationIcon /></template>
-              公告栏
+              首页公告
             </t-menu-item>
           </t-submenu>
 
@@ -452,7 +457,7 @@ async function handleDropdown(item: { value?: string | number }) {
           </t-submenu>
 
           <t-submenu
-            v-if="canSee(['/system/dicts', '/system/config', '/logs/audit', '/logs/login', '/system/roles', '/system/admins', '/system/sessions', '/system/assets', '/system/monitor', '/system/trash', '/governance', '/system/policies'], '系统管理') || canSee(['/approvals', '/member-governance'], '系统管理', 'members')"
+            v-if="canSee(['/system/dicts', '/system/config', '/logs/audit', '/logs/login', '/system/roles', '/system/admins', '/system/sessions', '/system/assets', '/system/monitor', '/system/trash', '/system/policies'], '系统管理') || canSee(['/approvals', '/member-governance'], '系统管理', 'members')"
             value="group-system"
             title="系统管理"
           >
@@ -470,7 +475,6 @@ async function handleDropdown(item: { value?: string | number }) {
               申请表单配置
             </t-menu-item>
             <t-menu-item v-if="canSee(['/member-governance'], '系统管理', 'members')" value="/system/deletion-requests" v-permission="'/member-governance'"><template #icon><CheckCircleIcon /></template>注销工单</t-menu-item>
-            <t-menu-item v-if="canSee(['/member-governance'], '系统管理', 'members')" value="/system/realname-reviews" v-permission="'/member-governance'"><template #icon><UserListIcon /></template>实名复核</t-menu-item>
             <t-menu-item value="/system/logs" v-permission="['/logs/audit', '/logs/login']">
               <template #icon><ViewListIcon /></template>
               日志与审计
@@ -490,10 +494,6 @@ async function handleDropdown(item: { value?: string | number }) {
             <t-menu-item value="/system/trash" v-permission="'/system/trash'">
               <template #icon><Edit2Icon /></template>
               归档管理
-            </t-menu-item>
-            <t-menu-item value="/system/governance" v-permission="'/governance'">
-              <template #icon><CheckCircleIcon /></template>
-              举报与申诉
             </t-menu-item>
             <t-menu-item value="/system/policies" v-permission="'/system/policies'"><template #icon><Edit2Icon /></template>协议与政策</t-menu-item>
           </t-submenu>

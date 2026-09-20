@@ -3,7 +3,7 @@ import type { ExternalEnterpriseProfile } from '@prisma/client'
 import { PrismaService } from '../../common/prisma/prisma.service'
 import { AuditService } from '../../common/audit/audit.service'
 import { IdGeneratorService } from '../../common/id-generator/id-generator.service'
-import { formatNow } from '../../common/utils/time'
+import { formatNow, formatToday } from '../../common/utils/time'
 import type { QueryExternalEnterprisesDto } from './dto/query-external-enterprises.dto'
 import type { CreateExternalEnterpriseDto } from './dto/create-external-enterprise.dto'
 import type { UpdateExternalEnterpriseDto } from './dto/update-external-enterprise.dto'
@@ -25,15 +25,8 @@ export interface ExternalEnterpriseDto {
   size: string
   foundedAt: string
   description: string
-  cooperationCount: number
-  firstCooperationAt: string
+  registeredAt: string
   members: ExternalEnterpriseMemberDto[]
-}
-
-/** 当前年月（YYYY-MM） */
-function currentMonth(): string {
-  const d = new Date()
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`
 }
 
 /* 合作企业聚合视图（wiki-backend.md §7.4）：
@@ -64,13 +57,10 @@ export class ExternalEnterprisesService {
     if (query.industry) list = list.filter((e) => e.industry === query.industry)
     if (query.status) list = list.filter((e) => e.status === query.status)
 
-    const field = query.sortBy ?? 'cooperationCount'
     const dir = query.sortOrder === 'ascend' ? 1 : -1
     list.sort((a, b) => {
-      const av = field === 'cooperationCount' ? a.cooperationCount : Number(a.firstCooperationAt.replace('-', ''))
-      const bv = field === 'cooperationCount' ? b.cooperationCount : Number(b.firstCooperationAt.replace('-', ''))
-      if (av < bv) return -1 * dir
-      if (av > bv) return 1 * dir
+      if (a.registeredAt < b.registeredAt) return -1 * dir
+      if (a.registeredAt > b.registeredAt) return 1 * dir
       return 0
     })
 
@@ -98,8 +88,7 @@ export class ExternalEnterprisesService {
         size: dto.size ?? '',
         foundedAt: dto.foundedAt ?? '',
         description: dto.description ?? '',
-        cooperationCount: 0,
-        firstCooperationAt: currentMonth(),
+        registeredAt: formatToday(),
       },
     })
     await this.audit.record({
@@ -282,8 +271,7 @@ export class ExternalEnterprisesService {
       size: profile.size,
       foundedAt: profile.foundedAt,
       description: profile.description,
-      cooperationCount: profile.cooperationCount,
-      firstCooperationAt: profile.firstCooperationAt,
+      registeredAt: profile.registeredAt,
       members,
     }
   }

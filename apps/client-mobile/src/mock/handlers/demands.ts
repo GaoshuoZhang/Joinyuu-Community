@@ -1,5 +1,5 @@
 import type { Demand, DemandCreatePayload, DemandKind, IdentityType, MyDemandItem, MyResponseItem } from '@/types'
-import { accountByUid, demandMessagesByDemand, demands, dictLabel, dicts, enterpriseResponsesByEnterprise, enterprises, grantPoints, nextDemandId, nextMockId, nowStamp, pushNotice, responsesByUid, trackMockEvent } from '@/mock/db'
+import { accountByUid, demands, dictLabel, dicts, enterprises, grantPoints, nextDemandId, nextMockId, nowStamp, pushNotice, responsesByUid, trackMockEvent } from '@/mock/db'
 import { permissionsOf } from '@/mock/handlers/enterprises'
 import { readPayload } from '@/mock/session'
 import { fail, withLatency } from '@/mock/latency'
@@ -14,14 +14,14 @@ function requireUid(): string {
   return payload.sub
 }
 
-/** 可见范围判定：空数组=不限；否则身份类型命中且（无等级要求 或 我的等级在集合内） */
+/** 可见范围判定：按「单个身份」联合判定（类型命中且等级命中），多个身份取并集；两组都为空=不限 */
 export function visibleTo(demand: Demand, identities: { type: string; level?: number }[]): boolean {
-  if (demand.visibilityIdentities.length === 0) return true
-  return identities.some((i) => {
-    if (!demand.visibilityIdentities.includes(i.type as never)) return false
-    if (demand.visibilityLevels.length === 0) return true
-    return i.level !== undefined && demand.visibilityLevels.includes(i.level)
-  })
+  if (demand.visibilityIdentities.length === 0 && demand.visibilityLevels.length === 0) return true
+  return identities.some(
+    (i) =>
+      (demand.visibilityIdentities.length === 0 || demand.visibilityIdentities.includes(i.type as never)) &&
+      (demand.visibilityLevels.length === 0 || (i.level !== undefined && demand.visibilityLevels.includes(i.level))),
+  )
 }
 
 function myIdentitiesOf(): { type: string; level?: number }[] {
@@ -127,11 +127,11 @@ export async function fetchDemands(query: { page?: number; pageSize?: number; ca
 export async function fetchDemand(id: string): Promise<Demand> {
   return withLatency(() => {
     const uid = readPayload()?.sub
-    /* 发布者可查看自身任意状态需求；其他成员仅可见已发布 / 已立项 */
-    const d = demands.find(
-      (x) => x.id === id && ((x.status === 'published' || x.status === 'projected') || (!!uid && x.publisherUid === uid)),
-    )
-    if (!d || !visibleTo(d, myIdentitiesOf())) fail(404, '需求不存在或已下架')
+    const d = demands.find((item) => item.id === id)
+    const participant = !!uid && (responsesByUid[uid] ?? []).some((response) => response.demandId === id)
+    const owner = !!uid && d?.publisherUid === uid
+    const publicVisible = d?.status === 'published' && visibleTo(d, myIdentitiesOf())
+    if (!d || (!owner && !participant && !publicVisible)) fail(404, '需求不存在或已下架')
     /* 撤回即从 mock 列表移除，因此存在记录即视为已响应 */
     const mine = uid ? (responsesByUid[uid] ?? []).find((r) => r.demandId === id) : undefined
     return { ...d, ...(mine ? { myResponse: { message: mine.note, at: mine.at, status: mine.status ?? 'pending' } } : {}) }
@@ -215,21 +215,6 @@ export async function withdrawDemand(id: string): Promise<void> {
   })
 }
 
-/** 驳回后申诉（一次性；运营复核后回写）。 */
-export async function appealDemand(id: string, reason: string): Promise<void> {
-  await withLatency(() => {
-    const uid = requireUid()
-    const d = demands.find((x) => x.id === id && x.publisherUid === uid)
-    if (!d) fail(404, '需求不存在')
-    if (d.status !== 'rejected') fail(409, '仅已驳回的需求可申诉')
-    if (d.appealed) fail(409, '该需求已提交过申诉')
-    if (!reason.trim()) fail(400, '请填写申诉理由')
-    d.appealed = true
-    d.appealReason = reason.trim()
-    pushNotice(uid, { type: 'system', title: '申诉已提交', content: `「${d.title}」的申诉已提交，运营将在 3 个工作日内复核。`, link: '/me/demands' })
-  })
-}
-
 /** 重提前回填表单：返回与发布表单一致的载荷。 */
 export async function fetchMyDemandPayload(id: string): Promise<DemandCreatePayload> {
   return withLatency(() => {
@@ -273,34 +258,63 @@ export async function fetchMyDemands(): Promise<MyDemandItem[]> {
       .map((d) => ({
         id: d.id, title: d.title, categoryLabel: d.categoryLabel, status: d.status, kind: d.kind,
         responseCount: d.responseCount, createdAt: d.createdAt, rejectReason: d.rejectReason,
-        appealed: d.appealed, appealReason: d.appealReason,
       }))
   })
 }
 
-export async function respondDemand(id: string, note: string, asEnterpriseId?: string): Promise<void> {
+export async function respondDemand(id: string, note: string, asIdentity: IdentityType = 'individual', asEnterpriseId?: string): Promise<void> {
   await withLatency(() => {
     const uid = requireUid()
+    const account = accountByUid(uid)
     const d = demands.find((x) => x.id === id)
     if (!d || d.status !== 'published') fail(404, '需求不存在或已下架')
+    if (!visibleTo(d, myIdentitiesOf())) fail(404, '需求不存在或不可见')
     if (d.publisherUid === uid) fail(409, '不可响应自己发布的需求')
-    const mine = (responsesByUid[uid] ??= [])
-    if (mine.some((r) => r.demandId === id)) fail(409, '你已响应过该需求')
     if (!note.trim()) fail(400, '请输入响应说明')
-    /* v42：支持以社区企业身份响应（企业工作台可见） */
-    const enterprise = asEnterpriseId ? enterprises.find((e) => e.id === asEnterpriseId) : undefined
-    if (asEnterpriseId && !enterprise) fail(404, '企业不存在')
+
+    /* 身份归属校验（与后端一致）：企业身份须已关联 */
+    const owned = account?.identities ?? []
+    if (asIdentity === 'community_enterprise') {
+      const row = owned.find((i) => i.type === 'community_enterprise' && i.enterpriseId === asEnterpriseId)
+      if (!asEnterpriseId || !row) fail(400, '您暂未关联该身份')
+    } else if (asIdentity === 'community_individual' || asIdentity === 'external_enterprise') {
+      if (!owned.some((i) => i.type === asIdentity)) fail(400, '您暂未关联该身份')
+    }
+
+    const enterprise = asIdentity === 'community_enterprise' ? enterprises.find((e) => e.id === asEnterpriseId) : undefined
+    if (asIdentity === 'community_enterprise' && !enterprise) fail(404, '企业不存在')
+    const external = owned.find((i) => i.type === 'external_enterprise')
+    const enterpriseName = enterprise?.name ?? (asIdentity === 'external_enterprise' ? external?.organizationName ?? '' : '')
+    const enterpriseRef = asEnterpriseId ?? (asIdentity === 'external_enterprise' ? enterpriseName : undefined)
+    const subject = `${asIdentity}:${enterpriseRef ?? ''}`
+
+    const mine = (responsesByUid[uid] ??= [])
+    if (mine.some((r) => r.demandId === id && r.status !== 'closed')) fail(409, '你已响应过该需求')
+    /* 已响应后不可更换身份重复响应（撤回后同身份可重试） */
+    if (mine.some((r) => r.demandId === id && `${r.responderIdentity}:${r.responderEnterpriseId ?? ''}` !== subject)) {
+      fail(409, '你已响应过该需求，不能更换身份重复响应')
+    }
+    if (asIdentity === 'community_enterprise' || asIdentity === 'external_enterprise') {
+      for (const [otherUid, list] of Object.entries(responsesByUid)) {
+        if (otherUid === uid) continue
+        if (list.some((r) => r.demandId === id && r.status !== 'closed' && `${r.responderIdentity}:${r.responderEnterpriseId ?? ''}` === subject)) {
+          fail(409, '该公司已有成员响应过此需求')
+        }
+      }
+    }
+
+    const responderName =
+      asIdentity === 'community_enterprise' || asIdentity === 'external_enterprise'
+        ? enterpriseName || account?.nickname || uid
+        : account?.nickname ?? uid
     mine.unshift({
       id: nextMockId('DR'), demandId: id, demandTitle: d.title, note: note.trim(), at: nowStamp(),
       responderUid: uid,
-      responderName: enterprise?.name ?? accountByUid(uid)?.nickname ?? uid,
-      responderIdentity: enterprise ? 'community_enterprise' : accountByUid(uid)?.identities.find((item) => item.type !== 'individual')?.type ?? 'individual',
+      responderName,
+      responderIdentity: asIdentity,
+      responderEnterpriseId: enterpriseRef,
       status: 'pending',
     })
-    if (enterprise) {
-      const list = (enterpriseResponsesByEnterprise[enterprise.id] ??= [])
-      list.unshift({ id: nextMockId('ER'), demandId: id, demandTitle: d.title, at: nowStamp() })
-    }
     d.responseCount += 1
     trackMockEvent('demand_respond')
     /* [MOCK-ONLY] 积分触发点：demand_responded（发放给响应成员，wiki §8.4） */
@@ -309,59 +323,10 @@ export async function respondDemand(id: string, note: string, asEnterpriseId?: s
   })
 }
 
-/** v42 需求沟通消息（发布方与响应者可见） */
-function assertCanMessage(demandId: string, uid: string): void {
-  const d = demands.find((x) => x.id === demandId)
-  if (!d) fail(404, '需求不存在或已下架')
-  const isPublisher = d.publisherUid === uid
-  const responded = (responsesByUid[uid] ?? []).some((r) => r.demandId === demandId)
-  if (!isPublisher && !responded) fail(403, '仅需求发布方与响应者可沟通')
-}
-
-export async function fetchDemandMessages(demandId: string): Promise<import('@/types').DemandMessage[]> {
-  return withLatency(() => {
-    const uid = requireUid()
-    assertCanMessage(demandId, uid)
-    return (demandMessagesByDemand[demandId] ?? []).map((m) => ({ ...m, mine: m.uid === uid }))
-  }, 140)
-}
-
-export async function sendDemandMessage(demandId: string, content: string): Promise<void> {
-  await withLatency(() => {
-    const uid = requireUid()
-    assertCanMessage(demandId, uid)
-    if (!content.trim()) fail(400, '请输入消息内容')
-    const list = (demandMessagesByDemand[demandId] ??= [])
-    list.push({ id: nextMockId('DM'), uid, name: accountByUid(uid)?.nickname ?? uid, content: content.trim(), at: nowStamp(), mine: true })
-  }, 160)
-}
-
-/** v42 需求沟通消息（发布方与响应者可见） */
-
-
-
 export async function fetchMyResponses(): Promise<MyResponseItem[]> {
   return withLatency(() => {
     const uid = requireUid()
     return [...(responsesByUid[uid] ?? [])]
-  })
-}
-
-/** 响应者撤回待处理响应（撤回后可重新响应）。 */
-export async function withdrawDemandResponse(responseId: string): Promise<void> {
-  await withLatency(() => {
-    const uid = requireUid()
-    const mine = (responsesByUid[uid] ??= [])
-    const index = mine.findIndex((item) => item.id === responseId)
-    if (index < 0) fail(404, '响应记录不存在')
-    const response = mine[index]
-    if (response.status && response.status !== 'pending') fail(409, '已处理的响应不可撤回')
-    const demand = demands.find((item) => item.id === response.demandId)
-    if (demand && demand.responseCount > 0) demand.responseCount -= 1
-    mine.splice(index, 1)
-    if (demand?.publisherUid && demand.status === 'published') {
-      pushNotice(demand.publisherUid, { type: 'system', title: '需求响应已撤回', content: `「${demand.title}」有一条响应被撤回。`, link: '/me/demands' })
-    }
   })
 }
 

@@ -1,8 +1,7 @@
 import { Body, Controller, Get, HttpCode, Param, Post, Query, Req, UnauthorizedException } from '@nestjs/common'
 import type { AppAuthenticatedRequest } from '../../../common/interfaces/app-authenticated-request'
-import { AppContentsService, type ArticleColumnDto, type ArticleDto, type ArticlePayloadDto, type MySubmittedArticleDto } from './contents.service'
+import { AppContentsService, type ArticleColumnDto, type ArticleDto, type ArticlePayloadDto, type MySubmittedArticleDetailDto, type MySubmittedArticleDto } from './contents.service'
 import { CreateArticleDto } from './dto/create-article.dto'
-import { AppealArticleDto } from './dto/appeal-article.dto'
 import { CreateCommentDto } from './dto/create-comment.dto'
 import { Public } from '../../../common/decorators/public.decorator'
 
@@ -44,6 +43,12 @@ export class AppContentsController {
     return this.contents.myArticles(this.user(req).uid)
   }
 
+  /** 我的投稿详情（全状态，仅作者本人） */
+  @Get('me/articles/:id')
+  myArticleDetail(@Req() req: AppAuthenticatedRequest, @Param('id') id: string): Promise<MySubmittedArticleDetailDto> {
+    return this.contents.myArticleDetail(this.user(req).uid, id)
+  }
+
   /** 撤回审核中的投稿 */
   @HttpCode(200)
   @Post('me/articles/:id/withdraw')
@@ -58,14 +63,7 @@ export class AppContentsController {
     return this.contents.resubmitArticle(this.user(req).uid, id, dto)
   }
 
-  /** 驳回后申诉 */
-  @HttpCode(200)
-  @Post('me/articles/:id/appeal')
-  appeal(@Req() req: AppAuthenticatedRequest, @Param('id') id: string, @Body() dto: AppealArticleDto): Promise<{ code: number }> {
-    return this.contents.appealArticle(this.user(req).uid, id, dto.reason)
-  }
-
-  /** 回填原始投稿 */
+  /** 修改重提的回填载荷 */
   @Get('me/articles/:id/payload')
   payload(@Req() req: AppAuthenticatedRequest, @Param('id') id: string): Promise<ArticlePayloadDto> {
     return this.contents.articlePayload(this.user(req).uid, id)
@@ -91,7 +89,7 @@ export class AppContentsController {
     @Param('id') id: string,
     @Body() dto: CreateCommentDto,
   ) {
-    return this.contents.createArticleComment(this.user(req).uid, id, dto.content)
+    return this.contents.createArticleComment(this.user(req).uid, id, dto.content, dto)
   }
 
   private user(req: AppAuthenticatedRequest): { uid: string; name: string } {

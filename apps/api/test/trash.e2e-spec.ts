@@ -292,7 +292,7 @@ describe('M1.5 R12 归档管理（软删除）', () => {
     expect((await list()).some((a) => a.id === 'AP3001')).toBe(true)
 
     const conflict = await request(app.getHttpServer())
-      .post('/api/admin/applications/AP3009/archive')
+      .post('/api/admin/applications/AP3015/archive')
       .set(auth())
     expect(conflict.status).toBe(409)
     expect(conflict.body).toEqual({ code: 409, message: '仅已通过或已驳回的申请可归档' })

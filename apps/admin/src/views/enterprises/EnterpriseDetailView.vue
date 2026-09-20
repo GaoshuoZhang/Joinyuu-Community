@@ -236,7 +236,6 @@ onMounted(() => {
             <div class="head-title">
               <span class="head-name">{{ enterprise.name }}</span>
               <StatusTag entity="enterprise" :value="enterprise.status" />
-              <StatusTag entity="showcase" :value="enterprise.showcaseStatus" />
             </div>
             <div class="head-id">企业ID: <t-tag class="id-tag" size="small" variant="light">{{ enterprise.id }}</t-tag></div>
             <div class="head-tags">

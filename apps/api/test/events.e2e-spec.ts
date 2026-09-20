@@ -29,6 +29,25 @@ describe('M1-C events 活动（发布/编辑/审核/签到/定时任务）', () 
     await app.close()
   })
 
+  it('报名审核：跨活动分页查询返回活动与报名人信息', async () => {
+    const res = await request(app.getHttpServer())
+      .get('/api/admin/events/enrollments?page=1&pageSize=10&status=pending')
+      .set('Authorization', `Bearer ${token}`)
+    expect(res.status).toBe(200)
+    expect(res.body.code).toBe(0)
+    expect(res.body.data.total).toBeGreaterThan(0)
+    expect(res.body.data.list[0]).toEqual(
+      expect.objectContaining({
+        eventId: expect.any(String),
+        eventTitle: expect.any(String),
+        userId: expect.any(String),
+        name: expect.any(String),
+        identities: expect.any(Array),
+        status: 'pending',
+      }),
+    )
+  })
+
   it('待发布活动立即发布 → 200，重复/非法流转 → 409', async () => {
     // EV6006 pending_release → published + enrollmentOpen
     const pub = await request(app.getHttpServer())

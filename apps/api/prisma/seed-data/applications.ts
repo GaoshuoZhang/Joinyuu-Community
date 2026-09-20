@@ -2,7 +2,7 @@ import type { Application } from '@/types'
 
 /* 申请审核数据 — 命名前缀 AP3001+；通用审核流：提交 →（通过/驳回），全部带审核记录时间线
  * 四类申请（2026-09-11 扩展）：企业入驻（settle）/ 个体入驻（individual）/
- * 企业合作（cooperation）/ 身份绑定（identity）
+ * 企业合作（cooperation）
  * 迁移说明：空间预约（space）→ 公共空间模块 reservations（SR2001+）
  *           企业名片由名片管理直接维护，保存后按可见性规则公开。 */
 export const applications: Application[] = [
@@ -29,26 +29,6 @@ export const applications: Application[] = [
     ],
   },
   {
-    id: 'AP3004',
-    type: 'identity',
-    applicantName: '韩梓萌',
-    applicantPhone: '13801210007',
-    targetName: '云径网络 · 产品经理',
-    submittedAt: '2025-05-09 11:10',
-    status: 'approved',
-    summary: '绑定企业身份：云径网络 · 产品经理',
-    details: [
-      { label: '申请人', value: '韩梓萌' },
-      { label: '目标身份', value: '云径网络 · 产品经理' },
-      { label: '证明材料', value: '在职证明扫描件' },
-      { label: '企业确认', value: '陆则铭 已确认' },
-    ],
-    records: [
-      { step: '提交申请', operator: '韩梓萌', action: 'submit', comment: '绑定企业身份', at: '2025-05-09 11:10' },
-      { step: '运营审核', operator: '社区管理员', action: 'approve', comment: '企业方已确认，通过', at: '2025-05-10 10:02' },
-    ],
-  },
-  {
     id: 'AP3006',
     type: 'settle',
     applicantName: '孟繁星',
@@ -67,45 +47,6 @@ export const applications: Application[] = [
       { step: '提交申请', operator: '孟繁星', action: 'submit', comment: '', at: '2025-05-10 16:40' },
       { step: '运营初审', operator: '社区管理员', action: 'approve', comment: '设计类企业符合社区业态规划', at: '2025-05-13 14:20' },
       { step: '正式入驻', operator: '社区管理员', action: 'approve', comment: '分配办公位 A-05/06', at: '2025-05-15 10:00' },
-    ],
-  },
-  {
-    id: 'AP3008',
-    type: 'identity',
-    applicantName: '白若溪',
-    applicantPhone: '13801210009',
-    targetName: '芯启半导体 · 研发工程师',
-    submittedAt: '2026-08-19 09:50',
-    status: 'rejected',
-    summary: '申请变更企业身份：沧岚新材料 → 芯启半导体',
-    details: [
-      { label: '申请人', value: '白若溪' },
-      { label: '当前身份', value: '沧岚新材料 · 研发工程师' },
-      { label: '目标身份', value: '芯启半导体 · 研发工程师' },
-      { label: '证明材料', value: '未上传' },
-    ],
-    records: [
-      { step: '提交申请', operator: '白若溪', action: 'submit', comment: '申请跳槽身份变更', at: '2026-08-19 09:50' },
-      { step: '运营审核', operator: '社区管理员', action: 'reject', comment: '缺少目标企业在职证明，请补充材料后重新提交', at: '2026-08-19 15:22' },
-    ],
-  },
-  {
-    id: 'AP3009',
-    type: 'identity',
-    applicantName: '何雨桐',
-    applicantPhone: '13801210013',
-    targetName: '青柠健康 · 管理员',
-    submittedAt: '2026-09-06 19:44',
-    status: 'pending',
-    summary: '申请将身份由「成员」变更为「企业管理员」',
-    details: [
-      { label: '申请人', value: '何雨桐' },
-      { label: '当前身份', value: '青柠健康 · 成员（运营负责人）' },
-      { label: '目标身份', value: '青柠健康 · 企业管理员' },
-      { label: '企业确认', value: '创始人邮件确认已发送（待回复）' },
-    ],
-    records: [
-      { step: '提交申请', operator: '何雨桐', action: 'submit', comment: '创始人出差，邮件确认中', at: '2026-09-06 19:44' },
     ],
   },
   {
@@ -149,34 +90,14 @@ export const applications: Application[] = [
     ],
   },
   {
-    id: 'AP3014',
-    type: 'identity',
-    applicantName: '白若溪',
-    applicantPhone: '13801210009',
-    targetName: '芯启半导体 · 研发工程师',
-    submittedAt: '2026-09-07 16:20',
-    status: 'pending',
-    summary: '补充材料重新申请变更企业身份：沧岚新材料 → 芯启半导体',
-    details: [
-      { label: '申请人', value: '白若溪' },
-      { label: '当前身份', value: '沧岚新材料 · 研发工程师' },
-      { label: '目标身份', value: '芯启半导体 · 研发工程师' },
-      { label: '证明材料', value: '芯启半导体在职证明（已补充）' },
-      { label: '企业确认', value: '周慕深 已确认' },
-    ],
-    records: [
-      { step: '提交申请', operator: '白若溪', action: 'submit', comment: '已补充目标企业在职证明与企业方确认', at: '2026-09-07 16:20' },
-    ],
-  },
-  {
     id: 'AP3015',
     type: 'settle',
     applicantName: '林知夏',
     applicantPhone: '13901219003',
     targetName: '星河文创社',
     submittedAt: '2026-08-28 11:00',
-    status: 'approved',
-    summary: '申请入驻开放办公位区（C 区 2 办公位），非遗手工艺品牌',
+    status: 'pending',
+    summary: '申请入驻开放办公位区（C 区 2 办公位），非遗手工艺品牌，待运营审核',
     details: [
       { label: '企业名称', value: '星河文创社' },
       { label: '申请空间', value: '半开放办公位 C-301、C-302' },
@@ -186,8 +107,7 @@ export const applications: Application[] = [
     ],
     records: [
       { step: '提交申请', operator: '林知夏', action: 'submit', comment: '非遗手工艺品牌，主理人入驻', at: '2026-08-28 11:00' },
-      { step: '运营初审', operator: '社区管理员', action: 'approve', comment: '文创类企业符合社区业态', at: '2026-09-01 10:30' },
-      { step: '正式入驻', operator: '社区管理员', action: 'approve', comment: '分配办公位 C-301/302', at: '2026-09-04 09:15' },
+      { step: '运营初审', operator: '社区管理员', action: 'submit', comment: '文创类企业符合社区业态，等待正式入驻办理', at: '2026-09-01 10:30' },
     ],
   },
   {
@@ -197,8 +117,8 @@ export const applications: Application[] = [
     applicantPhone: '13801210015',
     targetName: '社区个体 · 社群运营自由职业者',
     submittedAt: '2026-09-07 09:30',
-    status: 'approved',
-    summary: '申请入驻成为社区个体：社群运营自由职业者',
+    status: 'pending',
+    summary: '申请入驻成为社区个体：社群运营自由职业者（待审核）',
     details: [
       { label: '申请人', value: '许新言' },
       { label: '当前身份', value: '个人用户' },
@@ -207,7 +127,6 @@ export const applications: Application[] = [
     ],
     records: [
       { step: '提交申请', operator: '许新言', action: 'submit', comment: '希望以社区个体身份承接运营类需求', at: '2026-09-07 09:30' },
-      { step: '运营审核', operator: '社区管理员', action: 'approve', comment: '案例齐全，符合社区个体入驻标准', at: '2026-09-07 18:00' },
     ],
   },
   {
@@ -247,25 +166,6 @@ export const applications: Application[] = [
     ],
     records: [
       { step: '提交申请', operator: '白若溪', action: 'submit', comment: '希望以社区个体身份承接策展类项目', at: '2026-09-08 15:40' },
-    ],
-  },
-  {
-    id: 'AP3019',
-    type: 'identity',
-    applicantName: '何雨桐',
-    applicantPhone: '13801210013',
-    targetName: '星环科技 · 产品负责人',
-    submittedAt: '2026-09-09 09:20',
-    status: 'pending',
-    summary: '申请绑定企业身份：星环科技 · 产品负责人',
-    details: [
-      { label: '申请人', value: '何雨桐' },
-      { label: '目标身份', value: '星环科技 · 产品负责人' },
-      { label: '证明材料', value: '在职证明扫描件' },
-      { label: '企业确认', value: '待企业确认' },
-    ],
-    records: [
-      { step: '提交申请', operator: '何雨桐', action: 'submit', comment: '绑定合作企业身份', at: '2026-09-09 09:20' },
     ],
   },
 ]

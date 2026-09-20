@@ -17,7 +17,6 @@ import type {
   TransferContactPayload,
   UpdateMemberPayload,
 } from '@/types'
-import { enterpriseResponsesByEnterprise } from '@/mock/db'
 import { ENTERPRISE_PERMISSION_KEYS } from '@/constants/enterprise'
 import {
   accounts,
@@ -51,20 +50,14 @@ function isExpired(expiresAt?: string): boolean {
 
 /* [MOCK-ONLY] 企业 handlers：公开企业名片、个人名片、关联身份（社区个体 + 关联企业明细与操作）。 */
 
-/** v42 企业工作台：企业名义响应记录 */
-export async function fetchEnterpriseWorkbench(id: string): Promise<import('@/types').EnterpriseWorkbench> {
-  const list = enterpriseResponsesByEnterprise[id] ?? []
-  return { responseCount: list.length, recentResponses: list.map((r) => ({ ...r })) }
-}
-
 export async function fetchEnterpriseShowcase(id: string): Promise<EnterpriseShowcase> {
   return withLatency(() => {
     const e = enterprises.find((x) => x.id === id)
-    if (!e || e.showcaseStatus !== 'published') fail(404, '企业名片不存在或未发布')
+    if (!e) fail(404, '企业名片不存在')
     return {
       id: e.id, name: e.name, logo: e.logo, industry: e.industry, size: e.size,
       foundedAt: e.foundedAt, website: e.website, address: e.address, services: e.services, advantages: e.advantages,
-      description: e.description, showcaseStatus: e.showcaseStatus,
+      description: e.description,
       members: e.members.map((m) => m.name),
     }
   })
@@ -97,7 +90,7 @@ export async function fetchMyCards(): Promise<MyCards> {
     if (e) {
       result.enterprise = {
         enterpriseId: e.id, enterpriseName: e.name, industry: e.industry,
-        size: e.size, description: e.description, showcaseStatus: e.showcaseStatus,
+        size: e.size, description: e.description,
         isContact: e.contactUid === account.uid,
         contactName: e.contactName,
       }
@@ -245,7 +238,6 @@ export async function fetchMyIdentities(): Promise<MyIdentitySummary[]> {
         isContact,
         permissions: permissionsOf(e, account.uid),
         enterpriseId: e.id,
-        showcaseStatus: e.showcaseStatus,
       })
     }
 
@@ -279,7 +271,6 @@ export async function fetchEnterpriseDetail(id: string): Promise<MyEnterpriseDet
       services: e.services,
       advantages: e.advantages,
       description: e.description,
-      showcaseStatus: e.showcaseStatus,
       contactUid: e.contactUid,
       contactName: e.contactName,
       members: e.members.map((m) => ({ ...m, isContact: m.uid === e.contactUid })),

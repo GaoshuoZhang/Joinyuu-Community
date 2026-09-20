@@ -1,5 +1,5 @@
 import type { MyProject } from '@/types'
-import { accountByUid, grantEnterpriseExperience, grantExperience, nextMockId, nowStamp, projectFilesByProject, projectMessagesByProject, projectTasksByProject, projectsByUid, pushNotice } from '@/mock/db'
+import { accountByUid, grantEnterpriseExperience, grantExperience, nowStamp, projectsByUid, pushNotice } from '@/mock/db'
 import { readPayload } from '@/mock/session'
 import { fail, withLatency } from '@/mock/latency'
 
@@ -62,65 +62,6 @@ function grantCompletionExperience(entries: ProjectEntry[]): void {
   const hasCommunityIndividual = accountByUid(uid)?.identities.some((item) => item.type === 'community_individual')
   if (hasCommunityIndividual) grantExperience(uid, 100, `项目结项：${project.name}`)
 }
-
-/* ===== v42 项目协作空间：任务 / 文件 / 讨论 ===== */
-export async function fetchProjectCollab(projectId: string): Promise<{
-  tasks: import('@/types').ProjectTask[]
-  files: import('@/types').ProjectFileItem[]
-  messages: import('@/types').ProjectMessage[]
-}> {
-  return withLatency(() => {
-    const uid = readPayload()?.sub
-    return {
-      tasks: [...(projectTasksByProject[projectId] ?? [])],
-      files: [...(projectFilesByProject[projectId] ?? [])],
-      messages: (projectMessagesByProject[projectId] ?? []).map((m) => ({ ...m, mine: m.uid === uid })),
-    }
-  }, 140)
-}
-
-export async function addProjectTask(projectId: string, title: string): Promise<void> {
-  await withLatency(() => {
-    const uid = readPayload()?.sub
-    if (!uid) fail(401, '请先登录')
-    if (!title.trim()) fail(400, '请输入任务内容')
-    const list = (projectTasksByProject[projectId] ??= [])
-    list.push({ id: nextMockId('PT'), title: title.trim(), done: false, at: nowStamp() })
-  }, 140)
-}
-
-export async function toggleProjectTask(projectId: string, taskId: string): Promise<void> {
-  await withLatency(() => {
-    const task = (projectTasksByProject[projectId] ?? []).find((t) => t.id === taskId)
-    if (!task) fail(404, '任务不存在')
-    task.done = !task.done
-  }, 100)
-}
-
-export async function addProjectFile(projectId: string, name: string, url: string): Promise<void> {
-  await withLatency(() => {
-    if (!readPayload()?.sub) fail(401, '请先登录')
-    if (!name.trim() || !url.trim()) fail(400, '请填写文件名与链接')
-    const list = (projectFilesByProject[projectId] ??= [])
-    list.unshift({ id: nextMockId('PF'), name: name.trim(), url: url.trim(), at: nowStamp() })
-  }, 140)
-}
-
-export async function sendProjectMessage(projectId: string, content: string): Promise<void> {
-  await withLatency(() => {
-    const uid = readPayload()?.sub
-    if (!uid) fail(401, '请先登录')
-    if (!content.trim()) fail(400, '请输入讨论内容')
-    const list = (projectMessagesByProject[projectId] ??= [])
-    list.push({ id: nextMockId('PM'), uid, name: accountByUid(uid)?.nickname ?? uid, content: content.trim(), at: nowStamp(), mine: true })
-  }, 160)
-}
-
-/* ===== v42 项目协作空间：任务 / 文件 / 讨论 ===== */
-
-
-
-
 
 export async function fetchMyProjects(): Promise<MyProject[]> {
   return withLatency(() => {

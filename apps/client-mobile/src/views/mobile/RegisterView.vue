@@ -1,13 +1,14 @@
 <script setup lang="ts">
 import { computed, reactive, ref } from 'vue'
 import { useRouter } from 'vue-router'
-import { Button, Checkbox, Image, Input, NoticeBar, Toast } from 'tdesign-mobile-vue'
+import { Button, Checkbox, Input, NoticeBar, Toast } from 'tdesign-mobile-vue'
 import { useAuthStore } from '@/stores/auth'
 import { useConfigStore } from '@/stores/config'
 import { useNoticesStore } from '@/stores/notices'
 import { ApiError } from '@/api/http'
 import { isCaptcha, isPasswordStrong, isPhone, PASSWORD_MSG, PHONE_MSG, REQUIRED } from '@/utils/validators'
 import { useCaptcha } from '@/composables/useCaptcha'
+import CaptchaField from '@/components/CaptchaField.vue'
 import 'tdesign-mobile-vue/es/style/index.css'
 
 /* 移动注册：开关停用态 + 分步感表单（单页紧凑版）；成功即登录 */
@@ -26,7 +27,7 @@ const closed = computed(() => !config.config.registrationOpen)
 const agreed = ref(false)
 
 function validate(): boolean {
-  errors.nickname = ''
+  errors.nickname = form.nickname.trim() ? '' : REQUIRED('昵称')
   errors.phone = isPhone(form.phone) ? '' : PHONE_MSG
   errors.password = isPasswordStrong(form.password) ? '' : PASSWORD_MSG
   errors.confirmPassword = form.confirmPassword === form.password ? '' : '两次输入的密码不一致'
@@ -57,7 +58,7 @@ async function onSubmit() {
 </script>
 
 <template>
-  <div class="page-fade-in m-register">
+  <main id="main" class="page-fade-in m-register" tabindex="-1">
     <div class="hero">
       <h1 class="title">创建账号</h1>
       <p class="sub">注册默认获得「个人用户」身份</p>
@@ -67,8 +68,9 @@ async function onSubmit() {
 
     <div class="form">
       <div class="field">
-        <label>昵称（选填）</label>
-        <Input v-model="form.nickname" :maxlength="20" placeholder="昵称（选填）" :disabled="closed" />
+        <label>昵称</label>
+        <Input v-model="form.nickname" autocomplete="off" :spell-check="false" :maxlength="20" placeholder="请输入昵称…" :disabled="closed" />
+        <p v-if="errors.nickname" class="error">{{ errors.nickname }}</p>
       </div>
       <div class="field">
         <label>手机号</label>
@@ -77,7 +79,7 @@ async function onSubmit() {
           type="tel"
           autocomplete="tel"
           :maxlength="11"
-          placeholder="手机号"
+          placeholder="请输入手机号…"
           :disabled="closed"
           @keyup.enter="onSubmit"
         />
@@ -86,10 +88,11 @@ async function onSubmit() {
       <div class="field">
         <label>密码</label>
         <Input
+          class="password-field"
           v-model="form.password"
           type="password"
           autocomplete="new-password"
-          placeholder="密码（至少 8 位，含字母与数字）"
+          placeholder="密码（至少 8 位，含字母与数字）…"
           :disabled="closed"
           @keyup.enter="onSubmit"
         />
@@ -98,31 +101,25 @@ async function onSubmit() {
       <div class="field">
         <label>确认密码</label>
         <Input
+          class="password-field"
           v-model="form.confirmPassword"
           type="password"
           autocomplete="new-password"
-          placeholder="确认密码"
+          placeholder="请再次输入密码…"
           :disabled="closed"
           @keyup.enter="onSubmit"
         />
         <p v-if="errors.confirmPassword" class="error">{{ errors.confirmPassword }}</p>
       </div>
-      <div class="field captcha-row">
-        <label>验证码</label>
-        <Input
-          v-model="form.captchaCode"
-          class="captcha-input"
-          :maxlength="4"
-          :spell-check="false"
-          placeholder="请输入验证码"
-          :disabled="closed"
-          @keyup.enter="onSubmit"
-        />
-        <Button class="captcha-button" theme="light" :disabled="captchaLoading || closed" aria-label="刷新验证码" @click="refreshCaptcha">
-          <Image v-if="captchaImage" :src="captchaImage" fit="contain" class="captcha-img" alt="图形验证码" />
-          <span v-else>刷新</span>
-        </Button>
-      </div>
+      <CaptchaField
+        v-model="form.captchaCode"
+        :image="captchaImage"
+        :loading="captchaLoading"
+        :disabled="closed"
+        :error="errors.captchaCode"
+        @refresh="refreshCaptcha"
+        @keyup.enter="onSubmit"
+      />
       <div class="agreement">
         <Checkbox :checked="agreed" :borderless="true" @change="(value: unknown) => (agreed = Boolean(value))">
           <template #label>
@@ -137,7 +134,7 @@ async function onSubmit() {
       </Button>
       <p class="swap">已有账号？<router-link to="/login" class="link">直接登录</router-link></p>
     </div>
-  </div>
+  </main>
 </template>
 
 <style scoped>
@@ -145,45 +142,45 @@ async function onSubmit() {
   min-height: 100vh;
   min-height: 100dvh;
   background: var(--td-bg-color-container);
-  padding: 0 22px calc(22px + env(safe-area-inset-bottom));
+  padding: 0 var(--app-space-11) calc(var(--app-space-11) + env(safe-area-inset-bottom));
 }
 
 .hero {
-  padding: 40px 0 24px;
+  padding:40px 0 var(--app-space-11);
 }
 
 .title {
-  margin: 0 0 6px;
-  font-size: 22px;
+  margin:0 0 var(--app-space-3);
+  font-size: var(--app-font-title);
 }
 
 .sub {
-  margin: 0;
-  font-size: 12px;
+  margin:0;
+  font-size: var(--app-font-caption);
   color: var(--td-text-color-secondary);
 }
 
 .closed-tip {
-  margin-bottom: 14px;
+  margin-bottom:var(--app-space-7);
 }
 
 .field {
-  margin-bottom: 14px;
+  margin-bottom:var(--app-space-7);
 }
 
 .field label {
   display: block;
-  margin-bottom: 6px;
-  font-size: 12px;
+  margin-bottom:var(--app-space-3);
+  font-size: var(--app-font-caption);
   color: var(--td-text-color-secondary);
 }
 
 .agreement {
   display: flex;
   align-items: flex-start;
-  gap: 6px;
-  margin: 4px 0 14px;
-  font-size: 12px;
+  gap:var(--app-space-3);
+  margin:var(--app-space-2) 0 var(--app-space-7);
+  font-size: var(--app-font-caption);
   line-height: 1.7;
   color: var(--td-text-color-secondary);
 }
@@ -193,48 +190,34 @@ async function onSubmit() {
 }
 
 .agreement-error {
-  margin: -8px 0 12px;
-}
-
-.captcha-row {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-}
-
-.captcha-input {
-  flex: 1;
-  min-width: 0;
-}
-
-.captcha-button {
-  flex-shrink: 0;
-  min-width: 96px;
-  min-height: 40px;
-  padding: 0;
-  overflow: hidden;
-}
-
-.captcha-img {
-  display: block;
-  width: 96px;
-  height: 40px;
+  margin:-8px 0 var(--app-space-6);
 }
 
 .error {
-  margin: 4px 0 0;
-  font-size: 12px;
+  margin:var(--app-space-2) 0 0;
+  font-size: var(--app-font-caption);
   color: var(--td-error-color);
 }
 
 .swap {
-  margin: 18px 0 0;
+  margin:var(--app-space-9) 0 0;
   text-align: center;
-  font-size: 13px;
+  font-size: var(--app-font-body);
   color: var(--td-text-color-secondary);
 }
 
 .link {
   color: var(--td-brand-color);
+}
+
+.password-field :deep(.t-input__wrap--suffix-icon) {
+  display: grid;
+  flex: 0 0 24px;
+  width: 24px;
+  place-items: center;
+}
+
+.password-field :deep(.t-input--password) {
+  letter-spacing: 0;
 }
 </style>

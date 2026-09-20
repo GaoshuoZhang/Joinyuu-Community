@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { onMounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { CheckTag, Icon } from 'tdesign-mobile-vue'
+import { CheckTag, Icon, Image } from 'tdesign-mobile-vue'
 import { fetchGoods } from '@/api/mall'
 import { useAsyncList } from '@/composables/useAsyncList'
 import { useRefreshOnActivate } from '@/composables/useRefreshOnActivate'
@@ -12,6 +12,8 @@ import { useAuthStore } from '@/stores/auth'
 import EmptyBlock from '@/components/shared/EmptyBlock.vue'
 import ListSkeleton from '@/components/ListSkeleton.vue'
 import type { Goods } from '@/types'
+import { onImageError } from '@/utils/imageFallback'
+import { formatZhNumber } from '@/utils/format'
 
 useAnimSuppress()
 
@@ -63,8 +65,8 @@ useRefreshOnActivate(() => {
   <div class="m-mall page-fade-in">
     <section v-if="auth.isLogged" class="points-bar">
       <span>当前积分</span>
-      <strong class="tabular-nums">{{ auth.points.toLocaleString('zh-CN') }}</strong>
-      <a class="points-rule" v-pressable @click="router.push('/mall/rules')">积分规则<Icon name="chevron-right" size="12px" /></a>
+      <strong class="tabular-nums">{{ formatZhNumber(auth.points) }}</strong>
+      <router-link class="points-rule" to="/mall/rules">积分规则<Icon aria-hidden="true" name="chevron-right" size="12px" /></router-link>
     </section>
 
     <div class="chips">
@@ -83,85 +85,111 @@ useRefreshOnActivate(() => {
 
     <ListSkeleton v-if="loading && !(data ?? []).length" />
     <EmptyBlock v-else-if="error" :text="error" action-text="重试" @action="run" />
-    <EmptyBlock v-else-if="(data ?? []).length === 0" text="暂无可兑换商品" />
+    <EmptyBlock
+      v-else-if="(data ?? []).length === 0"
+      text="暂无可兑换商品"
+      :action-text="category ? '查看全部商品' : undefined"
+      @action="pickCategory('')"
+    />
     <div v-else class="goods-list stagger">
-      <p class="list-count">共 {{ data?.length }} 件商品</p>
-      <article v-for="g in data" :key="g.id" class="goods-card m-card" v-pressable @click="router.push(`/mall/${g.id}`)">
+      <p class="list-count">共 {{ formatZhNumber(data?.length ?? 0) }} 件商品</p>
+      <router-link v-for="g in data" :key="g.id" class="goods-card m-card pressable" :to="`/mall/${g.id}`">
+        <Image v-if="g.coverUrl" class="goods-cover" :src="g.coverUrl" :alt="g.name" fit="cover" lazy @error="onImageError" />
+        <div v-else class="goods-cover goods-cover-fallback"><Icon aria-hidden="true" name="gift" size="28px" /></div>
         <div class="row">
-          <h3 class="name">{{ g.name }}</h3>
-          <span class="cost">{{ g.pointsCost }} 积分</span>
+          <h2 class="name">{{ g.name }}</h2>
+          <span class="cost">{{ formatZhNumber(g.pointsCost) }} 积分</span>
         </div>
         <p class="desc">{{ g.description }}</p>
-        <p class="stock">库存 {{ g.stock }}</p>
-      </article>
+        <p class="stock">库存 {{ formatZhNumber(g.stock) }}</p>
+      </router-link>
     </div>
   </div>
 </template>
 
 <style scoped>
 .m-mall {
-  padding: 16px;
+  padding:var(--app-space-8);
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap:var(--app-space-6);
 }
 
 .chips {
   display: flex;
-  gap: 8px;
+  gap:var(--app-space-4);
   overflow-x: auto;
-  padding-bottom: 2px;
+  padding-bottom:var(--app-space-1);
 }
 
 .points-bar {
   align-self: flex-end;
   display: flex;
   align-items: center;
-  gap: 8px;
-  padding: 6px 14px;
+  gap:var(--app-space-4);
+  padding:var(--app-space-3) var(--app-space-7);
   border-radius: var(--td-radius-large);
   background: var(--td-brand-color-1);
-  font-size: 12px;
+  font-size: var(--app-font-caption);
   color: var(--td-text-color-secondary);
 }
 
 .points-bar strong {
   color: var(--td-brand-color);
-  font-size: 15px;
+  font-size: var(--app-font-subtitle);
 }
 
 .points-rule {
   display: inline-flex;
   align-items: center;
-  gap: 2px;
-  min-height: 32px;
-  line-height: 32px;
-  margin-left: 4px;
+  gap:var(--app-space-1);
+  min-height: 44px;
+  margin-left:var(--app-space-2);
   color: var(--td-brand-color);
+  text-decoration: none;
   cursor: pointer;
 }
 
 .goods-list {
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap:var(--app-space-5);
 }
 
 .goods-card {
+  color: inherit;
+  text-decoration: none;
   cursor: pointer;
+  overflow: hidden;
+}
+
+.goods-cover {
+  display: block;
+  width: calc(100% + var(--app-space-8) * 2);
+  height: 140px;
+  margin: calc(var(--app-space-8) * -1) calc(var(--app-space-8) * -1) var(--app-space-6);
+}
+
+/* 无封面时收敛为品牌浅底条形占位：不再用与图片等高的空白块挤压列表 */
+.goods-cover-fallback {
+  display: grid;
+  place-items: center;
+  height: 96px;
+  background: var(--td-brand-color-1);
+  color: var(--td-brand-color);
 }
 
 .row {
   display: flex;
   align-items: baseline;
   justify-content: space-between;
-  gap: 10px;
-  margin-bottom: 6px;
+  gap:var(--app-space-5);
+  margin-bottom:var(--app-space-3);
 }
 
 .name {
-  margin: 0;
-  font-size: 14px;
+  margin:0;
+  font-size: var(--app-font-body);
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -170,14 +198,14 @@ useRefreshOnActivate(() => {
 
 .cost {
   flex-shrink: 0;
-  font-size: 14px;
-  font-weight: 700;
+  font-size: var(--app-font-body);
+  font-weight: 600;
   color: var(--td-brand-color);
 }
 
 .desc {
-  margin: 0 0 8px;
-  font-size: 12px;
+  margin:0 0 var(--app-space-4);
+  font-size: var(--app-font-caption);
   color: var(--td-text-color-secondary);
   line-height: 1.6;
   display: -webkit-box;
@@ -187,8 +215,8 @@ useRefreshOnActivate(() => {
 }
 
 .stock {
-  margin: 0;
-  font-size: 12px;
+  margin:0;
+  font-size: var(--app-font-caption);
   color: var(--td-text-color-placeholder);
 }
 </style>

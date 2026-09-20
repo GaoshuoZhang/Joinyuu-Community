@@ -32,14 +32,19 @@ export interface UserActivity {
   content: string
 }
 
+/** 性别取值：后台历史数据为中文（男/女），客户端注册与资料更新使用英文规范值（male/female/unknown） */
+export type UserGender = '男' | '女' | 'male' | 'female' | 'unknown'
+
 export interface User {
   /** 用户唯一标识（微信登录预备：预留 uid 命名） */
   uid: string
   /** 昵称（微信登录预备：不再作为真实姓名使用） */
   nickname: string
+  /** 头像地址（客户端上传后由 /api/public/files/:key 提供；未设置时缺省） */
+  avatar?: string
   phone: string
   email: string
-  gender: '男' | '女'
+  gender: UserGender
   status: UserStatus
   /** 实名信息（真实姓名与身份证号均填写即视为已实名；实名状态由二者派生） */
   realName?: string
@@ -63,7 +68,6 @@ export interface User {
 }
 
 export type EnterpriseStatus = 'active' | 'exited' | 'disabled'
-export type ShowcaseStatus = 'none' | 'published' | 'rejected'
 
 export interface Enterprise {
   id: string
@@ -74,7 +78,6 @@ export interface Enterprise {
   settledAt: string | null
   leaseType: string
   status: EnterpriseStatus
-  showcaseStatus: ShowcaseStatus
   /** 经验值余额（社区企业持有；参加活动、承接项目累积） */
   experience?: number
   /** 企业等级（按 community_enterprise 等级梯度由经验值推导，列表接口下发） */
@@ -92,9 +95,9 @@ export interface Enterprise {
   tags: string[]
 }
 
-/* 申请类型（五类：企业入驻 / 个体入驻 / 企业合作 / 身份绑定 / 企业退驻）
+/* 申请类型（四类：企业入驻 / 个体入驻 / 企业合作 / 企业退驻）
  * 申请实体仍由 applications 维护 */
-export type ApplicationType = 'settle' | 'individual' | 'cooperation' | 'identity' | 'exit'
+export type ApplicationType = 'settle' | 'individual' | 'cooperation' | 'exit'
 export type ApplicationStatus = 'pending' | 'approved' | 'rejected'
 
 export interface ApprovalRecord {
@@ -103,6 +106,17 @@ export interface ApprovalRecord {
   action: 'submit' | 'approve' | 'reject'
   comment: string
   at: string
+}
+
+export interface ApplicationDetailFile {
+  name: string
+  url?: string
+}
+
+export interface ApplicationDetailEntry {
+  label: string
+  value?: string
+  files?: ApplicationDetailFile[]
 }
 
 export interface Application {
@@ -116,7 +130,7 @@ export interface Application {
   submittedAt: string
   status: ApplicationStatus
   summary: string
-  details: { label: string; value: string }[]
+  details: ApplicationDetailEntry[]
   records: ApprovalRecord[]
 }
 
@@ -147,6 +161,8 @@ export interface DemandRespondent {
 export interface Demand {
   id: string
   title: string
+  /** 字典类别的显示名称；category 保存筛选和持久化使用的 code。 */
+  categoryLabel?: string
   category: string
   demandType: 'task' | 'investment' | 'cooperation'
   deliverable?: string
@@ -227,7 +243,7 @@ export interface ProjectUndertaker {
 
 export interface Milestone {
   name: string
-  status: 'done' | 'active' | 'todo'
+  status: 'todo' | 'submitted' | 'accepted' | 'returned'
   date: string
   /** 负责该节点的承接方（多承接方项目选填，可多选，存承接方展示名） */
   owners?: string[]
@@ -275,11 +291,31 @@ export interface EventEnrollment {
   checkinMethod?: 'self' | 'admin'
 }
 
+/** 活动报名审核列表行（跨活动；含活动快照） */
+export interface EventEnrollmentRecord {
+  eventId: string
+  eventTitle: string
+  eventStartTime: string
+  eventStatus: string
+  userId: string
+  name: string
+  enterprise: string
+  identities: UserIdentity[]
+  phone: string
+  appliedAt: string
+  status: EventEnrollment['status']
+  waitlisted: boolean
+  waitlistOrder?: number
+  checkedIn: boolean
+  checkInAt: string | null
+}
+
 export interface CommunityEvent {
   id: string
   /** 创建时间（后台新增活动时写入，列表可按创建时间排序） */
   createdAt?: string
   title: string
+  coverUrl?: string
   type: string
   startTime: string
   endTime: string
@@ -420,9 +456,8 @@ export interface ExternalEnterprise {
   size: string
   foundedAt: string
   description: string
-  /** 累计合作次数 */
-  cooperationCount: number
-  firstCooperationAt: string
+  /** 登记日期：合作企业填表通过审核当天（YYYY-MM-DD） */
+  registeredAt: string
   members: ExternalEnterpriseMember[]
 }
 
@@ -436,15 +471,16 @@ export interface ExternalEnterprise {
 /* ---------- 积分商城 ---------- */
 
 export type GoodsCategory = string
-export type GoodsFulfillment = 'physical' | 'voucher' | 'service'
+export type GoodsFulfillment = 'physical' | 'voucher'
 export type GoodsStatus = 'on' | 'off' | 'restock'
 
 export interface MallGoods {
   id: string
   name: string
-  /** 实物商品 / 虚拟服务 / 权益券 */
+  coverUrl?: string
+  /** 实物商品 / 权益券 */
   category: GoodsCategory
-  /** 履约类型：实物配送 / 券码 / 服务权益 */
+  /** 履约类型：实物配送 / 券码 */
   fulfillment: GoodsFulfillment
   /** 兑换所需积分 */
   points: number
@@ -876,7 +912,7 @@ export interface HomeBanner {
   updatedAt: string
 }
 
-/* ---------- 公告栏（内容管理） ---------- */
+/* ---------- 首页公告（内容管理） ---------- */
 
 export type AnnouncementStatus = 'published' | 'withdrawn'
 
@@ -884,7 +920,7 @@ export interface Announcement {
   id: string
   title: string
   content: string
-  /** 置顶：置顶公告在列表与客户端公告位优先展示 */
+  /** 置顶：全局仅能开启一条（首页公告单例），展示在客户端首页搜索栏下方 */
   pinned: boolean
   status: AnnouncementStatus
   /** 发布时间（新增即发布 / 重新发布时写入） */

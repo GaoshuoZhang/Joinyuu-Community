@@ -19,8 +19,8 @@ export class QueryRedemptionOrdersDto {
   keyword?: string
 
   @IsOptional()
-  @IsIn(['pending_shipment', 'shipped', 'finished', 'cancelled'])
-  status?: 'pending_shipment' | 'shipped' | 'finished' | 'cancelled'
+  @IsIn(['pending_shipment', 'pending_use', 'shipped', 'finished', 'cancelled'])
+  status?: 'pending_shipment' | 'pending_use' | 'shipped' | 'finished' | 'cancelled'
 
   @IsOptional()
   @IsIn(['id', 'createdAt'])

@@ -1,74 +1,39 @@
 <script setup lang="ts">
-import { computed, onMounted, reactive, ref } from 'vue'
-import ListErrorState from '@/components/ListErrorState.vue'
-import { useListQueryState } from '@/utils/listQuery'
+import { onMounted, reactive, ref } from 'vue'
 import { MessagePlugin } from 'tdesign-vue-next'
-import { AddIcon, PinIcon, SearchIcon } from 'tdesign-icons-vue-next'
 import PageHeader from '@/components/PageHeader.vue'
-import StatusTag from '@/components/StatusTag.vue'
-import AnnouncementFormDialog from '@/components/AnnouncementFormDialog.vue'
-import ColumnController from '@/components/ColumnController.vue'
-import {
-  deleteAnnouncement,
-  fetchAnnouncements,
-  publishAnnouncement,
-  toggleAnnouncementPin,
-  withdrawAnnouncement,
-} from '@/api/announcements'
-import type { Announcement } from '@/types'
+import RichEditor from '@/components/RichEditor.vue'
+import ListErrorState from '@/components/ListErrorState.vue'
+import { fetchHomeAnnouncement, saveHomeAnnouncement } from '@/api/announcements'
 
-/* 公告栏：站点公告的发布/编辑/下架/置顶管理（新增即发布，客户端公告位仅消费已发布公告） */
+/* 首页公告：移动端首页搜索栏下方仅展示一条，本页直接编辑该条并控制开启/关闭。 */
 const loading = ref(false)
 const loadError = ref('')
-const acting = ref('')
-const list = ref<Announcement[]>([])
-const total = ref(0)
+const saving = ref(false)
+const formRef = ref()
+const meta = reactive({ publishedAt: '', updatedAt: '' })
 
-const query = reactive({
-  page: 1,
-  pageSize: 10,
-  keyword: '',
-  status: '',
+const form = reactive({
+  title: '',
+  content: '',
+  enabled: false,
 })
 
-const statusOptions = [
-  { label: '全部', value: '' },
-  { label: '已发布', value: 'published' },
-  { label: '已下架', value: 'withdrawn' },
-]
-
-const columns = [
-  { colKey: 'title', title: '公告', cell: 'title', width: 200, ellipsis: true, resizable: true },
-  { colKey: 'status', title: '状态', cell: 'status', width: 100, resizable: true , ellipsis: true},
-  { colKey: 'pinned', title: '置顶', cell: 'pinned', width: 90 , ellipsis: true},
-  { colKey: 'publishedAt', title: '发布时间', width: 140, resizable: true , ellipsis: true},
-  { colKey: 'updatedAt', title: '最近编辑', cell: 'updatedAt', width: 140, resizable: true , ellipsis: true},
-  { colKey: 'op', title: '操作', cell: 'op', width: 230 },
-]
-
-/* 列配置：本地持久化显隐/顺序 */
-const visibleColKeys = ref<string[]>(columns.map((c) => c.colKey))
-
-const visibleColumns = computed(() => {
-  const byKey = new Map(columns.map((c) => [c.colKey, c]))
-  return visibleColKeys.value.map((k) => byKey.get(k)).filter(Boolean)
-})
-
-const pagination = computed(() => ({
-  current: query.page,
-  pageSize: query.pageSize,
-  total: total.value,
-  showJumper: true,
-}))
+const rules = {
+  title: [{ required: true, message: '请输入公告标题', trigger: 'submit' }],
+  content: [{ required: true, message: '请输入公告内容', trigger: 'submit' }],
+}
 
 async function load() {
-  syncQuery()
   loading.value = true
   loadError.value = ''
   try {
-    const res = await fetchAnnouncements({ ...query })
-    list.value = res.list
-    total.value = res.total
+    const data = await fetchHomeAnnouncement()
+    form.title = data.title
+    form.content = data.content
+    form.enabled = data.enabled
+    meta.publishedAt = data.publishedAt
+    meta.updatedAt = data.updatedAt
   } catch (e) {
     loadError.value = e instanceof Error ? e.message : '数据加载失败'
   } finally {
@@ -76,219 +41,82 @@ async function load() {
   }
 }
 
-function onSearch() {
-  query.page = 1
-  load()
-}
-
-function onReset() {
-  query.keyword = ''
-  query.status = ''
-  query.page = 1
-  load()
-}
-
-function onPageChange(p: { current: number; pageSize: number }) {
-  query.page = p.current
-  query.pageSize = p.pageSize
-  load()
-}
-
-/* ---------- 新增 / 编辑 ---------- */
-const formVisible = ref(false)
-const formMode = ref<'create' | 'edit'>('create')
-const current = ref<Announcement | null>(null)
-
-function openCreate() {
-  formMode.value = 'create'
-  current.value = null
-  formVisible.value = true
-}
-
-function openEdit(row: Announcement) {
-  formMode.value = 'edit'
-  current.value = row
-  formVisible.value = true
-}
-
-/* ---------- 状态与置顶操作 ---------- */
-async function onWithdraw(row: Announcement) {
-  acting.value = row.id + ':withdraw'
+async function onSave() {
+  const valid = await formRef.value?.validate()
+  if (valid !== true) {
+    MessagePlugin.warning('请完善公告标题与内容')
+    return
+  }
+  saving.value = true
   try {
-    await withdrawAnnouncement(row.id)
-    MessagePlugin.success('公告已下架，客户端公告位不再展示')
+    await saveHomeAnnouncement({
+      title: form.title,
+      content: form.content,
+      enabled: form.enabled,
+    })
+    MessagePlugin.success(form.enabled ? '首页公告已保存并开启' : '首页公告已保存（未开启，客户端不显示）')
     await load()
   } catch (e) {
-    MessagePlugin.error(e instanceof Error ? e.message : '操作失败')
+    MessagePlugin.error(e instanceof Error ? e.message : '保存失败')
   } finally {
-    acting.value = ''
+    saving.value = false
   }
 }
-
-async function onPublish(row: Announcement) {
-  acting.value = row.id + ':publish'
-  try {
-    await publishAnnouncement(row.id)
-    MessagePlugin.success('公告已重新发布')
-    await load()
-  } catch (e) {
-    MessagePlugin.error(e instanceof Error ? e.message : '操作失败')
-  } finally {
-    acting.value = ''
-  }
-}
-
-async function onTogglePin(row: Announcement) {
-  acting.value = row.id + ':pin'
-  try {
-    await toggleAnnouncementPin(row.id)
-    MessagePlugin.success(row.pinned ? '已取消置顶' : '公告已置顶')
-    await load()
-  } catch (e) {
-    MessagePlugin.error(e instanceof Error ? e.message : '操作失败')
-  } finally {
-    acting.value = ''
-  }
-}
-
-async function onDelete(row: Announcement) {
-  acting.value = row.id + ':delete'
-  try {
-    await deleteAnnouncement(row.id)
-    MessagePlugin.success('公告已归档，可在归档管理中恢复')
-    await load()
-  } catch (e) {
-    MessagePlugin.error(e instanceof Error ? e.message : '归档失败')
-  } finally {
-    acting.value = ''
-  }
-}
-
-const { syncQuery } = useListQueryState(query, load)
 
 onMounted(load)
 </script>
 
 <template>
-  <div class="announcements-panel page-fade-in">
+  <div class="home-announcement page-fade-in">
+    <PageHeader
+      title="首页公告"
+      description="移动端首页搜索栏下方仅展示一条公告；关闭后客户端不再显示公告条"
+    />
+
     <ListErrorState v-if="loadError" :message="loadError" :loading="loading" @retry="load" />
-    <PageHeader title="公告栏" description="站点公告的发布、置顶与下架管理（客户端公告位仅展示已发布公告）">
-      <template #actions>
-        <ColumnController
-          v-model="visibleColKeys"
-          storage-key="announcements"
-          :columns="columns.map((c) => ({ key: c.colKey, title: c.title }))"
-        />
-        <t-button theme="primary" @click="openCreate">
-          <template #icon><AddIcon /></template>
-          发布公告
-        </t-button>
-      </template>
-    </PageHeader>
 
-    <div class="page-filter-bar">
-      <t-input
-        v-model="query.keyword"
-        clearable
-        placeholder="搜索公告标题/编号…"
-        style="width: 220px"
-        @enter="onSearch"
-      />
-      <t-select v-model="query.status" label="状态" :options="statusOptions" clearable style="width: 140px" @change="onSearch" />
-      <t-button theme="primary" @click="onSearch">
-        <template #icon><SearchIcon /></template>
-        查询
-      </t-button>
-      <t-button variant="outline" @click="onReset">重置</t-button>
+    <div v-else class="page-card">
+      <t-loading :loading="loading">
+        <t-form ref="formRef" :data="form" :rules="rules" label-width="90px">
+          <t-form-item label="公告标题" name="title">
+            <t-input v-model="form.title" clearable :maxlength="60" placeholder="请输入公告标题…" />
+          </t-form-item>
+          <t-form-item label="公告内容" name="content">
+            <RichEditor v-model="form.content" placeholder="请输入公告内容…" :min-height="240" />
+          </t-form-item>
+          <t-form-item label="开启公告" name="enabled">
+            <div class="switch-row">
+              <t-switch v-model="form.enabled" />
+              <span class="switch-tip">开启后展示在客户端首页公告条（全局仅一条）；关闭后客户端不显示</span>
+            </div>
+          </t-form-item>
+          <t-form-item>
+            <t-button theme="primary" :loading="saving" @click="onSave">保存</t-button>
+          </t-form-item>
+        </t-form>
+      </t-loading>
+      <p v-if="meta.publishedAt" class="meta">
+        最近发布：{{ meta.publishedAt }}<template v-if="meta.updatedAt"> · 最近编辑：{{ meta.updatedAt }}</template>
+      </p>
     </div>
-
-    <t-table
-      row-key="id"
-      table-layout="fixed"
-      hover
-      resizable
-      :data="list"
-      :columns="visibleColumns"
-      :loading="loading"
-      :pagination="pagination"
-      empty="暂无公告"
-      @page-change="onPageChange"
-    >
-      <template #title="{ row }">
-        <div class="cell-title">
-          <span class="title-text">{{ row.title }}</span>
-          <span class="title-id">{{ row.id }}</span>
-        </div>
-      </template>
-      <template #status="{ row }">
-        <StatusTag entity="announcement" :value="row.status" />
-      </template>
-      <template #pinned="{ row }">
-        <t-tag v-if="row.pinned" theme="warning" variant="light" size="small">
-          <template #icon><PinIcon /></template>
-          置顶
-        </t-tag>
-        <span v-else class="pin-none">—</span>
-      </template>
-      <template #updatedAt="{ row }">{{ row.updatedAt ?? '—' }}</template>
-      <template #op="{ row }">
-        <div class="op-cell" @click.stop>
-          <t-button variant="text" size="small" @click="openEdit(row)">编辑</t-button>
-          <t-button v-if="row.status === 'published'" variant="text" size="small" @click="onTogglePin(row)">
-            {{ row.pinned ? '取消置顶' : '置顶' }}
-          </t-button>
-          <t-popconfirm v-if="row.status === 'published'" content="确认下架该公告？下架后客户端公告位立即隐藏。" @confirm="onWithdraw(row)">
-            <t-button variant="text" size="small" theme="warning" :loading="acting === row.id + ':withdraw'">下架</t-button>
-          </t-popconfirm>
-          <t-button
-            v-else
-            variant="text"
-            size="small"
-            theme="primary"
-            :loading="acting === row.id + ':publish'"
-            @click="onPublish(row)"
-          >
-            重新发布
-          </t-button>
-          <t-popconfirm v-if="row.status === 'withdrawn'" content="确认将该公告归档？归档后可在归档管理中恢复。" @confirm="onDelete(row)">
-            <t-button variant="text" size="small" theme="danger" :loading="acting === row.id + ':delete'">归档</t-button>
-          </t-popconfirm>
-        </div>
-      </template>
-    </t-table>
-
-    <AnnouncementFormDialog v-model:visible="formVisible" :mode="formMode" :announcement="current" @success="load" />
   </div>
 </template>
 
 <style scoped>
-.cell-title {
-  display: flex;
-  flex-direction: column;
-  min-width: 0;
-}
-
-.title-text {
-  font-weight: 500;
-  color: var(--td-text-color-primary);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.title-id {
-  font-size: 12px;
-  color: var(--td-text-color-placeholder);
-}
-
-.pin-none {
-  color: var(--td-text-color-placeholder);
-}
-
-.op-cell {
+.switch-row {
   display: flex;
   align-items: center;
-  gap: 2px;
-  flex-wrap: wrap;
+  gap: 12px;
+}
+
+.switch-tip {
+  color: var(--td-text-color-placeholder);
+  font-size: 12px;
+}
+
+.meta {
+  margin: 16px 0 0;
+  color: var(--td-text-color-placeholder);
+  font-size: 12px;
 }
 </style>

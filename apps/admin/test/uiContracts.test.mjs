@@ -69,7 +69,7 @@ test('all query-object lists install URL state during setup, not inside onMounte
     assert.match(load.getText(script), /syncQuery\(\)/, path + ': commit the actual applied query')
     checked++
   }
-  assert.equal(checked, 19)
+  assert.equal(checked, 18)
 })
 
 test('static placeholders, sensitive settings and simulated navigation stay consistent', () => {

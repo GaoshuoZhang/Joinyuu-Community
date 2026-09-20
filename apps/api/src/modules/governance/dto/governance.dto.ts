@@ -1,27 +1,4 @@
 import { ArrayMaxSize, IsArray, IsBoolean, IsIn, IsOptional, IsString, MaxLength } from 'class-validator'
-import { TakedownDto } from '../../../common/dto/takedown.dto'
-
-export class ReviewReportDto extends TakedownDto {
-  @IsIn(['resolved', 'rejected'])
-  status!: 'resolved' | 'rejected'
-
-  @IsString()
-  @MaxLength(255)
-  resolution!: string
-
-  @IsOptional()
-  @IsIn(['none', 'hide', 'restore'])
-  action?: 'none' | 'hide' | 'restore'
-}
-
-export class ReviewAppealDto {
-  @IsIn(['accepted', 'rejected'])
-  decision!: 'accepted' | 'rejected'
-
-  @IsString()
-  @MaxLength(255)
-  resolution!: string
-}
 
 export class SavePolicyDto {
   @IsOptional()

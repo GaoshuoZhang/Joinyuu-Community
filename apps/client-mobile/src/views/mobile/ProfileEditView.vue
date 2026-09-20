@@ -1,29 +1,24 @@
 <script setup lang="ts">
 import { computed, onMounted, reactive, ref } from 'vue'
 import { useRouter } from 'vue-router'
-import { Loading, Button, Cell, CellGroup, Input, Radio, RadioGroup, Textarea, Toast } from 'tdesign-mobile-vue'
+import { Button, Cell, CellGroup, Input, Radio, RadioGroup, Textarea, Toast } from 'tdesign-mobile-vue'
 import { fetchMe, fetchRealName, updateMe } from '@/api/me'
 import { ApiError } from '@/api/http'
 import { useAuthStore } from '@/stores/auth'
-import { useDraft } from '@/composables/useDraft'
 import { useUnsavedGuard } from '@/composables/useUnsavedGuard'
 import AvatarUploader from '@/components/shared/AvatarUploader.vue'
 import EmptyBlock from '@/components/shared/EmptyBlock.vue'
+import ListSkeleton from '@/components/ListSkeleton.vue'
 
-/* 资料编辑：头像（点头像直接上传替换）/ 昵称 / 性别 / 简介 + 实名认证入口
- * v38：加载失败可重试；填写过程有草稿与离开保护，且不会被晚到的响应覆盖。 */
+/* 资料编辑：头像（点头像直接上传替换）/ 昵称 / 性别 / 简介 + 实名认证入口。 */
 const router = useRouter()
 const auth = useAuthStore()
 const form = reactive({ nickname: '', avatar: '', gender: 'unknown' as 'male' | 'female' | 'unknown', bio: '' })
 const submitting = ref(false)
 
-const { hasDraft: draftAvailable, savedAt: draftSavedAt, detect: detectDraft, restore: restoreDraft, discard: discardDraft, clear: clearDraft, rebase: rebaseDraft, dirty } = useDraft(
-  'profile',
-  () => ({ ...form }),
-  (value) => Object.assign(form, value),
-  { isEmpty: () => !form.nickname.trim() },
-)
-useUnsavedGuard(() => dirty.value)
+const baseline = ref('')
+const formSnapshot = computed(() => JSON.stringify(form))
+const { markClean } = useUnsavedGuard(() => loaded.value && formSnapshot.value !== baseline.value)
 
 /* 实名认证状态（入口 note）：null 表示加载中/未知 */
 const realNameVerified = ref<boolean | null>(null)
@@ -47,7 +42,7 @@ async function load() {
       form.avatar = me.avatar ?? ''
       form.gender = me.gender
       form.bio = me.bio ?? ''
-      rebaseDraft()
+      baseline.value = formSnapshot.value
     }
     loaded.value = true
     try {
@@ -65,7 +60,6 @@ async function load() {
 
 onMounted(() => {
   void load()
-  detectDraft()
 })
 
 async function onSave() {
@@ -79,7 +73,8 @@ async function onSave() {
     auth.name = form.nickname.trim()
     auth.avatar = form.avatar
     Toast('资料已更新')
-    clearDraft()
+    baseline.value = formSnapshot.value
+    markClean()
     await router.push('/me')
   } catch (e) {
     Toast(e instanceof ApiError ? e.message : '保存失败，请稍后重试')
@@ -91,14 +86,9 @@ async function onSave() {
 
 <template>
   <div class="page-fade-in profile-edit">
-    <Loading v-if="loading" class="state" text="加载中…" />
+    <ListSkeleton v-if="loading" />
     <EmptyBlock v-else-if="loadError" :text="loadError" action-text="重试" @action="load" />
     <template v-else>
-    <div v-if="draftAvailable" class="draft-bar">
-      <span>检测到 {{ draftSavedAt }} 的未保存草稿</span>
-      <a v-pressable @click="restoreDraft">恢复</a>
-      <a v-pressable @click="discardDraft">放弃</a>
-    </div>
     <div class="m-card">
       <div class="field">
         <span class="field-label">头像</span>
@@ -112,7 +102,7 @@ async function onSave() {
       </div>
       <div class="field">
         <label>昵称</label>
-        <Input v-model="form.nickname" :maxlength="20" placeholder="社区展示名…" clearable />
+        <Input v-model="form.nickname" autocomplete="off" :spell-check="false" :maxlength="20" placeholder="社区展示名…" clearable />
         <p v-if="nicknameError" class="field-error">{{ nicknameError }}</p>
       </div>
       <div class="field">
@@ -132,7 +122,7 @@ async function onSave() {
           placeholder="介绍一下自己…"
         />
       </div>
-      <Button theme="primary" size="large" block :loading="submitting" @click="onSave">
+      <Button class="mobile-sticky-action" theme="primary" size="large" block :loading="submitting" @click="onSave">
         {{ submitting ? '保存中…' : '保存' }}
       </Button>
     </div>
@@ -146,54 +136,33 @@ async function onSave() {
 
 <style scoped>
 .profile-edit {
-  padding: 16px;
-}
-
-.draft-bar {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  margin: 0 0 12px;
-  padding: 10px 12px;
-  border-radius: var(--td-radius-default);
-  background: var(--td-warning-color-1, #fff1e9);
-  font-size: 12px;
-  color: var(--td-text-color-secondary);
-}
-
-.draft-bar a {
-  color: var(--td-brand-color);
-  cursor: pointer;
-}
-
-.draft-bar a:first-of-type {
-  margin-left: auto;
+  padding:var(--app-space-8);
 }
 
 .field {
-  margin-bottom: 15px;
+  margin-bottom:var(--app-space-8);
 }
 
 .field label,
 .field .field-label {
   display: block;
-  font-size: 13px;
+  font-size: var(--app-font-body);
   color: var(--td-text-color-secondary);
-  margin-bottom: 6px;
+  margin-bottom:var(--app-space-3);
 }
 
 .genders {
   display: flex;
-  gap: 20px;
+  gap:var(--app-space-10);
 }
 
 .security {
-  margin-top: 12px;
+  margin-top:var(--app-space-6);
 }
 
 /* 卡片宽度与 .m-card 对齐（与 MeView 同口径） */
 .profile-edit :deep(.t-cell-group--card) {
-  margin: 0;
+  margin:0;
   border: 1px solid var(--td-component-border);
 }
 </style>

@@ -14,6 +14,7 @@ import { loginAs } from './helpers/login'
 describe('M1.5 contents 内容管理（文章/栏目）', () => {
   let app: INestApplication
   let token: string
+  let submissionToken: string
 
   beforeAll(async () => {
     reseed()
@@ -22,6 +23,10 @@ describe('M1.5 contents 内容管理（文章/栏目）', () => {
     await app.init()
 
     token = await loginAs(app)
+    await app.get(PrismaService).adminRolePermission.create({
+      data: { roleId: 'R3', permissionCode: '/contents/submissions' },
+    })
+    submissionToken = await loginAs(app, 'auditor')
   })
 
   afterAll(async () => {
@@ -121,6 +126,51 @@ describe('M1.5 contents 内容管理（文章/栏目）', () => {
       .send({ status: 'approved' })
     expect(again.status).toBe(409)
     expect(again.body).toEqual({ code: 409, message: '仅待审核的文章可审核' })
+  })
+
+  it('投稿专用编辑：投稿权限可调整待发布投稿，并清洗富文本', async () => {
+    const payload = {
+      title: '审核后调整的投稿',
+      columnIds: ['CL2003'],
+      summary: '调整后的摘要',
+      content: '<p>调整后的正文<script>alert(1)</script></p>',
+      tags: ['调整'],
+      commentsEnabled: false,
+    }
+    const update = await request(app.getHttpServer())
+      .put('/api/admin/contents/articles/SU1007/submission')
+      .set('Authorization', `Bearer ${submissionToken}`)
+      .send(payload)
+    expect(update.status).toBe(200)
+    expect(update.body).toEqual({ code: 0, data: { code: 0 } })
+    const updated = await listArticle('SU1007')
+    expect(updated).toEqual(expect.objectContaining({
+      title: payload.title,
+      status: 'pending_release',
+      commentsEnabled: false,
+    }))
+    expect(updated?.content).toContain('调整后的正文')
+    expect(updated?.content).not.toContain('script')
+
+    const generic = await request(app.getHttpServer())
+      .put('/api/admin/contents/articles/SU1007')
+      .set('Authorization', `Bearer ${submissionToken}`)
+      .send(payload)
+    expect(generic.status).toBe(403)
+
+    const official = await request(app.getHttpServer())
+      .put('/api/admin/contents/articles/A1010/submission')
+      .set('Authorization', `Bearer ${submissionToken}`)
+      .send(payload)
+    expect(official.status).toBe(409)
+    expect(official.body).toEqual({ code: 409, message: '仅用户投稿可在投稿内容中编辑' })
+
+    const published = await request(app.getHttpServer())
+      .put('/api/admin/contents/articles/SU1001/submission')
+      .set('Authorization', `Bearer ${submissionToken}`)
+      .send(payload)
+    expect(published.status).toBe(409)
+    expect(published.body).toEqual({ code: 409, message: '仅待发布的投稿可编辑' })
   })
 
   it('发布：待发布 → 已发布；重复发布 409', async () => {

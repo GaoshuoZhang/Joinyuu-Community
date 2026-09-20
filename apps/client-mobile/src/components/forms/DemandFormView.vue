@@ -1,18 +1,23 @@
 <script setup lang="ts">
-import { computed, onMounted, reactive, ref } from 'vue'
+import { computed, onMounted, reactive, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { Button, Cell, CheckTag, DateTimePicker, Icon, Input, Popup, Tag, Textarea, Toast } from 'tdesign-mobile-vue'
+import { Button, CheckTag, Icon, Input, Tag, Textarea, Toast } from 'tdesign-mobile-vue'
 import { createDemand, fetchMyDemandPayload, resubmitDemand } from '@/api/demands'
 import { fetchMyIdentities } from '@/api/enterprises'
 import { ApiError } from '@/api/http'
-import { useAuthStore, identityOptionLabel } from '@/stores/auth'
+import { actionIdentityOptions, useAuthStore } from '@/stores/auth'
 import { useConfigStore } from '@/stores/config'
 import { useDict } from '@/composables/useDict'
-import { useDraft } from '@/composables/useDraft'
+import { useUnsavedGuard } from '@/composables/useUnsavedGuard'
+import { useBusinessNow } from '@/composables/useBusinessNow'
 import EmptyBlock from '@/components/shared/EmptyBlock.vue'
-import { DEMAND_KINDS, DEMAND_KIND_LABELS } from '@/constants/demand'
+import IdentityPicker from '@/components/forms/IdentityPicker.vue'
+import ContactFields from '@/components/forms/ContactFields.vue'
+import DemandKindExtras from '@/components/forms/DemandKindExtras.vue'
+import FlowResult from '@/components/FlowResult.vue'
+import { DEMAND_KINDS } from '@/constants/demand'
 import type { DemandCreatePayload, DemandKind, IdentityType, UserIdentity } from '@/types'
-import { formatMockDate, mockClockVersion } from '@/mock/runtime'
+import { formatLocalDate } from '@/utils/format'
 
 /* 需求发布表单（schema 由 kind 决定：找服务 / 找投资 / 找合作），提交即 pending。
  * 发布身份仅作为归属（发布后列表展示的发布方），在表单内单选；
@@ -22,7 +27,6 @@ const props = defineProps<{ kind: DemandKind }>()
 const kindMeta = computed(() => DEMAND_KINDS.find((k) => k.kind === props.kind) ?? DEMAND_KINDS[0])
 const isTask = computed(() => props.kind === 'task')
 const isInvest = computed(() => props.kind === 'investment')
-const kindLabel = computed(() => DEMAND_KIND_LABELS[props.kind])
 
 /** 三类需求的字段文案 */
 const labels = computed(() =>
@@ -45,17 +49,12 @@ const { items: dictItems, error: dictError, reload: reloadDict } = useDict(isInv
 /** 发布身份选项：持「社区个体」时不再单列「个人用户」；含成员被授权「发布需求」的企业（代企业发布） */
 const delegatedIdentities = ref<UserIdentity[]>([])
 const identityOptions = computed(() => {
-  const base = auth.identities.filter((i) => !(i.type === 'individual' && auth.hasCommunityIndividual))
+  const base = auth.identities
   const extra = delegatedIdentities.value.filter(
     (d) => !base.some((b) => b.type === 'community_enterprise' && b.enterpriseId === d.enterpriseId),
   )
-  return [...base, ...extra]
+  return actionIdentityOptions([...base, ...extra])
 })
-
-/** 身份 chips 选中判定（企业需同时匹配企业 id，区分多个企业成员身份） */
-function isIdentityPicked(i: UserIdentity): boolean {
-  return form.asIdentity === i.type && (i.type !== 'community_enterprise' || form.asEnterpriseId === (i.enterpriseId ?? ''))
-}
 
 function pickIdentity(i: UserIdentity) {
   form.asIdentity = i.type
@@ -64,12 +63,11 @@ function pickIdentity(i: UserIdentity) {
 
 const demandOpen = ref(true)
 const submitting = ref(false)
+const submittedId = ref('')
 const showDeliverBy = ref(false)
 /** 预期交付日期下限 = 今天（Picker 无值时回落到 start，默认 start 为 10 年前） */
-const todayStr = computed(() => {
-  void mockClockVersion.value
-  return formatMockDate()
-})
+const businessNowMs = useBusinessNow()
+const todayStr = computed(() => formatLocalDate(businessNowMs.value))
 const form = reactive({
   title: '',
   description: '',
@@ -88,23 +86,25 @@ const form = reactive({
   asEnterpriseId: '',
 })
 
-/* v36 草稿自动保存（按需求类型隔离）；v38 修复放弃回写与空草稿，修改重提不写草稿 */
-const {
-  hasDraft: draftAvailable,
-  savedAt: draftSavedAt,
-  detect: detectDraft,
-  restore: restoreDraft,
-  discard: discardDraft,
-  clear: clearDraft,
-} = useDraft(
-  `demand-${props.kind}`,
-  () => ({ ...form }),
-  (value) => Object.assign(form, value),
-  {
-    enabled: () => !revising.value,
-    isEmpty: () => !form.title.trim() && !form.description.trim(),
-  },
-)
+function ensureVisibleIdentitySelection() {
+  const selected = identityOptions.value.some(
+    (identity) => identity.type === form.asIdentity
+      && (identity.type !== 'community_enterprise' || identity.enterpriseId === form.asEnterpriseId),
+  )
+  if (selected) return
+  const first = identityOptions.value[0]
+  if (first) pickIdentity(first)
+  else {
+    form.asIdentity = ''
+    form.asEnterpriseId = ''
+  }
+}
+
+watch(identityOptions, ensureVisibleIdentitySelection, { deep: true })
+const loaded = ref(false)
+const baseline = ref('')
+const formSnapshot = computed(() => JSON.stringify(form))
+useUnsavedGuard(() => loaded.value && !submittedId.value && formSnapshot.value !== baseline.value)
 
 onMounted(async () => {
   await config.ensureLoaded()
@@ -136,13 +136,16 @@ onMounted(async () => {
       form.contactEmail = p.contactEmail ?? ''
       form.asIdentity = p.asIdentity
       form.asEnterpriseId = p.asEnterpriseId ?? ''
+      ensureVisibleIdentitySelection()
     } catch (e) {
       Toast(e instanceof ApiError ? e.message : '加载原需求失败')
     }
+    baseline.value = formSnapshot.value
+    loaded.value = true
     return
   }
-  /* v36：探测未提交草稿 */
-  detectDraft()
+  baseline.value = formSnapshot.value
+  loaded.value = true
 })
 
 /* v38：行内校验（长表单 Toast 消失后用户找不到出错字段） */
@@ -166,8 +169,8 @@ async function onSubmit() {
   if (isInvest.value && !form.cooperationNeed.trim()) check('cooperationNeed', '请输入希望获得的投资 / 合作')
   if (!isTask.value && !isInvest.value && !form.bottleneck.trim()) check('bottleneck', '请描述业务瓶颈与合作诉求')
   if (!form.contactName.trim()) check('contactName', '请输入联系人')
-  if (!/^1\d{10}$/.test(form.contactPhone.trim())) check('contactPhone', '请输入正确的联系电话')
-  if (form.contactEmail.trim() && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.contactEmail.trim())) check('contactEmail', '请输入正确的联系邮箱')
+  if (!/^1\d{10}$/.test(form.contactPhone.trim())) check('contactPhone', '请输入 11 位手机号')
+  if (form.contactEmail.trim() && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.contactEmail.trim())) check('contactEmail', '请输入有效邮箱，如 name@example.com')
   if (firstError) {
     Toast(firstError)
     return
@@ -201,13 +204,11 @@ async function onSubmit() {
   try {
     if (revising.value) {
       await resubmitDemand(reviseId, payload)
-      Toast('已重新提交审核')
+      submittedId.value = reviseId
     } else {
-      await createDemand(payload)
-      Toast('已提交审核')
+      const result = await createDemand(payload)
+      submittedId.value = result.id
     }
-    clearDraft()
-    await router.push('/me/demands')
   } catch (e) {
     Toast(e instanceof ApiError ? e.message : '提交失败，请稍后重试')
   } finally {
@@ -218,26 +219,30 @@ async function onSubmit() {
 
 <template>
   <div class="m-demand-form page-fade-in">
+    <FlowResult
+      v-if="submittedId"
+      :title="revising ? '已重新提交审核' : '需求已提交审核'"
+      description="审核结果将通过站内信通知；通过后会进入待发布阶段。"
+      :reference="submittedId"
+      primary-text="查看我的需求"
+      secondary-text="返回需求广场"
+      @primary="router.replace('/me/demands')"
+      @secondary="router.replace('/projects')"
+    />
     <div v-if="!demandOpen">
       <EmptyBlock text="发布功能暂未开放" />
     </div>
 
-    <template v-else>
-      <h1 class="title">{{ revising ? `修改重提 · ${kindLabel}` : kindLabel }}</h1>
+    <template v-else-if="!submittedId">
+      <p v-if="revising" class="revision-label">修改重提</p>
       <p class="subtitle">{{ revising ? '修改后将重新进入审核队列' : '提交后进入审核，通过后展示在项目列表' }}</p>
-
-      <div v-if="draftAvailable && !revising" class="draft-bar">
-        <span>检测到 {{ draftSavedAt }} 的未提交草稿</span>
-        <a v-pressable @click="restoreDraft">恢复</a>
-        <a v-pressable @click="discardDraft">放弃</a>
-      </div>
 
       <div class="flow m-card">
         <span class="flow-label">发布后推进流程</span>
         <div class="flow-steps">
           <template v-for="(s, i) in kindMeta.process" :key="s">
             <Tag class="flow-step" size="small" variant="light" theme="primary">{{ s }}</Tag>
-            <Icon v-if="i < kindMeta.process.length - 1" name="chevron-right" size="12px" class="flow-arrow" />
+            <Icon aria-hidden="true" v-if="i < kindMeta.process.length - 1" name="chevron-right" size="12px" class="flow-arrow" />
           </template>
         </div>
       </div>
@@ -270,203 +275,101 @@ async function onSubmit() {
         </div>
         <p v-if="dictError" class="field-error">
           {{ labels.cat }}加载失败
-          <a class="dict-retry" v-pressable @click="reloadDict">重试</a>
+          <Button class="dict-retry" size="small" variant="text" theme="danger" @click="reloadDict">重试</Button>
         </p>
         <p v-else-if="errors.category" class="field-error">{{ errors.category }}</p>
       </div>
 
-      <template v-if="isTask">
-        <div class="field">
-          <label>期望交付</label>
-          <Textarea
-            v-model="form.deliverable"
-            :autosize="{ minRows: 3, maxRows: 6 }"
-            :maxlength="500"
-            placeholder="希望对方交付什么（成果物、验收标准、周期…）"
-          />
-          <p v-if="errors.deliverable" class="field-error">{{ errors.deliverable }}</p>
-        </div>
-        <div class="field">
-          <label>预算范围（选填）</label>
-          <Input v-model="form.budget" :maxlength="50" placeholder="如：¥8,000 - 15,000 / 面议" clearable />
-        </div>
-        <div class="field">
-          <span class="field-label">预期交付日期</span>
-          <Cell class="date-trigger" :title="form.deliverBy || '请选择预期交付日期'" arrow @click="showDeliverBy = true" />
-          <Popup v-model:visible="showDeliverBy" placement="bottom">
-            <DateTimePicker
-              v-model="form.deliverBy"
-              mode="date"
-              format="YYYY-MM-DD"
-              :start="todayStr"
-              title="选择预期交付日期"
-              @confirm="showDeliverBy = false"
-              @cancel="showDeliverBy = false"
-            />
-          </Popup>
-          <p v-if="errors.deliverBy" class="field-error">{{ errors.deliverBy }}</p>
-        </div>
-      </template>
+      <DemandKindExtras
+        :kind="kind"
+        :errors="errors"
+        :today-str="todayStr"
+        v-model:show-deliver-by="showDeliverBy"
+        v-model:deliverable="form.deliverable"
+        v-model:budget="form.budget"
+        v-model:deliver-by="form.deliverBy"
+        v-model:cooperation-need="form.cooperationNeed"
+        v-model:return-offer="form.returnOffer"
+        v-model:bottleneck="form.bottleneck"
+        v-model:partnership-mode="form.partnershipMode"
+      />
 
-      <template v-else-if="isInvest">
-        <div class="field">
-          <label>希望获得的投资 / 合作</label>
-          <Textarea
-            v-model="form.cooperationNeed"
-            :autosize="{ minRows: 3, maxRows: 6 }"
-            :maxlength="500"
-            placeholder="如：天使轮融资 50 万、渠道资源合作、联合研发…"
-          />
-          <p v-if="errors.cooperationNeed" class="field-error">{{ errors.cooperationNeed }}</p>
-        </div>
-        <div class="field">
-          <label>可提供的回报与资源（选填）</label>
-          <Textarea
-            v-model="form.returnOffer"
-            :autosize="{ minRows: 3, maxRows: 6 }"
-            :maxlength="500"
-            placeholder="如：股权、项目分红、技术与团队能力…"
-          />
-        </div>
-      </template>
-
-      <template v-else>
-        <div class="field">
-          <label>业务瓶颈与合作诉求</label>
-          <Textarea
-            v-model="form.bottleneck"
-            :autosize="{ minRows: 3, maxRows: 6 }"
-            :maxlength="500"
-            placeholder="当前卡在哪里、希望对方补足什么能力或资源…"
-          />
-          <p v-if="errors.bottleneck" class="field-error">{{ errors.bottleneck }}</p>
-        </div>
-        <div class="field">
-          <label>期望的合作方式（选填）</label>
-          <Input v-model="form.partnershipMode" :maxlength="80" placeholder="如：项目制合作、联合运营、渠道分成…" clearable />
-        </div>
-        <div class="field">
-          <label>可提供的资源与回报（选填）</label>
-          <Textarea
-            v-model="form.returnOffer"
-            :autosize="{ minRows: 3, maxRows: 6 }"
-            :maxlength="500"
-            placeholder="如：客户资源、供应链能力、收益分成…"
-          />
-        </div>
-      </template>
-
-      <div class="field">
-        <label>联系人</label>
-        <Input v-model="form.contactName" :maxlength="20" placeholder="请输入联系人姓名" clearable />
-        <p v-if="errors.contactName" class="field-error">{{ errors.contactName }}</p>
-      </div>
-      <div class="field">
-        <label>联系电话</label>
-        <Input v-model="form.contactPhone" type="tel" :maxlength="11" placeholder="请输入 11 位手机号" clearable />
-        <p v-if="errors.contactPhone" class="field-error">{{ errors.contactPhone }}</p>
-      </div>
-      <div class="field">
-        <label>联系邮箱（选填）</label>
-        <Input v-model="form.contactEmail" type="email" autocomplete="email" :spell-check="false" :maxlength="60" placeholder="便于对方直接邮件联系" clearable />
-        <p v-if="errors.contactEmail" class="field-error">{{ errors.contactEmail }}</p>
-      </div>
+      <ContactFields
+        v-model:name="form.contactName"
+        v-model:phone="form.contactPhone"
+        v-model:email="form.contactEmail"
+        :name-error="errors.contactName"
+        :phone-error="errors.contactPhone"
+        :email-error="errors.contactEmail"
+      />
 
       <div class="field">
         <span class="field-label">发布身份</span>
-        <div class="chips">
-          <CheckTag
-            v-for="i in identityOptions"
-            :key="`${i.type}:${i.enterpriseId ?? ''}`"
-            variant="light"
-            size="medium"
-            :checked="isIdentityPicked(i)"
-            @change="pickIdentity(i)"
-          >
-            {{ identityOptionLabel(i, auth.name) }}
-          </CheckTag>
-        </div>
+        <IdentityPicker
+          :identities="identityOptions"
+          :selected="form.asIdentity"
+          :selected-enterprise-id="form.asEnterpriseId"
+          :user-name="auth.name"
+          @select="pickIdentity"
+        />
       </div>
 
-      <Button theme="primary" block class="submit-btn" :loading="submitting" @click="onSubmit">{{ revising ? '重新提交' : '提交需求' }}</Button>
+      <Button theme="primary" block class="submit-btn mobile-sticky-action" :loading="submitting" @click="onSubmit">{{ revising ? '重新提交' : '提交需求' }}</Button>
     </template>
   </div>
 </template>
 
 <style scoped>
 .m-demand-form {
-  padding: 16px;
+  padding:var(--app-space-8);
   display: flex;
   flex-direction: column;
 }
 
-.title {
-  margin: 0 0 4px;
-  font-size: 18px;
+.revision-label {
+  width: fit-content;
+  margin: 0 0 var(--app-space-2);
+  padding: var(--app-space-2) var(--app-space-4);
+  border-radius: var(--td-radius-round);
+  background: var(--td-warning-color-1);
+  color: var(--td-warning-color);
+  font-size: var(--app-font-caption);
 }
 
 .subtitle {
-  margin: 0 0 12px;
-  font-size: 12px;
+  margin:0 0 var(--app-space-6);
+  font-size: var(--app-font-caption);
   color: var(--td-text-color-secondary);
-}
-
-.draft-bar {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  margin: 0 0 12px;
-  padding: 10px 12px;
-  border-radius: var(--td-radius-default);
-  background: var(--td-warning-color-1, #fff1e9);
-  font-size: 12px;
-  color: var(--td-text-color-secondary);
-}
-
-.draft-bar a {
-  color: var(--td-brand-color);
-  cursor: pointer;
-}
-
-.draft-bar a:first-of-type {
-  margin-left: auto;
 }
 
 .field-error {
-  margin: 6px 0 0;
-  font-size: 12px;
+  margin:var(--app-space-3) 0 0;
+  font-size: var(--app-font-caption);
   color: var(--td-error-color);
 }
 
 .dict-retry {
-  margin-left: 6px;
-  color: var(--td-brand-color);
-  cursor: pointer;
+  margin-left:var(--app-space-3);
 }
 
 /* 审核与推进流程卡 */
 .flow {
-  margin-bottom: 16px;
-  padding: 12px 14px;
+  margin-bottom:var(--app-space-8);
+  padding:var(--app-space-6) var(--app-space-7);
 }
 
 .flow-label {
   display: block;
-  font-size: 12px;
+  font-size: var(--app-font-caption);
   color: var(--td-text-color-secondary);
-  margin-bottom: 8px;
+  margin-bottom:var(--app-space-4);
 }
 
 .flow-steps {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: 4px;
-}
-
-.flow-step {
-  padding: 5px 8px;
-  line-height: 1;
+  gap:var(--app-space-2);
 }
 
 .flow-arrow {
@@ -474,29 +377,24 @@ async function onSubmit() {
 }
 
 .field {
-  margin-bottom: 16px;
+  margin-bottom:var(--app-space-8);
 }
 
 .field label,
 .field .field-label {
   display: block;
-  font-size: 13px;
-  margin-bottom: 8px;
+  font-size: var(--app-font-body);
+  margin-bottom:var(--app-space-4);
   color: var(--td-text-color-secondary);
 }
 
 .chips {
   display: flex;
   flex-wrap: wrap;
-  gap: 8px;
-}
-
-.date-trigger {
-  border: 1px solid var(--td-component-border);
-  border-radius: var(--td-radius-large);
+  gap:var(--app-space-4);
 }
 
 .submit-btn {
-  margin-top: 8px;
+  margin-top:var(--app-space-4);
 }
 </style>

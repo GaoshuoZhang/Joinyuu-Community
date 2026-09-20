@@ -5,10 +5,9 @@ import { AppDemandsService } from './demands.service'
 import { CreateDemandDto } from './dto/create-demand.dto'
 import { RespondDemandDto } from './dto/respond-demand.dto'
 import { SelectRespondersDto } from './dto/select-responders.dto'
-import { DemandMessageDto } from './dto/demand-message.dto'
 
 /* 需求广场（M2-R R2，/api/app/demands + /me/demands、/me/responses）：
- * 浏览（@Public 免登录，联系人仅登录可见）、提交、响应、撤回/重提/申诉、发布者审阅响应立项。 */
+ * 浏览（@Public 免登录，联系人仅登录可见）、提交、响应、撤回/重提、发布者审阅响应立项。 */
 @Controller('api/app')
 export class AppDemandsController {
   constructor(private readonly demands: AppDemandsService) {}
@@ -63,12 +62,6 @@ export class AppDemandsController {
     return this.demands.myResponses(this.uid(req))
   }
 
-  @HttpCode(200)
-  @Post('me/responses/:id/withdraw')
-  withdrawResponse(@Req() req: AppAuthenticatedRequest, @Param('id') id: string) {
-    return this.demands.withdrawResponse(this.uid(req), id)
-  }
-
   @Get('me/demands/:id/responses')
   demandResponses(@Req() req: AppAuthenticatedRequest, @Param('id') id: string) {
     return this.demands.demandResponses(this.uid(req), id)
@@ -99,23 +92,6 @@ export class AppDemandsController {
   @Get('me/demands/:id/payload')
   payload(@Req() req: AppAuthenticatedRequest, @Param('id') id: string) {
     return this.demands.demandPayload(this.uid(req), id)
-  }
-
-  @HttpCode(200)
-  @Post('me/demands/:id/appeal')
-  appeal(@Req() req: AppAuthenticatedRequest, @Param('id') id: string, @Body() dto: { reason?: string }) {
-    return this.demands.appealDemand(this.uid(req), id, dto?.reason ?? '')
-  }
-
-  @Get('demands/:id/messages')
-  messages(@Req() req: AppAuthenticatedRequest, @Param('id') id: string) {
-    return this.demands.listMessages(this.uid(req), id)
-  }
-
-  @HttpCode(200)
-  @Post('demands/:id/messages')
-  postMessage(@Req() req: AppAuthenticatedRequest, @Param('id') id: string, @Body() dto: DemandMessageDto) {
-    return this.demands.postMessage(this.uid(req), this.name(req), id, dto)
   }
 
   private uid(req: AppAuthenticatedRequest): string {

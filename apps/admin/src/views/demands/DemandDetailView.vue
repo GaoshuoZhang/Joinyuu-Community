@@ -182,7 +182,7 @@ onMounted(load)
               <span class="head-name">{{ demand.title }}</span>
               <StatusTag entity="demand" :value="demand.status" :scheduled-at="demand.scheduledAt" />
               <t-tag v-if="isArchived" theme="default" variant="light">已归档</t-tag>
-              <t-tag variant="light">{{ demand.category }}</t-tag>
+              <t-tag variant="light">{{ demand.categoryLabel ?? demand.category }}</t-tag>
             </div>
             <!-- 可见范围与可报名范围同行展示 -->
             <div class="scope-row">

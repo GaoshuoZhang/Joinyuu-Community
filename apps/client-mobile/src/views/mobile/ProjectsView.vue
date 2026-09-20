@@ -1,18 +1,21 @@
 <script setup lang="ts">
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { Button, CheckTag, PullDownRefresh, Search, Tabs, TabPanel, Tag, Toast } from 'tdesign-mobile-vue'
+import { Button, PullDownRefresh, Tabs, TabPanel, Toast } from 'tdesign-mobile-vue'
 import { fetchDemands, fetchMyResponses } from '@/api/demands'
 import { useAuthStore } from '@/stores/auth'
 import { useRefreshOnActivate } from '@/composables/useRefreshOnActivate'
 import { useAnimSuppress } from '@/composables/useAnimSuppress'
 import { useRouteQuerySync } from '@/composables/useRouteQuerySync'
+import { useTabSwipe } from '@/composables/useTabSwipe'
 import ListSkeleton from '@/components/ListSkeleton.vue'
 import { useDict } from '@/composables/useDict'
-import IdentityTag from '@/components/shared/IdentityTag.vue'
 import EmptyBlock from '@/components/shared/EmptyBlock.vue'
-import { DEMAND_KINDS, demandDateText } from '@/constants/demand'
+import DemandFilterBar from '@/components/projects/DemandFilterBar.vue'
+import DemandListCard from '@/components/projects/DemandListCard.vue'
+import { DEMAND_KINDS } from '@/constants/demand'
 import type { Demand, DemandKind } from '@/types'
+import { formatZhNumber } from '@/utils/format'
 
 useAnimSuppress()
 
@@ -53,43 +56,11 @@ function syncQuery() {
   void router.replace({ query })
 }
 
-// 与社区页一致的滑动体验：滑动中越过阈值即切换（TDesign 原生手感）；
-// 额外限制每次手势只切换一项，避免 TDesign 1.16.2 连续切换导致的跳项。
-let swipe: { identifier: number; x: number; y: number; index: number; switched: boolean } | null = null
-
-function cancelSwipe() {
-  swipe = null
-}
-
-function startSwipe(event: TouchEvent) {
-  cancelSwipe()
-  const target = event.target
-  if (event.touches.length !== 1 || !(target instanceof Element)) return
-  if (!target.closest('.t-tabs__content') || target.closest('.chips, input, textarea')) return
-  const touch = event.touches[0]
-  swipe = {
-    identifier: touch.identifier,
-    x: touch.clientX,
-    y: touch.clientY,
-    index: TABS.findIndex((kind) => kind.kind === activeTab.value),
-    switched: false,
-  }
-}
-
-function moveSwipe(event: TouchEvent) {
-  if (!swipe || swipe.switched) return
-  if (event.touches.length !== 1) return cancelSwipe()
-  const touch = event.touches[0]
-  const dx = touch.clientX - swipe.x
-  const dy = touch.clientY - swipe.y
-  if (Math.abs(dx) <= Math.abs(dy)) return
-  if (event.cancelable) event.preventDefault()
-  if (Math.abs(dx) < 40) return
-  const next = TABS[swipe.index + (dx < 0 ? 1 : -1)]
-  if (!next) return
-  activeTab.value = next.kind
-  swipe.switched = true
-}
+const { startSwipe, moveSwipe, cancelSwipe } = useTabSwipe(
+  () => TABS.map((tab) => tab.kind),
+  () => activeTab.value,
+  (value) => (activeTab.value = value as DemandKind | 'all'),
+)
 
 const PAGE_SIZE = 10
 const page = ref(1)
@@ -279,63 +250,32 @@ function onPublish() {
         <div v-if="activeTab === kind.kind" class="tab-content">
     <Button theme="primary" block class="publish" @click="onPublish">发布需求</Button>
 
-    <Search v-model="keywordInput" class="search" :placeholder="kind.searchPlaceholder" />
-
-    <div class="chips">
-      <CheckTag variant="light" size="medium" :checked="category === ''" @change="selectCategory('')">
-        全部
-      </CheckTag>
-      <CheckTag
-        v-for="c in categories"
-        :key="c.code"
-        variant="light"
-        size="medium"
-        :checked="category === c.label"
-        @change="selectCategory(c.label)"
-      >
-        {{ c.label }}
-      </CheckTag>
-    </div>
-    <p v-if="filterDictError" class="dict-error">
-      筛选项加载失败
-      <a v-pressable @click="retryFilterDict">重试</a>
-    </p>
-
-    <div class="sorts">
-      <span class="sorts-label">排序</span>
-      <CheckTag
-        v-for="s in SORTS"
-        :key="s.value"
-        variant="light"
-        size="medium"
-        :checked="sort === s.value"
-        @change="selectSort(s.value)"
-      >
-        {{ s.label }}
-      </CheckTag>
-    </div>
+    <DemandFilterBar
+      v-model:keyword="keywordInput"
+      :placeholder="kind.searchPlaceholder"
+      :categories="categories"
+      :category="category"
+      :sort="sort"
+      :sorts="SORTS"
+      :dict-error="filterDictError"
+      @select-category="selectCategory"
+      @select-sort="selectSort"
+      @retry-dict="retryFilterDict"
+    />
 
     <ListSkeleton v-if="firstLoading" :rows="3" />
     <EmptyBlock v-else-if="firstError" :text="error" action-text="重试" @action="reload" />
     <EmptyBlock v-else-if="items.length === 0 && hasFilter" text="没有符合筛选的需求" action-text="清除筛选" @action="clearFilters" />
     <EmptyBlock v-else-if="items.length === 0" text="暂无相关需求" />
     <div v-else class="list stagger">
-      <p class="list-count">共 {{ total }} 条</p>
-      <article v-for="d in items" :key="d.id" class="demand-item m-card" v-pressable @click="router.push(`/demands/${d.id}`)">
-        <div class="d-head">
-          <Tag class="d-cat" size="small" variant="light" theme="primary">{{ d.categoryLabel }}</Tag>
-          <h3 class="d-title">{{ d.title }}</h3>
-        </div>
-        <div class="d-meta">
-          <span class="d-pub">
-            <IdentityTag :type="d.publisherIdentity" />
-            <span class="d-pub-name">{{ d.publisherName }}</span>
-          </span>
-          <span v-if="demandDateText(d)">{{ demandDateText(d) }}</span>
-        </div>
-        <Tag v-if="respondedIds.has(d.id)" class="d-flag" size="small" variant="light" theme="success">已响应</Tag>
-        <p class="d-resp">{{ d.responseCount }} 人响应</p>
-      </article>
+      <p class="list-count">共 {{ formatZhNumber(total) }} 条</p>
+      <DemandListCard
+        v-for="d in items"
+        :key="d.id"
+        :demand="d"
+        :responded="respondedIds.has(d.id)"
+        :to="`/demands/${d.id}`"
+      />
     </div>
 
     <Button v-if="hasMore && !firstLoading" theme="default" variant="outline" block class="more-btn" :loading="loading" @click="loadMore">
@@ -350,10 +290,10 @@ function onPublish() {
 
 <style scoped>
 .projects {
-  padding: 16px;
+  padding:var(--app-space-8);
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap:var(--app-space-6);
 }
 
 .top-tabs {
@@ -364,48 +304,14 @@ function onPublish() {
 .tab-content {
   display: flex;
   flex-direction: column;
-  gap: 12px;
-  padding-top: 12px;
-}
-
-.search {
-  margin-bottom: 2px;
-}
-
-.chips {
-  display: flex;
-  gap: 8px;
-  overflow-x: auto;
-  padding-bottom: 2px;
-}
-
-.dict-error {
-  margin: 0;
-  font-size: 12px;
-  color: var(--td-error-color);
-}
-
-.sorts {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-
-.sorts-label {
-  font-size: 12px;
-  color: var(--td-text-color-secondary);
-}
-
-.dict-error a {
-  margin-left: 6px;
-  color: var(--td-brand-color);
-  cursor: pointer;
+  gap:var(--app-space-6);
+  padding-top:var(--app-space-6);
 }
 
 .hint {
-  padding: 20px;
+  padding:var(--app-space-10);
   color: var(--td-text-color-placeholder);
-  font-size: 12px;
+  font-size: var(--app-font-caption);
   text-align: center;
   background: var(--td-bg-color-container);
   border-radius: var(--td-radius-large);
@@ -414,61 +320,10 @@ function onPublish() {
 .list {
   display: flex;
   flex-direction: column;
-  gap: 10px;
-}
-
-.demand-item {
-  cursor: pointer;
-}
-
-.d-head {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-
-.d-cat {
-  flex-shrink: 0;
-}
-
-.d-title {
-  margin: 0;
-  flex: 1;
-  font-size: 14px;
-  line-height: 1.4;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.d-meta {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  margin-top: 8px;
-  font-size: 12px;
-  color: var(--td-text-color-secondary);
-}
-
-.d-pub {
-  display: inline-flex;
-  align-items: center;
-  gap: 5px;
-}
-
-.d-flag {
-  align-self: flex-start;
-  margin-top: 6px;
-}
-
-.d-resp {
-  margin: 6px 0 0;
-  font-size: 12px;
-  color: var(--td-brand-color);
-  font-weight: 600;
+  gap:var(--app-space-5);
 }
 
 .more-btn {
-  margin-top: 4px;
+  margin-top:var(--app-space-2);
 }
 </style>

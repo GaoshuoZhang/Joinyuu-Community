@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { Avatar, Badge, Icon, Navbar, NoticeBar, TabBar, TabBarItem } from 'tdesign-mobile-vue'
+import { Avatar, Badge, Button, Icon, Navbar, NoticeBar, TabBar, TabBarItem } from 'tdesign-mobile-vue'
 import { NotificationIcon } from 'tdesign-icons-vue-next'
 import { useAuthStore } from '@/stores/auth'
 import { useConfigStore } from '@/stores/config'
@@ -35,7 +35,7 @@ const NAVBAR_FADE_DISTANCE = 80
 const scrollTop = ref(0)
 const navbarAlpha = computed(() => Math.min(1, Math.max(0, scrollTop.value / NAVBAR_FADE_DISTANCE)))
 const navbarStyle = computed(() => ({
-  '--td-navbar-bg-color': `rgba(255, 255, 255, ${navbarAlpha.value.toFixed(3)})`,
+  '--td-navbar-bg-color': `rgba(var(--app-navbar-bg-rgb), ${navbarAlpha.value.toFixed(3)})`,
 }))
 let scrollRaf = 0
 function onWindowScroll() {
@@ -115,13 +115,12 @@ const KEEP_ALIVE_NAMES = [
   'ProjectsView',
   'CommunityView',
   'PlazaView',
-  'EventsView',
   'MallView',
   'SpacesView',
 ]
 /* 「我的」页：隐藏右上角用户信息、仅显示消息铃铛 */
 const isMe = computed(() => route.path === '/me')
-const pageTitle = computed(() => pageTitleFor(route.path))
+const pageTitle = computed(() => (isTab.value ? '' : pageTitleFor(route)))
 
 /* v41/v43：削减动画——Tab 间切换不播放页面过渡；缓存页再次激活的入场动画抑制由
  * useAnimSuppress 在页面根元素上处理（避免 shell 类切换让离场页重放动画）。 */
@@ -135,7 +134,7 @@ onBeforeUnmount(removeAnimGuard)
 /* v41：深链进入二级页时，返回按板块回到来源列表而不是一律回首页 */
 const BACK_FALLBACK: Record<string, string> = {
   articles: '/plaza?tab=articles',
-  events: '/events',
+  events: '/plaza?tab=events',
   demands: '/projects',
   mall: '/mall',
   talents: '/community?tab=talent',
@@ -177,9 +176,7 @@ function onNotices() {
 
 <template>
   <div class="m-shell">
-    <a class="skip-link" href="#main">跳到主要内容</a>
     <Navbar
-      :title="pageTitle || config.config.siteName || '聚屿社区'"
       fixed
       placeholder
       :left-arrow="!isTab"
@@ -188,14 +185,17 @@ function onNotices() {
       :style="navbarStyle"
       @left-click="goBack"
     >
+      <template #title>
+        <h1 class="navbar-title">{{ pageTitle || config.config.siteName || '聚屿社区' }}</h1>
+      </template>
       <template #right>
-        <button v-if="auth.isLogged && !isMe" class="nav-me" type="button" aria-label="我的" @click="router.push('/me')">
+        <Button v-if="auth.isLogged && !isMe" class="nav-me" variant="text" shape="square" size="large" aria-label="我的" @click="router.push('/me')">
           <Avatar size="30px" :image="auth.avatar">{{ auth.name.slice(0, 1) }}</Avatar>
-        </button>
+        </Button>
         <Badge v-if="isMe" class="bell-badge" :count="notices.unread" :max-count="99" :offset="[-10, 10]">
-          <button class="nav-bell" type="button" aria-label="站内信" @click="onNotices">
+          <Button class="nav-bell" variant="text" shape="square" size="large" aria-label="站内信" @click="onNotices">
             <NotificationIcon size="22px" />
-          </button>
+          </Button>
         </Badge>
       </template>
     </Navbar>
@@ -208,7 +208,7 @@ function onNotices() {
       class="offline-bar"
     />
 
-    <main id="main" class="m-content" tabindex="-1">
+    <main id="main" class="m-content" :class="{ 'has-tabbar': isTab }" tabindex="-1">
       <!-- v38：列表/浏览页 KeepAlive，保留筛选、分页与滚动位置；详情页即时重建；v41：Tab 间切换无过渡 -->
       <router-view v-slot="{ Component, route: current }">
         <Transition :name="transitionName" mode="out-in">
@@ -219,13 +219,13 @@ function onNotices() {
       </router-view>
     </main>
 
-    <TabBar :value="active" :fixed="true" :placeholder="false" safe-area-inset-bottom :bordered="true" @change="onTabChange">
+    <TabBar v-if="isTab" :value="active" :fixed="true" :placeholder="false" safe-area-inset-bottom :bordered="true" @change="onTabChange">
       <TabBarItem v-for="tab in tabs" :key="tab.value" :value="tab.value">
         <template #icon>
           <Badge v-if="tab.value === '/me' && notices.unread > 0" :count="notices.unread" :max-count="99">
-            <Icon :name="tab.icon" size="22px" />
+            <Icon aria-hidden="true" :name="tab.icon" size="22px" />
           </Badge>
-          <Icon v-else :name="tab.icon" size="22px" />
+          <Icon aria-hidden="true" v-else :name="tab.icon" size="22px" />
         </template>
         {{ tab.label }}
       </TabBarItem>
@@ -237,6 +237,12 @@ function onNotices() {
 /* v43：顶栏背景渐变过渡（透明度由内联 CSS 变量控制） */
 .m-shell :deep(.t-navbar__content) {
   transition: background-color 160ms linear;
+}
+
+/* 页标题为 h1（Navbar 默认渲染 span，视觉与库内 title 一致） */
+.navbar-title {
+  margin:0;
+  font: var(--td-navbar-title-font);
 }
 
 .m-shell {
@@ -252,30 +258,16 @@ function onNotices() {
 
 .m-content {
   flex: 1;
-  /* v38：底部安全区也要计入内容留白，否则最后一行会被 Home 指示条压住 */
-  padding-bottom: calc(var(--app-mobile-tabbar-h) + 16px + env(safe-area-inset-bottom));
+  padding-bottom: calc(var(--app-space-8) + env(safe-area-inset-bottom));
+}
+
+/* 一级 Tab 才为固定底栏留位；详情/表单页隐藏底栏，保持清晰的任务层级。 */
+.m-content.has-tabbar {
+  padding-bottom: calc(var(--app-mobile-tabbar-h) + var(--app-space-8) + env(safe-area-inset-bottom));
 }
 
 .offline-bar {
   --td-notice-bar-warning-color: var(--td-warning-color);
-}
-
-/* v39：跳转链接（键盘聚焦时可见） */
-.skip-link {
-  position: absolute;
-  left: 8px;
-  top: -48px;
-  z-index: 200;
-  padding: 10px 14px;
-  border-radius: var(--td-radius-default);
-  background: var(--td-brand-color);
-  color: var(--td-text-color-anti);
-  font-size: 13px;
-  transition: top 160ms ease;
-}
-
-.skip-link:focus {
-  top: calc(8px + env(safe-area-inset-top));
 }
 
 /* 页面切换过渡（v41：更快、仅淡入淡出；Tab 间切换走 none 无过渡） */
@@ -301,8 +293,8 @@ function onNotices() {
   justify-content: center;
   min-width: 44px;
   min-height: 44px;
-  margin-right: -7px;
-  padding: 0;
+  margin-right:calc(-1 * var(--app-space-3));
+  padding:0;
   border: none;
   background: none;
   border-radius: var(--td-radius-circle);
@@ -316,7 +308,7 @@ function onNotices() {
   justify-content: center;
   width: 44px;
   height: 44px;
-  padding: 0;
+  padding:0;
   border: none;
   background: none;
   color: var(--td-text-color-primary);

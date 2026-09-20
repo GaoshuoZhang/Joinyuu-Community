@@ -47,7 +47,7 @@ export const permissionCatalog: SeedPermission[] = [
   { code: 'perm:external-enterprise:enable', name: '启用合作企业', module: '社区成员', authType: 'button', sort: 22 },
   { code: 'perm:external-enterprise:delete', name: '删除合作企业', module: '社区成员', authType: 'button', sort: 23 },
   { code: '/approvals', name: '申请审核', module: '社区成员', authType: 'menu', sort: 24 },
-  { code: '/member-governance', name: '注销与实名治理', module: '社区成员', authType: 'menu', sort: 25 },
+  { code: '/member-governance', name: '注销治理', module: '社区成员', authType: 'menu', sort: 25 },
   { code: '/card-management', name: '名片管理', module: '社区成员', authType: 'menu', sort: 26 },
 
   { code: '/demands', name: '需求管理', module: '业务运营', authType: 'menu', sort: 30 },

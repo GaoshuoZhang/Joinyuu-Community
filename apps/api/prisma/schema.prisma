@@ -9,7 +9,8 @@
 //   6. 枚举用 String + 应用层校验（保持与前端字符串契约一致）
 
 generator client {
-  provider = "prisma-client-js"
+  provider      = "prisma-client-js"
+  binaryTargets = ["native", "windows", "debian-openssl-3.0.x"]
 }
 
 datasource db {
@@ -183,11 +184,7 @@ model User {
   status                 String                      @default("active") @db.VarChar(16)
   realName               String?                     @db.VarChar(64)
   citizenId              String?                     @db.VarChar(32)
-  realnameReviewStatus   String                      @default("unverified") @db.VarChar(16) // unverified | pending | approved | rejected
-  realnameSubmittedAt    String?                     @db.VarChar(16)
-  realnameReviewedAt     String?                     @db.VarChar(16)
-  realnameReviewedBy     String?                     @db.VarChar(64)
-  realnameReviewNote     String?                     @db.VarChar(255)
+  verifiedAt             String?                     @db.VarChar(16)
   wechatOpenid           String?                     @db.VarChar(64)
   wechatUnionid          String?                     @db.VarChar(64)
   wechatVerified         Boolean                     @default(false)
@@ -213,7 +210,6 @@ model User {
   articleComments        ArticleComment[]
   demandResponses        DemandRespondent[]
   reports                Report[]
-  appeals                Appeal[]
   blocksCreated          UserBlock[]
   individualCard         IndividualCard?
 
@@ -251,7 +247,6 @@ model Enterprise {
   settledAt       String?  @db.VarChar(16)
   leaseType       String   @db.VarChar(32)
   status          String   @default("pending") @db.VarChar(16)
-  showcaseStatus  String   @default("none") @db.VarChar(16)
   experience      Int      @default(0)
   // 关联用户（社区企业必须关联一个个人用户，作为企业联系人）
   contactUserId   String?  @db.VarChar(16)
@@ -284,8 +279,7 @@ model ExternalEnterpriseProfile {
   size               String  @default("") @db.VarChar(32)
   foundedAt          String  @default("") @db.VarChar(16)
   description        String  @db.Text
-  cooperationCount   Int     @default(0)
-  firstCooperationAt String  @db.VarChar(16)
+  registeredAt       String  @db.VarChar(16)
   deletedAt          String? @db.VarChar(16)
   deletedBy          String? @db.VarChar(64)
 
@@ -363,7 +357,6 @@ model Demand {
   projectId            String?            @db.VarChar(16)
   respondPoints        Int?
   respondents          DemandRespondent[]
-  messages             DemandMessage[]
   deletedAt            String?            @db.VarChar(16)
   deletedBy            String?            @db.VarChar(64)
   creatorName          String?            @db.VarChar(64)
@@ -401,19 +394,6 @@ model DemandRespondent {
   @@index([userId])
 }
 
-// M2-R R2：需求沟通留言板（仅需求发布方与响应方可读写）
-model DemandMessage {
-  id         Int    @id @default(autoincrement())
-  demandId   String @db.VarChar(16)
-  senderId   String @db.VarChar(16)
-  senderName String @db.VarChar(64)
-  content    String @db.VarChar(500)
-  at         String @db.VarChar(16)
-  demand     Demand @relation(fields: [demandId], references: [id], onDelete: Cascade)
-
-  @@index([demandId])
-}
-
 model Project {
   id             String              @id @db.VarChar(16)
   name           String              @db.VarChar(128)
@@ -430,9 +410,6 @@ model Project {
   closeReason    String?             @db.VarChar(255)
   undertakers    ProjectUndertaker[]
   milestones     Milestone[]
-  tasks          ProjectTask[]
-  files          ProjectFile[]
-  discussions    ProjectDiscussion[]
   deletedAt      String?             @db.VarChar(16)
   deletedBy      String?             @db.VarChar(64)
   archivableAt   String?             @db.VarChar(16)
@@ -472,51 +449,11 @@ model Milestone {
   @@index([projectId])
 }
 
-// M2-R R2：项目协作任务（参与双方可见）
-model ProjectTask {
-  id        Int     @id @default(autoincrement())
-  projectId String  @db.VarChar(16)
-  name      String  @db.VarChar(128)
-  assignee  String? @db.VarChar(64)
-  status    String  @default("todo") @db.VarChar(8) // todo | doing | done
-  duedAt    String? @db.VarChar(16)
-  createdAt String  @db.VarChar(16)
-  project   Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
-
-  @@index([projectId])
-}
-
-// M2-R R2：项目协作文件（对象存储 + 鉴权下载）
-model ProjectFile {
-  id         Int     @id @default(autoincrement())
-  projectId  String  @db.VarChar(16)
-  storeKey   String  @db.VarChar(255)
-  name       String  @db.VarChar(255)
-  size       Int
-  uploaderId String  @db.VarChar(16)
-  at         String  @db.VarChar(16)
-  project    Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
-
-  @@index([projectId])
-}
-
-// M2-R R2：项目协作讨论（参与双方）
-model ProjectDiscussion {
-  id         Int     @id @default(autoincrement())
-  projectId  String  @db.VarChar(16)
-  senderId   String  @db.VarChar(16)
-  senderName String  @db.VarChar(64)
-  content    String  @db.VarChar(500)
-  at         String  @db.VarChar(16)
-  project    Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
-
-  @@index([projectId])
-}
-
 model CommunityEvent {
   id                   String            @id @db.VarChar(16)
   createdAt            String            @db.VarChar(16)
   title                String            @db.VarChar(128)
+  coverUrl             String?           @db.VarChar(512)
   type                 String            @db.VarChar(32)
   startTime            String            @db.VarChar(16)
   endTime              String            @db.VarChar(16)
@@ -642,9 +579,10 @@ model PointsRecord {
 model MallGoods {
   id                   String   @id @db.VarChar(16)
   name                 String   @db.VarChar(128)
+  coverUrl             String?  @db.VarChar(512)
   // M2-R R2（Q1 决）：category 改造为 goods_category 字典分类（GC code）；履约类型由 fulfillment 承担
   category             String   @db.VarChar(16)
-  fulfillment          String   @default("physical") @db.VarChar(16) // physical | voucher | service
+  fulfillment          String   @default("physical") @db.VarChar(16) // physical | voucher
   points               Int
   stock                Int
   status               String   @default("off") @db.VarChar(8) // on | off | restock（库存为 0）
@@ -674,7 +612,7 @@ model RedemptionOrder {
   points           Int
   // M2-R R2：履约类型快照
   fulfillment      String  @default("physical") @db.VarChar(16)
-  status           String  @db.VarChar(24) // pending_shipment | shipped | finished | cancelled + pending_use（服务权益，R2）
+  status           String  @db.VarChar(24) // pending_shipment | shipped | finished | cancelled + pending_use（权益券，R2）
   createdAt        String  @db.VarChar(16)
   shippedAt        String? @db.VarChar(16)
   finishedAt       String? @db.VarChar(16)
@@ -932,6 +870,8 @@ model ArticleComment {
   userName  String  @db.VarChar(64)
   content   String  @db.VarChar(200)
   at        String  @db.VarChar(16)
+  /** 发表身份快照（type + 企业/组织信息），历史评论为空按个人用户 */
+  identity  Json?
   article   Article @relation(fields: [articleId], references: [id], onDelete: Cascade)
   user      User    @relation(fields: [userId], references: [uid], onDelete: Cascade)
 
@@ -1179,24 +1119,6 @@ model Report {
 
   @@index([reporterId, status])
   @@index([status])
-}
-
-// 需求/投稿申诉（一次性提交，管理端复核后回写原业务状态）
-model Appeal {
-  id          Int     @id @default(autoincrement())
-  appellantId String  @db.VarChar(16)
-  targetType  String  @db.VarChar(16) // demand | article
-  targetId    String  @db.VarChar(16)
-  reason      String  @db.VarChar(500)
-  status      String  @default("pending") @db.VarChar(16) // pending | resolved | rejected
-  createdAt   String  @db.VarChar(16)
-  handledAt   String? @db.VarChar(16)
-  handledBy   String? @db.VarChar(64)
-  resolution  String? @db.VarChar(255)
-  user        User    @relation(fields: [appellantId], references: [uid], onDelete: Cascade)
-
-  @@unique([appellantId, targetType, targetId])
-  @@index([status, createdAt])
 }
 
 // 屏蔽名单（屏蔽后对方的内容/评论在列表中不可见；blockedUid 不设外键便于解耦）

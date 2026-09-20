@@ -2,7 +2,7 @@ import { Type } from 'class-transformer'
 import { IsIn, IsInt, IsOptional, IsString, Min } from 'class-validator'
 
 /* GET /api/admin/external-enterprises 查询参数
- * 排序：默认 cooperationCount 倒序（合作最多在前）；firstCooperationAt 按 YYYY-MM 数值比较 */
+ * 排序：默认 registeredAt 倒序（登记日期新在前）；registeredAt 为 YYYY-MM-DD */
 export class QueryExternalEnterprisesDto {
   @Type(() => Number)
   @IsInt()
@@ -27,8 +27,8 @@ export class QueryExternalEnterprisesDto {
   status?: string
 
   @IsOptional()
-  @IsIn(['cooperationCount', 'firstCooperationAt'])
-  sortBy?: 'cooperationCount' | 'firstCooperationAt'
+  @IsIn(['registeredAt'])
+  sortBy?: 'registeredAt'
 
   @IsOptional()
   @IsIn(['ascend', 'descend'])

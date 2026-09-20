@@ -1,14 +1,14 @@
-# 聚屿社区 · 实体字段清单（69 个已落地模型）
+# 聚屿社区 · 实体字段清单
 
 > 事实来源：`apps/api/prisma/schema.prisma`（唯一事实），本文档为人读索引。模型变更时改 schema 并向 wiki-backend §7 与本文档同步。
 > 通用约定：主键为前缀字符串 ID（IdSequence 原子发号）；时间绝大多数为 String（AdminUser 的 createdAt/updatedAt 为 DateTime）；枚举用 String + 应用层校验；展示快照冗余为列不外键化。
-> **M2-R 收口及复查（2026-09-17）**：69 模型 / 34 迁移。后续迁移 `20260917120000_rule_redesign`（等级按身份拆分、发布限制取代实名权益权益、移除积分任务）、`20260917130000_admin_information_architecture`（移除 ShowcaseRequest 与 showcaseComment、政策权限拆分、等级回填）、`20260917140000_level_tier_identity_default_cleanup`、`20260917150000_publish_limits_default_unlimited`（发布限制默认 -1）、`20260917160000_article_closed_banners_notices_services`（文章 closed/评论开关/ArticleTakedown、HomeBanner、站内信简化、服务申请下线）、`20260917170000_banners_permission`（轮播图管理权限）。收口迁移 `20260917020000_m2r_closeout_governance` 新增 CardFieldConfig（type 主键、editableFields、updatedAt/By），User 增 realnameReviewStatus/SubmittedAt/ReviewedAt/ReviewedBy/ReviewNote，AccountDeletionRequest 增 reviewedAt/By/reviewNote 和 rejected 状态，IndividualCard 增 displayName。复查迁移 `20260917030000_closeout_review_guards` 为 AccountDeletionRequest 增 SQL 部分唯一索引（每 userId 最多一条 cooling）；User/Enterprise/Demand/Article 增 moderationVersion，由状态/归档/冻结写入触发器递增；Report 增 action、targetModerationVersion、restoredAt，绑定一次性恢复资格。功能验收见 `m2-r-closeout.md`。
+> `schema.prisma` 为当前事实来源。项目协作任务、共享文件与讨论功能已移除；项目及里程碑履约保留。
 
 ## 1. 认证、治理与基础设施（9）
 
 - **AdminUser** — 管理端账号（id 自增；username 唯一；passwordHash bcrypt；name 展示名；status active/disabled；lastLoginAt?；createdAt/updatedAt DateTime；种子 admin/admin123）
 - **AdminRole** — RBAC 角色（id R1+；code 唯一；name/description/sort/createdAt；内置 super/operator/auditor/space-ops）
-- **AdminPermission** — 权限点目录（code PK：菜单路径或 perm:xxx 按钮码；name/module；authType menu|button；sort；共 49 码）
+- **AdminPermission** — 权限点目录（code PK：菜单路径或 perm:xxx 按钮码；name/module；authType menu|button；sort；当前共 55 码）
 - **AdminUserRole** — 管理员-角色关联（adminUserId+roleId 联合唯一）
 - **AdminRolePermission** — 角色-权限点关联（roleId+permissionCode 联合唯一）
 - **LoginLog** — 登录日志（id LL；loginAt 秒级；username/ip/device；status success/fail/locked；failReason?；索引 loginAt/status）
@@ -18,11 +18,11 @@
 
 ## 2. 社区成员域（7）
 
-- **User** — 用户（uid PK U；nickname 展示名；phone 唯一；email/gender；avatar?；status active/frozen；realName?/citizenId?；微信字段 M3 预留；frozenUntil?/frozenReason?；points 积分余额；registeredAt/lastActiveAt；bio；activities Json）
+- **User** — 用户（uid PK U；nickname 展示名；phone 唯一；email/gender；avatar?；status active/frozen；realName?/citizenId?/verifiedAt?；微信字段 M3 预留；frozenUntil?/frozenReason?；points 积分余额；registeredAt/lastActiveAt；bio；activities Json）
 - **UserIdentity** — 一人多身份（userId 级联；type individual/community_individual/community_enterprise/external_enterprise；enterpriseId?/enterpriseName?/role?/title；level?/experience? 仅社区两类持有；唯一 userId+type+enterpriseId）
-- **Enterprise** — 社区企业（id E；name/industry/size/foundedAt/settledAt?/leaseType；status pending 默认/active/exited/disabled；showcaseStatus none/pending/published/rejected + showcaseComment?；experience 企业经验；contactUserId? 关联个人用户 + contactTitle 职位 + contactName/contactPhone/contactEmail?；description/tags；deletedAt?/deletedBy?；**stage 已删**）
-- **ExternalEnterpriseProfile** — 合作企业档案（id XE；name/industry；status active/disabled；size/foundedAt；description；cooperationCount/firstCooperationAt；deletedAt?/deletedBy?；聚合视图 = 档案 + external_enterprise 身份派生成员，不建独立实体表）
-- **Application** — 申请审核（id AP；type settle 企业入驻/individual 个体入驻/cooperation 企业合作/identity 身份绑定；applicantName/applicantPhone/targetName；submittedAt；status pending/approved/rejected；summary；details Json 表单明细；records Json 审核时间线；deletedAt?/deletedBy?/archivableAt?）
+- **Enterprise** — 社区企业（id E；name/industry/size/foundedAt/settledAt?/leaseType；status pending 默认/active/exited/disabled；experience 企业经验；contactUserId? 关联个人用户 + contactTitle 职位 + contactName/contactPhone/contactEmail?；description/tags；deletedAt?/deletedBy?；**stage 已删**）
+- **ExternalEnterpriseProfile** — 合作企业档案（id XE；name/industry；status active/disabled；size/foundedAt；description；registeredAt（登记日期=填表通过审核当天）；deletedAt?/deletedBy?；聚合视图 = 档案 + external_enterprise 身份派生成员，不建独立实体表）
+- **Application** — 申请审核（id AP；type settle 企业入驻/individual 个体入驻/cooperation 企业合作/exit 企业退驻；applicantName/applicantPhone/targetName；submittedAt；status pending/approved/rejected；summary；details Json 表单明细；records Json 审核时间线；deletedAt?/deletedBy?/archivableAt?）
 - **ExperienceRecord** — 经验流水（id EX；targetType enterprise/individual；targetId；delta/balance/reason/at/operator；source rule/manual）
 - **PointsRecord** — 积分流水（id PT；userId；delta/balance/reason/at/operator；source rule/manual/redemption；dedupeKey? 唯一，用于积分发放幂等）
 
@@ -38,7 +38,7 @@
 
 ## 4. 积分商城与规则（5）
 
-- **MallGoods** — 商品（id G；category physical/virtual/voucher；points/stock；status on/off/restock（库存为 0）；description/redeemedCount/createdAt；shippingMethods[] pickup|delivery + pickupAddress? + shippingFee?；visibilityIdentities/visibilityLevels 可见范围、orderIdentities/orderLevels 可下单范围；deletedAt?/deletedBy?/archivableAt?）
+- **MallGoods** — 商品（id G；category GC001 实物商品 / GC003 权益券；fulfillment physical|voucher；points/stock；status on/off/restock（库存为 0）；description/redeemedCount/createdAt；shippingMethods[] pickup|delivery + pickupAddress? + shippingFee?；visibilityIdentities/visibilityLevels 可见范围、orderIdentities/orderLevels 可下单范围；deletedAt?/deletedBy?/archivableAt?）
 - **RedemptionOrder** — 兑换订单（id RO；状态机 pending_shipment→shipped→finished/cancelled；userId/userName + goodsId/goodsName/points；createdAt/shippedAt?/finishedAt?；recipientName?/recipientPhone?/address?/note?；cancelReason?；deletedAt?/deletedBy?/archivableAt?）
 - **PointsRule** — 积分规则（code PK 固定 9 项：activity_checkin/activity_enroll_approved/article_accepted/demand_published/demand_responded/demand_undertaken/project_milestone/identity_first_bind/daily_login（默认停用）；name/scene/description 写死；points 可编辑；status）
 - **ExperienceRule** — 经验值规则（code PK 固定 6 项：activity_checkin/activity_enroll_approved/article_accepted/project_undertaken/project_completed/identity_first_bind；exp/status 可编辑）
@@ -73,7 +73,7 @@
 
 ## 8. M2-R 新增模型与字段扩展（2026-09-16；R1 已实施，R2~R4 规划）
 
-> 迁移按 `docs/m2-r-plan.md` R1~R4 分批执行（每批一组迁移）。字段口径以客户端 `apps/client-mobile/src/types/index.ts` 与 `api-app-design.md` 为准，偏差先改契约文档。
+> M2-R 迁移已经完成。字段口径以 `schema.prisma` 为事实源，并与客户端类型及 `api-app-design.md` 保持同步。
 
 ### 8.1 新增模型（27；含 2026-09-17 下线与新增调整）
 
@@ -84,8 +84,6 @@
 | R1 | AgreementConsent | 协议同意留痕（userId+agreementType+version 联合唯一；consentedAt；注册同时记录用户协议与隐私政策）（§7.7 A3/A11） |
 | R1 | AccountDeletionRequest | 注销申请（id；userId；status pending/cooling(7 天)/approved/cancelled；requestedAt/effectiveAt?；复核工单） |
 | R2 | DemandMessage | 需求沟通留言（demandId；senderId;content；at；仅发布方与响应方可见）（E2） |
-| R2 | ProjectTask | 项目协作任务（projectId；name/assignee/status/duedAt；参与双方可见）（E3） |
-| R2 | ProjectFile | 项目协作文件（projectId；storeKey/name/size/uploader；对象存储 + 鉴权下载）（E3） |
 | R2 | EventFeedback | 活动反馈（eventId+userId 唯一；rating 1~5；comment；结束后 + 参与过）（§7.7 A4） |
 | R2 | EventTicket | 电子票（eventId+enrollmentId 唯一；ticketNo；redeemCode HMAC 确定性；redeemedAt? 签到即核销）（E1） |
 | R2 | Favorite | 收藏（userId+targetType+targetId 唯一；targetType demand/article/event/enterprise/talent）（§7.1-22） |
@@ -96,7 +94,6 @@
 | R3 | EnterpriseInvitation | 企业成员邀请（id EI；enterpriseId；inviterUid；inviteeUid；role 职位；status pending/accepted/rejected/expired；7 天有效期）（§7.1-17） |
 | R3 | TransferRequest | 负责人转移请求（enterpriseId；fromUid/toUid；status pending/accepted/cancelled/expired；接受后变更 contactUserId）（§7.1-21） |
 | R3 | Policy | 社区政策/服务内容（id PL；category；title/content Html sanitize；version/effectiveAt；publisher；attachments[]；featured 精选；status；admin A18 维护）（§7.1-12+Q3） |
-| R2 | ProjectDiscussion | 项目讨论（projectId/senderId/content/at），参与方鉴权 |
 | R2 | ArticleComment | 文章评论（articleId/userId/content/at），支持删除和举报 |
 | R2 | ApplicationFormConfig | 申请表单配置（type/title/subtitle/submitLabel/tips/fields） |
 | R3 | IndividualCard | 个人名片（userId 唯一、data Json、published、updatedAt） |
@@ -124,7 +121,7 @@
 | R3 | Enterprise | logo?/website?/address?/services[]?/advantages[]?（精致名片字段，负责人可编辑） |
 | R3 | UserIdentity | permissions[]（8 项枚举 publish_demand/respond_demand/space_reserve/article_submit/manage_members/invite_member/assign_permission/edit_card；负责人全部、成员由负责人分配） |
 
-**卡片字段配置（Q8 决）**：个人名片（`User`/UserIdentity 派生字段）与社区企业名片（`Enterprise` 字段）均**免审核保存即公开**；admin 后台可**查看/编辑**个人与企业名片，并可配置「用户编辑名片时可填写的字段白名单」（`GET /api/app/card-schema/:type` 下发；管理面配置存储见 m2-r-plan §3.1 A19）。
+**卡片字段配置**：个人名片（`User`/UserIdentity 派生字段）与社区企业名片（`Enterprise` 字段）均**免审核保存即公开**；admin 后台可**查看/编辑**个人与企业名片，并可配置用户可编辑字段白名单，由 `GET /api/app/card-schema/:type` 下发。
 
 ## 修订记录
 

@@ -1,6 +1,6 @@
 import { Body, Controller, Get, HttpCode, Param, Post, Req, UnauthorizedException } from '@nestjs/common'
 import type { AppAuthenticatedRequest } from '../../../common/interfaces/app-authenticated-request'
-import { AppApplicationsService, type ApplicationFormSchemaDto, type MyApplicationDto } from './applications.service'
+import { AppApplicationsService, type ApplicationFormSchemaDto, type MyApplicationDetailDto, type MyApplicationDto } from './applications.service'
 import { CreateApplicationDto } from './dto/create-application.dto'
 
 @Controller('api/app')
@@ -25,6 +25,12 @@ export class AppApplicationsController {
   @Get('me/applications')
   myApplications(@Req() req: AppAuthenticatedRequest): Promise<MyApplicationDto[]> {
     return this.applications.myApplications(this.check(req))
+  }
+
+  /** 我的申请详情（仅申请人本人） */
+  @Get('me/applications/:id')
+  detail(@Req() req: AppAuthenticatedRequest, @Param('id') id: string): Promise<MyApplicationDetailDto> {
+    return this.applications.detail(this.check(req), id)
   }
 
   /** 撤回审核中的申请 */

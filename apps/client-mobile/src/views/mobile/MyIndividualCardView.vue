@@ -1,16 +1,17 @@
 <script setup lang="ts">
 import { computed, onMounted, reactive, ref } from 'vue'
 import { useRouter } from 'vue-router'
-import { Loading, Avatar, Button, Icon, Input, Switch, Tag, Textarea, Toast } from 'tdesign-mobile-vue'
+import { Avatar, Button, Icon, Input, Switch, Tag, Textarea, Toast } from 'tdesign-mobile-vue'
 import { fetchCardSchema, fetchMyCards, updateIndividualCard } from '@/api/enterprises'
 import { useAsyncList } from '@/composables/useAsyncList'
-import { useDraft } from '@/composables/useDraft'
 import { useUnsavedGuard } from '@/composables/useUnsavedGuard'
 import { useAuthStore } from '@/stores/auth'
 import { ApiError } from '@/api/http'
 import EmptyBlock from '@/components/shared/EmptyBlock.vue'
+import ListSkeleton from '@/components/ListSkeleton.vue'
+import { INDIVIDUAL_LIST_SECTIONS } from '@/constants/individualCard'
 
-/* 个人名片（简历式，[MOCK-ONLY]，缺口 §7.1-16）：预览 + 分段编辑（可增删）；
+/* 个人名片（简历式）：预览 + 分段编辑（可增删）；
  * 头像同步个人资料；保存即生效并公开到社区人才库；v35 支持敏感字段可见性与公开预览。 */
 const router = useRouter()
 const auth = useAuthStore()
@@ -48,76 +49,11 @@ const form = reactive({
   showPoliticalStatus: true,
 })
 
-/* v38 草稿与离开保护 */
-const { hasDraft: draftAvailable, savedAt: draftSavedAt, detect: detectDraft, restore: restoreDraft, discard: discardDraft, clear: clearDraft, rebase: rebaseDraft, dirty } = useDraft(
-  'individual-card',
-  () => ({ ...form }),
-  (value) => Object.assign(form, value),
-  { enabled: () => !!card.value, isEmpty: () => !form.displayName.trim() && !form.intro.trim() },
-)
-useUnsavedGuard(() => dirty.value)
+const loaded = ref(false)
+const baseline = ref('')
+const formSnapshot = computed(() => JSON.stringify(form))
+const { markClean } = useUnsavedGuard(() => loaded.value && formSnapshot.value !== baseline.value)
 
-/** 可增删的分段：key = form 中的列表字段 */
-const LIST_SECTIONS: {
-  key: 'education' | 'work' | 'projects' | 'honors' | 'socials' | 'customLinks'
-  title: string
-  fields: { k: string; label: string; ph?: string; textarea?: boolean }[]
-}[] = [
-  {
-    key: 'education',
-    title: '教育经历',
-    fields: [
-      { k: 'school', label: '学校', ph: '如：浙江大学' },
-      { k: 'major', label: '专业', ph: '如：工业设计' },
-      { k: 'degree', label: '学历 / 学位', ph: '如：本科' },
-      { k: 'period', label: '起止时间', ph: '如：2014 - 2018' },
-    ],
-  },
-  {
-    key: 'work',
-    title: '工作经历',
-    fields: [
-      { k: 'company', label: '公司', ph: '如：某某科技' },
-      { k: 'title', label: '职位', ph: '如：产品设计师' },
-      { k: 'period', label: '起止时间', ph: '如：2021 - 至今' },
-      { k: 'description', label: '工作内容', ph: '负责的事项与成果…', textarea: true },
-    ],
-  },
-  {
-    key: 'projects',
-    title: '项目经历',
-    fields: [
-      { k: 'name', label: '项目名称', ph: '如：聚屿社区小程序' },
-      { k: 'role', label: '担任角色', ph: '如：设计主理' },
-      { k: 'period', label: '起止时间', ph: '如：2026' },
-      { k: 'description', label: '项目简介', ph: '项目背景、成果…', textarea: true },
-    ],
-  },
-  {
-    key: 'honors',
-    title: '荣誉证书',
-    fields: [
-      { k: 'name', label: '名称', ph: '如：红点设计概念奖' },
-      { k: 'date', label: '获得时间', ph: '如：2023' },
-    ],
-  },
-  {
-    key: 'socials',
-    title: '社交媒体链接',
-    fields: [
-      { k: 'label', label: '名称', ph: '如：GitHub / 即刻' },
-      { k: 'url', label: '链接', ph: 'https://' },
-    ],
-  },
-  {
-    key: 'customLinks',
-    title: '自定义链接',
-    fields: [
-      { k: 'label', label: '名称', ph: '如：个人作品集' },
-      { k: 'url', label: '链接', ph: 'https://' },
-    ],
-  },
-]
 
 function fillForm() {
   const c = card.value
@@ -136,21 +72,21 @@ function fillForm() {
   form.customLinks = (c.customLinks ?? []).map((l) => ({ label: l.label ?? '', url: l.url ?? '' }))
   form.showAge = c.visibility?.age ?? true
   form.showPoliticalStatus = c.visibility?.politicalStatus ?? true
-  rebaseDraft()
-  detectDraft()
+  baseline.value = formSnapshot.value
+  loaded.value = true
 }
 
 function parseSkills(): string[] {
   return form.skillsText.split(/[、,，\s]+/).filter(Boolean)
 }
 
-function addEntry(key: (typeof LIST_SECTIONS)[number]['key']) {
-  const section = LIST_SECTIONS.find((s) => s.key === key)
+function addEntry(key: (typeof INDIVIDUAL_LIST_SECTIONS)[number]['key']) {
+  const section = INDIVIDUAL_LIST_SECTIONS.find((s) => s.key === key)
   if (!section) return
   form[key].push(Object.fromEntries(section.fields.map((f) => [f.k, ''])))
 }
 
-function removeEntry(key: (typeof LIST_SECTIONS)[number]['key'], index: number) {
+function removeEntry(key: (typeof INDIVIDUAL_LIST_SECTIONS)[number]['key'], index: number) {
   form[key].splice(index, 1)
 }
 
@@ -182,7 +118,8 @@ async function onSave() {
       visibility: { age: form.showAge, politicalStatus: form.showPoliticalStatus },
     })
     Toast('个人名片已保存')
-    clearDraft()
+    baseline.value = formSnapshot.value
+    markClean()
     await run()
     fillForm()
   } catch (e) {
@@ -195,15 +132,10 @@ async function onSave() {
 
 <template>
   <div class="page-fade-in m-card-page">
-    <Loading v-if="loading" class="state" text="加载中…" />
+    <ListSkeleton v-if="loading" />
     <EmptyBlock v-else-if="error" :text="error" action-text="重试" @action="run" />
     <EmptyBlock v-else-if="!card" text="当前账号没有个人名片" />
     <template v-else>
-      <div v-if="draftAvailable" class="draft-bar">
-        <span>检测到 {{ draftSavedAt }} 的未保存草稿</span>
-        <a v-pressable @click="restoreDraft">恢复</a>
-        <a v-pressable @click="discardDraft">放弃</a>
-      </div>
       <section class="m-card preview">
         <div class="head">
           <Avatar size="52px" class="avatar" :image="card.avatar">{{ card.displayName.slice(0, 1) }}</Avatar>
@@ -213,7 +145,7 @@ async function onSave() {
           </div>
           <Tag class="card-badge" size="small" variant="light" theme="primary">个人名片</Tag>
         </div>
-        <p class="preview-link" v-pressable @click="router.push(`/talents/${auth.uid}`)">预览公开名片效果 <Icon name="chevron-right" size="14px" /></p>
+        <router-link class="preview-link" :to="`/talents/${auth.uid}`">预览公开名片效果 <Icon aria-hidden="true" name="chevron-right" size="14px" /></router-link>
         <div v-if="card.skills.length" class="skills">
           <Tag v-for="s in card.skills" :key="s" size="small" variant="light" theme="primary" class="skill">{{ s }}</Tag>
         </div>
@@ -221,23 +153,23 @@ async function onSave() {
       </section>
 
       <section class="m-card">
-        <h3 class="sec-title">基本信息</h3>
+        <h2 class="sec-title">基本信息</h2>
         <div v-if="editable('displayName')" class="field">
           <label>姓名</label>
-          <Input v-model="form.displayName" :maxlength="20" placeholder="展示在社区人才库中的名称" clearable />
+          <Input v-model="form.displayName" autocomplete="off" :spell-check="false" :maxlength="20" placeholder="展示在社区人才库中的名称…" clearable />
           <p v-if="formErrors.displayName" class="field-error">{{ formErrors.displayName }}</p>
         </div>
         <div v-if="editable('age')" class="field">
           <label>年龄</label>
-          <Input v-model="form.age" type="number" :maxlength="3" placeholder="如：29" clearable />
+          <Input v-model="form.age" type="number" :maxlength="3" placeholder="如：29…" clearable />
         </div>
         <div v-if="editable('politicalStatus')" class="field">
           <label>政治面貌</label>
-          <Input v-model="form.politicalStatus" :maxlength="20" placeholder="如：中共党员 / 共青团员 / 群众" clearable />
+          <Input v-model="form.politicalStatus" autocomplete="off" :maxlength="20" placeholder="如：中共党员 / 共青团员 / 群众…" clearable />
         </div>
         <div v-if="editable('skills')" class="field">
           <label>相关技能</label>
-          <Input v-model="form.skillsText" :maxlength="60" placeholder="多个专长用、分隔，如：产品设计、用户研究" clearable />
+          <Input v-model="form.skillsText" :maxlength="60" placeholder="多个专长用、分隔，如：产品设计、用户研究…" clearable />
         </div>
         <div v-if="editable('intro')" class="field">
           <label>个人简介</label>
@@ -251,7 +183,7 @@ async function onSave() {
       </section>
 
       <section v-if="editable('visibility')" class="m-card">
-        <h3 class="sec-title">公开可见性</h3>
+        <h2 class="sec-title">公开可见性</h2>
         <p class="privacy-tip">关闭后该字段不会出现在公开人才名片中。</p>
         <div class="switch-row">
           <span>公开年龄</span>
@@ -263,9 +195,9 @@ async function onSave() {
         </div>
       </section>
 
-      <section v-for="sec in LIST_SECTIONS.filter(s => editable(s.key))" :key="sec.key" class="m-card">
+      <section v-for="sec in INDIVIDUAL_LIST_SECTIONS.filter(s => editable(s.key))" :key="sec.key" class="m-card">
         <div class="sec-head">
-          <h3 class="sec-title no-margin">{{ sec.title }}</h3>
+          <h2 class="sec-title no-margin">{{ sec.title }}</h2>
           <Button theme="primary" variant="outline" size="small" @click="addEntry(sec.key)">添加</Button>
         </div>
         <p v-if="form[sec.key].length === 0" class="empty-tip">暂无，点击「添加」补充</p>
@@ -281,11 +213,11 @@ async function onSave() {
 
       <section class="m-card">
         <p v-if="formErrors.links" class="field-error">{{ formErrors.links }}</p>
-        <Button theme="primary" size="large" block :disabled="!editableFields.length" :loading="submitting" @click="onSave">
+        <Button class="mobile-sticky-action" theme="primary" size="large" block :disabled="!editableFields.length" :loading="submitting" @click="onSave">
           {{ submitting ? '保存中…' : '保存并公开到人才库' }}
         </Button>
         <p class="tip">{{ editableFields.length ? '保存后立即公开，工作人员可维护名片内容。' : '当前名片由工作人员维护，暂未开放自助编辑。' }}</p>
-        <Button variant="text" theme="primary" block @click="router.push('/community')">去社区人才库查看<template #suffix><Icon name="chevron-right" size="14px" /></template></Button>
+        <Button variant="text" theme="primary" block @click="router.push('/community')">去社区人才库查看<template #suffix><Icon aria-hidden="true" name="chevron-right" size="14px" /></template></Button>
       </section>
     </template>
   </div>
@@ -293,52 +225,29 @@ async function onSave() {
 
 <style scoped>
 .m-card-page {
-  padding: 16px;
+  padding:var(--app-space-8);
   display: flex;
   flex-direction: column;
-  gap: 12px;
-}
-
-.draft-bar {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  padding: 10px 12px;
-  border-radius: var(--td-radius-default);
-  background: var(--td-warning-color-1, #fff1e9);
-  font-size: 12px;
-  color: var(--td-text-color-secondary);
-}
-
-.draft-bar a {
-  color: var(--td-brand-color);
-  cursor: pointer;
+  gap:var(--app-space-6);
 }
 
 .field-error {
-  margin: 6px 0 0;
-  font-size: 12px;
+  margin:var(--app-space-3) 0 0;
+  font-size: var(--app-font-caption);
   color: var(--td-error-color);
 }
 
-.draft-bar a:first-of-type {
-  margin-left: auto;
-}
-
-.state {
-  padding: 20px 0;
-}
 
 .preview .head {
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap:var(--app-space-6);
 }
 
 .avatar {
   flex-shrink: 0;
-  font-size: 22px;
-  font-weight: 700;
+  font-size: var(--app-font-title);
+  font-weight: 600;
 }
 
 .info {
@@ -347,21 +256,21 @@ async function onSave() {
 }
 
 .name {
-  margin: 0 0 4px;
-  font-size: 17px;
-  font-weight: 700;
+  margin:0 0 var(--app-space-2);
+  font-size: var(--app-font-title);
+  font-weight: 600;
 }
 
 .age {
-  margin-left: 8px;
-  font-size: 12px;
+  margin-left:var(--app-space-4);
+  font-size: var(--app-font-caption);
   font-weight: 400;
   color: var(--td-text-color-secondary);
 }
 
 .level {
-  margin: 0;
-  font-size: 12px;
+  margin:0;
+  font-size: var(--app-font-caption);
   color: var(--td-text-color-secondary);
 }
 
@@ -370,19 +279,21 @@ async function onSave() {
 }
 
 .preview-link {
-  margin: 10px 0 0;
+  margin:var(--app-space-5) 0 0;
   display: flex;
   align-items: center;
   justify-content: flex-end;
-  gap: 2px;
-  font-size: 12px;
+  gap:var(--app-space-1);
+  min-height: 44px;
+  font-size: var(--app-font-caption);
   color: var(--td-brand-color);
+  text-decoration: none;
   cursor: pointer;
 }
 
 .privacy-tip {
-  margin: -2px 0 10px;
-  font-size: 12px;
+  margin:-2px 0 var(--app-space-5);
+  font-size: var(--app-font-caption);
   color: var(--td-text-color-placeholder);
 }
 
@@ -390,8 +301,8 @@ async function onSave() {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 10px 0;
-  font-size: 13px;
+  padding:var(--app-space-5) 0;
+  font-size: var(--app-font-body);
   border-top: 1px solid var(--td-component-border);
 }
 
@@ -402,17 +313,17 @@ async function onSave() {
 .skills {
   display: flex;
   flex-wrap: wrap;
-  gap: 6px;
-  margin-top: 12px;
+  gap:var(--app-space-3);
+  margin-top:var(--app-space-6);
 }
 
 .skill {
-  margin: 0;
+  margin:0;
 }
 
 .intro {
-  margin: 12px 0 0;
-  font-size: 13px;
+  margin:var(--app-space-6) 0 0;
+  font-size: var(--app-font-body);
   line-height: 1.8;
   color: var(--td-text-color-secondary);
   white-space: pre-wrap;
@@ -422,58 +333,58 @@ async function onSave() {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  margin-bottom: 12px;
+  margin-bottom:var(--app-space-6);
 }
 
 .sec-title {
-  margin: 0 0 12px;
-  font-size: 15px;
+  margin:0 0 var(--app-space-6);
+  font-size: var(--app-font-subtitle);
 }
 
 .sec-title.no-margin {
-  margin: 0;
+  margin:0;
 }
 
 .empty-tip {
-  margin: 0;
-  font-size: 12px;
+  margin:0;
+  font-size: var(--app-font-caption);
   color: var(--td-text-color-placeholder);
 }
 
 .entry {
-  padding: 12px;
-  margin-bottom: 10px;
+  padding:var(--app-space-6);
+  margin-bottom:var(--app-space-5);
   border: 1px solid var(--td-component-border);
   border-radius: var(--td-radius-large);
 }
 
 .entry:last-child {
-  margin-bottom: 0;
+  margin-bottom:0;
 }
 
 .entry .field:last-of-type {
-  margin-bottom: 4px;
+  margin-bottom:var(--app-space-2);
 }
 
 .entry-del {
   display: block;
-  margin-left: auto;
+  margin-left:auto;
 }
 
 .field {
-  margin-bottom: 15px;
+  margin-bottom:var(--app-space-8);
 }
 
 .field label {
   display: block;
-  margin-bottom: 6px;
-  font-size: 13px;
+  margin-bottom:var(--app-space-3);
+  font-size: var(--app-font-body);
   color: var(--td-text-color-secondary);
 }
 
 .tip {
-  margin: 10px 0 0;
-  font-size: 12px;
+  margin:var(--app-space-5) 0 0;
+  font-size: var(--app-font-caption);
   color: var(--td-text-color-placeholder);
 }
 </style>

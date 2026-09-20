@@ -1,14 +1,16 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { Loading, Avatar, Button, Cell, DialogPlugin, NoticeBar, Tag, Toast } from 'tdesign-mobile-vue'
+import { Avatar, Button, Cell, DialogPlugin, NoticeBar, Tag, Toast } from 'tdesign-mobile-vue'
 import { fetchInvitation, respondInvitation } from '@/api/enterprises'
 import { ApiError } from '@/api/http'
 import { useAsyncList } from '@/composables/useAsyncList'
 import EmptyBlock from '@/components/shared/EmptyBlock.vue'
+import ListSkeleton from '@/components/ListSkeleton.vue'
 import type { EnterpriseInvitation, InvitationAction } from '@/types'
+import { formatLocalDateTime } from '@/utils/format'
 
-/* 企业邀请详情（[MOCK-ONLY] 缺口 §7.1-17）：被邀请人确认加入 / 拒绝；
+/* 企业邀请详情：被邀请人确认加入 / 拒绝；
  * 接受后写入企业成员并通知负责人；入口为站内信通知链接（/me/invitations/:id）。 */
 const route = useRoute()
 const router = useRouter()
@@ -65,7 +67,7 @@ function goEnterprise() {
 
 <template>
   <div class="page-fade-in m-invitation">
-    <Loading v-if="loading" class="state" text="加载中…" />
+    <ListSkeleton v-if="loading" />
     <EmptyBlock v-else-if="error" :text="error" action-text="重试" @action="run" />
     <template v-else-if="data">
       <section class="m-card ent">
@@ -73,20 +75,20 @@ function goEnterprise() {
           {{ data.enterpriseName.slice(0, 1) }}
         </Avatar>
         <div class="ent-info">
-          <h3 class="ent-name">{{ data.enterpriseName }}</h3>
+          <h2 class="ent-name">{{ data.enterpriseName }}</h2>
           <p class="ent-meta">{{ [data.enterpriseIndustry, data.enterpriseSize].filter(Boolean).join(' · ') }}</p>
         </div>
         <Tag size="small" variant="light" :theme="statusTag.theme">{{ statusTag.label }}</Tag>
       </section>
 
       <section class="m-card">
-        <h3 class="sec-title">邀请信息</h3>
+        <h2 class="sec-title">邀请信息</h2>
         <Cell title="邀请人" :note="data.inviterName" :bordered="false" />
         <Cell title="受邀成员" :note="data.memberName" :bordered="false" />
         <Cell title="联系电话" :note="data.phone" :bordered="false" />
         <Cell title="加入后职位" :note="data.role" :bordered="false" />
-        <Cell title="邀请时间" :note="data.at" :bordered="false" />
-        <Cell v-if="data.respondedAt" title="处理时间" :note="data.respondedAt" :bordered="false" />
+        <Cell title="邀请时间" :note="formatLocalDateTime(data.at)" :bordered="false" />
+        <Cell v-if="data.respondedAt" title="处理时间" :note="formatLocalDateTime(data.respondedAt)" :bordered="false" />
       </section>
 
       <template v-if="data.status === 'pending'">
@@ -114,26 +116,23 @@ function goEnterprise() {
 
 <style scoped>
 .m-invitation {
-  padding: 16px;
+  padding:var(--app-space-8);
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap:var(--app-space-6);
 }
 
-.state {
-  padding: 20px 0;
-}
 
 .ent {
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap:var(--app-space-6);
 }
 
 .ent-logo {
   flex-shrink: 0;
-  font-size: 20px;
-  font-weight: 700;
+  font-size: var(--app-font-title);
+  font-weight: 600;
 }
 
 .ent-info {
@@ -142,25 +141,25 @@ function goEnterprise() {
 }
 
 .ent-name {
-  margin: 0 0 4px;
-  font-size: 17px;
-  font-weight: 700;
+  margin:0 0 var(--app-space-2);
+  font-size: var(--app-font-title);
+  font-weight: 600;
 }
 
 .ent-meta {
-  margin: 0;
-  font-size: 12px;
+  margin:0;
+  font-size: var(--app-font-caption);
   color: var(--td-text-color-secondary);
 }
 
 .sec-title {
-  margin: 0 0 6px;
-  font-size: 14px;
+  margin:0 0 var(--app-space-3);
+  font-size: var(--app-font-body);
 }
 
 .result-tip {
-  margin: 0;
-  font-size: 12px;
+  margin:0;
+  font-size: var(--app-font-caption);
   color: var(--td-text-color-secondary);
   text-align: center;
 }

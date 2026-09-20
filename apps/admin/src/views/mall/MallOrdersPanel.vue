@@ -35,6 +35,7 @@ const query = reactive({
 const statusOptions = [
   { label: '全部', value: '' },
   { label: '待发货', value: 'pending_shipment' },
+  { label: '待使用', value: 'pending_use' },
   { label: '已发货', value: 'shipped' },
   { label: '已完成', value: 'finished' },
   { label: '已取消', value: 'cancelled' },

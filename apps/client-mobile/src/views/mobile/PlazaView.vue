@@ -1,7 +1,7 @@
 <script setup lang="ts">
-import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { CheckTag, Icon, Search, Tabs, TabPanel, PullDownRefresh, Tag } from 'tdesign-mobile-vue'
+import { CheckTag, Icon, Image, Search, Tabs, TabPanel, PullDownRefresh, Tag } from 'tdesign-mobile-vue'
 import { fetchEvents, fetchMyEnrollments } from '@/api/events'
 import { useAuthStore } from '@/stores/auth'
 import { fetchArticles, fetchColumns } from '@/api/contents'
@@ -11,6 +11,9 @@ import { useAnimSuppress } from '@/composables/useAnimSuppress'
 import ListSkeleton from '@/components/ListSkeleton.vue'
 import EmptyBlock from '@/components/shared/EmptyBlock.vue'
 import type { CommunityEvent, Article, ArticleColumn } from '@/types'
+import { onImageError } from '@/utils/imageFallback'
+import { useRouteQuerySync } from '@/composables/useRouteQuerySync'
+import { formatLocalDateTime, formatZhNumber } from '@/utils/format'
 
 useAnimSuppress()
 
@@ -29,9 +32,17 @@ const articleKeywordInput = ref(activeTab.value === 'articles' ? initialQ : '')
 /* v43：当前用户已报名的活动标记 */
 const enrolledIds = ref<Set<string>>(new Set())
 async function loadEnrolled() {
-  if (!auth.isLogged) return
+  if (!auth.isLogged) {
+    enrolledIds.value = new Set()
+    return
+  }
   try {
-    enrolledIds.value = new Set((await fetchMyEnrollments()).map((item) => item.eventId))
+    const activeStatuses = new Set(['pending', 'approved', 'waitlisted'])
+    enrolledIds.value = new Set(
+      (await fetchMyEnrollments())
+        .filter((item) => activeStatuses.has(item.status))
+        .map((item) => item.eventId),
+    )
   } catch {
     /* 标记失败不影响列表 */
   }
@@ -91,7 +102,9 @@ useRefreshOnActivate(() => {
 /* 实时搜索：输入防抖 300ms 后自动检索（清空即恢复全量） */
 let eventTimer: number | undefined
 let articleTimer: number | undefined
+let applyingRouteQuery = false
 watch(eventKeywordInput, () => {
+  if (applyingRouteQuery) return
   window.clearTimeout(eventTimer)
   eventTimer = window.setTimeout(() => {
     syncQuery()
@@ -99,20 +112,61 @@ watch(eventKeywordInput, () => {
   }, 300)
 })
 watch(articleKeywordInput, () => {
+  if (applyingRouteQuery) return
   window.clearTimeout(articleTimer)
   articleTimer = window.setTimeout(() => {
     syncQuery()
     loadArticles()
   }, 300)
 })
-watch(activeTab, () => syncQuery())
+watch(activeTab, () => {
+  if (applyingRouteQuery) return
+  if (activeTab.value === 'events') activeColumn.value = ''
+  syncQuery()
+})
 onBeforeUnmount(() => {
   window.clearTimeout(eventTimer)
   window.clearTimeout(articleTimer)
 })
 
+useRouteQuerySync('/plaza', (query) => {
+  const nextTab = query.tab === 'articles' ? 'articles' : 'events'
+  const nextKeyword = query.q ?? ''
+  const nextColumn = nextTab === 'articles' ? query.column ?? '' : ''
+  const currentKeyword = nextTab === 'articles' ? articleKeywordInput.value : eventKeywordInput.value
+  if (nextTab === activeTab.value && nextKeyword === currentKeyword && nextColumn === activeColumn.value) return
+
+  window.clearTimeout(eventTimer)
+  window.clearTimeout(articleTimer)
+  applyingRouteQuery = true
+  activeTab.value = nextTab
+  if (nextTab === 'articles') {
+    articleKeywordInput.value = nextKeyword
+    activeColumn.value = nextColumn
+    loadArticles()
+  } else {
+    eventKeywordInput.value = nextKeyword
+    activeColumn.value = ''
+    loadEvents()
+  }
+  void nextTick(() => {
+    applyingRouteQuery = false
+  })
+})
+
 function pickColumn(label: string) {
   activeColumn.value = label
+  syncQuery()
+  loadArticles()
+}
+
+function clearEventFilters() {
+  eventKeywordInput.value = ''
+}
+
+function clearArticleFilters() {
+  articleKeywordInput.value = ''
+  activeColumn.value = ''
   syncQuery()
   loadArticles()
 }
@@ -123,31 +177,47 @@ function pickColumn(label: string) {
   <div class="page-fade-in m-plaza">
     <Tabs v-model="activeTab" class="top-tabs">
       <TabPanel value="events" label="活动">
-        <Search v-model="eventKeywordInput" class="tab-search" placeholder="搜索活动关键词" />
+        <Search v-model="eventKeywordInput" class="tab-search" placeholder="搜索活动关键词…" />
         <ListSkeleton v-if="eventsLoading && !(events ?? []).length" />
         <EmptyBlock v-else-if="eventsError" :text="eventsError" action-text="重试" @action="loadEvents" />
-        <EmptyBlock v-else-if="eventsEmpty" text="暂无符合条件的活动" />
+        <EmptyBlock
+          v-else-if="eventsEmpty"
+          text="暂无符合条件的活动"
+          :action-text="eventKeywordInput ? '清除搜索' : undefined"
+          @action="clearEventFilters"
+        />
         <div v-else class="stagger list">
-          <p class="list-count">共 {{ events?.length ?? 0 }} 场活动</p>
+          <p class="list-count">共 {{ formatZhNumber(events?.length ?? 0) }} 场活动</p>
           <article
             v-for="ev in events"
             :key="ev.id"
             class="item m-card" v-pressable
             @click="router.push(`/events/${ev.id}`)"
           >
+            <Image v-if="ev.coverUrl" class="card-cover" :src="ev.coverUrl" :alt="ev.title" fit="cover" lazy @error="onImageError" />
+            <div v-else class="card-cover card-cover-fallback"><Icon aria-hidden="true" name="calendar" size="28px" /></div>
             <div class="row-head">
               <Tag class="type-tag" size="small" variant="light" theme="primary">{{ ev.typeLabel }}</Tag>
               <Tag v-if="enrolledIds.has(ev.id)" class="enrolled-flag" size="small" variant="light" theme="success">已报名</Tag>
-              <span class="capacity">已报名 {{ ev.approvedCount }}/{{ ev.capacity }}</span>
+              <span class="capacity">人数限制 {{ formatZhNumber(ev.capacity) }} 人</span>
             </div>
-            <h3 class="title">{{ ev.title }}</h3>
-            <p class="meta"><Icon name="time" size="14px" />{{ ev.startTime }} · <Icon name="location" size="14px" />{{ ev.location }}</p>
+            <h2 class="title">{{ ev.title }}</h2>
+            <p class="meta event-meta">
+              <span class="event-meta-item">
+                <Icon aria-hidden="true" class="event-meta-icon" name="time" size="14px" />
+                <span>{{ formatLocalDateTime(ev.startTime) }}</span>
+              </span>
+              <span class="event-meta-item">
+                <Icon aria-hidden="true" class="event-meta-icon" name="location" size="14px" />
+                <span>{{ ev.location }}</span>
+              </span>
+            </p>
           </article>
         </div>
       </TabPanel>
 
       <TabPanel value="articles" label="资讯">
-        <Search v-model="articleKeywordInput" class="tab-search" placeholder="搜索资讯关键词" />
+        <Search v-model="articleKeywordInput" class="tab-search" placeholder="搜索资讯关键词…" />
         <div class="chips">
           <CheckTag
             class="chip"
@@ -173,19 +243,26 @@ function pickColumn(label: string) {
 
         <ListSkeleton v-if="articlesLoading && !articles.length" />
         <EmptyBlock v-else-if="articlesError" :text="articlesError" action-text="重试" @action="loadArticles" />
-        <EmptyBlock v-else-if="articlesEmpty" text="暂无相关资讯" />
+        <EmptyBlock
+          v-else-if="articlesEmpty"
+          text="暂无相关资讯"
+          :action-text="articleKeywordInput || activeColumn ? '清除筛选' : undefined"
+          @action="clearArticleFilters"
+        />
         <div v-else class="stagger list">
-          <p class="list-count">共 {{ articles?.length ?? 0 }} 篇文章</p>
+          <p class="list-count">共 {{ formatZhNumber(articles?.length ?? 0) }} 篇文章</p>
           <article
             v-for="a in articles"
             :key="a.id"
             class="item m-card" v-pressable
             @click="router.push(`/articles/${a.id}`)"
           >
+            <Image v-if="a.coverUrl" class="card-cover" :src="a.coverUrl" :alt="a.title" fit="cover" lazy @error="onImageError" />
+            <div v-else class="card-cover card-cover-fallback"><Icon aria-hidden="true" name="image" size="28px" /></div>
             <Tag class="col-tag" size="small" variant="light" theme="primary">{{ a.columnLabel }}</Tag>
             <p class="title">{{ a.title }}</p>
             <p class="summary">{{ a.summary }}</p>
-            <p class="meta">{{ a.authorName }} · {{ a.publishedAt }} · {{ a.views }} 次浏览</p>
+            <p class="meta">{{ a.authorName }} · {{ formatLocalDateTime(a.publishedAt) }} · {{ formatZhNumber(a.views) }} 次浏览</p>
           </article>
         </div>
       </TabPanel>
@@ -196,10 +273,10 @@ function pickColumn(label: string) {
 
 <style scoped>
 .m-plaza {
-  padding: 16px;
+  padding:var(--app-space-8);
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap:var(--app-space-6);
 }
 
 .top-tabs {
@@ -210,20 +287,17 @@ function pickColumn(label: string) {
 
 .tab-search {
   /* 与选项卡标题条拉开间距 */
-  margin-top: 12px;
-  margin-bottom: 12px;
+  margin-top:var(--app-space-6);
+  margin-bottom:var(--app-space-6);
 }
 
-.state {
-  padding: 20px 0;
-}
 
 .chips {
   display: flex;
-  gap: 8px;
+  gap:var(--app-space-4);
   overflow-x: auto;
   scrollbar-width: none;
-  margin-bottom: 12px;
+  margin-bottom:var(--app-space-6);
 }
 
 .chips::-webkit-scrollbar {
@@ -237,18 +311,35 @@ function pickColumn(label: string) {
 .list {
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap:var(--app-space-5);
 }
 
 .item {
   cursor: pointer;
+  overflow: hidden;
+}
+
+.card-cover {
+  display: block;
+  width: calc(100% + var(--app-space-8) * 2);
+  height: 132px;
+  margin: calc(var(--app-space-8) * -1) calc(var(--app-space-8) * -1) var(--app-space-6);
+}
+
+/* 无封面时收敛为品牌浅底条形占位，避免大块灰底空洞 */
+.card-cover-fallback {
+  display: grid;
+  place-items: center;
+  height: 96px;
+  background: var(--td-brand-color-1);
+  color: var(--td-brand-color);
 }
 
 .row-head {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  margin-bottom: 8px;
+  margin-bottom:var(--app-space-4);
 }
 
 .enrolled-flag {
@@ -261,20 +352,20 @@ function pickColumn(label: string) {
 }
 
 .capacity {
-  margin-left: auto;
-  font-size: 12px;
+  margin-left:auto;
+  font-size: var(--app-font-caption);
   color: var(--td-brand-color);
 }
 
 .title {
-  margin: 0 0 8px;
-  font-size: 14px;
+  margin:0 0 var(--app-space-4);
+  font-size: var(--app-font-body);
   line-height: 1.4;
 }
 
 .summary {
-  margin: 0 0 8px;
-  font-size: 12px;
+  margin:0 0 var(--app-space-4);
+  font-size: var(--app-font-caption);
   color: var(--td-text-color-secondary);
   line-height: 1.6;
   display: -webkit-box;
@@ -284,8 +375,25 @@ function pickColumn(label: string) {
 }
 
 .meta {
-  margin: 0;
-  font-size: 12px;
+  margin:0;
+  font-size: var(--app-font-caption);
   color: var(--td-text-color-placeholder);
+}
+
+.event-meta {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap:var(--app-space-4);
+}
+
+.event-meta-item {
+  display: inline-flex;
+  align-items: center;
+  gap:var(--app-space-2);
+}
+
+.event-meta-icon {
+  flex-shrink: 0;
 }
 </style>

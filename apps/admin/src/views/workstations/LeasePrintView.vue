@@ -16,7 +16,7 @@ const notFound = ref(false)
 
 const renterTypeLabel: Record<string, string> = {
   enterprise: '社区企业',
-  individual: '社区个体',
+  individual: '个人用户',
   custom: '其他（自建）',
 }
 

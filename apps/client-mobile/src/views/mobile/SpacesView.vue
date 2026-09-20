@@ -1,17 +1,23 @@
 <script setup lang="ts">
-import { onMounted } from 'vue'
+import { computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
-import { Button, Icon, Tag } from 'tdesign-mobile-vue'
+import { Button, Icon, NoticeBar, Tag } from 'tdesign-mobile-vue'
 import { useAsyncList } from '@/composables/useAsyncList'
 import { useRefreshOnActivate } from '@/composables/useRefreshOnActivate'
 import { useAnimSuppress } from '@/composables/useAnimSuppress'
+import { useConfigStore } from '@/stores/config'
 import { fetchSpaces } from '@/api/spaces'
 import EmptyBlock from '@/components/shared/EmptyBlock.vue'
 import ListSkeleton from '@/components/ListSkeleton.vue'
+import { formatZhNumber } from '@/utils/format'
 
 useAnimSuppress()
 
 const router = useRouter()
+const config = useConfigStore()
+void config.ensureLoaded()
+/* 空间预约开关关闭时提示且禁用预约入口（D-007/D-008 前端层） */
+const reservationOpen = computed(() => config.config.reservationOpen)
 const { data, loading, error, run } = useAsyncList(fetchSpaces)
 onMounted(run)
 
@@ -22,17 +28,18 @@ useRefreshOnActivate(run)
 <template>
   <div class="page page-fade-in">
     <h1 class="title">可预约空间</h1>
+    <NoticeBar v-if="!reservationOpen" visible theme="warning" content="空间预约暂未开放，可先浏览空间信息。" class="closed-tip" />
     <ListSkeleton v-if="loading && !(data ?? []).length" />
     <EmptyBlock v-else-if="error" :text="error" action-text="重试" @action="run" />
     <EmptyBlock v-else-if="!data?.length" text="暂无可预约空间" />
     <div v-else class="list stagger">
-      <p class="list-count">共 {{ data?.length }} 个空间</p>
+      <p class="list-count">共 {{ formatZhNumber(data?.length ?? 0) }} 个空间</p>
       <article v-for="s in data" :key="s.id" class="m-card">
         <h2 class="name">{{ s.name }}</h2>
         <p class="meta">
-          <span class="meta-item"><Icon name="location" size="14px" />{{ s.location }}</span>
-          <span class="meta-item">容纳 {{ s.capacity }} 人</span>
-          <span class="meta-item"><Icon name="time" size="14px" />{{ s.openTime }}-{{ s.closeTime }}</span>
+          <span class="meta-item"><Icon aria-hidden="true" name="location" size="14px" />{{ s.location }}</span>
+          <span class="meta-item">容纳 {{ formatZhNumber(s.capacity) }} 人</span>
+          <span class="meta-item"><Icon aria-hidden="true" name="time" size="14px" />{{ s.openTime }}-{{ s.closeTime }}</span>
         </p>
         <div class="equip">
           <Tag v-for="e in s.equipment" :key="e" size="small" variant="light" theme="default">{{ e }}</Tag>
@@ -42,10 +49,10 @@ useRefreshOnActivate(run)
         <Button
           theme="primary"
           block
-          :disabled="s.status === 'maintenance'"
+          :disabled="s.status === 'maintenance' || !reservationOpen"
           @click="router.push(`/spaces/${s.id}/reserve`)"
         >
-          {{ s.status === 'maintenance' ? '维护中，暂不可预约' : '预约' }}
+          {{ !reservationOpen ? '预约暂未开放' : s.status === 'maintenance' ? '维护中，暂不可预约' : '预约' }}
         </Button>
       </article>
     </div>
@@ -53,13 +60,14 @@ useRefreshOnActivate(run)
 </template>
 
 <style scoped>
-.page { padding: 16px; }
-.title { margin: 0 0 12px; font-size: 17px; }
-.tip { padding: 20px; color: var(--td-text-color-placeholder); font-size: 12px; background: var(--td-bg-color-container); border-radius: var(--td-radius-large); }
+.page { padding:var(--app-space-8); }
+.title { margin:0 0 var(--app-space-6); font-size: var(--app-font-title); }
+.closed-tip { margin-bottom: var(--app-space-5); }
+.tip { padding:var(--app-space-10); color: var(--td-text-color-placeholder); font-size: var(--app-font-caption); background: var(--td-bg-color-container); border-radius: var(--td-radius-large); }
 .tip.danger { color: var(--td-error-color); }
-.list { display: flex; flex-direction: column; gap: 12px; }
-.name { margin: 0 0 6px; font-size: 15px; }
-.meta { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; margin: 0 0 8px; font-size: 12px; color: var(--td-text-color-secondary); }
-.meta-item { display: inline-flex; align-items: center; gap: 3px; }
-.equip { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 12px; }
+.list { display: flex; flex-direction: column; gap:var(--app-space-6); }
+.name { margin:0 0 var(--app-space-3); font-size: var(--app-font-subtitle); }
+.meta { display: flex; flex-wrap: wrap; align-items: center; gap:var(--app-space-5); margin:0 0 var(--app-space-4); font-size: var(--app-font-caption); color: var(--td-text-color-secondary); }
+.meta-item { display: inline-flex; align-items: center; gap:var(--app-space-2); }
+.equip { display: flex; flex-wrap: wrap; gap:var(--app-space-3); margin-bottom:var(--app-space-6); }
 </style>

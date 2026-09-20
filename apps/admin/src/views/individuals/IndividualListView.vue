@@ -34,7 +34,6 @@ const statusOptions = [
 
 const columns = [
   { colKey: 'user', title: '成员', cell: 'user', width: 190 , ellipsis: true},
-  { colKey: 'title', title: '社区个体头衔', cell: 'title', width: 200 , ellipsis: true},
   { colKey: 'level', title: '个体等级', cell: 'level', width: 90 , ellipsis: true},
   { colKey: 'others', title: '其他关联身份', cell: 'others' , ellipsis: true},
   { colKey: 'points', title: '积分', width: 85 , ellipsis: true},
@@ -91,10 +90,6 @@ function onPageChange(p: { current: number; pageSize: number }) {
   load()
 }
 
-function individualTitle(row: User): string {
-  return row.identities.find((i) => i.type === 'community_individual')?.title ?? '—'
-}
-
 function individualLevel(row: User): string {
   const level = row.identities.find((i) => i.type === 'community_individual')?.level
   return level ? `${level} 级` : '—'
@@ -113,12 +108,11 @@ function goDetail(row: User) {
 function onExport() {
   exportCsv(
     '社区个体列表',
-    ['编号', '昵称', '联系电话', '社区个体头衔', '个体等级', '积分', '状态', '注册时间'],
+    ['编号', '昵称', '联系电话', '个体等级', '积分', '状态', '注册时间'],
     list.value.map((u) => [
       u.uid,
       `${u.nickname} [${u.uid}]`,
       u.phone,
-      individualTitle(u),
       individualLevel(u),
       u.points,
       statusLabel('user', u.status),
@@ -199,8 +193,6 @@ onMounted(load)
             </div>
           </div>
         </template>
-
-        <template #title="{ row }">{{ individualTitle(row) }}</template>
 
         <template #level="{ row }">{{ individualLevel(row) }}</template>
 

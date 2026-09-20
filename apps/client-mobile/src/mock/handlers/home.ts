@@ -2,6 +2,7 @@ import type { HomeFeed } from '@/types'
 import { announcements, appConfig, articles, demands, events, homeBanners, noticesByUid } from '@/mock/db'
 import { readPayload } from '@/mock/session'
 import { withLatency } from '@/mock/latency'
+import { mockNowMs, parseMockStamp } from '@/mock/runtime'
 
 /* [MOCK-ONLY] 首页聚合 handler——缺口 §7-3（GET /api/app/home），接入期实现。 */
 export async function fetchHomeFeed(): Promise<HomeFeed> {
@@ -10,19 +11,27 @@ export async function fetchHomeFeed(): Promise<HomeFeed> {
     const unread = payload
       ? (noticesByUid[payload.sub] ?? []).filter((n) => !n.read).length
       : 0
-    const hotEvents = events.filter((event) => event.status === 'published').slice(0, 3).map((event) => ({
-      id: event.id, title: event.title, type: event.typeLabel, startTime: event.startTime,
-      location: event.location, enrolled: event.approvedCount, capacity: event.capacity,
-    }))
+    const hotEvents = events
+      .filter((event) => event.status === 'published' && parseMockStamp(event.endTime).getTime() > mockNowMs())
+      .sort((a, b) => a.startTime.localeCompare(b.startTime))
+      .slice(0, 3)
+      .map((event) => ({
+        id: event.id, title: event.title, type: event.typeLabel, startTime: event.startTime,
+        location: event.location, capacity: event.capacity,
+      }))
     const latestDemands = demands.filter((demand) => demand.status === 'published').sort((a, b) => b.createdAt.localeCompare(a.createdAt)).slice(0, 3).map((demand) => ({
       id: demand.id, title: demand.title, categoryLabel: demand.categoryLabel, publisherName: demand.publisherName,
       publisherIdentity: demand.publisherIdentity, deliverBy: demand.deliverBy, deadline: demand.deadline,
       responseCount: demand.responseCount,
     }))
-    const topArticles = [...articles].sort((a, b) => b.views - a.views).slice(0, 3).map((article) => ({
-      id: article.id, title: article.title, columnLabel: article.columnLabel,
-      publishedAt: article.publishedAt, views: article.views,
-    }))
+    const topArticles = articles
+      .filter((article) => article.status === 'published')
+      .sort((a, b) => b.publishedAt.localeCompare(a.publishedAt))
+      .slice(0, 3)
+      .map((article) => ({
+        id: article.id, title: article.title, columnLabel: article.columnLabel,
+        publishedAt: article.publishedAt, views: article.views,
+      }))
     return {
       siteName: '聚屿社区',
       siteSlogan: '让每一座创业孤岛，在这里连成群岛。',
@@ -33,7 +42,8 @@ export async function fetchHomeFeed(): Promise<HomeFeed> {
       latestDemands,
       topArticles,
       /* v40：置顶优先 + 时间倒序取前 2 条 */
-      announcements: [...announcements]
+      /* 与后端一致：首页顶部公告条仅下发「已开启置顶」的一条，全关则不下发 */
+      announcements: announcements.filter((a) => a.pinned).slice(0, 1)
         .sort((a, b) => Number(b.pinned ?? false) - Number(a.pinned ?? false) || b.at.localeCompare(a.at))
         .slice(0, 2),
     }

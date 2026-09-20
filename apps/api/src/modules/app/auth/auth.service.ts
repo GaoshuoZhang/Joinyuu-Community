@@ -105,7 +105,8 @@ export class AuthService {
     if (existing) throw new ConflictException('该手机号已注册')
 
     const uid = await this.ids.next('U')
-    const nickname = dto.nickname?.trim() || `用户${phone.slice(-4)}`
+    const nickname = dto.nickname.trim()
+    if (!nickname) throw new BadRequestException('请输入昵称')
     const now = formatNow()
     const agreements = await this.prisma.policy.findMany({
       where: { kind: { in: ['agreement_user', 'agreement_privacy'] }, status: 'published' },

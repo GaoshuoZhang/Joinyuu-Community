@@ -135,6 +135,15 @@ describe('M2-R R1 app 鉴权', () => {
     expect(dup.status).toBe(409)
   })
 
+  it('注册：昵称必填', async () => {
+    const { captchaId, captchaCode } = await fetchAppCaptcha(app)
+    const res = await request(app.getHttpServer())
+      .post('/api/app/auth/register')
+      .send({ phone: '13900000003', password: 'user12345', nickname: '', agreed: true, captchaId, captchaCode })
+    expect(res.status).toBe(400)
+    expect(res.body.message).toContain('请输入昵称')
+  })
+
   it('注册必须使用有效且一次性的图形验证码', async () => {
     const invalid = await request(app.getHttpServer()).post('/api/app/auth/register').send({
       phone: '13900000002', password: 'user12345', nickname: '无验证码', agreed: true,
@@ -188,10 +197,14 @@ describe('M2-R R1 app 鉴权', () => {
   it('daily_login 启用后同一自然日重复登录只发放一次', async () => {
     await prisma.pointsRule.update({ where: { code: 'daily_login' }, data: { status: 'enabled', points: 3 } })
     await redis.delCache(CACHE_KEYS.pointsRules)
-    await Promise.all([
+    /* 预热测试服务器：supertest 首次并发请求会竞争 listen，导致偶发 ECONNRESET */
+    await fetchAppCaptcha(app)
+    /* 并发登录：Docker Desktop 下偶发一次连接抖动，重试一次（两次登录语义相同，不影响去重断言） */
+    const loginPair = () => Promise.all([
       appLoginRequest(app, '13801210003', 'user123'),
       appLoginRequest(app, '13801210003', 'user123'),
     ])
+    await loginPair().catch(() => loginPair())
     const rows = await prisma.pointsRecord.findMany({ where: { dedupeKey: { startsWith: 'daily_login:U1003:' } } })
     expect(rows).toHaveLength(1)
   })

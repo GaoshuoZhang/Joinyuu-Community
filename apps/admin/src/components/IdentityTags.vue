@@ -14,7 +14,7 @@ const props = withDefaults(
 
 function tagText(identity: UserIdentity): string {
   if (identity.type === 'individual') return '个人用户'
-  if (identity.type === 'community_individual') return `社区个体·${identity.title}`
+  if (identity.type === 'community_individual') return '社区个体'
   return `${identity.enterpriseName}·${identity.title}`
 }
 

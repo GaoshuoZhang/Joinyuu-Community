@@ -2,8 +2,10 @@
  * 写状态机的套件必须从干净种子出发，否则跨运行/跨套件污染 */
 import { execSync } from 'node:child_process'
 import { join } from 'node:path'
+import { assertSafeTestEnvironment } from '../../src/common/testing/test-environment'
 
 export function reseed(): void {
+  assertSafeTestEnvironment()
   execSync('npx tsx prisma/seed.ts', {
     cwd: join(__dirname, '..', '..'),
     stdio: 'pipe',

@@ -46,7 +46,7 @@ describe('M2-R R2 app 需求撮合', () => {
     expect(res.body.data.id).toBe(id)
   })
 
-  it('响应 seed 已发布需求 → 防重复 409 → 我可撤回与重响应', async () => {
+  it('响应 seed 已发布需求 → 防重复 409 → 我的响应可见', async () => {
     const list = await appGet(app, tokenB, '/api/app/demands?pageSize=20')
     const target = list.body.data.list.find((d: { id: string }) => d.id !== 'D4')
     const id: string = target.id
@@ -71,17 +71,6 @@ describe('M2-R R2 app 需求撮合', () => {
     const mineRows = Array.isArray(mine.body.data) ? mine.body.data : mine.body.data.list
     const row = mineRows.find((r: { demandId: string }) => r.demandId === id)
     expect(row).toBeTruthy()
-    const responseId: number = row.id
-
-    const withdraw = await appPost(app, tokenB, `/api/app/me/responses/${responseId}/withdraw`, {})
-    expect(withdraw.status).toBe(200)
-
-    /* 撤回后视为未响应：重新出现响应入口 */
-    const afterWithdraw = await appGet(app, tokenB, `/api/app/demands/${id}`)
-    expect(afterWithdraw.body.data.myResponse).toBeUndefined()
-
-    const again = await appPost(app, tokenB, `/api/app/demands/${id}/respond`, { note: '撤回后重响应' })
-    expect(again.status).toBe(200)
   })
 
   it('发布需求（pending→管理端置 published）→ 应者响应 → 发布者选定承接方 → 管理员立项 → 里程碑验收结项', async () => {
@@ -108,6 +97,10 @@ describe('M2-R R2 app 需求撮合', () => {
 
     // ②模拟管理端审核通过 → published
     await prisma.demand.update({ where: { id: demandId }, data: { status: 'published' } })
+
+    // 字典类别在库中保存 code，但 App 展示契约必须返回标签。
+    const plazaWithCreated = await appGet(app, tokenA, '/api/app/demands?pageSize=50')
+    expect(plazaWithCreated.body.data.list.find((d: { id: string }) => d.id === demandId)?.categoryLabel).toBe('技术开发')
 
     // ③响应者响应
     const resp = await appPost(app, tokenB, `/api/app/demands/${demandId}/respond`, {
@@ -139,12 +132,19 @@ describe('M2-R R2 app 需求撮合', () => {
     expect(afterSelect?.matchedRespondent).toContain('顾北辰')
     const acceptedRow = await prisma.demandRespondent.findFirst({ where: { id: responseId } })
     expect(acceptedRow?.status).toBe('accepted')
+    const selectedMine = await appGet(app, tokenB, '/api/app/me/responses')
+    const selectedMineRows = Array.isArray(selectedMine.body.data) ? selectedMine.body.data : selectedMine.body.data.list
+    expect(selectedMineRows.find((row: { id: number }) => row.id === responseId)?.status).toBe('accepted')
 
-    // ⑦已选定后：发布者仍可查看详情；广场与非发布者不可见；不再接受新响应
+    // ⑦已选定后：发布者和已有响应者可查看详情；无关用户不可见；不再接受新响应
     const ownDetail = await appGet(app, tokenA, `/api/app/demands/${demandId}`)
     expect(ownDetail.status).toBe(200)
     expect(ownDetail.body.data.status).toBe('selected')
-    const outsiderDetail = await appGet(app, tokenB, `/api/app/demands/${demandId}`)
+    const respondentDetail = await appGet(app, tokenB, `/api/app/demands/${demandId}`)
+    expect(respondentDetail.status).toBe(200)
+    expect(respondentDetail.body.data.myResponse).toMatchObject({ status: 'accepted' })
+    const outsiderToken = await appLoginAs(app, '13801210009', 'user123')
+    const outsiderDetail = await appGet(app, outsiderToken, `/api/app/demands/${demandId}`)
     expect(outsiderDetail.status).toBe(404)
     const plaza = await appGet(app, tokenB, '/api/app/demands?pageSize=50')
     expect(plaza.body.data.list.some((d: { id: string }) => d.id === demandId)).toBe(false)
@@ -208,13 +208,5 @@ describe('M2-R R2 app 需求撮合', () => {
     }
     const after = await prisma.project.findUnique({ where: { id: projectId } })
     expect(after?.status).toBe('finished')
-  })
-
-  it('需求沟通留言板仅参与方可见', async () => {
-    const list = await appGet(app, tokenA, '/api/app/demands?pageSize=1')
-    const id: string = list.body.data.list[0].id
-    const outsider = await appLoginAs(app, '13801210002', 'user123')
-    const forbidden = await appGet(app, outsider, `/api/app/demands/${id}/messages`)
-    expect(forbidden.status).toBe(403)
   })
 })

@@ -81,7 +81,7 @@ export class AppCommunityService {
       list.push({
         uid: u.uid,
         name: card.displayName || u.nickname,
-        role: u.identities[0]?.title ?? '',
+        role: '',
         avatar: u.avatar ?? undefined,
         intro: card.intro,
         skills: card.skills,
@@ -129,14 +129,13 @@ export class AppCommunityService {
     }
   }
 
-  /** 企业库：showcaseStatus=published 且未归档的社区企业（成员由 community_enterprise 身份派生） */
+  /** 企业库：未归档的社区企业（成员由 community_enterprise 身份派生） */
   async enterprises(keyword?: string, industry?: string, authorization?: string) {
     const kw = keyword?.trim()
     const ind = industry?.trim()
     const blockedUids = await this.blockedUids(await this.optionalUid(authorization))
     const rows = await this.prisma.enterprise.findMany({
       where: {
-        showcaseStatus: 'published',
         deletedAt: null,
         ...(kw ? { OR: [{ name: { contains: kw } }, { description: { contains: kw } }] } : {}),
         ...(ind ? { industry: ind } : {}),
@@ -190,7 +189,6 @@ export class AppCommunityService {
           services: e.services.length ? e.services.join('、') : undefined,
           advantages: e.advantages.length ? e.advantages.join('、') : undefined,
           description: e.description,
-          showcaseStatus: 'published' as const,
           members: membersByEnterprise.get(e.id) ?? [],
           contactUid: e.contactUserId ?? undefined,
           contactName: e.contactName || undefined,

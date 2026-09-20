@@ -9,7 +9,7 @@ withDefaults(defineProps<{ rows?: number; theme?: 'text' | 'paragraph' | 'avatar
 </script>
 
 <template>
-  <div class="list-skeleton" aria-busy="true" aria-label="加载中">
+  <div class="list-skeleton" role="status" aria-live="polite" aria-busy="true" aria-label="加载中">
     <div v-for="i in rows" :key="i" class="m-card skeleton-card">
       <Skeleton theme="text" :row-col="[{ width: '40%' }, { width: '100%' }, { width: '70%' }]" animation="gradient" />
     </div>
@@ -20,10 +20,10 @@ withDefaults(defineProps<{ rows?: number; theme?: 'text' | 'paragraph' | 'avatar
 .list-skeleton {
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap:var(--app-space-5);
 }
 
 .skeleton-card {
-  padding: 14px;
+  padding:var(--app-space-7);
 }
 </style>

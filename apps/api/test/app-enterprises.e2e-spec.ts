@@ -43,7 +43,6 @@ describe('M2-R R3 企业治理', () => {
     const ent = res.body.data.find((i: { key: string }) => i.key === 'E2001')
     expect(ent.isContact).toBe(true)
     expect(ent.permissions.length).toBe(8)
-    expect(ent.showcaseStatus).toBe('published')
   })
 
   it('我的名片：/me/cards 聚合个体与企业名片', async () => {
@@ -226,17 +225,13 @@ describe('M2-R R3 企业治理', () => {
     expect(JSON.stringify(app_?.details)).toContain('业务调整')
   })
 
-  it('公开企业名片：published 可见含成员，non-published 404', async () => {
+  it('公开企业名片：未归档企业均可见且含成员', async () => {
     const ok = await appGet(app, outsider, '/api/app/enterprises/E2001')
     expect(ok.status).toBe(200)
-    expect(ok.body.data.showcaseStatus).toBe('published')
     expect(Array.isArray(ok.body.data.members)).toBe(true)
 
-    const hidden = await appGet(app, outsider, '/api/app/enterprises/E2003')
-    expect([200, 404]).toContain(hidden.status) // E2003 showcaseStatus=none → 404
-    if (hidden.status === 200) {
-      expect(hidden.body.data.showcaseStatus).toBe('published')
-    }
+    const other = await appGet(app, outsider, '/api/app/enterprises/E2003')
+    expect(other.status).toBe(200)
   })
 
   it('企业工作台：成员可看代企业响应统计', async () => {

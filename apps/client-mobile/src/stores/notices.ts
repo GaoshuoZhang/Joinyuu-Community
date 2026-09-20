@@ -3,10 +3,14 @@ import { ref } from 'vue'
 import { fetchNotices, fetchUnreadCount, markAllNoticesRead, markNoticeRead } from '@/api/notices'
 import type { UserNotice } from '@/types'
 
-/** 站内信 [MOCK-ONLY]（缺口 §7-1）：未读角标 + 列表 + 已读动作 */
+/** 站内信：未读角标 + 列表 + 已读动作。 */
 export const useNoticesStore = defineStore('notices', () => {
   const unread = ref(0)
   const list = ref<UserNotice[]>([])
+  const total = ref(0)
+  const loadingMore = ref(false)
+  const pageSize = 20
+  let page = 1
   let loadedOnce = false
 
   async function refreshUnread(): Promise<void> {
@@ -23,9 +27,26 @@ export const useNoticesStore = defineStore('notices', () => {
   }
 
   async function refreshAll(): Promise<void> {
-    list.value = await fetchNotices()
+    page = 1
+    const result = await fetchNotices(page, pageSize)
+    list.value = result.list
+    total.value = result.total
     await refreshUnread()
     loadedOnce = true
+  }
+
+  async function loadMore(): Promise<void> {
+    if (loadingMore.value || list.value.length >= total.value) return
+    loadingMore.value = true
+    try {
+      const nextPage = page + 1
+      const result = await fetchNotices(nextPage, pageSize)
+      list.value.push(...result.list.filter((item) => !list.value.some((current) => current.id === item.id)))
+      total.value = result.total
+      page = nextPage
+    } finally {
+      loadingMore.value = false
+    }
   }
 
   async function read(id: string): Promise<void> {
@@ -45,6 +66,8 @@ export const useNoticesStore = defineStore('notices', () => {
 
   function reset(): void {
     list.value = []
+    total.value = 0
+    page = 1
     unread.value = 0
     loadedOnce = false
   }
@@ -54,5 +77,5 @@ export const useNoticesStore = defineStore('notices', () => {
     unread.value = Math.max(0, Math.floor(value))
   }
 
-  return { unread, list, refreshUnread, ensureLoaded, refreshAll, read, readAll, setUnread, reset }
+  return { unread, list, total, loadingMore, refreshUnread, ensureLoaded, refreshAll, loadMore, read, readAll, setUnread, reset }
 })

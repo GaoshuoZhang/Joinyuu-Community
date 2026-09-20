@@ -5,11 +5,10 @@
  *       本套件用不同用户打同一商品以绕开「同用户」标记层，专测数据库层的超卖防护。 */
 import { INestApplication } from '@nestjs/common'
 import { Test } from '@nestjs/testing'
-import request from 'supertest'
 import { AppModule } from '../src/app.module'
 import { PrismaService } from '../src/common/prisma/prisma.service'
 import { reseed } from './helpers/reseed'
-import { appGet, appLoginAs, appPost } from './helpers/app-login'
+import { appLoginAs, appPost } from './helpers/app-login'
 
 const pad = (n: number): string => String(n).padStart(2, '0')
 const fmt = (d: Date): string =>
@@ -44,9 +43,9 @@ describe('M2-R R2 并发安全（活动/商城）', () => {
     await prisma.mallGoods.create({
       data: {
         id: goodsId,
-        name: '并发压测商品（服务）',
-        category: 'GC002',
-        fulfillment: 'service',
+        name: '并发压测商品（权益券）',
+        category: 'GC003',
+        fulfillment: 'voucher',
         points: price,
         stock: 1,
         status: 'on',
@@ -94,8 +93,8 @@ describe('M2-R R2 并发安全（活动/商城）', () => {
       data: {
         id: goodsId,
         name: '并发压测商品（连点）',
-        category: 'GC002',
-        fulfillment: 'service',
+        category: 'GC003',
+        fulfillment: 'voucher',
         points: 10,
         stock: 10,
         status: 'on',

@@ -36,7 +36,7 @@ export async function updateAnnouncement(id: string, payload: AnnouncementPayloa
   return httpPut<{ code: number }>(`/announcements/${id}`, payload)
 }
 
-/* POST /api/admin/announcements/:id/withdraw — 下架公告（客户端公告位立即隐藏） */
+/* POST /api/admin/announcements/:id/withdraw — 下架公告（客户端首页公告条立即隐藏） */
 export async function withdrawAnnouncement(id: string): Promise<{ code: number }> {
   return httpPost<{ code: number }>(`/announcements/${id}/withdraw`)
 }
@@ -54,4 +54,33 @@ export async function toggleAnnouncementPin(id: string): Promise<{ code: number 
 /* DELETE /api/admin/announcements/:id — 删除公告 */
 export async function deleteAnnouncement(id: string): Promise<{ code: number }> {
   return httpDelete<{ code: number }>(`/announcements/${id}`)
+}
+
+/* ---------- 首页公告单例（移动端首页搜索栏下方仅展示一条） ---------- */
+
+export interface HomeAnnouncement {
+  id: string | null
+  title: string
+  content: string
+  enabled: boolean
+  link: string
+  publishedAt: string
+  updatedAt: string
+}
+
+export interface HomeAnnouncementPayload {
+  title: string
+  content: string
+  enabled: boolean
+  link?: string
+}
+
+/* GET /api/admin/announcements/home — 读取当前首页公告（未创建时返回空表单） */
+export async function fetchHomeAnnouncement(): Promise<HomeAnnouncement> {
+  return httpGet<HomeAnnouncement>('/announcements/home')
+}
+
+/* PUT /api/admin/announcements/home — 保存首页公告内容与开启状态（开启时全局仅一条） */
+export async function saveHomeAnnouncement(payload: HomeAnnouncementPayload): Promise<{ code: number }> {
+  return httpPut<{ code: number }>('/announcements/home', payload)
 }

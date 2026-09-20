@@ -42,6 +42,8 @@ export interface DemandDto {
   id: string
   title: string
   category: string
+  /** 类别展示名称；category 保留字典 code，兼容历史直接保存名称的数据。 */
+  categoryLabel: string
   demandType: string
   deliverable?: string
   deliverBy?: string
@@ -123,6 +125,7 @@ function toDemandDto(d: DemandWithRespondents): DemandDto {
     id: d.id,
     title: d.title,
     category: d.category,
+    categoryLabel: d.category,
     demandType: d.demandType,
     publisherId: d.publisherId,
     publisherName: d.publisherName,
@@ -185,7 +188,16 @@ export class DemandsService {
         { id: { contains: kw, mode: 'insensitive' } },
       ]
     }
-    if (query.category) where.category = query.category
+    if (query.category) {
+      const entry = await this.prisma.dictEntry.findFirst({
+        where: {
+          type: { in: ['demand_category', 'industry'] },
+          OR: [{ code: query.category }, { label: query.category }],
+        },
+        select: { code: true, label: true },
+      })
+      where.category = entry ? { in: [entry.code, entry.label] } : query.category
+    }
     if (query.demandType) where.demandType = query.demandType
     if (query.status) where.status = query.status
     if (query.publisherId) where.publisherId = query.publisherId
@@ -252,10 +264,8 @@ export class DemandsService {
       byDemand.set(r.demandId, arr)
     }
 
-    return {
-      list: page.map((d) => toDemandDto({ ...d, respondents: byDemand.get(d.id) ?? [] })),
-      total,
-    }
+    const demandDtos = page.map((d) => toDemandDto({ ...d, respondents: byDemand.get(d.id) ?? [] }))
+    return { list: await this.withCategoryLabels(demandDtos), total }
   }
 
   async findOne(id: string): Promise<DemandDto> {
@@ -264,7 +274,7 @@ export class DemandsService {
       include: { respondents: { orderBy: { id: 'asc' } } },
     })
     if (!demand) throw new NotFoundException('需求不存在')
-    return toDemandDto(demand)
+    return (await this.withCategoryLabels([toDemandDto(demand)]))[0]
   }
 
   async create(dto: CreateDemandDto, operator: string): Promise<DemandDto> {
@@ -300,7 +310,7 @@ export class DemandsService {
       operator,
     })
 
-    return toDemandDto(demand)
+    return (await this.withCategoryLabels([toDemandDto(demand)]))[0]
   }
 
   async update(id: string, dto: UpdateDemandDto): Promise<{ code: number }> {
@@ -343,6 +353,15 @@ export class DemandsService {
       where: { id },
       data: { status: 'rejected', rejectedReason: reason, archivableAt: formatNow() },
     })
+    const publisherUserId = await this.notifiableUser(demand.publisherId)
+    if (publisherUserId) {
+      await this.notify.pushNotice(publisherUserId, {
+        type: 'demand',
+        title: '需求未通过审核',
+        content: `您的需求「${demand.title}」未通过审核：${reason}`,
+        link: '/me/demands',
+      })
+    }
     await this.audit.record({
       module: '需求管理',
       action: '需求驳回',
@@ -588,6 +607,11 @@ export class DemandsService {
     return enterprise?.contactUserId ?? null
   }
 
+  /** 同 resolveNotifiableUser 的非事务版本（用于单表写操作后的通知） */
+  private async notifiableUser(subjectId: string): Promise<string | null> {
+    return this.resolveNotifiableUser(this.prisma, subjectId)
+  }
+
   /** 承接方项目经验投放目标（enterprise / individual） */
   private respondentExperience(response: DemandRespondent): { targetType: 'enterprise' | 'individual'; targetId: string } | null {
     const ri = response.responderIdentity as Record<string, unknown> | null
@@ -712,6 +736,18 @@ export class DemandsService {
       return { type: 'individual', title: '个人用户' }
     }
     return (payloadIdentity as Prisma.InputJsonValue) ?? null
+  }
+
+  /** 类别字段保存字典 code；响应同时附带标签，已删除或历史直接保存标签时安全回退原值。 */
+  private async withCategoryLabels(demands: DemandDto[]): Promise<DemandDto[]> {
+    const codes = [...new Set(demands.map((demand) => demand.category).filter(Boolean))]
+    if (!codes.length) return demands
+    const entries = await this.prisma.dictEntry.findMany({
+      where: { code: { in: codes }, type: { in: ['demand_category', 'industry'] } },
+      select: { code: true, label: true },
+    })
+    const labels = new Map(entries.map((entry) => [entry.code, entry.label]))
+    return demands.map((demand) => ({ ...demand, categoryLabel: labels.get(demand.category) ?? demand.category }))
   }
 
   /* 可编辑字段（新增/编辑共用）：预算空 → 面议；contactEmail/respondPoints 空 → 清空 */

@@ -25,7 +25,7 @@ const archiveTabs = [
   { value: 'externalEnterprise', label: '合作企业' },
   { value: 'article', label: '资讯发布' },
   { value: 'submission', label: '投稿内容' },
-  { value: 'announcement', label: '公告栏' },
+  { value: 'announcement', label: '首页公告' },
   { value: 'demand', label: '需求' },
   { value: 'project', label: '项目' },
   { value: 'event', label: '活动' },
@@ -58,13 +58,13 @@ const applicationTypeTextMap: Record<string, string> = {
   settle: '企业入驻',
   individual: '个体入驻',
   cooperation: '企业合作',
-  identity: '身份绑定',
   exit: '企业退驻',
 }
 
 const applicationStatusTextMap: Record<string, string> = {
   approved: '已通过',
   rejected: '已驳回',
+  withdrawn: '已撤回',
 }
 
 const statusEntityMap: Record<string, StatusEntity> = {
@@ -165,7 +165,7 @@ const columns = computed<ArchiveColumn[]>(() => {
       return [
         { colKey: 'title', title: '标题', cell: 'title', width: 260, resizable: true, ellipsis: true },
         { colKey: 'status', title: '状态', cell: 'status', width: 100, resizable: true, ellipsis: true },
-        { colKey: 'pinned', title: '置顶', cell: 'pinned', width: 80, resizable: true, ellipsis: true },
+        { colKey: 'pinned', title: '开启', cell: 'pinned', width: 80, resizable: true, ellipsis: true },
         deletedAt,
         deletedBy,
         op,

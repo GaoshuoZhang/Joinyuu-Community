@@ -1,0 +1,63 @@
+<script setup lang="ts">
+import { Input } from 'tdesign-mobile-vue'
+
+/* 联系信息字段组：联系人 / 联系电话 / 联系邮箱（选填）。 */
+defineProps<{
+  name: string
+  phone: string
+  email: string
+  nameError?: string
+  phoneError?: string
+  emailError?: string
+}>()
+
+defineEmits<{
+  'update:name': [string]
+  'update:phone': [string]
+  'update:email': [string]
+}>()
+</script>
+
+<template>
+  <div class="contact-fields">
+    <div class="field">
+      <label>联系人</label>
+      <Input :model-value="name" :maxlength="20" placeholder="请输入联系人姓名…" clearable @update:model-value="(v: string | number) => $emit('update:name', String(v))" />
+      <p v-if="nameError" class="field-error">{{ nameError }}</p>
+    </div>
+    <div class="field">
+      <label>联系电话</label>
+      <Input :model-value="phone" type="tel" autocomplete="tel" :maxlength="11" placeholder="请输入 11 位手机号…" clearable @update:model-value="(v: string | number) => $emit('update:phone', String(v))" />
+      <p v-if="phoneError" class="field-error">{{ phoneError }}</p>
+    </div>
+    <div class="field">
+      <label>联系邮箱（选填）</label>
+      <Input :model-value="email" name="contact-email" inputmode="email" autocomplete="email" :spell-check="false" :maxlength="60" placeholder="便于对方直接邮件联系…" clearable @update:model-value="(v: string | number) => $emit('update:email', String(v))" />
+      <p v-if="emailError" class="field-error">{{ emailError }}</p>
+    </div>
+  </div>
+</template>
+
+<style scoped>
+.contact-fields {
+  display: flex;
+  flex-direction: column;
+}
+
+.field {
+  margin-bottom: var(--app-space-8);
+}
+
+.field label {
+  display: block;
+  font-size: var(--app-font-body);
+  margin-bottom: var(--app-space-4);
+  color: var(--td-text-color-secondary);
+}
+
+.field-error {
+  margin: var(--app-space-3) 0 0;
+  font-size: var(--app-font-caption);
+  color: var(--td-error-color);
+}
+</style>

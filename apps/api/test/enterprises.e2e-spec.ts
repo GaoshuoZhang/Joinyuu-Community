@@ -109,7 +109,6 @@ describe('M1-B 社区企业（enterprises）', () => {
       .get(`/api/admin/enterprises/${res.body.data.id}`)
       .set('Authorization', `Bearer ${token}`)
     expect(detail.body.data.enterprise.status).toBe('active')
-    expect(detail.body.data.enterprise.showcaseStatus).toBe('none')
     expect(detail.body.data.enterprise.name).toBe('测试新增科技')
     /* 关联用户必填：联系人姓名/联系电话由该用户派生（U1002 林晚舟） */
     expect(detail.body.data.enterprise.contactUserId).toBe('U1002')

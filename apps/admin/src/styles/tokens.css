@@ -476,3 +476,8 @@ html[data-route-loading='true']::after {
   vertical-align: baseline !important;
   color: inherit !important;
 }
+
+/* Tab 面板空态：上下留白，避免占位图贴住选项卡内容区边缘（身份信息/活跃记录等直接放 t-empty 的面板） */
+.t-tabs__content .t-empty {
+  padding: 24px 0;
+}

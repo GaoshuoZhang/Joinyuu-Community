@@ -4,13 +4,13 @@ import { useRoute, useRouter } from 'vue-router'
 import { useQueryTab } from '@/utils/navigation'
 import { DialogPlugin, MessagePlugin } from 'tdesign-vue-next'
 import type { FormProps } from 'tdesign-vue-next'
-import { ArrowLeftIcon } from 'tdesign-icons-vue-next'
+import { ArrowLeftIcon, BrowseIcon, BrowseOffIcon } from 'tdesign-icons-vue-next'
 import StatusTag from '@/components/StatusTag.vue'
 import IdentityTags from '@/components/IdentityTags.vue'
 import AdjustValueDialog from '@/components/AdjustValueDialog.vue'
 import UserCardTab from '@/components/UserCardTab.vue'
 import { identityTypeMap, roleLabelMap } from '@/constants/identity'
-import { applicationTypeMap } from '@/constants/status'
+import { applicationTypeMap, normalizeUserGender, userGenderLabel, userGenderOptions } from '@/constants/status'
 import {
   fetchUser,
   fetchUserRecords,
@@ -38,6 +38,7 @@ const route = useRoute()
 const router = useRouter()
 const loading = ref(true)
 const user = ref<User | null>(null)
+const sensitiveVisible = ref(false)
 /** 合作企业档案缓存：external_enterprise 身份经"档案名 + 成员 uid"反查档案 ID */
 const externalArchives = ref<ExternalEnterprise[]>([])
 const activeTab = useQueryTab('identities', ['identities', 'card', 'applications', 'demands', 'projects', 'events', 'leases', 'submissions', 'reservations', 'experience', 'points', 'activities'] as const)
@@ -46,6 +47,20 @@ function maskCitizenId(value?: string | null): string {
   if (!value) return '—'
   if (value.length <= 8) return `${value.slice(0, 2)}****${value.slice(-2)}`
   return `${value.slice(0, 6)}********${value.slice(-4)}`
+}
+
+function maskPhone(value?: string | null): string {
+  if (!value) return '—'
+  if (value.length < 8) return `${value.slice(0, 2)}****${value.slice(-2)}`
+  return `${value.slice(0, 3)}****${value.slice(7)}`
+}
+
+function maskEmail(value?: string | null): string {
+  if (!value) return '—'
+  const at = value.indexOf('@')
+  if (at <= 0) return `${value.slice(0, 2)}***`
+  const local = value.slice(0, at)
+  return `${local.slice(0, Math.min(2, local.length))}***${value.slice(at)}`
 }
 
 function maskOpaqueId(value?: string | null): string {
@@ -94,16 +109,11 @@ const editForm = reactive({
   nickname: '',
   phone: '',
   email: '',
-  gender: '男' as User['gender'],
+  gender: 'male' as 'male' | 'female' | 'unknown',
   realName: '',
   citizenId: '',
   bio: '',
 })
-
-const genderOptions = [
-  { label: '男', value: '男' },
-  { label: '女', value: '女' },
-]
 
 const editRules: FormProps['rules'] = {
   nickname: [{ required: true, message: '请填写昵称', trigger: 'blur' }],
@@ -114,7 +124,8 @@ function openEdit() {
   editForm.nickname = user.value.nickname
   editForm.phone = user.value.phone
   editForm.email = user.value.email
-  editForm.gender = user.value.gender
+  /* 历史中文值（男/女）在打开表单时归一为客户端规范值，保存后统一写入 male/female/unknown */
+  editForm.gender = normalizeUserGender(user.value.gender)
   editForm.realName = user.value.realName ?? ''
   editForm.citizenId = user.value.citizenId ?? ''
   editForm.bio = user.value.bio
@@ -534,7 +545,7 @@ onMounted(async () => {
       <!-- 用户信息头卡片 -->
       <div class="page-card profile-card">
         <div class="profile-head">
-          <t-avatar size="56px">{{ user.nickname.slice(0, 1) }}</t-avatar>
+          <t-avatar size="56px" :image="user.avatar">{{ user.nickname.slice(0, 1) }}</t-avatar>
           <div class="profile-title">
             <div class="profile-name-row">
               <span class="profile-name">{{ user.nickname }}</span>
@@ -543,30 +554,36 @@ onMounted(async () => {
             <span class="profile-id">用户ID: <t-tag class="id-tag" size="small" variant="light">{{ user.uid }}</t-tag></span>
             <IdentityTags v-if="headerIdentities.length" :identities="headerIdentities" :show-id="false" />
           </div>
-          <div v-if="user.status !== 'deleted'" class="profile-actions">
-            <t-button variant="outline" @click="openEdit">编辑</t-button>
-            <t-button variant="outline" @click="openResetPwd">重置密码</t-button>
-            <t-popconfirm
-              v-if="user.status === 'frozen'"
-              content="确认恢复该账号？恢复后冻结信息将被清除"
-              @confirm="onRestore"
-            >
-              <t-button theme="primary" :loading="restoring">恢复</t-button>
-            </t-popconfirm>
-            <t-button v-else theme="danger" @click="openFreeze">冻结</t-button>
+          <div class="profile-actions">
+            <t-button variant="text" :title="sensitiveVisible ? '隐藏敏感信息' : '显示敏感信息'" @click="sensitiveVisible = !sensitiveVisible">
+              <template #icon><BrowseOffIcon v-if="sensitiveVisible" /><BrowseIcon v-else /></template>
+              {{ sensitiveVisible ? '隐藏敏感信息' : '显示敏感信息' }}
+            </t-button>
+            <template v-if="user.status !== 'deleted'">
+              <t-button variant="outline" @click="openEdit">编辑</t-button>
+              <t-button variant="outline" @click="openResetPwd">重置密码</t-button>
+              <t-popconfirm
+                v-if="user.status === 'frozen'"
+                content="确认恢复该账号？恢复后冻结信息将被清除"
+                @confirm="onRestore"
+              >
+                <t-button theme="primary" :loading="restoring">恢复</t-button>
+              </t-popconfirm>
+              <t-button v-else theme="danger" @click="openFreeze">冻结</t-button>
+            </template>
           </div>
         </div>
 
         <t-descriptions :column="3" bordered table-layout="auto" class="profile-desc">
-          <t-descriptions-item label="联系电话">{{ user.phone }}</t-descriptions-item>
-          <t-descriptions-item label="邮箱">{{ user.email }}</t-descriptions-item>
-          <t-descriptions-item label="性别">{{ user.gender }}</t-descriptions-item>
+          <t-descriptions-item label="联系电话">{{ sensitiveVisible ? user.phone : maskPhone(user.phone) }}</t-descriptions-item>
+          <t-descriptions-item label="邮箱">{{ sensitiveVisible ? user.email : maskEmail(user.email) }}</t-descriptions-item>
+          <t-descriptions-item label="性别">{{ userGenderLabel(user.gender) }}</t-descriptions-item>
           <t-descriptions-item label="实名状态">
             <t-tag v-if="user.realName && user.citizenId" theme="success" variant="light" size="small">已实名</t-tag>
             <t-tag v-else theme="default" variant="light" size="small">未实名</t-tag>
           </t-descriptions-item>
           <t-descriptions-item label="真实姓名">{{ user.realName ?? '—' }}</t-descriptions-item>
-          <t-descriptions-item label="身份证号">{{ maskCitizenId(user.citizenId) }}</t-descriptions-item>
+          <t-descriptions-item label="身份证号">{{ sensitiveVisible ? (user.citizenId ?? '—') : maskCitizenId(user.citizenId) }}</t-descriptions-item>
           <t-descriptions-item label="微信绑定">
             {{ user.wechatOpenid ? (user.wechatVerified ? '已绑定 · 已微信实名' : '已绑定 · 未微信实名') : '未绑定' }}
           </t-descriptions-item>
@@ -587,38 +604,40 @@ onMounted(async () => {
       <div class="page-card">
         <t-tabs v-model="activeTab">
           <t-tab-panel value="identities" label="身份信息">
-            <t-empty
-              v-if="displayIdentities.length === 0"
-              description="该用户仅持有默认的个人用户身份"
-            />
-            <div v-else class="identity-list">
-              <t-link theme="default" hover="color" :href="identity.type === 'community_enterprise' ? '#/enterprises/' + identity.enterpriseId : '#/external-enterprises/' + externalArchiveId(identity)" :disabled="!canGoEnterprise(identity)"
-                v-for="(identity, i) in displayIdentities"
-                :key="i"
-                class="identity-card"
-                :class="{ clickable: canGoEnterprise(identity) }"
-              >
-                <div class="identity-card-head">
-                  <span class="identity-name">{{ identityName(identity) }}<t-tag v-if="identity.enterpriseId" class="id-tag" size="small" variant="light">{{ identity.enterpriseId }}</t-tag></span>
-                  <div class="identity-card-tags">
-                    <t-tag v-if="identity.type === 'community_individual'" variant="light" size="small">
-                      {{ identity.level ? `${identity.level} 级` : '社区个体' }}
-                    </t-tag>
-                    <template v-else>
-                      <t-tag variant="outline" size="small">{{ identityTypeMap[identity.type] }}</t-tag>
-                      <t-tag v-if="identity.role" variant="light" size="small">
-                        {{ roleLabelMap[identity.role] }}
+            <div class="tab-body">
+              <t-empty
+                v-if="displayIdentities.length === 0"
+                description="该用户仅持有默认的个人用户身份"
+              />
+              <div v-else class="identity-list">
+                <t-link theme="default" hover="color" :href="identity.type === 'community_enterprise' ? '#/enterprises/' + identity.enterpriseId : '#/external-enterprises/' + externalArchiveId(identity)" :disabled="!canGoEnterprise(identity)"
+                  v-for="(identity, i) in displayIdentities"
+                  :key="i"
+                  class="identity-card"
+                  :class="{ clickable: canGoEnterprise(identity) }"
+                >
+                  <div class="identity-card-head">
+                    <span class="identity-name">{{ identityName(identity) }}<t-tag v-if="identity.enterpriseId" class="id-tag" size="small" variant="light">{{ identity.enterpriseId }}</t-tag></span>
+                    <div class="identity-card-tags">
+                      <t-tag v-if="identity.type === 'community_individual'" variant="light" size="small">
+                        {{ identity.level ? `${identity.level} 级` : '社区个体' }}
                       </t-tag>
-                    </template>
+                      <template v-else>
+                        <t-tag variant="outline" size="small">{{ identityTypeMap[identity.type] }}</t-tag>
+                        <t-tag v-if="identity.role" variant="light" size="small">
+                          {{ roleLabelMap[identity.role] }}
+                        </t-tag>
+                      </template>
+                    </div>
                   </div>
-                </div>
-                <div class="identity-card-meta">
-                  <span>职位/头衔：{{ identity.title }}</span>
-                  <span v-if="identity.type !== 'community_individual' && identity.level">
-                    经验值等级：{{ identity.level }} 级
-                  </span>
-                </div>
-              </t-link>
+                  <div v-if="identity.type !== 'community_individual'" class="identity-card-meta">
+                    <span>职位/头衔：{{ identity.title }}</span>
+                    <span v-if="identity.level">
+                      经验值等级：{{ identity.level }} 级
+                    </span>
+                  </div>
+                </t-link>
+              </div>
             </div>
           </t-tab-panel>
 
@@ -1073,13 +1092,15 @@ onMounted(async () => {
           </t-tab-panel>
 
           <t-tab-panel value="activities" label="活跃记录">
-            <t-empty v-if="user.activities.length === 0" description="暂无活跃记录" />
-            <t-timeline v-else class="activity-timeline" mode="same">
-              <t-timeline-item v-for="(act, i) in user.activities" :key="i">
-                <div class="act-content">{{ act.content }}</div>
-                <div class="act-time">{{ act.time }}</div>
-              </t-timeline-item>
-            </t-timeline>
+            <div class="tab-body">
+              <t-empty v-if="user.activities.length === 0" description="暂无活跃记录" />
+              <t-timeline v-else class="activity-timeline" mode="same">
+                <t-timeline-item v-for="(act, i) in user.activities" :key="i">
+                  <div class="act-content">{{ act.content }}</div>
+                  <div class="act-time">{{ act.time }}</div>
+                </t-timeline-item>
+              </t-timeline>
+            </div>
           </t-tab-panel>
         </t-tabs>
       </div>
@@ -1109,7 +1130,7 @@ onMounted(async () => {
           <t-input v-model="editForm.email" name="email" inputmode="email" autocomplete="email" placeholder="请输入邮箱…" />
         </t-form-item>
         <t-form-item label="性别" name="gender">
-          <t-select v-model="editForm.gender" :options="genderOptions" placeholder="请选择性别…" />
+          <t-select v-model="editForm.gender" :options="userGenderOptions" placeholder="请选择性别…" />
         </t-form-item>
         <t-form-item label="真实姓名" name="realName">
           <t-input v-model="editForm.realName" name="real-name" autocomplete="name" placeholder="请输入真实姓名…" />

@@ -5,10 +5,9 @@ import * as mock from '@/mock/handlers/notices'
 /** R1 站内信真实接口；mock/http 双模式保持同一视图层形状。 */
 
 /** GET /api/app/notices — 我的站内信列表 */
-export async function fetchNotices(): Promise<UserNotice[]> {
-  if (apiMode === 'mock') return mock.fetchNotices()
-  const result = await httpGet<{ list: UserNotice[] }>('/notices?page=1&pageSize=50')
-  return result.list
+export async function fetchNotices(page = 1, pageSize = 20): Promise<{ list: UserNotice[]; total: number }> {
+  if (apiMode === 'mock') return mock.fetchNotices(page, pageSize)
+  return httpGet<{ list: UserNotice[]; total: number }>(`/notices?page=${page}&pageSize=${pageSize}`)
 }
 
 /** GET /api/app/notices/unread-count — 未读数（TabBar/铃铛角标） */

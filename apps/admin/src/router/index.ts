@@ -88,7 +88,7 @@ const router = createRouter({
           meta: { title: '申请审核', group: '社区成员' },
         },
         { path: 'application-form-config', redirect: '/system/application-form-config' },
-        { path: 'member-governance', redirect: (to) => to.query.tab === 'realnames' ? '/system/realname-reviews' : '/system/deletion-requests' },
+        { path: 'member-governance', redirect: '/system/deletion-requests' },
         { path: 'card-management', component: () => import('@/views/users/CardManagementView.vue'), meta: { title: '名片管理', group: '社区成员', perm: '/card-management' } },
         {
           path: 'demands',
@@ -119,6 +119,11 @@ const router = createRouter({
           path: 'events',
           component: () => import('@/views/events/EventListView.vue'),
           meta: { title: '活动管理', group: '业务运营' },
+        },
+        {
+          path: 'events/enrollments',
+          component: () => import('@/views/events/EventEnrollmentReviewView.vue'),
+          meta: { title: '活动报名', group: '业务运营', perm: '/events' },
         },
         {
           path: 'events/:id',
@@ -229,7 +234,7 @@ const router = createRouter({
         {
           path: 'contents/announcements',
           component: () => import('@/views/contents/AnnouncementsPanel.vue'),
-          meta: { title: '公告栏', group: '内容管理' },
+          meta: { title: '首页公告', group: '内容管理' },
         },
         {
           path: 'system/dicts',
@@ -250,11 +255,6 @@ const router = createRouter({
           path: 'system/deletion-requests',
           component: () => import('@/views/system/DeletionRequestsView.vue'),
           meta: { title: '注销工单', group: '系统管理', perm: '/member-governance', scopeDomain: 'members' },
-        },
-        {
-          path: 'system/realname-reviews',
-          component: () => import('@/views/system/RealnameReviewsView.vue'),
-          meta: { title: '实名复核', group: '系统管理', perm: '/member-governance', scopeDomain: 'members' },
         },
         {
           path: 'system/logs',
@@ -291,11 +291,6 @@ const router = createRouter({
           path: 'system/trash',
           component: () => import('@/views/system/ArchivePanel.vue'),
           meta: { title: '归档管理', group: '系统管理', perm: '/system/trash' },
-        },
-        {
-          path: 'system/governance',
-          component: () => import('@/views/system/GovernancePanel.vue'),
-          meta: { title: '举报与申诉', group: '系统管理', perm: '/governance' },
         },
         {
           path: 'system/policies',

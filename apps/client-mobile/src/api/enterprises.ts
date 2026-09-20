@@ -17,21 +17,14 @@ import type {
 } from '@/types'
 import * as mock from '@/mock/handlers/enterprises'
 
-/** GET /api/app/enterprises/:id — 企业名片（showcaseStatus=published 才可见） */
-/** GET /api/app/enterprises/:id/workbench — 企业工作台（v42 [MOCK-ONLY]） */
-export async function fetchEnterpriseWorkbench(id: string): Promise<import('@/types').EnterpriseWorkbench> {
-  if (apiMode === 'mock') return mock.fetchEnterpriseWorkbench(id)
-  return httpGet(`/me/enterprise-workbench?enterpriseId=${encodeURIComponent(id)}`)
-}
-
-/** GET /api/app/enterprises/:id/workbench — 企业工作台（v42 [MOCK-ONLY]） */
+/** GET /api/app/enterprises/:id — 企业公开名片。 */
 
 export async function fetchEnterpriseShowcase(id: string): Promise<EnterpriseShowcase> {
   if (apiMode === 'mock') return mock.fetchEnterpriseShowcase(id)
   return httpGet<EnterpriseShowcase>(`/enterprises/${id}`)
 }
 
-/** GET /api/app/me/cards — 我的名片（个人名片；缺口 §7.1-16） */
+/** GET /api/app/me/cards — 我的个人名片。 */
 export async function fetchMyCards(): Promise<MyCards> {
   if (apiMode === 'mock') return mock.fetchMyCards()
   return httpGet<MyCards>('/me/cards')
@@ -103,25 +96,25 @@ export async function respondInvitation(id: string, action: InvitationAction): P
   await httpPost(`/invitations/${id}/respond`, { action })
 }
 
-/** [MOCK-ONLY] 撤销待接受的企业邀请（需邀请权限）。 */
+/** 撤销待接受的企业邀请（需邀请权限）。 */
 export async function revokeEnterpriseInvitation(invitationId: string): Promise<void> {
   if (apiMode === 'mock') return mock.revokeEnterpriseInvitation(invitationId)
   await httpPost(`/me/enterprises/invitations/${invitationId}/revoke`)
 }
 
-/** [MOCK-ONLY] 我收到的负责人转移请求（v35；需目标成员接受后生效）。 */
+/** 我收到的负责人转移请求（需目标成员接受后生效）。 */
 export async function fetchMyTransferRequests(): Promise<EnterpriseTransferRequest[]> {
   if (apiMode === 'mock') return mock.fetchMyTransferRequests()
   return httpGet<EnterpriseTransferRequest[]>('/me/transfer-requests')
 }
 
-/** [MOCK-ONLY] 被邀请人接受/拒绝负责人转移。 */
+/** 被邀请人接受/拒绝负责人转移。 */
 export async function respondEnterpriseTransfer(requestId: string, action: 'accept' | 'reject'): Promise<void> {
   if (apiMode === 'mock') return mock.respondEnterpriseTransfer(requestId, action)
   await httpPost(`/me/transfer-requests/${requestId}/respond`, { action })
 }
 
-/** [MOCK-ONLY] 发起方撤销待确认的负责人转移请求。 */
+/** 发起方撤销待确认的负责人转移请求。 */
 export async function cancelEnterpriseTransfer(requestId: string): Promise<void> {
   if (apiMode === 'mock') return mock.cancelEnterpriseTransfer(requestId)
   await httpPost(`/me/transfer-requests/${requestId}/cancel`)

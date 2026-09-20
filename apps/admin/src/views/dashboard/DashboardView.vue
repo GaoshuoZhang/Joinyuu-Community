@@ -8,6 +8,8 @@ import {
   CalendarIcon,
   CartIcon,
   CheckCircleIcon,
+  ChevronDownIcon,
+  ChevronUpIcon,
   Edit2Icon,
   MapIcon,
   SettingIcon,
@@ -22,19 +24,31 @@ import StatCard from '@/components/StatCard.vue'
 import StatusTag from '@/components/StatusTag.vue'
 import TrendChart from '@/components/TrendChart.vue'
 import { applicationTypeMap } from '@/constants/status'
+import { useAuthStore } from '@/stores/auth'
 import { fetchDashboard, fetchTrend, type DashboardData, type TrendPoint } from '@/api/dashboard'
-import { fetchAnnouncements } from '@/api/announcements'
+import { fetchHomeAnnouncement, type HomeAnnouncement } from '@/api/announcements'
 import { fetchUsers } from '@/api/users'
 import { fetchIndividuals } from '@/api/individuals'
 import { fetchEnterprises } from '@/api/enterprises'
 import { fetchExternalEnterprises } from '@/api/external-enterprises'
 import { fetchProjects } from '@/api/projects'
 import { fetchArticles } from '@/api/contents'
-import type { Announcement } from '@/types'
 
 const router = useRouter()
+const auth = useAuthStore()
 const loading = ref(true)
 const data = ref<DashboardData | null>(null)
+
+/* 权限收敛（D-011）：待办/平台数据/快捷入口仅展示当前账号可用项 */
+const TODO_PERMS: Record<string, string> = {
+  settle: '/approvals',
+  demand: '/demands/review',
+  reservation: '/spaces/reservations',
+  article: '/contents/submissions',
+  eventEnrollment: '/events',
+  lease: '/workstations/leases',
+}
+const visibleTodos = computed(() => (data.value?.todos ?? []).filter((todo) => auth.hasPerm(TODO_PERMS[todo.key] ?? '')))
 
 /* ---------- 趋势区块：成员/需求/活动/积分，按 3/7/15/30 天区间展示（真实接口 dashboard/trend） ---------- */
 const trendLoading = ref(false)
@@ -83,15 +97,15 @@ watch(trendDays, (d) => {
   loadTrend(d)
 })
 
-/* ---------- 系统公告（最新 3 条已发布） ---------- */
-const announcements = ref<Announcement[]>([])
+/* ---------- 系统公告（与内容管理中的首页公告单例保持同一数据源） ---------- */
+const announcements = ref<HomeAnnouncement[]>([])
 const announcementsLoading = ref(false)
 
 async function loadAnnouncements() {
   announcementsLoading.value = true
   try {
-    const res = await fetchAnnouncements({ page: 1, pageSize: 3, status: 'published' })
-    announcements.value = res.list
+    const res = await fetchHomeAnnouncement()
+    announcements.value = res.enabled && res.id ? [res] : []
   } catch {
     /* 公告加载失败静默 */
   } finally {
@@ -125,22 +139,41 @@ const CARD_TITLES: Record<CardKey, string> = {
 const CARDS_STORAGE_KEY = 'joinyuu_dash_cards'
 
 const cardOn = reactive<Record<CardKey, boolean>>(loadCards())
+const cardOrder = ref<CardKey[]>(loadCardOrder())
+
+interface SavedCards {
+  visible?: Partial<Record<CardKey, boolean>>
+  order?: CardKey[]
+}
+
+function readSavedCards(): SavedCards | Partial<Record<CardKey, boolean>> | null {
+  const raw = localStorage.getItem(CARDS_STORAGE_KEY)
+  if (!raw) return null
+  try {
+    return JSON.parse(raw) as SavedCards | Partial<Record<CardKey, boolean>>
+  } catch {
+    return null
+  }
+}
 
 function loadCards(): Record<CardKey, boolean> {
   const all: Record<CardKey, boolean> = Object.fromEntries(CARD_KEYS.map((k) => [k, true])) as Record<CardKey, boolean>
-  const raw = localStorage.getItem(CARDS_STORAGE_KEY)
-  if (!raw) return all
-  try {
-    const saved = JSON.parse(raw) as Partial<Record<CardKey, boolean>>
-    for (const k of CARD_KEYS) if (typeof saved[k] === 'boolean') all[k] = saved[k]
-  } catch {
-    /* 损坏数据回默认 */
-  }
+  const stored = readSavedCards()
+  if (!stored) return all
+  const saved = 'visible' in stored && stored.visible ? stored.visible : stored as Partial<Record<CardKey, boolean>>
+  for (const k of CARD_KEYS) if (typeof saved[k] === 'boolean') all[k] = saved[k]
   return all
 }
 
+function loadCardOrder(): CardKey[] {
+  const stored = readSavedCards()
+  const saved = stored && 'order' in stored && Array.isArray(stored.order) ? stored.order : []
+  const valid = saved.filter((key): key is CardKey => CARD_KEYS.includes(key as CardKey))
+  return [...new Set([...valid, ...CARD_KEYS])]
+}
+
 function persistCards() {
-  localStorage.setItem(CARDS_STORAGE_KEY, JSON.stringify(cardOn))
+  localStorage.setItem(CARDS_STORAGE_KEY, JSON.stringify({ visible: cardOn, order: cardOrder.value }))
 }
 
 function isCardOn(key: CardKey) {
@@ -154,7 +187,22 @@ function toggleCard(key: CardKey, v: boolean) {
 
 function resetCards() {
   for (const k of CARD_KEYS) cardOn[k] = true
+  cardOrder.value = [...CARD_KEYS]
   persistCards()
+}
+
+function moveCard(key: CardKey, direction: -1 | 1) {
+  const index = cardOrder.value.indexOf(key)
+  const target = index + direction
+  if (index < 0 || target < 0 || target >= cardOrder.value.length) return
+  const next = [...cardOrder.value]
+  ;[next[index], next[target]] = [next[target], next[index]]
+  cardOrder.value = next
+  persistCards()
+}
+
+function cardStyle(key: CardKey) {
+  return { order: cardOrder.value.indexOf(key) }
 }
 
 /* 布局编辑弹层（仿「列设置」面板样式）：卡片开关 + 恢复默认 */
@@ -167,20 +215,24 @@ const todoCardIcons: Record<string, unknown> = {
   demand: ViewListIcon,
   reservation: MapIcon,
   article: Edit2Icon,
+  eventEnrollment: CalendarIcon,
   lease: TimeIcon,
 }
 
 
-const quickEntries = [
-  { label: '用户管理', path: '/users', icon: UserIcon },
-  { label: '社区企业', path: '/enterprises', icon: BuildingIcon },
-  { label: '申请审核', path: '/approvals', icon: CheckCircleIcon },
-  { label: '需求管理', path: '/demands', icon: ViewListIcon },
-  { label: '项目管理', path: '/projects', icon: AppIcon },
-  { label: '活动管理', path: '/events', icon: CalendarIcon },
-  { label: '商品管理', path: '/mall/goods', icon: CartIcon },
-  { label: '公共空间管理', path: '/spaces', icon: MapIcon },
-]
+const quickEntries = computed(() =>
+  [
+    { label: '用户管理', path: '/users', icon: UserIcon, perm: '/users' },
+    { label: '社区企业', path: '/enterprises', icon: BuildingIcon, perm: '/enterprises' },
+    { label: '申请审核', path: '/approvals', icon: CheckCircleIcon, perm: '/approvals' },
+    { label: '需求管理', path: '/demands', icon: ViewListIcon, perm: '/demands' },
+    { label: '项目管理', path: '/projects', icon: AppIcon, perm: '/projects' },
+    { label: '活动管理', path: '/events', icon: CalendarIcon, perm: '/events' },
+    { label: '活动报名', path: '/events/enrollments', icon: TimeIcon, perm: '/events' },
+    { label: '商品管理', path: '/mall/goods', icon: CartIcon, perm: '/mall/goods' },
+    { label: '公共空间管理', path: '/spaces', icon: MapIcon, perm: '/spaces' },
+  ].filter((entry) => auth.hasPerm(entry.perm)),
+)
 
 /* 平台数据：六域计数（全部用户/社区个体/社区企业/合作企业/进行中项目/资讯内容；
  * 与各列表分页 total 同口径，前端并行聚合，任一失败不阻塞卡片） */
@@ -189,6 +241,7 @@ interface PlatformStat {
   value: number
   icon: unknown
   route: string
+  perm: string
 }
 
 const platformStats = ref<PlatformStat[]>([])
@@ -204,13 +257,13 @@ async function loadPlatformStats() {
     count(fetchArticles({ page: 1, pageSize: 1 })),
   ])
   platformStats.value = [
-    { label: '全部用户', value: users, icon: markRaw(UserIcon), route: '/users' },
-    { label: '社区个体', value: individuals, icon: markRaw(UserCircleIcon), route: '/individuals' },
-    { label: '社区企业', value: enterprises, icon: markRaw(BuildingIcon), route: '/enterprises' },
-    { label: '合作企业', value: externals, icon: markRaw(Building1Icon), route: '/external-enterprises' },
-    { label: '进行中的项目', value: projects, icon: markRaw(AppIcon), route: '/projects' },
-    { label: '资讯内容', value: articles, icon: markRaw(Edit2Icon), route: '/contents/publish' },
-  ]
+    { label: '全部用户', value: users, icon: markRaw(UserIcon), route: '/users', perm: '/users' },
+    { label: '社区个体', value: individuals, icon: markRaw(UserCircleIcon), route: '/individuals', perm: '/individuals' },
+    { label: '社区企业', value: enterprises, icon: markRaw(BuildingIcon), route: '/enterprises', perm: '/enterprises' },
+    { label: '合作企业', value: externals, icon: markRaw(Building1Icon), route: '/external-enterprises', perm: '/external-enterprises' },
+    { label: '进行中的项目', value: projects, icon: markRaw(AppIcon), route: '/projects', perm: '/projects' },
+    { label: '资讯内容', value: articles, icon: markRaw(Edit2Icon), route: '/contents/publish', perm: '/contents/publish' },
+  ].filter((stat) => auth.hasPerm(stat.perm))
 }
 
 /* ESC 关闭「编辑布局」弹层：t-popup 仅 trigger=focus 时内置 ESC 处理，click 触发需自行监听 */
@@ -244,12 +297,16 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onLayoutKeydown))
                 <t-button theme="primary" variant="text" size="small" @click="resetCards">恢复默认</t-button>
               </div>
               <div class="layout-list">
-                <div v-for="k in CARD_KEYS" :key="k" class="layout-row">
+                <div v-for="k in cardOrder" :key="k" class="layout-row">
                   <span class="layout-name">{{ CARD_TITLES[k] }}</span>
-                  <t-switch :value="cardOn[k]" size="small" @change="(v: boolean) => toggleCard(k, v)" />
+                  <div class="layout-controls">
+                    <ChevronUpIcon class="layout-move" role="button" tabindex="0" :aria-label="`上移${CARD_TITLES[k]}`" @click="moveCard(k, -1)" @keydown.enter.space.prevent="moveCard(k, -1)" />
+                    <ChevronDownIcon class="layout-move" role="button" tabindex="0" :aria-label="`下移${CARD_TITLES[k]}`" @click="moveCard(k, 1)" @keydown.enter.space.prevent="moveCard(k, 1)" />
+                    <t-switch :value="cardOn[k]" size="small" @change="(v: boolean) => toggleCard(k, v)" />
+                  </div>
                 </div>
               </div>
-              <p class="layout-tip">开关控制卡片显隐，配置保存在本地浏览器。</p>
+              <p class="layout-tip">开关控制显隐，↑↓ 调整顺序；配置保存在本地浏览器。</p>
             </div>
           </template>
         </t-popup>
@@ -259,11 +316,12 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onLayoutKeydown))
     <t-skeleton v-if="loading" :row-col="[{ width: '100%', height: '88px' }, [{ width: '48%', height: '260px' }, { width: '48%', height: '260px' }]]" animation="gradient" />
 
     <template v-else-if="data">
+      <div class="dashboard-grid">
       <!-- 六域待办卡片 -->
-      <section v-show="isCardOn('todos')" class="dash-block">
+      <section v-show="isCardOn('todos')" class="dash-block todos-block" :style="cardStyle('todos')">
         <div class="stat-grid stagger">
           <StatCard
-            v-for="todo in data.todos"
+            v-for="todo in visibleTodos"
             :key="todo.key"
             class="stat-clickable"
             :class="{ 'is-active': todo.count > 0 }"
@@ -277,7 +335,7 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onLayoutKeydown))
 
       <!-- 平台数据 / 系统公告 -->
       <div class="panel-grid">
-        <section v-show="isCardOn('stats')" class="dash-block page-card">
+        <section v-show="isCardOn('stats') && platformStats.length" class="dash-block page-card" :style="cardStyle('stats')">
           <div class="panel-head">
             <h3 class="panel-title">平台数据</h3>
           </div>
@@ -299,7 +357,7 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onLayoutKeydown))
           </div>
         </section>
 
-        <section v-show="isCardOn('announcements')" class="dash-block page-card">
+        <section v-show="isCardOn('announcements') && auth.hasPerm('/contents/announcements')" class="dash-block page-card" :style="cardStyle('announcements')">
           <div class="panel-head">
             <h3 class="panel-title">系统公告</h3>
             <t-link href="#/contents/announcements" theme="primary" hover="color">全部</t-link>
@@ -308,7 +366,7 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onLayoutKeydown))
           <div v-else class="notice-list">
             <t-link theme="default" hover="color" v-for="a in announcements" :key="a.id" class="todo-item dash-item" href="#/contents/announcements">
               <div class="todo-main">
-                <t-tag v-if="a.pinned" theme="warning" variant="light" size="small">置顶</t-tag>
+                <t-tag theme="success" variant="light" size="small">已开启</t-tag>
                 <span class="todo-title">{{ a.title }}</span>
               </div>
               <div class="todo-meta">
@@ -321,7 +379,7 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onLayoutKeydown))
 
       <!-- 待办审核 / 近期活动 -->
       <div class="panel-grid">
-        <section v-show="isCardOn('approvals')" class="dash-block page-card">
+        <section v-show="isCardOn('approvals') && auth.hasPerm('/approvals')" class="dash-block page-card" :style="cardStyle('approvals')">
           <div class="panel-head">
             <h3 class="panel-title">待办审核</h3>
             <t-link href="#/approvals" theme="primary" hover="color">全部</t-link>
@@ -346,7 +404,7 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onLayoutKeydown))
           </div>
         </section>
 
-        <section v-show="isCardOn('events')" class="dash-block page-card">
+        <section v-show="isCardOn('events') && auth.hasPerm('/events')" class="dash-block page-card" :style="cardStyle('events')">
           <div class="panel-head">
             <h3 class="panel-title">近期活动</h3>
             <t-link href="#/events" theme="primary" hover="color">全部</t-link>
@@ -375,7 +433,7 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onLayoutKeydown))
 
       <!-- 30 日运营趋势 / 快捷入口：半屏并排 -->
       <div class="half-grid">
-        <section v-show="isCardOn('trend')" class="dash-block panel-card">
+        <section v-show="isCardOn('trend')" class="dash-block panel-card" :style="cardStyle('trend')">
           <div class="panel-head">
             <h3 class="panel-title">运营趋势</h3>
             <t-radio-group v-model="trendDays" variant="outline" size="small">
@@ -403,7 +461,7 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onLayoutKeydown))
           </t-tabs>
         </section>
 
-        <section v-show="isCardOn('quick')" class="dash-block panel-card">
+        <section v-show="isCardOn('quick')" class="dash-block panel-card" :style="cardStyle('quick')">
           <div class="panel-head">
             <h3 class="panel-title">快捷入口</h3>
           </div>
@@ -415,16 +473,32 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onLayoutKeydown))
           </div>
         </section>
       </div>
+      </div>
     </template>
   </div>
 </template>
 
 <style scoped>
+.dashboard-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 16px;
+}
+
+.dashboard-grid > .panel-grid,
+.dashboard-grid > .half-grid {
+  display: contents;
+}
+
+.todos-block {
+  grid-column: 1 / -1;
+}
+
 .stat-grid {
   display: grid;
   grid-template-columns: repeat(6, minmax(0, 1fr));
   gap: 16px;
-  margin-bottom: 16px;
+  margin-bottom: 0;
 }
 
 .panel-grid {
@@ -652,6 +726,26 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onLayoutKeydown))
   border-radius: var(--td-radius-small);
 }
 
+.layout-controls {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.layout-move {
+  padding: 3px;
+  border-radius: var(--td-radius-small);
+  color: var(--td-text-color-secondary);
+  cursor: pointer;
+}
+
+.layout-move:hover,
+.layout-move:focus-visible {
+  color: var(--td-brand-color);
+  background: var(--td-brand-color-1);
+  outline: none;
+}
+
 .layout-row:hover {
   background: var(--td-bg-color-container-hover);
 }
@@ -702,6 +796,7 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onLayoutKeydown))
 }
 
 @media (max-width: 768px) {
+  .dashboard-grid,
   .panel-grid,
   .half-grid {
     grid-template-columns: minmax(0, 1fr);

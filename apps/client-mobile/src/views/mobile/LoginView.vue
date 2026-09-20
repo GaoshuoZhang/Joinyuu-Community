@@ -1,11 +1,12 @@
 <script setup lang="ts">
 import { reactive, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { Button, Image, Input, Toast } from 'tdesign-mobile-vue'
+import { Button, Input, Toast } from 'tdesign-mobile-vue'
 import { useAuthStore } from '@/stores/auth'
 import { useNoticesStore } from '@/stores/notices'
 import { ApiError, apiMode } from '@/api/http'
 import { isCaptcha, isPhone, PHONE_MSG, REQUIRED } from '@/utils/validators'
+import CaptchaField from '@/components/CaptchaField.vue'
 import { useCaptcha } from '@/composables/useCaptcha'
 import 'tdesign-mobile-vue/es/style/index.css'
 
@@ -49,43 +50,40 @@ async function onSubmit() {
 </script>
 
 <template>
-  <div class="page-fade-in m-login">
+  <main id="main" class="page-fade-in m-login" tabindex="-1">
     <div class="hero">
       <span class="logo">聚</span>
-      <h1 class="title">聚屿社区</h1>
+      <h1 class="title">登录</h1>
       <p class="slogan">让每一座创业孤岛，在这里连成群岛。</p>
     </div>
 
     <div class="form">
       <div class="field">
         <label>手机号</label>
-        <Input v-model="form.phone" type="tel" autocomplete="username" :maxlength="11" placeholder="手机号" clearable @keyup.enter="onSubmit" />
+        <Input v-model="form.phone" type="tel" autocomplete="username" :maxlength="11" placeholder="请输入手机号…" clearable @keyup.enter="onSubmit" />
         <p v-if="errors.phone" class="error">{{ errors.phone }}</p>
       </div>
       <div class="field">
         <label>密码</label>
-        <Input v-model="form.password" type="password" autocomplete="current-password" placeholder="密码" clearable @keyup.enter="onSubmit" />
+        <Input class="password-field" v-model="form.password" type="password" autocomplete="current-password" placeholder="请输入密码…" clearable @keyup.enter="onSubmit" />
         <p v-if="errors.password" class="error">{{ errors.password }}</p>
         <p class="forgot"><router-link to="/forgot-password" class="link">忘记密码？</router-link></p>
       </div>
-      <div class="field">
-        <label>验证码</label>
-        <div class="captcha-row">
-          <Input v-model="form.captchaCode" :maxlength="4" :spell-check="false" placeholder="请输入验证码" @keyup.enter="onSubmit" />
-          <Button class="captcha-button" theme="light" :disabled="captchaLoading" aria-label="刷新验证码" @click="refreshCaptcha">
-            <Image v-if="captchaImage" :src="captchaImage" fit="contain" class="captcha-img" alt="图形验证码" />
-            <span v-else>刷新</span>
-          </Button>
-        </div>
-        <p v-if="errors.captchaCode" class="error">{{ errors.captchaCode }}</p>
-      </div>
+      <CaptchaField
+        v-model="form.captchaCode"
+        :image="captchaImage"
+        :loading="captchaLoading"
+        :error="errors.captchaCode"
+        @refresh="refreshCaptcha"
+        @keyup.enter="onSubmit"
+      />
 
       <Button theme="primary" block size="large" :loading="submitting" @click="onSubmit">登录</Button>
       <p class="guest"><router-link to="/" replace class="guest-link">暂不登录</router-link></p>
       <p class="swap">还没有账号？<router-link to="/register" class="link">立即注册</router-link></p>
       <p v-if="apiMode === 'mock'" class="demo">演示：13800000001 / client123</p>
     </div>
-  </div>
+  </main>
 </template>
 
 <style scoped>
@@ -93,11 +91,11 @@ async function onSubmit() {
   min-height: 100vh;
   min-height: 100dvh;
   background: var(--td-bg-color-container);
-  padding: 0 22px calc(22px + env(safe-area-inset-bottom));
+  padding: 0 var(--app-space-11) calc(var(--app-space-11) + env(safe-area-inset-bottom));
 }
 
 .hero {
-  padding: 56px 0 32px;
+  padding:56px 0 var(--app-space-12);
   text-align: center;
 }
 
@@ -109,82 +107,57 @@ async function onSubmit() {
   border-radius: var(--td-radius-large);
   background: var(--client-brand-gradient);
   color: var(--td-text-color-anti);
-  font-weight: 700;
-  font-size: 24px;
-  margin-bottom: 14px;
+  font-weight: 600;
+  font-size: var(--app-font-title);
+  margin-bottom:var(--app-space-7);
 }
 
 .title {
-  margin: 0 0 6px;
-  font-size: 22px;
+  margin:0 0 var(--app-space-3);
+  font-size: var(--app-font-title);
 }
 
 .slogan {
-  margin: 0;
-  font-size: 12px;
+  margin:0;
+  font-size: var(--app-font-caption);
   color: var(--td-text-color-secondary);
 }
 
 .field {
-  margin-bottom: 16px;
+  margin-bottom:var(--app-space-8);
 }
 
 .field label {
   display: block;
-  margin-bottom: 6px;
-  font-size: 12px;
+  margin-bottom:var(--app-space-3);
+  font-size: var(--app-font-caption);
   color: var(--td-text-color-secondary);
 }
 
-.captcha-row {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-}
-
-.captcha-row :deep(.t-input) {
-  flex: 1;
-  min-width: 0;
-}
-
-.captcha-button {
-  flex-shrink: 0;
-  min-width: 96px;
-  min-height: 40px;
-  padding: 0;
-  overflow: hidden;
-}
-
-.captcha-img {
-  width: 96px;
-  height: 40px;
-  display: block;
-}
-
 .error {
-  margin: 4px 0 0;
-  font-size: 12px;
+  margin:var(--app-space-2) 0 0;
+  font-size: var(--app-font-caption);
   color: var(--td-error-color);
 }
 
 .guest {
-  margin: 12px 0 0;
+  margin:var(--app-space-6) 0 0;
   text-align: center;
-  font-size: 14px;
+  font-size: var(--app-font-body);
 }
 
 .guest-link {
   display: inline-flex;
   align-items: center;
   min-height: 44px;
-  padding: 0 16px;
+  padding:0 var(--app-space-8);
   color: var(--td-text-color-secondary);
 }
 
 .swap {
-  margin: 18px 0 0;
+  margin:var(--app-space-9) 0 0;
   text-align: center;
-  font-size: 13px;
+  font-size: var(--app-font-body);
   color: var(--td-text-color-secondary);
 }
 
@@ -193,15 +166,26 @@ async function onSubmit() {
 }
 
 .forgot {
-  margin: 8px 0 0;
+  margin:var(--app-space-4) 0 0;
   text-align: right;
-  font-size: 13px;
+  font-size: var(--app-font-body);
 }
 
 .demo {
-  margin: 12px 0 0;
+  margin:var(--app-space-6) 0 0;
   text-align: center;
-  font-size: 12px;
+  font-size: var(--app-font-caption);
   color: var(--td-text-color-placeholder);
+}
+
+.password-field :deep(.t-input__wrap--suffix-icon) {
+  display: grid;
+  flex: 0 0 24px;
+  width: 24px;
+  place-items: center;
+}
+
+.password-field :deep(.t-input--password) {
+  letter-spacing: 0;
 }
 </style>

@@ -109,7 +109,7 @@ async function onConfirm() {
           <t-input v-model="form.phone" clearable type="tel" inputmode="tel" autocomplete="tel" placeholder="请输入联系电话…" />
         </t-form-item>
         <t-form-item label="邮箱" name="email">
-          <t-input v-model="form.email" clearable type="email" inputmode="email" autocomplete="email" placeholder="请输入邮箱…" />
+          <t-input v-model="form.email" clearable inputmode="email" autocomplete="email" placeholder="请输入邮箱…" />
         </t-form-item>
       </div>
       <div class="form-row">

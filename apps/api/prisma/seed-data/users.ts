@@ -36,7 +36,7 @@ export const users: User[] = [
       { time: '2026-09-06 16:20', content: '发布需求「社区小程序前端开发合作」' },
       { time: '2026-09-05 10:02', content: '更新项目「聚屿小程序共研计划」进度至 62%' },
       { time: '2026-09-03 19:30', content: '报名活动「第 12 期创业夜话」' },
-      { time: '2026-08-28 14:11', content: '企业展示页更新获得审核通过' },
+      { time: '2026-08-28 14:11', content: '更新企业名片：星澜智能科技服务与优势' },
     ],
   },
   {
@@ -52,13 +52,13 @@ export const users: User[] = [
     email: 'linwanzhou@starlan.ai',
     gender: '女',
     status: 'active',
-    points: 1950,
+    points: 1690,
     registeredAt: '2025-03-15',
     lastActiveAt: '2026-09-07 08:55',
     identities: [
       { type: 'individual', title: '个人用户' },
       { type: 'community_enterprise', enterpriseId: 'E2001', enterpriseName: '星澜智能科技', role: 'member', title: 'CTO', permissions: ['publish_demand', 'respond_demand', 'space_reserve'], memberPhone: '13801210002', level: 4 },
-      { type: 'community_individual', title: '开源组件库发起人', level: 2, experience: 800 },
+      { type: 'community_individual', title: '', level: 4, experience: 800 },
     ],
     bio: '全栈工程师，负责星澜智能平台架构。社区开源组件库发起人之一。',
     stats: { demands: 1, projects: 3, events: 8 },
@@ -83,7 +83,7 @@ export const users: User[] = [
     lastActiveAt: '2026-09-06 18:22',
     identities: [
       { type: 'individual', title: '个人用户' },
-      { type: 'community_enterprise', enterpriseId: 'E2002', enterpriseName: '芯启半导体', role: 'member', title: '财务负责人', permissions: ['publish_demand', 'article_submit'], memberPhone: '13801210003', level: 5 },
+      { type: 'community_enterprise', enterpriseId: 'E2002', enterpriseName: '芯启半导体', role: 'member', title: '财务负责人', permissions: ['publish_demand', 'article_submit'], memberPhone: '13801210003', level: 4 },
       { type: 'external_enterprise', enterpriseName: '启衡咨询', title: '签约财务顾问' },
     ],
     bio: '半导体行业财务老兵，擅长创业企业股权与融资财务规划。',
@@ -108,7 +108,7 @@ export const users: User[] = [
     lastActiveAt: '2026-09-07 10:12',
     identities: [
       { type: 'individual', title: '个人用户' },
-      { type: 'community_enterprise', enterpriseId: 'E2002', enterpriseName: '芯启半导体', role: 'founder', title: '创始人 & 总经理', level: 5 },
+      { type: 'community_enterprise', enterpriseId: 'E2002', enterpriseName: '芯启半导体', role: 'founder', title: '创始人 & 总经理', level: 4 },
     ],
     bio: '芯片设计背景，芯启半导体创始人，专注车规级 MCU。',
     stats: { demands: 2, projects: 1, events: 9 },
@@ -132,7 +132,7 @@ export const users: User[] = [
     lastActiveAt: '2026-09-06 21:33',
     identities: [
       { type: 'individual', title: '个人用户' },
-      { type: 'community_individual', title: '独立品牌与交互设计师', level: 3, experience: 1500 },
+      { type: 'community_individual', title: '', level: 5, experience: 1500 },
     ],
     bio: '独立品牌与交互设计师，服务过 20+ 初创团队，长期承接社区企业的设计外包。',
     stats: { demands: 0, projects: 1, events: 5 },
@@ -156,7 +156,7 @@ export const users: User[] = [
     lastActiveAt: '2026-09-06 10:18',
     identities: [
       { type: 'individual', title: '个人用户' },
-      { type: 'community_individual', title: '文创品牌主理人', level: 1, experience: 200 },
+      { type: 'community_individual', title: '', level: 2, experience: 200 },
     ],
     bio: '文创品牌主理人，正在申请入驻聚屿社区，期待对接渠道与供应链资源。',
     stats: { demands: 1, projects: 0, events: 0 },
@@ -206,7 +206,7 @@ export const users: User[] = [
     bio: '企业服务连续创业者，云径网络创始人，青年创业者导师计划发起人。',
     stats: { demands: 2, projects: 1, events: 11 },
     activities: [
-      { time: '2026-09-06 15:36', content: '提交企业展示页发布申请' },
+      { time: '2026-09-06 15:36', content: '更新企业名片与业务介绍' },
       { time: '2026-09-06 09:12', content: '发布需求「SaaS 控制台 UI 设计外包」' },
     ],
   },
@@ -222,7 +222,7 @@ export const users: User[] = [
     lastActiveAt: '2026-09-05 16:49',
     identities: [
       { type: 'individual', title: '个人用户' },
-      { type: 'community_enterprise', enterpriseId: 'E2005', enterpriseName: '沧岚新材料', role: 'member', title: '研发工程师', level: 2 },
+      { type: 'community_enterprise', enterpriseId: 'E2005', enterpriseName: '沧岚新材料', role: 'member', title: '研发工程师', level: 3 },
     ],
     bio: '高分子材料研发工程师，关注气凝胶在消费电子领域的应用。',
     stats: { demands: 1, projects: 0, events: 4 },
@@ -264,7 +264,7 @@ export const users: User[] = [
     lastActiveAt: '2026-09-06 20:05',
     identities: [
       { type: 'individual', title: '个人用户' },
-      { type: 'community_enterprise', enterpriseId: 'E2007', enterpriseName: '木白设计工作室', role: 'founder', title: '创始人 & 创意总监', level: 2 },
+      { type: 'community_enterprise', enterpriseId: 'E2007', enterpriseName: '木白设计工作室', role: 'founder', title: '创始人 & 创意总监', level: 3 },
       { type: 'external_enterprise', enterpriseName: '鹿岛文化', title: '联合创始人' },
     ],
     bio: '品牌设计工作室主理人，擅长新消费品牌的视觉体系搭建。',
@@ -288,8 +288,8 @@ export const users: User[] = [
     lastActiveAt: '2026-09-07 09:50',
     identities: [
       { type: 'individual', title: '个人用户' },
-      { type: 'community_enterprise', enterpriseId: 'E2008', enterpriseName: '深空航天科技', role: 'founder', title: '创始人 & CEO', level: 5 },
-      { type: 'community_individual', title: '航天科普作者', level: 4, experience: 2600 },
+      { type: 'community_enterprise', enterpriseId: 'E2008', enterpriseName: '深空航天科技', role: 'founder', title: '创始人 & CEO', level: 4 },
+      { type: 'community_individual', title: '', level: 5, experience: 2600 },
     ],
     bio: '商业航天创业者，深空航天创始人，社区最活跃的分享嘉宾之一。',
     stats: { demands: 1, projects: 0, events: 13 },
@@ -310,7 +310,7 @@ export const users: User[] = [
     lastActiveAt: '2026-09-06 19:44',
     identities: [
       { type: 'individual', title: '个人用户' },
-      { type: 'community_enterprise', enterpriseId: 'E2009', enterpriseName: '青柠健康', role: 'member', title: '运营负责人', level: 1 },
+      { type: 'community_enterprise', enterpriseId: 'E2009', enterpriseName: '青柠健康', role: 'member', title: '运营负责人', level: 2 },
     ],
     bio: '大健康行业运营，负责青柠健康的用户增长与品牌合作。',
     stats: { demands: 1, projects: 0, events: 6 },
@@ -335,7 +335,7 @@ export const users: User[] = [
     lastActiveAt: '2026-08-12 22:10',
     identities: [
       { type: 'individual', title: '个人用户' },
-      { type: 'community_individual', title: '独立开发者', level: 1, experience: 100 },
+      { type: 'community_individual', title: '', level: 2, experience: 100 },
     ],
     bio: '独立开发者。因多次在需求评论区发布广告，账号已被冻结。',
     stats: { demands: 0, projects: 0, events: 2 },

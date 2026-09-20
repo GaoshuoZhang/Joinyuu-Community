@@ -145,7 +145,7 @@ export class AppSearchService {
           skip: (page - 1) * pageSize,
           take: pageSize,
         })
-        return rows.map((e) => ({ id: e.id, name: e.name, industry: e.industry, size: e.size, description: e.description, showcaseStatus: e.showcaseStatus }))
+        return rows.map((e) => ({ id: e.id, name: e.name, industry: e.industry, size: e.size, description: e.description }))
       }
       case 'space':
         return (

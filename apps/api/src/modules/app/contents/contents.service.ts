@@ -46,8 +46,18 @@ export interface MySubmittedArticleDto {
   status: string
   submittedAt: string
   rejectReason?: string
-  appealed?: boolean
-  appealReason?: string
+}
+
+export interface MySubmittedArticleDetailDto extends MySubmittedArticleDto {
+  authorName: string
+  content: string
+  summary: string
+  tags: string[]
+  asIdentity?: string
+  asEnterpriseId?: string
+  identityName?: string
+  scheduledAt?: string
+  publishedAt?: string
 }
 
 /** 回填载荷（对齐客户端 ArticleCreatePayload） */
@@ -65,12 +75,11 @@ interface Snapshot {
   type?: string
   enterpriseId?: string
   enterpriseName?: string
-  appealReason?: string
 }
 
 /* 内容与投稿（M2-R R2 /api/app/contents 与 /api/app/articles、me/articles）：
  * 浏览 published 文章（详情浏览量 +1、返回点赞/评论计数）、栏目、投稿（SU 前缀、channel=submitted、status=pending）、
- * 我的投稿（撤回/重提/申诉/回填）、点赞切换（Favorite targetType='article' 存我的点赞 + Article.likeCount 事务增减）。
+ * 我的投稿（撤回/重提/回填）、点赞切换（Favorite targetType='article' 存我的点赞 + Article.likeCount 事务增减）。
  * 评论使用 ArticleComment 表并在事务内维护 Article.commentCount；R3 起评论列表叠加用户屏蔽过滤。 */
 @Injectable()
 export class AppContentsService {
@@ -162,13 +171,31 @@ export class AppContentsService {
     return { id }
   }
 
-  /** 我的投稿（全状态；含驳回原因/申诉标记） */
+  /** 我的投稿（全状态；含驳回原因） */
   async myArticles(uid: string): Promise<MySubmittedArticleDto[]> {
     const rows = await this.prisma.article.findMany({
       where: { authorId: uid, channel: 'submitted', deletedAt: null },
       orderBy: { createdAt: 'desc' },
     })
     return rows.map(toMySubmittedArticleDto)
+  }
+
+  /** 投稿详情不要求 published，按 authorId + submitted channel 校验归属。 */
+  async myArticleDetail(uid: string, id: string): Promise<MySubmittedArticleDetailDto> {
+    const article = await this.mine(uid, id)
+    const snap = (article.authorIdentity as unknown as Snapshot | null) ?? {}
+    return {
+      ...toMySubmittedArticleDto(article),
+      authorName: article.authorName,
+      content: article.content,
+      summary: article.summary,
+      tags: article.tags,
+      ...(snap.type ? { asIdentity: snap.type } : {}),
+      ...(snap.enterpriseId ? { asEnterpriseId: snap.enterpriseId } : {}),
+      ...(snap.enterpriseName ? { identityName: snap.enterpriseName } : {}),
+      ...(article.scheduledAt ? { scheduledAt: article.scheduledAt } : {}),
+      ...(article.publishedAt ? { publishedAt: article.publishedAt } : {}),
+    }
   }
 
   /** 撤回审核中的投稿：pending → withdrawn */
@@ -205,35 +232,6 @@ export class AppContentsService {
       },
       })
       if (changed.count !== 1) throw new ConflictException('投稿状态已变化，请刷新后重试')
-    })
-    return { code: 0 }
-  }
-
-  /** 驳回后一次性申诉：rejected → appealed */
-  async appealArticle(uid: string, id: string, reason: string): Promise<{ code: number }> {
-    const article = await this.mine(uid, id)
-    if (article.status !== 'rejected') throw new ConflictException('仅已驳回的投稿可申诉')
-    const appealReason = reason.trim()
-    if (!appealReason) throw new BadRequestException('请填写申诉原因')
-    const snap = (article.authorIdentity as unknown as Snapshot | null) ?? {}
-    await this.prisma.$transaction(async (tx) => {
-      const claimed = await tx.article.updateMany({
-        where: { id, status: 'rejected' },
-        data: {
-          status: 'appealed',
-          authorIdentity: { ...snap, appealReason } as unknown as Prisma.InputJsonValue,
-        },
-      })
-      if (claimed.count !== 1) throw new ConflictException('该投稿已申诉，请勿重复提交')
-      await tx.appeal.create({
-        data: {
-          appellantId: uid,
-          targetType: 'article',
-          targetId: id,
-          reason: appealReason,
-          createdAt: formatNow(),
-        },
-      })
     })
     return { code: 0 }
   }
@@ -299,19 +297,29 @@ export class AppContentsService {
       include: { user: { select: { avatar: true } } },
       orderBy: [{ at: 'asc' }, { id: 'asc' }],
     })
-    return rows.map((row) => ({
-      id: String(row.id),
-      articleId: row.articleId,
-      uid: row.userId,
-      authorName: row.userName,
-      avatar: row.user.avatar ?? undefined,
-      content: row.content,
-      at: row.at,
-    }))
+    return rows.map((row) => {
+      const identity = row.identity as { type?: string; enterpriseName?: string; organizationName?: string } | null
+      return {
+        id: String(row.id),
+        articleId: row.articleId,
+        uid: row.userId,
+        authorName: row.userName,
+        avatar: row.user.avatar ?? undefined,
+        content: row.content,
+        at: row.at,
+        identityType: identity?.type ?? 'individual',
+        identityName: identity?.enterpriseName ?? identity?.organizationName ?? undefined,
+      }
+    })
   }
 
-  /** 发布评论并原子更新冗余计数。 */
-  async createArticleComment(uid: string, articleId: string, rawContent: string): Promise<{ id: string }> {
+  /** 发布评论并原子更新冗余计数；支持选择发表身份。 */
+  async createArticleComment(
+    uid: string,
+    articleId: string,
+    rawContent: string,
+    identityInput?: { asIdentity?: string; asEnterpriseId?: string },
+  ): Promise<{ id: string }> {
     const content = rawContent.trim()
     if (content.length < 2 || content.length > 200) throw new BadRequestException('评论需为 2-200 字')
     const [article, user] = await Promise.all([
@@ -321,14 +329,43 @@ export class AppContentsService {
     if (!article) throw new NotFoundException('文章不存在')
     if (!(article as ArticleWithComments).commentsEnabled) throw new ConflictException('文章评论已关闭')
     if (!user) throw new NotFoundException('用户不存在')
+    const identity = await this.commentIdentity(uid, identityInput?.asIdentity, identityInput?.asEnterpriseId)
     const created = await this.prisma.$transaction(async (tx) => {
       const row = await tx.articleComment.create({
-        data: { articleId, userId: uid, userName: user.realName || user.nickname, content, at: formatNow() },
+        data: { articleId, userId: uid, userName: user.realName || user.nickname, content, at: formatNow(), identity },
       })
       await tx.article.update({ where: { id: articleId }, data: { commentCount: { increment: 1 } } })
       return row
     })
     return { id: String(created.id) }
+  }
+
+  /** 评论发表身份快照：按所选身份校验归属（企业评论要求已关联该企业） */
+  private async commentIdentity(
+    uid: string,
+    asIdentity?: string,
+    asEnterpriseId?: string,
+  ): Promise<Prisma.InputJsonValue | undefined> {
+    const requested = asIdentity ?? (asEnterpriseId ? 'community_enterprise' : 'individual')
+    if (requested === 'community_enterprise') {
+      if (!asEnterpriseId) throw new BadRequestException('请选择要代表的社区企业')
+      const row = await this.prisma.userIdentity.findFirst({
+        where: { userId: uid, type: 'community_enterprise', enterpriseId: asEnterpriseId },
+      })
+      if (!row) throw new BadRequestException('您暂未关联该身份')
+      return { type: 'community_enterprise', enterpriseId: row.enterpriseId, enterpriseName: row.enterpriseName ?? undefined, title: '社区企业' }
+    }
+    if (requested === 'community_individual') {
+      const row = await this.prisma.userIdentity.findFirst({ where: { userId: uid, type: 'community_individual' } })
+      if (!row) throw new BadRequestException('您暂未关联该身份')
+      return { type: 'community_individual', level: row.level ?? undefined }
+    }
+    if (requested === 'external_enterprise') {
+      const row = await this.prisma.userIdentity.findFirst({ where: { userId: uid, type: 'external_enterprise' } })
+      if (!row) throw new BadRequestException('您暂未关联该身份')
+      return { type: 'external_enterprise', organizationName: row.enterpriseName ?? undefined, title: '合作企业' }
+    }
+    return { type: 'individual', title: '个人用户' }
   }
 
   /* ---------- 私有辅助 ---------- */
@@ -396,7 +433,6 @@ function toArticleDto(a: Article | ArticleWithComments, includeLiked: boolean, l
 }
 
 function toMySubmittedArticleDto(a: Article): MySubmittedArticleDto {
-  const snap = (a.authorIdentity as unknown as Snapshot | null) ?? {}
   const dto: MySubmittedArticleDto = {
     id: a.id,
     title: a.title,
@@ -405,10 +441,6 @@ function toMySubmittedArticleDto(a: Article): MySubmittedArticleDto {
     submittedAt: a.createdAt,
   }
   if (a.rejectedReason) dto.rejectReason = a.rejectedReason
-  if (a.status === 'appealed') {
-    dto.appealed = true
-    if (snap.appealReason) dto.appealReason = snap.appealReason
-  }
   return dto
 }
 

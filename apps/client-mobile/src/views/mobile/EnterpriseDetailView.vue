@@ -1,7 +1,7 @@
 <script setup lang="ts">
-import { computed, onMounted, reactive, ref, watch } from 'vue'
+import { computed, onMounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { Loading, ActionSheet, Avatar, Button, Cell, DialogPlugin, Input, NoticeBar, Popup, Tag, Toast } from 'tdesign-mobile-vue'
+import { ActionSheet, Avatar, Button, Cell, DialogPlugin, NoticeBar, Tag, Toast } from 'tdesign-mobile-vue'
 import {
   applyEnterpriseExit,
   cancelEnterpriseTransfer,
@@ -11,17 +11,22 @@ import {
   transferEnterpriseContact,
 } from '@/api/enterprises'
 import { useAsyncList } from '@/composables/useAsyncList'
-import { formatMockStamp, parseMockStamp } from '@/mock/runtime'
 import { ApiError } from '@/api/http'
+import { useBusinessNow } from '@/composables/useBusinessNow'
+import { formatLocalDateTime, parseLocalDateTime } from '@/utils/format'
 import EmptyBlock from '@/components/shared/EmptyBlock.vue'
-import type { EnterpriseMemberInfo, EnterpriseMemberPermission } from '@/types'
+import ListSkeleton from '@/components/ListSkeleton.vue'
+import EnterpriseInviteSheet from '@/components/enterprise/EnterpriseInviteSheet.vue'
+import EnterpriseMemberSection from '@/components/enterprise/EnterpriseMemberSection.vue'
+import type { EnterpriseInvitation, EnterpriseMemberInfo, EnterpriseMemberPermission } from '@/types'
 
-/* 企业详情 / 管理（[MOCK-ONLY]，缺口 §7.1-16/17）：企业名片入口 + 负责人 / 成员 / 退驻注销；
+/* 企业详情 / 管理：企业名片入口 + 负责人 / 成员 / 退驻注销；
  * 负责人或持对应权限的成员可管理；成员管理与企业名片编辑均为独立页
  * （/me/enterprises/:id/members/:memberKey、/me/enterprises/:id/edit）。 */
 const route = useRoute()
 const router = useRouter()
 const enterpriseId = String(route.params.id)
+const businessNowMs = useBusinessNow()
 
 const { data, loading, error, run } = useAsyncList(() => fetchEnterpriseDetail(enterpriseId))
 onMounted(run)
@@ -103,7 +108,9 @@ function onCancelTransfer() {
 }
 
 /* v35：撤销待接受的成员邀请 */
-function onRevokeInvitation(invitationId: string, memberName: string) {
+function onRevokeInvitation(invitation: EnterpriseInvitation) {
+  const invitationId = invitation.id
+  const memberName = invitation.memberName
   DialogPlugin.confirm({
     title: '撤销邀请',
     content: `确认撤销对 ${memberName} 的成员邀请？`,
@@ -123,7 +130,9 @@ function onRevokeInvitation(invitationId: string, memberName: string) {
 
 function expiryText(expiresAt?: string): string {
   if (!expiresAt) return '7 天内有效'
-  const diff = parseMockStamp(expiresAt).getTime() - parseMockStamp(formatMockStamp()).getTime()
+  const expires = parseLocalDateTime(expiresAt)
+  if (!expires) return '有效期未知'
+  const diff = expires.getTime() - businessNowMs.value
   if (diff <= 0) return '已过期'
   const days = Math.ceil(diff / 86400000)
   return `${days} 天内有效`
@@ -131,45 +140,20 @@ function expiryText(expiresAt?: string): string {
 
 /* ---- 邀请企业成员（负责人；需指定职位） ---- */
 const inviteVisible = ref(false)
-const inviteForm = reactive({ name: '', phone: '', role: '' })
-/* v40：邀请表单行内错误 */
-const inviteErrors = reactive({ name: '', phone: '', role: '' })
-watch(() => inviteForm.name, () => (inviteErrors.name = ''))
-watch(() => inviteForm.phone, () => (inviteErrors.phone = ''))
-watch(() => inviteForm.role, () => (inviteErrors.role = ''))
 const inviting = ref(false)
 
-async function onInvite() {
-  inviteErrors.name = ''
-  inviteErrors.phone = ''
-  inviteErrors.role = ''
-  if (!inviteForm.name.trim()) {
-    inviteErrors.name = '请输入成员姓名'
-    Toast(inviteErrors.name)
-    return
-  }
-  if (!/^1\d{10}$/.test(inviteForm.phone.trim())) {
-    inviteErrors.phone = '请输入正确的手机号'
-    Toast(inviteErrors.phone)
-    return
-  }
-  if (!inviteForm.role.trim()) {
-    inviteErrors.role = '请输入成员职位'
-    Toast(inviteErrors.role)
+async function onInvite(payload: { name: string; phone: string; role: string }) {
+  /* 入口已按权限隐藏，此处兜底拦截直连弹层提交（D-013） */
+  if (!can('invite_member')) {
+    Toast('你没有邀请成员的权限')
+    inviteVisible.value = false
     return
   }
   inviting.value = true
   try {
-    await inviteEnterpriseMember(enterpriseId, {
-      name: inviteForm.name.trim(),
-      phone: inviteForm.phone.trim(),
-      role: inviteForm.role.trim(),
-    })
+    await inviteEnterpriseMember(enterpriseId, payload)
     Toast('邀请已发送，等待对方确认')
     inviteVisible.value = false
-    inviteForm.name = ''
-    inviteForm.phone = ''
-    inviteForm.role = ''
     await run()
   } catch (e) {
     Toast(e instanceof ApiError ? e.message : '邀请失败，请稍后重试')
@@ -179,12 +163,9 @@ async function onInvite() {
 }
 
 /* ---- 成员管理：跳转独立页（成员管理原为弹窗，内容较多无法上下滑动，v29 改为页面） ---- */
-function canManageMembers(m: EnterpriseMemberInfo): boolean {
-  return !m.isContact && (can('manage_members') || can('assign_permission'))
-}
+const canManageMembers = computed(() => can('manage_members') || can('assign_permission'))
 
 function goMemberManage(m: EnterpriseMemberInfo) {
-  if (!canManageMembers(m)) return
   const key = m.uid ?? m.name
   void router.push(`/me/enterprises/${enterpriseId}/members/${encodeURIComponent(key)}`)
 }
@@ -215,14 +196,14 @@ async function doExit() {
 
 <template>
   <div class="page-fade-in m-enterprise">
-    <Loading v-if="loading" class="state" text="加载中…" />
+    <ListSkeleton v-if="loading" />
     <EmptyBlock v-else-if="error" :text="error" action-text="重试" @action="run" />
     <template v-else-if="data">
       <section class="m-card">
         <div class="ent-head">
           <Avatar shape="round" size="56px" :image="data.logo" class="ent-logo">{{ data.enterpriseName.slice(0, 1) }}</Avatar>
           <div class="ent-info">
-            <h3 class="ent-name">{{ data.enterpriseName }}</h3>
+            <h2 class="ent-name">{{ data.enterpriseName }}</h2>
             <p class="ent-meta">
               {{ [data.industry, data.size, data.foundedAt ? `成立于 ${data.foundedAt}` : ''].filter(Boolean).join(' · ') }}
             </p>
@@ -234,14 +215,13 @@ async function doExit() {
           class="edit-cell"
           :bordered="false"
           title="编辑企业名片"
-          :note="data.showcaseStatus === 'published' ? '名片已发布' : '名片未发布'"
           arrow
           @click="goEditCard"
         />
       </section>
 
       <section class="m-card">
-        <h3 class="sec-title">企业负责人</h3>
+        <h2 class="sec-title">企业负责人</h2>
         <div class="contact-row">
           <div class="contact-info">
             <p class="contact-name">{{ data.contactName ?? '—' }}</p>
@@ -262,7 +242,7 @@ async function doExit() {
           <NoticeBar
             visible
             theme="warning"
-            :content="`负责人转移待 ${data.transferRequest.toName} 确认（${data.transferRequest.at} 发起，${expiryText(data.transferRequest.expiresAt)}）`"
+            :content="`负责人转移待 ${data.transferRequest.toName} 确认（${formatLocalDateTime(data.transferRequest.at)} 发起，${expiryText(data.transferRequest.expiresAt)}）`"
           />
           <div class="transfer-cancel">
             <Button size="small" variant="outline" @click="onCancelTransfer">撤销转移请求</Button>
@@ -270,55 +250,21 @@ async function doExit() {
         </template>
       </section>
 
-      <section class="m-card">
-        <div class="sec-head">
-          <h3 class="sec-title no-margin">企业成员（{{ data.members.length }}）</h3>
-          <Button v-if="can('invite_member')" theme="primary" size="small" @click="inviteVisible = true">邀请成员</Button>
-        </div>
-        <div v-if="data.invitations.length" class="invites">
-          <p class="members-hint">待接受邀请（{{ data.invitations.length }}）</p>
-          <Cell
-            v-for="inv in data.invitations"
-            :key="inv.id"
-            :title="inv.memberName"
-            :note="[inv.role, inv.phone, inv.status === 'expired' ? '已过期' : '待对方确认'].filter(Boolean).join(' · ')"
-            :bordered="false"
-          >
-            <template #right-icon>
-              <Tag v-if="inv.status === 'expired'" size="small" variant="light" theme="default">已过期</Tag>
-              <Button
-                v-else-if="can('invite_member')"
-                size="small"
-                variant="outline"
-                @click.stop="onRevokeInvitation(inv.id, inv.memberName)"
-              >
-                撤销
-              </Button>
-            </template>
-          </Cell>
-        </div>
-        <div class="members">
-          <Cell
-            v-for="m in data.members"
-            :key="m.phone ?? m.name"
-            :title="m.name"
-            :note="[m.role, m.phone].filter(Boolean).join(' · ')"
-            :bordered="false"
-            :arrow="canManageMembers(m)"
-            @click="canManageMembers(m) ? goMemberManage(m) : undefined"
-          >
-            <template #right-icon>
-              <Tag v-if="m.isContact" size="small" variant="light" theme="primary">负责人</Tag>
-            </template>
-          </Cell>
-        </div>
-        <p v-if="memberHint" class="members-hint">{{ memberHint }}</p>
-      </section>
+      <EnterpriseMemberSection
+        :members="data.members"
+        :invitations="data.invitations"
+        :can-invite="can('invite_member')"
+        :can-manage="canManageMembers"
+        :hint="memberHint"
+        @invite="inviteVisible = true"
+        @revoke="onRevokeInvitation"
+        @manage="goMemberManage"
+      />
 
       <section v-if="isContact || data.exitApplication" class="m-card">
-        <h3 class="sec-title">退驻 / 注销</h3>
+        <h2 class="sec-title">退驻 / 注销</h2>
         <template v-if="data.exitApplication">
-          <NoticeBar visible theme="warning" :content="`退驻/注销申请处理中（提交于 ${data.exitApplication.at}）`" />
+          <NoticeBar visible theme="warning" :content="`退驻/注销申请处理中（提交于 ${formatLocalDateTime(data.exitApplication.at)}）`" />
           <p v-if="data.exitApplication.reason" class="exit-reason">申请说明：{{ data.exitApplication.reason }}</p>
         </template>
         <template v-else>
@@ -339,52 +285,30 @@ async function doExit() {
       @selected="onTransferSelected"
     />
 
-    <Popup v-model:visible="inviteVisible" placement="bottom">
-      <div class="popup-body">
-        <h3 class="popup-title">邀请企业成员</h3>
-        <div class="field">
-          <label>成员姓名</label>
-          <Input v-model="inviteForm.name" :maxlength="20" placeholder="请输入成员姓名" clearable /><p v-if="inviteErrors.name" class="field-error">{{ inviteErrors.name }}</p>
-        </div>
-        <div class="field">
-          <label>手机号</label>
-          <Input v-model="inviteForm.phone" type="tel" :maxlength="11" placeholder="请输入 11 位手机号" clearable /><p v-if="inviteErrors.phone" class="field-error">{{ inviteErrors.phone }}</p>
-        </div>
-        <div class="field">
-          <label>职位</label>
-          <Input v-model="inviteForm.role" :maxlength="20" placeholder="如：产品负责人 / 设计总监" clearable /><p v-if="inviteErrors.role" class="field-error">{{ inviteErrors.role }}</p>
-        </div>
-        <Button theme="primary" size="large" block :loading="inviting" @click="onInvite">
-          {{ inviting ? '发送中…' : '发送邀请' }}
-        </Button>
-      </div>
-    </Popup>
+    <EnterpriseInviteSheet v-if="can('invite_member')" v-model:visible="inviteVisible" :submitting="inviting" @submit="onInvite" />
 
   </div>
 </template>
 
 <style scoped>
 .m-enterprise {
-  padding: 16px;
+  padding:var(--app-space-8);
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap:var(--app-space-6);
 }
 
-.state {
-  padding: 20px 0;
-}
 
 .ent-head {
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap:var(--app-space-6);
 }
 
 .ent-logo {
   flex-shrink: 0;
-  font-size: 20px;
-  font-weight: 700;
+  font-size: var(--app-font-title);
+  font-weight: 600;
 }
 
 .ent-info {
@@ -393,132 +317,64 @@ async function doExit() {
 }
 
 .ent-name {
-  margin: 0 0 4px;
-  font-size: 17px;
-  font-weight: 700;
+  margin:0 0 var(--app-space-2);
+  font-size: var(--app-font-title);
+  font-weight: 600;
 }
 
 .ent-meta {
-  margin: 0;
-  font-size: 12px;
+  margin:0;
+  font-size: var(--app-font-caption);
   color: var(--td-text-color-secondary);
 }
 
 .edit-cell {
-  margin-top: 12px;
-  padding: 12px 0 0;
+  margin-top:var(--app-space-6);
+  padding:var(--app-space-6) 0 0;
   border-top: 1px dashed var(--td-component-border);
 }
 
 .sec-title {
-  margin: 0 0 12px;
-  font-size: 15px;
-}
-
-.sec-title.no-margin {
-  margin: 0;
-}
-
-.sec-head {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  margin-bottom: 10px;
-}
-
-.field {
-  margin-bottom: 15px;
-}
-
-.field label {
-  display: block;
-  margin-bottom: 6px;
-  font-size: 13px;
-  color: var(--td-text-color-secondary);
+  margin:0 0 var(--app-space-6);
+  font-size: var(--app-font-subtitle);
 }
 
 .contact-row {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 10px;
+  gap:var(--app-space-5);
 }
 
 .transfer-cancel {
   display: flex;
   justify-content: flex-end;
-  margin-top: 10px;
+  margin-top:var(--app-space-5);
 }
 
 .contact-name {
-  margin: 0 0 4px;
-  font-size: 15px;
+  margin:0 0 var(--app-space-2);
+  font-size: var(--app-font-subtitle);
   font-weight: 600;
 }
 
 .contact-hint {
-  margin: 0;
-  font-size: 12px;
+  margin:0;
+  font-size: var(--app-font-caption);
   color: var(--td-text-color-secondary);
 }
 
-.members :deep(.t-cell) {
-  padding-left: 0;
-  padding-right: 0;
-}
-
-.members-hint {
-  margin: 6px 0 0;
-  font-size: 12px;
-  color: var(--td-text-color-placeholder);
-}
-
 .exit-desc {
-  margin: 0 0 12px;
-  font-size: 12px;
+  margin:0 0 var(--app-space-6);
+  font-size: var(--app-font-caption);
   line-height: 1.7;
   color: var(--td-text-color-secondary);
 }
 
 .exit-reason {
-  margin: 8px 0 0;
-  font-size: 12px;
+  margin:var(--app-space-4) 0 0;
+  font-size: var(--app-font-caption);
   color: var(--td-text-color-secondary);
 }
 
-.popup-body {
-  box-sizing: border-box;
-  width: 100%;
-  padding: 20px 16px calc(20px + env(safe-area-inset-bottom));
-  background: var(--td-bg-color-container);
-  border-radius: var(--td-radius-large) var(--td-radius-large) 0 0;
-}
-
-.popup-title {
-  margin: 0 0 16px;
-  font-size: 17px;
-}
-
-.remove-btn {
-  margin-top: 12px;
-}
-
-.popup-tip {
-  margin: 12px 0 0;
-  font-size: 12px;
-  color: var(--td-text-color-placeholder);
-  text-align: center;
-}
-
-.perm-tip {
-  margin: 0 0 8px;
-  font-size: 12px;
-  color: var(--td-text-color-secondary);
-}
-
-.field-error {
-  margin: 6px 0 0;
-  font-size: 12px;
-  color: var(--td-error-color);
-}
 </style>

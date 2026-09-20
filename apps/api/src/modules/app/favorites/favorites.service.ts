@@ -71,7 +71,7 @@ export class AppFavoritesService {
       if (row) return { title: row.title, subtitle: row.type }
     }
     if (type === 'enterprise') {
-      const row = await this.prisma.enterprise.findFirst({ where: { id: targetId, showcaseStatus: 'published', deletedAt: null }, select: { name: true, industry: true } })
+      const row = await this.prisma.enterprise.findFirst({ where: { id: targetId, deletedAt: null }, select: { name: true, industry: true } })
       if (row) return { title: row.name, subtitle: row.industry }
     }
     if (type === 'talent') {

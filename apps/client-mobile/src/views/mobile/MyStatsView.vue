@@ -1,12 +1,14 @@
 <script setup lang="ts">
 import { computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
-import { Grid, GridItem, Loading } from 'tdesign-mobile-vue'
+import { Grid, GridItem } from 'tdesign-mobile-vue'
 import { fetchMyStats } from '@/api/me'
 import { useAsyncList } from '@/composables/useAsyncList'
 import EmptyBlock from '@/components/shared/EmptyBlock.vue'
+import ListSkeleton from '@/components/ListSkeleton.vue'
+import { formatZhNumber } from '@/utils/format'
 
-/* v42 个人数据看板：积分收支与参与度汇总（Mock；接入期接 /api/app/me/stats）。 */
+/* 个人数据看板：积分收支与参与度汇总。 */
 const router = useRouter()
 const { data, loading, error, run } = useAsyncList(fetchMyStats)
 onMounted(run)
@@ -34,24 +36,21 @@ const statCells = computed<StatCell[]>(() => {
   return cells.filter((cell): cell is StatCell => cell !== null)
 })
 
-function formatCount(value: number): string {
-  return value.toLocaleString('zh-CN')
-}
 </script>
 
 <template>
   <div class="page-fade-in stats-page">
-    <Loading v-if="loading" class="state" text="加载中…" />
+    <ListSkeleton v-if="loading" />
     <EmptyBlock v-else-if="error" :text="error" action-text="重试" @action="run" />
     <template v-else-if="data">
       <section class="m-card points-card">
         <div class="points-item">
           <span class="points-label">累计获得</span>
-          <b class="points-value">+{{ formatCount(data.pointsEarned) }}</b>
+          <b class="points-value">+{{ formatZhNumber(data.pointsEarned) }}</b>
         </div>
         <div class="points-item">
           <span class="points-label">累计消耗</span>
-          <b class="points-value spent">-{{ formatCount(data.pointsSpent) }}</b>
+          <b class="points-value spent">-{{ formatZhNumber(data.pointsSpent) }}</b>
         </div>
       </section>
 
@@ -65,7 +64,7 @@ function formatCount(value: number): string {
           @click="cell.path && router.push(cell.path)"
         >
           <template #image>
-            <b class="stat-value">{{ formatCount(cell.value) }}</b>
+            <b class="stat-value">{{ formatZhNumber(cell.value) }}</b>
           </template>
           <template #text>{{ cell.label }}</template>
         </GridItem>
@@ -80,29 +79,29 @@ function formatCount(value: number): string {
 .stats-page {
   display: flex;
   flex-direction: column;
-  gap: 12px;
-  padding: 16px;
+  gap:var(--app-space-6);
+  padding:var(--app-space-8);
 }
 
 .points-card {
   display: flex;
-  gap: 12px;
+  gap:var(--app-space-6);
 }
 
 .points-item {
   flex: 1;
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap:var(--app-space-2);
 }
 
 .points-label {
-  font-size: 12px;
+  font-size: var(--app-font-caption);
   color: var(--td-text-color-secondary);
 }
 
 .points-value {
-  font-size: 24px;
+  font-size: var(--app-font-title);
   color: var(--td-brand-color);
   font-variant-numeric: tabular-nums;
 }
@@ -117,7 +116,7 @@ function formatCount(value: number): string {
 
   border: 1px solid var(--td-component-border);
   border-radius: var(--td-radius-large);
-  padding: 12px 14px;
+  padding:var(--app-space-6) var(--app-space-7);
   align-items: flex-start;
   text-align: left;
 }
@@ -127,14 +126,14 @@ function formatCount(value: number): string {
 }
 
 .stat-value {
-  font-size: 20px;
+  font-size: var(--app-font-title);
   line-height: 1.2;
   font-variant-numeric: tabular-nums;
 }
 
 .footnote {
-  margin: 0;
-  font-size: 11px;
+  margin:0;
+  font-size: var(--app-font-caption);
   color: var(--td-text-color-placeholder);
 }
 </style>

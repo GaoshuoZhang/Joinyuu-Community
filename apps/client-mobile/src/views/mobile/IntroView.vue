@@ -1,12 +1,16 @@
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { Button } from 'tdesign-mobile-vue'
+import { fetchRealName } from '@/api/me'
+import { useRefreshOnActivate } from '@/composables/useRefreshOnActivate'
+import { useAuthStore } from '@/stores/auth'
 
 /* 流程介绍页（/intros/settle | /intros/cooperation | /intros/talent）：
  * 每种入驻/登记流程独立页面：流程步骤 + 适合人群 + 所需材料 + CTA 进入对应申请表单。 */
 const route = useRoute()
 const router = useRouter()
+const auth = useAuthStore()
 
 const META = {
   settle: {
@@ -24,7 +28,7 @@ const META = {
     ],
     fit: [
       '需要在社区拥有实体办公空间的创业团队',
-      '希望获得工位、独立办公室与共享空间资源',
+      '希望获得办公位、独立办公室与共享空间资源',
       '希望以企业身份发布需求、优先参与路演与闭门会',
     ],
     materials: ['营业执照（图片/PDF）', '统一社会信用代码', '企业简介与主营业务', '联系人与联系电话', '办公空间需求'],
@@ -76,9 +80,40 @@ const kind = computed(() => {
   return (['settle', 'cooperation', 'talent'] as const).includes(k as never) ? (k as keyof typeof META) : 'settle'
 })
 const meta = computed(() => META[kind.value])
+const realNameVerified = ref<boolean | null>(null)
+const checkingRealName = ref(false)
+const talentNeedsRealName = computed(() => kind.value === 'talent' && auth.isLogged && realNameVerified.value === false)
+const talentSubmitBlocked = computed(() => kind.value === 'talent' && auth.isLogged && realNameVerified.value !== true)
+
+async function loadRealNameStatus() {
+  if (kind.value !== 'talent' || !auth.isLogged) {
+    realNameVerified.value = null
+    return
+  }
+  checkingRealName.value = true
+  try {
+    realNameVerified.value = (await fetchRealName()).verified
+  } catch {
+    realNameVerified.value = false
+  } finally {
+    checkingRealName.value = false
+  }
+}
+
+watch([kind, () => auth.isLogged], () => void loadRealNameStatus(), { immediate: true })
+useRefreshOnActivate(loadRealNameStatus)
 
 function goApply() {
+  if (kind.value === 'talent' && !auth.isLogged) {
+    void router.push({ path: '/login', query: { redirect: '/intros/talent' } })
+    return
+  }
+  if (talentSubmitBlocked.value) return
   void router.push(meta.value.form)
+}
+
+function goRealName() {
+  void router.push('/me/realname')
 }
 </script>
 
@@ -86,7 +121,7 @@ function goApply() {
   <div class="intro page-fade-in">
     <header class="hero">
       <span class="badge">{{ meta.badge }}</span>
-      <h1 class="title">{{ meta.title }}</h1>
+      <p class="title">{{ meta.title }}</p>
       <p class="subtitle">{{ meta.subtitle }}</p>
     </header>
 
@@ -114,62 +149,63 @@ function goApply() {
       </ul>
     </section>
 
-    <Button theme="primary" block size="large" class="apply-btn" @click="goApply">{{ meta.cta }}</Button>
+    <Button v-if="talentNeedsRealName" theme="primary" variant="outline" block size="large" class="verify-btn" @click="goRealName">进行实名认证</Button>
+    <Button theme="primary" block size="large" class="apply-btn" :disabled="talentSubmitBlocked || checkingRealName" @click="goApply">{{ meta.cta }}</Button>
     <p class="tip">登录后进入对应申请表单，社区运营将在 3 个工作日内完成审核</p>
   </div>
 </template>
 
 <style scoped>
 .intro {
-  padding: 16px;
+  padding:var(--app-space-8);
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap:var(--app-space-6);
 }
 
 .hero {
-  padding: 4px 2px;
+  padding:var(--app-space-2) var(--app-space-1);
 }
 
 .badge {
   display: inline-block;
-  margin-bottom: 8px;
-  padding: 2px 8px;
-  font-size: 12px;
+  margin-bottom:var(--app-space-4);
+  padding:var(--app-space-1) var(--app-space-4);
+  font-size: var(--app-font-caption);
   border-radius: var(--td-tag-square-border-radius, 4px);
   color: var(--td-brand-color);
   background: var(--td-brand-color-light);
 }
 
 .title {
-  margin: 0 0 4px;
-  font-size: 22px;
+  margin:0 0 var(--app-space-2);
+  font-size: var(--app-font-title);
 }
 
 .subtitle {
-  margin: 0;
-  font-size: 13px;
+  margin:0;
+  font-size: var(--app-font-body);
   color: var(--td-text-color-secondary);
 }
 
 .sec-title {
-  margin: 0 0 10px;
-  font-size: 15px;
+  margin:0 0 var(--app-space-5);
+  font-size: var(--app-font-subtitle);
 }
 
 .steps {
-  margin: 0;
-  padding: 0;
+  margin:0;
+  padding:0;
   list-style: none;
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap:var(--app-space-5);
 }
 
 .steps li {
   display: flex;
   align-items: flex-start;
-  gap: 10px;
+  gap:var(--app-space-5);
 }
 
 .step-no {
@@ -178,8 +214,8 @@ function goApply() {
   place-items: center;
   width: 20px;
   height: 20px;
-  margin-top: 1px;
-  font-size: 12px;
+  margin-top:var(--app-space-1);
+  font-size: var(--app-font-caption);
   font-weight: 600;
   border-radius: 50%;
   color: var(--td-brand-color);
@@ -187,29 +223,33 @@ function goApply() {
 }
 
 .step-text {
-  font-size: 13px;
+  font-size: var(--app-font-body);
   line-height: 1.6;
 }
 
 .bullets {
-  margin: 0;
-  padding: 0 0 0 16px;
+  margin:0;
+  padding:0 0 0 var(--app-space-8);
 }
 
 .bullets li {
-  font-size: 13px;
+  font-size: var(--app-font-body);
   line-height: 1.9;
   color: var(--td-text-color-secondary);
 }
 
 .apply-btn {
-  margin-top: 4px;
+  margin-top:var(--app-space-2);
+}
+
+.verify-btn + .apply-btn {
+  margin-top: calc(var(--app-space-4) * -1);
 }
 
 .tip {
-  margin: 0;
+  margin:0;
   text-align: center;
-  font-size: 12px;
+  font-size: var(--app-font-caption);
   color: var(--td-text-color-placeholder);
 }
 </style>

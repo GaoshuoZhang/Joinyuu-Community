@@ -1,5 +1,5 @@
-import type { MyStats, PageQuery, PageResult, PointsRecord, RealNameInfo, RealNamePayload, ReportPayload, UserProfile } from '@/types'
-import { accountByUid, accountRequestsByUid, accounts, articles, blockedByUid, demands, enrollmentsByUid, nowStamp, ordersByUid, pointsRecordsByUid, pushNotice, reports, responsesByUid } from '@/mock/db'
+import type { MyStats, PageQuery, PageResult, PointsRecord, RealNameInfo, RealNamePayload, RealnameRightsGroup, UserProfile } from '@/types'
+import { accountByUid, accountRequestsByUid, accounts, demands, enrollmentsByUid, experienceByUid, myArticlesByUid, nowStamp, ordersByUid, pointsRecordsByUid, projectsByUid, pushNotice, responsesByUid } from '@/mock/db'
 import { formatMockStamp, parseMockStamp } from '@/mock/runtime'
 import { readPayload } from '@/mock/session'
 import { fail, withLatency } from '@/mock/latency'
@@ -98,23 +98,44 @@ export async function fetchRealName(): Promise<RealNameInfo> {
   })
 }
 
-/* [MOCK-ONLY] 实名分级权益：静态两条分级，按当前账号实名状态标注 active（接入期读发布限制配置） */
-export async function fetchRealnameRights(): Promise<import('@/types').RealnameRightsGroup[]> {
+const RIGHTS_ACTIONS = [
+  { key: 'demand_publish', label: '需求发布' },
+  { key: 'article_publish', label: '文章投稿' },
+  { key: 'event_enroll', label: '活动报名' },
+  { key: 'space_reserve', label: '空间预约' },
+] as const
+
+/* [MOCK-ONLY] 实名分级权益：按 publishing-limit 规则口径（当前 seed 全部 -1 不限），
+ * 输出「个人 + 社区个体 1-5 级 + 社区企业 1-5 级」分组，并按身份/等级标注 active。 */
+export async function fetchRealnameRights(): Promise<RealnameRightsGroup[]> {
   return withLatency(() => {
     const account = accounts.find((a) => a.uid === requireUid())
     if (!account) fail(404, '用户不存在')
     const verified = !!(account.realName && account.citizenId)
-    const label = (n: number) => (n < 0 ? '不限' : `${n} 次/日`)
-    const limits = { demand_publish: verified ? 5 : 1, article_publish: verified ? 3 : 1, event_enroll: verified ? 5 : 3, space_reserve: verified ? 3 : 1 }
-    const items = (l: Record<string, number>) => [
-      `需求发布：${label(l.demand_publish)}`,
-      `文章投稿：${label(l.article_publish)}`,
-      `活动报名：${label(l.event_enroll)}`,
-      `空间预约：${label(l.space_reserve)}`,
-    ]
+    const individual = account.identities.find((i) => i.type === 'community_individual')
+    /* 默认主体（与后端 resolveSubject 未指定身份时一致）：有社区个体取个体等级，否则取个人实名层级 */
+    const subject = individual
+      ? { identityType: 'community_individual', level: individual.level ?? 1 }
+      : { identityType: verified ? 'personal_verified' : 'personal_unverified', level: 0 }
+    const group = (identityType: string, level: number): RealnameRightsGroup => {
+      const limits = Object.fromEntries(RIGHTS_ACTIONS.map((action) => [action.key, -1])) as Record<string, number>
+      const title = identityType === 'personal_unverified' ? '未实名个人'
+        : identityType === 'personal_verified' ? '已实名个人'
+          : `${identityType === 'community_individual' ? '社区个体' : '社区企业'} · 等级 ${level}`
+      return {
+        identityType,
+        level,
+        title,
+        active: identityType === subject.identityType && level === subject.level,
+        items: RIGHTS_ACTIONS.map((action) => `${action.label}：不限`),
+        limits,
+      }
+    }
     return [
-      { identityType: 'personal_unverified', level: 0, title: '未实名个人', active: !verified, items: verified ? items({ demand_publish: 1, article_publish: 1, event_enroll: 3, space_reserve: 1 }) : ['当前社区要求先完成实名认证后再操作'], limits: { demand_publish: 1, article_publish: 1, event_enroll: 3, space_reserve: 1 } },
-      { identityType: 'personal_verified', level: 0, title: '已实名个人', active: verified, items: items(limits), limits },
+      group('personal_unverified', 0),
+      group('personal_verified', 0),
+      ...[1, 2, 3, 4, 5].map((level) => group('community_individual', level)),
+      ...[1, 2, 3, 4, 5].map((level) => group('community_enterprise', level)),
     ]
   })
 }
@@ -131,14 +152,13 @@ export async function submitRealName(payload: RealNamePayload): Promise<void> {
     if (realName.length < 2 || realName.length > 20) fail(400, '真实姓名长度应为 2-20 个字')
     if (!/^[\u4e00-\u9fa5A-Za-z·]{2,20}$/.test(realName)) fail(400, '真实姓名仅支持中文或字母')
     if (!isValidCitizenId(citizenId)) fail(400, '请输入正确的身份证号')
-    /* [MOCK-ONLY] 演示全链路：提交即通过（真实后端为三要素核验后回写实名状态） */
     account.realName = realName
     account.citizenId = citizenId.toUpperCase()
     account.realNameVerifiedAt = nowStamp()
     pushNotice(uid, {
       type: 'system',
-      title: '实名认证已通过',
-      content: `你的实名认证已通过（${maskRealName(realName)}），可享受完整社区服务。`,
+      title: '实名认证已完成',
+      content: `你的实名信息已通过规则校验（${maskRealName(realName)}）。`,
       link: '/me/realname',
     })
   }, 220)
@@ -210,15 +230,20 @@ export async function fetchMyStats(): Promise<MyStats> {
   return withLatency(() => {
     const uid = requireUid()
     const records = pointsRecordsByUid[uid] ?? []
+    const account = accountByUid(uid)
+    const individual = account?.identities.find((i) => i.type === 'community_individual')
     return {
       pointsEarned: records.filter((r) => r.delta > 0).reduce((s, r) => s + r.delta, 0),
       pointsSpent: records.filter((r) => r.delta < 0).reduce((s, r) => s + Math.abs(r.delta), 0),
       demands: demands.filter((d) => d.publisherUid === uid).length,
       responses: (responsesByUid[uid] ?? []).length,
       enrollments: (enrollmentsByUid[uid] ?? []).length,
-      articles: articles.filter((a) => (a as { authorUid?: string }).authorUid === uid).length,
-      projects: 0,
+      articles: (myArticlesByUid[uid] ?? []).length,
+      projects: (projectsByUid[uid] ?? []).length,
       orders: (ordersByUid[uid] ?? []).length,
+      /* v34：个人看板补充经验值/签到/项目 */
+      experience: experienceByUid[uid]?.currentExperience ?? individual?.experience ?? 0,
+      checkedIn: (enrollmentsByUid[uid] ?? []).filter((item) => item.checkedIn).length,
     }
   }, 160)
 }
@@ -229,38 +254,4 @@ export async function fetchAccountRequests(): Promise<{ deletion?: { reason?: st
     const uid = requireUid()
     return structuredClone(accountRequestsByUid[uid] ?? {})
   }, 100)
-}
-
-/** 我的举报记录（含处理状态） */
-export async function listMyReports(): Promise<(ReportPayload & { id: string; at: string; status: 'pending' | 'resolved' | 'rejected' })[]> {
-  return withLatency(() => {
-    const uid = requireUid()
-    return reports.filter((item) => item.uid === uid).map((item) => ({ ...item }))
-  }, 120)
-}
-
-/** 屏蔽名单（uid + 昵称） */
-export async function listBlockedUsers(): Promise<{ uid: string; name: string }[]> {
-  return withLatency(() => {
-    const uid = requireUid()
-    return (blockedByUid[uid] ?? []).map((blockedUid) => ({ uid: blockedUid, name: accountByUid(blockedUid)?.nickname ?? blockedUid }))
-  }, 120)
-}
-
-export async function blockUser(targetUid: string): Promise<void> {
-  await withLatency(() => {
-    const uid = requireUid()
-    if (targetUid === uid) fail(400, '不能屏蔽自己')
-    const list = (blockedByUid[uid] ??= [])
-    if (!list.includes(targetUid)) list.push(targetUid)
-  }, 140)
-}
-
-export async function unblockUser(targetUid: string): Promise<void> {
-  await withLatency(() => {
-    const uid = requireUid()
-    const list = (blockedByUid[uid] ??= [])
-    const index = list.indexOf(targetUid)
-    if (index >= 0) list.splice(index, 1)
-  }, 140)
 }

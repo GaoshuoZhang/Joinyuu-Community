@@ -1,6 +1,6 @@
 /* 请求封装：包络解包 + 统一错误 + 401 拦截。
  * Mock 模式（VITE_API_MODE=mock）下由 src/mock/handlers 提供实现；
- * http 模式走 /api 真实请求（M2-R 接入期启用）。视图层只依赖 src/api/*.ts 的函数签名。 */
+ * http 模式走 /api 真实请求并作为默认模式。视图层只依赖 src/api/*.ts 的函数签名。 */
 
 export class ApiError extends Error {
   code: number
@@ -93,7 +93,7 @@ export async function httpDownload(path: string): Promise<Blob> {
   return res.blob()
 }
 
-/** multipart 上传（图片/PDF 等；缺口 §7.1-6 POST /api/app/uploads） */
+/** multipart 上传（图片/PDF 等；POST /api/app/uploads） */
 export function httpUpload<T>(path: string, form: FormData): Promise<T> {
   return request<T>(path, { method: 'POST', body: form })
 }

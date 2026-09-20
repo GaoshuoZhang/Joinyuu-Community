@@ -3,7 +3,8 @@ import type { Response } from 'express'
 import { Public } from '../../common/decorators/public.decorator'
 import { AssetsService } from './assets.service'
 
-/* 素材公开读取：<img src> 无法携带 Authorization，故走公开路由（仅按存储键读取已入库素材） */
+/* 公开读取：<img src> 无法携带 Authorization，故走公开路由（按存储键读取；
+ * admin 素材按库表元数据返回 MIME，App 上传按扩展名推断 MIME）。 */
 @Controller('api/public/files')
 export class FilesController {
   constructor(private readonly assets: AssetsService) {}

@@ -1,18 +1,16 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
 import { useRoute } from 'vue-router'
-import { Loading, Avatar, Button, DialogPlugin, Icon, Tag, Toast } from 'tdesign-mobile-vue'
+import { Avatar, Button, Icon, Tag, Toast } from 'tdesign-mobile-vue'
 import { useAsyncList } from '@/composables/useAsyncList'
 import { fetchTalentCard } from '@/api/community'
 import { listFavorites, toggleFavorite } from '@/api/favorites'
-import { blockUser } from '@/api/me'
-import { submitReport } from '@/api/reports'
 import { useAuthStore } from '@/stores/auth'
 import { shareContent } from '@/utils/share'
 import EmptyBlock from '@/components/shared/EmptyBlock.vue'
-import ReasonSheet from '@/components/ReasonSheet.vue'
+import ListSkeleton from '@/components/ListSkeleton.vue'
 
-/* 公开人才名片（简历式）：人才库点入，展示个人资料头像与全部公开字段；v38 支持屏蔽用户。 */
+/* 公开人才名片（简历式）：人才库点入，展示个人资料头像与全部公开字段。 */
 const route = useRoute()
 const auth = useAuthStore()
 const uid = String(route.params.uid)
@@ -37,16 +35,18 @@ async function onToggleFavorite() {
     Toast('登录后可收藏')
     return
   }
+  const next = !favorited.value
+  favorited.value = next
   try {
     favorited.value = await toggleFavorite('talent', uid, card.value?.name ?? uid, card.value?.role)
     Toast(favorited.value ? '已收藏' : '已取消收藏')
   } catch (e) {
+    favorited.value = !next
     Toast(e instanceof Error ? e.message : '操作失败，请稍后重试')
   }
 }
 
 const card = computed(() => data.value)
-const blocked = ref(false)
 
 /* v40：分享人才名片 */
 async function onShare() {
@@ -54,53 +54,17 @@ async function onShare() {
   if (!item) return
   await shareContent({ title: item.name, text: `${item.role} · ${item.intro}` })
 }
-
-/* v40：举报用户 */
-const reportVisible = ref(false)
-const USER_REPORT_REASONS = ['虚假身份', '骚扰 / 辱骂', '违规内容', '广告推广', '其他']
-
-async function onReport(text: string) {
-  if (!text) return void Toast('请选择举报原因')
-  try {
-    await submitReport({ targetType: 'user', targetId: uid, targetTitle: card.value?.name ?? uid, reason: text })
-    Toast('举报已提交，运营将核实处理')
-  } catch (e) {
-    Toast(e instanceof Error ? e.message : '举报提交失败，请稍后重试')
-  }
-}
-
-function onBlock() {
-  if (!auth.isLogged) {
-    Toast('请先登录后再屏蔽')
-    return
-  }
-  DialogPlugin.confirm({
-    title: '屏蔽该用户',
-    content: `屏蔽后你将不再看到「${card.value?.name ?? '该用户'}」的相关内容。`,
-    cancelBtn: '取消',
-    confirmBtn: '确认屏蔽',
-    onConfirm: async () => {
-      try {
-        await blockUser(uid)
-        blocked.value = true
-        Toast('已加入屏蔽名单，可在账号与安全中管理')
-      } catch (e) {
-        Toast(e instanceof Error ? e.message : '操作失败，请稍后重试')
-      }
-    },
-  })
-}
 </script>
 
 <template>
   <div class="page-fade-in talent-card-page">
-    <Loading v-if="loading" class="state" text="加载中…" />
+    <ListSkeleton v-if="loading" />
     <EmptyBlock v-else-if="error" :text="error" action-text="重试" @action="run" />
     <template v-else-if="card">
       <section class="m-card hero">
         <Avatar size="64px" class="avatar" :image="card.avatar">{{ card.name.slice(0, 1) }}</Avatar>
         <div class="hero-info">
-          <h1 class="name">{{ card.name }}</h1>
+          <h2 class="name">{{ card.name }}</h2>
           <div class="meta">
             <Tag v-if="card.levelName" size="small" variant="light" theme="primary">Lv.{{ card.level }} {{ card.levelName }}</Tag>
             <span v-if="card.age" class="meta-item">{{ card.age }} 岁</span>
@@ -116,15 +80,14 @@ function onBlock() {
 
       <div class="actions">
         <Button size="small" variant="outline" @click="onToggleFavorite">
-          <Icon :name="favorited ? 'star-filled' : 'star'" size="16px" />{{ favorited ? '已收藏' : '收藏' }}
+          <template #icon><Icon aria-hidden="true" :name="favorited ? 'star-filled' : 'star'" size="16px" /></template>
+          {{ favorited ? '已收藏' : '收藏' }}
         </Button>
-        <Button size="small" variant="outline" @click="onShare"><Icon name="share" size="16px" />分享</Button>
-        <Button size="small" variant="outline" @click="reportVisible = true">举报</Button>
-        <Button size="small" variant="outline" theme="danger" :disabled="blocked || !auth.isLogged" @click="onBlock">
-          {{ blocked ? '已屏蔽' : auth.isLogged ? '屏蔽该用户' : '登录后可屏蔽' }}
+        <Button size="small" variant="outline" @click="onShare">
+          <template #icon><Icon aria-hidden="true" name="share" size="16px" /></template>
+          分享
         </Button>
       </div>
-      <ReasonSheet v-model:visible="reportVisible" title="举报用户" :reasons="USER_REPORT_REASONS" placeholder="补充说明（选填）…" submit-label="提交举报" @submit="onReport" />
 
       <section v-if="card.skills.length" class="m-card">
         <h3 class="sec-title">相关技能</h3>
@@ -190,7 +153,7 @@ function onBlock() {
           rel="noopener"
         >
           <span class="link-label">{{ l.label || l.url }}</span>
-          <Icon name="chevron-right" size="16px" class="link-arrow" />
+          <Icon aria-hidden="true" name="chevron-right" size="16px" class="link-arrow" />
         </a>
       </section>
     </template>
@@ -201,30 +164,27 @@ function onBlock() {
 .actions {
   display: flex;
   justify-content: flex-end;
-  gap: 8px;
+  gap:var(--app-space-4);
 }
 
 .talent-card-page {
-  padding: 16px;
+  padding:var(--app-space-8);
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap:var(--app-space-6);
 }
 
-.state {
-  padding: 20px 0;
-}
 
 .hero {
   display: flex;
   align-items: center;
-  gap: 14px;
+  gap:var(--app-space-7);
 }
 
 .avatar {
   flex-shrink: 0;
-  font-size: 24px;
-  font-weight: 700;
+  font-size: var(--app-font-title);
+  font-weight: 600;
 }
 
 .hero-info {
@@ -232,31 +192,31 @@ function onBlock() {
 }
 
 .name {
-  margin: 0 0 6px;
-  font-size: 20px;
-  font-weight: 700;
+  margin:0 0 var(--app-space-3);
+  font-size: var(--app-font-title);
+  font-weight: 600;
 }
 
 .meta {
   display: flex;
   align-items: center;
   flex-wrap: wrap;
-  gap: 8px;
+  gap:var(--app-space-4);
 }
 
 .meta-item {
-  font-size: 12px;
+  font-size: var(--app-font-caption);
   color: var(--td-text-color-secondary);
 }
 
 .sec-title {
-  margin: 0 0 10px;
-  font-size: 15px;
+  margin:0 0 var(--app-space-5);
+  font-size: var(--app-font-subtitle);
 }
 
 .desc {
-  margin: 0;
-  font-size: 13px;
+  margin:0;
+  font-size: var(--app-font-body);
   line-height: 1.8;
   color: var(--td-text-color-secondary);
   white-space: pre-wrap;
@@ -265,20 +225,20 @@ function onBlock() {
 .skills {
   display: flex;
   flex-wrap: wrap;
-  gap: 6px;
+  gap:var(--app-space-3);
 }
 
 .skill {
-  margin: 0;
+  margin:0;
 }
 
 .entry {
-  padding: 10px 0;
+  padding:var(--app-space-5) 0;
   border-bottom: 1px dashed var(--td-component-border);
 }
 
 .entry:last-child {
-  padding-bottom: 0;
+  padding-bottom:0;
   border-bottom: none;
 }
 
@@ -286,39 +246,39 @@ function onBlock() {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 10px;
+  gap:var(--app-space-5);
 }
 
 .entry-head {
   display: flex;
   align-items: baseline;
   justify-content: space-between;
-  gap: 10px;
+  gap:var(--app-space-5);
 }
 
 .entry-title {
-  font-size: 14px;
+  font-size: var(--app-font-body);
   font-weight: 600;
   color: var(--td-text-color-primary);
 }
 
 .entry-role {
-  margin-left: 8px;
-  font-size: 12px;
+  margin-left:var(--app-space-4);
+  font-size: var(--app-font-caption);
   font-weight: 400;
   color: var(--td-text-color-secondary);
 }
 
 .entry-period {
   flex-shrink: 0;
-  font-size: 12px;
+  font-size: var(--app-font-caption);
   color: var(--td-text-color-placeholder);
 }
 
 .entry-sub,
 .entry-desc {
-  margin: 6px 0 0;
-  font-size: 12px;
+  margin:var(--app-space-3) 0 0;
+  font-size: var(--app-font-caption);
   line-height: 1.7;
   color: var(--td-text-color-secondary);
   white-space: pre-wrap;
@@ -328,21 +288,23 @@ function onBlock() {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 10px 0;
+  gap:var(--app-space-4);
+  padding:var(--app-space-5) 0;
   border-bottom: 1px dashed var(--td-component-border);
 }
 
 .link-row:last-child {
-  padding-bottom: 0;
+  padding-bottom:0;
   border-bottom: none;
 }
 
 .link-label {
-  font-size: 13px;
+  font-size: var(--app-font-body);
   color: var(--td-brand-color);
 }
 
 .link-arrow {
+  flex-shrink: 0;
   color: var(--td-text-color-placeholder);
 }
 </style>

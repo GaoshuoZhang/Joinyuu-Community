@@ -40,24 +40,16 @@ const statusOptions = [
   { label: '已停用', value: 'disabled' },
 ]
 
-/* 排序：默认累计合作倒序（合作最多在前），支持累计合作/首次合作正倒序 */
-const sortBy = ref<'cooperationCount' | 'firstCooperationAt'>('cooperationCount')
+/* 排序：默认登记日期倒序（最新登记在前），支持登记日期正倒序 */
+const sortBy = ref<'registeredAt'>('registeredAt')
 const sortOrder = ref<'ascend' | 'descend'>('descend')
 
 const columns = [
   { colKey: 'name', title: '企业名称', cell: 'name', width: 220 , ellipsis: true},
   { colKey: 'industry', title: '行业', width: 120 , ellipsis: true},
   {
-    colKey: 'cooperationCount',
-    title: '累计合作',
-    width: 95,
-    sorter: true,
-    sortType: 'all',
-  ellipsis: true,
-  },
-  {
-    colKey: 'firstCooperationAt',
-    title: '首次合作',
+    colKey: 'registeredAt',
+    title: '登记日期',
     width: 110,
     sorter: true,
     sortType: 'all',
@@ -100,7 +92,7 @@ async function load() {
 
 /* 远程排序：表头点击 → 更新排序状态 → 重新加载（受控 :sort 保证表头指示器正确） */
 function onSortChange(sort: { sortBy: string; descending: boolean }) {
-  if (sort.sortBy !== 'cooperationCount' && sort.sortBy !== 'firstCooperationAt') return
+  if (sort.sortBy !== 'registeredAt') return
   sortBy.value = sort.sortBy
   sortOrder.value = sort.descending ? 'descend' : 'ascend'
   query.page = 1
@@ -150,8 +142,8 @@ function openCreate() {
 function onExport() {
   exportCsv(
     '合作企业列表',
-    ['编号', '企业名称', '行业', '累计合作', '首次合作', '关联成员数'],
-    list.value.map((e) => [e.id, `${e.name} [${e.id}]`, e.industry, e.cooperationCount, e.firstCooperationAt, e.members.length]),
+    ['编号', '企业名称', '行业', '登记日期', '关联成员数'],
+    list.value.map((e) => [e.id, `${e.name} [${e.id}]`, e.industry, e.registeredAt, e.members.length]),
   )
   MessagePlugin.success(`已导出当前页 ${list.value.length} 条数据`)
 }
@@ -251,8 +243,6 @@ onMounted(() => {
             </div>
           </div>
         </template>
-
-        <template #cooperationCount="{ row }">{{ row.cooperationCount }} 次</template>
 
         <template #memberCount="{ row }">
           <t-tag variant="light" size="small">{{ row.members.length }} 人</t-tag>

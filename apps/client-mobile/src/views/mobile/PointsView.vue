@@ -1,11 +1,14 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
-import { Loading, Button, Search, Toast } from 'tdesign-mobile-vue'
+import { Button, Search, Toast } from 'tdesign-mobile-vue'
 import { useAuthStore } from '@/stores/auth'
 import { fetchPointsRecords } from '@/api/me'
 import EmptyBlock from '@/components/shared/EmptyBlock.vue'
+import ListSkeleton from '@/components/ListSkeleton.vue'
+import { pointsSourceLabel } from '@/constants/points'
 import type { PointsRecord } from '@/types'
+import { formatLocalDateTime, formatZhNumber } from '@/utils/format'
 
 /* 移动积分流水：余额卡（可去积分商城）+ 来源/事由搜索（防抖 300ms）+ 分页流水列表（含余额快照）
  * v38：改为分页加载（首屏 20 条 + 加载更多 + 总数），不再静默截断 50 条。 */
@@ -77,7 +80,7 @@ function loadMore() {
   <div class="page-fade-in points">
     <div class="balance-card">
       <span class="label">当前积分</span>
-      <b class="value tabular-nums">{{ auth.points.toLocaleString('zh-CN') }}</b>
+      <b class="value tabular-nums">{{ formatZhNumber(auth.points) }}</b>
     </div>
 
     <Button theme="primary" variant="outline" block class="mall-link" @click="router.push('/mall')">去积分商城兑换</Button>
@@ -85,22 +88,27 @@ function loadMore() {
       <Button size="small" variant="text" @click="router.push('/mall/rules')">积分规则</Button>
     </div>
 
-    <Search v-model="keyword" class="ledger-search" placeholder="搜索来源或事由" />
+    <Search v-model="keyword" class="ledger-search" placeholder="搜索来源或事由…" />
 
-    <Loading v-if="firstLoading" class="state" text="加载中…" />
+    <ListSkeleton v-if="firstLoading" />
     <EmptyBlock v-else-if="error && !items.length" :text="error" action-text="重试" @action="() => load(true)" />
-    <EmptyBlock v-else-if="!items.length" :text="keyword ? '暂无匹配流水' : '暂无积分流水'" />
+    <EmptyBlock
+      v-else-if="!items.length"
+      :text="keyword ? '暂无匹配流水' : '暂无积分流水'"
+      :action-text="keyword ? '清除搜索' : undefined"
+      @action="keyword = ''"
+    />
     <template v-else>
-      <p class="ledger-count">共 {{ total }} 条流水</p>
+      <p class="ledger-count">共 {{ formatZhNumber(total) }} 条流水</p>
       <div class="m-card ledger stagger">
         <div v-for="r in items" :key="r.id" class="row">
           <div class="main">
             <p class="reason">{{ r.reason }}</p>
-            <p class="meta">{{ r.source }} · {{ r.at }}</p>
+            <p class="meta">{{ pointsSourceLabel(r.source) }} · {{ formatLocalDateTime(r.at) }}</p>
           </div>
           <div class="side">
-            <span class="delta" :class="{ neg: r.delta < 0 }">{{ r.delta >= 0 ? '+' : '' }}{{ r.delta }}</span>
-            <span class="balance">余额 {{ r.balance }}</span>
+            <span class="delta" :class="{ neg: r.delta < 0 }">{{ r.delta >= 0 ? '+' : '' }}{{ formatZhNumber(r.delta) }}</span>
+            <span class="balance">余额 {{ formatZhNumber(r.balance) }}</span>
           </div>
         </div>
       </div>
@@ -114,27 +122,27 @@ function loadMore() {
 .quick-links {
   display: flex;
   justify-content: center;
-  gap: 8px;
+  gap:var(--app-space-4);
 }
 
 .points {
-  padding: 16px;
+  padding:var(--app-space-8);
 }
 
 .ledger-count {
-  margin: 0 0 8px;
-  font-size: 12px;
+  margin:0 0 var(--app-space-4);
+  font-size: var(--app-font-caption);
   color: var(--td-text-color-placeholder);
 }
 
 .more-btn {
-  margin-top: 12px;
+  margin-top:var(--app-space-6);
 }
 
 .ledger-end {
-  margin: 12px 0 0;
+  margin:var(--app-space-6) 0 0;
   text-align: center;
-  font-size: 12px;
+  font-size: var(--app-font-caption);
   color: var(--td-text-color-placeholder);
 }
 
@@ -142,45 +150,42 @@ function loadMore() {
   display: flex;
   flex-direction: column;
   align-items: center;
-  padding: 22px;
+  padding:var(--app-space-11);
   border-radius: var(--td-radius-large);
   background: var(--client-brand-gradient);
   color: var(--td-text-color-anti);
-  margin-bottom: 14px;
+  margin-bottom:var(--app-space-7);
 }
 
 .label {
-  font-size: 12px;
+  font-size: var(--app-font-caption);
   opacity: 0.85;
 }
 
 .value {
-  font-size: 30px;
-  font-weight: 700;
+  font-size: var(--app-font-title);
+  font-weight: 600;
 }
 
 .ledger-search {
-  margin-bottom: 12px;
+  margin-bottom:var(--app-space-6);
 }
 
 .mall-link {
-  margin-bottom: 14px;
+  margin-bottom:var(--app-space-7);
 }
 
-.state {
-  padding: 20px 0;
-}
 
 .ledger {
-  padding: 4px 14px;
+  padding:var(--app-space-2) var(--app-space-7);
 }
 
 .row {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 10px;
-  padding: 11px 0;
+  gap:var(--app-space-5);
+  padding:var(--app-space-6) 0;
   border-bottom: 1px solid var(--td-component-border);
 }
 
@@ -189,13 +194,13 @@ function loadMore() {
 }
 
 .reason {
-  margin: 0 0 3px;
-  font-size: 13px;
+  margin:0 0 var(--app-space-2);
+  font-size: var(--app-font-body);
 }
 
 .meta {
-  margin: 0;
-  font-size: 12px;
+  margin:0;
+  font-size: var(--app-font-caption);
   color: var(--td-text-color-secondary);
 }
 
@@ -204,9 +209,9 @@ function loadMore() {
 }
 
 .delta {
-  font-weight: 700;
+  font-weight: 600;
   color: var(--td-success-color);
-  font-size: 14px;
+  font-size: var(--app-font-body);
 }
 
 .delta.neg {
@@ -215,7 +220,7 @@ function loadMore() {
 
 .balance {
   display: block;
-  font-size: 12px;
+  font-size: var(--app-font-caption);
   color: var(--td-text-color-secondary);
 }
 </style>

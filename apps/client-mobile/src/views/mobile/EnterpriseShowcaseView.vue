@@ -1,20 +1,19 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
 import { useRoute } from 'vue-router'
-import { Loading, Button, Icon, Image, Toast } from 'tdesign-mobile-vue'
+import { Button, Icon, Image, Toast } from 'tdesign-mobile-vue'
 import { useAsyncList } from '@/composables/useAsyncList'
 import { fetchEnterpriseShowcase } from '@/api/enterprises'
 import { listFavorites, toggleFavorite } from '@/api/favorites'
 import { useAuthStore } from '@/stores/auth'
-import { submitReport } from '@/api/reports'
 import { shareContent } from '@/utils/share'
 import { onImageError } from '@/utils/imageFallback'
 import EmptyBlock from '@/components/shared/EmptyBlock.vue'
-import ReasonSheet from '@/components/ReasonSheet.vue'
+import ListSkeleton from '@/components/ListSkeleton.vue'
 import type { EnterpriseShowcase } from '@/types'
 
 /* 移动企业名片：品牌横幅（渐变 + 企业名首字）+ 介绍 + 企业信息；
- * 仅 published 可见（404 → 空态 + 返回）；名片申请入口在社区·企业库卡片（成员可见）；v35 支持举报。
+ * 仅 published 可见（404 → 空态 + 返回）；名片申请入口在社区·企业库卡片（成员可见）。
  * 2026-09-17 起不再公示企业成员。 */
 const route = useRoute()
 const auth = useAuthStore()
@@ -45,24 +44,14 @@ async function onToggleFavorite() {
     Toast('登录后可收藏')
     return
   }
+  const next = !favorited.value
+  favorited.value = next
   try {
     favorited.value = await toggleFavorite('enterprise', String(route.params.id), showcase.value?.name ?? '', showcase.value?.industry)
     Toast(favorited.value ? '已收藏' : '已取消收藏')
   } catch (e) {
+    favorited.value = !next
     Toast(e instanceof Error ? e.message : '操作失败，请稍后重试')
-  }
-}
-
-const reportVisible = ref(false)
-const REPORT_REASONS = ['信息不实', '冒用他人企业', '违规经营', '侵权内容', '其他']
-
-async function onReport(text: string) {
-  if (!text) return void Toast('请选择举报原因')
-  try {
-    await submitReport({ targetType: 'enterprise', targetId: String(route.params.id), targetTitle: showcase.value?.name ?? '', reason: text })
-    Toast('举报已提交，运营将核实处理')
-  } catch (e) {
-    Toast(e instanceof Error ? e.message : '举报提交失败，请稍后重试')
   }
 }
 
@@ -81,7 +70,7 @@ onMounted(async () => {
 
 <template>
   <div class="page-fade-in m-showcase">
-    <Loading v-if="loading" class="state" text="加载中…" />
+    <ListSkeleton v-if="loading" />
     <template v-else-if="error">
       <EmptyBlock :text="error" action-text="重试" @action="run" />
     </template>
@@ -92,7 +81,7 @@ onMounted(async () => {
           <template v-else>{{ firstChar }}</template>
         </span>
         <div class="banner-info">
-          <h1 class="name">{{ showcase.name }}</h1>
+          <h2 class="name">{{ showcase.name }}</h2>
           <p class="tags">
             {{ [showcase.industry, showcase.size, showcase.foundedAt ? `成立于 ${showcase.foundedAt}` : ''].filter(Boolean).join(' · ') }}
           </p>
@@ -129,31 +118,24 @@ onMounted(async () => {
 
       <div class="foot-actions">
         <Button size="small" variant="outline" @click="onToggleFavorite">
-          <Icon :name="favorited ? 'star-filled' : 'star'" size="16px" />{{ favorited ? '已收藏' : '收藏' }}
+          <template #icon><Icon aria-hidden="true" :name="favorited ? 'star-filled' : 'star'" size="16px" /></template>
+          {{ favorited ? '已收藏' : '收藏' }}
         </Button>
-        <Button size="small" variant="outline" @click="onShare"><Icon name="share" size="16px" />分享</Button>
-        <p class="report-link" v-pressable @click="reportVisible = true">举报该企业名片</p>
+        <Button size="small" variant="outline" @click="onShare">
+          <template #icon><Icon aria-hidden="true" name="share" size="16px" /></template>
+          分享
+        </Button>
       </div>
-      <ReasonSheet v-model:visible="reportVisible" title="举报企业名片" :reasons="REPORT_REASONS" placeholder="补充说明（选填）…" submit-label="提交举报" @submit="onReport" />
     </template>
   </div>
 </template>
 
 <style scoped>
 .m-showcase {
-  padding: 16px;
+  padding:var(--app-space-8);
   display: flex;
   flex-direction: column;
-  gap: 12px;
-}
-
-.report-link {
-  margin: 0;
-  padding: 4px 2px 8px;
-  text-align: right;
-  font-size: 12px;
-  color: var(--td-text-color-placeholder);
-  cursor: pointer;
+  gap:var(--app-space-6);
 }
 
 .foot-actions {
@@ -161,22 +143,15 @@ onMounted(async () => {
   align-items: center;
   justify-content: flex-end;
   flex-wrap: wrap;
-  gap: 12px;
+  gap:var(--app-space-6);
 }
 
-.foot-actions .report-link {
-  padding-bottom: 4px;
-}
-
-.state {
-  padding: 20px 0;
-}
 
 .banner {
   display: flex;
   align-items: center;
-  gap: 12px;
-  padding: 22px 18px;
+  gap:var(--app-space-6);
+  padding:var(--app-space-9);
   border-radius: var(--td-radius-large);
   background: var(--client-brand-gradient);
   color: var(--td-text-color-anti);
@@ -190,8 +165,8 @@ onMounted(async () => {
   place-items: center;
   border-radius: var(--td-radius-large);
   background: color-mix(in srgb, var(--td-text-color-anti) 20%, transparent);
-  font-size: 26px;
-  font-weight: 700;
+  font-size: var(--app-font-title);
+  font-weight: 600;
   overflow: hidden;
 }
 
@@ -205,25 +180,25 @@ onMounted(async () => {
 }
 
 .name {
-  margin: 0 0 4px;
-  font-size: 18px;
+  margin:0 0 var(--app-space-2);
+  font-size: var(--app-font-title);
   line-height: 1.3;
 }
 
 .tags {
-  margin: 0;
-  font-size: 12px;
+  margin:0;
+  font-size: var(--app-font-caption);
   opacity: 0.85;
 }
 
 .sec-title {
-  margin: 0 0 8px;
-  font-size: 14px;
+  margin:0 0 var(--app-space-4);
+  font-size: var(--app-font-body);
 }
 
 .desc {
-  margin: 0;
-  font-size: 13px;
+  margin:0;
+  font-size: var(--app-font-body);
   line-height: 1.8;
   color: var(--td-text-color-primary);
   white-space: pre-wrap;
@@ -231,14 +206,14 @@ onMounted(async () => {
 
 .info-row {
   display: flex;
-  gap: 10px;
-  margin: 0 0 8px;
-  font-size: 13px;
+  gap:var(--app-space-5);
+  margin:0 0 var(--app-space-4);
+  font-size: var(--app-font-body);
   color: var(--td-text-color-secondary);
 }
 
 .info-row:last-child {
-  margin-bottom: 0;
+  margin-bottom:0;
 }
 
 .info-label {

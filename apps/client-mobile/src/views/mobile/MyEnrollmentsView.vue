@@ -1,18 +1,21 @@
 <script setup lang="ts">
-import { onMounted, ref } from 'vue'
+import { computed, onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { Button, Icon, Toast } from 'tdesign-mobile-vue'
 import { cancelEnrollment, fetchMyEnrollments } from '@/api/events'
 import { useAsyncList } from '@/composables/useAsyncList'
+import { useIncrementalList } from '@/composables/useIncrementalList'
 import EmptyBlock from '@/components/shared/EmptyBlock.vue'
 import ListSkeleton from '@/components/ListSkeleton.vue'
 import StateTag from '@/components/shared/StateTag.vue'
 import type { MyEnrollmentItem } from '@/types'
+import { formatLocalDateTime, formatZhNumber } from '@/utils/format'
 
 /* 移动我的报名：报名卡片 + 签到入口/已签到标识；取消报名二次确认（两段式按钮）+ Toast */
-const router = useRouter()
-
 const { data, loading, error, run } = useAsyncList<MyEnrollmentItem[]>(() => fetchMyEnrollments())
+const router = useRouter()
+const enrollments = computed(() => data.value ?? [])
+const { visibleItems, hasMore, showMore } = useIncrementalList(enrollments)
 onMounted(run)
 
 const actingId = ref('')
@@ -21,7 +24,7 @@ let confirmTimer: ReturnType<typeof setTimeout> | null = null
 
 function canCancel(item: MyEnrollmentItem) {
   /* v38：候补中可随时退出；正式报名开始前 24 小时内不可取消（由服务端校验并返回原因） */
-  return item.status === 'pending' || item.status === 'approved' || item.status === 'waitlisted'
+  return !item.checkedIn && (item.status === 'pending' || item.status === 'approved' || item.status === 'waitlisted')
 }
 
 function onCancelTap(item: MyEnrollmentItem) {
@@ -56,125 +59,149 @@ async function doCancel(item: MyEnrollmentItem) {
   <div class="m-enrollments page-fade-in stagger">
     <ListSkeleton v-if="loading" />
     <EmptyBlock v-else-if="error" :text="error" action-text="重试" @action="run" />
-    <template v-else-if="(data ?? []).length > 0">
-      <p class="list-count">共 {{ (data ?? []).length }} 条报名</p>
-      <div v-for="item in data" :key="item.id" class="m-card">
+    <template v-else-if="enrollments.length > 0">
+      <p class="list-count">共 {{ formatZhNumber(enrollments.length) }} 条报名</p>
+      <div
+        v-for="item in visibleItems"
+        :key="item.id"
+        class="m-card enrollment-card"
+        role="link"
+        tabindex="0"
+        @click="router.push(`/events/${item.eventId}`)"
+        @keydown.enter.self="router.push(`/events/${item.eventId}`)"
+      >
         <div class="row">
-          <a class="title" v-pressable @click="router.push(`/events/${item.eventId}`)">{{ item.eventTitle }}</a>
+          <h2 class="title">{{ item.eventTitle }}</h2>
           <StateTag kind="enroll" :value="item.status" />
         </div>
-        <p class="meta"><Icon name="time" size="14px" />{{ item.startTime }} · <Icon name="location" size="14px" />{{ item.location }}</p>
+        <p class="meta"><Icon aria-hidden="true" name="time" size="14px" />{{ formatLocalDateTime(item.startTime) }} · <Icon aria-hidden="true" name="location" size="14px" />{{ item.location }}</p>
         <p v-if="item.status === 'waitlisted'" class="waitlist-note">
-          候补中{{ item.waitlistOrder ? `（第 ${item.waitlistOrder} 位）` : '' }}，有空位将自动递补并通知你
+          {{ item.waitlistOrder ? `当前第 ${formatZhNumber(item.waitlistOrder)} 位，` : '' }}有空位将自动递补并通知你
         </p>
         <p v-if="item.eventStatus === 'cancelled'" class="cancel-note">活动已取消，报名已同步取消</p>
-        <p v-else-if="item.rescheduledTo" class="waitlist-note">活动改期至 {{ item.rescheduledTo }}</p>
+        <p v-else-if="item.rescheduledTo" class="waitlist-note">活动改期至 {{ formatLocalDateTime(item.rescheduledTo) }}</p>
         <p v-if="item.rejectReason" class="reject-reason">驳回原因：{{ item.rejectReason }}</p>
         <div class="ops">
-          <span v-if="item.checkedIn" class="checked">已签到</span>
-          <a v-else-if="item.status === 'approved'" class="checkin-link" v-pressable @click="router.push(`/events/${item.eventId}/check-in`)">去签到<Icon name="chevron-right" size="12px" /></a>
-          <span v-else class="placeholder" />
-          <a v-if="item.status === 'approved' || item.checkedIn" class="checkin-link" v-pressable @click="router.push(`/events/${item.eventId}/ticket`)">电子票<Icon name="chevron-right" size="12px" /></a>
+          <router-link v-if="item.status === 'approved' || item.checkedIn" class="checkin-link" :to="`/events/${item.eventId}/check-in`" @click.stop>
+            {{ item.checkedIn ? '查看签到' : '签到' }}<Icon aria-hidden="true" name="chevron-right" size="12px" />
+          </router-link>
           <Button
             v-if="canCancel(item)"
             theme="danger"
             variant="outline"
             size="small"
             :disabled="actingId === item.id"
-            @click="onCancelTap(item)"
+            @click.stop="onCancelTap(item)"
           >
             {{ confirmingId === item.id ? '再点一次确认取消' : item.status === 'waitlisted' ? '退出候补' : '取消报名' }}
           </Button>
         </div>
       </div>
+      <Button v-if="hasMore" block variant="outline" @click="showMore">
+        加载更多（剩余 {{ formatZhNumber(enrollments.length - visibleItems.length) }} 条）
+      </Button>
     </template>
     <template v-else>
       <EmptyBlock text="暂无报名记录" />
-      <Button theme="primary" class="go-events" @click="router.push('/events')">去看看活动<template #suffix><Icon name="chevron-right" size="14px" /></template></Button>
+      <router-link class="go-events" to="/plaza?tab=events">去看看活动<Icon aria-hidden="true" name="chevron-right" size="14px" /></router-link>
     </template>
   </div>
 </template>
 
 <style scoped>
 .m-enrollments {
-  padding: 16px;
+  padding:var(--app-space-8);
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap:var(--app-space-5);
 }
 
 .error-box {
   text-align: center;
   color: var(--td-error-color);
-  font-size: 12px;
+  font-size: var(--app-font-caption);
 }
 
 .error-box p {
-  margin: 0 0 10px;
+  margin:0 0 var(--app-space-5);
 }
 
 .row {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 10px;
-  margin-bottom: 6px;
+  gap:var(--app-space-5);
+  margin-bottom:var(--app-space-3);
 }
 
 .title {
-  font-size: 14px;
+  display: inline-flex;
+  min-height: 44px;
+  align-items: center;
+  font-size: var(--app-font-body);
   font-weight: 600;
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  margin: 0;
 }
+
+.enrollment-card { cursor: pointer; }
+.enrollment-card:focus-visible { outline: 2px solid var(--td-brand-color); outline-offset: 2px; }
 
 .meta {
   display: flex;
   align-items: center;
-  gap: 4px;
-  margin: 0 0 12px;
-  font-size: 12px;
+  gap:var(--app-space-2);
+  margin:0 0 var(--app-space-6);
+  font-size: var(--app-font-caption);
   color: var(--td-text-color-secondary);
 }
 
 .reject-reason {
-  margin: 0 0 10px;
+  margin:0 0 var(--app-space-5);
   color: var(--td-error-color);
-  font-size: 12px;
+  font-size: var(--app-font-caption);
 }
 
 .waitlist-note {
-  margin: 0 0 10px;
+  margin:0 0 var(--app-space-5);
   color: var(--td-brand-color);
-  font-size: 12px;
+  font-size: var(--app-font-caption);
 }
 
 .cancel-note {
-  margin: 0 0 10px;
+  margin:0 0 var(--app-space-5);
   color: var(--td-error-color);
-  font-size: 12px;
+  font-size: var(--app-font-caption);
 }
 
 .ops {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 10px;
+  gap:var(--app-space-5);
+}
+
+/* 仅一个操作时（如待审核只有「取消报名」）右对齐，与「签到 + 取消报名」的取消按钮位置一致 */
+.ops > :only-child {
+  margin-left: auto;
 }
 
 .checked {
-  font-size: 12px;
+  font-size: var(--app-font-caption);
   color: var(--td-success-color);
 }
 
 .checkin-link {
   display: inline-flex;
   align-items: center;
-  gap: 2px;
-  font-size: 12px;
+  gap:var(--app-space-1);
+  min-height: 44px;
+  font-size: var(--app-font-caption);
   color: var(--td-brand-color);
+  text-decoration: none;
   cursor: pointer;
 }
 
@@ -184,5 +211,14 @@ async function doCancel(item: MyEnrollmentItem) {
 
 .go-events {
   align-self: center;
+  display: inline-flex;
+  min-height: 44px;
+  align-items: center;
+  gap: var(--app-space-2);
+  padding: 0 var(--app-space-7);
+  border-radius: var(--td-radius-default);
+  background: var(--td-brand-color);
+  color: var(--td-text-color-anti);
+  text-decoration: none;
 }
 </style>

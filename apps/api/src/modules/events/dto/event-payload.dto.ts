@@ -1,11 +1,16 @@
 import { Type } from 'class-transformer'
-import { IsArray, IsBoolean, IsInt, IsLatitude, IsLongitude, IsNotEmpty, IsOptional, IsString, Min } from 'class-validator'
+import { IsArray, IsBoolean, IsInt, IsLatitude, IsLongitude, IsNotEmpty, IsOptional, IsString, MaxLength, Min } from 'class-validator'
 
 /* 活动新增/编辑载荷（对照 apps/admin/src/api/events.ts EventPayload） */
 export class EventPayloadDto {
   @IsString()
   @IsNotEmpty()
   title!: string
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(512)
+  coverUrl?: string
 
   @IsString()
   @IsNotEmpty()

@@ -22,7 +22,7 @@ import {
 import { fail } from '@/mock/latency'
 import { commitMockState } from '@/mock/runtime'
 
-/* [MOCK-ONLY] v33 运营审核模拟器：只服务 DevTools，不进入 /api/app/** 契约。 */
+/* [MOCK-ONLY] v34 运营审核模拟器：只服务 DevTools，不进入 /api/app/** 契约。 */
 export type MockReviewDomain = 'demand' | 'application' | 'enrollment' | 'reservation' | 'article'
 export type MockReviewVerdict = 'approved' | 'rejected'
 
@@ -84,9 +84,9 @@ function addIdentityFromApplication(uid: string, payload: ApplicationCreatePaylo
   let identity: UserIdentity | undefined
 
   if (type === 'individual') {
-    identity = { type: 'community_individual', level: 1, levelName: '初来乍到', experience: 0 }
+    identity = { type: 'community_individual', level: 1, levelName: '新芽', experience: 0 }
   } else if (type === 'cooperation') {
-    const organizationName = String(payload.fields?.orgName ?? payload.organizationName ?? targetName.split(' · ')[0]).trim()
+    const organizationName = String(payload.fields?.orgName ?? targetName.split(' · ')[0]).trim()
     identity = { type: 'external_enterprise', organizationName }
   } else if (type === 'settle') {
     const fields = payload.fields ?? {}
@@ -98,30 +98,12 @@ function addIdentityFromApplication(uid: string, payload: ApplicationCreatePaylo
         industry: String(fields.industry ?? '综合'),
         size: String(fields.companySize ?? '1-9 人'),
         description: String(fields.intro ?? '申请入驻的社区企业'),
-        showcaseStatus: 'none',
         contactUid: uid,
         contactName: account.nickname,
         members: [{ uid, name: account.nickname, role: '负责人', phone: account.phone }],
     } satisfies EnterpriseRecord
     enterprises.push(enterprise)
     identity = { type: 'community_enterprise', enterpriseId: enterprise.id, enterpriseName: enterprise.name, enterpriseRole: '负责人' }
-  } else if (type === 'identity' && payload.identityType === 'community_individual') {
-    identity = { type: 'community_individual', level: 1, levelName: '初来乍到', experience: 0 }
-  } else if (type === 'identity' && payload.identityType === 'community_enterprise') {
-    const enterpriseName = payload.organizationName?.trim()
-    const enterprise = enterprises.find((item) => item.name === enterpriseName)
-    if (!enterprise) fail(404, '未找到该社区企业，请核对企业名称')
-    let member = enterprise.members.find((item) => item.uid === uid || item.phone === account.phone)
-    if (!member) {
-      member = { uid, name: account.realName ?? account.nickname, role: '成员', phone: account.phone }
-      enterprise.members.push(member)
-    } else {
-      member.uid = uid
-    }
-    identity = {
-      type: 'community_enterprise', enterpriseId: enterprise.id, enterpriseName: enterprise.name,
-      enterpriseRole: enterprise.contactUid === uid ? (member.role ?? '负责人') : (member.role ?? '成员'),
-    }
   }
 
   if (!identity) return null
@@ -147,11 +129,12 @@ function reviewDemand(id: string, verdict: MockReviewVerdict, reason: string): s
   if (item.status !== 'pending') fail(409, '该需求已处理')
   const uid = item.publisherUid ?? ''
   if (verdict === 'approved') {
-    item.status = 'published'
+    /* 审核通过仅转待发布；实际发布由运营/定时任务完成（对齐后端 demand 状态机） */
+    item.status = 'pending_release'
     delete item.rejectReason
     grantPoints(uid, 15, `发布需求：${item.title}`, '需求广场')
-    pushNotice(uid, { type: 'audit_result', title: '需求审核通过并已发布', content: `「${item.title}」已发布到项目页。`, link: '/me/demands' })
-    return '需求已通过并发布'
+    pushNotice(uid, { type: 'audit_result', title: '需求审核通过', content: `「${item.title}」已通过审核，等待发布。`, link: '/me/demands' })
+    return '需求已通过并转待发布'
   }
   item.status = 'rejected'
   item.rejectReason = reason
@@ -165,11 +148,13 @@ function reviewApplication(id: string, verdict: MockReviewVerdict, reason: strin
   const [uid, records] = entry
   const item = records.find((record) => record.id === id)!
   if (item.status !== 'pending') fail(409, '该申请已处理')
+  item.records ??= []
   if (verdict === 'approved') {
     const snapshot = applicationPayloadById[id]
     const added = addIdentityFromApplication(uid, snapshot?.payload ?? ({ type: item.type } as ApplicationCreatePayload), item.targetName)
     item.status = 'approved'
     item.reviewedAt = nowStamp()
+    item.records.push({ at: item.reviewedAt, action: 'approve', title: '审核通过', text: reason || '同意', operator: '社区管理员' })
     delete item.rejectReason
     if (added) {
       grantPoints(uid, 50, '首次绑定社区身份', '身份授予')
@@ -182,6 +167,7 @@ function reviewApplication(id: string, verdict: MockReviewVerdict, reason: strin
   item.status = 'rejected'
   item.reviewedAt = nowStamp()
   item.rejectReason = reason
+  item.records.push({ at: item.reviewedAt, action: 'reject', title: '审核驳回', text: reason, operator: '社区管理员' })
   pushNotice(uid, { type: 'audit_result', title: '申请审核未通过', content: `「${item.targetName}」未通过：${reason}`, link: '/me/applications' })
   return '申请已驳回'
 }
@@ -199,8 +185,8 @@ function reviewEnrollment(id: string, verdict: MockReviewVerdict, reason: string
     item.status = 'approved'
     delete item.rejectReason
     event.approvedCount += 1
+    /* 报名审核通过仅发放积分（activity_enroll_approved），不发放经验 */
     grantPoints(uid, 5, `报名审核通过：${event.title}`, '活动报名')
-    grantExperience(uid, 2, `报名审核通过：${event.title}`)
     pushNotice(uid, { type: 'enroll_result', title: '报名审核通过', content: `你报名的「${event.title}」已通过审核。`, link: '/me/enrollments' })
     return '报名已通过'
   }
@@ -216,16 +202,20 @@ function reviewReservation(id: string, verdict: MockReviewVerdict, reason: strin
   const [uid, records] = entry
   const item = records.find((record) => record.id === id)!
   if (item.status !== 'pending') fail(409, '该预约已处理')
+  item.records ??= []
   if (verdict === 'approved') {
-    const conflict = occupiedSlots(item.spaceId, item.date).some((slot) => slot.start < item.end && item.start < slot.end)
+    /* 冲突判定排除待审核记录自身，否则永远与自己冲突 */
+    const conflict = occupiedSlots(item.spaceId, item.date, item.id).some((slot) => slot.start < item.end && item.start < slot.end)
     if (conflict) fail(409, '该时段已有占用，无法通过预约')
     item.status = 'approved'
+    item.records.push({ at: nowStamp(), action: 'approve', title: '管理员审核', text: reason || '同意预约', operator: '社区管理员' })
     delete item.rejectReason
     pushNotice(uid, { type: 'audit_result', title: '空间预约审核通过', content: `「${item.spaceName}」${item.date} ${item.start}-${item.end} 已预约成功。`, link: '/me/reservations' })
     return '预约已通过'
   }
   item.status = 'rejected'
   item.rejectReason = reason
+  item.records.push({ at: nowStamp(), action: 'reject', title: '管理员审核', text: reason, operator: '社区管理员' })
   pushNotice(uid, { type: 'audit_result', title: '空间预约未通过', content: `「${item.spaceName}」预约未通过：${reason}`, link: '/me/reservations' })
   return '预约已驳回'
 }
@@ -288,7 +278,8 @@ export async function postponeEventAsOps(id: string, days = 1): Promise<string> 
   }
   ev.startTime = shift(ev.startTime)
   ev.endTime = shift(ev.endTime)
-  ev.enrollmentDeadline = shift(ev.enrollmentDeadline)
+  /* 对齐后端改期：记录 rescheduledTo 供「我的报名」提示，不调整报名截止时间 */
+  ev.rescheduledTo = ev.startTime
   let notified = 0
   for (const [uid, list] of Object.entries(enrollmentsByUid)) {
     const mine = list.find((item) => item.eventId === id && (item.status === 'approved' || item.status === 'pending' || item.status === 'waitlisted'))

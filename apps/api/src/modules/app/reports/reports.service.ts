@@ -106,7 +106,7 @@ export class AppReportsService {
     }
     if (type === 'enterprise') {
       const row = await this.prisma.enterprise.findFirst({
-        where: { id, showcaseStatus: 'published', deletedAt: null },
+        where: { id, deletedAt: null },
         select: { name: true },
       })
       if (row) return { title: row.name }

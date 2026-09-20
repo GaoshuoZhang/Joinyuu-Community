@@ -1,154 +1,71 @@
-# 聚屿社区 · 客户端移动端（M2 · `client-mobile`）开发 Wiki
+# 聚屿社区 · 移动端开发 Wiki
 
-> **应用拆分（已进入实施）**：客户端拆为两个独立应用/入口，**先移动端后桌面端**：
-> - `apps/client-mobile`（`@joinyuu/client-mobile`）——本文档对象，**纯移动端**（2026-09-13 已移除全部桌面端代码），dev **7759**；
-> - `apps/client-web`（`@joinyuu/client-web`）——桌面端，**尚未创建**，将承接原桌面视图与 `tdesign-vue-next`。
->
-> 本文是该应用的实现契约与工程约定，随 M2 批次持续补充；与代码冲突时以代码为准并回写本文。
-> 关联文档：[wiki-backend.md](./wiki-backend.md)（后端契约）、[api-app-design.md](./api-app-design.md)（/api/app/** 端点设计，M2 契约基线）、[m2-client-plan.md](./m2-client-plan.md)（规划与完成度看板）、[entity-fields.md](./entity-fields.md)（实体字段）；桌面端契约 `wiki-client-web.md` 待 `client-web` 创建时新建。
-> 技术栈：Vue 3.5 + Vite 6 + Pinia 3 + vue-router 4（**history 模式**）+ TypeScript；UI 库 `tdesign-mobile-vue@^1.16`（无桌面库）；dev 端口 **7759**（代理 /api → 7757）。
+> `apps/client-mobile` 是纯移动端应用，dev 端口 7759；桌面端 `apps/client-web` 尚未创建。
+> 关联文档：[后端契约](./wiki-backend.md)、[App API 契约](./api-app-design.md)、[当前进度](./full-spec-check.md)、[实体字段](./entity-fields.md)。
 
-## 1. 独立服务边界（冻结）
+## 1. 服务边界
 
-- `apps/client-mobile` 为独立 workspace 包（`@joinyuu/client-mobile`），**禁止 import `@joinyuu/admin`、`@joinyuu/api` 源码**；与管理端零粘连。
-- 实体与 API 类型在 `src/types/` 独立声明，字段口径对齐 `docs/api-app-design.md` 与 `entity-fields.md`；`[MOCK-ONLY]` 成员标注缺口编号。
-- 根脚本：`pnpm dev:client-mobile` / `pnpm build:client-mobile`。
+- workspace 包名为 `@joinyuu/client-mobile`，禁止导入 admin 或 api 源码。
+- 技术栈：Vue 3、Vite 6、Pinia 3、Vue Router 4 history 模式、TypeScript、TDesign Mobile Vue。
+- `src/types/` 独立声明客户端类型，字段与 API 契约保持一致。
+- 根命令：`pnpm dev:client-mobile`、`pnpm build:client-mobile`。
 
-## 2. API 契约层与双模式
+## 2. API 双模式
 
-> 2026-09-17 收尾复查：HTTP 注销申请并发仅一份有效，撤回后不可执行；个人名片 visibility 只更新明确传入的布尔键，省略键不会重新公开字段。人才库和全域人才搜索支持展示姓名并与公开名片名称一致。
+- `src/api/*.ts` 是视图唯一数据入口；页面不得直接读写 Mock 业务数据。
+- 默认模式为 HTTP，统一请求 `/api/app/**`；仅显式 `VITE_API_MODE=mock` 时分流到 `src/mock/handlers/*`。
+- HTTP 和 Mock 保持相同返回形状：成功 `{ code: 0, data }`、错误 `{ code, message }`、分页 `{ list, total }`。
+- HTTP 模式不读取、写入或重置 Mock 快照；Mock 状态保存在 `joinyuu_client_mock_v33`。
+- `[MOCK-ONLY]` 只标记 `src/mock/` 和 DevTools 专用能力，正式业务必须有 HTTP 分支。
+- Mock 模式使用 DevTools 可控业务时钟；HTTP 模式必须使用设备当前时间，不得复用固定演示时间。
+- 401 由公共请求层清除会话并跳转登录；下载与上传分别走统一鉴权下载和 multipart 封装。
 
-> 2026-09-17：M2-R 必做范围已完成。64 个入口 HTTP 加载检查与名片字段配置、实名人工复核、注销驳回通知跨端操作通过；浏览器覆盖边界见 `m2-r-closeout.md`。两个名片编辑页读取 `card-schema`，禁用字段隐藏并保留旧内容。实名页展示复核状态/原因；HTTP 电子票展示真实核销码，演示图案仅 Mock。默认 API 端口 7757，Vite 实际访问以启动输出为准（当前 localhost）。
+## 3. 应用架构
 
-- `VITE_API_MODE=mock|http`（2026-09-17 R4 起默认 http）：`src/api/*.ts` 函数为唯一契约层，显式 mock 模式内部分流到 `src/mock/handlers/*`；http 模式走 `http.ts` 真实请求。**视图层禁止绕过 api 层直接访问 mock**。HTTP 模式不读取、写入或重置 Mock 业务快照；切回 mock 保留演示快照。
-- Mock 响应与真实后端同形态：包络 `{ code: 0, data }`、错误 `{ code, message }`、分页 `{ list, total }`、时间 `YYYY-MM-DD HH:mm`；错误文案与 wiki 中文口径一致。
-- Mock 数据从 `apps/api/prisma/seed-data/` 派生（同 ID 体系 U/E/AP/D/P/EV/XE/EX/PT/G/RO/R/WS/WA/LS/S/SR/A/SU/CL/SC/AN/N/AL）；v33 起可变状态写入 `joinyuu_client_mock_v33` 版本化快照并跨刷新恢复（v38 新增地址、通知偏好、屏蔽、账号申请、活动反馈、点赞评论等状态在同一快照内向后兼容），业务 ID 使用持久序列号，业务时钟可由 DevTools 控制。需求响应在发布者接受后生成双方共享的项目记录。
-- 超出当前后端边界的功能（站内信 / 签到 / 首页聚合等）以 `// [MOCK-ONLY]` 标记，并在 `m2-client-plan.md` §7 缺口表与 §0.3/0.4 看板登记；接入期（M2-R）逐条销号。
+- 路由集中在 `src/router/index.ts`，全部页面位于 `src/views/mobile/`。
+- `AppShell.vue` 提供首页、项目、社区、广场、我的 5 个底部 Tab。
+- 登录、注册、找回密码等访客页位于壳外。
+- 业务逻辑收口到 `src/composables/` 和 `src/api/`；视图只负责展示与交互。
+- `components/shared/*` 保持组件库无关；全局挂载的 DevTools 也不得引入 TDesign 桶依赖。
 
-## 3. 移动端架构（2026-09-13 起为纯移动端）
+## 4. 鉴权与身份
 
-- **桌面端已移除**：`views/desktop/**` 与 `src/router/dualView.ts`、`tdesign-vue-next` 依赖已全部删除（桌面端代码将随 `apps/client-web` 重建，见顶部拆分说明）。
-- 路由单套（history 模式），`src/router/index.ts` 直连 `views/mobile/*`；`src/views/mobile/` 为全部页面。
-- **底部 5 Tab 壳**（`AppShell.vue`）：首页 / 项目 / 社区 / 广场 / 我的；`Tabs` 组件用于页内二级 Tab（社区 3 Tab、广场 2 Tab）。
-- 组件库 CSS 只在移动壳 `AppShell.vue` 与壳外访客页（登录/注册）引入一次。
-- 历史教训保留：全局挂载组件（`devtools/DevTools.vue`、`components/shared/*`）零组件库依赖；移动端按钮描边覆盖 `.t-button.t-button::after{border-style:none}`。
-- 登录/注册为壳外独立页（`meta.guestOnly`）。
+- HTTP 会话由 `/api/app/auth/**` 签发 App JWT，`scope=app`，与 Admin JWT 隔离。
+- `guestOnly` 阻止已登录用户进入访客页；`requiresAuth` 将游客重定向至 `/login?redirect=`。
+- 一名成员可拥有个人用户、社区个体、多个社区企业和合作企业身份；写操作由服务端复核主体权限。
+- 功能开关通过 `GET /api/app/config` 下发；入口隐藏与服务端写端点校验同时生效。
 
-## 4. 鉴权与多身份
+## 5. UI 与组件约定
 
-- HTTP 会话由 `/api/app/auth/**` 签发并由服务端鉴权；`restoreSession` 和图形验证码均经公共 HTTP 封装。显式 Mock 模式使用演示 JWT；两种模式共用 `joinyuu_client_token` 键，切换后如收到 401 需重新登录。
-- 守卫：`guestOnly`（已登录回首页）、`requiresAuth`（未登录跳 `/login?redirect=`，M2-M2 起挂 /me/**）；401 统一清态回登录。
-- 演示账号矩阵见 `src/mock/db.ts`（单/双/三身份、企业成员、新注册空态、冻结号）；验证码固定 `8888`（[MOCK-ONLY]）。
-- 功能开关：`GET /api/app/config` 下发，`config` store 承载；入口隐藏 + 写端点 400 双保险。
+- 使用 TDesign Mobile Vue；禁止引入其他 UI 库或桌面端组件库。
+- 状态统一使用 `StateTag`，身份统一使用 `IdentityTag`；禁止页面自行定义状态文案和颜色。
+- 色彩、圆角、阴影和边框使用 `--td-*`；共享布局类维护在 `styles/tokens.css`。
+- 卡片使用 `.m-card`，页面根节点使用 `.page-fade-in`，列表容器使用 `.stagger`。
+- 状态 Chip 使用 `Tag`，可选/可点击 Chip 使用 `CheckTag`；图标按钮使用 `Button` 的文本方形形态；主操作使用 primary。
+- 按钮、列表项等主交互目标至少 44px；Tag / CheckTag 仅使用 TDesign 提供的 `small`、`medium`、`large` 尺寸。表单必须有可见标签、行内错误与离开保护。
+- 弹层必须管理焦点、Tab 圈闭与关闭回焦；Toast、错误和加载态提供可访问性播报。
+- 调整纯视觉时不得顺带修改 API、路由、props/emits 或状态机。
 
-## 5. 视图层与 UI 约定（冻结）
+## 6. 主要页面
 
-### 5.1 分层
+- 首页：轮播、公告、快捷入口、最新需求/活动/文章和激活清单。
+- 项目：需求筛选、发布、详情、响应、发布者选定承接方。
+- 社区：政策、人才库、企业库、公开名片。
+- 广场：活动与文章。
+- 我的：资料、身份、名片、积分/经验、申请、项目、订单、预约、投稿、需求、响应、报名、通知和安全治理。
+- 二级闭环：项目里程碑交付验收、活动签到（含电子票）/反馈、商城履约、动态申请表单、企业成员与邀请。
 
-- 业务逻辑全部收口 `src/composables/` 与 `src/api/`，**视图层只做展示与交互**；表单校验函数共享 `src/utils/validators.ts`（文案与后端口径一致）。
+当前静态规模为 62 个视图、21 个域 API 文件；精确路由以 `src/router/index.ts` 为准。
 
-### 5.2 样式契约（对齐管理后台 `apps/admin/src/styles/tokens.css`）
+## 7. 验证
 
-- **色彩/圆角/阴影/边框一律使用 TDesign 默认令牌 `--td-*`**；禁止自定义色板、禁止写死色值（仅品牌区装饰性半透明叠加如 `rgba(255,255,255,.2)` 例外）。
-- `styles/tokens.css` 只补充：布局骨架尺寸、页面通用类、动效、客户端专属（`--client-brand-gradient`、移动安全区）。
-- 页面通用类（全局，禁止重复造等价 scoped 样式）：`.page-header / .page-title / .page-desc / .page-header-actions`、`.page-card`、`.page-filter-bar`、`.field-help`、`.page-fade-in`、`.stagger`、`.id-tag / .id-tag-block`、`.m-card`、`.login-page / .login-brand / .login-form-side / .login-form-card`。
-- 卡片一律用 `.page-card`（桌面）/ `.m-card`（移动）；页面根元素加 `.page-fade-in`；列表容器用 `.stagger`。
-- 常用映射：容器 `--td-bg-color-container`、页面底 `--td-bg-color-page`、边框 `--td-component-border`、主/次/占位文字 `--td-text-color-primary|secondary|placeholder`、品牌 `--td-brand-color / -hover / -light / -1`、成功/警告/错误 `--td-success-color --td-warning-color --td-error-color`、圆角 `--td-radius-default|medium|large`、阴影 `--td-shadow-1|2|3`。
+移动端改动至少执行：
 
-### 5.3 组件契约（全局使用 TDesign 组件）
+```bash
+pnpm --filter @joinyuu/client-mobile exec tsc -p tsconfig.json --noEmit
+pnpm --filter @joinyuu/client-mobile run lint
+pnpm --filter @joinyuu/client-mobile test
+pnpm build:client-mobile
+```
 
-- **禁止原生表单控件与原生按钮**：`<input>`→`Input`、`<textarea>`→`Textarea`、`<select>`→`Select`、`<button>`→`Button`；二次确认用 `Dialog`/`DialogPlugin`（禁止 `window.confirm`）。
-- 桌面：组件从 `tdesign-vue-next` 显式按名 import（PascalCase），模板用 PascalCase 标签；反馈 `MessagePlugin`；空态 `EmptyBlock`、加载 `Loading`、错误 `Alert`。
-- 移动：组件从 `tdesign-mobile-vue` 显式按名 import（PascalCase）；反馈 `Toast`、确认 `Dialog`；列表行优先 `Cell/CellGroup`。
-- 组件库 CSS 只在**每端入口**引入一次：桌面 `views/desktop/AppShell.vue`、移动 `views/mobile/AppShell.vue`，以及壳外访客页（登录/注册）各自引入本端 CSS。**视图内不得再 import 组件库 CSS**。
-- `components/shared/*`（IdentityTag / StateTag / EmptyBlock）**保持零组件库依赖**，仅用 `--td-*` 令牌表达 TDesign 视觉：一旦引入任一 TDesign 包，会把该包代码带进另一端的 chunk，破坏双端分包隔离（§3）。
-- **全局挂载组件零依赖**：`App.vue` 中全局挂载的 `[MOCK-ONLY] devtools/DevTools.vue` 与 `components/shared/*` 一样保持零组件库依赖（原生元素 + `--td-*` 令牌），这是 §3 双端隔离的硬性要求（该组件曾因桶导入 `tdesign-mobile-vue` 导致桌面按钮出现黑色描边）。
-- **移动端按钮描边层**：`tdesign-mobile-vue` 用 `.t-button::after`（200% 尺寸 + `scale(.5)`）画 1px 描边，其骨架规则自带 `border-style: solid`；`styles/tokens.css` 用 `.t-button.t-button::after { border-style: none }`（双类名提高特异性）统一去掉该描边层。
-- 状态文案/配色与 admin wiki 口径一致：状态用 `StateTag`（kind/value），身份用 `IdentityTag`，禁止自造文案与配色。
-- **可选/筛选 chip**：统一用 `Tag`（`:theme="选中 ? 'primary' : 'default'"` + `variant="light"`）。**禁止用 `Button` 的 `:theme/:variant` 切换冒充 chip**（会渲染成一排描边胶囊）。
-- **按钮选型**：顶栏/工具条图标按钮一律 `variant="text" shape="square"`（对齐 `AdminLayout`）；主操作 `theme="primary"`；`variant="outline"` 仅留给「重置/驳回」这类与 admin 一致的次要动作；禁止 `variant="outline"` + `ghost` 组合滥用。
-
-### 5.4 改造只读约束
-
-- 调整视图时**不得改动** script 业务逻辑、API 调用、路由、props/emits 语义；只调整模板结构与样式。
-
-## 6. 页面清单与路由
-
-> 2026-09-15 静态清点：61 条路由记录，60 条 component-backed（含 AppShell 壳），对应 58 个唯一视图文件；`IntroView.vue` 复用于 3 条路由，另有 1 条 catch-all 重定向。完整清单以 `src/router/index.ts` 为准。
-
-底部 5 Tab（`AppShell.vue`）+ 二级页（详情/提交/我的族/站内信/入驻说明）：
-
-- **首页** `/`：搜索框 → Swiper 轮播（数据来自后台 `HomeBanner`，`carouselEnabled` 为 false 或列表为空时整块区域不渲染；点击按 `banner.link` 跳转，可带图片，缺图用品牌渐变文字卡）→ 需求发布（独占行）→ 双入口（企业入驻/人才登记）→ 四宫格（文章投稿/积分商城/空间预约/活动计划）→ 最新项目 → 精选文章。
-- **项目** `/projects`：搜索 + 分类 Tag + 需求（项目）列表，排版沿用原需求页；发布入口「需求发布」→ `/demands/new`，详情 `/demands/:id`。
-- **社区** `/community`：3 个二级 Tab（社区服务=政策/指引列表 + 详情，人才库=社区个体（带头像，点入 `/talents/:uid` 简历式公开名片），企业库=社区企业），每个 Tab 带搜索；企业点入 `/enterprises/:id`（精致企业名片）。
-- **广场** `/plaza`：2 个二级 Tab（活动=活动列表，资讯=按栏目分组的文章）。
-- **站内信** `/notices`：单一列表（无分类标签、无归档操作），支持标记已读与全部已读；未读数与首页角标一致。
-- **文章详情** `/articles/:id`：正文兼容后台富文本 HTML（客户端 DOMPurify 清洗后渲染）与客户端纯文本/Markdown 图片行；`commentsEnabled=false` 时隐藏评论区且不请求评论接口。
-- **需求详情** `/demands/:id`（标题「需求详情」，原「项目详情」）：本人已响应时底部显示「我的响应」（响应说明 + 时间 + 状态），不再展示响应入口；撤回响应后恢复可响应状态。发布者查看本人任意状态需求：已发布时展示响应列表并多选意向承接方（可取消选择，「提交立项」后需求转 `selected`，等待社区管理员确认立项，不在客户端生成项目）；已选定/已立项时展示被选中承接方与状态提示；待发布/定时发布/已选定对非发布者提示暂不接受响应。
-- **我的需求** `/me/demands`：列表行可点击进入 `/demands/:id`（响应情况与承接方选择均在详情页操作）；审核中可撤回，已驳回可申诉、驳回/撤回后可修改重提。
-- **我的** `/me`：个人中心族（资料/积分/等级/我的项目/申请/订单/预约/投稿/需求/响应/报名/站内信）；社区个体另有「个人名片」；有关联身份时显示「关联身份」→ `/me/identities`（卡片列出社区个体与全部关联社区企业/合作企业：社区个体 → 个人名片；企业 → `/me/enterprises/:id` 按角色操作，负责人可编辑/邀请/转移/退驻，成员只读）。
-- 入驻说明 `/intros/:kind`：企业入驻/人才登记政策说明 + 引导登录，跳 `/applications/new?type=settle|individual`。
-
-路由注册集中在 `src/router/index.ts`；未实现路径由 catchAll 兜底重定向首页。移动端数据域 api：`api/home.ts`（首页聚合）、`api/community.ts`（政策/人才/企业）、其余域沿用。
-
-## 7. 验证策略
-
-- 每批次：`tsc --noEmit` + `pnpm build:client-mobile` + `pnpm lint` + playwright-cli 有头浏览器走查（移动 375 断点为主）。
-- 接入期（M2-R）：新增 `apps/api/test/app-*.e2e-spec.ts` 套件 + `VITE_API_MODE=http` 全量回归。
-
-## 8. 修订记录
-
-| 日期 | 摘要 |
-|---|---|
-| 2026-09-12 | 初版：独立服务边界 / Mock-First 架构 / 双端适配 / 鉴权与多身份 / 视图与验证约定（M2-M1 骨架 + 登录注册首页已落地） |
-| 2026-09-12 | M2-M2~M6 全量交付：42 页双端视图（需求/活动+签到/商城/空间/内容/展示页/项目/个人中心族/站内信）、9 域 mock handlers（含可见范围过滤、签到围栏+时间窗、事务下单、冲突 409、grantPoints 积分、pushNotice 站内信触发点）、首页聚合升级（hero+未读入口+全域聚合卡）、双端壳导航点亮；验证 tsc/build/lint 全绿 |
-| 2026-09-12 | **UI 全量统一（对齐后台 Design Contract）**：`--jc-*` 自定义色板 → TDesign `--td-*` 默认令牌（70 文件 / 951 处，零残留）；62 个视图原生控件（button/input/textarea/select/window.confirm）→ TDesign 组件（桌面 `tdesign-vue-next`、移动 `tdesign-mobile-vue`，PascalCase 显式导入）；双端壳改 `HeadMenu` / `Navbar + TabBar`；登录/注册对齐后台品牌区样式（`.login-brand` 等共享类）并补齐壳外组件库 CSS 入口；共享组件令牌化对齐 `t-tag` 视觉；新增 §5 UI 契约（样式/组件/CSS 入口/只读约束） |
-| 2026-09-12 | **按钮/chip 选型纠正**：分类筛选由「Button + `:theme/:variant` 切换」改为选择类组件——桌面 `CheckTag`（light 变体，8 处）、移动 `Tag variant="light"`；顶栏「退出」由 `outline` 改 `variant="text"`（对齐 `AdminLayout`）；首页 hero「注册」去掉 `outline + ghost`、「未读提示」去掉 `outline + ghost`；§5.3 补充 chip/按钮选型规则 |
-| 2026-09-12 | **修复「桌面按钮黑色描边」（真根因）**：全局挂载的 `DevTools` 桶导入 `tdesign-mobile-vue`，把移动端整包 CSS 带进全局样式图；移动端 `.t-button::after{border-style:solid}` 因此误命中桌面 `.t-button`（补 `width/color` 的 `.t-button--default::after` 不匹配桌面的 `--theme-*` 类）→ 桌面按钮 `::after` 取初始值 `medium(≈3px)`+`currentColor`。修法：①`DevTools` 改为零组件库依赖（原生元素 + 令牌），移动端样式回归 `vendor-tmobile` 分包；②`tokens.css` 覆盖 `.t-button.t-button::after{border-style:none}`。实测：桌面页移动端样式表请求 0、`.t-button…::after` 规则由 53 条降为 1 条（仅覆盖条）、按钮 `::after` 边框 `none`；tsc/lint/build 全绿 |
-| 2026-09-13 | **信息架构重构（社区管理者视角）**：`client-mobile` 收敛为**纯移动端**——移除 `views/desktop/**`、`dualView.ts`、`tdesign-vue-next` 依赖（构建产物不再含 `vendor-tdesktop`）；底部 5 Tab 改「首页/项目/社区/广场/我的」；新增 `HomeView`（搜索+轮播+需求发布+双入口+四宫格+最新项目+精选文章）、`ProjectsView`（复用需求排版与数据）、`CommunityView`（社区服务/人才库/企业库 3 Tab，各带搜索）、`PlazaView`（活动/资讯 2 Tab）、`IntroView`（企业入驻/人才登记政策说明+引导登录）；新增 `api/community.ts` 与社区运营 mock（policies/talents）、首页 banner；`ApplicationNewView` 支持 `?type=` 预设；§3 改为纯移动端架构；tsc/lint/build 全绿 |
-| 2026-09-13 | **一致性细化**（信息架构/元素/语词/视觉）：①纳入 git（commit 0dab926）；②`AppShell` Navbar 统一「返回箭头 + 页面标题映射」——5 Tab 无箭头、二级页箭头返回并显示标题，移除各页手写「返回/‹ 返回」控件（双返回）；③加载态统一为 `Loading` 组件（替换 12 处手写「加载中…」占位）；④删除死代码 `DemandsView.vue`；⑤语词统一（EventsView 空态补宾语、DemandNewView「需求广场」语境改「项目」「发布功能」）；⑥`border-radius` 硬编码 4px/12px/999px → `--td-radius-small/large/circle`（16 处） |
-| 2026-09-13 | **四维一致性归一化**（宽度/边距/字号/圆角）：①**令牌有效性审计**——差异比对 src 全部 26 个 `--td-*` 使用 vs mobile 库 215 个定义，揪出 2 个 desktop 惯性失效令牌：`--td-radius-medium`（16 处，mobile 无此令牌→圆角全失效为 0px）、`--td-bg-color-container-hover`（2 处）→ 分别改 `--td-radius-large`(9px) 与 `--td-bg-color-secondarycontainer`；②间距对齐 4px 节奏——`gap:14px→12px`（19 处）、`padding:14px→16px`（m-card）、Home 根容器 `12px 16px 8px→16px`；③字号对齐 TDesign 字体体系——`font-size:11px→12px`（55 处，11 不在 10/12/14/16/18 体系内）；④实测确认：卡片 radius 9px/padding 16px、根容器 padding 16/gap 12、列表 gap 10；tsc/lint/build 全绿 |
-| 2026-09-13 | **顶栏与交互修正（用户实测反馈）**：①Navbar 左侧=社区名（Tab 页）/返回箭头（二级页），右侧=头像+当前身份→铃铛；②社区/广场二级 Tabs 去 `--td-tab-nav-background` 白底（融入页面灰底，内容卡片保留白底）；③搜索全面实时化——统一 TDesign `Search` 组件（shape=round 胶囊、自带清除），Home 聚焦即跳项目页，Projects/Community×3/Events/Articles 输入防抖 300ms 自动检索，移除全部「搜索/查询/重置」按钮；④**当前身份切换**——auth store 新增 `currentIdentity`（持久化 `joinyuu_client_identity`）/`switchableIdentities`（社区个体时不再单列个人用户）/`profileIdentities`（资料卡隐藏个人用户标签）/`activeIdentityLabel`，Me 页新增「当前身份」Cell → ActionSheet 弹出全部可切换身份（当前身份高亮标记），切换后顶栏与 Cell 实时更新；⑤**全局组件化**——首页发布条/双入口/四宫格改 `Button`/`Grid`+`GridItem`，shared 三件套（IdentityTag/StateTag→Tag、EmptyBlock→Empty）与 DevTools 全部回归 TDesign 组件，自绘控件清零；实测：三身份账号切换后顶栏/Cell/持久化全部同步 |
-| 2026-09-13 | **二轮交互修正（用户实测反馈）**：①全局 `.t-search` 白底 + `--td-radius-large`（页面灰底上呈现白色圆角搜索条）；②广场页活动/资讯两 Tab 各加实时 Search（防抖 300ms）；③选项卡滑动区修复——`.top-tabs` 设 `min-height: calc(100dvh - 顶栏 - TabBar - 32px)`，内容不足一屏时卡片下方空白也在手势区内，左右滑动切换可用；④**我的页卡片宽度统一**——根因 `.t-cell-group--card` 自带 `margin: 0 16px` 与页面容器 padding 叠加（313 vs 345），置零 margin 并补 `--td-component-border` 边框，实测 5 卡全部 345px；⑤身份切换弹窗关闭修复——显式 `popupProps.closeOnOverlayClick` + `@close`/`@cancel` 置 visible=false，空白处（遮罩）点击与取消按钮均可关闭 |
-| 2026-09-13 | **三轮视觉与身份修正（用户实测反馈）**：①顶栏右侧改两行——大字=当前身份主名称（auth store 新增 `activeIdentityName`：社区企业→企业名/合作企业→主体名/其余→昵称）、小字=身份标签；②切换身份选项格式化——「个人用户」某某某/「社区企业」某某某有限公司 - 总经理，`UserIdentity` 新增 `enterpriseRole`（mock：芯启半导体-创始人/木白设计-总经理），ActionSheet 回调用 index 反查身份；③搜索框规格重定——移除 `.t-search` 容器背景，改调组件自身 `--td-search-bg-color`(白) + `--td-search-square-radius`(9px)，全部 8 处 Search 去 `shape="round"`（胶囊→与卡片同圆角）；④配色回退默认——删除 `--jc-accent*` 三变量，发布条回 `theme="primary"`、企业入驻卡去橙色 accent，logo/头像去品牌渐变回 Avatar 默认底色（消除"蓝色滤镜"感）；⑤**GridItem 图标渲染修复**——库源码 `renderTNodeJSX("icon")` 仅在 icon prop 真值时执行：GridItem 需 `:icon="true"` 才渲染 `#icon` 插槽，且默认插槽不渲染（文字必须走 `#text`）；⑥**网格边缘对齐**——Grid 根元素内联 `padding: {gutter}px` 导致首尾 item 内缩 8px，`padding: 0 !important` 覆盖（grid-gap 保留），实测首页全部元素边缘 [16,361] 对齐；⑦`.t-grid-item__image` 默认灰底透明化（`--td-grid-item-image-bg-color`）；实测：苏明远账号切换身份后顶栏两行/Cell/持久化同步，tsc/lint 全绿 |
-| 2026-09-13 | **选项卡滑动区真根因修复 + 标题条可视（用户实测反馈）**：①滑动失效真因——Tabs 的 touchstart/move/end 手势监听绑定在 `.t-tabs__content` 上（`swipeable` 默认即为 true），此前 min-height 误设在 `.t-tabs` 根元素，content 下方空白不在监听区；改为 `.top-tabs .t-tabs__content { min-height: calc(100dvh - 顶栏 - TabBar - 80px) }`，实测 content 底部 676 ≥ TabBar 顶 667，卡片下方空白全入手势区；②标题条白底——`--td-tab-nav-background` 改回 `var(--td-bg-color-container)`（作用于 `.t-tabs` 根与 `__wrapper`，标题条恢复"按钮"可视性），内容区回填 `--td-bg-color-page` 灰底保持「灰底+白卡片」层次；③标题条与搜索框加 12px 间距（`.tab-search margin-top`，社区/广场两页）；实测几何+截图确认，tsc/lint/build 全绿 |
-| 2026-09-13 | **全页面与流程细化（Mock，v6）**：①工程——401 改 `joinyuu:unauthorized` 事件 + history 跳登录（`main.ts` 清会话、带 redirect）、`EnterpriseRecord` 移入 `types/`、删 `stores/breakpoint.ts` 与 `vendor-tdesktop` 死分块；②签到——DevTools 增位置注入四场景（场地内/场地外 500m/关闭定位/清除）+「签到时间窗对齐当前」、失败文案按 `checkinOpenMin` 动态提示、活动日期相对「今天」生成（报名/签到场景不再随日期失效）；③订单——下单确认弹层（余额预览 + 积分不足前置）、`confirmOrder` 确认收货（缺口 §7.1-10，契约 `POST /mall/orders/:id/confirm`）、DevTools「待发货 → 已发货」模拟；④我的预约取消（Dialog 二次确认）；⑤展示页申请入口（社区·企业库卡片，成员可见）+ 投稿图片上传占位 + 驳回稿「重新投稿」；⑥资料编辑全字段落库（性别/简介）并同步昵称、积分流水防抖搜索；⑦首页消费 `hotEvents`/未读角标/`siteName`+`siteSlogan`（AppShell 品牌读 config.siteName，铃铛冷启动兜底刷新）；⑧mock 数据一致性（人才库 uid/姓名、政策 `PL` 前缀、字典补 industry/goods_category、首页活动卡由活动列表派生）；tsc/lint/build 全绿 |
-| 2026-09-13 | **Pixel 10 仿真 e2e 走查（v7，chrome-devtools MCP 412×924@2.625）**：全流程通过（登录边界/浏览搜索/需求/签到四态/商城收发货/预约取消/投稿/站内信/展示页/身份与开关/守卫与 401）。**修复**：①需求截止日期 Picker 缺 `format`/`start`（默认 2016 年）→ `format="YYYY-MM-DD"` + `:start=今天`；②站内信单条已读角标不减（store 与 mock 共享引用）→ 读前快照 `wasUnread`；③DevTools 开关未同步 mock `appConfig`（写端点不拦截）→ `onToggle` 同步；④`AppShell` 的 `<router-view>` 过渡改官方 slot 写法（消除 Vue Router 弃用告警）；⑤mock 时间戳统一 `nowStamp()`（`YYYY-MM-DD HH:mm`，覆盖下单/发货/完成/投稿/预约/申请/注册/通知/积分流水） |
-| 2026-09-13 | **点击式 e2e 二轮（v8，导航元素专项）**：全程仅用界面模拟点击（进入/返回均不走 URL）。修复 `AppShell`：①`isTab` 改精确匹配 Tab 路径——此前 `/me/**` 12 个子页被误判为 Tab 页（无返回箭头、无标题）；②`onTabChange` 改 `route.path` 精确比较——此前在 `/me/orders` 等子页点所属 Tab 无响应，现在点击即回 Tab 根。观察项：登录/注册页无「返回首页」入口；展示页申请提交后从展示页返回会回到申请页（history 语义） |
-| 2026-09-13 | **企业合作 / 人才登记流程重构（v9）**：①首页双入口「企业合作 / 人才登记」；②`/intros/enterprise` 企业合作 hub（企业入驻/合作伙伴两方式对比 + 选择态 + CTA「成为社区企业/成为合作伙伴」）；③独立介绍页 `/intros/settle|cooperation|talent`（流程步骤/适合人群/所需材料 + CTA）；④独立 schema 驱动表单页 `/applications/settle|cooperation|individual`（`components/forms/ApplicationFormRenderer.vue`：text/textarea/select(Picker)/number/date(DateTimePicker)/upload(Upload + 自定义 requestMethod)，必填校验与提交）；⑤上传契约 `api/uploads.ts`（mock 转 data URL；仅图片/PDF ≤10MB；http 分支 `POST /api/app/uploads`）；⑥身份绑定申请保留 `/applications/new`；⑦`IntroView` 改为按路径解析 kind（修复静态路由下 talent/cooperation 均渲染 settle 的缺陷）；缺口登记见 m2-client-plan §7.1-14/6、§7.2-5 |
-| 2026-09-13 | **发布需求细化（v10）**：①发布需求类型 hub（`DemandPublishHubView`：「找人干活 / 找投资 · 合作」两卡片对比 + 单选 + CTA 联动，未选禁用）；②两类独立表单（`/demands/new/task|invest` 薄壳 + `components/forms/DemandFormView` 按 `kind` 渲染；task：期望交付/预算，investment：所属行业/希望获得/可提供回报；DateTimePicker `format="YYYY-MM-DD"` + `start=今天`）；③`Demand` 增 `kind` 与专属字段、`DemandCreatePayload` 增 `kind/categoryDict`，mock 校验与种子数据同步；项目列表/详情/我的需求展示类型标签与专属字段；④`constants/demand.ts` 统一类型文案；⑤修复 `ProjectsView` 搜索回调 `v` 未定义（输入即 ReferenceError）；缺口见 m2-client-plan §7.1-15 / §7.2-6 |
-| 2026-09-13 | **发布需求三类细化（v11）**：①hub 扩为三类（找人干活 / 找投资 / 找合作），每类含 tagline + 推进流程步骤（找人干活：发布需求→平台审核→响应接单→立项协作→结项交付；找投资：…→公开展示→投资洽谈→立项协作→结项交付；找合作：…→公开展示→建立联系→达成合作）+ 4 条适用情形，CTA 按选中类型联动；②新增 `/demands/new/cooperation` 表单页（`DemandCoopFormView` 薄壳，字段：合作需求标题/业务现状与瓶颈/合作领域（字典 chips）/业务瓶颈与合作诉求/期望合作方式（选填）/可提供资源与回报（选填）/截止日期/发布身份）；③`DemandFormView` 按 kind 渲染三类字段并在表单顶部展示「审核与推进流程」流程卡；④需求详情增合作专属字段块（合作诉求/期望合作方式/可提供资源）；⑤种子：D4012 改合作类（含 bottleneck/partnershipMode/returnOffer）、新增已发布「找合作」D4013；⑥`AppShell` 标题「找投资」「找合作」与路由同步；缺口 §7.1-15 与 api-app-design §6 更新为三值 |
-| 2026-09-13 | **发布需求流程标签调整 + 控制台降噪（v12）**：①hub 与表单的流程 chips 移除「平台审核/公开展示」（自用户视角只保留推进节点），圆角改 `--td-radius-default`（圆角矩形）；②修复控制台大量 Vue warn：首页 `GridItem :icon="true"`（prop 类型应为函数）改为 `#image` 插槽承载图标；③`main.ts` 增加 a11y 修补（MutationObserver 为 TDesign 内层 input/textarea 补 id/name、label 关联 for），控制台 warn/issue 清零 |
-| 2026-09-13 | **我的展示页自助编辑（v13）**：「我的」当前身份下方新增「编辑展示页」（仅社区个体/社区企业可见，note 显示「个人/企业」）；新增 `/me/showcase`（`MyShowcaseView`，双目标切换 + 个人/企业表单）；契约 `GET/PUT /api/app/me/showcase`（`api/enterprises.ts` fetchMyShowcase/updateMyShowcase）；mock 保存即发布——企业回写展示页并置 `showcaseStatus='published'`，个人写个人展示页并联动社区人才库（talentMembers）；缺口 §7.1-16/§7.2-7/§7.4-9 与 api-app-design §5 已登记；tsc/lint/build 全绿 + 点击式走查（陈屿人才库联动、苏明远双目标与企业校验、周慕深不显示） |
-| 2026-09-13 | **展示页更名「名片」+ 企业名片/企业管理（v14）**：①全局 UI 展示页→名片（企业名片/个人名片/申请企业名片）；②「我的」按**当前身份**显示——社区个体→「个人名片」（查看/编辑）、社区企业→「企业名片」（联系人可编辑、非联系人只读并提示负责人）、企业联系人额外显示「企业管理」；③新增 `/me/cards/individual`（`MyIndividualCardView` 预览+编辑）、`/me/cards/enterprise`（`MyEnterpriseCardView` 预览+联系人可编辑）、`/me/enterprise`（`EnterpriseManageView`：基本信息 / 转移负责人（后台「联系人」）/ 邀请成员 / 申请退驻·注销），删除 `MyShowcaseView`；④契约 `api/enterprises.ts` 8 函数：fetchMyCards / updateIndividualCard / updateEnterpriseCard / fetchMyEnterprise / updateMyEnterprise / transferEnterpriseContact / inviteEnterpriseMember / applyEnterpriseExit；⑤mock `EnterpriseRecord.members` 改成员对象（uid/name/role/phone）并新增 `contactUid/contactName`，新增 `enterpriseExitApplications` 存储；转移后原联系人即时失去企业管理与名片编辑权限；tsc/lint/build 全绿 + 点击式走查（陈屿个人名片、苏明远企业名片/邀请成员/退驻申请、林晚转移给周予安后权限回收与只读、周慕深无入口、控制台零告警） |
-| 2026-09-14 | **项目页需求分类选项卡 + 滑动修复（v15）**：①项目页改用 TDesign `Tabs` 三类需求（找服务 / 找投资 / 找合作），搜索/分类/分页按当前类型筛选，切换类型重置筛选（找投资用行业字典）；`GET /api/app/demands` 增可选 `kind` 筛选参数（api-app-design §6）；②`task` 用户可见文案统一由「找人干活」改「找服务」（发布 hub / 表单 / 标题映射 / 项目列表；类型值与路由仍为 `task`）；③**滑动体验对齐社区页**——沿用 TDesign 原生手感（滑动中越过 40px 即切换），但每次手势至多切换一项：修复 1.16.2 在每个 `touchmove` 连续切换导致的 1↔3 跳项；首尾不循环，纵向滚动/多指/取消手势不切换，分类标签横滚不触发；④登录页新增「暂不登录」访客入口（`replace` 回首页，不执行登录逻辑）；⑤滑动区覆盖 `.t-tabs__content` 撑满的整个内容区（含卡片下方空白，与社区/广场一致）；移除项目页「已加载全部 N 条」尾提示；tsc/lint/build 全绿 + 浏览器验证（滑动逐项切换、点击切 Tab、多指与取消手势、控制台零告警） |
-| 2026-09-14 | **选项卡圆角 + 头像去描边 + 身份资产隔离（v16）**：①项目/社区/广场选项卡白条**四角**统一 9px 圆角（`tokens.css`：`.top-tabs` 根 `background: transparent` + `overflow: hidden`，白底由 `.t-tabs__wrapper` 承担并 `border-radius: var(--td-radius-large)`，避免圆角缺口露白）；②「我的」资料卡头像移除双层描边环（删除 `.avatar` box-shadow）；③**积分/经验按当前身份隔离**——社区个体：我的积分 + 我的等级；社区企业：仅企业等级（企业经验）、无积分；个人用户：仅我的积分、无等级；合作企业：均无。Me 页统计位（社区企业显示 Lv.x 企业等级）与「我的资产」入口、经验页标题（社区个体→我的等级 / 社区企业→企业等级）与取数、积分页空态均按 `auth.activeIdentity`；mock 新增 `enterpriseExperienceByEid`（E2001 芯启 Lv.3 同行先锋 / E2004 木白 Lv.2 启航伙伴），`fetchExperience(identityType)` 按身份返回（契约 `GET /me/experience-records?identity=`，缺口 §7.1-7 与 api-app-design §5 已更新）；点击式走查四身份矩阵（苏明远 社区个体↔社区企业、林晚 个人用户↔社区企业、周慕深 个人用户↔合作企业）与控制台零告警；tsc/lint/build 全绿 |
-| 2026-09-14 | **「我的」菜单按身份严格隔离 + 签到命名（v17）**：①菜单隔离矩阵——社区个体：个人名片/我的积分/我的等级/我的项目 + 个人记录（需求·响应·报名·订单·预约·投稿·申请）；个人用户：我的积分/我的项目 + 个人记录（无名片、无等级）；社区企业：企业名片/企业管理（联系人）/企业等级/我的项目 + 记录（我的需求）；合作企业：无资产组（隐藏积分/等级/订单）+ 记录（我的需求·我的申请）；编辑资料/站内信/退出对所有身份保留；②修复「幽灵身份」——`stores/auth.ts` 的 `activeIdentity` 与 `apply()` 改按 `switchableIdentities` 判定（被社区个体覆盖的个人用户不再滞留为当前身份）；③UI 文案「位置签到」→「签到」（活动详情按钮、签到页成功提示），`AppShell` 标题前缀改为 `/check-in`（修复此前永不命中、签到页标题落到「活动计划」的缺陷）；tsc/lint/build 全绿 + 点击式走查（苏明远 社区个体↔社区企业、周慕深 个人用户↔合作企业 菜单矩阵；陈屿 签到页标题「签到」；控制台零告警） |
-| 2026-09-14 | **合作企业业务能力对齐 + 主体快照（v18）**：①合作企业可发布全部类型需求——发布表单「以哪个身份发布」默认当前身份（与预约表单口径一致）；②空间预约新增「以哪个身份预约」主体快照（`SpaceReservation.identityType/subjectName`，`ReservationCreatePayload.asIdentity`）：社区企业/合作企业均可预约会议室等空间，「我的预约」卡片展示身份标签与主体名；③Me 菜单补「我的预约」（社区企业：需求·预约；合作企业：需求·预约·申请）；④mock：需求 `publisherName` 按身份取企业名/组织名（个人取昵称），企业预约种子 SR5101 标注社区企业·芯启半导体；契约 api-app-design §6/§8 同步；tsc/lint/build 全绿 + 点击式走查（周慕深 合作企业发布找服务需求、以合作企业预约共享会议室 A 并显示 [合作企业] 云径数据；苏明远 企业预约显示 [社区企业] 芯启半导体） |
-| 2026-09-14 | **身份模型收敛：弱化企业与个人隔离（v19）**：①**移除全局「当前身份」**——`stores/auth.ts` 删除 `currentIdentity`/`switchIdentity`/`activeIdentity*`/`switchableIdentities` 与 `joinyuu_client_identity` 持久化，顶栏只显示昵称；②身份仅作为**发布/提交归属**在表单内单选（需求/预约表单 chips：「个人用户 · 陈屿 / 社区个体 · 陈屿 / 社区企业 · 芯启半导体」，统一 `identityOptionLabel`；发布后列表展示的主体即发布方）；③「我的」页统一菜单（不再按身份隔离）：个人名片（社区个体）/ 我的积分 / 我的等级（社区个体）/ 我的项目 / 全部记录 / 编辑资料 / 站内信；④**企业管理**收敛：仅当用户是某企业负责人时显示入口，列表卡片展示所有关联企业（负责人/成员 tag + 名片发布状态），详情页（负责人可编辑信息、转移负责人、邀请成员、申请退驻；成员只读——表单禁用 + 提示负责人）；⑤路由与契约收敛：新增 `/me/enterprises`、`/me/enterprises/:id`，移除 `/me/enterprise` 与 `/me/cards/enterprise`（删除 `EnterpriseManageView`/`MyEnterpriseCardView`，新增 `EnterpriseListView`/`EnterpriseDetailView`）；`api/enterprises.ts` 改为 id 维度（fetchMyEnterprises / fetchEnterpriseDetail / updateMyEnterprise / transfer / invite / exit），移除 updateEnterpriseCard；⑥经验页按个人维度取数（社区个体→我的等级，否则空态），`identity` 参数保留兼容；tsc/lint/build 全绿 + 点击式走查（苏明远：无当前身份/企业管理 1 家/列表 → 详情编辑保存 → 转移江晚晴后变只读；需求与预约表单身份 chips；我的等级 Lv.3 岛屿开拓者；控制台零告警） |
-| 2026-09-14 | **「企业管理」升级为「关联身份」（v20）**：①「我的」页入口更名「关联身份」（note=身份个数，无关联身份时隐藏）；②新增 `/me/identities`（`IdentityListView`）以卡片列出**全部身份**——社区个体（副标题 Lv.x 等级，点击进个人名片）+ 各关联社区企业/合作企业（角色 负责人/成员 + 名片发布状态，点击进企业详情），支持同类型多个；③契约：列表端点 `GET /me/enterprises` → `GET /me/identities`（`MyIdentitySummary`），企业详情与操作（`GET/PUT /me/enterprises/:id`、transfer/invite/exit）不变；④mock 由账号身份 + 企业成员关联合并生成（社区个体卡 + 企业卡；无企业记录的合作企业组织为无入口信息卡）；删除 `EnterpriseListView`；⑤a11y 修补：`main.ts` 字段 id 改用全局递增序号（修复按索引命名撞号），需求/预约/投稿/资料/申请等表单的装饰性分组 `label` 改 `span.field-label`（控制台 form-field issue 清零）；tsc/lint/build 全绿 + 点击式走查（苏明远 2 个身份：社区个体→个人名片、芯启半导体→详情；周慕深 1 个：合作企业·云径数据；陈屿 1 个：社区个体；新居民无关联身份不显示入口；控制台零告警） |
-| 2026-09-14 | **需求表单调整（v21）**：①移除「截止日期」（`deadline` 不再收集；日期文案 `demandDateText` 优先「预期交付」、回退旧「截止」，项目列表/详情/首页同步）；②「找服务」新增「预期交付日期」（`deliverBy`，必填；Picker 下限今天）；③三类需求新增「联系人 / 联系电话 / 联系邮箱」（前两项必填：电话校验 11 位；邮箱选填、校验格式；需求详情新增联系人信息块）；④发布身份选项：持社区个体身份时不再单列「个人用户」（`auth.hasCommunityIndividual` 过滤）；⑤「以哪个身份发布」更名「发布身份」；⑥输入框圆角修复（`tokens.css` 全局 `.t-input`/`.t-textarea` 9px，与搜索框同规格）；种子 D4001/D4003/D4004/D4005 补 `deliverBy` 与联系人，首页卡与详情同步；契约 §7.1-15 与 api-app-design §6 同步；tsc/lint/build 全绿 + 点击式走查（task 表单字段/电话与邮箱校验 Toast/提交成功、投资表单无日期项、项目列表与首页「预期交付」、D4001 详情联系人、控制台零 issue） |
-| 2026-09-14 | **头像 / 企业 Logo / 成员职位（v22）**：①「我的」移除「个人名片」入口（功能并入 关联身份 → 社区个体 → 个人名片）；②顶栏右侧仅显示头像（移除昵称文字，`nav-me` 仅 Avatar）；③**头像更换**——`ProfileEditView` 增头像上传（TDesign Upload → `POST /uploads`，mock data URL；`PUT /me` 增 `avatar`），`AuthResult`/`UserProfile`/auth store 增 `avatar`，保存后顶栏与「我的」同步显示图片；④**企业 Logo**——企业详情「企业基本信息」增 Logo 上传（负责人可上传、成员只读），`EnterpriseRecord.logo` + 企业详情/展示页返回，展示页 banner 显示 Logo；⑤**成员职位**——邀请成员需指定职位（`InviteMemberPayload.role` 必填），负责人点击成员条目修改职位（新增 `PUT /me/enterprises/:id/member-role`，`UpdateMemberRolePayload`）；tsc/lint/build 全绿 + 点击式走查（头像上传保存后顶栏/我的显示；Logo 上传保存后社区展示页 banner 显示；江晚晴职位改「技术负责人」；邀请「顾青·市场专员」入列；控制台零 issue） |
-| 2026-09-14 | **个人/企业名片简历化 + 头像同步与直传（v23）**：①**个人名片简历化**——`MyIndividualCard` 扩为分段字段（年龄/政治面貌/行业经验 + `education/work/projects/honors/socials/customLinks` 条目数组），`MyIndividualCardView` 编辑器支持每段添加/删除；保存后公开到人才库；新增 `/talents/:uid`（`TalentCardView` 简历式精致排版：头像/等级/简介/技能/行业经验/教育·工作·项目经历/荣誉/链接），人才库列表卡片带头像并可点入；②**头像同步**——个人名片预览与公开人才名片展示个人资料头像；③**企业名片丰富**——`EnterpriseRecord` 增 `foundedAt/website/address/services/advantages`（企业详情负责人可编辑、成员只读），`EnterpriseShowcaseView` 精致排版（Logo 横幅 + 成立于 + 主营业务 + 核心优势 + 企业信息办公地点/官网 + 成员）；④**头像/Logo 直传**——新增共享组件 `AvatarUploader`（点头像/Logo 直接选图上传替换，隐藏 file input，圆形/方形共用），资料编辑与企业 Logo 移除边上上传框；⑤负责人可修改**自己**的成员职位（成员条目全部可点）；契约 api-app-design §5/§8 与 §7.1-12/16 更新；tsc/lint/build 全绿 + 点击式走查（头像直传保存后同步顶栏/个人名片；陈屿人才名片全部分段渲染（教育/工作/项目/荣誉/链接）；企业字段编辑与展示页渲染；负责人改自己职位为「首席执行官」；控制台零 issue） |
-| 2026-09-14 | **企业名片细化 + 底栏归属 + 积分入口（v24）**：①「企业展示」标题更名「企业名片」（AppShell），成员 chips 由 `--td-radius-circle` 椭圆改 `--td-radius-small` 圆角矩形；②**底栏高亮修复**——`/enterprises/**`、`/talents/**` 归属「社区」Tab（AppShell `TAB_ALIASES`）；③**移除企业成员**——成员管理弹层新增「移除成员」（Dialog 二次确认），仅负责人可操作且负责人本人提示「需先转移负责人」；新增契约 `POST /me/enterprises/:id/remove-member`；④「我的积分」余额卡下新增「去积分商城兑换」按钮 → `/mall`；⑤**企业详情改管理视图**——头部（Logo/名称/行业·规模·成立时间/角色）+「编辑企业名片」入口 + 企业负责人 / 企业成员 / 退驻注销；企业基本信息编辑独立为 `/me/enterprises/:id/edit`（`EnterpriseCardEditView`：Logo 直传 + 名称只读 + 行业/规模/成立时间/官网/办公地点/简介/主营业务/核心优势；仅负责人可进，保存后返回详情）；tsc/lint/build 全绿 + 点击式走查（企业名片标题与成员 3px 圆角、两页底栏「社区」高亮、移除江晚晴后成员 1 人、负责人本人弹层提示、积分页按钮跳商城、编辑企业名片保存并返回详情、Logo 直传生效；控制台零告警） |
-| 2026-09-14 | **全量 e2e 覆盖 + 两处缺陷修复（v25）**：登录边界（验证码/冻结/不存在/成功/「暂不登录」/守卫 redirect 与 401 事件回跳）、首页/广场/社区（检索、政策弹层、人才库公开名片、企业库名片状态）、项目三选项卡与需求响应、发布需求全校验链与提交、活动报名/取消与**签到四态**（定位失败/围栏外/关闭定位/成功+10 与去重）、商城下单-发货-收货、空间预约与取消、投稿与重新投稿、名片（关联身份/个人名片编辑并公开/企业详情/编辑企业名片/成员职位/退驻）、站内信（筛选/跳转/全部已读）、DevTools 开关关停态。**修复**：①`stores/auth.ts` 新增 `refreshProfile()`（GET /me 同步昵称/头像/积分），Me/我的积分/商城列表/商品详情进入时刷新（积分变动后余额不再滞留旧值）；②`SpaceReserveView` 预约身份选项按 `hasCommunityIndividual` 过滤「个人用户」（与需求表单一致） |
-| 2026-09-14 | **「我的」资料卡去重（v26）**：移除资料卡右侧积分统计块（与「我的资产 → 我的积分」重复），`.stats` 样式清理；tsc/lint 全绿 |
-| 2026-09-14 | **企业成员邀请闭环 + 成员手机号维护（v27）**：①成员管理弹层新增手机号修改（`PUT /me/enterprises/:id/member`，职位 + 手机号，11 位校验/冲突 409）；②邀请成员改为生成邀请记录 + 站内信（未注册 400、已是成员/重复邀请/邀请自己 409）；③新增邀请详情页 `/me/invitations/:id`（`InvitationView`，企业概要 + 邀请信息 + 确认加入/拒绝；接受写入成员并通知负责人，拒绝仅记状态；仅被邀请人可处理）；④企业详情展示待接受邀请（仅负责人）；站内信触发点：邀请发送/接受/拒绝/成员资料更新；缺口 §7.1-17 / §7.4-10 / 后台 §7.2-7 增补，api-app-design §5 同步 |
-| 2026-09-14 | **企业成员权限分配 + 企业库列表去成员（v28）**：成员管理弹层新增 8 项权限勾选（发布需求/响应需求/空间预约/文章投稿/管理成员/邀请成员/分配权限/编辑企业名片；负责人默认全部并显示说明）；`permissions` 经 `PUT /me/enterprises/:id/member` 保存（需 assign_permission；职位/手机号需 manage_members），mock 对 invite/remove-member/企业信息编辑分别校验 invite_member/manage_members/edit_card；企业详情按 `myPermissions` 显隐入口与操作；被授权成员在需求发布/空间预约表单自动出现「社区企业 · <企业>」身份选项（`asEnterpriseId` 代企业主体，校验 publish_demand/space_reserve，撤销权限后选项消失）；**企业库列表移除成员行**；tsc/lint/build 全绿 + 浏览器走查 |
-| 2026-09-14 | **成员管理改为独立页（v29）**：原底部弹窗内容（职位/手机号 + 8 项权限）超出视口无法上下滚动 → 新增 `/me/enterprises/:id/members/:memberKey`（`EnterpriseMemberView`：成员头部 + 成员信息 + 权限勾选 + 保存/移除；负责人显示默认全权提示与退出提示；保存/移除后返回企业详情）；企业详情成员行改路由跳转（memberKey = uid 或姓名）；AppShell 标题「成员管理」；邀请成员仍为弹窗 |
-| 2026-09-15 | **实名认证入口（v30）**：「编辑资料」页新增「实名认证」Cell（note 已认证/未认证）→ `/me/realname`（`RealNameView`：未认证表单 = 真实姓名 + 18 位身份证号（含校验码校验）；已认证 = 脱敏展示 姓名首字 + 证件号前 4 后 4 + 认证时间，提示修改需联系运营）；契约 `GET/PUT /me/realname`（缺口 §7.1-18，真实后端需三要素核验）；mock `accounts` 增 `realName/citizenId`（苏明远、林晚已认证种子），提交即通过并发站内信；浏览器验证 新居民 未认证→非法证件号拦截→通过后脱敏展示 |
-| 2026-09-15 | **搜索、社区服务与投稿体验细化（v31，Mock）**：首页搜索接入 `/search` 全局搜索页，聚合项目、活动、文章、社区服务和人才；社区服务增加分类、精选专题与服务指引层级，继续经 `fetchPolicies` 契约取数，后续由后台内容管理发布；投稿支持封面上传、段落式正文和段间插图，图片复用 `POST /api/app/uploads` 契约，详情页支持 Markdown 图片行渲染；企业入驻/合作伙伴/人才登记、身份绑定与企业名片申请统一强化说明区、字段分组与移动端视觉；tsc/lint/build 全绿 |
-| 2026-09-15 | **Mock 验证基础设施（v32）**：新增 `mock/runtime.ts` 统一版本化快照、稳定序列号、固定基准业务时钟和网络场景；成功 Mock 请求统一提交快照，DevTools 可模拟正常/慢网/离线/500/超时、推进时间及进入签到窗口；新增 `mock/operations.ts`，集中模拟需求、申请、活动报名、空间预约、投稿五域审核，联动积分、身份、报名容量、空间占用和站内信；首页聚合改读实时业务状态。M2-R 保持未启动 |
-| 2026-09-15 | **需求撮合闭环（v33）**：响应记录增加处理状态/审核时间/驳回原因与响应方快照，响应者可撤回待处理响应（撤回后可重投）；「我的需求」对自己的已发布需求加载响应列表并支持按状态筛选，可填写原因驳回或确认接受；接受后需求进入 `projected`，生成同一项目 ID 的需求发起方与承接方记录，创建合作方案确认/项目交付两个里程碑，承接方获得项目立项积分与经验（企业身份记入企业经验），双方及其他响应方收到对应站内信；新增项目详情 `/me/projects/:id`（参与双方、来源需求、进度、里程碑提交/验收），全部里程碑验收通过自动结项并发放项目结项经验；需求详情允许查看已立项需求；Mock 快照升级为 `joinyuu_client_mock_v33`；tsc/lint/build 全绿。M2-R 保持未启动 |
-| 2026-09-15 | **审核与履约闭环（v34）**：需求 / 投稿 / 申请审核中可撤回（`withdrawn`），驳回/撤回后支持修改重提并保留原编号（需求表单、投稿编辑器、schema 申请表单、身份绑定申请均支持 `?revise=<id>` 回填；申请附件需重新上传）；商城引入履约类型 `Goods.fulfillment`（实物 physical / 数字券码 voucher / 服务权益 service）：实物待发货→发货→确认收货，券码下单即发码并可在订单复制，服务权益待使用→核销（新增 `useOrder`），订单状态新增 `pending_use`；tsc/lint/build 全绿 |
-| 2026-09-15 | **信任与治理（v35）**：需求联系方式仅登录用户可见（游客提示「登录后查看」）；个人名片新增年龄/政治面貌公开开关与「预览公开名片效果」入口，公开人才名片按设置过滤敏感字段；需求 / 文章 / 企业名片支持举报（`ReasonSheet` 预设原因 + 补充说明，记录进 Mock 举报队列并在 DevTools 展示待处理数）；驳回需求 / 投稿支持一次性申诉并回显申诉状态；企业治理——成员邀请 7 天有效期（过期展示、不可处理）与撤销，负责人转移改为请求-接受（目标成员在「关联身份」页接受后生效，发起方可撤销，通知双方）；tsc/lint/build 全绿 |
-| 2026-09-15 | **系统性 UX（v36）**：`useAsyncList` 增加请求序号（快速切换筛选/搜索时旧请求不覆盖新结果）；路由 `scrollBehavior` 返回恢复滚动、新页置顶；底部 Tab 归属集中映射（`TAB_BY_SEGMENT`，项目/社区/广场/我的二级页稳定高亮）；Navbar 返回、铃铛、头像与空态重试按钮触控目标 ≥44×44px；登录/注册补充可见字段标签；需求发布与投稿草稿自动保存（`useDraft` + sessionStorage，支持恢复/放弃，提交后清除）；`EmptyBlock` 支持重试动作并接入 7 个关键页面；全局搜索单数据源失败时降级为部分结果 + 提示；tsc/lint/build 全绿 |
-| 2026-09-15 | **激活与留存（v37）**：首页新增新手任务清单（绑定社区身份 / 实名认证 / 发布需求 / 响应需求 / 报名活动，完成自动隐藏、可「不再提示」）；全局搜索新增已发布企业与空间结果、分类计数 chips 与最近搜索（localStorage，可清空/复用），埋点计数 search；新增收藏（需求 / 文章 / 活动详情可收藏）与 `/me/favorites` 我的收藏页，Me 页新增入口；缺货商品支持「到货提醒」订阅；新增 Mock 埋点漏斗（12 项计数，DevTools 面板可见）；tsc/lint/build 全绿。M2-R 保持未启动 |
-| 2026-09-15 | **全量体验整改 + 产品级 Mock 闭环（v38）**：①体验兜底——`useDraft` 修复（放弃不回写、空内容不产生草稿、页面隐藏落盘、程序化回填不算修改）；`useUnsavedGuard` 为申请/资料/企业名片/个人名片提供离开保护；返回导航按路由历史判断，保存后显式 `replace` 目标页；`.m-content` 补底部安全区、壳/登录/注册改 `100dvh`、Navbar 开启顶部安全区；约 30 处错误态接入「重试」动作；②交互一致性——全局搜索请求序号 + `router.replace` 同步 `q`；列表页 KeepAlive（Home/Search/Projects/Community/Plaza/Events/Articles/Mall/Spaces）+ `useRefreshOnActivate` 激活刷新；预约页空间与时段加载失败可重试并做请求防竞态；积分流水分页（20/页 + 加载更多 + 总数）；退出/取消报名/拒绝邀请等危险操作二次确认；全局小号按钮 ≥44px、筛选 chips ≥32px；需求/申请/实名行内错误与登录回车提交；Tab「我的」未读角标；我的需求并行加载响应 + 处理中禁用 + 单条失败重试；兑换成功改为「查看订单」入口；游客可浏览商品详情、投稿入口引导登录；③可访问性与设备——`v-pressable` 指令为卡片补 role/tabindex/键盘激活，`announce()` + EmptyBlock 播报，`router.afterEach` 更新 `document.title`，12px 字号下限，图片 `loading="lazy"`，需求详情状态文案按状态分支，ReasonSheet 校验通过才关闭，`prefers-reduced-motion` 关闭轮播自动播放，离线横幅 + 请求 15s 超时与网络错误文案，Tab 再次点击回顶，社区 Tab 切换不再触发隐藏 Tab 请求，商城错误态去除双按钮；④产品级 Mock 闭环——`/me/addresses` 收货地址簿（实物订单必选地址并写快照）、`/forgot-password` 找回密码与 `/me/security` 账号与安全（改密/换绑手机号/注销申请/数据导出/我的举报/屏蔽名单）、`/privacy` 用户协议与隐私政策（注册须勾选同意并留痕）、活动候补与自动递补/开始前 24h 取消时限/会后反馈、通知偏好开关、订单取消（退积分 + 回补库存）与券码 30 天有效期、空间维护/最长时长/提前天数/开放时间规则、里程碑交付证据与发起方退回、举报状态回写与屏蔽用户、文章点赞与评论；Mock 快照仍为 `joinyuu_client_mock_v33`（新增状态同版本向后兼容）；API/admin 跟进方法与验收标准见 `m2-client-plan.md` §7.7；tsc/lint/build 全绿。M2-R 保持未启动 |
-| 2026-09-15 | **体验补全 + E2E 回归修复（v39，纯客户端）**：①文章——浏览量按浏览器 + 业务自然日去重（刷新不增长）、`utils/readingHistory.ts` 本机最近阅读（文章列表 chips、可清空）、系统分享/复制链接；②活动——`utils/ics.ts` 生成 `.ics` 并下载（添加到日历）；③列表——`components/ListSkeleton.vue` 骨架屏接入 8 个浏览页，`PullDownRefresh` 接入首页/项目/社区/广场；④无障碍——skip link、路由切换聚焦 `#main`、`v-pressable` 扩展到首页宫格与更多卡片、AvatarUploader 键盘可达；⑤安全与占位——企业官网 http(s) 校验（`EnterpriseCardEditView` 行内 + mock handler 兜底）、展示页仅对合法链接渲染 href、文章封面/正文与编辑器图片 aspect-ratio 占位；⑥筛选与信息——项目页 `kind/category/q` 同步 URL（KeepAlive 下不重建）、7 个列表「共 N 条」、社区政策版本化字段（version/effectiveAt/publisher/attachments）展示、站内信「待处理/全部/已归档」+ 单条归档/恢复、个人名片/资料编辑/预约行内错误、首页按社区企业身份显示「企业名片」入口；⑦**第一轮 E2E 修复**：模拟网络异常时路由守卫会话恢复 reject 导致整页空白（`auth.ensureRestored` 失败降级并允许重试）、`/forgot-password` 改非 guestOnly（登录态重置后回 `/me/security`）、预约通知缺分隔符与「管理员」措辞、历史项目「需求发起方未记录」；⑧**第二轮 E2E 回归修复**：44px 触控目标误加在 SVG 图标上导致导航铃铛/返回箭头被拉伸（改为按钮容器 44px、图标保持 22/24px）、tokens 全局小号按钮抬升导致投稿编辑器「插入段落/插入图片」高度不一致（统一 44px）；Playwright headed 走查 22 页零控制台错误；tsc/lint/build 全绿。M2-R 保持未启动 |
-| 2026-09-16 | **八大功能新增（v42，纯客户端 Mock）**：①活动电子票 `/events/:id/ticket`（演示二维码、候补位次、取消失效）与「我的报名」入口；②需求沟通 `/demands/:id/messages`（发布方/响应者留言板，「我的响应」沟通入口）；③项目协作 `/me/projects/:id/collab`（任务清单 / 文件链接 / 讨论区）；④积分任务中心 `/me/tasks`（5 项任务、领取积分、Mock 通知）与积分规则 `/mall/rules`；⑤个人数据看板 `/me/stats`（积分收支与参与度）；⑥社区服务在线申请（政策弹层「在线申请」→ `/me/services` 表单与进度）；⑦企业工作台 `/me/enterprises/:id/workbench`（企业名义响应记录）与需求「代企业响应」；⑧实名认证分级权益展示；「我的」新增任务/看板/服务申请/企业工作台入口；全场景 headed E2E 三轮覆盖 64 页零失败（截图 `/tmp/opencode/e2e/roundN`）；tsc/lint/build 全绿 |
-| 2026-09-16 | **三轮复审整改（v41，纯客户端）**：KeepAlive 列表页响应 URL query（搜索「查看更多项目」带关键词）、社区 `?tab=talent/enterprise` 深链首屏加载、服务分类全量派生、活动重复计数、登录页忘记密码入口、积分流水加载更多失败回退并保留列表、邀请有效期接 Mock 时钟、预约时长受开放时段约束、占位文本对比度提升；新增商城订单评价（1~5 星+文字，每单一次）、账号注销 7 天冷静期与撤回、图片失败兜底；举报原因不预选、项目空态一键清除筛选；headed 实测零控制台错误，tsc/lint/build 全绿 |
-| 2026-09-16 | **产品/UX 复审整改（v40，纯客户端）**：①活动——DevTools 运营模拟「取消活动并通知报名者 / 活动改期 +1 天并通知」（`mock/operations.ts` `cancelEventAsOps/postponeEventAsOps`），`EventStatus` 增 `cancelled`，详情页取消横幅（"该活动已被取消，报名已同步取消"），报名列表 `eventStatus/rescheduledTo` 标记；②分享——`utils/share.ts` 接入需求/活动/企业名片/人才名片详情；③浏览历史——新增 `/me/history` 页（`utils/readingHistory.ts` 支持删除单条/清空），Me 页入口；④首页公告——`HomeAnnouncement` + Mock 公告数据 + NoticeBar/弹窗；⑤商城——`Goods.category`（字典 goods_category）分类 chips 筛选并同步 URL、列表计数；⑥订单——`MyOrder.trackingNo`（发起发货写入并随通知下发）展示；⑦举报——`ReportTargetType` 扩展 `comment/user`（文章评论行内举报、人才名片举报用户）；⑧收藏——类型扩展企业/人才，`MyFavoritesView` 类型筛选 chips，企业名片/人才名片收藏按钮；⑨搜索——分类 chips 可点击过滤、「查看更多项目」跳项目页关键词；⑩无障碍与体验——main.ts 集中补丁（Toast aria-live、Dialog/Popup role/aria-modal、表单 id/name 只扫描新增子树）、路由按名记忆滚动位置、小号 Tag ≥12px 与交互 chips ≥32px、列表 Loading→ListSkeleton、更多卡片补 `v-pressable`；⑪复审补齐——项目页排序（最新/响应最多）与文章/活动/社区/广场筛选 URL 同步；首页「为你推荐」；投稿/评论/响应/地址/账号安全/邀请/退回原因表单行内错误；我的列表与通知/社区/广场计数补齐；修复首页推荐块误入样式区导致的渲染报错。Playwright headed 增量复测（商城分类 URL=GC002→2 件、收藏 6 类筛选、搜索 chips 6→1、活动取消失效横幅、浏览历史空态）零控制台错误；tsc/lint/build 全绿 |
-| 2026-09-17 | **需求撮合口径调整（纯客户端 + 后端契约同步）**：需求状态机新增 `selected`（已选定）——发布者在需求详情页查看响应情况并多选意向承接方，「提交立项」后状态转 `selected`（不再由发布者直接生成项目，也不提供单个驳回），未选中响应保持待处理；管理员在后台「已选定」需求上手动立项（补发承接方积分/经验并通知双方）。「我的需求」行点击进入需求详情（响应列表与选择操作从列表页移除），状态标签补齐待发布/定时发布中/已选定/申诉中；发布者可查看本人任意状态需求详情（`GET /api/app/demands/:id`）。`POST /api/app/me/demands/:id/responses/:responseId/review` 由 `POST /api/app/me/demands/:id/select`（body `responseIds[]`）取代；tsc/lint/build 全绿 |
-| 2026-09-17 | **企业信息展示调整**：社区「企业库」卡片右上角由「入驻展示」标签改为企业等级（`Lv.n 等级名`，服务端按社区企业等级梯度由企业经验值推导后随列表下发，契约 `GET /api/app/community/enterprises` 增 `level/levelName`）；企业名片（`/enterprises/:id`）不再公示成员卡片。后台同步：社区企业列表新增「企业等级」列、「展示页状态」更名「名片状态」，社区个体列表「经验值等级」更名「个体等级」。tsc/lint/build 与全量 e2e（41 套件 / 282 用例）通过 |
-| 2026-09-17 | **接口对齐审计整改（客户端接入）**：①隐私政策页由静态演示文本改为读取后台已发布协议（`GET /api/app/policies/user_agreement|privacy_policy`，版本号/发布时间 + 富文本经 DOMPurify 清洗），接口不可用时回退演示文本；②实名页「认证权益」改读 `GET /api/app/me/realname-rights`（按身份/等级分组，当前层级高亮，失败回退静态说明）；③收货地址新增「设为默认」行内操作（`POST /api/app/me/addresses/:id/default`），保留编辑弹窗内 Switch；④预约页空间信息改为按 id 读取 `GET /api/app/spaces/:id`（不再拉全量列表）；⑤企业工作台统一走 `GET /api/app/me/enterprise-workbench`（后端已移除重复的 `/enterprises/:id/workbench`）。tsc/lint/build 全绿 |
+运行时问题再使用浏览器检查；HTTP 业务状态机以 API e2e 为主。最新验证证据和覆盖边界见 [M2-R 收口](./m2-r-closeout.md)。

@@ -29,14 +29,29 @@ export class HttpExceptionFilter implements ExceptionFilter {
         status = HttpStatus.BAD_REQUEST
         message = '文件过大，请压缩后重试（可在「系统配置」调整上传文件大小限制）'
       }
-    } else if (exception instanceof Error) {
-      /* Prisma 无法连接数据库（Pg 容器/网络瞬断）：给用户可读的 503 而不是 500，并落盘便于排查 */
-      const prismaCode = (exception as { code?: string }).code
-      if (prismaCode === 'P1001' || prismaCode === 'P1002') {
-        status = HttpStatus.SERVICE_UNAVAILABLE
-        message = '数据库连接暂时不可用，请稍后重试'
+      /* body-parser JSON 解析失败：不同 Nest 版本可能包装为 BadRequestException 透出英文原文 */
+      const parseType = (exception as { type?: string }).type
+      if (
+        status === HttpStatus.BAD_REQUEST &&
+        (parseType === 'entity.parse.failed' || /JSON at position|Unexpected token|Expected property name/i.test(message))
+      ) {
+        message = '请求体格式错误，请检查 JSON 内容'
       }
-      console.error('[api] 未捕获异常:', exception)
+    } else if (exception instanceof Error) {
+      const type = (exception as { type?: string }).type
+      /* body-parser JSON 解析失败（entity.parse.failed）：转可展示中文提示 */
+      if (type === 'entity.parse.failed') {
+        status = HttpStatus.BAD_REQUEST
+        message = '请求体格式错误，请检查 JSON 内容'
+      } else {
+        /* Prisma 无法连接数据库（Pg 容器/网络瞬断）：给用户可读的 503 而不是 500，并落盘便于排查 */
+        const prismaCode = (exception as { code?: string }).code
+        if (prismaCode === 'P1001' || prismaCode === 'P1002') {
+          status = HttpStatus.SERVICE_UNAVAILABLE
+          message = '数据库连接暂时不可用，请稍后重试'
+        }
+        console.error('[api] 未捕获异常:', exception)
+      }
     }
 
     if (status >= HttpStatus.INTERNAL_SERVER_ERROR) {

@@ -52,15 +52,15 @@ export class AppRealnameService {
   async status(uid: string) {
     const user = await this.prisma.user.findUnique({
       where: { uid },
-      select: { realName: true, citizenId: true, realnameReviewStatus: true, realnameReviewNote: true },
+      select: { realName: true, citizenId: true, verifiedAt: true },
     })
     if (!user) throw new NotFoundException('用户不存在')
-    if (!user.realName || !user.citizenId) return { verified: false, reviewStatus: user.realnameReviewStatus, reviewNote: user.realnameReviewNote ?? undefined }
+    if (!user.realName || !user.citizenId) return { verified: false }
     return {
       verified: true,
       realName: maskName(user.realName),
       citizenIdMasked: maskCitizenId(user.citizenId),
-      reviewStatus: user.realnameReviewStatus,
+      verifiedAt: user.verifiedAt ?? undefined,
     }
   }
 
@@ -85,24 +85,20 @@ export class AppRealnameService {
       data: {
         realName,
         citizenId,
-        realnameReviewStatus: 'pending',
-        realnameSubmittedAt: formatNow(),
-        realnameReviewedAt: null,
-        realnameReviewedBy: null,
-        realnameReviewNote: null,
+        verifiedAt: formatNow(),
       },
     })
     await this.notify.pushNotice(uid, {
       type: 'system',
-      title: '实名认证已提交',
-      content: `您的实名信息已通过规则校验（${maskName(realName)}），已生效并进入人工复核。`,
+      title: '实名认证已完成',
+      content: `您的实名信息已通过规则校验（${maskName(realName)}）。`,
     })
     return { code: 0 }
   }
 
   /** 实名分级权益（两条静态分级，active 标注当前所处层级） */
   async rights(uid: string) {
-    const { rules, activeRules, subject } = await currentPublishingLimits(this.prisma, uid)
+    const { rules, subject } = await currentPublishingLimits(this.prisma, uid)
     const config = await this.prisma.systemConfig.findUnique({ where: { id: 1 }, select: { realnameRequired: true } })
     const label = (n: number) => n < 0 ? '不限' : `${n} 次/日`
     const grouped = new Map<string, typeof rules>()

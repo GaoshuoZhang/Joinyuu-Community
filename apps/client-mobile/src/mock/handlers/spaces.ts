@@ -1,4 +1,4 @@
-import type { ReservationCreatePayload, Space, SpaceReservation, SpaceSlot } from '@/types'
+import type { ReservationCreatePayload, Space, SpaceReservation, SpaceReservationDetail, SpaceSlot } from '@/types'
 import { accountByUid, appConfig, enterprises, nextMockId, nowStamp, occupiedSlots, pushNotice, reservationsByUid, spaces, trackMockEvent } from '@/mock/db'
 import { permissionsOf } from '@/mock/handlers/enterprises'
 import { readPayload } from '@/mock/session'
@@ -14,12 +14,14 @@ function requireUid(): string {
 }
 
 export async function fetchSpaces(): Promise<Space[]> {
-  return withLatency(() => [...spaces])
+  /* 维护中空间不下发（与后端 list：仅 status=available） */
+  return withLatency(() => spaces.filter((s) => s.status === 'open').map((s) => ({ ...s })))
 }
 
 export async function fetchSpaceDetail(id: string): Promise<Space> {
   return withLatency(() => {
-    const space = spaces.find((s) => s.id === id)
+    /* 不可约空间统一 404，不暴露存在性（与后端 detail/findReservable 一致） */
+    const space = spaces.find((s) => s.id === id && s.status === 'open')
     if (!space) fail(404, '空间不存在或已下架')
     return { ...space }
   }, 120)
@@ -31,12 +33,14 @@ export async function fetchAvailability(spaceId: string, date: string): Promise<
     if (!space) fail(404, '空间不存在')
     const occupied = occupiedSlots(spaceId, date)
     const slots: SpaceSlot[] = []
-    const open = Number(space.openTime.slice(0, 2))
-    const close = Number(space.closeTime.slice(0, 2))
-    for (let h = open; h < close; h++) {
-      const start = `${String(h).padStart(2, '0')}:00`
-      const end = `${String(h + 1).padStart(2, '0')}:00`
-      slots.push({ start, end, occupied: occupied.some((slot) => slot.start < end && start < slot.end) })
+    for (const window of space.openHours) {
+      const open = minutes(window.start)
+      const close = minutes(window.end)
+      for (let cursor = open; cursor < close; cursor += 60) {
+        const start = time(cursor)
+        const end = time(Math.min(cursor + 60, close))
+        slots.push({ start, end, occupied: occupied.some((slot) => slot.start < end && start < slot.end) })
+      }
     }
     return slots
   })
@@ -49,7 +53,7 @@ export async function createReservation(payload: ReservationCreatePayload): Prom
     const space = spaces.find((s) => s.id === payload.spaceId)
     if (!space) fail(404, '空间不存在')
     /* v38：空间规则校验（维护 / 提前天数 / 最长时长 / 开放时间） */
-    if (space.status === 'maintenance') fail(400, '该空间维护中，暂不可预约')
+    if (space.status === 'maintenance') fail(400, '该空间维护中暂不可预约')
     if (!payload.date) fail(400, '请选择预约日期')
     if (payload.date < formatMockDate()) fail(400, '预约日期不能早于今天')
     const maxDate = new Date(mockNowMs())
@@ -57,13 +61,9 @@ export async function createReservation(payload: ReservationCreatePayload): Prom
     if (payload.date > formatMockDate(maxDate.getTime())) fail(400, `最多可提前 ${space.advanceDays} 天预约`)
     if (!payload.start || !payload.end) fail(400, '请选择预约时段')
     if (payload.start >= payload.end) fail(400, '结束时间需晚于开始时间')
-    const minutes = (time: string) => {
-      const [h, m] = time.split(':').map(Number)
-      return h * 60 + (m || 0)
-    }
     const durationHours = (minutes(payload.end) - minutes(payload.start)) / 60
     if (durationHours > space.maxHours) fail(400, `单次预约最长 ${space.maxHours} 小时`)
-    if (payload.start < space.openTime || payload.end > space.closeTime) {
+    if (!space.openHours.some((window) => payload.start >= window.start && payload.end <= window.end)) {
       fail(400, `预约时间需在开放时段 ${space.openTime}-${space.closeTime} 内`)
     }
     if (occupiedSlots(payload.spaceId, payload.date).some((s) => s.start < payload.end && payload.start < s.end)) {
@@ -92,11 +92,14 @@ export async function createReservation(payload: ReservationCreatePayload): Prom
       identityType = 'community_enterprise'
       subjectName = ent.name
     }
+    const createdAt = nowStamp()
     mine.unshift({
       id: nextMockId('SR'), spaceId: space.id, spaceName: space.name,
       date: payload.date, start: payload.start, end: payload.end,
-      status, createdAt: nowStamp(),
+      status, createdAt,
       identityType, subjectName,
+      purpose: payload.topic?.trim() ?? '', attendees: 1,
+      records: [{ at: createdAt, action: 'submit', title: '提交预约', text: `${space.name} ${payload.date} ${payload.start}-${payload.end} 预约提交` }],
     })
     /* [MOCK-ONLY] 通知触发点：预约已提交 */
     pushNotice(uid, {
@@ -110,10 +113,33 @@ export async function createReservation(payload: ReservationCreatePayload): Prom
   })
 }
 
+function minutes(value: string): number {
+  const [hours, mins] = value.split(':').map(Number)
+  return hours * 60 + (mins || 0)
+}
+
+function time(value: number): string {
+  return `${String(Math.floor(value / 60)).padStart(2, '0')}:${String(value % 60).padStart(2, '0')}`
+}
+
 export async function fetchMyReservations(): Promise<SpaceReservation[]> {
   return withLatency(() => {
     const uid = requireUid()
     return [...(reservationsByUid[uid] ?? [])]
+  })
+}
+
+export async function fetchMyReservation(id: string): Promise<SpaceReservationDetail> {
+  return withLatency(() => {
+    const uid = requireUid()
+    const item = (reservationsByUid[uid] ?? []).find((reservation) => reservation.id === id)
+    if (!item) fail(404, '预约不存在')
+    return {
+      ...structuredClone(item),
+      purpose: item.purpose ?? '',
+      attendees: item.attendees ?? 1,
+      records: structuredClone(item.records ?? []),
+    }
   })
 }
 
@@ -124,6 +150,8 @@ export async function cancelReservation(id: string): Promise<void> {
     if (!item) fail(404, '预约不存在')
     if (item.status !== 'pending' && item.status !== 'approved') fail(409, '当前状态不可取消')
     item.status = 'cancelled'
+    item.records ??= []
+    item.records.push({ at: nowStamp(), action: 'cancel', title: '取消预约' })
     /* [MOCK-ONLY] 通知触发点：预约已取消 */
     pushNotice(uid, { type: 'system', title: '预约已取消', content: `「${item.spaceName}」${item.date} ${item.start}-${item.end} 的预约已取消。`, link: '/me/reservations' })
   }, 150)

@@ -44,6 +44,13 @@ export class ContentsController {
 
   @RequirePermission('/contents/submissions')
   @HttpCode(200)
+  @Put('articles/:id/submission')
+  updateSubmissionArticle(@Param('id') id: string, @Body() dto: ArticlePayloadDto) {
+    return this.contents.updateSubmissionArticle(id, dto)
+  }
+
+  @RequirePermission('/contents/submissions')
+  @HttpCode(200)
   @Post('articles/:id/review')
   reviewArticle(
     @Param('id') id: string,

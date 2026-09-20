@@ -87,7 +87,12 @@ onMounted(async () => {
         <table class="doc-table">
           <tr v-for="d in application.details" :key="d.label">
             <td class="label detail-label">{{ d.label }}</td>
-            <td>{{ d.value }}</td>
+            <td>
+              <template v-if="d.files?.length">
+                <div v-for="(f, i) in d.files" :key="i">{{ f.name }}<template v-if="f.url">（{{ f.url }}）</template></div>
+              </template>
+              <template v-else>{{ d.value }}</template>
+            </td>
           </tr>
         </table>
 

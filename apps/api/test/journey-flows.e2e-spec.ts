@@ -1,5 +1,5 @@
 /* M2-R 三端联调 e2e（客户端 + 管理后台全链路）：
- * 注册 → 登录 → 实名认证（后台复核）→ 入驻申请（人才登记/企业入驻，后台审核）→ 个人/企业名片编辑（两端）
+ * 注册 → 登录 → 实名认证 → 入驻申请（人才登记/企业入驻，后台审核）→ 个人/企业名片编辑（两端）
  * → 需求发布（后台审核/发布）→ 需求响应 → 发布者选定 → 管理员立项 → 里程碑提交/验收结项
  * → 空间预约（后台审核）→ 活动报名（后台审核）+ 客户端/后台签到 → 商城兑换（后台发货）→ 确认收货 → 评价。
  * 前置：docker compose up + prisma migrate + seed；管理员 admin/admin123，种子成员 13801210005/user123。 */
@@ -71,25 +71,12 @@ describe('M2-R 三端联调：注册/实名/入驻/需求/项目/活动/商城/�
     expect(asList<{ type: string }>(me.body.data.identities).some((i) => i.type === 'individual')).toBe(true)
   })
 
-  it('② 实名认证：客户端提交（规则校验通过）→ 后台复核通过', async () => {
+  it('② 实名认证：客户端提交并通过规则校验后立即生效', async () => {
     const submit = await put('/api/app/me/realname', { realName: NICKNAME, citizenId: CITIZEN_ID })
     expect(submit.status).toBe(200)
     const status = await appGet(app, userToken, '/api/app/me/realname')
     expect(status.body.data.verified).toBe(true)
-    expect(status.body.data.reviewStatus).toBe('pending')
-
-    const pending = await adminGet('/api/admin/member-governance/realnames?status=pending&pageSize=100')
-    expect(pending.status).toBe(200)
-    const row = asList<{ uid: string; phone: string }>(pending.body.data).find((r) => r.phone === PHONE)
-    expect(row?.uid).toBe(uid)
-
-    const review = await adminPost(`/api/admin/member-governance/realnames/${uid}/review`, {
-      action: 'approve',
-      note: '联调复核通过',
-    })
-    expect(review.status).toBe(200)
-    const after = await appGet(app, userToken, '/api/app/me/realname')
-    expect(after.body.data.reviewStatus).toBe('approved')
+    expect(status.body.data.verifiedAt).toEqual(expect.any(String))
   })
 
   it('③ 入驻申请：人才登记 + 企业入驻提交 → 后台审核通过 → 身份与企业实体生效', async () => {
@@ -111,7 +98,7 @@ describe('M2-R 三端联调：注册/实名/入驻/需求/项目/活动/商城/�
         creditCode: '91310101MA1JOURNEY',
         industry: '专业服务',
         companySize: '1-9 人',
-        officeNeeds: '1-2 个工位',
+        officeNeeds: '1-2 个办公位',
         settleDate: addDays(formatToday(), 10),
         contactName: NICKNAME,
         contactPhone: PHONE,
@@ -289,13 +276,12 @@ describe('M2-R 三端联调：注册/实名/入驻/需求/项目/活动/商城/�
     const created = await appPost(app, userToken, '/api/app/spaces/reservations', {
       spaceId: space.id,
       date,
-      startTime: free!.start,
-      endTime: free!.end,
-      purpose: '联调空间预约',
+      start: free!.start,
+      end: free!.end,
+      topic: '联调空间预约',
       attendees: 2,
-      identityType: 'community_enterprise',
+      asIdentity: 'community_enterprise',
       asEnterpriseId: enterpriseId,
-      subjectName: ENTERPRISE_NAME,
     })
     expect([200, 201]).toContain(created.status)
     expect(created.body.data.status).toBe('pending')

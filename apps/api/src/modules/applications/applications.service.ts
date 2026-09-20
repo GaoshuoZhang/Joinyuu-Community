@@ -35,18 +35,16 @@ interface GrantResult {
 const IDENTITY_FIRST_BIND_POINTS_REASON = '首次入驻/绑定身份'
 const IDENTITY_FIRST_BIND_EXP_REASON = '首次绑定社区身份'
 
-/* 申请类型（五类，与前端 applicationTypeMap 对齐）：
+/* 申请类型（四类，与前端 applicationTypeMap 对齐）：
  *   settle      企业入驻申请 → 通过：新增/激活社区企业 + community_enterprise 身份
  *   individual  个体入驻申请 → 通过：新增 community_individual 身份（社区个体）
  *   cooperation 企业合作申请 → 通过：新增/复用合作企业档案 + external_enterprise 身份
- *   identity    身份绑定申请 → 通过：按目标企业归属（社区企业或合作企业，缺失则自动新增合作企业）
- *   exit        企业退驻申请 → 通过：企业转为已退驻并撤下展示名片
+ *   exit        企业退驻申请 → 通过：企业转为已退驻
  */
 const APPLICATION_TYPE_LABELS: Record<string, string> = {
   settle: '企业入驻',
   individual: '个体入驻',
   cooperation: '企业合作',
-  identity: '身份绑定',
   exit: '企业退驻',
 }
 const APPLICATION_TYPES = Object.keys(APPLICATION_TYPE_LABELS)
@@ -213,7 +211,7 @@ export class ApplicationsService {
       if (app.type === 'exit') {
         const enterprise = await tx.enterprise.findFirst({ where: { name: app.targetName, deletedAt: null } })
         if (!enterprise) throw new NotFoundException('企业不存在')
-        await tx.enterprise.update({ where: { id: enterprise.id }, data: { status: 'exited', showcaseStatus: 'none' } })
+        await tx.enterprise.update({ where: { id: enterprise.id }, data: { status: 'exited' } })
         return { userId: null, enterpriseId: enterprise.id }
       }
       return this.grantIdentity(tx, app)
@@ -350,20 +348,39 @@ export class ApplicationsService {
     return null
   }
 
-  private detailEntries(type: string, details: Prisma.JsonValue): { label: string; value: string }[] {
-    if (Array.isArray(details)) return details as unknown as { label: string; value: string }[]
+  private detailEntries(
+    type: string,
+    details: Prisma.JsonValue,
+  ): { label: string; value?: string; files?: { name: string; url?: string }[] }[] {
+    if (Array.isArray(details)) return details as unknown as { label: string; value?: string; files?: { name: string; url?: string }[] }[]
     if (!details || typeof details !== 'object') return []
     const payload = details as Record<string, unknown>
     const fields = payload.fields
     const schema = DEFAULT_APPLICATION_SCHEMAS[type as keyof typeof DEFAULT_APPLICATION_SCHEMAS]
     const labels = new Map(schema?.fields.map((field) => [field.key, field.label]) ?? [])
-    const entries: { label: string; value: string }[] = []
+    const entries: { label: string; value?: string; files?: { name: string; url?: string }[] }[] = []
     if (fields && typeof fields === 'object' && !Array.isArray(fields)) {
       for (const [key, value] of Object.entries(fields)) {
-        const display = Array.isArray(value)
-          ? value.map((item) => item && typeof item === 'object' && 'name' in item ? String(item.name) : String(item)).join('、')
-          : String(value ?? '')
-        if (display) entries.push({ label: labels.get(key) ?? key, value: display })
+        const label = labels.get(key) ?? key
+        if (Array.isArray(value)) {
+          const isFile = (item: unknown): item is { name: unknown; url?: unknown } =>
+            !!item && typeof item === 'object' && 'name' in item
+          if (value.length && value.every(isFile)) {
+            const files = value.map((item) => {
+              const url = typeof item.url === 'string' && item.url ? item.url : undefined
+              return url ? { name: String(item.name), url } : { name: String(item.name) }
+            })
+            entries.push({ label, files })
+          } else {
+            const display = value
+              .map((item) => (isFile(item) ? String(item.name) : String(item)))
+              .join('、')
+            if (display) entries.push({ label, value: display })
+          }
+          continue
+        }
+        const display = String(value ?? '')
+        if (display) entries.push({ label, value: display })
       }
     }
     if (typeof payload.note === 'string' && payload.note.trim()) entries.push({ label: '补充说明', value: payload.note })
@@ -377,7 +394,7 @@ export class ApplicationsService {
     return { name: targetName, title: '' }
   }
 
-  /** 合作企业档案：存在即复用，缺失则按申请表单新增（企业合作/身份绑定均使用） */
+  /** 合作企业档案：存在即复用，缺失则按申请表单新增（企业合作申请使用） */
   private async ensureCooperationProfile(
     tx: Prisma.TransactionClient,
     name: string,
@@ -394,19 +411,16 @@ export class ApplicationsService {
         size: this.detailValue(details, '团队规模', 'companySize') ?? '',
         foundedAt: this.detailValue(details, '成立时间', 'foundedAt') ?? '',
         description: this.detailValue(details, '企业简介', 'intro', 'coopField') ?? '审核通过自动新增的合作企业',
-        cooperationCount: 0,
-        firstCooperationAt: formatNow().slice(0, 7),
+        registeredAt: formatToday(),
       },
     })
     return created.id
   }
 
-  /* 审核通过授予身份（四类分支）：
+  /* 审核通过授予身份（三类分支）：
    *   settle      新增/激活社区企业（字段取自申请表单）→ community_enterprise 身份（去重）
    *   individual  新增 community_individual 身份（社区个体，去重）
    *   cooperation 新增/复用合作企业档案 → external_enterprise 身份（去重）
-   *   identity    目标企业在社区企业名单 → community_enterprise 身份；
-   *               否则在合作企业名单（缺失则自动新增合作企业）→ external_enterprise 身份
    * 仅在真正新增身份时返回 userId（触发首绑积分/经验值）；enterpriseId 仅在社区企业时返回。 */
   private async grantIdentity(tx: Prisma.TransactionClient, app: {
     type: string
@@ -435,7 +449,6 @@ export class ApplicationsService {
             settledAt: formatToday(),
             leaseType: applyingSpace.includes('独立办公室') ? '独立办公室' : '办公位',
             status: 'active',
-            showcaseStatus: 'none',
             contactUserId: user.uid,
             contactTitle: '社区企业成员',
             contactName: user.nickname,
@@ -480,7 +493,7 @@ export class ApplicationsService {
         data: {
           userId: user.uid,
           type: 'community_individual',
-          title: title || '社区个体',
+          title: '',
           level: 1,
           experience: 0,
         },
@@ -505,58 +518,7 @@ export class ApplicationsService {
       return { userId: user.uid, enterpriseId: null, profileId }
     }
 
-    const bindType = this.detailValue(details, '要绑定的身份', 'identityType')
-    if (bindType === 'community_individual') {
-      const duplicate = await tx.userIdentity.findFirst({ where: { userId: user.uid, type: 'community_individual' } })
-      if (duplicate) return { userId: null, enterpriseId: null }
-      await tx.userIdentity.create({
-        data: {
-          userId: user.uid,
-          type: 'community_individual',
-          title: '社区个体',
-          level: 1,
-          experience: 0,
-        },
-      })
-      return { userId: user.uid, enterpriseId: null }
-    }
-
-    /* 企业身份绑定：优先社区企业，其次合作企业（缺失自动新增）。 */
-    const community = await tx.enterprise.findFirst({ where: { name } })
-    if (community) {
-      const dup = await tx.userIdentity.findFirst({
-        where: { userId: user.uid, type: 'community_enterprise', enterpriseId: community.id },
-      })
-      if (dup) return { userId: null, enterpriseId: null }
-      await tx.userIdentity.create({
-        data: {
-          userId: user.uid,
-          type: 'community_enterprise',
-          enterpriseId: community.id,
-          enterpriseName: community.name,
-          role: 'member',
-          title: title || '企业成员',
-          level: await this.enterpriseLevel(tx, community.experience),
-          experience: community.experience,
-        },
-      })
-      return { userId: user.uid, enterpriseId: community.id }
-    }
-
-    const profileId = await this.ensureCooperationProfile(tx, name, details)
-    const dup = await tx.userIdentity.findFirst({
-      where: { userId: user.uid, type: 'external_enterprise', enterpriseName: name },
-    })
-    if (dup) return { userId: null, enterpriseId: null, profileId }
-    await tx.userIdentity.create({
-      data: {
-        userId: user.uid,
-        type: 'external_enterprise',
-        enterpriseName: name,
-        title: title || '合作方',
-      },
-    })
-    return { userId: user.uid, enterpriseId: null, profileId }
+    return { userId: null, enterpriseId: null }
   }
 
   private appendRecord(raw: Prisma.JsonValue, record: ApprovalRecord): Prisma.InputJsonValue {

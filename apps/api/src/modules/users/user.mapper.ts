@@ -33,6 +33,8 @@ export interface UserDto {
   nickname: string
   phone: string
   email: string
+  /** 头像地址（/api/public/files/:key；未设置时缺省） */
+  avatar?: string
   gender: string
   status: string
   realName?: string
@@ -104,6 +106,7 @@ export function toUserDto(user: UserWithIdentities, stats: UserStats): UserDto {
     stats,
     activities: user.activities as unknown as UserActivity[],
   }
+  if (user.avatar != null) dto.avatar = user.avatar
   if (user.realName != null) dto.realName = user.realName
   if (user.citizenId != null) dto.citizenId = user.citizenId
   if (user.wechatOpenid != null) {

@@ -1,39 +1,46 @@
 <script setup lang="ts">
 import { onMounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { Loading, Button, Icon, Result, Toast } from 'tdesign-mobile-vue'
-import { checkInEvent, fetchEvent } from '@/api/events'
-import { useAsyncList } from '@/composables/useAsyncList'
+import { Button, Icon, QRCode, Result, Tag, Toast } from 'tdesign-mobile-vue'
+import { checkInEvent, fetchEvent, fetchEventTicket } from '@/api/events'
 import { getPosition } from '@/utils/geolocation'
 import EmptyBlock from '@/components/shared/EmptyBlock.vue'
-import type { CommunityEvent } from '@/types'
+import ListSkeleton from '@/components/ListSkeleton.vue'
+import type { CommunityEvent, EventTicket } from '@/types'
 import type { GeoPosition } from '@/utils/geolocation'
+import { formatLocalDateTime, formatZhNumber } from '@/utils/format'
 
-/* 移动签到：活动信息 + 定位→围栏校验→签到；加载时静默预定位一次，错误内联展示并保留重试 */
+/* 移动签到：在同一页面提供电子票、定位签到与核销状态。 */
 const route = useRoute()
 const router = useRouter()
 const eventId = route.params.id as string
 
-const { data: event, loading, error, run } = useAsyncList<CommunityEvent>(() => fetchEvent(eventId))
-onMounted(async () => {
-  await run()
-  if (!event.value?.myCheckedIn) silentLocate()
-})
+const event = ref<CommunityEvent | null>(null)
+const ticket = ref<EventTicket | null>(null)
+const loading = ref(true)
+const error = ref('')
+
+async function load() {
+  loading.value = true
+  error.value = ''
+  try {
+    const [eventData, ticketData] = await Promise.all([fetchEvent(eventId), fetchEventTicket(eventId)])
+    event.value = eventData
+    ticket.value = ticketData
+  } catch (e) {
+    error.value = e instanceof Error ? e.message : '签到信息加载失败，请稍后重试'
+  } finally {
+    loading.value = false
+  }
+}
+
+onMounted(load)
 
 const phase = ref<'idle' | 'locating' | 'verifying' | 'success' | 'failed'>('idle')
 const position = ref<GeoPosition | null>(null)
 const geoHint = ref('')
 const pointsAwarded = ref(0)
 const failMessage = ref('')
-
-async function silentLocate() {
-  try {
-    position.value = await getPosition()
-    geoHint.value = ''
-  } catch {
-    geoHint.value = '尚未获取到定位，请点击下方按钮手动签到'
-  }
-}
 
 async function startCheckIn() {
   phase.value = 'locating'
@@ -51,6 +58,10 @@ async function startCheckIn() {
   try {
     const res = await checkInEvent(eventId, { lat: position.value.lat, lng: position.value.lng })
     pointsAwarded.value = res.pointsAwarded
+    if (event.value) event.value.myCheckedIn = true
+    if (ticket.value) {
+      ticket.value = { ...ticket.value, status: 'checked', checkedIn: true }
+    }
     phase.value = 'success'
   } catch (e) {
     phase.value = 'failed'
@@ -61,35 +72,73 @@ async function startCheckIn() {
 function backToDetail() {
   router.push(`/events/${eventId}`)
 }
+
+const ticketStatusText = () => {
+  if (!ticket.value) return ''
+  if (ticket.value.status === 'cancelled') return '已失效（活动取消）'
+  if (ticket.value.status === 'expired') return '已失效（活动结束）'
+  if (ticket.value.checkedIn || ticket.value.status === 'checked') return '已签到'
+  if (ticket.value.waitlistOrder) return '候补中'
+  return '有效'
+}
+
+const ticketStatusTheme = () => {
+  if (!ticket.value) return 'default'
+  if (ticket.value.status === 'cancelled' || ticket.value.status === 'expired') return 'danger'
+  if (ticket.value.checkedIn || ticket.value.status === 'checked') return 'success'
+  return ticket.value.waitlistOrder ? 'warning' : 'primary'
+}
+
+const canCheckIn = () => Boolean(
+  event.value
+  && ticket.value
+  && ticket.value.status === 'valid'
+  && !ticket.value.waitlistOrder
+  && !ticket.value.checkedIn
+  && !event.value.myCheckedIn,
+)
 </script>
 
 <template>
   <div class="m-checkin page-fade-in stagger">
-    <Loading v-if="loading" class="state" text="加载中…" />
-    <EmptyBlock v-else-if="error" :text="error" action-text="重试" @action="run" />
-    <template v-else-if="event">
-      <section class="m-card info">
-        <h1 class="title">{{ event.title }}</h1>
-        <p class="meta"><Icon name="time" size="16px" />签到时间窗：活动开始前 {{ event.checkinOpenMin }} 分钟至开始后 {{ event.checkinCloseMin }} 分钟</p>
-        <p class="meta"><Icon name="location" size="16px" />签到半径：场地 {{ event.checkinRadiusM }} 米范围内</p>
+    <ListSkeleton v-if="loading" />
+    <EmptyBlock v-else-if="error" :text="error" action-text="重试" @action="load" />
+    <template v-else-if="event && ticket">
+      <section class="ticket-card m-card" :class="{ invalid: ticket.status !== 'valid' }">
+        <div class="ticket-head">
+          <span class="brand" translate="no">聚屿社区 · 活动签到</span>
+          <Tag :theme="ticketStatusTheme()" variant="light" size="small">{{ ticketStatusText() }}</Tag>
+        </div>
+        <h2 class="title">{{ ticket.eventTitle }}</h2>
+        <p class="meta"><Icon aria-hidden="true" name="time" size="16px" />{{ formatLocalDateTime(ticket.startTime) }}</p>
+        <p class="meta"><Icon aria-hidden="true" name="location" size="16px" />{{ ticket.location }}</p>
+        <div class="qr-wrap"><QRCode :value="ticket.ticketCode" :size="140" level="M" aria-label="活动核销二维码" /></div>
+        <p class="code">核销码：<code translate="no">{{ ticket.ticketCode }}</code></p>
+        <p class="ticket-hint">
+          <template v-if="ticket.status === 'cancelled'">活动已取消，凭证自动失效。</template>
+          <template v-else-if="ticket.status === 'expired'">活动已结束，未核销凭证已失效。</template>
+          <template v-else-if="ticket.checkedIn">你已完成签到，感谢参与。</template>
+          <template v-else-if="ticket.waitlistOrder">你当前为候补第 {{ formatZhNumber(ticket.waitlistOrder) }} 位，递补成功后将自动转为有效票。</template>
+          <template v-else>到场后出示此凭证，并在下方完成定位签到。</template>
+        </p>
       </section>
 
-      <section class="m-card stage">
-        <template v-if="event.myCheckedIn">
+      <section v-if="canCheckIn() || event.myCheckedIn || phase === 'success'" class="m-card stage">
+        <template v-if="event.myCheckedIn && phase !== 'success'">
           <p class="success-title">你已完成签到</p>
           <Button variant="outline" @click="backToDetail">返回活动详情</Button>
         </template>
         <template v-else-if="phase === 'success'">
           <Result theme="success" title="签到成功">
             <template #description>
-              <p class="success-points">积分 +{{ pointsAwarded }}</p>
+              <p class="success-points">积分 +{{ formatZhNumber(pointsAwarded) }}</p>
               <p class="success-tip">已记录本次签到，记得准时参加活动哦。</p>
             </template>
           </Result>
           <Button theme="default" variant="outline" @click="backToDetail">返回活动详情</Button>
         </template>
 
-        <template v-else>
+        <template v-else-if="canCheckIn()">
           <p v-if="position" class="coord">已获取定位：{{ position.lat.toFixed(5) }}, {{ position.lng.toFixed(5) }}</p>
           <p v-else-if="geoHint" class="geo-hint">{{ geoHint }}</p>
           <p v-if="phase === 'failed' && failMessage" class="fail">{{ failMessage }}</p>
@@ -102,7 +151,7 @@ function backToDetail() {
           >
             {{ phase === 'locating' ? '正在获取定位…' : phase === 'verifying' ? '正在校验距离…' : '获取定位并签到' }}
           </Button>
-          <p class="tip">签到需在活动签到时间窗内、距场地 {{ event.checkinRadiusM }} 米以内完成。</p>
+          <p class="tip">签到需在活动签到时间窗内、距场地 {{ formatZhNumber(event.checkinRadiusM) }} 米以内完成。</p>
         </template>
       </section>
     </template>
@@ -111,24 +160,70 @@ function backToDetail() {
 
 <style scoped>
 .m-checkin {
-  padding: 16px;
+  padding:var(--app-space-8);
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap:var(--app-space-6);
 }
 
 .title {
-  margin: 0 0 10px;
-  font-size: 16px;
+  margin:0 0 var(--app-space-5);
+  font-size: var(--app-font-subtitle);
   line-height: 1.4;
 }
 
+.ticket-card {
+  display: flex;
+  flex-direction: column;
+  gap: var(--app-space-4);
+  padding: var(--app-space-10) var(--app-space-8);
+  border: 1px dashed var(--td-brand-color);
+}
+
+.ticket-card.invalid {
+  border-color: var(--td-component-border);
+  opacity: 0.75;
+}
+
+.ticket-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--app-space-4);
+}
+
+.brand,
+.ticket-hint,
+.code {
+  margin: 0;
+  font-size: var(--app-font-caption);
+  color: var(--td-text-color-secondary);
+}
+
+.qr-wrap {
+  align-self: center;
+  margin: var(--app-space-4) 0;
+  padding: var(--app-space-5);
+  background: var(--td-bg-color-container);
+  border-radius: var(--td-radius-default);
+}
+
+.code {
+  text-align: center;
+}
+
+.code code {
+  color: var(--td-text-color-primary);
+  font-weight: 600;
+  letter-spacing: 1px;
+}
+
 .meta {
-  margin: 5px 0;
+  margin:var(--app-space-3) 0;
   display: flex;
   align-items: flex-start;
-  gap: 4px;
-  font-size: 12px;
+  gap:var(--app-space-2);
+  font-size: var(--app-font-caption);
   color: var(--td-text-color-secondary);
 }
 
@@ -136,53 +231,53 @@ function backToDetail() {
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 12px;
-  padding: 28px 18px;
+  gap:var(--app-space-6);
+  padding:28px var(--app-space-9);
   text-align: center;
 }
 
 .coord {
-  margin: 0;
-  font-size: 12px;
+  margin:0;
+  font-size: var(--app-font-caption);
   color: var(--td-text-color-secondary);
 }
 
 .geo-hint {
-  margin: 0;
-  font-size: 12px;
+  margin:0;
+  font-size: var(--app-font-caption);
   color: var(--td-text-color-placeholder);
 }
 
 .fail {
-  margin: 0;
-  font-size: 12px;
+  margin:0;
+  font-size: var(--app-font-caption);
   color: var(--td-error-color);
   line-height: 1.6;
 }
 
 .tip {
-  margin: 0;
-  font-size: 12px;
+  margin:0;
+  font-size: var(--app-font-caption);
   color: var(--td-text-color-placeholder);
 }
 
 .success-title {
-  margin: 0;
-  font-size: 20px;
-  font-weight: 700;
+  margin:0;
+  font-size: var(--app-font-title);
+  font-weight: 600;
   color: var(--td-success-color);
 }
 
 .success-points {
-  margin: 0;
-  font-size: 14px;
+  margin:0;
+  font-size: var(--app-font-body);
   color: var(--td-brand-color);
   font-weight: 600;
 }
 
 .success-tip {
-  margin: 0 0 8px;
-  font-size: 12px;
+  margin:0 0 var(--app-space-4);
+  font-size: var(--app-font-caption);
   color: var(--td-text-color-secondary);
 }
 </style>

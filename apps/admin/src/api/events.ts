@@ -1,4 +1,4 @@
-import type { PageResult, CommunityEvent } from '@/types'
+import type { PageResult, CommunityEvent, EventEnrollmentRecord } from '@/types'
 import { httpGet, httpPatch, httpPost, httpPut } from './http'
 
 export interface EventQuery {
@@ -32,6 +32,25 @@ export async function fetchEvents(query: EventQuery): Promise<PageResult<Communi
 /* GET /api/admin/events/:id */
 export async function fetchEvent(id: string): Promise<CommunityEvent> {
   return httpGet<CommunityEvent>(`/events/${id}`)
+}
+
+export interface EventEnrollmentQuery {
+  page: number
+  pageSize: number
+  keyword?: string
+  status?: string
+  eventId?: string
+}
+
+/* GET /api/admin/events/enrollments?page&pageSize&keyword&status&eventId */
+export async function fetchEventEnrollments(query: EventEnrollmentQuery): Promise<PageResult<EventEnrollmentRecord>> {
+  const qs = new URLSearchParams()
+  qs.set('page', String(query.page))
+  qs.set('pageSize', String(query.pageSize))
+  if (query.keyword) qs.set('keyword', query.keyword)
+  if (query.status) qs.set('status', query.status)
+  if (query.eventId) qs.set('eventId', query.eventId)
+  return httpGet<PageResult<EventEnrollmentRecord>>(`/events/enrollments?${qs}`)
 }
 
 /* POST /api/admin/events/:id/enrollments/:userId/review，入参 { status: approved | rejected } */
@@ -112,6 +131,7 @@ export async function archiveEvent(id: string): Promise<{ code: number }> {
 
 export interface EventPayload {
   title: string
+  coverUrl?: string
   type: string
   startTime: string
   endTime: string

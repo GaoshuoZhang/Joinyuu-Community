@@ -38,8 +38,9 @@ const confirmTextMap = {
   edit: '保存',
 } as const
 
-/* 类别选项来自数据字典，加载失败回退默认词表 */
+/* 类别选项来自数据字典：表单持久化 code、界面显示 label。 */
 const categoryOptions = ref(dictFallback.demand_category.map((c) => ({ label: c, value: c })))
+const categoryCodeByLabel = ref<Record<string, string>>({})
 
 const submitting = ref(false)
 const formRef = ref()
@@ -176,8 +177,14 @@ onMounted(async () => {
   }
   fetchDictEntries('demand_category')
     .then((entries) => {
-      const labels = entries.filter((e) => e.status === 'enabled').map((e) => ({ label: e.label, value: e.label }))
-      if (labels.length) categoryOptions.value = labels
+      const enabled = entries.filter((e) => e.status === 'enabled')
+      categoryCodeByLabel.value = Object.fromEntries(entries.map((entry) => [entry.label, entry.code]))
+      const options = enabled.map((entry) => ({ label: entry.label, value: entry.code }))
+      if (options.length) categoryOptions.value = options
+      /* 字典晚于编辑抽屉加载时，也将历史标签值归一为 code。 */
+      if (props.visible && props.demand && form.category === props.demand.category) {
+        form.category = categoryCodeByLabel.value[props.demand.category] ?? props.demand.category
+      }
     })
     .catch(() => {
       /* 字典加载失败保留回退词表 */
@@ -220,7 +227,8 @@ watch(
       form.customIdentityType = ''
     } else {
       form.title = props.demand.title
-      form.category = props.demand.category
+      /* 兼容旧数据直接存标签；再次保存时归一为当前字典 code。 */
+      form.category = categoryCodeByLabel.value[props.demand.category] ?? props.demand.category
       form.demandType = props.demand.demandType ?? 'task'
       form.deliverable = props.demand.deliverable ?? ''
       form.deliverBy = props.demand.deliverBy ?? ''
@@ -370,11 +378,12 @@ function onClose() {
 
 <template>
   <t-dialog
+    lazy
+    destroy-on-close
     :close-on-overlay-click="true"
     :visible="visible"
     :header="headerMap[mode]"
     width="880px"
-    lazy
     :close-on-esc-keydown="false"
     @close="onClose"
   >
@@ -426,7 +435,7 @@ function onClose() {
           <t-input clearable v-model="form.contactPhone" name="contact-phone" type="tel" inputmode="tel" autocomplete="tel" placeholder="选已注册需求方后自动填充…" />
         </t-form-item>
         <t-form-item label="联系邮箱" name="contactEmail">
-          <t-input clearable v-model="form.contactEmail" name="contact-email" type="email" inputmode="email" autocomplete="email" placeholder="选填…" />
+          <t-input clearable v-model="form.contactEmail" name="contact-email" inputmode="email" autocomplete="email" placeholder="选填…" />
         </t-form-item>
       </div>
 

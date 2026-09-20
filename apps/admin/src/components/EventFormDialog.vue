@@ -34,6 +34,7 @@ const tagsText = ref('')
 
 const form = reactive({
   title: '',
+  coverUrl: '',
   type: '沙龙',
   startTime: '',
   endTime: '',
@@ -93,6 +94,7 @@ watch(
     if (!v) return
     if (props.mode === 'edit' && props.event) {
       form.title = props.event.title
+      form.coverUrl = props.event.coverUrl ?? ''
       form.type = props.event.type
       form.startTime = props.event.startTime
       form.endTime = props.event.endTime
@@ -120,6 +122,7 @@ watch(
       tagsText.value = props.event.tags.join('，')
     } else {
       form.title = ''
+      form.coverUrl = ''
       form.type = '沙龙'
       form.startTime = ''
       form.endTime = ''
@@ -182,6 +185,7 @@ async function onConfirm() {
   try {
     const payload: EventPayload = {
       title: form.title,
+      coverUrl: form.coverUrl.trim() || undefined,
       type: form.type,
       startTime: form.startTime,
       endTime: form.endTime,
@@ -229,11 +233,12 @@ function onClose() {
 
 <template>
   <t-dialog
+    lazy
+    destroy-on-close
     :close-on-overlay-click="true"
     :visible="visible"
     :header="mode === 'create' ? '新增活动' : '编辑活动'"
     width="880px"
-    lazy
     :close-on-esc-keydown="false"
     @close="onClose"
   >
@@ -248,6 +253,10 @@ function onClose() {
     <t-form ref="formRef" :data="form" :rules="rules" label-align="top">
       <t-form-item label="活动标题" name="title">
         <t-input clearable v-model="form.title" placeholder="请输入活动标题…" />
+      </t-form-item>
+      <t-form-item label="活动封面" name="coverUrl" help="可粘贴素材库文件地址或 HTTPS 图片地址；留空时移动端显示品牌占位图">
+        <t-input clearable v-model="form.coverUrl" placeholder="请输入封面图片地址…" />
+        <t-image v-if="form.coverUrl" class="cover-preview" :src="form.coverUrl" fit="cover" />
       </t-form-item>
       <div class="form-row">
         <t-form-item label="活动类型" name="type">
@@ -448,6 +457,13 @@ function onClose() {
   display: flex;
   justify-content: flex-end;
   gap: 8px;
+}
+
+.cover-preview {
+  width: 200px;
+  height: 112px;
+  margin-top: 8px;
+  border-radius: var(--td-radius-medium);
 }
 
 .scope-head {

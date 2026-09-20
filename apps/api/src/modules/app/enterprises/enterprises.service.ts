@@ -73,7 +73,6 @@ export interface MyEnterpriseCardDto {
   industry: string
   size: string
   description: string
-  showcaseStatus: string
   isContact: boolean
   contactName?: string
 }
@@ -93,7 +92,6 @@ export interface MyIdentitySummaryDto {
   isContact?: boolean
   permissions?: string[]
   enterpriseId?: string
-  showcaseStatus?: string
 }
 
 export interface EnterpriseMemberDto {
@@ -151,7 +149,6 @@ export interface MyEnterpriseDetailDto {
   services?: string
   advantages?: string
   description: string
-  showcaseStatus: string
   contactUid?: string
   contactName?: string
   members: EnterpriseMemberDto[]
@@ -180,7 +177,6 @@ export interface EnterpriseShowcaseDto {
   services?: string
   advantages?: string
   description: string
-  showcaseStatus: 'published'
   members: string[]
 }
 
@@ -317,7 +313,6 @@ export class AppEnterprisesService {
           industry: ent.industry,
           size: ent.size,
           description: ent.description,
-          showcaseStatus: ent.showcaseStatus,
           isContact: ent.contactUserId === uid,
           contactName: ent.contactName,
         }
@@ -401,7 +396,7 @@ export class AppEnterprisesService {
         type: 'community_individual',
         label: '社区个体',
         name: user.nickname,
-        subtitle: individual.title,
+        subtitle: '',
       })
     }
 
@@ -426,7 +421,6 @@ export class AppEnterprisesService {
           isContact,
           permissions: isContact ? [...ENTERPRISE_PERMISSIONS] : identity.permissions,
           enterpriseId: ent.id,
-          showcaseStatus: ent.showcaseStatus,
         })
       }
     }
@@ -491,7 +485,6 @@ export class AppEnterprisesService {
       ...(servicesText ? { services: servicesText } : {}),
       ...(advantagesText ? { advantages: advantagesText } : {}),
       description: ent.description,
-      showcaseStatus: ent.showcaseStatus,
       ...(ent.contactUserId ? { contactUid: ent.contactUserId } : {}),
       contactName: ent.contactName,
       members: identityRows.map((row) => ({
@@ -939,7 +932,7 @@ export class AppEnterprisesService {
   /** 公开企业名片（仅 published 且未删除可见；services/advantages 数组拼接为文本） */
   async enterpriseShowcase(id: string): Promise<EnterpriseShowcaseDto> {
     const ent = await this.prisma.enterprise.findFirst({ where: { id, deletedAt: null } })
-    if (!ent || ent.showcaseStatus !== 'published') throw new NotFoundException('企业名片不存在或未发布')
+    if (!ent) throw new NotFoundException('企业名片不存在')
 
     const identityRows = await this.prisma.userIdentity.findMany({
       where: { type: 'community_enterprise', enterpriseId: ent.id },
@@ -960,7 +953,6 @@ export class AppEnterprisesService {
       ...(servicesText ? { services: servicesText } : {}),
       ...(advantagesText ? { advantages: advantagesText } : {}),
       description: ent.description,
-      showcaseStatus: 'published' as const,
       members: identityRows.map((row) => row.user.nickname),
     }
   }

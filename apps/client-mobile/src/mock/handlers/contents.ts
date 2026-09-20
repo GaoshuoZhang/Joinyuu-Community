@@ -1,9 +1,10 @@
-import type { Article, ArticleColumn, ArticleComment, ArticleCreatePayload, MySubmittedArticle } from '@/types'
-import { accountByUid, articleComments, articleLikesByUid, articlePayloadById, articles, blockedByUid, columns, enterprises, myArticlesByUid, nextMockId, nowStamp, pushNotice, trackMockEvent } from '@/mock/db'
+import type { Article, ArticleColumn, ArticleComment, ArticleCreatePayload, IdentityType, MySubmittedArticle, MySubmittedArticleDetail } from '@/types'
+import { accountByUid, articleComments, articleLikesByUid, articlePayloadById, articles, columns, enterprises, myArticlesByUid, nextMockId, nowStamp, pushNotice, trackMockEvent } from '@/mock/db'
 import { permissionsOf } from '@/mock/handlers/enterprises'
 import { readPayload } from '@/mock/session'
 import { fail, withLatency } from '@/mock/latency'
 import { formatMockDate } from '@/mock/runtime'
+import { articleContentVisibleTextLength } from '@/utils/articleContent'
 
 /* [MOCK-ONLY] 内容与投稿 handlers：SU 前缀、提交即 pending、浏览量 +1、通知触发点；
  * v34 支持审核中撤回与驳回后修改重提。 */
@@ -30,7 +31,7 @@ function normalizeArticle(uid: string, payload: ArticleCreatePayload): { title: 
     if (!enterprise || !enterprise.members.some((member) => member.uid === uid)) fail(403, '你不是该企业成员')
     if (!permissionsOf(enterprise, uid).includes('article_submit')) fail(403, '你没有代企业提交投稿的权限')
   }
-  if (content.length < 30) fail(400, '正文至少 30 字')
+  if (articleContentVisibleTextLength(content) < 30) fail(400, '正文至少 30 字')
   return { title, content, columnLabel: columns.find((c) => c.code === payload.columnCode)?.label ?? payload.columnCode }
 }
 
@@ -38,18 +39,25 @@ export async function fetchColumns(): Promise<ArticleColumn[]> {
   return withLatency(() => [...columns], 100)
 }
 
+/** 对客户端只下发 published（closed 已下架不可见） */
+function toPublicArticle(article: (typeof articles)[number]): Article {
+  const { status: _status, ...publicArticle } = article
+  void _status
+  return publicArticle
+}
+
 export async function fetchArticles(query: { column?: string; keyword?: string } = {}): Promise<Article[]> {
   return withLatency(() => {
-    let list = [...articles]
+    let list = articles.filter((a) => a.status === 'published').map(toPublicArticle)
     if (query.column) list = list.filter((a) => a.columnLabel === query.column)
     if (query.keyword) list = list.filter((a) => a.title.includes(query.keyword!))
-    return list
+    return list.sort((a, b) => b.publishedAt.localeCompare(a.publishedAt))
   })
 }
 
 export async function fetchArticle(id: string): Promise<Article> {
   return withLatency(() => {
-    const a = articles.find((x) => x.id === id)
+    const a = articles.find((x) => x.id === id && x.status === 'published')
     if (!a) fail(404, '文章不存在或未发布')
     /* v39：浏览量按浏览器 + 自然日去重（Mock 时钟口径），避免刷新即增长 */
     const viewKey = `joinyuu_article_viewed_${id}_${formatMockDate()}`
@@ -64,7 +72,7 @@ export async function fetchArticle(id: string): Promise<Article> {
     /* v38：点赞聚合（跨账号）与我的点赞状态 */
     const likeCount = Object.values(articleLikesByUid).reduce((sum, list) => sum + (list.includes(a.id) ? 1 : 0), 0)
     const uid = readPayload()?.sub
-    return { ...a, commentsEnabled: a.commentsEnabled ?? true, likeCount, liked: uid ? (articleLikesByUid[uid] ?? []).includes(a.id) : false }
+    return { ...toPublicArticle(a), commentsEnabled: a.commentsEnabled ?? true, likeCount, liked: uid ? (articleLikesByUid[uid] ?? []).includes(a.id) : false }
   }, 180)
 }
 
@@ -73,7 +81,7 @@ export async function fetchArticle(id: string): Promise<Article> {
 export async function toggleArticleLike(articleId: string): Promise<{ liked: boolean; likeCount: number }> {
   return withLatency(() => {
     const uid = requireUid()
-    const article = articles.find((item) => item.id === articleId)
+    const article = articles.find((item) => item.id === articleId && item.status === 'published')
     if (!article) fail(404, '文章不存在或未发布')
     const list = (articleLikesByUid[uid] ??= [])
     const index = list.indexOf(articleId)
@@ -86,28 +94,40 @@ export async function toggleArticleLike(articleId: string): Promise<{ liked: boo
 
 export async function fetchArticleComments(articleId: string): Promise<ArticleComment[]> {
   return withLatency(() => {
-    const article = articles.find((item) => item.id === articleId)
+    const article = articles.find((item) => item.id === articleId && item.status === 'published')
     if (!article) fail(404, '文章不存在或未发布')
     if (article.commentsEnabled === false) fail(409, '文章评论已关闭')
-    const uid = readPayload()?.sub
-    const blocked = uid ? (blockedByUid[uid] ?? []) : []
     return articleComments
-      .filter((item) => item.articleId === articleId && !blocked.includes(item.uid))
-      .sort((a, b) => b.at.localeCompare(a.at))
-      .map((item) => ({ ...item }))
+      .filter((item) => item.articleId === articleId)
+      .sort((a, b) => a.at.localeCompare(b.at) || a.id.localeCompare(b.id))
+      .map((item) => ({ ...item, avatar: item.avatar ?? accountByUid(item.uid)?.avatar, identityType: item.identityType ?? 'individual' }))
   }, 140)
 }
 
-export async function createArticleComment(articleId: string, content: string): Promise<void> {
+export async function createArticleComment(articleId: string, content: string, asIdentity: IdentityType = 'individual', asEnterpriseId?: string): Promise<void> {
   await withLatency(() => {
     const uid = requireUid()
-    const article = articles.find((item) => item.id === articleId)
+    const article = articles.find((item) => item.id === articleId && item.status === 'published')
     if (!article) fail(404, '文章不存在或未发布')
     if (article.commentsEnabled === false) fail(409, '文章评论已关闭')
     const text = content.trim()
     if (text.length < 2) fail(400, '评论至少 2 个字')
     if (text.length > 200) fail(400, '评论最多 200 个字')
     const account = accountByUid(uid)
+    const owned = account?.identities ?? []
+    let identityType: IdentityType = 'individual'
+    let identityName: string | undefined
+    if (asIdentity === 'community_enterprise') {
+      const row = owned.find((i) => i.type === 'community_enterprise' && i.enterpriseId === asEnterpriseId)
+      if (!asEnterpriseId || !row) fail(400, '您暂未关联该身份')
+      identityType = 'community_enterprise'
+      identityName = row.enterpriseName
+    } else if (asIdentity === 'community_individual' || asIdentity === 'external_enterprise') {
+      const row = owned.find((i) => i.type === asIdentity)
+      if (!row) fail(400, '您暂未关联该身份')
+      identityType = asIdentity
+      identityName = asIdentity === 'external_enterprise' ? row.organizationName : undefined
+    }
     articleComments.unshift({
       id: nextMockId('CM'),
       articleId,
@@ -116,6 +136,8 @@ export async function createArticleComment(articleId: string, content: string): 
       avatar: account?.avatar,
       content: text,
       at: nowStamp(),
+      identityType,
+      identityName,
     })
     trackMockEvent('article_comment')
   }, 160)
@@ -165,21 +187,6 @@ export async function resubmitArticle(id: string, payload: ArticleCreatePayload)
   })
 }
 
-/** 驳回后申诉（一次性）。 */
-export async function appealArticle(id: string, reason: string): Promise<void> {
-  await withLatency(() => {
-    const uid = requireUid()
-    const item = (myArticlesByUid[uid] ?? []).find((article) => article.id === id)
-    if (!item) fail(404, '投稿不存在')
-    if (item.status !== 'rejected') fail(409, '仅已驳回的投稿可申诉')
-    if (item.appealed) fail(409, '该投稿已提交过申诉')
-    if (!reason.trim()) fail(400, '请填写申诉理由')
-    item.appealed = true
-    item.appealReason = reason.trim()
-    pushNotice(uid, { type: 'system', title: '申诉已提交', content: `「${item.title}」的申诉已提交，运营将在 3 个工作日内复核。`, link: '/me/articles' })
-  })
-}
-
 /** 重提前回填：返回投稿原始内容（仅本人）。 */
 export async function fetchMyArticlePayload(id: string): Promise<ArticleCreatePayload> {
   return withLatency(() => {
@@ -196,5 +203,26 @@ export async function fetchMyArticles(): Promise<MySubmittedArticle[]> {
   return withLatency(() => {
     const uid = requireUid()
     return [...(myArticlesByUid[uid] ?? [])]
+  })
+}
+
+export async function fetchMyArticle(id: string): Promise<MySubmittedArticleDetail> {
+  return withLatency(() => {
+    const uid = requireUid()
+    const item = (myArticlesByUid[uid] ?? []).find((article) => article.id === id)
+    if (!item) fail(404, '投稿不存在')
+    const stored = articlePayloadById[id]
+    if (!stored || stored.uid !== uid) fail(404, '投稿内容不存在')
+    const account = accountByUid(uid)
+    return {
+      ...structuredClone(item),
+      authorName: account?.realName || account?.nickname || '未命名',
+      content: stored.payload.content,
+      summary: '',
+      tags: [],
+      asIdentity: stored.payload.asIdentity,
+      asEnterpriseId: stored.payload.asEnterpriseId,
+      identityName: stored.payload.asEnterpriseId ? enterprises.find((enterprise) => enterprise.id === stored.payload.asEnterpriseId)?.name : undefined,
+    }
   })
 }

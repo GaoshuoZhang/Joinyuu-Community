@@ -1,297 +1,165 @@
 <script setup lang="ts">
-import { onMounted, ref } from 'vue'
+import { computed, onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
-import { Button, DialogPlugin, Icon, Popup, Rate, Textarea, Toast } from 'tdesign-mobile-vue'
-import { confirmOrder, fetchMyOrders, useOrder, cancelOrder, reviewOrder } from '@/api/mall'
+import { Button, Icon, TabPanel, Tabs } from 'tdesign-mobile-vue'
+import { fetchMyOrders } from '@/api/mall'
 import { useAsyncList } from '@/composables/useAsyncList'
-import { formatMockStamp } from '@/mock/runtime'
+import { useIncrementalList } from '@/composables/useIncrementalList'
+import { useTabSwipe } from '@/composables/useTabSwipe'
 import EmptyBlock from '@/components/shared/EmptyBlock.vue'
 import ListSkeleton from '@/components/ListSkeleton.vue'
-import StateTag from '@/components/shared/StateTag.vue'
 import type { MyOrder } from '@/types'
+import StateTag from '@/components/shared/StateTag.vue'
+import { formatLocalDateTime, formatZhNumber } from '@/utils/format'
 
-/* 移动我的兑换订单：订单卡片（商品/积分/状态/时间）；shipped 可确认收货（Dialog 二次确认）；空态提供去兑换入口 */
+/* 我的订单：整页左右滑动切换「全部 / 未完成 / 已完成」（默认未完成）；
+ * 未完成含数字券与实物订单（发货后仍留在未完成，确认收货后转入已完成）。
+ * 点击进入订单详情查看券码与二维码。 */
 const router = useRouter()
-
-const { data, loading, error, run } = useAsyncList<MyOrder[]>(() => fetchMyOrders())
+const { data, loading, error, run } = useAsyncList(fetchMyOrders)
 onMounted(run)
 
-const actingId = ref('')
+type OrderTab = 'all' | 'unfinished' | 'completed'
+const TAB_VALUES = ['all', 'unfinished', 'completed'] as const
+const TABS: { value: OrderTab; label: string }[] = [
+  { value: 'all', label: '全部' },
+  { value: 'unfinished', label: '未完成' },
+  { value: 'completed', label: '已完成' },
+]
+/* 默认展示未完成（券码核销与待收货主场景） */
+const activeTab = ref<OrderTab>('unfinished')
 
-/* v41：订单评价 */
-const reviewFor = ref<MyOrder | null>(null)
-const reviewRating = ref(5)
-const reviewText = ref('')
-const reviewing = ref(false)
-function openReview(o: MyOrder) {
-  reviewFor.value = o
-  reviewRating.value = 5
-  reviewText.value = ''
-}
-async function onReviewSubmit() {
-  if (!reviewFor.value) return
-  reviewing.value = true
-  try {
-    await reviewOrder(reviewFor.value.id, reviewRating.value, reviewText.value)
-    Toast('评价已提交')
-    reviewFor.value = null
-    await run()
-  } catch (e) {
-    Toast(e instanceof Error ? e.message : '评价失败，请稍后重试')
-  } finally {
-    reviewing.value = false
-  }
-}
+const UNFINISHED_STATUSES = ['pending_use', 'pending_shipment', 'shipped']
 
-function onConfirmReceipt(o: MyOrder) {
-  DialogPlugin.confirm({
-    title: '确认收货',
-    content: `确认已收到「${o.goodsName}」？确认后订单将完成。`,
-    cancelBtn: '取消',
-    confirmBtn: '确认收货',
-    onConfirm: () => {
-      void doConfirm(o)
-    },
-  })
-}
+const orders = computed(() => data.value ?? [])
+const filtered = computed(() => {
+  if (activeTab.value === 'all') return orders.value
+  if (activeTab.value === 'completed') return orders.value.filter((order) => String(order.status) === 'completed')
+  return orders.value.filter((order) => UNFINISHED_STATUSES.includes(String(order.status)))
+})
+const { visibleItems, hasMore, showMore } = useIncrementalList(filtered)
 
-async function doConfirm(o: MyOrder) {
-  actingId.value = o.id
-  try {
-    await confirmOrder(o.id)
-    Toast('已确认收货')
-    await run()
-  } catch (e) {
-    Toast(e instanceof Error ? e.message : '操作失败，请稍后重试')
-  } finally {
-    actingId.value = ''
-  }
-}
+const { startSwipe, moveSwipe, cancelSwipe } = useTabSwipe(
+  () => TAB_VALUES,
+  () => activeTab.value,
+  (value) => (activeTab.value = value as OrderTab),
+)
 
-function onUse(o: MyOrder) {
-  DialogPlugin.confirm({
-    title: '核销权益',
-    content: `确认已使用「${o.goodsName}」？核销后订单将完成。`,
-    cancelBtn: '取消',
-    confirmBtn: '确认核销',
-    onConfirm: () => {
-      void doUse(o)
-    },
-  })
-}
-
-async function doUse(o: MyOrder) {
-  actingId.value = o.id
-  try {
-    await useOrder(o.id)
-    Toast('权益已核销')
-    await run()
-  } catch (e) {
-    Toast(e instanceof Error ? e.message : '操作失败，请稍后重试')
-  } finally {
-    actingId.value = ''
-  }
-}
-
-async function copyCode(code: string) {
-  try {
-    await navigator.clipboard.writeText(code)
-    Toast('券码已复制')
-  } catch {
-    Toast(`券码：${code}`)
-  }
-}
-
-/* v38：券码有效期与取消订单 */
-function voucherExpired(expiresAt?: string): boolean {
-  if (!expiresAt) return false
-  return expiresAt < formatMockStamp()
-}
-
-function onCancelOrder(o: MyOrder) {
-  DialogPlugin.confirm({
-    title: '取消兑换',
-    content: `取消后「${o.goodsName}」的 ${o.pointsCost} 积分将退回，库存恢复。确认取消？`,
-    cancelBtn: '再想想',
-    confirmBtn: '确认取消',
-    onConfirm: async () => {
-      actingId.value = o.id
-      try {
-        await cancelOrder(o.id)
-        Toast('订单已取消，积分已退回')
-        await run()
-      } catch (e) {
-        Toast(e instanceof Error ? e.message : '取消失败，请稍后重试')
-      } finally {
-        actingId.value = ''
-      }
-    },
-  })
+function goDetail(order: MyOrder) {
+  void router.push(`/me/orders/${order.id}`)
 }
 </script>
 
 <template>
-  <div class="m-orders page-fade-in stagger">
-    <ListSkeleton v-if="loading" />
-    <EmptyBlock v-else-if="error" :text="error" action-text="重试" @action="run" />
-    <template v-else-if="(data ?? []).length > 0">
-      <p class="list-count">共 {{ (data ?? []).length }} 笔订单</p>
-      <div v-for="o in data" :key="o.id" class="m-card">
-        <div class="row">
-          <p class="name">{{ o.goodsName }}</p>
-          <StateTag kind="order" :value="o.status" />
+  <div
+    class="m-orders page-fade-in"
+    @touchstart="startSwipe"
+    @touchmove="moveSwipe"
+    @touchend="cancelSwipe"
+    @touchcancel="cancelSwipe"
+  >
+    <Tabs v-model="activeTab" class="top-tabs" :swipeable="false">
+      <TabPanel v-for="tab in TABS" :key="tab.value" :value="tab.value" :label="tab.label">
+        <div v-if="activeTab === tab.value" class="tab-panel">
+          <ListSkeleton v-if="loading && !orders.length" />
+          <EmptyBlock v-else-if="error" :text="error" action-text="重试" @action="run" />
+          <EmptyBlock v-else-if="!filtered.length" :text="tab.value === 'all' ? '暂无兑换订单' : `暂无${tab.label}订单`" />
+          <template v-else>
+            <p class="list-count">共 {{ formatZhNumber(filtered.length) }} 笔订单</p>
+            <article
+              v-for="order in visibleItems"
+              :key="order.id"
+              class="m-card order-card"
+              v-pressable
+              @click="goDetail(order)"
+            >
+              <div class="row">
+                <h2 class="name">{{ order.goodsName }}</h2>
+                <StateTag kind="order" :value="order.status" />
+              </div>
+              <p class="cost">{{ formatZhNumber(order.pointsCost) }} 积分</p>
+              <p v-if="order.voucherCode" class="voucher">
+                兑换码：<code translate="no">{{ order.voucherCode }}</code>
+              </p>
+              <p v-else-if="order.trackingNo" class="meta">物流单号：{{ order.trackingNo }}</p>
+              <p class="meta">下单时间：{{ formatLocalDateTime(order.createdAt) }}</p>
+              <span class="detail-link">查看详情<Icon aria-hidden="true" name="chevron-right" size="14px" /></span>
+            </article>
+            <Button v-if="hasMore" block variant="outline" @click="showMore">
+              加载更多（剩余 {{ formatZhNumber(filtered.length - visibleItems.length) }} 笔）
+            </Button>
+          </template>
         </div>
-        <p class="cost">{{ o.pointsCost }} 积分</p>
-        <p v-if="o.recipientAddress" class="recipient">收货：{{ o.recipientName }} {{ o.recipientPhone }} · {{ o.recipientAddress }}</p>
-        <p v-if="o.trackingNo" class="recipient">物流单号：{{ o.trackingNo }}</p>
-        <p v-if="o.voucherCode" class="voucher">
-          券码：<code>{{ o.voucherCode }}</code>
-          <Button size="small" variant="outline" :disabled="voucherExpired(o.voucherExpiresAt)" @click="copyCode(o.voucherCode)">复制</Button>
-          <span v-if="voucherExpired(o.voucherExpiresAt)" class="expired">已过期</span>
-          <span v-else-if="o.voucherExpiresAt" class="expiry">有效期至 {{ o.voucherExpiresAt }}</span>
-        </p>
-        <p class="meta">
-          下单时间：{{ o.createdAt }}<template v-if="o.shippedAt"> · 发货时间：{{ o.shippedAt }}</template><template v-if="o.usedAt"> · 使用时间：{{ o.usedAt }}</template><template v-if="o.finishedAt"> · 完成时间：{{ o.finishedAt }}</template>
-        </p>
-        <div v-if="o.status === 'completed'" class="ops">
-          <Button v-if="!o.rating" theme="primary" size="small" @click="openReview(o)">评价</Button>
-          <span v-else class="reviewed">已评价 <Icon v-for="n in o.rating" :key="n" name="star-filled" size="14px" class="review-star" /><template v-if="o.review"> · {{ o.review }}</template></span>
-        </div>
-        <div v-if="o.status === 'shipped' || o.status === 'pending_use' || o.status === 'pending_shipment'" class="ops">
-          <Button
-            v-if="o.status === 'shipped'"
-            theme="primary"
-            size="small"
-            :disabled="actingId === o.id"
-            @click="onConfirmReceipt(o)"
-          >
-            {{ actingId === o.id ? '处理中…' : '确认收货' }}
-          </Button>
-          <Button
-            v-else-if="o.status === 'pending_use'"
-            theme="primary"
-            size="small"
-            :disabled="actingId === o.id"
-            @click="onUse(o)"
-          >
-            {{ actingId === o.id ? '处理中…' : '立即使用' }}
-          </Button>
-          <Button
-            v-else
-            variant="outline"
-            size="small"
-            :disabled="actingId === o.id"
-            @click="onCancelOrder(o)"
-          >
-            {{ actingId === o.id ? '处理中…' : '取消兑换' }}
-          </Button>
-        </div>
-      </div>
-    </template>
-    <template v-else>
-      <EmptyBlock text="暂无兑换订单" />
-      <Button theme="primary" class="go-mall" @click="router.push('/mall')">去兑换<template #suffix><Icon name="chevron-right" size="14px" /></template></Button>
-    </template>
-
-    <Popup :visible="!!reviewFor" placement="bottom" @update:visible="(v: boolean) => { if (!v) reviewFor = null }">
-      <div v-if="reviewFor" class="review-sheet">
-        <h3 class="review-title">评价「{{ reviewFor.goodsName }}」</h3>
-        <Rate v-model="reviewRating" :count="5" aria-label="订单评分" />
-        <Textarea v-model="reviewText" :maxlength="100" :autosize="{ minRows: 2, maxRows: 4 }" placeholder="说说兑换体验（选填，100 字内）" />
-        <Button theme="primary" block :loading="reviewing" @click="onReviewSubmit">提交评价</Button>
-      </div>
-    </Popup>
+      </TabPanel>
+    </Tabs>
   </div>
 </template>
 
 <style scoped>
-.review-sheet {
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-  padding: 16px 16px calc(16px + env(safe-area-inset-bottom));
-}
-
-.review-title {
-  margin: 0;
-  font-size: 16px;
-}
-
-.reviewed {
-  font-size: 12px;
-  color: var(--td-text-color-secondary);
-}
-
-.review-star {
-  color: var(--td-warning-color);
-  vertical-align: -2px;
-}
-
 .m-orders {
-  padding: 16px;
+  padding: var(--app-space-8);
   display: flex;
   flex-direction: column;
-  gap: 10px;
 }
 
-.error-box {
-  text-align: center;
-  color: var(--td-error-color);
-  font-size: 12px;
+.top-tabs {
+  --td-tab-nav-background: var(--td-bg-color-container);
+  --td-tabs-track-color: var(--td-brand-color);
 }
 
-.error-box p {
-  margin: 0 0 10px;
+.tab-panel {
+  display: flex;
+  flex-direction: column;
+  gap: var(--app-space-5);
+  padding-top: var(--app-space-6);
+}
+
+.list-count {
+  margin: 0 2px;
+}
+
+.order-card {
+  cursor: pointer;
 }
 
 .row {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 10px;
-  margin-bottom: 6px;
+  gap: var(--app-space-5);
+  margin-bottom: var(--app-space-3);
 }
 
 .name {
   margin: 0;
-  font-size: 14px;
-  font-weight: 600;
+  flex: 1;
   min-width: 0;
+  font-size: var(--app-font-body);
+  font-weight: 600;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
 .cost {
-  margin: 0 0 6px;
-  font-size: 14px;
+  margin: 0 0 var(--app-space-3);
+  font-variant-numeric: tabular-nums;
+  font-size: var(--app-font-body);
   font-weight: 600;
   color: var(--td-brand-color);
-}
-
-.meta {
-  margin: 0;
-  font-size: 12px;
-  color: var(--td-text-color-secondary);
-}
-
-.ops {
-  margin-top: 10px;
-  display: flex;
-  justify-content: flex-end;
 }
 
 .voucher {
   display: flex;
   align-items: center;
-  gap: 8px;
-  margin: 0 0 6px;
-  font-size: 12px;
+  gap: var(--app-space-4);
+  margin: 0 0 var(--app-space-3);
+  font-size: var(--app-font-caption);
   color: var(--td-text-color-secondary);
 }
 
 .voucher code {
-  padding: 2px 6px;
+  padding: var(--app-space-1) var(--app-space-3);
   border-radius: var(--td-radius-small);
   background: var(--td-bg-color-secondarycontainer);
   color: var(--td-brand-color);
@@ -299,24 +167,19 @@ function onCancelOrder(o: MyOrder) {
   letter-spacing: 0.5px;
 }
 
-.recipient {
-  margin: 0 0 6px;
-  font-size: 12px;
-  line-height: 1.7;
+.meta {
+  margin: 0;
+  font-size: var(--app-font-caption);
   color: var(--td-text-color-secondary);
 }
 
-.expired {
-  color: var(--td-error-color);
-  font-size: 12px;
-}
-
-.expiry {
-  color: var(--td-text-color-placeholder);
-  font-size: 12px;
-}
-
-.go-mall {
-  align-self: center;
+.detail-link {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--app-space-1);
+  align-self: flex-end;
+  margin-top: var(--app-space-3);
+  font-size: var(--app-font-caption);
+  color: var(--td-brand-color);
 }
 </style>

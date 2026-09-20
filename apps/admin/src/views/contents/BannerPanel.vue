@@ -247,7 +247,7 @@ onMounted(load)
       </template>
       <t-form ref="formRef" :data="form" :rules="rules" label-align="top">
         <t-form-item label="轮播标题" name="title">
-          <t-input v-model="form.title" :maxlength="64" placeholder="如 2026 春季创业路演周…" />
+          <t-input v-model="form.title" :maxlength="64" placeholder="如 2026 秋季创业路演周…" />
         </t-form-item>
         <t-form-item label="副标题" name="subtitle">
           <t-input v-model="form.subtitle" :maxlength="128" placeholder="一句话补充说明…" />

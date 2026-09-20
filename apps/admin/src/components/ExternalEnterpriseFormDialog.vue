@@ -207,7 +207,7 @@ function onClose() {
       <t-form-item v-if="mode === 'edit'" label="关联成员">
         <div class="member-box">
           <p class="member-tip">
-            关联成员为该企业的 external_enterprise 身份成员，勾选保存后同步身份绑定。
+            关联成员为该企业的 external_enterprise 身份成员，勾选保存后同步成员归属。
           </p>
           <t-select
             v-model="memberUids"

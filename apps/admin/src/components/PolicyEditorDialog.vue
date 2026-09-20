@@ -104,6 +104,8 @@ async function submit() {
 
 <template>
   <t-dialog
+    lazy
+    destroy-on-close
     :visible="visible"
     :header="record ? `编辑${mode === 'community' ? '社区政策' : '协议'}版本` : `新增${mode === 'community' ? '社区政策' : '协议'}版本`"
     width="880px"

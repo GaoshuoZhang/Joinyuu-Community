@@ -94,4 +94,29 @@ export const pointsRecords: PointsRecord[] = [
   { id: 'PT9020', userId: 'U1014', delta: -120, balance: 200, reason: '兑换「精品咖啡券」', at: '2026-09-02 10:00', source: 'redemption', operator: '系统' },
   { id: 'PT9021', userId: 'U1014', delta: 120, balance: 320, reason: '订单取消退回积分（RO2006）', at: '2026-09-02 18:30', source: 'manual', operator: '社区管理员' },
   /* U1006 沈嘉禾（当前 0）— 暂无流水 */
+  /* 其余成员的积分历史（保证每个用户余额与其末笔流水一致） */
+  /* U1003 苏晴（当前 1320） */
+  { id: 'PT9022', userId: 'U1003', delta: 700, balance: 700, reason: '天使轮财务顾问服务', at: '2025-11-20 15:00', source: 'manual', operator: '社区管理员' },
+  { id: 'PT9023', userId: 'U1003', delta: 620, balance: 1320, reason: '年度财务顾问奖励', at: '2026-03-10 10:00', source: 'manual', operator: '社区管理员' },
+  /* U1004 周慕深（当前 2410） */
+  { id: 'PT9025', userId: 'U1004', delta: 1210, balance: 1210, reason: '年度贡献企业负责人奖励', at: '2026-01-15 15:30', source: 'manual', operator: '社区管理员' },
+  { id: 'PT9024', userId: 'U1004', delta: 1200, balance: 2410, reason: '「半导体供应链对接专项」结项积分', at: '2026-09-01 14:10', source: 'rule', operator: '系统' },
+  /* U1007 韩梓萌（当前 1560） */
+  { id: 'PT9026', userId: 'U1007', delta: 560, balance: 560, reason: '「社区知识库共建」贡献积分', at: '2026-06-20 17:40', source: 'manual', operator: '社区管理员' },
+  { id: 'PT9027', userId: 'U1007', delta: 1000, balance: 1560, reason: '产品实践分享嘉宾奖励', at: '2026-09-04 20:10', source: 'manual', operator: '社区管理员' },
+  /* U1008 陆则铭（当前 2740） */
+  { id: 'PT9028', userId: 'U1008', delta: 740, balance: 740, reason: '「社区开源组件库」发起积分', at: '2026-06-20 17:40', source: 'manual', operator: '社区管理员' },
+  { id: 'PT9029', userId: 'U1008', delta: 2000, balance: 2740, reason: '青年创业者导师计划发起奖励', at: '2026-08-28 10:00', source: 'manual', operator: '社区管理员' },
+  /* U1009 白若溪（当前 860） */
+  { id: 'PT9031', userId: 'U1009', delta: 500, balance: 500, reason: '「气凝胶在消费电子热管理中的应用」投稿采纳', at: '2026-09-03 15:10', source: 'rule', operator: '系统' },
+  { id: 'PT9030', userId: 'U1009', delta: 360, balance: 860, reason: '「新材料趋势分享会」讲师积分', at: '2026-09-05 17:00', source: 'rule', operator: '系统' },
+  /* U1010 程一诺（当前 2130） */
+  { id: 'PT9032', userId: 'U1010', delta: 1130, balance: 1130, reason: '「智慧园区访客系统试点」承接积分', at: '2026-07-20 14:45', source: 'rule', operator: '系统' },
+  { id: 'PT9033', userId: 'U1010', delta: 1000, balance: 2130, reason: '天使轮筹备贡献奖励', at: '2026-09-03 13:40', source: 'manual', operator: '社区管理员' },
+  /* U1011 孟繁星（当前 1680） */
+  { id: 'PT9034', userId: 'U1011', delta: 680, balance: 680, reason: '「社区品牌联名周边」设计定稿积分', at: '2026-08-20 16:30', source: 'manual', operator: '社区管理员' },
+  { id: 'PT9035', userId: 'U1011', delta: 1000, balance: 1680, reason: '设计思维工作坊主办奖励', at: '2026-09-18 17:30', source: 'manual', operator: '社区管理员' },
+  /* U1013 何雨桐（当前 1140） */
+  { id: 'PT9036', userId: 'U1013', delta: 640, balance: 640, reason: '品牌合作项目积分', at: '2026-04-10 15:00', source: 'manual', operator: '社区管理员' },
+  { id: 'PT9037', userId: 'U1013', delta: 500, balance: 1140, reason: '运营贡献奖励', at: '2026-09-02 14:00', source: 'manual', operator: '社区管理员' },
 ]

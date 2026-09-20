@@ -214,6 +214,7 @@ const categoryOptions = ref([
   { label: '全部', value: '' },
   ...dictFallback.demand_category.map((label) => ({ label, value: label })),
 ])
+const categoryText = (demand: Demand) => demand.categoryLabel ?? demand.category
 
 const statusOptions = [
   { label: '全部', value: '' },
@@ -302,7 +303,7 @@ function onExport() {
     list.value.map((d) => [
       d.id,
       d.title,
-      d.category,
+      categoryText(d),
       d.publisherName,
       d.budget,
       d.respondents.length,
@@ -326,7 +327,7 @@ async function onExportAll() {
       (d) => [
         d.id,
         d.title,
-        d.category,
+        categoryText(d),
         d.publisherName,
         d.budget,
         d.respondents.length,
@@ -605,8 +606,8 @@ onMounted(() => {
   load()
   fetchDictEntries('demand_category')
     .then((entries) => {
-      const labels = entries.filter((e) => e.status === 'enabled').map((e) => ({ label: e.label, value: e.label }))
-      if (labels.length) categoryOptions.value = [{ label: '全部', value: '' }, ...labels]
+      const options = entries.filter((e) => e.status === 'enabled').map((e) => ({ label: e.label, value: e.code }))
+      if (options.length) categoryOptions.value = [{ label: '全部', value: '' }, ...options]
     })
     .catch(() => {
       /* 字典加载失败保留回退词表 */
@@ -725,7 +726,7 @@ onMounted(() => {
         </template>
 
         <template #category="{ row }">
-          <t-tag variant="light">{{ row.category }}</t-tag>
+          <t-tag variant="light">{{ categoryText(row) }}</t-tag>
         </template>
         <template #demandType="{ row }">
           <t-tag variant="light" theme="primary">{{ demandTypeLabel[row.demandType] ?? row.demandType }}</t-tag>
@@ -906,7 +907,7 @@ onMounted(() => {
             <t-input clearable v-model="proxyForm.phone" name="proxy-phone" type="tel" inputmode="tel" autocomplete="tel" placeholder="必填…" />
           </t-form-item>
           <t-form-item label="联系邮箱" name="email">
-            <t-input clearable v-model="proxyForm.email" name="proxy-email" type="email" inputmode="email" autocomplete="email" placeholder="选填…" />
+            <t-input clearable v-model="proxyForm.email" name="proxy-email" inputmode="email" autocomplete="email" placeholder="选填…" />
           </t-form-item>
         </div>
         <t-form-item label="报价" name="quote">

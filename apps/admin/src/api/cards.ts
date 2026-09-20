@@ -7,7 +7,7 @@ export interface CardRow {
   honors?: Record<string, string>[]; socials?: Record<string, string>[]; customLinks?: Record<string, string>[]
   visibility?: { age: boolean; politicalStatus: boolean }
   logo?: string; industry?: string; size?: string; foundedAt?: string; website?: string; address?: string
-  services?: string[]; advantages?: string[]; showcaseStatus?: string
+  services?: string[]; advantages?: string[]
 }
 export const cardFields: Record<CardType, { key: string; label: string }[]> = {
   individual: Object.entries({ displayName: '展示姓名', age: '年龄', politicalStatus: '政治面貌', intro: '个人简介', industryExperience: '行业经验', skills: '相关技能', education: '教育经历', work: '工作经历', projects: '项目经历', honors: '荣誉证书', socials: '社交链接', customLinks: '自定义链接', visibility: '公开可见性' }).map(([key, label]) => ({ key, label })),

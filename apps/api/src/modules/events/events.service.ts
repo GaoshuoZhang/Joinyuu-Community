@@ -7,6 +7,7 @@ import { PointsEngineService } from '../../common/engine/points-engine/points-en
 import { formatNow } from '../../common/utils/time'
 import { sanitizeHtml } from '../../common/utils/sanitize-html'
 import type { EventPayloadDto } from './dto/event-payload.dto'
+import type { QueryEnrollmentsDto } from './dto/query-enrollments.dto'
 import { toEventDto } from './event-dto'
 import { NotificationService } from '../../common/notify/notification.service'
 import type { RescheduleEventDto } from './dto/reschedule-event.dto'
@@ -75,6 +76,79 @@ export class EventsService {
     return { list: list.map((e) => toEventDto(e, e.enrollments)), total }
   }
 
+  /** 活动报名审核列表（跨活动；keyword 匹配报名人/企业/电话/活动标题与编号） */
+  async listEnrollments(query: QueryEnrollmentsDto): Promise<{ list: unknown[]; total: number }> {
+    const where: Prisma.EventEnrollmentWhereInput = {}
+    if (query.status) where.status = query.status
+    if (query.eventId) where.eventId = query.eventId
+    if (query.keyword) {
+      where.OR = [
+        { name: { contains: query.keyword, mode: 'insensitive' } },
+        { enterprise: { contains: query.keyword, mode: 'insensitive' } },
+        { phone: { contains: query.keyword } },
+        { eventId: { contains: query.keyword, mode: 'insensitive' } },
+        { event: { title: { contains: query.keyword, mode: 'insensitive' } } },
+      ]
+    }
+
+    const [rows, total] = await Promise.all([
+      this.prisma.eventEnrollment.findMany({
+        where,
+        orderBy: [{ appliedAt: 'desc' }, { id: 'desc' }],
+        include: {
+          event: { select: { id: true, title: true, startTime: true, status: true } },
+          user: {
+            select: {
+              identities: {
+                orderBy: { id: 'asc' },
+                select: {
+                  type: true,
+                  enterpriseId: true,
+                  enterpriseName: true,
+                  role: true,
+                  title: true,
+                  level: true,
+                  experience: true,
+                },
+              },
+            },
+          },
+        },
+        skip: (query.page - 1) * query.pageSize,
+        take: query.pageSize,
+      }),
+      this.prisma.eventEnrollment.count({ where }),
+    ])
+    return {
+      list: rows.map((row) => ({
+        eventId: row.eventId,
+        eventTitle: row.event.title,
+        eventStartTime: row.event.startTime,
+        eventStatus: row.event.status,
+        userId: row.userId,
+        name: row.name,
+        enterprise: row.enterprise,
+        identities: row.user.identities.map((identity) => ({
+          type: identity.type,
+          enterpriseId: identity.enterpriseId ?? undefined,
+          enterpriseName: identity.enterpriseName ?? undefined,
+          role: identity.role ?? undefined,
+          title: identity.title,
+          level: identity.level ?? undefined,
+          experience: identity.experience ?? undefined,
+        })),
+        phone: row.phone,
+        appliedAt: row.appliedAt,
+        status: row.status,
+        waitlisted: row.waitlisted,
+        waitlistOrder: row.waitlistOrder,
+        checkedIn: row.checkedIn,
+        checkInAt: row.checkInAt,
+      })),
+      total,
+    }
+  }
+
   async findOne(id: string): Promise<unknown> {
     const [event, feedbacks] = await Promise.all([
       this.prisma.communityEvent.findUnique({
@@ -108,6 +182,7 @@ export class EventsService {
         id: await this.ids.next('EV'),
         createdAt: formatNow(),
         title: payload.title,
+        coverUrl: payload.coverUrl?.trim() || null,
         type: payload.type,
         startTime: payload.startTime,
         endTime: payload.endTime,
@@ -150,6 +225,7 @@ export class EventsService {
       where: { id },
       data: {
         title: payload.title,
+        coverUrl: payload.coverUrl?.trim() || null,
         type: payload.type,
         startTime: payload.startTime,
         endTime: payload.endTime,
@@ -414,6 +490,15 @@ export class EventsService {
         await this.engine.issuePoints(userId, 'activity_enroll_approved', ENROLL_APPROVED_POINTS_REASON)
       }
     }
+    await this.notify.pushNotice(userId, {
+      type: 'event',
+      title: status === 'approved' ? '活动报名已通过' : '活动报名未通过',
+      content:
+        status === 'approved'
+          ? `「${event.title}」报名已通过，请准时参加。`
+          : `「${event.title}」报名未通过审核。`,
+      link: '/me/enrollments',
+    })
     return { code: 0 }
   }
 

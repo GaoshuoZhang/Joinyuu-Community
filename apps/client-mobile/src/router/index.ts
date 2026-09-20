@@ -1,9 +1,8 @@
 import { createRouter, createWebHistory } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
-import { pageTitleFor } from '@/constants/pageTitles'
 
 /** M2 移动端路由表（纯移动端，2026-09-13 移除桌面端后直连 mobile 视图）。
- * 底部 5 Tab：首页 / 项目 / 社区 / 广场 / 我的（见 m2-client-plan §5.3 重构说明）。
+ * 底部 5 Tab：首页 / 项目 / 社区 / 广场 / 我的。
  * /me/**、提交类、入驻说明跳转需登录（requiresAuth）；未列出路径由 catchAll 兜底回首页。 */
 export const router = createRouter({
   history: createWebHistory(),
@@ -33,7 +32,6 @@ export const router = createRouter({
         { path: 'demands/new/invest', name: 'demand-new-invest', component: () => import('@/views/mobile/DemandInvestFormView.vue'), meta: { requiresAuth: true } },
         { path: 'demands/new/cooperation', name: 'demand-new-cooperation', component: () => import('@/views/mobile/DemandCoopFormView.vue'), meta: { requiresAuth: true } },
         { path: 'demands/:id', name: 'demand-detail', component: () => import('@/views/mobile/DemandDetailView.vue') },
-        { path: 'demands/:id/messages', name: 'demand-messages', component: () => import('@/views/mobile/DemandMessagesView.vue'), meta: { requiresAuth: true } },
 
         /* ---- 企业合作 / 人才登记（独立流程介绍页）---- */
         { path: 'intros/enterprise', name: 'intro-enterprise', component: () => import('@/views/mobile/EnterpriseCoopView.vue') },
@@ -42,10 +40,8 @@ export const router = createRouter({
         { path: 'intros/talent', name: 'intro-talent', component: () => import('@/views/mobile/IntroView.vue') },
 
         /* ---- 活动 ---- */
-        { path: 'events', name: 'events', component: () => import('@/views/mobile/EventsView.vue'), meta: { keepAlive: true } },
         { path: 'events/:id', name: 'event-detail', component: () => import('@/views/mobile/EventDetailView.vue') },
         { path: 'events/:id/check-in', name: 'event-checkin', component: () => import('@/views/mobile/CheckInView.vue'), meta: { requiresAuth: true } },
-        { path: 'events/:id/ticket', name: 'event-ticket', component: () => import('@/views/mobile/EventTicketView.vue'), meta: { requiresAuth: true } },
 
         /* ---- 积分商城 ---- */
         { path: 'mall', name: 'mall', component: () => import('@/views/mobile/MallView.vue'), meta: { keepAlive: true } },
@@ -65,7 +61,7 @@ export const router = createRouter({
         /* talent-card: 公开人才名片（人才库点入） */
         { path: 'enterprises/:id', name: 'enterprise-showcase', component: () => import('@/views/mobile/EnterpriseShowcaseView.vue') },
 
-        /* ---- 站内信 [MOCK-ONLY] ---- */
+        /* ---- 站内信 ---- */
         { path: 'notices', name: 'notices', component: () => import('@/views/mobile/NoticesView.vue'), meta: { requiresAuth: true } },
 
         /* ---- 个人中心 ---- */
@@ -84,19 +80,23 @@ export const router = createRouter({
         { path: 'me/responses', name: 'me-responses', component: () => import('@/views/mobile/MyResponsesView.vue'), meta: { requiresAuth: true } },
         { path: 'me/enrollments', name: 'me-enrollments', component: () => import('@/views/mobile/MyEnrollmentsView.vue'), meta: { requiresAuth: true } },
         { path: 'me/orders', name: 'me-orders', component: () => import('@/views/mobile/MyOrdersView.vue'), meta: { requiresAuth: true } },
+        { path: 'me/orders/:id', name: 'my-order-detail', component: () => import('@/views/mobile/MyOrderDetailView.vue'), meta: { requiresAuth: true } },
         { path: 'me/reservations', name: 'me-reservations', component: () => import('@/views/mobile/MyReservationsView.vue'), meta: { requiresAuth: true } },
+        { path: 'me/reservations/:id', name: 'my-reservation-detail', component: () => import('@/views/mobile/MyReservationDetailView.vue'), meta: { requiresAuth: true } },
+        { path: 'me/leases', name: 'me-leases', component: () => import('@/views/mobile/MyLeasesView.vue'), meta: { requiresAuth: true } },
         { path: 'me/articles', name: 'me-articles', component: () => import('@/views/mobile/MyArticlesView.vue'), meta: { requiresAuth: true } },
+        { path: 'me/articles/:id', name: 'my-article-detail', component: () => import('@/views/mobile/MyArticleDetailView.vue'), meta: { requiresAuth: true } },
         { path: 'me/favorites', name: 'me-favorites', component: () => import('@/views/mobile/MyFavoritesView.vue'), meta: { requiresAuth: true } },
         { path: 'me/history', name: 'me-history', component: () => import('@/views/mobile/HistoryView.vue'), meta: { requiresAuth: true } },
         { path: 'me/addresses', name: 'me-addresses', component: () => import('@/views/mobile/AddressesView.vue'), meta: { requiresAuth: true } },
         { path: 'me/security', name: 'me-security', component: () => import('@/views/mobile/SecurityView.vue'), meta: { requiresAuth: true } },
+        { path: 'me/records', name: 'me-records', component: () => import('@/views/mobile/MeRecordsView.vue'), meta: { requiresAuth: true } },
+        { path: 'me/settings', name: 'me-settings', component: () => import('@/views/mobile/MeSettingsView.vue'), meta: { requiresAuth: true } },
         { path: 'privacy', name: 'privacy', component: () => import('@/views/mobile/PrivacyView.vue') },
         { path: 'me/applications', name: 'me-applications', component: () => import('@/views/mobile/MyApplicationsView.vue'), meta: { requiresAuth: true } },
+        { path: 'me/applications/:id', name: 'my-application-detail', component: () => import('@/views/mobile/MyApplicationDetailView.vue'), meta: { requiresAuth: true } },
         { path: 'me/projects', name: 'me-projects', component: () => import('@/views/mobile/MyProjectsView.vue'), meta: { requiresAuth: true } },
         { path: 'me/projects/:id', name: 'my-project-detail', component: () => import('@/views/mobile/MyProjectDetailView.vue'), meta: { requiresAuth: true } },
-        { path: 'me/projects/:id/collab', name: 'project-collab', component: () => import('@/views/mobile/ProjectCollabView.vue'), meta: { requiresAuth: true } },
-        { path: 'me/enterprises/:id/workbench', name: 'enterprise-workbench', component: () => import('@/views/mobile/EnterpriseWorkbenchView.vue'), meta: { requiresAuth: true } },
-        { path: 'applications/new', name: 'application-new', component: () => import('@/views/mobile/ApplicationNewView.vue'), meta: { requiresAuth: true } },
         { path: 'applications/settle', name: 'application-settle', component: () => import('@/views/mobile/ApplicationSettleView.vue'), meta: { requiresAuth: true } },
         { path: 'applications/cooperation', name: 'application-cooperation', component: () => import('@/views/mobile/ApplicationCooperationView.vue'), meta: { requiresAuth: true } },
         { path: 'applications/individual', name: 'application-individual', component: () => import('@/views/mobile/ApplicationIndividualView.vue'), meta: { requiresAuth: true } },
@@ -135,10 +135,9 @@ router.beforeEach(async (to) => {
   return true
 })
 
-/* v38：随路由更新浏览器标题，便于历史/最近任务识别；
- * v39/v40：仅在路径变化且用户未在输入时聚焦主内容（避免搜索/筛选输入被夺焦、移动端键盘被收起）。 */
-const SITE_NAME = '聚屿社区'
+/* v39/v40：仅在路径变化且用户未在输入时聚焦主内容（避免搜索/筛选输入被夺焦、移动端键盘被收起）。 */
 let lastPath = ''
+let firstNavigation = true
 
 function isEditableFocused(): boolean {
   const el = document.activeElement as HTMLElement | null
@@ -148,8 +147,12 @@ function isEditableFocused(): boolean {
 }
 
 router.afterEach((to) => {
-  const title = pageTitleFor(to.path)
-  document.title = title ? `${title} · ${SITE_NAME}` : SITE_NAME
+  /* 首次进入（刷新/直达）不移动焦点：避免整页焦点环，且页面本身从头开始阅读 */
+  if (firstNavigation) {
+    firstNavigation = false
+    lastPath = to.path
+    return
+  }
   if (to.path === lastPath) return
   lastPath = to.path
   if (isEditableFocused()) return

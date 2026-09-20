@@ -10,10 +10,6 @@ export const statusMap = {
     cooling: { label: '待处理', theme: 'warning' }, approved: { label: '已注销', theme: 'default' },
     rejected: { label: '已驳回', theme: 'danger' }, cancelled: { label: '已撤回', theme: 'default' },
   },
-  realnameReview: {
-    unverified: { label: '未实名', theme: 'default' }, pending: { label: '待复核', theme: 'warning' },
-    approved: { label: '已通过', theme: 'success' }, rejected: { label: '已驳回', theme: 'danger' },
-  },
   user: {
     active: { label: '正常', theme: 'success' },
     frozen: { label: '已冻结', theme: 'danger' },
@@ -24,15 +20,11 @@ export const statusMap = {
     exited: { label: '已退出', theme: 'default' },
     disabled: { label: '已停用', theme: 'default' },
   },
-  showcase: {
-    published: { label: '已发布', theme: 'success' },
-    rejected: { label: '治理下架', theme: 'danger' },
-    none: { label: '未发布', theme: 'default' },
-  },
   application: {
     pending: { label: '待审核', theme: 'warning' },
     approved: { label: '已通过', theme: 'success' },
     rejected: { label: '已驳回', theme: 'danger' },
+    withdrawn: { label: '已撤回', theme: 'default' },
   },
   demand: {
     pending: { label: '待审核', theme: 'warning' },
@@ -42,6 +34,7 @@ export const statusMap = {
     selected: { label: '已选定', theme: 'primary' },
     rejected: { label: '已驳回', theme: 'danger' },
     projected: { label: '已立项', theme: 'success' },
+    withdrawn: { label: '已撤回', theme: 'default' },
     closed: { label: '已关闭', theme: 'default' },
   },
   project: {
@@ -72,6 +65,7 @@ export const statusMap = {
   },
   redemption: {
     pending_shipment: { label: '待发货', theme: 'warning' },
+    pending_use: { label: '待使用', theme: 'primary' },
     shipped: { label: '已发货', theme: 'primary' },
     finished: { label: '已完成', theme: 'success' },
     cancelled: { label: '已取消', theme: 'default' },
@@ -110,6 +104,7 @@ export const statusMap = {
     pending_release: { label: '待发布', theme: 'primary' },
     scheduled: { label: '定时发布中', theme: 'primary' },
     published: { label: '已发布', theme: 'success' },
+    withdrawn: { label: '已撤回', theme: 'default' },
     closed: { label: '已关闭', theme: 'default' },
   },
   column: {
@@ -124,23 +119,49 @@ export const statusMap = {
 
 export type StatusEntity = keyof typeof statusMap
 
-/* 申请类型映射（五类：企业入驻 / 个体入驻 / 企业合作 / 身份绑定 / 企业退驻） */
+/* 申请类型映射（四类：企业入驻 / 个体入驻 / 企业合作 / 企业退驻） */
 export const applicationTypeMap: Record<string, { label: string; theme: 'default' | 'primary' | 'success' | 'warning' | 'danger' }> = {
   settle: { label: '企业入驻', theme: 'primary' },
   individual: { label: '个体入驻', theme: 'primary' },
   cooperation: { label: '企业合作', theme: 'primary' },
-  identity: { label: '身份绑定', theme: 'primary' },
   exit: { label: '企业退驻', theme: 'warning' },
 }
+
+/* 性别词汇表：兼容历史中文值（男/女）与客户端规范值（male/female/unknown，其中 unknown=保密），
+ * 详情展示与编辑表单统一经此处，禁止直接渲染原始值 */
+export const userGenderMap: Record<string, string> = {
+  male: '男',
+  female: '女',
+  男: '男',
+  女: '女',
+  unknown: '保密',
+}
+
+/** 原始性别值 → 中文文案；空值与未知码兜底为「保密」/原样返回 */
+export function userGenderLabel(value?: string | null): string {
+  if (!value) return '保密'
+  return userGenderMap[value] ?? value
+}
+
+/** 编辑表单规范值：历史中文值在打开表单时归一，保存后统一写入 male/female/unknown */
+export function normalizeUserGender(value?: string | null): 'male' | 'female' | 'unknown' {
+  if (value === '男' || value === 'male') return 'male'
+  if (value === '女' || value === 'female') return 'female'
+  return 'unknown'
+}
+
+export const userGenderOptions = [
+  { label: '保密', value: 'unknown' },
+  { label: '男', value: 'male' },
+  { label: '女', value: 'female' },
+]
 
 /* 选项词汇表（页面统一取用，禁止自造文案） */
 
 export const goodsCategoryMap: Record<string, string> = {
   GC001: '实物商品',
-  GC002: '虚拟服务',
   GC003: '权益券',
   physical: '实物商品',
-  virtual: '虚拟服务',
   voucher: '权益券',
 }
 

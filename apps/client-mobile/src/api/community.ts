@@ -9,7 +9,7 @@ export async function fetchAgreementPolicy(kind: 'user_agreement' | 'privacy_pol
 }
 
 /* 社区域契约（社区服务 / 人才库 / 企业库）。
- * [MOCK-ONLY]：社区服务与人才库为当前后端边界外，接入期补充 /api/app/** 端点（见 m2-client-plan §7.1）。
+ * HTTP 模式读取社区政策、人才库和企业库真实端点；Mock 模式保留演示数据。
  * v40：http 分支补齐 query 接线（keyword/category/industry），与 Mock 行为一致。 */
 
 function toQuery(params?: Record<string, string | undefined>): string {

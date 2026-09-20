@@ -24,12 +24,12 @@ import type {
   MyEnrollmentItem,
   MyEventFeedback,
   MyIndividualCard,
+  MyLease,
   MyOrder,
   MyProject,
   MyResponseItem,
   MySubmittedArticle,
   PointsRecord,
-  ReportPayload,
   Space,
   SpaceReservation,
   TalentMember,
@@ -46,7 +46,13 @@ import {
 
 export { nextMockId } from '@/mock/runtime'
 
-/* [MOCK-ONLY] v33 内存数据库：实体从 seed 派生，可变状态写入版本化 localStorage 快照。 */
+/* [MOCK-ONLY] v34 内存数据库：实体从 seed 派生，可变状态写入版本化 localStorage 快照。 */
+
+/** [MOCK-ONLY] 演示封面：以内联 SVG 生成稳定图案，避免外部图床依赖。 */
+function demoCover(label: string, hue: number): string {
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="640" height="360"><rect width="640" height="360" fill="hsl(${hue} 52% 42%)"/><text x="320" y="180" fill="#ffffff" font-size="36" font-family="sans-serif" text-anchor="middle" dominant-baseline="middle">${label}</text></svg>`
+  return `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}`
+}
 
 export const appConfig: AppConfig = {
   siteName: '聚屿社区',
@@ -89,7 +95,6 @@ export const dicts: Record<string, { code: string; label: string }[]> = {
   ],
   goods_category: [
     { code: 'GC001', label: '实物商品' },
-    { code: 'GC002', label: '虚拟服务' },
     { code: 'GC003', label: '权益券' },
   ],
   article_column: [
@@ -133,7 +138,7 @@ export const accounts: MockAccount[] = [
     points: 2710,
     identities: [
       { type: 'individual' },
-      { type: 'community_individual', level: 4, levelName: '群岛共建者', experience: 2410 },
+      { type: 'community_individual', level: 5, levelName: '领航', experience: 2410 },
     ],
     registeredAt: '2025-03-12 09:30',
     gender: 'male',
@@ -148,7 +153,7 @@ export const accounts: MockAccount[] = [
     points: 1950,
     identities: [
       { type: 'individual' },
-      { type: 'community_individual', level: 3, levelName: '岛屿开拓者', experience: 1320 },
+      { type: 'community_individual', level: 5, levelName: '领航', experience: 1320 },
       { type: 'community_enterprise', enterpriseId: 'E2001', enterpriseName: '芯启半导体', enterpriseRole: '创始人' },
     ],
     registeredAt: '2025-03-15 14:20',
@@ -303,69 +308,88 @@ function demoDate(dayOffset: number, hhmm: string): string {
 
 /* ---------- 活动中心（EV6001 为签到演示主场：今晚 19:00，签到窗 18:30-21:00 [MOCK-ONLY]） ---------- */
 
-export const events: CommunityEvent[] = [
+export type MockCommunityEvent = CommunityEvent & {
+  approvedCount: number
+  /** 签到积分（缺省回退到 activity_checkin 规则值） */
+  checkinPoints?: number
+  /** 最近一次改期后的开始时间（改期后不下发原值，由服务端写入） */
+  rescheduledTo?: string
+}
+
+export const events: MockCommunityEvent[] = [
   {
     id: 'EV6001', title: '第 12 期创业夜话 · AI 应用的落地时刻', typeLabel: '沙龙',
     startTime: demoDate(0, '19:00'), endTime: demoDate(0, '21:00'), location: '岛屿咖啡区',
-    capacity: 60, approvedCount: 8, requireReview: false, enrollmentDeadline: demoDate(0, '18:00'), status: 'published',
+    capacity: 60, approvedCount: 8, requireReview: false, enrollmentOpen: true, enrollmentDeadline: demoDate(0, '18:00'), status: 'published',
     visibilityIdentities: [], visibilityLevels: [], enrollmentIdentities: [], enrollmentLevels: [],
     description: '两位一线 AI 创业者聊落地：场景选择、成本结构与团队配置。',
-    venueLat: 31.2304, venueLng: 121.4737, checkinRadiusM: 200, checkinOpenMin: '18:30', checkinCloseMin: '21:00',
+    coverUrl: demoCover('创业夜话', 212),
+    venueLat: 31.2304, venueLng: 121.4737, checkinRadiusM: 200, checkinOpenMin: 30, checkinCloseMin: 120,
   },
   {
     id: 'EV6005', title: '设计思维工作坊：从用户访谈到原型', typeLabel: '培训',
     startTime: demoDate(5, '14:00'), endTime: demoDate(5, '17:00'), location: '共享会议室 A',
-    capacity: 24, approvedCount: 2, requireReview: true, enrollmentDeadline: demoDate(4, '12:00'), status: 'published',
+    capacity: 24, approvedCount: 2, requireReview: true, enrollmentOpen: true, enrollmentDeadline: demoDate(4, '12:00'), status: 'published',
     visibilityIdentities: [], visibilityLevels: [], enrollmentIdentities: [], enrollmentLevels: [],
     description: '两小时工作坊，带你完整走一遍用户访谈到低保真原型的流程。',
-    venueLat: 31.2318, venueLng: 121.4751, checkinRadiusM: 200, checkinOpenMin: '13:30', checkinCloseMin: '17:00',
+    coverUrl: demoCover('设计思维工作坊', 168),
+    venueLat: 31.2318, venueLng: 121.4751, checkinRadiusM: 200, checkinOpenMin: 30, checkinCloseMin: 180,
   },
   {
     id: 'EV6003', title: '聚屿社区年度路演日 2026', typeLabel: '路演',
     startTime: demoDate(13, '13:30'), endTime: demoDate(13, '18:00'), location: '聚屿路演厅',
-    capacity: 120, approvedCount: 2, requireReview: true, enrollmentDeadline: demoDate(12, '12:00'), status: 'published',
+    capacity: 120, approvedCount: 2, requireReview: true, enrollmentOpen: false, enrollmentDeadline: demoDate(12, '12:00'), status: 'published',
     visibilityIdentities: [], visibilityLevels: [], enrollmentIdentities: [], enrollmentLevels: [],
     description: '十个社区项目登台路演，投资人现场点评。', venueLat: 31.2325, venueLng: 121.4762,
-    checkinRadiusM: 200, checkinOpenMin: '13:00', checkinCloseMin: '18:00',
+    coverUrl: demoCover('年度路演日', 258),
+    checkinRadiusM: 200, checkinOpenMin: 30, checkinCloseMin: 270,
   },
   {
     id: 'EV6009', title: 'Q4 社区企业闭门交流会', typeLabel: '社交',
     startTime: demoDate(32, '18:30'), endTime: demoDate(32, '21:00'), location: '聚屿路演厅',
-    capacity: 50, approvedCount: 0, requireReview: false, enrollmentDeadline: demoDate(31, '18:00'), status: 'published',
+    capacity: 50, approvedCount: 0, requireReview: false, enrollmentOpen: true, enrollmentDeadline: demoDate(31, '18:00'), status: 'published',
     visibilityIdentities: ['community_enterprise', 'external_enterprise'], visibilityLevels: [], enrollmentIdentities: ['community_enterprise', 'external_enterprise'], enrollmentLevels: [],
     description: '仅面向社区企业与合作伙伴的闭门交流。', venueLat: 31.2325, venueLng: 121.4762,
-    checkinRadiusM: 200, checkinOpenMin: '18:00', checkinCloseMin: '21:00',
+    coverUrl: demoCover('闭门交流会', 24),
+    checkinRadiusM: 200, checkinOpenMin: 30, checkinCloseMin: 150,
   },
   {
     id: 'EV6008', title: '创业心理舒缓小组（第 3 期）', typeLabel: '沙龙',
     startTime: demoDate(-5, '19:00'), endTime: demoDate(-5, '21:00'), location: '岛屿咖啡区',
-    capacity: 20, approvedCount: 12, requireReview: false, enrollmentDeadline: demoDate(-6, '18:00'), status: 'ended',
+    capacity: 20, approvedCount: 12, requireReview: false, enrollmentOpen: false, enrollmentDeadline: demoDate(-6, '18:00'), status: 'ended',
     visibilityIdentities: [], visibilityLevels: [], enrollmentIdentities: [], enrollmentLevels: [],
     description: '已结束活动（用于签到失败态演示）。', venueLat: 31.2304, venueLng: 121.4737,
-    checkinRadiusM: 200, checkinOpenMin: '18:30', checkinCloseMin: '21:00',
+    coverUrl: demoCover('心理舒缓小组', 320),
+    checkinRadiusM: 200, checkinOpenMin: 30, checkinCloseMin: 120,
   },
 ]
 
-/* 我的报名（按 uid，含签到状态 [MOCK-ONLY]） */
-export const enrollmentsByUid: Record<string, MyEnrollmentItem[]> = {
+/* 我的报名（按 uid，含签到状态 [MOCK-ONLY]）；
+ * ticketRedeemed 对应后端 EventTicket.redeemedAt：签到即核销，电子票状态由此派生。 */
+export type MockEnrollment = MyEnrollmentItem & { ticketRedeemed?: boolean }
+
+export const enrollmentsByUid: Record<string, MockEnrollment[]> = {
   U1001: [
     { id: 'EE7002', eventId: 'EV6001', eventTitle: '第 12 期创业夜话 · AI 应用的落地时刻', startTime: events.find((event) => event.id === 'EV6001')!.startTime, location: '岛屿咖啡区', status: 'approved', checkedIn: false },
   ],
   U1004: [
     { id: 'EE7001', eventId: 'EV6005', eventTitle: '设计思维工作坊：从用户访谈到原型', startTime: events.find((event) => event.id === 'EV6005')!.startTime, location: '共享会议室 A', status: 'pending', checkedIn: false },
-    { id: 'EE7101', eventId: 'EV6001', eventTitle: '第 12 期创业夜话 · AI 应用的落地时刻', startTime: events.find((event) => event.id === 'EV6001')!.startTime, location: '岛屿咖啡区', status: 'approved', checkedIn: true },
+    { id: 'EE7101', eventId: 'EV6001', eventTitle: '第 12 期创业夜话 · AI 应用的落地时刻', startTime: events.find((event) => event.id === 'EV6001')!.startTime, location: '岛屿咖啡区', status: 'approved', checkedIn: true, ticketRedeemed: true },
   ],
 }
 
 /* ---------- 积分商城 ---------- */
 
-export const goods: Goods[] = [
-  { id: 'G1001', name: '会议室优先预约卡', pointsCost: 500, stock: 12, description: '未来 7 天内任意会议室时段优先预约权一张。', fulfillment: 'service', category: 'GC002' },
-  { id: 'G1002', name: '精品咖啡券（单杯）', pointsCost: 150, stock: 30, description: '岛屿咖啡区任意现制咖啡一杯。', fulfillment: 'voucher', category: 'GC003' },
-  { id: 'G1003', name: '聚屿周边帆布袋', pointsCost: 300, stock: 8, description: '社区联名帆布袋，路演日同款。', fulfillment: 'physical', category: 'GC001' },
-  { id: 'G1004', name: '独立办公位体验日', pointsCost: 800, stock: 3, description: '独立办公室体验一日（工作日有效，需提前预约）。', fulfillment: 'service', category: 'GC002' },
-  { id: 'G1005', name: '打印机 A4 纸包月', pointsCost: 220, stock: 0, description: '公共打印机 A4 纸包月额度（补货中，暂不展示）。', fulfillment: 'physical' },
-  { id: 'G1006', name: '已下架 · 周年纪念徽章', pointsCost: 100, stock: 5, description: '已下架商品（不展示）。', fulfillment: 'physical' },
+/** 商品后台状态：on 上架 / off 下架 / restock 缺货补货中（对齐 MallGoods.status） */
+export type MockGoods = Goods & { status: 'on' | 'off' | 'restock' }
+
+export const goods: MockGoods[] = [
+  { id: 'G1001', name: '会议室优先预约卡', pointsCost: 500, stock: 12, description: '权益券：未来 7 天内任意会议室时段优先预约权一张。', fulfillment: 'voucher', category: 'GC003', coverUrl: demoCover('会议室预约卡', 204), status: 'on' },
+  { id: 'G1002', name: '精品咖啡券（单杯）', pointsCost: 150, stock: 30, description: '权益券：岛屿咖啡区任意现制咖啡一杯。', fulfillment: 'voucher', category: 'GC003', coverUrl: demoCover('精品咖啡券', 30), status: 'on' },
+  { id: 'G1003', name: '聚屿周边帆布袋', pointsCost: 300, stock: 8, description: '社区联名帆布袋，路演日同款。', fulfillment: 'physical', category: 'GC001', coverUrl: demoCover('聚屿帆布袋', 132), status: 'on' },
+  { id: 'G1004', name: '独立办公位体验日', pointsCost: 800, stock: 3, description: '权益券：独立办公室体验一日（工作日有效，需提前预约）。', fulfillment: 'voucher', category: 'GC003', coverUrl: demoCover('办公位体验日', 258), status: 'on' },
+  { id: 'G1005', name: '打印机 A4 纸包月', pointsCost: 220, stock: 0, description: '公共打印机 A4 纸包月额度（补货中，可订阅到货提醒）。', fulfillment: 'physical', category: 'GC001', coverUrl: demoCover('A4 纸包月', 12), status: 'restock' },
+  { id: 'G1006', name: '已下架 · 周年纪念徽章', pointsCost: 100, stock: 5, description: '已下架商品（不展示）。', fulfillment: 'physical', category: 'GC001', coverUrl: demoCover('周年徽章', 0), status: 'off' },
 ]
 export const goodsOffIds = ['G1006']
 export const goodsHiddenZeroStock = true
@@ -373,7 +397,9 @@ export const goodsHiddenZeroStock = true
 export const ordersByUid: Record<string, MyOrder[]> = {
   U1001: [
     { id: 'RO2001', goodsId: 'G1002', goodsName: '精品咖啡券（单杯）', pointsCost: 150, status: 'completed', fulfillment: 'voucher', voucherCode: 'JYV-8F2K6M', createdAt: '2026-08-28 12:00', finishedAt: '2026-08-28 12:00' },
-    { id: 'RO2006', goodsId: 'G1001', goodsName: '会议室优先预约卡', pointsCost: 500, status: 'pending_use', fulfillment: 'service', createdAt: '2026-09-08 15:00' },
+    { id: 'RO2002', goodsId: 'G1002', goodsName: '精品咖啡券（单杯）', pointsCost: 150, status: 'pending_use', fulfillment: 'voucher', voucherCode: 'JYV-DEMO01', voucherExpiresAt: '2026-10-31 23:59', createdAt: '2026-09-15 10:00' },
+    /* v34：已过期的权益券（pending_use + 有效期已过 → fetchMyOrders 派生 expired，不可核销） */
+    { id: 'RO2006', goodsId: 'G1001', goodsName: '会议室优先预约卡', pointsCost: 500, status: 'pending_use', fulfillment: 'voucher', voucherCode: 'JYV-ROOM06', voucherExpiresAt: '2026-09-01 23:59', createdAt: '2026-08-01 15:00' },
   ],
   U1004: [
     { id: 'RO2010', goodsId: 'G1003', goodsName: '聚屿周边帆布袋', pointsCost: 300, status: 'completed', fulfillment: 'physical', createdAt: '2026-08-15 09:00', shippedAt: '2026-08-17 09:00', finishedAt: '2026-08-18 10:00' },
@@ -383,24 +409,25 @@ export const ordersByUid: Record<string, MyOrder[]> = {
 /* ---------- 空间预约 ---------- */
 
 export const spaces: Space[] = [
-  { id: 'S1001', name: '岛屿咖啡区', location: '一楼东侧', capacity: 40, equipment: ['咖啡机', '白板'], needApproval: false, openTime: '08:00', closeTime: '22:00', status: 'open', maxHours: 4, advanceDays: 30 },
-  { id: 'S1002', name: '共享会议室 A', location: '二楼 201', capacity: 12, equipment: ['投影', '视频会议', '白板'], needApproval: true, openTime: '09:00', closeTime: '21:00', status: 'open', maxHours: 4, advanceDays: 30 },
-  { id: 'S1003', name: '聚屿路演厅', location: '三楼 301', capacity: 120, equipment: ['舞台灯光', '音响', '直播机位'], needApproval: true, openTime: '09:00', closeTime: '21:00', status: 'open', maxHours: 4, advanceDays: 30 },
-  { id: 'S1004', name: '共享工位区', location: '二楼 203', capacity: 30, equipment: ['升降桌', '显示器'], needApproval: false, openTime: '08:00', closeTime: '22:00', status: 'open', maxHours: 4, advanceDays: 30 },
-  { id: 'S1005', name: '共享会议室 B', location: '二楼 202', capacity: 8, equipment: ['投影', '白板'], needApproval: true, openTime: '09:00', closeTime: '21:00', status: 'maintenance', maxHours: 2, advanceDays: 14 },
+  { id: 'S1001', name: '岛屿咖啡区', type: '公共活动区', location: '一楼东侧', capacity: 40, equipment: ['咖啡机', '白板'], needApproval: false, openTime: '08:00', closeTime: '22:00', status: 'open', maxHours: 4, advanceDays: 30, openHours: [{ start: '08:00', end: '22:00' }], description: '开放活动区，适合小型分享与自由交流，咖啡区营业时间内可直接使用。' },
+  { id: 'S1002', name: '共享会议室 A', type: '会议室', location: '二楼 201', capacity: 12, equipment: ['投影', '视频会议', '白板'], needApproval: true, openTime: '09:00', closeTime: '21:00', status: 'open', maxHours: 4, advanceDays: 30, openHours: [{ start: '09:00', end: '21:00' }], description: '标准会议室，配备投影与视频会议设备，需提前预约并由运营审核。' },
+  { id: 'S1003', name: '聚屿路演厅', type: '路演厅', location: '三楼 301', capacity: 120, equipment: ['舞台灯光', '音响', '直播机位'], needApproval: true, openTime: '09:00', closeTime: '21:00', status: 'open', maxHours: 4, advanceDays: 30, openHours: [{ start: '09:00', end: '21:00' }], description: '大型活动场地，含舞台灯光、音响与直播机位，适合路演、发布会等。' },
+  { id: 'S1004', name: '共享办公位区', type: '办公区', location: '二楼 203', capacity: 30, equipment: ['升降桌', '显示器'], needApproval: false, openTime: '08:00', closeTime: '22:00', status: 'open', maxHours: 4, advanceDays: 30, openHours: [{ start: '08:00', end: '22:00' }], description: '开放办公位区，含升降桌与显示器，无需审核即可预约使用。' },
+  { id: 'S1005', name: '共享会议室 B', type: '会议室', location: '二楼 202', capacity: 8, equipment: ['投影', '白板'], needApproval: true, openTime: '09:00', closeTime: '21:00', status: 'maintenance', maxHours: 2, advanceDays: 14, openHours: [{ start: '09:00', end: '21:00' }], description: '小型会议室，维护中暂不可预约（列表与详情均不展示）。' },
 ]
 
 export const reservationsByUid: Record<string, SpaceReservation[]> = {
   U1001: [
-    { id: 'SR5001', spaceId: 'S1002', spaceName: '共享会议室 A', date: '2026-09-20', start: '14:00', end: '16:00', status: 'approved', createdAt: '2026-09-10 10:00', identityType: 'community_individual', subjectName: '陈屿' },
+    { id: 'SR5001', spaceId: 'S1002', spaceName: '共享会议室 A', date: '2026-09-20', start: '14:00', end: '16:00', status: 'approved', createdAt: '2026-09-10 10:00', identityType: 'community_individual', subjectName: '陈屿', purpose: '项目方案评审', attendees: 6, records: [{ at: '2026-09-10 10:00', action: 'submit', title: '提交预约', text: '共享会议室 A 预约提交' }, { at: '2026-09-10 14:20', action: 'approve', title: '管理员审核', text: '同意预约', operator: '社区管理员' }] },
   ],
   U1004: [
-    { id: 'SR5101', spaceId: 'S1002', spaceName: '共享会议室 A', date: '2026-09-22', start: '10:00', end: '12:00', status: 'pending', createdAt: '2026-09-11 09:00', identityType: 'community_enterprise', subjectName: '芯启半导体' },
+    { id: 'SR5101', spaceId: 'S1002', spaceName: '共享会议室 A', date: '2026-09-22', start: '10:00', end: '12:00', status: 'pending', createdAt: '2026-09-11 09:00', identityType: 'community_enterprise', subjectName: '芯启半导体', purpose: '客户技术交流', attendees: 8, records: [{ at: '2026-09-11 09:00', action: 'submit', title: '提交预约', text: '共享会议室 A 预约提交' }] },
   ],
 }
 
-/** 某空间某日的已占用时段（基础占用 + 全账号已通过预约 + 同场地活动）。 */
-export function occupiedSlots(spaceId: string, date: string): { start: string; end: string }[] {
+/** 某空间某日的已占用时段（基础占用 + 全账号待审核/已通过预约 + 同场地活动）。
+ *  excludeReservationId 用于审核通过时排除待审核记录自身。 */
+export function occupiedSlots(spaceId: string, date: string, excludeReservationId?: string): { start: string; end: string }[] {
   const seed = [...(spaceId + date)].reduce((s, c) => s + c.charCodeAt(0), 0)
   const slots: { start: string; end: string }[] = []
   for (let h = 9; h <= 20; h++) {
@@ -408,7 +435,8 @@ export function occupiedSlots(spaceId: string, date: string): { start: string; e
   }
   for (const records of Object.values(reservationsByUid)) {
     for (const reservation of records) {
-      if (reservation.spaceId === spaceId && reservation.date === date && reservation.status === 'approved') {
+      if (reservation.id === excludeReservationId) continue
+      if (reservation.spaceId === spaceId && reservation.date === date && (reservation.status === 'pending' || reservation.status === 'approved')) {
         slots.push({ start: reservation.start, end: reservation.end })
       }
     }
@@ -431,12 +459,17 @@ export const columns: ArticleColumn[] = [
   { code: 'CL004', label: '活动回顾' },
 ]
 
-export const articles: Article[] = [
-  { id: 'A1001', title: '入驻指南：三步加入聚屿社区', columnLabel: '社区动态', authorName: '社区运营组', publishedAt: '2026-09-05 10:00', views: 321, summary: '从注册到身份绑定的完整流程。', content: '第一步，注册账号；第二步，提交入驻申请；第三步，等待审核通过与身份授予……', commentsEnabled: true },
-  { id: 'A1002', title: '路演日观察：社区项目的三种成长路径', columnLabel: '深度报道', authorName: '社区运营组', publishedAt: '2026-09-01 15:00', views: 208, summary: '我们在路演日现场记录了十个项目。', content: '技术型、服务型与社群型项目在社区里的成长路径各不相同……', commentsEnabled: true },
-  { id: 'SU1001', title: '我在岛上的一年：从 lone wolf 到共建者', columnLabel: '岛民故事', authorName: '白若溪', publishedAt: '2026-08-20 09:00', views: 156, summary: '一位独立设计师的社区一年。', content: '一年前我拖着行李箱走进岛屿咖啡区……', commentsEnabled: true },
-  { id: 'A1003', title: '9 月空间使用提示：会议室预约新规', columnLabel: '社区动态', authorName: '社区运营组', publishedAt: '2026-09-03 09:30', views: 98, summary: '会议室需提前一个工作日申请。', content: '自本月起，共享会议室 A 需提前一个工作日提交预约申请……', commentsEnabled: true },
-  { id: 'A1004', title: '活动回顾：第 11 期创业夜话金句集', columnLabel: '活动回顾', authorName: '社区运营组', publishedAt: '2026-08-18 10:00', views: 132, summary: '十二个金句与三次全场掌声。', content: '「先找到问题，再谈技术选型」……', commentsEnabled: true },
+/** 文章发布状态：published 已发布 / closed 已下架（closed 不在列表与详情中下发） */
+export type MockArticle = Article & { status: 'published' | 'closed' }
+
+export const articles: MockArticle[] = [
+  { id: 'A1001', title: '入驻指南：三步加入聚屿社区', columnLabel: '社区动态', authorName: '社区运营组', publishedAt: '2026-09-05 10:00', views: 321, summary: '从注册到入驻的完整流程。', content: '第一步，注册账号；第二步，提交入驻申请；第三步，等待审核通过与身份授予……', commentsEnabled: true, coverUrl: demoCover('入驻指南', 210), status: 'published' },
+  { id: 'A1002', title: '路演日观察：社区项目的三种成长路径', columnLabel: '深度报道', authorName: '社区运营组', publishedAt: '2026-09-01 15:00', views: 208, summary: '我们在路演日现场记录了十个项目。', content: '技术型、服务型与社群型项目在社区里的成长路径各不相同……', commentsEnabled: true, coverUrl: demoCover('路演日观察', 258), status: 'published' },
+  { id: 'SU1001', title: '我在岛上的一年：从 lone wolf 到共建者', columnLabel: '岛民故事', authorName: '白若溪', publishedAt: '2026-08-20 09:00', views: 156, summary: '一位独立设计师的社区一年。', content: '一年前我拖着行李箱走进岛屿咖啡区……', commentsEnabled: true, coverUrl: demoCover('岛民故事', 158), status: 'published' },
+  { id: 'A1003', title: '9 月空间使用提示：会议室预约新规', columnLabel: '社区动态', authorName: '社区运营组', publishedAt: '2026-09-03 09:30', views: 98, summary: '会议室需提前一个工作日申请。', content: '自本月起，共享会议室 A 需提前一个工作日提交预约申请……', commentsEnabled: true, coverUrl: demoCover('空间使用提示', 28), status: 'published' },
+  { id: 'A1004', title: '活动回顾：第 11 期创业夜话金句集', columnLabel: '活动回顾', authorName: '社区运营组', publishedAt: '2026-08-18 10:00', views: 132, summary: '十二个金句与三次全场掌声。', content: '「先找到问题，再谈技术选型」……', commentsEnabled: true, coverUrl: demoCover('活动回顾', 320), status: 'published' },
+  /* v34：下架文章（closed）——列表/详情/点赞/评论均不可见 */
+  { id: 'A1005', title: '已下架：某品牌合作推广软文', columnLabel: '社区动态', authorName: '社区运营组', publishedAt: '2026-08-10 09:00', views: 45, summary: '该内容因不符合社区规范已下架。', content: '（内容已下架）', commentsEnabled: false, coverUrl: demoCover('已下架', 0), status: 'closed' },
 ]
 
 export const myArticlesByUid: Record<string, MySubmittedArticle[]> = {
@@ -454,7 +487,7 @@ export const enterprises: EnterpriseRecord[] = [
     foundedAt: '2019-05', website: 'https://xinqi.example.com', address: '聚屿社区 3 号楼 5 层',
     services: '车规级芯片设计、验证与量产支持',
     advantages: '核心团队来自头部芯片公司，具备完整的车规认证经验，已服务多家主机厂与 Tier1 供应商。',
-    description: '车规级芯片设计与验证服务商，社区首批入驻企业。', showcaseStatus: 'published',
+    description: '车规级芯片设计与验证服务商，社区首批入驻企业。',
     contactUid: 'U1004', contactName: '苏明远',
     members: [
       { uid: 'U1004', name: '苏明远', role: '创始人' },
@@ -466,7 +499,7 @@ export const enterprises: EnterpriseRecord[] = [
     foundedAt: '2016-03', website: 'https://mubai.example.com', address: '聚屿社区 2 号楼 201',
     services: '品牌设计、空间设计与施工监理',
     advantages: '深耕本地创业社区，作品覆盖多个公共空间与社区品牌，交付口碑稳定。',
-    description: '品牌与空间设计工作室，社区多个公共空间的设计方。', showcaseStatus: 'published',
+    description: '品牌与空间设计工作室，社区多个公共空间的设计方。',
     contactUid: 'U1006', contactName: '林晚',
     members: [
       { uid: 'U1006', name: '林晚', role: '总经理' },
@@ -478,9 +511,47 @@ export const enterprises: EnterpriseRecord[] = [
     foundedAt: '2018-09', website: 'https://yunjing.example.com', address: '软件园 B 座 12 层',
     services: '数据中台建设与小程序联合研发',
     advantages: '数据工程团队 20+，具备多行业数据中台交付经验，支持联合研发与长期运维。',
-    description: '合作企业，数据中台与小程序联合研发伙伴。', showcaseStatus: 'none',
+    description: '合作企业，数据中台与小程序联合研发伙伴。',
     contactUid: 'U1014', contactName: '周慕深',
     members: [{ uid: 'U1014', name: '周慕深', role: '联合创始人' }],
+  },
+]
+
+export interface MockLeaseFixture extends Omit<MyLease, 'renterType' | 'status'> {
+  renterId: string
+  renterType: 'individual' | 'enterprise' | 'custom'
+  storedStatus: 'active' | 'terminated'
+  deletedAt?: string
+  note?: string
+}
+
+/** [MOCK-ONLY] 租约源记录包含授权字段；handler 仅映射客户端安全字段。 */
+export const leases: MockLeaseFixture[] = [
+  {
+    id: 'LSM1001', renterId: 'U1001', renterType: 'individual', renterName: '陈屿',
+    workstationLabels: ['C-302'], startDate: '2026-01-01', endDate: '2026-09-30', longTerm: false,
+    storedStatus: 'active', monthlyRent: 900, rentPeriod: 'month', contactName: '陈屿', contactPhone: '13800000001',
+  },
+  {
+    id: 'LSM2001', renterId: 'E2001', renterType: 'enterprise', renterName: '芯启半导体',
+    workstationLabels: ['B-202', 'A-10'], startDate: '2025-03-20', endDate: '', longTerm: true,
+    storedStatus: 'active', monthlyRent: 18000, rentPeriod: 'month', contactName: '苏明远', contactPhone: '13800000002',
+  },
+  {
+    id: 'LSM2002', renterId: 'E2001', renterType: 'enterprise', renterName: '芯启半导体',
+    workstationLabels: ['A-03'], startDate: '2024-03-20', endDate: '2025-03-19', longTerm: false,
+    storedStatus: 'terminated', monthlyRent: 1200, rentPeriod: 'month', contactName: '苏明远', contactPhone: '13800000002',
+    deletedAt: '2025-04-01 10:00', note: '归档记录不应下发管理备注',
+  },
+  {
+    id: 'LSM9001', renterId: 'U1004', renterType: 'individual', renterName: '苏明远',
+    workstationLabels: ['C-301'], startDate: '2025-01-01', endDate: '2025-12-31', longTerm: false,
+    storedStatus: 'active', monthlyRent: 800, rentPeriod: 'month', contactName: '苏明远', contactPhone: '13800000002',
+  },
+  {
+    id: 'LSM9999', renterId: 'U1004', renterType: 'custom', renterName: '临时访客',
+    workstationLabels: ['A-12'], startDate: '2026-01-01', endDate: '2026-12-31', longTerm: false,
+    storedStatus: 'active', monthlyRent: 500, rentPeriod: 'month', contactName: '访客联系人', contactPhone: '13900009999',
   },
 ]
 
@@ -492,9 +563,6 @@ export const enterpriseInvitations: EnterpriseInvitation[] = []
 
 /* [MOCK-ONLY] v35 负责人转移请求（需目标成员接受后生效） */
 export const enterpriseTransferRequests: EnterpriseTransferRequest[] = []
-
-/* [MOCK-ONLY] v35 举报记录（聚合到 Mock 运营队列，接入期接管理端举报处理） */
-export const reports: (ReportPayload & { id: string; uid: string; at: string; status: 'pending' })[] = []
 
 /* [MOCK-ONLY] v37 收藏（按用户） */
 export const favoritesByUid: Record<string, FavoriteItem[]> = {}
@@ -515,17 +583,7 @@ export const addressesByUid: Record<string, AddressItem[]> = {
   ],
 }
 
-/** 屏蔽名单（v38 [MOCK-ONLY]） */
-export const blockedByUid: Record<string, string[]> = {}
-
 /** 账号申请（注销 / 数据导出；v38 [MOCK-ONLY]） */
-/* ===== v42 新状态（内存态，不参与快照持久化） ===== */
-export const demandMessagesByDemand: Record<string, import('@/types').DemandMessage[]> = {}
-export const projectTasksByProject: Record<string, import('@/types').ProjectTask[]> = {}
-export const projectFilesByProject: Record<string, import('@/types').ProjectFileItem[]> = {}
-export const projectMessagesByProject: Record<string, import('@/types').ProjectMessage[]> = {}
-export const enterpriseResponsesByEnterprise: Record<string, { id: string; demandId: string; demandTitle: string; at: string }[]> = {}
-
 export const accountRequestsByUid: Record<string, { deletion?: { reason?: string; at: string; cancelableUntil?: string }; export?: { at: string } }> = {}
 
 /** 活动反馈（按 uid + eventId；v38 [MOCK-ONLY]） */
@@ -539,8 +597,8 @@ export const articleLikesByUid: Record<string, string[]> = {
 }
 
 export const articleComments: ArticleComment[] = [
-  { id: 'CM1001', articleId: 'A1001', uid: 'U1004', authorName: '苏明远', content: '指南很清晰，入驻流程按这个走一遍就通了。', at: '2026-09-06 11:20' },
-  { id: 'CM1002', articleId: 'A1002', uid: 'U1001', authorName: '陈屿', content: '社区项目的三种路径总结得很到位，期待更多案例复盘。', at: '2026-09-02 09:10' },
+  { id: 'CM1001', articleId: 'A1001', uid: 'U1004', authorName: '苏明远', content: '指南很清晰，入驻流程按这个走一遍就通了。', at: '2026-09-06 11:20', identityType: 'community_individual', identityName: '芯启半导体' },
+  { id: 'CM1002', articleId: 'A1002', uid: 'U1001', authorName: '陈屿', content: '社区项目的三种路径总结得很到位，期待更多案例复盘。', at: '2026-09-02 09:10', identityType: 'community_individual' },
 ]
 
 /** [MOCK-ONLY] 记录一次埋点事件（接入期为真实埋点 SDK / 数据平台上报） */
@@ -549,8 +607,13 @@ export function trackMockEvent(name: string): void {
 }
 
 /** 审核模拟器保留的原始申请载荷，不暴露给客户端 API。 */
-export const applicationPayloadById: Record<string, { uid: string; payload: import('@/types').ApplicationCreatePayload }> = {}
-export const articlePayloadById: Record<string, { uid: string; payload: import('@/types').ArticleCreatePayload }> = {}
+export const applicationPayloadById: Record<string, { uid: string; payload: import('@/types').ApplicationCreatePayload }> = {
+  AP3001: { uid: 'U1001', payload: { type: 'individual', fields: { realName: '陈屿', skills: '产品设计', years: 5, intro: '专注社区产品与服务设计', contactPhone: '13801210001' } } },
+}
+export const articlePayloadById: Record<string, { uid: string; payload: import('@/types').ArticleCreatePayload }> = {
+  SU1002: { uid: 'U1001', payload: { title: '独立开发者接单指南', columnCode: 'CL003', asIdentity: 'community_individual', content: '<p>从需求澄清、报价到交付复盘，整理一套适合独立开发者的社区协作方法。</p>' } },
+  SU1003: { uid: 'U1001', payload: { title: '群岛夜话侧记：一场关于定价的对谈', columnCode: 'CL002', asIdentity: 'community_individual', content: '<p>本期群岛夜话围绕服务定价展开，记录现场讨论中的关键观点。</p>' } },
+}
 
 /* ---------- 项目协作（只读） ---------- */
 
@@ -579,11 +642,10 @@ export const projectsByUid: Record<string, MyProject[]> = {
 
 export const applicationsByUid: Record<string, MyApplication[]> = {
   U1001: [
-    { id: 'AP3006', type: 'identity', targetName: '社区个体身份绑定', status: 'approved', submittedAt: '2026-07-01 09:00', reviewedAt: '2026-07-02 10:00' },
-    { id: 'AP3001', type: 'individual', targetName: '社区个体入驻', status: 'approved', submittedAt: '2026-06-28 15:00', reviewedAt: '2026-06-30 11:00' },
+    { id: 'AP3001', type: 'individual', targetName: '社区个体入驻', status: 'approved', submittedAt: '2026-06-28 15:00', reviewedAt: '2026-06-30 11:00', records: [{ at: '2026-06-28 15:00', action: 'submit', title: '提交申请' }, { at: '2026-06-30 11:00', action: 'approve', title: '审核通过', text: '资料完整，审核通过', operator: '社区管理员' }] },
   ],
   U1014: [
-    { id: 'AP3101', type: 'cooperation', targetName: '云径数据 · 战略合作', status: 'pending', submittedAt: '2026-09-08 10:12' },
+    { id: 'AP3101', type: 'cooperation', targetName: '云径数据 · 战略合作', status: 'pending', submittedAt: '2026-09-08 10:12', records: [{ at: '2026-09-08 10:12', action: 'submit', title: '提交申请' }] },
   ],
   U1015: [],
 }
@@ -598,7 +660,7 @@ export const applicationFormSchemas: Partial<Record<ApplicationType, Application
     title: '企业入驻申请',
     subtitle: '提交资料并通过审核后，成为「社区企业」并获得办公空间',
     submitLabel: '提交入驻申请',
-    tips: ['企业入驻需在社区拥有办公空间（工位或独立办公室）', '请准备营业执照；审核约 3 个工作日，结果站内信通知'],
+    tips: ['企业入驻需在社区拥有办公空间（办公位或独立办公室）', '请准备营业执照；审核约 3 个工作日，结果站内信通知'],
     fields: [
       { key: 'companyName', label: '企业名称', type: 'text', required: true, placeholder: '与营业执照一致', maxlength: 60 },
       { key: 'creditCode', label: '统一社会信用代码', type: 'text', required: true, placeholder: '18 位统一社会信用代码', maxlength: 18 },
@@ -610,8 +672,8 @@ export const applicationFormSchemas: Partial<Record<ApplicationType, Application
         { label: '100 人以上', value: '100 人以上' },
       ] },
       { key: 'officeNeeds', label: '办公空间需求', type: 'select', required: true, help: '企业入驻需在社区拥有办公空间', options: [
-        { label: '1-2 个工位', value: '1-2 个工位' },
-        { label: '3-6 个工位', value: '3-6 个工位' },
+        { label: '1-2 个办公位', value: '1-2 个办公位' },
+        { label: '3-6 个办公位', value: '3-6 个办公位' },
         { label: '独立办公室', value: '独立办公室' },
         { label: '其他（在简介中说明）', value: '其他' },
       ] },
@@ -660,31 +722,44 @@ export const applicationFormSchemas: Partial<Record<ApplicationType, Application
       { key: 'portfolio', label: '作品集或简历', type: 'upload', accept: 'image/*,application/pdf', multiple: true, maxCount: 2, help: '选填，最多 2 个文件' },
     ],
   },
-  identity: {
-    type: 'identity',
-    title: '身份绑定',
-    subtitle: '加入社区生态：绑定社区个体或社区企业身份',
-    submitLabel: '提交身份绑定',
-    tips: ['社区个体：面向个人专长展示', '社区企业：需填写要绑定并已在社区入驻的企业名称'],
-    fields: [
-      { key: 'identityType', label: '要绑定的身份', type: 'select', required: true, options: [
-        { label: '社区个体', value: 'community_individual' },
-        { label: '社区企业', value: 'community_enterprise' },
-      ] },
-      { key: 'orgName', label: '社区企业名称', type: 'text', maxlength: 60, help: '选择社区企业身份时填写' },
-      { key: 'industry', label: '所属行业', type: 'select', options: industryOptions },
-      { key: 'contactName', label: '联系人', type: 'text', required: true, maxlength: 20 },
-      { key: 'contactPhone', label: '联系电话', type: 'text', required: true, maxlength: 11 },
-      { key: 'certifications', label: '相关材料', type: 'upload', accept: 'image/*,application/pdf', multiple: true, maxCount: 3, help: '选填，最多 3 个文件' },
-    ],
-  },
 }
 
 /* ---------- 经验值流水（缺口 §7-7） ---------- */
 
-export const experienceByUid: Record<string, { records: { id: string; delta: number; balance: number; reason: string; at: string }[]; identityLabel: string; level: number; levelName: string; nextLevelExp: number }> = {
+const individualExperienceTiers = [
+  { level: 1, levelName: '新芽', threshold: 0 },
+  { level: 2, levelName: '成长', threshold: 100 },
+  { level: 3, levelName: '骨干', threshold: 300 },
+  { level: 4, levelName: '先锋', threshold: 600 },
+  { level: 5, levelName: '领航', threshold: 1000 },
+]
+
+const enterpriseExperienceTiers = [
+  { level: 1, levelName: '初创', threshold: 0 },
+  { level: 2, levelName: '成长', threshold: 300 },
+  { level: 3, levelName: '进阶', threshold: 1000 },
+  { level: 4, levelName: '标杆', threshold: 3000 },
+  { level: 5, levelName: '领军', threshold: 8000 },
+]
+
+function updateExperienceTier(
+  profile: ExperienceProfile,
+  tiers: Array<{ level: number; levelName: string; threshold: number }>,
+): void {
+  let tierIndex = 0
+  tiers.forEach((tier, index) => {
+    if (tier.threshold <= profile.currentExperience) tierIndex = index
+  })
+  const tier = tiers[tierIndex]
+  profile.level = tier.level
+  profile.levelName = tier.levelName
+  profile.currentLevelThreshold = tier.threshold
+  profile.nextLevelThreshold = tiers[tierIndex + 1]?.threshold ?? null
+}
+
+export const experienceByUid: Record<string, ExperienceProfile> = {
   U1001: {
-    identityLabel: '社区个体', level: 4, levelName: '群岛共建者', nextLevelExp: 3000,
+    identityLabel: '社区个体', level: 5, levelName: '领航', currentExperience: 2410, currentLevelThreshold: 1000, nextLevelThreshold: null,
     records: [
       { id: 'EX4031', delta: +100, balance: 2410, reason: '项目里程碑：原型验收', at: '2026-09-02 11:00' },
       { id: 'EX4018', delta: +30, balance: 2310, reason: '投稿采纳', at: '2026-08-20 12:00' },
@@ -692,7 +767,7 @@ export const experienceByUid: Record<string, { records: { id: string; delta: num
     ],
   },
   U1004: {
-    identityLabel: '社区个体', level: 3, levelName: '岛屿开拓者', nextLevelExp: 1800,
+    identityLabel: '社区个体', level: 5, levelName: '领航', currentExperience: 1320, currentLevelThreshold: 1000, nextLevelThreshold: null,
     records: [{ id: 'EX4101', delta: +50, balance: 1320, reason: '首次绑定社区个体身份', at: '2026-06-30 10:00' }],
   },
 }
@@ -700,7 +775,7 @@ export const experienceByUid: Record<string, { records: { id: string; delta: num
 /** 企业经验（社区企业身份维度；身份隔离：企业经验与个人经验互不相通） */
 export const enterpriseExperienceByEid: Record<string, ExperienceProfile> = {
   E2001: {
-    identityLabel: '社区企业', level: 3, levelName: '同行先锋', nextLevelExp: 1800,
+    identityLabel: '社区企业', level: 2, levelName: '成长', currentExperience: 680, currentLevelThreshold: 300, nextLevelThreshold: 1000,
     records: [
       { id: 'EX6101', delta: +200, balance: 680, reason: '联合立项：车规芯片验证项目', at: '2026-08-26 15:00' },
       { id: 'EX6042', delta: +80, balance: 480, reason: '承办社区技术分享会', at: '2026-08-08 14:00' },
@@ -708,7 +783,7 @@ export const enterpriseExperienceByEid: Record<string, ExperienceProfile> = {
     ],
   },
   E2004: {
-    identityLabel: '社区企业', level: 2, levelName: '启航伙伴', nextLevelExp: 800,
+    identityLabel: '社区企业', level: 1, levelName: '初创', currentExperience: 260, currentLevelThreshold: 0, nextLevelThreshold: 300,
     records: [
       { id: 'EX7008', delta: +120, balance: 260, reason: '社区公共空间设计合作', at: '2026-08-12 11:00' },
       { id: 'EX7001', delta: +140, balance: 140, reason: '首次入驻社区企业', at: '2026-06-18 10:00' },
@@ -792,19 +867,25 @@ export function grantExperience(uid: string, delta: number, reason: string): voi
   const identity = account?.identities.find((item) => item.type === 'community_individual')
   if (!identity) return
   const profile = (experienceByUid[uid] ??= {
-    identityLabel: '社区个体', level: 1, levelName: '初来乍到', nextLevelExp: 100, records: [],
+    identityLabel: '社区个体', level: 1, levelName: '新芽', currentExperience: 0, currentLevelThreshold: 0, nextLevelThreshold: 100, records: [],
   })
-  const balance = (profile.records[0]?.balance ?? identity.experience ?? 0) + delta
+  const balance = profile.currentExperience + delta
+  profile.currentExperience = balance
+  updateExperienceTier(profile, individualExperienceTiers)
   profile.records.unshift({ id: nextMockId('EX'), delta, balance, reason, at: nowStamp() })
   identity.experience = balance
+  identity.level = profile.level ?? undefined
+  identity.levelName = profile.levelName
 }
 
 /** [MOCK-ONLY] 社区企业经验按企业隔离。 */
 export function grantEnterpriseExperience(enterpriseId: string, delta: number, reason: string): void {
   const profile = (enterpriseExperienceByEid[enterpriseId] ??= {
-    identityLabel: '社区企业', level: 1, levelName: '初来乍到', nextLevelExp: 100, records: [],
+    identityLabel: '社区企业', level: 1, levelName: '初创', currentExperience: 0, currentLevelThreshold: 0, nextLevelThreshold: 300, records: [],
   })
-  const balance = (profile.records[0]?.balance ?? 0) + delta
+  const balance = profile.currentExperience + delta
+  profile.currentExperience = balance
+  updateExperienceTier(profile, enterpriseExperienceTiers)
   profile.records.unshift({ id: nextMockId('EX'), delta, balance, reason, at: nowStamp() })
 }
 
@@ -818,12 +899,12 @@ export const announcements: HomeAnnouncement[] = [
 ]
 
 export const homeBanners: HomeBanner[] = [
-  { id: 'BN1', title: '第二批社区企业招募启动', subtitle: '申请入驻，共享工位与创业资源', link: '/intros/enterprise' },
-  { id: 'BN2', title: '年度路演日报名中', subtitle: '9 月 26 日，聚屿路演厅', link: '/events' },
+  { id: 'BN1', title: '第二批社区企业招募启动', subtitle: '申请入驻，共享办公位与创业资源', imageUrl: demoCover('企业招募', 212), link: '/intros/enterprise' },
+  { id: 'BN2', title: '年度路演日报名中', subtitle: '9 月 26 日，聚屿路演厅', imageUrl: demoCover('年度路演日', 258), link: '/plaza?tab=events' },
   { id: 'BN3', title: '积分商城上新', subtitle: '会议室优先预约卡等你兑换', link: '/mall' },
 ]
 
-/* 首页活动卡从活动列表派生，保证与活动详情的时间/报名数一致 */
+/* 首页活动卡从活动列表派生，保证与活动详情的时间和人数限制一致 */
 export const homeEvents: HomeEventCard[] = events
   .filter((e) => e.status === 'published')
   .slice(0, 3)
@@ -833,7 +914,6 @@ export const homeEvents: HomeEventCard[] = events
     type: e.typeLabel,
     startTime: e.startTime,
     location: e.location,
-    enrolled: e.approvedCount,
     capacity: e.capacity,
   }))
 
@@ -857,7 +937,7 @@ export const communityPolicies: CommunityPolicy[] = [
     category: '入驻指南',
     title: '企业合作流程与权益',
     summary: '企业合作分「企业入驻」与「合作伙伴」两种，按需选择并提交对应申请。',
-    content: '企业合作分两种方式：1）企业入驻——需在社区拥有办公空间（工位或办公室），审核通过后成为「社区企业」，可享受共享会议室优先预约、需求广场发布、路演活动优先报名等权益；2）合作伙伴——无需入驻办公，以项目与资源合作方式参与社区共建，审核通过后成为「合作企业」，可申请企业名片并优先对接社区企业资源。两种方式均从首页「企业合作」入口了解差异并提交申请，社区运营 3 个工作日内审核。',
+    content: '企业合作分两种方式：1）企业入驻——需在社区拥有办公空间（办公位或办公室），审核通过后成为「社区企业」，可享受共享会议室优先预约、需求广场发布、路演活动优先报名等权益；2）合作伙伴——无需入驻办公，以项目与资源合作方式参与社区共建，审核通过后成为「合作企业」，可申请企业名片并优先对接社区企业资源。两种方式均从首页「企业合作」入口了解差异并提交申请，社区运营 3 个工作日内审核。',
     updatedAt: '2026-09-13',
     version: 'v3.1',
     effectiveAt: '2026-09-15',
@@ -961,23 +1041,22 @@ type PersistedMockData = {
   accounts: MockAccount[]
   demands: Demand[]
   responsesByUid: typeof responsesByUid
-  events: CommunityEvent[]
+  events: MockCommunityEvent[]
   enrollmentsByUid: typeof enrollmentsByUid
-  goods: Goods[]
+  goods: MockGoods[]
   ordersByUid: typeof ordersByUid
   reservationsByUid: typeof reservationsByUid
-  articles: Article[]
+  articles: MockArticle[]
   myArticlesByUid: typeof myArticlesByUid
   enterprises: EnterpriseRecord[]
+  leases: MockLeaseFixture[]
   enterpriseExitApplications: typeof enterpriseExitApplications
   enterpriseInvitations: EnterpriseInvitation[]
   enterpriseTransferRequests: EnterpriseTransferRequest[]
-  reports: typeof reports
   favoritesByUid: typeof favoritesByUid
   restockSubscriptions: typeof restockSubscriptions
   analyticsCounters: typeof analyticsCounters
   addressesByUid: typeof addressesByUid
-  blockedByUid: typeof blockedByUid
   accountRequestsByUid: typeof accountRequestsByUid
   eventFeedbackByUid: typeof eventFeedbackByUid
   articleLikesByUid: typeof articleLikesByUid
@@ -1010,7 +1089,13 @@ if (persisted) {
   replaceArray(accounts, persisted.accounts)
   replaceArray(demands, persisted.demands)
   replaceRecord(responsesByUid, persisted.responsesByUid)
-  replaceArray(events, persisted.events)
+  if (persisted.events) {
+    const enrollmentOpenById = new Map(events.map((event) => [event.id, event.enrollmentOpen]))
+    replaceArray(events, persisted.events.map((event) => ({
+      ...event,
+      enrollmentOpen: event.enrollmentOpen ?? enrollmentOpenById.get(event.id) ?? true,
+    })))
+  }
   replaceRecord(enrollmentsByUid, persisted.enrollmentsByUid)
   replaceArray(goods, persisted.goods)
   replaceRecord(ordersByUid, persisted.ordersByUid)
@@ -1018,15 +1103,14 @@ if (persisted) {
   replaceArray(articles, persisted.articles)
   replaceRecord(myArticlesByUid, persisted.myArticlesByUid)
   replaceArray(enterprises, persisted.enterprises)
+  replaceArray(leases, persisted.leases)
   replaceRecord(enterpriseExitApplications, persisted.enterpriseExitApplications)
   replaceArray(enterpriseInvitations, persisted.enterpriseInvitations)
   replaceArray(enterpriseTransferRequests, persisted.enterpriseTransferRequests)
-  replaceArray(reports, persisted.reports)
   replaceRecord(favoritesByUid, persisted.favoritesByUid)
   replaceRecord(restockSubscriptions, persisted.restockSubscriptions)
   replaceRecord(analyticsCounters, persisted.analyticsCounters)
   replaceRecord(addressesByUid, persisted.addressesByUid)
-  replaceRecord(blockedByUid, persisted.blockedByUid)
   replaceRecord(accountRequestsByUid, persisted.accountRequestsByUid)
   replaceRecord(eventFeedbackByUid, persisted.eventFeedbackByUid)
   replaceRecord(articleLikesByUid, persisted.articleLikesByUid)
@@ -1045,10 +1129,10 @@ if (persisted) {
 
 registerMockStateExporter((): PersistedMockData => ({
   appConfig, accounts, demands, responsesByUid, events, enrollmentsByUid, goods, ordersByUid,
-  reservationsByUid, articles, myArticlesByUid, enterprises, enterpriseExitApplications,
-  enterpriseInvitations, enterpriseTransferRequests, reports,
+  reservationsByUid, articles, myArticlesByUid, enterprises, leases, enterpriseExitApplications,
+  enterpriseInvitations, enterpriseTransferRequests,
   favoritesByUid, restockSubscriptions, analyticsCounters,
-  addressesByUid, blockedByUid, accountRequestsByUid, eventFeedbackByUid,
+  addressesByUid, accountRequestsByUid, eventFeedbackByUid,
   articleLikesByUid, articleComments,
   projectsByUid, applicationsByUid, applicationPayloadById, articlePayloadById,
   experienceByUid, enterpriseExperienceByEid, pointsRecordsByUid, noticesByUid, talentMembers,

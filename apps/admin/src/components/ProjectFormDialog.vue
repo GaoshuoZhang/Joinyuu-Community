@@ -295,11 +295,12 @@ function onClose() {
 
 <template>
   <t-dialog
+    lazy
+    destroy-on-close
     :close-on-overlay-click="true"
     :visible="visible"
     :header="mode === 'edit' ? '编辑项目' : demand ? '需求立项' : '新增项目'"
     width="880px"
-    lazy
     :close-on-esc-keydown="false"
     @close="onClose"
   >

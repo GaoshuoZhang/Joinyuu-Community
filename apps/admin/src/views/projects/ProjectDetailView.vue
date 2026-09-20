@@ -19,14 +19,15 @@ const tab = useQueryTab('info', ['info', 'milestones'] as const)
 const isArchived = computed(() => !!project.value?.deletedAt)
 
 const milestoneTagMap: Record<Milestone['status'], { label: string; theme: 'success' | 'primary' | 'default' }> = {
-  done: { label: '已完成', theme: 'success' },
-  active: { label: '进行中', theme: 'primary' },
+  accepted: { label: '已验收', theme: 'success' },
+  submitted: { label: '待验收', theme: 'primary' },
+  returned: { label: '已退回', theme: 'default' },
   todo: { label: '未开始', theme: 'default' },
 }
 
 const undertakerTypeMap: Record<ProjectUndertaker['type'], string> = {
   enterprise: '社区企业',
-  individual: '社区个体',
+  individual: '个人用户',
   custom: '自定义',
 }
 
@@ -48,7 +49,7 @@ async function load() {
   }
 }
 
-/* current：有 active 节点取其索引，否则取 done 数量（下一待办节点） */
+/* current：有 submitted 节点取其索引，否则取 accepted 数量（下一待办节点） */
 /* 起止日期：项目字段缺省时取固定里程碑「项目立项 / 预期交付」的日期 */
 const displayStartDate = computed(() => {
   if (project.value?.startDate) return project.value.startDate
@@ -63,9 +64,9 @@ const displayEndDate = computed(() => {
 
 const milestoneCurrent = computed(() => {
   const ms = project.value?.milestones ?? []
-  const activeIndex = ms.findIndex((m) => m.status === 'active')
+  const activeIndex = ms.findIndex((m) => m.status === 'submitted')
   if (activeIndex >= 0) return activeIndex
-  return ms.filter((m) => m.status === 'done').length
+  return ms.filter((m) => m.status === 'accepted').length
 })
 
 

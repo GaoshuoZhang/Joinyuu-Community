@@ -38,6 +38,7 @@ export async function fetchGoods(query: GoodsQuery): Promise<PageResult<MallGood
 
 export interface GoodsPayload {
   name: string
+  coverUrl?: string
   category: GoodsCategory
   fulfillment: GoodsFulfillment
   points: number

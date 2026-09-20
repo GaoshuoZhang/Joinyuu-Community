@@ -1,5 +1,5 @@
-import type { CheckinPayload, CommunityEvent, EventFeedbackPayload, MyEnrollmentItem, MyEventFeedback } from '@/types'
-import { accountByUid, enrollmentsByUid, eventFeedbackByUid, events, grantExperience, grantPoints, nextEnrollmentId, nowStamp, pushNotice, trackMockEvent } from '@/mock/db'
+import type { CheckinPayload, CommunityEvent, EventEnrollmentResult, EventFeedbackPayload, MyEnrollmentItem, MyEventFeedback } from '@/types'
+import { accountByUid, enrollmentsByUid, eventFeedbackByUid, events, grantPoints, nextEnrollmentId, nowStamp, pushNotice, trackMockEvent } from '@/mock/db'
 import { readPayload } from '@/mock/session'
 import { fail, withLatency } from '@/mock/latency'
 import { mockNowDate, mockNowMs, parseMockStamp } from '@/mock/runtime'
@@ -19,35 +19,36 @@ function myIdentitiesOf(): { type: string; level?: number }[] {
   return account?.identities ?? [{ type: 'individual' }]
 }
 
+/** 范围判定：按「单个身份」联合判定（类型命中且等级命中），多个身份取并集；两组都为空=不限 */
+function scopeOk(identityTypes: string[], levels: number[], ids: { type: string; level?: number }[]): boolean {
+  if (identityTypes.length === 0 && levels.length === 0) return true
+  return ids.some(
+    (i) =>
+      (identityTypes.length === 0 || identityTypes.includes(i.type as never)) &&
+      (levels.length === 0 || (i.level !== undefined && levels.includes(i.level))),
+  )
+}
+
 function visibleTo(ev: CommunityEvent): boolean {
-  const ids = myIdentitiesOf()
-  if (ev.visibilityIdentities.length === 0) return true
-  return ids.some((i) => {
-    if (!ev.visibilityIdentities.includes(i.type as never)) return false
-    if (ev.visibilityLevels.length === 0) return true
-    return i.level !== undefined && ev.visibilityLevels.includes(i.level)
-  })
+  return scopeOk(ev.visibilityIdentities, ev.visibilityLevels, myIdentitiesOf())
 }
 
 function canEnroll(ev: CommunityEvent): boolean {
-  const ids = myIdentitiesOf()
-  if (ev.enrollmentIdentities.length === 0) return true
-  return ids.some((i) => {
-    if (!ev.enrollmentIdentities.includes(i.type as never)) return false
-    if (ev.enrollmentLevels.length === 0) return true
-    return i.level !== undefined && ev.enrollmentLevels.includes(i.level)
-  })
+  return scopeOk(ev.enrollmentIdentities, ev.enrollmentLevels, myIdentitiesOf())
 }
 
-function enrich(ev: CommunityEvent): CommunityEvent {
+function enrich(ev: (typeof events)[number]): CommunityEvent {
   const uid = readPayload()?.sub
-  const mine = uid ? (enrollmentsByUid[uid] ?? []).find((e) => e.eventId === ev.id && e.status !== 'cancelled') : undefined
-  return { ...ev, myEnrollmentStatus: mine?.status as CommunityEvent['myEnrollmentStatus'], myEnrollmentRejectReason: mine?.rejectReason, myCheckedIn: mine?.checkedIn ?? false }
+  const mine = uid ? (enrollmentsByUid[uid] ?? []).find((e) => e.eventId === ev.id) : undefined
+  const { approvedCount: _approvedCount, ...publicEvent } = ev
+  void _approvedCount
+  return { ...publicEvent, myEnrollmentStatus: mine?.status as CommunityEvent['myEnrollmentStatus'], myEnrollmentRejectReason: mine?.rejectReason, myCheckedIn: mine?.checkedIn ?? false }
 }
 
 export async function fetchEvents(query: { type?: string; keyword?: string } = {}): Promise<CommunityEvent[]> {
   return withLatency(() => {
-    let list = events.filter((e) => e.status === 'published' && visibleTo(e))
+    /* 仅返回已发布且未结束的活动（结束时间晚于当前） */
+    let list = events.filter((e) => e.status === 'published' && parseMockStamp(e.endTime).getTime() > mockNowMs() && visibleTo(e))
     if (query.type) list = list.filter((e) => e.typeLabel === query.type)
     if (query.keyword) list = list.filter((e) => e.title.includes(query.keyword!))
     return list.map(enrich)
@@ -57,16 +58,19 @@ export async function fetchEvents(query: { type?: string; keyword?: string } = {
 export async function fetchEvent(id: string): Promise<CommunityEvent> {
   return withLatency(() => {
     const ev = events.find((e) => e.id === id)
-    // 已结束活动仍校验可见范围，与 HTTP 详情保持一致。
-    if (!ev || ev.status === 'cancelled' || !visibleTo(ev)) fail(404, '活动不存在或已结束')
+    const uid = readPayload()?.sub
+    const participant = !!uid && (enrollmentsByUid[uid] ?? []).some((enrollment) => enrollment.eventId === id)
+    const publicVisible = !!ev && ev.status === 'published' && visibleTo(ev)
+    if (!ev || (!participant && !publicVisible)) fail(404, '活动不存在或已结束')
     return enrich(ev)
   }, 200)
 }
-export async function enrollEvent(id: string): Promise<{ status: 'approved' | 'pending' | 'waitlisted' }> {
+export async function enrollEvent(id: string): Promise<EventEnrollmentResult> {
   return withLatency(() => {
     const uid = requireUid()
     const ev = events.find((e) => e.id === id)
     if (!ev || ev.status !== 'published') fail(404, '活动不存在或已结束')
+    if (ev.enrollmentOpen === false) fail(400, '报名暂未开放')
     if (!canEnroll(ev)) fail(403, '当前身份不在该活动的可报名范围内')
     if (parseMockStamp(ev.enrollmentDeadline).getTime() < mockNowMs()) fail(409, '报名已截止')
     const mine = (enrollmentsByUid[uid] ??= [])
@@ -76,14 +80,13 @@ export async function enrollEvent(id: string): Promise<{ status: 'approved' | 'p
       const waitlistOrder = Object.values(enrollmentsByUid).flat().filter((e) => e.eventId === id && e.status === 'waitlisted').length + 1
       mine.unshift({ id: nextEnrollmentId(), eventId: id, eventTitle: ev.title, startTime: ev.startTime, location: ev.location, status: 'waitlisted', checkedIn: false, waitlistOrder })
       pushNotice(uid, { type: 'enroll_result', title: '已加入候补', content: `「${ev.title}」名额已满，你已加入候补（第 ${waitlistOrder} 位），有空位将自动递补并通知你。`, link: '/me/enrollments' })
-      return { status: 'waitlisted' }
+      return { status: 'waitlisted', waitlistOrder }
     }
     const status: 'approved' | 'pending' = ev.requireReview ? 'pending' : 'approved'
     mine.unshift({ id: nextEnrollmentId(), eventId: id, eventTitle: ev.title, startTime: ev.startTime, location: ev.location, status, checkedIn: false })
     if (status === 'approved') {
       ev.approvedCount += 1
       grantPoints(uid, 5, `报名成功：${ev.title}`, '活动报名')
-      grantExperience(uid, 2, `报名成功：${ev.title}`)
     }
     /* [MOCK-ONLY] 通知触发点：报名结果（requireReview 时为待审核提示） */
     pushNotice(uid, {
@@ -107,11 +110,14 @@ export async function cancelEnrollment(id: string): Promise<void> {
     const mine = (enrollmentsByUid[uid] ??= [])
     const item = mine.find((e) => e.eventId === id && (e.status === 'pending' || e.status === 'approved' || e.status === 'waitlisted'))
     if (!item) fail(404, '未找到可取消的报名记录')
-    if (item.status !== 'waitlisted' && ev && parseMockStamp(ev.startTime).getTime() - mockNowMs() < CANCEL_DEADLINE_MS) {
+    if (item.checkedIn) fail(409, '已签到的活动不可取消报名')
+    /* 取消时限仅约束已通过（approved）报名；待审核/候补可随时取消（对齐后端 cancel） */
+    if (item.status === 'approved' && ev && parseMockStamp(ev.startTime).getTime() - mockNowMs() < CANCEL_DEADLINE_MS) {
       fail(409, '距活动开始不足 24 小时，无法取消；如无法到场请联系社区运营')
     }
     if (ev && item.status === 'approved' && ev.approvedCount > 0) ev.approvedCount -= 1
     item.status = 'cancelled'
+    delete item.waitlistOrder
     /* v38：名额释放后自动递补候补第一位 */
     if (ev) {
       const waitlisted = Object.entries(enrollmentsByUid)
@@ -136,7 +142,13 @@ export async function fetchEventTicket(eventId: string): Promise<import('@/types
     const item = (enrollmentsByUid[uid] ?? []).find((e) => e.eventId === eventId)
     if (!item) fail(404, '未找到该活动的报名记录')
     const ev = events.find((candidate) => candidate.id === eventId)
-    const status = item.status === 'cancelled' || ev?.status === 'cancelled' ? 'cancelled' : item.checkedIn ? 'checked' : 'valid'
+    const status = item.status === 'cancelled' || ev?.status === 'cancelled'
+      ? 'cancelled'
+      : item.ticketRedeemed
+        ? 'checked'
+        : ev?.status === 'ended' || (ev && parseMockStamp(ev.endTime).getTime() < mockNowMs())
+          ? 'expired'
+          : 'valid'
     return {
       eventId,
       eventTitle: item.eventTitle,
@@ -155,11 +167,14 @@ export async function fetchMyEnrollments(): Promise<MyEnrollmentItem[]> {
     const uid = requireUid()
     /* v40：附带活动当前状态与改期时间，便于列表提示「已取消 / 已改期」 */
     return (enrollmentsByUid[uid] ?? []).map((item) => {
+      const { ticketRedeemed: _ticketRedeemed, ...publicItem } = item
+      void _ticketRedeemed
       const ev = events.find((candidate) => candidate.id === item.eventId)
       return {
-        ...item,
+        ...publicItem,
+        startTime: ev?.startTime ?? item.startTime,
         eventStatus: ev?.status,
-        rescheduledTo: ev && ev.startTime !== item.startTime ? ev.startTime : undefined,
+        rescheduledTo: ev?.rescheduledTo ?? (ev && ev.startTime !== item.startTime ? ev.startTime : undefined),
       }
     })
   })
@@ -201,11 +216,6 @@ function haversineM(lat1: number, lng1: number, lat2: number, lng2: number): num
   return Math.round(R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a)))
 }
 
-function minutesOf(hhmm: string): number {
-  const [h, m] = hhmm.split(':').map(Number)
-  return h * 60 + m
-}
-
 export async function checkInEvent(id: string, payload: CheckinPayload): Promise<{ pointsAwarded: number }> {
   return withLatency(() => {
     const uid = requireUid()
@@ -216,15 +226,13 @@ export async function checkInEvent(id: string, payload: CheckinPayload): Promise
     if (mine.checkedIn) fail(409, '该活动已签到过，请勿重复签到')
     if (ev.status === 'ended') fail(400, '活动已结束，无法签到')
 
+    /* 时间窗：checkinOpenMin/checkinCloseMin 为相对开始时间的分钟偏移（与后端 app events 一致） */
     const now = mockNowDate()
-    const start = parseMockStamp(ev.startTime)
-    const end = parseMockStamp(ev.endTime)
-    const openAt = new Date(start)
-    openAt.setHours(Math.floor(minutesOf(ev.checkinOpenMin) / 60), minutesOf(ev.checkinOpenMin) % 60, 0, 0)
-    const closeAt = new Date(end)
-    closeAt.setHours(Math.floor(minutesOf(ev.checkinCloseMin) / 60), minutesOf(ev.checkinCloseMin) % 60, 0, 0)
-    if (now < openAt) fail(400, `未到签到时间，签到将于 ${ev.checkinOpenMin} 开放`)
-    if (now > closeAt) fail(400, '活动已结束，无法签到')
+    const startTs = parseMockStamp(ev.startTime).getTime()
+    const openMin = ev.checkinOpenMin ?? 30
+    const closeMin = ev.checkinCloseMin ?? 30
+    if (now.getTime() < startTs - openMin * 60_000) fail(400, '当前不在签到时间范围内')
+    if (now.getTime() > startTs + closeMin * 60_000) fail(400, '当前不在签到时间范围内')
 
     const distance = haversineM(payload.lat, payload.lng, ev.venueLat, ev.venueLng)
     if (distance > ev.checkinRadiusM) {
@@ -232,10 +240,10 @@ export async function checkInEvent(id: string, payload: CheckinPayload): Promise
     }
 
     mine.checkedIn = true
-    /* [MOCK-ONLY] 积分触发点：activity_checkin（签到积分，M1.5 已建引擎规则） */
-    const pointsAwarded = 10
+    mine.ticketRedeemed = true
+    /* 签到积分 = checkinPoints ?? activity_checkin 规则值（Mock 规则值 10） */
+    const pointsAwarded = ev.checkinPoints ?? 10
     grantPoints(uid, pointsAwarded, `活动签到：${ev.title}`, '活动签到')
-    grantExperience(uid, 5, `活动签到：${ev.title}`)
     pushNotice(uid, { type: 'points', title: '签到成功', content: `「${ev.title}」签到成功，积分 +${pointsAwarded}。`, link: '/me/points' })
     trackMockEvent('event_checkin')
     return { pointsAwarded }

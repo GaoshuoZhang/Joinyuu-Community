@@ -11,7 +11,6 @@ describe('M2-R A6/A19 管理端收口', () => {
   let app: INestApplication
   let db: PrismaService
   let admin: string
-  let operator: string
   let member: string
   let owner: string
   beforeAll(async () => {
@@ -20,7 +19,6 @@ describe('M2-R A6/A19 管理端收口', () => {
     await app.init()
     db = app.get(PrismaService)
     admin = await loginAs(app)
-    operator = await loginAs(app, 'operator')
     member = await appLoginAs(app, '13801210005', 'user123')
     owner = await appLoginAs(app, '13801210001', 'user123')
   })
@@ -31,7 +29,6 @@ describe('M2-R A6/A19 管理端收口', () => {
 
   it('权限隔离：普通 app 与无治理权限管理员不可处理工单', async () => {
     expect((await get('/api/admin/member-governance/deletions', member)).status).not.toBe(200)
-    expect((await get('/api/admin/member-governance/realnames', operator)).status).toBe(403)
     expect((await get('/api/admin/cards/individual', member)).status).not.toBe(200)
   })
 
@@ -46,19 +43,19 @@ describe('M2-R A6/A19 管理端收口', () => {
     expect((await get('/api/admin/cards/individual/U1001')).status).toBe(404)
   })
 
-  it('实名提交→待复核→驳回清实名并通知→重提→并发仅一次通过', async () => {
-    await db.user.update({ where: { uid: 'U1005' }, data: { realName: null, citizenId: null } })
+  it('实名提交通过规则校验后立即认证，且不再暴露人工复核端点', async () => {
+    await db.user.update({ where: { uid: 'U1005' }, data: { realName: null, citizenId: null, verifiedAt: null } })
     const identity = { realName: '顾北辰', citizenId: '11010519491231002X' }
     expect((await put('/api/app/me/realname', identity, member)).status).toBe(200)
-    const list = await get('/api/admin/member-governance/realnames?status=pending')
-    expect(list.body.data.list.find((u: { uid: string }) => u.uid === 'U1005').citizenId).toBe('1101**********002X')
-    expect((await post('/api/admin/member-governance/realnames/U1005/review', { action: 'reject', note: '资料需更正' })).status).toBe(200)
-    expect((await get('/api/app/me/realname', member)).body.data).toMatchObject({ verified: false, reviewStatus: 'rejected', reviewNote: '资料需更正' })
-    expect(await db.userNotification.count({ where: { userId: 'U1005', title: '实名认证复核未通过' } })).toBe(1)
-    expect((await put('/api/app/me/realname', identity, member)).status).toBe(200)
-    const results = await Promise.all([1, 2, 3].map(() => post('/api/admin/member-governance/realnames/U1005/review', { action: 'approve', note: '核对通过' })))
-    expect(results.map(r => r.status).sort()).toEqual([200, 409, 409])
-    expect((await get('/api/app/me/realname', member)).body.data).toMatchObject({ verified: true, reviewStatus: 'approved' })
+    expect((await get('/api/app/me/realname', member)).body.data).toMatchObject({
+      verified: true,
+      realName: '顾*',
+      citizenIdMasked: '1101**********002X',
+      verifiedAt: expect.any(String),
+    })
+    expect(await db.user.findUnique({ where: { uid: 'U1005' } })).toMatchObject({ ...identity, verifiedAt: expect.any(String) })
+    expect((await get('/api/admin/member-governance/realnames')).status).toBe(404)
+    expect((await post('/api/admin/member-governance/realnames/U1005/review', { action: 'approve', note: '不应存在' })).status).toBe(404)
   })
 
   it('名片配置即时下发；禁止字段不可写；部分保存不清空禁用字段', async () => {
@@ -102,7 +99,7 @@ describe('M2-R A6/A19 管理端收口', () => {
     await db.accountDeletionRequest.create({ data: { id: 'DR99999', userId: 'U1005', requestedAt: '2020-01-01 10:00', effectiveAt: '2020-01-08 10:00' } })
     const results = await Promise.all([1, 2].map(() => post('/api/admin/member-governance/deletions/DR99999/review', { action: 'approve', note: '已核对注销申请' })))
     expect(results.map(r => r.status).sort()).toEqual([200, 409])
-    expect(await db.user.findUnique({ where: { uid: 'U1005' } })).toMatchObject({ status: 'deleted', passwordHash: null, phone: 'deleted:U1005', realName: null, citizenId: null })
+    expect(await db.user.findUnique({ where: { uid: 'U1005' } })).toMatchObject({ status: 'deleted', passwordHash: null, phone: 'deleted:U1005', realName: null, citizenId: null, verifiedAt: null })
     expect((await get('/api/app/me', member)).status).toBe(401)
     const restore = await request(app.getHttpServer()).patch('/api/admin/users/U1005/status').set('Authorization', `Bearer ${admin}`).send({ status: 'active' })
     expect(restore.status).toBe(409)

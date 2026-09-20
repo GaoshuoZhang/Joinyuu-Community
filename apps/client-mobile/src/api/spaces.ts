@@ -1,5 +1,5 @@
 import { apiMode, httpGet, httpPost } from './http'
-import type { ReservationCreatePayload, Space, SpaceReservation, SpaceSlot } from '@/types'
+import type { ReservationCreatePayload, Space, SpaceReservation, SpaceReservationDetail, SpaceSlot } from '@/types'
 import * as mock from '@/mock/handlers/spaces'
 
 /** GET /api/app/spaces — 可预约空间列表 */
@@ -8,7 +8,7 @@ export async function fetchSpaces(): Promise<Space[]> {
   return httpGet<Space[]>('/spaces')
 }
 
-/** GET /api/app/spaces/:id/availability?date= — 某日已占用时段（已通过预约 + 活动占用） */
+/** GET /api/app/spaces/:id/availability?date= — 某日时段（待审核/已通过预约 + 活动占用） */
 export async function fetchAvailability(spaceId: string, date: string): Promise<SpaceSlot[]> {
   if (apiMode === 'mock') return mock.fetchAvailability(spaceId, date)
   return httpGet<SpaceSlot[]>(`/spaces/${spaceId}/availability?date=${date}`)
@@ -30,6 +30,12 @@ export async function createReservation(payload: ReservationCreatePayload): Prom
 export async function fetchMyReservations(): Promise<SpaceReservation[]> {
   if (apiMode === 'mock') return mock.fetchMyReservations()
   return httpGet<SpaceReservation[]>('/me/reservations')
+}
+
+/** GET /api/app/me/reservations/:id — 本人的空间预约详情。 */
+export async function fetchMyReservation(id: string): Promise<SpaceReservationDetail> {
+  if (apiMode === 'mock') return mock.fetchMyReservation(id)
+  return httpGet<SpaceReservationDetail>(`/me/reservations/${id}`)
 }
 
 /** POST /api/app/spaces/reservations/:id/cancel — 取消预约（pending/approved 可取消） */

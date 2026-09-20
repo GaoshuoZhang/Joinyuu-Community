@@ -6,7 +6,7 @@ import { useAuthStore } from '@/stores/auth'
 import { useConfigStore } from '@/stores/config'
 import { useNoticesStore } from '@/stores/notices'
 import { mockAdvanceOrder } from '@/api/mall'
-import { accounts, analyticsCounters, appConfig, events, ordersByUid, reports } from '@/mock/db'
+import { accounts, analyticsCounters, appConfig, events, ordersByUid } from '@/mock/db'
 import { listPendingReviews, reviewPending } from '@/mock/operations'
 import type { MockReviewItem, MockReviewVerdict } from '@/mock/operations'
 import { cancelEventAsOps, postponeEventAsOps } from '@/mock/operations'
@@ -48,7 +48,7 @@ const networkModes: { value: MockNetworkMode; label: string }[] = [
 ]
 
 const accountItems = computed(() => accounts.map((a) => ({ phone: a.phone, label: `${a.nickname} · ${a.phone}`, frozen: a.status === 'frozen' })))
-const FUNNEL_KEYS = ['login', 'register', 'demand_publish', 'demand_respond', 'event_enroll', 'event_checkin', 'order_create', 'article_submit', 'reservation_create', 'favorite_add', 'report_submit', 'search']
+const FUNNEL_KEYS = ['login', 'register', 'demand_publish', 'demand_respond', 'event_enroll', 'event_checkin', 'order_create', 'article_submit', 'reservation_create', 'favorite_add', 'search']
 const funnel = computed(() => FUNNEL_KEYS.map((key) => ({ key, count: analyticsCounters[key] ?? 0 })))
 
 let statusTimer: number | undefined
@@ -293,7 +293,6 @@ function resetMock() {
         </article>
       </div>
       <p v-else class="empty-review">暂无待审核记录，可在客户端提交后回来操作</p>
-      <p class="empty-review">v35 举报队列：{{ reports.filter((r) => r.status === 'pending').length }} 条待处理</p>
 
       <div class="section">v37 · 漏斗计数（Mock 埋点）</div>
       <div v-for="item in funnel" :key="item.key" class="switch-row">
@@ -323,7 +322,7 @@ function resetMock() {
 
   width: 44px;
   height: 44px;
-  font-size: 18px;
+  font-size: var(--app-font-title);
   box-shadow: var(--td-shadow-3);
 }
 
@@ -339,17 +338,17 @@ function resetMock() {
   border: 1px solid var(--td-component-border);
   border-radius: var(--td-radius-large);
   box-shadow: var(--td-shadow-3);
-  padding: 14px;
+  padding:var(--app-space-7);
 }
 
 .panel-title {
-  font-size: 13px;
-  font-weight: 700;
-  margin-bottom: 10px;
+  font-size: var(--app-font-body);
+  font-weight: 600;
+  margin-bottom:var(--app-space-5);
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 8px;
+  gap:var(--app-space-4);
 }
 
 .mode {
@@ -359,60 +358,60 @@ function resetMock() {
 }
 
 .section {
-  font-size: 12px;
+  font-size: var(--app-font-caption);
   color: var(--td-text-color-secondary);
-  margin: 10px 0 6px;
+  margin:var(--app-space-5) 0 var(--app-space-3);
 }
 
 .account {
-  margin-bottom: 6px;
+  margin-bottom:var(--app-space-3);
 }
 
 .switch-row {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  font-size: 12px;
-  padding: 6px 0;
+  font-size: var(--app-font-caption);
+  padding:var(--app-space-3) 0;
 }
 
 .geo-grid {
   display: grid;
   grid-template-columns: repeat(2, 1fr);
-  gap: 6px;
+  gap:var(--app-space-3);
 }
 
 .mode-grid {
   display: grid;
   grid-template-columns: repeat(5, minmax(0, 1fr));
-  gap: 4px;
+  gap:var(--app-space-2);
 }
 
 .clock {
-  margin: 0 0 6px;
+  margin:0 0 var(--app-space-3);
   color: var(--td-text-color-primary);
-  font-size: 12px;
+  font-size: var(--app-font-caption);
   font-variant-numeric: tabular-nums;
 }
 
 .clock-grid {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 4px;
+  gap:var(--app-space-2);
 }
 
 .review-reason {
-  margin-bottom: 6px;
+  margin-bottom:var(--app-space-3);
 }
 
 .review-list {
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap:var(--app-space-3);
 }
 
 .review-card {
-  padding: 8px;
+  padding:var(--app-space-4);
   border: 1px solid var(--td-component-border);
   border-radius: var(--td-radius-default);
   background: var(--td-bg-color-secondarycontainer);
@@ -423,51 +422,51 @@ function resetMock() {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 6px;
+  gap:var(--app-space-3);
 }
 
 .review-head {
-  font-size: 12px;
+  font-size: var(--app-font-caption);
 }
 
 .review-head span,
 .review-card small,
 .empty-review {
   color: var(--td-text-color-secondary);
-  font-size: 12px;
+  font-size: var(--app-font-caption);
 }
 
 .review-card p {
-  margin: 6px 0 2px;
-  font-size: 12px;
+  margin:var(--app-space-3) 0 var(--app-space-1);
+  font-size: var(--app-font-caption);
 }
 
 .review-actions {
   justify-content: flex-end;
-  margin-top: 8px;
+  margin-top:var(--app-space-4);
 }
 
 .empty-review {
-  margin: 8px 0;
+  margin:var(--app-space-4) 0;
 }
 
 .scenario {
-  margin-top: 6px;
+  margin-top:var(--app-space-3);
 }
 
 .danger {
-  margin-top: 12px;
+  margin-top:var(--app-space-6);
 }
 
 .status {
-  margin: 10px 0 0;
-  font-size: 12px;
+  margin:var(--app-space-5) 0 0;
+  font-size: var(--app-font-caption);
   color: var(--td-success-color);
 }
 
 .persist-error {
-  margin: 10px 0 0;
+  margin:var(--app-space-5) 0 0;
   color: var(--td-error-color);
-  font-size: 12px;
+  font-size: var(--app-font-caption);
 }
 </style>

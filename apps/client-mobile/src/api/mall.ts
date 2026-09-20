@@ -27,7 +27,7 @@ export async function fetchMyOrders(): Promise<MyOrder[]> {
   return (await httpGet<{ list: MyOrder[]; total: number }>('/me/orders')).list
 }
 
-/** POST /api/app/mall/orders/:id/confirm — 确认收货（实物 shipped → completed；缺口 §7.1-10 待补契约） */
+/** POST /api/app/mall/orders/:id/confirm — 确认收货（实物 shipped → completed）。 */
 /** POST /api/app/mall/orders/:id/review — 完成订单评价（1~5 星 + 可选文字） */
 export async function reviewOrder(id: string, rating: number, review?: string): Promise<void> {
   if (apiMode === 'mock') return mock.reviewOrder(id, rating, review)
@@ -39,25 +39,25 @@ export async function confirmOrder(id: string): Promise<void> {
   await httpPost(`/mall/orders/${id}/confirm`)
 }
 
-/** [MOCK-ONLY] 服务权益核销（service pending_use → completed）。 */
+/** 权益券核销（voucher pending_use → completed）。 */
 export async function useOrder(id: string): Promise<void> {
   if (apiMode === 'mock') return mock.useOrder(id)
   await httpPost(`/mall/orders/${id}/use`)
 }
 
-/** [MOCK-ONLY] 缺货商品到货提醒订阅。 */
+/** 缺货商品到货提醒订阅。 */
 export async function subscribeRestock(goodsId: string): Promise<void> {
   if (apiMode === 'mock') return mock.subscribeRestock(goodsId)
   await httpPost(`/mall/goods/${goodsId}/restock-subscribe`)
 }
 
-/** [MOCK-ONLY] v38 取消待发货订单（退积分 + 回补库存）。 */
+/** 取消待发货订单（退积分 + 回补库存）。 */
 export async function cancelOrder(id: string): Promise<void> {
   if (apiMode === 'mock') return mock.cancelOrder(id)
   await httpPost(`/mall/orders/${id}/cancel`)
 }
 
-/** [MOCK-ONLY] devtools：模拟后台发货（pending_shipment → shipped；接入后为管理端能力，缺口 §7.2-3） */
+/** [MOCK-ONLY] DevTools 模拟后台发货；真实发货由管理端完成。 */
 export async function mockAdvanceOrder(id: string): Promise<void> {
   if (apiMode === 'mock') return mock.advanceOrder(id)
 }

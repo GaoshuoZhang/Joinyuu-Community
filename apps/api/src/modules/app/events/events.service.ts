@@ -26,7 +26,7 @@ const CHECKIN_REASON = '活动签到'
 const TICKET_SECRET = process.env.JWT_SECRET ?? 'dev-only-change-me'
 
 /* 活动中心（M2-R R2，/api/app/events + /api/app/me/enrollments）：
- * 浏览（published 未结束 + 身份×等级可见范围）、详情（进度/我的报名态/改期提示）、
+ * 浏览（published 未结束 + 身份×等级可见范围）、详情（人数限制/我的报名态/改期提示）、
  * 报名（截止/范围/容量 → 满员候补、requireReview→pending）、取消（释放名额自动递补候补第一名）、
  * 客户端电子签到（时间窗 + 有地址时地理围栏 + 防重复 + activity_checkin 积分 + 签到即核销 Q4）、
  * 我的报名、电子票（approved 懒签发 + HMAC 核销码）、活动反馈（结束后 + 参与过 + 一人一条）。 */
@@ -49,7 +49,6 @@ export class AppEventsService {
 
     const all = await this.prisma.communityEvent.findMany({
       where: { status: 'published', deletedAt: null },
-      include: { enrollments: true },
     })
     const open = all.filter((e) => e.endTime > formatNow())
     /* 类型 + 关键词（标题/地点/嘉宾）过滤 */
@@ -82,18 +81,21 @@ export class AppEventsService {
     const uid = await this.optionalUid(authorization)
     const event = await this.prisma.communityEvent.findUnique({
       where: { id },
-      include: { enrollments: true },
     })
-    if (!event || event.deletedAt || event.status === 'cancelled') throw new NotFoundException('活动不存在')
+    if (!event || event.deletedAt) throw new NotFoundException('活动不存在')
+
+    const mine = uid
+      ? await this.prisma.eventEnrollment.findUnique({
+          where: { eventId_userId: { eventId: id, userId: uid } },
+        })
+      : null
 
     const identities = await this.loadIdentities(uid)
-    if (!this.scopeMatches(event.visibilityIdentities, event.visibilityLevels, identities)) {
+    const publiclyViewable = event.status === 'published'
+      && this.scopeMatches(event.visibilityIdentities, event.visibilityLevels, identities)
+    if (!mine && !publiclyViewable) {
       throw new NotFoundException('活动不存在')
     }
-
-    const mine = await this.prisma.eventEnrollment.findUnique({
-      where: { eventId_userId: { eventId: id, userId: uid } },
-    })
     return this.toEventDto(event, mine ?? undefined)
   }
 
@@ -192,16 +194,20 @@ export class AppEventsService {
       })
       if (!enrollment) throw new NotFoundException('报名记录不存在')
       if (enrollment.status === 'cancelled') throw new ConflictException('该报名已取消')
-      if (enrollment.status !== 'pending' && enrollment.status !== 'approved') {
+      if (enrollment.status !== 'pending' && enrollment.status !== 'approved' && enrollment.status !== 'waitlisted') {
         throw new ConflictException('该状态不可取消报名')
       }
+      if (enrollment.checkedIn) throw new ConflictException('已签到的活动不可取消报名')
 
       const cancelHours = enrollment.event.cancelDeadlineHours ?? 24
       if (enrollment.status === 'approved') {
         const cutoff = this.parseTime(enrollment.event.startTime).getTime() - cancelHours * 3600_000
         if (Date.now() >= cutoff) throw new ConflictException(`活动开场前 ${cancelHours} 小时不可取消`)
       }
-      await tx.eventEnrollment.update({ where: { id: enrollment.id }, data: { status: 'cancelled' } })
+      await tx.eventEnrollment.update({
+        where: { id: enrollment.id },
+        data: { status: 'cancelled', waitlisted: false, waitlistOrder: null },
+      })
       if (enrollment.status === 'approved') await this.promoteWaitlist(tx, enrollment.event)
       await this.notify.pushNoticeInTransaction(tx, uid, {
         type: 'event',
@@ -310,8 +316,6 @@ export class AppEventsService {
     if (!enrollment) throw new NotFoundException('报名记录不存在')
     if (enrollment.userId !== uid) throw new ForbiddenException('无权查看该电子票')
     if (enrollment.status !== 'approved') throw new BadRequestException('报名未通过，无法获取电子票')
-    if (enrollment.event.status === 'cancelled') throw new BadRequestException('活动已取消，无法获取电子票')
-
     let ticket = await this.prisma.eventTicket.findUnique({
       where: { enrollmentId: enrollment.id },
     })
@@ -357,13 +361,20 @@ export class AppEventsService {
     })
     if (!enrollment) throw new NotFoundException('报名记录不存在')
     const ticket = await this.myTicket(uid, String(enrollment.id))
+    const expired = enrollment.event.status === 'ended' || this.parseTime(enrollment.event.endTime).getTime() < Date.now()
     return {
       eventId,
       eventTitle: enrollment.event.title,
       startTime: enrollment.event.startTime,
       location: enrollment.event.location,
       ticketCode: ticket.redeemCode,
-      status: enrollment.event.status === 'cancelled' ? 'cancelled' : ticket.redeemedAt ? 'checked' : 'valid',
+      status: enrollment.event.status === 'cancelled'
+        ? 'cancelled'
+        : ticket.redeemedAt
+          ? 'checked'
+          : expired
+            ? 'expired'
+            : 'valid',
       checkedIn: enrollment.checkedIn,
       waitlistOrder: enrollment.waitlistOrder ?? undefined,
     }
@@ -420,16 +431,18 @@ export class AppEventsService {
     return rows
   }
 
-  /** 范围过滤：身份类型集合与等级集合各自对用户身份取交集；空数组 = 不限 */
+  /** 范围过滤：按「单个身份」联合判定（类型命中且等级命中），多个身份取并集；两组都为空 = 不限 */
   private scopeMatches(
     identityTypes: string[],
     levels: string[],
     identities: Array<{ type: string; level: number | null }>,
   ): boolean {
-    const identOk = identityTypes.length === 0 || identities.some((i) => identityTypes.includes(i.type))
-    const levelOk =
-      levels.length === 0 || identities.some((i) => i.level != null && levels.includes(String(i.level)))
-    return identOk && levelOk
+    if (identityTypes.length === 0 && levels.length === 0) return true
+    return identities.some(
+      (i) =>
+        (identityTypes.length === 0 || identityTypes.includes(i.type)) &&
+        (levels.length === 0 || (i.level != null && levels.includes(String(i.level)))),
+    )
   }
 
   /** 取可报名活动（存在 + 可见范围 + 未取消），否则 404 */
@@ -470,22 +483,21 @@ export class AppEventsService {
 
   /** 活动转出（列表/详情统一）。myEnrollment 可选，null 表示未报名 */
   private toEventDto(
-    e: CommunityEvent & { enrollments?: EventEnrollment[] },
+    e: CommunityEvent,
     mine?: EventEnrollment | null,
   ) {
-    const enrollments = e.enrollments ?? []
-    const approvedCount = enrollments.filter((x) => x.status === 'approved').length
     return {
       id: e.id,
       title: e.title,
+      coverUrl: e.coverUrl ?? undefined,
       type: e.type,
       typeLabel: e.type,
       startTime: e.startTime,
       endTime: e.endTime,
       location: e.location,
       capacity: e.capacity,
-      approvedCount,
       requireReview: e.requireReview,
+      enrollmentOpen: e.enrollmentOpen,
       enrollmentDeadline: e.enrollmentDeadline ?? '',
       status: e.status,
       visibilityIdentities: e.visibilityIdentities,

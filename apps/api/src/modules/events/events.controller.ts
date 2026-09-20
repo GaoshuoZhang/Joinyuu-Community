@@ -3,6 +3,7 @@ import type { AuthenticatedRequest } from '../../common/interfaces/authenticated
 import { RequirePermission } from '../../common/decorators/require-permission.decorator'
 import { EventsService } from './events.service'
 import { QueryEventsDto } from './dto/query-events.dto'
+import { QueryEnrollmentsDto } from './dto/query-enrollments.dto'
 import { EventPayloadDto } from './dto/event-payload.dto'
 import { ScheduleEventDto } from './dto/schedule-event.dto'
 import { ReviewEnrollmentDto } from './dto/review-enrollment.dto'
@@ -18,6 +19,12 @@ export class EventsController {
   @Get()
   findAll(@Query() query: QueryEventsDto) {
     return this.events.findAll(query)
+  }
+
+  /* 静态路径须先于 :id 注册，避免被参数路由吞掉 */
+  @Get('enrollments')
+  listEnrollments(@Query() query: QueryEnrollmentsDto) {
+    return this.events.listEnrollments(query)
   }
 
   @Get(':id')

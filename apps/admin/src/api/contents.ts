@@ -72,6 +72,11 @@ export async function updateArticle(id: string, payload: ArticlePayload): Promis
   return httpPut<{ code: number }>(`/contents/articles/${id}`, payload)
 }
 
+/** PUT /api/admin/contents/articles/:id/submission — 编辑审核通过且待发布的用户投稿 */
+export async function updateSubmissionArticle(id: string, payload: ArticlePayload): Promise<{ code: number }> {
+  return httpPut<{ code: number }>(`/contents/articles/${id}/submission`, payload)
+}
+
 /** POST /api/admin/contents/articles/:id/review，入参 { approved | rejected, comment? }
  * 通过 → 待发布（pending_release）；驳回 → 已驳回（rejected）并记录原因 */
 export async function reviewArticle(

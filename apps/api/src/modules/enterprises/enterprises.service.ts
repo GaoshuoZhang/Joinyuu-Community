@@ -18,7 +18,6 @@ export interface EnterpriseDto {
   settledAt: string | null
   leaseType: string
   status: string
-  showcaseStatus: string
   experience: number
   /** 企业等级（按 community_enterprise 等级梯度由经验值推导，列表接口下发） */
   level?: number
@@ -44,7 +43,6 @@ export function toEnterpriseDto(e: Enterprise): EnterpriseDto {
     settledAt: e.settledAt,
     leaseType: e.leaseType,
     status: e.status,
-    showcaseStatus: e.showcaseStatus,
     experience: e.experience,
     contactTitle: e.contactTitle,
     contactName: e.contactName,
@@ -125,7 +123,6 @@ export class EnterprisesService {
           settledAt: dto.settledAt ?? formatToday(),
           leaseType: dto.leaseType,
           status: 'active',
-          showcaseStatus: 'none',
           experience: 0,
           contactUserId: dto.contactUserId,
           contactTitle: title,

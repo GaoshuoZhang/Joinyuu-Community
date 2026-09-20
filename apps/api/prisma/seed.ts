@@ -118,7 +118,7 @@ const policySeeds: Array<Record<string, unknown>> = [
   {
     id: 'PL1002', kind: 'agreement_privacy', category: '-', title: '聚屿社区隐私政策',
     summary: '个人信息收集、使用与保护说明', version: '1.0',
-    content: '我们仅在为您提供社区服务所必需的范围内收集个人信息（联系方式、实名信息、简历内容等），并采取加密与访问控制保护数据安全。未经您的同意，我们不会向第三方共享可识别个人身份的信息，法律法规另有规定的除外。',
+    content: '我们仅在为您提供社区服务所必需的范围内收集个人信息（联系信息、实名信息、简历内容等），并采取加密与访问控制保护数据安全。未经您的同意，我们不会向第三方共享可识别个人身份的信息，法律法规另有规定的除外。',
     effectiveAt: '2026-01-01', publisher: '聚屿社区', status: 'published',
     publishedAt: '2026-01-01 00:00', updatedAt: '2026-01-01 00:00',
   },
@@ -132,7 +132,7 @@ const policySeeds: Array<Record<string, unknown>> = [
   {
     id: 'PL2002', kind: 'community', category: '入驻指南', title: '企业入驻与办公空间申请指引',
     summary: '从提交申请到入驻办公的全流程说明', version: '1.2',
-    content: '一、提交入驻申请（营业执照等材料）。\n二、运营审核（3 个工作日内反馈）。\n三、签署入驻协议并办理工位/办公室租赁。\n四、公共空间预约需提前一个工作日提交，路演厅需提前三个工作日并附活动方案。',
+    content: '一、提交入驻申请（营业执照等材料）。\n二、运营审核（3 个工作日内反馈）。\n三、签署入驻协议并办理办公位/办公室租赁。\n四、公共空间预约需提前一个工作日提交，路演厅需提前三个工作日并附活动方案。',
     effectiveAt: '2026-08-15', publisher: '聚屿社区运营部', status: 'published',
     publishedAt: '2026-08-15 09:00', updatedAt: '2026-08-15 09:00',
   },
@@ -289,6 +289,7 @@ async function main() {
       minioAccessKey: systemConfig.minioAccessKey,
       minioSecretKey: systemConfig.minioSecretKey,
       minioBucket: systemConfig.minioBucket,
+      realnameRequired: systemConfig.realnameRequired,
       updatedAt: systemConfig.updatedAt,
       updatedBy: systemConfig.updatedBy,
     },
@@ -337,9 +338,7 @@ async function main() {
         status: u.status,
         realName: u.realName ?? null,
         citizenId: u.citizenId ?? null,
-        realnameReviewStatus: u.realName && u.citizenId ? 'approved' : 'unverified',
-        realnameReviewedAt: u.realName && u.citizenId ? u.registeredAt : null,
-        realnameReviewedBy: u.realName && u.citizenId ? '种子数据' : null,
+        verifiedAt: u.realName && u.citizenId ? u.registeredAt : null,
         wechatOpenid: u.wechatOpenid ?? null,
         wechatUnionid: u.wechatUnionid ?? null,
         wechatVerified: u.wechatVerified ?? false,
@@ -410,7 +409,6 @@ async function main() {
         settledAt: e.settledAt ?? null,
         leaseType: e.leaseType,
         status: e.status,
-        showcaseStatus: e.showcaseStatus,
         experience: e.experience ?? 0,
         contactUserId: e.contactUserId ?? null,
         contactTitle: e.contactTitle ?? '',
@@ -440,8 +438,7 @@ async function main() {
         size: p.size ?? '',
         foundedAt: p.foundedAt ?? '',
         description: p.description,
-        cooperationCount: p.cooperationCount ?? 0,
-        firstCooperationAt: p.firstCooperationAt,
+        registeredAt: p.registeredAt,
       },
     })
   }
@@ -473,6 +470,13 @@ async function main() {
         id: d.id,
         title: d.title,
         category: d.category,
+        demandType: d.demandType ?? 'task',
+        deliverable: d.deliverable ?? null,
+        deliverBy: d.deliverBy ?? null,
+        cooperationNeed: d.cooperationNeed ?? null,
+        returnOffer: d.returnOffer ?? null,
+        bottleneck: d.bottleneck ?? null,
+        partnershipMode: d.partnershipMode ?? null,
         publisherId: d.publisherId ?? '',
         publisherName: d.publisherName,
         publisherIdentity: d.publisherIdentity ?? null,
@@ -569,6 +573,11 @@ async function main() {
           status: m.status ?? 'todo',
           date: m.date,
           owners: m.owners ?? [],
+          attachments: m.attachments ?? [],
+          returnReason: m.returnReason ?? null,
+          submitAt: m.submitAt ?? null,
+          acceptAt: m.acceptAt ?? null,
+          returnedAt: m.returnedAt ?? null,
         },
       })
       milestoneCount += 1
@@ -585,6 +594,7 @@ async function main() {
         id: ev.id,
         createdAt: ev.createdAt ?? '',
         title: ev.title,
+        coverUrl: ev.coverUrl ?? null,
         type: ev.type,
         startTime: ev.startTime,
         endTime: ev.endTime,
@@ -603,6 +613,11 @@ async function main() {
         scheduledAt: ev.scheduledAt ?? null,
         enrollPoints: ev.enrollPoints ?? null,
         checkinPoints: ev.checkinPoints ?? null,
+        venueLat: ev.venueLat ?? null,
+        venueLng: ev.venueLng ?? null,
+        checkinRadiusM: ev.checkinRadiusM ?? 200,
+        checkinOpenMin: ev.checkinOpenMin ?? 30,
+        checkinCloseMin: ev.checkinCloseMin ?? 30,
         description: ev.description,
         tags: ev.tags ?? [],
       },
@@ -619,6 +634,11 @@ async function main() {
           status: en.status ?? 'pending',
           checkedIn: en.checkedIn ?? false,
           checkInAt: en.checkInAt ?? null,
+          waitlisted: en.waitlisted ?? false,
+          waitlistOrder: en.waitlistOrder ?? null,
+          checkinLat: en.checkinLat ?? null,
+          checkinLng: en.checkinLng ?? null,
+          checkinMethod: en.checkinMethod ?? null,
         },
       })
       enrollmentCount += 1
@@ -663,20 +683,26 @@ async function main() {
 
   // ---------- 积分商城与规则 ----------
   for (const g of goods) {
-    /* M2-R R2（Q1 决）：category 改造为 goods_category 字典分类（GC code），履约类型由 fulfillment 承担 */
-    const gcCode: Record<string, string> = { 实物商品: 'GC001', 虚拟服务: 'GC002', 权益券: 'GC003' }
-    const fulfillment: Record<string, string> = { 实物商品: 'physical', 虚拟服务: 'service', 权益券: 'voucher' }
+    /* M2-R R2（Q1 决）：category 为 goods_category 字典分类（GC code），履约类型由 fulfillment 承担 */
     await prisma.mallGoods.create({
       data: {
         id: g.id,
         name: g.name,
-        category: gcCode[g.category] ?? g.category,
-        fulfillment: fulfillment[g.category] ?? 'physical',
+        coverUrl: g.coverUrl ?? null,
+        category: g.category,
+        fulfillment: g.fulfillment ?? 'physical',
         points: g.points,
         stock: g.stock,
         status: g.status ?? 'on',
         description: g.description,
         redeemedCount: g.redeemedCount ?? 0,
+        shippingMethods: g.shippingMethods ?? [],
+        pickupAddress: g.pickupAddress ?? null,
+        shippingFee: g.shippingFee ?? null,
+        visibilityIdentities: g.visibilityIdentities ?? [],
+        visibilityLevels: g.visibilityLevels ?? [],
+        orderIdentities: g.orderIdentities ?? [],
+        orderLevels: g.orderLevels ?? [],
         createdAt: g.createdAt,
       },
     })
@@ -692,6 +718,7 @@ async function main() {
         goodsId: o.goodsId,
         goodsName: o.goodsName,
         points: o.points,
+        fulfillment: o.fulfillment ?? 'physical',
         status: o.status,
         createdAt: o.createdAt,
         shippedAt: o.shippedAt ?? null,
@@ -699,6 +726,14 @@ async function main() {
         recipientName: o.recipientName ?? null,
         recipientPhone: o.recipientPhone ?? null,
         address: o.address ?? null,
+        addressId: o.addressId ?? null,
+        trackingNo: o.trackingNo ?? null,
+        voucherCode: o.voucherCode ?? null,
+        voucherExpiresAt: o.voucherExpiresAt ?? null,
+        usedAt: o.usedAt ?? null,
+        cancelledAt: o.cancelledAt ?? null,
+        rating: o.rating ?? null,
+        reviewComment: o.reviewComment ?? null,
         note: o.note ?? null,
         cancelReason: o.cancelReason ?? null,
       },
@@ -834,6 +869,9 @@ async function main() {
         needApproval: s.needApproval ?? false,
         equipment: s.equipment ?? [],
         status: s.status ?? 'available',
+        maxHours: s.maxHours ?? 4,
+        advanceDays: s.advanceDays ?? 30,
+        openHours: s.openHours ?? [{ start: s.openTime, end: s.closeTime }],
         description: s.description,
       },
     })
@@ -858,6 +896,9 @@ async function main() {
         submittedAt: r.submittedAt,
         records: r.records ?? [],
         rejectReason: r.rejectReason ?? null,
+        identityType: r.identityType ?? null,
+        subjectName: r.subjectName ?? null,
+        asEnterpriseId: r.asEnterpriseId ?? null,
       },
     })
   }
@@ -886,8 +927,9 @@ async function main() {
         id: a.id,
         title: a.title,
         channel: a.channel ?? 'submitted',
-        columnId: a.columnIds?.[0] ?? a.columnId,
-        columnName: a.columnNames?.[0] ?? a.columnName,
+        columnId: a.columnId,
+        columnName: a.columnName,
+        commentsEnabled: a.commentsEnabled ?? true,
         authorId: a.authorId ?? null,
         authorName: a.authorName,
         authorIdentity: a.authorIdentity ?? null,
@@ -916,6 +958,8 @@ async function main() {
         publishedAt: a.publishedAt,
         createdAt: a.createdAt,
         updatedAt: a.updatedAt ?? null,
+        expireAt: a.expireAt ?? null,
+        link: a.link ?? null,
       },
     })
   }
@@ -1020,6 +1064,7 @@ async function main() {
     ['BN', banners.map((x: any) => x.id)],
     ['N', notifications.map((x: any) => x.id)],
     ['AL', auditLogs.map((x: any) => x.id)],
+    ['PL', policySeeds.map((x) => x.id as string)],
   ]
   for (const [prefix, ids] of idSeeds) {
     const nextNumber = ids.reduce((max, id) => Math.max(max, numericSuffix(id)), 0)

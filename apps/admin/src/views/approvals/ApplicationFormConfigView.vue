@@ -27,7 +27,7 @@ const draft = reactive({
 })
 
 const labels: Record<ApplicationFormConfig['type'], string> = {
-  settle: '企业入驻', cooperation: '合作伙伴', individual: '人才登记', identity: '身份绑定',
+  settle: '企业入驻', cooperation: '合作伙伴', individual: '人才登记',
 }
 const typeOptions: { label: string; value: ApplicationFieldType }[] = [
   { label: '单行文本', value: 'text' },

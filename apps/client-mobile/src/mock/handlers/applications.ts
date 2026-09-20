@@ -1,17 +1,16 @@
-import type { ApplicationCreatePayload, ApplicationFormSchema, ApplicationType, MyApplication, UploadedFileInfo } from '@/types'
+import type { ApplicationCreatePayload, ApplicationDetailField, ApplicationFormSchema, ApplicationType, MyApplication, MyApplicationDetail, UploadedFileInfo } from '@/types'
 import { applicationFormSchemas, applicationPayloadById, applicationsByUid, nextMockId, nowStamp, pushNotice } from '@/mock/db'
 import { readPayload } from '@/mock/session'
 import { fail, withLatency } from '@/mock/latency'
 import { formatMockDate } from '@/mock/runtime'
 
 /* [MOCK-ONLY] 申请 handlers：settle 企业入驻 / cooperation 合作伙伴 / individual 人才登记（schema 驱动）
- * 与 identity 身份绑定。表单自定义字段与附件上传为缺口 §7.1-14 / §7.1-6；v34 支持撤回与驳回重提。 */
+ * 与人才登记。表单自定义字段与附件上传为缺口 §7.1-14 / §7.1-6；v34 支持撤回与驳回重提。 */
 
 const TYPE_LABEL: Record<ApplicationType, string> = {
   settle: '企业入驻',
   individual: '人才登记',
   cooperation: '合作伙伴',
-  identity: '身份绑定',
 }
 
 function requireUid(): string {
@@ -24,6 +23,22 @@ export async function fetchMyApplications(): Promise<MyApplication[]> {
   return withLatency(() => {
     const uid = requireUid()
     return [...(applicationsByUid[uid] ?? [])]
+  })
+}
+
+export async function fetchMyApplication(id: string): Promise<MyApplicationDetail> {
+  return withLatency(() => {
+    const uid = requireUid()
+    const item = (applicationsByUid[uid] ?? []).find((application) => application.id === id)
+    if (!item) fail(404, '申请不存在')
+    const payload = applicationPayloadById[id]
+    const schema = applicationFormSchemas[item.type]
+    const labels = new Map(schema?.fields.map((field) => [field.key, field.label]) ?? [])
+    const fields: ApplicationDetailField[] = Object.entries(payload?.uid === uid ? payload.payload.fields ?? {} : {}).map(([key, value]) => {
+      if (isAttachmentList(value)) return { key, label: labels.get(key) ?? key, files: value.map(({ name, size, url }) => ({ name, size, url })) }
+      return { key, label: labels.get(key) ?? key, value: String(value) }
+    })
+    return { ...structuredClone(item), records: structuredClone(item.records ?? []), fields, ...(payload?.payload.note ? { note: payload.payload.note } : {}) }
   })
 }
 
@@ -45,7 +60,7 @@ function normalizeApplication(uid: string, payload: ApplicationCreatePayload): {
   const label = TYPE_LABEL[payload.type]
   if (!label) fail(400, '申请类型无效')
   const schema = applicationFormSchemas[payload.type]
-  let targetName = payload.organizationName?.trim() ?? label
+  let targetName = label
   let summary: string | undefined
   let attachments: { name: string; size: number }[] = []
 
@@ -71,14 +86,6 @@ function normalizeApplication(uid: string, payload: ApplicationCreatePayload): {
     const nameValue = nameField ? String(fields[nameField.key] ?? '').trim() : ''
     targetName = nameValue || label
   }
-  if (payload.type === 'identity') {
-    const identityType = payload.identityType ?? payload.fields?.identityType
-    const organizationName = payload.organizationName?.trim() || String(payload.fields?.orgName ?? '').trim()
-    if (identityType !== 'community_individual' && identityType !== 'community_enterprise') fail(400, '请选择要绑定的身份类型')
-    if (identityType === 'community_enterprise' && !organizationName) fail(400, '请填写要绑定的社区企业名称')
-    targetName = identityType === 'community_enterprise' ? `${organizationName} · 社区企业身份绑定` : '社区个体身份绑定'
-  }
-
   const mine = (applicationsByUid[uid] ??= [])
   if (mine.some((a) => a.type === payload.type && a.status === 'pending')) fail(409, '你已有同类型申请在审核中，请耐心等待')
   return { label, targetName, summary, attachments }
@@ -98,6 +105,7 @@ export async function createApplication(payload: ApplicationCreatePayload): Prom
       submittedAt: nowStamp(),
       summary,
       attachments: attachments.length ? attachments : undefined,
+      records: [{ at: nowStamp(), action: 'submit', title: '提交申请' }],
     })
     applicationPayloadById[id] = { uid, payload: structuredClone(payload) }
     /* [MOCK-ONLY] 通知触发点：申请已提交（审核结果通知由管理端审核动作产生） */
@@ -114,6 +122,7 @@ export async function withdrawApplication(id: string): Promise<void> {
     if (!item) fail(404, '申请不存在')
     if (item.status !== 'pending') fail(409, '仅审核中的申请可撤回')
     item.status = 'withdrawn'
+    item.records.push({ at: nowStamp(), action: 'withdraw', title: '撤回申请' })
   })
 }
 
@@ -130,6 +139,7 @@ export async function resubmitApplication(id: string, payload: ApplicationCreate
     item.attachments = attachments.length ? attachments : undefined
     item.status = 'pending'
     item.submittedAt = nowStamp()
+    item.records.push({ at: item.submittedAt, action: 'resubmit', title: '重新提交' })
     delete item.reviewedAt
     delete item.rejectReason
     applicationPayloadById[id] = { uid, payload: structuredClone(payload) }

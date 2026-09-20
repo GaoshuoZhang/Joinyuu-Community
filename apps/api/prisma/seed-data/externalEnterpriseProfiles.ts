@@ -9,8 +9,7 @@ export interface ExternalEnterpriseProfile {
   size: string
   foundedAt: string
   description: string
-  cooperationCount: number
-  firstCooperationAt: string
+  registeredAt: string
 }
 
 export const externalEnterpriseProfiles: ExternalEnterpriseProfile[] = [
@@ -22,8 +21,7 @@ export const externalEnterpriseProfiles: ExternalEnterpriseProfile[] = [
     size: '10-50人',
     foundedAt: '2019-03',
     description: '专注早期科技创投的财务顾问机构，与社区多家企业保持投融资辅导合作，定期参与社区路演活动担任评审。',
-    cooperationCount: 6,
-    firstCooperationAt: '2025-06',
+    registeredAt: '2025-06-18',
   },
   {
     id: 'XE7002',
@@ -33,8 +31,7 @@ export const externalEnterpriseProfiles: ExternalEnterpriseProfile[] = [
     size: '10人以下',
     foundedAt: '2020-08',
     description: '为科技创业企业提供财务规范化、融资尽调陪跑与股权设计咨询，创始人为社区企业资深财务顾问。',
-    cooperationCount: 3,
-    firstCooperationAt: '2025-09',
+    registeredAt: '2025-09-05',
   },
   {
     id: 'XE7003',
@@ -44,7 +41,6 @@ export const externalEnterpriseProfiles: ExternalEnterpriseProfile[] = [
     size: '10-50人',
     foundedAt: '2021-11',
     description: '新消费品牌内容营销与 IP 联名运营商，与社区设计类企业保持长期项目合作。',
-    cooperationCount: 2,
-    firstCooperationAt: '2026-01',
+    registeredAt: '2026-01-22',
   },
 ]

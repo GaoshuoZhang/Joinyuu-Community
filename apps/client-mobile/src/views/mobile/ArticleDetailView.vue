@@ -1,68 +1,29 @@
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { Loading, Button, Icon, Image, Tag, Textarea, Toast } from 'tdesign-mobile-vue'
-import DOMPurify from 'dompurify'
+import { Button, Icon, Image, Tag, Toast } from 'tdesign-mobile-vue'
 import { useAsyncList } from '@/composables/useAsyncList'
 import { createArticleComment, fetchArticle, fetchArticleComments, toggleArticleLike } from '@/api/contents'
 import { listFavorites, toggleFavorite } from '@/api/favorites'
 import { shareContent } from '@/utils/share'
 import { onImageError } from '@/utils/imageFallback'
-import { submitReport } from '@/api/reports'
-import { useAuthStore } from '@/stores/auth'
+import { actionIdentityOptions, useAuthStore } from '@/stores/auth'
 import { addReadingHistory } from '@/utils/readingHistory'
 import EmptyBlock from '@/components/shared/EmptyBlock.vue'
-import ReasonSheet from '@/components/ReasonSheet.vue'
-import type { Article, ArticleComment, ReportTargetType } from '@/types'
+import ListSkeleton from '@/components/ListSkeleton.vue'
+import ArticleContent from '@/components/contents/ArticleContent.vue'
+import ArticleComments from '@/components/contents/ArticleComments.vue'
+import type { Article, ArticleComment, UserIdentity } from '@/types'
+import { formatLocalDateTime, formatZhNumber } from '@/utils/format'
 
 /* 移动文章详情：正文支持客户端投稿生成的 Markdown 图片行，兼容既有纯文本内容；
- * v35 支持举报，v37 支持收藏，v38 支持点赞与评论。 */
+ * v37 支持收藏，v38 支持点赞与评论。 */
 const route = useRoute()
 const router = useRouter()
 const auth = useAuthStore()
 
 const { data, loading, error, run } = useAsyncList<Article>(() => fetchArticle(String(route.params.id)))
 const article = computed(() => data.value)
-const isRichContent = computed(() => /<\/?[a-z][^>]*>/i.test(data.value?.content ?? ''))
-const richContent = computed(() => DOMPurify.sanitize(data.value?.content ?? ''))
-const contentBlocks = computed(() =>
-  (data.value?.content ?? '')
-    .split('\n')
-    .map((s) => s.trim())
-    .filter(Boolean)
-    .map((text) => {
-      const image = text.match(/^!\[[^\]]*\]\((.+)\)$/)
-      return image ? { type: 'image' as const, url: image[1] } : { type: 'text' as const, text }
-    }),
-)
-
-const reportVisible = ref(false)
-/* v40：举报目标动态化（文章 / 评论） */
-const reportTarget = ref<{ type: ReportTargetType; id: string; title: string } | null>(null)
-const REPORT_REASONS = ['内容不实', '疑似抄袭', '违规 / 不良信息', '广告推广', '其他']
-const COMMENT_REPORT_REASONS = ['垃圾广告', '骚扰 / 辱骂', '违规信息', '不实信息', '其他']
-
-function openArticleReport() {
-  reportTarget.value = { type: 'article', id: String(route.params.id), title: article.value?.title ?? '' }
-  reportVisible.value = true
-}
-
-function openCommentReport(item: ArticleComment) {
-  reportTarget.value = { type: 'comment', id: item.id, title: item.content.slice(0, 20) }
-  reportVisible.value = true
-}
-
-async function onReport(text: string) {
-  if (!text) return void Toast('请选择举报原因')
-  const target = reportTarget.value
-  if (!target) return
-  try {
-    await submitReport({ targetType: target.type, targetId: target.id, targetTitle: target.title, reason: text })
-    Toast('举报已提交，运营将核实处理')
-  } catch (e) {
-    Toast(e instanceof Error ? e.message : '举报提交失败，请稍后重试')
-  }
-}
 
 onMounted(async () => {
   await run()
@@ -91,6 +52,7 @@ const liked = ref(false)
 const comments = ref<ArticleComment[]>([])
 const commentText = ref('')
 const commentError = ref('')
+const commentIdentities = computed(() => actionIdentityOptions(auth.identities))
 watch(commentText, () => (commentError.value = ''))
 const commenting = ref(false)
 
@@ -117,16 +79,22 @@ async function onLike() {
     await router.push({ path: '/login', query: { redirect: route.fullPath } })
     return
   }
+  const nextLiked = !liked.value
+  const nextCount = likeCount.value + (nextLiked ? 1 : -1)
+  liked.value = nextLiked
+  likeCount.value = nextCount
   try {
     const res = await toggleArticleLike(String(route.params.id))
     liked.value = res.liked
     likeCount.value = res.likeCount
   } catch (e) {
+    liked.value = !nextLiked
+    likeCount.value = nextCount + (nextLiked ? -1 : 1)
     Toast(e instanceof Error ? e.message : '操作失败，请稍后重试')
   }
 }
 
-async function onComment() {
+async function onComment(identity: UserIdentity | null) {
   if (!auth.isLogged) {
     await router.push({ path: '/login', query: { redirect: route.fullPath } })
     return
@@ -137,7 +105,7 @@ async function onComment() {
   }
   commenting.value = true
   try {
-    await createArticleComment(String(route.params.id), commentText.value)
+    await createArticleComment(String(route.params.id), commentText.value, identity?.type, identity?.enterpriseId)
     commentText.value = ''
     commentError.value = ''
     Toast('评论已发布')
@@ -161,11 +129,14 @@ async function loadFavorite() {
 }
 
 async function onToggleFavorite() {
+  const next = !favorited.value
+  favorited.value = next
   try {
     const item = article.value
     favorited.value = await toggleFavorite('article', String(route.params.id), item?.title ?? '', item?.columnLabel)
     Toast(favorited.value ? '已收藏' : '已取消收藏')
   } catch (e) {
+    favorited.value = !next
     if (e instanceof Error && e.message.includes('登录')) {
       await router.push({ path: '/login', query: { redirect: route.fullPath } })
       return
@@ -177,62 +148,43 @@ async function onToggleFavorite() {
 
 <template>
   <div class="page-fade-in m-detail">
-    <Loading v-if="loading" class="state" text="加载中…" />
+    <ListSkeleton v-if="loading" />
     <template v-else-if="error">
       <EmptyBlock :text="error" action-text="重试" @action="run" />
     </template>
     <template v-else-if="article">
       <header class="head">
         <Tag class="col-tag" size="small" variant="light" theme="primary">{{ article.columnLabel }}</Tag>
-        <h1 class="title">{{ article.title }}</h1>
-       <p class="meta">{{ article.authorName }} · {{ article.publishedAt }} · {{ article.views }} 次浏览</p>
+        <h2 class="title">{{ article.title }}</h2>
+        <p class="meta">{{ article.authorName }} · {{ formatLocalDateTime(article.publishedAt) }} · {{ formatZhNumber(article.views) }} 次浏览</p>
       </header>
       <Image v-if="article.coverUrl" class="cover" :src="article.coverUrl" :alt="article.title" fit="cover" lazy @error="onImageError" />
-      <article class="m-card body">
-        <div v-if="isRichContent" class="rich-content" v-html="richContent"></div>
-        <template v-else>
-          <template v-for="(block, i) in contentBlocks" :key="i">
-            <Image v-if="block.type === 'image'" class="content-image" :src="block.url" alt="文章配图" fit="contain" lazy @error="onImageError" />
-            <p v-else class="para">{{ block.text }}</p>
-          </template>
-        </template>
-      </article>
+      <ArticleContent :content="article.content ?? ''" />
       <div class="foot-actions">
         <Button size="small" :theme="liked ? 'primary' : 'default'" variant="outline" @click="onLike">
-          <Icon :name="liked ? 'heart-filled' : 'heart'" size="16px" />点赞 {{ likeCount }}
+          <template #icon><Icon aria-hidden="true" :name="liked ? 'heart-filled' : 'heart'" size="16px" /></template>
+          点赞 {{ formatZhNumber(likeCount) }}
         </Button>
         <Button size="small" variant="outline" @click="onToggleFavorite">
-          <Icon :name="favorited ? 'star-filled' : 'star'" size="16px" />{{ favorited ? '已收藏' : '收藏' }}
+          <template #icon><Icon aria-hidden="true" :name="favorited ? 'star-filled' : 'star'" size="16px" /></template>
+          {{ favorited ? '已收藏' : '收藏' }}
         </Button>
-        <Button size="small" variant="outline" :loading="sharing" @click="onShare">分享</Button>
-        <p class="report-link" v-pressable @click="openArticleReport">举报该内容</p>
+        <Button size="small" variant="outline" :loading="sharing" @click="onShare">
+          <template #icon><Icon aria-hidden="true" name="share" size="16px" /></template>
+          分享
+        </Button>
       </div>
-      <ReasonSheet
-        v-model:visible="reportVisible"
-        :title="reportTarget?.type === 'comment' ? '举报评论' : '举报内容'"
-        :reasons="reportTarget?.type === 'comment' ? COMMENT_REPORT_REASONS : REPORT_REASONS"
-        placeholder="补充说明（选填）…"
-        submit-label="提交举报"
-        @submit="onReport"
-      />
 
-      <section v-if="article.commentsEnabled" class="m-card comments">
-        <h3 class="sec-title">评论（{{ comments.length }}）</h3>
-        <div v-if="comments.length" class="comment-list">
-          <div v-for="item in comments" :key="item.id" class="comment">
-            <div class="comment-head">
-              <span class="comment-author">{{ item.authorName }}</span>
-              <span class="comment-at">{{ item.at }}</span>
-              <a class="comment-report" v-pressable @click.stop="openCommentReport(item)">举报</a>
-            </div>
-            <p class="comment-content">{{ item.content }}</p>
-          </div>
-        </div>
-        <p v-else class="comment-empty">暂无评论，来说两句</p>
-        <Textarea v-model="commentText" :autosize="{ minRows: 2, maxRows: 4 }" :maxlength="200" placeholder="友善评论，共建社区…" />
-        <p v-if="commentError" class="field-error">{{ commentError }}</p>
-        <Button theme="primary" size="small" class="comment-submit" :loading="commenting" @click="onComment">发表评论</Button>
-      </section>
+      <ArticleComments
+        v-if="article.commentsEnabled"
+        v-model="commentText"
+        :comments="comments"
+        :identities="commentIdentities"
+        :user-name="auth.name"
+        :submitting="commenting"
+        :error="commentError"
+        @submit="onComment"
+      />
       <section v-else class="m-card comments-disabled" aria-live="polite">该文章已关闭评论</section>
     </template>
   </div>
@@ -240,19 +192,10 @@ async function onToggleFavorite() {
 
 <style scoped>
 .m-detail {
-  padding: 16px;
+  padding:var(--app-space-8);
   display: flex;
   flex-direction: column;
-  gap: 12px;
-}
-
-.report-link {
-  margin: 0;
-  padding: 4px 2px 8px;
-  text-align: right;
-  font-size: 12px;
-  color: var(--td-text-color-placeholder);
-  cursor: pointer;
+  gap:var(--app-space-6);
 }
 
 .foot-actions {
@@ -260,72 +203,12 @@ async function onToggleFavorite() {
   align-items: center;
   justify-content: flex-end;
   flex-wrap: wrap;
-  gap: 12px;
+  gap:var(--app-space-6);
 }
 
-.foot-actions .report-link {
-  padding-bottom: 4px;
-}
-
-.comments {
-  display: flex;
-  flex-direction: column;
-}
-
-.comment-list {
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-  margin-bottom: 12px;
-}
-
-.comment-head {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-}
-
-.comment-author {
-  font-size: 13px;
-  font-weight: 600;
-}
-
-.comment-at {
-  font-size: 12px;
-  color: var(--td-text-color-placeholder);
-}
-
-.comment-report {
-  margin-left: 8px;
-  font-size: 12px;
-  color: var(--td-text-color-placeholder);
-  cursor: pointer;
-}
-
-.comment-content {
-  margin: 6px 0 0;
-  font-size: 13px;
-  line-height: 1.7;
-  color: var(--td-text-color-secondary);
-}
-
-.comment-empty {
-  margin: 0 0 12px;
-  font-size: 12px;
-  color: var(--td-text-color-placeholder);
-}
-
-.comment-submit {
-  margin-top: 10px;
-  align-self: flex-end;
-}
-
-.state {
-  padding: 20px 0;
-}
 
 .head {
-  padding: 0 2px;
+  padding:0 var(--app-space-1);
 }
 
 .col-tag {
@@ -333,91 +216,24 @@ async function onToggleFavorite() {
 }
 
 .title {
-  margin: 8px 0 6px;
-  font-size: 19px;
+  margin:var(--app-space-4) 0 var(--app-space-3);
+  font-size: var(--app-font-title);
   line-height: 1.45;
 }
 
 .meta {
-  margin: 0;
-  font-size: 12px;
+  margin:0;
+  font-size: var(--app-font-caption);
   color: var(--td-text-color-placeholder);
 }
 
-.body {
-  padding: 16px;
-}
-
 .cover,
-.content-image {
-  display: block;
-  width: 100%;
-  border-radius: var(--td-radius-large);
-}
-
 .cover { max-height: 240px; aspect-ratio: 16 / 9; }
-.content-image { margin: 0 0 12px; max-height: 420px; aspect-ratio: 4 / 3; background: var(--td-bg-color-secondarycontainer); }
-
-.para {
-  margin: 0 0 12px;
-  font-size: 14px;
-  line-height: 1.85;
-  color: var(--td-text-color-primary);
-}
-
-.para:last-child {
-  margin-bottom: 0;
-}
-
 .comments-disabled {
-  padding: 16px;
+  padding:var(--app-space-8);
   text-align: center;
   color: var(--td-text-color-secondary);
-  font-size: 13px;
+  font-size: var(--app-font-body);
 }
 
-.rich-content {
-  overflow-wrap: anywhere;
-  font-size: 14px;
-  line-height: 1.85;
-  color: var(--td-text-color-primary);
-}
-
-.rich-content :deep(p),
-.rich-content :deep(ul),
-.rich-content :deep(ol),
-.rich-content :deep(blockquote),
-.rich-content :deep(pre) {
-  margin: 0 0 12px;
-}
-
-.rich-content :deep(h1),
-.rich-content :deep(h2),
-.rich-content :deep(h3),
-.rich-content :deep(h4) {
-  margin: 20px 0 8px;
-  line-height: 1.45;
-}
-
-.rich-content :deep(h1) { font-size: 20px; }
-.rich-content :deep(h2) { font-size: 18px; }
-.rich-content :deep(h3),
-.rich-content :deep(h4) { font-size: 16px; }
-.rich-content :deep(ul),
-.rich-content :deep(ol) { padding-left: 22px; }
-.rich-content :deep(blockquote) { padding-left: 12px; border-left: 3px solid var(--td-component-border); color: var(--td-text-color-secondary); }
-.rich-content :deep(a) { color: var(--td-brand-color); text-decoration: underline; }
-.rich-content :deep(img),
-.rich-content :deep(video) { display: block; width: auto; max-width: 100%; height: auto; margin: 0 auto 12px; border-radius: var(--td-radius-large); }
-.rich-content :deep(table) { display: block; max-width: 100%; overflow-x: auto; border-collapse: collapse; }
-.rich-content :deep(th),
-.rich-content :deep(td) { padding: 6px 8px; border: 1px solid var(--td-component-border); }
-.rich-content :deep(pre) { max-width: 100%; overflow-x: auto; padding: 12px; background: var(--td-bg-color-secondarycontainer); }
-.rich-content :deep(:last-child) { margin-bottom: 0; }
-
-.field-error {
-  margin: 6px 0 0;
-  font-size: 12px;
-  color: var(--td-error-color);
-}
 </style>

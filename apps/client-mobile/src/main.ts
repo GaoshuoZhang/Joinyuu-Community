@@ -7,7 +7,10 @@ import { useAuthStore } from './stores/auth'
 import { useNoticesStore } from './stores/notices'
 import { pressable } from './directives/pressable'
 import { announce } from './utils/a11y'
+import { initTheme } from './utils/theme'
 import './styles/tokens.css'
+
+initTheme()
 
 const app = createApp(App)
 app.use(createPinia())
@@ -61,14 +64,106 @@ function announceToast(node: HTMLElement) {
   if (text) announceOnce(text)
 }
 
+let errorFocusScheduled = false
+function isEditableControl(el: Element | null): boolean {
+  if (!(el instanceof HTMLElement)) return false
+  const tag = el.tagName
+  return tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT' || el.isContentEditable
+}
+
+/* 行内校验错误出现时把焦点移到首个错误字段（用户正在输入时不打断）。
+ * 同一帧可能出现多个错误节点，合并为一次、且只聚焦文档中第一个错误。 */
+function scheduleErrorFocus() {
+  if (errorFocusScheduled) return
+  errorFocusScheduled = true
+  window.requestAnimationFrame(() => {
+    errorFocusScheduled = false
+    const field = document.querySelector<HTMLElement>('.field-error, .error')
+    if (!field || !field.innerText.trim()) return
+    if (isEditableControl(document.activeElement)) return
+    const container = field.closest('.field, .agreement, .form') ?? field.parentElement
+    const control = container?.querySelector<HTMLElement>(
+      'input:not([type="hidden"]):not([type="file"]), textarea',
+    )
+    if (!control || (control as HTMLInputElement).disabled) return
+    control.focus({ preventScroll: true })
+    control.scrollIntoView({ block: 'center', behavior: 'smooth' })
+  })
+}
+
 function announceFieldError(node: HTMLElement) {
   const fields = [
     ...(node.matches('.field-error, .error') ? [node] : []),
     ...node.querySelectorAll<HTMLElement>('.field-error, .error'),
   ]
   const text = fields.map((el) => el.innerText.trim()).find(Boolean)
-  if (text) announceOnce(text)
+  if (text) {
+    announceOnce(text)
+    scheduleErrorFocus()
+  }
 }
+
+/* 加载态播报：TDesign Loading 无 status 语义，统一补 role="status"/aria-busy。 */
+function patchLoadingRoles(node: HTMLElement) {
+  const loadings = [
+    ...(node.matches('.t-loading') ? [node] : []),
+    ...node.querySelectorAll<HTMLElement>('.t-loading'),
+  ]
+  for (const el of loadings) {
+    if (!el.hasAttribute('role')) el.setAttribute('role', 'status')
+    if (!el.hasAttribute('aria-live')) el.setAttribute('aria-live', 'polite')
+    if (!el.hasAttribute('aria-busy')) el.setAttribute('aria-busy', 'true')
+    if (!el.hasAttribute('aria-label')) {
+      const text = el.innerText.trim()
+      if (text) el.setAttribute('aria-label', text)
+    }
+  }
+}
+
+/* 弹层焦点：打开时聚焦首个可聚焦元素、Tab 圈闭、关闭后回焦触发元素。 */
+const FOCUSABLE_SELECTOR =
+  'button:not([disabled]), [href], input:not([type="hidden"]):not([disabled]), textarea:not([disabled]), select:not([disabled]), [tabindex]:not([tabindex="-1"])'
+let lastFocused: HTMLElement | null = null
+
+function focusDialog(dialog: HTMLElement) {
+  if (dialog.contains(document.activeElement)) return
+  const first = dialog.querySelector<HTMLElement>(FOCUSABLE_SELECTOR)
+  if (!first) return
+  lastFocused = document.activeElement instanceof HTMLElement ? document.activeElement : null
+  window.requestAnimationFrame(() => {
+    if (!dialog.contains(document.activeElement)) first.focus()
+  })
+}
+
+function restoreDialogFocus() {
+  if (lastFocused && document.activeElement === document.body) lastFocused.focus()
+  lastFocused = null
+}
+
+document.addEventListener('keydown', (event) => {
+  if (event.key !== 'Tab') return
+  const dialogs = document.querySelectorAll<HTMLElement>('.t-dialog[role="dialog"], .t-popup[role="dialog"]')
+  const dialog = dialogs[dialogs.length - 1]
+  if (!dialog) return
+  const focusables = Array.from(dialog.querySelectorAll<HTMLElement>(FOCUSABLE_SELECTOR)).filter(
+    (el) => el.offsetParent !== null,
+  )
+  if (!focusables.length) return
+  const first = focusables[0]
+  const last = focusables[focusables.length - 1]
+  if (!dialog.contains(document.activeElement)) {
+    event.preventDefault()
+    first.focus()
+    return
+  }
+  if (event.shiftKey && document.activeElement === first) {
+    event.preventDefault()
+    last.focus()
+  } else if (!event.shiftKey && document.activeElement === last) {
+    event.preventDefault()
+    first.focus()
+  }
+})
 
 function patchDialogRoles(node: HTMLElement) {
   const dialogs = [
@@ -78,6 +173,13 @@ function patchDialogRoles(node: HTMLElement) {
   for (const el of dialogs) {
     if (!el.hasAttribute('role')) el.setAttribute('role', 'dialog')
     if (!el.hasAttribute('aria-modal')) el.setAttribute('aria-modal', 'true')
+    focusDialog(el)
+  }
+}
+
+function handleRemovedDialog(node: HTMLElement) {
+  if (node.matches('.t-dialog, .t-popup') || node.querySelector('.t-dialog, .t-popup')) {
+    restoreDialogFocus()
   }
 }
 
@@ -89,12 +191,17 @@ new MutationObserver((mutations) => {
       patchA11yFields(added)
       announceToast(added)
       announceFieldError(added)
+      patchLoadingRoles(added)
       patchDialogRoles(added)
+    }
+    for (const removed of mutation.removedNodes) {
+      if (!(removed instanceof HTMLElement)) continue
+      handleRemovedDialog(removed)
     }
   }
 }).observe(document.body, { childList: true, subtree: true })
 
 /* [MOCK-ONLY] 模式标识：仅 mock 模式挂载开发者工具（http 模式此日志不出现） */
 if (apiMode === 'mock') {
-  console.info('[joinyuu-client] API 模式 = mock（演示数据；切换真实接口见 docs/m2-client-plan.md §3.2）')
+  console.info('[joinyuu-client] API 模式 = mock（演示数据；默认模式为真实 HTTP）')
 }

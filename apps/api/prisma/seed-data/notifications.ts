@@ -60,8 +60,8 @@ export const notifications: AdminNotification[] = [
   {
     id: 'N9008',
     type: 'approval',
-    title: '身份绑定申请待审核',
-    content: '何雨桐申请变更青柠健康身份角色（成员 → 企业管理员），请核实后处理。',
+    title: '企业合作申请待审核',
+    content: '「云图数据」提交企业合作申请，请核实资料后处理。',
     at: '2026-09-03 19:44',
     read: true,
     link: '/approvals',

@@ -3,7 +3,7 @@ import { computed, onMounted, reactive, ref } from 'vue'
 import { useListQueryState } from '@/utils/listQuery'
 import { useRouter } from 'vue-router'
 import { MessagePlugin } from 'tdesign-vue-next'
-import { SearchIcon, DownloadIcon, AddIcon } from 'tdesign-icons-vue-next'
+import { SearchIcon, DownloadIcon, AddIcon, BrowseIcon, BrowseOffIcon } from 'tdesign-icons-vue-next'
 import PageHeader from '@/components/PageHeader.vue'
 import StatusTag from '@/components/StatusTag.vue'
 import IdentityTags from '@/components/IdentityTags.vue'
@@ -21,6 +21,13 @@ const loadError = ref('')
 const list = ref<User[]>([])
 const total = ref(0)
 const formVisible = ref(false)
+const phoneVisible = ref(false)
+
+function maskPhone(value?: string | null): string {
+  if (!value) return '—'
+  if (value.length < 8) return `${value.slice(0, 2)}****${value.slice(-2)}`
+  return `${value.slice(0, 3)}****${value.slice(7)}`
+}
 
 const query = reactive({
   page: 1,
@@ -46,7 +53,7 @@ const realStatusOptions = [
 
 const columns = [
   { colKey: 'user', title: '用户', cell: 'user', width: 190 , ellipsis: true},
-  { colKey: 'phone', title: '联系电话', width: 125 , ellipsis: true},
+  { colKey: 'phone', title: 'phone-title', cell: 'phone', width: 145 , ellipsis: true},
   { colKey: 'identities', title: '关联身份', cell: 'identities', width: 240 , ellipsis: true},
   { colKey: 'realStatus', title: '实名状态', cell: 'realStatus', width: 95 , ellipsis: true},
   { colKey: 'points', title: '积分', width: 80 , ellipsis: true},
@@ -164,7 +171,7 @@ onMounted(load)
         <ColumnController
           v-model="visibleColKeys"
           storage-key="users"
-          :columns="columns.map((c) => ({ key: c.colKey, title: c.title }))"
+          :columns="columns.map((c) => ({ key: c.colKey, title: c.colKey === 'phone' ? '联系电话' : c.title }))"
         />
         <t-button variant="outline" @click="onExport">
           <template #icon><DownloadIcon /></template>
@@ -232,9 +239,29 @@ onMounted(load)
         @page-change="onPageChange"
         @row-click="({ row }) => goDetail(row)"
       >
+        <template #phone-title>
+          <span class="phone-title">
+            联系电话
+            <t-button
+              variant="text"
+              size="small"
+              shape="square"
+              :title="phoneVisible ? '隐藏联系电话' : '显示联系电话'"
+              :aria-label="phoneVisible ? '隐藏联系电话' : '显示联系电话'"
+              @click.stop="phoneVisible = !phoneVisible"
+            >
+              <template #icon><BrowseOffIcon v-if="phoneVisible" /><BrowseIcon v-else /></template>
+            </t-button>
+          </span>
+        </template>
+
+        <template #phone="{ row }">
+          {{ phoneVisible ? row.phone : maskPhone(row.phone) }}
+        </template>
+
         <template #user="{ row }">
           <div class="user-cell">
-            <t-avatar size="36px">{{ row.nickname.slice(0, 1) }}</t-avatar>
+            <t-avatar size="36px" :image="row.avatar">{{ row.nickname.slice(0, 1) }}</t-avatar>
             <div class="user-cell-info">
               <span class="user-name">{{ row.nickname }}</span>
               <t-tag class="id-tag-block" size="small" variant="light">{{ row.uid }}</t-tag>
@@ -275,6 +302,11 @@ onMounted(load)
 </template>
 
 <style scoped>
+.phone-title {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
 .filter-keyword {
   width: 240px;
 }

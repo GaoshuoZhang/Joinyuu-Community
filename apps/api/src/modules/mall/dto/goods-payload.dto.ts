@@ -19,13 +19,18 @@ export class GoodsPayloadDto {
   @IsNotEmpty()
   name!: string
 
+  @IsOptional()
+  @IsString()
+  @MaxLength(512)
+  coverUrl?: string
+
   @IsString({ message: '请选择商品类型' })
   @IsNotEmpty({ message: '请选择商品类型' })
   category!: string
 
   @IsOptional()
-  @IsIn(['physical', 'voucher', 'service'])
-  fulfillment?: 'physical' | 'voucher' | 'service'
+  @IsIn(['physical', 'voucher'])
+  fulfillment?: 'physical' | 'voucher'
 
   @Type(() => Number)
   @IsInt()

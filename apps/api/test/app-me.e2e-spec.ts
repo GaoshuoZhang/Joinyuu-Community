@@ -73,7 +73,26 @@ describe('M2-R R1 app 个人中心', () => {
     expect(res.status).toBe(200)
     expect(res.body.code).toBe(0)
     expect(res.body.data.level).toBeNull()
+    expect(res.body.data.currentExperience).toBe(0)
+    expect(res.body.data.currentLevelThreshold).toBe(0)
+    expect(res.body.data.nextLevelThreshold).toBeNull()
     expect(Array.isArray(res.body.data.records)).toBe(true)
+  })
+
+  it('GET /me/experience-records 返回权威经验值与当前/下一等级门槛', async () => {
+    const individual = await appLoginAs(app, '13801210005', 'user123')
+    const res = await appGet(app, individual, '/api/app/me/experience-records')
+
+    expect(res.status).toBe(200)
+    expect(res.body.data).toMatchObject({
+      identityLabel: '社区个体',
+      level: 5,
+      levelName: '领航',
+      currentExperience: 1500,
+      currentLevelThreshold: 1000,
+      nextLevelThreshold: null,
+    })
+    expect(res.body.data.records.length).toBeGreaterThan(0)
   })
 
   it('改密：原密码错误 400，成功后旧密码失效', async () => {

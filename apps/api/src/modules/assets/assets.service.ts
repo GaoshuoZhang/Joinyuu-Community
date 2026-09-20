@@ -71,6 +71,24 @@ function sniffMime(buffer: Buffer): string | null {
   return null
 }
 
+/** 存储键仅允许扁平文件名（uuid.ext），阻止路径穿越 */
+const FLAT_KEY_RE = /^[A-Za-z0-9][A-Za-z0-9._-]*$/
+
+const MIME_BY_EXT: Record<string, string> = {
+  '.png': 'image/png',
+  '.jpg': 'image/jpeg',
+  '.jpeg': 'image/jpeg',
+  '.gif': 'image/gif',
+  '.webp': 'image/webp',
+  '.pdf': 'application/pdf',
+}
+
+function mimeByKey(key: string): string {
+  const dot = key.lastIndexOf('.')
+  if (dot < 0) return 'application/octet-stream'
+  return MIME_BY_EXT[key.slice(dot).toLowerCase()] ?? 'application/octet-stream'
+}
+
 /* 素材库：上传（multipart → 对象存储 + 落库）/ 列表 / 删除（删库 + 删对象）。
  * 存储键为扁平文件名，配合 /api/public/files/:key 读取。 */
 @Injectable()
@@ -177,13 +195,16 @@ export class AssetsService {
     return { code: 0 }
   }
 
-  /** 读取素材二进制（公开文件路由使用；按 storeKey 反查 MIME 与文件名） */
+  /** 读取存储对象（公开文件路由使用）。
+   * 优先按 storeKey 反查素材库元数据（admin 素材）；App 上传不落素材库，
+   * 文件存在时按扩展名推断 MIME 直接返回，避免「已上传但 404」。 */
   async readFile(key: string): Promise<{ buffer: Buffer; mime: string; fileName: string } | null> {
-    const asset = await this.prisma.mallAsset.findFirst({ where: { storeKey: key } })
-    if (!asset) return null
+    if (!FLAT_KEY_RE.test(key) || key.includes('..')) return null
     const buffer = await this.storage.read(key)
     if (!buffer) return null
-    return { buffer, mime: asset.mime, fileName: asset.fileName }
+    const asset = await this.prisma.mallAsset.findFirst({ where: { storeKey: key } })
+    if (asset) return { buffer, mime: asset.mime, fileName: asset.fileName }
+    return { buffer, mime: mimeByKey(key), fileName: key }
   }
 }
 

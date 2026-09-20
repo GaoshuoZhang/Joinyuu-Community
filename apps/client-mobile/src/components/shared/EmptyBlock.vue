@@ -30,7 +30,7 @@ watch(
 
 <style scoped>
 .empty-block {
-  padding: 24px 16px;
+  padding:var(--app-space-11) var(--app-space-8);
   text-align: center;
   background: var(--td-bg-color-container);
   border: 1px solid var(--td-component-border);

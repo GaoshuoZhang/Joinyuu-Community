@@ -12,8 +12,54 @@
   --app-mobile-tabbar-h: 56px;
   --app-content-max: 1120px;
 
+  /* 应用字号刻度：只保留 4 档（12/14/16/20），页面不再写裸 px、不再新增步进 */
+  --app-font-caption: 12px;
+  --app-font-body: 14px;
+  --app-font-subtitle: 16px;
+  --app-font-title: 20px;
+
+  /* TDesign Mobile 官方 Button 变量：移动端所有按钮命中高度不低于 44px。 */
+  --td-button-medium-height: 44px;
+  --td-button-small-height: 44px;
+  --td-button-extra-small-height: 44px;
+
+  /* 应用间距刻度：统一到 4px 网格，旧变量名保留以降低迁移风险。 */
+  --app-space-1: 4px;
+  --app-space-2: 4px;
+  --app-space-3: 8px;
+  --app-space-4: 8px;
+  --app-space-5: 12px;
+  --app-space-6: 12px;
+  --app-space-7: 16px;
+  --app-space-8: 16px;
+  --app-space-9: 24px;
+  --app-space-10: 24px;
+  --app-space-11: 24px;
+  --app-space-12: 32px;
+
   /* 品牌渐变（客户端专属：后台登录页为内联渐变，客户端横幅/入口卡复用） */
   --client-brand-gradient: linear-gradient(135deg, var(--td-brand-color) 0%, var(--td-brand-color-5) 100%);
+
+  /* 顶栏滚动渐显底色（AppShell 按透明度合成，需随明暗主题切换） */
+  --app-navbar-bg-rgb: 255, 255, 255;
+
+  /* 底部固定操作栏投影（随主题加深） */
+  --app-action-bar-shadow: 0 -2px 12px rgba(0, 0, 0, 0.06);
+}
+
+/* ---------- 暗色模式 ---------- */
+/* theme.ts 依据「跟随系统/手动」在 html 上切换 .dark 与 theme-mode；
+ * TDesign Mobile 的 :root.dark / :root[theme-mode='dark'] 变量随之生效，
+ * 此处只补充客户端自有变量与少量官方未覆盖的场景色。 */
+:root {
+  color-scheme: light;
+}
+
+:root.dark,
+:root[theme-mode='dark'] {
+  --app-navbar-bg-rgb: 36, 36, 36;
+  --app-action-bar-shadow: 0 -2px 12px rgba(0, 0, 0, 0.45);
+  color-scheme: dark;
 }
 
 /* 通用按压反馈（移动端微交互）：可点击的卡片/宫格/列表项添加 .pressable */
@@ -24,6 +70,23 @@
 
 .pressable:active {
   transform: scale(0.97);
+}
+
+/* 文字链动作（v-pressable 的 a，无 href）：按压时降低不透明度作为反馈 */
+a[role='button']:active {
+  opacity: 0.72;
+}
+
+/* v-pressable 会为无 href 的文字动作补 role/button 键盘语义；统一扩大命中区。
+ * 排除 TDesign Tag/CheckTag（它们内部也用 role="button"，尺寸必须由 size 属性决定）。 */
+a[role='button']:not(.t-tag),
+p[role='button'],
+span[role='button']:not(.t-tag) {
+  display: inline-flex;
+  min-width: 44px;
+  min-height: 44px;
+  align-items: center;
+  justify-content: center;
 }
 
 /* ---------- 搜索框（TDesign Search 全局规格） ---------- */
@@ -144,15 +207,15 @@ a {
 
 .page-header .page-title {
   margin: 0;
-  font-size: 20px;
+  font-size: var(--app-font-title);
   font-weight: 600;
-  line-height: 28px;
+  line-height: 1.4;
   color: var(--td-text-color-primary);
 }
 
 .page-header .page-desc {
   margin: 4px 0 0;
-  font-size: 13px;
+  font-size: var(--app-font-body);
   color: var(--td-text-color-secondary);
 }
 
@@ -187,7 +250,7 @@ a {
 .field-help {
   margin-top: 4px;
   color: var(--td-text-color-placeholder);
-  font-size: 12px;
+  font-size: var(--app-font-caption);
   line-height: 20px;
 }
 
@@ -267,6 +330,40 @@ a {
   padding: 16px;
 }
 
+/* 长表单主操作：二级页不显示 TabBar，按钮吸附在拇指区并避让系统安全区。 */
+.mobile-sticky-action {
+  position: sticky;
+  bottom: calc(var(--app-space-4) + env(safe-area-inset-bottom));
+  z-index: 20;
+  box-shadow: var(--td-shadow-2);
+}
+
+/* 活动详情操作栏的定位必须随首屏基础样式同步加载，避免懒加载组件挂载后再跳到底部。 */
+.event-enrollment-bar {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 90;
+  display: flex;
+  flex-direction: column;
+  gap: var(--app-space-4);
+  padding: var(--app-space-5) var(--app-space-8) calc(var(--app-space-5) + env(safe-area-inset-bottom));
+}
+
+/* 详情/选择页固定主操作区；关键定位随基础样式同步加载，避免懒加载页面首屏跳动。 */
+.mobile-fixed-action-bar {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 90;
+  display: flex;
+  flex-direction: column;
+  gap: var(--app-space-3);
+  padding: var(--app-space-5) var(--app-space-8) calc(var(--app-space-4) + env(safe-area-inset-bottom));
+}
+
 /* ---------- 移除移动端按钮的 ::after 描边层 ---------- */
 /* tdesign-mobile-vue 用 `.t-button::after`（200% 尺寸 + scale(.5)）来画 1px 描边，
  * 该 ::after 自带 border-style: solid，再由各主题变体补 border-width / border-color
@@ -277,24 +374,38 @@ a {
   border-style: none;
 }
 
+/* v44：outline/dashed 变体保留描边（上述扁平化会让「描边按钮」看起来像纯文字，
+ * 详情页/名片的操作按钮需保持可识别的按钮形态） */
+.t-button--outline.t-button::after,
+.t-button--dashed.t-button::after {
+  border-style: solid;
+}
+
 /* ---------- 登录/注册品牌区 ---------- */
 /* 移动端登录/注册页使用页面内自有样式（.m-login/.m-register），此处不再保留桌面版式死代码。 */
 
-/* v38 触控目标：小号操作按钮 ≥44px，超小号图标按钮 ≥36px（移动端最小可点面积） */
+/* ---------- 兑换确认弹窗（DialogPlugin 挂载到 body，需全局样式） ---------- */
+.order-confirm {
+  text-align: left;
+}
+
+.order-confirm__line {
+  margin: 0 0 6px;
+}
+
+.order-confirm__line:last-child {
+  margin-bottom: 0;
+}
+
+/* Button 变量为主，类选择器作为旧版组件样式的兼容兜底。 */
+.t-button--size-medium,
 .t-button--size-small {
   min-height: 44px;
 }
 
 .t-button--size-extra-small {
-  min-height: 36px;
-}
-
-/* 筛选 chips（Tag）扩大点击面积，状态标签不受影响 */
-.chips .t-tag,
-.response-filters .t-tag,
-.recent-chips .t-tag,
-.count-chips .t-tag {
-  min-height: 32px;
+  min-width: 44px;
+  min-height: 44px;
 }
 
 /* v38 屏幕阅读器专用文本 */
@@ -312,19 +423,9 @@ a {
 
 /* v39 列表计数 */
 .list-count {
-  margin: 0 2px;
-  font-size: 12px;
+  margin: 0 var(--app-space-1);
+  font-size: var(--app-font-caption);
   color: var(--td-text-color-placeholder);
-}
-
-/* v40 可读性与触控：小号 Tag 字号不低于 12px；交互 chips 保证可点面积；元信息提升对比度 */
-.t-tag--size-small {
-  font-size: 12px;
-}
-
-.slots .t-tag,
-.service-categories .t-tag {
-  min-height: 32px;
 }
 
 .list-count {
@@ -337,7 +438,14 @@ img.img-fallback {
   min-height: 90px;
 }
 
-/* v41：元信息/占位文本对比度提升（placeholder 原值约 2.85:1，不达 WCAG AA） */
-body {
+/* v41：元信息/占位文本对比度提升（placeholder 原值约 2.85:1，不达 WCAG AA）；
+ * 仅浅色模式生效，暗色模式沿用 TDesign 自带的高对比占位色。 */
+html:not(.dark):not([theme-mode='dark']) body {
   --td-text-color-placeholder: #767676;
+}
+
+/* 禁用主按钮对比度：浅色下官方用 brand-3 + 白字（约 2:1，白字几乎不可读），
+ * 改为品牌深色文字，仍保持"不可点"的低饱和观感；暗色模式官方组合已足够。 */
+html:not(.dark):not([theme-mode='dark']) .t-button--primary.t-button--disabled {
+  --td-button-primary-disabled-color: var(--td-brand-color-7);
 }

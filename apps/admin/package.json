@@ -6,7 +6,7 @@
   "scripts": {
     "dev": "vite --port 7758",
     "build": "vite build",
-    "lint": "eslint src",
+    "lint": "eslint src --max-warnings 0",
     "lint:fix": "eslint src --fix",
     "test:ui": "node --test test/*.test.mjs",
     "preview": "vite preview"

@@ -1,8 +1,8 @@
 import { apiMode, httpDownload, httpGet, httpPost, httpPut } from './http'
-import type { MyStats, PageQuery, PageResult, PointsRecord, RealNameInfo, RealNamePayload, RealnameRightsGroup, ReportPayload, UserProfile } from '@/types'
+import type { MyStats, PageQuery, PageResult, PointsRecord, RealNameInfo, RealNamePayload, RealnameRightsGroup, UserProfile } from '@/types'
 import * as mock from '@/mock/handlers/me'
 
-/** GET /api/app/me/stats — 个人数据看板（v42 [MOCK-ONLY]） */
+/** GET /api/app/me/stats — 个人数据看板。 */
 export async function fetchMyStats(): Promise<MyStats> {
   if (apiMode === 'mock') return mock.fetchMyStats()
   return httpGet<MyStats>('/me/stats')
@@ -20,7 +20,7 @@ export async function updateMe(payload: Partial<Pick<UserProfile, 'nickname' | '
   await httpPut('/me', payload)
 }
 
-/** GET /api/app/me/realname — 实名认证状态（姓名/证件号脱敏；缺口 §7.1-18） */
+/** GET /api/app/me/realname — 实名认证状态（姓名/证件号脱敏）。 */
 export async function fetchRealName(): Promise<RealNameInfo> {
   if (apiMode === 'mock') return mock.fetchRealName()
   return httpGet<RealNameInfo>('/me/realname')
@@ -46,7 +46,7 @@ export async function fetchPointsRecords(query: PageQuery = {}): Promise<PageRes
   return httpGet<PageResult<PointsRecord>>(`/me/points-records?${qs}`)
 }
 
-/* ---------- 账号安全与治理（R1 已接入；举报与屏蔽留待 R3） ---------- */
+/* ---------- 账号安全与治理 ---------- */
 
 /** 修改登录密码（校验原密码，并使其他 app 会话失效）。 */
 export async function changePassword(payload: { oldPassword: string; password: string }): Promise<void> {
@@ -88,24 +88,3 @@ export async function fetchAccountRequests(): Promise<{ deletion?: { reason?: st
   return httpGet('/me/account-requests')
 }
 
-/** [MOCK-ONLY] 我的举报记录（含处理状态）。 */
-export async function listMyReports(): Promise<(ReportPayload & { id: string; at: string; status: 'pending' | 'resolved' | 'rejected' })[]> {
-  if (apiMode === 'mock') return mock.listMyReports()
-  return httpGet('/me/reports')
-}
-
-/** [MOCK-ONLY] 屏蔽名单。 */
-export async function listBlockedUsers(): Promise<{ uid: string; name: string }[]> {
-  if (apiMode === 'mock') return mock.listBlockedUsers()
-  return httpGet('/me/blocklist')
-}
-
-export async function blockUser(targetUid: string): Promise<void> {
-  if (apiMode === 'mock') return mock.blockUser(targetUid)
-  await httpPost('/me/blocklist', { uid: targetUid })
-}
-
-export async function unblockUser(targetUid: string): Promise<void> {
-  if (apiMode === 'mock') return mock.unblockUser(targetUid)
-  await httpPost(`/me/blocklist/${targetUid}/remove`)
-}

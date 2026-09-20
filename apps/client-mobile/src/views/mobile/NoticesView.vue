@@ -9,6 +9,7 @@ import { useAsyncList } from '@/composables/useAsyncList'
 import EmptyBlock from '@/components/shared/EmptyBlock.vue'
 import ListSkeleton from '@/components/ListSkeleton.vue'
 import type { NoticeType, UserNotice } from '@/types'
+import { formatLocalDateTime, formatZhNumber } from '@/utils/format'
 
 const TYPE_LABELS: Record<NoticeType, string> = {
   audit_result: '审核结果',
@@ -18,7 +19,7 @@ const TYPE_LABELS: Record<NoticeType, string> = {
   system: '系统通知',
   invite: '企业邀请',
   transfer: '负责人转移',
-  report: '举报与申诉',
+  report: '举报处理',
   article: '资讯与投稿',
   demand: '需求',
   project: '项目',
@@ -60,12 +61,20 @@ async function onReadAll() {
   }
 }
 
+async function onLoadMore() {
+  try {
+    await notices.loadMore()
+  } catch (e) {
+    Toast(e instanceof ApiError ? e.message : '加载更多失败，请稍后重试')
+  }
+}
+
 </script>
 
 <template>
   <div class="m-notices page-fade-in">
     <div class="toolbar">
-      <span class="unread-count" :class="{ zero: notices.unread === 0 }">未读 {{ notices.unread }} 条</span>
+      <span class="unread-count" :class="{ zero: notices.unread === 0 }">未读 {{ formatZhNumber(notices.unread) }} 条</span>
       <Button
         theme="light"
         size="small"
@@ -81,16 +90,19 @@ async function onReadAll() {
     <EmptyBlock v-else-if="error" :text="error" action-text="重试" @action="run" />
     <EmptyBlock v-else-if="notices.list.length === 0" text="暂无站内信" />
     <div v-else class="list stagger">
-      <p class="list-count">共 {{ notices.list.length }} 条</p>
-      <div v-for="n in notices.list" :key="n.id" class="notice-item m-card" v-pressable :class="{ unread: !n.read }" @click="onItemClick(n)">
-        <div class="n-head">
+      <p class="list-count">共 {{ formatZhNumber(notices.total) }} 条</p>
+      <Button v-for="n in notices.list" :key="n.id" variant="text" block class="notice-item m-card pressable" :class="{ unread: !n.read }" @click="onItemClick(n)">
+        <span class="n-head">
           <Badge :dot="!n.read" class="n-badge">
             <span class="n-title">{{ n.title }}</span>
           </Badge>
-        </div>
-        <p class="n-content">{{ n.content }}</p>
-        <p class="n-at">{{ TYPE_LABELS[n.type] ?? '通知' }} · {{ n.at }}</p>
-      </div>
+        </span>
+        <span class="n-content">{{ n.content }}</span>
+        <span class="n-at">{{ TYPE_LABELS[n.type] ?? '通知' }} · {{ formatLocalDateTime(n.at) }}</span>
+      </Button>
+      <Button v-if="notices.list.length < notices.total" block variant="outline" :loading="notices.loadingMore" @click="onLoadMore">
+        加载更多（剩余 {{ formatZhNumber(notices.total - notices.list.length) }} 条）
+      </Button>
     </div>
 
   </div>
@@ -98,10 +110,10 @@ async function onReadAll() {
 
 <style scoped>
 .m-notices {
-  padding: 16px;
+  padding:var(--app-space-8);
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap:var(--app-space-6);
 }
 
 .toolbar {
@@ -111,7 +123,7 @@ async function onReadAll() {
 }
 
 .unread-count {
-  font-size: 12px;
+  font-size: var(--app-font-caption);
   color: var(--td-error-color);
   font-weight: 600;
 }
@@ -124,17 +136,23 @@ async function onReadAll() {
 .list {
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap:var(--app-space-5);
 }
 
 .notice-item {
+  display: block;
+  width: 100%;
+  height: auto;
+  color: inherit;
+  text-align: left;
+  white-space: normal;
   cursor: pointer;
 }
 
 .n-head {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap:var(--app-space-4);
 }
 
 .n-badge {
@@ -144,7 +162,7 @@ async function onReadAll() {
 
 .n-title {
   flex: 1;
-  font-size: 14px;
+  font-size: var(--app-font-body);
   line-height: 1.45;
 }
 
@@ -153,15 +171,17 @@ async function onReadAll() {
 }
 
 .n-content {
-  margin: 6px 0 0;
-  font-size: 12px;
+  display: block;
+  margin:var(--app-space-3) 0 0;
+  font-size: var(--app-font-caption);
   line-height: 1.7;
   color: var(--td-text-color-secondary);
 }
 
 .n-at {
-  margin: 6px 0 0;
-  font-size: 12px;
+  display: block;
+  margin:var(--app-space-3) 0 0;
+  font-size: var(--app-font-caption);
   color: var(--td-text-color-placeholder);
 }
 </style>

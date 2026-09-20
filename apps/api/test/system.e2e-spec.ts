@@ -174,10 +174,10 @@ describe('M1-E system 系统管理域', () => {
       expect(Array.isArray(data.upcomingEvents[0].enrollments)).toBe(true)
     }
 
-    /* 五域待办（dashboard 内嵌与 /todos 一致） */
+    /* 六域待办（dashboard 内嵌与 /todos 一致） */
     expect(todos.status).toBe(200)
     const keys = (todos.body.data as Array<{ key: string }>).map((t) => t.key)
-    expect(keys).toEqual(['settle', 'demand', 'reservation', 'article', 'lease'])
+    expect(keys).toEqual(['settle', 'demand', 'reservation', 'article', 'eventEnrollment', 'lease'])
     expect(data.todos.map((t: { key: string }) => t.key)).toEqual(keys)
     expect(data.todos.every((t: { count: number }) => typeof t.count === 'number')).toBe(true)
 

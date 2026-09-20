@@ -21,7 +21,6 @@ import { assertEnterprisePermission } from '../../../common/enterprise/enterpris
 import type { CreateDemandDto } from './dto/create-demand.dto'
 import type { RespondDemandDto } from './dto/respond-demand.dto'
 import type { SelectRespondersDto } from './dto/select-responders.dto'
-import type { DemandMessageDto } from './dto/demand-message.dto'
 
 /** 响应方/发布方身份类型集合（用于可见范围过滤与代企业主体判定） */
 interface IdentitySummary {
@@ -32,7 +31,7 @@ interface IdentitySummary {
 }
 
 /* 需求广场（M2-R R2，/api/app/demands + /me/demands、/me/responses）：
- * 浏览公开需求（剔除联系人，游客不可见联系人）、提交/响应/撤回/重提/申诉、发布者审阅响应并立项生成协作项目。 */
+ * 浏览公开需求（剔除联系人，游客不可见联系人）、提交/响应/撤回/重提、发布者审阅响应并立项生成协作项目。 */
 
 @Injectable()
 export class AppDemandsService {
@@ -65,8 +64,8 @@ export class AppDemandsService {
       ]
     }
     if (query.category) {
-      const code = await this.resolveCategoryCode(query.category)
-      if (code) where.category = code
+      const values = await this.resolveCategoryValues(query.category)
+      if (values) where.category = { in: values }
       else return { list: [], total: 0 }
     }
 
@@ -82,10 +81,7 @@ export class AppDemandsService {
       }),
     ])
     const counts = await this.responseCounts(rows.map((d) => d.id))
-    return {
-      list: rows.map((d) => this.toListItem(d, counts.get(d.id) ?? 0, !!uid)),
-      total,
-    }
+    return { list: await this.toListItems(rows, counts, !!uid), total }
   }
 
   /** 需求详情（不可见 → 404，不暴露存在性） */
@@ -95,11 +91,19 @@ export class AppDemandsService {
     const blockedUids = await this.blockedUids(uid)
 
     const demand = await this.prisma.demand.findFirst({
-      where: { id, deletedAt: null, ...(blockedUids.length ? { publisherId: { notIn: blockedUids } } : {}) },
+      where: { id, deletedAt: null },
     })
-    /* 发布者可查看自己需求的全状态详情（「我的需求」点击进入）；其余人仅可看已发布的可见需求 */
+    const participation = uid && demand
+      ? await this.prisma.demandRespondent.findFirst({ where: { demandId: id, userId: uid }, select: { id: true } })
+      : null
+    /* 发布者和响应者可查看关联需求的全状态详情；其他人仅可看公开且范围匹配的需求。 */
     const isPublisher = !!uid && demand?.publisherId === uid
-    if (!demand || (!isPublisher && (demand.status !== 'published' || !this.visibly(identities, demand)))) {
+    const isRespondent = !!participation
+    const isPubliclyVisible = !!demand
+      && demand.status === 'published'
+      && !blockedUids.includes(demand.publisherId)
+      && this.visibly(identities, demand)
+    if (!demand || (!isPublisher && !isRespondent && !isPubliclyVisible)) {
       throw new NotFoundException('需求不存在或不可见')
     }
 
@@ -115,8 +119,9 @@ export class AppDemandsService {
       if (mine) myResponse = mine
     }
 
+    const [item] = await this.toListItems([demand], new Map([[demand.id, count]]), !!uid)
     return {
-      ...this.toListItem(demand, count, !!uid),
+      ...item,
       description: demand.description,
       visibilityIdentities: demand.visibilityIdentities,
       visibilityLevels: demand.visibilityLevels.map((l) => Number(l)),
@@ -181,8 +186,9 @@ export class AppDemandsService {
     if (status) where.status = status
     const rows = await this.prisma.demand.findMany({ where, orderBy: { createdAt: 'desc' } })
     const counts = await this.responseCounts(rows.map((d) => d.id))
-    return rows.map((d) => {
-      const item = this.toListItem(d, counts.get(d.id) ?? 0, true)
+    const items = await this.toListItems(rows, counts, true)
+    return items.map((item, index) => {
+      const d = rows[index]
       return {
         id: item.id,
         title: item.title,
@@ -198,9 +204,13 @@ export class AppDemandsService {
 
   /** 响应需求：published + 不能响应自己 + 防重复 + 代企业权限 → 写响应 + demand_responded 积分 */
   async respond(uid: string, id: string, dto: RespondDemandDto) {
+    await this.assertDemandOpen('响应')
     const demand = await this.requireDemand(id)
     if (demand.status !== 'published') throw new ConflictException('仅已发布的需求可响应')
     if (demand.publisherId === uid) throw new ConflictException('不能响应自己发布的需求')
+
+    const identities = await this.identitySet(uid)
+    if (!this.visibly(identities, demand)) throw new NotFoundException('需求不存在或不可见')
 
     const dup = await this.prisma.demandRespondent.findFirst({
       where: { demandId: demand.id, userId: uid, status: { in: ['pending', 'accepted'] } },
@@ -210,6 +220,26 @@ export class AppDemandsService {
 
     const user = await this.requireUser(uid)
     const responder = await this.resolveResponder(uid, user, dto)
+
+    /* 已响应后不可更换身份重复响应；同一公司（社区/合作企业）其他成员不可再次响应 */
+    const requestedSubject = this.subjectKey(responder.identity)
+    const mine = await this.prisma.demandRespondent.findMany({
+      where: { demandId: demand.id, userId: uid },
+      select: { responderIdentity: true },
+    })
+    if (mine.some((row) => this.subjectKey(row.responderIdentity) !== requestedSubject)) {
+      throw new ConflictException('您已响应过该需求，不能更换身份重复响应')
+    }
+    const isCompany = requestedSubject.startsWith('community_enterprise:') || requestedSubject.startsWith('external_enterprise:')
+    if (isCompany) {
+      const others = await this.prisma.demandRespondent.findMany({
+        where: { demandId: demand.id, userId: { not: uid } },
+        select: { responderIdentity: true },
+      })
+      if (others.some((row) => this.subjectKey(row.responderIdentity) === requestedSubject)) {
+        throw new ConflictException('该公司已有成员响应过此需求')
+      }
+    }
 
     const at = formatNow()
     await this.prisma.demandRespondent.create({
@@ -229,17 +259,16 @@ export class AppDemandsService {
     })
 
     await this.points.issuePoints(uid, 'demand_responded', '响应需求获得积分', `demand_responded:${uid}:${demand.id}:${at}`)
-    return { code: 0 }
-  }
-
-  /** 响应者撤回（仅 pending → closed + withdrawnAt） */
-  async withdrawResponse(uid: string, responseId: string) {
-    const response = await this.requireResponseOf(responseId, uid)
-    if (response.status !== 'pending') throw new ConflictException('响应已被处理，无法撤回')
-    await this.prisma.demandRespondent.update({
-      where: { id: response.id },
-      data: { status: 'closed', withdrawnAt: formatNow() },
-    })
+    /* 后台代发需求的发布者可能是企业 ID：解析真实收件人后再发站内信 */
+    const publisherUid = await this.noticeRecipient(demand.publisherId)
+    if (publisherUid) {
+      await this.notify.pushNotice(publisherUid, {
+        type: 'demand',
+        title: '收到新的需求响应',
+        content: `您的需求「${demand.title}」收到新的响应，可在详情中查看并选择意向承接方。`,
+        link: `/demands/${demand.id}`,
+      })
+    }
     return { code: 0 }
   }
 
@@ -412,71 +441,33 @@ export class AppDemandsService {
     }
   }
 
-  /** 驳回后一次性申诉：rejected → appealed（管理端复核） */
-  async appealDemand(uid: string, demandId: string, reason: string) {
-    const demand = await this.requireOwnDemand(uid, demandId)
-    if (demand.status !== 'rejected') throw new ConflictException('仅被驳回的需求可申诉')
-    const appealReason = (reason ?? '').trim()
-    if (!appealReason) throw new BadRequestException('请填写申诉原因')
-    await this.prisma.$transaction(async (tx) => {
-      const claimed = await tx.demand.updateMany({
-        where: { id: demand.id, status: 'rejected' },
-        data: { status: 'appealed' },
-      })
-      if (claimed.count !== 1) throw new ConflictException('该需求已申诉，请勿重复提交')
-      await tx.appeal.create({
-        data: {
-          appellantId: uid,
-          targetType: 'demand',
-          targetId: demand.id,
-          reason: appealReason,
-          createdAt: formatNow(),
-        },
-      })
-    })
-    return { code: 0 }
-  }
-
-  /** 需求沟通留言：GET（仅发布方与响应过者可见） */
-  async listMessages(uid: string, demandId: string) {
-    await this.assertMessageAccess(uid, demandId)
-    const rows = await this.prisma.demandMessage.findMany({
-      where: { demandId },
-      orderBy: { id: 'asc' },
-    })
-    return rows.map((m) => ({
-      id: m.id,
-      uid: m.senderId,
-      name: m.senderName,
-      content: m.content,
-      at: m.at,
-      mine: m.senderId === uid,
-    }))
-  }
-
-  /** 需求沟通留言：POST（同上权限；content 1-500 字） */
-  async postMessage(uid: string, name: string, demandId: string, dto: DemandMessageDto) {
-    await this.assertMessageAccess(uid, demandId)
-    const content = dto.content?.trim() ?? ''
-    if (!content) throw new BadRequestException('留言内容不能为空')
-    if (content.length > 500) throw new BadRequestException('留言不能超过 500 字')
-    await this.prisma.demandMessage.create({
-      data: { demandId, senderId: uid, senderName: name || '用户', content, at: formatNow() },
-    })
-    return { code: 0 }
-  }
-
   /* ---------- 内部工具 ---------- */
 
-  private async assertDemandOpen(): Promise<void> {
+  /** 需求广场开关（关闭后提交与响应同时暂停） */
+  private async assertDemandOpen(action: '发布' | '响应' = '发布'): Promise<void> {
     const cfg = await this.prisma.systemConfig.findUnique({ where: { id: 1 } })
-    if (cfg && cfg.demandOpen === false) throw new BadRequestException('需求发布暂未开放')
+    if (cfg && cfg.demandOpen === false) {
+      throw new BadRequestException(action === '响应' ? '需求响应暂未开放' : '需求发布暂未开放')
+    }
   }
 
   private async blockedUids(uid?: string | null): Promise<string[]> {
     if (!uid) return []
     const rows = await this.prisma.userBlock.findMany({ where: { userId: uid }, select: { blockedUid: true } })
     return rows.map((row) => row.blockedUid)
+  }
+
+  /** 站内信收件人解析：用户本人；企业 ID 落到企业联系人；无法解析返回 null（不阻断主流程） */
+  private async noticeRecipient(subjectId: string): Promise<string | null> {
+    const user = await this.prisma.user.findUnique({ where: { uid: subjectId }, select: { uid: true } })
+    if (user) return user.uid
+    const enterprise = await this.prisma.enterprise.findUnique({
+      where: { id: subjectId },
+      select: { contactUserId: true },
+    })
+    if (!enterprise?.contactUserId) return null
+    const contact = await this.prisma.user.findUnique({ where: { uid: enterprise.contactUserId }, select: { uid: true } })
+    return contact?.uid ?? null
   }
 
   /** 按需求类型的必填校验（对齐 docs/api-app-design.md §6） */
@@ -529,16 +520,6 @@ export class AppDemandsService {
   }
 
   /** 发布方或响应过者可见留言板，否则 403 */
-  private async assertMessageAccess(uid: string, demandId: string): Promise<void> {
-    const demand = await this.requireDemand(demandId)
-    if (demand.publisherId === uid) return
-    const responded = await this.prisma.demandRespondent.findFirst({
-      where: { demandId, userId: uid },
-      select: { id: true },
-    })
-    if (!responded) throw new ForbiddenException('您无权查看该需求的沟通留言')
-  }
-
   /* ---------- 身份/主体快照解析 ---------- */
 
   /** 当前登录用户身份集合（用于可见范围；游客返回空） */
@@ -579,7 +560,7 @@ export class AppDemandsService {
 
     const asIdentity = dto.asIdentity ?? this.defaultIdentity(identities)
     if (asIdentity === 'community_individual' && identities.some((i) => i.type === 'community_individual')) {
-      return { name: user.nickname, identity: { type: 'community_individual', title: '社区个体', level: null } }
+      return { name: user.nickname, identity: { type: 'community_individual', level: null } }
     }
     if (asIdentity === 'external_enterprise') {
       const ext = identities.find((i) => i.type === 'external_enterprise')
@@ -603,13 +584,16 @@ export class AppDemandsService {
     return { name: user.nickname || fallbackName, identity: { type: 'individual', title: '个人用户' } }
   }
 
-  /** 响应方主体快照 */
+  /** 响应方主体快照（按所选身份解析；不再隐式代表首个社区企业） */
   private async resolveResponder(
     uid: string,
     user: User,
     dto: RespondDemandDto,
   ): Promise<{ name: string; enterprise: string; phone: string | null; identity: Prisma.InputJsonValue | null }> {
-    if (dto.asEnterpriseId) {
+    const requested = dto.asIdentity ?? (dto.asEnterpriseId ? 'community_enterprise' : 'individual')
+
+    if (requested === 'community_enterprise') {
+      if (!dto.asEnterpriseId) throw new BadRequestException('请选择要代表的社区企业')
       await assertEnterprisePermission(this.prisma, uid, dto.asEnterpriseId, 'respond_demand')
       const ent = await this.prisma.enterprise.findUnique({ where: { id: dto.asEnterpriseId } })
       if (!ent) throw new BadRequestException('企业不存在')
@@ -621,21 +605,28 @@ export class AppDemandsService {
       }
     }
 
-    if (dto.asIdentity === 'community_enterprise') {
-      throw new BadRequestException('请选择要代表的社区企业')
-    }
-
-    const identities = await this.prisma.userIdentity.findMany({ where: { userId: uid } })
-    const ce = identities.find((i) => i.type === 'community_enterprise' && i.enterpriseId)
-    if (!dto.asIdentity && ce) {
-      await assertEnterprisePermission(this.prisma, uid, ce.enterpriseId as string, 'respond_demand')
+    if (requested === 'community_individual') {
+      const row = await this.prisma.userIdentity.findFirst({ where: { userId: uid, type: 'community_individual' } })
+      if (!row) throw new BadRequestException('您暂未关联该身份')
       return {
         name: user.realName || user.nickname,
-        enterprise: ce?.enterpriseName || '',
+        enterprise: '',
         phone: user.phone,
-        identity: ce ? { type: 'community_enterprise', enterpriseId: ce.enterpriseId, enterpriseName: ce.enterpriseName } : null,
+        identity: { type: 'community_individual', level: row.level ?? undefined },
       }
     }
+
+    if (requested === 'external_enterprise') {
+      const row = await this.prisma.userIdentity.findFirst({ where: { userId: uid, type: 'external_enterprise' } })
+      if (!row) throw new BadRequestException('您暂未关联该身份')
+      return {
+        name: user.realName || user.nickname,
+        enterprise: row.enterpriseName || '',
+        phone: user.phone,
+        identity: { type: 'external_enterprise', organizationName: row.enterpriseName ?? undefined, title: '合作企业' },
+      }
+    }
+
     return {
       name: user.realName || user.nickname,
       enterprise: '',
@@ -644,30 +635,42 @@ export class AppDemandsService {
     }
   }
 
-  /* ---------- 可见范围 SQL 条件 ---------- */
-
-  private visibilityCond(identities: IdentitySummary[]): Prisma.DemandWhereInput {
-    const types = identities.map((i) => i.type)
-    const levels = identities.flatMap((i) => (i.level != null ? [String(i.level)] : []))
-    return {
-      OR: [
-        { visibilityIdentities: { isEmpty: true } },
-        {
-          visibilityIdentities: { hasSome: types },
-          OR: [{ visibilityLevels: { isEmpty: true } }, { visibilityLevels: { hasSome: levels } }],
-        },
-      ],
-    }
+  /** 响应主体 key（身份类型 + 公司/组织）：用于「换身份重复响应」与「同企业二次响应」判定 */
+  private subjectKey(identity: unknown): string {
+    if (!identity || typeof identity !== 'object' || Array.isArray(identity)) return ''
+    const obj = identity as Record<string, unknown>
+    const scope = obj.enterpriseId ?? obj.organizationName ?? ''
+    return `${String(obj.type ?? '')}:${String(scope)}`
   }
 
-  /** 单条详情可见性校验（含等级匹配） */
-  private visibly(identities: IdentitySummary[], demand: Demand): boolean {
-    if (demand.visibilityIdentities.length === 0) return true
-    return identities.some((i) => {
-      if (!demand.visibilityIdentities.includes(i.type)) return false
-      if (demand.visibilityLevels.length === 0) return true
-      return i.level != null && demand.visibilityLevels.includes(String(i.level))
+  /* ---------- 可见范围 SQL 条件 ---------- */
+
+  /** 可见范围 SQL 条件：按「单个身份」联合判定（类型命中且等级命中），多个身份取并集；两组都为空 = 不限 */
+  private visibilityCond(identities: IdentitySummary[]): Prisma.DemandWhereInput {
+    if (identities.length === 0) {
+      return { visibilityIdentities: { isEmpty: true }, visibilityLevels: { isEmpty: true } }
+    }
+    const branches: Prisma.DemandWhereInput[] = identities.map((i) => {
+      const typeCond: Prisma.DemandWhereInput = {
+        OR: [{ visibilityIdentities: { isEmpty: true } }, { visibilityIdentities: { has: i.type } }],
+      }
+      const levelCond: Prisma.DemandWhereInput =
+        i.level != null
+          ? { OR: [{ visibilityLevels: { isEmpty: true } }, { visibilityLevels: { has: String(i.level) } }] }
+          : { visibilityLevels: { isEmpty: true } }
+      return { AND: [typeCond, levelCond] }
     })
+    return { OR: branches }
+  }
+
+  /** 单条详情可见性校验：与列表一致，按「单个身份」联合判定，多个身份取并集 */
+  private visibly(identities: IdentitySummary[], demand: Demand): boolean {
+    if (demand.visibilityIdentities.length === 0 && demand.visibilityLevels.length === 0) return true
+    return identities.some(
+      (i) =>
+        (demand.visibilityIdentities.length === 0 || demand.visibilityIdentities.includes(i.type)) &&
+        (demand.visibilityLevels.length === 0 || (i.level != null && demand.visibilityLevels.includes(String(i.level)))),
+    )
   }
 
   /** 分页响应数（排除已撤回 closed） */
@@ -681,24 +684,37 @@ export class AppDemandsService {
     return new Map(rows.map((r) => [r.demandId, r._count.demandId]))
   }
 
-  /** 类目参数（编码或标签）→ 字典 code；无法解析返回 null */
-  private async resolveCategoryCode(input: string): Promise<string | null> {
+  /** 类目参数（编码或标签）→ 编码和标签；兼容历史直接保存标签的需求。 */
+  private async resolveCategoryValues(input: string): Promise<string[] | null> {
     if (!input) return null
     const candidates = await this.prisma.dictEntry.findMany({
       where: { type: { in: ['demand_category', 'industry'] } },
       select: { code: true, label: true },
     })
     const hit = candidates.find((c) => c.code === input || c.label === input)
-    return hit?.code ?? null
+    return hit ? [hit.code, hit.label] : null
+  }
+
+  /** 需求库保存字典 code；对 App 契约统一下发人可读标签，并兼容历史直接保存标签的数据。 */
+  private async toListItems(demands: Demand[], counts: Map<string, number>, withContact: boolean) {
+    const codes = [...new Set(demands.map((d) => d.category).filter(Boolean))]
+    const entries = codes.length
+      ? await this.prisma.dictEntry.findMany({
+          where: { code: { in: codes }, type: { in: ['demand_category', 'industry'] } },
+          select: { code: true, label: true },
+        })
+      : []
+    const labels = new Map(entries.map((entry) => [entry.code, entry.label]))
+    return demands.map((demand) => this.toListItem(demand, counts.get(demand.id) ?? 0, withContact, labels))
   }
 
   /** 列表/详情条目（联系人仅登录用户可见） */
-  private toListItem(demand: Demand, responseCount: number, withContact: boolean) {
+  private toListItem(demand: Demand, responseCount: number, withContact: boolean, categoryLabels = new Map<string, string>()) {
     return {
       id: demand.id,
       title: demand.title,
       description: demand.description,
-      categoryLabel: demand.category,
+      categoryLabel: categoryLabels.get(demand.category) ?? demand.category,
       status: demand.status,
       kind: (demand.demandType ?? 'task') as 'task' | 'investment' | 'cooperation',
       publisherUid: demand.publisherId,

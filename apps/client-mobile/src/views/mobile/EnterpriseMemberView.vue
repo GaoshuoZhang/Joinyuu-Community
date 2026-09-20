@@ -1,15 +1,17 @@
 <script setup lang="ts">
 import { computed, onMounted, reactive, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { Loading, Avatar, Button, CheckboxGroup, DialogPlugin, Input, Tag, Toast } from 'tdesign-mobile-vue'
+import { Avatar, Button, CheckboxGroup, DialogPlugin, Input, Tag, Toast } from 'tdesign-mobile-vue'
 import { fetchEnterpriseDetail, removeEnterpriseMember, updateEnterpriseMember } from '@/api/enterprises'
 import { useAsyncList } from '@/composables/useAsyncList'
+import { useUnsavedGuard } from '@/composables/useUnsavedGuard'
 import { ApiError } from '@/api/http'
 import { ENTERPRISE_PERMISSIONS } from '@/constants/enterprise'
 import EmptyBlock from '@/components/shared/EmptyBlock.vue'
+import ListSkeleton from '@/components/ListSkeleton.vue'
 import type { EnterpriseMemberPermission } from '@/types'
 
-/* 成员管理（[MOCK-ONLY]，缺口 §7.1-17）：原为底部弹窗，内容较多无法上下滑动，v29 改为独立页面。
+/* 成员管理：原为底部弹窗，内容较多无法上下滑动，v29 改为独立页面。
  * 负责人或持「管理成员 / 分配权限」的成员可进入；职位/手机号需 manage_members，权限分配需 assign_permission。 */
 const route = useRoute()
 const router = useRouter()
@@ -39,6 +41,9 @@ function permissionLabels(perms?: EnterpriseMemberPermission[]): string {
 }
 
 const form = reactive({ role: '', phone: '', permissions: [] as EnterpriseMemberPermission[] })
+const baseline = ref('')
+const formSnapshot = computed(() => JSON.stringify(form))
+const { markClean } = useUnsavedGuard(() => filled.value && formSnapshot.value !== baseline.value)
 const permissionsModel = computed({
   get: () => form.permissions as (string | number | boolean)[],
   set: (v: (string | number | boolean)[]) => {
@@ -53,6 +58,7 @@ function fillForm() {
   form.role = member.value.role ?? ''
   form.phone = member.value.phone ?? ''
   form.permissions = [...(member.value.permissions ?? [])]
+  baseline.value = formSnapshot.value
   filled.value = true
 }
 watch(member, fillForm, { immediate: true })
@@ -71,7 +77,7 @@ async function onSave() {
     }
     const phone = form.phone.trim()
     if (phone && !/^1\d{10}$/.test(phone)) {
-      Toast('请输入正确的手机号')
+      Toast('请输入 11 位手机号')
       return
     }
     payload.role = form.role.trim()
@@ -84,6 +90,8 @@ async function onSave() {
   try {
     await updateEnterpriseMember(enterpriseId, payload)
     Toast('成员信息已更新')
+    baseline.value = formSnapshot.value
+    markClean()
     await router.replace(`/me/enterprises/${enterpriseId}`)
   } catch (e) {
     Toast(e instanceof ApiError ? e.message : '保存失败，请稍后重试')
@@ -110,6 +118,7 @@ async function doRemove() {
   try {
     await removeEnterpriseMember(enterpriseId, { memberUid: member.value.uid, memberName: member.value.name })
     Toast('成员已移除')
+    markClean()
     await router.replace(`/me/enterprises/${enterpriseId}`)
   } catch (e) {
     Toast(e instanceof ApiError ? e.message : '移除失败，请稍后重试')
@@ -119,7 +128,7 @@ async function doRemove() {
 
 <template>
   <div class="page-fade-in m-member">
-    <Loading v-if="loading" class="state" text="加载中…" />
+    <ListSkeleton v-if="loading" />
     <EmptyBlock v-else-if="error" :text="error" action-text="重试" @action="run" />
     <EmptyBlock v-else-if="!data" text="企业不存在" />
     <EmptyBlock v-else-if="!member" text="未找到该企业成员" />
@@ -128,7 +137,7 @@ async function doRemove() {
       <section class="m-card head">
         <Avatar shape="round" size="56px" class="avatar">{{ member.name.slice(0, 1) }}</Avatar>
         <div class="info">
-          <h3 class="name">{{ member.name }}</h3>
+          <h2 class="name">{{ member.name }}</h2>
           <p class="meta">{{ [member.role, member.phone].filter(Boolean).join(' · ') || '暂无职位信息' }}</p>
         </div>
         <Tag v-if="member.isContact" size="small" variant="light" theme="primary">负责人</Tag>
@@ -136,15 +145,15 @@ async function doRemove() {
       </section>
 
       <section class="m-card">
-        <h3 class="sec-title">成员信息</h3>
+        <h2 class="sec-title">成员信息</h2>
         <template v-if="can('manage_members')">
           <div class="field">
             <label>职位</label>
-            <Input v-model="form.role" :maxlength="20" placeholder="如：产品负责人 / 设计总监" clearable />
+            <Input v-model="form.role" :maxlength="20" placeholder="如：产品负责人 / 设计总监…" clearable />
           </div>
           <div class="field">
             <label>手机号</label>
-            <Input v-model="form.phone" type="tel" :maxlength="11" placeholder="请输入 11 位手机号" clearable />
+            <Input v-model="form.phone" type="tel" :maxlength="11" placeholder="请输入 11 位手机号…" clearable />
           </div>
         </template>
         <template v-else>
@@ -160,7 +169,7 @@ async function doRemove() {
       </section>
 
       <section class="m-card">
-        <h3 class="sec-title">成员权限</h3>
+        <h2 class="sec-title">成员权限</h2>
         <template v-if="targetIsContact">
           <p class="perm-tip">负责人默认拥有全部权限，无需分配。</p>
         </template>
@@ -173,7 +182,7 @@ async function doRemove() {
         </template>
       </section>
 
-      <Button v-if="canSave" theme="primary" size="large" block :loading="saving" @click="onSave">
+      <Button v-if="canSave" class="mobile-sticky-action" theme="primary" size="large" block :loading="saving" @click="onSave">
         {{ saving ? '保存中…' : '保存修改' }}
       </Button>
       <Button
@@ -194,27 +203,24 @@ async function doRemove() {
 
 <style scoped>
 .m-member {
-  padding: 16px;
-  padding-bottom: 32px;
+  padding:var(--app-space-8);
+  padding-bottom:var(--app-space-12);
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap:var(--app-space-6);
 }
 
-.state {
-  padding: 20px 0;
-}
 
 .head {
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap:var(--app-space-6);
 }
 
 .avatar {
   flex-shrink: 0;
-  font-size: 20px;
-  font-weight: 700;
+  font-size: var(--app-font-title);
+  font-weight: 600;
 }
 
 .info {
@@ -223,46 +229,46 @@ async function doRemove() {
 }
 
 .name {
-  margin: 0 0 4px;
-  font-size: 17px;
-  font-weight: 700;
+  margin:0 0 var(--app-space-2);
+  font-size: var(--app-font-title);
+  font-weight: 600;
 }
 
 .meta {
-  margin: 0;
-  font-size: 12px;
+  margin:0;
+  font-size: var(--app-font-caption);
   color: var(--td-text-color-secondary);
 }
 
 .sec-title {
-  margin: 0 0 12px;
-  font-size: 15px;
+  margin:0 0 var(--app-space-6);
+  font-size: var(--app-font-subtitle);
 }
 
 .field {
-  margin-bottom: 14px;
+  margin-bottom:var(--app-space-7);
 }
 
 .field:last-child {
-  margin-bottom: 0;
+  margin-bottom:0;
 }
 
 .field label {
   display: block;
-  margin-bottom: 6px;
-  font-size: 12px;
+  margin-bottom:var(--app-space-3);
+  font-size: var(--app-font-caption);
   color: var(--td-text-color-secondary);
 }
 
 .read-row {
   display: flex;
-  gap: 8px;
-  margin-bottom: 10px;
-  font-size: 14px;
+  gap:var(--app-space-4);
+  margin-bottom:var(--app-space-5);
+  font-size: var(--app-font-body);
 }
 
 .read-row:last-child {
-  margin-bottom: 0;
+  margin-bottom:0;
 }
 
 .read-label {
@@ -277,24 +283,24 @@ async function doRemove() {
 }
 
 .perm-hint {
-  margin: 0 0 10px;
-  font-size: 12px;
+  margin:0 0 var(--app-space-5);
+  font-size: var(--app-font-caption);
   color: var(--td-text-color-secondary);
 }
 
 .perm-tip {
-  margin: 0;
-  font-size: 13px;
+  margin:0;
+  font-size: var(--app-font-body);
   color: var(--td-text-color-secondary);
 }
 
 .remove-btn {
-  margin-top: 4px;
+  margin-top:var(--app-space-2);
 }
 
 .page-tip {
-  margin: 0;
-  font-size: 12px;
+  margin:0;
+  font-size: var(--app-font-caption);
   color: var(--td-text-color-placeholder);
   text-align: center;
 }

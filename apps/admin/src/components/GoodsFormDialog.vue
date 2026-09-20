@@ -44,7 +44,6 @@ const shippingMethodOptions = [
 const fulfillmentOptions = [
   { label: '实物配送', value: 'physical' },
   { label: '券码权益', value: 'voucher' },
-  { label: '服务权益', value: 'service' },
 ]
 
 const submitting = ref(false)
@@ -56,6 +55,7 @@ const customOrdering = ref(false)
 
 const form = reactive({
   name: '',
+  coverUrl: '',
   category: 'GC001' as GoodsCategory,
   fulfillment: 'physical' as GoodsFulfillment,
   points: 100,
@@ -76,6 +76,7 @@ watch(
     if (!v) return
     if (props.mode === 'edit' && props.goods) {
       form.name = props.goods.name
+      form.coverUrl = props.goods.coverUrl ?? ''
       form.category = props.goods.category
       form.fulfillment = props.goods.fulfillment
       form.points = props.goods.points
@@ -92,6 +93,7 @@ watch(
       customOrdering.value = form.orderIdentities.length > 0 || form.orderLevels.length > 0
     } else {
       form.name = ''
+      form.coverUrl = ''
       form.category = 'GC001'
       form.fulfillment = 'physical'
       form.points = 100
@@ -138,6 +140,7 @@ async function onConfirm() {
   try {
     const payload = {
       name: form.name,
+      coverUrl: form.coverUrl.trim() || undefined,
       category: form.category,
       fulfillment: form.fulfillment,
       points: form.points,
@@ -174,11 +177,12 @@ function onClose() {
 
 <template>
   <t-dialog
+    lazy
+    destroy-on-close
     :close-on-overlay-click="true"
     :visible="visible"
     :header="mode === 'create' ? '新增商品' : '编辑商品'"
     width="880px"
-    lazy
     :close-on-esc-keydown="false"
     @close="onClose"
   >
@@ -193,6 +197,10 @@ function onClose() {
     <t-form ref="formRef" :data="form" :rules="rules" label-align="top">
       <t-form-item label="商品名称" name="name">
         <t-input clearable v-model="form.name" placeholder="请输入商品名称…" />
+      </t-form-item>
+      <t-form-item label="商品封面" name="coverUrl" help="可粘贴素材库文件地址或 HTTPS 图片地址；留空时移动端显示品牌占位图">
+        <t-input clearable v-model="form.coverUrl" placeholder="请输入封面图片地址…" />
+        <t-image v-if="form.coverUrl" class="cover-preview" :src="form.coverUrl" fit="cover" />
       </t-form-item>
       <div class="form-row">
         <t-form-item label="商品分类" name="category">
@@ -345,5 +353,12 @@ function onClose() {
   display: flex;
   justify-content: flex-end;
   gap: 8px;
+}
+
+.cover-preview {
+  width: 200px;
+  height: 112px;
+  margin-top: 8px;
+  border-radius: var(--td-radius-medium);
 }
 </style>

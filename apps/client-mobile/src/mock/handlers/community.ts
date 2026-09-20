@@ -101,7 +101,7 @@ export async function fetchEnterpriseList(query: EnterpriseQuery = {}): Promise<
       )
       .map((e) => {
         const exp = enterpriseExperienceByEid[e.id]
-        return exp ? { ...e, level: exp.level, levelName: exp.levelName } : e
+        return exp ? { ...e, level: exp.level ?? undefined, levelName: exp.levelName } : e
       })
   }, 150)
 }

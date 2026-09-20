@@ -21,6 +21,12 @@ export function identityOptionLabel(identity: UserIdentity, personName: string):
   return `${IDENTITY_LABELS[identity.type]} · ${personName}`
 }
 
+/** 行为身份选项：社区个体是个人用户的升级身份，两者不同时展示。 */
+export function actionIdentityOptions(identities: readonly UserIdentity[]): UserIdentity[] {
+  const hasCommunityIndividual = identities.some((identity) => identity.type === 'community_individual')
+  return identities.filter((identity) => !hasCommunityIndividual || identity.type !== 'individual')
+}
+
 export const useAuthStore = defineStore('auth', () => {
   const token = ref(localStorage.getItem(TOKEN_KEY) ?? '')
   const uid = ref('')
@@ -69,7 +75,7 @@ export const useAuthStore = defineStore('auth', () => {
     apply(await authApi.login(payload))
   }
 
-  async function register(payload: { phone: string; password: string; confirmPassword: string; captchaId: string; captchaCode: string; nickname?: string; agreed?: boolean }) {
+  async function register(payload: { phone: string; password: string; confirmPassword: string; captchaId: string; captchaCode: string; nickname: string; agreed?: boolean }) {
     apply(await authApi.register(payload))
   }
 

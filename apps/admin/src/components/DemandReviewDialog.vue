@@ -105,7 +105,7 @@ function publisherIdentityLabel(d: Demand): string {
         <div class="review-title">{{ demand.title }}</div>
         <div class="review-meta">
           <span class="meta-item">编号：{{ demand.id }}</span>
-          <span class="meta-item">类别：{{ demand.category || '—' }}</span>
+          <span class="meta-item">类别：{{ (demand.categoryLabel ?? demand.category) || '—' }}</span>
         </div>
 
         <t-descriptions :column="2" bordered class="review-desc">

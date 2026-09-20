@@ -7,6 +7,7 @@ import { formatNow } from '../../common/utils/time'
 import { sanitizeHtml } from '../../common/utils/sanitize-html'
 import type { QueryAnnouncementsDto } from './dto/query-announcements.dto'
 import type { AnnouncementPayloadDto } from './dto/announcement-payload.dto'
+import type { HomeAnnouncementPayloadDto } from './dto/home-announcement-payload.dto'
 
 function toAnnouncementDto(a: Announcement): Record<string, unknown> {
   const dto: Record<string, unknown> = {
@@ -24,7 +25,8 @@ function toAnnouncementDto(a: Announcement): Record<string, unknown> {
   return dto
 }
 
-/* 公告栏（wiki-backend.md §7.14）：新增即发布，支持下架/重新发布/置顶/删除；全部写操作留痕（内容管理）。 */
+/* 首页公告（wiki-backend.md §7.14）：单例编辑器（getHomeAnnouncement/saveHomeAnnouncement）；
+ * 同时保留列表/新增/下架/重新发布/置顶等既有接口供归档与兼容使用；写操作留痕。 */
 @Injectable()
 export class AnnouncementsService {
   constructor(
@@ -57,21 +59,113 @@ export class AnnouncementsService {
     return { list: rows.map(toAnnouncementDto), total }
   }
 
+  /** 首页公告单例读取：当前开启的一条优先，否则最近一条；无记录返回空表单 */
+  async getHomeAnnouncement(): Promise<Record<string, unknown>> {
+    const row = await this.prisma.announcement.findFirst({
+      where: { deletedAt: null },
+      orderBy: [{ pinned: 'desc' }, { publishedAt: 'desc' }, { id: 'desc' }],
+    })
+    if (!row) {
+      return { id: null, title: '', content: '', enabled: false, link: '', publishedAt: '', updatedAt: '' }
+    }
+    return {
+      id: row.id,
+      title: row.title,
+      content: row.content,
+      enabled: row.pinned && row.status === 'published',
+      link: row.link ?? '',
+      publishedAt: row.publishedAt,
+      updatedAt: row.updatedAt ?? '',
+    }
+  }
+
+  /** 首页公告单例保存：开启时保持全局唯一（取消其他置顶），关闭后客户端不再展示 */
+  async saveHomeAnnouncement(payload: HomeAnnouncementPayloadDto, operator: string): Promise<{ code: number }> {
+    const now = formatNow()
+    const title = payload.title.trim()
+    const content = sanitizeHtml(payload.content).trim()
+    const link = payload.link?.trim() || null
+
+    const existing = await this.prisma.announcement.findFirst({
+      where: { deletedAt: null },
+      orderBy: [{ pinned: 'desc' }, { publishedAt: 'desc' }, { id: 'desc' }],
+    })
+
+    let id = existing?.id ?? ''
+    await this.prisma.$transaction(async (tx) => {
+      if (payload.enabled) {
+        await tx.announcement.updateMany({
+          where: {
+            pinned: true,
+            deletedAt: null,
+            ...(existing ? { id: { not: existing.id } } : {}),
+          },
+          data: { pinned: false },
+        })
+      }
+      if (existing) {
+        await tx.announcement.update({
+          where: { id: existing.id },
+          data: {
+            title,
+            content,
+            link,
+            pinned: payload.enabled,
+            status: 'published',
+            updatedAt: now,
+          },
+        })
+      } else {
+        id = await this.ids.next('AN')
+        await tx.announcement.create({
+          data: {
+            id,
+            title,
+            content,
+            link,
+            pinned: payload.enabled,
+            status: 'published',
+            publishedAt: now,
+            createdAt: now,
+            updatedAt: null,
+          },
+        })
+      }
+    })
+
+    await this.audit.record({
+      module: '内容管理',
+      action: '保存首页公告',
+      target: id,
+      before: existing ? { title: existing.title, pinned: existing.pinned } : undefined,
+      after: { title, enabled: payload.enabled },
+      operator,
+    })
+    return { code: 0 }
+  }
+
   async create(payload: AnnouncementPayloadDto, operator: string): Promise<Record<string, unknown>> {
     const now = formatNow()
-    const announcement = await this.prisma.announcement.create({
-      data: {
-        id: await this.ids.next('AN'),
-        title: payload.title.trim(),
-        content: sanitizeHtml(payload.content).trim(),
-        pinned: payload.pinned,
-        status: 'published',
-        publishedAt: now,
-        createdAt: now,
-        updatedAt: null,
-        expireAt: payload.expireAt || null,
-        link: payload.link?.trim() || null,
-      },
+    const id = await this.ids.next('AN')
+    const announcement = await this.prisma.$transaction(async (tx) => {
+      /* 置顶公告全局唯一：新增即开启时先取消其他置顶 */
+      if (payload.pinned) {
+        await tx.announcement.updateMany({ where: { pinned: true, deletedAt: null }, data: { pinned: false } })
+      }
+      return tx.announcement.create({
+        data: {
+          id,
+          title: payload.title.trim(),
+          content: sanitizeHtml(payload.content).trim(),
+          pinned: payload.pinned,
+          status: 'published',
+          publishedAt: now,
+          createdAt: now,
+          updatedAt: null,
+          expireAt: payload.expireAt || null,
+          link: payload.link?.trim() || null,
+        },
+      })
     })
 
     await this.audit.record({
@@ -91,16 +185,25 @@ export class AnnouncementsService {
     const title = payload.title.trim()
     const content = sanitizeHtml(payload.content).trim()
 
-    await this.prisma.announcement.update({
-      where: { id },
-      data: {
-        title,
-        content,
-        pinned: payload.pinned,
-        updatedAt: formatNow(),
-        expireAt: payload.expireAt || null,
-        link: payload.link?.trim() || null,
-      },
+    await this.prisma.$transaction(async (tx) => {
+      /* 开启置顶时保持全局唯一 */
+      if (payload.pinned) {
+        await tx.announcement.updateMany({
+          where: { pinned: true, deletedAt: null, id: { not: id } },
+          data: { pinned: false },
+        })
+      }
+      await tx.announcement.update({
+        where: { id },
+        data: {
+          title,
+          content,
+          pinned: payload.pinned,
+          updatedAt: formatNow(),
+          expireAt: payload.expireAt || null,
+          link: payload.link?.trim() || null,
+        },
+      })
     })
 
     await this.audit.record({
@@ -122,7 +225,7 @@ export class AnnouncementsService {
     const now = formatNow()
     await this.prisma.announcement.update({
       where: { id },
-      data: { status: 'withdrawn', updatedAt: now, archivableAt: now },
+      data: { status: 'withdrawn', pinned: false, updatedAt: now, archivableAt: now },
     })
 
     await this.audit.record({
@@ -162,9 +265,18 @@ export class AnnouncementsService {
     if (!item || item.deletedAt) throw new NotFoundException('公告不存在')
     const pinned = !item.pinned
 
-    await this.prisma.announcement.update({
-      where: { id },
-      data: { pinned, updatedAt: formatNow() },
+    await this.prisma.$transaction(async (tx) => {
+      /* 置顶公告全局唯一：开启本条时取消其他置顶 */
+      if (pinned) {
+        await tx.announcement.updateMany({
+          where: { pinned: true, deletedAt: null, id: { not: id } },
+          data: { pinned: false },
+        })
+      }
+      await tx.announcement.update({
+        where: { id },
+        data: { pinned, updatedAt: formatNow() },
+      })
     })
 
     await this.audit.record({

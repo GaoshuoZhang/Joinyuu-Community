@@ -1,19 +1,27 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
-import { useRouter } from 'vue-router'
-import { CheckTag, Tag } from 'tdesign-mobile-vue'
+import { useRoute, useRouter } from 'vue-router'
+import { useRouteQuerySync } from '@/composables/useRouteQuerySync'
+import { Button, CheckTag, Tag } from 'tdesign-mobile-vue'
 import { listFavorites } from '@/api/favorites'
 import { useAsyncList } from '@/composables/useAsyncList'
+import { useIncrementalList } from '@/composables/useIncrementalList'
 import EmptyBlock from '@/components/shared/EmptyBlock.vue'
 import ListSkeleton from '@/components/ListSkeleton.vue'
-import type { FavoriteItem, FavoriteTargetType } from '@/types'
+import type { FavoriteTargetType } from '@/types'
+import { formatLocalDateTime, formatZhNumber } from '@/utils/format'
 
-/* 我的收藏（v37 [MOCK-ONLY]；v40 扩展企业/人才并支持类型筛选）：点击回到原内容。 */
+/* 我的收藏：支持需求、文章、活动、企业和人才筛选，点击回到原内容。 */
+const route = useRoute()
 const router = useRouter()
 const { data, loading, error, run } = useAsyncList(listFavorites)
 onMounted(run)
 
-const activeType = ref<'all' | FavoriteTargetType>('all')
+const FAVORITE_TYPES: FavoriteTargetType[] = ['demand', 'article', 'event', 'enterprise', 'talent']
+function normalizeType(value: unknown): 'all' | FavoriteTargetType {
+  return FAVORITE_TYPES.includes(String(value) as FavoriteTargetType) ? (String(value) as FavoriteTargetType) : 'all'
+}
+const activeType = ref<'all' | FavoriteTargetType>(normalizeType(route.query.type))
 const TYPE_LABEL: Record<FavoriteTargetType, string> = { demand: '项目', article: '文章', event: '活动', enterprise: '企业', talent: '人才' }
 const TYPE_PATH: Record<FavoriteTargetType, string> = {
   demand: '/demands/', article: '/articles/', event: '/events/', enterprise: '/enterprises/', talent: '/talents/',
@@ -29,16 +37,21 @@ const FILTERS: { value: 'all' | FavoriteTargetType; label: string }[] = [
 
 const all = computed(() => data.value ?? [])
 const items = computed(() => (activeType.value === 'all' ? all.value : all.value.filter((item) => item.type === activeType.value)))
+const { visibleItems, hasMore, showMore } = useIncrementalList(items)
 
-function go(item: FavoriteItem) {
-  void router.push(`${TYPE_PATH[item.type]}${item.targetId}`)
+/* 类型筛选同步 URL，便于分享/返回还原 */
+function pickType(value: 'all' | FavoriteTargetType) {
+  activeType.value = value
+  void router.replace({ query: value === 'all' ? {} : { type: value } })
 }
+
+useRouteQuerySync('/me/favorites', (query) => {
+  activeType.value = normalizeType(query.type)
+})
 </script>
 
 <template>
   <div class="page-fade-in m-favorites">
-    <h1 class="page-title">我的收藏</h1>
-
     <ListSkeleton v-if="loading" />
     <EmptyBlock v-else-if="error" :text="error" action-text="重试" @action="run" />
     <template v-else-if="all.length">
@@ -49,22 +62,25 @@ function go(item: FavoriteItem) {
           variant="light"
           size="medium"
           :checked="activeType === f.value"
-          @change="activeType = f.value"
+          @change="pickType(f.value)"
         >
           {{ f.label }}
         </CheckTag>
       </div>
-      <EmptyBlock v-if="!items.length" text="该类型下暂无收藏" />
+      <EmptyBlock v-if="!items.length" text="该类型下暂无收藏" action-text="查看全部收藏" @action="pickType('all')" />
       <div v-else class="stagger list">
-        <p class="list-count">共 {{ items.length }} 条</p>
-        <article v-for="item in items" :key="item.id" class="m-card fav-card" v-pressable @click="go(item)">
+        <p class="list-count">共 {{ formatZhNumber(items.length) }} 条</p>
+        <router-link v-for="item in visibleItems" :key="item.id" class="m-card fav-card pressable" :to="`${TYPE_PATH[item.type]}${item.targetId}`">
           <div class="fav-head">
             <Tag size="small" variant="light" theme="primary">{{ TYPE_LABEL[item.type] }}</Tag>
-            <h3 class="fav-title">{{ item.title }}</h3>
+            <h2 class="fav-title">{{ item.title }}</h2>
           </div>
           <p v-if="item.subtitle" class="fav-sub">{{ item.subtitle }}</p>
-          <p class="fav-at">收藏于 {{ item.at }}</p>
-        </article>
+          <p class="fav-at">收藏于 {{ formatLocalDateTime(item.at) }}</p>
+        </router-link>
+        <Button v-if="hasMore" block variant="outline" @click="showMore">
+          加载更多（剩余 {{ formatZhNumber(items.length - visibleItems.length) }} 条）
+        </Button>
       </div>
     </template>
     <EmptyBlock v-else text="暂无收藏，去项目、文章或活动页收藏感兴趣的内容" />
@@ -73,56 +89,49 @@ function go(item: FavoriteItem) {
 
 <style scoped>
 .m-favorites {
-  padding: 16px;
+  padding:var(--app-space-8);
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap:var(--app-space-6);
 }
 
-.page-title {
-  margin: 0;
-  padding: 0 2px;
-  font-size: 18px;
-}
-
-.state {
-  padding: 20px 0;
-}
 
 .list {
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap:var(--app-space-5);
 }
 
 .chips {
   display: flex;
   flex-wrap: wrap;
-  gap: 8px;
+  gap:var(--app-space-4);
 }
 
 .fav-card {
+  color: inherit;
+  text-decoration: none;
   cursor: pointer;
 }
 
 .fav-head {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap:var(--app-space-4);
 }
 
 .fav-title {
   flex: 1;
-  margin: 0;
-  font-size: 14px;
+  margin:0;
+  font-size: var(--app-font-body);
   line-height: 1.45;
   min-width: 0;
 }
 
 .fav-sub,
 .fav-at {
-  margin: 6px 0 0;
-  font-size: 12px;
+  margin:var(--app-space-3) 0 0;
+  font-size: var(--app-font-caption);
   color: var(--td-text-color-secondary);
 }
 

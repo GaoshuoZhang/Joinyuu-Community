@@ -1,10 +1,10 @@
-/* M1.5 验收（四类申请审核，2026-09-11 扩展）：
+/* M1.5 验收（四类申请审核）：
  *   settle      企业入驻申请 → 新增社区企业 + 申请人社区企业身份
  *   individual  个体入驻申请 → 新增社区个体（community_individual 身份）
  *   cooperation 企业合作申请 → 新增合作企业档案 + 申请人合作企业身份
- *   identity    身份绑定申请 → 目标企业属社区企业/合作企业则挂成员；否则自动新增合作企业
+ *   exit        企业退驻申请 → 企业转为已退驻（governance.e2e）
  * 首绑均触发 identity_first_bind 积分/经验值发放。
- * 前置：docker compose up + prisma migrate + seed（AP3012/AP3017/AP3018/AP3019/AP3014 等待审核） */
+ * 前置：docker compose up + prisma migrate + seed（AP3012/AP3017/AP3018 等待审核） */
 import { INestApplication } from '@nestjs/common'
 import { Test } from '@nestjs/testing'
 import request from 'supertest'
@@ -101,31 +101,5 @@ describe('M1.5 applications 四类申请审核', () => {
       .set(auth())
     expect(detail.status).toBe(200)
     expect(detail.body.data.members.some((m: { userId: string }) => m.userId === 'U1004')).toBe(true)
-  })
-
-  it('身份绑定（目标为社区企业）：挂到该社区企业成员名单', async () => {
-    await approve('AP3014')
-
-    const detail = await request(app.getHttpServer()).get('/api/admin/enterprises/E2002').set(auth())
-    expect(detail.status).toBe(200)
-    expect(detail.body.data.members.some((m: { uid: string }) => m.uid === 'U1009')).toBe(true)
-  })
-
-  it('身份绑定（目标不在社区企业/合作企业名单）：自动新增合作企业并挂靠成员', async () => {
-    await approve('AP3019')
-
-    const list = await request(app.getHttpServer())
-      .get('/api/admin/external-enterprises')
-      .set(auth())
-      .query({ page: 1, pageSize: 50, keyword: '星环科技' })
-    expect(list.status).toBe(200)
-    const profile = list.body.data.list.find((p: { name: string }) => p.name === '星环科技')
-    expect(profile).toBeTruthy()
-
-    const detail = await request(app.getHttpServer())
-      .get(`/api/admin/external-enterprises/${profile.id}`)
-      .set(auth())
-    expect(detail.status).toBe(200)
-    expect(detail.body.data.members.some((m: { userId: string }) => m.userId === 'U1013')).toBe(true)
   })
 })

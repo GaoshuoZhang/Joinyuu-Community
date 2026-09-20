@@ -127,17 +127,23 @@ export class MeService {
       },
     })
     if (!identity) {
-      return { identityLabel: '', level: null, levelName: '', nextLevelExp: null, records: [] }
+      return {
+        identityLabel: '',
+        level: null,
+        levelName: '',
+        currentExperience: 0,
+        currentLevelThreshold: 0,
+        nextLevelThreshold: null,
+        records: [],
+      }
     }
 
     const enterprise = identity.type === 'community_enterprise' && identity.enterpriseId
       ? await this.prisma.enterprise.findUnique({ where: { id: identity.enterpriseId } })
       : null
     const experience = enterprise?.experience ?? identity.experience ?? 0
-    const level = identity.level ?? 1
-    const tier = await this.prisma.levelTier.findUnique({ where: { identityType_level: { identityType: identity.type, level } } })
-    /* 下一级门槛：经验 < threshold 的最小门槛（升序取第一个高于当前经验值者） */
     const tiers = await this.prisma.levelTier.findMany({ where: { identityType: identity.type }, orderBy: { threshold: 'asc' } })
+    const tier = [...tiers].reverse().find((item) => item.threshold <= experience) ?? tiers[0]
     const next = tiers.find((t) => t.threshold > experience)
 
     const targetType = identity.type === 'community_enterprise' ? 'enterprise' : 'individual'
@@ -148,9 +154,11 @@ export class MeService {
     })
     return {
       identityLabel: IDENTITY_LABEL[identity.type] || identity.type,
-      level,
+      level: tier?.level ?? identity.level ?? 1,
       levelName: tier?.label ?? '',
-      nextLevelExp: next ? next.threshold : null,
+      currentExperience: experience,
+      currentLevelThreshold: tier?.threshold ?? 0,
+      nextLevelThreshold: next?.threshold ?? null,
       records: records.map((r) => ({ id: r.id, delta: r.delta, balance: r.balance, reason: r.reason, at: r.at })),
     }
   }

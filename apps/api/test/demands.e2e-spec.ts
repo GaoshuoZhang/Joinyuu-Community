@@ -28,6 +28,17 @@ describe('M1-C demands（状态机 + 立项联动）', () => {
     await app.close()
   })
 
+  it('类别编码返回可读标签，供管理端列表显示和筛选', async () => {
+    await app.get(PrismaService).demand.update({ where: { id: 'D4004' }, data: { category: 'DC004' } })
+    const res = await request(app.getHttpServer())
+      .get('/api/admin/demands?category=DC004&page=1&pageSize=10')
+      .set('Authorization', `Bearer ${token}`)
+
+    expect(res.status).toBe(200)
+    const row = res.body.data.list.find((item: { id: string }) => item.id === 'D4004')
+    expect(row).toMatchObject({ category: 'DC004', categoryLabel: '技术开发' })
+  })
+
   it('审核通过：pending → pending_release', async () => {
     const res = await request(app.getHttpServer())
       .post('/api/admin/demands/D4005/approve')

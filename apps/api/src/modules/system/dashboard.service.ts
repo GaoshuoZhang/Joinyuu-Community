@@ -42,10 +42,11 @@ export class DashboardService {
   async getTodos(): Promise<TodoSummary[]> {
     const c = await this.todoCounts()
     return [
-      { key: 'settle', title: '入驻/合作/身份审核', description: '企业入驻、个体入驻、企业合作与身份绑定待审核', count: c.settle, route: '/approvals' },
+      { key: 'settle', title: '入驻/合作/退驻审核', description: '企业入驻、个体入驻、企业合作与企业退驻待审核', count: c.settle, route: '/approvals' },
       { key: 'demand', title: '需求审核', description: '待审核需求，通过后转待发布', count: c.demand, route: '/demands/review' },
       { key: 'reservation', title: '空间预约审核', description: '待审核的空间预约申请', count: c.reservation, route: '/spaces/reservations' },
       { key: 'article', title: '文章审核', description: '待审核的资讯文章', count: c.article, route: '/contents/submissions' },
+      { key: 'eventEnrollment', title: '活动报名审核', description: '待审核的活动报名申请', count: c.eventEnrollment, route: '/events/enrollments' },
       { key: 'lease', title: '临期租约', description: '15 天内到期的租约，请跟进续期', count: c.lease, route: '/workstations/leases' },
     ]
   }
@@ -146,26 +147,27 @@ export class DashboardService {
     }
   }
 
-  /* 五域待办计数 */
+  /* 待办计数 */
   private async todoCounts(): Promise<Record<string, number>> {
     const config = await this.prisma.systemConfig.findUnique({ where: { id: 1 } })
     const days = config?.leaseExpireRemindDays ?? 15
     const today = formatToday()
     const windowEnd = addDays(today, days)
 
-    const [settle, demand, reservation, article, lease] = await Promise.all([
+    const [settle, demand, reservation, article, eventEnrollment, lease] = await Promise.all([
       this.prisma.application.count({
         where: { status: 'pending', type: { in: ['settle', 'individual', 'cooperation', 'identity'] } },
       }),
       this.prisma.demand.count({ where: { status: 'pending', deletedAt: null } }),
       this.prisma.spaceReservation.count({ where: { status: 'pending' } }),
       this.prisma.article.count({ where: { status: 'pending', deletedAt: null } }),
+      this.prisma.eventEnrollment.count({ where: { status: 'pending' } }),
       /* expiring 派生：active 且非长期租约且 endDate 落在 [today, today+days] */
       this.prisma.lease.count({
         where: { status: 'active', longTerm: false, endDate: { gte: today, lte: windowEnd } },
       }),
     ])
-    return { settle, demand, reservation, article, lease }
+    return { settle, demand, reservation, article, eventEnrollment, lease }
   }
 }
 

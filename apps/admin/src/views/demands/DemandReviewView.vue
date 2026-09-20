@@ -37,6 +37,7 @@ const categoryOptions = ref([
   { label: '全部', value: '' },
   ...dictFallback.demand_category.map((label) => ({ label, value: label })),
 ])
+const categoryText = (demand: Demand) => demand.categoryLabel ?? demand.category
 
 const columns = [
   { colKey: 'title', title: '需求', cell: 'title', width: 210, resizable: true , ellipsis: true},
@@ -143,8 +144,8 @@ onMounted(() => {
   load()
   fetchDictEntries('demand_category')
     .then((entries) => {
-      const labels = entries.filter((e) => e.status === 'enabled').map((e) => ({ label: e.label, value: e.label }))
-      if (labels.length) categoryOptions.value = [{ label: '全部', value: '' }, ...labels]
+      const options = entries.filter((e) => e.status === 'enabled').map((e) => ({ label: e.label, value: e.code }))
+      if (options.length) categoryOptions.value = [{ label: '全部', value: '' }, ...options]
     })
     .catch(() => {
       /* 字典加载失败保留回退词表 */
@@ -214,7 +215,7 @@ onMounted(() => {
         </template>
 
         <template #category="{ row }">
-          <t-tag variant="light">{{ row.category }}</t-tag>
+          <t-tag variant="light">{{ categoryText(row) }}</t-tag>
         </template>
 
         <template #publisher="{ row }">

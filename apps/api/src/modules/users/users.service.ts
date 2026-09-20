@@ -13,7 +13,7 @@ import { IdGeneratorService } from '../../common/id-generator/id-generator.servi
 import { formatNow, formatToday } from '../../common/utils/time'
 import { NotificationService } from '../../common/notify/notification.service'
 import { AppSessionService } from '../../common/app-session/app-session.service'
-import type { ReviewDeletionDto, ReviewRealnameDto } from './dto/review-member-governance.dto'
+import type { ReviewDeletionDto } from './dto/review-member-governance.dto'
 
 /* 用户与社区个体域：读多写少（冻结为写），stats 实时派生（wiki-backend.md §7.2） */
 @Injectable()
@@ -56,6 +56,8 @@ export class UsersService {
     if (existing) throw new ConflictException('该联系电话已被其他用户使用')
 
     const uid = await this.ids.next('U')
+    const realName = dto.realName?.trim() || null
+    const citizenId = dto.citizenId?.trim() || null
     await this.prisma.user.create({
       data: {
         uid,
@@ -63,8 +65,9 @@ export class UsersService {
         phone,
         email,
         gender: dto.gender,
-        realName: dto.realName?.trim() || null,
-        citizenId: dto.citizenId?.trim() || null,
+        realName,
+        citizenId,
+        verifiedAt: realName && citizenId ? formatNow() : null,
         registeredAt: formatToday(),
         lastActiveAt: formatNow(),
         bio: dto.bio?.trim() ?? '',
@@ -257,6 +260,11 @@ export class UsersService {
       data.citizenId = dto.citizenId.trim()
       changed.push('证件号')
     }
+    if (dto.realName !== undefined || dto.citizenId !== undefined) {
+      const realName = dto.realName !== undefined ? dto.realName.trim() : user.realName
+      const citizenId = dto.citizenId !== undefined ? dto.citizenId.trim() : user.citizenId
+      data.verifiedAt = realName && citizenId ? formatNow() : null
+    }
     if (dto.bio !== undefined) {
       data.bio = dto.bio.trim()
       changed.push('简介')
@@ -379,14 +387,10 @@ export class UsersService {
             email: '',
             realName: null,
             citizenId: null,
+            verifiedAt: null,
             passwordHash: null,
             avatar: null,
             bio: '',
-            realnameReviewStatus: 'unverified',
-            realnameSubmittedAt: null,
-            realnameReviewedAt: null,
-            realnameReviewedBy: null,
-            realnameReviewNote: null,
           },
         })
       } else {
@@ -399,62 +403,6 @@ export class UsersService {
     await this.audit.record({
       module: '社区成员', action: dto.action === 'approve' ? '确认账号注销' : '驳回账号注销',
       target: `${request.userId} · ${request.user.nickname}`, detail: note, operator,
-    })
-    return { code: 0 }
-  }
-
-  async realnameReviews(page: number, pageSize: number, status?: string) {
-    const where: Prisma.UserWhereInput = {
-      status: { not: 'deleted' },
-      ...(status ? { realnameReviewStatus: status } : {}),
-    }
-    const [total, rows] = await Promise.all([
-      this.prisma.user.count({ where }),
-      this.prisma.user.findMany({
-        where,
-        orderBy: [{ realnameSubmittedAt: 'desc' }, { uid: 'asc' }],
-        skip: (page - 1) * pageSize,
-        take: pageSize,
-        select: {
-          uid: true, nickname: true, phone: true, realName: true, citizenId: true,
-          realnameReviewStatus: true, realnameSubmittedAt: true, realnameReviewedAt: true,
-          realnameReviewedBy: true, realnameReviewNote: true,
-        },
-      }),
-    ])
-    return {
-      list: rows.map(row => ({ ...row, citizenId: row.citizenId ? `${row.citizenId.slice(0, 4)}**********${row.citizenId.slice(-4)}` : null })),
-      total,
-    }
-  }
-
-  async reviewRealname(uid: string, dto: ReviewRealnameDto, operator: string): Promise<{ code: number }> {
-    const note = dto.note.trim()
-    if (!note) throw new BadRequestException('请填写复核说明')
-    const user = await this.prisma.user.findUnique({ where: { uid } })
-    if (!user) throw new NotFoundException('用户不存在')
-    if (user.realnameReviewStatus !== 'pending' || !user.realName || !user.citizenId) {
-      throw new ConflictException('该实名记录无需复核')
-    }
-    const now = formatNow()
-    await this.prisma.$transaction(async tx => {
-      const changed = await tx.user.updateMany({
-        where: { uid, status: { not: 'deleted' }, realnameReviewStatus: 'pending', realName: user.realName, citizenId: user.citizenId },
-        data: dto.action === 'approve'
-          ? { realnameReviewStatus: 'approved', realnameReviewedAt: now, realnameReviewedBy: operator, realnameReviewNote: note }
-          : { realName: null, citizenId: null, realnameReviewStatus: 'rejected', realnameReviewedAt: now, realnameReviewedBy: operator, realnameReviewNote: note },
-      })
-      if (changed.count !== 1) throw new ConflictException('该实名记录已变化，请重新加载')
-      await this.notify.pushNoticeInTransaction(tx, uid, {
-        type: 'audit_result',
-        title: dto.action === 'approve' ? '实名认证复核通过' : '实名认证复核未通过',
-        content: note,
-        link: '/me/realname',
-      })
-    })
-    await this.audit.record({
-      module: '社区成员', action: dto.action === 'approve' ? '通过实名复核' : '驳回实名复核',
-      target: `${uid} · ${user.nickname}`, detail: note, operator,
     })
     return { code: 0 }
   }

@@ -191,8 +191,7 @@ async function onEnable() {
                 <t-descriptions-item label="行业">{{ enterprise.industry }}</t-descriptions-item>
                 <t-descriptions-item label="规模">{{ enterprise.size || '—' }}</t-descriptions-item>
                 <t-descriptions-item label="成立时间">{{ enterprise.foundedAt || '—' }}</t-descriptions-item>
-                <t-descriptions-item label="首次合作时间">{{ enterprise.firstCooperationAt }}</t-descriptions-item>
-                <t-descriptions-item label="累计合作次数">{{ enterprise.cooperationCount }} 次</t-descriptions-item>
+                <t-descriptions-item label="登记日期">{{ enterprise.registeredAt }}</t-descriptions-item>
                 <t-descriptions-item label="关联成员数">{{ enterprise.members.length }} 人</t-descriptions-item>
               </t-descriptions>
 
