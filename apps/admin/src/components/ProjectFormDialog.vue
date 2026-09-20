@@ -7,7 +7,7 @@ import { AddIcon, DeleteIcon } from 'tdesign-icons-vue-next'
 import { fetchUndertakerOptions, initiateProject, type UndertakerOption } from '@/api/demands'
 import { createProject, updateProject } from '@/api/projects'
 import { fetchExperienceRules } from '@/api/rules'
-import type { Demand, MilestoneInput, Project } from '@/types'
+import type { Demand, Milestone, MilestoneInput, Project } from '@/types'
 
 const RichEditor = defineAsyncComponent(() => import('@/components/RichEditor.vue'))
 
@@ -90,8 +90,8 @@ function buildFixedMilestones(): MilestoneRow[] {
   ]
 }
 
-function normalizeMilestones(rows: { name: string; date: string; owners: string[] }[]): MilestoneRow[] {
-  const list: MilestoneRow[] = rows.map((m) => ({ name: m.name, date: m.date, owners: [...m.owners] }))
+function normalizeMilestones(rows: Milestone[]): MilestoneRow[] {
+  const list: MilestoneRow[] = rows.map((m) => ({ name: m.name, date: m.date, owners: [...(m.owners ?? [])] }))
   /* 首部确保「项目立项」，尾部确保「预期交付」；两固定节点在匹配时也要打 fixed 标记，保证编辑态只读 */
   if (list[0]?.name === FIXED_START_NAME) {
     list[0].fixed = 'start'
@@ -144,7 +144,7 @@ watch(
       form.description = props.project.description
       shares.value = props.project.undertakers.map((t) => t.share)
       milestones.value = props.project.milestones.length
-        ? props.project.milestones.map((m) => ({ name: m.name, date: m.date, owners: [...m.owners] }))
+        ? props.project.milestones.map((m) => ({ name: m.name, date: m.date, owners: [...(m.owners ?? [])] }))
         : [{ name: '', date: '', owners: [] }]
       form.expReward = props.project.expReward ?? ruleExp.value
       customContactsClear()

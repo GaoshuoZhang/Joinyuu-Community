@@ -3,7 +3,7 @@ import { computed, nextTick, onMounted, reactive, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useQueryTab } from '@/utils/navigation'
 import { DialogPlugin, MessagePlugin } from 'tdesign-vue-next'
-import type { FormProps } from 'tdesign-vue-next'
+import type { CustomValidateResolveType, FormProps } from 'tdesign-vue-next'
 import { ArrowLeftIcon, BrowseIcon, BrowseOffIcon } from 'tdesign-icons-vue-next'
 import StatusTag from '@/components/StatusTag.vue'
 import IdentityTags from '@/components/IdentityTags.vue'
@@ -242,10 +242,15 @@ const resetPwdForm = reactive({ password: '', confirmPassword: '' })
 /* 确认密码一致性校验（TDesign 自定义校验器签名） */
 function validateConfirmPassword(
   _value: unknown,
-  params: { password: string; confirmPassword: string },
-): { result: boolean; message?: string } {
-  if (params.confirmPassword !== params.password) return { result: false, message: '两次输入的密码不一致' }
-  return { result: true }
+  params?: {
+    formData: Record<string, unknown>
+    name: string
+    password?: string
+    confirmPassword?: string
+  },
+): CustomValidateResolveType {
+  if (params!.confirmPassword !== params!.password) return { result: false, message: '两次输入的密码不一致' }
+  return true
 }
 
 const resetPwdRules: FormProps['rules'] = {
@@ -724,7 +729,7 @@ onMounted(async () => {
                     :data="currentDemands"
                     :columns="demandColumns"
                     :loading="recordsLoading"
-                    @row-click="({ row }) => goDemandRecord(row)"
+                    @row-click="({ row }: { row: UserDemandRecord }) => goDemandRecord(row)"
                   >
                     <template #status="{ row }">
                       <t-tag v-if="row.deletedAt" theme="default" variant="light">已归档</t-tag>
@@ -746,7 +751,7 @@ onMounted(async () => {
                     :data="historyDemands"
                     :columns="demandColumns"
                     :loading="recordsLoading"
-                    @row-click="({ row }) => goDemandRecord(row)"
+                    @row-click="({ row }: { row: UserDemandRecord }) => goDemandRecord(row)"
                   >
                     <template #status="{ row }">
                       <t-tag v-if="row.deletedAt" theme="default" variant="light">已归档</t-tag>
@@ -779,7 +784,7 @@ onMounted(async () => {
                     :data="currentProjects"
                     :columns="projectColumns"
                     :loading="recordsLoading"
-                    @row-click="({ row }) => goProjectRecord(row)"
+                    @row-click="({ row }: { row: UserProjectRecord }) => goProjectRecord(row)"
                   >
                     <template #status="{ row }">
                       <t-tag v-if="row.deletedAt" theme="default" variant="light">已归档</t-tag>
@@ -801,7 +806,7 @@ onMounted(async () => {
                     :data="historyProjects"
                     :columns="projectColumns"
                     :loading="recordsLoading"
-                    @row-click="({ row }) => goProjectRecord(row)"
+                    @row-click="({ row }: { row: UserProjectRecord }) => goProjectRecord(row)"
                   >
                     <template #status="{ row }">
                       <t-tag v-if="row.deletedAt" theme="default" variant="light">已归档</t-tag>
@@ -834,7 +839,7 @@ onMounted(async () => {
                     :data="currentEvents"
                     :columns="eventColumns"
                     :loading="recordsLoading"
-                    @row-click="({ row }) => goEventRecord(row)"
+                    @row-click="({ row }: { row: UserEventRecord }) => goEventRecord(row)"
                   >
                     <template #status="{ row }">
                       <t-tag v-if="row.deletedAt" theme="default" variant="light">已归档</t-tag>
@@ -857,7 +862,7 @@ onMounted(async () => {
                     :data="historyEvents"
                     :columns="eventColumns"
                     :loading="recordsLoading"
-                    @row-click="({ row }) => goEventRecord(row)"
+                    @row-click="({ row }: { row: UserEventRecord }) => goEventRecord(row)"
                   >
                     <template #status="{ row }">
                       <t-tag v-if="row.deletedAt" theme="default" variant="light">已归档</t-tag>
@@ -891,7 +896,7 @@ onMounted(async () => {
                     :data="currentLeases"
                     :columns="recordLeaseColumns"
                     :loading="recordsLoading"
-                    @row-click="({ row }) => goLeaseRecord(row)"
+                    @row-click="({ row }: { row: UserLeaseRecord }) => goLeaseRecord(row)"
                   >
                     <template #term="{ row }">{{ recordLeaseTerm(row) }}</template>
                     <template #status="{ row }">
@@ -915,7 +920,7 @@ onMounted(async () => {
                     :data="historyLeases"
                     :columns="recordLeaseColumns"
                     :loading="recordsLoading"
-                    @row-click="({ row }) => goLeaseRecord(row)"
+                    @row-click="({ row }: { row: UserLeaseRecord }) => goLeaseRecord(row)"
                   >
                     <template #term="{ row }">{{ recordLeaseTerm(row) }}</template>
                     <template #status="{ row }">

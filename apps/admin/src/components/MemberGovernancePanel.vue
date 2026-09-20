@@ -66,7 +66,7 @@ onMounted(load)
       <ColumnController v-model="visibleKeys" storage-key="member-governance-deletions" :columns="allColumns.map(column => ({ key: column.colKey, title: column.title }))" />
     </div>
     <ListErrorState v-if="loadError" :message="loadError" :loading="loading" @retry="load" />
-    <t-table row-key="id" :data="rows" :columns="columns" :loading="loading" table-layout="fixed" hover resizable :pagination="{ current: page, pageSize: 20, total, showPageSize: false }" @page-change="value => { page = value.current; load() }">
+    <t-table row-key="id" :data="rows" :columns="columns" :loading="loading" table-layout="fixed" hover resizable :pagination="{ current: page, pageSize: 20, total, showPageSize: false }" @page-change="(value: { current: number }) => { page = value.current; load() }">
       <template #user="{ row }"><span>{{ row.user.nickname }}</span><t-tag class="id-tag-block" size="small" variant="light">{{ row.userId }}</t-tag></template>
       <template #id="{ row }"><t-tag class="id-tag" size="small" variant="light">{{ row.id }}</t-tag></template>
       <template #effectiveAt="{ row }">{{ row.effectiveAt || '—' }}<p v-if="row.status === 'cooling'" class="field-help">{{ remaining(row) }}</p></template>

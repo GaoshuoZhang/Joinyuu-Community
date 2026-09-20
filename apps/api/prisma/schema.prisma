@@ -978,6 +978,18 @@ model SystemConfig {
    */
   realnameRequired      Boolean @default(false)
   /**
+   * P1 实名核验（权威二要素）：启用开关 + 供应商单选（aliyun|tencent|空=未选）
+   * + 非机密参数 + 凭据环境变量名（仅存变量名）+ 连通性测试结果（变更即重置，需重测）
+   */
+  realnameVerifyEnabled       Boolean @default(false)
+  realnameVerifyProvider      String  @default("") @db.VarChar(16)
+  realnameVerifyConfig        Json?
+  realnameVerifyCredentialEnv Json?
+  /** 凭据来源：inline=后台直接填写密钥（只写、脱敏、不入审计）| env=登记环境变量名 */
+  realnameVerifyCredentialMode String @default("inline") @db.VarChar(8)
+  realnameVerifyTestOk        Boolean @default(false)
+  realnameVerifyTestedAt      String? @db.VarChar(16)
+  /**
    * 首页轮播图总开关：关闭后客户端首页不展示轮播区域
    */
   homeCarouselOpen      Boolean @default(true)
@@ -1087,10 +1099,15 @@ model AccountDeletionRequest {
 
 // 用户通知偏好（mutedTypes：被静音的通知类型；system 账号与安全通知不可静音）
 model UserNotificationPreference {
-  userId     String   @id @db.VarChar(16)
-  mutedTypes String[] @default([])
-  updatedAt  String   @db.VarChar(16)
-  user       User     @relation(fields: [userId], references: [uid], onDelete: Cascade)
+  userId          String   @id @db.VarChar(16)
+  mutedTypes      String[] @default([])
+  /// P0 安静时段（HH:mm；两者都填才生效；security 类通知不受影响）
+  quietHoursStart String?  @db.VarChar(5)
+  quietHoursEnd   String?  @db.VarChar(5)
+  /// P0 按渠道的营销接收偏好（{ sms?: boolean; email?: boolean; inapp?: boolean }），安全类不受影响
+  channelPrefs    Json?
+  updatedAt       String   @db.VarChar(16)
+  user            User     @relation(fields: [userId], references: [uid], onDelete: Cascade)
 }
 
 
@@ -1111,6 +1128,135 @@ model EnterpriseInvitation {
   @@index([enterpriseId])
   @@index([inviteeUid, status, expiresAt])
   @@index([phone])
+}
+
+// ---------- P0 消息中心（2026-09-20：渠道配置 / 模板中心 / 发送治理 / 短信验证码） ----------
+// 设计要点：凭据只经环境变量注入（credentialEnv 仅存变量名，不存值），便于 Secret Manager 轮换；
+// 模板版本化 + 审批；Outbox 承担幂等、重试退避、死信与投递日志；用户偏好与安静时段在 Outbox 侧生效。
+
+// 消息渠道配置（sms / email / inapp）；同 kind+provider 唯一
+model MessageChannel {
+  id            String  @id @db.VarChar(16) // MC 前缀
+  kind          String  @db.VarChar(16) // sms | email | inapp
+  provider      String  @db.VarChar(32) // aliyun_sms | tencent_sms | smtp | inapp | dry_run
+  name          String  @db.VarChar(64)
+  enabled       Boolean @default(false)
+  /// 非机密配置：签名 / 发件人 / Region / Endpoint / 模板映射 / 默认模板等
+  config        Json?
+  /// 凭据环境变量名映射（仅存变量名，如 { accessKeyId: "ALIYUN_SMS_ACCESS_KEY_ID" }）
+  credentialEnv Json?
+  /// 凭据来源：env=登记环境变量名（默认，兼容既有数据）| inline=后台直接填写密钥（只写、脱敏、不入审计）
+  credentialMode String @default("env") @db.VarChar(8)
+  /// 每日发送上限，0 = 不限
+  dailyLimit    Int     @default(0)
+  remark        String? @db.VarChar(255)
+  createdAt     String  @db.VarChar(16)
+  updatedAt     String  @db.VarChar(16)
+  updatedBy     String  @db.VarChar(64)
+
+  @@unique([kind, provider])
+  @@index([kind, enabled])
+}
+
+// 消息模板（code 唯一）；变量白名单 + 当前生效版本号
+model MessageTemplate {
+  id             String   @id @db.VarChar(16) // MT 前缀
+  code           String   @db.VarChar(64) // verify_code / account_security / event_changed ...
+  name           String   @db.VarChar(64)
+  kind           String   @db.VarChar(16) // sms | email | inapp
+  /// security 安全类（强制送达）| marketing 营销类（可退订、受安静时段与偏好约束）
+  category       String   @default("security") @db.VarChar(16)
+  /// 允许的模板变量白名单（如 ["code","minutes"]），渲染时校验
+  variables      Json?
+  status         String   @default("draft") @db.VarChar(16) // draft | published
+  currentVersion Int      @default(0)
+  updatedAt      String   @db.VarChar(16)
+  updatedBy      String   @db.VarChar(64)
+  versions       MessageTemplateVersion[]
+
+  @@unique([code])
+  @@index([kind, status])
+}
+
+// 消息模板版本（草稿 → 待审 → 通过/驳回 → 发布；支持回滚到历史版本）
+model MessageTemplateVersion {
+  id         String          @id @db.VarChar(16) // MV 前缀
+  templateId String          @db.VarChar(16)
+  version    Int
+  subject    String?         @db.VarChar(128) // 邮件主题；短信/站内信为空
+  body       String          @db.Text
+  /// draft | pending | approved | rejected | published | archived
+  status     String          @default("draft") @db.VarChar(16)
+  reviewedBy String?         @db.VarChar(64)
+  reviewedAt String?         @db.VarChar(16)
+  reviewNote String?         @db.VarChar(255)
+  createdBy  String          @db.VarChar(64)
+  createdAt  String          @db.VarChar(16)
+  template   MessageTemplate @relation(fields: [templateId], references: [id], onDelete: Cascade)
+
+  @@unique([templateId, version])
+  @@index([templateId, status])
+}
+
+// 发送队列（Outbox）：幂等键唯一；重试退避 + 死信；与投递日志配合做可观测
+model OutboxMessage {
+  id                String  @id @db.VarChar(16) // OB 前缀
+  idempotencyKey    String  @db.VarChar(128)
+  channelKind       String  @db.VarChar(16) // sms | email | inapp
+  templateCode      String  @db.VarChar(64)
+  recipient         String  @db.VarChar(128) // 手机号 / 邮箱 / uid
+  userId            String? @db.VarChar(16)
+  /// 模板变量（渲染用）
+  payload           Json?
+  /// pending | sending | sent | failed（待重试）| dead（死信）| skipped（偏好/安静时段跳过）
+  status            String  @default("pending") @db.VarChar(16)
+  priority          Int     @default(0)
+  attempts          Int     @default(0)
+  maxAttempts       Int     @default(3)
+  nextAttemptAt     String? @db.VarChar(16)
+  lastError         String? @db.VarChar(512)
+  providerMessageId String? @db.VarChar(128)
+  /// 安全类消息：不受用户营销偏好与安静时段约束
+  security          Boolean @default(false)
+  createdAt         String  @db.VarChar(16)
+  updatedAt         String  @db.VarChar(16)
+  sentAt            String? @db.VarChar(16)
+
+  @@unique([idempotencyKey])
+  @@index([status, nextAttemptAt])
+  @@index([channelKind, status])
+  @@index([userId, createdAt])
+}
+
+// 投递日志（每次发送尝试一条；渠道/收件人/结果可检索）
+model MessageDeliveryLog {
+  id                String @id @db.VarChar(16) // ML 前缀
+  outboxId          String @db.VarChar(16)
+  channelKind       String @db.VarChar(16)
+  provider          String @db.VarChar(32)
+  recipient         String @db.VarChar(128)
+  attempt           Int
+  status            String @db.VarChar(16) // sent | failed | skipped
+  providerMessageId String? @db.VarChar(128)
+  error             String? @db.VarChar(512)
+  costMs            Int    @default(0)
+  at                String @db.VarChar(16)
+
+  @@index([outboxId])
+  @@index([channelKind, at])
+}
+
+// 渠道合规同意 / 营销退订（security 强制发送，不查询此表）
+model ContactConsent {
+  id          Int     @id @default(autoincrement())
+  userId      String  @db.VarChar(16)
+  channelKind String  @db.VarChar(16) // sms | email
+  purpose     String  @db.VarChar(16) // security | marketing
+  consented   Boolean @default(true)
+  at          String  @db.VarChar(16)
+
+  @@unique([userId, channelKind, purpose])
+  @@index([userId])
 }
 
 // 负责人转移请求（请求制：发起 → 对方接受/拒绝；接受后变更 contactUserId）

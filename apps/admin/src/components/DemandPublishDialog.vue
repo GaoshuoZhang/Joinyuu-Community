@@ -125,7 +125,7 @@ const customIdentityOptions = [
   { label: identityTypeMap.external_company, value: 'external_company' },
 ]
 
-const form = reactive<DemandPublishPayload & { customIdentityType: CustomPublisherIdentityType | '' }>({
+const form = reactive<DemandPublishPayload & { customIdentityType: CustomPublisherIdentityType | '' } & { publisherValue: string }>({
   publisherValue: '',
   title: '',
   category: '',

@@ -91,6 +91,9 @@ export const permissionCatalog: SeedPermission[] = [
   { code: '/system/trash', name: '归档管理', module: '系统管理', authType: 'menu', sort: 89 },
   { code: '/system/export', name: '数据导出', module: '系统管理', authType: 'menu', sort: 90 },
   { code: '/system/policies', name: '协议与政策', module: '系统管理', authType: 'menu', sort: 94 },
+  { code: '/system/message-channels', name: '渠道配置', module: '系统管理', authType: 'menu', sort: 95 },
+  { code: '/system/message-templates', name: '模板中心', module: '系统管理', authType: 'menu', sort: 96 },
+  { code: '/system/outbox', name: '发送记录', module: '系统管理', authType: 'menu', sort: 97 },
 ]
 
 /* 内置角色（超级管理员 '*' 全量；其余按模块授予） */

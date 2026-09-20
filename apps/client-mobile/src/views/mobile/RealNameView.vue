@@ -6,9 +6,13 @@ import { ApiError } from '@/api/http'
 import EmptyBlock from '@/components/shared/EmptyBlock.vue'
 import ListSkeleton from '@/components/ListSkeleton.vue'
 import { useUnsavedGuard } from '@/composables/useUnsavedGuard'
+import { useConfigStore } from '@/stores/config'
 
-/* 实名认证：未认证 → 姓名 + 身份证号提交；
- * 已认证 → 脱敏展示（真实后端为三要素核验，且修改需联系运营）。 */
+/* 实名核验（P1）：后台启用权威二要素核验并测试联通时展示「实名认证」，否则为「身份信息登记」；
+ * 未完成 → 姓名 + 身份证号提交；已完成 → 脱敏展示（修改需联系运营）。 */
+const configStore = useConfigStore()
+const label = computed(() => configStore.realnameLabel)
+const isVerifiedMode = computed(() => configStore.realnameMode === 'verified')
 const loading = ref(true)
 const error = ref('')
 const verified = ref(false)
@@ -56,7 +60,7 @@ async function onSubmit() {
   submitting.value = true
   try {
     await submitRealName({ realName: form.realName.trim(), citizenId })
-    Toast('实名认证已完成')
+    Toast(isVerifiedMode.value ? '实名认证已完成' : '身份信息登记已完成')
     await load()
   } catch (e) {
     Toast(e instanceof ApiError ? e.message : '提交失败，请稍后重试')
@@ -74,8 +78,8 @@ async function onSubmit() {
     <template v-else-if="verified">
       <section class="m-card">
         <div class="sec-head">
-          <h2 class="sec-title no-margin">实名信息</h2>
-          <Tag size="small" variant="light" theme="success">已认证</Tag>
+          <h2 class="sec-title no-margin">{{ label }}</h2>
+          <Tag size="small" variant="light" theme="success">{{ isVerifiedMode ? '已认证' : '已登记' }}</Tag>
         </div>
         <div class="read-row">
           <span class="read-label">真实姓名</span>
@@ -86,18 +90,22 @@ async function onSubmit() {
           <span class="read-value">{{ info.citizenIdMasked || '—' }}</span>
         </div>
         <div v-if="info.verifiedAt" class="read-row">
-          <span class="read-label">认证时间</span>
+          <span class="read-label">{{ isVerifiedMode ? '认证时间' : '登记时间' }}</span>
           <span class="read-value">{{ info.verifiedAt }}</span>
         </div>
       </section>
-      <p class="tip">实名信息仅用于社区身份核验，如需修改请联系社区运营。</p>
+      <p class="tip">
+        {{ isVerifiedMode
+          ? '实名信息仅用于社区身份核验，如需修改请联系社区运营。'
+          : '身份信息仅用于社区身份核验，如需修改请联系社区运营。' }}
+      </p>
     </template>
 
     <template v-else>
       <NoticeBar
         visible
         theme="info"
-        content="完成实名认证后可享受完整社区服务（企业合作、空间预约等）。"
+        :content="isVerifiedMode ? '完成实名认证后可享受完整社区服务（企业合作、空间预约等）。' : '完成身份信息登记后可享受完整社区服务（企业合作、空间预约等）。'"
       />
       <section class="m-card">
         <div class="field">
@@ -111,10 +119,14 @@ async function onSubmit() {
           <p v-if="errors.citizenId" class="field-error">{{ errors.citizenId }}</p>
         </div>
         <Button class="mobile-sticky-action" theme="primary" size="large" block :disabled="!canSubmit" :loading="submitting" @click="onSubmit">
-          {{ submitting ? '提交中…' : '提交认证' }}
+          {{ submitting ? '提交中…' : (isVerifiedMode ? '提交认证' : '提交登记') }}
         </Button>
       </section>
-      <p class="tip">信息仅用于身份核验，不会公开展示。提交并通过规则校验后立即生效。</p>
+      <p class="tip">
+        {{ isVerifiedMode
+          ? '信息仅用于身份核验，不会公开展示。提交后将经权威核验（姓名与身份证号一致）后生效。'
+          : '信息仅用于身份核验，不会公开展示。提交并通过规则校验后立即生效。' }}
+      </p>
     </template>
   </div>
 </template>

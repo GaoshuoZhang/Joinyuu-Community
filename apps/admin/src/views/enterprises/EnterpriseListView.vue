@@ -214,7 +214,7 @@ onMounted(() => {
         :pagination="pagination"
         empty="暂无企业"
         @page-change="onPageChange"
-        @row-click="({ row }) => goDetail(row)"
+        @row-click="({ row }: { row: Enterprise }) => goDetail(row)"
       >
         <template #name="{ row }">
           <div class="ent-cell">

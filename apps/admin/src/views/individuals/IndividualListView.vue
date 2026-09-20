@@ -182,7 +182,7 @@ onMounted(load)
         :pagination="pagination"
         empty="暂无社区个体"
         @page-change="onPageChange"
-        @row-click="({ row }) => goDetail(row)"
+        @row-click="({ row }: { row: User }) => goDetail(row)"
       >
         <template #user="{ row }">
           <div class="user-cell">

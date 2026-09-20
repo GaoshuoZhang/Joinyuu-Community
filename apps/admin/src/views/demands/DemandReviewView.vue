@@ -205,7 +205,7 @@ onMounted(() => {
         empty="暂无待审核的需求"
         @page-change="onPageChange"
         @sort-change="onSortChange"
-        @row-click="({ row }) => goDetail(row)"
+        @row-click="({ row }: { row: Demand }) => goDetail(row)"
       >
         <template #title="{ row }">
           <div class="demand-cell">

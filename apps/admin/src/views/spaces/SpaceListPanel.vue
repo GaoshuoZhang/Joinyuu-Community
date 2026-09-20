@@ -122,7 +122,7 @@ onMounted(load)
         :columns="visibleColumns"
         :loading="loading"
         empty="暂无空间"
-        @row-click="({ row }) => goDetail(row)"
+        @row-click="({ row }: { row: Space }) => goDetail(row)"
       >
         <template #name="{ row }">
           <div class="cell-title">{{ row.name }}</div>

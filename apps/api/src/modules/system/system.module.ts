@@ -9,10 +9,12 @@ import { DictsController } from './dicts.controller'
 import { DictsService } from './dicts.service'
 import { DashboardController } from './dashboard.controller'
 import { DashboardService } from './dashboard.service'
+import { RealnameModule } from '../../common/realname/realname.module'
 
-/* 系统管理域（wiki-backend.md §7.15/§7.16）：
- * 通知中心 / 操作日志查询 / 系统配置 / 数据字典 / 工作台聚合（dashboard + todos），共 12 端点。 */
+/* 系统管理域（wiki-backend.md §7.15/§7.16/§7.17）：
+ * 通知中心 / 操作日志查询 / 系统配置（含实名核验配置与联通测试）/ 数据字典 / 工作台聚合。 */
 @Module({
+  imports: [RealnameModule],
   controllers: [
     NotificationsController,
     AuditLogsController,

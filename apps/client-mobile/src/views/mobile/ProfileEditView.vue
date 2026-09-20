@@ -5,6 +5,7 @@ import { Button, Cell, CellGroup, Input, Radio, RadioGroup, Textarea, Toast } fr
 import { fetchMe, fetchRealName, updateMe } from '@/api/me'
 import { ApiError } from '@/api/http'
 import { useAuthStore } from '@/stores/auth'
+import { useConfigStore } from '@/stores/config'
 import { useUnsavedGuard } from '@/composables/useUnsavedGuard'
 import AvatarUploader from '@/components/shared/AvatarUploader.vue'
 import EmptyBlock from '@/components/shared/EmptyBlock.vue'
@@ -20,11 +21,14 @@ const baseline = ref('')
 const formSnapshot = computed(() => JSON.stringify(form))
 const { markClean } = useUnsavedGuard(() => loaded.value && formSnapshot.value !== baseline.value)
 
-/* 实名认证状态（入口 note）：null 表示加载中/未知 */
+/* 实名入口（P1）：后端启用并测试联通权威核验时称「实名认证」，否则称「身份信息登记」 */
+const configStore = useConfigStore()
 const realNameVerified = ref<boolean | null>(null)
 const realNameNote = computed(() => {
   if (realNameVerified.value === null) return ''
-  return realNameVerified.value ? '已认证' : '未认证'
+  const verifiedWord = configStore.realnameMode === 'verified' ? '已认证' : '已登记'
+  const unverifiedWord = configStore.realnameMode === 'verified' ? '未认证' : '未登记'
+  return realNameVerified.value ? verifiedWord : unverifiedWord
 })
 
 const nicknameError = computed(() => (form.nickname.trim() ? '' : '请输入昵称'))
@@ -128,7 +132,7 @@ async function onSave() {
     </div>
 
     <CellGroup theme="card" class="security">
-      <Cell title="实名认证" :note="realNameNote" arrow @click="router.push('/me/realname')" />
+      <Cell :title="configStore.realnameLabel" :note="realNameNote" arrow @click="router.push('/me/realname')" />
     </CellGroup>
     </template>
   </div>

@@ -3,6 +3,8 @@ import type { DictEntry, SystemConfig } from '@prisma/client'
 import { PrismaService } from '../../../common/prisma/prisma.service'
 import { RedisService } from '../../../common/redis/redis.service'
 import { CACHE_KEYS, CACHE_TTL, dictCacheKey } from '../../../common/redis/cache-keys'
+import { minioConfigView } from '../../../common/storage/minio-config'
+import { realnameVerificationView } from '../../../common/realname/realname-config'
 
 /** App 端下发允许的字典类型（与 admin DICT_TYPE_LABELS 对齐） */
 const APP_DICT_TYPES: readonly string[] = [
@@ -21,6 +23,8 @@ export interface SiteConfigDto {
   demandOpen: boolean
   reservationOpen: boolean
   homeCarouselOpen: boolean
+  /** P1 实名核验：verified=「实名认证」（后端已启用并测试联通）；registration=「身份信息登记」 */
+  realnameMode: 'verified' | 'registration'
 }
 
 export interface DictItemDto {
@@ -58,6 +62,7 @@ export class ConfigService {
       demandOpen: Boolean(full.demandOpen),
       reservationOpen: Boolean(full.reservationOpen),
       homeCarouselOpen: Boolean(full.homeCarouselOpen),
+      realnameMode: full.realnameMode === 'verified' ? 'verified' : 'registration',
     }
   }
 
@@ -97,6 +102,8 @@ export class ConfigService {
   }
 }
 
+/* 回源结构必须与 admin 的 toSystemConfigDto 逐字段一致（两者共用 config:system 缓存键）。
+ * MinIO 段统一走 minioConfigView，缓存与下发都不含 SecretKey 原文（P0 密钥安全）。 */
 function toFullSystemConfig(config: SystemConfig): Record<string, unknown> {
   return {
     siteName: config.siteName,
@@ -110,13 +117,8 @@ function toFullSystemConfig(config: SystemConfig): Record<string, unknown> {
     leaseExpireRemindDays: config.leaseExpireRemindDays,
     uploadMaxSizeMb: config.uploadMaxSizeMb,
     passwordExpireDays: config.passwordExpireDays,
-    minioEnabled: config.minioEnabled,
-    minioEndpoint: config.minioEndpoint,
-    minioPort: config.minioPort,
-    minioUseSsl: config.minioUseSsl,
-    minioAccessKey: config.minioAccessKey,
-    minioSecretKey: config.minioSecretKey,
-    minioBucket: config.minioBucket,
+    ...minioConfigView(config),
+    ...realnameVerificationView(config),
     updatedAt: config.updatedAt,
     updatedBy: config.updatedBy,
   }

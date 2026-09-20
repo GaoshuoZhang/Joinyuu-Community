@@ -3,6 +3,7 @@ import { Cron, CronExpression } from '@nestjs/schedule'
 import { PrismaService } from '../common/prisma/prisma.service'
 import { IdGeneratorService } from '../common/id-generator/id-generator.service'
 import { TrashService } from '../modules/system/trash/trash.service'
+import { OutboxService } from '../modules/messaging/outbox.service'
 import { formatNow, formatNowSec, formatToday } from '../common/utils/time'
 import { PointsEngineService } from '../common/engine/points-engine/points-engine.service'
 
@@ -29,6 +30,7 @@ export class SchedulerService {
     private readonly ids: IdGeneratorService,
     private readonly trash: TrashService,
     private readonly points: PointsEngineService,
+    private readonly outbox: OutboxService,
   ) {}
 
   /** 任务注册表（监控页展示 + 手动触发入口） */
@@ -50,6 +52,8 @@ export class SchedulerService {
       { name: 'lease-expiring-notify', cron: '每天 09:00', enabled: true, run: () => this.scanLeaseExpiring() },
       { name: 'archive-auto-archive', cron: '每 5 分钟', enabled: true, run: () => this.trash.runAutoArchive() },
       { name: 'archive-auto-purge', cron: '每 5 分钟', enabled: true, run: () => this.trash.runAutoPurge() },
+      /* P0 消息投递：扫描 Outbox 到期消息，重试退避与死信由 OutboxService 内部处理 */
+      { name: 'message-outbox-dispatch', cron: '每 30 秒', enabled: true, run: () => this.outbox.processPending(50) },
     ]
   }
 
@@ -131,6 +135,11 @@ export class SchedulerService {
   @Cron(CronExpression.EVERY_5_MINUTES, { name: 'archive-auto-purge' })
   async handleAutoPurge(): Promise<void> {
     await this.runJob('archive-auto-purge')
+  }
+
+  @Cron(CronExpression.EVERY_30_SECONDS, { name: 'message-outbox-dispatch' })
+  async handleOutboxDispatch(): Promise<void> {
+    await this.runJob('message-outbox-dispatch')
   }
 
   /** 到点发布扫描：状态迁移与通知写入置于同一事务，避免"已发布但通知缺失"的部分失败 */

@@ -2,20 +2,46 @@ import { Body, Controller, Get, HttpCode, Post, Req, UnauthorizedException } fro
 import { Public } from '../../../common/decorators/public.decorator'
 import type { AppAuthenticatedRequest } from '../../../common/interfaces/app-authenticated-request'
 import { AuthService, type AppLoginResult } from './auth.service'
+import { SmsCodeService, type SmsPurpose } from '../../messaging/sms-code.service'
 import { RegisterDto } from './dto/register.dto'
 import { AppLoginDto } from './dto/login.dto'
 import { ResetPasswordDto } from './dto/reset-password.dto'
+import { SendSmsCodeDto } from './dto/send-sms-code.dto'
 import { ChangePhoneDto } from '../me/dto/change-phone.dto'
 
 @Controller('api/app/auth')
 export class AuthController {
-  constructor(private readonly auth: AuthService) {}
+  constructor(
+    private readonly auth: AuthService,
+    private readonly sms: SmsCodeService,
+  ) {}
 
   /** 图形验证码：返回 { captchaId, image(dataURL) }；按客户端 IP 限流 */
   @Public()
   @Get('captcha')
   captcha(@Req() req: AppAuthenticatedRequest): Promise<{ captchaId: string; image: string }> {
     return this.auth.generateCaptcha(req.ip ?? req.socket.remoteAddress ?? '')
+  }
+
+  /** 短信通道是否可用：客户端据此决定走短信验证码还是图形验证码 */
+  @Public()
+  @Get('sms/available')
+  async smsAvailable(): Promise<{ available: boolean }> {
+    return { available: await this.sms.isAvailable() }
+  }
+
+  /** 发送短信验证码（P0）：手机号/ IP / 设备三维频控；安全类消息强制送达 */
+  @Public()
+  @HttpCode(200)
+  @Post('sms/send')
+  sendSmsCode(
+    @Req() req: AppAuthenticatedRequest,
+    @Body() dto: SendSmsCodeDto,
+  ): Promise<{ expiresInSec: number; devCode?: string }> {
+    return this.sms.send(dto.phone, dto.purpose as SmsPurpose, {
+      ip: req.ip ?? req.socket.remoteAddress ?? '',
+      deviceId: dto.deviceId,
+    })
   }
 
   @Public()

@@ -38,11 +38,11 @@ describe('M1.5 R6 系统监控', () => {
     expect(data.service.db.status).toBe('up')
     expect(data.service.redis.status).toBe('up')
     expect(Array.isArray(data.jobs)).toBe(true)
-    expect(data.jobs.length).toBe(6)
+    expect(data.jobs.length).toBe(7)
     const names = data.jobs.map((j: { name: string }) => j.name)
     expect(names).toContain('articles-scheduled-publish')
     expect(names).toEqual(
-      expect.arrayContaining(['archive-auto-archive', 'archive-auto-purge']),
+      expect.arrayContaining(['archive-auto-archive', 'archive-auto-purge', 'message-outbox-dispatch']),
     )
   })
 

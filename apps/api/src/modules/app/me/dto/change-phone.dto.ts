@@ -1,16 +1,21 @@
-import { IsNotEmpty, IsString, Matches } from 'class-validator'
+import { IsNotEmpty, IsOptional, IsString, Matches } from 'class-validator'
 
-/** 更换绑定手机号（新号图形验证码；短信通道接入后替换 captcha） */
+/** 更换绑定手机号（新号图形验证码与短信验证码二选一；短信通道启用后优先短信码） */
 export class ChangePhoneDto {
   @IsNotEmpty({ message: '请输入新手机号' })
   @Matches(/^1\d{10}$/, { message: '手机号格式不正确' })
   newPhone!: string
 
-  @IsNotEmpty({ message: '请先获取验证码' })
+  @IsOptional()
   @IsString()
-  captchaId!: string
+  captchaId?: string
 
-  @IsNotEmpty({ message: '请输入验证码' })
+  @IsOptional()
   @IsString()
-  captchaCode!: string
+  captchaCode?: string
+
+  /** 短信验证码（用途 change_phone）；与图形验证码二选一 */
+  @IsOptional()
+  @Matches(/^\d{6}$/, { message: '短信验证码格式不正确' })
+  smsCode?: string
 }

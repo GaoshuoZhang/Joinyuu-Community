@@ -303,7 +303,7 @@ onMounted(() => {
         :pagination="pagination"
         empty="暂无预约"
         @page-change="onPageChange"
-        @row-click="({ row }) => openDetail(row)"
+        @row-click="({ row }: { row: SpaceReservation }) => openDetail(row)"
       >
         <template #user="{ row }">
           <div class="user-cell">

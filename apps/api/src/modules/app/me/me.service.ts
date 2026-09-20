@@ -11,6 +11,7 @@ import { PrismaService } from '../../../common/prisma/prisma.service'
 import { RedisService } from '../../../common/redis/redis.service'
 import { IdGeneratorService } from '../../../common/id-generator/id-generator.service'
 import { NotificationService } from '../../../common/notify/notification.service'
+import { SmsCodeService } from '../../messaging/sms-code.service'
 import { AppSessionService } from '../../../common/app-session/app-session.service'
 import { StorageService } from '../../../common/storage/storage.service'
 import { formatNow } from '../../../common/utils/time'
@@ -22,7 +23,6 @@ import type { DeletionRequestDto } from './dto/deletion-request.dto'
 
 /** 图形验证码存储前缀（与 app auth 共用同一键空间，一次性消费） */
 const CAPTCHA_PREFIX = 'captcha:app:'
-
 /** 身份类型 → 展示标签（经验页 identityLabel 用） */
 const IDENTITY_LABEL: Record<string, string> = {
   individual: '个人用户',
@@ -42,6 +42,7 @@ export class MeService {
     private readonly redis: RedisService,
     private readonly ids: IdGeneratorService,
     private readonly notify: NotificationService,
+    private readonly sms: SmsCodeService,
     private readonly sessions: AppSessionService,
     private readonly storage: StorageService,
   ) {}
@@ -182,10 +183,9 @@ export class MeService {
     return { code: 0 }
   }
 
-  /** 更换绑定手机号（新号图形验证码）；占用校验 → 更新 → 站内信 */
+  /** 更换绑定手机号（短信验证码优先，未启用时回退图形验证码）；占用校验 → 更新 → 站内信 */
   async changePhone(uid: string, dto: ChangePhoneDto): Promise<{ code: number }> {
-    const captchaOk = await this.verifyCaptcha(dto.captchaId, dto.captchaCode)
-    if (!captchaOk) throw new BadRequestException('验证码错误或已过期')
+    await this.verifyContactChange(dto)
 
     const newPhone = dto.newPhone.trim()
     if (!/^1\d{10}$/.test(newPhone)) throw new BadRequestException('手机号格式不正确')
@@ -199,6 +199,18 @@ export class MeService {
       content: '您绑定的手机号已更换成功，请牢记新号码登录。',
     })
     return { code: 0 }
+  }
+
+  /** 换绑手机号身份校验（P0 短信验证码）：提供 smsCode 时证明新号归属，否则回退图形验证码 */
+  private async verifyContactChange(dto: ChangePhoneDto): Promise<void> {
+    const smsCode = dto.smsCode?.trim()
+    if (smsCode) {
+      const ok = await this.sms.verify(dto.newPhone.trim(), 'change_phone', smsCode)
+      if (!ok) throw new BadRequestException('短信验证码错误或已过期')
+      return
+    }
+    const captchaOk = await this.verifyCaptcha(dto.captchaId ?? '', dto.captchaCode ?? '')
+    if (!captchaOk) throw new BadRequestException('验证码错误或已过期')
   }
 
   /** 提交注销申请：进入 7 天冷静期；已有进行中申请则冲突 */

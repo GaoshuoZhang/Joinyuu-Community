@@ -70,7 +70,7 @@ onBeforeUnmount(() => {
 })
 
 /* ---------- 菜单分组展开/折叠（受控）：低频组（积分管理/规则管理/系统管理）默认折叠 ---------- */
-const ALL_GROUP_KEYS = ['group-members', 'group-biz', 'group-points', 'group-rules', 'group-space', 'group-contents', 'group-system']
+const ALL_GROUP_KEYS = ['group-members', 'group-biz', 'group-points', 'group-rules', 'group-space', 'group-contents', 'group-system', 'group-messaging']
 const DEFAULT_COLLAPSED_GROUPS = ['group-points', 'group-rules', 'group-system']
 const expandedMenus = ref<string[]>(ALL_GROUP_KEYS.filter((k) => !DEFAULT_COLLAPSED_GROUPS.includes(k)))
 const isAllExpanded = computed(() => expandedMenus.value.length >= ALL_GROUP_KEYS.length)
@@ -457,7 +457,7 @@ async function handleDropdown(item: { value?: string | number }) {
           </t-submenu>
 
           <t-submenu
-            v-if="canSee(['/system/dicts', '/system/config', '/logs/audit', '/logs/login', '/system/roles', '/system/admins', '/system/sessions', '/system/assets', '/system/monitor', '/system/trash', '/system/policies'], '系统管理') || canSee(['/approvals', '/member-governance'], '系统管理', 'members')"
+            v-if="canSee(['/system/dicts', '/system/config', '/logs/audit', '/logs/login', '/system/roles', '/system/admins', '/system/sessions', '/system/assets', '/system/monitor', '/system/trash', '/system/policies', '/system/message-channels', '/system/message-templates', '/system/outbox'], '系统管理') || canSee(['/approvals', '/member-governance'], '系统管理', 'members')"
             value="group-system"
             title="系统管理"
           >
@@ -496,6 +496,21 @@ async function handleDropdown(item: { value?: string | number }) {
               归档管理
             </t-menu-item>
             <t-menu-item value="/system/policies" v-permission="'/system/policies'"><template #icon><Edit2Icon /></template>协议与政策</t-menu-item>
+            <t-submenu value="group-messaging" title="消息中心">
+              <template #icon><NotificationIcon /></template>
+              <t-menu-item value="/system/message-channels" v-permission="'/system/message-channels'">
+                <template #icon><NotificationIcon /></template>
+                渠道配置
+              </t-menu-item>
+              <t-menu-item value="/system/message-templates" v-permission="'/system/message-templates'">
+                <template #icon><Edit2Icon /></template>
+                模板中心
+              </t-menu-item>
+              <t-menu-item value="/system/outbox" v-permission="'/system/outbox'">
+                <template #icon><ViewListIcon /></template>
+                发送记录
+              </t-menu-item>
+            </t-submenu>
           </t-submenu>
         </t-menu>
       </div>

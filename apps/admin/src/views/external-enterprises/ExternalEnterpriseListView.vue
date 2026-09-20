@@ -232,7 +232,7 @@ onMounted(() => {
         empty="暂无合作企业"
         @page-change="onPageChange"
         @sort-change="onSortChange"
-        @row-click="({ row }) => goDetail(row)"
+        @row-click="({ row }: { row: ExternalEnterprise }) => goDetail(row)"
       >
         <template #name="{ row }">
           <div class="name-cell">

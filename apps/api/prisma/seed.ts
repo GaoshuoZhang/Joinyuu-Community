@@ -62,6 +62,7 @@ const { articles, columns } = require('./seed-data/contents')
 const { notifications } = require('./seed-data/notifications')
 const { auditLogs } = require('./seed-data/auditLogs')
 const { systemConfig } = require('./seed-data/systemConfig')
+const { messageChannels, messageTemplates, messageTemplateVersions } = require('./seed-data/messaging')
 const { dicts } = require('./seed-data/dict')
 const { announcements } = require('./seed-data/announcements')
 const { banners } = require('./seed-data/banners')
@@ -218,6 +219,20 @@ async function main() {
   await prisma.adminUser.deleteMany()
 
   const counts: Record<string, number> = {}
+
+  /* P0 消息中心：渠道配置 / 模板中心（凭据仅登记环境变量名，不落库明文） */
+  await prisma.messageDeliveryLog.deleteMany()
+  await prisma.outboxMessage.deleteMany()
+  await prisma.messageTemplateVersion.deleteMany()
+  await prisma.messageTemplate.deleteMany()
+  await prisma.messageChannel.deleteMany()
+  await prisma.contactConsent.deleteMany()
+  await prisma.messageChannel.createMany({ data: messageChannels })
+  await prisma.messageTemplate.createMany({ data: messageTemplates })
+  await prisma.messageTemplateVersion.createMany({ data: messageTemplateVersions })
+  counts.MessageChannel = messageChannels.length
+  counts.MessageTemplate = messageTemplates.length
+  counts.MessageTemplateVersion = messageTemplateVersions.length
 
   // ---------- 认证与基础设施 ----------
   // RBAC 权限点目录 + 角色 + 角色权限 + 管理员账号（R1/R2）

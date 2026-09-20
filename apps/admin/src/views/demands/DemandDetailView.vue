@@ -25,6 +25,8 @@ const isArchived = computed(() => !!demand.value?.deletedAt)
 const respondentStatusMap: Record<DemandRespondent['status'], { label: string; theme: 'warning' | 'success' | 'default' }> = {
   pending: { label: '待回应', theme: 'warning' },
   contacted: { label: '已对接', theme: 'success' },
+  accepted: { label: '已接受', theme: 'success' },
+  rejected: { label: '已拒绝', theme: 'default' },
   closed: { label: '已结束', theme: 'default' },
 }
 

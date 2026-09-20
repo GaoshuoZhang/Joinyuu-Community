@@ -20,7 +20,7 @@ import {
   publishArticleNow,
   restoreArticle,
 } from '@/api/contents'
-import type { Article } from '@/types'
+import type { Article, ArticleStatus } from '@/types'
 
 /* 投稿内容（内容管理 · 用户投稿）：社区个体/社区企业用户投稿，需经审核。
  * 状态机：待审核 →（通过）待发布 /（驳回）已驳回；待发布 → 定时发布中/已发布；已发布 →（下架）待发布。
@@ -35,7 +35,7 @@ const query = reactive({
   page: 1,
   pageSize: 10,
   keyword: '',
-  status: '',
+  status: '' as ArticleStatus | '',
 })
 
 const statusOptions = [
@@ -77,7 +77,7 @@ async function load() {
   loading.value = true
   loadError.value = ''
   try {
-    const res = await fetchArticles({ ...query, channel: 'submitted' })
+    const res = await fetchArticles({ ...query, channel: 'submitted', status: query.status || undefined })
     list.value = res.list
     total.value = res.total
   } catch (e) {
@@ -151,7 +151,7 @@ const bulkStatuses = [
 async function doBulkArchive(values: string[]) {
   const targets: Article[] = []
   for (let page = 1; page <= 20; page++) {
-    const res = await fetchArticles({ ...query, channel: 'submitted', page, pageSize: 100 })
+    const res = await fetchArticles({ ...query, channel: 'submitted', page, pageSize: 100, status: query.status || undefined })
     targets.push(...res.list)
     if (targets.length >= res.total || res.list.length < 100) break
   }

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, markRaw, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
+import { computed, markRaw, onBeforeUnmount, onMounted, reactive, ref, watch, type Component } from 'vue'
 import { useRouter } from 'vue-router'
 import {
   AppIcon,
@@ -53,7 +53,7 @@ const visibleTodos = computed(() => (data.value?.todos ?? []).filter((todo) => a
 /* ---------- 趋势区块：成员/需求/活动/积分，按 3/7/15/30 天区间展示（真实接口 dashboard/trend） ---------- */
 const trendLoading = ref(false)
 const trend = ref<TrendPoint[]>([])
-const trendTab = ref('members')
+const trendTab = ref<'members' | 'demands' | 'events' | 'points'>('members')
 const trendDays = ref(30)
 
 const trendTabs = [
@@ -210,7 +210,7 @@ const layoutVisible = ref(false)
 
 /* ---------- 数据与跳转 ---------- */
 /* 待办卡片的图标与跳转路由（数据来自 fetchDashboard().todos） */
-const todoCardIcons: Record<string, unknown> = {
+const todoCardIcons: Record<string, Component> = {
   settle: CheckCircleIcon,
   demand: ViewListIcon,
   reservation: MapIcon,

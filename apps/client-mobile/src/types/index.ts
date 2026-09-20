@@ -26,6 +26,8 @@ export interface AppConfig {
   reservationOpen: boolean
   /** 首页轮播图总开关：关闭后首页不展示轮播区域 */
   homeCarouselOpen: boolean
+  /** P1 实名核验：verified=「实名认证」（后台已启用并测试联通）；registration=「身份信息登记」 */
+  realnameMode?: 'verified' | 'registration'
 }
 
 /* ---------- 字典项（GET /api/app/dicts/:type） ---------- */
@@ -75,6 +77,8 @@ export interface UserProfile {
 
 export interface RealNameInfo {
   verified: boolean
+  /** 当前展示模式（后端下发）：verified=实名认证 / registration=身份信息登记 */
+  mode?: 'verified' | 'registration'
   /** 脱敏展示：首字保留（如 苏*） */
   realName?: string
   /** 脱敏证件号：前 4 + 后 4（如 3301**********1234） */

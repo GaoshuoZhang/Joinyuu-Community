@@ -3,18 +3,55 @@ import { computed, onBeforeUnmount, onMounted, reactive, ref } from 'vue'
 import { onBeforeRouteLeave } from 'vue-router'
 import { DialogPlugin, MessagePlugin } from 'tdesign-vue-next'
 import PageHeader from '@/components/PageHeader.vue'
-import { fetchSystemConfig, saveSystemConfig } from '@/api/systemConfig'
+import {
+  fetchRealnameCatalog,
+  fetchSystemConfig,
+  saveSystemConfig,
+  testRealnameVerification,
+} from '@/api/systemConfig'
+import type { RealnameCatalog, SystemConfigPayload } from '@/api/systemConfig'
 import type { SystemConfig } from '@/types'
 import { focusFirstInvalid } from '@/utils/form'
 
-/* 系统配置：站点信息与运行时开关（保存即生效；按端下发） */
+/* 系统配置：站点信息与运行时开关（保存即生效；按端下发）
+ * 密钥安全（P0）：MinIO SecretKey 为只写字段——服务端不回传原文，仅返回「是否已配置」与脱敏值；
+ * 留空提交表示保持原值（支持只轮换其他配置），填写表示更新或轮换密钥。 */
+type SystemConfigForm = SystemConfigPayload &
+  Pick<SystemConfig, 'updatedAt' | 'updatedBy'> & {
+    /** 表单内始终以字符串映射维护，避免可选项索引触发 TS18048 */
+    realnameVerifyConfig: Record<string, string>
+    realnameVerifyCredentialEnv: Record<string, string>
+  }
+
 const loading = ref(true)
 const saving = ref(false)
 const formRef = ref()
-const meta = reactive({ updatedAt: '', updatedBy: '' })
 const savedSnapshot = ref('')
 
-const form = reactive<SystemConfig>({
+/** SecretKey 是否已配置（环境变量或数据库任一存在） */
+const secretConfigured = ref(false)
+/** SecretKey 脱敏展示值 */
+const secretMasked = ref('')
+/** 凭据来源：env 优先，其次 database */
+const credentialSource = ref<'env' | 'database' | 'none'>('none')
+
+/* ---------- P1 实名核验（权威二要素） ---------- */
+const realnameCatalog = ref<RealnameCatalog>({ options: [], meta: [] })
+const realnameProviderLabel = ref('')
+const realnameCredentialConfigured = ref(false)
+const realnameMissingCredentials = ref<string[]>([])
+const realnameTestOk = ref(false)
+const realnameTestedAt = ref<string | null>(null)
+const realnameTesting = ref(false)
+const realnameMode = ref<'verified' | 'registration'>('registration')
+const realnameCredentialMasked = ref<Record<string, string>>({})
+
+/** 当前所选供应商的元信息（参数与凭据变量名） */
+const currentRealnameMeta = computed(() =>
+  realnameCatalog.value.meta.find((item) => item.provider === form.realnameVerifyProvider),
+)
+
+const form = reactive<SystemConfigForm>({
   siteName: '',
   siteSlogan: '',
   registrationOpen: true,
@@ -26,6 +63,11 @@ const form = reactive<SystemConfig>({
   leaseExpireRemindDays: 15,
   uploadMaxSizeMb: 10,
   passwordExpireDays: 90,
+  realnameVerifyEnabled: false,
+  realnameVerifyProvider: '',
+  realnameVerifyCredentialMode: 'inline',
+  realnameVerifyConfig: {},
+  realnameVerifyCredentialEnv: {},
   minioEnabled: false,
   minioEndpoint: '',
   minioPort: 9000,
@@ -37,12 +79,98 @@ const form = reactive<SystemConfig>({
   updatedBy: '',
 })
 
+/** 用服务端配置刷新表单，并清空只写密钥输入（避免把「已配置」误当成待提交的新值） */
+function applyConfig(conf: SystemConfig) {
+  const {
+    minioSecretKeyConfigured,
+    minioSecretKeyMasked,
+    minioCredentialSource,
+    realnameVerifyProviderLabel: providerLabel,
+    realnameVerifyCredentialConfigured: credentialConfigured,
+    realnameVerifyMissingCredentials: missingCredentials,
+    realnameVerifyCredentialMasked: credentialMasked,
+    realnameVerifyTestOk: testOk,
+    realnameVerifyTestedAt: testedAt,
+    realnameMode: mode,
+    ...rest
+  } = conf
+  Object.assign(form, rest)
+  form.minioSecretKey = ''
+  secretConfigured.value = minioSecretKeyConfigured
+  secretMasked.value = minioSecretKeyMasked
+  credentialSource.value = minioCredentialSource
+  realnameProviderLabel.value = providerLabel
+  realnameCredentialConfigured.value = credentialConfigured
+  realnameMissingCredentials.value = missingCredentials
+  realnameCredentialMasked.value = credentialMasked ?? {}
+  realnameTestOk.value = testOk
+  realnameTestedAt.value = testedAt
+  realnameMode.value = mode
+}
+
+/** 测试实名核验联通（接口可调用即算联通）；成功后客户端才显示「实名认证」 */
+async function onTestRealname() {
+  realnameTesting.value = true
+  try {
+    const result = await testRealnameVerification()
+    MessagePlugin.success(`联通成功：${result.message}`)
+  } catch (e) {
+    MessagePlugin.error(e instanceof Error ? e.message : '联通测试失败')
+  } finally {
+    realnameTesting.value = false
+    applyConfig(await fetchSystemConfig())
+  }
+}
+
+/** 启用/切换供应商后清空上一供应商的参数与凭据变量名 */
+function onRealnameProviderChange(provider: string) {
+  form.realnameVerifyProvider = provider
+  form.realnameVerifyConfig = {}
+  form.realnameVerifyCredentialEnv = {}
+  for (const field of realnameCatalog.value.meta.find((item) => item.provider === provider)?.credentialKeys ?? []) {
+    form.realnameVerifyCredentialEnv[field.key] = ''
+  }
+}
+
+/** 切换凭据来源时清空输入（inline 空值=保持原值，避免把变量名当密钥提交） */
+function onRealnameCredentialModeChange(mode: 'inline' | 'env') {
+  form.realnameVerifyCredentialMode = mode
+  form.realnameVerifyCredentialEnv = {}
+  for (const field of currentRealnameMeta.value?.credentialKeys ?? []) {
+    form.realnameVerifyCredentialEnv[field.key] = ''
+  }
+}
+
+function realnameCredentialLabel(field: { key: string; label: string }): string {
+  return form.realnameVerifyCredentialMode === 'env' ? `${field.label}（环境变量名）` : field.label
+}
+
+function realnameCredentialPlaceholder(field: { key: string; label: string }): string {
+  if (form.realnameVerifyCredentialMode === 'env') {
+    return `如 REALNAME_${field.key.toUpperCase()}…`
+  }
+  const masked = realnameCredentialMasked.value[field.key]
+  return masked ? `${masked}（留空保持不变）…` : `请输入${field.label}…`
+}
+
+/** 未配置密钥时必填；已配置时留空即保持原值 */
+const secretRules = computed(() =>
+  secretConfigured.value
+    ? []
+    : [{ required: true, message: '请输入 SecretKey', trigger: 'submit' as const }],
+)
+
+const credentialSourceLabel = computed(() => {
+  if (credentialSource.value === 'env') return '由环境变量提供'
+  if (credentialSource.value === 'database') return '已保存到数据库'
+  return '—'
+})
+
 onMounted(async () => {
   try {
-    const conf = await fetchSystemConfig()
-    Object.assign(form, conf)
-    meta.updatedAt = conf.updatedAt
-    meta.updatedBy = conf.updatedBy
+    const [conf, catalog] = await Promise.all([fetchSystemConfig(), fetchRealnameCatalog()])
+    realnameCatalog.value = catalog
+    applyConfig(conf)
     savedSnapshot.value = JSON.stringify(form)
   } finally {
     loading.value = false
@@ -54,11 +182,9 @@ async function onSave() {
   if (valid !== true) return focusFirstInvalid(formRef.value)
   saving.value = true
   try {
-    await saveSystemConfig({ ...form })
-    const conf = await fetchSystemConfig()
-    Object.assign(form, conf)
-    meta.updatedAt = conf.updatedAt
-    meta.updatedBy = conf.updatedBy
+    /* 密钥留空时服务端保持原值；仅在有输入时提交新密钥（轮换） */
+    await saveSystemConfig({ ...form, minioSecretKey: form.minioSecretKey?.trim() ?? '' })
+    applyConfig(await fetchSystemConfig())
     savedSnapshot.value = JSON.stringify(form)
     MessagePlugin.success('系统配置已保存并生效')
   } catch (e) {
@@ -106,7 +232,7 @@ onBeforeRouteLeave(async () => {
   <div class="config-panel page-fade-in">
     <PageHeader title="系统配置" description="站点信息与运行时开关，保存后立即生效">
       <template #actions>
-        <span class="config-meta">最近保存：{{ meta.updatedAt || '—' }}（{{ meta.updatedBy || '—' }}）</span>
+        <span class="config-meta">最近保存：{{ form.updatedAt || '—' }}（{{ form.updatedBy || '—' }}）</span>
       </template>
     </PageHeader>
 
@@ -197,6 +323,116 @@ onBeforeRouteLeave(async () => {
             </t-form-item>
           </div>
 
+          <div class="section-title">实名核验（权威二要素）</div>
+          <div class="switch-grid">
+            <div class="switch-row">
+              <div class="switch-text">
+                <div class="switch-label">启用权威核验</div>
+                <div class="switch-tip">
+                  启用并测试联通后，客户端显示「实名认证」；未启用或未联通时显示「身份信息登记」
+                </div>
+              </div>
+              <t-switch v-model="form.realnameVerifyEnabled" />
+            </div>
+          </div>
+          <template v-if="form.realnameVerifyEnabled">
+            <div class="form-grid">
+              <t-form-item
+                label="核验供应商（单选）"
+                name="realnameVerifyProvider"
+                :rules="[{ required: true, message: '请选择核验供应商' }]"
+              >
+                <t-select
+                  :value="form.realnameVerifyProvider"
+                  :options="realnameCatalog.options.map((item) => ({ label: item.label, value: item.provider }))"
+                  @change="(value: unknown) => onRealnameProviderChange(String(value))"
+                />
+              </t-form-item>
+              <t-form-item label="联通状态" name="realnameStatus">
+                <t-space size="small">
+                  <t-tag :theme="realnameTestOk ? 'success' : 'warning'" variant="light" size="small">
+                    {{ realnameTestOk ? '已联通' : '未联通' }}
+                  </t-tag>
+                  <t-button
+                    theme="primary"
+                    variant="outline"
+                    size="small"
+                    :loading="realnameTesting"
+                    @click="onTestRealname"
+                  >
+                    测试联通
+                  </t-button>
+                </t-space>
+                <template #help>
+                  <span v-if="realnameTestedAt">最近联通：{{ realnameTestedAt }}；配置变更后需重新测试</span>
+                  <span v-else>尚未测试；配置变更后需重新测试</span>
+                </template>
+              </t-form-item>
+            </div>
+            <div v-if="currentRealnameMeta?.configFields?.length" class="form-grid">
+              <t-form-item
+                v-for="field in currentRealnameMeta.configFields"
+                :key="field.key"
+                :label="field.label"
+                :name="`realnameVerifyConfig.${field.key}`"
+              >
+                <t-input v-model="form.realnameVerifyConfig[field.key]" clearable :placeholder="(field.hint || '') + '…'" />
+                <template #help>{{ field.hint || '' }}</template>
+              </t-form-item>
+            </div>
+            <div class="section-title">核验凭据</div>
+            <div class="form-grid">
+              <t-form-item label="凭据来源" name="realnameVerifyCredentialMode">
+                <t-select
+                  :value="form.realnameVerifyCredentialMode"
+                  :options="[
+                    { label: '直接填写密钥（推荐）', value: 'inline' },
+                    { label: '登记环境变量名', value: 'env' },
+                  ]"
+                  @change="(value: unknown) => onRealnameCredentialModeChange(String(value) as 'inline' | 'env')"
+                />
+                <template #help>
+                  {{ form.realnameVerifyCredentialMode === 'inline'
+                    ? '密钥写入数据库仅供服务端调用：接口不回传、审计不记录；留空表示保持原值'
+                    : '仅登记环境变量名，值由部署侧注入（大写字母开头，仅含大写字母/数字/下划线）' }}
+                </template>
+              </t-form-item>
+              <t-form-item
+                v-for="field in currentRealnameMeta?.credentialKeys ?? []"
+                :key="field.key"
+                :label="realnameCredentialLabel(field)"
+                :name="`realnameVerifyCredentialEnv.${field.key}`"
+              >
+                <t-input
+                  v-model="form.realnameVerifyCredentialEnv[field.key]"
+                  clearable
+                  autocomplete="off"
+                  :placeholder="realnameCredentialPlaceholder(field)"
+                />
+                <template #help>
+                  <span v-if="form.realnameVerifyCredentialMode === 'inline'">
+                    {{ realnameCredentialMasked[field.key] ? '已配置，留空则保持不变' : '尚未配置' }}
+                  </span>
+                  <span v-else>环境变量名</span>
+                </template>
+              </t-form-item>
+            </div>
+            <div class="switch-row">
+              <div class="switch-text">
+                <div class="switch-label">
+                  当前客户端文案：{{ realnameMode === 'verified' ? '实名认证' : '身份信息登记' }}
+                </div>
+                <div class="switch-tip">
+                  <span v-if="!realnameCredentialConfigured">
+                    缺少环境变量：{{ realnameMissingCredentials.join('、') || '未登记' }}
+                  </span>
+                  <span v-else-if="!realnameTestOk">凭据已齐备，请点击「测试联通」</span>
+                  <span v-else>已联通 {{ realnameProviderLabel }}</span>
+                </div>
+              </div>
+            </div>
+          </template>
+
           <div class="section-title">MinIO 对象存储</div>
           <div class="switch-grid">
             <div class="switch-row">
@@ -233,12 +469,20 @@ onBeforeRouteLeave(async () => {
             >
               <t-input v-model="form.minioAccessKey" clearable autocomplete="off" placeholder="MinIO 访问密钥…" />
             </t-form-item>
-            <t-form-item
-              label="SecretKey"
-              name="minioSecretKey"
-              :rules="[{ required: true, message: '请输入 SecretKey' }]"
-            >
-              <t-input v-model="form.minioSecretKey" type="password" clearable autocomplete="off" placeholder="MinIO 密钥…" />
+            <t-form-item label="SecretKey" name="minioSecretKey" :rules="secretRules">
+              <t-input
+                v-model="form.minioSecretKey"
+                type="password"
+                clearable
+                autocomplete="off"
+                placeholder="留空则保持不变…"
+              />
+              <template #help>
+                <span v-if="secretConfigured">
+                  当前：{{ secretMasked }}（{{ credentialSourceLabel }}）；留空表示保持不变
+                </span>
+                <span v-else>尚未配置；启用 MinIO 前请填写一次</span>
+              </template>
             </t-form-item>
             <t-form-item
               label="Bucket"

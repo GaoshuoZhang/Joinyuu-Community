@@ -14,7 +14,7 @@ import {
   fetchExternalEnterpriseStats,
   type ExternalEnterpriseStats,
 } from '@/api/external-enterprises'
-import type { ExternalEnterprise } from '@/types'
+import type { ExternalEnterprise, ExternalEnterpriseMember } from '@/types'
 
 const route = useRoute()
 const router = useRouter()
@@ -232,7 +232,7 @@ async function onEnable() {
                 :data="enterprise.members"
                 :columns="memberColumns"
                 empty="暂无关联成员"
-                @row-click="({ row }) => router.push('/users/' + row.userId)"
+                @row-click="({ row }: { row: ExternalEnterpriseMember }) => router.push('/users/' + row.userId)"
               >
                 <template #member="{ row }">
                   <div class="member-cell">

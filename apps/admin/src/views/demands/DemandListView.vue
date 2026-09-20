@@ -176,7 +176,7 @@ async function onProxyConfirm() {
 }
 
 /* 代报名联系电话自动填充的数据源（fetchPublisherOptions 结果缓存） */
-let publisherOptionsCache: { users: { uid: string; nickname: string; phone: string; email: string }[]; enterprises: { id: string; name: string; contactPhone: string; contactEmail?: string }[] } | null = null
+let publisherOptionsCache: Awaited<ReturnType<typeof fetchPublisherOptions>> | null = null
 function fetchPublisherOptionsUsers() {
   return publisherOptionsCache?.users ?? []
 }
@@ -206,7 +206,7 @@ const query = reactive({
 })
 
 /* 排序：默认创建时间倒序（最新在前），支持创建时间正/倒序 */
-const sortBy = ref<'createdAt' | 'id'>('createdAt')
+const sortBy = ref<'createdAt' | 'id' | 'publishedAt'>('createdAt')
 const sortOrder = ref<'ascend' | 'descend'>('descend')
 
 /* 类别选项来自数据字典，加载失败回退默认词表 */
@@ -386,7 +386,7 @@ function onPageChange(p: { current: number; pageSize: number }) {
 
 /* 新增 / 完成并发布 / 编辑（同一弹窗组件，mode 区分） */
 const publishVisible = ref(false)
-const publishMode = ref<'create' | 'publish' | 'edit'>('publish')
+const publishMode = ref<'create' | 'edit'>('create')
 const current = ref<Demand | null>(null)
 
 function openCreate() {
@@ -716,7 +716,7 @@ onMounted(() => {
         empty="暂无需求"
         @page-change="onPageChange"
         @sort-change="onSortChange"
-        @row-click="({ row }) => goDetail(row)"
+        @row-click="({ row }: { row: Demand }) => goDetail(row)"
       >
         <template #title="{ row }">
           <div class="demand-cell">

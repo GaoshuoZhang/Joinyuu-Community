@@ -56,6 +56,7 @@ import { AppFavoritesModule } from './modules/app/favorites/favorites.module'
 import { AppPoliciesModule } from './modules/app/policies/policies.module'
 import { AppLeasesModule } from './modules/app/leases/leases.module'
 import { EngagementModule } from './modules/app/engagement/engagement.module'
+import { MessagingModule } from './modules/messaging/messaging.module'
 import { SchedulerModule } from './scheduler/scheduler.module'
 import { HealthController } from './health/health.controller'
 import { JwtAuthGuard } from './common/guards/jwt-auth.guard'
@@ -125,6 +126,7 @@ import { HttpExceptionFilter } from './common/filters/http-exception.filter'
     AppPoliciesModule,
     AppLeasesModule,
     EngagementModule,
+    MessagingModule,
     SchedulerModule,
   ],
   controllers: [HealthController],

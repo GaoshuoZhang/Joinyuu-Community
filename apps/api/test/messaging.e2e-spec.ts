@@ -1,0 +1,246 @@
+/* P0 消息中心 · 渠道配置 e2e：
+ * 覆盖：驱动目录、渠道新增/编辑/启停、配置与凭据校验、凭据不回传、测试发送（干跑）、权限 403。
+ * 前置：docker compose up + prisma migrate + seed（迁移 20260920190000_p0_message_center）。 */
+import { INestApplication } from '@nestjs/common'
+import { Test } from '@nestjs/testing'
+import { PrismaClient } from '@prisma/client'
+import request from 'supertest'
+import { AppModule } from '../src/app.module'
+import { reseed } from './helpers/reseed'
+import { loginAs } from './helpers/login'
+
+describe('P0 消息中心 · 渠道配置', () => {
+  let app: INestApplication
+  let token: string
+  let auditorToken: string
+
+  beforeAll(async () => {
+    reseed()
+    const moduleRef = await Test.createTestingModule({ imports: [AppModule] }).compile()
+    app = moduleRef.createNestApplication()
+    await app.init()
+
+    token = await loginAs(app)
+    auditorToken = await loginAs(app, 'auditor')
+  })
+
+  afterAll(async () => {
+    await app.close()
+  })
+
+  const get = (path: string, as = token) =>
+    request(app.getHttpServer()).get(path).set('Authorization', `Bearer ${as}`)
+  const put = (path: string, as = token) =>
+    request(app.getHttpServer()).put(path).set('Authorization', `Bearer ${as}`)
+  const patch = (path: string, as = token) =>
+    request(app.getHttpServer()).patch(path).set('Authorization', `Bearer ${as}`)
+  const post = (path: string, as = token) =>
+    request(app.getHttpServer()).post(path).set('Authorization', `Bearer ${as}`)
+
+  /** 基础载荷：阿里云短信渠道 */
+  const basePayload = {
+    kind: 'sms',
+    provider: 'aliyun_sms',
+    name: '阿里云短信',
+    enabled: true,
+    config: { signName: '聚屿社区', templateMapping: { verify_code: 'SMS_12345678' } },
+    credentialEnv: {
+      accessKeyId: 'ALIYUN_SMS_ACCESS_KEY_ID',
+      accessKeySecret: 'ALIYUN_SMS_ACCESS_KEY_SECRET',
+    },
+    dailyLimit: 1000,
+    remark: '主通道',
+  }
+
+  it('驱动目录：返回消息类型与阿里云/腾讯云/SMTP 驱动', async () => {
+    const res = await get('/api/admin/message-channels/catalog')
+    expect(res.status).toBe(200)
+    expect(res.body.data.kinds).toEqual(['sms', 'email', 'inapp'])
+    const providers = (res.body.data.providers as Array<{ provider: string; supports: string[] }>).map(
+      (p) => p.provider,
+    )
+    expect(providers).toEqual(
+      expect.arrayContaining(['aliyun_sms', 'tencent_sms', 'smtp', 'inapp', 'dry_run']),
+    )
+  })
+
+  it('新增渠道：凭据只登记环境变量名，凭据未注入时标记未齐备且不回传值', async () => {
+    const created = await put('/api/admin/message-channels').send(basePayload)
+    expect(created.status).toBe(200)
+    const id = created.body.data.id as string
+    expect(id).toMatch(/^MC\d+$/)
+
+    const list = await get('/api/admin/message-channels')
+    expect(list.status).toBe(200)
+    const channel = (list.body.data as Array<Record<string, unknown>>).find((c) => c.id === id)!
+    expect(channel.kind).toBe('sms')
+    expect(channel.providerLabel).toBe('阿里云短信')
+    expect(channel.enabled).toBe(true)
+    expect(channel.dailyLimit).toBe(1000)
+    /* 凭据值不回传：只有变量名映射与齐备状态 */
+    expect(channel.credentialEnv).toEqual({
+      accessKeyId: 'ALIYUN_SMS_ACCESS_KEY_ID',
+      accessKeySecret: 'ALIYUN_SMS_ACCESS_KEY_SECRET',
+    })
+    expect(channel.credentialConfigured).toBe(false)
+    expect(channel.missingCredentials).toEqual(
+      expect.arrayContaining(['ALIYUN_SMS_ACCESS_KEY_ID', 'ALIYUN_SMS_ACCESS_KEY_SECRET']),
+    )
+    expect(JSON.stringify(channel)).not.toContain('ALIYUN_SMS_ACCESS_KEY_SECRET=')
+  })
+
+  it('编辑同名(同 kind+provider)渠道为更新而非新增，并可切换启停', async () => {
+    const before = await get('/api/admin/message-channels')
+    const count = (before.body.data as unknown[]).length
+
+    const updated = await put('/api/admin/message-channels').send({
+      ...basePayload,
+      name: '阿里云短信（备）',
+      enabled: false,
+      dailyLimit: 0,
+    })
+    expect(updated.status).toBe(200)
+
+    const after = await get('/api/admin/message-channels')
+    expect((after.body.data as unknown[]).length).toBe(count)
+    const channel = (after.body.data as Array<Record<string, unknown>>).find(
+      (c) => c.id === updated.body.data.id,
+    )!
+    expect(channel.name).toBe('阿里云短信（备）')
+    expect(channel.enabled).toBe(false)
+
+    const toggled = await patch(`/api/admin/message-channels/${updated.body.data.id}/enabled`).send({
+      enabled: true,
+    })
+    expect(toggled.status).toBe(200)
+    expect(toggled.body).toEqual({ code: 0, data: { code: 0 } })
+  })
+
+  it('校验：驱动与消息类型不匹配 / 必填配置缺失 / 凭据项非法 均 400', async () => {
+    const mismatch = await put('/api/admin/message-channels').send({
+      ...basePayload,
+      provider: 'smtp',
+      kind: 'sms',
+    })
+    expect(mismatch.status).toBe(400)
+    expect(mismatch.body.message).toContain('不支持消息类型')
+
+    const missingConfig = await put('/api/admin/message-channels').send({
+      ...basePayload,
+      provider: 'tencent_sms',
+      config: {},
+    })
+    expect(missingConfig.status).toBe(400)
+    expect(missingConfig.body.message).toContain('请填写')
+
+    const badEnvKey = await put('/api/admin/message-channels').send({
+      ...basePayload,
+      credentialEnv: { wrongKey: 'SOME_ENV' },
+    })
+    expect(badEnvKey.status).toBe(400)
+    expect(badEnvKey.body.message).toContain('不属于该驱动')
+
+    const badEnvName = await put('/api/admin/message-channels').send({
+      ...basePayload,
+      credentialEnv: { accessKeyId: 'lower_case_name' },
+    })
+    expect(badEnvName.status).toBe(400)
+    expect(badEnvName.body.message).toContain('环境变量名不合法')
+  })
+
+  it('测试发送：凭据未注入时非生产环境降级干跑，返回回执且不抛错', async () => {
+    const list = await get('/api/admin/message-channels')
+    const channel = (list.body.data as Array<{ id: string; provider: string }>).find(
+      (c) => c.provider === 'aliyun_sms',
+    )!
+    const res = await post(`/api/admin/message-channels/${channel.id}/test-send`).send({
+      recipient: '13800000000',
+      body: '验证码 {{code}}，{{minutes}} 分钟内有效。',
+      variables: { code: '1234', minutes: '5' },
+    })
+    expect(res.status).toBe(200)
+    expect(res.body.data.dryRun).toBe(true)
+    expect(String(res.body.data.providerMessageId)).toMatch(/^dry-/)
+  })
+
+  it('权限：具备审核角色（无该权限码）访问渠道配置 → 403', async () => {
+    const res = await get('/api/admin/message-channels', auditorToken)
+    expect(res.status).toBe(403)
+  })
+
+  it('渠道凭据 inline：直接填写入参只写不泄露，留空保持原值，审计不含密钥原文', async () => {
+    const inline = {
+      ...basePayload,
+      credentialMode: 'inline',
+      credentialEnv: { accessKeyId: 'AKID-INLINE-TEST-0001', accessKeySecret: 'secret-inline-value-xyz' },
+    }
+    const created = await put('/api/admin/message-channels').send(inline)
+    expect(created.status).toBe(200)
+    const id = created.body.data.id as string
+
+    const dirty = await get('/api/admin/message-channels')
+    const channel = (dirty.body.data as Array<Record<string, unknown>>).find((c) => c.id === id)!
+    expect(channel.credentialMode).toBe('inline')
+    expect(channel.credentialConfigured).toBe(true)
+    /* inline 模式不回传变量名，只回掩码，且不含密钥原文 */
+    expect(channel.credentialEnv).toEqual({})
+    expect(channel.credentialMasked).toEqual({ accessKeyId: '********', accessKeySecret: '********' })
+    const serialized = JSON.stringify(channel)
+    expect(serialized).not.toContain('AKID-INLINE-TEST-0001')
+    expect(serialized).not.toContain('secret-inline-value-xyz')
+
+    /* 留空 = 保持原值（仅改名） */
+    const keep = await put('/api/admin/message-channels').send({
+      ...basePayload,
+      credentialMode: 'inline',
+      name: '阿里云短信（inline）',
+      credentialEnv: {},
+    })
+    expect(keep.status).toBe(200)
+    const afterKeep = (await get('/api/admin/message-channels')).body.data as Array<Record<string, unknown>>
+    expect(afterKeep.find((c) => c.id === id)!.credentialConfigured).toBe(true)
+
+    /* 仅轮换其中一项，另一项继续保持 */
+    const rotate = await put('/api/admin/message-channels').send({
+      ...basePayload,
+      credentialMode: 'inline',
+      credentialEnv: { accessKeySecret: 'rotated-secret-002' },
+    })
+    expect(rotate.status).toBe(200)
+    const afterRotate = (await get('/api/admin/message-channels')).body.data as Array<Record<string, unknown>>
+    expect(afterRotate.find((c) => c.id === id)!.credentialConfigured).toBe(true)
+
+    /* 库内可用（服务端可解密到明文用于调用），但审计不留密钥原文 */
+    const prisma = new PrismaClient()
+    try {
+      const row = await prisma.messageChannel.findUnique({ where: { id } })
+      expect(row?.credentialMode).toBe('inline')
+      expect(JSON.stringify(row?.credentialEnv)).toContain('rotated-secret-002')
+
+      const logs = await prisma.auditLog.findMany({
+        where: { module: '消息中心', action: '保存消息渠道' },
+        orderBy: { id: 'desc' },
+        take: 6,
+      })
+      expect(logs.length).toBeGreaterThan(0)
+      for (const log of logs) {
+        const text = JSON.stringify({ detail: log.detail, before: log.before, after: log.after })
+        expect(text).not.toContain('AKID-INLINE-TEST-0001')
+        expect(text).not.toContain('secret-inline-value-xyz')
+        expect(text).not.toContain('rotated-secret-002')
+      }
+    } finally {
+      await prisma.$disconnect()
+    }
+  })
+
+  it('渠道凭据：未知凭据项被拒绝（400）', async () => {
+    const res = await put('/api/admin/message-channels').send({
+      ...basePayload,
+      credentialMode: 'inline',
+      credentialEnv: { notAField: 'whatever' },
+    })
+    expect(res.status).toBe(400)
+    expect(res.body.message).toContain('不属于该驱动')
+  })
+})

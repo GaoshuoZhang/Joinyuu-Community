@@ -120,7 +120,12 @@ const KEEP_ALIVE_NAMES = [
 ]
 /* 「我的」页：隐藏右上角用户信息、仅显示消息铃铛 */
 const isMe = computed(() => route.path === '/me')
-const pageTitle = computed(() => (isTab.value ? '' : pageTitleFor(route)))
+const pageTitle = computed(() => {
+  if (isTab.value) return ''
+  /* P1：实名页标题随核验模式切换（实名认证 / 身份信息登记） */
+  if (route.name === 'me-realname') return config.realnameLabel
+  return pageTitleFor(route)
+})
 
 /* v41/v43：削减动画——Tab 间切换不播放页面过渡；缓存页再次激活的入场动画抑制由
  * useAnimSuppress 在页面根元素上处理（避免 shell 类切换让离场页重放动画）。 */

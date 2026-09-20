@@ -15,6 +15,7 @@ import { RedisService } from '../../../common/redis/redis.service'
 import { IdGeneratorService } from '../../../common/id-generator/id-generator.service'
 import { PointsEngineService } from '../../../common/engine/points-engine/points-engine.service'
 import { NotificationService } from '../../../common/notify/notification.service'
+import { SmsCodeService } from '../../messaging/sms-code.service'
 import { AppSessionService } from '../../../common/app-session/app-session.service'
 import { formatNow } from '../../../common/utils/time'
 import { normalizeGender } from '../../../common/utils/gender'
@@ -62,6 +63,7 @@ export class AuthService {
     private readonly ids: IdGeneratorService,
     private readonly points: PointsEngineService,
     private readonly notify: NotificationService,
+    private readonly sms: SmsCodeService,
     private readonly sessions: AppSessionService,
   ) {}
 
@@ -81,17 +83,34 @@ export class AuthService {
   }
 
   /** 校验并一次性消费验证码（错误也消费，防自动化枚举） */
-  private async verifyCaptcha(captchaId: string, code: string): Promise<boolean> {
+  private async verifyCaptcha(captchaId?: string, code?: string): Promise<boolean> {
+    if (!captchaId) return false
     const expected = await this.redis.getCache<string>(CAPTCHA_PREFIX + captchaId)
     await this.redis.delCache(CAPTCHA_PREFIX + captchaId)
     if (!expected) return false
     return expected.toUpperCase() === (code ?? '').toUpperCase()
   }
 
+  /** 身份校验（P0 短信验证码）：提供 smsCode 时走短信校验（证明手机号归属），
+   * 否则回退图形验证码——保证短信通道未启用时既有流程不中断。 */
+  private async verifyIdentity(
+    purpose: 'register' | 'reset_password' | 'change_phone',
+    phone: string,
+    input: { smsCode?: string; captchaId?: string; captchaCode?: string },
+  ): Promise<void> {
+    const smsCode = input.smsCode?.trim()
+    if (smsCode) {
+      const ok = await this.sms.verify(phone, purpose, smsCode)
+      if (!ok) throw new BadRequestException('短信验证码错误或已过期')
+      return
+    }
+    const captchaOk = await this.verifyCaptcha(input.captchaId, input.captchaCode)
+    if (!captchaOk) throw new BadRequestException('验证码错误或已过期')
+  }
+
   /** 注册：开关校验 → 手机号唯一 → 建用户 + 默认 individual 身份 + 协议同意留痕 → 签发 app JWT */
   async register(dto: RegisterDto): Promise<AppLoginResult> {
-    const captchaOk = await this.verifyCaptcha(dto.captchaId, dto.captchaCode)
-    if (!captchaOk) throw new BadRequestException('验证码错误或已过期')
+    await this.verifyIdentity('register', dto.phone.trim(), dto)
     const config = await this.prisma.systemConfig.findUnique({ where: { id: 1 } })
     if (config && config.registrationOpen === false) {
       throw new BadRequestException('注册暂未开放')
@@ -228,8 +247,7 @@ export class AuthService {
     if (attempts !== null && attempts > 5) {
       throw new HttpException('操作过于频繁，请稍后重试', HttpStatus.TOO_MANY_REQUESTS)
     }
-    const captchaOk = await this.verifyCaptcha(dto.captchaId, dto.captchaCode)
-    if (!captchaOk) throw new BadRequestException('验证码错误或已过期')
+    await this.verifyIdentity('reset_password', dto.phone.trim(), dto)
 
     const user = await this.prisma.user.findFirst({ where: { phone: dto.phone.trim() } })
     /* D-105：未注册手机号是业务校验失败而非登录失效，用 400 避免触发客户端全局 401 登出跳转 */
@@ -250,8 +268,7 @@ export class AuthService {
   }
 
   async changePhone(uid: string, dto: ChangePhoneDto): Promise<{ code: number }> {
-    const captchaOk = await this.verifyCaptcha(dto.captchaId, dto.captchaCode)
-    if (!captchaOk) throw new BadRequestException('验证码错误或已过期')
+    await this.verifyIdentity('change_phone', dto.newPhone.trim(), dto)
     const newPhone = dto.newPhone.trim()
     const conflict = await this.prisma.user.findUnique({ where: { phone: newPhone }, select: { uid: true } })
     if (conflict && conflict.uid !== uid) throw new ConflictException('该手机号已绑定其他账号')

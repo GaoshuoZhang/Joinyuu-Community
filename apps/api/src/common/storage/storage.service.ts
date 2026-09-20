@@ -4,24 +4,17 @@ import type { Readable } from 'node:stream'
 import { mkdir, readFile, rm, writeFile } from 'node:fs/promises'
 import { dirname, join } from 'node:path'
 import { PrismaService } from '../prisma/prisma.service'
+import { resolveMinioRuntimeConfig, type MinioRuntimeConfig } from './minio-config'
 
 /* 对象存储抽象：默认本地磁盘驱动（uploads/ 目录），可在系统配置中切换到 MinIO（R4）。
  * put/read/remove 语义两驱动一致；存储键形如 `assets/2026/09/<uuid>.<ext>`，
  * 通过 /api/public/files/:key 对外读取（URL 与驱动无关）。
  * MinIO 判定结果带 60s 进程内缓存（配置保存后由 SystemConfigService 调用 invalidateConfig()
- * 立即失效）；客户端按需懒创建，首次使用时确保桶存在。 */
+ * 立即失效）；客户端按需懒创建，首次使用时确保桶存在。
+ * 凭据解析（环境变量优先 + 数据库回退）统一走 ./minio-config，避免密钥处理逻辑分散。 */
 
 const UPLOAD_ROOT = process.env.UPLOAD_DIR ?? join(process.cwd(), 'uploads')
 const CONFIG_CACHE_TTL_MS = 60_000
-
-interface MinioRuntimeConfig {
-  endPoint: string
-  port: number
-  useSSL: boolean
-  accessKey: string
-  secretKey: string
-  bucket: string
-}
 
 interface MinioRuntime {
   client: Client
@@ -133,19 +126,10 @@ export class StorageService {
     await ready
   }
 
-  /** 读取系统配置单例并判定是否启用 MinIO（四要素齐全才启用） */
+  /** 读取系统配置单例并解析运行时配置（环境变量优先 + 数据库回退；凭据齐全才启用） */
   private async loadMinioConfig(): Promise<MinioRuntimeConfig | null> {
     const config = await this.prisma.systemConfig.findUnique({ where: { id: 1 } })
-    if (!config || !config.minioEnabled) return null
-    if (!config.minioEndpoint || !config.minioAccessKey || !config.minioSecretKey) return null
-    return {
-      endPoint: config.minioEndpoint,
-      port: config.minioPort,
-      useSSL: config.minioUseSsl,
-      accessKey: config.minioAccessKey,
-      secretKey: config.minioSecretKey,
-      bucket: config.minioBucket || 'joinyuu',
-    }
+    return resolveMinioRuntimeConfig(config)
   }
 }
 

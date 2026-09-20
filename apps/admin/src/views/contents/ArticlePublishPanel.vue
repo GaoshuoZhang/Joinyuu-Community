@@ -19,7 +19,7 @@ import {
   publishArticleNow,
   restoreArticle,
 } from '@/api/contents'
-import type { Article } from '@/types'
+import type { Article, ArticleStatus } from '@/types'
 
 /* 资讯发布（内容管理 · 官方）：社区自行发布文章。
  * 状态机：待发布 → 定时发布中/已发布；定时发布中 → 已发布；已发布 →（下架）待发布。
@@ -34,7 +34,7 @@ const query = reactive({
   page: 1,
   pageSize: 10,
   keyword: '',
-  status: '',
+  status: '' as ArticleStatus | '',
 })
 
 const statusOptions = [
@@ -75,7 +75,7 @@ async function load() {
   loading.value = true
   loadError.value = ''
   try {
-    const res = await fetchArticles({ ...query, channel: 'official' })
+    const res = await fetchArticles({ ...query, channel: 'official', status: query.status || undefined })
     list.value = res.list
     total.value = res.total
   } catch (e) {
@@ -240,7 +240,7 @@ onMounted(load)
       :pagination="pagination"
       empty="暂无资讯"
       @page-change="onPageChange"
-      @row-click="({ row }) => openView(row)"
+      @row-click="({ row }: { row: Article }) => openView(row)"
     >
       <template #title="{ row }">
         <div class="cell-title">

@@ -237,7 +237,7 @@ onMounted(load)
         :pagination="pagination"
         empty="暂无用户"
         @page-change="onPageChange"
-        @row-click="({ row }) => goDetail(row)"
+        @row-click="({ row }: { row: User }) => goDetail(row)"
       >
         <template #phone-title>
           <span class="phone-title">

@@ -1,5 +1,5 @@
 import { defineStore } from 'pinia'
-import { ref } from 'vue'
+import { computed, ref } from 'vue'
 import { fetchAppConfig } from '@/api/config'
 import type { AppConfig } from '@/types'
 
@@ -13,8 +13,15 @@ export const useConfigStore = defineStore('config', () => {
     demandOpen: true,
     reservationOpen: true,
     homeCarouselOpen: true,
+    realnameMode: 'registration',
   })
   let loaded = false
+
+  /* P1 实名核验：后端启用并通过联通测试才显示「实名认证」，否则为「身份信息登记」 */
+  const realnameMode = computed<'verified' | 'registration'>(() =>
+    config.value.realnameMode === 'verified' ? 'verified' : 'registration',
+  )
+  const realnameLabel = computed(() => (realnameMode.value === 'verified' ? '实名认证' : '身份信息登记'))
 
   async function ensureLoaded(force = false): Promise<void> {
     if (loaded && !force) return
@@ -28,5 +35,5 @@ export const useConfigStore = defineStore('config', () => {
     loaded = true
   }
 
-  return { config, ensureLoaded, override }
+  return { config, realnameMode, realnameLabel, ensureLoaded, override }
 })

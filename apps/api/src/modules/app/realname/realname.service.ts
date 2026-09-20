@@ -7,6 +7,7 @@ import {
 } from '@nestjs/common'
 import { PrismaService } from '../../../common/prisma/prisma.service'
 import { NotificationService } from '../../../common/notify/notification.service'
+import { RealnameVerificationService } from '../../../common/realname/realname-verification.service'
 import type { UpdateRealnameDto } from './dto/update-realname.dto'
 import { currentPublishingLimits } from '../../../common/enterprise/publishing-limits'
 import { formatNow } from '../../../common/utils/time'
@@ -46,25 +47,30 @@ export class AppRealnameService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly notify: NotificationService,
+    private readonly realname: RealnameVerificationService,
   ) {}
 
-  /** 实名状态：verified + 脱敏姓名（首字+*）+ 脱敏证件号（前4+**********+后4） */
+  /** 实名状态：verified + 脱敏姓名（首字+*）+ 脱敏证件号（前4+**********+后4）；
+   * mode 表示客户端应显示「实名认证」（已联通权威核验）还是「身份信息登记」 */
   async status(uid: string) {
+    const mode = await this.realname.mode()
     const user = await this.prisma.user.findUnique({
       where: { uid },
       select: { realName: true, citizenId: true, verifiedAt: true },
     })
     if (!user) throw new NotFoundException('用户不存在')
-    if (!user.realName || !user.citizenId) return { verified: false }
+    if (!user.realName || !user.citizenId) return { verified: false, mode }
     return {
       verified: true,
+      mode,
       realName: maskName(user.realName),
       citizenIdMasked: maskCitizenId(user.citizenId),
       verifiedAt: user.verifiedAt ?? undefined,
     }
   }
 
-  /** 提交实名认证：重复认证 409 → 姓名 2-20 字 → 身份证校验码校验 → 回写 + 站内信 */
+  /** 提交实名：重复认证 409 → 姓名 2-20 字 → 身份证格式/校验码 →
+   * 已联通权威核验时按二要素校验（一致才通过）；未联通时按既有规则登记 → 回写 + 站内信 */
   async verify(uid: string, dto: UpdateRealnameDto): Promise<{ code: number }> {
     const user = await this.prisma.user.findUnique({
       where: { uid },
@@ -80,6 +86,15 @@ export class AppRealnameService {
     const citizenId = dto.citizenId.trim()
     if (!isValidCitizenId(citizenId)) throw new BadRequestException('请输入有效的身份证号码')
 
+    const authoritative = await this.realname.verifyAuthoritative(realName, citizenId)
+    if (authoritative && authoritative.outcome !== 'match') {
+      throw new BadRequestException(
+        authoritative.outcome === 'no_record'
+          ? '未查询到该身份信息，请核对姓名与身份证号'
+          : '姓名与身份证号不一致，请核对后重试',
+      )
+    }
+
     await this.prisma.user.update({
       where: { uid },
       data: {
@@ -90,8 +105,10 @@ export class AppRealnameService {
     })
     await this.notify.pushNotice(uid, {
       type: 'system',
-      title: '实名认证已完成',
-      content: `您的实名信息已通过规则校验（${maskName(realName)}）。`,
+      title: authoritative ? '实名认证已完成' : '身份信息登记已完成',
+      content: authoritative
+        ? `您的实名信息已通过权威核验（${maskName(realName)}）。`
+        : `您的身份信息已登记（${maskName(realName)}）。`,
     })
     return { code: 0 }
   }

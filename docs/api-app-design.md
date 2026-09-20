@@ -17,11 +17,14 @@
 
 | 项 | 设计 |
 |---|---|
-| 注册 | `POST /api/app/auth/register`；body `{phone,password,nickname,captchaId,captchaCode,agreed}`；昵称必填；受 `registrationOpen` 控制；手机号数据库唯一；默认授予 `individual`；同时记录用户协议与隐私政策版本 |
+| 注册 | `POST /api/app/auth/register`；body `{phone,password,nickname,agreed}` + 验证码（`captchaId/captchaCode` 与 `smsCode` 二选一）；昵称必填；受 `registrationOpen` 控制；手机号数据库唯一；默认授予 `individual`；同时记录用户协议与隐私政策版本 |
 | 登录 | `POST /api/app/auth/login`（手机号+密码+图形验证码 `captchaId/captchaCode`）；签发多身份 JWT：`{ sub: uid, scope: 'app', identities: [...], jti }` |
 | 令牌校验 | 复用 JWT Guard（按 `scope` 区分 admin/app 两套守卫）；登出黑名单复用 `auth:blacklist:{jti}` |
 | 登出 | `POST /api/app/auth/logout` |
-| 验证码 | `GET /api/app/auth/captcha` → `{captchaId,image}`；登录、注册、找回密码、换绑手机号均一次性消费 |
+| 图形验证码 | `GET /api/app/auth/captcha` → `{captchaId,image}`；登录一次性消费；注册/找回密码/换绑手机号在短信通道未启用时兜底使用 |
+| 短信通道探测 | `GET /api/app/auth/sms/available` → `{available}`（已启用短信渠道且验证码模板已发布）；客户端据此决定走短信还是图形验证码 |
+| 短信验证码发送 | `POST /api/app/auth/sms/send`；body `{phone, purpose: register\|reset_password\|change_phone\|login, deviceId?}` → `{expiresInSec, devCode?}`（`devCode` 仅非生产环境干跑时返回）；频控：同号+用途 60 秒冷却、同号日限 10 次、同 IP 10 分钟 20 次、同设备 1 小时 10 次；校验失败 5 次即失效；下发经发送队列（安全类强制送达） |
+| 短信校验 | `register` / `reset-password` / `change-phone` 提交 `smsCode`（6 位）替代图形验证码即可，证明手机号归属 |
 | 每日登录积分 | 登录成功触发 `daily_login` 规则（PointsRule 固定触发项，种子默认停用；引擎按规则启停发放，自然日去重随 M2 客户端接入落地） |
 
 ## 3. 通用约定（沿用 wiki-backend §4）

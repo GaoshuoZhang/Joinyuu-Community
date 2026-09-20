@@ -1,8 +1,20 @@
 import { Type } from 'class-transformer'
-import { IsBoolean, IsInt, IsString, Matches, Max, MaxLength, Min } from 'class-validator'
+import {
+  IsBoolean,
+  IsIn,
+  IsInt,
+  IsObject,
+  IsOptional,
+  IsString,
+  Matches,
+  Max,
+  MaxLength,
+  Min,
+} from 'class-validator'
 
 /* PUT /api/admin/system/config 载荷（对照 apps/admin/src/api/systemConfig.ts SystemConfigPayload）。
- * 校验文案逐字一致；空串由服务层二次校验（class-validator 不拦空串）。 */
+ * 校验文案逐字一致；空串由服务层二次校验（class-validator 不拦空串）。
+ * 密钥安全（P0）：minioSecretKey 为只写字段——缺省/空串表示保持原值，非空表示更新或轮换；服务端不回传原文。 */
 export class SystemConfigPayloadDto {
   @IsString({ message: '站点名称不能为空' })
   siteName!: string
@@ -26,7 +38,32 @@ export class SystemConfigPayloadDto {
   @IsBoolean()
   realnameRequired!: boolean
 
-  /** 首页轮播图总开关：关闭后客户端首页不展示轮播区域。 */
+  /** P1 实名核验：是否启用权威二要素核验（缺省不启用，保持向后兼容） */
+  @IsOptional()
+  @IsBoolean()
+  realnameVerifyEnabled?: boolean
+
+  /** 核验供应商（单选）：'' 未选择 | aliyun | tencent（缺省未选择） */
+  @IsOptional()
+  @IsIn(['', 'aliyun', 'tencent'], { message: '核验供应商不合法' })
+  realnameVerifyProvider?: string
+
+  /** 凭据来源：inline 后台直接填写（只写，留空保持原值）| env 登记环境变量名 */
+  @IsOptional()
+  @IsIn(['inline', 'env'], { message: '凭据来源不合法' })
+  realnameVerifyCredentialMode?: string
+
+  /** 非机密参数（endpoint / region） */
+  @IsOptional()
+  @IsObject()
+  realnameVerifyConfig?: Record<string, unknown>
+
+  /** 凭据环境变量名映射（仅存变量名，值由部署侧注入） */
+  @IsOptional()
+  @IsObject()
+  realnameVerifyCredentialEnv?: Record<string, unknown>
+
+  /** 开启后，客户端首页不展示轮播区域。 */
   @IsBoolean()
   homeCarouselOpen!: boolean
 
@@ -68,9 +105,11 @@ export class SystemConfigPayloadDto {
   @MaxLength(128)
   minioAccessKey!: string
 
+  /** 只写字段：缺省/空串 = 保持原值不变；非空 = 更新或轮换。服务端不回传、不审计其原文。 */
+  @IsOptional()
   @IsString()
   @MaxLength(128)
-  minioSecretKey!: string
+  minioSecretKey?: string
 
   @IsString()
   @MaxLength(64)

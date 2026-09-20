@@ -92,7 +92,7 @@ onMounted(load)
         <ColumnController v-model="visibleKeys" storage-key="card-management" :columns="allColumns.map(c => ({ key: c.colKey, title: c.title }))" />
       </div>
       <ListErrorState v-if="loadError" :message="loadError" :loading="loading" @retry="load" />
-      <t-table :row-key="type === 'individual' ? 'userId' : 'id'" :data="rows" :columns="columns" :loading="loading" table-layout="fixed" hover resizable :pagination="{ current: page, pageSize: 20, total, showPageSize: false }" @page-change="p => { page = p.current; load() }">
+      <t-table :row-key="type === 'individual' ? 'userId' : 'id'" :data="rows" :columns="columns" :loading="loading" table-layout="fixed" hover resizable :pagination="{ current: page, pageSize: 20, total, showPageSize: false }" @page-change="(p: { current: number }) => { page = p.current; load() }">
         <template #name="{ row }">{{ row.displayName ?? row.name }}<t-tag class="id-tag-block" size="small" variant="light">{{ row.userId ?? row.id }}</t-tag></template>
         <template #intro="{ row }">{{ row.intro ?? row.description }}</template>
         <template #op="{ row }"><t-button variant="text" theme="primary" @click="open(row)">查看/编辑</t-button></template>

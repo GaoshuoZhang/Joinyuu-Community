@@ -528,8 +528,10 @@ TZ=Asia/Shanghai
 | POST | /api/admin/notifications/:id/read | 单条已读（幂等） |
 | POST | /api/admin/notifications/read-all | 全部已读 |
 | GET | /api/admin/audit-logs | query：page/pageSize/keyword(target/action/detail/operator)/module 精确筛选；权限 `/logs/audit` |
-| GET | /api/admin/system/config | 单例配置（走 `config:system` 缓存 10min）；权限 `/system/config` |
-| PUT | /api/admin/system/config | 保存即生效；leaseExpireRemindDays 1-90、uploadMaxSizeMb 1-100；记 updatedBy/updatedAt + before/after 审计 |
+| GET | /api/admin/system/config | 单例配置（走 `config:system` 缓存 10min）；权限 `/system/config`；MinIO SecretKey 不回传原文，仅 `minioSecretKeyConfigured` + `minioSecretKeyMasked`（`********`）+ `minioCredentialSource`（env 优先、其次 database）；实名核验只回 `realnameVerifyCredentialMasked`（inline 模式）与派生 `realnameMode` |
+| PUT | /api/admin/system/config | 保存即生效；leaseExpireRemindDays 1-90、uploadMaxSizeMb 1-100；记 updatedBy/updatedAt + before/after 审计；`minioSecretKey` 为只写字段（留空=保持原值，非空=更新/轮换），审计快照含 `minioSecretKeyChanged` 但不含密钥原文。**实名核验**：`realnameVerifyEnabled` + `realnameVerifyProvider`（启用时必须单选）、`realnameVerifyConfig`、`realnameVerifyCredentialMode`（inline 直接填写：留空=保持原值/只写；env 登记变量名）、`realnameVerifyCredentialEnv`；启用/供应商/来源/参数/凭据任一变化会把 `realnameVerifyTestOk` 重置为 false（须重新测试联通），审计含 `realnameVerifyChanged` 且 inline 凭据不入快照 |
+| GET | /api/admin/system/config/realname/catalog | 实名核验供应商目录（配置字段 + 凭据变量名，供表单渲染）；权限 `/system/config` |
+| POST | /api/admin/system/config/realname/test | 测试联通：用格式合法的固定样例调用所选供应商，**接口可返回业务结果即算联通**（不要求核验一致）；成功写 `realnameVerifyTestOk=true` + `realnameVerifyTestedAt` 并清 `config:system` 缓存；失败写 false 并返回带阿里云 `Recommend` 的诊断信息 |
 | GET | /api/admin/dicts/:type | 按 sort 升序（管理页返回全量含 disabled）；type 四类 demand_category/industry/event_type/goods_category；权限 `/system/dicts` |
 | POST | /api/admin/dicts/:type | `{ label }`；label 全类型唯一；创建即启用（code 按类型前缀 DC/IN/ET/GC 自增） |
 | POST | /api/admin/dicts/:type/:code/toggle-status | 启用↔停用 |
@@ -568,7 +570,35 @@ TZ=Asia/Shanghai
 | GET | /api/admin/todos | 五域待办聚合：入驻/合作/身份审核、需求审核、空间预约审核、文章审核、临期租约（窗口取 SystemConfig.leaseExpireRemindDays），`[{ key, title, description, count, route }]` |
 | GET | /api/admin/dashboard/trend | query `days`（默认 30，范围 3-90）；按日聚合 `{ date(M-DD), members, demands, events, points }`（含补零） |
 
-**端点总计：244**（`/api/admin/**` 路由装饰器；`/api/app/**` 122 个另计，`GET /api/health`、`GET /api/public/files/:key` 两个 `@Public` 端点未计入）。
+### 7.17 消息中心 messaging（19）
+
+| 方法 | 路径 | 说明 |
+|---|---|---|
+| GET | /api/admin/message-channels | 渠道列表（含凭据来源与齐备状态；inline 只回掩码、env 只回变量名，不回传密钥原文）；权限 `/system/message-channels` |
+| GET | /api/admin/message-channels/catalog | 消息类型与驱动目录（非机密配置字段 + 凭据变量名，供表单渲染与校验） |
+| PUT | /api/admin/message-channels | 按 kind+provider 新增或更新（幂等）；必填参数齐备 + 凭据项归属校验；`credentialMode` inline（留空=保持原值）| env（登记变量名，缺省）；审计「消息中心」不含凭据原文 |
+| PATCH | /api/admin/message-channels/:id/enabled | 启停渠道 |
+| POST | /api/admin/message-channels/:id/test-send | 测试发送（不写发送队列）；凭据未注入时非生产环境降级干跑 |
+| GET | /api/admin/message-templates | 模板列表（含当前发布版本摘要）；权限 `/system/message-templates` |
+| GET | /api/admin/message-templates/:id | 模板详情（含全部版本） |
+| POST | /api/admin/message-templates | 新建模板 + 首个草稿版本；编码唯一（409） |
+| PUT | /api/admin/message-templates/:id/draft | 保存草稿（最新版本仍为 draft 则原地更新，否则新建版本保留历史） |
+| POST | /api/admin/message-templates/:id/submit | 提交审核（draft → pending） |
+| POST | /api/admin/message-templates/:id/review | `{ approve, note? }`；驳回必填原因；pending → approved/rejected |
+| POST | /api/admin/message-templates/:id/publish | 发布；仅 approved/archived 可发布，传 `version` 即回滚；旧发布版本转 archived |
+| POST | /api/admin/message-templates/:id/disable | 下架（发布版本转 archived，模板回 draft） |
+| POST | /api/admin/message-templates/:id/test-send | 测试发送（按模板类型取已启用渠道） |
+| POST | /api/admin/message-templates/:id/preview | 预览渲染结果（不发送） |
+| GET | /api/admin/outbox | 发送记录分页 + 状态/渠道/关键字筛选 + 各状态计数；权限 `/system/outbox` |
+| GET | /api/admin/outbox/:id/logs | 投递日志（每次尝试一条，最新在前） |
+| POST | /api/admin/outbox/:id/retry | 手动重试（failed/dead/skipped → pending） |
+| POST | /api/admin/outbox/:id/discard | 手动终止（进入死信） |
+
+**发送治理（Outbox）**：入队按 `idempotencyKey` 幂等去重（唯一键 + 冲突回读）；调度任务 `message-outbox-dispatch`（每 30 秒）扫描 `pending|failed` 且到期的消息，乐观抢占（`updateMany` 改 sending 成功者拿锁）后投递；失败按指数退避重试（30s→60s→120s…上限 30 分钟），超 `maxAttempts` 或不可重试错误进死信（`dead`）；每次尝试写 `MessageDeliveryLog`。营销类消息受用户 `channelPrefs`、`ContactConsent` 与安静时段约束（安静时段顺延到结束时刻，退订则 `skipped`），安全类（模板 category=security）强制送达。
+
+**凭据安全**：渠道凭据支持两种来源（`credentialMode`）——`inline`=后台直接填写密钥（只写：留空保持原值；GET 只回 `credentialMasked` 掩码；审计不记录；切换来源时不沿用旧值）、`env`=登记环境变量名（默认，值由部署侧注入）。管理端与审计都不含凭据原文；凭据未注入时非生产环境自动降级为干跑驱动，便于端到端联调。实名核验凭据同口径（见 §7.15）。
+
+**端点总计：265**（`/api/admin/**` 路由装饰器；`/api/app/**` 124 个另计，`GET /api/health`、`GET /api/public/files/:key` 两个 `@Public` 端点未计入）。
 
 ## 8. 业务规则服务端化
 

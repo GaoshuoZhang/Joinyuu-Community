@@ -270,7 +270,7 @@ onMounted(load)
         :pagination="pagination"
         empty="暂无申请"
         @page-change="onPageChange"
-        @row-click="({ row }) => openDetail(row)"
+        @row-click="({ row }: { row: Application }) => openDetail(row)"
       >
         <template #type="{ row }">
           <t-tag variant="light">{{ applicationTypeMap[row.type]?.label ?? row.type }}</t-tag>

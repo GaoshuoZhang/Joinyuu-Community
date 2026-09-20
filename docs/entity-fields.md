@@ -67,9 +67,21 @@
 
 - **AdminNotification** — 管理端通知（id N；type approval/demand_review/reservation/showcase/article/lease/schedule 共 7 类；title/content/at/read/link?）
 - **AuditLog** — 审计日志（id AL；operator/module/action/target/detail?/at/ip?；before/after Json? 变更前后快照）
-- **SystemConfig** — 系统配置（单例 id=1；siteName/siteSlogan；registrationOpen/mallOpen/demandOpen/reservationOpen；realnameRequired；homeCarouselOpen 首页轮播总开关；leaseExpireRemindDays；uploadMaxSizeMb 上传上限 MB 1-100 默认 10（素材库/富文本共用）；updatedAt/updatedBy；**dailyLoginPoints 已删**）
+- **SystemConfig** — 系统配置（单例 id=1；siteName/siteSlogan；registrationOpen/mallOpen/demandOpen/reservationOpen；realnameRequired；homeCarouselOpen 首页轮播总开关；leaseExpireRemindDays；uploadMaxSizeMb 上传上限 MB 1-100 默认 10（素材库/富文本共用）；minioEnabled/minioEndpoint/minioPort/minioUseSsl/minioAccessKey/minioSecretKey/minioBucket；**P1 实名核验** realnameVerifyEnabled/realnameVerifyProvider(''|aliyun|tencent)/realnameVerifyConfig/realnameVerifyCredentialEnv/realnameVerifyCredentialMode(inline|env)/realnameVerifyTestOk/realnameVerifyTestedAt；updatedAt/updatedBy；**dailyLoginPoints 已删**）
+  - 密钥安全（P0）：`minioSecretKey` 只写不读——管理端 GET 只回 `minioSecretKeyConfigured`/`minioSecretKeyMasked`/`minioCredentialSource`，审计快照不含密钥原文；凭据可经 `MINIO_SECRET_KEY`/`MINIO_ACCESS_KEY` 环境变量优先注入。
+  - 实名核验（P1）：`realnameVerifyCredentialMode=inline` 时凭据为**后台直接填写的密钥**（只写、GET 只回掩码 `realnameVerifyCredentialMasked`、审计快照凭据字段恒为空）；`env` 时仅登记环境变量名。启用 + `realnameVerifyTestOk=true` 时客户端 `realnameMode=verified`（「实名认证」），否则 `registration`（「身份信息登记」）；任一核验配置变更会把 `realnameVerifyTestOk` 重置为 false 并要求重新测试联通。
 - **DictEntry** — 数据字典（type+code 联合 PK；type demand_category/industry/event_type/goods_category；label 全类型唯一；sort/status）
 - **ArchiveSetting** — 归档设置（domain PK；autoArchive/archiveDelayDays 自动归档延时；autoPurge/purgeDelayDays 自动删除延时；archiveStatuses Json? 按状态开关）
+
+## 7.1 P0 消息中心（2026-09-20）
+
+- **MessageChannel** — 消息渠道（id MC；kind sms/email/inapp；provider aliyun_sms/tencent_sms/smtp/inapp/dry_run；name/enabled（kind+provider 唯一）；config Json? 非机密参数（signName/host/from/templateMapping 等）；**credentialMode inline|env**（默认 env；inline=后台直接填写密钥，只写/GET 只回掩码/审计不记录；env=登记变量名）；credentialEnv Json?；dailyLimit 0=不限；remark?/createdAt/updatedAt/updatedBy）
+- **MessageTemplate** — 消息模板（id MT；code 唯一；name/kind/category security|marketing；variables Json? 变量白名单；status draft|published；currentVersion；updatedAt/updatedBy）
+- **MessageTemplateVersion** — 模板版本（id MV；templateId→MessageTemplate 级联；version（templateId+version 唯一）；subject?/body；status draft|pending|approved|rejected|published|archived；reviewedBy?/reviewedAt?/reviewNote?/createdBy/createdAt）
+- **OutboxMessage** — 发送队列（id OB；idempotencyKey 唯一；channelKind/templateCode/recipient/userId?；payload Json? 模板变量；status pending|sending|sent|failed|dead|skipped；priority/attempts/maxAttempts/nextAttemptAt?/lastError?/providerMessageId?/security；createdAt/updatedAt/sentAt?）
+- **MessageDeliveryLog** — 投递日志（id ML；outboxId/channelKind/provider/recipient/attempt/status sent|failed|skipped/providerMessageId?/error?/costMs/at）
+- **ContactConsent** — 渠道合规同意/营销退订（id 自增；userId+channelKind+purpose 唯一；consented；at）
+- **UserNotificationPreference**（扩展）— 新增 quietHoursStart?/quietHoursEnd?（HH:mm，两者都填才生效）与 channelPrefs Json?（按渠道的营销接收偏好）；security 类通知不受两者约束
 
 ## 8. M2-R 新增模型与字段扩展（2026-09-16；R1 已实施，R2~R4 规划）
 

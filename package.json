@@ -18,7 +18,8 @@
     "db:reset": "pnpm --filter @joinyuu/api db:reset",
     "test:e2e:it": "node scripts/integration.mjs test",
     "lint": "eslint . --max-warnings 0",
-    "lint:fix": "eslint . --fix"
+    "lint:fix": "eslint . --fix",
+    "typecheck": "pnpm -r --if-present typecheck"
   },
   "devDependencies": {
     "eslint": "^10.10.0",

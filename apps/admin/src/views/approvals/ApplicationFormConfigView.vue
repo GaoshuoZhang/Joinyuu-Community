@@ -237,7 +237,7 @@ onMounted(load)
     <div class="page-card" :class="{ loading }">
       <ListErrorState v-if="loadError" :message="loadError" :loading="loading" @retry="load" />
       <template v-else>
-        <t-tabs :value="active" @change="(value) => select(value as ApplicationFormConfig['type'])">
+        <t-tabs :value="active" @change="(value: string | number) => select(value as ApplicationFormConfig['type'])">
           <t-tab-panel v-for="item in configs" :key="item.type" :value="item.type" :label="labels[item.type]" />
         </t-tabs>
 

@@ -396,7 +396,7 @@ onMounted(() => {
                 :data="members"
                 :columns="memberColumns"
                 empty="暂无企业成员"
-                @row-click="({ row }) => router.push('/users/' + row.uid)"
+                @row-click="({ row }: { row: User }) => router.push('/users/' + row.uid)"
               >
                 <template #member="{ row }">
                   <div class="member-cell">

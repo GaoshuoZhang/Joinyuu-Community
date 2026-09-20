@@ -876,6 +876,29 @@ export interface SystemConfig {
   uploadMaxSizeMb: number
   /** 密码有效期（天）：0=不启用；超期登录后仅允许修改密码 */
   passwordExpireDays: number
+  /** P1 实名核验：是否启用权威二要素核验 */
+  realnameVerifyEnabled: boolean
+  /** 核验供应商（'' 未选择 | aliyun | tencent） */
+  realnameVerifyProvider: string
+  /** 供应商展示名 */
+  realnameVerifyProviderLabel: string
+  /** 非机密参数（endpoint / region） */
+  realnameVerifyConfig: Record<string, unknown>
+  /** 凭据来源：inline=后台直接填写密钥（只写/脱敏）| env=登记环境变量名 */
+  realnameVerifyCredentialMode: 'inline' | 'env'
+  /** 凭据环境变量名映射（仅 env 模式回传；inline 模式恒为空） */
+  realnameVerifyCredentialEnv: Record<string, string>
+  /** 凭据脱敏视图：inline 已配置 → 掩码；env → 变量名 */
+  realnameVerifyCredentialMasked: Record<string, string>
+  /** 凭据环境变量是否齐备 */
+  realnameVerifyCredentialConfigured: boolean
+  /** 缺失的环境变量名 */
+  realnameVerifyMissingCredentials: string[]
+  /** 联通性测试是否通过（配置变更即重置，需重新测试） */
+  realnameVerifyTestOk: boolean
+  realnameVerifyTestedAt: string | null
+  /** 派生模式：verified=客户端显示「实名认证」；registration=「身份信息登记」 */
+  realnameMode: 'verified' | 'registration'
   /** MinIO 对象存储开关（关闭时上传写入本地磁盘 UPLOAD_DIR） */
   minioEnabled: boolean
   /** MinIO 服务地址（不含协议与端口，如 127.0.0.1） */
@@ -884,15 +907,180 @@ export interface SystemConfig {
   minioPort: number
   /** 是否使用 HTTPS 访问 MinIO */
   minioUseSsl: boolean
+  /** MinIO AccessKey（访问标识，供运维核对；密钥本体不回传） */
   minioAccessKey: string
-  minioSecretKey: string
+  /** SecretKey 是否已配置（服务端不回传原文；保存时留空表示保持原值） */
+  minioSecretKeyConfigured: boolean
+  /** SecretKey 脱敏展示值（已配置为固定掩码，否则空串） */
+  minioSecretKeyMasked: string
+  /** 凭据来源：环境变量优先，其次数据库 */
+  minioCredentialSource: 'env' | 'database' | 'none'
   minioBucket: string
   updatedAt: string
   updatedBy: string
 }
 
-export type DictType = 'demand_category' | 'industry' | 'event_type' | 'goods_category'
+/* ---------- 消息中心（P0）：渠道配置 / 模板中心 / 发送记录 ---------- */
 
+export type MessageChannelKind = 'sms' | 'email' | 'inapp'
+
+export interface MessageProviderConfigField {
+  key: string
+  label: string
+  required?: boolean
+  hint?: string
+}
+
+export interface MessageProviderMeta {
+  provider: string
+  label: string
+  supports: MessageChannelKind[]
+  /** 需在环境变量中提供的凭据变量名（仅校验是否齐备，不回传值） */
+  credentialKeys: string[]
+  configFields: MessageProviderConfigField[]
+}
+
+export interface MessageChannel {
+  id: string
+  kind: MessageChannelKind
+  provider: string
+  providerLabel: string
+  name: string
+  enabled: boolean
+  config: Record<string, unknown>
+  /** 凭据来源：inline=后台直接填写密钥（只写/脱敏）| env=登记环境变量名 */
+  credentialMode: 'inline' | 'env'
+  /** env 模式下的变量名映射；inline 模式恒为空（不回传密钥） */
+  credentialEnv: Record<string, string>
+  /** 凭据脱敏视图：inline 已配置 → 掩码；env → 变量名 */
+  credentialMasked: Record<string, string>
+  credentialConfigured: boolean
+  missingCredentials: string[]
+  dailyLimit: number
+  remark: string | null
+  updatedAt: string
+  updatedBy: string
+}
+
+export interface MessageChannelPayload {
+  kind: MessageChannelKind
+  provider: string
+  name: string
+  enabled: boolean
+  config: Record<string, unknown>
+  /** 凭据来源：inline 后台直接填写（只写，留空保持原值）| env 登记环境变量名 */
+  credentialMode?: 'inline' | 'env'
+  credentialEnv: Record<string, string>
+  dailyLimit: number
+  remark?: string
+}
+
+export interface MessageChannelCatalog {
+  kinds: MessageChannelKind[]
+  providers: MessageProviderMeta[]
+}
+
+export type MessageTemplateCategory = 'security' | 'marketing'
+export type MessageTemplateStatus = 'draft' | 'published'
+export type MessageTemplateVersionStatus =
+  | 'draft'
+  | 'pending'
+  | 'approved'
+  | 'rejected'
+  | 'published'
+  | 'archived'
+
+export interface MessageTemplateVersion {
+  id: string
+  version: number
+  subject: string | null
+  body: string
+  status: MessageTemplateVersionStatus
+  reviewedBy: string | null
+  reviewedAt: string | null
+  reviewNote: string | null
+  createdBy: string
+  createdAt: string
+}
+
+export interface MessageTemplate {
+  id: string
+  code: string
+  name: string
+  kind: MessageChannelKind
+  category: MessageTemplateCategory
+  status: MessageTemplateStatus
+  currentVersion: number
+  variables: string[]
+  updatedAt: string
+  updatedBy: string
+  publishedSubject: string | null
+  publishedBody: string | null
+}
+
+export interface MessageTemplateDetail {
+  id: string
+  code: string
+  name: string
+  kind: MessageChannelKind
+  category: MessageTemplateCategory
+  status: MessageTemplateStatus
+  currentVersion: number
+  variables: string[]
+  updatedAt: string
+  updatedBy: string
+  versions: MessageTemplateVersion[]
+}
+
+export interface MessageTemplatePayload {
+  code: string
+  name: string
+  kind: MessageChannelKind
+  category: MessageTemplateCategory
+  variables: string[]
+  subject?: string
+  body: string
+}
+
+export type OutboxStatus = 'pending' | 'sending' | 'sent' | 'failed' | 'dead' | 'skipped'
+
+export interface OutboxMessage {
+  id: string
+  templateCode: string
+  channelKind: MessageChannelKind
+  recipient: string
+  userId: string | null
+  status: OutboxStatus
+  priority: number
+  attempts: number
+  maxAttempts: number
+  security: boolean
+  lastError: string | null
+  providerMessageId: string | null
+  nextAttemptAt: string | null
+  createdAt: string
+  sentAt: string | null
+  variables: Record<string, unknown> | null
+}
+
+export interface OutboxDeliveryLog {
+  id: string
+  attempt: number
+  status: string
+  provider: string
+  providerMessageId: string | null
+  error: string | null
+  costMs: number
+  at: string
+}
+
+export interface OutboxListResult {
+  list: OutboxMessage[]
+  total: number
+  stats: Record<string, number>
+}
+
+export type DictType = 'demand_category' | 'industry' | 'event_type' | 'goods_category'
 export interface DictEntry {
   code: string
   label: string

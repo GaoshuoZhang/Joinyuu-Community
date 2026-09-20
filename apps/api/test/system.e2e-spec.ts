@@ -5,6 +5,7 @@
  * 前置：docker compose up + prisma migrate + seed（N9001+ 通知 / AL1001+ 审计 / 三类字典 / 单例配置）。 */
 import { INestApplication } from '@nestjs/common'
 import { Test } from '@nestjs/testing'
+import { PrismaClient } from '@prisma/client'
 import request from 'supertest'
 import { AppModule } from '../src/app.module'
 import { reseed } from './helpers/reseed'
@@ -193,13 +194,16 @@ describe('M1-E system 系统管理域', () => {
     expect(current.status).toBe(200)
     expect(current.body.data.siteName).toBe('聚屿社区')
     expect(current.body.data.leaseExpireRemindDays).toBe(15)
-    /* R4：GET 返回 7 个 MinIO 字段（种子默认值） */
+    /* P0 密钥安全：仍返回 MinIO 配置，但 SecretKey 只给「是否已配置 + 脱敏值」，不回传原文 */
     expect(current.body.data.minioEnabled).toBe(false)
     expect(current.body.data.minioEndpoint).toBe('')
     expect(current.body.data.minioPort).toBe(9000)
     expect(current.body.data.minioUseSsl).toBe(false)
     expect(current.body.data.minioAccessKey).toBe('')
-    expect(current.body.data.minioSecretKey).toBe('')
+    expect(current.body.data.minioSecretKey).toBeUndefined()
+    expect(current.body.data.minioSecretKeyConfigured).toBe(false)
+    expect(current.body.data.minioSecretKeyMasked).toBe('')
+    expect(current.body.data.minioCredentialSource).toBe('none')
     expect(current.body.data.minioBucket).toBe('joinyuu')
 
     const saved = await put('/api/admin/system/config').send({
@@ -237,7 +241,10 @@ describe('M1-E system 系统管理域', () => {
     expect(after.body.data.minioPort).toBe(9001)
     expect(after.body.data.minioUseSsl).toBe(true)
     expect(after.body.data.minioAccessKey).toBe('joinyuu')
-    expect(after.body.data.minioSecretKey).toBe('joinyuu-secret')
+    expect(after.body.data.minioSecretKey).toBeUndefined()
+    expect(after.body.data.minioSecretKeyConfigured).toBe(true)
+    expect(after.body.data.minioSecretKeyMasked).toBe('********')
+    expect(after.body.data.minioCredentialSource).toBe('database')
     expect(after.body.data.minioBucket).toBe('joinyuu-media')
     expect(after.body.data.updatedBy).toBe('社区管理员')
 
@@ -314,5 +321,172 @@ describe('M1-E system 系统管理域', () => {
     })
     expect(badUploadLimit.status).toBe(400)
     expect(badUploadLimit.body).toEqual({ code: 400, message: '上传文件大小限制须为 1-100 的整数' })
+  })
+
+  it('系统配置密钥：留空保持原值、非空轮换、审计与出参都不留密钥原文', async () => {
+    const base = {
+      siteName: '聚屿社区',
+      siteSlogan: '',
+      registrationOpen: true,
+      mallOpen: true,
+      demandOpen: true,
+      reservationOpen: true,
+      realnameRequired: false,
+      homeCarouselOpen: true,
+      leaseExpireRemindDays: 15,
+      uploadMaxSizeMb: 10,
+      passwordExpireDays: 90,
+      minioEnabled: false,
+      minioEndpoint: 'minio.local',
+      minioPort: 9000,
+      minioUseSsl: false,
+      minioAccessKey: 'joinyuu',
+      minioBucket: 'joinyuu',
+    }
+
+    /* 先写入 v1 密钥 */
+    const seeded = await put('/api/admin/system/config').send({ ...base, minioSecretKey: 'secret-v1' })
+    expect(seeded.status).toBe(200)
+
+    /* 留空提交：其余配置更新，密钥保持原值不被清空 */
+    const keep = await put('/api/admin/system/config').send({ ...base, uploadMaxSizeMb: 22 })
+    expect(keep.status).toBe(200)
+    const afterKeep = await get('/api/admin/system/config')
+    expect(afterKeep.body.data.uploadMaxSizeMb).toBe(22)
+    expect(afterKeep.body.data.minioSecretKeyConfigured).toBe(true)
+    expect(afterKeep.body.data.minioSecretKey).toBeUndefined()
+
+    /* 非空提交：轮换密钥，接口仍只暴露「已配置」，不回传原文 */
+    const rotate = await put('/api/admin/system/config').send({ ...base, minioSecretKey: 'secret-v2' })
+    expect(rotate.status).toBe(200)
+    const afterRotate = await get('/api/admin/system/config')
+    expect(afterRotate.body.data.minioSecretKeyConfigured).toBe(true)
+    expect(afterRotate.body.data.minioSecretKey).toBeUndefined()
+
+    /* 数据库保存最近一次密钥；审计快照（before/after/detail）不得含任何密钥原文 */
+    const prisma = new PrismaClient()
+    try {
+      const row = await prisma.systemConfig.findUnique({ where: { id: 1 } })
+      expect(row?.minioSecretKey).toBe('secret-v2')
+
+      const logs = await prisma.auditLog.findMany({
+        where: { module: '系统管理', action: '保存系统配置' },
+        orderBy: { id: 'desc' },
+        take: 10,
+      })
+      expect(logs.length).toBeGreaterThan(0)
+      for (const log of logs) {
+        const serialized = JSON.stringify({ detail: log.detail, before: log.before, after: log.after })
+        expect(serialized).not.toContain('secret-v1')
+        expect(serialized).not.toContain('secret-v2')
+        expect(serialized).not.toContain('joinyuu-secret')
+      }
+      const latest = logs[0].after as { minioSecretKeyChanged?: boolean; minioSecretKey?: unknown } | null
+      expect(latest?.minioSecretKeyChanged).toBe(true)
+      expect(latest?.minioSecretKey).toBeUndefined()
+    } finally {
+      await prisma.$disconnect()
+    }
+  })
+
+  it('实名核验配置：启用需单选供应商、inline 凭据只写不泄露、变更即重置联通', async () => {
+    const base = {
+      siteName: '聚屿社区',
+      siteSlogan: '',
+      registrationOpen: true,
+      mallOpen: true,
+      demandOpen: true,
+      reservationOpen: true,
+      realnameRequired: false,
+      homeCarouselOpen: true,
+      leaseExpireRemindDays: 15,
+      uploadMaxSizeMb: 10,
+      passwordExpireDays: 90,
+      minioEnabled: false,
+      minioEndpoint: 'minio.local',
+      minioPort: 9000,
+      minioUseSsl: false,
+      minioAccessKey: 'joinyuu',
+      minioBucket: 'joinyuu',
+      realnameVerifyEnabled: true,
+      realnameVerifyProvider: 'tencent',
+      realnameVerifyCredentialMode: 'inline',
+      realnameVerifyConfig: { region: 'ap-guangzhou' },
+      realnameVerifyCredentialEnv: { secretId: 'AKID-inline-0001', secretKey: 'sk-inline-xxxx' },
+    }
+
+    /* 启用但未选供应商 → 400 */
+    const noProvider = await put('/api/admin/system/config').send({ ...base, realnameVerifyProvider: '' })
+    expect(noProvider.status).toBe(400)
+    expect(noProvider.body.message).toContain('必须选择一个供应商')
+
+    /* 凭据项不属于该供应商 → 400 */
+    const badKey = await put('/api/admin/system/config').send({
+      ...base,
+      realnameVerifyCredentialEnv: { wrongKey: 'X_1' },
+    })
+    expect(badKey.status).toBe(400)
+    expect(badKey.body.message).toContain('不属于该供应商')
+
+    /* 正常保存：inline 凭据只写、只回掩码、不回原文；未测试联通 → 客户端为「身份信息登记」 */
+    const saved = await put('/api/admin/system/config').send(base)
+    expect(saved.status).toBe(200)
+    const after = await get('/api/admin/system/config')
+    expect(after.body.data.realnameVerifyCredentialMode).toBe('inline')
+    expect(after.body.data.realnameVerifyCredentialConfigured).toBe(true)
+    expect(after.body.data.realnameVerifyCredentialEnv).toEqual({})
+    expect(after.body.data.realnameVerifyCredentialMasked).toEqual({ secretId: '********', secretKey: '********' })
+    expect(JSON.stringify(after.body.data)).not.toContain('AKID-inline-0001')
+    expect(after.body.data.realnameVerifyTestOk).toBe(false)
+    expect(after.body.data.realnameMode).toBe('registration')
+
+    const prisma = new PrismaClient()
+    try {
+      const row = await prisma.systemConfig.findUnique({ where: { id: 1 } })
+      expect(JSON.stringify(row?.realnameVerifyCredentialEnv)).toContain('sk-inline-xxxx')
+
+      /* 模拟"已联通"：仅改站点名（非核验配置）+ 凭据留空 → 凭据保持、联通状态不重置 */
+      await prisma.systemConfig.update({
+        where: { id: 1 },
+        data: { realnameVerifyTestOk: true, realnameVerifyTestedAt: '2026-09-21 00:00' },
+      })
+      const keep = await put('/api/admin/system/config').send({
+        ...base,
+        siteName: '聚屿社区（测试）',
+        realnameVerifyCredentialEnv: {},
+      })
+      expect(keep.status).toBe(200)
+      const afterKeep = await get('/api/admin/system/config')
+      expect(afterKeep.body.data.realnameVerifyCredentialConfigured).toBe(true)
+      expect(afterKeep.body.data.realnameVerifyTestOk).toBe(true)
+      expect(afterKeep.body.data.realnameMode).toBe('verified')
+
+      /* 审计快照不含 inline 凭据原文 */
+      const logs = await prisma.auditLog.findMany({
+        where: { module: '系统管理', action: '保存系统配置' },
+        orderBy: { id: 'desc' },
+        take: 8,
+      })
+      expect(logs.length).toBeGreaterThan(0)
+      for (const log of logs) {
+        const text = JSON.stringify({ detail: log.detail, before: log.before, after: log.after })
+        expect(text).not.toContain('AKID-inline-0001')
+        expect(text).not.toContain('sk-inline-xxxx')
+      }
+
+      /* 变更核验参数 → 联通状态重置为未联通，客户端文案回到「身份信息登记」 */
+      const changed = await put('/api/admin/system/config').send({
+        ...base,
+        siteName: '聚屿社区（测试）',
+        realnameVerifyConfig: { region: 'ap-guangzhou', endpoint: 'faceid.tencentcloudapi.com' },
+        realnameVerifyCredentialEnv: {},
+      })
+      expect(changed.status).toBe(200)
+      const afterChanged = await get('/api/admin/system/config')
+      expect(afterChanged.body.data.realnameVerifyTestOk).toBe(false)
+      expect(afterChanged.body.data.realnameMode).toBe('registration')
+    } finally {
+      await prisma.$disconnect()
+    }
   })
 })

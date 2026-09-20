@@ -307,7 +307,7 @@ onMounted(load)
   :pagination="pagination"
   empty="暂无兑换订单"
   @page-change="onPageChange"
-  @row-click="({ row }) => openDetail(row)"
+  @row-click="({ row }: { row: RedemptionOrder }) => openDetail(row)"
   >
         <template #user="{ row }">
           <div class="cell-title">{{ row.userName }}</div>

@@ -298,6 +298,21 @@ const router = createRouter({
           meta: { title: '协议与政策', group: '系统管理', perm: '/system/policies' },
         },
         {
+          path: 'system/message-channels',
+          component: () => import('@/views/system/MessageChannelPanel.vue'),
+          meta: { title: '渠道配置', group: '系统管理', perm: '/system/message-channels' },
+        },
+        {
+          path: 'system/message-templates',
+          component: () => import('@/views/system/MessageTemplatePanel.vue'),
+          meta: { title: '模板中心', group: '系统管理', perm: '/system/message-templates' },
+        },
+        {
+          path: 'system/outbox',
+          component: () => import('@/views/system/MessageOutboxPanel.vue'),
+          meta: { title: '发送记录', group: '系统管理', perm: '/system/outbox' },
+        },
+        {
           path: '403',
           component: () => import('@/views/system/ForbiddenView.vue'),
           meta: { title: '无权限' },

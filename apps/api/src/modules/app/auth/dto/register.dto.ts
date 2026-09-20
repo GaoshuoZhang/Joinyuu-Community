@@ -20,11 +20,19 @@ export class RegisterDto {
   @IsNotEmpty({ message: '请输入昵称' })
   nickname!: string
 
+  /* 图形验证码与短信验证码二选一（短信通道启用后优先短信码） */
+  @IsOptional()
   @IsString()
-  captchaId!: string
+  captchaId?: string
 
+  @IsOptional()
   @IsString()
-  captchaCode!: string
+  captchaCode?: string
+
+  /** 短信验证码（用途 register）；与图形验证码二选一 */
+  @IsOptional()
+  @Matches(/^\d{6}$/, { message: '短信验证码格式不正确' })
+  smsCode?: string
 
   /** 须勾选同意用户协议与隐私政策 */
   @IsBoolean({ message: '请先阅读并同意用户协议与隐私政策' })
