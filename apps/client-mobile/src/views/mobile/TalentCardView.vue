@@ -7,6 +7,7 @@ import { fetchTalentCard } from '@/api/community'
 import { listFavorites, toggleFavorite } from '@/api/favorites'
 import { useAuthStore } from '@/stores/auth'
 import { shareContent } from '@/utils/share'
+import { safeHttpUrl } from '@/utils/validators'
 import EmptyBlock from '@/components/shared/EmptyBlock.vue'
 import ListSkeleton from '@/components/ListSkeleton.vue'
 
@@ -23,6 +24,8 @@ onMounted(async () => {
 /* v40：收藏人才名片 */
 const favorited = ref(false)
 async function loadFavorite() {
+  /* 公开路由：游客不请求收藏列表，避免 401 被统一拦截跳登录 */
+  if (!auth.isLogged) return
   try {
     const list = await listFavorites()
     favorited.value = list.some((item) => item.type === 'talent' && item.targetId === uid)
@@ -38,7 +41,7 @@ async function onToggleFavorite() {
   const next = !favorited.value
   favorited.value = next
   try {
-    favorited.value = await toggleFavorite('talent', uid, card.value?.name ?? uid, card.value?.role)
+    favorited.value = await toggleFavorite('talent', uid, card.value?.name ?? uid)
     Toast(favorited.value ? '已收藏' : '已取消收藏')
   } catch (e) {
     favorited.value = !next
@@ -48,11 +51,18 @@ async function onToggleFavorite() {
 
 const card = computed(() => data.value)
 
+/* 名片链接白名单：过滤 javascript:/data: 等协议（用户自填字段），避免点击即执行脚本 */
+const safeLinks = computed(() =>
+  [...(card.value?.socials ?? []), ...(card.value?.customLinks ?? [])]
+    .map((link) => ({ label: link.label || link.url, url: safeHttpUrl(link.url) }))
+    .filter((link): link is { label: string; url: string } => Boolean(link.url)),
+)
+
 /* v40：分享人才名片 */
 async function onShare() {
   const item = card.value
   if (!item) return
-  await shareContent({ title: item.name, text: `${item.role} · ${item.intro}` })
+  await shareContent({ title: item.name, text: item.intro })
 }
 </script>
 
@@ -142,17 +152,17 @@ async function onShare() {
         </div>
       </section>
 
-      <section v-if="card.socials.length || card.customLinks.length" class="m-card">
+      <section v-if="safeLinks.length" class="m-card">
         <h3 class="sec-title">链接</h3>
         <a
-          v-for="(l, i) in [...card.socials, ...card.customLinks]"
+          v-for="(l, i) in safeLinks"
           :key="i"
           class="link-row"
           :href="l.url"
           target="_blank"
           rel="noopener"
         >
-          <span class="link-label">{{ l.label || l.url }}</span>
+          <span class="link-label">{{ l.label }}</span>
           <Icon aria-hidden="true" name="chevron-right" size="16px" class="link-arrow" />
         </a>
       </section>

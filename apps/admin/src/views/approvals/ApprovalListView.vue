@@ -2,6 +2,7 @@
 import { computed, nextTick, onMounted, reactive, ref } from 'vue'
 import ListErrorState from '@/components/ListErrorState.vue'
 import { useListQueryState } from '@/utils/listQuery'
+import { safeHttpUrl } from '@/utils/url'
 import { useRouter } from 'vue-router'
 import { MessagePlugin, type FormProps } from 'tdesign-vue-next'
 import PageHeader from '@/components/PageHeader.vue'
@@ -67,19 +68,30 @@ const pagination = computed(() => ({
   showJumper: true,
 }))
 
+/* 请求序号守卫：仅最后一次请求可写回状态，避免快速切页/改筛选时的竞态覆盖 */
+let version = 0
 async function load() {
+  const current = ++version
   syncQuery()
   loading.value = true
   loadError.value = ''
   try {
     const res = await fetchApplications({ ...query })
-    list.value = res.list
-    total.value = res.total
+    if (current === version) {
+      list.value = res.list
+      total.value = res.total
+    }
   } catch (e) {
-    loadError.value = e instanceof Error ? e.message : '数据加载失败'
+    if (current === version) loadError.value = e instanceof Error ? e.message : '数据加载失败'
   } finally {
-    loading.value = false
+    if (current === version) loading.value = false
   }
+}
+
+/* 归档后当前页可能已空：页码越界时回退一页再加载 */
+async function reloadAfterRemove() {
+  if (list.value.length <= 1 && query.page > 1) query.page -= 1
+  await load()
 }
 
 function onTypeChange() {
@@ -123,7 +135,7 @@ async function onArchive(row: Application) {
   try {
     await archiveApplication(row.id)
     MessagePlugin.success('申请已归档')
-    await load()
+    await reloadAfterRemove()
   } catch (e) {
     MessagePlugin.error(e instanceof Error ? e.message : '归档失败')
   }
@@ -139,10 +151,13 @@ const bulkStatuses = [
 
 async function doBulkArchive(values: string[]) {
   const targets: Application[] = []
+  /* 沿用当前筛选（含申请类型）；最多 20 页（2000 条），超出时提示剩余需再次执行 */
+  let truncated = false
   for (let page = 1; page <= 20; page++) {
-    const res = await fetchApplications({ page, pageSize: 100, status: '' })
+    const res = await fetchApplications({ ...query, page, pageSize: 100, status: '' })
     targets.push(...res.list)
     if (targets.length >= res.total || res.list.length < 100) break
+    if (page === 20) truncated = true
   }
   const pending = targets.filter((a) => values.includes(a.status))
   if (!pending.length) {
@@ -157,7 +172,13 @@ async function doBulkArchive(values: string[]) {
       failed++
     }
   }
-  if (pending.length - failed > 0) MessagePlugin.success(`已归档 ${pending.length - failed} 条申请`)
+  if (pending.length - failed > 0) {
+    MessagePlugin.success(
+      truncated
+        ? `已归档 ${pending.length - failed} 条申请，剩余请再次执行`
+        : `已归档 ${pending.length - failed} 条申请`,
+    )
+  }
   if (failed > 0) MessagePlugin.warning(`${failed} 条申请归档失败，请重试`)
   await load()
 }
@@ -187,7 +208,7 @@ const submitting = ref(false)
 
 /* 驳回必须填写原因（与需求/投稿审核一致），通过时意见可选 */
 const commentRules = computed<FormProps['rules']>(() =>
-  dialogAction.value === 'reject' ? { comment: [{ required: true, message: '请填写驳回原因', trigger: 'blur' }] } : {},
+  dialogAction.value === 'reject' ? { comment: [{ required: true, message: '请填写驳回原因', trigger: 'submit' }] } : {},
 )
 
 function openDialog(action: 'approve' | 'reject', row: Application) {
@@ -340,8 +361,8 @@ onMounted(load)
           <t-descriptions-item v-for="d in current.details" :key="d.label" :label="d.label">
             <div v-if="d.files?.length" class="detail-files">
               <div v-for="(f, i) in d.files" :key="i" class="detail-file">
-                <t-image v-if="f.url && isImageFile(f.name)" :src="f.url" fit="cover" class="detail-thumb" />
-                <a v-if="f.url" :href="f.url" target="_blank" rel="noopener noreferrer">{{ f.name }}</a>
+                <t-image v-if="safeHttpUrl(f.url) && isImageFile(f.name)" :src="safeHttpUrl(f.url)" fit="cover" class="detail-thumb" />
+                <a v-if="safeHttpUrl(f.url)" :href="safeHttpUrl(f.url)" target="_blank" rel="noopener noreferrer">{{ f.name }}</a>
                 <span v-else>{{ f.name }}</span>
               </div>
             </div>

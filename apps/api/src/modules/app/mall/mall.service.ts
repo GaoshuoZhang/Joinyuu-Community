@@ -113,14 +113,17 @@ export class AppMallService {
           data: { status: 'restock' },
         })
 
-        /* 事务内复核积分并扣减 */
-        const fresh = await tx.user.findUnique({ where: { uid } })
-        if (!fresh || fresh.points < goods.points) throw new BadRequestException('积分不足')
-        remaining = fresh.points - goods.points
-        await tx.user.update({ where: { uid }, data: { points: remaining } })
+        /* 事务内原子条件扣减积分：余额不足则整体回滚，避免并发下的丢失更新（超兑） */
+        const deducted = await tx.user.updateMany({
+          where: { uid, points: { gte: goods.points } },
+          data: { points: { decrement: goods.points } },
+        })
+        if (deducted.count !== 1) throw new BadRequestException('积分不足')
+        const afterDeduct = await tx.user.findUnique({ where: { uid }, select: { points: true } })
+        remaining = afterDeduct?.points ?? 0
         await tx.pointsRecord.create({
           data: {
-            id: await this.ids.next('PT'),
+            id: await this.ids.next('PT', tx),
             userId: uid,
             delta: -goods.points,
             balance: remaining,
@@ -131,7 +134,7 @@ export class AppMallService {
           },
         })
 
-        orderId = await this.ids.next('RO')
+        orderId = await this.ids.next('RO', tx)
         await tx.redemptionOrder.create({
           data: this.buildOrderData(orderId, uid, user.nickname, goods, dto, address),
         })
@@ -175,14 +178,16 @@ export class AppMallService {
       })
       if (claimed.count !== 1) throw new ConflictException('仅待发货订单可取消')
 
-      /* 退积分（正流水，source=redemption） */
-      const fresh = await tx.user.findUnique({ where: { uid } })
-      if (!fresh) throw new BadRequestException('用户不存在')
-      const newBalance = fresh.points + order.points
-      await tx.user.update({ where: { uid }, data: { points: newBalance } })
+      /* 退积分（原子自增 + 正流水，source=redemption） */
+      const refunded = await tx.user.update({
+        where: { uid },
+        data: { points: { increment: order.points } },
+        select: { points: true },
+      })
+      const newBalance = refunded.points
       await tx.pointsRecord.create({
         data: {
-          id: await this.ids.next('PT'),
+          id: await this.ids.next('PT', tx),
           userId: uid,
           delta: order.points,
           balance: newBalance,
@@ -192,14 +197,13 @@ export class AppMallService {
           source: 'redemption',
         },
       })
-      /* 回补库存：售罄商品回补后恢复上架（保持客户端可见与可下单一致） */
-      const goods = await tx.mallGoods.findUnique({ where: { id: order.goodsId } })
+      /* 回补库存：原子自增，售罄商品回补后恢复上架（保持客户端可见与可下单一致） */
+      const goods = await tx.mallGoods.findUnique({ where: { id: order.goodsId }, select: { status: true } })
       if (goods) {
-        const newStock = goods.stock + 1
         const restoreStatus = goods.status === 'restock' ? { status: 'on' } : {}
         await tx.mallGoods.update({
           where: { id: order.goodsId },
-          data: { stock: newStock, redeemedCount: Math.max(0, goods.redeemedCount - 1), ...restoreStatus },
+          data: { stock: { increment: 1 }, redeemedCount: { decrement: 1 }, ...restoreStatus },
         })
       }
     })

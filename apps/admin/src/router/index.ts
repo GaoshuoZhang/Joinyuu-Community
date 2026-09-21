@@ -16,6 +16,23 @@ function requiredPerm(path: string): string | undefined {
   return undefined
 }
 
+/** 首个可访问路由：登录成功与兜底跳转的目标，避免无 /dashboard 权限的账号必然落地 403。
+ * 按路由注册顺序取第一个「有标题、非参数化、权限与数据范围均放行」的静态路由；全不可访问时返回 /403 */
+export function firstAccessiblePath(): string {
+  const auth = useAuthStore()
+  for (const record of router.getRoutes()) {
+    const path = record.path
+    if (!record.meta?.title || path.includes(':') || path === '/login') continue
+    const perm = (record.meta.perm as string | string[] | undefined) ?? requiredPerm(path)
+    if (perm && !auth.hasPerm(perm)) continue
+    const group = record.meta.group as string | undefined
+    const scopeDomain = record.meta.scopeDomain as string | undefined
+    if (group && !scopeAllowsGroup(auth.dataScope, auth.permissions, group, scopeDomain)) continue
+    return path
+  }
+  return '/403'
+}
+
 /* 路由表（冻结）：所有页面路由预注册，页面组件仅填充 AdminLayout 的 router-view */
 const router = createRouter({
   history: createWebHashHistory(),
@@ -40,7 +57,7 @@ const router = createRouter({
     {
       path: '/',
       component: () => import('@/layouts/AdminLayout.vue'),
-      redirect: '/dashboard',
+      redirect: () => firstAccessiblePath(),
       children: [
         {
           path: 'dashboard',
@@ -298,19 +315,9 @@ const router = createRouter({
           meta: { title: '协议与政策', group: '系统管理', perm: '/system/policies' },
         },
         {
-          path: 'system/message-channels',
-          component: () => import('@/views/system/MessageChannelPanel.vue'),
-          meta: { title: '渠道配置', group: '系统管理', perm: '/system/message-channels' },
-        },
-        {
-          path: 'system/message-templates',
-          component: () => import('@/views/system/MessageTemplatePanel.vue'),
-          meta: { title: '模板中心', group: '系统管理', perm: '/system/message-templates' },
-        },
-        {
-          path: 'system/outbox',
-          component: () => import('@/views/system/MessageOutboxPanel.vue'),
-          meta: { title: '发送记录', group: '系统管理', perm: '/system/outbox' },
+          path: 'system/messages',
+          component: () => import('@/views/system/MessageCenterView.vue'),
+          meta: { title: '消息中心', group: '系统管理', perm: '/system/messages' },
         },
         {
           path: '403',
@@ -319,7 +326,7 @@ const router = createRouter({
         },
       ],
     },
-    { path: '/:pathMatch(.*)*', redirect: '/dashboard' },
+    { path: '/:pathMatch(.*)*', redirect: () => firstAccessiblePath() },
   ],
 })
 
@@ -333,7 +340,7 @@ router.beforeEach((to) => {
     return { path: '/login', query: to.fullPath === '/' ? {} : { redirect: to.fullPath } }
   }
   if (to.path === '/login' && logged) {
-    return '/dashboard'
+    return firstAccessiblePath()
   }
   /* RBAC：路由级权限校验（meta.perm 优先，否则按权限目录推导；支持数组 any-of），无权限落地 /403 */
   const perm = (to.meta.perm as string | string[] | undefined) ?? requiredPerm(to.path)

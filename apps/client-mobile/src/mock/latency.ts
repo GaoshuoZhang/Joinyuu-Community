@@ -6,8 +6,20 @@ export function delay(ms = MOCK_LATENCY): Promise<void> {
   return new Promise((r) => setTimeout(r, ms))
 }
 
-/** 抛业务错误（code/message 与后端错误包络同形态） */
+/** 抛业务错误（code/message 与后端错误包络同形态）。
+ * 401 且本地已存在令牌时，与 http 模式一致地走「统一未授权通道」：
+ * 清理本地令牌并广播事件，避免 mock 模式下会话失效后仍停留为「已登录」假象
+ * （登录失败等未登录场景不带令牌，不会触发本分支）。 */
 export function fail(code: number, message: string): never {
+  if (code === 401 && localStorage.getItem('joinyuu_client_token')) {
+    localStorage.removeItem('joinyuu_client_token')
+    localStorage.removeItem('joinyuu_client_identity')
+    window.dispatchEvent(
+      new CustomEvent('joinyuu:unauthorized', {
+        detail: { redirect: location.pathname + location.search },
+      }),
+    )
+  }
   throw new ApiError(code, message)
 }
 

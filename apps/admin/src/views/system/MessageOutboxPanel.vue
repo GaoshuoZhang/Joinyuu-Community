@@ -14,6 +14,7 @@ import type { OutboxDeliveryLog, OutboxMessage, OutboxStatus } from '@/types'
 
 /* 消息中心 · 发送记录（P0 Outbox）：投递状态 / 失败原因 / 投递日志 / 手动重试与终止。
  * 重试退避与死信由后端调度任务自动处理，此处用于人工干预与排障。 */
+defineProps<{ inline?: boolean }>()
 const loading = ref(true)
 const loadError = ref('')
 const list = ref<OutboxMessage[]>([])
@@ -131,8 +132,8 @@ async function openLogs(row: OutboxMessage) {
 </script>
 
 <template>
-  <div class="outbox-panel page-fade-in">
-    <PageHeader title="发送记录" description="消息投递状态与投递日志；重试退避与死信由后台定时任务自动执行">
+  <div class="outbox-panel" :class="{ 'page-fade-in': true }">
+    <PageHeader v-if="!$props.inline" title="发送记录" description="消息投递状态与投递日志；重试退避与死信由后台定时任务自动执行">
       <template #actions>
         <t-space size="small">
           <t-tag v-for="(count, key) in stats" :key="key" variant="light-outline" size="small">

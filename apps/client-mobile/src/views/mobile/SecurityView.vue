@@ -1,22 +1,23 @@
 <script setup lang="ts">
-import { computed, onMounted, reactive, ref, watch } from 'vue'
+import { computed, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { Button, Cell, CellGroup, DialogPlugin, Input, Popup, Textarea, Toast } from 'tdesign-mobile-vue'
-import { changePhone } from '@/api/auth'
-import { cancelAccountDeletion, changePassword, downloadPersonalData, fetchAccountRequests, requestAccountDeletion, requestDataExport } from '@/api/me'
+import { changeEmail, changePhone, sendEmailCode, sendSmsCode } from '@/api/auth'
+import { cancelAccountDeletion, changePassword, downloadPersonalData, fetchAccountRequests, fetchMe, requestAccountDeletion, requestDataExport } from '@/api/me'
 import { ApiError } from '@/api/http'
+import { useAuthStore } from '@/stores/auth'
 import EmptyBlock from '@/components/shared/EmptyBlock.vue'
-import { useCaptcha } from '@/composables/useCaptcha'
-import CaptchaField from '@/components/CaptchaField.vue'
 import { useUnsavedGuard } from '@/composables/useUnsavedGuard'
 import { formatLocalDateTime } from '@/utils/format'
+import { EMAIL_MSG, isEmail, isPhone, isSmsCode, PHONE_MSG } from '@/utils/validators'
+import type { UserProfile } from '@/types'
 
-/* 账号与安全：修改密码 / 更换手机号 / 注销申请 / 数据导出。
- * 短信与三要素实名当前按 M2-R 既定降级方案实现。 */
+/* 账号与安全：修改密码 / 绑定手机号 / 绑定邮箱 / 注销申请 / 数据导出。 */
 const router = useRouter()
-const { captchaId, captchaImage, captchaLoading, refreshCaptcha } = useCaptcha()
+const auth = useAuthStore()
 
 const requests = ref<{ deletion?: { reason?: string; at: string; cancelableUntil?: string }; export?: { at: string; url?: string } }>({})
+const profile = ref<UserProfile | null>(null)
 const loadError = ref('')
 
 async function loadAll() {
@@ -26,10 +27,35 @@ async function loadAll() {
   } catch (e) {
     loadError.value = e instanceof ApiError ? e.message : '加载失败，请稍后重试'
   }
+  try {
+    profile.value = await fetchMe()
+  } catch {
+    /* 绑定信息展示失败不阻断页面其余功能 */
+  }
 }
 onMounted(loadAll)
 
-/* ---- 修改密码 ---- */
+/* ---- 绑定信息（脱敏展示） ---- */
+function maskPhone(value: string): string {
+  return /^\d{11}$/.test(value) ? `${value.slice(0, 3)}****${value.slice(-4)}` : value
+}
+function maskEmail(value: string): string {
+  const [name, domain] = value.split('@')
+  if (!domain) return value
+  return `${name.slice(0, 1)}***@${domain}`
+}
+const phoneNote = computed(() => {
+  const phone = profile.value?.phone
+  if (!phone) return '未绑定'
+  return `${maskPhone(phone)}${profile.value?.phoneVerified ? '' : '（未验证）'}`
+})
+const emailNote = computed(() => {
+  const email = profile.value?.email
+  if (!email) return '未绑定'
+  return `${maskEmail(email)}${profile.value?.emailVerified ? '' : '（未验证）'}`
+})
+
+/* ---- 修改密码：成功后服务端强制全端登出，客户端清理会话并回登录页 ---- */
 const pwdVisible = ref(false)
 const pwdForm = reactive({ oldPassword: '', password: '', confirm: '' })
 /* v40：行内校验错误 */
@@ -58,11 +84,13 @@ function onPwdSave() {
   pwdSaving.value = true
   changePassword({ oldPassword: pwdForm.oldPassword, password: pwdForm.password })
     .then(() => {
-      Toast('密码已修改')
+      Toast('密码已修改，请重新登录')
       pwdVisible.value = false
       pwdForm.oldPassword = ''
       pwdForm.password = ''
       pwdForm.confirm = ''
+      auth.resetSession()
+      void router.replace('/login')
     })
     .catch((e) => Toast(e instanceof ApiError ? e.message : '修改失败，请稍后重试'))
     .finally(() => {
@@ -70,40 +98,146 @@ function onPwdSave() {
     })
 }
 
-/* ---- 更换手机号 ---- */
+/* ---- 验证码倒计时 ---- */
+const phoneCountdown = ref(0)
+const emailCountdown = ref(0)
+let phoneTimer: number | undefined
+let emailTimer: number | undefined
+function startCountdown(kind: 'phone' | 'email', seconds = 60) {
+  const timerRef = kind === 'phone' ? phoneCountdown : emailCountdown
+  const clear = () => {
+    if (kind === 'phone') {
+      window.clearInterval(phoneTimer)
+      phoneTimer = undefined
+    } else {
+      window.clearInterval(emailTimer)
+      emailTimer = undefined
+    }
+    timerRef.value = 0
+  }
+  clear()
+  timerRef.value = seconds
+  const timer = window.setInterval(() => {
+    timerRef.value -= 1
+    if (timerRef.value <= 0) clear()
+  }, 1000)
+  if (kind === 'phone') phoneTimer = timer
+  else emailTimer = timer
+}
+onBeforeUnmount(() => {
+  window.clearInterval(phoneTimer)
+  window.clearInterval(emailTimer)
+})
+
+/* ---- 绑定 / 更换手机号 ---- */
 const phoneVisible = ref(false)
-const phoneForm = reactive({ phone: '', captchaCode: '' })
-const phoneErrors = reactive({ phone: '', captchaCode: '' })
-watch(() => phoneForm.phone, () => (phoneErrors.phone = ''))
-watch(() => phoneForm.captchaCode, () => (phoneErrors.captchaCode = ''))
+const phoneForm = reactive({ newPhone: '', smsCode: '' })
+const phoneErrors = reactive({ newPhone: '', smsCode: '' })
+watch(() => phoneForm.newPhone, () => (phoneErrors.newPhone = ''))
+watch(() => phoneForm.smsCode, () => (phoneErrors.smsCode = ''))
 const phoneSaving = ref(false)
+const phoneSending = ref(false)
+
+async function onSendPhoneCode() {
+  phoneErrors.newPhone = ''
+  if (!isPhone(phoneForm.newPhone.trim())) {
+    phoneErrors.newPhone = PHONE_MSG
+    return void Toast(phoneErrors.newPhone)
+  }
+  phoneSending.value = true
+  try {
+    const result = await sendSmsCode({ phone: phoneForm.newPhone.trim(), purpose: 'change_phone' })
+    Toast(result.devCode ? `验证码已发送（演示码 ${result.devCode}）` : '验证码已发送')
+    startCountdown('phone')
+  } catch (e) {
+    Toast(e instanceof ApiError ? e.message : '验证码发送失败，请稍后重试')
+  } finally {
+    phoneSending.value = false
+  }
+}
 
 function onPhoneSave() {
-  phoneErrors.phone = ''
-  phoneErrors.captchaCode = ''
-  if (!/^1\d{10}$/.test(phoneForm.phone.trim())) {
-    phoneErrors.phone = '请输入 11 位手机号'
-    return void Toast(phoneErrors.phone)
+  phoneErrors.newPhone = ''
+  phoneErrors.smsCode = ''
+  if (!isPhone(phoneForm.newPhone.trim())) {
+    phoneErrors.newPhone = PHONE_MSG
+    return void Toast(phoneErrors.newPhone)
   }
-  if (!phoneForm.captchaCode.trim()) {
-    phoneErrors.captchaCode = '请输入验证码'
-    return void Toast(phoneErrors.captchaCode)
+  if (!isSmsCode(phoneForm.smsCode)) {
+    phoneErrors.smsCode = '请输入 6 位验证码'
+    return void Toast(phoneErrors.smsCode)
   }
   phoneSaving.value = true
-  changePhone({ phone: phoneForm.phone.trim(), captchaId: captchaId.value, captchaCode: phoneForm.captchaCode.trim() })
-    .then(() => {
+  changePhone({ newPhone: phoneForm.newPhone.trim(), smsCode: phoneForm.smsCode.trim() })
+    .then(async () => {
       Toast('手机号已更新')
       phoneVisible.value = false
-      phoneForm.phone = ''
-      phoneForm.captchaCode = ''
+      phoneForm.newPhone = ''
+      phoneForm.smsCode = ''
+      profile.value = await fetchMe().catch(() => profile.value)
     })
     .catch((e) => {
       Toast(e instanceof ApiError ? e.message : '更新失败，请稍后重试')
-      phoneForm.captchaCode = ''
-      void refreshCaptcha()
+      phoneForm.smsCode = ''
     })
     .finally(() => {
       phoneSaving.value = false
+    })
+}
+
+/* ---- 绑定 / 更换邮箱 ---- */
+const emailVisible = ref(false)
+const emailForm = reactive({ newEmail: '', code: '' })
+const emailErrors = reactive({ newEmail: '', code: '' })
+watch(() => emailForm.newEmail, () => (emailErrors.newEmail = ''))
+watch(() => emailForm.code, () => (emailErrors.code = ''))
+const emailSaving = ref(false)
+const emailSending = ref(false)
+
+async function onSendEmailCode() {
+  emailErrors.newEmail = ''
+  if (!isEmail(emailForm.newEmail)) {
+    emailErrors.newEmail = EMAIL_MSG
+    return void Toast(emailErrors.newEmail)
+  }
+  emailSending.value = true
+  try {
+    const result = await sendEmailCode({ email: emailForm.newEmail.trim(), purpose: 'change_email' })
+    Toast(result.devCode ? `验证码已发送（演示码 ${result.devCode}）` : '验证码已发送')
+    startCountdown('email')
+  } catch (e) {
+    Toast(e instanceof ApiError ? e.message : '验证码发送失败，请稍后重试')
+  } finally {
+    emailSending.value = false
+  }
+}
+
+function onEmailSave() {
+  emailErrors.newEmail = ''
+  emailErrors.code = ''
+  if (!isEmail(emailForm.newEmail)) {
+    emailErrors.newEmail = EMAIL_MSG
+    return void Toast(emailErrors.newEmail)
+  }
+  if (!isSmsCode(emailForm.code)) {
+    emailErrors.code = '请输入 6 位验证码'
+    return void Toast(emailErrors.code)
+  }
+  emailSaving.value = true
+  changeEmail({ newEmail: emailForm.newEmail.trim(), code: emailForm.code.trim() })
+    .then(async () => {
+      Toast('邮箱已更新')
+      emailVisible.value = false
+      emailForm.newEmail = ''
+      emailForm.code = ''
+      profile.value = await fetchMe().catch(() => profile.value)
+    })
+    .catch((e) => {
+      Toast(e instanceof ApiError ? e.message : '更新失败，请稍后重试')
+      emailForm.code = ''
+    })
+    .finally(() => {
+      emailSaving.value = false
     })
 }
 
@@ -112,30 +246,37 @@ const deletionReason = ref('')
 const deletionVisible = ref(false)
 const hasUnsavedSheet = computed(() => (
   (pwdVisible.value && Boolean(pwdForm.oldPassword || pwdForm.password || pwdForm.confirm))
-  || (phoneVisible.value && Boolean(phoneForm.phone || phoneForm.captchaCode))
+  || (phoneVisible.value && Boolean(phoneForm.newPhone || phoneForm.smsCode))
+  || (emailVisible.value && Boolean(emailForm.newEmail || emailForm.code))
   || (deletionVisible.value && Boolean(deletionReason.value.trim()))
 ))
 useUnsavedGuard(() => hasUnsavedSheet.value)
 
-function requestSheetClose(kind: 'password' | 'phone' | 'deletion', visible: boolean) {
+function requestSheetClose(kind: 'password' | 'phone' | 'email' | 'deletion', visible: boolean) {
   if (visible) {
     if (kind === 'password') pwdVisible.value = true
     else if (kind === 'phone') phoneVisible.value = true
+    else if (kind === 'email') emailVisible.value = true
     else deletionVisible.value = true
     return
   }
   const dirty = kind === 'password'
     ? Boolean(pwdForm.oldPassword || pwdForm.password || pwdForm.confirm)
     : kind === 'phone'
-      ? Boolean(phoneForm.phone || phoneForm.captchaCode)
-      : Boolean(deletionReason.value.trim())
+      ? Boolean(phoneForm.newPhone || phoneForm.smsCode)
+      : kind === 'email'
+        ? Boolean(emailForm.newEmail || emailForm.code)
+        : Boolean(deletionReason.value.trim())
   const close = () => {
     if (kind === 'password') {
       pwdVisible.value = false
       Object.assign(pwdForm, { oldPassword: '', password: '', confirm: '' })
     } else if (kind === 'phone') {
       phoneVisible.value = false
-      Object.assign(phoneForm, { phone: '', captchaCode: '' })
+      Object.assign(phoneForm, { newPhone: '', smsCode: '' })
+    } else if (kind === 'email') {
+      emailVisible.value = false
+      Object.assign(emailForm, { newEmail: '', code: '' })
     } else {
       deletionVisible.value = false
       deletionReason.value = ''
@@ -216,7 +357,8 @@ async function onExport() {
     <p class="group-title">账号安全</p>
     <CellGroup theme="card">
       <Cell title="修改登录密码" arrow @click="pwdVisible = true" />
-      <Cell title="更换绑定手机号" arrow @click="phoneVisible = true" />
+      <Cell title="绑定手机号" :note="phoneNote" arrow @click="phoneVisible = true" />
+      <Cell title="绑定邮箱" :note="emailNote" arrow @click="emailVisible = true" />
       <Cell title="找回密码说明" note="退出登录后可在登录页操作" arrow @click="router.push('/forgot-password')" />
     </CellGroup>
 
@@ -247,16 +389,46 @@ async function onExport() {
         <div class="field"><label>原密码</label><Input v-model="pwdForm.oldPassword" type="password" autocomplete="current-password" placeholder="请输入原密码…" clearable /><p v-if="pwdErrors.oldPassword" class="field-error">{{ pwdErrors.oldPassword }}</p></div>
         <div class="field"><label>新密码</label><Input v-model="pwdForm.password" type="password" autocomplete="new-password" placeholder="至少 8 位，含字母与数字…" clearable /><p v-if="pwdErrors.password" class="field-error">{{ pwdErrors.password }}</p></div>
         <div class="field"><label>确认新密码</label><Input v-model="pwdForm.confirm" type="password" autocomplete="new-password" placeholder="再次输入新密码…" clearable /><p v-if="pwdErrors.confirm" class="field-error">{{ pwdErrors.confirm }}</p></div>
+        <p class="sheet-tip">修改成功后需使用新密码重新登录。</p>
         <Button theme="primary" size="large" block :loading="pwdSaving" @click="onPwdSave">保存</Button>
       </div>
     </Popup>
 
     <Popup :visible="phoneVisible" placement="bottom" :close-btn="true" @update:visible="requestSheetClose('phone', $event)">
       <div class="sheet">
-        <h2 class="sheet-title">更换绑定手机号</h2>
-        <div class="field"><label>新手机号</label><Input v-model="phoneForm.phone" type="tel" autocomplete="tel" :maxlength="11" placeholder="请输入新手机号…" clearable /><p v-if="phoneErrors.phone" class="field-error">{{ phoneErrors.phone }}</p></div>
-        <CaptchaField v-model="phoneForm.captchaCode" label="图形验证码" :image="captchaImage" :loading="captchaLoading" clearable :error="phoneErrors.captchaCode" @refresh="refreshCaptcha" />
+        <h2 class="sheet-title">绑定手机号</h2>
+        <p class="sheet-tip">当前：{{ phoneNote }}。更换后新手机号可用于登录与接收通知。</p>
+        <div class="field"><label>新手机号</label><Input v-model="phoneForm.newPhone" type="tel" autocomplete="tel" :maxlength="11" placeholder="请输入新手机号…" clearable /><p v-if="phoneErrors.newPhone" class="field-error">{{ phoneErrors.newPhone }}</p></div>
+        <div class="field">
+          <label>短信验证码</label>
+          <div class="code-row">
+            <Input v-model="phoneForm.smsCode" class="code-input" :maxlength="6" inputmode="numeric" :spell-check="false" placeholder="请输入 6 位验证码…" clearable />
+            <Button class="code-button" theme="light" :disabled="phoneSending || phoneCountdown > 0" @click="onSendPhoneCode">
+              {{ phoneCountdown > 0 ? `${phoneCountdown}s` : phoneSending ? '发送中…' : '获取验证码' }}
+            </Button>
+          </div>
+          <p v-if="phoneErrors.smsCode" class="field-error">{{ phoneErrors.smsCode }}</p>
+        </div>
         <Button theme="primary" size="large" block :loading="phoneSaving" @click="onPhoneSave">确认更换</Button>
+      </div>
+    </Popup>
+
+    <Popup :visible="emailVisible" placement="bottom" :close-btn="true" @update:visible="requestSheetClose('email', $event)">
+      <div class="sheet">
+        <h2 class="sheet-title">绑定邮箱</h2>
+        <p class="sheet-tip">当前：{{ emailNote }}。绑定后邮箱可用于登录与接收通知。</p>
+        <div class="field"><label>新邮箱</label><Input v-model="emailForm.newEmail" type="text" autocomplete="email" placeholder="请输入新邮箱…" clearable /><p v-if="emailErrors.newEmail" class="field-error">{{ emailErrors.newEmail }}</p></div>
+        <div class="field">
+          <label>邮箱验证码</label>
+          <div class="code-row">
+            <Input v-model="emailForm.code" class="code-input" :maxlength="6" inputmode="numeric" :spell-check="false" placeholder="请输入 6 位验证码…" clearable />
+            <Button class="code-button" theme="light" :disabled="emailSending || emailCountdown > 0" @click="onSendEmailCode">
+              {{ emailCountdown > 0 ? `${emailCountdown}s` : emailSending ? '发送中…' : '获取验证码' }}
+            </Button>
+          </div>
+          <p v-if="emailErrors.code" class="field-error">{{ emailErrors.code }}</p>
+        </div>
+        <Button theme="primary" size="large" block :loading="emailSaving" @click="onEmailSave">确认绑定</Button>
       </div>
     </Popup>
 
@@ -322,6 +494,23 @@ async function onExport() {
   margin-bottom:var(--app-space-3);
   font-size: var(--app-font-caption);
   color: var(--td-text-color-secondary);
+}
+
+.code-row {
+  display: flex;
+  align-items: center;
+  gap:var(--app-space-5);
+}
+
+.code-input {
+  flex: 1;
+  min-width: 0;
+}
+
+.code-button {
+  flex-shrink: 0;
+  min-width: 108px;
+  min-height: 40px;
 }
 
 .field-error {

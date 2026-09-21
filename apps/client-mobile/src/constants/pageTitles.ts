@@ -63,6 +63,7 @@ const ROUTE_TITLES: Record<string, string> = {
   'me-security': '账号与安全',
   'me-records': '我的记录',
   'me-settings': '设置',
+  'me-notification-settings': '通知设置',
   privacy: '用户协议与隐私政策',
   'me-applications': '我的申请',
   'my-application-detail': '申请详情',

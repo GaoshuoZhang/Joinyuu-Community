@@ -62,11 +62,11 @@ export const experienceRecords: ExperienceRecord[] = [
 ]
 
 export const pointsRecords: PointsRecord[] = [
-  /* U1001 陈屿（当前 2860） */
+  /* U1001 陈屿（当前 2710） */
   { id: 'PT9001', userId: 'U1001', delta: 1000, balance: 1000, reason: '需求「社区小程序」立项积分', at: '2026-05-20 10:00', source: 'rule', operator: '系统' },
   { id: 'PT9002', userId: 'U1001', delta: 860, balance: 1860, reason: '项目里程碑达成奖励', at: '2026-08-25 14:11', source: 'rule', operator: '系统' },
   { id: 'PT9003', userId: 'U1001', delta: 1000, balance: 2860, reason: '年度活跃成员奖励', at: '2026-09-05 19:30', source: 'manual', operator: '社区管理员' },
-  /* U1002 林晚舟（当前 1950） */
+  /* U1002 林晚舟（当前 1690） */
   { id: 'PT9004', userId: 'U1002', delta: 600, balance: 600, reason: '组件库共建积分', at: '2026-06-20 17:40', source: 'manual', operator: '社区管理员' },
   { id: 'PT9005', userId: 'U1002', delta: 650, balance: 1250, reason: '里程碑评审通过', at: '2026-08-30 09:40', source: 'rule', operator: '系统' },
   { id: 'PT9006', userId: 'U1002', delta: -300, balance: 950, reason: '兑换「会议室优先预约卡」', at: '2026-08-25 09:40', source: 'redemption', operator: '系统' },

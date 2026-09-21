@@ -26,7 +26,6 @@ const emit = defineEmits<{ 'update:modelValue': [string]; refresh: [] }>()
         class="captcha-input"
         :model-value="modelValue"
         :maxlength="4"
-        inputmode="numeric"
         :spell-check="false"
         :clearable="clearable"
         :disabled="disabled"

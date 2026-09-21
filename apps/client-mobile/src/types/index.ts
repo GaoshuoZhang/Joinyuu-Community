@@ -58,8 +58,18 @@ export interface UserIdentity {
 
 export interface UserProfile {
   uid: string
-  phone: string
+  /** 登录标识（用户可修改，全站唯一） */
+  username: string
+  /** 昵称（社区展示名） */
   nickname: string
+  /** 已绑定手机号（未绑定为空；服务端下发未脱敏值，展示层自行脱敏） */
+  phone?: string
+  /** 已绑定邮箱（未绑定为空） */
+  email?: string
+  /** 手机号是否为已验证可信渠道（可用于找回密码/接收通知） */
+  phoneVerified?: boolean
+  /** 邮箱是否为已验证可信渠道 */
+  emailVerified?: boolean
   realName?: string
   /** 是否已完成实名认证 */
   realNameVerified?: boolean
@@ -353,28 +363,54 @@ export interface HomeArticleCard {
 
 /* ---------- 鉴权 ---------- */
 
+/** 登录标识：手机号 / 邮箱 / 用户名 */
 export interface LoginPayload {
-  phone: string
+  identifier: string
   password: string
   captchaCode: string
   captchaId: string
 }
 
 export interface RegisterPayload {
-  phone: string
+  /** 注册渠道：email（默认）| phone */
+  channel: 'email' | 'phone'
+  email?: string
+  phone?: string
+  /** 6 位验证码（邮箱注册为邮箱验证码，手机号注册为短信验证码） */
+  code: string
   password: string
-  confirmPassword: string
-  captchaCode: string
-  captchaId: string
-  nickname: string
+  /** 仅客户端本地校验一致性，不随请求下发 */
+  confirmPassword?: string
   /** v38：注册须勾选同意用户协议与隐私政策 */
   agreed?: boolean
+  gender?: string
+}
+
+/** 短信验证码用途 */
+export type SmsPurpose = 'register' | 'reset_password' | 'change_phone' | 'login'
+
+/** 邮箱验证码用途 */
+export type EmailPurpose = 'register' | 'reset_password' | 'change_email'
+
+/** 发送验证码响应：devCode 仅开发/未接入通道时下发 */
+export interface SendCodeResult {
+  expiresInSec: number
+  devCode?: string
+}
+
+/** 找回密码前置：账号已验证可信渠道（脱敏值，null 表示不可用） */
+export interface RecoveryChannels {
+  email: string | null
+  phone: string | null
 }
 
 /** 登录/注册响应：包含多身份摘要的 App JWT。 */
 export interface AuthResult {
   token: string
   uid: string
+  /** 登录标识（用户可修改，全站唯一） */
+  username: string
+  /** 展示昵称（沿用 name 字段） */
   name: string
   avatar?: string
   identities: UserIdentity[]
@@ -825,6 +861,8 @@ export interface ArticleCreatePayload {
   /** 封面与正文图片均复用客户端上传契约 */
   coverUrl?: string
   content: string
+  /** 列表卡片副标题与搜索摘要；未提供时后端留空 */
+  summary?: string
 }
 
 /* ---------- 企业名片与名片申请 ---------- */

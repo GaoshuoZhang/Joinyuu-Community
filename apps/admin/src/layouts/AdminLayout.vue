@@ -160,9 +160,13 @@ async function onNoticeClick(item: AdminNotification) {
 }
 
 async function onReadAll() {
-  await markAllNotificationsRead()
-  noticeList.value = noticeList.value.map((n) => ({ ...n, read: true }))
-  MessagePlugin.success('全部通知已标记为已读')
+  try {
+    await markAllNotificationsRead()
+    noticeList.value = noticeList.value.map((n) => ({ ...n, read: true }))
+    MessagePlugin.success('全部通知已标记为已读')
+  } catch (error) {
+    MessagePlugin.error(error instanceof Error ? error.message : '标记已读失败，请重试')
+  }
 }
 
 onMounted(loadNotifications)
@@ -268,9 +272,15 @@ async function handleDropdown(item: { value?: string | number }) {
     return
   }
   if (item.value === 'logout') {
-    await auth.logout()
-    tabs.clear()
-    router.push('/login')
+    try {
+      await auth.logout()
+    } catch {
+      /* 登出接口失败：本地登录态已由 resetAuth 兜底清理，仍需提示并离开 */
+      MessagePlugin.error('退出登录失败，已清除本地登录状态')
+    } finally {
+      tabs.clear()
+      router.push('/login')
+    }
   }
 }
 </script>
@@ -457,7 +467,7 @@ async function handleDropdown(item: { value?: string | number }) {
           </t-submenu>
 
           <t-submenu
-            v-if="canSee(['/system/dicts', '/system/config', '/logs/audit', '/logs/login', '/system/roles', '/system/admins', '/system/sessions', '/system/assets', '/system/monitor', '/system/trash', '/system/policies', '/system/message-channels', '/system/message-templates', '/system/outbox'], '系统管理') || canSee(['/approvals', '/member-governance'], '系统管理', 'members')"
+            v-if="canSee(['/system/dicts', '/system/config', '/logs/audit', '/logs/login', '/system/roles', '/system/admins', '/system/sessions', '/system/assets', '/system/monitor', '/system/trash', '/system/policies', '/system/messages'], '系统管理') || canSee(['/approvals', '/member-governance'], '系统管理', 'members')"
             value="group-system"
             title="系统管理"
           >
@@ -496,21 +506,10 @@ async function handleDropdown(item: { value?: string | number }) {
               归档管理
             </t-menu-item>
             <t-menu-item value="/system/policies" v-permission="'/system/policies'"><template #icon><Edit2Icon /></template>协议与政策</t-menu-item>
-            <t-submenu value="group-messaging" title="消息中心">
+            <t-menu-item value="/system/messages" v-permission="'/system/messages'">
               <template #icon><NotificationIcon /></template>
-              <t-menu-item value="/system/message-channels" v-permission="'/system/message-channels'">
-                <template #icon><NotificationIcon /></template>
-                渠道配置
-              </t-menu-item>
-              <t-menu-item value="/system/message-templates" v-permission="'/system/message-templates'">
-                <template #icon><Edit2Icon /></template>
-                模板中心
-              </t-menu-item>
-              <t-menu-item value="/system/outbox" v-permission="'/system/outbox'">
-                <template #icon><ViewListIcon /></template>
-                发送记录
-              </t-menu-item>
-            </t-submenu>
+              消息中心
+            </t-menu-item>
           </t-submenu>
         </t-menu>
       </div>

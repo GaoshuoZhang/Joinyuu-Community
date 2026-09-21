@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, markRaw, onBeforeUnmount, onMounted, reactive, ref, watch, type Component } from 'vue'
 import { useRouter } from 'vue-router'
+import { MessagePlugin } from 'tdesign-vue-next'
 import {
   AppIcon,
   Building1Icon,
@@ -20,6 +21,7 @@ import {
   ViewListIcon,
 } from 'tdesign-icons-vue-next'
 import PageHeader from '@/components/PageHeader.vue'
+import ListErrorState from '@/components/ListErrorState.vue'
 import StatCard from '@/components/StatCard.vue'
 import StatusTag from '@/components/StatusTag.vue'
 import TrendChart from '@/components/TrendChart.vue'
@@ -37,6 +39,7 @@ import { fetchArticles } from '@/api/contents'
 const router = useRouter()
 const auth = useAuthStore()
 const loading = ref(true)
+const loadError = ref('')
 const data = ref<DashboardData | null>(null)
 
 /* 权限收敛（D-011）：待办/平台数据/快捷入口仅展示当前账号可用项 */
@@ -84,12 +87,20 @@ const activeTrendLabel = computed(
   () => trendTabs.find((t) => t.value === trendTab.value)?.label ?? '',
 )
 
+/* 请求序号守卫 + 失败提示：快速切换区间时只保留最后一次结果 */
+let trendVersion = 0
 async function loadTrend(days: number) {
+  const current = ++trendVersion
   trendLoading.value = true
   try {
-    trend.value = await fetchTrend(days)
+    const points = await fetchTrend(days)
+    if (current === trendVersion) trend.value = points
+  } catch (error) {
+    if (current === trendVersion) {
+      MessagePlugin.error(error instanceof Error ? error.message : '趋势数据加载失败')
+    }
   } finally {
-    trendLoading.value = false
+    if (current === trendVersion) trendLoading.value = false
   }
 }
 
@@ -113,16 +124,22 @@ async function loadAnnouncements() {
   }
 }
 
-onMounted(async () => {
+async function load() {
+  loadError.value = ''
+  loading.value = true
   try {
     data.value = await fetchDashboard()
+  } catch (error) {
+    loadError.value = error instanceof Error ? error.message : '数据加载失败'
   } finally {
     loading.value = false
   }
   loadTrend(trendDays.value)
   loadAnnouncements()
   loadPlatformStats()
-})
+}
+
+onMounted(load)
 
 /* ---------- 布局编辑：卡片显隐开关（下拉列表 + localStorage 持久化） ---------- */
 const CARD_KEYS = ['todos', 'stats', 'announcements', 'approvals', 'events', 'trend', 'quick'] as const
@@ -312,6 +329,8 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onLayoutKeydown))
         </t-popup>
       </template>
     </PageHeader>
+
+    <ListErrorState v-if="loadError" :message="loadError" :loading="loading" @retry="load" />
 
     <t-skeleton v-if="loading" :row-col="[{ width: '100%', height: '88px' }, [{ width: '48%', height: '260px' }, { width: '48%', height: '260px' }]]" animation="gradient" />
 

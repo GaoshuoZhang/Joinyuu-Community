@@ -1,4 +1,4 @@
-import type { CheckinPayload, CommunityEvent, EventEnrollmentResult, EventFeedbackPayload, MyEnrollmentItem, MyEventFeedback } from '@/types'
+import type { CheckinPayload, CommunityEvent, EventEnrollmentResult, EventFeedbackPayload, MyEnrollmentItem, MyEventFeedback, PageResult } from '@/types'
 import { accountByUid, enrollmentsByUid, eventFeedbackByUid, events, grantPoints, nextEnrollmentId, nowStamp, pushNotice, trackMockEvent } from '@/mock/db'
 import { readPayload } from '@/mock/session'
 import { fail, withLatency } from '@/mock/latency'
@@ -45,13 +45,20 @@ function enrich(ev: (typeof events)[number]): CommunityEvent {
   return { ...publicEvent, myEnrollmentStatus: mine?.status as CommunityEvent['myEnrollmentStatus'], myEnrollmentRejectReason: mine?.rejectReason, myCheckedIn: mine?.checkedIn ?? false }
 }
 
-export async function fetchEvents(query: { type?: string; keyword?: string } = {}): Promise<CommunityEvent[]> {
+/** 列表分页：与后端一致，默认 pageSize=10；返回 { list, total } 供前端展示真实总数 */
+function paginate<T>(items: T[], page = 1, pageSize = 10): PageResult<T> {
+  const safePage = Math.max(1, page)
+  const safeSize = Math.min(100, Math.max(1, pageSize))
+  return { list: items.slice((safePage - 1) * safeSize, safePage * safeSize), total: items.length }
+}
+
+export async function fetchEvents(query: { type?: string; keyword?: string; page?: number; pageSize?: number } = {}): Promise<PageResult<CommunityEvent>> {
   return withLatency(() => {
     /* 仅返回已发布且未结束的活动（结束时间晚于当前） */
     let list = events.filter((e) => e.status === 'published' && parseMockStamp(e.endTime).getTime() > mockNowMs() && visibleTo(e))
     if (query.type) list = list.filter((e) => e.typeLabel === query.type)
     if (query.keyword) list = list.filter((e) => e.title.includes(query.keyword!))
-    return list.map(enrich)
+    return paginate(list.map(enrich), query.page, query.pageSize)
   })
 }
 
@@ -71,8 +78,8 @@ export async function enrollEvent(id: string): Promise<EventEnrollmentResult> {
     const ev = events.find((e) => e.id === id)
     if (!ev || ev.status !== 'published') fail(404, '活动不存在或已结束')
     if (ev.enrollmentOpen === false) fail(400, '报名暂未开放')
-    if (!canEnroll(ev)) fail(403, '当前身份不在该活动的可报名范围内')
-    if (parseMockStamp(ev.enrollmentDeadline).getTime() < mockNowMs()) fail(409, '报名已截止')
+    if (!canEnroll(ev)) fail(400, '当前身份不在该活动的可报名范围内')
+    if (parseMockStamp(ev.enrollmentDeadline).getTime() < mockNowMs()) fail(400, '报名已截止')
     const mine = (enrollmentsByUid[uid] ??= [])
     if (mine.some((e) => e.eventId === id && (e.status === 'pending' || e.status === 'approved' || e.status === 'waitlisted'))) fail(409, '你已报名该活动')
     /* v38：满员进入候补（按顺序自动递补）；有审核的活动满员同样候补 */
@@ -141,8 +148,10 @@ export async function fetchEventTicket(eventId: string): Promise<import('@/types
     const uid = requireUid()
     const item = (enrollmentsByUid[uid] ?? []).find((e) => e.eventId === eventId)
     if (!item) fail(404, '未找到该活动的报名记录')
+    /* 与后端 myTicket 一致：仅已通过（approved）报名可获取电子票 */
+    if (item.status !== 'approved') fail(400, '报名未通过，无法获取电子票')
     const ev = events.find((candidate) => candidate.id === eventId)
-    const status = item.status === 'cancelled' || ev?.status === 'cancelled'
+    const status = ev?.status === 'cancelled'
       ? 'cancelled'
       : item.ticketRedeemed
         ? 'checked'
@@ -162,11 +171,11 @@ export async function fetchEventTicket(eventId: string): Promise<import('@/types
   }, 140)
 }
 
-export async function fetchMyEnrollments(): Promise<MyEnrollmentItem[]> {
+export async function fetchMyEnrollments(query: { page?: number; pageSize?: number } = {}): Promise<PageResult<MyEnrollmentItem>> {
   return withLatency(() => {
     const uid = requireUid()
     /* v40：附带活动当前状态与改期时间，便于列表提示「已取消 / 已改期」 */
-    return (enrollmentsByUid[uid] ?? []).map((item) => {
+    const all = (enrollmentsByUid[uid] ?? []).map((item) => {
       const { ticketRedeemed: _ticketRedeemed, ...publicItem } = item
       void _ticketRedeemed
       const ev = events.find((candidate) => candidate.id === item.eventId)
@@ -177,6 +186,7 @@ export async function fetchMyEnrollments(): Promise<MyEnrollmentItem[]> {
         rescheduledTo: ev?.rescheduledTo ?? (ev && ev.startTime !== item.startTime ? ev.startTime : undefined),
       }
     })
+    return paginate(all, query.page, query.pageSize)
   })
 }
 

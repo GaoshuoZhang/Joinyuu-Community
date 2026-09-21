@@ -1,10 +1,11 @@
-import { ConflictException, Injectable, NotFoundException } from '@nestjs/common'
+import { BadRequestException, ConflictException, Injectable, NotFoundException } from '@nestjs/common'
 import type { Prisma } from '@prisma/client'
 import { PrismaService } from '../../common/prisma/prisma.service'
 import { IdGeneratorService } from '../../common/id-generator/id-generator.service'
 import { AuditService } from '../../common/audit/audit.service'
 import { PointsEngineService } from '../../common/engine/points-engine/points-engine.service'
 import { formatNow } from '../../common/utils/time'
+import { normalizeScheduledAt } from '../../common/utils/schedule-time'
 import { sanitizeHtml } from '../../common/utils/sanitize-html'
 import type { EventPayloadDto } from './dto/event-payload.dto'
 import type { QueryEnrollmentsDto } from './dto/query-enrollments.dto'
@@ -176,7 +177,7 @@ export class EventsService {
     }
   }
 
-  async create(payload: EventPayloadDto): Promise<unknown> {
+  async create(payload: EventPayloadDto, operator: string): Promise<unknown> {
     const event = await this.prisma.communityEvent.create({
       data: {
         id: await this.ids.next('EV'),
@@ -211,14 +212,29 @@ export class EventsService {
         tags: payload.tags,
       },
     })
+
+    await this.audit.record({
+      module: '活动管理',
+      action: '新增活动',
+      target: `${event.id} · ${event.title}`,
+      after: { status: event.status },
+      operator,
+    })
+
     return toEventDto(event, [])
   }
 
-  async update(id: string, payload: EventPayloadDto): Promise<{ code: number }> {
+  async update(id: string, payload: EventPayloadDto, operator: string): Promise<{ code: number }> {
     const event = await this.prisma.communityEvent.findUnique({ where: { id } })
     if (!event) throw new NotFoundException('活动不存在')
     if (event.status === 'scheduled' || event.status === 'ended' || event.status === 'cancelled') {
       throw new ConflictException('仅待发布/已发布的活动可编辑')
+    }
+    if (
+      event.status === 'published' &&
+      (payload.startTime !== event.startTime || payload.endTime !== event.endTime)
+    ) {
+      throw new BadRequestException('已发布活动的开始/结束时间不可直接修改，请走改期接口（改期才有报名者通知）')
     }
 
     await this.prisma.communityEvent.update({
@@ -251,6 +267,15 @@ export class EventsService {
         enrollmentDeadline: payload.enrollmentDeadline ?? null,
       },
     })
+
+    await this.audit.record({
+      module: '活动管理',
+      action: '编辑活动',
+      target: `${event.id} · ${event.title}`,
+      before: { status: event.status },
+      after: { status: event.status },
+      operator,
+    })
     return { code: 0 }
   }
 
@@ -279,19 +304,21 @@ export class EventsService {
     const event = await this.prisma.communityEvent.findUnique({ where: { id } })
     if (!event) throw new NotFoundException('活动不存在')
     if (event.status !== 'pending_release') throw new ConflictException('仅待发布的活动可设定时发布')
+    /* 格式校验 + 归一化 + 必须晚于当前时间（避免非法/过去值被调度任务判定为立即发布） */
+    const normalized = normalizeScheduledAt(scheduledAt)
 
     await this.prisma.communityEvent.update({
       where: { id },
-      data: { status: 'scheduled', scheduledAt },
+      data: { status: 'scheduled', scheduledAt: normalized },
     })
 
     await this.audit.record({
       module: '活动管理',
       action: '活动定时发布',
       target: `${event.id} · ${event.title}`,
-      detail: `定时时间 ${scheduledAt}`,
+      detail: `定时时间 ${normalized}`,
       before: { status: event.status },
-      after: { status: 'scheduled', scheduledAt },
+      after: { status: 'scheduled', scheduledAt: normalized },
       operator,
     })
     return { code: 0 }
@@ -466,6 +493,7 @@ export class EventsService {
     eventId: string,
     userId: string,
     status: 'approved' | 'rejected',
+    operator: string,
   ): Promise<{ code: number }> {
     const event = await this.prisma.communityEvent.findUnique({ where: { id: eventId } })
     if (!event) throw new NotFoundException('活动不存在')
@@ -477,21 +505,33 @@ export class EventsService {
       throw new ConflictException('该报名已审核，请勿重复操作')
     }
 
-    /* 条件更新做幂等守卫：并发/重复调用只会命中一次状态迁移 */
-    const updated = await this.prisma.eventEnrollment.updateMany({
-      where: { eventId, userId, status: 'pending' },
-      data: { status },
-    })
-    if (updated.count === 0) throw new ConflictException('该报名已审核，请勿重复操作')
+    /* 与报名审核串行化：同一活动的并发通过请求不会越过容量上限；
+     * 状态迁移 + 容量校验 + 积分发放同事务，任一失败整体回滚。 */
+    await this.prisma.$transaction(async (tx) => {
+      await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${'event-enroll:' + eventId}))`
 
-    if (status === 'approved') {
-      /* 报名积分 = enrollPoints ?? 规则值；custom 值直写事务（引擎仅读规则值，此处内联其事务模式） */
-      if (event.enrollPoints != null) {
-        await this.issuePointsByValue(userId, event.enrollPoints, ENROLL_APPROVED_POINTS_REASON)
-      } else {
-        await this.engine.issuePoints(userId, 'activity_enroll_approved', ENROLL_APPROVED_POINTS_REASON)
+      /* 条件更新做幂等守卫：并发/重复调用只会命中一次状态迁移 */
+      const updated = await tx.eventEnrollment.updateMany({
+        where: { eventId, userId, status: 'pending' },
+        data: { status },
+      })
+      if (updated.count === 0) throw new ConflictException('该报名已审核，请勿重复操作')
+
+      if (status === 'approved') {
+        /* 容量校验：capacity <= 0 视为不限名额；含本次在内已通过数超过容量则拒绝 */
+        if (event.capacity > 0) {
+          const approvedCount = await tx.eventEnrollment.count({ where: { eventId, status: 'approved' } })
+          if (approvedCount > event.capacity) throw new ConflictException('活动名额已满，无法通过该报名')
+        }
+        /* 报名积分 = enrollPoints ?? 规则值；custom 值直写事务（引擎仅读规则值，此处内联其事务模式） */
+        if (event.enrollPoints != null) {
+          await this.issuePointsByValueInTransaction(tx, userId, event.enrollPoints, ENROLL_APPROVED_POINTS_REASON)
+        } else {
+          await this.engine.issuePointsInTransaction(tx, userId, 'activity_enroll_approved', ENROLL_APPROVED_POINTS_REASON)
+        }
       }
-    }
+    })
+
     await this.notify.pushNotice(userId, {
       type: 'event',
       title: status === 'approved' ? '活动报名已通过' : '活动报名未通过',
@@ -500,6 +540,15 @@ export class EventsService {
           ? `「${event.title}」报名已通过，请准时参加。`
           : `「${event.title}」报名未通过审核。`,
       link: '/me/enrollments',
+    })
+
+    await this.audit.record({
+      module: '活动管理',
+      action: status === 'approved' ? '报名审核通过' : '报名审核驳回',
+      target: `${event.id} · ${enrollment.name}`,
+      before: { status: 'pending' },
+      after: { status },
+      operator,
     })
     return { code: 0 }
   }
@@ -566,25 +615,35 @@ export class EventsService {
     return { code: 0 }
   }
 
-  /* 自定义积分值发放 —— 复刻 PointsEngineService.issuePoints 的事务模式（余额 += 值 + 写 source=rule 流水） */
+  /* 自定义积分值发放（独立事务）—— 供签到等单步流程使用 */
   private async issuePointsByValue(userId: string, value: number, reason: string): Promise<void> {
     await this.prisma.$transaction(async (tx) => {
-      const user = await tx.user.findUnique({ where: { uid: userId } })
-      if (!user) return
-      const balance = user.points + value
-      await tx.user.update({ where: { uid: userId }, data: { points: balance } })
-      await tx.pointsRecord.create({
-        data: {
-          id: await this.ids.next('PT'),
-          userId,
-          delta: value,
-          balance,
-          reason,
-          at: formatNow(),
-          operator: '系统',
-          source: 'rule',
-        },
-      })
+      await this.issuePointsByValueInTransaction(tx, userId, value, reason)
+    })
+  }
+
+  /* 自定义积分值发放 —— 在调用方事务内原子自增余额并写流水（与 PointsEngineService 同口径，
+   * 并发下不再「读旧值→写绝对值」丢积分） */
+  private async issuePointsByValueInTransaction(
+    tx: Prisma.TransactionClient,
+    userId: string,
+    value: number,
+    reason: string,
+  ): Promise<void> {
+    const exists = await tx.user.findUnique({ where: { uid: userId }, select: { uid: true } })
+    if (!exists) return
+    const user = await tx.user.update({ where: { uid: userId }, data: { points: { increment: value } } })
+    await tx.pointsRecord.create({
+      data: {
+        id: await this.ids.next('PT'),
+        userId,
+        delta: value,
+        balance: user.points,
+        reason,
+        at: formatNow(),
+        operator: '系统',
+        source: 'rule',
+      },
     })
   }
 

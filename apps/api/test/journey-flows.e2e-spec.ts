@@ -10,11 +10,12 @@ import { AppModule } from '../src/app.module'
 import { PrismaService } from '../src/common/prisma/prisma.service'
 import { addDays, formatToday } from '../src/common/utils/time'
 import { reseed } from './helpers/reseed'
-import { appGet, appLoginAs, appLoginRequest, appPost, fetchAppCaptcha } from './helpers/app-login'
+import { appGet, appLoginAs, appLoginRequest, appPost, sendAppSmsCode } from './helpers/app-login'
 import { loginAs } from './helpers/login'
 
 const PASSWORD = 'journey123'
 const PHONE = '13900009001'
+/* 注册时不再填昵称（服务端自动分配），此处姓名用于实名认证与名片展示 */
 const NICKNAME = '联调用户'
 const CITIZEN_ID = '110101199001010015'
 const ENTERPRISE_NAME = '联调智造科技（测试）'
@@ -53,21 +54,25 @@ describe('M2-R 三端联调：注册/实名/入驻/需求/项目/活动/商城/�
     (Array.isArray(data) ? data : (data as { list?: T[] } | null)?.list ?? []) as T[]
 
   it('① 注册：验证码 + 协议同意 → 新账号可直接登录', async () => {
-    const { captchaId, captchaCode } = await fetchAppCaptcha(app)
+    const code = await sendAppSmsCode(app, PHONE, 'register')
     const reg = await request(app.getHttpServer())
       .post('/api/app/auth/register')
-      .send({ phone: PHONE, password: PASSWORD, nickname: NICKNAME, captchaId, captchaCode, agreed: true })
+      .send({ channel: 'phone', phone: PHONE, code, password: PASSWORD, agreed: true })
     expect(reg.status).toBe(200)
     expect(reg.body.data.token).toBeTruthy()
     uid = reg.body.data.uid
     expect(uid).toBeTruthy()
+    /* 昵称与用户名由服务端自动分配 */
+    const nickname = reg.body.data.name as string
+    expect(nickname).toMatch(/^岛民\d{6}$/)
+    expect(String(reg.body.data.username)).toMatch(/^user_[a-z0-9]{8}$/)
 
     const login = await appLoginRequest(app, PHONE, PASSWORD)
     expect(login.status).toBe(200)
     userToken = login.body.data.token
     const me = await appGet(app, userToken, '/api/app/me')
     expect(me.status).toBe(200)
-    expect(me.body.data.nickname).toBe(NICKNAME)
+    expect(me.body.data.nickname).toBe(nickname)
     expect(asList<{ type: string }>(me.body.data.identities).some((i) => i.type === 'individual')).toBe(true)
   })
 

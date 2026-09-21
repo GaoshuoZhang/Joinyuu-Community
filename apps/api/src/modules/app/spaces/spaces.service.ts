@@ -155,6 +155,10 @@ export class AppSpacesService {
     if (!start || !end) throw new BadRequestException('请选择预约时段')
     if (!isTime(start) || !isTime(end)) throw new BadRequestException('预约时段格式不正确')
     if (start >= end) throw new BadRequestException('结束时间需晚于开始时间')
+    /* 当天预约：时段不得早于当前时刻（避免提交已经过去的时段并落库为 approved） */
+    if (date === formatToday() && start <= formatNow().slice(11, 16)) {
+      throw new BadRequestException('预约时段已过期，请选择晚于当前时间的时段')
+    }
     const durationHours = (toMinutes(end) - toMinutes(start)) / 60
     const maxHours = space.maxHours ?? 0
     if (maxHours > 0 && durationHours > maxHours) throw new BadRequestException(`单次预约最长 ${maxHours} 小时`)
@@ -340,10 +344,16 @@ export class AppSpacesService {
     return events.filter((e) => e.startTime.slice(0, 10) <= date && date <= e.endTime.slice(0, 10))
   }
 
-  /** 活动占用空间判定：活动 location 命中空间名或空间地址（schema 无 spaceId 外键，R2 以位置匹配近似） */
+  /** 活动占用空间判定：活动 location 命中空间名（或与空间地址完全一致）。
+   * schema 无 spaceId 外键，故按位置近似匹配：仅用「空间名」做包含匹配 + 「空间地址」做完全等值匹配，
+   * 避免用楼层级地址（如「岛屿中心 2F」）做包含匹配导致同层多个空间互相误判，也避免空串恒真。 */
   private eventOccupiesSpace(event: CommunityEvent, space: Space): boolean {
-    const loc = event.location
-    return loc.includes(space.name) || loc.includes(space.location)
+    const loc = (event.location ?? '').trim()
+    if (!loc) return false
+    const name = (space.name ?? '').trim()
+    const address = (space.location ?? '').trim()
+    if (name && loc.includes(name)) return true
+    return Boolean(address) && loc === address
   }
 
   private async resolveSubjectName(

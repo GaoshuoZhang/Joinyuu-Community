@@ -33,9 +33,10 @@ export const messageChannels = [
     enabled: true,
     config: {
       host: 'smtp.example.com',
-      port: '465',
+      port: 465,
       secure: 'true',
-      from: '聚屿社区 <no-reply@example.com>',
+      fromAddress: 'no-reply@example.com',
+      fromName: '聚屿社区',
       domainVerified: 'false',
     },
     credentialEnv: { user: 'SMTP_USER', password: 'SMTP_PASSWORD' },
@@ -98,6 +99,18 @@ export const messageTemplates = [
     updatedAt: '2026-09-20 00:00',
     updatedBy: '系统初始化',
   },
+  {
+    id: 'MT4',
+    code: 'verify_code_email',
+    name: '邮箱验证码',
+    kind: 'email',
+    category: 'security',
+    variables: ['code', 'minutes'],
+    status: 'published',
+    currentVersion: 1,
+    updatedAt: '2026-09-21 09:00',
+    updatedBy: '系统初始化',
+  },
 ]
 
 export const messageTemplateVersions = [
@@ -139,5 +152,18 @@ export const messageTemplateVersions = [
     reviewNote: null,
     createdBy: '系统初始化',
     createdAt: '2026-09-20 00:00',
+  },
+  {
+    id: 'MV4',
+    templateId: 'MT4',
+    version: 1,
+    subject: '【聚屿社区】邮箱验证码',
+    body: '您的验证码为 {{code}}，{{minutes}} 分钟内有效，请勿泄露给他人。如非本人操作，请忽略本邮件。',
+    status: 'published',
+    reviewedBy: '系统初始化',
+    reviewedAt: '2026-09-21 09:00',
+    reviewNote: null,
+    createdBy: '系统初始化',
+    createdAt: '2026-09-21 09:00',
   },
 ]

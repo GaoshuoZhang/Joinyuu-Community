@@ -48,10 +48,13 @@ export class BannersService {
 
   async saveSettings(carouselOpen: boolean, operator: string): Promise<{ code: number }> {
     const previous = await this.prisma.systemConfig.findUnique({ where: { id: 1 }, select: { homeCarouselOpen: true } })
-    await this.prisma.systemConfig.update({
+    /* 用 updateMany 而非 update：单例行缺失时不抛 P2025（原实现会转成 500），
+     * 改为可辨识的 404，与 getSettings 的容错口径一致 */
+    const updated = await this.prisma.systemConfig.updateMany({
       where: { id: 1 },
       data: { homeCarouselOpen: carouselOpen, updatedAt: formatNow(), updatedBy: operator },
     })
+    if (updated.count === 0) throw new NotFoundException('系统配置未初始化，无法保存轮播图开关')
     await this.redis.delCache(CACHE_KEYS.systemConfig)
     await this.audit.record({
       module: '内容管理',

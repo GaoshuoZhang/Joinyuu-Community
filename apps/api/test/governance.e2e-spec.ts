@@ -7,7 +7,7 @@ import request from 'supertest'
 import { AppModule } from '../src/app.module'
 import { PrismaService } from '../src/common/prisma/prisma.service'
 import { reseed } from './helpers/reseed'
-import { appGet, appLoginAs, appPost, fetchAppCaptcha } from './helpers/app-login'
+import { appGet, appLoginAs, appPost, sendAppSmsCode } from './helpers/app-login'
 import { loginAs } from './helpers/login'
 
 describe('M2-R R3 管理端下架/退驻/协议留痕', () => {
@@ -95,10 +95,10 @@ describe('M2-R R3 管理端下架/退驻/协议留痕', () => {
   })
 
   it('协议版本实际留痕：注册 AgreementConsent.version 与 Policy 版本一致', async () => {
-    const { captchaId, captchaCode } = await fetchAppCaptcha(app)
+    const code = await sendAppSmsCode(app, '13900118866', 'register')
     const reg = await request(app.getHttpServer())
       .post('/api/app/auth/register')
-      .send({ phone: '13900118866', password: 'pass1234', nickname: '治理测试新用户', agreed: true, captchaId, captchaCode })
+      .send({ channel: 'phone', phone: '13900118866', code, password: 'pass1234', agreed: true })
     expect(reg.status).toBe(200)
     const uid = reg.body.data.uid
 

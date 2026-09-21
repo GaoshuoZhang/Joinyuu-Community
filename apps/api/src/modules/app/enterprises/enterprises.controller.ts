@@ -2,6 +2,7 @@ import { Body, Controller, Get, HttpCode, Param, Post, Put, Query, Req, Unauthor
 import type { AppAuthenticatedRequest } from '../../../common/interfaces/app-authenticated-request'
 import type { AuthenticatedRequest } from '../../../common/interfaces/authenticated-request'
 import { RequirePermission } from '../../../common/decorators/require-permission.decorator'
+import { Public } from '../../../common/decorators/public.decorator'
 import { AppEnterprisesService } from './enterprises.service'
 import { UpdateIndividualCardDto } from './dto/individual-card.dto'
 import {
@@ -169,7 +170,8 @@ export class AppEnterprisesController {
     return this.enterprises.submitExitApplication(this.uid(req), id, dto)
   }
 
-  /** 公开企业名片（仅 published 且未删除可见） */
+  /** 公开企业名片（仅 published 且未删除可见；移动端企业名片页为游客可访问路由） */
+  @Public()
   @Get('enterprises/:id')
   enterpriseShowcase(@Param('id') id: string) {
     return this.enterprises.enterpriseShowcase(id)

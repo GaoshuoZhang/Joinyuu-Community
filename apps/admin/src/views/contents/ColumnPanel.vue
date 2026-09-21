@@ -36,21 +36,11 @@ const visibleColumns = computed(() => {
   return visibleColKeys.value.map((k) => byKey.get(k)).filter(Boolean)
 })
 
-/* 文章数：从文章列表聚合展示（直接复用 fetchArticles 全量） */
-const articleCountByColumn = ref<Record<string, number>>({})
-
+/* 文章数：直接使用后端列表接口已聚合的 articleCount（避免前端分页拉取导致口径偏小） */
 async function load() {
   loading.value = true
   try {
-    const [cols, articlesRes] = await Promise.all([
-      fetchColumns(),
-      import('@/api/contents').then((m) => m.fetchArticles({ page: 1, pageSize: 100 })),
-    ])
-    list.value = cols
-    const counts: Record<string, number> = {}
-    /* 多选栏目：一篇文章可计入多个栏目 */
-    for (const a of articlesRes.list) for (const id of a.columnIds) counts[id] = (counts[id] ?? 0) + 1
-    articleCountByColumn.value = counts
+    list.value = await fetchColumns()
     loadError.value = ''
   } catch (e) {
     loadError.value = e instanceof Error ? e.message : '数据加载失败'
@@ -211,7 +201,7 @@ onMounted(load)
           <div class="cell-title">{{ row.name }}</div>
           <div class="cell-sub">{{ row.id }}</div>
         </template>
-        <template #articleCount="{ row }">{{ articleCountByColumn[row.id] ?? 0 }}</template>
+        <template #articleCount="{ row }">{{ row.articleCount ?? 0 }}</template>
         <template #submissionOpen="{ row }">
           <t-switch
             :value="row.submissionOpen"

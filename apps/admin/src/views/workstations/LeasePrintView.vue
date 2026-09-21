@@ -1,7 +1,9 @@
 <script setup lang="ts">
 import { onMounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
+import ListErrorState from '@/components/ListErrorState.vue'
 import { deriveLeaseStatus, fetchLeasePrint } from '@/api/workstations'
+import { isNotFound } from '@/api/http'
 import type { Lease } from '@/types'
 
 /* 租约打印页：独立于 AdminLayout 的裸页，window.print + 打印样式；可从租约列表操作列进入。
@@ -13,6 +15,8 @@ const lease = ref<Lease | null>(null)
 const clauses = ref<string[]>([])
 const loading = ref(true)
 const notFound = ref(false)
+/* 非 404 的加载失败：展示错误与重试入口（403/500/断网不再伪装成「未找到」） */
+const loadError = ref('')
 
 const renterTypeLabel: Record<string, string> = {
   enterprise: '社区企业',
@@ -38,18 +42,25 @@ function doPrint() {
   window.print()
 }
 
-onMounted(async () => {
+async function load() {
+  loading.value = true
+  loadError.value = ''
+  notFound.value = false
   try {
     const payload = await fetchLeasePrint(String(route.params.id))
     lease.value = payload.lease
     clauses.value = payload.clauses ?? []
     notFound.value = !lease.value
-  } catch {
-    notFound.value = true
+  } catch (e) {
+    /* 404 = 记录不存在；其余错误保留具体原因并给出重试入口 */
+    if (isNotFound(e)) notFound.value = true
+    else loadError.value = e instanceof Error ? e.message : '租约打印数据加载失败'
   } finally {
     loading.value = false
   }
-})
+}
+
+onMounted(load)
 </script>
 
 <template>
@@ -61,6 +72,8 @@ onMounted(async () => {
     </div>
 
     <t-loading :loading="loading" size="small" class="paper">
+      <ListErrorState v-if="loadError" :message="loadError" :loading="loading" @retry="load" />
+
       <template v-if="notFound">
         <div class="empty-tip">未找到租约记录（{{ route.params.id }}）</div>
       </template>

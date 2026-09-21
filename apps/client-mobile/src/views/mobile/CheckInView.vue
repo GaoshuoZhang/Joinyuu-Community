@@ -17,21 +17,29 @@ const eventId = route.params.id as string
 
 const event = ref<CommunityEvent | null>(null)
 const ticket = ref<EventTicket | null>(null)
+const ticketError = ref('')
 const loading = ref(true)
 const error = ref('')
 
 async function load() {
   loading.value = true
   error.value = ''
-  try {
-    const [eventData, ticketData] = await Promise.all([fetchEvent(eventId), fetchEventTicket(eventId)])
-    event.value = eventData
-    ticket.value = ticketData
-  } catch (e) {
-    error.value = e instanceof Error ? e.message : '签到信息加载失败，请稍后重试'
-  } finally {
-    loading.value = false
+  ticketError.value = ''
+  /* allSettled：活动信息失败才整页报错；电子票失败（如报名未通过 400）降级为页面内提示 */
+  const [eventResult, ticketResult] = await Promise.allSettled([fetchEvent(eventId), fetchEventTicket(eventId)])
+  if (eventResult.status === 'fulfilled') {
+    event.value = eventResult.value
+  } else {
+    event.value = null
+    error.value = eventResult.reason instanceof Error ? eventResult.reason.message : '签到信息加载失败，请稍后重试'
   }
+  if (ticketResult.status === 'fulfilled') {
+    ticket.value = ticketResult.value
+  } else {
+    ticket.value = null
+    ticketError.value = ticketResult.reason instanceof Error ? ticketResult.reason.message : '暂无电子票'
+  }
+  loading.value = false
 }
 
 onMounted(load)
@@ -103,8 +111,8 @@ const canCheckIn = () => Boolean(
   <div class="m-checkin page-fade-in stagger">
     <ListSkeleton v-if="loading" />
     <EmptyBlock v-else-if="error" :text="error" action-text="重试" @action="load" />
-    <template v-else-if="event && ticket">
-      <section class="ticket-card m-card" :class="{ invalid: ticket.status !== 'valid' }">
+    <template v-else-if="event">
+      <section v-if="ticket" class="ticket-card m-card" :class="{ invalid: ticket.status !== 'valid' }">
         <div class="ticket-head">
           <span class="brand" translate="no">聚屿社区 · 活动签到</span>
           <Tag :theme="ticketStatusTheme()" variant="light" size="small">{{ ticketStatusText() }}</Tag>
@@ -121,6 +129,12 @@ const canCheckIn = () => Boolean(
           <template v-else-if="ticket.waitlistOrder">你当前为候补第 {{ formatZhNumber(ticket.waitlistOrder) }} 位，递补成功后将自动转为有效票。</template>
           <template v-else>到场后出示此凭证，并在下方完成定位签到。</template>
         </p>
+      </section>
+
+      <section v-else class="m-card stage">
+        <p class="title">暂无电子票</p>
+        <p class="ticket-hint">{{ ticketError || '暂无电子票，报名通过后可在此查看' }}</p>
+        <Button variant="outline" @click="backToDetail">返回活动详情</Button>
       </section>
 
       <section v-if="canCheckIn() || event.myCheckedIn || phase === 'success'" class="m-card stage">

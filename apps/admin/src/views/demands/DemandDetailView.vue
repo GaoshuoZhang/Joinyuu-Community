@@ -12,11 +12,14 @@ import ContentTakedownDialog from '@/components/ContentTakedownDialog.vue'
 import ProjectFormDialog from '@/components/ProjectFormDialog.vue'
 import { identityTypeMap, userLevelMap } from '@/constants/identity'
 import { cancelDemandSchedule, closeDemand, fetchDemand, publishDemandNow } from '@/api/demands'
+import { isNotFound } from '@/api/http'
+import ListErrorState from '@/components/ListErrorState.vue'
 import type { Demand, DemandRespondent } from '@/types'
 
 const route = useRoute()
 const router = useRouter()
 const loading = ref(true)
+const loadError = ref('')
 const demand = ref<Demand | null>(null)
 const tab = useQueryTab('info', ['info', 'respondents'] as const)
 /* 已归档条目：隐藏全部写操作，仅保留只读内容与「查看关联项目」跳转 */
@@ -42,8 +45,15 @@ async function load() {
   loading.value = true
   try {
     demand.value = await fetchDemand(route.params.id as string)
+    loadError.value = ''
   } catch (e) {
-    MessagePlugin.error(e instanceof Error ? e.message : '需求加载失败')
+    /* 404 = 需求不存在（走空态）；其余错误保留原因并展示重试入口 */
+    if (isNotFound(e)) {
+      demand.value = null
+      loadError.value = ''
+    } else {
+      loadError.value = e instanceof Error ? e.message : '需求加载失败'
+    }
   } finally {
     loading.value = false
   }
@@ -172,6 +182,8 @@ onMounted(load)
       :row-col="[{ width: '100%', height: '180px' }, { width: '100%', height: '360px' }]"
       animation="gradient"
     />
+
+    <ListErrorState v-else-if="loadError" :message="loadError" :loading="loading" @retry="load" />
 
     <t-empty v-else-if="!demand" description="需求不存在或已被删除" />
 

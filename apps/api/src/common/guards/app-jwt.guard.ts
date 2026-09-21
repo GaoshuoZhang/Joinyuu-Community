@@ -3,6 +3,7 @@ import {
   ExecutionContext,
   ForbiddenException,
   Injectable,
+  ServiceUnavailableException,
   UnauthorizedException,
 } from '@nestjs/common'
 import { Reflector } from '@nestjs/core'
@@ -55,7 +56,15 @@ export class AppJwtGuard implements CanActivate {
       request.user = payload
       return true
     } catch (error) {
-      if (error instanceof UnauthorizedException || error instanceof ForbiddenException) throw error
+      /* 认证/授权类原样抛出；吊销策略服务故障（503）也原样抛出，
+       * 避免被重写成 401「登录已过期」导致客户端在 Redis 抖动时全局掉线。 */
+      if (
+        error instanceof UnauthorizedException ||
+        error instanceof ForbiddenException ||
+        error instanceof ServiceUnavailableException
+      ) {
+        throw error
+      }
       throw new UnauthorizedException('登录已过期，请重新登录')
     }
   }

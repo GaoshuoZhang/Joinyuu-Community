@@ -108,11 +108,8 @@ export class ProjectsService {
     }
     if (query.status) where.status = query.status
 
-    /* 主行查询含承接方（参与人/企业筛选需用）；里程碑与承接方映射在分页后批量补取 */
-    const rows = await this.prisma.project.findMany({ where, include: { undertakers: true } })
-
-    let list = rows as ProjectWithRelations[]
-
+    /* 参与人/企业筛选下沉数据库（承接方关联 some）；两者并存时按 AND 叠加，保持原「依次过滤」语义 */
+    const and: Prisma.ProjectWhereInput[] = []
     if (query.participant) {
       const user = await this.prisma.user.findUnique({
         where: { uid: query.participant },
@@ -122,19 +119,22 @@ export class ProjectsService {
         user?.identities
           .filter((i) => i.type === 'community_enterprise' && i.enterpriseId != null)
           .map((i) => i.enterpriseId as string) ?? []
-      list = list.filter((p) =>
-        p.undertakers.some(
-          (t) =>
-            (t.type === 'individual' && t.refId === query.participant) ||
-            (t.type === 'enterprise' && enterpriseIds.includes(t.refId)),
-        ),
-      )
+      and.push({
+        undertakers: {
+          some: {
+            OR: [
+              { type: 'individual', refId: query.participant },
+              { type: 'enterprise', refId: { in: enterpriseIds } },
+            ],
+          },
+        },
+      })
     }
 
     if (query.enterprise) {
       const isCommunity = !!(await this.prisma.enterprise.findUnique({ where: { id: query.enterprise } }))
       if (isCommunity) {
-        list = list.filter((p) => p.undertakers.some((t) => t.type === 'enterprise' && t.refId === query.enterprise))
+        and.push({ undertakers: { some: { type: 'enterprise', refId: query.enterprise } } })
       } else {
         const profile = await this.prisma.externalEnterpriseProfile.findUnique({
           where: { id: query.enterprise },
@@ -147,24 +147,51 @@ export class ProjectsService {
               })
             ).map((m) => m.userId)
           : []
-        list = list.filter((p) => p.undertakers.some((t) => t.type === 'individual' && memberIds.includes(t.refId)))
+        and.push({ undertakers: { some: { type: 'individual', refId: { in: memberIds } } } })
       }
     }
+    if (and.length) where.AND = and
 
-    /* 排序：默认立项日期倒序（最新立项在前），可按立项日期/编号正倒序 */
+    /* 排序：默认立项日期倒序（最新立项在前），可按立项日期/编号正倒序；排序与计数、分页一并下发数据库 */
+    const desc = query.sortOrder !== 'ascend'
     const field = query.sortBy ?? 'initiatedAt'
-    const dir = query.sortOrder === 'ascend' ? 1 : -1
-    list.sort((a, b) => {
-      const av = field === 'id' ? Number(a.id.replace('P', '')) : a.initiatedAt
-      const bv = field === 'id' ? Number(b.id.replace('P', '')) : b.initiatedAt
-      if (av < bv) return -1 * dir
-      if (av > bv) return 1 * dir
-      return 0
-    })
+    const offset = (query.page - 1) * query.pageSize
 
-    const total = list.length
-    const start = (query.page - 1) * query.pageSize
-    const page = list.slice(start, start + query.pageSize)
+    let page: Project[]
+    let total: number
+    if (field === 'id') {
+      /* Prisma orderBy 只能按字符串比较编号（P9/P10 会错序），故保留数值序：
+       * 仅取编号列在库内过滤后内存定位当页编号，再按编号批量取当页行，避免整行全表载入 */
+      const dir = desc ? -1 : 1
+      const [idRows, count] = await Promise.all([
+        this.prisma.project.findMany({ where, select: { id: true } }),
+        this.prisma.project.count({ where }),
+      ])
+      const pageIds = idRows
+        .map((row) => row.id)
+        .sort((a, b) => {
+          const av = Number(a.replace('P', ''))
+          const bv = Number(b.replace('P', ''))
+          return av < bv ? -1 * dir : av > bv ? 1 * dir : 0
+        })
+        .slice(offset, offset + query.pageSize)
+      page = pageIds.length ? await this.prisma.project.findMany({ where: { id: { in: pageIds } } }) : []
+      const pos = new Map(pageIds.map((id, index) => [id, index]))
+      page.sort((a, b) => (pos.get(a.id) ?? 0) - (pos.get(b.id) ?? 0))
+      total = count
+    } else {
+      const [list, count] = await Promise.all([
+        this.prisma.project.findMany({
+          where,
+          orderBy: { initiatedAt: desc ? 'desc' : 'asc' },
+          skip: offset,
+          take: query.pageSize,
+        }),
+        this.prisma.project.count({ where }),
+      ])
+      page = list
+      total = count
+    }
 
     /* 仅当页批量补取承接方与里程碑（替代全量 include，随分页收缩载入量） */
     const pageIds = page.map((p) => p.id)
@@ -317,7 +344,7 @@ export class ProjectsService {
 
   /* 编辑（wiki-backend.md §7.7）：已结项项目只读；其余状态可编辑（前端禁用 finished 入口，后端同样强制）；
    * 不改状态/编号；里程碑整体重置为 todo；重算 memberCount */
-  async update(id: string, payload: ProjectCreatePayload): Promise<{ code: number }> {
+  async update(id: string, payload: ProjectCreatePayload, operator: string): Promise<{ code: number }> {
     const project = await this.prisma.project.findUnique({ where: { id } })
     if (!project) throw new NotFoundException('项目不存在')
     if (project.status === 'finished') throw new ConflictException('已结项的项目不可编辑')
@@ -360,6 +387,13 @@ export class ProjectsService {
           data: { projectId: id, name: m.name, status: m.status, date: m.date, owners: m.owners },
         })
       }
+    })
+
+    await this.audit.record({
+      module: '项目管理',
+      action: '编辑项目',
+      target: `${project.id} · ${project.name}`,
+      operator,
     })
 
     return { code: 0 }

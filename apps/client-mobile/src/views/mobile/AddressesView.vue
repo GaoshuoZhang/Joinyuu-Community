@@ -144,7 +144,8 @@ function onRemove(item: AddressItem) {
 
     <ListSkeleton v-if="loading" />
     <EmptyBlock v-else-if="error" :text="error" action-text="重试" @action="load" />
-    <EmptyBlock v-else-if="!items.length" text="暂无收货地址，添加后可用于实物兑换" />
+    <!-- v45：空状态补出口，避免二级页没有 TabBar 时成为死胡同 -->
+    <EmptyBlock v-else-if="!items.length" text="暂无收货地址，添加后可用于实物兑换" action-text="新增地址" @action="openEditor()" />
 
     <div v-else class="list">
       <article v-for="item in items" :key="item.id" class="m-card addr">

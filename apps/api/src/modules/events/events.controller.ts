@@ -35,14 +35,14 @@ export class EventsController {
 
   @HttpCode(200)
   @Post()
-  create(@Body() dto: EventPayloadDto) {
-    return this.events.create(dto)
+  create(@Body() dto: EventPayloadDto, @Req() req: AuthenticatedRequest) {
+    return this.events.create(dto, req.user?.name ?? '社区管理员')
   }
 
   @HttpCode(200)
   @Put(':id')
-  update(@Param('id') id: string, @Body() dto: EventPayloadDto) {
-    return this.events.update(id, dto)
+  update(@Param('id') id: string, @Body() dto: EventPayloadDto, @Req() req: AuthenticatedRequest) {
+    return this.events.update(id, dto, req.user?.name ?? '社区管理员')
   }
 
   @HttpCode(200)
@@ -111,8 +111,9 @@ export class EventsController {
     @Param('id') id: string,
     @Param('userId') userId: string,
     @Body() dto: ReviewEnrollmentDto,
+    @Req() req: AuthenticatedRequest,
   ) {
-    return this.events.reviewEnrollment(id, userId, dto.status)
+    return this.events.reviewEnrollment(id, userId, dto.status, req.user?.name ?? '社区管理员')
   }
 
   @HttpCode(200)

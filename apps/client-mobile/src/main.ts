@@ -4,7 +4,6 @@ import App from './App.vue'
 import { router } from './router'
 import { apiMode } from './api/http'
 import { useAuthStore } from './stores/auth'
-import { useNoticesStore } from './stores/notices'
 import { pressable } from './directives/pressable'
 import { announce } from './utils/a11y'
 import { initTheme } from './utils/theme'
@@ -21,9 +20,8 @@ app.mount('#app')
 /* 401 统一处理（api/http.ts 派发）：清会话并由路由层跳登录（history 模式 + redirect 回跳） */
 window.addEventListener('joinyuu:unauthorized', (event) => {
   const auth = useAuthStore()
-  auth.clearSession()
-  /* v38：同步清理通知状态，避免旧角标/列表带入下一次会话 */
-  useNoticesStore().reset()
+  /* v38：resetSession 统一清理登录态与通知缓存，避免旧角标/列表带入下一次会话 */
+  auth.resetSession()
   if (router.currentRoute.value.path !== '/login') {
     const redirect = (event as CustomEvent<{ redirect?: string }>).detail?.redirect
     router.replace({ path: '/login', query: redirect ? { redirect } : {} })
@@ -120,6 +118,19 @@ function patchLoadingRoles(node: HTMLElement) {
   }
 }
 
+/* 装饰性标签语义（v45）：TDesign Tag 无论是否可点都会输出 role="button" + aria-disabled="false"
+ * （见 Tag 组件 API，无「非交互」开关），而本项目 52 处 <Tag> 全是纯展示的分类/状态标签，
+ * 读屏会把它们逐条读成「按钮」，让整套控件的可信度下降。
+ * 只对非 CheckTag（不带 .t-tag--checkable，实测为该库可交互标签的唯一标记）剥离错误的按钮语义，
+ * 不触碰组件 API、样式与任何交互行为。 */
+function patchDecorativeTags(root: ParentNode) {
+  const tags = Array.from(root.querySelectorAll<HTMLElement>('.t-tag:not(.t-tag--checkable)'))
+  for (const el of tags) {
+    if (el.getAttribute('role') === 'button') el.removeAttribute('role')
+    if (el.hasAttribute('aria-disabled')) el.removeAttribute('aria-disabled')
+  }
+}
+
 /* 弹层焦点：打开时聚焦首个可聚焦元素、Tab 圈闭、关闭后回焦触发元素。 */
 const FOCUSABLE_SELECTOR =
   'button:not([disabled]), [href], input:not([type="hidden"]):not([disabled]), textarea:not([disabled]), select:not([disabled]), [tabindex]:not([tabindex="-1"])'
@@ -184,11 +195,13 @@ function handleRemovedDialog(node: HTMLElement) {
 }
 
 patchA11yFields(document)
+patchDecorativeTags(document)
 new MutationObserver((mutations) => {
   for (const mutation of mutations) {
     for (const added of mutation.addedNodes) {
       if (!(added instanceof HTMLElement)) continue
       patchA11yFields(added)
+      patchDecorativeTags(added)
       announceToast(added)
       announceFieldError(added)
       patchLoadingRoles(added)

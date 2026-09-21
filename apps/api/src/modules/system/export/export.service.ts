@@ -1,6 +1,10 @@
 import { Injectable, NotFoundException } from '@nestjs/common'
 import { PrismaService } from '../../../common/prisma/prisma.service'
+import { AuditService } from '../../../common/audit/audit.service'
 import type { QueryExportDto } from './dto/query-export.dto'
+
+/** 单次导出行数上限：避免一次导出拉爆内存/响应体（超出部分截断，响应头 X-Export-Truncated 标注） */
+const EXPORT_MAX_ROWS = 10000
 
 interface ExportColumn {
   label: string
@@ -16,22 +20,39 @@ interface ExportDef {
 export interface ExportResult {
   fileName: string
   content: string
+  /** 是否因超过单次导出上限被截断 */
+  truncated: boolean
+  /** 实际导出行数 */
+  rowCount: number
 }
 
 /* 服务端导出：按域输出 CSV（UTF-8 BOM，Excel 直开不乱码）。
- * 域：users / demands / projects / events / orders / audit-logs；支持 keyword/status/时间范围过滤。 */
+ * 域：users / demands / projects / events / orders / audit-logs；支持 keyword/status/时间范围过滤。
+ * 导出为敏感数据批量外带出口：每次导出写操作审计，并对单次行数设上限。 */
 @Injectable()
 export class ExportService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly audit: AuditService,
+  ) {}
 
-  async exportCsv(domain: string, q: QueryExportDto): Promise<ExportResult> {
+  async exportCsv(domain: string, q: QueryExportDto, operator: string): Promise<ExportResult> {
     const def = this.defs()[domain]
     if (!def) throw new NotFoundException('不支持的导出域')
     const rows = await def.fetch(q)
+    const truncated = rows.length > EXPORT_MAX_ROWS
+    const limited = truncated ? rows.slice(0, EXPORT_MAX_ROWS) : rows
     const header = def.columns.map((c) => c.label)
-    const body = rows.map((r) => def.columns.map((c) => c.value(r)))
+    const body = limited.map((r) => def.columns.map((c) => c.value(r)))
     const csv = [header, ...body].map((r) => r.map(escapeCsv).join(',')).join('\r\n')
-    return { fileName: `${def.fileName}_${stamp()}.csv`, content: csv }
+    await this.audit.record({
+      module: '系统管理',
+      action: '导出数据',
+      target: `${def.fileName}（${domain}）`,
+      detail: `导出 ${limited.length} 行${truncated ? `（已达单次上限 ${EXPORT_MAX_ROWS}，已截断）` : ''} · 过滤：${describeQuery(q)}`,
+      operator,
+    })
+    return { fileName: `${def.fileName}_${stamp()}.csv`, content: csv, truncated, rowCount: limited.length }
   }
 
   private defs(): Record<string, ExportDef> {
@@ -148,6 +169,8 @@ export class ExportService {
           db.redemptionOrder.findMany({
             where: {
               AND: [
+                /* 与列表页/其它导出域口径一致：软删（已归档）订单不进入导出 */
+                { deletedAt: null },
                 q.status ? { status: q.status } : {},
                 q.keyword ? { userName: { contains: q.keyword } } : {},
               ],
@@ -200,4 +223,14 @@ function stamp(): string {
   const d = new Date()
   const p = (n: number): string => String(n).padStart(2, '0')
   return `${d.getFullYear()}${p(d.getMonth() + 1)}${p(d.getDate())}`
+}
+
+/** 导出过滤条件摘要（写入审计，便于追溯「谁在什么条件下导出了多少数据」） */
+function describeQuery(q: QueryExportDto): string {
+  const parts: string[] = []
+  if (q.status) parts.push(`状态=${q.status}`)
+  if (q.keyword) parts.push(`关键词=${q.keyword}`)
+  if (q.startDate) parts.push(`起=${q.startDate}`)
+  if (q.endDate) parts.push(`止=${q.endDate}`)
+  return parts.length ? parts.join(' ') : '无'
 }

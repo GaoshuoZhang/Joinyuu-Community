@@ -7,7 +7,7 @@ import request from 'supertest'
 import { AppModule } from '../src/app.module'
 import { PrismaService } from '../src/common/prisma/prisma.service'
 import { reseed } from './helpers/reseed'
-import { fetchAppCaptcha } from './helpers/app-login'
+import { sendAppSmsCode } from './helpers/app-login'
 
 describe('内置 V1.0 协议兜底', () => {
   let app: INestApplication
@@ -50,16 +50,15 @@ describe('内置 V1.0 协议兜底', () => {
   })
 
   it('未发布协议时注册成功，同意留痕使用内置 V1.0 版本', async () => {
-    const { captchaId, captchaCode } = await fetchAppCaptcha(app)
+    const code = await sendAppSmsCode(app, '13911112222', 'register')
     const reg = await request(app.getHttpServer())
       .post('/api/app/auth/register')
       .send({
+        channel: 'phone',
         phone: '13911112222',
+        code,
         password: 'user12345',
-        nickname: '兜底协议验收',
         agreed: true,
-        captchaId,
-        captchaCode,
       })
     expect(reg.status).toBe(200)
     const uid: string = reg.body.data.uid

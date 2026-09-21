@@ -6,7 +6,8 @@ export function useIncrementalList<T>(source: MaybeRefOrGetter<readonly T[]>, pa
   const visibleItems = computed(() => items.value.slice(0, visibleCount.value))
   const hasMore = computed(() => visibleCount.value < items.value.length)
 
-  watch(items, () => {
+  /* 监听数组长度而非数组引用：原地 push 不换引用，只看引用会漏掉新增项而无法重置分页 */
+  watch(() => items.value.length, () => {
     visibleCount.value = pageSize
   })
 

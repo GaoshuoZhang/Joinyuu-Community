@@ -8,7 +8,7 @@ import request from 'supertest'
 import { AppModule } from '../src/app.module'
 import { PrismaService } from '../src/common/prisma/prisma.service'
 import { reseed } from './helpers/reseed'
-import { appGet, appLoginAs, appPost, fetchAppCaptcha } from './helpers/app-login'
+import { appGet, appLoginAs, appPost } from './helpers/app-login'
 import { loginAs } from './helpers/login'
 
 describe('修复轮次回归：契约与功能补齐', () => {
@@ -94,13 +94,12 @@ describe('修复轮次回归：契约与功能补齐', () => {
     expect(list.body.data.list[0].gender).toBe('female')
   })
 
-  it('D-105：找回密码未注册手机号返回 400（不触发客户端登出）', async () => {
-    const { captchaId, captchaCode } = await fetchAppCaptcha(app)
+  it('D-105：找回密码未注册账号返回 400（不触发客户端登出）', async () => {
     const res = await request(app.getHttpServer())
       .post('/api/app/auth/reset-password')
-      .send({ phone: '13900009999', newPassword: 'Secret123', captchaId, captchaCode })
+      .send({ identifier: '13900009999', channel: 'phone', code: '123456', newPassword: 'Secret123' })
     expect(res.status).toBe(400)
-    expect(res.body.message).toBe('该手机号未注册')
+    expect(res.body.message).toBe('该账号未注册')
   })
 
   it('C-03/D-111：评论清洗、自行删除与管理员治理删除', async () => {
@@ -183,5 +182,25 @@ describe('修复轮次回归：契约与功能补齐', () => {
 
     const invalid = await patch({})
     expect(invalid.status).toBe(400)
+  })
+
+  /* BE-D1 回归保护：手写迁移中的「部分唯一索引」Prisma 无法声明，
+   * 一旦被 migrate dev/db push 判为漂移删除，并发保护会静默消失，故在此锁定其存在。 */
+  it('手写部分唯一索引仍然存在（每用户默认地址 / 待处理邀请 / 待处理转移 / 注销冷静期）', async () => {
+    const rows = await prisma.$queryRaw<Array<{ indexname: string }>>`
+      SELECT indexname FROM pg_indexes
+      WHERE schemaname = current_schema()
+        AND indexname IN (
+          'Address_one_default_per_user_key',
+          'EnterpriseInvitation_pending_enterprise_invitee_key',
+          'TransferRequest_pending_enterprise_key',
+          'AccountDeletionRequest_one_cooling_per_user'
+        )`
+    expect(rows.map((r) => r.indexname).sort()).toEqual([
+      'AccountDeletionRequest_one_cooling_per_user',
+      'Address_one_default_per_user_key',
+      'EnterpriseInvitation_pending_enterprise_invitee_key',
+      'TransferRequest_pending_enterprise_key',
+    ])
   })
 })

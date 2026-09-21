@@ -1,7 +1,9 @@
 <script setup lang="ts">
 import { onMounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
+import ListErrorState from '@/components/ListErrorState.vue'
 import { fetchApplicationPrint } from '@/api/applications'
+import { isNotFound } from '@/api/http'
 import { applicationTypeMap, statusMap } from '@/constants/status'
 import type { Application } from '@/types'
 
@@ -13,6 +15,8 @@ const router = useRouter()
 
 const application = ref<Application | null>(null)
 const loading = ref(true)
+/* 非 404 的加载失败：展示错误与重试入口（403/500/断网不再伪装成「未找到」） */
+const loadError = ref('')
 
 const actionTextMap: Record<string, string> = {
   submit: '提交申请',
@@ -25,18 +29,24 @@ function doPrint() {
   window.print()
 }
 
-onMounted(async () => {
+async function load() {
+  loading.value = true
+  loadError.value = ''
   try {
     const id = String(route.params.id)
     /* 走专用打印接口详情直取，避免列表 pageSize 上限导致旧记录查不到 */
     const res = await fetchApplicationPrint(id)
     application.value = res.application
-  } catch {
+  } catch (e) {
     application.value = null
+    /* 404 = 记录不存在；其余错误保留具体原因并给出重试入口 */
+    if (!isNotFound(e)) loadError.value = e instanceof Error ? e.message : '审核单加载失败'
   } finally {
     loading.value = false
   }
-})
+}
+
+onMounted(load)
 </script>
 
 <template>
@@ -47,7 +57,9 @@ onMounted(async () => {
     </div>
 
     <t-loading :loading="loading" size="small" class="paper">
-      <template v-if="!application">
+      <ListErrorState v-if="loadError" :message="loadError" :loading="loading" @retry="load" />
+
+      <template v-else-if="!application">
         <div class="empty-tip">未找到审核记录（{{ route.params.id }}）</div>
       </template>
 
@@ -60,9 +72,9 @@ onMounted(async () => {
         <table class="doc-table">
           <tr>
             <td class="label">申请类型</td>
-            <td>{{ applicationTypeMap[application.type].label }}</td>
+            <td>{{ applicationTypeMap[application.type]?.label ?? application.type }}</td>
             <td class="label">当前状态</td>
-            <td>{{ applicationStatusMap[application.status].label }}</td>
+            <td>{{ applicationStatusMap[application.status]?.label ?? application.status }}</td>
           </tr>
           <tr>
             <td class="label">申请人</td>

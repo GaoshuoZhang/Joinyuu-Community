@@ -11,7 +11,9 @@ export function statusLabel(entity: string, value: string | undefined): string {
 /* 导出当前列表为 CSV（带 BOM，Excel 直接打开不乱码） */
 export function exportCsv(filename: string, headers: string[], rows: (string | number)[][]) {
   const esc = (v: string | number | undefined | null) => {
-    const s = String(v ?? '')
+    let s = String(v ?? '')
+    /* 公式注入防护：以 = + - @ 制表符 回车 开头的值前置单引号，Excel/WPS 打开时按文本处理 */
+    if (/^[=+\-@\t\r]/.test(s)) s = "'" + s
     return /[",\r\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s
   }
   const csv = [headers, ...rows].map((r) => r.map(esc).join(',')).join('\r\n')
@@ -22,8 +24,11 @@ export function exportCsv(filename: string, headers: string[], rows: (string | n
   const p = (n: number) => String(n).padStart(2, '0')
   a.href = url
   a.download = `${filename}_${d.getFullYear()}${p(d.getMonth() + 1)}${p(d.getDate())}.csv`
+  /* 部分浏览器要求 <a> 在文档中才会触发下载；延迟释放临时 URL，避免下载尚未开始即被回收 */
+  document.body.appendChild(a)
   a.click()
-  URL.revokeObjectURL(url)
+  document.body.removeChild(a)
+  setTimeout(() => URL.revokeObjectURL(url), 0)
 }
 
 /* 全量导出：按现有分页接口拉取全部数据后导出 CSV。

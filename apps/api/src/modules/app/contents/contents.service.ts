@@ -5,16 +5,21 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common'
-import type { Article, ArticleColumn, Prisma } from '@prisma/client'
+import { Prisma, type Article, type ArticleColumn } from '@prisma/client'
 import { PrismaService } from '../../../common/prisma/prisma.service'
 import { IdGeneratorService } from '../../../common/id-generator/id-generator.service'
 import { sanitizeHtml, sanitizePlainText } from '../../../common/utils/sanitize-html'
-import { formatNow } from '../../../common/utils/time'
+import { formatNow, formatToday } from '../../../common/utils/time'
 import type { CreateArticleDto } from './dto/create-article.dto'
 import { JwtService } from '@nestjs/jwt'
 import { assertEnterprisePermission } from '../../../common/enterprise/enterprise-permission'
 import { consumePublishingLimit } from '../../../common/enterprise/publishing-limits'
+import { RedisService } from '../../../common/redis/redis.service'
+import { resolveOptionalAppUid, type OptionalAppAuthDeps } from '../../../common/auth/optional-app-uid'
 import type { ArticleWithComments } from '../../contents/article-integration'
+
+/** 允许的投稿身份（个人 / 社区个体 / 合作企业；社区企业经 asEnterpriseId 分支校验） */
+const SUBMIT_IDENTITIES = ['individual', 'community_individual', 'external_enterprise'] as const
 
 /** 栏目 DTO（对齐客户端 ArticleColumn：code/label） */
 export interface ArticleColumnDto {
@@ -88,7 +93,13 @@ export class AppContentsService {
     private readonly prisma: PrismaService,
     private readonly ids: IdGeneratorService,
     private readonly jwt: JwtService,
+    private readonly redis: RedisService,
   ) {}
+
+  /** 可选登录态解析依赖（与 AppJwtGuard 同口径） */
+  private get auth(): OptionalAppAuthDeps {
+    return { jwt: this.jwt, redis: this.redis, prisma: this.prisma }
+  }
 
   /** 栏目列表（enabled 且非系统保留；对齐客户端按 code/label 输出） */
   async articleColumns(): Promise<ArticleColumnDto[]> {
@@ -111,16 +122,23 @@ export class AppContentsService {
     return rows.map((a) => toArticleDto(a, false))
   }
 
-  /** 文章详情：published；浏览量 +1；返回 likeCount/commentCount/myLiked */
+  /** 文章详情：published；浏览量 +1（登录用户按人+自然日去重）；返回 likeCount/commentCount/myLiked */
   async articleDetail(id: string, authorization?: string): Promise<ArticleDto> {
     const uid = await this.optionalUid(authorization)
     const article = await this.prisma.article.findFirst({
       where: { id, status: 'published', deletedAt: null },
     })
     if (!article) throw new NotFoundException('文章不存在')
-    await this.prisma.article.updateMany({ where: { id, status: 'published' }, data: { views: { increment: 1 } } })
+    /* 登录用户按「人 + 自然日」去重（Redis 抢占，TTL 24h），避免脚本重复刷新刷高阅读量；
+     * 游客无可信身份维度，保持每次累加（与既有口径一致）。 */
+    const counted = uid
+      ? await this.redis.acquireFlag(`article:view:${id}:${uid}:${formatToday()}`, 24 * 60 * 60)
+      : true
+    if (counted) {
+      await this.prisma.article.updateMany({ where: { id, status: 'published' }, data: { views: { increment: 1 } } })
+    }
     const liked = uid ? await this.isLiked(uid, 'article', id) : false
-    return toArticleDto({ ...article, views: article.views + 1 }, true, liked)
+    return toArticleDto({ ...article, views: counted ? article.views + 1 : article.views }, true, liked)
   }
 
   /** 投稿：channel=submitted、status=pending、SU 前缀、作者身份快照、代企业校验 article_submit */
@@ -141,6 +159,9 @@ export class AppContentsService {
       snapshot = { type: 'community_enterprise', enterpriseId: enterprise.id, enterpriseName: enterprise.name }
     } else if (dto.asIdentity === 'community_enterprise') {
       throw new BadRequestException('请选择要代表的社区企业')
+    } else {
+      /* 身份归属校验：非个人身份必须由用户实际持有，避免冒用「合作企业 / 社区个体」投稿 */
+      snapshot = { type: await this.assertSubmitIdentity(user.uid, dto.asIdentity) }
     }
 
     const id = await this.ids.next('SU')
@@ -249,34 +270,37 @@ export class AppContentsService {
     return dto
   }
 
-  /** 点赞切换：Favorite targetType='article' 幂等 + Article.likeCount 事务增减 */
+  /** 点赞切换：Favorite targetType='article' 幂等 + Article.likeCount 事务增减。
+   * 先按「删除命中数」判定是否已点赞，避免先查后写的并发窗口（并发重复点赞由唯一约束兜底）。 */
   async toggleLike(uid: string, id: string): Promise<{ liked: boolean; likeCount: number }> {
     const article = await this.prisma.article.findFirst({
       where: { id, status: 'published', deletedAt: null },
     })
     if (!article) throw new NotFoundException('文章不存在')
-    const existing = await this.prisma.favorite.findUnique({
-      where: { userId_targetType_targetId: { userId: uid, targetType: 'article', targetId: id } },
+
+    const removed = await this.prisma.$transaction(async (tx) => {
+      const res = await tx.favorite.deleteMany({ where: { userId: uid, targetType: 'article', targetId: id } })
+      if (res.count === 0) return false
+      await tx.article.update({ where: { id }, data: { likeCount: { decrement: 1 } } })
+      return true
     })
-    if (existing) {
-      await this.prisma.$transaction([
-        this.prisma.favorite.delete({
-          where: { userId_targetType_targetId: { userId: uid, targetType: 'article', targetId: id } },
-        }),
-        this.prisma.article.updateMany({
-          where: { id, likeCount: { gt: 0 } },
-          data: { likeCount: { decrement: 1 } },
-        }),
-      ])
-      return { liked: false, likeCount: Math.max(0, article.likeCount - 1) }
+
+    if (!removed) {
+      try {
+        await this.prisma.$transaction(async (tx) => {
+          await tx.favorite.create({
+            data: { userId: uid, targetType: 'article', targetId: id, createdAt: formatNow() },
+          })
+          await tx.article.update({ where: { id }, data: { likeCount: { increment: 1 } } })
+        })
+      } catch (error) {
+        /* 并发重复点赞：唯一约束兜底，视为已点赞，不重复计数 */
+        if (!(error instanceof Prisma.PrismaClientKnownRequestError) || error.code !== 'P2002') throw error
+      }
     }
-    await this.prisma.$transaction([
-      this.prisma.favorite.create({
-        data: { userId: uid, targetType: 'article', targetId: id, createdAt: formatNow() },
-      }),
-      this.prisma.article.updateMany({ where: { id }, data: { likeCount: { increment: 1 } } }),
-    ])
-    return { liked: true, likeCount: article.likeCount + 1 }
+
+    const fresh = await this.prisma.article.findUnique({ where: { id }, select: { likeCount: true } })
+    return { liked: !removed, likeCount: Math.max(0, fresh?.likeCount ?? 0) }
   }
 
   /** 已发布文章评论列表（升序） */
@@ -386,14 +410,8 @@ export class AppContentsService {
     return !!fav
   }
 
-  private async optionalUid(authorization?: string): Promise<string | undefined> {
-    if (!authorization?.startsWith('Bearer ')) return undefined
-    try {
-      const payload = await this.jwt.verifyAsync<{ sub: string; scope?: string }>(authorization.slice(7))
-      return payload.scope === 'app' ? payload.sub : undefined
-    } catch {
-      return undefined
-    }
+  private optionalUid(authorization?: string): Promise<string | undefined> {
+    return resolveOptionalAppUid(this.auth, authorization)
   }
 
   private async mine(uid: string, id: string): Promise<Article> {
@@ -402,6 +420,21 @@ export class AppContentsService {
     })
     if (!article) throw new NotFoundException('投稿不存在')
     return article
+  }
+
+  /** 投稿身份归属校验：白名单取值 + 非个人身份须由用户实际持有（防冒用「合作企业/社区个体」） */
+  private async assertSubmitIdentity(uid: string, requested?: string): Promise<string> {
+    const type = (requested ?? '').trim() || 'individual'
+    if (!(SUBMIT_IDENTITIES as readonly string[]).includes(type)) {
+      throw new BadRequestException('发布身份不合法')
+    }
+    if (type === 'individual') return 'individual'
+    const held = await this.prisma.userIdentity.findFirst({
+      where: { userId: uid, type },
+      select: { id: true },
+    })
+    if (!held) throw new ForbiddenException('你不具备该发布身份')
+    return type
   }
 
   private async resolveArticleColumn(columnId?: string, columnCode?: string): Promise<ArticleColumn | null> {

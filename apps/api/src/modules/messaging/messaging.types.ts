@@ -29,6 +29,8 @@ export interface ProviderMeta {
   supports: readonly ChannelKind[]
   /** 需在环境变量中提供的凭据变量名（仅校验是否齐备，不回传值） */
   credentialKeys: readonly string[]
+  /** 表单渲染时对凭据项的补充说明（当前仅 SMTP：认证用户名/授权码提示） */
+  credentialConfigFields?: readonly ProviderConfigField[]
   /** 非机密配置字段（管理端表单渲染用） */
   configFields: readonly ProviderConfigField[]
 }
@@ -64,11 +66,16 @@ export const PROVIDER_CATALOG: readonly ProviderMeta[] = [
     label: 'SMTP 邮件',
     supports: ['email'],
     credentialKeys: ['user', 'password'],
+    credentialConfigFields: [
+      { key: 'user', label: '认证用户名', hint: 'QQ/163/企业邮等填完整邮箱地址' },
+      { key: 'password', label: '认证密码/授权码', hint: 'QQ/163/新浪等需填「授权码」而非登录密码' },
+    ],
     configFields: [
-      { key: 'host', label: 'SMTP 主机', required: true },
-      { key: 'port', label: '端口', required: true },
-      { key: 'secure', label: '启用 TLS', hint: 'true = 465/SSL' },
-      { key: 'from', label: '发件人', required: true, hint: '如 聚屿社区 <no-reply@example.com>' },
+      { key: 'host', label: 'SMTP 主机', required: true, hint: '如 smtp.qq.com' },
+      { key: 'port', label: '端口', required: true, hint: '465（SSL）或 587（STARTTLS）' },
+      { key: 'secure', label: '启用 TLS', hint: 'true = 465/SSL，false = 587/STARTTLS' },
+      { key: 'fromAddress', label: '发件人邮箱地址', required: true, hint: '推荐与认证用户名一致；QQ/163/企业邮要求必须一致，否则 553' },
+      { key: 'fromName', label: '发件人显示名称', hint: '如 聚屿社区（选填）' },
       { key: 'domainVerified', label: '发件域名已验证', hint: 'true/false，仅作运营提示' },
     ],
   },
@@ -124,4 +131,6 @@ export interface SendMessageInput {
 
 export interface SendMessageResult {
   providerMessageId?: string
+  /** 非阻断性提示（如发件人与认证用户不一致），供测试发送等场景回显 */
+  warnings?: string[]
 }

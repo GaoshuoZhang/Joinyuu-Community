@@ -10,8 +10,8 @@ import {
   TestTemplateDto,
 } from './dto/message-template.dto'
 
-/* 消息模板中心（P0）：变量白名单 + 版本化 + 审批 + 测试发送 + 回滚（重新发布历史版本）。 */
-@RequirePermission('/system/message-templates')
+/* 消息模板（P0）：变量白名单 + 版本化（保存即发布）+ 历史版本回滚 + 测试发送。 */
+@RequirePermission('/system/messages')
 @Controller('api/admin/message-templates')
 export class MessageTemplateController {
   constructor(private readonly templates: MessageTemplateService) {}

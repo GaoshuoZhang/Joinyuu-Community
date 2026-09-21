@@ -469,6 +469,9 @@ export class AppEnterprisesService {
     })
 
     const isContact = ent.contactUserId === uid
+    /* 成员手机号与邀请记录（含被邀请人手机号）属管理信息：仅负责人与持相应权限的成员可见 */
+    const canManageMembers = isContact || (await this.hasPermission(uid, ent.id, 'manage_members'))
+    const canInviteMember = isContact || (await this.hasPermission(uid, ent.id, 'invite_member'))
     const servicesText = this.toText(ent.services)
     const advantagesText = this.toText(ent.advantages)
     const exitReason = exitApp ? this.exitReason(exitApp.details) : undefined
@@ -491,15 +494,17 @@ export class AppEnterprisesService {
         uid: row.userId,
         name: row.user.nickname,
         role: row.title,
-        ...(row.memberPhone ? { phone: row.memberPhone } : {}),
+        ...(canManageMembers && row.memberPhone ? { phone: row.memberPhone } : {}),
         permissions: row.userId === ent.contactUserId ? [...ENTERPRISE_PERMISSIONS] : row.permissions,
         isContact: row.userId === ent.contactUserId,
       })),
       isContact,
       myPermissions: isContact ? [...ENTERPRISE_PERMISSIONS] : identity?.permissions ?? [],
-      invitations: [...invitationRows]
-        .sort((a, b) => Number(b.status === 'pending') - Number(a.status === 'pending'))
-        .map((r) => this.invitationShape(r, ent.name, inviterNames)),
+      invitations: canInviteMember
+        ? [...invitationRows]
+            .sort((a, b) => Number(b.status === 'pending') - Number(a.status === 'pending'))
+            .map((r) => this.invitationShape(r, ent.name, inviterNames))
+        : [],
       transferRequest: pendingTransfer ? this.transferShape(pendingTransfer, ent.name, transferNames) : null,
       exitApplication: exitApp
         ? {
@@ -630,8 +635,12 @@ export class AppEnterprisesService {
     if (wantsBase && !(await this.hasPermission(uid, ent.id, 'manage_members'))) throw new ForbiddenException('你没有该操作权限')
     if (wantsPerm && !(await this.hasPermission(uid, ent.id, 'assign_permission'))) throw new ForbiddenException('你没有该操作权限')
 
-    const target = await this.locateMember(ent.id, dto.memberUid, dto.memberName)
-    if (wantsPerm && target.userId === ent.contactUserId) throw new ConflictException('负责人无需分配权限')
+    const target = await this.locateMember(ent.id, dto.memberUid)
+    if (wantsPerm) {
+      if (target.userId === ent.contactUserId) throw new ConflictException('负责人无需分配权限')
+      /* 防自我提权：不得给自己写权限位（持 assign_permission 的成员据此后可自授 manage_members 等全权） */
+      if (target.userId === uid) throw new ForbiddenException('不可修改自己的成员权限')
+    }
 
     const data: Prisma.UserIdentityUpdateInput = {}
     if (dto.role !== undefined) {
@@ -653,7 +662,7 @@ export class AppEnterprisesService {
   async removeMember(uid: string, id: string, dto: RemoveMemberDto): Promise<{ code: number }> {
     const { ent } = await this.requireMemberEnterprise(uid, id)
     if (!(await this.hasPermission(uid, ent.id, 'manage_members'))) throw new ForbiddenException('你没有该操作权限')
-    const target = await this.locateMember(ent.id, dto.memberUid, dto.memberName)
+    const target = await this.locateMember(ent.id, dto.memberUid)
     if (target.userId === ent.contactUserId) throw new ConflictException('负责人需先完成转移后才能移除')
 
     await this.prisma.userIdentity.delete({ where: { id: target.id } })
@@ -671,7 +680,7 @@ export class AppEnterprisesService {
     const { ent } = await this.requireMemberEnterprise(uid, id)
     if (ent.contactUserId !== uid) throw new ForbiddenException('只有负责人可以发起转移')
 
-    const target = await this.locateMember(ent.id, dto.memberUid, dto.memberName)
+    const target = await this.locateMember(ent.id, dto.memberUid)
     if (target.userId === uid) throw new ConflictException('不能转移给自己')
     const pending = await this.prisma.transferRequest.findFirst({
       where: { enterpriseId: ent.id, status: 'pending' },
@@ -751,7 +760,7 @@ export class AppEnterprisesService {
             contactUserId: uid,
             contactTitle: myIdentity.title,
             contactName: me.nickname,
-            contactPhone: me.phone,
+            contactPhone: me.phone ?? '',
           },
         })
         await tx.userIdentity.update({ where: { id: myIdentity.id }, data: { role: 'founder' } })
@@ -917,7 +926,7 @@ export class AppEnterprisesService {
         id: await this.ids.next('AP'),
         type: 'exit',
         applicantName: me.nickname,
-        applicantPhone: me.phone,
+        applicantPhone: me.phone ?? '',
         targetName: ent.name,
         summary: `退驻申请：${ent.name}`,
         details: [{ label: '退驻原因', value: dto.reason?.trim() ?? '' }] as unknown as Prisma.InputJsonValue,
@@ -929,9 +938,9 @@ export class AppEnterprisesService {
     return { code: 0 }
   }
 
-  /** 公开企业名片（仅 published 且未删除可见；services/advantages 数组拼接为文本） */
+  /** 公开企业名片（仅 active 且未删除可见；services/advantages 数组拼接为文本） */
   async enterpriseShowcase(id: string): Promise<EnterpriseShowcaseDto> {
-    const ent = await this.prisma.enterprise.findFirst({ where: { id, deletedAt: null } })
+    const ent = await this.prisma.enterprise.findFirst({ where: { id, deletedAt: null, status: 'active' } })
     if (!ent) throw new NotFoundException('企业名片不存在')
 
     const identityRows = await this.prisma.userIdentity.findMany({
@@ -987,20 +996,13 @@ export class AppEnterprisesService {
     return { ent, identity }
   }
 
-  /** 定位成员：memberUid 优先，未命中再按 memberName 匹配 identity.title */
-  private async locateMember(enterpriseId: string, memberUid?: string, memberName?: string): Promise<UserIdentity> {
+  /** 定位成员：仅按 memberUid 精确定位（写操作需明确目标，避免按 title/name 模糊回退误伤重名成员） */
+  private async locateMember(enterpriseId: string, memberUid?: string): Promise<UserIdentity> {
     if (memberUid) {
       const byUid = await this.prisma.userIdentity.findFirst({
         where: { userId: memberUid, type: 'community_enterprise', enterpriseId },
       })
       if (byUid) return byUid
-    }
-    const name = memberName?.trim()
-    if (name) {
-      const byName = await this.prisma.userIdentity.findFirst({
-        where: { title: name, type: 'community_enterprise', enterpriseId },
-      })
-      if (byName) return byName
     }
     throw new NotFoundException('未找到该企业成员')
   }

@@ -574,29 +574,33 @@ TZ=Asia/Shanghai
 
 | 方法 | 路径 | 说明 |
 |---|---|---|
-| GET | /api/admin/message-channels | 渠道列表（含凭据来源与齐备状态；inline 只回掩码、env 只回变量名，不回传密钥原文）；权限 `/system/message-channels` |
-| GET | /api/admin/message-channels/catalog | 消息类型与驱动目录（非机密配置字段 + 凭据变量名，供表单渲染与校验） |
+| GET | /api/admin/message-channels | 渠道列表（含凭据来源与齐备状态；inline 只回掩码、env 只回变量名，不回传密钥原文）；权限 `/system/messages` |
+| GET | /api/admin/message-channels/catalog | 消息类型与驱动目录（非机密配置字段 + 凭据项说明 `credentialConfigFields`，供表单渲染与校验） |
 | PUT | /api/admin/message-channels | 按 kind+provider 新增或更新（幂等）；必填参数齐备 + 凭据项归属校验；`credentialMode` inline（留空=保持原值）| env（登记变量名，缺省）；审计「消息中心」不含凭据原文 |
-| PATCH | /api/admin/message-channels/:id/enabled | 启停渠道 |
-| POST | /api/admin/message-channels/:id/test-send | 测试发送（不写发送队列）；凭据未注入时非生产环境降级干跑 |
-| GET | /api/admin/message-templates | 模板列表（含当前发布版本摘要）；权限 `/system/message-templates` |
+| GET/PATCH | /api/admin/message-channels/:id/enabled | 渠道启停；权限同上 |
+| POST | /api/admin/message-channels/:id/test-send | 测试发送（不写发送队列）；响应含 `warnings[]`（如 SMTP 发件人与认证用户不一致）；凭据缺失时非生产环境降级干跑 |
+| GET | /api/admin/message-templates | 模板列表（含当前发布版本摘要）；权限 `/system/messages` |
 | GET | /api/admin/message-templates/:id | 模板详情（含全部版本） |
-| POST | /api/admin/message-templates | 新建模板 + 首个草稿版本；编码唯一（409） |
-| PUT | /api/admin/message-templates/:id/draft | 保存草稿（最新版本仍为 draft 则原地更新，否则新建版本保留历史） |
-| POST | /api/admin/message-templates/:id/submit | 提交审核（draft → pending） |
-| POST | /api/admin/message-templates/:id/review | `{ approve, note? }`；驳回必填原因；pending → approved/rejected |
-| POST | /api/admin/message-templates/:id/publish | 发布；仅 approved/archived 可发布，传 `version` 即回滚；旧发布版本转 archived |
+| POST | /api/admin/message-templates | 创建即发布：直接生成 v1 published（无需审批）；编码唯一（409） |
+| PUT | /api/admin/message-templates/:id/draft | 保存即发布：最新 published 版本原地更新（版本号与状态不变、正文立即生效），否则新建版本并置为 published |
+| POST | /api/admin/message-templates/:id/submit | 兼容保留（发送即发布模式下无实际作用） |
+| POST | /api/admin/message-templates/:id/review | 兼容保留（发送即发布模式下无实际作用） |
+| POST | /api/admin/message-templates/:id/publish | 发布；传 `version` 即回滚（历史版本重新发布为当前版）；旧发布版本转 archived |
 | POST | /api/admin/message-templates/:id/disable | 下架（发布版本转 archived，模板回 draft） |
-| POST | /api/admin/message-templates/:id/test-send | 测试发送（按模板类型取已启用渠道） |
+| POST | /api/admin/message-templates/:id/test-send | 测试发送（按模板类型取已启用渠道，凭据缺失时非生产环境降级干跑） |
 | POST | /api/admin/message-templates/:id/preview | 预览渲染结果（不发送） |
-| GET | /api/admin/outbox | 发送记录分页 + 状态/渠道/关键字筛选 + 各状态计数；权限 `/system/outbox` |
+| GET | /api/admin/outbox | 发送记录分页 + 状态/渠道/关键字筛选 + 各状态计数；权限 `/system/messages` |
 | GET | /api/admin/outbox/:id/logs | 投递日志（每次尝试一条，最新在前） |
 | POST | /api/admin/outbox/:id/retry | 手动重试（failed/dead/skipped → pending） |
 | POST | /api/admin/outbox/:id/discard | 手动终止（进入死信） |
 
 **发送治理（Outbox）**：入队按 `idempotencyKey` 幂等去重（唯一键 + 冲突回读）；调度任务 `message-outbox-dispatch`（每 30 秒）扫描 `pending|failed` 且到期的消息，乐观抢占（`updateMany` 改 sending 成功者拿锁）后投递；失败按指数退避重试（30s→60s→120s…上限 30 分钟），超 `maxAttempts` 或不可重试错误进死信（`dead`）；每次尝试写 `MessageDeliveryLog`。营销类消息受用户 `channelPrefs`、`ContactConsent` 与安静时段约束（安静时段顺延到结束时刻，退订则 `skipped`），安全类（模板 category=security）强制送达。
 
+**管理端形态**：消息中心在后台扁平化为单一菜单 `/system/messages`（原三个子菜单合并），以「渠道配置 / 模板配置 / 发送记录」三个选项卡聚合。渠道配置按消息类型分块维护——短信（阿里云/腾讯云签名与模板映射）、邮箱（SMTP 主机/端口/授权码）、站内信（无需外部凭据）；每类渠道配置后可直接「保存并测试连通」。模板配置采用「保存即发布」：创建即生成 v1 published，编辑保存原地更新当前发布版本（正文立即生效），历史版本保留，重新发布历史版本即回滚；不设审批流程（submit/review 接口兼容保留）。
+
 **凭据安全**：渠道凭据支持两种来源（`credentialMode`）——`inline`=后台直接填写密钥（只写：留空保持原值；GET 只回 `credentialMasked` 掩码；审计不记录；切换来源时不沿用旧值）、`env`=登记环境变量名（默认，值由部署侧注入）。管理端与审计都不含凭据原文；凭据未注入时非生产环境自动降级为干跑驱动，便于端到端联调。实名核验凭据同口径（见 §7.15）。
+
+**邮件（SMTP）配置说明**：`from` 单字段已拆分为 `fromAddress`（发件人邮箱地址，必填）+ `fromName`（显示名，选填）；旧版 `from`（如 `聚屿社区 <no-reply@example.com>`）仍兼容读取，管理端编辑时会自动拆分。驱动发送前做「发件人 = SMTP 认证用户名」一致性预检，不一致以 `warnings[]` 回显（不阻断发送），并在 553/535/网络类错误信息中追加中文排障建议（授权码、端口放行等）。目录中 SMTP 的凭据项带 `credentialConfigFields` 说明（授权码提示）。
 
 **端点总计：265**（`/api/admin/**` 路由装饰器；`/api/app/**` 124 个另计，`GET /api/health`、`GET /api/public/files/:key` 两个 `@Public` 端点未计入）。
 

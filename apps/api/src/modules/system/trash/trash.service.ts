@@ -136,11 +136,9 @@ export class TrashService {
 
   async list(query: QueryTrashDto): Promise<{ list: ArchiveItemDto[]; total: number }> {
     const map = this.domainMap()
-    const selected: string[] = query.domain
-      ? DOMAIN_DEFS[query.domain]
-        ? [query.domain]
-        : []
-      : DOMAIN_ORDER
+    /* 非法域明确报 400，而不是静默返回空列表（前端标签页与域枚举同源，出现即契约不一致） */
+    if (query.domain && !DOMAIN_DEFS[query.domain]) throw new BadRequestException('不支持的归档标签页')
+    const selected: string[] = query.domain ? [query.domain] : DOMAIN_ORDER
 
     const rows: ArchiveItemDto[] = []
     for (const domain of selected) {
@@ -176,8 +174,13 @@ export class TrashService {
     const ops = this.requireDomain(domain)
     try {
       await ops.restore(id)
-    } catch {
-      throw new NotFoundException('归档中不存在该对象')
+    } catch (e) {
+      /* 仅把「对象不存在」映射为 404；数据库连接/约束等真实故障透传，避免误导为「归档中不存在」 */
+      if (e instanceof NotFoundException) throw e
+      if (e instanceof Prisma.PrismaClientKnownRequestError && e.code === 'P2025') {
+        throw new NotFoundException('归档中不存在该对象')
+      }
+      throw e
     }
     await this.audit.record({
       module: '归档管理',
@@ -256,11 +259,12 @@ export class TrashService {
     for (const st of def.archiveStatuses) {
       archiveStatuses[st.value] = incoming[st.value] ?? savedStatuses[st.value] ?? false
     }
+    /* 部分字段提交时按既有设置回填，避免「只改一个开关」把其它设置重置为默认值 */
     const values = {
-      autoArchive: def.autoArchive ? (dto.autoArchive ?? false) : false,
-      archiveDelayDays: dto.archiveDelayDays ?? 7,
-      autoPurge: dto.autoPurge ?? false,
-      purgeDelayDays: dto.purgeDelayDays ?? 30,
+      autoArchive: def.autoArchive ? (dto.autoArchive ?? existing?.autoArchive ?? false) : false,
+      archiveDelayDays: dto.archiveDelayDays ?? existing?.archiveDelayDays ?? 7,
+      autoPurge: dto.autoPurge ?? existing?.autoPurge ?? false,
+      purgeDelayDays: dto.purgeDelayDays ?? existing?.purgeDelayDays ?? 30,
       archiveStatuses,
     }
     await this.prisma.archiveSetting.upsert({
@@ -446,14 +450,25 @@ export class TrashService {
     return ops
   }
 
-  /** 生成某模型的恢复/彻底删除操作（限定 deletedAt 非空对象，可按域附加条件如 channel） */
-  private softOps(model: SoftModel, extraWhere: Record<string, unknown> = {}): Pick<DomainOps, 'restore' | 'purge'> {
+  /** 生成某模型的恢复/彻底删除操作（限定 deletedAt 非空对象，可按域附加条件如 channel）。
+   * clearArchivable：目标模型是否含 archivableAt 列（企业/合作企业档案不参与自动归档，无该列）。 */
+  private softOps(
+    model: SoftModel,
+    extraWhere: Record<string, unknown> = {},
+    clearArchivable = true,
+  ): Pick<DomainOps, 'restore' | 'purge'> {
     const deletedWhere = { deletedAt: { not: null }, ...extraWhere }
     return {
       restore: async (id: string) => {
         const found = await model.findFirst({ where: { id, ...deletedWhere } })
         if (!found) throw new NotFoundException('归档中不存在该对象')
-        await model.update({ where: { id }, data: { deletedAt: null, deletedBy: null } })
+        /* 同时清空 archivableAt：否则下一轮自动归档会按旧时间再次写入 deletedAt，人工恢复实际失效 */
+        await model.update({
+          where: { id },
+          data: clearArchivable
+            ? { deletedAt: null, deletedBy: null, archivableAt: null }
+            : { deletedAt: null, deletedBy: null },
+        })
       },
       purge: async (id: string) => {
         const found = await model.findFirst({ where: { id, ...deletedWhere } })
@@ -466,22 +481,22 @@ export class TrashService {
   private domainMap(): Record<string, DomainOps> {
     const db = this.prisma
     const deletedWhere = { deletedAt: { not: null } }
-    const soft = (m: unknown, extraWhere?: Record<string, unknown>): Pick<DomainOps, 'restore' | 'purge'> =>
-      this.softOps(m as SoftModel, extraWhere)
+    const soft = (m: unknown, extraWhere?: Record<string, unknown>, clearArchivable = true): Pick<DomainOps, 'restore' | 'purge'> =>
+      this.softOps(m as SoftModel, extraWhere, clearArchivable)
 
     return {
       enterprise: {
         label: DOMAIN_DEFS.enterprise.label,
         titleOf: (r) => String(r.name),
         listDeleted: () => db.enterprise.findMany({ where: deletedWhere, orderBy: { deletedAt: 'desc' } }),
-        ...soft(db.enterprise),
+        ...soft(db.enterprise, {}, false),
       },
       externalEnterprise: {
         label: DOMAIN_DEFS.externalEnterprise.label,
         titleOf: (r) => String(r.name),
         listDeleted: () =>
           db.externalEnterpriseProfile.findMany({ where: deletedWhere, orderBy: { deletedAt: 'desc' } }),
-        ...soft(db.externalEnterpriseProfile),
+        ...soft(db.externalEnterpriseProfile, {}, false),
       },
       demand: {
         label: DOMAIN_DEFS.demand.label,

@@ -26,7 +26,7 @@ describe('mock owned record details', () => {
   })
 
   it('does not expose either record to another member', async () => {
-    issueToken('U1004', [{ type: 'community_enterprise', enterpriseId: 'E2001' }])
+    issueToken('U1004', [{ type: 'community_enterprise', enterpriseId: 'E9001' }])
     await expect(fetchMyApplication('AP3001')).rejects.toEqual(expect.objectContaining({ code: 404 }))
     await expect(fetchMyArticle('SU1002')).rejects.toEqual(expect.objectContaining({ code: 404 }))
   })

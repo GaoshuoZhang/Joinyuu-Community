@@ -10,11 +10,24 @@ import { useUnsavedGuard } from '@/composables/useUnsavedGuard'
 import AvatarUploader from '@/components/shared/AvatarUploader.vue'
 import EmptyBlock from '@/components/shared/EmptyBlock.vue'
 import ListSkeleton from '@/components/ListSkeleton.vue'
+import {
+  NICKNAME_MSG,
+  NICKNAME_RESERVED_MSG,
+  NICKNAME_TOO_LONG_MSG,
+  REQUIRED,
+  isNickname,
+  isReservedNickname,
+  isReservedUsername,
+  isUsername,
+  USERNAME_MSG,
+  USERNAME_RESERVED_MSG,
+} from '@/utils/validators'
 
-/* 资料编辑：头像（点头像直接上传替换）/ 昵称 / 性别 / 简介 + 实名认证入口。 */
+/* 资料编辑：头像（点头像直接上传替换）/ 用户名 / 昵称 / 性别 / 简介 + 实名认证入口。
+ * 邮箱与手机号变更在「账号与安全」通过验证码完成，此处不提供编辑。 */
 const router = useRouter()
 const auth = useAuthStore()
-const form = reactive({ nickname: '', avatar: '', gender: 'unknown' as 'male' | 'female' | 'unknown', bio: '' })
+const form = reactive({ username: '', nickname: '', avatar: '', gender: 'unknown' as 'male' | 'female' | 'unknown', bio: '' })
 const submitting = ref(false)
 
 const baseline = ref('')
@@ -31,7 +44,20 @@ const realNameNote = computed(() => {
   return realNameVerified.value ? verifiedWord : unverifiedWord
 })
 
-const nicknameError = computed(() => (form.nickname.trim() ? '' : '请输入昵称'))
+const usernameError = computed(() => {
+  const value = form.username.trim()
+  if (!value) return REQUIRED('用户名')
+  if (!isUsername(value)) return USERNAME_MSG
+  if (isReservedUsername(value)) return USERNAME_RESERVED_MSG
+  return ''
+})
+const nicknameError = computed(() => {
+  const value = form.nickname.trim()
+  if (!value) return NICKNAME_MSG
+  if (!isNickname(value)) return NICKNAME_TOO_LONG_MSG
+  if (isReservedNickname(value)) return NICKNAME_RESERVED_MSG
+  return ''
+})
 const loading = ref(true)
 const loadError = ref('')
 const loaded = ref(false)
@@ -42,6 +68,7 @@ async function load() {
   try {
     const me = await fetchMe()
     if (!loaded.value) {
+      form.username = me.username
       form.nickname = me.nickname
       form.avatar = me.avatar ?? ''
       form.gender = me.gender
@@ -67,13 +94,21 @@ onMounted(() => {
 })
 
 async function onSave() {
-  if (!form.nickname.trim()) {
-    Toast(nicknameError.value)
+  const firstError = usernameError.value || nicknameError.value
+  if (firstError) {
+    Toast(firstError)
     return
   }
   submitting.value = true
   try {
-    await updateMe({ ...form })
+    await updateMe({
+      username: form.username.trim(),
+      nickname: form.nickname.trim(),
+      avatar: form.avatar,
+      gender: form.gender,
+      bio: form.bio,
+    })
+    auth.username = form.username.trim()
     auth.name = form.nickname.trim()
     auth.avatar = form.avatar
     Toast('资料已更新')
@@ -103,6 +138,12 @@ async function onSave() {
           biz-type="avatar"
           @update:image="form.avatar = $event"
         />
+      </div>
+      <div class="field">
+        <label>用户名</label>
+        <Input v-model="form.username" autocomplete="username" :spell-check="false" :maxlength="20" placeholder="字母开头，4-20 位字母/数字/下划线…" clearable />
+        <p class="field-hint">全站唯一，可用于登录；修改后请用新用户名登录。</p>
+        <p v-if="usernameError" class="field-error">{{ usernameError }}</p>
       </div>
       <div class="field">
         <label>昵称</label>
@@ -158,6 +199,12 @@ async function onSave() {
 .genders {
   display: flex;
   gap:var(--app-space-10);
+}
+
+.field-hint {
+  margin:var(--app-space-3) 0 0;
+  font-size: var(--app-font-caption);
+  color: var(--td-text-color-placeholder);
 }
 
 .security {

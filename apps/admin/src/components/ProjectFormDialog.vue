@@ -29,6 +29,8 @@ const emit = defineEmits<{
 
 const submitting = ref(false)
 const formRef = ref()
+/* 「回填中」标记：编辑/重新新增回填承接方与占比期间，抑制均分重算，避免静默覆盖已有占比 */
+const initializing = ref(false)
 const undertakerOptions = ref<UndertakerOption[]>([])
 
 const form = reactive({
@@ -122,6 +124,7 @@ watch(
     if (v) void ensureOptions()
     if (v && props.mode === 'edit' && props.project) {
       /* 编辑：回填项目现有数据（承接方 value = type:id 与选项格式对齐） */
+      initializing.value = true
       form.projectName = props.project.name
       form.undertakers = props.project.undertakers.map((t) => t.type + ':' + t.id)
       form.description = props.project.description
@@ -134,11 +137,15 @@ watch(
         .forEach((t) => {
           customContacts[t.name] = { contactName: t.contactName ?? '', phone: t.phone ?? '' }
         })
-      nextTick(() => formRef.value?.clearValidate())
+      nextTick(() => {
+        formRef.value?.clearValidate()
+        initializing.value = false
+      })
       return
     }
     if (v && props.mode === 'create' && props.project) {
       /* 重新新增：以已关闭项目为模板预填（保存时生成新项目编号与状态） */
+      initializing.value = true
       form.projectName = props.project.name
       form.undertakers = props.project.undertakers.map((t) => t.type + ':' + t.id)
       form.description = props.project.description
@@ -153,7 +160,10 @@ watch(
         .forEach((t) => {
           customContacts[t.name] = { contactName: t.contactName ?? '', phone: t.phone ?? '' }
         })
-      nextTick(() => formRef.value?.clearValidate())
+      nextTick(() => {
+        formRef.value?.clearValidate()
+        initializing.value = false
+      })
       return
     }
     if (v) {
@@ -170,10 +180,11 @@ watch(
   },
 )
 
-/* 承接方选择变化 → 重置为均分 */
+/* 承接方选择变化 → 重置为均分（回填期间跳过，保留项目已有占比） */
 watch(
   () => [...form.undertakers],
   (sel) => {
+    if (initializing.value) return
     shares.value = evenShares(sel.length)
   },
 )

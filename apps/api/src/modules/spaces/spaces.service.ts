@@ -144,7 +144,7 @@ export class SpacesService {
   }
 
   async updateSpace(id: string, payload: SpacePayloadDto): Promise<{ code: number }> {
-    const space = await this.prisma.space.findUnique({ where: { id } })
+    const space = await this.prisma.space.findFirst({ where: { id, deletedAt: null } })
     if (!space) throw new NotFoundException('空间不存在')
 
     await this.prisma.space.update({ where: { id }, data: this.spaceData(payload) })
@@ -152,7 +152,7 @@ export class SpacesService {
   }
 
   async setSpaceStatus(id: string, status: string): Promise<{ code: number }> {
-    const space = await this.prisma.space.findUnique({ where: { id } })
+    const space = await this.prisma.space.findFirst({ where: { id, deletedAt: null } })
     if (!space) throw new NotFoundException('空间不存在')
 
     await this.prisma.space.update({ where: { id }, data: { status } })
@@ -197,33 +197,43 @@ export class SpacesService {
   ): Promise<{ code: number }> {
     const reservation = await this.prisma.spaceReservation.findUnique({ where: { id } })
     if (!reservation) throw new NotFoundException('空间预约不存在')
-    if (reservation.status !== 'pending') {
-      throw new ConflictException('该预约已处理，请勿重复审核')
-    }
 
-    if (status === 'approved') {
-      await this.assertNoConflict(reservation)
-    }
+    /* BE-M1 并发审核串行化：对同空间同日期的审核加咨询锁。
+     * 两个 pending 重叠预约被并发双通过的场景：锁保证第二个事务在第一个提交后才复查，
+     * 此时 assertNoConflict 能看到刚通过的预约 → 拒绝冲突。 */
+    await this.prisma.$transaction(async (tx) => {
+      await tx.$queryRaw<unknown[]>`
+        SELECT pg_advisory_xact_lock(hashtext(${`space_rv:${reservation.spaceId}:${reservation.date}`}))::text AS locked`
 
-    const records = (reservation.records as unknown as ApprovalRecord[]) ?? []
-    const record: ApprovalRecord = {
-      step: '管理员审核',
-      operator,
-      action: status === 'approved' ? 'approve' : 'reject',
-      comment: comment ?? (status === 'approved' ? '同意预约' : ''),
-      at: formatNow(),
-    }
-    records.push(record)
+      const fresh = await tx.spaceReservation.findUnique({ where: { id } })
+      if (!fresh || fresh.status !== 'pending') {
+        throw new ConflictException('该预约已处理，请勿重复审核')
+      }
 
-    await this.prisma.spaceReservation.update({
-      where: { id },
-      data: {
-        status,
-        records: records as unknown as Prisma.InputJsonValue,
-        ...(status === 'rejected'
-          ? { rejectReason: comment ?? '', archivableAt: formatNow() }
-          : {}),
-      },
+      if (status === 'approved') {
+        await this.assertNoConflict(tx, fresh)
+      }
+
+      const records = (fresh.records as unknown as ApprovalRecord[]) ?? []
+      const record: ApprovalRecord = {
+        step: '管理员审核',
+        operator,
+        action: status === 'approved' ? 'approve' : 'reject',
+        comment: comment ?? (status === 'approved' ? '同意预约' : ''),
+        at: formatNow(),
+      }
+      records.push(record)
+
+      await tx.spaceReservation.update({
+        where: { id },
+        data: {
+          status,
+          records: records as unknown as Prisma.InputJsonValue,
+          ...(status === 'rejected'
+            ? { rejectReason: comment ?? '', archivableAt: formatNow() }
+            : {}),
+        },
+      })
     })
 
     await this.audit.record({
@@ -298,7 +308,7 @@ export class SpacesService {
     }))
 
     const events = await this.prisma.communityEvent.findMany({
-      where: { status: 'published', startTime: { startsWith: date } },
+      where: { status: 'published', startTime: { startsWith: date }, deletedAt: null },
     })
     if (events.length > 0) {
       const spaces = await this.prisma.space.findMany()
@@ -322,9 +332,12 @@ export class SpacesService {
     return list
   }
 
-  /* 审核通过前时段冲突校验（两条分支） */
-  private async assertNoConflict(reservation: SpaceReservation): Promise<void> {
-    const clash = await this.prisma.spaceReservation.findFirst({
+  /* 审核通过前时段冲突校验（两条分支）；db 注入事务客户端时在事务内复核，避免并发双通过 */
+  private async assertNoConflict(
+    db: Prisma.TransactionClient | PrismaService,
+    reservation: SpaceReservation,
+  ): Promise<void> {
+    const clash = await db.spaceReservation.findFirst({
       where: {
         id: { not: reservation.id },
         spaceId: reservation.spaceId,
@@ -337,9 +350,9 @@ export class SpacesService {
     })
     if (clash) throw new ConflictException('该时段已有已通过的预约，无法重复占用')
 
-    const space = await this.prisma.space.findUnique({ where: { id: reservation.spaceId } })
+    const space = await db.space.findUnique({ where: { id: reservation.spaceId } })
     if (!space) return
-    const events = await this.prisma.communityEvent.findMany({
+    const events = await db.communityEvent.findMany({
       where: {
         status: 'published',
         location: space.name,

@@ -88,7 +88,7 @@ export class NotificationService {
     if (await this.isMuted(tx, userId, input.type)) return
     await tx.userNotification.create({
       data: {
-        id: await this.ids.next('UN'),
+        id: await this.ids.next('UN', tx),
         userId,
         type: input.type,
         title: input.title,

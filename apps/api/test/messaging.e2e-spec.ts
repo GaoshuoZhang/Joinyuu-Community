@@ -244,3 +244,89 @@ describe('P0 消息中心 · 渠道配置', () => {
     expect(res.body.message).toContain('不属于该驱动')
   })
 })
+
+/* P0 消息中心 · 模板（简化流程）：创建即发布、编辑保存即生效。 */
+describe('P0 消息中心 · 模板（保存即发布）', () => {
+  let app: INestApplication
+  let token: string
+
+  beforeAll(async () => {
+    reseed()
+    const moduleRef = await Test.createTestingModule({ imports: [AppModule] }).compile()
+    app = moduleRef.createNestApplication()
+    await app.init()
+    token = await loginAs(app)
+  })
+
+  afterAll(async () => {
+    await app.close()
+  })
+
+  const get = (path: string) =>
+    request(app.getHttpServer()).get(path).set('Authorization', `Bearer ${token}`)
+  const put = (path: string) =>
+    request(app.getHttpServer()).put(path).set('Authorization', `Bearer ${token}`)
+  const post = (path: string) =>
+    request(app.getHttpServer()).post(path).set('Authorization', `Bearer ${token}`)
+
+  const payload = {
+    code: 'test_p0_email',
+    name: '测试邮件模板',
+    kind: 'email',
+    category: 'marketing',
+    variables: ['nickname'],
+    subject: 'hi {{nickname}}',
+    body: '你好 {{nickname}}',
+  }
+
+  it('创建模板即发布（v1 published），无需审批', async () => {
+    const created = await post('/api/admin/message-templates').send(payload)
+    expect(created.status).toBe(200)
+    const id = created.body.data.id as string
+
+    const detail = await get(`/api/admin/message-templates/${id}`)
+    expect(detail.status).toBe(200)
+    expect(detail.body.data.status).toBe('published')
+    expect(detail.body.data.currentVersion).toBe(1)
+    expect(detail.body.data.versions[0].status).toBe('published')
+  })
+
+  it('编辑保存即发布：正文立即更新、版本不变、状态保持 published', async () => {
+    const list = await get('/api/admin/message-templates')
+    const tpl = (list.body.data as Array<{ id: string; code: string }>).find(
+      (t) => t.code === 'test_p0_email',
+    )!
+
+    const saved = await put(`/api/admin/message-templates/${tpl.id}/draft`).send({
+      name: '测试邮件模板',
+      category: 'marketing',
+      variables: ['nickname'],
+      subject: 'hi {{nickname}}',
+      body: '你好 {{nickname}}，欢迎回来！',
+    })
+    expect(saved.status).toBe(200)
+
+    const detail = await get(`/api/admin/message-templates/${tpl.id}`)
+    expect(detail.body.data.status).toBe('published')
+    expect(detail.body.data.currentVersion).toBe(1)
+    expect(detail.body.data.versions[0].body).toContain('欢迎回来')
+  })
+
+  it('模板测试发送：按已启用渠道投递并返回回执', async () => {
+    const both = await request(app.getHttpServer()).get('/api/admin/message-channels').set('Authorization', `Bearer ${token}`)
+    const emailChannel = (both.body.data as Array<{ id: string; kind: string }>).find((c) => c.kind === 'email')!
+    expect(emailChannel).toBeTruthy()
+
+    const list = await get('/api/admin/message-templates')
+    const tpl = (list.body.data as Array<{ id: string; code: string }>).find(
+      (t) => t.code === 'test_p0_email',
+    )!
+    const res = await post(`/api/admin/message-templates/${tpl.id}/test-send`).send({
+      recipient: 'dev@example.com',
+      variables: { nickname: '张三' },
+    })
+    expect(res.status).toBe(200)
+    expect(res.body.data.dryRun).toBe(true)
+    expect(String(res.body.data.providerMessageId)).toMatch(/^dry-/)
+  })
+})

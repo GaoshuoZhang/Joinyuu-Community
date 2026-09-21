@@ -56,11 +56,16 @@ function onTypeChange() {
   load()
 }
 
+/* 提交互斥：避免重复点击/连按回车产生并发新增 */
+const submitting = ref(false)
+
 async function onCreate() {
+  if (submitting.value) return
   if (!newLabel.value.trim()) {
     MessagePlugin.warning('请输入字典项名称')
     return
   }
+  submitting.value = true
   try {
     await createDictEntry(activeType.value, { label: newLabel.value })
     MessagePlugin.success(`字典项「${newLabel.value.trim()}」已新增并启用`)
@@ -68,6 +73,8 @@ async function onCreate() {
     await load(true)
   } catch (e) {
     MessagePlugin.error(e instanceof Error ? e.message : '新增失败')
+  } finally {
+    submitting.value = false
   }
 }
 
@@ -117,7 +124,7 @@ onMounted(load)
         style="width: 280px"
         @enter="onCreate"
       />
-      <t-button theme="primary" @click="onCreate">
+      <t-button theme="primary" :loading="submitting" @click="onCreate">
         <template #icon><AddIcon /></template>
         新增字典项
       </t-button>

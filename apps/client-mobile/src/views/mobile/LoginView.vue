@@ -5,7 +5,7 @@ import { Button, Input, Toast } from 'tdesign-mobile-vue'
 import { useAuthStore } from '@/stores/auth'
 import { useNoticesStore } from '@/stores/notices'
 import { ApiError, apiMode } from '@/api/http'
-import { isCaptcha, isPhone, PHONE_MSG, REQUIRED } from '@/utils/validators'
+import { isCaptcha, REQUIRED } from '@/utils/validators'
 import CaptchaField from '@/components/CaptchaField.vue'
 import { useCaptcha } from '@/composables/useCaptcha'
 import 'tdesign-mobile-vue/es/style/index.css'
@@ -17,20 +17,30 @@ const auth = useAuthStore()
 const notices = useNoticesStore()
 const { captchaId, captchaImage, captchaLoading, refreshCaptcha } = useCaptcha()
 
-const form = reactive({ phone: '', password: '', captchaCode: '' })
+async function onRefreshCaptcha() {
+  const result = await refreshCaptcha()
+  if (!result.ok) Toast(result.message ?? '验证码加载失败，请重试')
+}
+
+const form = reactive({ identifier: '', password: '', captchaCode: '' })
 const submitting = ref(false)
-const errors = reactive({ phone: '', password: '', captchaCode: '' })
+const errors = reactive({ identifier: '', password: '', captchaCode: '' })
 
 function validate(): boolean {
-  errors.phone = isPhone(form.phone) ? '' : PHONE_MSG
+  errors.identifier = form.identifier.trim() ? '' : REQUIRED('手机号/邮箱/用户名')
   errors.password = form.password ? '' : REQUIRED('密码')
   errors.captchaCode = isCaptcha(form.captchaCode) ? '' : REQUIRED('验证码')
-  return !errors.phone && !errors.password && !errors.captchaCode
+  return !errors.identifier && !errors.password && !errors.captchaCode
 }
 
 async function onSubmit() {
   if (!validate()) {
     Toast(Object.values(errors).find((v) => v) ?? '请完善表单')
+    return
+  }
+  /* 验证码加载失败时 captchaId 为空，提交只会得到误导性错误：先拦截并提示 */
+  if (!captchaId.value) {
+    Toast('请先获取验证码')
     return
   }
   submitting.value = true
@@ -42,7 +52,7 @@ async function onSubmit() {
   } catch (e) {
     Toast(e instanceof ApiError ? e.message : '登录失败，请稍后重试')
     form.captchaCode = ''
-    await refreshCaptcha().catch(() => undefined)
+    await refreshCaptcha()
   } finally {
     submitting.value = false
   }
@@ -59,9 +69,9 @@ async function onSubmit() {
 
     <form class="form" @submit.prevent="onSubmit">
       <div class="field">
-        <label>手机号</label>
-        <Input v-model="form.phone" type="tel" autocomplete="username" :maxlength="11" placeholder="请输入手机号…" clearable @keyup.enter="onSubmit" />
-        <p v-if="errors.phone" class="error">{{ errors.phone }}</p>
+        <label>手机号/邮箱/用户名</label>
+        <Input v-model="form.identifier" type="text" autocomplete="username" placeholder="请输入手机号/邮箱/用户名…" clearable @keyup.enter="onSubmit" />
+        <p v-if="errors.identifier" class="error">{{ errors.identifier }}</p>
       </div>
       <div class="field">
         <label>密码</label>
@@ -74,11 +84,11 @@ async function onSubmit() {
         :image="captchaImage"
         :loading="captchaLoading"
         :error="errors.captchaCode"
-        @refresh="refreshCaptcha"
+        @refresh="onRefreshCaptcha"
         @keyup.enter="onSubmit"
       />
 
-      <Button theme="primary" block size="large" :loading="submitting" @click="onSubmit">登录</Button>
+      <Button theme="primary" block size="large" :loading="submitting" :disabled="submitting || !captchaId" @click="onSubmit">登录</Button>
       <p class="guest"><router-link to="/" replace class="guest-link">暂不登录</router-link></p>
       <p class="swap">还没有账号？<router-link to="/register" class="link">立即注册</router-link></p>
       <p v-if="apiMode === 'mock'" class="demo">演示：13800000001 / client123</p>

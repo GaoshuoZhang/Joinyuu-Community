@@ -36,13 +36,21 @@ onMounted(run)
 const readingAll = ref(false)
 
 async function onItemClick(n: UserNotice) {
-  try {
-    if (!n.read) await notices.read(n.id)
-  } catch {
-    return
+  if (!n.read) {
+    try {
+      /* read() 仅在接口成功后把 item.read 置 true；失败不阻塞浏览（弱网/离线仍可阅读内容） */
+      await notices.read(n.id)
+    } catch {
+      /* 已读标记失败忽略，允许继续打开 */
+    }
   }
   if (n.link?.startsWith('/api/app/me/data-exports/')) {
-    await downloadPersonalData(n.link)
+    /* 下载失败给出反馈，避免点击后无响应 */
+    try {
+      await downloadPersonalData(n.link)
+    } catch (e) {
+      Toast(e instanceof ApiError ? e.message : '下载失败，请稍后重试')
+    }
     return
   }
   if (n.link) await router.push(n.link)

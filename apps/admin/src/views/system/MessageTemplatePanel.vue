@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, reactive, ref } from 'vue'
+import { onMounted, reactive, ref } from 'vue'
 import { MessagePlugin } from 'tdesign-vue-next'
 import PageHeader from '@/components/PageHeader.vue'
 import ListErrorState from '@/components/ListErrorState.vue'
@@ -10,9 +10,7 @@ import {
   fetchMessageTemplates,
   previewMessageTemplate,
   publishMessageTemplate,
-  reviewMessageTemplate,
   saveMessageTemplateDraft,
-  submitMessageTemplate,
   testSendMessageTemplate,
 } from '@/api/messageTemplates'
 import type {
@@ -23,8 +21,9 @@ import type {
   MessageTemplateVersion,
 } from '@/types'
 
-/* 消息中心 · 模板中心（P0）：变量白名单 + 版本化 + 审批 + 测试发送 + 回滚。
- * 发布需先经审核通过；重新发布历史版本即为回滚。 */
+/* 消息中心 · 模板配置（简化）：创建即发布；编辑「保存」即对当前发布版本生效；
+ * 历史版本保留，重新发布历史版本即为回滚。 */
+defineProps<{ inline?: boolean }>()
 const loading = ref(true)
 const loadError = ref('')
 const templates = ref<MessageTemplate[]>([])
@@ -32,12 +31,12 @@ const templates = ref<MessageTemplate[]>([])
 const KIND_LABEL: Record<string, string> = { sms: '短信', email: '邮件', inapp: '站内信' }
 const CATEGORY_LABEL: Record<string, string> = { security: '安全类', marketing: '营销类' }
 const VERSION_STATUS_LABEL: Record<string, string> = {
+  published: '已发布',
+  archived: '历史版本',
   draft: '草稿',
   pending: '待审核',
   approved: '已通过',
   rejected: '已驳回',
-  published: '已发布',
-  archived: '历史版本',
 }
 const VERSION_STATUS_THEME: Record<string, 'default' | 'success' | 'warning' | 'danger' | 'primary'> = {
   draft: 'default',
@@ -116,7 +115,7 @@ async function onCreate() {
       body: createForm.body,
     })
     createVisible.value = false
-    MessagePlugin.success('模板已创建（草稿版本 v1）')
+    MessagePlugin.success('模板已创建并发布（v1）')
     await load()
   } catch (error) {
     MessagePlugin.error(error instanceof Error ? error.message : '创建失败')
@@ -134,7 +133,6 @@ const edit = reactive({
   variablesText: '',
   subject: '',
   body: '',
-  reviewNote: '',
 })
 
 async function openDetail(row: MessageTemplate) {
@@ -149,7 +147,6 @@ async function openDetail(row: MessageTemplate) {
     const latest = data.versions[0]
     edit.subject = latest?.subject ?? ''
     edit.body = latest?.body ?? ''
-    edit.reviewNote = ''
   } catch (error) {
     MessagePlugin.error(error instanceof Error ? error.message : '模板详情加载失败')
     detailVisible.value = false
@@ -177,7 +174,8 @@ async function withAction(action: () => Promise<unknown>, successText: string) {
   }
 }
 
-async function onSaveDraft() {
+/** 保存并发布：编辑即生效（保存到当前发布版本） */
+async function onSavePublish() {
   if (!detail.value) return
   const valid = await editRef.value.validate()
   if (valid !== true) return
@@ -190,7 +188,7 @@ async function onSaveDraft() {
         subject: edit.subject.trim() || undefined,
         body: edit.body,
       }),
-    '草稿已保存',
+    '已保存并发布',
   )
 }
 
@@ -206,24 +204,7 @@ async function onPreview() {
   }
 }
 
-const latestVersion = computed(() => detail.value?.versions[0] ?? null)
-const canPublishLatest = computed(() =>
-  ['approved', 'archived'].includes(latestVersion.value?.status ?? ''),
-)
-
-/* ---------- 审核 / 发布 / 下架 ---------- */
-async function onReview(approve: boolean) {
-  if (!detail.value) return
-  if (!approve && !edit.reviewNote.trim()) {
-    MessagePlugin.warning('驳回时必须填写原因')
-    return
-  }
-  await withAction(
-    () => reviewMessageTemplate(detail.value!.id, { approve, note: edit.reviewNote.trim() || undefined }),
-    approve ? '审核已通过' : '已驳回',
-  )
-}
-
+/* ---------- 下架 / 回滚历史版本 ---------- */
 async function onPublish(version?: number) {
   if (!detail.value) return
   await withAction(
@@ -236,10 +217,6 @@ async function onDisable() {
   if (!detail.value) return
   await withAction(() => disableMessageTemplate(detail.value!.id), '模板已下架')
 }
-
-const pendingVersion = computed(() =>
-  detail.value?.versions.find((v) => v.status === 'pending') ?? null,
-)
 
 /* ---------- 测试发送 ---------- */
 const testVisible = ref(false)
@@ -286,6 +263,9 @@ async function onTestSend() {
     testVisible.value = false
     const suffix = result.dryRun ? '（凭据未注入，已干跑）' : ''
     MessagePlugin.success(`测试发送成功${suffix} · 回执 ${result.providerMessageId ?? '—'} · ${result.costMs}ms`)
+    if (result.warnings?.length) {
+      MessagePlugin.warning(result.warnings.join('\n'))
+    }
   } catch (error) {
     MessagePlugin.error(error instanceof Error ? error.message : '测试发送失败')
   }
@@ -298,7 +278,11 @@ function versionActionLabel(version: MessageTemplateVersion): string {
 
 <template>
   <div class="template-panel page-fade-in">
-    <PageHeader title="模板中心" description="变量白名单 / 版本化 / 审批 / 测试发送；发布后方可用于发送队列">
+    <PageHeader
+      v-if="!$props.inline"
+      title="模板配置"
+      description="短信 / 邮件 / 站内信模板；创建即发布，编辑保存即生效，历史版本可回滚"
+    >
       <template #actions>
         <t-button theme="primary" @click="openCreate">新增模板</t-button>
       </template>
@@ -319,7 +303,7 @@ function versionActionLabel(version: MessageTemplateVersion): string {
         </template>
         <template #status="{ row }">
           <t-tag :theme="row.status === 'published' ? 'success' : 'default'" variant="light" size="small">
-            {{ row.status === 'published' ? `已发布 v${row.currentVersion}` : '草稿' }}
+            {{ row.status === 'published' ? `已发布 v${row.currentVersion}` : '未发布' }}
           </t-tag>
         </template>
         <template #variables="{ row }">
@@ -338,7 +322,7 @@ function versionActionLabel(version: MessageTemplateVersion): string {
       v-model:visible="createVisible"
       header="新增模板"
       width="640px"
-      :confirm-btn="{ content: '创建', theme: 'primary' }"
+      :confirm-btn="{ content: '创建并发布', theme: 'primary' }"
       @confirm="onCreate"
     >
       <t-form ref="createRef" :data="createForm" label-align="top">
@@ -407,21 +391,15 @@ function versionActionLabel(version: MessageTemplateVersion): string {
             <t-form-item label="模板正文" name="body" :rules="[{ required: true, message: '请输入模板正文' }]">
               <t-textarea v-model="edit.body" :autosize="{ minRows: 3, maxRows: 8 }" />
             </t-form-item>
-            <t-form-item label="审核意见（驳回必填）" name="reviewNote">
-              <t-input v-model="edit.reviewNote" clearable placeholder="选填…" />
-            </t-form-item>
           </t-form>
 
           <t-space class="action-bar">
-            <t-button theme="default" @click="onSaveDraft">保存草稿</t-button>
+            <t-button theme="primary" @click="onSavePublish">保存并发布</t-button>
             <t-button theme="default" @click="onPreview">预览</t-button>
-            <t-button theme="default" :disabled="!latestVersion || latestVersion.status !== 'draft'" @click="withAction(() => submitMessageTemplate(detail!.id), '已提交审核')">提交审核</t-button>
-            <t-button theme="success" :disabled="!pendingVersion" @click="onReview(true)">审核通过</t-button>
-            <t-button theme="danger" variant="outline" :disabled="!pendingVersion" @click="onReview(false)">驳回</t-button>
-            <t-button theme="primary" :disabled="!canPublishLatest" @click="onPublish()">
-              {{ detail.currentVersion > 0 ? '重新发布最新版本' : '发布' }}
+            <t-button theme="danger" variant="outline" :disabled="detail.currentVersion === 0" @click="onDisable">
+              下架
             </t-button>
-            <t-button theme="default" :disabled="detail.currentVersion === 0" @click="onDisable">下架</t-button>
+            <span class="muted action-hint">保存后立即可用于发送队列；如需恢复历史版本，在下表点「发布」回滚</span>
           </t-space>
 
           <div class="section-title">版本历史（发布历史版本即为回滚）</div>
@@ -494,6 +472,10 @@ function versionActionLabel(version: MessageTemplateVersion): string {
 .action-bar {
   margin: 4px 0 8px;
   flex-wrap: wrap;
+}
+
+.action-hint {
+  align-self: center;
 }
 
 .muted {

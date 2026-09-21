@@ -1,4 +1,4 @@
-import { BadRequestException, ConflictException, Injectable, NotFoundException } from '@nestjs/common'
+import { BadRequestException, ConflictException, ForbiddenException, Injectable, NotFoundException } from '@nestjs/common'
 import { hash } from 'bcryptjs'
 import { randomInt } from 'node:crypto'
 import { PrismaService } from '../../../common/prisma/prisma.service'
@@ -68,10 +68,16 @@ export class AdminsService {
     return { list, total: list.length }
   }
 
-  async create(dto: CreateAdminDto, operator: string): Promise<{ id: number; initialPassword?: string }> {
+  async create(
+    dto: CreateAdminDto,
+    operator: { username: string; name: string },
+  ): Promise<{ id: number; initialPassword?: string }> {
     const username = dto.username.trim()
     const exists = await this.prisma.adminUser.findUnique({ where: { username } })
     if (exists) throw new ConflictException('该账号已存在')
+
+    /* 防提权：非超管不得分配超出自身权限的角色（含 super） */
+    await this.assertNoEscalation(operator.username, dto.roleCodes)
 
     const roleIds = await this.resolveRoleIds(dto.roleCodes)
     const initialPassword = dto.password ?? generateInitialPassword()
@@ -93,14 +99,21 @@ export class AdminsService {
       action: '新增管理员',
       target: `${created.username} · ${created.name}`,
       detail: dto.password ? undefined : '初始密码随机生成',
-      operator,
+      operator: operator.name,
     })
     return dto.password ? { id: created.id } : { id: created.id, initialPassword }
   }
 
-  async update(id: number, dto: UpdateAdminDto, operator: string): Promise<{ code: number }> {
+  async update(
+    id: number,
+    dto: UpdateAdminDto,
+    operator: { username: string; name: string },
+  ): Promise<{ code: number }> {
     const admin = await this.prisma.adminUser.findUnique({ where: { id } })
     if (!admin) throw new NotFoundException('管理员不存在')
+    /* 防提权：非超管不得操作超管账号，也不得分配超出自身权限的角色 */
+    await this.assertOperatorCanManageTarget(operator.username, id)
+    await this.assertNoEscalation(operator.username, dto.roleCodes)
     const roleIds = await this.resolveRoleIds(dto.roleCodes)
 
     /* 最后一名启用超管不可降权（避免系统失去全量权限入口） */
@@ -124,7 +137,7 @@ export class AdminsService {
       action: '编辑管理员',
       target: `${admin.username} · ${admin.name}`,
       detail: `角色：${dto.roleCodes.join('、')}`,
-      operator,
+      operator: operator.name,
     })
     return { code: 0 }
   }
@@ -140,6 +153,9 @@ export class AdminsService {
       throw new BadRequestException('不可停用当前登录账号')
     }
     if (admin.status === status) return { code: 0 }
+
+    /* 防提权：非超管不得停用/启用超管账号 */
+    await this.assertOperatorCanManageTarget(operator.username, id)
 
     /* 最后一名启用超管不可停用 */
     if (status === 'disabled' && (await this.hasRole(id, 'super')) && !(await this.hasOtherActiveSuper(id))) {
@@ -158,9 +174,15 @@ export class AdminsService {
     return { code: 0 }
   }
 
-  async resetPassword(id: number, dto: ResetPasswordDto, operator: string): Promise<{ code: number }> {
+  async resetPassword(
+    id: number,
+    dto: ResetPasswordDto,
+    operator: { username: string; name: string },
+  ): Promise<{ code: number }> {
     const admin = await this.prisma.adminUser.findUnique({ where: { id } })
     if (!admin) throw new NotFoundException('管理员不存在')
+    /* 防提权：非超管不得重置超管密码（否则可直接接管系统） */
+    await this.assertOperatorCanManageTarget(operator.username, id)
     await this.prisma.adminUser.update({
       where: { id },
       data: { passwordHash: await hash(dto.password, 10), passwordUpdatedAt: formatNow() },
@@ -172,9 +194,39 @@ export class AdminsService {
       module: 'RBAC',
       action: '重置管理员密码',
       target: `${admin.username} · ${admin.name}`,
-      operator,
+      operator: operator.name,
     })
     return { code: 0 }
+  }
+
+  /** 防提权：非超管不得为账号分配超出自身权限的角色（含 '*'） */
+  private async assertNoEscalation(operatorUsername: string, roleCodes: string[]): Promise<void> {
+    const operatorCodes = await this.permissions.getPermCodes(operatorUsername)
+    if (operatorCodes.includes('*')) return
+    const codes = [...new Set(roleCodes)]
+    const roles = await this.prisma.adminRole.findMany({
+      where: { code: { in: codes } },
+      select: { id: true },
+    })
+    if (roles.length === 0) return
+    const rows = await this.prisma.adminRolePermission.findMany({
+      where: { roleId: { in: roles.map((r) => r.id) } },
+      select: { permissionCode: true },
+    })
+    const granted = [...new Set(rows.map((r) => r.permissionCode))]
+    const escalated = granted.filter((code) => code === '*' || !operatorCodes.includes(code))
+    if (escalated.length > 0) {
+      throw new ForbiddenException('不可分配超出自身权限范围的角色或超级管理员')
+    }
+  }
+
+  /** 防提权：非超管不得对超管账号执行改角色/改状态/重置密码 */
+  private async assertOperatorCanManageTarget(operatorUsername: string, targetAdminUserId: number): Promise<void> {
+    const operatorCodes = await this.permissions.getPermCodes(operatorUsername)
+    if (operatorCodes.includes('*')) return
+    if (await this.hasRole(targetAdminUserId, 'super')) {
+      throw new ForbiddenException('不可操作超级管理员账号')
+    }
   }
 
   /** 账号是否持有指定角色码 */

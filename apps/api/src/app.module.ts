@@ -34,6 +34,7 @@ import { AssetsModule } from './modules/assets/assets.module'
 import { GovernanceModule } from './modules/governance/governance.module'
 import { NotificationModule } from './common/notify/notification.module'
 import { AppSessionModule } from './common/app-session/app-session.module'
+import { IdentityNameModule } from './common/identity/identity-name.module'
 import { AppAuthModule } from './modules/app/auth/auth.module'
 import { AppMeModule } from './modules/app/me/me.module'
 import { AppConfigModule } from './modules/app/config/config.module'
@@ -64,7 +65,6 @@ import { AppJwtGuard } from './common/guards/app-jwt.guard'
 import { PermissionGuard } from './common/guards/permission.guard'
 import { DomainScopeGuard } from './common/guards/domain-scope.guard'
 import { EnvelopeInterceptor } from './common/interceptors/envelope.interceptor'
-import { AuditInterceptor } from './common/interceptors/audit.interceptor'
 import { AppAnalyticsInterceptor } from './common/interceptors/app-analytics.interceptor'
 import { HttpExceptionFilter } from './common/filters/http-exception.filter'
 
@@ -104,6 +104,7 @@ import { HttpExceptionFilter } from './common/filters/http-exception.filter'
     GovernanceModule,
     NotificationModule,
     AppSessionModule,
+    IdentityNameModule,
     AppAuthModule,
     AppMeModule,
     AppConfigModule,
@@ -140,7 +141,6 @@ import { HttpExceptionFilter } from './common/filters/http-exception.filter'
     { provide: APP_GUARD, useClass: PermissionGuard },
     { provide: APP_GUARD, useClass: DomainScopeGuard },
     { provide: APP_INTERCEPTOR, useClass: EnvelopeInterceptor },
-    { provide: APP_INTERCEPTOR, useClass: AuditInterceptor },
     { provide: APP_INTERCEPTOR, useClass: AppAnalyticsInterceptor },
     { provide: APP_FILTER, useClass: HttpExceptionFilter },
   ],

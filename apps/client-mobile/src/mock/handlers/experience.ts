@@ -31,11 +31,13 @@ export async function fetchExperience(identityType?: IdentityType): Promise<Expe
       const enterpriseId = account?.identities.find((i) => i.type === 'community_enterprise')?.enterpriseId
       if (!enterpriseId) return emptyProfile()
       const data = enterpriseId ? enterpriseExperienceByEid[enterpriseId] : undefined
-      return data ?? emptyProfile('社区企业', true)
+      /* 浅拷贝避免视图原地修改污染 mock 库 */
+      return data ? { ...data } : emptyProfile('社区企业', true)
     }
     if (active === 'community_individual') {
       if (!account?.identities.some((i) => i.type === 'community_individual')) return emptyProfile()
-      return experienceByUid[payload.sub] ?? emptyProfile('社区个体')
+      /* 浅拷贝避免视图原地修改污染 mock 库 */
+      return experienceByUid[payload.sub] ? { ...experienceByUid[payload.sub] } : emptyProfile('社区个体')
     }
     return emptyProfile()
   })

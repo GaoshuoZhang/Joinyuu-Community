@@ -1,29 +1,28 @@
 import { apiMode, httpDelete, httpGet, httpPost, httpPut } from './http'
 import type { AddressItem, AddressPayload } from '@/types'
-import * as mock from '@/mock/handlers/addresses'
 
 /** R1 我的收货地址（视图沿用单字段 address，HTTP 层兼容后端 region/detail）。 */
 export async function listAddresses(): Promise<AddressItem[]> {
-  if (apiMode === 'mock') return mock.listAddresses()
+  if (apiMode === 'mock') return (await import('@/mock/handlers/addresses')).listAddresses()
   const result = await httpGet<{ list: Array<Omit<AddressItem, 'address'> & { region: string; detail: string }> }>('/me/addresses')
   return result.list.map((item) => ({ ...item, address: `${item.region}${item.detail}` }))
 }
 
 /** 新增 / 编辑收货地址。 */
 export async function saveAddress(id: string | undefined, payload: AddressPayload): Promise<{ id: string }> {
-  if (apiMode === 'mock') return mock.saveAddress(id, payload)
+  if (apiMode === 'mock') return (await import('@/mock/handlers/addresses')).saveAddress(id, payload)
   if (id) return httpPut<{ id: string }>(`/me/addresses/${id}`, payload)
   return httpPost<{ id: string }>('/me/addresses', payload)
 }
 
 /** 删除收货地址。 */
 export async function removeAddress(id: string): Promise<void> {
-  if (apiMode === 'mock') return mock.removeAddress(id)
+  if (apiMode === 'mock') return (await import('@/mock/handlers/addresses')).removeAddress(id)
   await httpDelete(`/me/addresses/${id}`)
 }
 
 /** 设为默认收货地址（唯一默认）。 */
 export async function setDefaultAddress(id: string): Promise<void> {
-  if (apiMode === 'mock') return mock.setDefaultAddress(id)
+  if (apiMode === 'mock') return (await import('@/mock/handlers/addresses')).setDefaultAddress(id)
   await httpPost(`/me/addresses/${id}/default`)
 }

@@ -51,7 +51,7 @@ describe('admin policy endpoint boundaries', () => {
       title: '政策边界测试',
       summary: '验证社区政策字段',
       content: '<p>政策正文</p>',
-      version: '1.0',
+      version: '3.0',
       effectiveAt: '2026-09-20',
       status: 'published',
       featured: true,

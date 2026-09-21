@@ -83,7 +83,8 @@ useRouteQuerySync('/me/favorites', (query) => {
         </Button>
       </div>
     </template>
-    <EmptyBlock v-else text="暂无收藏，去项目、文章或活动页收藏感兴趣的内容" />
+    <!-- v45：空状态补出口，避免二级页没有 TabBar 时成为死胡同 -->
+    <EmptyBlock v-else text="暂无收藏，去项目、文章或活动页收藏感兴趣的内容" action-text="浏览需求" @action="router.push('/projects')" />
   </div>
 </template>
 

@@ -106,6 +106,12 @@ function onPageChange(p: { current: number; pageSize: number }) {
   load()
 }
 
+/* 归档后当前页可能已空：页码越界时回退一页再加载 */
+async function reloadAfterRemove() {
+  if (list.value.length <= 1 && query.page > 1) query.page -= 1
+  await load()
+}
+
 /* ---------- 审核（查看详情） ---------- */
 const reviewVisible = ref(false)
 const viewVisible = ref(false)
@@ -131,7 +137,7 @@ async function onDelete(row: Article) {
   try {
     await deleteArticle(row.id)
     MessagePlugin.success('投稿已归档，可在归档管理中恢复')
-    await load()
+    await reloadAfterRemove()
   } catch (e) {
     MessagePlugin.error(e instanceof Error ? e.message : '归档失败')
   } finally {

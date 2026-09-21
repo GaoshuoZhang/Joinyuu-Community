@@ -32,7 +32,8 @@ onMounted(run)
   <div class="page-fade-in m-my-projects">
     <ListSkeleton v-if="loading" />
     <EmptyBlock v-else-if="error" :text="error" action-text="重试" @action="run" />
-    <EmptyBlock v-else-if="empty" text="暂无承接中的项目" />
+    <!-- v45：空状态补出口，避免二级页没有 TabBar 时成为死胡同 -->
+    <EmptyBlock v-else-if="empty" text="暂无承接中的项目" action-text="浏览需求" @action="router.push('/projects')" />
     <div v-else class="stagger list">
       <p class="list-count">共 {{ formatZhNumber(projects.length) }} 个</p>
       <section v-for="p in visibleItems" :key="p.id" class="m-card project-card" v-pressable @click="router.push(`/me/projects/${p.id}`)">

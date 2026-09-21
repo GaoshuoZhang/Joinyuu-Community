@@ -10,7 +10,7 @@ import {
 import { CHANNEL_KINDS, PROVIDER_CATALOG } from './messaging.types'
 
 /* 消息渠道配置（P0）：只读写非机密配置；凭据以环境变量名登记，永不回传值。 */
-@RequirePermission('/system/message-channels')
+@RequirePermission('/system/messages')
 @Controller('api/admin/message-channels')
 export class MessageChannelController {
   constructor(private readonly channels: MessageChannelService) {}

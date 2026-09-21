@@ -1,13 +1,19 @@
-import { Injectable, OnModuleDestroy } from '@nestjs/common'
+import { Injectable, OnModuleDestroy, ServiceUnavailableException } from '@nestjs/common'
 import Redis from 'ioredis'
 
 /* Redis 服务（wiki-backend.md §10）：
  * - JWT 登出黑名单（auth:blacklist:{jti}）
  * - 通用 JSON 缓存：config:system / dicts:{type} / rules:points|experience|levels / dashboard:summary
- * 降级策略：连接/读写异常仅记录日志，缓存读取返回 null（调用方回源 DB），写操作正常完成——不中断主流程。 */
+ * 降级策略分两类：
+ * 1) 缓存/限流类：连接或读写异常仅记录日志，读返回 null/空（调用方回源 DB 或放行），不中断主流程；
+ * 2) 吊销/策略类（黑名单、密码过期标记、安全敏感计数）：默认 fail-closed，异常时抛 503，
+ *    避免「静默失效」导致已吊销令牌仍可用。运维可在故障期设置环境变量
+ *    AUTH_REVOCATION_FAIL_OPEN=1 切换为放行（可用性优先，需自行承担窗口期风险）。 */
 @Injectable()
 export class RedisService implements OnModuleDestroy {
   private readonly client: Redis
+  /** 吊销/策略类读写失败时是否降级放行（默认 false = fail-closed） */
+  private readonly revocationFailOpen: boolean = process.env.AUTH_REVOCATION_FAIL_OPEN === '1'
 
   constructor() {
     this.client = new Redis(process.env.REDIS_URL ?? 'redis://localhost:6379', {
@@ -19,35 +25,42 @@ export class RedisService implements OnModuleDestroy {
     })
   }
 
-  /** 将 JWT jti 加入黑名单（剩余有效期秒数）；Redis 异常仅告警，不阻断登出/踢人流程 */
+  /** 吊销/策略类失败处理：默认抛 503（fail-closed）；放行模式仅告警 */
+  private revocationFailure(op: string, e: unknown): void {
+    const message = e instanceof Error ? e.message : String(e)
+    console.error(`[redis] ${op}失败:`, message)
+    if (!this.revocationFailOpen) {
+      throw new ServiceUnavailableException('会话校验服务暂不可用，请稍后重试')
+    }
+    console.error('[redis] AUTH_REVOCATION_FAIL_OPEN=1：降级放行（窗口期内安全策略可能失效）')
+  }
+
+  /** 将 JWT jti 加入黑名单（剩余有效期秒数）；失败默认抛 503（避免登出/踢人静默失效） */
   async blacklist(jti: string, seconds: number): Promise<void> {
     if (seconds <= 0) return
     try {
       await this.client.set(`auth:blacklist:${jti}`, '1', 'EX', seconds)
     } catch (e) {
-      console.error(
-        '[redis] 黑名单写入失败（令牌将保留至自然过期）:',
-        e instanceof Error ? e.message : e,
-      )
+      this.revocationFailure('黑名单写入', e)
     }
   }
 
-  /** jti 是否已被拉黑；Redis 不可用时降级返回 false（fail-open） */
+  /** jti 是否已被拉黑；Redis 不可用时默认 fail-closed（抛 503），避免已吊销令牌继续可用 */
   async isBlacklisted(jti: string): Promise<boolean> {
     try {
       return (await this.client.exists(`auth:blacklist:${jti}`)) === 1
     } catch (e) {
-      console.error('[redis] 黑名单查询失败，降级放行:', e instanceof Error ? e.message : e)
+      this.revocationFailure('黑名单查询', e)
       return false
     }
   }
 
-  /** 写入标记键（固定值 1，TTL 秒）；失败仅告警（fail-open 不阻断主流程） */
+  /** 写入策略标记键（固定值 1，TTL 秒）；失败默认抛 503（如密码过期标记必须真实生效） */
   async setFlag(key: string, ttlSeconds: number): Promise<void> {
     try {
       await this.client.set(key, '1', 'EX', ttlSeconds)
     } catch (e) {
-      console.error('[redis] 标记写入失败:', e instanceof Error ? e.message : e)
+      this.revocationFailure('策略标记写入', e)
     }
   }
 
@@ -61,12 +74,12 @@ export class RedisService implements OnModuleDestroy {
     }
   }
 
-  /** 标记键是否存在；Redis 不可用时降级返回 false（fail-open 放行） */
+  /** 策略标记是否存在；Redis 不可用时默认 fail-closed（抛 503），避免策略静默失效 */
   async hasFlag(key: string): Promise<boolean> {
     try {
       return (await this.client.exists(key)) === 1
     } catch (e) {
-      console.error('[redis] 标记查询失败，降级放行:', e instanceof Error ? e.message : e)
+      this.revocationFailure('策略标记查询', e)
       return false
     }
   }
@@ -81,6 +94,15 @@ export class RedisService implements OnModuleDestroy {
       console.error('[redis] 计数失败，降级放行:', e instanceof Error ? e.message : e)
       return null
     }
+  }
+
+  /** 安全敏感自增计数（如验证码校验失败次数）：Redis 异常时抛 503（fail-closed），不放行 */
+  async incrWithTtlStrict(key: string, ttlSeconds: number): Promise<number> {
+    const count = await this.incrWithTtl(key, ttlSeconds)
+    if (count === null) {
+      throw new ServiceUnavailableException('风控服务暂不可用，请稍后重试')
+    }
+    return count
   }
 
   /** 读取 JSON 缓存；未命中或 Redis 异常返回 null（调用方回源 DB） */
@@ -111,6 +133,35 @@ export class RedisService implements OnModuleDestroy {
       await this.client.del(...keys)
     } catch (e) {
       console.error('[redis] 缓存失效失败:', e instanceof Error ? e.message : e)
+    }
+  }
+
+  /** 删除缓存键（安全敏感失效）：失败抛 503（fail-closed），避免「权限/策略已变更但缓存未失效」的越权窗口
+   * （BE-M9：RBAC 改角色/停用/重置密码后必须确保旧权限缓存真实清除） */
+  async delCacheStrict(...keys: string[]): Promise<void> {
+    if (keys.length === 0) return
+    try {
+      await this.client.del(...keys)
+    } catch (e) {
+      this.revocationFailure('缓存失效', e)
+    }
+  }
+
+  /** 原子「比对并删除」：用于一次性凭据（验证码）消费。
+   * GET 与 DEL 在同一 Lua 脚本内执行，避免并发下同一验证码被两个请求同时校验通过。
+   * 返回 true 仅当键存在且值与 expected 一致；Redis 异常返回 false（fail-closed，视为校验失败）。 */
+  async compareAndDelete(key: string, expected: string): Promise<boolean> {
+    try {
+      const result = (await this.client.eval(
+        "local v = redis.call('GET', KEYS[1]); if not v then return '0' end; if v == ARGV[1] then redis.call('DEL', KEYS[1]); return '1' end; return '0'",
+        1,
+        key,
+        JSON.stringify(expected),
+      )) as string
+      return result === '1'
+    } catch (e) {
+      console.error('[redis] 验证码校验失败（按校验不通过处理）:', e instanceof Error ? e.message : e)
+      return false
     }
   }
 

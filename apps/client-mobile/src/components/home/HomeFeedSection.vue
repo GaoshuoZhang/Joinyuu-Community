@@ -37,8 +37,8 @@ defineProps<{ title: string; items: FeedItem[]; emptyText: string; morePath?: st
         class="m-card demand-item pressable"
       >
         <div class="d-head">
-          <h3 class="d-title">{{ item.title }}</h3>
           <Tag class="d-cat" size="small" variant="light" theme="primary">{{ item.tag }}</Tag>
+          <h3 class="d-title">{{ item.title }}</h3>
         </div>
         <div class="d-meta">
           <span v-for="(meta, index) in item.metas" :key="index" :class="{ 'd-resp': meta.accent }">{{ meta.text }}</span>
@@ -58,7 +58,9 @@ defineProps<{ title: string; items: FeedItem[]; emptyText: string; morePath?: st
 
 .block-head h2 {
   margin:0;
-  font-size: var(--app-font-subtitle);
+  font-size: var(--app-font-title);
+  font-weight: 600;
+  line-height: 1.4;
 }
 
 .more {
@@ -95,20 +97,26 @@ defineProps<{ title: string; items: FeedItem[]; emptyText: string; morePath?: st
   margin:0;
   flex: 1;
   min-width: 0;
-  font-size: var(--app-font-body);
+  font-size: var(--app-font-subtitle);
+  font-weight: 600;
+  line-height: 1.4;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
   overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
 }
 
 .d-cat {
   flex-shrink: 0;
+  align-self: flex-start;
 }
 
 .d-meta {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
-  gap: var(--app-space-6);
+  column-gap: var(--app-space-6);
+  row-gap: var(--app-space-3);
   margin-top: var(--app-space-4);
   font-size: var(--app-font-caption);
   color: var(--td-text-color-secondary);
@@ -125,8 +133,10 @@ defineProps<{ title: string; items: FeedItem[]; emptyText: string; morePath?: st
   flex-shrink: 0;
 }
 
+/* v45：与需求列表卡片对齐——强调值单独占一行，不再右浮动 */
 .d-resp {
-  margin-left:auto;
+  flex-basis: 100%;
+  margin-left:0;
   font-variant-numeric: tabular-nums;
   color: var(--td-brand-color);
   font-weight: 600;

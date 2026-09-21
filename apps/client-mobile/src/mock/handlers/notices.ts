@@ -28,7 +28,8 @@ export async function fetchNotices(page = 1, pageSize = 20): Promise<{ list: Use
     const uid = requireUid()
     const all = [...(noticesByUid[uid] ?? [])].sort((a, b) => b.at.localeCompare(a.at))
     const start = (page - 1) * pageSize
-    return { list: all.slice(start, start + pageSize), total: all.length }
+    /* 浅拷贝避免视图原地修改污染 mock 库 */
+    return { list: all.slice(start, start + pageSize).map((n) => ({ ...n })), total: all.length }
   })
 }
 

@@ -38,12 +38,20 @@ export type UserGender = '男' | '女' | 'male' | 'female' | 'unknown'
 export interface User {
   /** 用户唯一标识（微信登录预备：预留 uid 命名） */
   uid: string
-  /** 昵称（微信登录预备：不再作为真实姓名使用） */
+  /** 登录用户名（全站唯一，字母开头 4-20 位，仅字母/数字/下划线） */
+  username: string
+  /** 昵称（微信登录预备：不再作为真实姓名使用；全站唯一） */
   nickname: string
   /** 头像地址（客户端上传后由 /api/public/files/:key 提供；未设置时缺省） */
   avatar?: string
+  /** 手机号（可空且唯一，空时后端回空串） */
   phone: string
+  /** 邮箱（可空且唯一，空时后端回空串） */
   email: string
+  /** 手机号是否为已验证的可信通知渠道 */
+  phoneVerified?: boolean
+  /** 邮箱是否为已验证的可信通知渠道 */
+  emailVerified?: boolean
   gender: UserGender
   status: UserStatus
   /** 实名信息（真实姓名与身份证号均填写即视为已实名；实名状态由二者派生） */
@@ -276,7 +284,7 @@ export interface Project {
   deletedAt?: string | null
 }
 
-export type EventStatus = 'pending_release' | 'scheduled' | 'published' | 'ended' | 'cancelled' | 'postponed'
+export type EventStatus = 'pending_release' | 'scheduled' | 'published' | 'ended' | 'cancelled'
 
 export interface EventEnrollment {
   userId: string
@@ -805,6 +813,8 @@ export interface ArticleColumn {
   /** 系统保留栏目（如「未指定」）：不可编辑/停用/删除，成员端不可见 */
   system?: boolean
   status: ColumnStatus
+  /** 该栏目下文章数（后端列表接口聚合返回） */
+  articleCount?: number
   createdAt: string
 }
 
@@ -937,6 +947,8 @@ export interface MessageProviderMeta {
   supports: MessageChannelKind[]
   /** 需在环境变量中提供的凭据变量名（仅校验是否齐备，不回传值） */
   credentialKeys: string[]
+  /** 凭据项的补充说明（如 SMTP 认证用户名/授权码提示） */
+  credentialConfigFields?: MessageProviderConfigField[]
   configFields: MessageProviderConfigField[]
 }
 

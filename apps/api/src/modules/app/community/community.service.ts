@@ -148,17 +148,16 @@ export class AppCommunityService {
       }),
     ])
     const descTiers = [...tiers].reverse()
-    const membersByEnterprise = new Map<string, { uid?: string; name: string; role?: string; phone?: string; permissions?: string[] }[]>()
+    const membersByEnterprise = new Map<string, { uid?: string; name: string; role?: string }[]>()
     for (const identity of identities) {
       const key = identity.enterpriseId ?? ''
       if (!key) continue
       const list = membersByEnterprise.get(key) ?? []
+      /* 公开企业库为游客可访问：成员仅下发姓名/职位/uid，手机号与内部权限位不下发（避免未登录批量抓取） */
       list.push({
         uid: identity.user?.uid,
         name: identity.user ? identity.user.realName || identity.user.nickname : '',
         role: identity.title,
-        phone: identity.memberPhone ?? undefined,
-        ...(identity.permissions.length ? { permissions: identity.permissions } : {}),
       })
       membersByEnterprise.set(key, list)
     }

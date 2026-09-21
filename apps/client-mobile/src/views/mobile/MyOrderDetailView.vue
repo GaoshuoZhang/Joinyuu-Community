@@ -6,7 +6,7 @@ import { cancelOrder, confirmOrder, fetchMyOrders, reviewOrder, useOrder } from 
 import { useAsyncList } from '@/composables/useAsyncList'
 import EmptyBlock from '@/components/shared/EmptyBlock.vue'
 import ListSkeleton from '@/components/ListSkeleton.vue'
-import type { MyOrder } from '@/types'
+import type { MyOrder, PageResult } from '@/types'
 import StateTag from '@/components/shared/StateTag.vue'
 import { useBusinessNow } from '@/composables/useBusinessNow'
 import { formatLocalDateTime, formatZhNumber, parseLocalDateTime } from '@/utils/format'
@@ -16,10 +16,10 @@ const route = useRoute()
 const router = useRouter()
 const id = String(route.params.id)
 const businessNowMs = useBusinessNow()
-const { data, loading, error, run } = useAsyncList(fetchMyOrders)
+const { data, loading, error, run } = useAsyncList<PageResult<MyOrder>>(fetchMyOrders)
 onMounted(run)
 
-const order = computed(() => (data.value ?? []).find((item) => item.id === id))
+const order = computed(() => (data.value?.list ?? []).find((item) => item.id === id))
 
 function isExpired(item: MyOrder): boolean {
   if (String(item.status) === 'expired') return true

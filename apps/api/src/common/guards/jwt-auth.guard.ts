@@ -3,6 +3,7 @@ import {
   ExecutionContext,
   ForbiddenException,
   Injectable,
+  ServiceUnavailableException,
   UnauthorizedException,
 } from '@nestjs/common'
 import { Reflector } from '@nestjs/core'
@@ -10,10 +11,11 @@ import { JwtService } from '@nestjs/jwt'
 import { IS_PUBLIC_KEY } from '../decorators/public.decorator'
 import { passwordExpiredKey } from '../redis/cache-keys'
 import { RedisService } from '../redis/redis.service'
+import { AdminPermissionService } from '../rbac/admin-permission.service'
 import type { AdminJwtPayload } from '../interfaces/admin-jwt-payload'
 import type { AuthenticatedRequest } from '../interfaces/authenticated-request'
 
-/** 密码过期状态下仍可访问的路径（路径包含匹配）：改密 / 登出 / 验证码 / 登录 / 健康检查 */
+/** 密码过期状态下仍可访问的路径（与请求路径去掉 /api、/api/admin 前缀后精确比较） */
 const PWD_EXPIRED_WHITELIST = [
   '/auth/change-password',
   '/auth/logout',
@@ -23,14 +25,16 @@ const PWD_EXPIRED_WHITELIST = [
 ]
 
 /* /api/admin/** 全局 JWT Guard（@Public 豁免）：
- * 校验签名 + Redis 黑名单（登出令牌失效）+ 密码过期标记（仅放行白名单路径）；
- * 黑名单/过期标记查询失败时 fail-open 放行（降级可用性优先） */
+ * 校验签名 + 账号存在且启用 + Redis 黑名单（登出令牌失效）+ 密码过期标记（仅放行白名单路径）；
+ * 黑名单/过期标记查询失败时 fail-open 放行（降级可用性优先）。
+ * 账号状态校验为 fail-closed：停用/删除的管理员，其未过期令牌立即失效。 */
 @Injectable()
 export class JwtAuthGuard implements CanActivate {
   constructor(
     private readonly reflector: Reflector,
     private readonly jwt: JwtService,
     private readonly redis: RedisService,
+    private readonly permissions: AdminPermissionService,
   ) {}
 
   async canActivate(context: ExecutionContext): Promise<boolean> {
@@ -56,7 +60,14 @@ export class JwtAuthGuard implements CanActivate {
       const blacklisted = await this.redis.isBlacklisted(payload.jti)
       if (blacklisted) throw new UnauthorizedException('登录已过期，请重新登录')
 
-      const whitelisted = PWD_EXPIRED_WHITELIST.some((path) => request.path.includes(path))
+      /* 账号存在且启用（fail-closed）：停用/删除后不再依赖令牌自然过期 */
+      const profile = await this.permissions.getAccessProfile(payload.sub)
+      if (!profile.exists || !profile.active) {
+        throw new UnauthorizedException('账号已停用或不存在，请重新登录')
+      }
+
+      const suffix = path.replace(/^\/api\/(?:admin|app)/, '')
+      const whitelisted = PWD_EXPIRED_WHITELIST.includes(suffix)
       if (payload.sub && !whitelisted && (await this.redis.hasFlag(passwordExpiredKey(payload.sub)))) {
         throw new ForbiddenException('密码已过期，请先修改密码')
       }
@@ -64,7 +75,14 @@ export class JwtAuthGuard implements CanActivate {
       request.user = payload
       return true
     } catch (error) {
-      if (error instanceof UnauthorizedException || error instanceof ForbiddenException) throw error
+      /* 认证/授权类原样抛出；吊销策略服务故障（503）也原样抛出，避免被误报为「登录已过期」 */
+      if (
+        error instanceof UnauthorizedException ||
+        error instanceof ForbiddenException ||
+        error instanceof ServiceUnavailableException
+      ) {
+        throw error
+      }
       throw new UnauthorizedException('登录已过期，请重新登录')
     }
   }

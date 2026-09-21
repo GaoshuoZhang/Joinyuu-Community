@@ -81,10 +81,12 @@ const renterOptions = computed(() => [
   ...renterUsers.value.map((u) => ({ label: `${u.nickname}（个人用户 · ${u.uid}）`, value: `U:${u.uid}` })),
 ])
 
-/* 选择值变化 → 解析租赁方并自动填充联系电话（未注册条目不填充，联系人手动输入） */
+/* 选择值变化 → 解析租赁方并自动填充联系电话（未注册条目不填充，联系人手动输入）；
+ * 编辑态租赁方不可变更，跳过该联动，避免用选项表覆盖回填的租约快照 */
 watch(
   () => form.renterValue,
   (v) => {
+    if (props.mode !== 'create') return
     if (v.startsWith('E:')) {
       const e = renterEnterprises.value.find((x) => `E:${x.id}` === v)
       if (!e) return

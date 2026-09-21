@@ -1,11 +1,12 @@
 import { Module } from '@nestjs/common'
 import { AppUploadsController } from './uploads.controller'
 import { AppUploadsService } from './uploads.service'
+import { AppUploadRateLimitInterceptor } from './upload-rate-limit.interceptor'
 
-/* App 上传（M2-R R2 POST /api/app/uploads）：图片/PDF（魔数嗅探）、大小上限读系统配置。
+/* App 上传（M2-R R2 POST /api/app/uploads）：图片/PDF（魔数嗅探）、大小上限读系统配置 + 上传频控。
  * 复用 Storage（全局）写盘，不落 MallAsset 素材库。 */
 @Module({
   controllers: [AppUploadsController],
-  providers: [AppUploadsService],
+  providers: [AppUploadsService, AppUploadRateLimitInterceptor],
 })
 export class AppUploadsModule {}

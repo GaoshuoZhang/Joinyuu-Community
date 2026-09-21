@@ -20,7 +20,7 @@ export class AppPoliciesService {
 
   /** 指定协议的最新 published 版本（publishedAt 倒序取一）；缺失时返回内置 V1.0 */
   async agreement(kind: string) {
-    const policyKind = AGREEMENT_KINDS[kind]
+    const policyKind = Object.hasOwn(AGREEMENT_KINDS, kind) ? AGREEMENT_KINDS[kind] : undefined
     if (!policyKind) throw new NotFoundException('暂未发布该协议')
     const row = await this.prisma.policy.findFirst({
       where: { kind: policyKind, status: 'published' },

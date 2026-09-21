@@ -23,8 +23,8 @@ import type {
 
 const VARIABLE_NAME = /^[A-Za-z_][A-Za-z0-9_]{0,31}$/
 
-/* 消息模板中心（P0）：模板变量白名单 + 版本化（草稿→待审→通过/驳回→发布）+ 回滚 + 测试发送。
- * 发布采用审批前置：只有 approved（或历史 archived，用于回滚）的版本可发布。 */
+/* 消息模板（P0）：变量白名单 + 版本化（创建即发布、保存即发布）+ 历史版本回滚 + 测试发送。
+ * 提交/审核/发布接口保留（兼容旧流程与 e2e），但管理端不再使用——编辑保存即对当前发布版本生效。 */
 @Injectable()
 export class MessageTemplateService {
   constructor(
@@ -102,8 +102,8 @@ export class MessageTemplateService {
             kind: dto.kind,
             category: dto.category,
             variables,
-            status: 'draft',
-            currentVersion: 0,
+            status: 'published',
+            currentVersion: 1,
             updatedAt: now,
             updatedBy: operator,
           },
@@ -115,7 +115,7 @@ export class MessageTemplateService {
             version: 1,
             subject: dto.subject?.trim() || null,
             body: dto.body,
-            status: 'draft',
+            status: 'published',
             createdBy: operator,
             createdAt: now,
           },
@@ -131,61 +131,74 @@ export class MessageTemplateService {
       module: '消息中心',
       action: '新增消息模板',
       target: `${dto.name.trim()}（${code}）`,
-      detail: `类型 ${dto.kind} · 分类 ${dto.category} · 变量 ${variables.length} 个`,
+      detail: `类型 ${dto.kind} · 分类 ${dto.category} · 变量 ${variables.length} 个 · 已发布 v1`,
       operator,
     })
     return { id }
   }
 
-  /** 保存草稿：更新模板元信息；最新版本仍为草稿则原地更新，否则新建版本（保留历史） */
+  /** 保存并发布：修改当前发布版本正文并立即生效（无发布版本时新建 v+1 发布）。
+   * 历史版本保留（重新发布历史版本即回滚）。 */
   async saveDraft(id: string, dto: SaveTemplateDraftDto, operator: string): Promise<{ version: number }> {
     const template = await this.require(id)
     const variables = validateVariables(dto.variables)
     this.render.assertTemplate(variables, dto.subject, dto.body)
 
-    const latest = await this.prisma.messageTemplateVersion.findFirst({
-      where: { templateId: id },
-      orderBy: { version: 'desc' },
-    })
     const now = formatNow()
     const subject = dto.subject?.trim() || null
 
-    let version: number
-    if (latest && latest.status === 'draft') {
-      await this.prisma.messageTemplateVersion.update({
-        where: { id: latest.id },
-        data: { subject, body: dto.body },
+    /* 版本写入与模板状态更新同事务，避免中途失败导致版本与模板状态不一致 */
+    const version = await this.prisma.$transaction(async (tx) => {
+      const latestPublished = await tx.messageTemplateVersion.findFirst({
+        where: { templateId: id, status: 'published' },
+        orderBy: { version: 'desc' },
       })
-      version = latest.version
-    } else {
-      version = (latest?.version ?? 0) + 1
-      await this.prisma.messageTemplateVersion.create({
+
+      let nextVersion: number
+      if (latestPublished) {
+        await tx.messageTemplateVersion.update({
+          where: { id: latestPublished.id },
+          data: { subject, body: dto.body },
+        })
+        nextVersion = latestPublished.version
+      } else {
+        const max = await tx.messageTemplateVersion.findFirst({
+          where: { templateId: id },
+          orderBy: { version: 'desc' },
+        })
+        nextVersion = (max?.version ?? 0) + 1
+        await tx.messageTemplateVersion.create({
+          data: {
+            id: await this.ids.next('MV', tx),
+            templateId: id,
+            version: nextVersion,
+            subject,
+            body: dto.body,
+            status: 'published',
+            createdBy: operator,
+            createdAt: now,
+          },
+        })
+      }
+
+      await tx.messageTemplate.update({
+        where: { id },
         data: {
-          id: await this.ids.next('MV'),
-          templateId: id,
-          version,
-          subject,
-          body: dto.body,
-          status: 'draft',
-          createdBy: operator,
-          createdAt: now,
+          name: dto.name.trim(),
+          category: dto.category,
+          variables,
+          status: 'published',
+          currentVersion: nextVersion,
+          updatedAt: now,
+          updatedBy: operator,
         },
       })
-    }
-
-    await this.prisma.messageTemplate.update({
-      where: { id },
-      data: {
-        name: dto.name.trim(),
-        category: dto.category,
-        variables,
-        updatedAt: now,
-        updatedBy: operator,
-      },
+      return nextVersion
     })
+
     await this.audit.record({
       module: '消息中心',
-      action: '保存消息模板草稿',
+      action: '保存并发布消息模板',
       target: `${dto.name.trim()}（${template.code}）`,
       detail: `版本 v${version} · 变量 ${variables.length} 个`,
       operator,
@@ -301,7 +314,13 @@ export class MessageTemplateService {
     id: string,
     dto: TestTemplateDto,
     operator: string,
-  ): Promise<{ providerMessageId?: string; dryRun: boolean; costMs: number; rendered: { subject?: string; body: string } }> {
+  ): Promise<{
+    providerMessageId?: string
+    dryRun: boolean
+    costMs: number
+    warnings: string[]
+    rendered: { subject?: string; body: string }
+  }> {
     const template = await this.require(id)
     const version = await this.resolveVersion(id, dto.version)
     const variables = stringRecord(dto.variables ?? {})
@@ -336,7 +355,13 @@ export class MessageTemplateService {
         detail: `版本 v${version.version} · ${runtime.dryRun ? '干跑' : '真实发送'} · ${costMs}ms`,
         operator,
       })
-      return { providerMessageId: result.providerMessageId, dryRun: runtime.dryRun, costMs, rendered }
+      return {
+        providerMessageId: result.providerMessageId,
+        dryRun: runtime.dryRun,
+        costMs,
+        warnings: result.warnings ?? [],
+        rendered,
+      }
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error)
       await this.audit.record({

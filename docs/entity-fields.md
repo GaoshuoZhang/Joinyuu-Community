@@ -18,11 +18,11 @@
 
 ## 2. 社区成员域（7）
 
-- **User** — 用户（uid PK U；nickname 展示名；phone 唯一；email/gender；avatar?；status active/frozen；realName?/citizenId?/verifiedAt?；微信字段 M3 预留；frozenUntil?/frozenReason?；points 积分余额；registeredAt/lastActiveAt；bio；activities Json）
+- **User** — 用户（uid PK U；**username 登录标识/全站唯一**；nickname 展示昵称/全站唯一；**phone?/email? 可空且非空时全站唯一**；**phoneVerifiedAt?/emailVerifiedAt? 可信通知渠道标记**（非空=该渠道已验证，可用于找回密码与接收通知）；gender；avatar?；status active/frozen；realName?/citizenId?/verifiedAt?；微信字段 M3 预留；frozenUntil?/frozenReason?；points 积分余额；registeredAt/lastActiveAt；bio；activities Json）
 - **UserIdentity** — 一人多身份（userId 级联；type individual/community_individual/community_enterprise/external_enterprise；enterpriseId?/enterpriseName?/role?/title；level?/experience? 仅社区两类持有；唯一 userId+type+enterpriseId）
 - **Enterprise** — 社区企业（id E；name/industry/size/foundedAt/settledAt?/leaseType；status pending 默认/active/exited/disabled；experience 企业经验；contactUserId? 关联个人用户 + contactTitle 职位 + contactName/contactPhone/contactEmail?；description/tags；deletedAt?/deletedBy?；**stage 已删**）
 - **ExternalEnterpriseProfile** — 合作企业档案（id XE；name/industry；status active/disabled；size/foundedAt；description；registeredAt（登记日期=填表通过审核当天）；deletedAt?/deletedBy?；聚合视图 = 档案 + external_enterprise 身份派生成员，不建独立实体表）
-- **Application** — 申请审核（id AP；type settle 企业入驻/individual 个体入驻/cooperation 企业合作/exit 企业退驻；applicantName/applicantPhone/targetName；submittedAt；status pending/approved/rejected；summary；details Json 表单明细；records Json 审核时间线；deletedAt?/deletedBy?/archivableAt?）
+- **Application** — 申请审核（id AP；type settle 企业入驻/individual 个体入驻/cooperation 企业合作/exit 企业退驻；applicantName/applicantPhone/**userId? 申请人 uid（「我的申请」按 uid 归属，历史数据回退按手机号匹配）**；targetName；submittedAt；status pending/approved/rejected；summary；details Json 表单明细；records Json 审核时间线；deletedAt?/deletedBy?/archivableAt?）
 - **ExperienceRecord** — 经验流水（id EX；targetType enterprise/individual；targetId；delta/balance/reason/at/operator；source rule/manual）
 - **PointsRecord** — 积分流水（id PT；userId；delta/balance/reason/at/operator；source rule/manual/redemption；dedupeKey? 唯一，用于积分发放幂等）
 
@@ -75,9 +75,9 @@
 
 ## 7.1 P0 消息中心（2026-09-20）
 
-- **MessageChannel** — 消息渠道（id MC；kind sms/email/inapp；provider aliyun_sms/tencent_sms/smtp/inapp/dry_run；name/enabled（kind+provider 唯一）；config Json? 非机密参数（signName/host/from/templateMapping 等）；**credentialMode inline|env**（默认 env；inline=后台直接填写密钥，只写/GET 只回掩码/审计不记录；env=登记变量名）；credentialEnv Json?；dailyLimit 0=不限；remark?/createdAt/updatedAt/updatedBy）
-- **MessageTemplate** — 消息模板（id MT；code 唯一；name/kind/category security|marketing；variables Json? 变量白名单；status draft|published；currentVersion；updatedAt/updatedBy）
-- **MessageTemplateVersion** — 模板版本（id MV；templateId→MessageTemplate 级联；version（templateId+version 唯一）；subject?/body；status draft|pending|approved|rejected|published|archived；reviewedBy?/reviewedAt?/reviewNote?/createdBy/createdAt）
+- **MessageChannel** — 消息渠道（id MC；kind sms/email/inapp；provider aliyun_sms/tencent_sms/smtp/inapp/dry_run；name/enabled（kind+provider 唯一）；config Json? 非机密参数（signName/host/port/secure/fromAddress 发件人邮箱/fromName 显示名/from 旧版兼容/templateMapping 等）；**credentialMode inline|env**（默认 env；inline=后台直接填写密钥，只写/GET 只回掩码/审计不记录；env=登记变量名）；credentialEnv Json?；dailyLimit 0=不限；remark?/createdAt/updatedAt/updatedBy）
+- **MessageTemplate** — 消息模板（id MT；code 唯一；name/kind/category security|marketing；variables Json? 变量白名单；status draft|published（**保存即发布**：创建即 v1 published，编辑「保存」原地更新当前发布版本并以 published 生效；下架回 draft）；currentVersion；updatedAt/updatedBy）
+- **MessageTemplateVersion** — 模板版本（id MV；templateId→MessageTemplate 级联；version（templateId+version 唯一）；subject?/body；status draft|pending|approved|rejected|published|archived（发布模式下新建即 published，审批态枚举保留兼容）；reviewedBy?/reviewedAt?/reviewNote?/createdBy/createdAt）
 - **OutboxMessage** — 发送队列（id OB；idempotencyKey 唯一；channelKind/templateCode/recipient/userId?；payload Json? 模板变量；status pending|sending|sent|failed|dead|skipped；priority/attempts/maxAttempts/nextAttemptAt?/lastError?/providerMessageId?/security；createdAt/updatedAt/sentAt?）
 - **MessageDeliveryLog** — 投递日志（id ML；outboxId/channelKind/provider/recipient/attempt/status sent|failed|skipped/providerMessageId?/error?/costMs/at）
 - **ContactConsent** — 渠道合规同意/营销退订（id 自增；userId+channelKind+purpose 唯一；consented；at）

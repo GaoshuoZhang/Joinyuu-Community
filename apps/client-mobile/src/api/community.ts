@@ -1,10 +1,9 @@
 import { apiMode, httpGet } from './http'
 import type { AgreementPolicy, CommunityPolicy, EnterpriseRecord, TalentCard, TalentMember } from '@/types'
-import * as mock from '@/mock/handlers/community'
 
 /** GET /api/app/policies/:kind — 已发布的用户协议 / 隐私政策（注册与政策页） */
 export async function fetchAgreementPolicy(kind: 'user_agreement' | 'privacy_policy'): Promise<AgreementPolicy> {
-  if (apiMode === 'mock') return mock.fetchAgreementPolicy(kind)
+  if (apiMode === 'mock') return (await import('@/mock/handlers/community')).fetchAgreementPolicy(kind)
   return httpGet<AgreementPolicy>(`/policies/${kind}`)
 }
 
@@ -22,22 +21,22 @@ function toQuery(params?: Record<string, string | undefined>): string {
 }
 
 export async function fetchPolicies(params?: { keyword?: string; category?: string }): Promise<CommunityPolicy[]> {
-  if (apiMode === 'mock') return mock.fetchPolicies(params)
+  if (apiMode === 'mock') return (await import('@/mock/handlers/community')).fetchPolicies(params)
   return httpGet<CommunityPolicy[]>(`/community/policies${toQuery(params)}`)
 }
 
 export async function fetchTalents(params?: { keyword?: string }): Promise<TalentMember[]> {
-  if (apiMode === 'mock') return mock.fetchTalents(params)
+  if (apiMode === 'mock') return (await import('@/mock/handlers/community')).fetchTalents(params)
   return httpGet<TalentMember[]>(`/community/talents${toQuery(params)}`)
 }
 
 /** GET /api/app/community/talents/:uid — 公开人才名片（简历式，人才库点入） */
 export async function fetchTalentCard(uid: string): Promise<TalentCard> {
-  if (apiMode === 'mock') return mock.fetchTalentCard(uid)
+  if (apiMode === 'mock') return (await import('@/mock/handlers/community')).fetchTalentCard(uid)
   return httpGet<TalentCard>(`/community/talents/${uid}`)
 }
 
 export async function fetchEnterpriseList(params?: { keyword?: string; industry?: string }): Promise<EnterpriseRecord[]> {
-  if (apiMode === 'mock') return mock.fetchEnterpriseList(params)
+  if (apiMode === 'mock') return (await import('@/mock/handlers/community')).fetchEnterpriseList(params)
   return httpGet<EnterpriseRecord[]>(`/community/enterprises${toQuery(params)}`)
 }

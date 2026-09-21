@@ -36,7 +36,7 @@ describe('mock space availability', () => {
       attendees: 6,
       records: expect.any(Array),
     })
-    issueToken('U1004', [{ type: 'community_enterprise', enterpriseId: 'E2001' }])
+    issueToken('U1004', [{ type: 'community_enterprise', enterpriseId: 'E9001' }])
     await expect(fetchMyReservation('SR5001')).rejects.toEqual(expect.objectContaining({ code: 404 }))
   })
 })

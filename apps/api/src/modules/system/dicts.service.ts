@@ -1,5 +1,5 @@
 import { BadRequestException, ConflictException, Injectable, NotFoundException } from '@nestjs/common'
-import type { DictEntry } from '@prisma/client'
+import { Prisma, type DictEntry } from '@prisma/client'
 import { PrismaService } from '../../common/prisma/prisma.service'
 import { AuditService } from '../../common/audit/audit.service'
 import { RedisService } from '../../common/redis/redis.service'
@@ -52,9 +52,18 @@ export class DictsService {
     const maxNum = list.reduce((m, e) => Math.max(m, Number(e.code.replace(/\D/g, '')) || 0), 0)
     const code = `${DICT_TYPE_PREFIXES[type]}${String(maxNum + 1).padStart(3, '0')}`
 
-    const entry = await this.prisma.dictEntry.create({
-      data: { type, code, label, sort: list.length + 1, status: 'enabled' },
-    })
+    const entry = await this.prisma.dictEntry
+      .create({
+        data: { type, code, label, sort: list.length + 1, status: 'enabled' },
+      })
+      .catch((e: unknown) => {
+        /* 并发新增时按「当前最大序号 +1」拼码可能撞 type_code 唯一约束：转 409 供前端重试，
+         * 而不是把 Prisma 校验错误透传成 500 */
+        if (e instanceof Prisma.PrismaClientKnownRequestError && e.code === 'P2002') {
+          throw new ConflictException('字典编码冲突，请重试')
+        }
+        throw e
+      })
 
     await this.audit.record({
       module: '系统管理',

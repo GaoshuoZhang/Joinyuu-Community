@@ -53,6 +53,7 @@ const realStatusOptions = [
 
 const columns = [
   { colKey: 'user', title: '用户', cell: 'user', width: 190 , ellipsis: true},
+  { colKey: 'username', title: '用户名', cell: 'username', width: 150 , ellipsis: true},
   { colKey: 'phone', title: 'phone-title', cell: 'phone', width: 145 , ellipsis: true},
   { colKey: 'identities', title: '关联身份', cell: 'identities', width: 240 , ellipsis: true},
   { colKey: 'realStatus', title: '实名状态', cell: 'realStatus', width: 95 , ellipsis: true},
@@ -77,18 +78,23 @@ const pagination = computed(() => ({
   showJumper: true,
 }))
 
+/* 请求序号守卫：仅最后一次请求可写回状态，避免快速切页/改筛选时的竞态覆盖 */
+let version = 0
 async function load() {
+  const current = ++version
   syncQuery()
   loading.value = true
   loadError.value = ''
   try {
     const res = await fetchUsers({ ...query })
-    list.value = res.list
-    total.value = res.total
+    if (current === version) {
+      list.value = res.list
+      total.value = res.total
+    }
   } catch (e) {
-    loadError.value = e instanceof Error ? e.message : '数据加载失败'
+    if (current === version) loadError.value = e instanceof Error ? e.message : '数据加载失败'
   } finally {
-    loading.value = false
+    if (current === version) loading.value = false
   }
 }
 
@@ -106,15 +112,16 @@ function onReset() {
   load()
 }
 
-/* 导出当前页用户列表为 CSV */
+/* 导出当前页用户列表为 CSV（沿用列表脱敏状态：未点「显示联系电话」时导出遮罩值） */
 function onExport() {
   exportCsv(
     '用户列表',
-    ['编号', '昵称', '联系电话', '关联身份', '实名状态', '积分', '状态', '注册时间'],
+    ['编号', '用户名', '昵称', '联系电话', '关联身份', '实名状态', '积分', '状态', '注册时间'],
     list.value.map((u) => [
       u.uid,
+      u.username,
       `${u.nickname} [${u.uid}]`,
-      u.phone,
+      phoneVisible.value ? u.phone : maskPhone(u.phone),
       u.identities
         .filter((i) => i.type !== 'individual')
         .map((i) => identityTypeMap[i.type])
@@ -188,7 +195,7 @@ onMounted(load)
       <t-input
         v-model="query.keyword"
         class="filter-keyword"
-        placeholder="搜索昵称/UID/联系电话…"
+        placeholder="搜索用户名/昵称/UID/联系电话…"
         clearable
         @enter="onSearch"
       />
@@ -256,7 +263,7 @@ onMounted(load)
         </template>
 
         <template #phone="{ row }">
-          {{ phoneVisible ? row.phone : maskPhone(row.phone) }}
+          {{ phoneVisible ? (row.phone || '—') : maskPhone(row.phone) }}
         </template>
 
         <template #user="{ row }">
@@ -267,6 +274,11 @@ onMounted(load)
               <t-tag class="id-tag-block" size="small" variant="light">{{ row.uid }}</t-tag>
             </div>
           </div>
+        </template>
+
+        <template #username="{ row }">
+          <span v-if="row.username">{{ row.username }}</span>
+          <span v-else class="muted-dash">—</span>
         </template>
 
         <template #identities="{ row }">

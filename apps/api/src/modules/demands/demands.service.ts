@@ -11,6 +11,7 @@ import { IdGeneratorService } from '../../common/id-generator/id-generator.servi
 import { AuditService } from '../../common/audit/audit.service'
 import { NotificationService } from '../../common/notify/notification.service'
 import { formatNow } from '../../common/utils/time'
+import { normalizeScheduledAt } from '../../common/utils/schedule-time'
 import { sanitizeHtml } from '../../common/utils/sanitize-html'
 import { toIdentityDto } from '../users/user.mapper'
 import { ProjectsService } from '../projects/projects.service'
@@ -202,58 +203,65 @@ export class DemandsService {
     if (query.status) where.status = query.status
     if (query.publisherId) where.publisherId = query.publisherId
 
-    /* 主行查询不含关联（避免全量载入响应记录）；企业筛选/排序/分页在内存完成，仅当页补查关联 */
-    const rows = await this.prisma.demand.findMany({ where })
-
-    let list: DemandRow[] = rows
-
-    /* 企业筛选：社区企业按 publisherIdentity.enterpriseId；合作企业按档案名匹配 enterpriseName */
+    /* 企业筛选下沉数据库：社区企业按身份快照 enterpriseId；合作企业按档案名匹配快照 enterpriseName（档案不存在则空集） */
     if (query.enterprise) {
       const community = await this.prisma.enterprise.findUnique({ where: { id: query.enterprise } })
       if (community) {
-        list = list.filter(
-          (d) => (d.publisherIdentity as { enterpriseId?: string } | null)?.enterpriseId === query.enterprise,
-        )
+        where.publisherIdentity = { path: ['enterpriseId'], equals: query.enterprise }
       } else {
         const profile = await this.prisma.externalEnterpriseProfile.findUnique({
           where: { id: query.enterprise },
         })
-        list = list.filter(
-          (d) => (d.publisherIdentity as { enterpriseName?: string } | null)?.enterpriseName === profile?.name,
-        )
+        if (!profile) return { list: [], total: 0 }
+        where.publisherIdentity = { path: ['enterpriseName'], equals: profile.name }
       }
     }
 
-    /* 排序：默认 createdAt 倒序；publishedAt 空值排最后（双向）；id 按编号数值比较 */
+    /* 排序：默认 createdAt 倒序；publishedAt 空值排最后（双向）；id 按编号数值比较——三者与计数、分页一并下发数据库 */
+    const desc = query.sortOrder !== 'ascend'
     const field = query.sortBy ?? 'createdAt'
-    const dir = query.sortOrder === 'ascend' ? 1 : -1
-    list.sort((a, b) => {
-      if (field === 'id') {
-        const av = Number(a.id.replace('D', ''))
-        const bv = Number(b.id.replace('D', ''))
-        return av < bv ? -1 * dir : av > bv ? 1 * dir : 0
-      }
-      if (field === 'publishedAt') {
-        const av = a.publishedAt
-        const bv = b.publishedAt
-        if (av == null && bv == null) return 0
-        if (av == null) return 1
-        if (bv == null) return -1
-        return av < bv ? -1 * dir : av > bv ? 1 * dir : 0
-      }
-      const av = a.createdAt
-      const bv = b.createdAt
-      return av < bv ? -1 * dir : av > bv ? 1 * dir : 0
-    })
+    const offset = (query.page - 1) * query.pageSize
 
-    const total = list.length
-    const start = (query.page - 1) * query.pageSize
-    const page = list.slice(start, start + query.pageSize)
+    let rows: DemandRow[]
+    let total: number
+    if (field === 'id') {
+      /* Prisma orderBy 只能按字符串比较编号（D9/D10 会错序），故保留数值序：
+       * 仅取编号列在库内过滤后内存定位当页编号，再按编号批量取当页行，避免整行全表载入 */
+      const dir = desc ? -1 : 1
+      const [idRows, count] = await Promise.all([
+        this.prisma.demand.findMany({ where, select: { id: true } }),
+        this.prisma.demand.count({ where }),
+      ])
+      const pageIds = idRows
+        .map((r) => r.id)
+        .sort((a, b) => {
+          const av = Number(a.replace('D', ''))
+          const bv = Number(b.replace('D', ''))
+          return av < bv ? -1 * dir : av > bv ? 1 * dir : 0
+        })
+        .slice(offset, offset + query.pageSize)
+      rows = pageIds.length
+        ? await this.prisma.demand.findMany({ where: { id: { in: pageIds } } })
+        : []
+      const pos = new Map(pageIds.map((id, index) => [id, index]))
+      rows.sort((a, b) => (pos.get(a.id) ?? 0) - (pos.get(b.id) ?? 0))
+      total = count
+    } else {
+      const orderBy: Prisma.DemandOrderByWithRelationInput = field === 'publishedAt'
+        ? { publishedAt: { sort: desc ? 'desc' : 'asc', nulls: 'last' } }
+        : { createdAt: desc ? 'desc' : 'asc' }
+      const [list, count] = await Promise.all([
+        this.prisma.demand.findMany({ where, orderBy, skip: offset, take: query.pageSize }),
+        this.prisma.demand.count({ where }),
+      ])
+      rows = list
+      total = count
+    }
 
     /* 仅当页批量补取响应记录（替代全量 include，随分页收缩载入量） */
-    const respondents = page.length
+    const respondents = rows.length
       ? await this.prisma.demandRespondent.findMany({
-          where: { demandId: { in: page.map((d) => d.id) } },
+          where: { demandId: { in: rows.map((d) => d.id) } },
           orderBy: { id: 'asc' },
         })
       : []
@@ -264,7 +272,7 @@ export class DemandsService {
       byDemand.set(r.demandId, arr)
     }
 
-    const demandDtos = page.map((d) => toDemandDto({ ...d, respondents: byDemand.get(d.id) ?? [] }))
+    const demandDtos = rows.map((d) => toDemandDto({ ...d, respondents: byDemand.get(d.id) ?? [] }))
     return { list: await this.withCategoryLabels(demandDtos), total }
   }
 
@@ -313,7 +321,7 @@ export class DemandsService {
     return (await this.withCategoryLabels([toDemandDto(demand)]))[0]
   }
 
-  async update(id: string, dto: UpdateDemandDto): Promise<{ code: number }> {
+  async update(id: string, dto: UpdateDemandDto, operator: string): Promise<{ code: number }> {
     const demand = await this.prisma.demand.findUnique({ where: { id } })
     if (!demand) throw new NotFoundException('需求不存在')
     if (demand.status !== 'pending_release' && demand.status !== 'published') {
@@ -321,6 +329,13 @@ export class DemandsService {
     }
 
     await this.prisma.demand.update({ where: { id }, data: this.editableData(dto) })
+
+    await this.audit.record({
+      module: '需求管理',
+      action: '编辑需求',
+      target: `${demand.id} · ${demand.title}`,
+      operator,
+    })
     return { code: 0 }
   }
 
@@ -423,19 +438,21 @@ export class DemandsService {
     const demand = await this.prisma.demand.findUnique({ where: { id } })
     if (!demand) throw new NotFoundException('需求不存在')
     if (demand.status !== 'pending_release') throw new ConflictException('仅待发布的需求可设定时发布')
+    /* 格式校验 + 归一化 + 必须晚于当前时间（避免非法/过去值被调度任务判定为立即发布） */
+    const scheduledAt = normalizeScheduledAt(dto.scheduledAt)
 
     await this.prisma.demand.update({
       where: { id },
-      data: { status: 'scheduled', scheduledAt: dto.scheduledAt },
+      data: { status: 'scheduled', scheduledAt },
     })
 
     await this.audit.record({
       module: '需求管理',
       action: '需求定时发布',
       target: `${demand.id} · ${demand.title}`,
-      detail: `定时时间 ${dto.scheduledAt}`,
+      detail: `定时时间 ${scheduledAt}`,
       before: { status: demand.status },
-      after: { status: 'scheduled', scheduledAt: dto.scheduledAt },
+      after: { status: 'scheduled', scheduledAt },
       operator,
     })
     return { code: 0 }
@@ -552,12 +569,16 @@ export class DemandsService {
       : []
 
     const project = await this.prisma.$transaction(async (tx) => {
+      /* 条件抢占：仅当需求仍为 published/selected 且未立项时才准予立项，避免并发重复立项 */
+      const claim = await tx.demand.updateMany({
+        where: { id: demand.id, deletedAt: null, status: { in: ['published', 'selected'] }, projectId: null },
+        data: { status: 'projected', archivableAt: formatNow() },
+      })
+      if (claim.count !== 1) throw new ConflictException('该需求已立项或被处理')
+
       const created = await this.projects.createProjectInHostTx(tx, dto)
       await tx.project.update({ where: { id: created.id }, data: { sourceDemandId: demand.id } })
-      await tx.demand.update({
-        where: { id: demand.id },
-        data: { status: 'projected', archivableAt: formatNow(), projectId: created.id },
-      })
+      await tx.demand.update({ where: { id: demand.id }, data: { projectId: created.id } })
 
       /* 立项奖励：发起方 + 被选中的承接方（与需求承接规则一致，幂等键按需求维度去重） */
       await this.points.issuePointsInTransaction(tx, demand.publisherId, 'demand_undertaken', '需求立项获得积分', `demand_undertaken:${demand.publisherId}:${demand.id}`)
@@ -657,8 +678,8 @@ export class DemandsService {
         uid: u.uid,
         nickname: u.nickname,
         realName: u.realName ?? u.nickname,
-        phone: u.phone,
-        email: u.email,
+        phone: u.phone ?? '',
+        email: u.email ?? '',
         tag: (u.identities.some((i) => i.type === 'community_individual')
           ? '社区个体'
           : '个人用户') as '社区个体' | '个人用户',

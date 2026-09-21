@@ -57,18 +57,23 @@ const pagination = computed(() => ({
   showJumper: true,
 }))
 
+/* 请求序号守卫：仅最后一次请求可写回状态，避免快速切页/改筛选时的竞态覆盖 */
+let version = 0
 async function load() {
+  const current = ++version
   syncQuery()
   loading.value = true
   loadError.value = ''
   try {
     const res = await fetchIndividuals({ ...query })
-    list.value = res.list
-    total.value = res.total
+    if (current === version) {
+      list.value = res.list
+      total.value = res.total
+    }
   } catch (e) {
-    loadError.value = e instanceof Error ? e.message : '数据加载失败'
+    if (current === version) loadError.value = e instanceof Error ? e.message : '数据加载失败'
   } finally {
-    loading.value = false
+    if (current === version) loading.value = false
   }
 }
 
@@ -90,6 +95,13 @@ function onPageChange(p: { current: number; pageSize: number }) {
   load()
 }
 
+/* 该列表不展示联系电话，导出统一输出遮罩值，避免绕过脱敏 */
+function maskPhone(value?: string | null): string {
+  if (!value) return '—'
+  if (value.length < 8) return `${value.slice(0, 2)}****${value.slice(-2)}`
+  return `${value.slice(0, 3)}****${value.slice(7)}`
+}
+
 function individualLevel(row: User): string {
   const level = row.identities.find((i) => i.type === 'community_individual')?.level
   return level ? `${level} 级` : '—'
@@ -104,7 +116,7 @@ function goDetail(row: User) {
   router.push(`/users/${row.uid}`)
 }
 
-/* 导出当前页社区个体列表为 CSV */
+/* 导出当前页社区个体列表为 CSV（联系电话统一脱敏输出） */
 function onExport() {
   exportCsv(
     '社区个体列表',
@@ -112,7 +124,7 @@ function onExport() {
     list.value.map((u) => [
       u.uid,
       `${u.nickname} [${u.uid}]`,
-      u.phone,
+      maskPhone(u.phone),
       individualLevel(u),
       u.points,
       statusLabel('user', u.status),

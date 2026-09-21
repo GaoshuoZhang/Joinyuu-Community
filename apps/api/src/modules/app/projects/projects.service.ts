@@ -5,7 +5,7 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common'
-import type { Milestone, Project, ProjectUndertaker } from '@prisma/client'
+import type { Milestone, Prisma, Project, ProjectUndertaker } from '@prisma/client'
 import { PrismaService } from '../../../common/prisma/prisma.service'
 import { IdGeneratorService } from '../../../common/id-generator/id-generator.service'
 import { NotificationService } from '../../../common/notify/notification.service'
@@ -121,8 +121,8 @@ export class AppProjectsService {
     if (!mil) throw new NotFoundException('里程碑不存在')
     if (mil.status !== 'todo' && mil.status !== 'returned') throw new ConflictException('该里程碑当前不可提交')
 
-    await this.prisma.milestone.update({
-      where: { id: mil.id },
+    const updated = await this.prisma.milestone.updateMany({
+      where: { id: mil.id, status: { in: ['todo', 'returned'] } },
       data: {
         status: 'submitted',
         submitAt: formatNow(),
@@ -131,6 +131,7 @@ export class AppProjectsService {
         returnedAt: null,
       },
     })
+    if (updated.count !== 1) throw new ConflictException('里程碑状态已变更，请刷新后重试')
     if (initiatorUid) {
       await this.notify.pushNotice(initiatorUid, {
         type: 'project',
@@ -151,12 +152,40 @@ export class AppProjectsService {
     if (mil.status !== 'submitted') throw new ConflictException('该里程碑未提交，无法验收')
 
     const now = formatNow()
-    await this.prisma.milestone.update({ where: { id: mil.id }, data: { status: 'accepted', acceptAt: now } })
-
     const respondentUid = await this.respondentUid(project.sourceDemandId)
-    if (respondentUid) {
-      await this.points.issuePoints(respondentUid, 'project_milestone', '项目里程碑通过验收', `project_milestone:${mil.id}`)
-    }
+    let finished = false
+
+    /* 状态迁移 + 里程碑通过积分 + 重算进度/结项 + 结项经验同事务，
+     * 避免并发覆盖与「已退回但仍发经验 / progress 与真实通过数不符」 */
+    await this.prisma.$transaction(async (tx) => {
+      /* 条件更新做幂等守卫：并发/重复验收只会命中一次状态迁移 */
+      const updated = await tx.milestone.updateMany({
+        where: { id: mil.id, status: 'submitted' },
+        data: { status: 'accepted', acceptAt: now },
+      })
+      if (updated.count !== 1) throw new ConflictException('里程碑状态已变更，请刷新后重试')
+
+      if (respondentUid) {
+        await this.points.issuePointsInTransaction(tx, respondentUid, 'project_milestone', '项目里程碑通过验收', `project_milestone:${mil.id}`)
+      }
+
+      const all = await tx.milestone.findMany({ where: { projectId: project.id } })
+      const acceptedCount = all.filter((m) => m.status === 'accepted').length
+      if (all.length > 0 && acceptedCount === all.length) {
+        await tx.project.update({
+          where: { id: project.id },
+          data: { status: 'finished', progress: 100, archivableAt: now, finishedAt: now },
+        })
+        finished = true
+        await this.issueFinishExperience(tx, project.sourceDemandId, project.name)
+      } else {
+        await tx.project.update({
+          where: { id: project.id },
+          data: { progress: Math.round((acceptedCount / all.length) * 100) },
+        })
+      }
+    })
+
     if (respondentUid) {
       await this.notify.pushNotice(respondentUid, {
         type: 'project',
@@ -166,13 +195,7 @@ export class AppProjectsService {
       })
     }
 
-    const all = await this.prisma.milestone.findMany({ where: { projectId: project.id } })
-    const acceptedCount = all.filter((m) => m.status === 'accepted').length
-    if (all.length > 0 && acceptedCount === all.length) {
-      await this.prisma.project.update({
-        where: { id: project.id },
-        data: { status: 'finished', progress: 100, archivableAt: now, finishedAt: now },
-      })
+    if (finished) {
       const title = '项目已结项'
       if (initiatorUid) {
         await this.notify.pushNotice(initiatorUid, { type: 'project', title, content: '「' + project.name + '」已完成全部里程碑，顺利结项。', link: `/me/projects/${project.id}` })
@@ -180,12 +203,6 @@ export class AppProjectsService {
       if (respondentUid) {
         await this.notify.pushNotice(respondentUid, { type: 'project', title, content: '「' + project.name + '」已完成全部里程碑，顺利结项。', link: `/me/projects/${project.id}` })
       }
-      await this.issueFinishExperience(project.sourceDemandId, project.name)
-    } else {
-      await this.prisma.project.update({
-        where: { id: project.id },
-        data: { progress: Math.round((acceptedCount / all.length) * 100) },
-      })
     }
     return { code: 0 }
   }
@@ -200,10 +217,11 @@ export class AppProjectsService {
     const reason = (dto.reason ?? '').trim()
     if (!reason) throw new BadRequestException('请填写退回原因')
 
-    await this.prisma.milestone.update({
-      where: { id: mil.id },
+    const returned = await this.prisma.milestone.updateMany({
+      where: { id: mil.id, status: 'submitted' },
       data: { status: 'returned', returnReason: reason, returnedAt: formatNow() },
     })
+    if (returned.count !== 1) throw new ConflictException('里程碑状态已变更，请刷新后重试')
     const respondentUid = await this.respondentUid(project.sourceDemandId)
     if (respondentUid) {
       await this.notify.pushNotice(respondentUid, {
@@ -271,7 +289,7 @@ export class AppProjectsService {
     )
     if (matched.some((u) => u.type === 'enterprise')) {
       const e = matched.find((u) => u.type === 'enterprise')
-      return { role: '企业承接' as const, enterpriseName: e?.name, enterpriseId: matched[0]?.refId }
+      return { role: '企业承接' as const, enterpriseName: e?.name, enterpriseId: e?.refId }
     }
     if (matched.length > 0) return { role: '本人承接' as const, enterpriseName: undefined, enterpriseId: undefined }
     return { role: '需求发起方' as const, enterpriseName: undefined, enterpriseId: undefined }
@@ -348,22 +366,22 @@ export class AppProjectsService {
     return r?.userId ?? null
   }
 
-  /** 结项经验：按承接方身份发放 project_completed（事务外，规则缺失则 no-op） */
-  private async issueFinishExperience(sourceDemandId: string | null, projectName: string) {
+  /** 结项经验：按承接方身份在结项事务内发放 project_completed（规则缺失则 no-op，失败随事务回滚） */
+  private async issueFinishExperience(
+    tx: Prisma.TransactionClient,
+    sourceDemandId: string | null,
+    projectName: string,
+  ): Promise<void> {
     if (!sourceDemandId) return
-    const accepted = await this.prisma.demandRespondent.findFirst({
+    const accepted = await tx.demandRespondent.findFirst({
       where: { demandId: sourceDemandId, status: 'accepted' },
     })
     if (!accepted) return
     const ri = (accepted.responderIdentity ?? null) as Record<string, unknown> | null
-    try {
-      if (ri?.type === 'community_enterprise' && ri.enterpriseId) {
-        await this.points.issueExperience('enterprise', ri.enterpriseId as string, 'project_completed', `「${projectName}」结项经验值`)
-      } else if (accepted.userId) {
-        await this.points.issueExperience('individual', accepted.userId, 'project_completed', `「${projectName}」结项经验值`)
-      }
-    } catch {
-      /* noop */
+    if (ri?.type === 'community_enterprise' && ri.enterpriseId) {
+      await this.points.issueExperienceInTransaction(tx, 'enterprise', ri.enterpriseId as string, 'project_completed', `「${projectName}」结项经验值`)
+    } else if (accepted.userId) {
+      await this.points.issueExperienceInTransaction(tx, 'individual', accepted.userId, 'project_completed', `「${projectName}」结项经验值`)
     }
   }
 }

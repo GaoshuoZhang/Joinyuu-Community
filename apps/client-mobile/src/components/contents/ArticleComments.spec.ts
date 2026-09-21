@@ -7,7 +7,7 @@ describe('ArticleComments', () => {
   it('uses community individual instead of a stale individual selection', async () => {
     const individual: UserIdentity = { type: 'individual' }
     const communityIndividual: UserIdentity = { type: 'community_individual' }
-    const company: UserIdentity = { type: 'community_enterprise', enterpriseId: 'E2001', enterpriseName: '芯启半导体' }
+    const company: UserIdentity = { type: 'community_enterprise', enterpriseId: 'E9001', enterpriseName: '芯启半导体' }
     const wrapper = mount(ArticleComments, {
       props: {
         comments: [],

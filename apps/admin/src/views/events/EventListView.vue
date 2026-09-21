@@ -96,19 +96,30 @@ const pagination = computed(() => ({
   showJumper: true,
 }))
 
+/* 请求序号守卫：仅最后一次请求可写回状态，避免快速切页/改筛选时的竞态覆盖 */
+let version = 0
 async function load() {
+  const current = ++version
   syncQuery()
   loading.value = true
   loadError.value = ''
   try {
     const res = await fetchEvents({ ...query, sortBy: sortBy.value, sortOrder: sortOrder.value })
-    list.value = res.list
-    total.value = res.total
+    if (current === version) {
+      list.value = res.list
+      total.value = res.total
+    }
   } catch (e) {
-    loadError.value = e instanceof Error ? e.message : '数据加载失败'
+    if (current === version) loadError.value = e instanceof Error ? e.message : '数据加载失败'
   } finally {
-    loading.value = false
+    if (current === version) loading.value = false
   }
+}
+
+/* 归档后当前页可能已空：页码越界时回退一页再加载 */
+async function reloadAfterRemove() {
+  if (list.value.length <= 1 && query.page > 1) query.page -= 1
+  await load()
 }
 
 /* 远程排序：表头点击 → 更新排序状态 → 重新加载（受控 :sort 保证表头指示器正确） */
@@ -175,7 +186,7 @@ async function onArchive(row: CommunityEvent) {
   try {
     await archiveEvent(row.id)
     MessagePlugin.success('活动已归档')
-    await load()
+    await reloadAfterRemove()
   } catch (e) {
     MessagePlugin.error(e instanceof Error ? e.message : '操作失败')
   } finally {

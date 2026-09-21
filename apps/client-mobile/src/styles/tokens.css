@@ -91,10 +91,12 @@ span[role='button']:not(.t-tag) {
 
 /* ---------- 搜索框（TDesign Search 全局规格） ---------- */
 /* 只调 Search 自身：白底与卡片一致，圆角与其他元素对齐（radius-large=9px）；
- * 组件根元素不带背景（避免二次容器色差） */
+ * 组件根元素不带背景（避免二次容器色差）；
+ * v45：官方默认高度 40px 低于本项目 44px 触控基线，统一抬到 44px。 */
 .t-search {
   --td-search-bg-color: var(--td-bg-color-container);
   --td-search-square-radius: var(--td-radius-large);
+  --td-search-height: 44px;
 }
 
 /* 输入类组件（Input/Textarea）与搜索框同规格：直接放在页面灰底上的白底输入框避免直角 */
@@ -421,14 +423,10 @@ a {
   border: 0;
 }
 
-/* v39 列表计数 */
+/* v39 列表计数；v45 合并重复声明，统一为次级文字色 */
 .list-count {
   margin: 0 var(--app-space-1);
   font-size: var(--app-font-caption);
-  color: var(--td-text-color-placeholder);
-}
-
-.list-count {
   color: var(--td-text-color-secondary);
 }
 
@@ -444,8 +442,9 @@ html:not(.dark):not([theme-mode='dark']) body {
   --td-text-color-placeholder: #767676;
 }
 
-/* 禁用主按钮对比度：浅色下官方用 brand-3 + 白字（约 2:1，白字几乎不可读），
- * 改为品牌深色文字，仍保持"不可点"的低饱和观感；暗色模式官方组合已足够。 */
+/* 禁用主按钮对比度：浅色下官方用 brand-3 底 + 白字（约 2:1，白字几乎不可读）。
+ * v45：改用 brand-color-8 文字，在 brand-color-3 底上实测约 5.5:1，达到 WCAG AA 正文要求——
+ * 禁用态按钮上的「为什么不能点」说明文字必须可读。 */
 html:not(.dark):not([theme-mode='dark']) .t-button--primary.t-button--disabled {
-  --td-button-primary-disabled-color: var(--td-brand-color-7);
+  --td-button-primary-disabled-color: var(--td-brand-color-8);
 }

@@ -33,8 +33,8 @@ export interface TestSendPayload {
 export async function testSendMessageChannel(
   id: string,
   payload: TestSendPayload,
-): Promise<{ providerMessageId?: string; dryRun: boolean; costMs: number }> {
-  return httpPost<{ providerMessageId?: string; dryRun: boolean; costMs: number }>(
+): Promise<{ providerMessageId?: string; dryRun: boolean; costMs: number; warnings?: string[] }> {
+  return httpPost<{ providerMessageId?: string; dryRun: boolean; costMs: number; warnings?: string[] }>(
     `/message-channels/${id}/test-send`,
     payload,
   )

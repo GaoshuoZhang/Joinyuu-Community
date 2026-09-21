@@ -125,7 +125,8 @@ function time(value: number): string {
 export async function fetchMyReservations(): Promise<SpaceReservation[]> {
   return withLatency(() => {
     const uid = requireUid()
-    return [...(reservationsByUid[uid] ?? [])]
+    /* 浅拷贝避免视图原地修改污染 mock 库 */
+    return [...(reservationsByUid[uid] ?? [])].map((reservation) => ({ ...reservation }))
   })
 }
 

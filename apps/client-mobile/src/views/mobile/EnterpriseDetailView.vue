@@ -244,7 +244,7 @@ async function doExit() {
             theme="warning"
             :content="`负责人转移待 ${data.transferRequest.toName} 确认（${formatLocalDateTime(data.transferRequest.at)} 发起，${expiryText(data.transferRequest.expiresAt)}）`"
           />
-          <div class="transfer-cancel">
+          <div v-if="isContact" class="transfer-cancel">
             <Button size="small" variant="outline" @click="onCancelTransfer">撤销转移请求</Button>
           </div>
         </template>
@@ -271,7 +271,7 @@ async function doExit() {
           <NoticeBar
             v-if="data.exitApplication && data.exitApplication.status === 'rejected'"
             visible
-            theme="danger"
+            theme="error"
             :content="`退驻/注销申请已被驳回（${formatLocalDateTime(data.exitApplication.at)}）${data.exitApplication.reason ? `：${data.exitApplication.reason}` : ''}`"
           />
           <p class="exit-desc">退驻后企业将失去社区企业身份与相关权益；注销后企业档案将被归档。提交后由社区运营审核确认。</p>

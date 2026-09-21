@@ -84,20 +84,49 @@ const equipmentText = computed(() =>
   space.value && space.value.equipment.length > 0 ? space.value.equipment.join('、') : '—',
 )
 
+/* 预约接口 pageSize 上限 100：首屏取第一页，其余按需追加，避免只展示前 100 条 */
+const RESERVATION_PAGE_SIZE = 100
+const reservationTotal = ref(0)
+const reservationPage = ref(1)
+const loadingMore = ref(false)
+
 async function load() {
   loading.value = true
   try {
     const id = String(route.params.id)
     const [s, res] = await Promise.all([
       fetchSpace(id),
-      fetchReservations({ page: 1, pageSize: 100, spaceId: id }),
+      fetchReservations({ page: 1, pageSize: RESERVATION_PAGE_SIZE, spaceId: id }),
     ])
     space.value = s
     reservations.value = res.list
+    reservationTotal.value = res.total
+    reservationPage.value = 1
   } catch (e) {
     MessagePlugin.error(e instanceof Error ? e.message : '空间加载失败')
   } finally {
     loading.value = false
+  }
+}
+
+/* 加载更多预约（追加下一页） */
+async function loadMoreReservations() {
+  if (loadingMore.value || reservations.value.length >= reservationTotal.value) return
+  loadingMore.value = true
+  try {
+    const next = reservationPage.value + 1
+    const res = await fetchReservations({
+      page: next,
+      pageSize: RESERVATION_PAGE_SIZE,
+      spaceId: String(route.params.id),
+    })
+    reservationPage.value = next
+    reservations.value = [...reservations.value, ...res.list]
+    reservationTotal.value = res.total
+  } catch (e) {
+    MessagePlugin.error(e instanceof Error ? e.message : '预约加载失败')
+  } finally {
+    loadingMore.value = false
   }
 }
 
@@ -239,6 +268,12 @@ onMounted(load)
                 <StatusTag entity="reservation" :value="deriveReservationStatus(row)" />
               </template>
             </t-table>
+            <div v-if="reservations.length < reservationTotal" class="more-row">
+              仅显示 {{ reservations.length }} / {{ reservationTotal }} 条预约
+              <t-button variant="text" size="small" :loading="loadingMore" @click="loadMoreReservations">
+                加载更多
+              </t-button>
+            </div>
           </div>
         </div>
       </div>
@@ -263,6 +298,15 @@ onMounted(load)
 
 .calendar-card {
   margin: 16px 0;
+}
+
+.more-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 8px;
+  font-size: 12px;
+  color: var(--td-text-color-secondary);
 }
 
 /* 日历（2/3）+ 当月预约明细（1/3）双栏布局 */

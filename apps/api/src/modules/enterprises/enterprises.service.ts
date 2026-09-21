@@ -70,7 +70,7 @@ export class EnterprisesService {
     if (!user) throw new BadRequestException('关联用户不存在')
     return {
       contactName: user.realName ?? user.nickname,
-      contactPhone: user.phone,
+      contactPhone: user.phone ?? '',
       contactEmail: user.email || null,
     }
   }
@@ -145,7 +145,7 @@ export class EnterprisesService {
   }
 
   async update(id: string, dto: UpdateEnterpriseDto): Promise<{ code: number }> {
-    const enterprise = await this.prisma.enterprise.findUnique({ where: { id } })
+    const enterprise = await this.prisma.enterprise.findFirst({ where: { id, deletedAt: null } })
     if (!enterprise) throw new NotFoundException('企业不存在')
 
     /* 更换关联用户时，联系人姓名/联系电话/邮箱以其为准 */
@@ -197,7 +197,7 @@ export class EnterprisesService {
   }
 
   async disable(id: string): Promise<{ code: number }> {
-    const enterprise = await this.prisma.enterprise.findUnique({ where: { id } })
+    const enterprise = await this.prisma.enterprise.findFirst({ where: { id, deletedAt: null } })
     if (!enterprise) throw new NotFoundException('企业不存在')
     await this.prisma.enterprise.update({ where: { id }, data: { status: 'disabled' } })
     await this.audit.record({
@@ -209,7 +209,7 @@ export class EnterprisesService {
   }
 
   async enable(id: string): Promise<{ code: number }> {
-    const enterprise = await this.prisma.enterprise.findUnique({ where: { id } })
+    const enterprise = await this.prisma.enterprise.findFirst({ where: { id, deletedAt: null } })
     if (!enterprise) throw new NotFoundException('企业不存在')
     await this.prisma.enterprise.update({ where: { id }, data: { status: 'active' } })
     await this.audit.record({
@@ -307,7 +307,7 @@ export class EnterprisesService {
   }
 
   async stats(id: string): Promise<{ demandCount: number; projectCount: number }> {
-    const enterprise = await this.prisma.enterprise.findUnique({ where: { id } })
+    const enterprise = await this.prisma.enterprise.findFirst({ where: { id, deletedAt: null } })
     if (!enterprise) throw new NotFoundException('企业不存在')
 
     const demands = await this.prisma.demand.findMany({

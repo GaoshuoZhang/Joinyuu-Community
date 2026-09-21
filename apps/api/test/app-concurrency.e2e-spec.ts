@@ -51,6 +51,11 @@ describe('M2-R R2 并发安全（活动/商城）', () => {
         status: 'on',
         description: '仅用于并发验收',
         redeemedCount: 0,
+        shippingMethods: [],
+        visibilityIdentities: [],
+        visibilityLevels: [],
+        orderIdentities: [],
+        orderLevels: [],
         createdAt: '2026-09-16 10:00',
       },
     })
@@ -100,6 +105,11 @@ describe('M2-R R2 并发安全（活动/商城）', () => {
         status: 'on',
         description: '仅用于并发验收',
         redeemedCount: 0,
+        shippingMethods: [],
+        visibilityIdentities: [],
+        visibilityLevels: [],
+        orderIdentities: [],
+        orderLevels: [],
         createdAt: '2026-09-16 10:00',
       },
     })

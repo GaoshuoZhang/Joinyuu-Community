@@ -1,6 +1,7 @@
 import { PrismaService } from '../../../common/prisma/prisma.service'
 import { IdGeneratorService } from '../../../common/id-generator/id-generator.service'
 import { formatNow } from '../../../common/utils/time'
+import { sanitizePlainText } from '../../../common/utils/sanitize-html'
 import { MessageSendError, type MessageProvider } from './message-provider'
 import type { ChannelKind, SendMessageInput, SendMessageResult } from '../messaging.types'
 
@@ -28,7 +29,8 @@ export class InAppProvider implements MessageProvider {
         userId,
         type: (input.variables.noticeType || 'system').slice(0, 32),
         title: (input.subject?.trim() || input.variables.title || input.templateCode).slice(0, 128),
-        content: input.body.slice(0, 255),
+        /* 站内信按纯文本展示：落库前清洗标签（防存储型 XSS）并按列长截断 */
+        content: sanitizePlainText(input.body).slice(0, 255),
         link: input.variables.link ? input.variables.link.slice(0, 128) : null,
         at: formatNow(),
       },

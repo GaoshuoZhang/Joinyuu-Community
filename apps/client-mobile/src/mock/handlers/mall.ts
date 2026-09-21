@@ -1,4 +1,4 @@
-import type { Goods, MyOrder } from '@/types'
+import type { Goods, MyOrder, PageResult } from '@/types'
 import { accountByUid, addressesByUid, appConfig, goods, goodsOffIds, grantPoints, nextMockId, nowStamp, ordersByUid, pushNotice, trackMockEvent } from '@/mock/db'
 import { readPayload } from '@/mock/session'
 import { fail, withLatency } from '@/mock/latency'
@@ -20,10 +20,18 @@ const orderDedupe = new Map<string, number>()
 /* 券码默认有效期（天）：商品未配置 validDays 时兜底（对齐后端） */
 const DEFAULT_VOUCHER_VALID_DAYS = 30
 
-export async function fetchGoods(query: { category?: string } = {}): Promise<Goods[]> {
+/** 列表分页：与后端一致，默认 pageSize=10；返回 { list, total } 供前端展示真实总数 */
+function paginate<T>(items: T[], page = 1, pageSize = 10): PageResult<T> {
+  const safePage = Math.max(1, page)
+  const safeSize = Math.min(100, Math.max(1, pageSize))
+  return { list: items.slice((safePage - 1) * safeSize, safePage * safeSize), total: items.length }
+}
+
+export async function fetchGoods(query: { category?: string; page?: number; pageSize?: number } = {}): Promise<PageResult<Goods>> {
   return withLatency(() => {
     if (!appConfig.mallOpen) fail(400, '积分商城暂未开放')
-    return goods.filter((g) => g.status !== 'off' && !goodsOffIds.includes(g.id) && (!query.category || g.category === query.category))
+    const all = goods.filter((g) => g.status !== 'off' && !goodsOffIds.includes(g.id) && (!query.category || g.category === query.category))
+    return paginate(all, query.page, query.pageSize)
   })
 }
 
@@ -96,16 +104,17 @@ export async function createOrder(goodsId: string, addressId?: string): Promise<
   })
 }
 
-export async function fetchMyOrders(): Promise<MyOrder[]> {
+export async function fetchMyOrders(query: { page?: number; pageSize?: number } = {}): Promise<PageResult<MyOrder>> {
   return withLatency(() => {
     const uid = requireUid()
     const at = nowStamp()
     /* 券码过期派生：pending_use 且 voucherExpiresAt 已过 → expired（不可核销） */
-    return (ordersByUid[uid] ?? []).map((order) => (
+    const all = (ordersByUid[uid] ?? []).map((order) => (
       order.status === 'pending_use' && order.voucherExpiresAt && order.voucherExpiresAt <= at
         ? { ...order, status: 'expired' as const }
         : { ...order }
     ))
+    return paginate(all, query.page, query.pageSize)
   })
 }
 

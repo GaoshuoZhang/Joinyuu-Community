@@ -3,6 +3,7 @@ import {
   ConflictException,
   ForbiddenException,
   Injectable,
+  InternalServerErrorException,
   NotFoundException,
 } from '@nestjs/common'
 import { createHmac } from 'node:crypto'
@@ -13,6 +14,8 @@ import { IdGeneratorService } from '../../../common/id-generator/id-generator.se
 import { PointsEngineService } from '../../../common/engine/points-engine/points-engine.service'
 import { NotificationService } from '../../../common/notify/notification.service'
 import { formatNow } from '../../../common/utils/time'
+import { RedisService } from '../../../common/redis/redis.service'
+import { resolveOptionalAppUid, type OptionalAppAuthDeps } from '../../../common/auth/optional-app-uid'
 import { assertRealnameAllowed } from '../realname/realname.service'
 import { consumePublishingLimit } from '../../../common/enterprise/publishing-limits'
 import { CheckInDto } from './dto/check-in.dto'
@@ -38,7 +41,13 @@ export class AppEventsService {
     private readonly engine: PointsEngineService,
     private readonly notify: NotificationService,
     private readonly jwt: JwtService,
+    private readonly redis: RedisService,
   ) {}
+
+  /** 可选登录态解析依赖（与 AppJwtGuard 同口径） */
+  private get auth(): OptionalAppAuthDeps {
+    return { jwt: this.jwt, redis: this.redis, prisma: this.prisma }
+  }
 
   /* ---------- 活动浏览 ---------- */
 
@@ -128,7 +137,7 @@ export class AppEventsService {
       userId: uid,
       name,
       enterprise,
-      phone: user.phone,
+      phone: user.phone ?? '',
       appliedAt: now,
     }
 
@@ -321,11 +330,7 @@ export class AppEventsService {
     })
     if (!ticket) {
       const ticketNo = `ET${enrollment.eventId.replace(/^EV/, '')}${enrollment.id}`
-      const redeemCode = createHmac('sha256', TICKET_SECRET)
-        .update(`${enrollment.eventId}:${enrollment.id}`)
-        .digest('hex')
-        .slice(0, 8)
-        .toUpperCase()
+      const redeemCode = await this.generateRedeemCode(enrollment.eventId, enrollment.id)
       try {
         ticket = await this.prisma.eventTicket.create({
           data: { eventId: enrollment.eventId, enrollmentId: enrollment.id, ticketNo, redeemCode },
@@ -392,7 +397,7 @@ export class AppEventsService {
 
   async submitFeedback(uid: string, eventId: string, dto: SubmitFeedbackDto): Promise<{ code: number }> {
     const event = await this.prisma.communityEvent.findUnique({ where: { id: eventId } })
-    if (!event) throw new NotFoundException('活动不存在')
+    if (!event || event.deletedAt) throw new NotFoundException('活动不存在')
     if (event.status === 'cancelled') throw new BadRequestException('活动已取消，无法评价')
     if (event.endTime >= formatNow()) throw new BadRequestException('活动尚未结束，暂不能评价')
 
@@ -524,19 +529,31 @@ export class AppEventsService {
     return Number.isFinite(n) ? n : undefined
   }
 
+  /* 签发核销码：HMAC 截断 8 位，若同活动内已存在同码则换 nonce 有界重试（最多 5 次）；
+   * 仍冲突说明该活动空间内码位耗尽，抛 500 由全局异常过滤器兜底（不新增唯一索引/迁移）。 */
+  private async generateRedeemCode(eventId: string, enrollmentId: number): Promise<string> {
+    for (let nonce = 0; nonce < 5; nonce++) {
+      const code = createHmac('sha256', TICKET_SECRET)
+        .update(`${eventId}:${enrollmentId}:${nonce}`)
+        .digest('hex')
+        .slice(0, 8)
+        .toUpperCase()
+      const dup = await this.prisma.eventTicket.findFirst({
+        where: { eventId, redeemCode: code },
+        select: { id: true },
+      })
+      if (!dup) return code
+    }
+    throw new InternalServerErrorException('电子票核销码生成失败，请稍后重试')
+  }
+
   private parseTime(s: string): Date {
     return new Date(s.includes('T') ? s : `${s.replace(' ', 'T')}`)
   }
 
-  /** Public 浏览端点的可选 app JWT；无效令牌按游客处理。 */
+  /** @Public 浏览端点的可选 app JWT：验签 + 黑名单 + 账号状态，无效按游客处理 */
   private async optionalUid(authorization?: string): Promise<string> {
-    if (!authorization?.startsWith('Bearer ')) return ''
-    try {
-      const payload = await this.jwt.verifyAsync<{ sub: string; scope?: string }>(authorization.slice(7))
-      return payload.scope === 'app' ? payload.sub : ''
-    } catch {
-      return ''
-    }
+    return (await resolveOptionalAppUid(this.auth, authorization)) ?? ''
   }
 }
 

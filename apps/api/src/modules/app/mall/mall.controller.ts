@@ -1,15 +1,18 @@
 import { Body, Controller, Get, HttpCode, Param, Post, Query, Req } from '@nestjs/common'
+import { Public } from '../../../common/decorators/public.decorator'
 import type { AppAuthenticatedRequest } from '../../../common/interfaces/app-authenticated-request'
 import { PageQueryDto } from '../../../common/dto/page-query.dto'
 import { AppMallService } from './mall.service'
 import { CreateOrderDto } from './dto/create-order.dto'
 import { ReviewOrderDto } from './dto/review-order.dto'
 
-/* 积分商城（M2-R R2）：商品浏览/详情、下单、取消/核销/收货/评价 */
+/* 积分商城（M2-R R2）：商品浏览/详情、下单、取消/核销/收货/评价。
+ * 商品浏览与详情为游客可访问（移动端商城页无登录门槛），其余端点需登录。 */
 @Controller('api/app/mall')
 export class AppMallController {
   constructor(private readonly mall: AppMallService) {}
 
+  @Public()
   @Get('goods')
   listGoods(
     @Req() req: AppAuthenticatedRequest,
@@ -20,6 +23,7 @@ export class AppMallController {
     return this.mall.listGoods(query.page, query.pageSize, category, keyword)
   }
 
+  @Public()
   @Get('goods/:id')
   goodsDetail(@Req() req: AppAuthenticatedRequest, @Param('id') id: string) {
     return this.mall.goodsDetail(id)

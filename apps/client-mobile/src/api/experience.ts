@@ -1,10 +1,9 @@
 import { apiMode, httpGet } from './http'
 import type { ExperienceProfile, IdentityType } from '@/types'
-import * as mock from '@/mock/handlers/experience'
 
 /** GET /api/app/me/experience-records — 经验值流水。
  * 按当前身份取数：社区个体→个人经验；社区企业→企业经验；个人用户/合作企业→空。 */
 export async function fetchExperience(identityType?: IdentityType): Promise<ExperienceProfile> {
-  if (apiMode === 'mock') return mock.fetchExperience(identityType)
+  if (apiMode === 'mock') return (await import('@/mock/handlers/experience')).fetchExperience(identityType)
   return httpGet(`/me/experience-records${identityType ? `?identity=${identityType}` : ''}`)
 }

@@ -40,7 +40,17 @@ describe('AssetsService.readFile', () => {
   it('未知扩展名回退 application/octet-stream', async () => {
     storage.read.mockResolvedValue(Buffer.from('x'))
     prisma.mallAsset.findFirst.mockResolvedValue(null)
-    await expect(service.readFile('file.bin')).resolves.toMatchObject({ mime: 'application/octet-stream' })
+    await expect(service.readFile('60428ced-03aa-4b1b-9d3f-a1183a317b04.bin')).resolves.toMatchObject({
+      mime: 'application/octet-stream',
+    })
+  })
+
+  it('拒绝可枚举命名（非 uuid 且无素材库记录）且不触碰存储', async () => {
+    storage.read.mockResolvedValue(Buffer.from('export-json'))
+    prisma.mallAsset.findFirst.mockResolvedValue(null)
+    await expect(service.readFile('export-U1001-202609211200-ab12cd34.json')).resolves.toBeNull()
+    await expect(service.readFile('file.bin')).resolves.toBeNull()
+    expect(storage.read).not.toHaveBeenCalled()
   })
 
   it('文件不存在 → null（404）', async () => {

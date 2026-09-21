@@ -49,7 +49,6 @@ export const statusMap = {
     published: { label: '已发布', theme: 'success' },
     ended: { label: '已结束', theme: 'default' },
     cancelled: { label: '已取消', theme: 'danger' },
-    postponed: { label: '已改期', theme: 'warning' },
   },
   enrollment: {
     pending: { label: '待审核', theme: 'warning' },

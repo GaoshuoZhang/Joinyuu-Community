@@ -1,4 +1,5 @@
 import { Injectable } from '@nestjs/common'
+import type { SchedulerLog } from '@prisma/client'
 import { PrismaService } from '../../../common/prisma/prisma.service'
 import { RedisService } from '../../../common/redis/redis.service'
 import { SchedulerService } from '../../../scheduler/scheduler.service'
@@ -6,7 +7,9 @@ import { SchedulerService } from '../../../scheduler/scheduler.service'
 /** 服务启动时间（模块加载即记录，用于 uptime 展示） */
 const SERVICE_STARTED_AT = new Date()
 const SERVICE_NAME = 'joinyuu-api'
-const SERVICE_VERSION = '1.5.0'
+/* 版本号取自 apps/api/package.json；静态 import 会让 tsc 把 JSON 纳入编译并改变 dist 输出结构，故用 require */
+// eslint-disable-next-line @typescript-eslint/no-require-imports
+const SERVICE_VERSION: string = (require('../../../../package.json') as { version: string }).version
 
 export interface ServiceHealthDto {
   status: 'healthy' | 'degraded' | 'down'
@@ -81,24 +84,21 @@ export class MonitorService {
     const redisInfo = parseRedisInfo(await this.redis.info())
 
     const jobInfos = this.scheduler.listJobs()
-    const jobs: CronJobStatusDto[] = []
-    for (const j of jobInfos) {
-      /* DB 不可用时跳过日志查询，保证监控页在故障时仍可打开（展示 down 状态） */
-      const last = dbUp
-        ? await this.prisma.schedulerLog.findFirst({
-            where: { jobName: j.name },
-            orderBy: { startedAt: 'desc' },
-          })
-        : null
-      jobs.push({
+    /* 一次聚合 + 一次取回各任务最近日志（避免逐任务 N+1）；DB 不可用时跳过，保证监控页在故障时仍可打开 */
+    const lastByJob = dbUp && jobInfos.length > 0
+      ? await this.latestLogsByJob(jobInfos.map((j) => j.name))
+      : new Map<string, SchedulerLog>()
+    const jobs: CronJobStatusDto[] = jobInfos.map((j) => {
+      const last = lastByJob.get(j.name)
+      return {
         name: j.name,
         cron: j.cron,
         enabled: j.enabled,
         lastRunAt: last?.startedAt ?? '',
         lastRunDurationMs: last?.durationMs ?? 0,
         lastResult: last ? (last.status === 'error' ? 'failed' : 'success') : 'unknown',
-      })
-    }
+      }
+    })
 
     const status: ServiceHealthDto['status'] = dbUp && redisUp ? 'healthy' : dbUp ? 'degraded' : 'down'
 
@@ -117,6 +117,19 @@ export class MonitorService {
       redis: redisInfo,
       jobs,
     }
+  }
+
+  /** 各任务最近一条执行日志：一次 groupBy 取最大 startedAt（时间字符串按字典序即时序）+ 一次取回对应行 */
+  private async latestLogsByJob(jobNames: string[]): Promise<Map<string, SchedulerLog>> {
+    const latest = await this.prisma.schedulerLog.groupBy({
+      by: ['jobName'],
+      where: { jobName: { in: jobNames } },
+      _max: { startedAt: true },
+    })
+    const rows = await this.prisma.schedulerLog.findMany({
+      where: { OR: latest.map((g) => ({ jobName: g.jobName, startedAt: g._max.startedAt ?? '' })) },
+    })
+    return new Map(rows.map((log) => [log.jobName, log]))
   }
 
   async cronLogs(jobName?: string): Promise<CronRunLogDto[]> {

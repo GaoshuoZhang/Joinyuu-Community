@@ -14,7 +14,7 @@ describe('DemandRespondForm', () => {
 
   it('填写后派发响应事件（含所选身份）', async () => {
     const individual: UserIdentity = { type: 'individual' }
-    const company: UserIdentity = { type: 'community_enterprise', enterpriseId: 'E2001', enterpriseName: '芯启半导体' }
+    const company: UserIdentity = { type: 'community_enterprise', enterpriseId: 'E9001', enterpriseName: '芯启半导体' }
     const wrapper = mount(DemandRespondForm, {
       props: { identities: [individual, company], userName: '张三', submitting: false },
     })
@@ -29,7 +29,7 @@ describe('DemandRespondForm', () => {
   it('社区个体出现后隐藏个人用户并清理旧选择', async () => {
     const individual: UserIdentity = { type: 'individual' }
     const communityIndividual: UserIdentity = { type: 'community_individual' }
-    const company: UserIdentity = { type: 'community_enterprise', enterpriseId: 'E2001', enterpriseName: '芯启半导体' }
+    const company: UserIdentity = { type: 'community_enterprise', enterpriseId: 'E9001', enterpriseName: '芯启半导体' }
     const wrapper = mount(DemandRespondForm, {
       props: { identities: [individual], userName: '张三', submitting: false },
     })

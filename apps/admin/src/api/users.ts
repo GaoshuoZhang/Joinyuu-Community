@@ -37,9 +37,11 @@ export async function fetchUsers(query: UserQuery): Promise<PageResult<User>> {
 }
 
 export interface CreateUserPayload {
+  /** 用户名（选填：留空由服务端自动分配） */
+  username?: string
   nickname: string
   phone: string
-  email: string
+  email?: string
   gender: User['gender']
   realName?: string
   citizenId?: string
@@ -155,6 +157,8 @@ export async function fetchUserRecords(id: string): Promise<UserRecords> {
 
 /* PUT /api/admin/users/:id — 编辑用户资料 */
 export interface UserProfilePayload {
+  /** 用户名（全站唯一，字母开头 4-20 位，仅字母/数字/下划线） */
+  username?: string
   nickname?: string
   phone?: string
   email?: string

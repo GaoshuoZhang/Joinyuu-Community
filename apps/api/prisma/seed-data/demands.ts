@@ -73,7 +73,7 @@ export const demands: Demand[] = [
   {
     id: 'D4003',
     title: '天使轮财务尽调支持',
-    category: '智慧交通',
+    category: '法务财务',
     demandType: 'investment',
     cooperationNeed: '天使轮融资财务尽调支持与投资人对接，4 周内完成数据整理与尽调现场配合',
     returnOffer: '财务顾问费与后续轮次优先合作机会',

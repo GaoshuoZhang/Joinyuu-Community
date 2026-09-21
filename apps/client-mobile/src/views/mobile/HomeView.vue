@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, ref, watch } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { Button, Icon, NoticeBar, PullDownRefresh, Search, Toast } from 'tdesign-mobile-vue'
 import { useAuthStore } from '@/stores/auth'
@@ -23,7 +23,7 @@ import HomeAnnouncementSheet from '@/components/home/HomeAnnouncementSheet.vue'
 import type { FeedItem } from '@/components/home/HomeFeedSection.vue'
 import { demandDateText } from '@/constants/demand'
 import type { HomeAnnouncement } from '@/types'
-import { formatLocalDateTime, formatZhNumber } from '@/utils/format'
+import { formatLocalDate, formatZhNumber } from '@/utils/format'
 
 useAnimSuppress()
 
@@ -34,32 +34,40 @@ const auth = useAuthStore()
 const notices = useNoticesStore()
 const { data: feed, loading, error, run } = useAsyncList(fetchHomeFeed)
 
-/* 最新需求 / 最新资讯卡片数据 */
+/* 最新需求 / 最新资讯卡片数据
+ * v45 首页信息层级：内容区每块只展示前 2 条，其余交给「更多」——避免首屏被长列表挤满。 */
+const HOME_FEED_LIMIT = 2
 const demandItems = computed<FeedItem[]>(() =>
-  (feed.value?.latestDemands ?? []).map((d) => ({
-    key: d.id,
-    title: d.title,
-    tag: d.categoryLabel,
-    path: `/demands/${d.id}`,
-    metas: [
-      { text: d.publisherName },
-      ...(demandDateText(d) ? [{ text: demandDateText(d) as string }] : []),
-      { text: `${formatZhNumber(d.responseCount)} 人响应`, accent: true },
-    ],
-  })),
+  (feed.value?.latestDemands ?? [])
+    .map((d) => ({
+      key: d.id,
+      title: d.title,
+      tag: d.categoryLabel,
+      path: `/demands/${d.id}`,
+      metas: [
+        { text: d.publisherName },
+        ...(demandDateText(d) ? [{ text: demandDateText(d) as string }] : []),
+        { text: `${formatZhNumber(d.responseCount)} 人响应`, accent: true },
+      ],
+    }))
+    .slice(0, HOME_FEED_LIMIT),
 )
 const articleItems = computed<FeedItem[]>(() =>
-  (feed.value?.topArticles ?? []).map((a) => ({
-    key: a.id,
-    title: a.title,
-    tag: a.columnLabel,
-    path: `/articles/${a.id}`,
-    metas: [{ text: formatLocalDateTime(a.publishedAt) }, { text: `${formatZhNumber(a.views)} 次浏览` }],
-  })),
+  (feed.value?.topArticles ?? [])
+    .map((a) => ({
+      key: a.id,
+      title: a.title,
+      tag: a.columnLabel,
+      path: `/articles/${a.id}`,
+      /* v45 首页信息流的时间只到日粒度：时分对「最新资讯」的浏览决策没有帮助 */
+      metas: [{ text: formatLocalDate(a.publishedAt) }, { text: `${formatZhNumber(a.views)} 次浏览` }],
+    }))
+    .slice(0, HOME_FEED_LIMIT),
 )
 
 onMounted(() => {
-  config.ensureLoaded()
+  /* 配置拉取失败不阻塞页面：沿用默认功能开关 */
+  void config.ensureLoaded().catch(() => {})
   run()
 })
 
@@ -115,7 +123,7 @@ async function loadActivation() {
       { key: 'realname', label: '完成实名认证', done: !!me.realNameVerified, path: '/me/realname' },
       { key: 'publish', label: '发布一条需求', done: demands.length > 0, path: '/demands/new' },
       { key: 'respond', label: '响应一次需求', done: responses.length > 0, path: '/projects' },
-      { key: 'enroll', label: '报名一场活动', done: enrollments.length > 0, path: '/plaza?tab=events' },
+      { key: 'enroll', label: '报名一场活动', done: enrollments.list.length > 0, path: '/plaza?tab=events' },
     ]
   } catch {
     if (auth.uid === uid) activationSteps.value = []
@@ -124,6 +132,7 @@ async function loadActivation() {
 
 /* v39：下拉刷新 */
 const refreshing = ref(false)
+let refreshTimer: ReturnType<typeof setTimeout> | null = null
 
 async function onRefresh() {
   refreshing.value = true
@@ -132,11 +141,18 @@ async function onRefresh() {
     await loadActivation()
     if (auth.isLogged) await notices.refreshUnread()
   } finally {
-    setTimeout(() => {
+    if (refreshTimer) clearTimeout(refreshTimer)
+    refreshTimer = setTimeout(() => {
       refreshing.value = false
+      refreshTimer = null
     }, 300)
   }
 }
+
+onBeforeUnmount(() => {
+  if (refreshTimer) clearTimeout(refreshTimer)
+  refreshTimer = null
+})
 
 function dismissActivation() {
   if (!auth.uid) return
@@ -227,6 +243,7 @@ const quickEntries = computed(() => {
       <EmptyBlock v-else-if="error" :text="error" action-text="重试" @action="run" />
 
       <template v-else>
+        <!-- 唯一运营位：轮播 -->
         <HomeBanner
           v-if="feed?.carouselEnabled !== false && feed?.banners?.length"
           :banners="feed.banners"
@@ -234,27 +251,8 @@ const quickEntries = computed(() => {
           @select="onBannerClick"
         />
 
-        <Button v-if="config.config.demandOpen" theme="primary" block size="large" class="publish-entry pressable" @click="goPublish">
-          <template #icon><Icon aria-hidden="true" name="flag" size="20px" /></template>
-          {{ auth.isLogged ? '发布需求 · 让社区一起帮你完成' : '登录后发布需求' }}
-          <template #suffix><Icon aria-hidden="true" name="chevron-right" size="16px" /></template>
-        </Button>
-
-        <ActivationChecklist
-          v-if="showActivation"
-          :steps="visibleActivationSteps"
-          @dismiss="dismissActivation"
-        />
-
-        <HomeEntryGrids
-          :features="featureEntries"
-          :quick="quickEntries"
-          @open="(path: string) => router.push(path)"
-        />
-
-        <HotEventStrip
-          :events="feed?.hotEvents ?? []"
-        />
+        <!-- v45 内容优先：先让用户看到社区里有什么，再出现引导与入口 -->
+        <HotEventStrip :events="feed?.hotEvents ?? []" />
 
         <HomeFeedSection
           title="最新需求"
@@ -263,11 +261,31 @@ const quickEntries = computed(() => {
           more-path="/projects"
         />
 
+        <!-- 发布入口放在需求语境之后（先浏览、再发布），并降为描边次级按钮，不与轮播争焦点 -->
+        <Button v-if="config.config.demandOpen" theme="primary" variant="outline" block size="large" class="publish-entry pressable" @click="goPublish">
+          <template #icon><Icon aria-hidden="true" name="flag" size="20px" /></template>
+          {{ auth.isLogged ? '发布需求 · 让社区一起帮你完成' : '登录后发布需求' }}
+          <template #suffix><Icon aria-hidden="true" name="chevron-right" size="16px" /></template>
+        </Button>
+
         <HomeFeedSection
           title="最新资讯"
           :items="articleItems"
           empty-text="暂无最新资讯"
           more-path="/plaza?tab=articles"
+        />
+
+        <HomeEntryGrids
+          :features="featureEntries"
+          :quick="quickEntries"
+          @open="(path: string) => router.push(path)"
+        />
+
+        <!-- 新手任务收在内容之后：先看到内容，再决定是否开始引导 -->
+        <ActivationChecklist
+          v-if="showActivation"
+          :steps="visibleActivationSteps"
+          @dismiss="dismissActivation"
         />
       </template>
     </div>

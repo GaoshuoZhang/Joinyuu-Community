@@ -116,13 +116,9 @@ export async function fetchLeasePrint(id: string): Promise<{ title: string; gene
   return httpGet<{ title: string; generatedAt: string; lease: Lease; clauses: string[] }>(`/leases/${id}/print`)
 }
 
-/* 租约详情：后端无 by-id 端点，列表查找（租约量级小，与打印页同口径） */
-export async function fetchLease(id: string): Promise<Lease | null> {
-  try {
-    return await httpGet<Lease>(`/workstation-leases/${id}`)
-  } catch {
-    return null
-  }
+/* GET /api/admin/workstation-leases/:id — 租约详情（错误外抛，由页面区分 404 与其它失败） */
+export async function fetchLease(id: string): Promise<Lease> {
+  return httpGet<Lease>(`/workstation-leases/${id}`)
 }
 
 export interface LeasePayload {

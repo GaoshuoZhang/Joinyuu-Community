@@ -23,10 +23,14 @@ export class MeController {
     return this.me.updateMe(this.uid(req), dto)
   }
 
-  /** 我的积分流水（分页倒序，含 balance） */
+  /** 我的积分流水（分页倒序，含 balance；keyword 可选，匹配事由/来源） */
   @Get('points-records')
-  pointsRecords(@Req() req: AppAuthenticatedRequest, @Query() query: PageQueryDto) {
-    return this.me.pointsRecords(this.uid(req), query.page, query.pageSize)
+  pointsRecords(
+    @Req() req: AppAuthenticatedRequest,
+    @Query() query: PageQueryDto,
+    @Query('keyword') keyword?: string,
+  ) {
+    return this.me.pointsRecords(this.uid(req), query.page, query.pageSize, keyword)
   }
 
   /** 我的经验与等级（走社区个体个人维度） */
@@ -35,11 +39,11 @@ export class MeController {
     return this.me.experienceRecords(this.uid(req), identity)
   }
 
-  /** 登录态修改密码 */
+  /** 登录态修改密码（成功后强制退出全部会话，需重新登录） */
   @HttpCode(200)
   @Post('change-password')
   changePassword(@Req() req: AppAuthenticatedRequest, @Body() dto: ChangePasswordDto) {
-    return this.me.changePassword(this.uid(req), req.user?.jti ?? '', dto)
+    return this.me.changePassword(this.uid(req), dto)
   }
 
   /** 提交账号注销申请（7 天冷静期） */

@@ -106,6 +106,7 @@ const editVisible = ref(false)
 const editSaving = ref(false)
 const editFormRef = ref()
 const editForm = reactive({
+  username: '',
   nickname: '',
   phone: '',
   email: '',
@@ -114,20 +115,37 @@ const editForm = reactive({
   citizenId: '',
   bio: '',
 })
+/* 编辑弹窗中处于遮罩占位的值：与表单当前值一致时视为「未修改」，提交时回填原值而非写入遮罩文本 */
+const editMaskedPhone = ref('')
+const editMaskedCitizenId = ref('')
 
 const editRules: FormProps['rules'] = {
-  nickname: [{ required: true, message: '请填写昵称', trigger: 'blur' }],
+  username: [
+    { required: true, message: '请填写用户名', trigger: 'submit' },
+    {
+      pattern: /^[A-Za-z][A-Za-z0-9_]{3,19}$/,
+      message: '用户名需以字母开头，4-20 位，仅可包含字母、数字与下划线',
+      trigger: 'submit',
+    },
+  ],
+  nickname: [{ required: true, message: '请填写昵称', trigger: 'submit' }],
 }
 
 function openEdit() {
   if (!user.value) return
+  editForm.username = user.value.username
   editForm.nickname = user.value.nickname
-  editForm.phone = user.value.phone
+  /* 未显式「显示敏感信息」时以遮罩占位回填，避免明文出现在弹窗（提交时未修改则回填原值） */
+  editMaskedPhone.value = !sensitiveVisible.value && user.value.phone ? maskPhone(user.value.phone) : ''
+  editForm.phone = editMaskedPhone.value || (user.value.phone ?? '')
   editForm.email = user.value.email
   /* 历史中文值（男/女）在打开表单时归一为客户端规范值，保存后统一写入 male/female/unknown */
   editForm.gender = normalizeUserGender(user.value.gender)
   editForm.realName = user.value.realName ?? ''
-  editForm.citizenId = user.value.citizenId ?? ''
+  editMaskedCitizenId.value = !sensitiveVisible.value && user.value.citizenId
+    ? maskCitizenId(user.value.citizenId)
+    : ''
+  editForm.citizenId = editMaskedCitizenId.value || (user.value.citizenId ?? '')
   editForm.bio = user.value.bio
   editVisible.value = true
   nextTick(() => editFormRef.value?.clearValidate())
@@ -139,13 +157,23 @@ async function onConfirmEdit() {
   if (!user.value) return
   editSaving.value = true
   try {
+    /* 遮罩占位未被修改（值与占位一致）时回填原值，避免把「138****0000」写入库 */
+    const phone =
+      editMaskedPhone.value && editForm.phone === editMaskedPhone.value
+        ? (user.value.phone ?? '')
+        : editForm.phone
+    const citizenId =
+      editMaskedCitizenId.value && editForm.citizenId === editMaskedCitizenId.value
+        ? (user.value.citizenId ?? '')
+        : editForm.citizenId
     const payload: UserProfilePayload = {
+      username: editForm.username.trim(),
       nickname: editForm.nickname,
-      phone: editForm.phone,
+      phone,
       email: editForm.email,
       gender: editForm.gender,
       realName: editForm.realName,
-      citizenId: editForm.citizenId,
+      citizenId,
       bio: editForm.bio,
     }
     await updateUser(user.value.uid, payload)
@@ -169,8 +197,8 @@ const freezeForm = reactive({
 })
 
 const freezeRules: FormProps['rules'] = {
-  reason: [{ required: true, message: '请填写冻结原因', trigger: 'blur' }],
-  until: [{ required: true, message: '请选择冻结期限或开启长期冻结', trigger: 'change' }],
+  reason: [{ required: true, message: '请填写冻结原因', trigger: 'submit' }],
+  until: [{ required: true, message: '请选择冻结期限或开启长期冻结', trigger: 'submit' }],
 }
 
 /* 长期开关：开启后清空冻结期限（期限项随之隐藏） */
@@ -239,29 +267,26 @@ const resetPwdSaving = ref(false)
 const resetPwdFormRef = ref()
 const resetPwdForm = reactive({ password: '', confirmPassword: '' })
 
-/* 确认密码一致性校验（TDesign 自定义校验器签名） */
+/* 确认密码一致性校验（TDesign 自定义校验器第二参只有 { formData, name }，字段值须从 formData 读取） */
 function validateConfirmPassword(
   _value: unknown,
-  params?: {
-    formData: Record<string, unknown>
-    name: string
-    password?: string
-    confirmPassword?: string
-  },
+  params?: { formData: Record<string, unknown>; name: string },
 ): CustomValidateResolveType {
-  if (params!.confirmPassword !== params!.password) return { result: false, message: '两次输入的密码不一致' }
+  if (params?.formData?.confirmPassword !== params?.formData?.password) {
+    return { result: false, message: '两次输入的密码不一致' }
+  }
   return true
 }
 
 const resetPwdRules: FormProps['rules'] = {
   password: [
-    { required: true, message: '请输入新密码', trigger: 'blur' },
-    { min: 8, message: '密码至少 8 位', trigger: 'blur' },
-    { pattern: /^(?=.*[A-Za-z])(?=.*\d).+$/, message: '密码需同时包含字母和数字', trigger: 'blur' },
+    { required: true, message: '请输入新密码', trigger: 'submit' },
+    { min: 8, message: '密码至少 8 位', trigger: 'submit' },
+    { pattern: /^(?=.*[A-Za-z])(?=.*\d).+$/, message: '密码需同时包含字母和数字', trigger: 'submit' },
   ],
   confirmPassword: [
-    { required: true, message: '请再次输入新密码', trigger: 'blur' },
-    { validator: validateConfirmPassword },
+    { required: true, message: '请再次输入新密码', trigger: 'submit' },
+    { validator: validateConfirmPassword, trigger: 'submit' },
   ],
 }
 
@@ -556,6 +581,7 @@ onMounted(async () => {
               <span class="profile-name">{{ user.nickname }}</span>
               <StatusTag entity="user" :value="user.status" />
             </div>
+            <span class="profile-id">用户名: <t-tag class="id-tag" size="small" variant="light">{{ user.username }}</t-tag></span>
             <span class="profile-id">用户ID: <t-tag class="id-tag" size="small" variant="light">{{ user.uid }}</t-tag></span>
             <IdentityTags v-if="headerIdentities.length" :identities="headerIdentities" :show-id="false" />
           </div>
@@ -580,8 +606,22 @@ onMounted(async () => {
         </div>
 
         <t-descriptions :column="3" bordered table-layout="auto" class="profile-desc">
-          <t-descriptions-item label="联系电话">{{ sensitiveVisible ? user.phone : maskPhone(user.phone) }}</t-descriptions-item>
-          <t-descriptions-item label="邮箱">{{ sensitiveVisible ? user.email : maskEmail(user.email) }}</t-descriptions-item>
+          <t-descriptions-item label="联系电话">
+            <span class="channel-value">
+              {{ sensitiveVisible ? (user.phone || '—') : maskPhone(user.phone) }}
+              <t-tag :theme="user.phoneVerified ? 'success' : 'default'" variant="light" size="small">
+                {{ user.phoneVerified ? '已验证' : '未验证' }}
+              </t-tag>
+            </span>
+          </t-descriptions-item>
+          <t-descriptions-item label="邮箱">
+            <span class="channel-value">
+              {{ sensitiveVisible ? (user.email || '—') : maskEmail(user.email) }}
+              <t-tag :theme="user.emailVerified ? 'success' : 'default'" variant="light" size="small">
+                {{ user.emailVerified ? '已验证' : '未验证' }}
+              </t-tag>
+            </span>
+          </t-descriptions-item>
           <t-descriptions-item label="性别">{{ userGenderLabel(user.gender) }}</t-descriptions-item>
           <t-descriptions-item label="实名状态">
             <t-tag v-if="user.realName && user.citizenId" theme="success" variant="light" size="small">已实名</t-tag>
@@ -1125,6 +1165,9 @@ onMounted(async () => {
         </div>
       </template>
       <t-form ref="editFormRef" :data="editForm" :rules="editRules" label-align="top">
+        <t-form-item label="用户名" name="username">
+          <t-input v-model="editForm.username" name="username" autocomplete="off" placeholder="请输入用户名…" />
+        </t-form-item>
         <t-form-item label="昵称" name="nickname">
           <t-input v-model="editForm.nickname" name="nickname" autocomplete="off" placeholder="请输入昵称…" />
         </t-form-item>
@@ -1290,6 +1333,12 @@ onMounted(async () => {
 
 .profile-desc {
   margin-bottom: 16px;
+}
+
+.channel-value {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
 }
 
 .profile-bio {

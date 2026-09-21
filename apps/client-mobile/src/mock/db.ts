@@ -109,7 +109,15 @@ export const dicts: Record<string, { code: string; label: string }[]> = {
 
 export interface MockAccount {
   uid: string
+  /** 登录标识（用户可修改，全站唯一） */
+  username: string
+  /** 手机号（未绑定时为空串） */
   phone: string
+  /** 邮箱（未绑定时为空） */
+  email?: string
+  /** 已验证可信渠道标记（可用于找回密码/接收通知） */
+  phoneVerified?: boolean
+  emailVerified?: boolean
   password: string
   nickname: string
   status: 'active' | 'frozen'
@@ -131,7 +139,11 @@ export interface MockAccount {
 export const accounts: MockAccount[] = [
   {
     uid: 'U1001',
+    username: 'user_1001',
     phone: '13800000001',
+    email: 'chenyu@example.com',
+    phoneVerified: true,
+    emailVerified: true,
     password: 'client123',
     nickname: '陈屿',
     status: 'active',
@@ -146,7 +158,11 @@ export const accounts: MockAccount[] = [
   },
   {
     uid: 'U1004',
+    username: 'user_1004',
     phone: '13800000002',
+    email: 'sumingyuan@example.com',
+    phoneVerified: true,
+    emailVerified: true,
     password: 'client123',
     nickname: '苏明远',
     status: 'active',
@@ -154,7 +170,7 @@ export const accounts: MockAccount[] = [
     identities: [
       { type: 'individual' },
       { type: 'community_individual', level: 5, levelName: '领航', experience: 1320 },
-      { type: 'community_enterprise', enterpriseId: 'E2001', enterpriseName: '芯启半导体', enterpriseRole: '创始人' },
+      { type: 'community_enterprise', enterpriseId: 'E9001', enterpriseName: '芯启半导体', enterpriseRole: '创始人' },
     ],
     registeredAt: '2025-03-15 14:20',
     gender: 'male',
@@ -165,14 +181,18 @@ export const accounts: MockAccount[] = [
   },
   {
     uid: 'U1006',
+    username: 'user_1006',
     phone: '13800000003',
+    email: 'linwan@example.com',
+    phoneVerified: true,
+    emailVerified: true,
     password: 'client123',
     nickname: '林晚',
     status: 'active',
     points: 860,
     identities: [
       { type: 'individual' },
-      { type: 'community_enterprise', enterpriseId: 'E2004', enterpriseName: '木白设计工作室', enterpriseRole: '总经理' },
+      { type: 'community_enterprise', enterpriseId: 'E9004', enterpriseName: '木白设计工作室', enterpriseRole: '总经理' },
     ],
     registeredAt: '2025-07-23 10:05',
     gender: 'female',
@@ -183,7 +203,11 @@ export const accounts: MockAccount[] = [
   },
   {
     uid: 'U1014',
+    username: 'user_1014',
     phone: '13800000004',
+    email: 'zhoumushen@example.com',
+    phoneVerified: true,
+    emailVerified: true,
     password: 'client123',
     nickname: '周慕深',
     status: 'active',
@@ -198,7 +222,11 @@ export const accounts: MockAccount[] = [
   },
   {
     uid: 'U1015',
+    username: 'user_1015',
     phone: '13800000005',
+    email: 'newresident@example.com',
+    phoneVerified: true,
+    emailVerified: true,
     password: 'client123',
     nickname: '新居民',
     status: 'active',
@@ -209,7 +237,11 @@ export const accounts: MockAccount[] = [
   },
   {
     uid: 'U1009',
+    username: 'user_1009',
     phone: '13800000009',
+    email: 'frozen@example.com',
+    phoneVerified: true,
+    emailVerified: true,
     password: 'client123',
     nickname: '被冻结用户',
     status: 'frozen',
@@ -408,11 +440,13 @@ export const ordersByUid: Record<string, MyOrder[]> = {
 /* ---------- 空间预约 ---------- */
 
 export const spaces: Space[] = [
-  { id: 'S1001', name: '岛屿咖啡区', type: '公共活动区', location: '一楼东侧', capacity: 40, equipment: ['咖啡机', '白板'], needApproval: false, openTime: '08:00', closeTime: '22:00', status: 'open', maxHours: 4, advanceDays: 30, openHours: [{ start: '08:00', end: '22:00' }], description: '开放活动区，适合小型分享与自由交流，咖啡区营业时间内可直接使用。' },
-  { id: 'S1002', name: '共享会议室 A', type: '会议室', location: '二楼 201', capacity: 12, equipment: ['投影', '视频会议', '白板'], needApproval: true, openTime: '09:00', closeTime: '21:00', status: 'open', maxHours: 4, advanceDays: 30, openHours: [{ start: '09:00', end: '21:00' }], description: '标准会议室，配备投影与视频会议设备，需提前预约并由运营审核。' },
-  { id: 'S1003', name: '聚屿路演厅', type: '路演厅', location: '三楼 301', capacity: 120, equipment: ['舞台灯光', '音响', '直播机位'], needApproval: true, openTime: '09:00', closeTime: '21:00', status: 'open', maxHours: 4, advanceDays: 30, openHours: [{ start: '09:00', end: '21:00' }], description: '大型活动场地，含舞台灯光、音响与直播机位，适合路演、发布会等。' },
-  { id: 'S1004', name: '共享办公位区', type: '办公区', location: '二楼 203', capacity: 30, equipment: ['升降桌', '显示器'], needApproval: false, openTime: '08:00', closeTime: '22:00', status: 'open', maxHours: 4, advanceDays: 30, openHours: [{ start: '08:00', end: '22:00' }], description: '开放办公位区，含升降桌与显示器，无需审核即可预约使用。' },
-  { id: 'S1005', name: '共享会议室 B', type: '会议室', location: '二楼 202', capacity: 8, equipment: ['投影', '白板'], needApproval: true, openTime: '09:00', closeTime: '21:00', status: 'maintenance', maxHours: 2, advanceDays: 14, openHours: [{ start: '09:00', end: '21:00' }], description: '小型会议室，维护中暂不可预约（列表与详情均不展示）。' },
+  /* 与真实种子同 ID 的实体（S1002 共享会议室 A）规则字段对齐 apps/api/prisma/seed-data/spaces.ts；
+   * mock 独有空间改用 S9xxx 段，避免与真实种子同 ID 但不同实体冲突。 */
+  { id: 'S9001', name: '岛屿咖啡区', type: '公共活动区', location: '一楼东侧', capacity: 40, equipment: ['咖啡机', '白板'], needApproval: false, openTime: '08:00', closeTime: '22:00', status: 'open', maxHours: 4, advanceDays: 30, openHours: [{ start: '08:00', end: '22:00' }], description: '开放活动区，适合小型分享与自由交流，咖啡区营业时间内可直接使用。' },
+  { id: 'S1002', name: '共享会议室 A', type: '会议室', location: '二楼 201', capacity: 12, equipment: ['投影', '视频会议', '白板'], needApproval: true, openTime: '09:00', closeTime: '18:00', status: 'open', maxHours: 4, advanceDays: 7, openHours: [{ start: '09:00', end: '18:00' }], description: '标准会议室，配备投影与视频会议设备，需提前预约并由运营审核。' },
+  { id: 'S9003', name: '聚屿路演厅', type: '路演厅', location: '三楼 301', capacity: 120, equipment: ['舞台灯光', '音响', '直播机位'], needApproval: true, openTime: '09:00', closeTime: '21:00', status: 'open', maxHours: 4, advanceDays: 30, openHours: [{ start: '09:00', end: '21:00' }], description: '大型活动场地，含舞台灯光、音响与直播机位，适合路演、发布会等。' },
+  { id: 'S9004', name: '共享办公位区', type: '办公区', location: '二楼 203', capacity: 30, equipment: ['升降桌', '显示器'], needApproval: false, openTime: '08:00', closeTime: '22:00', status: 'open', maxHours: 4, advanceDays: 30, openHours: [{ start: '08:00', end: '22:00' }], description: '开放办公位区，含升降桌与显示器，无需审核即可预约使用。' },
+  { id: 'S9005', name: '共享会议室 B', type: '会议室', location: '二楼 202', capacity: 8, equipment: ['投影', '白板'], needApproval: true, openTime: '09:00', closeTime: '21:00', status: 'maintenance', maxHours: 2, advanceDays: 14, openHours: [{ start: '09:00', end: '21:00' }], description: '小型会议室，维护中暂不可预约（列表与详情均不展示）。' },
 ]
 
 export const reservationsByUid: Record<string, SpaceReservation[]> = {
@@ -481,8 +515,9 @@ export const myArticlesByUid: Record<string, MySubmittedArticle[]> = {
 /* ---------- 企业名片（原「展示页」更名，含成员与联系人） ---------- */
 
 export const enterprises: EnterpriseRecord[] = [
+  /* mock 企业改用 E9xxx 段：真实种子企业 ID 段表示不同企业，避免同 ID 不同实体冲突。 */
   {
-    id: 'E2001', name: '芯启半导体', industry: '集成电路', size: '50-99 人',
+    id: 'E9001', name: '芯启半导体', industry: '集成电路', size: '50-99 人',
     foundedAt: '2019-05', website: 'https://xinqi.example.com', address: '聚屿社区 3 号楼 5 层',
     services: '车规级芯片设计、验证与量产支持',
     advantages: '核心团队来自头部芯片公司，具备完整的车规认证经验，已服务多家主机厂与 Tier1 供应商。',
@@ -494,7 +529,7 @@ export const enterprises: EnterpriseRecord[] = [
     ],
   },
   {
-    id: 'E2004', name: '木白设计工作室', industry: '设计', size: '5-9 人',
+    id: 'E9004', name: '木白设计工作室', industry: '设计', size: '5-9 人',
     foundedAt: '2016-03', website: 'https://mubai.example.com', address: '聚屿社区 2 号楼 201',
     services: '品牌设计、空间设计与施工监理',
     advantages: '深耕本地创业社区，作品覆盖多个公共空间与社区品牌，交付口碑稳定。',
@@ -506,7 +541,7 @@ export const enterprises: EnterpriseRecord[] = [
     ],
   },
   {
-    id: 'E2002', name: '云径数据', industry: '数据服务', size: '20-49 人',
+    id: 'E9002', name: '云径数据', industry: '数据服务', size: '20-49 人',
     foundedAt: '2018-09', website: 'https://yunjing.example.com', address: '软件园 B 座 12 层',
     services: '数据中台建设与小程序联合研发',
     advantages: '数据工程团队 20+，具备多行业数据中台交付经验，支持联合研发与长期运维。',
@@ -532,12 +567,12 @@ export const leases: MockLeaseFixture[] = [
     storedStatus: 'active', monthlyRent: 900, rentPeriod: 'month', contactName: '陈屿', contactPhone: '13800000001',
   },
   {
-    id: 'LSM2001', renterId: 'E2001', renterType: 'enterprise', renterName: '芯启半导体',
+    id: 'LSM2001', renterId: 'E9001', renterType: 'enterprise', renterName: '芯启半导体',
     workstationLabels: ['B-202', 'A-10'], startDate: '2025-03-20', endDate: '', longTerm: true,
     storedStatus: 'active', monthlyRent: 18000, rentPeriod: 'month', contactName: '苏明远', contactPhone: '13800000002',
   },
   {
-    id: 'LSM2002', renterId: 'E2001', renterType: 'enterprise', renterName: '芯启半导体',
+    id: 'LSM2002', renterId: 'E9001', renterType: 'enterprise', renterName: '芯启半导体',
     workstationLabels: ['A-03'], startDate: '2024-03-20', endDate: '2025-03-19', longTerm: false,
     storedStatus: 'terminated', monthlyRent: 1200, rentPeriod: 'month', contactName: '苏明远', contactPhone: '13800000002',
     deletedAt: '2025-04-01 10:00', note: '归档记录不应下发管理备注',
@@ -770,7 +805,7 @@ export const experienceByUid: Record<string, ExperienceProfile> = {
 
 /** 企业经验（社区企业身份维度；身份隔离：企业经验与个人经验互不相通） */
 export const enterpriseExperienceByEid: Record<string, ExperienceProfile> = {
-  E2001: {
+  E9001: {
     identityLabel: '社区企业', level: 2, levelName: '成长', currentExperience: 680, currentLevelThreshold: 300, nextLevelThreshold: 1000,
     records: [
       { id: 'EX6101', delta: +200, balance: 680, reason: '联合立项：车规芯片验证项目', at: '2026-08-26 15:00' },
@@ -778,7 +813,7 @@ export const enterpriseExperienceByEid: Record<string, ExperienceProfile> = {
       { id: 'EX6001', delta: +400, balance: 400, reason: '首次入驻社区企业', at: '2026-05-20 10:00' },
     ],
   },
-  E2004: {
+  E9004: {
     identityLabel: '社区企业', level: 1, levelName: '初创', currentExperience: 260, currentLevelThreshold: 0, nextLevelThreshold: 300,
     records: [
       { id: 'EX7008', delta: +120, balance: 260, reason: '社区公共空间设计合作', at: '2026-08-12 11:00' },
@@ -1037,9 +1072,44 @@ export function nextInvitationId(): string {
   return nextMockId('EI')
 }
 
+/** [MOCK-ONLY] 账号落盘快照字段白名单：排除 password / realName / citizenId 等敏感字段。 */
+type PersistedMockAccount = Pick<MockAccount,
+  'uid' | 'username' | 'phone' | 'email' | 'phoneVerified' | 'emailVerified'
+  | 'nickname' | 'status' | 'points' | 'identities' | 'registeredAt' | 'gender' | 'bio' | 'avatar' | 'agreementAt'>
+
+/** 白名单导出：仅落盘业务必需字段，明文密码与实名信息保留在内存态不落盘。 */
+function toPersistedAccount(account: MockAccount): PersistedMockAccount {
+  return {
+    uid: account.uid,
+    username: account.username,
+    phone: account.phone,
+    email: account.email,
+    phoneVerified: account.phoneVerified,
+    emailVerified: account.emailVerified,
+    nickname: account.nickname,
+    status: account.status,
+    points: account.points,
+    identities: account.identities,
+    registeredAt: account.registeredAt,
+    gender: account.gender,
+    bio: account.bio,
+    avatar: account.avatar,
+    agreementAt: account.agreementAt,
+  }
+}
+
+/** 白名单回填：敏感字段不落盘——seed 内存态（演示账号密码/实名）保持不变，新增账号密码置空（登录仅校验非空）。 */
+function restoreAccounts(saved: PersistedMockAccount[]): void {
+  const seedByUid = new Map(accounts.map((account) => [account.uid, account]))
+  replaceArray(accounts, saved.map((account) => {
+    const seed = seedByUid.get(account.uid)
+    return seed ? Object.assign(seed, account) : { ...account, password: '' }
+  }))
+}
+
 type PersistedMockData = {
   appConfig: AppConfig
-  accounts: MockAccount[]
+  accounts: PersistedMockAccount[]
   demands: Demand[]
   responsesByUid: typeof responsesByUid
   events: MockCommunityEvent[]
@@ -1087,7 +1157,7 @@ function replaceRecord<T extends object>(target: T, source?: T): void {
 const persisted = readStoredMockData<Partial<PersistedMockData>>()
 if (persisted) {
   if (persisted.appConfig) Object.assign(appConfig, persisted.appConfig)
-  replaceArray(accounts, persisted.accounts)
+  if (persisted.accounts) restoreAccounts(persisted.accounts)
   replaceArray(demands, persisted.demands)
   replaceRecord(responsesByUid, persisted.responsesByUid)
   if (persisted.events) {
@@ -1129,7 +1199,7 @@ if (persisted) {
 }
 
 registerMockStateExporter((): PersistedMockData => ({
-  appConfig, accounts, demands, responsesByUid, events, enrollmentsByUid, goods, ordersByUid,
+  appConfig, accounts: accounts.map(toPersistedAccount), demands, responsesByUid, events, enrollmentsByUid, goods, ordersByUid,
   reservationsByUid, articles, myArticlesByUid, enterprises, leases, enterpriseExitApplications,
   enterpriseInvitations, enterpriseTransferRequests,
   favoritesByUid, analyticsCounters,

@@ -37,11 +37,29 @@ const visibleColumns = computed(() => {
   return visibleColKeys.value.map((k) => byKey.get(k)).filter(Boolean)
 })
 
+/* 仅统计已发布文章（后端 pageSize 上限 100），逐页拉取后本地聚合；
+ * 上限 50 页（5000 条）防止异常大的总量拖垮页面 */
+const PAGE_SIZE = 100
+const MAX_PAGES = 50
+
 async function load() {
   loading.value = true
   try {
-    const res = await fetchArticles({ page: 1, pageSize: 100, sortBy: 'views', sortOrder: 'descend' })
-    list.value = res.list
+    const query = (page: number) => ({
+      page,
+      pageSize: PAGE_SIZE,
+      status: 'published' as const,
+      sortBy: 'views' as const,
+      sortOrder: 'descend' as const,
+    })
+    const first = await fetchArticles(query(1))
+    const all = [...first.list]
+    const pages = Math.min(Math.ceil(first.total / PAGE_SIZE), MAX_PAGES)
+    for (let p = 2; p <= pages; p++) {
+      const res = await fetchArticles(query(p))
+      all.push(...res.list)
+    }
+    list.value = all
     loadError.value = ''
   } catch (e) {
     loadError.value = e instanceof Error ? e.message : '数据加载失败'

@@ -81,27 +81,49 @@ export class MallService {
     if (query.category) where.category = this.resolveCategory(query.category)
     if (query.status) where.status = query.status
 
-    const [rows, total] = await Promise.all([
-      this.prisma.mallGoods.findMany({ where }),
+    /* 排序与计数、分页下发数据库 */
+    const field = query.sortBy ?? 'id'
+    const desc = query.sortOrder !== 'ascend'
+    const offset = (query.page - 1) * query.pageSize
+
+    if (field === 'id') {
+      /* Prisma orderBy 只能按字符串比较编号（G9/G10 会错序），故保留数值序：
+       * 仅取编号列在库内过滤后内存定位当页编号，再按编号批量取当页行，避免整行全表载入 */
+      const dir = desc ? -1 : 1
+      const [idRows, total] = await Promise.all([
+        this.prisma.mallGoods.findMany({ where, select: { id: true } }),
+        this.prisma.mallGoods.count({ where }),
+      ])
+      const pageIds = idRows
+        .map((row) => row.id)
+        .sort((a, b) => {
+          const av = Number(a.replace('G', ''))
+          const bv = Number(b.replace('G', ''))
+          return av < bv ? -1 * dir : av > bv ? 1 * dir : 0
+        })
+        .slice(offset, offset + query.pageSize)
+      const list = pageIds.length
+        ? await this.prisma.mallGoods.findMany({ where: { id: { in: pageIds } } })
+        : []
+      const pos = new Map(pageIds.map((id, index) => [id, index]))
+      list.sort((a, b) => (pos.get(a.id) ?? 0) - (pos.get(b.id) ?? 0))
+      return { list, total }
+    }
+
+    const [list, total] = await Promise.all([
+      this.prisma.mallGoods.findMany({
+        where,
+        orderBy: field === 'points' ? { points: desc ? 'desc' : 'asc' } : { createdAt: desc ? 'desc' : 'asc' },
+        skip: offset,
+        take: query.pageSize,
+      }),
       this.prisma.mallGoods.count({ where }),
     ])
-
-    const field = query.sortBy ?? 'id'
-    const dir = query.sortOrder === 'ascend' ? 1 : -1
-    const sorted = [...rows].sort((a, b) => {
-      const av = field === 'id' ? Number(a.id.replace('G', '')) : field === 'points' ? a.points : a.createdAt
-      const bv = field === 'id' ? Number(b.id.replace('G', '')) : field === 'points' ? b.points : b.createdAt
-      if (av < bv) return -1 * dir
-      if (av > bv) return 1 * dir
-      return 0
-    })
-
-    const start = (query.page - 1) * query.pageSize
-    return { list: sorted.slice(start, start + query.pageSize), total }
+    return { list, total }
   }
 
-  async createGoods(dto: GoodsPayloadDto): Promise<MallGoods> {
-    return this.prisma.mallGoods.create({
+  async createGoods(dto: GoodsPayloadDto, operator: string): Promise<MallGoods> {
+    const goods = await this.prisma.mallGoods.create({
       data: {
         id: await this.ids.next('G'),
         name: dto.name,
@@ -122,9 +144,18 @@ export class MallService {
         createdAt: formatNow(),
       },
     })
+
+    await this.audit.record({
+      module: '积分商城',
+      action: '新增商品',
+      target: `${goods.id} · ${goods.name}`,
+      after: { status: goods.status },
+      operator,
+    })
+    return goods
   }
 
-  async updateGoods(id: string, dto: GoodsPayloadDto): Promise<{ code: number }> {
+  async updateGoods(id: string, dto: GoodsPayloadDto, operator: string): Promise<{ code: number }> {
     const goods = await this.prisma.mallGoods.findFirst({ where: { id, deletedAt: null } })
     if (!goods) throw new NotFoundException('商品不存在')
 
@@ -149,6 +180,15 @@ export class MallService {
         orderIdentities: dto.orderIdentities ?? [],
         orderLevels: dto.orderLevels ?? [],
       },
+    })
+
+    await this.audit.record({
+      module: '积分商城',
+      action: '编辑商品',
+      target: `${goods.id} · ${goods.name}`,
+      before: { status: goods.status },
+      after: { status },
+      operator,
     })
     return { code: 0 }
   }
@@ -258,23 +298,45 @@ export class MallService {
     }
     if (query.status) where.status = query.status
 
+    /* 排序与计数、分页下发数据库 */
+    const field = query.sortBy ?? 'id'
+    const desc = query.sortOrder !== 'ascend'
+    const offset = (query.page - 1) * query.pageSize
+
+    if (field === 'id') {
+      /* Prisma orderBy 只能按字符串比较编号（RO9/RO10 会错序），故保留数值序：
+       * 仅取编号列在库内过滤后内存定位当页编号，再按编号批量取当页行，避免整行全表载入 */
+      const dir = desc ? -1 : 1
+      const [idRows, total] = await Promise.all([
+        this.prisma.redemptionOrder.findMany({ where, select: { id: true } }),
+        this.prisma.redemptionOrder.count({ where }),
+      ])
+      const pageIds = idRows
+        .map((row) => row.id)
+        .sort((a, b) => {
+          const av = Number(a.replace('RO', ''))
+          const bv = Number(b.replace('RO', ''))
+          return av < bv ? -1 * dir : av > bv ? 1 * dir : 0
+        })
+        .slice(offset, offset + query.pageSize)
+      const rows = pageIds.length
+        ? await this.prisma.redemptionOrder.findMany({ where: { id: { in: pageIds } } })
+        : []
+      const pos = new Map(pageIds.map((id, index) => [id, index]))
+      rows.sort((a, b) => (pos.get(a.id) ?? 0) - (pos.get(b.id) ?? 0))
+      return { list: rows.map(toOrderDto), total }
+    }
+
     const [rows, total] = await Promise.all([
-      this.prisma.redemptionOrder.findMany({ where }),
+      this.prisma.redemptionOrder.findMany({
+        where,
+        orderBy: { createdAt: desc ? 'desc' : 'asc' },
+        skip: offset,
+        take: query.pageSize,
+      }),
       this.prisma.redemptionOrder.count({ where }),
     ])
-
-    const field = query.sortBy ?? 'id'
-    const dir = query.sortOrder === 'ascend' ? 1 : -1
-    const sorted = [...rows].sort((a, b) => {
-      const av = field === 'id' ? Number(a.id.replace('RO', '')) : a.createdAt
-      const bv = field === 'id' ? Number(b.id.replace('RO', '')) : b.createdAt
-      if (av < bv) return -1 * dir
-      if (av > bv) return 1 * dir
-      return 0
-    })
-
-    const start = (query.page - 1) * query.pageSize
-    return { list: sorted.slice(start, start + query.pageSize).map(toOrderDto), total }
+    return { list: rows.map(toOrderDto), total }
   }
 
   async shipOrder(id: string, trackingNo: string | undefined, operator: string): Promise<{ code: number }> {
@@ -285,10 +347,12 @@ export class MallService {
       throw new ConflictException('收件信息不完整，无法发货')
     }
 
-    await this.prisma.redemptionOrder.update({
-      where: { id },
+    /* 并发安全：以状态条件抢占，避免重复发货 */
+    const claimed = await this.prisma.redemptionOrder.updateMany({
+      where: { id, status: 'pending_shipment' },
       data: { status: 'shipped', shippedAt: formatNow(), trackingNo: trackingNo?.trim() || null },
     })
+    if (claimed.count !== 1) throw new ConflictException('仅待发货订单可发货')
 
     await this.audit.record({
       module: '积分商城',
@@ -313,10 +377,12 @@ export class MallService {
     if (order.status !== 'shipped') throw new ConflictException('仅已发货订单可标记完成')
 
     const now = formatNow()
-    await this.prisma.redemptionOrder.update({
-      where: { id },
+    /* 并发安全：以状态条件抢占，避免重复标记完成 */
+    const claimed = await this.prisma.redemptionOrder.updateMany({
+      where: { id, status: 'shipped' },
       data: { status: 'finished', finishedAt: now, archivableAt: now },
     })
+    if (claimed.count !== 1) throw new ConflictException('仅已发货订单可标记完成')
     return { code: 0 }
   }
 
@@ -345,14 +411,22 @@ export class MallService {
     const result = await this.prisma.$transaction(async (tx) => {
       const order = await tx.redemptionOrder.findUnique({ where: { id } })
       if (!order) throw new NotFoundException('兑换订单不存在')
-      if (order.status !== 'pending_shipment') throw new ConflictException('仅待发货订单可取消')
 
-      /* 退回积分：直接写 source=redemption 流水（wiki §7.10 冻结口径）。
-       * 注：复用手动调整（source=manual/operator=管理员），语义上 redemption 更正确，按 wiki 实现 */
-      const user = await tx.user.findUnique({ where: { uid: order.userId } })
-      if (!user) throw new NotFoundException('用户不存在')
-      const newBalance = user.points + order.points
-      await tx.user.update({ where: { uid: order.userId }, data: { points: newBalance } })
+      /* 并发安全：先以状态条件抢占取消权，只有抢占成功者才进入退款/补库存，
+       * 避免并发取消造成重复退积分与重复回补库存 */
+      const claimed = await tx.redemptionOrder.updateMany({
+        where: { id, status: 'pending_shipment' },
+        data: { status: 'cancelled', cancelledAt: formatNow(), cancelReason: ORDER_CANCEL_REASON },
+      })
+      if (claimed.count !== 1) throw new ConflictException('仅待发货订单可取消')
+
+      /* 退回积分：原子自增（wiki §7.10 冻结口径：写 source=redemption 流水） */
+      const refunded = await tx.user.update({
+        where: { uid: order.userId },
+        data: { points: { increment: order.points } },
+        select: { points: true },
+      })
+      const newBalance = refunded.points
       await tx.pointsRecord.create({
         data: {
           id: await this.ids.next('PT'),
@@ -366,25 +440,15 @@ export class MallService {
         },
       })
 
-      /* 回补库存（stock+1、redeemedCount 不小于 0 递减）；待补货商品补货后回落为下架 */
-      const goods = await tx.mallGoods.findUnique({ where: { id: order.goodsId } })
+      /* 回补库存：原子自增（stock+1、redeemedCount-1）；待补货商品补货后回落为下架 */
+      const goods = await tx.mallGoods.findUnique({ where: { id: order.goodsId }, select: { status: true } })
       if (goods) {
-        const newStock = goods.stock + 1
-        const restoreStatus = goods.status === 'restock' && newStock > 0 ? { status: 'off' } : {}
+        const restoreStatus = goods.status === 'restock' ? { status: 'off' } : {}
         await tx.mallGoods.update({
           where: { id: order.goodsId },
-          data: {
-            stock: newStock,
-            redeemedCount: Math.max(0, goods.redeemedCount - 1),
-            ...restoreStatus,
-          },
+          data: { stock: { increment: 1 }, redeemedCount: { decrement: 1 }, ...restoreStatus },
         })
       }
-
-      await tx.redemptionOrder.update({
-        where: { id },
-        data: { status: 'cancelled', cancelReason: ORDER_CANCEL_REASON },
-      })
 
       return { code: 0, userId: order.userId, goodsName: order.goodsName, points: order.points }
     })

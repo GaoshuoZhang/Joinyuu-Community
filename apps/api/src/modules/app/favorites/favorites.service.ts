@@ -28,14 +28,12 @@ export class AppFavoritesService {
 
   /** 收藏切换：已存在则删除返回未收藏；不存在写入快照返回已收藏（P2002 兜底并发幂等） */
   async toggle(uid: string, dto: ToggleFavoriteDto): Promise<{ favorited: boolean }> {
-    const existing = await this.prisma.favorite.findFirst({
+    /* 按「删除命中数」判定是否已收藏：并发重复取消不会因 delete 未命中而抛 P2025 */
+    const removed = await this.prisma.favorite.deleteMany({
       where: { userId: uid, targetType: dto.type, targetId: dto.targetId },
-      select: { id: true },
     })
-    if (existing) {
-      await this.prisma.favorite.delete({ where: { id: existing.id } })
-      return { favorited: false }
-    }
+    if (removed.count > 0) return { favorited: false }
+
     const snapshot = await this.resolveTarget(dto.type, dto.targetId)
     try {
       await this.prisma.favorite.create({

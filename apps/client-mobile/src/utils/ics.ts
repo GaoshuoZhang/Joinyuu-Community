@@ -1,3 +1,24 @@
+import { parseLocalDateTime } from './format'
+
+const pad = (n: number) => String(n).padStart(2, '0')
+
+/** ICS 文本字段转义（RFC 5545）：反斜杠、逗号、分号与换行 */
+function escapeIcsText(value: string): string {
+  return value
+    .replace(/\\/g, '\\\\')
+    .replace(/;/g, '\\;')
+    .replace(/,/g, '\\,')
+    .replace(/\r\n|\r|\n/g, '\\n')
+}
+
+/** 本地时间 → ICS 时间戳（YYYYMMDDTHHmmss，浮动本地时区）。
+ * 复用 format 的本地解析能力，兼容「YYYY-MM-DD HH:mm」与 ISO 的 T 分隔串。 */
+function icsStamp(value: string): string {
+  const date = parseLocalDateTime(value)
+  if (!date) return ''
+  return `${date.getFullYear()}${pad(date.getMonth() + 1)}${pad(date.getDate())}T${pad(date.getHours())}${pad(date.getMinutes())}${pad(date.getSeconds())}`
+}
+
 /** v39：生成并下载活动日历文件（.ics，本地时间）。 */
 export function downloadEventIcs(event: {
   id: string
@@ -7,14 +28,7 @@ export function downloadEventIcs(event: {
   location: string
   description?: string
 }): void {
-  const stamp = (value: string): string => {
-    const [date, time = '00:00'] = value.trim().split(' ')
-    const [y, m, d] = date.split('-')
-    const [hh, mm] = time.split(':')
-    return `${y}${m}${d}T${hh}${mm}00`
-  }
   const now = new Date()
-  const pad = (n: number) => String(n).padStart(2, '0')
   const dtstamp = `${now.getUTCFullYear()}${pad(now.getUTCMonth() + 1)}${pad(now.getUTCDate())}T${pad(now.getUTCHours())}${pad(now.getUTCMinutes())}${pad(now.getUTCSeconds())}Z`
   const lines = [
     'BEGIN:VCALENDAR',
@@ -24,11 +38,11 @@ export function downloadEventIcs(event: {
     'BEGIN:VEVENT',
     `UID:${event.id}@joinyuu.community`,
     `DTSTAMP:${dtstamp}`,
-    `DTSTART:${stamp(event.startTime)}`,
-    `DTEND:${stamp(event.endTime)}`,
-    `SUMMARY:${event.title}`,
-    `LOCATION:${event.location}`,
-    `DESCRIPTION:${(event.description ?? '').replace(/\n/g, ' ')}`,
+    `DTSTART:${icsStamp(event.startTime)}`,
+    `DTEND:${icsStamp(event.endTime)}`,
+    `SUMMARY:${escapeIcsText(event.title)}`,
+    `LOCATION:${escapeIcsText(event.location)}`,
+    `DESCRIPTION:${escapeIcsText(event.description ?? '')}`,
     'END:VEVENT',
     'END:VCALENDAR',
   ]
@@ -36,7 +50,9 @@ export function downloadEventIcs(event: {
   const url = URL.createObjectURL(blob)
   const link = document.createElement('a')
   link.href = url
-  link.download = `${event.title}.ics`
+  /* 文件名过滤路径/系统非法字符（含反斜杠），为空时兜底 event */
+  const safeTitle = event.title.replace(/[\\/:*?"<>|\u0000-\u001f]/g, '_').trim() || 'event'
+  link.download = `${safeTitle}.ics`
   document.body.appendChild(link)
   link.click()
   document.body.removeChild(link)

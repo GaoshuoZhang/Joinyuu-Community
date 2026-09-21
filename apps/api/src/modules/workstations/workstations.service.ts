@@ -306,7 +306,7 @@ export class WorkstationsService {
       this.prisma.enterprise.findMany({ where: { deletedAt: null }, orderBy: { id: 'asc' } }),
     ])
     return {
-      users: users.map((u) => ({ uid: u.uid, nickname: u.nickname, phone: u.phone })),
+      users: users.map((u) => ({ uid: u.uid, nickname: u.nickname, phone: u.phone ?? '' })),
       enterprises: enterprises.map((e) => ({
         id: e.id,
         name: e.name,
@@ -320,6 +320,11 @@ export class WorkstationsService {
     const renterName = payload.enterpriseName.trim()
     if (!renterName) throw new BadRequestException('请选择或输入租赁方')
 
+    /* 租期校验：非长期必须给出不早于开始日期的结束日期（服务端兜底，不依赖前端校验） */
+    const { startDate, endDate } = this.assertLeaseRange(payload.startDate, payload.endDate, payload.longTerm)
+
+    /* 承租方标识归一化：custom 允许为空（纯自定义名称），非空时必须命中未删除的企业档案 */
+    let renterId = payload.enterpriseId
     if (payload.renterType === 'enterprise') {
       const enterprise = await this.prisma.enterprise.findFirst({
         where: { id: payload.enterpriseId, deletedAt: null },
@@ -330,6 +335,16 @@ export class WorkstationsService {
     if (payload.renterType === 'individual') {
       const user = await this.prisma.user.findUnique({ where: { uid: payload.enterpriseId } })
       if (!user) throw new BadRequestException('用户不存在')
+    }
+    if (payload.renterType === 'custom') {
+      const customId = payload.enterpriseId.trim()
+      if (customId) {
+        const enterprise = await this.prisma.enterprise.findFirst({
+          where: { id: customId, deletedAt: null },
+        })
+        if (!enterprise) throw new BadRequestException('企业不存在')
+      }
+      renterId = customId
     }
 
     if (payload.workstationIds.length === 0) throw new BadRequestException('请至少选择一个办公位')
@@ -347,11 +362,11 @@ export class WorkstationsService {
       await tx.lease.create({
         data: {
           id,
-          renterId: payload.enterpriseId,
+          renterId,
           renterName,
           renterType: payload.renterType,
-          startDate: payload.startDate,
-          endDate: payload.longTerm ? '' : payload.endDate,
+          startDate,
+          endDate: payload.longTerm ? '' : endDate,
           longTerm: payload.longTerm,
           status: 'active',
           monthlyRent: payload.monthlyRent,
@@ -364,20 +379,25 @@ export class WorkstationsService {
       for (const wsId of payload.workstationIds) {
         await tx.leaseWorkstation.create({ data: { leaseId: id, workstationId: wsId } })
       }
-      await tx.workstation.updateMany({
-        where: { id: { in: payload.workstationIds } },
+      /* 并发安全：以「状态仍为 idle」为条件抢占；行锁重检后不满足即整体回滚，
+       * 避免两个并发租约同时占用同一办公位（一地两租） */
+      const claimed = await tx.workstation.updateMany({
+        where: { id: { in: payload.workstationIds }, status: 'idle' },
         data: {
           status: 'assigned',
-          enterpriseId: payload.enterpriseId || null,
+          enterpriseId: renterId || null,
           enterpriseName: renterName,
           leaseId: id,
         },
       })
+      if (claimed.count !== payload.workstationIds.length) {
+        throw new ConflictException('所选办公位中存在已被分配或维护中的办公位，请刷新后重试')
+      }
     })
 
     return {
       id,
-      enterpriseId: payload.enterpriseId,
+      enterpriseId: renterId,
       enterpriseName: renterName,
       renterType: payload.renterType,
       workstationIds: payload.workstationIds,
@@ -404,11 +424,13 @@ export class WorkstationsService {
       : []
     editRecords.push({ at: formatNow(), operator, reason: payload.reason.trim() })
 
+    const { startDate, endDate } = this.assertLeaseRange(payload.startDate, payload.endDate, payload.longTerm)
+
     await this.prisma.lease.update({
       where: { id },
       data: {
-        startDate: payload.startDate,
-        endDate: payload.longTerm ? '' : payload.endDate,
+        startDate,
+        endDate: payload.longTerm ? '' : endDate,
         longTerm: payload.longTerm,
         monthlyRent: payload.monthlyRent,
         rentPeriod: payload.rentPeriod ?? 'month',
@@ -419,6 +441,17 @@ export class WorkstationsService {
       },
     })
     return { code: 0 }
+  }
+
+  /** 租期校验：非长期租约必须给出不早于开始日期的结束日期；返回裁剪后的日期供写入 */
+  private assertLeaseRange(startDate: string, endDate: string, longTerm: boolean): { startDate: string; endDate: string } {
+    const start = (startDate ?? '').trim()
+    const end = (endDate ?? '').trim()
+    if (!start) throw new BadRequestException('请填写租赁开始日期')
+    if (longTerm) return { startDate: start, endDate: end }
+    if (!end) throw new BadRequestException('请填写租赁结束日期，或开启「长期」开关')
+    if (end < start) throw new BadRequestException('租赁结束日期不能早于开始日期')
+    return { startDate: start, endDate: end }
   }
 
   async terminateLease(id: string): Promise<{ code: number }> {

@@ -2,6 +2,8 @@ import { Injectable } from '@nestjs/common'
 import { JwtService } from '@nestjs/jwt'
 import { Prisma, UserIdentity } from '@prisma/client'
 import { PrismaService } from '../../../common/prisma/prisma.service'
+import { RedisService } from '../../../common/redis/redis.service'
+import { resolveOptionalAppUid, type OptionalAppAuthDeps } from '../../../common/auth/optional-app-uid'
 
 /** 首页公告（对齐客户端 HomeAnnouncement） */
 export interface HomeAnnouncementDto {
@@ -71,7 +73,13 @@ export class AppHomeService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly jwt: JwtService,
+    private readonly redis: RedisService,
   ) {}
+
+  /** 可选登录态解析依赖（与 AppJwtGuard 同口径） */
+  private get auth(): OptionalAppAuthDeps {
+    return { jwt: this.jwt, redis: this.redis, prisma: this.prisma }
+  }
 
   async home(authorization?: string): Promise<HomeFeedDto> {
     const uid = await this.resolveOptionalUid(authorization)
@@ -185,16 +193,9 @@ export class AppHomeService {
     return (this.prisma as unknown as { homeBanner: AppHomeService['homeBanners'] }).homeBanner
   }
 
-  /** @Public 端点：可选令牌判定登录 uid（best-effort，失败按未登录） */
-  private async resolveOptionalUid(authorization?: string): Promise<string | undefined> {
-    if (!authorization?.startsWith('Bearer ')) return undefined
-    const token = authorization.slice(7)
-    try {
-      const payload = await this.jwt.verifyAsync<{ sub: string; scope: string }>(token)
-      return payload.scope === 'app' ? payload.sub : undefined
-    } catch {
-      return undefined
-    }
+  /** @Public 端点：可选令牌判定登录 uid（验签 + 黑名单 + 账号状态，与 AppJwtGuard 同口径） */
+  private resolveOptionalUid(authorization?: string): Promise<string | undefined> {
+    return resolveOptionalAppUid(this.auth, authorization)
   }
 
   /** 取用户身份集（type + level），供活动可见范围过滤 */

@@ -1,10 +1,11 @@
-import { IsNotEmpty, IsString, Matches } from 'class-validator'
+import { IsNotEmpty, IsString } from 'class-validator'
 
-/** 移动端登录（手机号 + 密码 + 图形验证码） */
+/** 移动端登录：手机号 / 邮箱 / 用户名 任一 + 密码 + 图形验证码 */
 export class AppLoginDto {
-  @IsNotEmpty({ message: '请输入手机号' })
-  @Matches(/^1\d{10}$/, { message: '手机号格式不正确' })
-  phone!: string
+  /** 登录标识：手机号 / 邮箱 / 用户名 */
+  @IsNotEmpty({ message: '请输入手机号/邮箱/用户名' })
+  @IsString()
+  identifier!: string
 
   @IsNotEmpty({ message: '请输入密码' })
   password!: string

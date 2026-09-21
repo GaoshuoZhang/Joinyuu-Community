@@ -156,7 +156,7 @@ export class MessageChannelService {
     id: string,
     dto: TestSendDto,
     operator: string,
-  ): Promise<{ providerMessageId?: string; dryRun: boolean; costMs: number }> {
+  ): Promise<{ providerMessageId?: string; dryRun: boolean; costMs: number; warnings: string[] }> {
     const runtime = await this.resolveById(id)
     const recipient = dto.recipient.trim()
     if (!recipient) throw new BadRequestException('请输入测试收件人')
@@ -182,7 +182,12 @@ export class MessageChannelService {
         detail: `收件人 ${maskRecipient(recipient)} · 模板 ${built.templateCode} · ${runtime.dryRun ? '干跑' : '真实发送'} · ${costMs}ms`,
         operator: operator || '社区管理员',
       })
-      return { providerMessageId: result.providerMessageId, dryRun: runtime.dryRun, costMs }
+      return {
+        providerMessageId: result.providerMessageId,
+        dryRun: runtime.dryRun,
+        costMs,
+        warnings: result.warnings ?? [],
+      }
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error)
       await this.audit.record({

@@ -9,6 +9,7 @@ import ListSkeleton from '@/components/ListSkeleton.vue'
 import StateTag from '@/components/shared/StateTag.vue'
 import type { MyApplicationDetail } from '@/types'
 import { formatLocalDateTime } from '@/utils/format'
+import { safeHttpUrl } from '@/utils/validators'
 
 const route = useRoute()
 const router = useRouter()
@@ -40,7 +41,7 @@ const typeLabel = { settle: '企业入驻', cooperation: '合作伙伴', individ
             <dd v-if="field.value">{{ field.value }}</dd>
             <dd v-else-if="field.files?.length" class="files">
               <template v-for="file in field.files" :key="file.name">
-                <a v-if="file.url" :href="file.url" target="_blank" rel="noopener">{{ file.name }}</a>
+                <a v-if="safeHttpUrl(file.url)" :href="safeHttpUrl(file.url)" target="_blank" rel="noopener">{{ file.name }}</a>
                 <span v-else>{{ file.name }}</span>
               </template>
             </dd>

@@ -17,7 +17,7 @@ export const useNoticesStore = defineStore('notices', () => {
     try {
       unread.value = await fetchUnreadCount()
     } catch {
-      unread.value = 0
+      /* 拉取失败时保留上一次未读值（初始值即 0），避免把角标误清零 */
     }
   }
 

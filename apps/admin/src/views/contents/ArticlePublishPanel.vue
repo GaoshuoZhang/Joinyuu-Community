@@ -104,6 +104,12 @@ function onPageChange(p: { current: number; pageSize: number }) {
   load()
 }
 
+/* 归档后当前页可能已空：页码越界时回退一页再加载 */
+async function reloadAfterRemove() {
+  if (list.value.length <= 1 && query.page > 1) query.page -= 1
+  await load()
+}
+
 /* ---------- 新增 / 编辑 ---------- */
 const formVisible = ref(false)
 const formMode = ref<'create' | 'edit'>('create')
@@ -181,7 +187,7 @@ async function onDelete(row: Article) {
   try {
     await deleteArticle(row.id)
     MessagePlugin.success('资讯已归档')
-    await load()
+    await reloadAfterRemove()
   } catch (e) {
     MessagePlugin.error(e instanceof Error ? e.message : '归档失败')
   } finally {

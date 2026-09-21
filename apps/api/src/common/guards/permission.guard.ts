@@ -32,8 +32,12 @@ export class PermissionGuard implements CanActivate {
     if (!username) throw new UnauthorizedException('未登录或登录已过期')
 
     const requiredCodes = Array.isArray(required) ? required : [required]
-    const codes = await this.permissions.getPermCodes(username)
-    if (codes.includes('*') || requiredCodes.some((code) => codes.includes(code))) return true
+    const profile = await this.permissions.getAccessProfile(username)
+    /* 账号不存在/已停用（JwtAuthGuard 已拦，此处纵深防御） */
+    if (!profile.exists || !profile.active) {
+      throw new UnauthorizedException('账号已停用或不存在，请重新登录')
+    }
+    if (profile.super || requiredCodes.some((code) => profile.codes.includes(code))) return true
     throw new ForbiddenException('无权限执行该操作')
   }
 }

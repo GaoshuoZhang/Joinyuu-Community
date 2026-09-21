@@ -120,13 +120,14 @@ export class AddressesService {
         orderBy: { updatedAt: 'desc' },
       })
       await this.prisma.$transaction(async (tx) => {
-        await tx.address.delete({ where: { id } })
+        /* deleteMany 命中 0 行不抛错：并发重复删除保持幂等（原 delete 会抛 P2025 → 500） */
+        await tx.address.deleteMany({ where: { id, userId } })
         if (rest.length > 0) {
           await tx.address.update({ where: { id: rest[0].id }, data: { isDefault: true } })
         }
       })
     } else {
-      await this.prisma.address.delete({ where: { id } })
+      await this.prisma.address.deleteMany({ where: { id, userId } })
     }
     return { code: 0 }
   }

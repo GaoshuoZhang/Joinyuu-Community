@@ -23,22 +23,30 @@ export interface SearchResultDto {
 
 const DOMAINS: SearchDomain[] = ['demand', 'event', 'article', 'enterprise', 'space', 'talent']
 
+/** 身份摘要（可见范围判定用） */
+interface IdentitySummary {
+  type: string
+  level: number | null
+}
+
 /* 全域聚合搜索（M2-R R2 GET /api/app/search）：
- * keyword 必填（400）；一次算 6 域 count；按 type 返回当前域分页结果。 */
+ * keyword 必填（400）；一次算 6 域 count；按 type 返回当前域分页结果。
+ * 需求与活动的可见范围（visibilityIdentities/visibilityLevels）与列表页同口径过滤，避免搜索成为越权读取入口。 */
 @Injectable()
 export class AppSearchService {
   constructor(private readonly prisma: PrismaService) {}
 
-  async search(keyword: string, type?: string, page = 1, pageSize = 10): Promise<SearchResultDto> {
+  async search(uid: string | undefined, keyword: string, type?: string, page = 1, pageSize = 10): Promise<SearchResultDto> {
     const kw = keyword?.trim()
     if (!kw) throw new BadRequestException('请输入搜索关键词')
 
     const p = Math.max(1, Number.isFinite(page) ? page : 1)
     const s = Math.min(20, Math.max(1, Number.isFinite(pageSize) ? pageSize : 10))
 
+    const identities = await this.loadIdentities(uid)
     const [demand, event, article, enterprise, space, talent] = await Promise.all([
-      this.countDemands(kw),
-      this.countEvents(kw),
+      this.countDemands(kw, identities),
+      this.countEvents(kw, identities),
       this.countArticles(kw),
       this.countEnterprises(kw),
       this.countSpaces(kw),
@@ -49,7 +57,7 @@ export class AppSearchService {
     let list: Record<string, unknown>[] = []
     if (type) {
       if (!DOMAINS.includes(type as SearchDomain)) throw new BadRequestException('搜索类型无效')
-      list = await this.listDomain(type as SearchDomain, kw, p, s)
+      list = await this.listDomain(type as SearchDomain, kw, p, s, identities)
     }
 
     return { counts, list, keyword: kw }
@@ -57,12 +65,12 @@ export class AppSearchService {
 
   /* ---------- 各域 count ---------- */
 
-  private countDemands(kw: string): Promise<number> {
-    return this.prisma.demand.count({ where: this.demandWhere(kw) })
+  private countDemands(kw: string, identities: IdentitySummary[]): Promise<number> {
+    return this.prisma.demand.count({ where: this.demandWhere(kw, identities) })
   }
 
-  private countEvents(kw: string): Promise<number> {
-    return this.prisma.communityEvent.count({ where: this.eventWhere(kw) })
+  private countEvents(kw: string, identities: IdentitySummary[]): Promise<number> {
+    return this.prisma.communityEvent.count({ where: this.eventWhere(kw, identities) })
   }
 
   private countArticles(kw: string): Promise<number> {
@@ -94,11 +102,17 @@ export class AppSearchService {
 
   /* ---------- 各域分页 list ---------- */
 
-  private async listDomain(type: SearchDomain, kw: string, page: number, pageSize: number): Promise<Record<string, unknown>[]> {
+  private async listDomain(
+    type: SearchDomain,
+    kw: string,
+    page: number,
+    pageSize: number,
+    identities: IdentitySummary[],
+  ): Promise<Record<string, unknown>[]> {
     switch (type) {
       case 'demand': {
         const rows = await this.prisma.demand.findMany({
-          where: this.demandWhere(kw),
+          where: this.demandWhere(kw, identities),
           orderBy: { createdAt: 'desc' },
           skip: (page - 1) * pageSize,
           take: pageSize,
@@ -123,7 +137,7 @@ export class AppSearchService {
       case 'event':
         return (
           await this.prisma.communityEvent.findMany({
-            where: this.eventWhere(kw),
+            where: this.eventWhere(kw, identities),
             orderBy: { startTime: 'desc' },
             skip: (page - 1) * pageSize,
             take: pageSize,
@@ -171,12 +185,67 @@ export class AppSearchService {
 
   /* ---------- 私有辅助 ---------- */
 
-  private demandWhere(kw: string): Prisma.DemandWhereInput {
-    return { status: 'published', deletedAt: null, title: { contains: kw } }
+  /** 需求可见范围（与需求列表同口径：按单个身份联合判定，多身份取并集；两组都为空 = 不限） */
+  private demandWhere(kw: string, identities: IdentitySummary[]): Prisma.DemandWhereInput {
+    return {
+      status: 'published',
+      deletedAt: null,
+      title: { contains: kw },
+      AND: [this.demandVisibilityCond(identities)],
+    }
   }
 
-  private eventWhere(kw: string): Prisma.CommunityEventWhereInput {
-    return { status: 'published', deletedAt: null, title: { contains: kw } }
+  private demandVisibilityCond(identities: IdentitySummary[]): Prisma.DemandWhereInput {
+    if (identities.length === 0) {
+      return { visibilityIdentities: { isEmpty: true }, visibilityLevels: { isEmpty: true } }
+    }
+    const branches: Prisma.DemandWhereInput[] = identities.map((i) => {
+      const typeCond: Prisma.DemandWhereInput = {
+        OR: [{ visibilityIdentities: { isEmpty: true } }, { visibilityIdentities: { has: i.type } }],
+      }
+      const levelCond: Prisma.DemandWhereInput =
+        i.level != null
+          ? { OR: [{ visibilityLevels: { isEmpty: true } }, { visibilityLevels: { has: String(i.level) } }] }
+          : { visibilityLevels: { isEmpty: true } }
+      return { AND: [typeCond, levelCond] }
+    })
+    return { OR: branches }
+  }
+
+  /** 活动可见范围（与活动列表同口径） */
+  private eventWhere(kw: string, identities: IdentitySummary[]): Prisma.CommunityEventWhereInput {
+    return {
+      status: 'published',
+      deletedAt: null,
+      title: { contains: kw },
+      AND: [this.eventVisibilityCond(identities)],
+    }
+  }
+
+  private eventVisibilityCond(identities: IdentitySummary[]): Prisma.CommunityEventWhereInput {
+    if (identities.length === 0) {
+      return { visibilityIdentities: { isEmpty: true }, visibilityLevels: { isEmpty: true } }
+    }
+    const branches: Prisma.CommunityEventWhereInput[] = identities.map((i) => {
+      const typeCond: Prisma.CommunityEventWhereInput = {
+        OR: [{ visibilityIdentities: { isEmpty: true } }, { visibilityIdentities: { has: i.type } }],
+      }
+      const levelCond: Prisma.CommunityEventWhereInput =
+        i.level != null
+          ? { OR: [{ visibilityLevels: { isEmpty: true } }, { visibilityLevels: { has: String(i.level) } }] }
+          : { visibilityLevels: { isEmpty: true } }
+      return { AND: [typeCond, levelCond] }
+    })
+    return { OR: branches }
+  }
+
+  /** 当前登录用户身份（无 uid 视为无身份，按最严格可见范围处理） */
+  private loadIdentities(uid?: string): Promise<IdentitySummary[]> {
+    if (!uid) return Promise.resolve([])
+    return this.prisma.userIdentity.findMany({
+      where: { userId: uid },
+      select: { type: true, level: true },
+    })
   }
 
   private articleWhere(kw: string): Prisma.ArticleWhereInput {

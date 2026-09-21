@@ -6,23 +6,20 @@ import {
   UnauthorizedException,
 } from '@nestjs/common'
 import { compare, hash } from 'bcryptjs'
+import { randomUUID } from 'node:crypto'
 import type { Prisma } from '@prisma/client'
 import { PrismaService } from '../../../common/prisma/prisma.service'
-import { RedisService } from '../../../common/redis/redis.service'
 import { IdGeneratorService } from '../../../common/id-generator/id-generator.service'
 import { NotificationService } from '../../../common/notify/notification.service'
-import { SmsCodeService } from '../../messaging/sms-code.service'
+import { IdentityNameService } from '../../../common/identity/identity-name.service'
 import { AppSessionService } from '../../../common/app-session/app-session.service'
 import { StorageService } from '../../../common/storage/storage.service'
 import { formatNow } from '../../../common/utils/time'
 import { normalizeGender } from '../../../common/utils/gender'
 import type { UpdateMeDto } from './dto/update-me.dto'
 import type { ChangePasswordDto } from './dto/change-password.dto'
-import type { ChangePhoneDto } from './dto/change-phone.dto'
 import type { DeletionRequestDto } from './dto/deletion-request.dto'
 
-/** 图形验证码存储前缀（与 app auth 共用同一键空间，一次性消费） */
-const CAPTCHA_PREFIX = 'captcha:app:'
 /** 身份类型 → 展示标签（经验页 identityLabel 用） */
 const IDENTITY_LABEL: Record<string, string> = {
   individual: '个人用户',
@@ -39,10 +36,9 @@ const DELETION_COOLING_DAYS = 7
 export class MeService {
   constructor(
     private readonly prisma: PrismaService,
-    private readonly redis: RedisService,
     private readonly ids: IdGeneratorService,
     private readonly notify: NotificationService,
-    private readonly sms: SmsCodeService,
+    private readonly identityNames: IdentityNameService,
     private readonly sessions: AppSessionService,
     private readonly storage: StorageService,
   ) {}
@@ -57,10 +53,14 @@ export class MeService {
 
     return {
       uid: user.uid,
+      username: user.username,
       nickname: user.nickname,
       gender: normalizeGender(user.gender),
       email: user.email,
       phone: user.phone,
+      /* 可信通知渠道标记：true=已验证（可用于找回密码/接收通知） */
+      emailVerified: Boolean(user.email && user.emailVerifiedAt),
+      phoneVerified: Boolean(user.phone && user.phoneVerifiedAt),
       bio: user.bio,
       points: user.points,
       realName: user.realName ?? undefined,
@@ -79,25 +79,33 @@ export class MeService {
     }
   }
 
-  /** 更新资料：仅更新传入的可编辑字段，头像 URL 一并持久化。 */
+  /** 更新资料：用户名/昵称需全站唯一且不得占用保留名；邮箱/手机号变更走专门验证端点。 */
   async updateMe(uid: string, dto: UpdateMeDto): Promise<{ code: number }> {
     const user = await this.prisma.user.findUnique({ where: { uid } })
     if (!user) throw new NotFoundException('用户不存在')
 
     const data: Prisma.UserUpdateInput = {}
-    if (dto.nickname !== undefined && dto.nickname.trim()) data.nickname = dto.nickname.trim()
+    if (dto.username !== undefined && dto.username.trim()) {
+      data.username = await this.identityNames.assertUsernameAvailable(dto.username, uid)
+    }
+    if (dto.nickname !== undefined && dto.nickname.trim()) {
+      data.nickname = await this.identityNames.assertNicknameAvailable(dto.nickname, uid)
+    }
     if (dto.gender !== undefined) data.gender = normalizeGender(dto.gender)
     if (dto.bio !== undefined) data.bio = dto.bio.trim()
-    if (dto.email !== undefined) data.email = dto.email.trim()
     if (dto.avatar !== undefined) data.avatar = dto.avatar.trim() || null
 
     await this.prisma.user.update({ where: { uid }, data })
     return { code: 0 }
   }
 
-  /** 我的积分流水（分页倒序，每条含 balance） */
-  async pointsRecords(uid: string, page: number, pageSize: number) {
-    const where: Prisma.PointsRecordWhereInput = { userId: uid }
+  /** 我的积分流水（分页倒序，每条含 balance；keyword 匹配事由或来源） */
+  async pointsRecords(uid: string, page: number, pageSize: number, keyword?: string) {
+    const kw = keyword?.trim()
+    const where: Prisma.PointsRecordWhereInput = {
+      userId: uid,
+      ...(kw ? { OR: [{ reason: { contains: kw } }, { source: { contains: kw } }] } : {}),
+    }
     const [total, rows] = await Promise.all([
       this.prisma.pointsRecord.count({ where }),
       this.prisma.pointsRecord.findMany({
@@ -165,8 +173,8 @@ export class MeService {
     }
   }
 
-  /** 登录态修改密码：校验原密码 → 更新，并使当前会话之外的 app 会话失效。 */
-  async changePassword(uid: string, currentJti: string, dto: ChangePasswordDto): Promise<{ code: number }> {
+  /** 登录态修改密码：校验原密码 → 更新 → 强制退出全部会话（客户端需重新登录）。 */
+  async changePassword(uid: string, dto: ChangePasswordDto): Promise<{ code: number }> {
     const user = await this.prisma.user.findUnique({ where: { uid } })
     if (!user) throw new UnauthorizedException('未登录或登录已过期')
     if (!user.passwordHash || !(await compare(dto.oldPassword, user.passwordHash))) {
@@ -179,38 +187,14 @@ export class MeService {
       where: { uid },
       data: { passwordHash: await hash(dto.newPassword, 10), passwordUpdatedAt: formatNow() },
     })
-    await this.sessions.kickOthers(uid, currentJti)
-    return { code: 0 }
-  }
-
-  /** 更换绑定手机号（短信验证码优先，未启用时回退图形验证码）；占用校验 → 更新 → 站内信 */
-  async changePhone(uid: string, dto: ChangePhoneDto): Promise<{ code: number }> {
-    await this.verifyContactChange(dto)
-
-    const newPhone = dto.newPhone.trim()
-    if (!/^1\d{10}$/.test(newPhone)) throw new BadRequestException('手机号格式不正确')
-    const conflict = await this.prisma.user.findFirst({ where: { phone: newPhone }, select: { uid: true } })
-    if (conflict && conflict.uid !== uid) throw new ConflictException('该手机号已绑定其他账号')
-
-    await this.prisma.user.update({ where: { uid }, data: { phone: newPhone } })
+    /* 需求：修改完密码自动退出登录，需重新登录（全端会话失效，含当前会话） */
+    await this.sessions.kickAll(uid)
     await this.notify.pushNotice(uid, {
       type: 'system',
-      title: '手机号已更换',
-      content: '您绑定的手机号已更换成功，请牢记新号码登录。',
+      title: '登录密码已修改',
+      content: '您的登录密码已修改成功，请使用新密码重新登录。',
     })
     return { code: 0 }
-  }
-
-  /** 换绑手机号身份校验（P0 短信验证码）：提供 smsCode 时证明新号归属，否则回退图形验证码 */
-  private async verifyContactChange(dto: ChangePhoneDto): Promise<void> {
-    const smsCode = dto.smsCode?.trim()
-    if (smsCode) {
-      const ok = await this.sms.verify(dto.newPhone.trim(), 'change_phone', smsCode)
-      if (!ok) throw new BadRequestException('短信验证码错误或已过期')
-      return
-    }
-    const captchaOk = await this.verifyCaptcha(dto.captchaId ?? '', dto.captchaCode ?? '')
-    if (!captchaOk) throw new BadRequestException('验证码错误或已过期')
   }
 
   /** 提交注销申请：进入 7 天冷静期；已有进行中申请则冲突 */
@@ -280,7 +264,8 @@ export class MeService {
     if (!user) throw new NotFoundException('用户不存在')
     const generatedAt = formatNow()
     const safeStamp = generatedAt.replace(/[- :]/g, '')
-    const key = `export-${uid}-${safeStamp}.json`
+    /* 键名追加随机段：即使同秒并发生成也不会互相覆盖，且不依赖 uid+时间戳的可枚举性 */
+    const key = `export-${uid}-${safeStamp}-${randomUUID().slice(0, 8)}.json`
     const { citizenId, ...safeUser } = user
     const payload = {
       generatedAt,
@@ -318,17 +303,12 @@ export class MeService {
 
   async readExport(uid: string, key: string): Promise<Buffer | null> {
     if (!key.startsWith(`export-${uid}-`) || !key.endsWith('.json')) return null
+    /* 与公开文件路由同口径：拒绝任何含路径分隔/穿越的键 */
+    if (!/^[A-Za-z0-9][A-Za-z0-9._-]*$/.test(key) || key.includes('..')) return null
     return this.storage.read(key)
   }
 
   /* ---------- 内部工具 ---------- */
-
-  private async verifyCaptcha(captchaId: string, code: string): Promise<boolean> {
-    const expected = await this.redis.getCache<string>(CAPTCHA_PREFIX + captchaId)
-    await this.redis.delCache(CAPTCHA_PREFIX + captchaId)
-    if (!expected) return false
-    return expected.toUpperCase() === (code ?? '').toUpperCase()
-  }
 
   /** 时间字符串（YYYY-MM-DD HH:mm）加天数 */
   private addDaysTime(timeStr: string, days: number): string {

@@ -23,15 +23,15 @@ export class MallController {
   @RequirePermission('/mall/goods')
   @HttpCode(200)
   @Post('goods')
-  createGoods(@Body() dto: GoodsPayloadDto) {
-    return this.mall.createGoods(dto)
+  createGoods(@Body() dto: GoodsPayloadDto, @Req() req: AuthenticatedRequest) {
+    return this.mall.createGoods(dto, req.user?.name ?? '社区管理员')
   }
 
   @RequirePermission('/mall/goods')
   @HttpCode(200)
   @Put('goods/:id')
-  updateGoods(@Param('id') id: string, @Body() dto: GoodsPayloadDto) {
-    return this.mall.updateGoods(id, dto)
+  updateGoods(@Param('id') id: string, @Body() dto: GoodsPayloadDto, @Req() req: AuthenticatedRequest) {
+    return this.mall.updateGoods(id, dto, req.user?.name ?? '社区管理员')
   }
 
   @RequirePermission('/mall/goods')

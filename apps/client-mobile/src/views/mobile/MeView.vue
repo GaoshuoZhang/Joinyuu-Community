@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { Avatar, Cell, CellGroup, PullDownRefresh } from 'tdesign-mobile-vue'
 import { useAuthStore } from '@/stores/auth'
@@ -71,6 +71,7 @@ async function loadLevel() {
 
 /* 下拉刷新：同步资料与多身份，保证响应需求等入口拿到最新企业身份 */
 const refreshing = ref(false)
+let refreshTimer: ReturnType<typeof setTimeout> | null = null
 async function onRefresh() {
   refreshing.value = true
   try {
@@ -78,11 +79,18 @@ async function onRefresh() {
     await Promise.all([loadIdentities(), loadLevel()])
     if (auth.isLogged) await notices.refreshUnread()
   } finally {
-    setTimeout(() => {
+    if (refreshTimer) clearTimeout(refreshTimer)
+    refreshTimer = setTimeout(() => {
       refreshing.value = false
+      refreshTimer = null
     }, 300)
   }
 }
+
+onBeforeUnmount(() => {
+  if (refreshTimer) clearTimeout(refreshTimer)
+  refreshTimer = null
+})
 
 async function refreshMe() {
   await auth.refreshProfile()
@@ -100,6 +108,7 @@ useRefreshOnActivate(() => void refreshMe())
         <Avatar size="56px" class="avatar" :image="auth.avatar">{{ auth.name.slice(0, 1) }}</Avatar>
         <div class="info">
           <p class="name">{{ auth.name }}</p>
+          <p v-if="auth.username" class="handle">@{{ auth.username }}</p>
           <p class="uid">UID {{ auth.uid }}</p>
           <div class="tags">
             <IdentityTag v-for="i in auth.profileIdentities" :key="i.type" :type="i.type" />
@@ -180,6 +189,12 @@ useRefreshOnActivate(() => void refreshMe())
   margin: 0 0 var(--app-space-3);
   font-size: var(--app-font-caption);
   color: var(--td-text-color-secondary);
+}
+
+.handle {
+  margin: 0 0 var(--app-space-2);
+  font-size: var(--app-font-caption);
+  color: var(--td-text-color-placeholder);
 }
 
 .tags {

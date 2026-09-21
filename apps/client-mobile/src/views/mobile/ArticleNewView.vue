@@ -66,6 +66,16 @@ watch(contentReady, (ready) => {
   if (ready) errors.content = ''
 })
 const content = computed(() => serializeArticleContent(blocks.value))
+
+/* 投稿摘要：优先沿用原投稿摘要，否则取正文纯文本首段（去除 HTML 标签，≤120 字） */
+const existingSummary = ref('')
+function deriveSummary(): string | undefined {
+  const kept = existingSummary.value.trim()
+  if (kept) return kept.slice(0, 120)
+  const plain = blocks.value.reduce((acc, block) => acc || (block.type === 'text' ? block.text.trim() : ''), '')
+  const summary = plain.replace(/<[^>]*>/g, '').replace(/\s+/g, ' ').trim().slice(0, 120)
+  return summary || undefined
+}
 const editorSnapshot = computed(() => JSON.stringify({
   ...form,
   coverUrl: coverUrl.value,
@@ -115,6 +125,7 @@ onMounted(async () => {
       form.asEnterpriseId = payload.asEnterpriseId ?? ''
       ensureVisibleIdentitySelection()
       coverUrl.value = payload.coverUrl ?? ''
+      existingSummary.value = payload.summary ?? ''
       blocks.value = parseArticleContent(payload.content, () => nextBlockId.value++)
     } catch (e) {
       Toast(e instanceof ApiError ? e.message : '加载原投稿失败')
@@ -166,6 +177,11 @@ async function onBodyImageChange(event: Event) {
   pendingBodyAnchor.value = null
   input.value = ''
   if (!file) return
+  /* 正文插图仅接受图片：uploadFile 统一校验之外再拦截 PDF 等非图片文件 */
+  if (!file.type.startsWith('image/')) {
+    Toast('正文插图仅支持图片文件')
+    return
+  }
   try {
     const info = await uploadFile(file, 'article')
     insertImage({ url: info.url, anchor })
@@ -214,6 +230,7 @@ async function onSubmit() {
     ...(form.asIdentity === 'community_enterprise' && form.asEnterpriseId ? { asEnterpriseId: form.asEnterpriseId } : {}),
     coverUrl: String(coverFiles.value[0]?.response?.url ?? coverFiles.value[0]?.url ?? coverUrl.value ?? '') || undefined,
     content: content.value,
+    summary: deriveSummary(),
   }
   submitting.value = true
   try {

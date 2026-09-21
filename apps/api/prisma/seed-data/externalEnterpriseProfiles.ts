@@ -36,7 +36,7 @@ export const externalEnterpriseProfiles: ExternalEnterpriseProfile[] = [
   {
     id: 'XE7003',
     name: '鹿岛文化',
-    industry: '文化传播',
+    industry: '文化创意',
     status: 'active',
     size: '10-50人',
     foundedAt: '2021-11',

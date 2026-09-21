@@ -3,13 +3,11 @@ import { computed, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { ActionSheet, Cell, CellGroup, DialogPlugin } from 'tdesign-mobile-vue'
 import { useAuthStore } from '@/stores/auth'
-import { useNoticesStore } from '@/stores/notices'
 import { getThemeMode, setThemeMode, themeModeLabel, type ThemeMode } from '@/utils/theme'
 
 /* 设置（二级收纳页）：资料/地址/账号安全/数据看板/深色模式/退出登录。 */
 const router = useRouter()
 const auth = useAuthStore()
-const notices = useNoticesStore()
 
 const entries: { path: string; label: string }[] = [
   { path: '/me/profile/edit', label: '编辑资料' },
@@ -55,9 +53,14 @@ function onLogout() {
 }
 
 async function doLogout() {
-  await auth.logout()
-  notices.reset()
-  await router.push('/login')
+  try {
+    await auth.logout()
+  } catch {
+    /* 登出接口失败也要清理本地会话，避免停留在半登录态 */
+    auth.resetSession()
+  } finally {
+    await router.push('/login')
+  }
 }
 </script>
 
@@ -70,7 +73,7 @@ async function doLogout() {
       <Cell title="深色模式" :note="themeLabel" arrow @click="themeSheetVisible = true" />
     </CellGroup>
     <CellGroup theme="card">
-      <Cell class="logout" title="退出登录" arrow @click="onLogout" />
+      <Cell class="logout" title="退出登录" :bordered="false" @click="onLogout" />
     </CellGroup>
 
     <ActionSheet
@@ -97,7 +100,10 @@ async function doLogout() {
   border: 1px solid var(--td-component-border);
 }
 
+/* v45：Cell 标题颜色由 --td-cell-title-color 决定，直接写 color 不会覆盖（此前退出登录实际并未变红）。
+ * 破坏性操作用错误色 + 去掉右侧箭头（它不跳转，只弹确认），与上方跳转行区分开。 */
 .logout {
+  --td-cell-title-color: var(--td-error-color);
   color: var(--td-error-color);
 }
 </style>

@@ -3,6 +3,7 @@ import { RequirePermission } from '../../common/decorators/require-permission.de
 import { SpacesService, type SpaceDto, type SpaceOccupancy, type ReservationDto } from './spaces.service'
 import { SpacePayloadDto } from './dto/space-payload.dto'
 import { SpaceStatusDto } from './dto/space-status.dto'
+import { UsageBoardQueryDto } from './dto/usage-board-query.dto'
 
 @RequirePermission('/spaces')
 @Controller('api/admin/spaces')
@@ -16,8 +17,8 @@ export class SpacesController {
 
   /* 静态路由须先于 :id 声明 */
   @Get('usage-board')
-  usageBoard(@Query('date') date: string): Promise<SpaceOccupancy[]> {
-    return this.spaces.usageBoard(date)
+  usageBoard(@Query() query: UsageBoardQueryDto): Promise<SpaceOccupancy[]> {
+    return this.spaces.usageBoard(query.date)
   }
 
   @Get(':id')

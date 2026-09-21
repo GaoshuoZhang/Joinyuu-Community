@@ -98,6 +98,8 @@ function onRedeem() {
 }
 
 async function submitOrder(item: Goods) {
+  /* 重入守卫：后端下单无幂等键，避免重复点击生成多笔订单 */
+  if (submitting.value) return
   submitting.value = true
   try {
     const res = await createOrder(item.id, item.fulfillment === 'physical' ? selectedAddressId.value || undefined : undefined)

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { Button, Icon, Toast } from 'tdesign-mobile-vue'
 import { cancelEnrollment, fetchMyEnrollments } from '@/api/events'
@@ -8,19 +8,24 @@ import { useIncrementalList } from '@/composables/useIncrementalList'
 import EmptyBlock from '@/components/shared/EmptyBlock.vue'
 import ListSkeleton from '@/components/ListSkeleton.vue'
 import StateTag from '@/components/shared/StateTag.vue'
-import type { MyEnrollmentItem } from '@/types'
+import type { MyEnrollmentItem, PageResult } from '@/types'
 import { formatLocalDateTime, formatZhNumber } from '@/utils/format'
 
 /* 移动我的报名：报名卡片 + 签到入口/已签到标识；取消报名二次确认（两段式按钮）+ Toast */
-const { data, loading, error, run } = useAsyncList<MyEnrollmentItem[]>(() => fetchMyEnrollments())
+const { data, loading, error, run } = useAsyncList<PageResult<MyEnrollmentItem>>(() => fetchMyEnrollments())
 const router = useRouter()
-const enrollments = computed(() => data.value ?? [])
+const enrollments = computed(() => data.value?.list ?? [])
 const { visibleItems, hasMore, showMore } = useIncrementalList(enrollments)
 onMounted(run)
 
 const actingId = ref('')
 const confirmingId = ref('')
 let confirmTimer: ReturnType<typeof setTimeout> | null = null
+
+onBeforeUnmount(() => {
+  if (confirmTimer) clearTimeout(confirmTimer)
+  confirmTimer = null
+})
 
 function canCancel(item: MyEnrollmentItem) {
   /* v38：候补中可随时退出；正式报名开始前 24 小时内不可取消（由服务端校验并返回原因） */
@@ -102,7 +107,8 @@ async function doCancel(item: MyEnrollmentItem) {
       </Button>
     </template>
     <template v-else>
-      <EmptyBlock text="暂无报名记录" />
+      <!-- v45：空状态补出口，避免二级页没有 TabBar 时成为死胡同 -->
+      <EmptyBlock text="暂无报名记录" action-text="看看活动" @action="router.push('/plaza?tab=events')" />
       <router-link class="go-events" to="/plaza?tab=events">去看看活动<Icon aria-hidden="true" name="chevron-right" size="14px" /></router-link>
     </template>
   </div>

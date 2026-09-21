@@ -14,7 +14,9 @@ import { ReviewDeletionDto } from './dto/review-member-governance.dto'
 export class UsersController {
   constructor(private readonly users: UsersService) {}
 
-  /* 选项端点供跨域表单复用，仅需登录（只返回 uid+nickname） */
+  /* 选项端点供跨域表单复用：仅返回 uid+nickname，但需持有实际消费页面的权限之一
+   * （积分/经验发放记录、合作企业档案表单），避免零权限角色枚举全量用户 */
+  @RequirePermission(['/users', '/rules/ledger', '/rules/experience-records', '/external-enterprises'])
   @Get('options')
   options(): Promise<Array<{ label: string; value: string }>> {
     return this.users.options()
@@ -70,8 +72,12 @@ export class UsersController {
 
   @RequirePermission('/users')
   @Patch(':id/status')
-  updateStatus(@Param('id') id: string, @Body() dto: UpdateUserStatusDto): Promise<{ code: number }> {
-    return this.users.updateStatus(id, dto.status)
+  updateStatus(
+    @Param('id') id: string,
+    @Body() dto: UpdateUserStatusDto,
+    @Req() req: AuthenticatedRequest,
+  ): Promise<{ code: number }> {
+    return this.users.updateStatus(id, dto.status, req.user?.name ?? '社区管理员')
   }
 
   @RequirePermission('/users')

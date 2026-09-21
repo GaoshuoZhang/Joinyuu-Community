@@ -16,6 +16,7 @@ const emit = defineEmits<{
 const formRef = ref()
 const submitting = ref(false)
 const form = reactive({
+  username: '',
   nickname: '',
   phone: '',
   email: '',
@@ -26,9 +27,17 @@ const form = reactive({
 })
 
 const rules: FormProps['rules'] = {
+  /* 用户名选填：留空由服务端自动分配，仅填写时校验格式 */
+  username: [
+    {
+      pattern: /^[A-Za-z][A-Za-z0-9_]{3,19}$/,
+      message: '用户名需以字母开头，4-20 位，仅可包含字母、数字与下划线',
+      trigger: 'submit',
+    },
+  ],
   nickname: [{ required: true, message: '请输入昵称', trigger: 'submit' }],
   phone: [{ required: true, message: '请输入联系电话', trigger: 'submit' }],
-  email: [{ required: true, message: '请输入邮箱', trigger: 'submit' }],
+  email: [{ pattern: /^[^\s@]+@[^\s@]+\.[^\s@]+$/, message: '邮箱格式不正确', trigger: 'submit' }],
   gender: [{ required: true, message: '请选择性别', trigger: 'submit' }],
 }
 
@@ -36,6 +45,7 @@ watch(
   () => props.visible,
   (visible) => {
     if (!visible) return
+    form.username = ''
     form.nickname = ''
     form.phone = ''
     form.email = ''
@@ -57,9 +67,10 @@ async function onConfirm() {
   submitting.value = true
   try {
     const result = await createUser({
+      username: form.username.trim() || undefined,
       nickname: form.nickname.trim(),
       phone: form.phone.trim(),
-      email: form.email.trim(),
+      email: form.email.trim() || undefined,
       gender: form.gender,
       realName: form.realName.trim() || undefined,
       citizenId: form.citizenId.trim() || undefined,
@@ -93,6 +104,14 @@ async function onConfirm() {
     </template>
 
     <t-form ref="formRef" :data="form" :rules="rules" label-align="top">
+      <t-form-item label="用户名" name="username">
+        <t-input
+          v-model="form.username"
+          clearable
+          autocomplete="off"
+          placeholder="留空由系统自动分配；字母开头 4-20 位，仅字母/数字/下划线…"
+        />
+      </t-form-item>
       <div class="form-row">
         <t-form-item label="昵称" name="nickname">
           <t-input v-model="form.nickname" clearable placeholder="请输入用户昵称…" />
@@ -110,7 +129,7 @@ async function onConfirm() {
           <t-input v-model="form.phone" clearable type="tel" inputmode="tel" autocomplete="tel" placeholder="请输入联系电话…" />
         </t-form-item>
         <t-form-item label="邮箱" name="email">
-          <t-input v-model="form.email" clearable inputmode="email" autocomplete="email" placeholder="请输入邮箱…" />
+          <t-input v-model="form.email" clearable inputmode="email" autocomplete="email" placeholder="选填，如 name@example.com…" />
         </t-form-item>
       </div>
       <div class="form-row">

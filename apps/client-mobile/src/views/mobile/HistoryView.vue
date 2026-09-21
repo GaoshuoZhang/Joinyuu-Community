@@ -1,11 +1,14 @@
 <script setup lang="ts">
 import { ref } from 'vue'
+import { useRouter } from 'vue-router'
 import { Button, DialogPlugin, Toast } from 'tdesign-mobile-vue'
 import EmptyBlock from '@/components/shared/EmptyBlock.vue'
 import { clearReadingHistory, listReadingHistory, removeReadingHistoryItem } from '@/utils/readingHistory'
 import { formatLocalDateTime } from '@/utils/format'
 
-/* 浏览历史（v40，本机记录，最多 10 条）：点击回到文章，可单条移除或全部清空。 */
+/* 浏览历史（v40，本机记录，最多 10 条）：点击回到文章，可单条移除或全部清空。
+ * v45：空状态补出口——历史记录承载的是资讯，指向「广场 > 资讯」而不是泛泛的社区页。 */
+const router = useRouter()
 const items = ref(listReadingHistory())
 
 function refresh() {
@@ -39,7 +42,13 @@ function onClear() {
       <Button v-if="items.length" size="small" variant="outline" @click="onClear">清空</Button>
     </header>
 
-    <EmptyBlock v-if="!items.length" text="暂无浏览记录，去社区内容逛逛" />
+    <!-- v45：空状态补出口，避免二级页没有 TabBar 时成为死胡同 -->
+    <EmptyBlock
+      v-if="!items.length"
+      text="暂无浏览记录，去社区内容逛逛"
+      action-text="看资讯"
+      @action="router.push('/plaza?tab=articles')"
+    />
     <div v-else class="list">
       <article v-for="item in items" :key="item.id" class="m-card row">
         <router-link class="main" :to="`/articles/${item.id}`">

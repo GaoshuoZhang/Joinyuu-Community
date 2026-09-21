@@ -27,8 +27,8 @@ export class ProjectsController {
   }
 
   @Put(':id')
-  update(@Param('id') id: string, @Body() dto: CreateProjectDto) {
-    return this.projects.update(id, dto)
+  update(@Param('id') id: string, @Body() dto: CreateProjectDto, @Req() req: AuthenticatedRequest) {
+    return this.projects.update(id, dto, req.user?.name ?? '社区管理员')
   }
 
   @HttpCode(200)

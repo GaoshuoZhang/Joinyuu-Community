@@ -100,12 +100,22 @@ async function onSave() {
   }
 }
 
-/* 启停 */
+/* 启停：行级 loading/禁用防止重复点击，失败保留列表原状并提示 */
+const togglingId = ref<number | null>(null)
+
 async function onToggleStatus(row: AdminAccount) {
+  if (togglingId.value != null) return
   const next = row.status === 'active' ? 'disabled' : 'active'
-  await updateAdminStatus(row.id, next)
-  MessagePlugin.success(next === 'disabled' ? '已停用该账号' : '已启用该账号')
-  await load()
+  togglingId.value = row.id
+  try {
+    await updateAdminStatus(row.id, next)
+    MessagePlugin.success(next === 'disabled' ? '已停用该账号' : '已启用该账号')
+    await load()
+  } catch (e) {
+    MessagePlugin.error(e instanceof Error ? e.message : '操作失败')
+  } finally {
+    togglingId.value = null
+  }
 }
 
 /* 重置密码 */
@@ -216,7 +226,10 @@ onMounted(load)
               :content="row.status === 'active' ? '确认停用该账号？' : '确认启用该账号？'"
               @confirm="onToggleStatus(row)"
             >
-              <t-button variant="text" size="small" :theme="row.status === 'active' ? 'danger' : 'primary'">
+              <t-button variant="text" size="small" :theme="row.status === 'active' ? 'danger' : 'primary'"
+                :loading="togglingId === row.id"
+                :disabled="togglingId != null"
+              >
                 {{ row.status === 'active' ? '停用' : '启用' }}
               </t-button>
             </t-popconfirm>

@@ -17,25 +17,25 @@ export async function fetchAppCaptcha(
   return { captchaId: res.body.data.captchaId, captchaCode: decodeAppCaptcha(res.body.data.image) }
 }
 
-/** 带验证码登录（返回完整响应，供断言失败场景） */
+/** 带验证码登录（返回完整响应，供断言失败场景）；identifier 支持手机号/邮箱/用户名 */
 export async function appLoginRequest(
   app: INestApplication,
-  phone = '13801210001',
+  identifier = '13801210001',
   password = 'user123',
 ) {
   const { captchaId, captchaCode } = await fetchAppCaptcha(app)
   return request(app.getHttpServer())
     .post('/api/app/auth/login')
-    .send({ phone, password, captchaId, captchaCode })
+    .send({ identifier, password, captchaId, captchaCode })
 }
 
 /** 带验证码登录（返回 token，成功场景快捷方式） */
 export async function appLoginAs(
   app: INestApplication,
-  phone = '13801210001',
+  identifier = '13801210001',
   password = 'user123',
 ): Promise<string> {
-  const res = await appLoginRequest(app, phone, password)
+  const res = await appLoginRequest(app, identifier, password)
   return res.body.data.token
 }
 
@@ -58,3 +58,25 @@ export const appPost = (
     .post(path)
     .set('Authorization', `Bearer ${token}`)
     .send(body ?? {})
+
+/** 发送短信验证码并取回干跑明文（非生产环境凭据未注入时后端返回 devCode） */
+export async function sendAppSmsCode(
+  app: INestApplication,
+  phone: string,
+  purpose: string,
+): Promise<string> {
+  const res = await request(app.getHttpServer()).post('/api/app/auth/sms/send').send({ phone, purpose })
+  if (res.status !== 200) throw new Error(`发送短信验证码失败：${res.status} ${JSON.stringify(res.body)}`)
+  return res.body.data.devCode as string
+}
+
+/** 发送邮箱验证码并取回干跑明文 */
+export async function sendAppEmailCode(
+  app: INestApplication,
+  email: string,
+  purpose: string,
+): Promise<string> {
+  const res = await request(app.getHttpServer()).post('/api/app/auth/email/send').send({ email, purpose })
+  if (res.status !== 200) throw new Error(`发送邮箱验证码失败：${res.status} ${JSON.stringify(res.body)}`)
+  return res.body.data.devCode as string
+}

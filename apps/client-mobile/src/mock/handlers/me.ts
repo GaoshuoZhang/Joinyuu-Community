@@ -3,6 +3,7 @@ import { accountByUid, accountRequestsByUid, accounts, demands, enrollmentsByUid
 import { formatMockStamp, parseMockStamp } from '@/mock/runtime'
 import { readPayload } from '@/mock/session'
 import { fail, withLatency } from '@/mock/latency'
+import { USERNAME_MSG, USERNAME_RESERVED_MSG, isReservedNickname, isReservedUsername, isUsername } from '@/utils/validators'
 
 /* [MOCK-ONLY] 个人中心 handlers（GET/PUT /me、points-records）。 */
 
@@ -17,8 +18,12 @@ function toProfile(uid: string): UserProfile {
   if (!account) fail(404, '用户不存在')
   return {
     uid: account.uid,
-    phone: account.phone.replace(/^(\d{3})\d{4}(\d{4})$/, '$1****$2'),
+    username: account.username,
     nickname: account.nickname,
+    phone: account.phone || undefined,
+    email: account.email,
+    phoneVerified: Boolean(account.phone && account.phoneVerified),
+    emailVerified: Boolean(account.email && account.emailVerified),
     realName: account.realName,
     realNameVerified: !!(account.realName && account.citizenId),
     avatar: account.avatar,
@@ -35,15 +40,24 @@ export async function fetchMe(): Promise<UserProfile> {
   return withLatency(() => toProfile(requireUid()))
 }
 
-export async function updateMe(payload: Partial<Pick<UserProfile, 'nickname' | 'gender' | 'bio' | 'avatar'>>): Promise<void> {
+export async function updateMe(payload: Partial<Pick<UserProfile, 'username' | 'nickname' | 'gender' | 'bio' | 'avatar'>>): Promise<void> {
   await withLatency(() => {
     const uid = requireUid()
     const account = accounts.find((a) => a.uid === uid)
     if (!account) fail(404, '用户不存在')
+    if (payload.username !== undefined) {
+      const username = payload.username.trim().toLowerCase()
+      if (!isUsername(username)) fail(400, USERNAME_MSG)
+      if (isReservedUsername(username)) fail(400, USERNAME_RESERVED_MSG)
+      if (accounts.some((a) => a.username === username && a.uid !== uid)) fail(409, '该用户名已被占用')
+      account.username = username
+    }
     if (payload.nickname !== undefined) {
       const nickname = payload.nickname.trim()
       if (!nickname) fail(400, '请输入昵称')
-      if (nickname.length > 20) fail(400, '昵称不能超过 20 个字')
+      if ([...nickname].length > 20) fail(400, '昵称不能超过 20 个字符')
+      if (isReservedNickname(nickname)) fail(400, '该昵称为系统保留，请更换')
+      if (accounts.some((a) => a.nickname === nickname && a.uid !== uid)) fail(409, '该昵称已被占用')
       account.nickname = nickname
     }
     if (payload.avatar !== undefined) {

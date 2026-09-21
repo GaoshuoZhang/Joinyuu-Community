@@ -164,6 +164,16 @@ function openPolicy(p: CommunityPolicy) {
   policyVisible.value = true
 }
 
+/* 关闭弹层时清掉 ?policy=，否则后续政策列表刷新会被 watch 重新弹出 */
+function onPolicyVisibleChange(visible: boolean) {
+  policyVisible.value = visible
+  if (!visible && route.query.policy) {
+    const rest = { ...route.query }
+    delete rest.policy
+    void router.replace({ query: rest })
+  }
+}
+
 function clearServiceFilters() {
   serviceKeyword.value = ''
   selectedCategory.value = ''
@@ -315,7 +325,7 @@ watch(policies, () => {
       </TabPanel>
     </Tabs>
 
-    <PolicyPopup v-model:visible="policyVisible" :policy="currentPolicy" />
+    <PolicyPopup :visible="policyVisible" :policy="currentPolicy" @update:visible="onPolicyVisibleChange" />
   </div>
   </PullDownRefresh>
 </template>
@@ -353,8 +363,9 @@ watch(policies, () => {
 .service-categories :deep(.t-tag) { flex: 0 0 auto; }
 
 .service-section-head { display: flex; align-items: baseline; justify-content: space-between; margin:0 var(--app-space-1) var(--app-space-4); }
-.service-section-head h2 { margin:0; font-size: var(--app-font-subtitle); font-weight: 600; }
-.service-section-head span { color: var(--td-text-color-placeholder); font-size: var(--app-font-caption); }
+/* v45：区块标题统一为 20px 层级，与首页「最新需求/最新资讯」口径一致；计数改用次级文字色 */
+.service-section-head h2 { margin:0; font-size: var(--app-font-title); font-weight: 600; line-height: 1.4; }
+.service-section-head span { color: var(--td-text-color-secondary); font-size: var(--app-font-caption); }
 
 .tab-search {
   margin-bottom:var(--app-space-5);

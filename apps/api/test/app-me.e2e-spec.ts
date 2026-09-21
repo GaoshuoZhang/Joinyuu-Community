@@ -95,7 +95,7 @@ describe('M2-R R1 app 个人中心', () => {
     expect(res.body.data.records.length).toBeGreaterThan(0)
   })
 
-  it('改密：原密码错误 400，成功后旧密码失效', async () => {
+  it('改密：原密码错误 400，成功后自动退出登录（含当前会话）', async () => {
     const otherToken = await appLoginAs(app, '13801210001', 'user123')
     const wrong = await appPost(app, token, '/api/app/me/change-password', {
       oldPassword: 'bad-old',
@@ -114,10 +114,14 @@ describe('M2-R R1 app 个人中心', () => {
     expect(oldPass.status).toBe(401)
     const newPass = await appLoginRequest(app, '13801210001', 'newpass456')
     expect(newPass.status).toBe(200)
+    /* 需求：修改完密码自动退出登录——其他会话与当前会话一并失效 */
     const kicked = await appGet(app, otherToken, '/api/app/me')
     expect(kicked.status).toBe(401)
-    const current = await appGet(app, token, '/api/app/me')
-    expect(current.status).toBe(200)
+    const currentKicked = await appGet(app, token, '/api/app/me')
+    expect(currentKicked.status).toBe(401)
+
+    /* 用新密码重新登录，供后续用例继续使用 */
+    token = newPass.body.data.token
   })
 
   it('地址簿：CRUD + 默认地址唯一 + 删除默认转移', async () => {

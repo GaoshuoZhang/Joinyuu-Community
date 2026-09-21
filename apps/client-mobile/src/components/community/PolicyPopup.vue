@@ -3,6 +3,7 @@ import { Button, Popup, Tag } from 'tdesign-mobile-vue'
 import type { CommunityPolicy } from '@/types'
 import RichTextBlock from '@/components/shared/RichTextBlock.vue'
 import { formatLocalDate, formatLocalDateTime } from '@/utils/format'
+import { safeHttpUrl } from '@/utils/validators'
 
 /* 社区政策正文弹层：标题/摘要/正文/版本信息/附件/更新时间。 */
 defineProps<{ visible: boolean; policy: CommunityPolicy | null }>()
@@ -27,7 +28,7 @@ defineEmits<{ 'update:visible': [boolean] }>()
         <span v-if="policy.publisher">发布主体：{{ policy.publisher }}</span>
       </div>
       <div v-if="policy.attachments?.length" class="p-files">
-        <a v-for="file in policy.attachments" :key="file.url" :href="file.url" target="_blank" rel="noopener">{{ file.name }}</a>
+        <a v-for="file in policy.attachments" :key="file.url" :href="safeHttpUrl(file.url)" target="_blank" rel="noopener">{{ file.name }}</a>
       </div>
       <p class="p-updated">更新时间：{{ policy.updatedAt.length === 10 ? formatLocalDate(policy.updatedAt) : formatLocalDateTime(policy.updatedAt) }}</p>
       <Button variant="outline" block @click="$emit('update:visible', false)">关闭</Button>

@@ -2,10 +2,15 @@ import { Injectable, InternalServerErrorException, NotFoundException } from '@ne
 import { Cron, CronExpression } from '@nestjs/schedule'
 import { PrismaService } from '../common/prisma/prisma.service'
 import { IdGeneratorService } from '../common/id-generator/id-generator.service'
+import { RedisService } from '../common/redis/redis.service'
 import { TrashService } from '../modules/system/trash/trash.service'
 import { OutboxService } from '../modules/messaging/outbox.service'
 import { formatNow, formatNowSec, formatToday } from '../common/utils/time'
 import { PointsEngineService } from '../common/engine/points-engine/points-engine.service'
+import { AuditService } from '../common/audit/audit.service'
+
+/** 任务级互斥锁 TTL（秒）：单实例单任务执行时长上限，超时后锁自动释放 */
+const JOB_LOCK_TTL_SEC = 60 * 15
 
 export interface SchedulerJobInfo {
   name: string
@@ -31,6 +36,8 @@ export class SchedulerService {
     private readonly trash: TrashService,
     private readonly points: PointsEngineService,
     private readonly outbox: OutboxService,
+    private readonly redis: RedisService,
+    private readonly audit: AuditService,
   ) {}
 
   /** 任务注册表（监控页展示 + 手动触发入口） */
@@ -49,6 +56,8 @@ export class SchedulerService {
         run: () => this.scanArticleScheduledPublish(),
       },
       { name: 'events-auto-end', cron: '每 5 分钟', enabled: true, run: () => this.scanAutoEnd() },
+      /* 冻结到期自动解冻：避免「临时冻结」因无到期任务而变成永久冻结 */
+      { name: 'user-freeze-expire', cron: '每 5 分钟', enabled: true, run: () => this.scanFreezeExpire() },
       { name: 'lease-expiring-notify', cron: '每天 09:00', enabled: true, run: () => this.scanLeaseExpiring() },
       { name: 'archive-auto-archive', cron: '每 5 分钟', enabled: true, run: () => this.trash.runAutoArchive() },
       { name: 'archive-auto-purge', cron: '每 5 分钟', enabled: true, run: () => this.trash.runAutoPurge() },
@@ -61,15 +70,33 @@ export class SchedulerService {
     return this.jobs.map((j) => ({ name: j.name, cron: j.cron, enabled: j.enabled }))
   }
 
-  /** 执行任务并记录 SchedulerLog（手动触发与 @Cron 共用） */
+  /** 执行任务并记录 SchedulerLog（手动触发与 @Cron 共用）
+   * BE-M3 修复：执行前用 Redis 抢占任务级互斥锁。多实例/手动触发与 @Cron 并发时，
+   * 只有持有锁的实例执行，其余跳过（写入跳过日志），避免重复通知/重复积分。 */
   async runJob(name: string): Promise<{ code: number }> {
     const job = this.jobs.find((j) => j.name === name)
     if (!job) throw new NotFoundException('任务不存在')
 
+    /* 互斥锁：抢不到说明另一实例正在执行（Redis 故障时 fail-open 放行，保证主流程可用） */
+    const lockKey = `scheduler:lock:${name}`
+    const acquired = await this.redis.acquireFlag(lockKey, JOB_LOCK_TTL_SEC)
+    if (!acquired) {
+      console.warn(`[scheduler] 任务 ${name} 已被其他实例执行，本次跳过`)
+      await this.writeLog(name, formatNowSec(), 0, 'ok', '另一实例正在执行，本次跳过', 0)
+      return { code: 0 }
+    }
+    try {
+      return await this.runJobUnlocked(name, job.run)
+    } finally {
+      await this.redis.delCache(lockKey)
+    }
+  }
+
+  private async runJobUnlocked(name: string, run: () => Promise<number>): Promise<{ code: number }> {
     const startedAt = formatNowSec()
     const t0 = Date.now()
     try {
-      const rows = await job.run()
+      const rows = await run()
       await this.writeLog(name, startedAt, Date.now() - t0, 'ok', rows > 0 ? `影响 ${rows} 行` : '无待处理数据', rows)
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e)
@@ -120,6 +147,11 @@ export class SchedulerService {
   @Cron(CronExpression.EVERY_5_MINUTES, { name: 'events-auto-end' })
   async handleAutoEnd(): Promise<void> {
     await this.runJob('events-auto-end')
+  }
+
+  @Cron(CronExpression.EVERY_5_MINUTES, { name: 'user-freeze-expire' })
+  async handleFreezeExpire(): Promise<void> {
+    await this.runJob('user-freeze-expire')
   }
 
   @Cron('0 9 * * *', { name: 'lease-expiring-notify' })
@@ -238,6 +270,36 @@ export class SchedulerService {
       where: { status: 'published', endTime: { lte: now }, deletedAt: null },
       data: { status: 'ended', archivableAt: now },
     })
+    return res.count
+  }
+
+  /** 冻结到期自动解冻（每 5 分钟）：临时冻结（frozenUntil 非空且已到点）自动置回 active 并留痕；
+   * 长期冻结 frozenUntil 为空，不受影响（需人工解冻）。 */
+  async scanFreezeExpire(): Promise<number> {
+    const now = formatNow()
+    const expired = await this.prisma.user.findMany({
+      where: { status: 'frozen', frozenUntil: { not: null, lte: now } },
+      select: { uid: true, nickname: true, frozenReason: true, frozenUntil: true },
+    })
+    if (expired.length === 0) return 0
+
+    /* 条件更新兜底：仅当仍为 frozen 且期限确实到点才解冻，与人工解冻并发时不重复处理 */
+    const res = await this.prisma.user.updateMany({
+      where: { uid: { in: expired.map((u) => u.uid) }, status: 'frozen', frozenUntil: { not: null, lte: now } },
+      data: { status: 'active', frozenUntil: null, frozenReason: null },
+    })
+
+    for (const user of expired) {
+      await this.audit.record({
+        module: '社区成员',
+        action: '冻结到期自动解冻',
+        target: `${user.uid} · ${user.nickname}`,
+        detail: `冻结期限 ${user.frozenUntil ?? ''} 已到点，系统自动解冻`,
+        before: { status: 'frozen', frozenUntil: user.frozenUntil ?? null, frozenReason: user.frozenReason ?? null },
+        after: { status: 'active', frozenUntil: null },
+        operator: '系统',
+      })
+    }
     return res.count
   }
 

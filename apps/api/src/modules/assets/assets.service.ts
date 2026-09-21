@@ -74,6 +74,10 @@ function sniffMime(buffer: Buffer): string | null {
 /** 存储键仅允许扁平文件名（uuid.ext），阻止路径穿越 */
 const FLAT_KEY_RE = /^[A-Za-z0-9][A-Za-z0-9._-]*$/
 
+/** 公开读取白名单：仅放行上传服务生成的 uuid 形态键。
+ * 可读性命名（如个人数据导出 export-<uid>-<时间戳>.json）即使落在存储根目录也不会被公开路由抓到。 */
+const PUBLIC_KEY_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\.[a-z0-9]{1,8}$/
+
 const MIME_BY_EXT: Record<string, string> = {
   '.png': 'image/png',
   '.jpg': 'image/jpeg',
@@ -200,9 +204,11 @@ export class AssetsService {
    * 文件存在时按扩展名推断 MIME 直接返回，避免「已上传但 404」。 */
   async readFile(key: string): Promise<{ buffer: Buffer; mime: string; fileName: string } | null> {
     if (!FLAT_KEY_RE.test(key) || key.includes('..')) return null
+    const asset = await this.prisma.mallAsset.findFirst({ where: { storeKey: key } })
+    /* 公开路由只暴露「素材库登记键」或「uuid 形态的上传键」，其余（含个人数据导出等可枚举命名）一律拒绝 */
+    if (!asset && !PUBLIC_KEY_RE.test(key)) return null
     const buffer = await this.storage.read(key)
     if (!buffer) return null
-    const asset = await this.prisma.mallAsset.findFirst({ where: { storeKey: key } })
     if (asset) return { buffer, mime: asset.mime, fileName: asset.fileName }
     return { buffer, mime: mimeByKey(key), fileName: key }
   }

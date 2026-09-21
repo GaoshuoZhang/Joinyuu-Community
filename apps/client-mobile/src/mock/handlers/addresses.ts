@@ -34,7 +34,8 @@ export async function saveAddress(id: string | undefined, payload: AddressPayloa
     if (id) {
       const target = list.find((item) => item.id === id)
       if (!target) fail(404, '地址不存在')
-      Object.assign(target, { name, phone, address, isDefault })
+      /* 未勾选默认时保留原值，避免整簿失去默认地址（与后端一致） */
+      Object.assign(target, { name, phone, address, ...(isDefault ? { isDefault: true } : {}) })
       return { id }
     }
     const newId = nextMockId('AD')

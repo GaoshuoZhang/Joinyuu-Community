@@ -169,10 +169,37 @@ function isAttachmentList(value: unknown): value is { name: string; size: number
   })
 }
 
+/** 附件 URL 白名单：仅接受 http(s) 绝对地址或站内相对路径（'/' 开头且非 '//'）。
+ * 其余协议（javascript:/data:/vbscript:/file: 等）一律剔除，避免「管理员点击附件即执行脚本」的存储型 XSS。 */
+export function safeAttachmentUrl(value: unknown): string | undefined {
+  if (typeof value !== 'string') return undefined
+  const raw = value.trim()
+  if (!raw) return undefined
+  if (raw.startsWith('/')) return raw.startsWith('//') ? undefined : raw
+  try {
+    const parsed = new URL(raw)
+    return parsed.protocol === 'http:' || parsed.protocol === 'https:' ? raw : undefined
+  } catch {
+    return undefined
+  }
+}
+
+/** 就地清洗上传字段中的附件 URL（写入前调用，杜绝脏数据落库） */
+function sanitizeAttachmentUrls(fields: Record<string, unknown>): void {
+  for (const value of Object.values(fields)) {
+    if (!isAttachmentList(value)) continue
+    for (const file of value) {
+      const safe = safeAttachmentUrl(file.url)
+      if (safe) file.url = safe
+      else delete file.url
+    }
+  }
+}
+
 /* 申请（M2-R R2 /api/app/applications）：
  * 可配置表单 schema 下发（未配置时使用冻结默认值）、schema 驱动提交（写 Application + records 时间线）、
  * 我的申请、撤回（pending→withdrawn）、修改重提（rejected/withdrawn→pending）、回填 payload。
- * 从简：Application 无 userId 列，以 applicantPhone（用户手机号）识别「我的申请」。 */
+ * 归属：以 Application.userId（申请人 uid）识别「我的申请」；历史数据 userId 为空时回退按 applicantPhone 匹配。 */
 @Injectable()
 export class AppApplicationsService {
   constructor(
@@ -202,7 +229,6 @@ export class AppApplicationsService {
   /** 提交申请（schema 校验必填 + targetName/summary/attachments 派生 + 同类型 pending 去重） */
   async create(user: { uid: string; name: string }, dto: CreateApplicationDto): Promise<{ id: string }> {
     const account = await this.prisma.user.findUnique({ where: { uid: user.uid } })
-    const phone = account?.phone ?? ''
     const name = account?.nickname || user.name
     const type = dto.type
     if (type === 'individual' && (!account?.realName || !account.citizenId)) {
@@ -213,12 +239,18 @@ export class AppApplicationsService {
 
     const fields = dto.fields ?? {}
     const { targetName, summary } = await this.normalize(type as AppApplicationType, fields)
+    /* 申请人手机号：优先账号已绑定手机号，否则取表单联系人电话（历史字段，非空约束保留） */
+    const contactPhone = typeof fields.contactPhone === 'string' ? fields.contactPhone.trim() : ''
+    const applicantPhone = account?.phone ?? contactPhone ?? ''
 
-    /* 同类型审核中申请去重 */
+    /* 同类型审核中申请去重（按 uid 归属） */
     const dup = await this.prisma.application.findFirst({
-      where: { type, status: 'pending', deletedAt: null, applicantPhone: phone },
+      where: { type, status: 'pending', deletedAt: null, userId: user.uid },
     })
     if (dup) throw new ConflictException('你已有同类型申请在审核中，请耐心等待')
+
+    /* 附件 URL 白名单清洗（防存储型 XSS） */
+    sanitizeAttachmentUrls(fields)
 
     const now = formatNow()
     const payload: ApplicationPayloadStorage = { fields, note: dto.note }
@@ -227,7 +259,8 @@ export class AppApplicationsService {
         id: await this.ids.next('AP'),
         type,
         applicantName: name,
-        applicantPhone: phone,
+        applicantPhone,
+        userId: user.uid,
         targetName,
         summary: summary ?? '',
         details: payload as unknown as Prisma.InputJsonValue,
@@ -248,18 +281,16 @@ export class AppApplicationsService {
 
   /** 我的申请（含时间线 records 与状态） */
   async myApplications(uid: string): Promise<MyApplicationDto[]> {
-    const phone = await this.phoneOf(uid)
     const rows = await this.prisma.application.findMany({
-      where: { applicantPhone: phone, deletedAt: null },
+      where: { deletedAt: null, ...(await this.ownershipWhere(uid)) },
       orderBy: { submittedAt: 'desc' },
     })
     return rows.map(toMyApplicationDto)
   }
 
-  /** 申请详情：手机号归属校验，兼容历史数组、平铺对象和新版 fields 包装。 */
+  /** 申请详情：归属校验，兼容历史数组、平铺对象和新版 fields 包装。 */
   async detail(uid: string, id: string): Promise<MyApplicationDetailDto> {
-    const phone = await this.phoneOf(uid)
-    const application = await this.mine(phone, id)
+    const application = await this.mine(uid, id)
     const configured = await this.prisma.applicationFormConfig.findUnique({ where: { type: application.type } })
     const schemaFields = configured
       ? configured.fields as unknown as ApplicationField[]
@@ -275,8 +306,7 @@ export class AppApplicationsService {
 
   /** 撤回审核中的申请：pending → withdrawn */
   async withdraw(uid: string, id: string): Promise<{ code: number }> {
-    const phone = await this.phoneOf(uid)
-    const application = await this.mine(phone, id)
+    const application = await this.mine(uid, id)
     if (application.status !== 'pending') throw new ConflictException('仅审核中的申请可撤回')
     const records = (application.records as Prisma.JsonArray) ?? []
     await this.prisma.application.update({
@@ -297,8 +327,7 @@ export class AppApplicationsService {
 
   /** 修改重提：rejected/withdrawn → pending（可带新 fields 覆盖 details） */
   async resubmit(uid: string, id: string, dto: CreateApplicationDto): Promise<{ code: number }> {
-    const phone = await this.phoneOf(uid)
-    const application = await this.mine(phone, id)
+    const application = await this.mine(uid, id)
     if (application.status !== 'rejected' && application.status !== 'withdrawn') {
       throw new ConflictException('仅已驳回或已撤回的申请可修改重提')
     }
@@ -307,12 +336,15 @@ export class AppApplicationsService {
     if (!schema) throw new BadRequestException('申请类型无效')
     const fields = dto.fields ?? (application.details as unknown as ApplicationPayloadStorage | null)?.fields ?? {}
     const { targetName, summary } = await this.normalize(application.type as AppApplicationType, fields)
+    /* 附件 URL 白名单清洗（防存储型 XSS） */
+    sanitizeAttachmentUrls(fields)
     const payload: ApplicationPayloadStorage = { fields, note: dto.note }
     const now = formatNow()
     const records = (application.records as Prisma.JsonArray) ?? []
     await this.prisma.application.update({
       where: { id },
       data: {
+        userId: uid,
         targetName,
         summary: summary ?? '',
         details: payload as unknown as Prisma.InputJsonValue,
@@ -332,8 +364,7 @@ export class AppApplicationsService {
 
   /** 回填申请原始载荷（仅本人） */
   async payload(uid: string, id: string): Promise<CreateApplicationDto> {
-    const phone = await this.phoneOf(uid)
-    const application = await this.mine(phone, id)
+    const application = await this.mine(uid, id)
     const stored = readStored(application)
     const dto: CreateApplicationDto = { type: application.type }
     if (stored.fields) dto.fields = stored.fields
@@ -343,9 +374,12 @@ export class AppApplicationsService {
 
   /* ---------- 私有辅助 ---------- */
 
-  private async phoneOf(uid: string): Promise<string> {
+  /** 归属条件：优先 uid；历史记录 userId 为空时回退按账号手机号匹配 */
+  private async ownershipWhere(uid: string): Promise<Prisma.ApplicationWhereInput> {
     const user = await this.prisma.user.findUnique({ where: { uid }, select: { phone: true } })
-    return user?.phone ?? ''
+    const legacy: Prisma.ApplicationWhereInput[] = [{ userId: uid }]
+    if (user?.phone) legacy.push({ userId: null, applicantPhone: user.phone })
+    return { OR: legacy }
   }
 
   private async assertTalentApplicantVerified(uid: string): Promise<void> {
@@ -353,9 +387,9 @@ export class AppApplicationsService {
     if (!user?.realName || !user.citizenId) throw new ForbiddenException('完成实名认证后才能提交人才登记')
   }
 
-  private async mine(phone: string, id: string): Promise<Application> {
+  private async mine(uid: string, id: string): Promise<Application> {
     const application = await this.prisma.application.findFirst({
-      where: { id, applicantPhone: phone, deletedAt: null },
+      where: { id, deletedAt: null, ...(await this.ownershipWhere(uid)) },
     })
     if (!application) throw new NotFoundException('申请不存在')
     return application
@@ -462,10 +496,11 @@ function toApplicationFields(raw: Prisma.JsonValue, schemaFields: ApplicationFie
           if (!file || typeof file !== 'object' || Array.isArray(file)) return []
           const data = file as Record<string, unknown>
           if (typeof data.name !== 'string' || !data.name.trim()) return []
+          const url = safeAttachmentUrl(data.url)
           return [{
             name: data.name,
             ...(typeof data.size === 'number' ? { size: data.size } : {}),
-            ...(typeof data.url === 'string' && data.url ? { url: data.url } : {}),
+            ...(url ? { url } : {}),
           }]
         })
         legacyEntries.push({ label, files })
@@ -489,11 +524,14 @@ function toApplicationFields(raw: Prisma.JsonValue, schemaFields: ApplicationFie
       entries.push({
         key,
         label,
-        files: value.map((file) => ({
-          name: file.name,
-          size: file.size,
-          ...(file.url ? { url: file.url } : {}),
-        })),
+        files: value.map((file) => {
+          const url = safeAttachmentUrl(file.url)
+          return {
+            name: file.name,
+            size: file.size,
+            ...(url ? { url } : {}),
+          }
+        }),
       })
       continue
     }

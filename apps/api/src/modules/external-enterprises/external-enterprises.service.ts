@@ -1,5 +1,5 @@
 import { BadRequestException, ConflictException, Injectable, NotFoundException } from '@nestjs/common'
-import type { ExternalEnterpriseProfile } from '@prisma/client'
+import type { ExternalEnterpriseProfile, Prisma } from '@prisma/client'
 import { PrismaService } from '../../common/prisma/prisma.service'
 import { AuditService } from '../../common/audit/audit.service'
 import { IdGeneratorService } from '../../common/id-generator/id-generator.service'
@@ -40,33 +40,36 @@ export class ExternalEnterprisesService {
   ) {}
 
   async list(query: QueryExternalEnterprisesDto): Promise<{ list: ExternalEnterpriseDto[]; total: number }> {
-    const profiles = await this.prisma.externalEnterpriseProfile.findMany({
-      where: { deletedAt: null },
-    })
-    let list = await Promise.all(profiles.map((p) => this.aggregate(p)))
-
+    /* 关键字/行业/状态筛选与排序、计数、分页全部下发数据库（档案字段即可判定，无需内存后置计算） */
+    const where: Prisma.ExternalEnterpriseProfileWhereInput = { deletedAt: null }
     if (query.keyword) {
-      const kw = query.keyword.trim().toLowerCase()
-      list = list.filter(
-        (e) =>
-          e.name.toLowerCase().includes(kw) ||
-          e.industry.toLowerCase().includes(kw) ||
-          e.id.toLowerCase().includes(kw),
-      )
+      const kw = query.keyword.trim()
+      where.OR = [
+        { name: { contains: kw, mode: 'insensitive' } },
+        { industry: { contains: kw, mode: 'insensitive' } },
+        { id: { contains: kw, mode: 'insensitive' } },
+      ]
     }
-    if (query.industry) list = list.filter((e) => e.industry === query.industry)
-    if (query.status) list = list.filter((e) => e.status === query.status)
+    if (query.industry) where.industry = query.industry
+    if (query.status) where.status = query.status
 
-    const dir = query.sortOrder === 'ascend' ? 1 : -1
-    list.sort((a, b) => {
-      if (a.registeredAt < b.registeredAt) return -1 * dir
-      if (a.registeredAt > b.registeredAt) return 1 * dir
-      return 0
-    })
+    const desc = query.sortOrder !== 'ascend'
+    const [total, profiles] = await Promise.all([
+      this.prisma.externalEnterpriseProfile.count({ where }),
+      this.prisma.externalEnterpriseProfile.findMany({
+        where,
+        orderBy: { registeredAt: desc ? 'desc' : 'asc' },
+        skip: (query.page - 1) * query.pageSize,
+        take: query.pageSize,
+      }),
+    ])
 
-    const total = list.length
-    const start = (query.page - 1) * query.pageSize
-    return { list: list.slice(start, start + query.pageSize), total }
+    /* 当页成员一次性批量取回（原实现每个档案单独查 userIdentity，N+1） */
+    const membersByProfile = await this.membersByProfileNames(profiles.map((profile) => profile.name))
+    return {
+      list: profiles.map((profile) => this.toDto(profile, membersByProfile.get(profile.name) ?? [])),
+      total,
+    }
   }
 
   async detail(id: string): Promise<ExternalEnterpriseDto> {
@@ -100,27 +103,38 @@ export class ExternalEnterprisesService {
   }
 
   async update(id: string, dto: UpdateExternalEnterpriseDto): Promise<{ code: number }> {
-    const profile = await this.prisma.externalEnterpriseProfile.findUnique({ where: { id } })
+    const profile = await this.prisma.externalEnterpriseProfile.findFirst({
+      where: { id, deletedAt: null },
+    })
     if (!profile) throw new NotFoundException('合作企业不存在')
 
-    /* 改名时同步迁移已有成员身份（成员以档案名匹配） */
+    /* 改名时同步迁移已有成员身份（成员以档案名匹配）；迁移与改名同事务，避免中途失败导致名称不一致 */
     const name = dto.name?.trim() ?? profile.name
     if (name !== profile.name) {
-      await this.prisma.userIdentity.updateMany({
-        where: { type: 'external_enterprise', enterpriseName: profile.name },
-        data: { enterpriseName: name },
+      /* 改名撞同名未删除档案会静默合并成员身份，前置拦截 */
+      const sameName = await this.prisma.externalEnterpriseProfile.findFirst({
+        where: { id: { not: id }, deletedAt: null, name },
       })
+      if (sameName) throw new ConflictException('已存在同名合作企业档案')
     }
 
-    await this.prisma.externalEnterpriseProfile.update({
-      where: { id },
-      data: {
-        ...(dto.name !== undefined ? { name } : {}),
-        ...(dto.industry !== undefined ? { industry: dto.industry.trim() } : {}),
-        ...(dto.size !== undefined ? { size: dto.size } : {}),
-        ...(dto.foundedAt !== undefined ? { foundedAt: dto.foundedAt } : {}),
-        ...(dto.description !== undefined ? { description: dto.description } : {}),
-      },
+    await this.prisma.$transaction(async (tx) => {
+      if (name !== profile.name) {
+        await tx.userIdentity.updateMany({
+          where: { type: 'external_enterprise', enterpriseName: profile.name },
+          data: { enterpriseName: name },
+        })
+      }
+      await tx.externalEnterpriseProfile.update({
+        where: { id },
+        data: {
+          ...(dto.name !== undefined ? { name } : {}),
+          ...(dto.industry !== undefined ? { industry: dto.industry.trim() } : {}),
+          ...(dto.size !== undefined ? { size: dto.size } : {}),
+          ...(dto.foundedAt !== undefined ? { foundedAt: dto.foundedAt } : {}),
+          ...(dto.description !== undefined ? { description: dto.description } : {}),
+        },
+      })
     })
     await this.audit.record({
       module: '合作企业',
@@ -131,7 +145,7 @@ export class ExternalEnterprisesService {
   }
 
   async disable(id: string): Promise<{ code: number }> {
-    const profile = await this.prisma.externalEnterpriseProfile.findUnique({ where: { id } })
+    const profile = await this.prisma.externalEnterpriseProfile.findFirst({ where: { id, deletedAt: null } })
     if (!profile) throw new NotFoundException('合作企业不存在')
     await this.prisma.externalEnterpriseProfile.update({ where: { id }, data: { status: 'disabled' } })
     await this.audit.record({
@@ -143,7 +157,7 @@ export class ExternalEnterprisesService {
   }
 
   async enable(id: string): Promise<{ code: number }> {
-    const profile = await this.prisma.externalEnterpriseProfile.findUnique({ where: { id } })
+    const profile = await this.prisma.externalEnterpriseProfile.findFirst({ where: { id, deletedAt: null } })
     if (!profile) throw new NotFoundException('合作企业不存在')
     await this.prisma.externalEnterpriseProfile.update({ where: { id }, data: { status: 'active' } })
     await this.audit.record({
@@ -174,7 +188,7 @@ export class ExternalEnterprisesService {
   }
 
   async addMember(id: string, dto: AddMemberInput): Promise<{ code: number }> {
-    const profile = await this.prisma.externalEnterpriseProfile.findUnique({ where: { id } })
+    const profile = await this.prisma.externalEnterpriseProfile.findFirst({ where: { id, deletedAt: null } })
     if (!profile) throw new NotFoundException('合作企业不存在')
 
     const user = await this.prisma.user.findUnique({ where: { uid: dto.userId } })
@@ -206,7 +220,7 @@ export class ExternalEnterprisesService {
   }
 
   async removeMember(id: string, userId: string): Promise<{ code: number }> {
-    const profile = await this.prisma.externalEnterpriseProfile.findUnique({ where: { id } })
+    const profile = await this.prisma.externalEnterpriseProfile.findFirst({ where: { id, deletedAt: null } })
     if (!profile) throw new NotFoundException('合作企业不存在')
 
     const result = await this.prisma.userIdentity.deleteMany({
@@ -224,7 +238,7 @@ export class ExternalEnterprisesService {
   }
 
   async stats(id: string): Promise<{ demandCount: number; projectCount: number }> {
-    const profile = await this.prisma.externalEnterpriseProfile.findUnique({ where: { id } })
+    const profile = await this.prisma.externalEnterpriseProfile.findFirst({ where: { id, deletedAt: null } })
     if (!profile) throw new NotFoundException('合作企业不存在')
 
     const demands = await this.prisma.demand.findMany({
@@ -250,19 +264,38 @@ export class ExternalEnterprisesService {
     return { demandCount, projectCount }
   }
 
+  /** 单档案聚合视图（详情用）：成员按档案名批量取回后再取本档案一份 */
   private async aggregate(profile: ExternalEnterpriseProfile): Promise<ExternalEnterpriseDto> {
+    const membersByProfile = await this.membersByProfileNames([profile.name])
+    return this.toDto(profile, membersByProfile.get(profile.name) ?? [])
+  }
+
+  /** 按档案名批量取成员并分组（一次查询覆盖多个档案，替代逐档案查询）；组内顺序与原 per-档案 查询一致 */
+  private async membersByProfileNames(names: string[]): Promise<Map<string, ExternalEnterpriseMemberDto[]>> {
+    const grouped = new Map<string, ExternalEnterpriseMemberDto[]>()
+    if (!names.length) return grouped
+
     const identities = await this.prisma.userIdentity.findMany({
-      where: { type: 'external_enterprise', enterpriseName: profile.name },
+      where: { type: 'external_enterprise', enterpriseName: { in: names } },
       include: { user: true },
       orderBy: [{ userId: 'asc' }, { id: 'asc' }],
     })
-    const members: ExternalEnterpriseMemberDto[] = identities.map((i) => ({
-      userId: i.userId,
-      name: i.user.realName ?? i.user.nickname,
-      title: i.title,
-      phone: i.user.phone,
-      status: i.user.status,
-    }))
+    for (const i of identities) {
+      if (i.enterpriseName == null) continue
+      const members = grouped.get(i.enterpriseName) ?? []
+      members.push({
+        userId: i.userId,
+        name: i.user.realName ?? i.user.nickname,
+        title: i.title,
+        phone: i.user.phone ?? '',
+        status: i.user.status,
+      })
+      grouped.set(i.enterpriseName, members)
+    }
+    return grouped
+  }
+
+  private toDto(profile: ExternalEnterpriseProfile, members: ExternalEnterpriseMemberDto[]): ExternalEnterpriseDto {
     return {
       id: profile.id,
       name: profile.name,

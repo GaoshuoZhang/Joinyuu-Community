@@ -23,7 +23,7 @@ defineProps<{ demand: Demand; responded: boolean; to: string }>()
       <span v-if="demandDateText(demand)">{{ demandDateText(demand) }}</span>
     </div>
     <Tag v-if="responded" class="d-flag" size="small" variant="light" theme="success">已响应</Tag>
-    <p class="d-resp">{{ formatZhNumber(demand.responseCount) }} 人响应</p>
+    <p class="d-resp" :class="{ 'is-zero': !demand.responseCount }">{{ formatZhNumber(demand.responseCount) }} 人响应</p>
   </router-link>
 </template>
 
@@ -37,7 +37,7 @@ defineProps<{ demand: Demand; responded: boolean; to: string }>()
 
 .d-head {
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   gap: var(--app-space-4);
 }
 
@@ -49,11 +49,13 @@ defineProps<{ demand: Demand; responded: boolean; to: string }>()
   margin:0;
   flex: 1;
   min-width: 0;
-  font-size: var(--app-font-body);
+  font-size: var(--app-font-subtitle);
+  font-weight: 600;
   line-height: 1.4;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
   overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
 }
 
 .d-meta {
@@ -82,5 +84,11 @@ defineProps<{ demand: Demand; responded: boolean; to: string }>()
   font-size: var(--app-font-caption);
   color: var(--td-brand-color);
   font-weight: 600;
+}
+
+/* v45：0 响应不再是有效信号，撤掉品牌色强调，把强调色留给真的有人响应的需求 */
+.d-resp.is-zero {
+  color: var(--td-text-color-secondary);
+  font-weight: 400;
 }
 </style>

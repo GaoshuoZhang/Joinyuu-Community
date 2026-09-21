@@ -125,15 +125,14 @@ export class SmsCodeService {
     const input = (code ?? '').trim()
     if (!normalized || !/^\d{6}$/.test(input)) return false
 
-    const attempts = await this.redis.incrWithTtl(attemptKey(purpose, normalized), CODE_TTL_SEC)
+    /* 校验失败次数为安全敏感计数：Redis 异常时拒绝而非放行，避免爆破保护失效 */
+    const attempts = await this.redis.incrWithTtlStrict(attemptKey(purpose, normalized), CODE_TTL_SEC)
     if (attempts !== null && attempts > MAX_VERIFY_ATTEMPTS) return false
 
-    const expected = await this.redis.getCache<string>(codeKey(purpose, normalized))
-    if (!expected) return false
+    /* 比对与消费在 Redis 内原子完成：并发请求不可能同时消费同一验证码 */
+    if (!(await this.redis.compareAndDelete(codeKey(purpose, normalized), input))) return false
 
-    if (expected !== input) return false
-
-    await this.redis.delCache(codeKey(purpose, normalized), attemptKey(purpose, normalized))
+    await this.redis.delCache(attemptKey(purpose, normalized))
     return true
   }
 }

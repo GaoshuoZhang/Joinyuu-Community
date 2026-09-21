@@ -6,11 +6,14 @@ import { DialogPlugin } from 'tdesign-mobile-vue'
 export function useUnsavedGuard(isDirty: () => boolean) {
   let pending = false
   let allowNextLeave = false
+  let allowLeaverTimer: number | null = null
 
   function markClean(): void {
     allowNextLeave = true
-    window.setTimeout(() => {
+    if (allowLeaverTimer !== null) window.clearTimeout(allowLeaverTimer)
+    allowLeaverTimer = window.setTimeout(() => {
       allowNextLeave = false
+      allowLeaverTimer = null
     }, 0)
   }
 
@@ -21,7 +24,11 @@ export function useUnsavedGuard(isDirty: () => boolean) {
   }
 
   window.addEventListener('beforeunload', onBeforeUnload)
-  onBeforeUnmount(() => window.removeEventListener('beforeunload', onBeforeUnload))
+  onBeforeUnmount(() => {
+    window.removeEventListener('beforeunload', onBeforeUnload)
+    if (allowLeaverTimer !== null) window.clearTimeout(allowLeaverTimer)
+    allowLeaverTimer = null
+  })
 
   onBeforeRouteLeave(() => {
     if (allowNextLeave || !isDirty()) return true

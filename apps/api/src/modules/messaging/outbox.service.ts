@@ -3,6 +3,7 @@ import { Prisma, type OutboxMessage } from '@prisma/client'
 import { PrismaService } from '../../common/prisma/prisma.service'
 import { IdGeneratorService } from '../../common/id-generator/id-generator.service'
 import { AuditService } from '../../common/audit/audit.service'
+import { formatDateTime } from '../../common/utils/time'
 import { MessageChannelService } from './message-channel.service'
 import { MessageRenderService } from './message-render.service'
 import { MessageProviderRegistry } from './providers/provider.registry'
@@ -14,6 +15,8 @@ const MAX_ATTEMPTS_DEFAULT = 3
 /** 退避基数（秒）：30s → 60s → 120s…，上限 30 分钟 */
 const BACKOFF_BASE_SEC = 30
 const BACKOFF_MAX_SEC = 1800
+/** 卡在 sending 的消息回收阈值（分钟）：进程崩溃/投递挂起超过该时长后重新入队投递 */
+const SENDING_STALE_MINUTES = 10
 
 export interface EnqueueInput {
   channelKind: ChannelKind
@@ -123,13 +126,22 @@ export class OutboxService {
     return { id, status, deduplicated: false }
   }
 
-  /** 处理到期待发送消息；返回本次处理条数（供调度器日志） */
+  /** 处理到期待发送消息；返回本次处理条数（供调度器日志）
+   * BE-M2 修复：抢占为 sending 后若进程崩溃/投递挂起，记录会永久停留 sending。
+   * 扫描时额外回收超过阈值未完成的 sending（updatedAt ≤ now - 10min）重新入队投递。 */
   async processPending(limit = 20): Promise<number> {
     const now = formatAt(new Date())
+    const staleBefore = formatAt(new Date(Date.now() - SENDING_STALE_MINUTES * 60_000))
     const candidates = await this.prisma.outboxMessage.findMany({
       where: {
-        status: { in: ['pending', 'failed'] },
-        OR: [{ nextAttemptAt: null }, { nextAttemptAt: { lte: now } }],
+        OR: [
+          {
+            status: { in: ['pending', 'failed'] },
+            OR: [{ nextAttemptAt: null }, { nextAttemptAt: { lte: now } }],
+          },
+          /* 卡死的 sending 超时回收（updatedAt 为 VARCHAR(16) 分钟精度，阈值 10 分钟足够避开在途消息） */
+          { status: 'sending', updatedAt: { lte: staleBefore } },
+        ],
       },
       orderBy: [{ priority: 'desc' }, { createdAt: 'asc' }],
       take: limit,
@@ -137,14 +149,31 @@ export class OutboxService {
 
     let processed = 0
     for (const candidate of candidates) {
-      /* 乐观抢占：只有把 pending/failed 改成 sending 的那次拿锁成功 */
+      /* 乐观抢占：pending/failed 按状态抢占；超时 sending 必须同时满足「已超时」才可回收，
+       * 否则两个实例会先后把同一条 sending 抢到并各投递一次（重复短信/邮件）。 */
+      const claimWhere: Prisma.OutboxMessageWhereInput =
+        candidate.status === 'sending'
+          ? { id: candidate.id, status: 'sending', updatedAt: { lte: staleBefore } }
+          : { id: candidate.id, status: { in: ['pending', 'failed'] } }
       const claimed = await this.prisma.outboxMessage.updateMany({
-        where: { id: candidate.id, status: { in: ['pending', 'failed'] } },
+        where: claimWhere,
         data: { status: 'sending', updatedAt: formatAt(new Date()) },
       })
       if (claimed.count !== 1) continue
       processed += 1
-      await this.deliver(candidate.id)
+      /* deliver 内部异常兜底回写 failed（含重试退避），避免再次长期滞留 sending */
+      await this.deliver(candidate.id).catch(async (e) => {
+        console.error('[messaging] 投递异常，回写 failed:', e instanceof Error ? e.message : e)
+        await this.prisma.outboxMessage.updateMany({
+          where: { id: candidate.id, status: 'sending' },
+          data: {
+            status: 'failed',
+            lastError: (e instanceof Error ? e.message : String(e)).slice(0, 512),
+            nextAttemptAt: formatAt(new Date(Date.now() + backoffSeconds(candidate.attempts + 1) * 1000)),
+            updatedAt: formatAt(new Date()),
+          },
+        })
+      })
     }
     return processed
   }
@@ -155,10 +184,10 @@ export class OutboxService {
     if (query.channelKind) where.channelKind = query.channelKind
     const keyword = query.keyword?.trim()
     if (keyword) {
+      /* 说明：不检索 idempotencyKey——安全类消息的幂等键内嵌验证码，可作为侧信道枚举 */
       where.OR = [
         { recipient: { contains: keyword } },
         { templateCode: { contains: keyword } },
-        { idempotencyKey: { contains: keyword } },
         { userId: { contains: keyword } },
       ]
     }
@@ -198,11 +227,11 @@ export class OutboxService {
     }))
   }
 
-  /** 手动重试（failed/dead/skipped → pending） */
+  /** 手动重试（failed/dead/skipped → pending）；已投递/处理中的消息不可重试，避免重复发送 */
   async retry(id: string, operator: string): Promise<{ code: number }> {
     const row = await this.require(id)
-    if (row.status === 'pending' || row.status === 'sending') {
-      throw new BadRequestException('该消息正在处理中，无需重试')
+    if (row.status !== 'failed' && row.status !== 'dead' && row.status !== 'skipped') {
+      throw new BadRequestException('仅失败/已终止/已跳过的消息可以重试')
     }
     await this.prisma.outboxMessage.update({
       where: { id },
@@ -407,8 +436,19 @@ function toOutboxDto(row: OutboxMessage): Record<string, unknown> {
     nextAttemptAt: row.nextAttemptAt,
     createdAt: row.createdAt,
     sentAt: row.sentAt,
-    variables: row.payload,
+    /* 安全类消息（验证码等）变量脱敏：运营可见投递状态，但不得读到在途验证码 */
+    variables: row.security ? maskSecurityVariables(row.payload) : row.payload,
   }
+}
+
+/** 安全类消息变量脱敏：疑似凭据键（code/token/password/link 等）统一掩码 */
+function maskSecurityVariables(payload: Prisma.JsonValue): Prisma.JsonValue {
+  if (!payload || typeof payload !== 'object' || Array.isArray(payload)) return payload
+  const masked: Record<string, unknown> = {}
+  for (const [key, value] of Object.entries(payload as Record<string, unknown>)) {
+    masked[key] = /code|token|password|secret|link/i.test(key) ? '******' : value
+  }
+  return masked as Prisma.JsonValue
 }
 
 /** 指数退避：30s, 60s, 120s… 上限 30 分钟 */
@@ -442,7 +482,7 @@ function toMinutes(value: string): number | null {
   return Number(match[1]) * 60 + Number(match[2])
 }
 
+/** 时间格式化：OutboxMessage 各时间列为 VARCHAR(16)，须用 YYYY-MM-DD HH:mm（不含秒） */
 function formatAt(date: Date): string {
-  const p = (n: number): string => String(n).padStart(2, '0')
-  return `${date.getFullYear()}-${p(date.getMonth() + 1)}-${p(date.getDate())} ${p(date.getHours())}:${p(date.getMinutes())}:${p(date.getSeconds())}`
+  return formatDateTime(date)
 }

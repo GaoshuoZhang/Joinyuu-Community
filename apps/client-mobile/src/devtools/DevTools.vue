@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, ref, watch } from 'vue'
+import { computed, onBeforeUnmount, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { Button, DialogPlugin, Input, Switch } from 'tdesign-mobile-vue'
 import { useAuthStore } from '@/stores/auth'
@@ -60,10 +60,14 @@ function flash(msg: string) {
   }, 2400)
 }
 
+onBeforeUnmount(() => {
+  if (statusTimer !== undefined) window.clearTimeout(statusTimer)
+})
+
 async function switchAccount(phone: string) {
   busy.value = phone
   try {
-    await auth.login({ phone, password: 'client123', captchaCode: '8888' })
+    await auth.login({ identifier: phone, password: 'client123', captchaId: 'mock', captchaCode: '8888' })
     await notices.refreshAll()
     flash(`已切换为「${auth.name}」`)
     await router.push('/')

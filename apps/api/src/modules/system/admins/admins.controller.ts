@@ -20,7 +20,8 @@ export class AdminsController {
   @Post()
   @HttpCode(200)
   create(@Body() dto: CreateAdminDto, @Req() req: AuthenticatedRequest): Promise<{ id: number; initialPassword?: string }> {
-    return this.admins.create(dto, req.user?.name ?? '社区管理员')
+    const user = this.operator(req)
+    return this.admins.create(dto, user)
   }
 
   @Put(':id')
@@ -30,7 +31,7 @@ export class AdminsController {
     @Body() dto: UpdateAdminDto,
     @Req() req: AuthenticatedRequest,
   ): Promise<{ code: number }> {
-    return this.admins.update(id, dto, req.user?.name ?? '社区管理员')
+    return this.admins.update(id, dto, this.operator(req))
   }
 
   @Patch(':id/status')
@@ -40,9 +41,7 @@ export class AdminsController {
     @Body() dto: UpdateAdminStatusDto,
     @Req() req: AuthenticatedRequest,
   ): Promise<{ code: number }> {
-    const user = req.user
-    if (!user) throw new UnauthorizedException('未登录或登录已过期')
-    return this.admins.updateStatus(id, dto.status, { username: user.sub, name: user.name })
+    return this.admins.updateStatus(id, dto.status, this.operator(req))
   }
 
   @Post(':id/reset-password')
@@ -52,6 +51,13 @@ export class AdminsController {
     @Body() dto: ResetPasswordDto,
     @Req() req: AuthenticatedRequest,
   ): Promise<{ code: number }> {
-    return this.admins.resetPassword(id, dto, req.user?.name ?? '社区管理员')
+    return this.admins.resetPassword(id, dto, this.operator(req))
+  }
+
+  /** 取当前登录管理员标识（sub 用于防提权判定，name 用于审计展示） */
+  private operator(req: AuthenticatedRequest): { username: string; name: string } {
+    const user = req.user
+    if (!user) throw new UnauthorizedException('未登录或登录已过期')
+    return { username: user.sub, name: user.name }
   }
 }

@@ -17,14 +17,17 @@
 
 | 项 | 设计 |
 |---|---|
-| 注册 | `POST /api/app/auth/register`；body `{phone,password,nickname,agreed}` + 验证码（`captchaId/captchaCode` 与 `smsCode` 二选一）；昵称必填；受 `registrationOpen` 控制；手机号数据库唯一；默认授予 `individual`；同时记录用户协议与隐私政策版本 |
-| 登录 | `POST /api/app/auth/login`（手机号+密码+图形验证码 `captchaId/captchaCode`）；签发多身份 JWT：`{ sub: uid, scope: 'app', identities: [...], jti }` |
+| 注册 | `POST /api/app/auth/register`；body `{channel: email\|phone, email?, phone?, code, password, agreed, gender?}`。默认邮箱注册；后台已配置可用短信渠道时可选手机号注册；**无论何种渠道都必须验证码验证**（邮箱渠道用邮箱验证码，手机渠道用短信验证码）；验证通过的邮箱/手机号即成为该用户「可信通知渠道」。注册不填昵称与用户名：服务端自动分配（用户名 `user_` + 随机码全站唯一；昵称 `岛民` + 随机数字全站唯一）。邮箱/手机号库内唯一且可空；受 `registrationOpen` 控制；默认授予 `individual`；同时记录用户协议与隐私政策版本 |
+| 登录 | `POST /api/app/auth/login`；body `{identifier, password, captchaId, captchaCode}`，`identifier` 支持**手机号 / 邮箱 / 用户名**；签发多身份 JWT：`{ sub: uid, scope: 'app', identities: [...], jti }` |
 | 令牌校验 | 复用 JWT Guard（按 `scope` 区分 admin/app 两套守卫）；登出黑名单复用 `auth:blacklist:{jti}` |
 | 登出 | `POST /api/app/auth/logout` |
-| 图形验证码 | `GET /api/app/auth/captcha` → `{captchaId,image}`；登录一次性消费；注册/找回密码/换绑手机号在短信通道未启用时兜底使用 |
-| 短信通道探测 | `GET /api/app/auth/sms/available` → `{available}`（已启用短信渠道且验证码模板已发布）；客户端据此决定走短信还是图形验证码 |
-| 短信验证码发送 | `POST /api/app/auth/sms/send`；body `{phone, purpose: register\|reset_password\|change_phone\|login, deviceId?}` → `{expiresInSec, devCode?}`（`devCode` 仅非生产环境干跑时返回）；频控：同号+用途 60 秒冷却、同号日限 10 次、同 IP 10 分钟 20 次、同设备 1 小时 10 次；校验失败 5 次即失效；下发经发送队列（安全类强制送达） |
-| 短信校验 | `register` / `reset-password` / `change-phone` 提交 `smsCode`（6 位）替代图形验证码即可，证明手机号归属 |
+| 图形验证码 | `GET /api/app/auth/captcha` → `{captchaId,image}`；登录一次性消费 |
+| 通道可用性探测 | `GET /api/app/auth/sms/available`、`GET /api/app/auth/email/available` → `{available}`（已启用对应渠道且验证码模板已发布）；客户端据此决定注册入口与验证方式是否开放 |
+| 验证码发送 | `POST /api/app/auth/sms/send`（body `{phone, purpose, deviceId?}`）与 `POST /api/app/auth/email/send`（body `{email, purpose, deviceId?}`）→ `{expiresInSec, devCode?}`（`devCode` 仅非生产环境干跑时返回）；`purpose`：短信 `register\|reset_password\|change_phone\|login`、邮箱 `register\|reset_password\|change_email`；频控：同号/同邮箱+用途 60 秒冷却、日限 10 次、同 IP 10 分钟 20 次、同设备 1 小时 10 次；校验失败 5 次即失效；下发经发送队列（安全类强制送达） |
+| 找回密码 | `GET /api/app/auth/recovery-channels?identifier=` → 该账号**已验证可信渠道**（脱敏 `{email, phone}`）；`POST /api/app/auth/reset-code/send` body `{identifier, channel}` 由服务端解析可信渠道并投递验证码（客户端不接触真实地址）；`POST /api/app/auth/reset-password` body `{identifier, channel, code, newPassword}` → 校验通过后更新密码并全端登出 |
+| 账号绑定 | `POST /api/app/auth/change-phone`（body `{newPhone, smsCode}`）、`POST /api/app/auth/change-email`（body `{newEmail, code}`）：绑定或更换均须验证**新**手机号/邮箱，验证后标记为可信渠道；占用冲突 409 |
+| 用户名/昵称 | 全站唯一，各有保留名单（`admin`/`管理员` 等，占用报 400）；用户名登录标识（字母开头 4-20 位，仅字母/数字/下划线，登录时忽略大小写），昵称仅作展示（≤20 字符，支持中文）。经 `PUT /api/app/me` 修改 |
+| 修改密码 | `POST /api/app/me/change-password` body `{oldPassword, newPassword}`：校验原密码后更新，并**强制退出全部会话（含当前会话）**，客户端需重新登录 |
 | 每日登录积分 | 登录成功触发 `daily_login` 规则（PointsRule 固定触发项，种子默认停用；引擎按规则启停发放，自然日去重随 M2 客户端接入落地） |
 
 ## 3. 通用约定（沿用 wiki-backend §4）
@@ -230,3 +233,4 @@
 | 2026-09-15 | 登记需求撮合、项目协作、撤回重提、商城履约、信任治理、收藏、提醒与埋点契约 |
 | 2026-09-15 | 新增实名认证查询/提交与脱敏展示契约 |
 | 2026-09-16 | M2-R R0 将客户端 Mock 能力转正为正式契约，并补充首页、电子票、沟通、协作、看板、工作台、评价、名片字段与政策端点 |
+| 2026-09-21 | **注册/找回密码/改密/绑定细化**：注册改为默认邮箱注册（可选手机号，视短信通道可用性），任一渠道均须验证码验证，验证后成为「可信通知渠道」；新增 `username`（登录标识，全站唯一，注册自动分配）与 `nickname` 唯一化（保留名单）；登录标识支持手机号/邮箱/用户名；找回密码必须走已验证可信渠道（新增 `GET /auth/recovery-channels`、`POST /auth/reset-code/send`）；新增 `POST /auth/change-phone`、`POST /auth/change-email`（绑定与更换均须验证新值）；`POST /me/change-password` 成功后强制退出全部会话；`phone`/`email` 改为可空且唯一；「我的申请」改为按 uid 归属（`Application.userId`，兼容历史按手机号匹配） |

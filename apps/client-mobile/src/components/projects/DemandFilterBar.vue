@@ -1,21 +1,18 @@
 <script setup lang="ts">
 import { Button, CheckTag, Search } from 'tdesign-mobile-vue'
 
-/* 项目列表筛选条：搜索 + 分类 chips + 排序 + 字典失败重试。 */
+/* 项目列表筛选条：搜索 + 分类 chips + 字典失败重试。 */
 defineProps<{
   keyword: string
   placeholder?: string
   categories: { code: string; label: string }[]
   category: string
-  sort: 'latest' | 'hot'
   dictError?: string
-  sorts: { value: 'latest' | 'hot'; label: string }[]
 }>()
 
 defineEmits<{
   'update:keyword': [string]
   selectCategory: [string]
-  selectSort: ['latest' | 'hot']
   retryDict: []
 }>()
 </script>
@@ -47,28 +44,19 @@ defineEmits<{
       筛选项加载失败
       <Button size="small" variant="text" theme="danger" @click="$emit('retryDict')">重试</Button>
     </p>
-
-    <div class="sorts">
-      <span class="sorts-label">排序</span>
-      <CheckTag
-        v-for="s in sorts"
-        :key="s.value"
-        variant="light"
-        size="medium"
-        :checked="sort === s.value"
-        @change="$emit('selectSort', s.value)"
-      >
-        {{ s.label }}
-      </CheckTag>
-    </div>
   </div>
 </template>
 
 <style scoped>
+/* v45：搜索 + 分类收敛到同一张卡片内，两行筛选读作一组而不是两块独立浮动元素 */
 .filter-bar {
   display: flex;
   flex-direction: column;
-  gap: var(--app-space-6);
+  gap: var(--app-space-5);
+  padding: var(--app-space-7);
+  background: var(--td-bg-color-container);
+  border: 1px solid var(--td-component-border);
+  border-radius: var(--td-radius-large);
 }
 
 .chips {
@@ -86,16 +74,5 @@ defineEmits<{
 
 .dict-error :deep(.t-button) {
   margin-left: var(--app-space-3);
-}
-
-.sorts {
-  display: flex;
-  align-items: center;
-  gap: var(--app-space-4);
-}
-
-.sorts-label {
-  font-size: var(--app-font-caption);
-  color: var(--td-text-color-secondary);
 }
 </style>

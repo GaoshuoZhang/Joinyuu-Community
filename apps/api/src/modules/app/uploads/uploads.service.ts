@@ -30,6 +30,10 @@ const MIME_EXT: Record<string, string> = {
 }
 const PNG_MAGIC = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a])
 
+/** multer 硬上限（字节）：SystemConfig.uploadMaxSizeMb 最大允许 100，故取系统上限；
+ * 精确上限由 upload() 读配置二次校验（multer 装饰器在模块加载期求值，无法读动态配置）。 */
+export const MAX_UPLOAD_FILE_BYTES = 100 * 1024 * 1024
+
 /* App 上传（M2-R R2 POST /api/app/uploads）：申请资料/配图上传，仅图片与 PDF（魔数嗅探，SVG 拒绝），
  * 大小上限读 SystemConfig.uploadMaxSizeMb（缺省 10）；复用 Storage 写盘并返回 {key,name,size,type,url}
  * （url=/api/public/files/:key）。R2 不落 MallAsset 素材库，保持与 admin 资产隔离。 */

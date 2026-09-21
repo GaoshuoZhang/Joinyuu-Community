@@ -44,7 +44,8 @@ const DOMAIN_BY_SEGMENT: Record<string, string> = {
 
 /* 数据范围守卫（叠加在 JwtAuthGuard、PermissionGuard 之后）：
  * 端点按路径首段归属数据域，管理员数据范围非空且不含该域时 403；
- * 空范围 = 不限制全部域；超管（权限含 '*'）放行；未映射路径（auth/dashboard/notifications 等）放行。 */
+ * 超管（权限含 '*'）放行；未分配角色 = 无任何数据范围（拒绝，而非放行）；
+ * 未映射路径（auth/dashboard/notifications 等）放行。 */
 @Injectable()
 export class DomainScopeGuard implements CanActivate {
   constructor(private readonly permissions: AdminPermissionService) {}
@@ -61,12 +62,15 @@ export class DomainScopeGuard implements CanActivate {
     const domain = DOMAIN_BY_SEGMENT[segment]
     if (!domain) return true
 
-    const codes = await this.permissions.getPermCodes(username)
-    if (codes.includes('*')) return true
-
-    const scopes = await this.permissions.getScopeCodes(username)
-    if (scopes.length === 0) return true
-    if (scopes.includes(domain)) return true
+    const profile = await this.permissions.getAccessProfile(username)
+    /* 账号不存在/已停用（JwtAuthGuard 已拦，此处纵深防御）：一律拒绝 */
+    if (!profile.exists || !profile.active) throw new ForbiddenException('账号已停用或不存在')
+    if (profile.super) return true
+    /* 未分配任何角色 = 无数据范围，不得视为「不受限」 */
+    if (!profile.hasRoles) throw new ForbiddenException('账号未分配角色，无数据访问权限')
+    /* 已分配角色且数据范围为空 = 不限域（既有权衡：角色未限定范围即全域） */
+    if (profile.scopes.length === 0) return true
+    if (profile.scopes.includes(domain)) return true
     throw new ForbiddenException('无权限访问该数据范围')
   }
 }

@@ -4,10 +4,12 @@ import {
   ForbiddenException,
   Injectable,
   NotFoundException,
+  ServiceUnavailableException,
 } from '@nestjs/common'
 import { PrismaService } from '../../../common/prisma/prisma.service'
 import { NotificationService } from '../../../common/notify/notification.service'
 import { RealnameVerificationService } from '../../../common/realname/realname-verification.service'
+import { RealnameVerifyError } from '../../../common/realname/realname-verifier'
 import type { UpdateRealnameDto } from './dto/update-realname.dto'
 import { currentPublishingLimits } from '../../../common/enterprise/publishing-limits'
 import { formatNow } from '../../../common/utils/time'
@@ -86,7 +88,7 @@ export class AppRealnameService {
     const citizenId = dto.citizenId.trim()
     if (!isValidCitizenId(citizenId)) throw new BadRequestException('请输入有效的身份证号码')
 
-    const authoritative = await this.realname.verifyAuthoritative(realName, citizenId)
+    const authoritative = await this.verifyAuthoritative(realName, citizenId)
     if (authoritative && authoritative.outcome !== 'match') {
       throw new BadRequestException(
         authoritative.outcome === 'no_record'
@@ -111,6 +113,21 @@ export class AppRealnameService {
         : `您的身份信息已登记（${maskName(realName)}）。`,
     })
     return { code: 0 }
+  }
+
+  /** 权威核验包装：供应商异常（RealnameVerifyError，非 HttpException）统一兜底，
+   * 避免全局过滤器转为 500；不透出供应商原始报文。 */
+  private async verifyAuthoritative(realName: string, citizenId: string) {
+    try {
+      return await this.realname.verifyAuthoritative(realName, citizenId)
+    } catch (error) {
+      if (error instanceof RealnameVerifyError) {
+        throw error.retriable
+          ? new ServiceUnavailableException('实名核验服务暂时不可用，请稍后重试')
+          : new BadRequestException('实名信息核验未通过')
+      }
+      throw error
+    }
   }
 
   /** 实名分级权益（两条静态分级，active 标注当前所处层级） */

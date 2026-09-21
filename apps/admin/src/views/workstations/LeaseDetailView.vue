@@ -5,8 +5,10 @@ import { MessagePlugin } from 'tdesign-vue-next'
 import { ArrowLeftIcon, EditIcon } from 'tdesign-icons-vue-next'
 import PageHeader from '@/components/PageHeader.vue'
 import StatusTag from '@/components/StatusTag.vue'
+import ListErrorState from '@/components/ListErrorState.vue'
 import LeaseFormDialog from '@/components/LeaseFormDialog.vue'
 import { archiveLease, deriveLeaseStatus, fetchLease, fetchWorkstations, terminateLease } from '@/api/workstations'
+import { isNotFound } from '@/api/http'
 import { formatDateOnly } from '@/utils/format'
 import type { Lease, Workstation } from '@/types'
 
@@ -21,6 +23,8 @@ const lease = ref<Lease | null>(null)
 const workstations = ref<Workstation[]>([])
 const acting = ref('')
 const formVisible = ref(false)
+/* 非 404 的加载失败：展示错误与重试入口（403/500/断网不再伪装成「不存在」） */
+const loadError = ref('')
 /* 已归档条目：隐藏写操作（编辑/终止/归档），打印保留 */
 const isArchived = computed(() => !!lease.value?.deletedAt)
 
@@ -83,10 +87,13 @@ async function onArchive() {
 
 async function load() {
   loading.value = true
+  loadError.value = ''
   try {
     lease.value = await fetchLease(String(route.params.id))
-  } catch {
+  } catch (e) {
     lease.value = null
+    /* 404 = 租约不存在；其余错误保留具体原因并给出重试入口 */
+    if (!isNotFound(e)) loadError.value = e instanceof Error ? e.message : '租约加载失败'
   } finally {
     loading.value = false
   }
@@ -138,7 +145,8 @@ onMounted(async () => {
 
     <div class="page-card">
       <t-loading :loading="loading">
-        <t-empty v-if="!loading && !lease" description="租约不存在或已删除" />
+        <ListErrorState v-if="loadError" :message="loadError" :loading="loading" @retry="load" />
+        <t-empty v-else-if="!loading && !lease" description="租约不存在或已删除" />
         <template v-else-if="lease">
         <div class="head-row">
           <StatusTag entity="lease" :value="viewStatus" />

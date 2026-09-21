@@ -7,7 +7,8 @@ import {
   NotFoundException,
 } from '@nestjs/common'
 import { JwtService } from '@nestjs/jwt'
-import type { AppJwtPayload } from '../../../common/interfaces/app-jwt-payload'
+import { RedisService } from '../../../common/redis/redis.service'
+import { resolveOptionalAppUid, type OptionalAppAuthDeps } from '../../../common/auth/optional-app-uid'
 import { Prisma, type Demand, type DemandRespondent, type User } from '@prisma/client'
 import { PrismaService } from '../../../common/prisma/prisma.service'
 import { IdGeneratorService } from '../../../common/id-generator/id-generator.service'
@@ -41,7 +42,13 @@ export class AppDemandsService {
     private readonly notify: NotificationService,
     private readonly points: PointsEngineService,
     private readonly jwt: JwtService,
+    private readonly redis: RedisService,
   ) {}
+
+  /** 可选登录态解析依赖（与 AppJwtGuard 同口径） */
+  private get auth(): OptionalAppAuthDeps {
+    return { jwt: this.jwt, redis: this.redis, prisma: this.prisma }
+  }
 
   /** 需求广场列表（仅 published，服务端可见范围过滤；kind/类目/关键词/分页） */
   async list(query: { kind?: string; category?: string; keyword?: string; page?: number; pageSize?: number }, req: Request) {
@@ -238,21 +245,28 @@ export class AppDemandsService {
     }
 
     const at = formatNow()
-    await this.prisma.demandRespondent.create({
-      data: {
-        demandId: demand.id,
-        userId: uid,
-        responderIdentity: responder.identity ?? Prisma.DbNull,
-        name: responder.name,
-        enterprise: responder.enterprise,
-        phone: responder.phone || null,
-        email: null,
-        quote: dto.quote?.trim() || null,
-        message: dto.note?.trim() || '响应需求',
-        at,
-        status: 'pending',
-      },
-    })
+    try {
+      await this.prisma.demandRespondent.create({
+        data: {
+          demandId: demand.id,
+          userId: uid,
+          responderIdentity: responder.identity ?? Prisma.DbNull,
+          name: responder.name,
+          enterprise: responder.enterprise,
+          phone: responder.phone || null,
+          email: null,
+          quote: dto.quote?.trim() || null,
+          message: dto.note?.trim() || '响应需求',
+          at,
+          status: 'pending',
+        },
+      })
+    } catch (e) {
+      if (e instanceof Prisma.PrismaClientKnownRequestError && e.code === 'P2002') {
+        throw new ConflictException('您已响应过该需求')
+      }
+      throw e
+    }
 
     await this.points.issuePoints(uid, 'demand_responded', '响应需求获得积分', `demand_responded:${uid}:${demand.id}:${at}`)
     /* 后台代发需求的发布者可能是企业 ID：解析真实收件人后再发站内信 */
@@ -305,7 +319,7 @@ export class AppDemandsService {
     if (!demand) throw new NotFoundException('需求不存在')
     if (demand.status !== 'published') throw new ConflictException('需求已进入立项流程，响应不可撤回')
     if (response.status !== 'pending') throw new ConflictException('该响应已被处理，不可撤回')
-    await this.prisma.demandRespondent.update({ where: { id }, data: { withdrawnAt: formatNow() } })
+    await this.prisma.demandRespondent.update({ where: { id }, data: { withdrawnAt: formatNow(), status: 'closed' } })
     return { code: 0 }
   }
 
@@ -686,7 +700,7 @@ export class AppDemandsService {
     if (demandIds.length === 0) return new Map()
     const rows = await this.prisma.demandRespondent.groupBy({
       by: ['demandId'],
-      where: { demandId: { in: demandIds }, status: { not: 'closed' } },
+      where: { demandId: { in: demandIds }, withdrawnAt: null },
       _count: { demandId: true },
     })
     return new Map(rows.map((r) => [r.demandId, r._count.demandId]))
@@ -759,18 +773,10 @@ export class AppDemandsService {
     return types.includes('community_individual') ? 'community_individual' : 'individual'
   }
 
-  /** @Public 浏览端点：读可选登录态（失败按游客处理） */
+  /** @Public 浏览端点：读可选登录态（与 AppJwtGuard 同口径，失败按游客处理） */
   private async optionalUid(req: Request): Promise<string | null> {
-    const header = req.headers.authorization ?? ''
-    if (!header.startsWith('Bearer ')) return null
-    const token = header.slice(7)
-    if (!token) return null
-    try {
-      const payload = await this.jwt.verifyAsync<AppJwtPayload>(token)
-      return payload.scope === 'app' ? payload.sub : null
-    } catch {
-      return null
-    }
+    const uid = await resolveOptionalAppUid(this.auth, req.headers.authorization ?? undefined)
+    return uid ?? null
   }
 
   private toNum(id: string): number {

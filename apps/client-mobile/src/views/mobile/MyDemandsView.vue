@@ -56,7 +56,8 @@ function onWithdrawDemand(d: MyDemandItem) {
     <ListSkeleton v-if="loading" />
     <EmptyBlock v-else-if="error" :text="error" action-text="重试" @action="run" />
     <template v-else-if="items.length === 0">
-      <EmptyBlock text="暂无需求，去发布第一条" />
+      <!-- v45：空状态补出口，避免二级页没有 TabBar 时成为死胡同 -->
+      <EmptyBlock text="暂无需求，去发布第一条" action-text="发布需求" @action="router.push('/demands/new')" />
     </template>
     <div v-else class="list stagger">
       <p class="list-count">共 {{ formatZhNumber(items.length) }} 条需求</p>

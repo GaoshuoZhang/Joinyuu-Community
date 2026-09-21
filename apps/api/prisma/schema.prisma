@@ -4,9 +4,33 @@
 //   2. 展示快照字段保留为列（publisherName/spaceName/goodsName/columnName 等），不外键化
 //   3. 时间字段统一 String（'YYYY-MM-DD HH:mm' / 'YYYY-MM-DD' / 'YYYY-MM'）——与 M0 契约逐字节一致；
 //      单时区运营，字符串字典序即时间序（比较/排序/定时扫描安全）
+//      例外清单（这三列明确为 DateTime，不适用本则，勿按 String 口径处理）：
+//        - AdminUser.createdAt / AdminUser.updatedAt（框架 @default(now())/@updatedAt 维护）
+//        - AnalyticsEvent.at（埋点写入时间，仅内部聚合，无对外字符串契约）
 //   4. 内嵌数组拆表（identities/respondents/undertakers/milestones/enrollments/lease-workstations）
 //   5. 半结构数据用 Json（审核时间线/身份快照/活跃记录）；标签与身份筛选数组用 String[]
 //   6. 枚举用 String + 应用层校验（保持与前端字符串契约一致）
+//   7. 手写迁移中存在 Prisma 无法声明的「部分唯一索引」（并发保护），**不进 schema 且不可被自动生成的迁移删除**：
+//      - Address_one_default_per_user_key              每用户至多一个默认地址（WHERE isDefault = true）
+//        → prisma/migrations/20260916093000_app_r1_review_fixes/migration.sql
+//      - EnterpriseInvitation_pending_enterprise_invitee_key  每企业每被邀请人至多一条待处理邀请
+//      - TransferRequest_pending_enterprise_key               每企业至多一条待处理负责人转移请求
+//        → prisma/migrations/20260916120634_app_r3_trust/migration.sql
+//      - AccountDeletionRequest_one_cooling_per_user          每用户至多一条冷静期注销申请
+//        → prisma/migrations/20260917030000_closeout_review_guards/migration.sql
+//      - UserIdentity_one_individual_per_user_key             每用户至多一个 individual 身份（WHERE type = 'individual'）
+//      - UserIdentity_one_community_individual_per_user_key   每用户至多一个 community_individual 身份（WHERE type = 'community_individual'）
+//        （可空列 enterpriseId 使 @@unique([userId, type, enterpriseId]) 对二者失效，故另建部分唯一索引兜底）
+//      - Policy_published_kind_version_key                    已发布政策同 kind+version 唯一（WHERE status = 'published'）
+//        → prisma/migrations/20260921120000_data_layer_hardening/migration.sql
+//      约束：改动这些表时须用 `prisma migrate deploy`（勿用 `migrate dev`/`db push` 自动生成迁移，否则会 DROP 掉上述索引）；
+//      回归保护见 apps/api/test/regression-fixes.e2e-spec.ts「手写部分唯一索引仍然存在」。
+//   8. User 子表外键删除策略（显式声明，避免 Prisma 默认值造成的隐式 drift）：
+//      - 留痕类（EventEnrollment / PointsRecord / RedemptionOrder / SpaceReservation）= Restrict
+//        → 禁止物理删除用户（账号注销为软删除 status='deleted'），保护账本与业务记录不被级联清除
+//      - 从属数据（UserIdentity / UserNotification / UserNotificationPreference / Address /
+//        AgreementConsent / ArticleComment / IndividualCard / AccountDeletionRequest）= Cascade
+//      - 可选关联（DemandRespondent.userId）= SetNull（响应记录保留，归属置空）
 
 generator client {
   provider      = "prisma-client-js"
@@ -176,9 +200,16 @@ model IdSequence {
 
 model User {
   uid                    String                      @id @db.VarChar(16)
-  nickname               String                      @db.VarChar(64)
-  phone                  String                      @unique @db.VarChar(32)
-  email                  String                      @db.VarChar(128)
+  // 登录标识之一：全站唯一、仅字母/数字/下划线；注册后自动分配，用户可改
+  username               String                      @unique @db.VarChar(32)
+  // 展示用昵称：全站唯一，允许中文；注册后自动分配，用户可改
+  nickname               String                      @unique @db.VarChar(64)
+  // 手机号/邮箱可空（邮箱注册无手机号，反之亦然），非空时全站唯一
+  phone                  String?                     @unique @db.VarChar(32)
+  email                  String?                     @unique @db.VarChar(128)
+  // 可信通知渠道：非空=该渠道已验证（注册验证或绑定验证通过）
+  phoneVerifiedAt        String?                     @db.VarChar(16)
+  emailVerifiedAt        String?                     @db.VarChar(16)
   gender                 String                      @db.VarChar(8)
   status                 String                      @default("active") @db.VarChar(16)
   realName               String?                     @db.VarChar(64)
@@ -214,6 +245,12 @@ model User {
   @@index([status])
 }
 
+// 用户身份（个人 / 社区个体 / 社区企业成员 / 合作企业成员）
+// 注意：@@unique([userId, type, enterpriseId]) 中 enterpriseId 可空，Postgres 下 NULL 互不相等，
+// 故它对 individual / community_individual 完全失效（可插入多行）。「社区个体至多一个」由手写迁移中的
+// 部分唯一索引兜底，Prisma 无法声明、也不得被自动生成的迁移删除（见文件头「建模总则」第 7 条）：
+//   - UserIdentity_one_individual_per_user_key           ON "UserIdentity"("userId") WHERE type = 'individual'
+//   - UserIdentity_one_community_individual_per_user_key ON "UserIdentity"("userId") WHERE type = 'community_individual'
 model UserIdentity {
   id             Int     @id @default(autoincrement())
   userId         String  @db.VarChar(16)
@@ -265,6 +302,7 @@ model Enterprise {
 
   @@index([status])
   @@index([industry])
+  @@index([deletedAt])
 }
 
 // 合作企业档案；ExternalEnterprise 聚合视图 = 档案 + identities(type=external_enterprise) 派生成员，不建独立实体表
@@ -281,6 +319,7 @@ model ExternalEnterpriseProfile {
   deletedBy          String? @db.VarChar(64)
 
   @@index([name])
+  @@index([deletedAt])
 }
 
 model Application {
@@ -288,6 +327,8 @@ model Application {
   type           String  @db.VarChar(16) // settle | identity
   applicantName  String  @db.VarChar(64)
   applicantPhone String  @db.VarChar(32)
+  // 申请人 uid：归属「我的申请」；历史数据可空（回退按 applicantPhone 匹配）
+  userId         String? @db.VarChar(16)
   targetName     String  @db.VarChar(128)
   submittedAt    String  @db.VarChar(16)
   status         String  @db.VarChar(16) // pending | approved | rejected
@@ -299,6 +340,9 @@ model Application {
   archivableAt   String? @db.VarChar(16)
 
   @@index([status, type])
+  @@index([userId])
+  @@index([archivableAt])
+  @@index([deletedAt])
 }
 
 // M2-R R2：客户端申请表单 schema，由管理端按类型配置。
@@ -317,6 +361,7 @@ model ApplicationFormConfig {
 model Demand {
   id                   String             @id @db.VarChar(16)
   title                String             @db.VarChar(128)
+  // 需求类别：存 demand_category 字典的**中文 label**（如 '供应链'、'技术开发'），非字典 code
   category             String             @db.VarChar(64)
   // M2-R R2：需求类型 task 找服务 / investment 找投资 / cooperation 找合作
   demandType           String             @default("task") @db.VarChar(16)
@@ -363,8 +408,13 @@ model Demand {
   @@index([publisherId])
   @@index([category])
   @@index([demandType])
+  @@index([archivableAt])
+  @@index([deletedAt])
 }
 
+// 注意：同用户对同一需求至多一条有效（未撤回）响应，由手写迁移中的部分唯一索引兜底，
+// Prisma 无法声明、也不得被自动生成的迁移删除（见文件头「建模总则」第 7 条）：
+//   - DemandRespondent_active_response_per_user_key ON "DemandRespondent"("demandId", "userId") WHERE "withdrawnAt" IS NULL
 model DemandRespondent {
   id                Int     @id @default(autoincrement())
   demandId          String  @db.VarChar(16)
@@ -412,6 +462,8 @@ model Project {
   archivableAt   String?             @db.VarChar(16)
 
   @@index([status])
+  @@index([archivableAt])
+  @@index([deletedAt])
 }
 
 model ProjectUndertaker {
@@ -488,6 +540,8 @@ model CommunityEvent {
 
   @@index([status])
   @@index([startTime])
+  @@index([archivableAt])
+  @@index([deletedAt])
 }
 
 model EventEnrollment {
@@ -508,26 +562,30 @@ model EventEnrollment {
   checkinLng    String?        @db.VarChar(32)
   checkinMethod String?        @db.VarChar(16) // self | admin
   event         CommunityEvent @relation(fields: [eventId], references: [id], onDelete: Cascade)
-  user          User           @relation(fields: [userId], references: [uid])
+  user          User           @relation(fields: [userId], references: [uid], onDelete: Restrict)
+  ticket        EventTicket?
 
   @@unique([eventId, userId])
   @@index([userId])
 }
 
 // M2-R R2：活动电子票（报名 approved 签发；签到成功即核销）
+// enrollmentId → EventEnrollment.id 为级联外键（报名记录删除时票据一并清除，不留孤儿）；enrollmentId 已唯一，故为 1:1
 model EventTicket {
-  id           Int            @id @default(autoincrement())
-  eventId      String         @db.VarChar(16)
-  enrollmentId Int            @unique
-  ticketNo     String         @unique @db.VarChar(32)
-  redeemCode   String         @db.VarChar(16)
-  redeemedAt   String?        @db.VarChar(16)
-  event        CommunityEvent @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  id           Int             @id @default(autoincrement())
+  eventId      String          @db.VarChar(16)
+  enrollmentId Int             @unique
+  ticketNo     String          @unique @db.VarChar(32)
+  redeemCode   String          @db.VarChar(16)
+  redeemedAt   String?         @db.VarChar(16)
+  event        CommunityEvent  @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  enrollment   EventEnrollment @relation(fields: [enrollmentId], references: [id], onDelete: Cascade)
 
   @@index([eventId])
 }
 
 // M2-R R2：活动反馈（结束后 + 参与过，一人一条）
+// 解耦表：eventId / userId 仅字符串列、无外键，删活动/用户不会级联，须显式清理
 model EventFeedback {
   id      Int    @id @default(autoincrement())
   eventId String @db.VarChar(16)
@@ -565,7 +623,7 @@ model PointsRecord {
   operator  String  @db.VarChar(64)
   source    String  @db.VarChar(16) // rule | manual | redemption
   dedupeKey String? @unique @db.VarChar(128)
-  user      User    @relation(fields: [userId], references: [uid])
+  user      User    @relation(fields: [userId], references: [uid], onDelete: Restrict)
 
   @@index([userId])
   @@index([source])
@@ -577,12 +635,13 @@ model MallGoods {
   id                   String   @id @db.VarChar(16)
   name                 String   @db.VarChar(128)
   coverUrl             String?  @db.VarChar(512)
-  // M2-R R2（Q1 决）：category 改造为 goods_category 字典分类（GC code）；履约类型由 fulfillment 承担
+  // M2-R R2（Q1 决）：category 改造为 goods_category 字典分类；履约类型由 fulfillment 承担
+  // 取值口径：存 goods_category 字典的**code**（如 GC001、GC003），非中文 label
   category             String   @db.VarChar(16)
   fulfillment          String   @default("physical") @db.VarChar(16) // physical | voucher
   points               Int
   stock                Int
-  status               String   @default("off") @db.VarChar(8) // on | off | restock（库存为 0）
+  status               String   @default("off") @db.VarChar(8) // on | off
   description          String   @db.Text
   redeemedCount        Int      @default(0)
   shippingMethods      String[] // physical 商品的发货方式：pickup | delivery
@@ -600,6 +659,8 @@ model MallGoods {
   archivableAt         String?  @db.VarChar(16)
 
   @@index([status])
+  @@index([archivableAt])
+  @@index([deletedAt])
 }
 
 model RedemptionOrder {
@@ -631,10 +692,12 @@ model RedemptionOrder {
   deletedAt        String? @db.VarChar(16)
   deletedBy        String? @db.VarChar(64)
   archivableAt     String? @db.VarChar(16)
-  user             User    @relation(fields: [userId], references: [uid])
+  user             User    @relation(fields: [userId], references: [uid], onDelete: Restrict)
 
   @@index([status])
   @@index([userId])
+  @@index([archivableAt])
+  @@index([deletedAt])
 }
 
 // M2-R R2：到货提醒订阅（缺货商品，补货联动通知）
@@ -722,6 +785,8 @@ model Lease {
   workstations LeaseWorkstation[]
 
   @@index([status])
+  @@index([archivableAt])
+  @@index([deletedAt])
 }
 
 // 租约-办公位关联（保留终止后的历史归属）；当前占用由 Workstation.leaseId 表达
@@ -754,6 +819,8 @@ model Space {
   description     String   @db.Text
   deletedAt       String?  @db.VarChar(16)
   deletedBy       String?  @db.VarChar(64)
+
+  @@index([deletedAt])
 }
 
 model SpaceReservation {
@@ -779,16 +846,18 @@ model SpaceReservation {
   deletedAt      String? @db.VarChar(16)
   deletedBy      String? @db.VarChar(64)
   archivableAt   String? @db.VarChar(16)
-  user           User    @relation(fields: [userId], references: [uid])
+  user           User    @relation(fields: [userId], references: [uid], onDelete: Restrict)
 
   @@index([spaceId, date, status])
   @@index([userId])
+  @@index([archivableAt])
+  @@index([deletedAt])
 }
 
 // ---------- 内容管理 ----------
 
 // 文章（M1.5 内容改造）：channel=official 社区自行发布 / submitted 用户投稿
-// status：pending 待审核 / rejected 已驳回 / pending_release 待发布 / scheduled 定时发布中 / published 已发布
+// status：pending 待审核 / rejected 已驳回 / pending_release 待发布 / scheduled 定时发布中 / published 已发布 / withdrawn 已下架 / closed 已关闭
 model Article {
   id             String           @id @db.VarChar(16)
   title          String           @db.VarChar(128)
@@ -832,6 +901,8 @@ model Article {
   @@index([status])
   @@index([columnId])
   @@index([channel])
+  @@index([archivableAt])
+  @@index([deletedAt])
 }
 
 // 文章下架记录：后台主动下架与举报处置各留一条；恢复时回填 restored*（保留历史）
@@ -908,10 +979,12 @@ model Announcement {
   deletedAt    String? @db.VarChar(16)
   deletedBy    String? @db.VarChar(64)
 
+  @@index([archivableAt])
   @@index([deletedAt])
 }
 
 // M2-R R2：收藏（需求/文章/活动/企业/人才，幂等去重）
+// 解耦表：targetId 为多态字符串、无外键（目标可为 5 类实体），目标删除时须显式清理
 model Favorite {
   id         Int    @id @default(autoincrement())
   userId     String @db.VarChar(16)
@@ -930,14 +1003,17 @@ model Favorite {
 
 model AdminNotification {
   id      String  @id @db.VarChar(16)
-  type    String  @db.VarChar(32) // approval | demand_review | reservation | showcase | article | lease | schedule
+  type    String  @db.VarChar(32) // approval | demand_review | reservation | article | lease | schedule
   title   String  @db.VarChar(128)
   content String  @db.VarChar(255)
   at      String  @db.VarChar(16)
   read    Boolean @default(false)
   link    String? @db.VarChar(128)
+  // BE-M4：收件人（管理员账号 id）；NULL = 全局广播（定时任务/系统事件），非空 = 定向通知
+  recipientId String? @db.VarChar(16)
 
   @@index([read])
+  @@index([recipientId])
 }
 
 model AuditLog {
@@ -1008,7 +1084,7 @@ model SystemConfig {
 }
 
 model DictEntry {
-  type   String @db.VarChar(32) // demand_category | industry | event_type
+  type   String @db.VarChar(32) // demand_category | industry | event_type | goods_category
   code   String @db.VarChar(16)
   label  String @db.VarChar(64)
   sort   Int
@@ -1112,6 +1188,7 @@ model UserNotificationPreference {
 
 
 // 企业成员邀请（7 天有效期；被邀请人经站内信链接查看并接受/拒绝）
+// 解耦表：enterpriseId / inviterId / inviteeUid 仅字符串列、无外键，须显式清理（配合手写部分唯一索引约束待处理唯一）
 model EnterpriseInvitation {
   id            String  @id @db.VarChar(16) // EI 前缀
   enterpriseId  String  @db.VarChar(16)
@@ -1221,6 +1298,7 @@ model OutboxMessage {
   createdAt         String  @db.VarChar(16)
   updatedAt         String  @db.VarChar(16)
   sentAt            String? @db.VarChar(16)
+  deliveryLogs      MessageDeliveryLog[]
 
   @@unique([idempotencyKey])
   @@index([status, nextAttemptAt])
@@ -1229,6 +1307,7 @@ model OutboxMessage {
 }
 
 // 投递日志（每次发送尝试一条；渠道/收件人/结果可检索）
+// outboxId → OutboxMessage.id 为级联外键（队列消息删除时投递日志随之清除，不留孤儿）
 model MessageDeliveryLog {
   id                String @id @db.VarChar(16) // ML 前缀
   outboxId          String @db.VarChar(16)
@@ -1241,12 +1320,14 @@ model MessageDeliveryLog {
   error             String? @db.VarChar(512)
   costMs            Int    @default(0)
   at                String @db.VarChar(16)
+  outbox            OutboxMessage @relation(fields: [outboxId], references: [id], onDelete: Cascade)
 
   @@index([outboxId])
   @@index([channelKind, at])
 }
 
 // 渠道合规同意 / 营销退订（security 强制发送，不查询此表）
+// 解耦表：userId 仅字符串列、无外键，用户注销/清理时须显式删除本表记录
 model ContactConsent {
   id          Int     @id @default(autoincrement())
   userId      String  @db.VarChar(16)
@@ -1260,6 +1341,7 @@ model ContactConsent {
 }
 
 // 负责人转移请求（请求制：发起 → 对方接受/拒绝；接受后变更 contactUserId）
+// 解耦表：enterpriseId / fromUserId / toUserId 仅字符串列、无外键，须显式清理（配合手写部分唯一索引约束待处理唯一）
 model TransferRequest {
   id           String  @id @db.VarChar(16) // TR 前缀
   enterpriseId String  @db.VarChar(16)
@@ -1275,6 +1357,9 @@ model TransferRequest {
 }
 
 // 政策/协议内容（kind：agreement_user | agreement_privacy | community；社区政策带 category/version/有效期）
+// 唯一性：同 kind + version 在「已发布（status = 'published'）」范围内唯一，由手写迁移的部分唯一索引
+// Policy_published_kind_version_key 保证（Prisma 无法声明部分唯一索引；历史草稿/归档不受约束）。
+// 曾用 @@unique([kind, version]) 全量约束，因阻断历史草稿与归档版本共存而在 20260916165500 显式回滚。
 model Policy {
   id          String  @id @db.VarChar(16) // PL 前缀
   kind        String  @db.VarChar(24)

@@ -58,7 +58,7 @@ async function onToggle(item: NoticePreferenceType, enabled: boolean | number) {
             <Switch
               :value="!item.muted"
               :disabled="!item.mutable || saving"
-              @change="(value: boolean | number) => onToggle(item, value)"
+              @change="(value: boolean | number | string) => onToggle(item, Boolean(value))"
             />
           </template>
         </Cell>

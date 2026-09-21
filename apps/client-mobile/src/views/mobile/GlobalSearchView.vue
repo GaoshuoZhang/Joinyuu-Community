@@ -87,7 +87,7 @@ async function search() {
     const failed: string[] = []
     const [demandRes, events, articles, policies, talents, enterprises, spaces] = await Promise.all([
       fetchDemands({ keyword: q, page: 1, pageSize: 10 }).catch(() => { failed.push('项目'); return null }),
-      fetchEvents({ keyword: q }).catch(() => { failed.push('活动'); return [] }),
+      fetchEvents({ keyword: q }).catch(() => { failed.push('活动'); return null }),
       fetchArticles({ keyword: q }).catch(() => { failed.push('文章'); return [] }),
       fetchPolicies({ keyword: q }).catch(() => { failed.push('社区服务'); return [] }),
       fetchTalents({ keyword: q }).catch(() => { failed.push('人才'); return [] }),
@@ -100,7 +100,7 @@ async function search() {
     demandHasResults.value = (demandRes?.list.length ?? 0) > 0
     results.value = [
       ...(demandRes?.list ?? []).map((item) => ({ id: item.id, kind: '项目', title: item.title, summary: item.description, path: `/demands/${item.id}` })),
-      ...events.map((item) => ({ id: item.id, kind: '活动', title: item.title, summary: `${formatLocalDateTime(item.startTime)} · ${item.location}`, path: `/events/${item.id}` })),
+      ...(events?.list ?? []).map((item) => ({ id: item.id, kind: '活动', title: item.title, summary: `${formatLocalDateTime(item.startTime)} · ${item.location}`, path: `/events/${item.id}` })),
       ...articles.map((item) => ({ id: item.id, kind: '文章', title: item.title, summary: item.summary, path: `/articles/${item.id}` })),
       ...policies.map((item) => ({ id: item.id, kind: '社区服务', title: item.title, summary: item.summary, path: `/community?tab=service&policy=${item.id}` })),
       ...talents.map((item) => ({ id: item.uid, kind: '人才', title: item.name, summary: `${item.role} · ${item.intro}`, path: `/talents/${item.uid}` })),

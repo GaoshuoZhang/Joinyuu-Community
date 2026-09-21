@@ -3,7 +3,7 @@ import { hash } from 'bcryptjs'
 import type { Prisma } from '@prisma/client'
 import { PrismaService } from '../../common/prisma/prisma.service'
 import { AuditService } from '../../common/audit/audit.service'
-import { buildUserDto, type UserDto } from './user.mapper'
+import { buildUserDto, buildUserDtos, type UserDto } from './user.mapper'
 import type { QueryUsersDto } from './dto/query-users.dto'
 import type { QueryIndividualsDto } from './dto/query-individuals.dto'
 import type { FreezeUserDto } from './dto/freeze-user.dto'
@@ -13,6 +13,7 @@ import { IdGeneratorService } from '../../common/id-generator/id-generator.servi
 import { formatNow, formatToday } from '../../common/utils/time'
 import { normalizeGender } from '../../common/utils/gender'
 import { NotificationService } from '../../common/notify/notification.service'
+import { IdentityNameService } from '../../common/identity/identity-name.service'
 import { AppSessionService } from '../../common/app-session/app-session.service'
 import type { ReviewDeletionDto } from './dto/review-member-governance.dto'
 
@@ -24,6 +25,7 @@ export class UsersService {
     private readonly audit: AuditService,
     private readonly ids: IdGeneratorService,
     private readonly notify: NotificationService,
+    private readonly identityNames: IdentityNameService,
     private readonly sessions: AppSessionService,
   ) {}
 
@@ -41,36 +43,49 @@ export class UsersService {
       }),
     ])
 
-    const list = await Promise.all(rows.map((u) => buildUserDto(this.prisma, u)))
+    const list = await buildUserDtos(this.prisma, rows)
     return { list, total }
   }
 
   async create(dto: CreateUserDto, operator: string): Promise<{ id: string }> {
     const nickname = dto.nickname.trim()
     const phone = dto.phone.trim()
-    const email = dto.email.trim()
+    const email = (dto.email ?? '').trim().toLowerCase()
     if (!nickname) throw new BadRequestException('请输入昵称')
     if (!phone) throw new BadRequestException('请输入联系电话')
-    if (!email) throw new BadRequestException('请输入邮箱')
 
-    const existing = await this.prisma.user.findFirst({ where: { phone }, select: { uid: true } })
-    if (existing) throw new ConflictException('该联系电话已被其他用户使用')
+    /* 用户名：留空自动分配；昵称/手机号/邮箱均全站唯一 */
+    const username = dto.username?.trim()
+      ? await this.identityNames.assertUsernameAvailable(dto.username)
+      : await this.identityNames.assignUsername()
+    await this.identityNames.assertNicknameAvailable(nickname)
+    if (await this.prisma.user.findUnique({ where: { phone }, select: { uid: true } })) {
+      throw new ConflictException('该联系电话已被其他用户使用')
+    }
+    if (email && (await this.prisma.user.findUnique({ where: { email }, select: { uid: true } }))) {
+      throw new ConflictException('该邮箱已被其他用户使用')
+    }
 
     const uid = await this.ids.next('U')
     const realName = dto.realName?.trim() || null
     const citizenId = dto.citizenId?.trim() || null
+    const now = formatNow()
     await this.prisma.user.create({
       data: {
         uid,
+        username,
         nickname,
         phone,
-        email,
+        email: email || null,
+        /* 后台代录的联系方式视为可信通知渠道（否则该账号无法找回密码） */
+        phoneVerifiedAt: now,
+        emailVerifiedAt: email ? now : null,
         gender: normalizeGender(dto.gender),
         realName,
         citizenId,
-        verifiedAt: realName && citizenId ? formatNow() : null,
+        verifiedAt: realName && citizenId ? now : null,
         registeredAt: formatToday(),
-        lastActiveAt: formatNow(),
+        lastActiveAt: now,
         bio: dto.bio?.trim() ?? '',
         identities: {
           create: { type: 'individual', title: '个人用户' },
@@ -100,6 +115,8 @@ export class UsersService {
       where: { uid: id },
       data: { passwordHash: await hash(next, 10), passwordUpdatedAt: formatNow() },
     })
+    /* BE-M5：重置后踢出全部会话，旧 JWT 立即失效（对齐 me.service 改密行为） */
+    await this.sessions.kickAll(id)
 
     await this.audit.record({
       module: '社区成员',
@@ -140,7 +157,7 @@ export class UsersService {
       }),
     ])
 
-    const list = await Promise.all(rows.map((u) => buildUserDto(this.prisma, u)))
+    const list = await buildUserDtos(this.prisma, rows)
     return { list, total }
   }
 
@@ -166,7 +183,13 @@ export class UsersService {
 
     const [applications, demands, projects, events, leases, submissions, reservations] = await Promise.all([
       this.prisma.application.findMany({
-        where: { applicantPhone: user.phone },
+        where: {
+          deletedAt: null,
+          OR: [
+            { userId: id },
+            ...(user.phone ? [{ userId: null, applicantPhone: user.phone }] : []),
+          ],
+        },
         orderBy: { submittedAt: 'desc' },
         select: { id: true, type: true, targetName: true, status: true, submittedAt: true, summary: true, deletedAt: true },
       }),
@@ -234,19 +257,31 @@ export class UsersService {
     if (!user) throw new NotFoundException('用户不存在')
     if (user.status === 'deleted') throw new ConflictException('已注销账号不可编辑')
 
-    /* 仅更新传入字段；昵称/手机号/邮箱/性别忽略空串，实名/证件号/简介允许清空 */
+    /* 仅更新传入字段；用户名/昵称/手机号/邮箱全站唯一，忽略空串 */
     const data: Prisma.UserUpdateInput = {}
     const changed: string[] = []
+    if (dto.username !== undefined && dto.username.trim()) {
+      data.username = await this.identityNames.assertUsernameAvailable(dto.username, id)
+      changed.push('用户名')
+    }
     if (dto.nickname !== undefined && dto.nickname.trim()) {
-      data.nickname = dto.nickname.trim()
+      data.nickname = await this.identityNames.assertNicknameAvailable(dto.nickname, id)
       changed.push('昵称')
     }
     if (dto.phone !== undefined && dto.phone.trim()) {
-      data.phone = dto.phone.trim()
+      const phone = dto.phone.trim()
+      const owner = await this.prisma.user.findUnique({ where: { phone }, select: { uid: true } })
+      if (owner && owner.uid !== id) throw new ConflictException('该联系电话已被其他用户使用')
+      data.phone = phone
+      data.phoneVerifiedAt = formatNow()
       changed.push('手机号')
     }
     if (dto.email !== undefined && dto.email.trim()) {
-      data.email = dto.email.trim()
+      const email = dto.email.trim().toLowerCase()
+      const owner = await this.prisma.user.findUnique({ where: { email }, select: { uid: true } })
+      if (owner && owner.uid !== id) throw new ConflictException('该邮箱已被其他用户使用')
+      data.email = email
+      data.emailVerifiedAt = formatNow()
       changed.push('邮箱')
     }
     if (dto.gender !== undefined && dto.gender.trim()) {
@@ -283,7 +318,7 @@ export class UsersService {
     return { code: 0 }
   }
 
-  async updateStatus(id: string, status: 'active' | 'frozen'): Promise<{ code: number }> {
+  async updateStatus(id: string, status: 'active' | 'frozen', operator?: string): Promise<{ code: number }> {
     const user = await this.prisma.user.findUnique({ where: { uid: id } })
     if (!user) throw new NotFoundException('用户不存在')
     if (user.status === 'deleted') throw new ConflictException('已注销账号不可恢复')
@@ -297,6 +332,17 @@ export class UsersService {
       where: { uid: id },
       data: { status: 'active', frozenUntil: null, frozenReason: null },
     })
+
+    /* 解冻留痕：与 freeze 对称，避免冻结解除无记录可追溯 */
+    await this.audit.record({
+      module: '社区成员',
+      action: '解冻账号',
+      target: `${user.uid} · ${user.nickname}`,
+      detail: user.frozenReason ?? '解除冻结',
+      before: { status: user.status, frozenUntil: user.frozenUntil ?? null },
+      after: { status: 'active', frozenUntil: null },
+      operator: operator ?? '社区管理员',
+    })
     return { code: 0 }
   }
 
@@ -308,12 +354,14 @@ export class UsersService {
     if (!dto.permanent && !dto.until) throw new BadRequestException('请选择冻结期限或开启长期冻结')
     const reason = (dto.reason ?? '').trim()
     if (!reason) throw new BadRequestException('请填写冻结原因')
+    /* 期限必须是晚于当前时间的合法时间串，避免误传过去时间/垃圾串导致冻结实际已过期 */
+    const frozenUntil = dto.permanent ? null : normalizeFrozenUntil(dto.until)
 
     await this.prisma.user.update({
       where: { uid: id },
       data: {
         status: 'frozen',
-        frozenUntil: dto.permanent ? null : (dto.until ?? null),
+        frozenUntil,
         frozenReason: reason,
       },
     })
@@ -327,7 +375,7 @@ export class UsersService {
       after: {
         status: 'frozen',
         permanent: dto.permanent,
-        frozenUntil: dto.permanent ? null : (dto.until ?? null),
+        frozenUntil,
         frozenReason: reason,
       },
       operator,
@@ -383,9 +431,13 @@ export class UsersService {
           where: { uid: request.userId },
           data: {
             status: 'deleted',
-            nickname: '已注销用户',
+            /* 昵称全站唯一：注销占位名带上 uid，避免多个注销账号互相冲突 */
+            nickname: `已注销用户_${request.userId}`,
+            /* 手机号/邮箱唯一：注销后置为占位值以释放原值 */
             phone: `deleted:${request.userId}`,
-            email: '',
+            email: null,
+            phoneVerifiedAt: null,
+            emailVerifiedAt: null,
             realName: null,
             citizenId: null,
             verifiedAt: null,
@@ -433,4 +485,15 @@ export class UsersService {
     }
     return conditions.length ? { AND: conditions } : {}
   }
+}
+
+/** 冻结期限归一化：仅日期按当日 23:59 处理；格式非法或早于当前时间抛 400（与调度任务的字符串比较同口径） */
+function normalizeFrozenUntil(raw?: string): string {
+  const value = (raw ?? '').trim()
+  if (!/^\d{4}-\d{2}-\d{2}(?: \d{2}:\d{2})?$/.test(value)) {
+    throw new BadRequestException('冻结期限格式应为 YYYY-MM-DD HH:mm')
+  }
+  const normalized = value.length === 10 ? `${value} 23:59` : value
+  if (normalized <= formatNow()) throw new BadRequestException('冻结期限必须晚于当前时间')
+  return normalized
 }

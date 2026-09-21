@@ -1,12 +1,19 @@
 import { Type } from 'class-transformer'
-import { IsBoolean, IsIn, IsInt, IsNotEmpty, IsOptional, IsString, Min } from 'class-validator'
+import { IsBoolean, IsIn, IsInt, IsNotEmpty, IsOptional, IsString, Matches, Min, ValidateIf } from 'class-validator'
+
+/** 租赁日期格式（与后台 t-date-picker valueType 及调度比较口径一致） */
+const LEASE_DATE_RE = /^\d{4}-\d{2}-\d{2}$/
 
 /* 租约续期/改租金/改联系人载荷（对照 apps/admin/src/api/workstations.ts LeaseUpdatePayload） */
 export class LeaseUpdateDto {
   @IsString()
+  @Matches(LEASE_DATE_RE, { message: '租赁开始日期格式应为 YYYY-MM-DD' })
   startDate!: string
 
+  /** 长期租约时前端传空串；非空才校验格式，必填与先后关系由服务层兜底校验 */
+  @ValidateIf((o: LeaseUpdateDto) => !!o.endDate)
   @IsString()
+  @Matches(LEASE_DATE_RE, { message: '租赁结束日期格式应为 YYYY-MM-DD' })
   endDate!: string
 
   @IsBoolean()

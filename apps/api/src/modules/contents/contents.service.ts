@@ -6,6 +6,7 @@ import { IdGeneratorService } from '../../common/id-generator/id-generator.servi
 import { AuditService } from '../../common/audit/audit.service'
 import { NotificationService } from '../../common/notify/notification.service'
 import { formatNow, formatToday } from '../../common/utils/time'
+import { normalizeScheduledAt } from '../../common/utils/schedule-time'
 import { sanitizeHtml } from '../../common/utils/sanitize-html'
 import { toIdentityDto } from '../users/user.mapper'
 import { PointsEngineService } from '../../common/engine/points-engine/points-engine.service'
@@ -157,12 +158,18 @@ export class ContentsService {
     }
   }
 
-  /** 治理性删除评论（物理删除 + 计数回落 + 审计；填写原因时站内信通知评论作者） */
-  async removeArticleComment(commentId: string, reason: string | undefined, operator: string): Promise<{ code: number }> {
+  /** 治理性删除评论（物理删除 + 计数回落 + 审计；填写原因时站内信通知评论作者）。
+   * articleId 来自路径参数：评论必须属于该文章，避免命中其它文章下的评论 */
+  async removeArticleComment(
+    articleId: string,
+    commentId: string,
+    reason: string | undefined,
+    operator: string,
+  ): Promise<{ code: number }> {
     const id = Number.parseInt(commentId, 10)
     if (!Number.isInteger(id) || id <= 0) throw new NotFoundException('评论不存在或已删除')
     const comment = await this.prisma.articleComment.findUnique({ where: { id } })
-    if (!comment) throw new NotFoundException('评论不存在或已删除')
+    if (!comment || comment.articleId !== articleId) throw new NotFoundException('评论不存在或已删除')
     await this.prisma.$transaction(async (tx) => {
       /* 通知需在删除前读取评论作者（notifyContentTakedown 依赖评论行） */
       if (reason?.trim()) {
@@ -181,7 +188,7 @@ export class ContentsService {
     return { code: 0 }
   }
 
-  async createArticle(payload: ArticlePayloadDto): Promise<Record<string, unknown>> {
+  async createArticle(payload: ArticlePayloadDto, operator: string): Promise<Record<string, unknown>> {
     const channel = payload.channel ?? 'official'
     const columnId = payload.columnIds?.[0]
     if (!columnId) throw new BadRequestException('请选择所属栏目')
@@ -214,29 +221,36 @@ export class ContentsService {
       } as unknown as Prisma.ArticleUncheckedCreateInput,
     })
     await this.bindAssets(article.content, channel, article.id)
+    await this.audit.record({
+      module: '内容管理',
+      action: channel === 'submitted' ? '代发布用户投稿' : '新增文章',
+      target: `${article.id} · ${article.title}`,
+      detail: `栏目 ${column.name} · 状态 ${article.status}`,
+      operator,
+    })
     return toArticleDto(article)
   }
 
-  async updateArticle(id: string, payload: ArticlePayloadDto): Promise<{ code: number }> {
+  async updateArticle(id: string, payload: ArticlePayloadDto, operator: string): Promise<{ code: number }> {
     const article = await this.prisma.article.findUnique({ where: { id } })
     if (!article || article.deletedAt) throw new NotFoundException('文章不存在')
     if (article.status !== 'pending_release' && article.status !== 'scheduled' && article.status !== 'rejected') {
       throw new ConflictException('仅待发布、定时发布中或已驳回的文章可编辑')
     }
 
-    return this.applyArticleUpdate(article, payload)
+    return this.applyArticleUpdate(article, payload, operator)
   }
 
-  async updateSubmissionArticle(id: string, payload: ArticlePayloadDto): Promise<{ code: number }> {
+  async updateSubmissionArticle(id: string, payload: ArticlePayloadDto, operator: string): Promise<{ code: number }> {
     const article = await this.prisma.article.findUnique({ where: { id } })
     if (!article || article.deletedAt) throw new NotFoundException('文章不存在')
     if (article.channel !== 'submitted') throw new ConflictException('仅用户投稿可在投稿内容中编辑')
     if (article.status !== 'pending_release') throw new ConflictException('仅待发布的投稿可编辑')
 
-    return this.applyArticleUpdate(article, payload)
+    return this.applyArticleUpdate(article, payload, operator)
   }
 
-  private async applyArticleUpdate(article: Article, payload: ArticlePayloadDto): Promise<{ code: number }> {
+  private async applyArticleUpdate(article: Article, payload: ArticlePayloadDto, operator: string): Promise<{ code: number }> {
     const columnId = payload.columnIds?.[0]
     if (!columnId) throw new BadRequestException('请选择所属栏目')
     const column = await this.prisma.articleColumn.findUnique({ where: { id: columnId } })
@@ -262,6 +276,14 @@ export class ContentsService {
       } as unknown as Prisma.ArticleUncheckedUpdateInput,
     })
     await this.bindAssets(content, article.channel, article.id)
+    await this.audit.record({
+      module: '内容管理',
+      action: '编辑文章',
+      target: `${article.id} · ${payload.title}`,
+      before: { title: article.title, columnName: article.columnName, status: article.status },
+      after: { title: payload.title, columnName: column.name, status: nextStatus },
+      operator,
+    })
     return { code: 0 }
   }
 
@@ -348,8 +370,9 @@ export class ContentsService {
     const article = await this.prisma.article.findUnique({ where: { id } })
     if (!article || article.deletedAt) throw new NotFoundException('文章不存在')
     if (article.status !== 'pending_release') throw new ConflictException('仅待发布的文章可设置定时发布')
-    const scheduledAt = dto.scheduledAt.trim()
-    if (scheduledAt <= formatNow()) throw new BadRequestException('定时发布时间需晚于当前时间')
+    /* 统一校验与规范化：格式合法 + 归一为 YYYY-MM-DD HH:mm（列宽 16）+ 晚于当前时间，
+     * 避免非法/超长取值被调度任务按字符串 lte 判定为「立即发布」或溢出列宽报 500 */
+    const scheduledAt = normalizeScheduledAt(dto.scheduledAt)
 
     await this.prisma.article.update({ where: { id }, data: { status: 'scheduled', scheduledAt } })
     await this.audit.record({

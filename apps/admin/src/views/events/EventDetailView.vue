@@ -25,10 +25,13 @@ import {
 import type { EventTicketRow } from '@/api/events'
 import type { CommunityEvent, EventEnrollment } from '@/types'
 import { exportCsv } from '@/utils/exportCsv'
+import { isNotFound } from '@/api/http'
+import ListErrorState from '@/components/ListErrorState.vue'
 
 const route = useRoute()
 const router = useRouter()
 const loading = ref(true)
+const loadError = ref('')
 const event = ref<CommunityEvent | null>(null)
 const tab = useQueryTab('info', ['info', 'enrollments', 'checkin', 'tickets'] as const)
 /* 已归档条目：隐藏全部写操作（含报名审核/签到），仅保留只读内容 */
@@ -196,8 +199,15 @@ async function load(silent = false) {
   try {
     event.value = await fetchEvent(route.params.id as string)
     tickets.value = await fetchEventTickets(route.params.id as string)
-  } catch {
-    MessagePlugin.error('活动加载失败')
+    loadError.value = ''
+  } catch (e) {
+    /* 404 = 活动不存在（走空态）；其余错误保留原因并展示重试入口 */
+    if (isNotFound(e)) {
+      event.value = null
+      loadError.value = ''
+    } else {
+      loadError.value = e instanceof Error ? e.message : '活动加载失败'
+    }
   } finally {
     loading.value = false
   }
@@ -564,6 +574,8 @@ onMounted(() => load())
         </t-tabs>
       </div>
     </template>
+
+    <ListErrorState v-else-if="loadError" :message="loadError" :loading="loading" @retry="() => load()" />
 
     <t-empty v-else description="活动不存在或已被删除" />
 

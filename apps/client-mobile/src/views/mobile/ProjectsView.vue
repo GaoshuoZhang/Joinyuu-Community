@@ -35,24 +35,18 @@ const TABS: { kind: DemandKind | 'all'; title: string; searchPlaceholder: string
   { kind: 'all', title: '全部', searchPlaceholder: '搜索需求关键词' },
   ...DEMAND_KINDS.map((k) => ({ kind: k.kind as DemandKind | 'all', title: k.title, searchPlaceholder: k.searchPlaceholder })),
 ]
-const SORTS = [
-  { value: 'latest' as const, label: '最新' },
-  { value: 'hot' as const, label: '响应最多' },
-]
 const initialKind = TABS.some((tab) => tab.kind === String(route.query.kind)) ? (String(route.query.kind) as DemandKind | 'all') : 'all'
 const activeTab = ref<DemandKind | 'all'>(initialKind)
-const sort = ref<'latest' | 'hot'>(route.query.sort === 'hot' ? 'hot' : 'latest')
 const categories = computed(() => activeTab.value === 'investment' ? industries.value : demandCategories.value)
 
-/* v39：筛选条件（类型/分类/关键词）同步到 URL，返回或分享可还原；v40：追加排序 */
+/* v39：筛选条件（类型/分类/关键词）同步到 URL，返回或分享可还原 */
 function syncQuery() {
   const query: Record<string, string> = {}
   if (activeTab.value !== 'all') query.kind = activeTab.value
   if (category.value) query.category = category.value
   if (keyword.value) query.q = keyword.value
-  if (sort.value !== 'latest') query.sort = sort.value
   const current = route.query as Record<string, string>
-  if (current.kind === query.kind && current.category === query.category && current.q === query.q && current.sort === query.sort) return
+  if (current.kind === query.kind && current.category === query.category && current.q === query.q) return
   void router.replace({ query })
 }
 
@@ -95,7 +89,6 @@ async function run() {
       pageSize: PAGE_SIZE,
       category: category.value || undefined,
       keyword: keyword.value || undefined,
-      sort: sort.value,
     })
     if (id !== requestId) return
     items.value = requestedPage === 1 ? res.list : items.value.concat(res.list)
@@ -136,16 +129,18 @@ useRefreshOnActivate(() => {
   void loadResponded()
 })
 
-const hasFilter = computed(() => activeTab.value !== 'all' || Boolean(category.value) || Boolean(keyword.value) || sort.value !== 'latest')
+const hasFilter = computed(() => activeTab.value !== 'all' || Boolean(category.value) || Boolean(keyword.value))
 
-/* v41：空态一键清除筛选 */
+/* v41：空态一键清除筛选；非「全部」Tab 由 watch(activeTab) 统一清筛选并 reload，避免重复请求 */
 function clearFilters() {
   window.clearTimeout(searchTimer)
-  activeTab.value = 'all'
+  if (activeTab.value !== 'all') {
+    activeTab.value = 'all'
+    return
+  }
   category.value = ''
   keyword.value = ''
   keywordInput.value = ''
-  sort.value = 'latest'
   syncQuery()
   reload()
 }
@@ -164,13 +159,11 @@ function selectCategory(label: string) {
 let applyingQuery = false
 useRouteQuerySync('/projects', (q) => {
   const nextKind: DemandKind | 'all' = TABS.some((tab) => tab.kind === String(q.kind)) ? (String(q.kind) as DemandKind | 'all') : 'all'
-  const nextSort: 'latest' | 'hot' = q.sort === 'hot' ? 'hot' : 'latest'
   const nextCategory = q.category ?? ''
   const nextKeyword = q.q ?? ''
-  if (nextKind === activeTab.value && nextSort === sort.value && nextCategory === category.value && nextKeyword === keyword.value && nextKeyword === keywordInput.value) return
+  if (nextKind === activeTab.value && nextCategory === category.value && nextKeyword === keyword.value && nextKeyword === keywordInput.value) return
   applyingQuery = true
   activeTab.value = nextKind
-  sort.value = nextSort
   category.value = nextCategory
   keyword.value = nextKeyword
   keywordInput.value = nextKeyword
@@ -179,14 +172,6 @@ useRouteQuerySync('/projects', (q) => {
   })
   reload()
 })
-
-/* v40：排序切换（最新 / 响应最多） */
-function selectSort(value: 'latest' | 'hot') {
-  if (sort.value === value) return
-  sort.value = value
-  syncQuery()
-  reload()
-}
 
 /* 实时搜索：输入防抖 300ms 后自动检索（清空即恢复全量） */
 let searchTimer: number | undefined
@@ -248,25 +233,24 @@ function onPublish() {
     <Tabs v-model="activeTab" class="top-tabs" :swipeable="false">
       <TabPanel v-for="kind in TABS" :key="kind.kind" :value="kind.kind" :label="kind.title">
         <div v-if="activeTab === kind.kind" class="tab-content">
-    <Button theme="primary" block class="publish" @click="onPublish">发布需求</Button>
-
     <DemandFilterBar
       v-model:keyword="keywordInput"
       :placeholder="kind.searchPlaceholder"
       :categories="categories"
       :category="category"
-      :sort="sort"
-      :sorts="SORTS"
       :dict-error="filterDictError"
       @select-category="selectCategory"
-      @select-sort="selectSort"
       @retry-dict="retryFilterDict"
     />
+
+    <!-- v45：发布入口移到筛选之后并降为描边次级按钮，避免整块品牌色把筛选区与列表切开 -->
+    <Button theme="primary" variant="outline" block class="publish" @click="onPublish">发布需求</Button>
 
     <ListSkeleton v-if="firstLoading" :rows="3" />
     <EmptyBlock v-else-if="firstError" :text="error" action-text="重试" @action="reload" />
     <EmptyBlock v-else-if="items.length === 0 && hasFilter" text="没有符合筛选的需求" action-text="清除筛选" @action="clearFilters" />
-    <EmptyBlock v-else-if="items.length === 0" text="暂无相关需求" />
+    <!-- v45：空状态补出口，避免二级页没有 TabBar 时成为死胡同 -->
+    <EmptyBlock v-else-if="items.length === 0" text="暂无相关需求" action-text="发布需求" @action="onPublish" />
     <div v-else class="list stagger">
       <p class="list-count">共 {{ formatZhNumber(total) }} 条</p>
       <DemandListCard

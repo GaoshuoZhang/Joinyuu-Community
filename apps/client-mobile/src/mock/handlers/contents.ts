@@ -49,7 +49,11 @@ function toPublicArticle(article: (typeof articles)[number]): Article {
 export async function fetchArticles(query: { column?: string; keyword?: string } = {}): Promise<Article[]> {
   return withLatency(() => {
     let list = articles.filter((a) => a.status === 'published').map(toPublicArticle)
-    if (query.column) list = list.filter((a) => a.columnLabel === query.column)
+    if (query.column) {
+      /* 与真实后端同口径：客户端传栏目 id（code）；兼容历史 label 传参 */
+      const label = columns.find((c) => c.code === query.column)?.label ?? query.column
+      list = list.filter((a) => a.columnLabel === label)
+    }
     if (query.keyword) list = list.filter((a) => a.title.includes(query.keyword!))
     return list.sort((a, b) => b.publishedAt.localeCompare(a.publishedAt))
   })

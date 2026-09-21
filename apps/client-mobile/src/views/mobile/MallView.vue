@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { onMounted, ref } from 'vue'
+import { computed, onMounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { CheckTag, Icon, Image } from 'tdesign-mobile-vue'
 import { fetchGoods } from '@/api/mall'
@@ -11,7 +11,7 @@ import { useDict } from '@/composables/useDict'
 import { useAuthStore } from '@/stores/auth'
 import EmptyBlock from '@/components/shared/EmptyBlock.vue'
 import ListSkeleton from '@/components/ListSkeleton.vue'
-import type { Goods } from '@/types'
+import type { Goods, PageResult } from '@/types'
 import { onImageError } from '@/utils/imageFallback'
 import { formatZhNumber } from '@/utils/format'
 
@@ -25,7 +25,16 @@ const auth = useAuthStore()
 const { items: categories } = useDict('goods_category')
 
 const category = ref(String(route.query.category ?? ''))
-const { data, loading, error, run } = useAsyncList<Goods[]>(() => fetchGoods({ category: category.value || undefined }))
+const { data, loading, error, run } = useAsyncList<PageResult<Goods>>(() => fetchGoods({ category: category.value || undefined }))
+/* v46：列表接口返回 { list, total }，总数用于展示真实商品数（不再受默认分页截断） */
+const goodsList = computed(() => data.value?.list ?? [])
+const goodsTotal = computed(() => data.value?.total ?? 0)
+
+/* v45：无封面商品的占位字形——按履约类型区分（实物商品 / 权益券），
+ * 取代此前 8 件商品共用同一张大块占位的做法；真实封面（coverUrl）仍然优先。 */
+function glyphFor(goods: Goods): string {
+  return goods.fulfillment === 'voucher' ? 'ticket' : 'gift'
+}
 
 function syncQuery() {
   const query: Record<string, string> = {}
@@ -83,19 +92,21 @@ useRefreshOnActivate(() => {
       </CheckTag>
     </div>
 
-    <ListSkeleton v-if="loading && !(data ?? []).length" />
+    <ListSkeleton v-if="loading && !goodsList.length" />
     <EmptyBlock v-else-if="error" :text="error" action-text="重试" @action="run" />
     <EmptyBlock
-      v-else-if="(data ?? []).length === 0"
+      v-else-if="goodsList.length === 0"
       text="暂无可兑换商品"
       :action-text="category ? '查看全部商品' : undefined"
       @action="pickCategory('')"
     />
     <div v-else class="goods-list stagger">
-      <p class="list-count">共 {{ formatZhNumber(data?.length ?? 0) }} 件商品</p>
-      <router-link v-for="g in data" :key="g.id" class="goods-card m-card pressable" :to="`/mall/${g.id}`">
+      <p class="list-count">共 {{ formatZhNumber(goodsTotal) }} 件商品</p>
+      <router-link v-for="g in goodsList" :key="g.id" class="goods-card m-card pressable" :to="`/mall/${g.id}`">
         <Image v-if="g.coverUrl" class="goods-cover" :src="g.coverUrl" :alt="g.name" fit="cover" lazy @error="onImageError" />
-        <div v-else class="goods-cover goods-cover-fallback"><Icon aria-hidden="true" name="gift" size="28px" /></div>
+        <!-- v45：无封面时不再伪造与图片等高的占位块（8 件商品会长得一模一样、且像加载失败），
+             改为按履约类型给出的小字形，卡片更紧凑、一屏可比较更多商品 -->
+        <span v-else class="goods-glyph"><Icon aria-hidden="true" :name="glyphFor(g)" size="20px" /></span>
         <div class="row">
           <h2 class="name">{{ g.name }}</h2>
           <span class="cost">{{ formatZhNumber(g.pointsCost) }} 积分</span>
@@ -153,13 +164,21 @@ useRefreshOnActivate(() => {
   cursor: pointer;
 }
 
+/* v45：单列长滚动改为两列网格，一屏可比较 4 件以上商品 */
 .goods-list {
-  display: flex;
-  flex-direction: column;
-  gap:var(--app-space-5);
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--app-space-5);
+}
+
+.goods-list .list-count {
+  grid-column: 1 / -1;
 }
 
 .goods-card {
+  display: flex;
+  flex-direction: column;
+  padding: var(--app-space-5);
   color: inherit;
   text-decoration: none;
   cursor: pointer;
@@ -168,35 +187,41 @@ useRefreshOnActivate(() => {
 
 .goods-cover {
   display: block;
-  width: calc(100% + var(--app-space-8) * 2);
-  height: 140px;
-  margin: calc(var(--app-space-8) * -1) calc(var(--app-space-8) * -1) var(--app-space-6);
+  width: calc(100% + var(--app-space-5) * 2);
+  height: 96px;
+  margin: calc(var(--app-space-5) * -1) calc(var(--app-space-5) * -1) var(--app-space-5);
 }
 
-/* 无封面时收敛为品牌浅底条形占位：不再用与图片等高的空白块挤压列表 */
-.goods-cover-fallback {
+/* 无封面时的类别字形：小尺寸符号，不再占据整行高度 */
+.goods-glyph {
   display: grid;
   place-items: center;
-  height: 96px;
+  width: 32px;
+  height: 32px;
+  margin-bottom: var(--app-space-5);
+  border-radius: var(--td-radius-large);
   background: var(--td-brand-color-1);
   color: var(--td-brand-color);
 }
 
+/* 窄卡片内名称与积分改为上下两行，避免同行互相挤压 */
 .row {
   display: flex;
-  align-items: baseline;
-  justify-content: space-between;
-  gap:var(--app-space-5);
-  margin-bottom:var(--app-space-3);
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--app-space-2);
+  margin-bottom: var(--app-space-3);
 }
 
 .name {
   margin:0;
   font-size: var(--app-font-body);
-  min-width: 0;
+  font-weight: 600;
+  line-height: 1.4;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
   overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
 }
 
 .cost {
@@ -207,18 +232,18 @@ useRefreshOnActivate(() => {
 }
 
 .desc {
-  margin:0 0 var(--app-space-4);
+  margin:0 0 var(--app-space-3);
   font-size: var(--app-font-caption);
   color: var(--td-text-color-secondary);
   line-height: 1.6;
   display: -webkit-box;
-  -webkit-line-clamp: 2;
+  -webkit-line-clamp: 1;
   -webkit-box-orient: vertical;
   overflow: hidden;
 }
 
 .stock {
-  margin:0;
+  margin:auto 0 0;
   font-size: var(--app-font-caption);
   color: var(--td-text-color-placeholder);
 }

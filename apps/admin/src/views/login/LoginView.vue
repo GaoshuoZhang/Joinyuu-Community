@@ -4,6 +4,7 @@ import { useRoute, useRouter } from 'vue-router'
 import { MessagePlugin } from 'tdesign-vue-next'
 import { CheckCircleIcon, RefreshIcon } from 'tdesign-icons-vue-next'
 import { useAuthStore } from '@/stores/auth'
+import { firstAccessiblePath } from '@/router'
 import { fetchCaptcha, type CaptchaResult } from '@/api/auth'
 import type { FormProps } from 'tdesign-vue-next'
 
@@ -18,9 +19,9 @@ const form = reactive({
 })
 
 const rules: FormProps['rules'] = {
-  username: [{ required: true, message: '请输入用户名', trigger: 'blur' }],
-  password: [{ required: true, message: '请输入密码', trigger: 'blur' }],
-  captcha: [{ required: true, message: '请输入验证码', trigger: 'blur' }],
+  username: [{ required: true, message: '请输入用户名', trigger: 'submit' }],
+  password: [{ required: true, message: '请输入密码', trigger: 'submit' }],
+  captcha: [{ required: true, message: '请输入验证码', trigger: 'submit' }],
 }
 
 const submitting = ref(false)
@@ -60,7 +61,8 @@ const onSubmit: FormProps['onSubmit'] = async ({ validateResult, firstError }) =
       return
     }
     MessagePlugin.success('登录成功，欢迎回来')
-    const redirect = (route.query.redirect as string) || '/dashboard'
+    /* 未带 redirect 时落到「首个可访问路由」，避免无 /dashboard 权限的账号登录即 403 */
+    const redirect = (route.query.redirect as string) || firstAccessiblePath()
     router.push(redirect)
   } catch (err) {
     MessagePlugin.error(err instanceof Error ? err.message : '登录失败，请稍后重试')
@@ -143,7 +145,6 @@ const showDemoAccount = import.meta.env.DEV || import.meta.env.VITE_SHOW_DEMO_AC
                 clearable
                 maxlength="4"
                 name="captcha"
-                inputmode="numeric"
                 autocomplete="one-time-code"
                 placeholder="验证码…"
                 style="flex: 1"

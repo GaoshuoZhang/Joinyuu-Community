@@ -3,20 +3,27 @@
  * http://127.0.0.1:7757，生产由部署期网关统一转发 /api。
  */
 
+import { resetAuth } from '@/stores/auth'
+
 const TOKEN_KEY = 'joinyuu_admin_token'
-const NAME_KEY = 'joinyuu_admin_name'
-const PERMS_KEY = 'joinyuu_admin_perm_codes'
-const SCOPE_KEY = 'joinyuu_admin_scope_codes'
 const BASE_PATH = '/api/admin'
 /* 请求超时（ms）：后端挂起时主动中止，避免无限挂载 */
 const REQUEST_TIMEOUT = 30_000
 
-/* 401：清理全部登录缓存（token / 名称 / 权限 / 数据范围），避免残留旧权限集合 */
-function clearAuthStorage(): void {
-  localStorage.removeItem(TOKEN_KEY)
-  localStorage.removeItem(NAME_KEY)
-  localStorage.removeItem(PERMS_KEY)
-  localStorage.removeItem(SCOPE_KEY)
+/** 带 HTTP 状态码的错误：调用方据此区分「记录不存在（404）」与其他失败 */
+export class HttpError extends Error {
+  readonly status: number
+
+  constructor(message: string, status: number) {
+    super(message)
+    this.name = 'HttpError'
+    this.status = status
+  }
+}
+
+/** 是否记录不存在（404）；超时/断网等无状态码错误返回 false */
+export function isNotFound(error: unknown): boolean {
+  return error instanceof HttpError && error.status === 404
 }
 
 type HttpMethod = 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE'
@@ -27,7 +34,7 @@ interface Envelope<T> {
   message?: string
 }
 
-/* 核心请求：成功返回 body.data；401 清 token 跳登录；非 0 业务码抛 body.message；
+/* 核心请求：成功返回 body.data；401 统一重置登录态并跳登录；非 0 业务码抛 body.message；
  * 超过 REQUEST_TIMEOUT 主动 Abort 抛"请求超时" */
 export async function http<T>(method: HttpMethod, path: string, body?: unknown): Promise<T> {
   const headers: Record<string, string> = { 'Content-Type': 'application/json' }
@@ -62,9 +69,9 @@ export async function http<T>(method: HttpMethod, path: string, body?: unknown):
   }
 
   if (res.status === 401) {
-    clearAuthStorage()
+    resetAuth()
     window.location.hash = '#/login'
-    throw new Error(payload?.message ?? '登录已过期，请重新登录')
+    throw new HttpError(payload?.message ?? '登录已过期，请重新登录', 401)
   }
 
   if (!res.ok || payload == null || payload.code !== 0) {
@@ -81,7 +88,7 @@ function throwError(status: number, message?: string): never {
     const target = '#/system/change-password'
     if (window.location.hash !== target) window.location.hash = target
   }
-  throw new Error(text)
+  throw new HttpError(text, status)
 }
 
 export function httpGet<T>(path: string): Promise<T> {
@@ -138,9 +145,9 @@ export async function httpUpload<T>(path: string, form: FormData): Promise<T> {
   }
 
   if (res.status === 401) {
-    clearAuthStorage()
+    resetAuth()
     window.location.hash = '#/login'
-    throw new Error(payload?.message ?? '登录已过期，请重新登录')
+    throw new HttpError(payload?.message ?? '登录已过期，请重新登录', 401)
   }
 
   if (!res.ok || payload == null || payload.code !== 0) {

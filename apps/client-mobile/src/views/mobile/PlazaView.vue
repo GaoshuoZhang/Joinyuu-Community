@@ -10,10 +10,10 @@ import { useRefreshOnActivate } from '@/composables/useRefreshOnActivate'
 import { useAnimSuppress } from '@/composables/useAnimSuppress'
 import ListSkeleton from '@/components/ListSkeleton.vue'
 import EmptyBlock from '@/components/shared/EmptyBlock.vue'
-import type { CommunityEvent, Article, ArticleColumn } from '@/types'
+import type { CommunityEvent, Article, ArticleColumn, PageResult } from '@/types'
 import { onImageError } from '@/utils/imageFallback'
 import { useRouteQuerySync } from '@/composables/useRouteQuerySync'
-import { formatLocalDateTime, formatZhNumber } from '@/utils/format'
+import { formatLocalDate, formatLocalDateTime, formatZhNumber } from '@/utils/format'
 
 useAnimSuppress()
 
@@ -40,7 +40,7 @@ async function loadEnrolled() {
     const activeStatuses = new Set(['pending', 'approved', 'waitlisted'])
     enrolledIds.value = new Set(
       (await fetchMyEnrollments())
-        .filter((item) => activeStatuses.has(item.status))
+        .list.filter((item) => activeStatuses.has(item.status))
         .map((item) => item.eventId),
     )
   } catch {
@@ -48,9 +48,12 @@ async function loadEnrolled() {
   }
 }
 
-const { data: events, loading: eventsLoading, error: eventsError, run: loadEvents } = useAsyncList<CommunityEvent[]>(
+const { data: eventData, loading: eventsLoading, error: eventsError, run: loadEvents } = useAsyncList<PageResult<CommunityEvent>>(
   () => fetchEvents({ keyword: eventKeywordInput.value.trim() || undefined }),
 )
+/* v46：列表接口返回 { list, total }，总数用于展示真实活动数（不再受默认分页截断） */
+const events = computed(() => eventData.value?.list ?? [])
+const eventsTotal = computed(() => eventData.value?.total ?? 0)
 const { data: columnData, run: loadColumns } = useAsyncList<ArticleColumn[]>(fetchColumns)
 const activeColumn = ref(String(route.query.column ?? ''))
 const { data: articleData, loading: articlesLoading, error: articlesError, run: loadArticles } = useAsyncList<Article[]>(() =>
@@ -70,7 +73,7 @@ function syncQuery() {
 
 const columns = computed(() => columnData.value ?? [])
 const articles = computed(() => articleData.value ?? [])
-const eventsEmpty = computed(() => !eventsLoading.value && !eventsError.value && (events.value ?? []).length === 0)
+const eventsEmpty = computed(() => !eventsLoading.value && !eventsError.value && events.value.length === 0)
 const articlesEmpty = computed(() => !articlesLoading.value && !articlesError.value && articles.value.length === 0)
 
 /* v39：下拉刷新 */
@@ -154,8 +157,9 @@ useRouteQuerySync('/plaza', (query) => {
   })
 })
 
-function pickColumn(label: string) {
-  activeColumn.value = label
+/* 栏目筛选传「栏目 id」（c.code）：后端按 Article.columnId 过滤，名称仅用于展示 */
+function pickColumn(code: string) {
+  activeColumn.value = code
   syncQuery()
   loadArticles()
 }
@@ -187,7 +191,7 @@ function clearArticleFilters() {
           @action="clearEventFilters"
         />
         <div v-else class="stagger list">
-          <p class="list-count">共 {{ formatZhNumber(events?.length ?? 0) }} 场活动</p>
+          <p class="list-count">共 {{ formatZhNumber(eventsTotal) }} 场活动</p>
           <article
             v-for="ev in events"
             :key="ev.id"
@@ -234,8 +238,8 @@ function clearArticleFilters() {
             class="chip"
             size="medium"
             variant="light"
-            :checked="activeColumn === c.label"
-            @change="pickColumn(c.label)"
+            :checked="activeColumn === c.code"
+            @change="pickColumn(c.code)"
           >
             {{ c.label }}
           </CheckTag>
@@ -262,7 +266,7 @@ function clearArticleFilters() {
             <Tag class="col-tag" size="small" variant="light" theme="primary">{{ a.columnLabel }}</Tag>
             <p class="title">{{ a.title }}</p>
             <p class="summary">{{ a.summary }}</p>
-            <p class="meta">{{ a.authorName }} · {{ formatLocalDateTime(a.publishedAt) }} · {{ formatZhNumber(a.views) }} 次浏览</p>
+            <p class="meta">{{ a.authorName }} · {{ formatLocalDate(a.publishedAt) }} · {{ formatZhNumber(a.views) }} 次浏览</p>
           </article>
         </div>
       </TabPanel>
@@ -351,15 +355,17 @@ function clearArticleFilters() {
   flex-shrink: 0;
 }
 
+/* v45：人数上限不是有效信号，撤掉品牌色强调（与首页近期活动口径一致） */
 .capacity {
   margin-left:auto;
   font-size: var(--app-font-caption);
-  color: var(--td-brand-color);
+  color: var(--td-text-color-secondary);
 }
 
 .title {
   margin:0 0 var(--app-space-4);
-  font-size: var(--app-font-body);
+  font-size: var(--app-font-subtitle);
+  font-weight: 600;
   line-height: 1.4;
 }
 

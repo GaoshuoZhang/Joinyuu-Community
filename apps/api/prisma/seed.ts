@@ -29,12 +29,19 @@ async function clearAppCache(): Promise<void> {
     /* 动态鉴权缓存（按用户名/验证码分片）一并清理，避免重种子后读到旧权限 */
     const dynamicKeys = [
       ...(await redis.keys('auth:admin:perms:*')),
+      ...(await redis.keys('auth:admin:profile:*')),
       ...(await redis.keys('captcha:*')),
       'auth:admin:sessions',
     ]
     // Each serial e2e suite gets a fresh rate window; ordinary seed keeps production limits intact.
     if (process.env.E2E_SEED_RESET_RATES === '1') {
-      dynamicKeys.push(...await redis.keys('auth:app:captcha:rate:*'))
+      dynamicKeys.push(
+        ...await redis.keys('auth:app:captcha:rate:*'),
+        /* 验证码频控与待消费验证码（短信/邮箱/找回密码）一并清理，避免跨套件累计触发 429 */
+        ...await redis.keys('sms:*'),
+        ...await redis.keys('email:*'),
+        ...await redis.keys('auth:app:reset:rate:*'),
+      )
     }
     if (dynamicKeys.length > 0) await redis.del(...dynamicKeys)
     console.log(`[seed] 应用缓存已清理（${APP_CACHE_KEYS.length + dynamicKeys.length} 键）`)
@@ -343,9 +350,14 @@ async function main() {
     await prisma.user.create({
       data: {
         uid: u.uid,
+        /* 用户名：与迁移回填同口径（user_ + 小写 uid），全站唯一 */
+        username: u.username ?? `user_${String(u.uid).toLowerCase()}`,
         nickname: u.nickname,
-        phone: u.phone,
-        email: u.email,
+        phone: u.phone ?? null,
+        email: u.email ?? null,
+        /* 种子用户的手机号/邮箱均视为已验证的可信通知渠道 */
+        phoneVerifiedAt: u.phone ? u.registeredAt : null,
+        emailVerifiedAt: u.email ? u.registeredAt : null,
         gender: u.gender,
         status: u.status,
         realName: u.realName ?? null,
@@ -463,6 +475,8 @@ async function main() {
         type: a.type,
         applicantName: a.applicantName,
         applicantPhone: a.applicantPhone,
+        /* 归属「我的申请」按 uid：按申请人手机号回填注册用户 */
+        userId: users.find((u: any) => u.phone === a.applicantPhone)?.uid ?? null,
         targetName: a.targetName,
         submittedAt: a.submittedAt,
         status: a.status,
@@ -535,6 +549,8 @@ async function main() {
           message: r.message,
           at: r.at,
           status: r.status ?? 'pending',
+          /* 归属「我的响应」按 uid：种子响应数据无 phone，以响应者姓名回填注册用户（企业身份响应无对应个人用户时保持 null） */
+          userId: users.find((u: { realName?: string; nickname: string }) => u.realName === r.name || u.nickname === r.name)?.uid ?? null,
         },
       })
       respondentCount += 1
@@ -1079,6 +1095,9 @@ async function main() {
     ['N', notifications.map((x: any) => x.id)],
     ['AL', auditLogs.map((x: any) => x.id)],
     ['PL', policySeeds.map((x) => x.id as string)],
+    ['MC', messageChannels.map((x: any) => x.id)],
+    ['MT', messageTemplates.map((x: any) => x.id)],
+    ['MV', messageTemplateVersions.map((x: any) => x.id)],
   ]
   for (const [prefix, ids] of idSeeds) {
     const nextNumber = ids.reduce((max, id) => Math.max(max, numericSuffix(id)), 0)

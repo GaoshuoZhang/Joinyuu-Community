@@ -8,7 +8,7 @@ import { useIncrementalList } from '@/composables/useIncrementalList'
 import { useTabSwipe } from '@/composables/useTabSwipe'
 import EmptyBlock from '@/components/shared/EmptyBlock.vue'
 import ListSkeleton from '@/components/ListSkeleton.vue'
-import type { MyOrder } from '@/types'
+import type { MyOrder, PageResult } from '@/types'
 import StateTag from '@/components/shared/StateTag.vue'
 import { formatLocalDateTime, formatZhNumber } from '@/utils/format'
 
@@ -17,7 +17,8 @@ import { formatLocalDateTime, formatZhNumber } from '@/utils/format'
  * 权益券过期后进入「已过期」（不可核销，可查看券码与有效期）。
  * 点击进入订单详情查看券码与二维码。 */
 const router = useRouter()
-const { data, loading, error, run } = useAsyncList(fetchMyOrders)
+/* v46：列表接口返回 { list, total }，一次取满整页，避免默认分页导致后续订单不可见 */
+const { data, loading, error, run } = useAsyncList<PageResult<MyOrder>>(fetchMyOrders)
 onMounted(run)
 
 type OrderTab = 'all' | 'unfinished' | 'expired' | 'completed'
@@ -33,7 +34,7 @@ const activeTab = ref<OrderTab>('unfinished')
 
 const UNFINISHED_STATUSES = ['pending_use', 'pending_shipment', 'shipped']
 
-const orders = computed(() => data.value ?? [])
+const orders = computed(() => data.value?.list ?? [])
 const filtered = computed(() => {
   if (activeTab.value === 'all') return orders.value
   if (activeTab.value === 'completed') return orders.value.filter((order) => String(order.status) === 'completed')
@@ -66,7 +67,8 @@ function goDetail(order: MyOrder) {
         <div v-if="activeTab === tab.value" class="tab-panel">
           <ListSkeleton v-if="loading && !orders.length" />
           <EmptyBlock v-else-if="error" :text="error" action-text="重试" @action="run" />
-          <EmptyBlock v-else-if="!filtered.length" :text="tab.value === 'all' ? '暂无兑换订单' : `暂无${tab.label}订单`" />
+          <!-- v45：空状态补出口，避免二级页没有 TabBar 时成为死胡同 -->
+          <EmptyBlock v-else-if="!filtered.length" :text="tab.value === 'all' ? '暂无兑换订单' : `暂无${tab.label}订单`" action-text="去积分商城" @action="router.push('/mall')" />
           <template v-else>
             <p class="list-count">共 {{ formatZhNumber(filtered.length) }} 笔订单</p>
             <article

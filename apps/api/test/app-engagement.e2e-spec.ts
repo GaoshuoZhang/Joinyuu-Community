@@ -114,7 +114,7 @@ describe('M2-R 自动积分、发布额度、等级与埋点', () => {
     const first = await post('/api/app/demands', { title: '企业额度一', description: '共享额度测试', kind: 'task', categoryCode: 'DC001', categoryDict: 'demand_category', asIdentity: 'community_enterprise', asEnterpriseId: identity.enterpriseId, contactName: '测试', contactPhone: '13801210001', deliverable: '报告', deliverBy: '2026-12-01' })
     expect(first.status).toBe(200)
     const member = await db.userIdentity.findFirstOrThrow({ where: { type: 'community_enterprise', enterpriseId: identity.enterpriseId, userId: { not: uid } } })
-    const memberToken = await appLoginAs(app, (await db.user.findUniqueOrThrow({ where: { uid: member.userId } })).phone, 'user123')
+    const memberToken = await appLoginAs(app, (await db.user.findUniqueOrThrow({ where: { uid: member.userId } })).phone ?? '', 'user123')
     const second = await request(app.getHttpServer()).post('/api/app/demands').set('Authorization', `Bearer ${memberToken}`).send({ title: '企业额度二', description: '共享额度测试', kind: 'task', categoryCode: 'DC001', categoryDict: 'demand_category', asIdentity: 'community_enterprise', asEnterpriseId: identity.enterpriseId, contactName: '测试', contactPhone: '13801210001', deliverable: '报告', deliverBy: '2026-12-01' })
     expect(second.status).toBe(403)
     expect(await db.publishingLimitUsage.findUnique({ where: { subjectType_subjectId_action_date: { subjectType: 'enterprise', subjectId: identity.enterpriseId!, action: 'demand_publish', date: formatToday() } } })).toMatchObject({ count: 1 })

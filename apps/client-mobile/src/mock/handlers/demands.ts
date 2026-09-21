@@ -107,20 +107,19 @@ function normalizeDemandPayload(uid: string, payload: DemandCreatePayload, enfor
   }
 }
 
-export async function fetchDemands(query: { page?: number; pageSize?: number; category?: string; keyword?: string; kind?: DemandKind; sort?: 'latest' | 'hot' }): Promise<{ list: Demand[]; total: number }> {
+export async function fetchDemands(query: { page?: number; pageSize?: number; category?: string; keyword?: string; kind?: DemandKind }): Promise<{ list: Demand[]; total: number }> {
   return withLatency(() => {
-    let list = demands.filter((d) => d.status === 'published' && visibleTo(d, myIdentitiesOf()))
-    if (query.kind) list = list.filter((d) => (d.kind ?? 'task') === query.kind)
-    if (query.category) list = list.filter((d) => d.categoryLabel === query.category)
+    const list = demands.filter((d) => d.status === 'published' && visibleTo(d, myIdentitiesOf()))
+    let filtered = list
+    if (query.kind) filtered = filtered.filter((d) => (d.kind ?? 'task') === query.kind)
+    if (query.category) filtered = filtered.filter((d) => d.categoryLabel === query.category)
     if (query.keyword) {
       const kw = query.keyword
-      list = list.filter((d) => d.title.includes(kw) || d.description.includes(kw))
+      filtered = filtered.filter((d) => d.title.includes(kw) || d.description.includes(kw))
     }
-    /* v40：排序（latest 保持种子/发布时间倒序，hot 按响应人数） */
-    if (query.sort === 'hot') list = [...list].sort((a, b) => (b.responseCount ?? 0) - (a.responseCount ?? 0))
     const page = Math.max(1, query.page ?? 1)
-    const pageSize = Math.min(100, query.pageSize ?? 10)
-    return { list: list.slice((page - 1) * pageSize, page * pageSize), total: list.length }
+    const pageSize = Math.max(1, Math.min(100, query.pageSize ?? 10))
+    return { list: filtered.slice((page - 1) * pageSize, page * pageSize), total: filtered.length }
   })
 }
 

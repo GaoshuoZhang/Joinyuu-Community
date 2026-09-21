@@ -13,7 +13,7 @@ export const users: User[] = [
     uid: 'U1001',
     nickname: '陈屿',
     realName: '陈屿',
-    citizenId: '1101011990011003711X',
+    citizenId: '11010119900110001X',
     wechatOpenid: 'oX8vS5qK7dK2mX8vS5qK01',
     wechatUnionid: 'oUnion_9dK2mX8vS5qK01',
     wechatVerified: true,
@@ -43,7 +43,7 @@ export const users: User[] = [
     uid: 'U1002',
     nickname: '林晚舟',
     realName: '林晚舟',
-    citizenId: '1101011990011007412X',
+    citizenId: '11010119900110002X',
     wechatOpenid: 'oX8vS5qK7dK2mX8vS5qK02',
     wechatUnionid: 'oUnion_9dK2mX8vS5qK02',
     wechatVerified: true,
@@ -72,7 +72,7 @@ export const users: User[] = [
     uid: 'U1003',
     nickname: '苏晴',
     realName: '苏晴',
-    citizenId: '1101011990011011113X',
+    citizenId: '11010119900110003X',
 
     phone: '13801210003',
     email: 'suqing@chipseed.com',
@@ -97,7 +97,7 @@ export const users: User[] = [
     uid: 'U1004',
     nickname: '周慕深',
     realName: '周砚白',
-    citizenId: '1101011990011014814X',
+    citizenId: '11010119900110004X',
 
     phone: '13801210004',
     email: 'zhoumushen@chipseed.com',
@@ -121,7 +121,7 @@ export const users: User[] = [
     uid: 'U1005',
     nickname: '顾北辰',
     realName: '顾北辰',
-    citizenId: '1101011990011018515X',
+    citizenId: '11010119900110005X',
 
     phone: '13801210005',
     email: 'gubeichen@island.design',
@@ -145,7 +145,7 @@ export const users: User[] = [
     uid: 'U1006',
     nickname: '沈嘉禾',
     realName: '沈嘉禾',
-    citizenId: '1101011990011022216X',
+    citizenId: '11010119900110006X',
 
     phone: '13801210006',
     email: 'shenjiahe@shiguang.art',
@@ -166,7 +166,7 @@ export const users: User[] = [
     uid: 'U1007',
     nickname: '韩梓萌',
     realName: '韩青梧',
-    citizenId: '1101011990011025917X',
+    citizenId: '11010119900110007X',
 
     phone: '13801210007',
     email: 'hanzimeng@cloudpath.cn',
@@ -190,7 +190,7 @@ export const users: User[] = [
     uid: 'U1008',
     nickname: '陆则铭',
     realName: '陆知行',
-    citizenId: '1101011990011029618X',
+    citizenId: '11010119900110008X',
 
     phone: '13801210008',
     email: 'luzeming@cloudpath.cn',

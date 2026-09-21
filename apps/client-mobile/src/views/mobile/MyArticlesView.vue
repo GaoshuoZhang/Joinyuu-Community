@@ -55,7 +55,8 @@ onMounted(run)
     <ListSkeleton v-if="loading" />
     <EmptyBlock v-else-if="error" :text="error" action-text="重试" @action="run" />
     <template v-else-if="empty">
-      <EmptyBlock text="还没有投稿，去写一篇吧" />
+      <!-- v45：空状态补出口，避免二级页没有 TabBar 时成为死胡同 -->
+      <EmptyBlock text="还没有投稿，去写一篇吧" action-text="写一篇投稿" @action="router.push('/articles/new')" />
       <Button theme="primary" block @click="router.push('/articles/new')">去投稿</Button>
     </template>
     <div v-else class="stagger list">

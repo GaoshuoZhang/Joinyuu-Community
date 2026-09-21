@@ -1,9 +1,9 @@
 <script setup lang="ts">
-import { computed, onMounted, ref, watch } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import { Button, DialogPlugin, Icon, Image, Progress, Tag, Textarea, Toast, Upload } from 'tdesign-mobile-vue'
 import type { UploadFile } from 'tdesign-mobile-vue'
-import { acceptMilestone, fetchMyProject, returnMilestone, submitMilestone } from '@/api/projects'
+import { acceptMilestone, fetchMyProject, returnMilestone, revokeProjectAttachmentUrls, submitMilestone } from '@/api/projects'
 import { uploadFile } from '@/api/uploads'
 import { ApiError } from '@/api/http'
 import { onImageError } from '@/utils/imageFallback'
@@ -21,6 +21,8 @@ const projectId = String(route.params.id)
 
 const { data: project, loading, error, run } = useAsyncList<MyProject>(() => fetchMyProject(projectId))
 onMounted(run)
+/* 离开页面回收附件 blob URL（避免详情页反复进出累积内存） */
+onBeforeUnmount(revokeProjectAttachmentUrls)
 
 const acting = ref(false)
 const note = ref('')

@@ -39,32 +39,33 @@ export class ContentsController {
   @HttpCode(200)
   @Post('articles/:id/comments/:commentId/remove')
   removeComment(
+    @Param('id') articleId: string,
     @Param('commentId') commentId: string,
     @Body() dto: TakedownDto,
     @Req() req: AuthenticatedRequest,
   ) {
-    return this.contents.removeArticleComment(commentId, dto.takedownReason, req.user?.name ?? '社区管理员')
+    return this.contents.removeArticleComment(articleId, commentId, dto.takedownReason, req.user?.name ?? '社区管理员')
   }
 
   @RequirePermission('/contents/publish')
   @HttpCode(200)
   @Post('articles')
-  createArticle(@Body() dto: ArticlePayloadDto) {
-    return this.contents.createArticle(dto)
+  createArticle(@Body() dto: ArticlePayloadDto, @Req() req: AuthenticatedRequest) {
+    return this.contents.createArticle(dto, req.user?.name ?? '社区管理员')
   }
 
   @RequirePermission('/contents/publish')
   @HttpCode(200)
   @Put('articles/:id')
-  updateArticle(@Param('id') id: string, @Body() dto: ArticlePayloadDto) {
-    return this.contents.updateArticle(id, dto)
+  updateArticle(@Param('id') id: string, @Body() dto: ArticlePayloadDto, @Req() req: AuthenticatedRequest) {
+    return this.contents.updateArticle(id, dto, req.user?.name ?? '社区管理员')
   }
 
   @RequirePermission('/contents/submissions')
   @HttpCode(200)
   @Put('articles/:id/submission')
-  updateSubmissionArticle(@Param('id') id: string, @Body() dto: ArticlePayloadDto) {
-    return this.contents.updateSubmissionArticle(id, dto)
+  updateSubmissionArticle(@Param('id') id: string, @Body() dto: ArticlePayloadDto, @Req() req: AuthenticatedRequest) {
+    return this.contents.updateSubmissionArticle(id, dto, req.user?.name ?? '社区管理员')
   }
 
   @RequirePermission('/contents/submissions')

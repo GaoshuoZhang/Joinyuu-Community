@@ -152,24 +152,37 @@ export class ApplicationsService {
       }),
       this.prisma.application.count({ where }),
     ])
-    const uidByPhone = await this.resolveApplicantIds(rows.map((r) => r.applicantPhone))
+    const uidMap = await this.resolveApplicantIds(rows)
     const list = rows.map((r) => ({
       ...r,
       details: this.detailEntries(r.type, r.details),
-      applicantId: uidByPhone.get(r.applicantPhone) ?? null,
+      applicantId: uidMap.get(r.id) ?? null,
     }))
     return { list, total }
   }
 
-  /** 申请人用户 ID 派生（申请单仅存手机号，按手机号匹配注册用户；无匹配返回 null） */
-  private async resolveApplicantIds(phones: string[]): Promise<Map<string, string>> {
-    const unique = [...new Set(phones.filter(Boolean))]
-    if (!unique.length) return new Map()
-    const users = await this.prisma.user.findMany({
-      where: { phone: { in: unique } },
-      select: { uid: true, phone: true },
-    })
-    return new Map(users.map((u) => [u.phone, u.uid]))
+  /** 申请人用户 ID 派生：优先取申请单 userId；历史数据为空时回退按手机号匹配注册用户。
+   * 返回 Map<申请单 id, uid>。 */
+  private async resolveApplicantIds(
+    rows: Array<{ id: string; userId: string | null; applicantPhone: string }>,
+  ): Promise<Map<string, string>> {
+    const map = new Map<string, string>()
+    const phones = [...new Set(rows.filter((r) => !r.userId && r.applicantPhone).map((r) => r.applicantPhone))]
+    const byPhone = new Map<string, string>()
+    if (phones.length) {
+      const users = await this.prisma.user.findMany({
+        where: { phone: { in: phones } },
+        select: { uid: true, phone: true },
+      })
+      for (const u of users) {
+        if (u.phone) byPhone.set(u.phone, u.uid)
+      }
+    }
+    for (const row of rows) {
+      const uid = row.userId ?? byPhone.get(row.applicantPhone) ?? null
+      if (uid) map.set(row.id, uid)
+    }
+    return map
   }
 
   /** 审核单打印（复用申请详情数据，无新表） */
@@ -177,14 +190,14 @@ export class ApplicationsService {
     const row = await this.prisma.application.findUnique({ where: { id } })
     if (!row) throw new NotFoundException('申请不存在')
     const label = APPLICATION_TYPE_LABELS[row.type] ?? '申请'
-    const uidByPhone = await this.resolveApplicantIds([row.applicantPhone])
+    const uidMap = await this.resolveApplicantIds([row])
     return {
       title: `聚屿社区 · ${label}审核单`,
       generatedAt: formatNow(),
       application: {
         ...row,
         details: this.detailEntries(row.type, row.details),
-        applicantId: uidByPhone.get(row.applicantPhone) ?? null,
+        applicantId: uidMap.get(row.id) ?? null,
       },
     }
   }
@@ -202,6 +215,8 @@ export class ApplicationsService {
       at: formatNow(),
     })
 
+    /* 首绑积分/经验值发放与身份授予、状态迁移同事务：任一失败整体回滚，
+     * 避免「身份已授予但奖励永久丢失」且重试被 409 拒绝无法补发。 */
     const grant = await this.prisma.$transaction(async (tx) => {
       const claimed = await tx.application.updateMany({
         where: { id, status: 'pending' },
@@ -214,20 +229,21 @@ export class ApplicationsService {
         await tx.enterprise.update({ where: { id: enterprise.id }, data: { status: 'exited' } })
         return { userId: null, enterpriseId: enterprise.id }
       }
-      return this.grantIdentity(tx, app)
-    })
-
-    if (grant.userId) {
-      await this.engine.issuePoints(grant.userId, 'identity_first_bind', IDENTITY_FIRST_BIND_POINTS_REASON)
-      if (grant.enterpriseId) {
-        await this.engine.issueExperience(
-          'enterprise',
-          grant.enterpriseId,
-          'identity_first_bind',
-          IDENTITY_FIRST_BIND_EXP_REASON,
-        )
+      const result = await this.grantIdentity(tx, app)
+      if (result.userId) {
+        await this.engine.issuePointsInTransaction(tx, result.userId, 'identity_first_bind', IDENTITY_FIRST_BIND_POINTS_REASON)
+        if (result.enterpriseId) {
+          await this.engine.issueExperienceInTransaction(
+            tx,
+            'enterprise',
+            result.enterpriseId,
+            'identity_first_bind',
+            IDENTITY_FIRST_BIND_EXP_REASON,
+          )
+        }
       }
-    }
+      return result
+    })
 
     await this.audit.record({
       module: '审核中心',
@@ -246,9 +262,9 @@ export class ApplicationsService {
 
     /* 失效工作台聚合缓存，避免 60s 内待办卡片残留已处理项 */
     await this.redis.delCache(CACHE_KEYS.dashboardSummary)
-    const applicant = await this.prisma.user.findFirst({ where: { phone: app.applicantPhone }, select: { uid: true } })
-    if (applicant) {
-      await this.notify.pushNotice(applicant.uid, {
+    const applicantUid = await this.resolveApplicantUid(app)
+    if (applicantUid) {
+      await this.notify.pushNotice(applicantUid, {
         type: 'audit_result',
         title: `${APPLICATION_TYPE_LABELS[app.type] ?? '申请'}已通过`,
         content: comment || '您的申请已审核通过。',
@@ -289,9 +305,9 @@ export class ApplicationsService {
 
     /* 失效工作台聚合缓存，避免 60s 内待办卡片残留已处理项 */
     await this.redis.delCache(CACHE_KEYS.dashboardSummary)
-    const applicant = await this.prisma.user.findFirst({ where: { phone: app.applicantPhone }, select: { uid: true } })
-    if (applicant) {
-      await this.notify.pushNotice(applicant.uid, {
+    const applicantUid = await this.resolveApplicantUid(app)
+    if (applicantUid) {
+      await this.notify.pushNotice(applicantUid, {
         type: 'audit_result',
         title: `${APPLICATION_TYPE_LABELS[app.type] ?? '申请'}未通过`,
         content: comment || '您的申请未获通过。',
@@ -417,6 +433,14 @@ export class ApplicationsService {
     return created.id
   }
 
+  /** 申请人 uid：优先申请单 userId；历史数据为空时回退按手机号匹配 */
+  private async resolveApplicantUid(app: { userId: string | null; applicantPhone: string }): Promise<string | null> {
+    if (app.userId) return app.userId
+    if (!app.applicantPhone) return null
+    const user = await this.prisma.user.findFirst({ where: { phone: app.applicantPhone }, select: { uid: true } })
+    return user?.uid ?? null
+  }
+
   /* 审核通过授予身份（三类分支）：
    *   settle      新增/激活社区企业（字段取自申请表单）→ community_enterprise 身份（去重）
    *   individual  新增 community_individual 身份（社区个体，去重）
@@ -424,11 +448,15 @@ export class ApplicationsService {
    * 仅在真正新增身份时返回 userId（触发首绑积分/经验值）；enterpriseId 仅在社区企业时返回。 */
   private async grantIdentity(tx: Prisma.TransactionClient, app: {
     type: string
+    userId: string | null
     applicantPhone: string
     targetName: string
     details: Prisma.JsonValue
   }): Promise<GrantResult> {
-    const user = await tx.user.findFirst({ where: { phone: app.applicantPhone } })
+    /* 归属：优先 userId；历史数据回退按手机号匹配 */
+    const user = app.userId
+      ? await tx.user.findUnique({ where: { uid: app.userId } })
+      : await tx.user.findFirst({ where: { phone: app.applicantPhone } })
     if (!user) return { userId: null, enterpriseId: null }
 
     const { type, details } = app
@@ -453,7 +481,7 @@ export class ApplicationsService {
             contactTitle: '社区企业成员',
             contactName: user.nickname,
             contactPhone: app.applicantPhone,
-            contactEmail: user.email,
+            contactEmail: user.email ?? '',
             description: '审核通过自动新增的社区企业',
             tags: [],
           },

@@ -45,8 +45,12 @@ export class DemandsController {
 
   @RequirePermission('/demands')
   @Put(':id')
-  update(@Param('id') id: string, @Body() dto: UpdateDemandDto): Promise<{ code: number }> {
-    return this.demands.update(id, dto)
+  update(
+    @Param('id') id: string,
+    @Body() dto: UpdateDemandDto,
+    @Req() req: AuthenticatedRequest,
+  ): Promise<{ code: number }> {
+    return this.demands.update(id, dto, req.user?.name ?? '社区管理员')
   }
 
   /* 审核对话框在需求列表/详情/审核页共用，两码任一即可 */

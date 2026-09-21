@@ -19,7 +19,8 @@ const config = useConfigStore()
 const notices = useNoticesStore()
 
 onMounted(() => {
-  config.ensureLoaded()
+  /* 配置拉取失败不阻塞壳渲染：沿用默认功能开关 */
+  void config.ensureLoaded().catch(() => {})
   if (auth.isLogged) notices.refreshUnread()
   window.addEventListener('online', onOnline)
   window.addEventListener('offline', onOffline)
@@ -96,7 +97,7 @@ const TAB_BY_SEGMENT: Record<string, string> = {
   notices: '/me',
   applications: '/me',
 }
-const TAB_ROOTS = new Set(tabs.map((tab) => tab.value))
+const TAB_ROOTS = new Set<string>(tabs.map((tab) => tab.value))
 const active = computed(() => {
   const segment = route.path.split('/')[1] ?? ''
   const target = TAB_BY_SEGMENT[segment] ?? `/${segment}`

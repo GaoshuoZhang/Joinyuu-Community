@@ -264,6 +264,11 @@ describe('M2-R R2 app 活动与商城', () => {
         status: 'restock',
         description: '缺货可见性验收',
         redeemedCount: 0,
+        shippingMethods: [],
+        visibilityIdentities: [],
+        visibilityLevels: [],
+        orderIdentities: [],
+        orderLevels: [],
         createdAt: '2026-09-16 10:00',
       },
     })
@@ -290,6 +295,11 @@ describe('M2-R R2 app 活动与商城', () => {
         description: '有效期验收',
         redeemedCount: 0,
         validDays: 2,
+        shippingMethods: [],
+        visibilityIdentities: [],
+        visibilityLevels: [],
+        orderIdentities: [],
+        orderLevels: [],
         createdAt: '2026-09-16 10:00',
       },
     })

@@ -20,9 +20,11 @@ const enterpriseId = String(route.params.id)
 const editableFields = ref<string[]>([])
 const editable = (key: string) => editableFields.value.includes(key)
 const { data, loading, error, run } = useAsyncList(async () => {
-  const [detail, schema] = await Promise.all([fetchEnterpriseDetail(enterpriseId), fetchCardSchema('enterprise')])
-  editableFields.value = schema.editableFields
-  return detail
+  /* 卡片 schema 失败不应连带企业详情整页报错：降级为空可编辑字段并禁用保存 */
+  const [detailRes, schemaRes] = await Promise.allSettled([fetchEnterpriseDetail(enterpriseId), fetchCardSchema('enterprise')])
+  if (detailRes.status === 'rejected') throw detailRes.reason
+  editableFields.value = schemaRes.status === 'fulfilled' ? schemaRes.value.editableFields : []
+  return detailRes.value
 })
 onMounted(async () => {
   await run()

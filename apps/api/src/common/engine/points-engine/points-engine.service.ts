@@ -47,7 +47,7 @@ export class PointsEngineService {
     const user = await tx.user.update({ where: { uid: recipientId }, data: { points: { increment: rule.points } } })
     await tx.pointsRecord.create({
       data: {
-        id: await this.ids.next('PT'),
+        id: await this.ids.next('PT', tx),
         userId: recipientId,
         delta: rule.points,
         balance: user.points,
@@ -87,7 +87,7 @@ export class PointsEngineService {
     const user = await tx.user.update({ where: { uid: recipientId }, data: { points: { increment: amount } } })
     await tx.pointsRecord.create({
       data: {
-        id: await this.ids.next('PT'),
+        id: await this.ids.next('PT', tx),
         userId: recipientId,
         delta: amount,
         balance: user.points,
@@ -137,7 +137,7 @@ export class PointsEngineService {
       })
       await tx.experienceRecord.create({
         data: {
-          id: await this.ids.next('EX'),
+          id: await this.ids.next('EX', tx),
           targetType: 'enterprise',
           targetId,
           delta: rule.exp,
@@ -163,7 +163,7 @@ export class PointsEngineService {
     })
     await tx.experienceRecord.create({
       data: {
-        id: await this.ids.next('EX'),
+        id: await this.ids.next('EX', tx),
         targetType: 'individual',
         targetId,
         delta: rule.exp,

@@ -75,18 +75,23 @@ const pagination = computed(() => ({
   showJumper: true,
 }))
 
+/* 请求序号守卫：仅最后一次请求可写回状态，避免快速切页/改筛选时的竞态覆盖 */
+let version = 0
 async function load() {
+  const current = ++version
   syncQuery()
   loading.value = true
   loadError.value = ''
   try {
     const res = await fetchAuditLogs({ ...query })
-    list.value = res.list
-    total.value = res.total
+    if (current === version) {
+      list.value = res.list
+      total.value = res.total
+    }
   } catch (e) {
-    loadError.value = e instanceof Error ? e.message : '数据加载失败'
+    if (current === version) loadError.value = e instanceof Error ? e.message : '数据加载失败'
   } finally {
-    loading.value = false
+    if (current === version) loading.value = false
   }
 }
 

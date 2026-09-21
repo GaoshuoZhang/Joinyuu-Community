@@ -5,7 +5,7 @@ import { OutboxService } from './outbox.service'
 import { QueryOutboxDto } from './dto/outbox.dto'
 
 /* 发送记录（P0 Outbox）：投递状态、失败原因、投递日志、手动重试与终止。 */
-@RequirePermission('/system/outbox')
+@RequirePermission('/system/messages')
 @Controller('api/admin/outbox')
 export class OutboxController {
   constructor(private readonly outbox: OutboxService) {}

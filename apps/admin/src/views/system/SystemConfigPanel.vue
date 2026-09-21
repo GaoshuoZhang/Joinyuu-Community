@@ -3,6 +3,7 @@ import { computed, onBeforeUnmount, onMounted, reactive, ref } from 'vue'
 import { onBeforeRouteLeave } from 'vue-router'
 import { DialogPlugin, MessagePlugin } from 'tdesign-vue-next'
 import PageHeader from '@/components/PageHeader.vue'
+import ListErrorState from '@/components/ListErrorState.vue'
 import {
   fetchRealnameCatalog,
   fetchSystemConfig,
@@ -25,6 +26,8 @@ type SystemConfigForm = SystemConfigPayload &
 
 const loading = ref(true)
 const saving = ref(false)
+/* 加载失败：保留错误展示与重试入口，并禁用保存，避免用默认值覆盖线上配置 */
+const loadError = ref('')
 const formRef = ref()
 const savedSnapshot = ref('')
 
@@ -166,18 +169,30 @@ const credentialSourceLabel = computed(() => {
   return '—'
 })
 
-onMounted(async () => {
+/* 加载配置：失败时记录错误（禁用保存并给出重试），成功后才建立可保存快照 */
+async function loadConfig() {
+  loading.value = true
   try {
     const [conf, catalog] = await Promise.all([fetchSystemConfig(), fetchRealnameCatalog()])
     realnameCatalog.value = catalog
     applyConfig(conf)
     savedSnapshot.value = JSON.stringify(form)
+    loadError.value = ''
+  } catch (e) {
+    loadError.value = e instanceof Error ? e.message : '系统配置加载失败'
   } finally {
     loading.value = false
   }
-})
+}
+
+onMounted(loadConfig)
 
 async function onSave() {
+  /* 未加载成功时表单为默认值，禁止提交以免覆盖线上配置 */
+  if (!savedSnapshot.value) {
+    MessagePlugin.error('配置尚未加载成功，请重新加载后再保存')
+    return
+  }
   const valid = await formRef.value.validate()
   if (valid !== true) return focusFirstInvalid(formRef.value)
   saving.value = true
@@ -235,6 +250,8 @@ onBeforeRouteLeave(async () => {
         <span class="config-meta">最近保存：{{ form.updatedAt || '—' }}（{{ form.updatedBy || '—' }}）</span>
       </template>
     </PageHeader>
+
+    <ListErrorState v-if="loadError" :message="loadError" :loading="loading" @retry="loadConfig" />
 
     <t-loading :loading="loading" size="small">
       <t-card :bordered="true" class="config-card">
@@ -498,7 +515,7 @@ onBeforeRouteLeave(async () => {
           </div>
         </t-form>
         <div class="config-footer">
-          <t-button theme="primary" :loading="saving" @click="onSave">保存配置</t-button>
+          <t-button theme="primary" :loading="saving" :disabled="!!loadError" @click="onSave">保存配置</t-button>
         </div>
       </t-card>
     </t-loading>

@@ -15,7 +15,10 @@ import { RedisService } from '../../../common/redis/redis.service'
 import { IdGeneratorService } from '../../../common/id-generator/id-generator.service'
 import { PointsEngineService } from '../../../common/engine/points-engine/points-engine.service'
 import { NotificationService } from '../../../common/notify/notification.service'
+import { IdentityNameService } from '../../../common/identity/identity-name.service'
+import { normalizeUsername } from '../../../common/identity/identity-names'
 import { SmsCodeService } from '../../messaging/sms-code.service'
+import { EmailCodeService, normalizeEmail } from '../../messaging/email-code.service'
 import { AppSessionService } from '../../../common/app-session/app-session.service'
 import { formatNow } from '../../../common/utils/time'
 import { normalizeGender } from '../../../common/utils/gender'
@@ -24,7 +27,8 @@ import { buildCaptcha } from '../../auth/captcha.util'
 import type { AppJwtPayload } from '../../../common/interfaces/app-jwt-payload'
 import type { RegisterDto } from './dto/register.dto'
 import type { AppLoginDto } from './dto/login.dto'
-import type { ResetPasswordDto } from './dto/reset-password.dto'
+import type { ResetPasswordDto, SendResetCodeDto } from './dto/reset-password.dto'
+import type { ChangeEmailDto } from './dto/change-email.dto'
 import type { ChangePhoneDto } from '../me/dto/change-phone.dto'
 
 /** JWT 有效期（秒），与共享 JwtModule 的 expiresIn 2h 对齐 */
@@ -47,6 +51,9 @@ const IDENTITY_LABEL: Record<string, string> = {
 export interface AppLoginResult {
   token: string
   uid: string
+  /** 登录标识：用户可修改，全站唯一 */
+  username: string
+  /** 展示昵称（name 字段沿用昵称，兼容既有客户端） */
   name: string
   identities: AppIdentitySnapshot[]
   points: number
@@ -64,6 +71,8 @@ export class AuthService {
     private readonly points: PointsEngineService,
     private readonly notify: NotificationService,
     private readonly sms: SmsCodeService,
+    private readonly emailCodes: EmailCodeService,
+    private readonly identityNames: IdentityNameService,
     private readonly sessions: AppSessionService,
   ) {}
 
@@ -91,26 +100,25 @@ export class AuthService {
     return expected.toUpperCase() === (code ?? '').toUpperCase()
   }
 
-  /** 身份校验（P0 短信验证码）：提供 smsCode 时走短信校验（证明手机号归属），
-   * 否则回退图形验证码——保证短信通道未启用时既有流程不中断。 */
-  private async verifyIdentity(
-    purpose: 'register' | 'reset_password' | 'change_phone',
-    phone: string,
-    input: { smsCode?: string; captchaId?: string; captchaCode?: string },
-  ): Promise<void> {
-    const smsCode = input.smsCode?.trim()
-    if (smsCode) {
-      const ok = await this.sms.verify(phone, purpose, smsCode)
-      if (!ok) throw new BadRequestException('短信验证码错误或已过期')
-      return
+  /** 按登录标识（手机号 / 邮箱 / 用户名）定位账号 */
+  private async findByIdentifier(identifier: string) {
+    const raw = (identifier ?? '').trim()
+    if (!raw) return null
+    if (/^1\d{10}$/.test(raw)) {
+      return this.prisma.user.findUnique({ where: { phone: raw }, include: { identities: true } })
     }
-    const captchaOk = await this.verifyCaptcha(input.captchaId, input.captchaCode)
-    if (!captchaOk) throw new BadRequestException('验证码错误或已过期')
+    const email = normalizeEmail(raw)
+    if (email) {
+      return this.prisma.user.findUnique({ where: { email }, include: { identities: true } })
+    }
+    const username = normalizeUsername(raw)
+    return this.prisma.user.findUnique({ where: { username }, include: { identities: true } })
   }
 
-  /** 注册：开关校验 → 手机号唯一 → 建用户 + 默认 individual 身份 + 协议同意留痕 → 签发 app JWT */
+  /** 注册：默认邮箱注册（后台已配置短信渠道时可选手机号注册）。
+   * 必须验证码验证；验证后的邮箱/手机号即成为该用户的可信通知渠道；
+   * 昵称与用户名由服务端自动分配（全站唯一，可后续修改）。 */
   async register(dto: RegisterDto): Promise<AppLoginResult> {
-    await this.verifyIdentity('register', dto.phone.trim(), dto)
     const config = await this.prisma.systemConfig.findUnique({ where: { id: 1 } })
     if (config && config.registrationOpen === false) {
       throw new BadRequestException('注册暂未开放')
@@ -118,16 +126,36 @@ export class AuthService {
     if (dto.agreed !== true) {
       throw new BadRequestException('请先阅读并同意用户协议与隐私政策')
     }
-    const phone = dto.phone.trim()
-    if (!/^1\d{10}$/.test(phone)) {
-      throw new BadRequestException('手机号格式不正确')
+
+    const channel = dto.channel ?? 'email'
+    const email = normalizeEmail(dto.email)
+    const phone = (dto.phone ?? '').trim()
+
+    if (channel === 'email') {
+      if (!dto.email?.trim()) throw new BadRequestException('请输入邮箱')
+      if (!email) throw new BadRequestException('邮箱格式不正确')
+      if (!(await this.emailCodes.isAvailable())) {
+        throw new BadRequestException('邮箱注册暂未开放，请稍后再试或选择手机号注册')
+      }
+      const ok = await this.emailCodes.verify(email, 'register', dto.code)
+      if (!ok) throw new BadRequestException('邮箱验证码错误或已过期')
+      const existing = await this.prisma.user.findUnique({ where: { email }, select: { uid: true } })
+      if (existing) throw new ConflictException('该邮箱已注册')
+    } else {
+      if (!phone) throw new BadRequestException('请输入手机号')
+      if (!/^1\d{10}$/.test(phone)) throw new BadRequestException('手机号格式不正确')
+      if (!(await this.sms.isAvailable())) {
+        throw new BadRequestException('手机号注册暂未开放，请稍后再试')
+      }
+      const ok = await this.sms.verify(phone, 'register', dto.code)
+      if (!ok) throw new BadRequestException('短信验证码错误或已过期')
+      const existing = await this.prisma.user.findFirst({ where: { phone }, select: { uid: true } })
+      if (existing) throw new ConflictException('该手机号已注册')
     }
-    const existing = await this.prisma.user.findFirst({ where: { phone }, select: { uid: true } })
-    if (existing) throw new ConflictException('该手机号已注册')
 
     const uid = await this.ids.next('U')
-    const nickname = dto.nickname.trim()
-    if (!nickname) throw new BadRequestException('请输入昵称')
+    const username = await this.identityNames.assignUsername()
+    const nickname = await this.identityNames.assignNickname()
     const now = formatNow()
     const agreements = await this.prisma.policy.findMany({
       where: { kind: { in: ['agreement_user', 'agreement_privacy'] }, status: 'published' },
@@ -145,22 +173,26 @@ export class AuthService {
     try {
       await this.prisma.$transaction(async (tx) => {
         await tx.user.create({
-        data: {
-          uid,
-          nickname,
-          phone,
-          email: dto.email?.trim() ?? '',
-          gender: normalizeGender(dto.gender),
-          status: 'active',
-          passwordHash: await hash(dto.password, 10),
-          points: 0,
-          registeredAt: now,
-          lastActiveAt: now,
-          bio: '',
-          identities: {
-            create: { type: 'individual', title: '个人用户' },
+          data: {
+            uid,
+            username,
+            nickname,
+            phone: channel === 'phone' ? phone : null,
+            email: channel === 'email' ? email : null,
+            /* 注册验证通过即视为可信通知渠道 */
+            phoneVerifiedAt: channel === 'phone' ? now : null,
+            emailVerifiedAt: channel === 'email' ? now : null,
+            gender: normalizeGender(dto.gender),
+            status: 'active',
+            passwordHash: await hash(dto.password, 10),
+            points: 0,
+            registeredAt: now,
+            lastActiveAt: now,
+            bio: '',
+            identities: {
+              create: { type: 'individual', title: '个人用户' },
+            },
           },
-        },
         })
         await tx.agreementConsent.createMany({
           data: [
@@ -176,7 +208,7 @@ export class AuthService {
       })
     } catch (error) {
       if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002') {
-        throw new ConflictException('该手机号已注册')
+        throw new ConflictException(channel === 'email' ? '该邮箱已注册' : '该手机号已注册')
       }
       throw error
     }
@@ -184,24 +216,28 @@ export class AuthService {
     await this.notify.pushNotice(uid, {
       type: 'system',
       title: '欢迎加入聚屿社区',
-      content: '注册成功，开始探索社区服务吧。',
+      content: `注册成功，你的用户名是 ${username}，开始探索社区服务吧。`,
     })
 
     const token = await this.signToken(uid, nickname, [{ type: 'individual', label: '个人用户' }])
-    return { token, uid, name: nickname, identities: [{ type: 'individual', label: '个人用户' }], points: 0 }
+    return {
+      token,
+      uid,
+      username,
+      name: nickname,
+      identities: [{ type: 'individual', label: '个人用户' }],
+      points: 0,
+    }
   }
 
-  /** 登录：校验验证码 → 校验手机号/密码与状态 → 签发多身份 app JWT → 触发每日登录积分（自然日去重） */
+  /** 登录：校验图形验证码 → 按 手机号/邮箱/用户名 定位账号 → 校验密码与状态 → 签发多身份 app JWT */
   async login(dto: AppLoginDto): Promise<AppLoginResult> {
     const captchaOk = await this.verifyCaptcha(dto.captchaId, dto.captchaCode)
     if (!captchaOk) throw new BadRequestException('验证码错误或已过期')
 
-    const user = await this.prisma.user.findFirst({
-      where: { phone: dto.phone.trim() },
-      include: { identities: true },
-    })
+    const user = await this.findByIdentifier(dto.identifier)
     if (!user || !user.passwordHash || !(await compare(dto.password, user.passwordHash))) {
-      throw new UnauthorizedException('手机号或密码错误')
+      throw new UnauthorizedException('账号或密码错误')
     }
     if (user.status === 'frozen') throw new UnauthorizedException('账号已冻结，请联系社区运营')
     if (user.status !== 'active') throw new UnauthorizedException('账号已注销或停用，请联系社区运营')
@@ -229,7 +265,14 @@ export class AuthService {
     }
 
     const fresh = await this.prisma.user.findUnique({ where: { uid: user.uid }, select: { points: true } })
-    return { token, uid: user.uid, name: user.nickname, identities, points: fresh?.points ?? 0 }
+    return {
+      token,
+      uid: user.uid,
+      username: user.username,
+      name: user.nickname,
+      identities,
+      points: fresh?.points ?? 0,
+    }
   }
 
   /** 登出：jti 加入黑名单（剩余有效期），token 即时失效 */
@@ -241,17 +284,60 @@ export class AuthService {
     return { code: 0 }
   }
 
-  /** 找回密码（短信降级为图形验证码）：校验验证码 → 更新密码 → 站内信通知 */
+  /** 找回密码前置：返回该账号已验证的可信验证渠道（脱敏），供客户端选择用哪种方式收码 */
+  async recoveryChannels(identifier: string): Promise<{ email: string | null; phone: string | null }> {
+    const user = await this.findByIdentifier(identifier)
+    if (!user) throw new BadRequestException('该账号未注册')
+    return {
+      email: user.email && user.emailVerifiedAt ? maskEmail(user.email) : null,
+      phone: user.phone && user.phoneVerifiedAt ? maskPhone(user.phone) : null,
+    }
+  }
+
+  /** 找回密码发码：解析账号已验证的可信渠道，向该渠道真实地址下发验证码（客户端只传账号标识） */
+  async sendResetCode(
+    dto: SendResetCodeDto,
+    context: { ip?: string; deviceId?: string } = {},
+  ): Promise<{ expiresInSec: number; devCode?: string }> {
+    const user = await this.findByIdentifier(dto.identifier)
+    if (!user) throw new BadRequestException('该账号未注册')
+
+    if (dto.channel === 'email') {
+      if (!user.email || !user.emailVerifiedAt) {
+        throw new BadRequestException('该账号未绑定已验证的邮箱，无法通过邮箱验证')
+      }
+      return this.emailCodes.send(user.email, 'reset_password', context)
+    }
+    if (!user.phone || !user.phoneVerifiedAt) {
+      throw new BadRequestException('该账号未绑定已验证的手机号，无法通过短信验证')
+    }
+    return this.sms.send(user.phone, 'reset_password', context)
+  }
+
+  /** 找回密码：必须使用可信通知渠道验证 → 更新密码 → 全端登出 → 站内信通知 */
   async resetPassword(dto: ResetPasswordDto): Promise<{ code: number }> {
-    const attempts = await this.redis.incrWithTtl(`auth:app:reset:rate:${dto.phone.trim()}`, 15 * 60)
+    const attempts = await this.redis.incrWithTtl(`auth:app:reset:rate:${dto.identifier.trim()}`, 15 * 60)
     if (attempts !== null && attempts > 5) {
       throw new HttpException('操作过于频繁，请稍后重试', HttpStatus.TOO_MANY_REQUESTS)
     }
-    await this.verifyIdentity('reset_password', dto.phone.trim(), dto)
 
-    const user = await this.prisma.user.findFirst({ where: { phone: dto.phone.trim() } })
-    /* D-105：未注册手机号是业务校验失败而非登录失效，用 400 避免触发客户端全局 401 登出跳转 */
-    if (!user) throw new BadRequestException('该手机号未注册')
+    const user = await this.findByIdentifier(dto.identifier)
+    /* D-105：未注册账号是业务校验失败而非登录失效，用 400 避免触发客户端全局 401 登出跳转 */
+    if (!user) throw new BadRequestException('该账号未注册')
+
+    if (dto.channel === 'email') {
+      if (!user.email || !user.emailVerifiedAt) {
+        throw new BadRequestException('该账号未绑定已验证的邮箱，无法通过邮箱验证')
+      }
+      const ok = await this.emailCodes.verify(user.email, 'reset_password', dto.code)
+      if (!ok) throw new BadRequestException('邮箱验证码错误或已过期')
+    } else {
+      if (!user.phone || !user.phoneVerifiedAt) {
+        throw new BadRequestException('该账号未绑定已验证的手机号，无法通过短信验证')
+      }
+      const ok = await this.sms.verify(user.phone, 'reset_password', dto.code)
+      if (!ok) throw new BadRequestException('短信验证码错误或已过期')
+    }
 
     await this.prisma.user.update({
       where: { uid: user.uid },
@@ -267,16 +353,48 @@ export class AuthService {
     return { code: 0 }
   }
 
+  /** 绑定/更换绑定手机号：须验证新手机号（短信验证码）→ 占用校验 → 更新并标记为可信渠道 */
   async changePhone(uid: string, dto: ChangePhoneDto): Promise<{ code: number }> {
-    await this.verifyIdentity('change_phone', dto.newPhone.trim(), dto)
     const newPhone = dto.newPhone.trim()
+    if (!/^1\d{10}$/.test(newPhone)) throw new BadRequestException('手机号格式不正确')
+    if (!(await this.sms.isAvailable())) throw new BadRequestException('短信通道未启用，无法验证手机号')
+    const ok = await this.sms.verify(newPhone, 'change_phone', dto.smsCode)
+    if (!ok) throw new BadRequestException('短信验证码错误或已过期')
+
     const conflict = await this.prisma.user.findUnique({ where: { phone: newPhone }, select: { uid: true } })
     if (conflict && conflict.uid !== uid) throw new ConflictException('该手机号已绑定其他账号')
-    await this.prisma.user.update({ where: { uid }, data: { phone: newPhone } })
+
+    await this.prisma.user.update({
+      where: { uid },
+      data: { phone: newPhone, phoneVerifiedAt: formatNow() },
+    })
     await this.notify.pushNotice(uid, {
       type: 'system',
-      title: '手机号已更换',
-      content: '您绑定的手机号已更换成功，请牢记新号码登录。',
+      title: '手机号已绑定',
+      content: '您绑定的手机号已更新成功，可用于登录与接收通知。',
+    })
+    return { code: 0 }
+  }
+
+  /** 绑定/更换绑定邮箱：须验证新邮箱（邮箱验证码）→ 占用校验 → 更新并标记为可信渠道 */
+  async changeEmail(uid: string, dto: ChangeEmailDto): Promise<{ code: number }> {
+    const newEmail = normalizeEmail(dto.newEmail)
+    if (!newEmail) throw new BadRequestException('邮箱格式不正确')
+    if (!(await this.emailCodes.isAvailable())) throw new BadRequestException('邮箱通道未启用，无法验证邮箱')
+    const ok = await this.emailCodes.verify(newEmail, 'change_email', dto.code)
+    if (!ok) throw new BadRequestException('邮箱验证码错误或已过期')
+
+    const conflict = await this.prisma.user.findUnique({ where: { email: newEmail }, select: { uid: true } })
+    if (conflict && conflict.uid !== uid) throw new ConflictException('该邮箱已绑定其他账号')
+
+    await this.prisma.user.update({
+      where: { uid },
+      data: { email: newEmail, emailVerifiedAt: formatNow() },
+    })
+    await this.notify.pushNotice(uid, {
+      type: 'system',
+      title: '邮箱已绑定',
+      content: '您绑定的邮箱已更新成功，可用于登录与接收通知。',
     })
     return { code: 0 }
   }
@@ -300,4 +418,17 @@ export class AuthService {
     await this.sessions.add(uid, { jti, exp })
     return token
   }
+}
+
+/** 邮箱脱敏：a***@domain */
+function maskEmail(email: string): string {
+  const [name, domain] = email.split('@')
+  if (!domain) return '***'
+  return `${name.slice(0, 1)}***@${domain}`
+}
+
+/** 手机号脱敏：138****0000 */
+function maskPhone(phone: string): string {
+  if (!/^\d{11}$/.test(phone)) return '***'
+  return `${phone.slice(0, 3)}****${phone.slice(-4)}`
 }

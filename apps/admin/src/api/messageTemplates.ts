@@ -52,8 +52,8 @@ export async function disableMessageTemplate(id: string): Promise<{ code: number
 export async function testSendMessageTemplate(
   id: string,
   payload: { recipient: string; version?: number; variables?: Record<string, string> },
-): Promise<{ providerMessageId?: string; dryRun: boolean; costMs: number }> {
-  return httpPost<{ providerMessageId?: string; dryRun: boolean; costMs: number }>(
+): Promise<{ providerMessageId?: string; dryRun: boolean; costMs: number; warnings?: string[] }> {
+  return httpPost<{ providerMessageId?: string; dryRun: boolean; costMs: number; warnings?: string[] }>(
     `/message-templates/${id}/test-send`,
     payload,
   )
