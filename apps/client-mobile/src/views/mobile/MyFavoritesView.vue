@@ -22,13 +22,13 @@ function normalizeType(value: unknown): 'all' | FavoriteTargetType {
   return FAVORITE_TYPES.includes(String(value) as FavoriteTargetType) ? (String(value) as FavoriteTargetType) : 'all'
 }
 const activeType = ref<'all' | FavoriteTargetType>(normalizeType(route.query.type))
-const TYPE_LABEL: Record<FavoriteTargetType, string> = { demand: '项目', article: '文章', event: '活动', enterprise: '企业', talent: '人才' }
+const TYPE_LABEL: Record<FavoriteTargetType, string> = { demand: '需求', article: '文章', event: '活动', enterprise: '企业', talent: '人才' }
 const TYPE_PATH: Record<FavoriteTargetType, string> = {
   demand: '/demands/', article: '/articles/', event: '/events/', enterprise: '/enterprises/', talent: '/talents/',
 }
 const FILTERS: { value: 'all' | FavoriteTargetType; label: string }[] = [
   { value: 'all', label: '全部' },
-  { value: 'demand', label: '项目' },
+  { value: 'demand', label: '需求' },
   { value: 'article', label: '文章' },
   { value: 'event', label: '活动' },
   { value: 'enterprise', label: '企业' },
@@ -89,7 +89,7 @@ useRouteQuerySync('/me/favorites', (query) => {
       </List>
     </template>
     <!-- v45：空状态补出口，避免二级页没有 TabBar 时成为死胡同 -->
-    <EmptyBlock v-else text="暂无收藏，去项目、文章或活动页收藏感兴趣的内容" action-text="浏览需求" @action="router.push('/projects')" />
+    <EmptyBlock v-else text="暂无收藏，去需求、文章或活动页收藏感兴趣的内容" action-text="浏览需求" @action="router.push('/projects')" />
   </div>
 </template>
 

@@ -49,7 +49,7 @@ onMounted(run)
         <p v-if="progress?.isHighestLevel" class="bar-meta">当前 {{ formatZhNumber(data.currentExperience) }} 经验 · 已达最高等级</p>
         <p v-else class="bar-meta">当前 {{ formatZhNumber(data.currentExperience) }} 经验 · 距下一级还需 {{ formatZhNumber(progress?.remaining ?? 0) }} 经验</p>
       </div>
-      <EmptyBlock v-if="!records.length" text="暂无经验记录，参与社区项目和活动后将在这里展示" action-text="浏览项目" @action="router.push('/projects')" />
+      <EmptyBlock v-if="!records.length" text="暂无经验记录，参与社区需求、项目协作或活动后将在这里展示" action-text="浏览需求" @action="router.push('/projects')" />
       <List v-else class="m-card ledger stagger" :async-loading="footerState" @load-more="loadMore" @scroll="onListScroll">
         <div v-for="r in visibleItems" :key="r.id" class="row">
           <div>

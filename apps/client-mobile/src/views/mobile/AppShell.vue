@@ -11,7 +11,7 @@ import 'tdesign-mobile-vue/es/style/index.css'
 
 /* 移动应用壳：Navbar（居中：Tab 页=社区名 / 二级页=页面标题；左：仅二级页返回箭头；
  * 右：头像+昵称（头像在右，/me 页隐藏）→ 铃铛（仅 /me 页显示））
- * + 内容出口 + 底部 5 Tab（首页/项目/社区/广场/我的）。 */
+ * + 内容出口 + 底部 5 Tab（首页/需求/社区/广场/我的）。 */
 const route = useRoute()
 const router = useRouter()
 const auth = useAuthStore()

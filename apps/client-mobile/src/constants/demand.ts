@@ -5,7 +5,7 @@ import { formatLocalDate } from '@/utils/format'
 export interface DemandKindMeta {
   kind: DemandKind
   title: string
-  /** 项目页该分类的搜索框占位文案 */
+  /** 需求页该分类的搜索框占位文案 */
   searchPlaceholder: string
   tagline: string
   /** 发布后的推进流程（步骤文案） */
@@ -25,7 +25,7 @@ export const DEMAND_KINDS: DemandKindMeta[] = [
       '适合外包承接、专项执行与合伙落地',
       '说清期望交付与预算范围，沟通更高效',
       '社区成员与企业可直接响应联系',
-      '审核通过后展示在项目列表',
+      '审核通过后展示在需求列表',
     ],
     cta: '发布找服务需求',
   },

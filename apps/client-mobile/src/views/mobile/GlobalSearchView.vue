@@ -86,7 +86,7 @@ async function search() {
     /* v36：单一数据源失败不影响其余结果（部分失败提示） */
     const failed: string[] = []
     const [demandRes, events, articles, policies, talents, enterprises, spaces] = await Promise.all([
-      fetchDemands({ keyword: q, page: 1, pageSize: 10 }).catch(() => { failed.push('项目'); return null }),
+      fetchDemands({ keyword: q, page: 1, pageSize: 10 }).catch(() => { failed.push('需求'); return null }),
       fetchEvents({ keyword: q }).catch(() => { failed.push('活动'); return null }),
       fetchArticles({ keyword: q }).catch(() => { failed.push('文章'); return [] }),
       fetchPolicies({ keyword: q }).catch(() => { failed.push('社区服务'); return [] }),
@@ -99,7 +99,7 @@ async function search() {
     activeKind.value = ''
     demandHasResults.value = (demandRes?.list.length ?? 0) > 0
     results.value = [
-      ...(demandRes?.list ?? []).map((item) => ({ id: item.id, kind: '项目', title: item.title, summary: item.description, path: `/demands/${item.id}` })),
+      ...(demandRes?.list ?? []).map((item) => ({ id: item.id, kind: '需求', title: item.title, summary: item.description, path: `/demands/${item.id}` })),
       ...(events?.list ?? []).map((item) => ({ id: item.id, kind: '活动', title: item.title, summary: `${formatLocalDateTime(item.startTime)} · ${item.location}`, path: `/events/${item.id}` })),
       ...articles.map((item) => ({ id: item.id, kind: '文章', title: item.title, summary: item.summary, path: `/articles/${item.id}` })),
       ...policies.map((item) => ({ id: item.id, kind: '社区服务', title: item.title, summary: item.summary, path: `/community?tab=service&policy=${item.id}` })),
@@ -165,7 +165,7 @@ onMounted(() => {
 <template>
   <div class="page-fade-in global-search">
     <header class="head">
-      <p class="page-desc">查找项目、活动、文章、社区服务和人才</p>
+      <p class="page-desc">查找需求、活动、文章、社区服务和人才</p>
     </header>
     <Search v-model="keyword" placeholder="输入关键词后搜索…" @search="onSearchNow" />
 
@@ -197,7 +197,7 @@ onMounted(() => {
         </CheckTag>
       </div>
       <Button v-if="demandHasResults" size="small" variant="outline" block @click="router.push(`/projects?q=${encodeURIComponent(keyword.trim())}`)">
-        查看更多项目
+        查看更多需求
         <template #suffix><Icon aria-hidden="true" name="chevron-right" size="14px" /></template>
       </Button>
       <EmptyBlock v-if="!visibleResults.length" text="没有找到相关内容，换个关键词试试" />

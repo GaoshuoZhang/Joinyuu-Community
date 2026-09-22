@@ -264,7 +264,7 @@ async function onSubmit() {
 
     <template v-else-if="!submittedId">
       <p v-if="revising" class="revision-label">修改重提</p>
-      <p class="subtitle">{{ revising ? '修改后将重新进入审核队列' : '提交后进入审核，通过后展示在项目列表' }}</p>
+      <p class="subtitle">{{ revising ? '修改后将重新进入审核队列' : '提交后进入审核，通过后展示在需求列表' }}</p>
 
       <div class="flow m-card">
         <span class="flow-label">发布后推进流程</span>

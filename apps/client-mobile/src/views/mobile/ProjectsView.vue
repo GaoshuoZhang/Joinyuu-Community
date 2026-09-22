@@ -19,7 +19,7 @@ import { formatZhNumber } from '@/utils/format'
 
 useAnimSuppress()
 
-/* 项目页：三类需求选项卡，类型筛选在分页前执行。 */
+/* 需求页：三类需求选项卡，类型筛选在分页前执行。 */
 const route = useRoute()
 const router = useRouter()
 const auth = useAuthStore()
@@ -143,7 +143,7 @@ const footerState = computed(() => {
   return hasMore.value ? 'load-more' : ''
 })
 
-/* v41：外部跳转（全局搜索「查看更多项目」等）带来的筛选参数同步 */
+/* v41：外部跳转（全局搜索「查看更多需求」等）带来的筛选参数同步 */
 let applyingQuery = false
 useRouteQuerySync('/projects', (q) => {
   const nextKind: DemandKind | 'all' = TABS.some((tab) => tab.kind === String(q.kind)) ? (String(q.kind) as DemandKind | 'all') : 'all'

@@ -6,7 +6,7 @@ import { demandDateText } from '@/constants/demand'
 import type { Demand } from '@/types'
 import { formatZhNumber } from '@/utils/format'
 
-/* 项目列表卡片：分类/标题/发布方/日期/响应数 + 已响应标记。 */
+/* 需求列表卡片：分类/标题/发布方/日期/响应数 + 已响应标记。 */
 defineProps<{ demand: Demand; responded: boolean; to: string }>()
 </script>
 

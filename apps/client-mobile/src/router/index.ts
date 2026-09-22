@@ -2,7 +2,7 @@ import { createRouter, createWebHistory } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
 
 /** M2 移动端路由表（纯移动端，2026-09-13 移除桌面端后直连 mobile 视图）。
- * 底部 5 Tab：首页 / 项目 / 社区 / 广场 / 我的。
+ * 底部 5 Tab：首页 / 需求 / 社区 / 广场 / 我的。
  * /me/**、提交类、入驻说明跳转需登录（requiresAuth）；未列出路径由 catchAll 兜底回首页。 */
 export const router = createRouter({
   history: createWebHistory(),
@@ -26,7 +26,7 @@ export const router = createRouter({
         { path: 'me', name: 'me', component: () => import('@/views/mobile/MeView.vue'), meta: { requiresAuth: true, keepAlive: true } },
         { path: 'me/stats', name: 'my-stats', component: () => import('@/views/mobile/MyStatsView.vue'), meta: { requiresAuth: true } },
 
-        /* ---- 需求发布（类型 hub + 独立表单）/ 详情（项目语境）---- */
+        /* ---- 需求发布（类型 hub + 独立表单）/ 详情（需求语境）---- */
         { path: 'demands/new', name: 'demand-new', component: () => import('@/views/mobile/DemandPublishHubView.vue'), meta: { requiresAuth: true } },
         { path: 'demands/new/task', name: 'demand-new-task', component: () => import('@/views/mobile/DemandTaskFormView.vue'), meta: { requiresAuth: true } },
         { path: 'demands/new/invest', name: 'demand-new-invest', component: () => import('@/views/mobile/DemandInvestFormView.vue'), meta: { requiresAuth: true } },

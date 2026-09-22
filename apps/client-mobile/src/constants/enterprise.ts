@@ -2,7 +2,7 @@ import type { EnterpriseMemberPermission } from '@/types'
 
 /** 企业成员权限目录（负责人可在成员管理中分配）。 */
 export const ENTERPRISE_PERMISSIONS: { value: EnterpriseMemberPermission; label: string; desc: string }[] = [
-  { value: 'publish_demand', label: '发布需求', desc: '可代替企业发布项目/需求' },
+  { value: 'publish_demand', label: '发布需求', desc: '可代替企业发布需求' },
   { value: 'respond_demand', label: '响应需求', desc: '可代替企业响应他人需求' },
   { value: 'space_reserve', label: '空间预约', desc: '可代替企业预约会议室等空间' },
   { value: 'article_submit', label: '文章投稿', desc: '可代替企业提交投稿' },
