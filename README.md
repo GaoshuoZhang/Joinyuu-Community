@@ -1,85 +1,85 @@
 # 聚屿社区 Joinyuu Community
 
-创业社区数字化运营平台：管理后台（运营方）+ 客户端 Web（社区个体/社区企业）+ 微信小程序（社区个体/社区企业/个人用户）。
+创业社区数字化运营平台：管理后台（运营方）+ 客户端移动端（社区个体/社区企业/个人用户）+ 微信小程序（规划中）。
 
 > 本 README 面向人类协作者与 AI agent，传达项目信息与协作约定。开始任何开发工作前，请先读完本文档与 `docs/` 下的索引文档。
 
-## 当前进度（2026-09-20）
+## 当前状态
 
-项目已完成 M0、M1、M1.5，以及 M2-R R0～R4 的主要实现，当前处于 M2-R 收尾后的整合与复查阶段。管理后台和移动端均已接入真实 HTTP API；移动端仍保留显式 `VITE_API_MODE=mock` 演示模式。
+平台已完成 M0～M2-R 的全部必做范围，并完成收尾后的整合复查与产品化打磨（三端联调修复、权限与数据一致性、移动端交互体验、需求/项目口径统一）。管理后台与移动端均接入真实 HTTP API（开发经 Vite 代理访问后端，生产由网关同源转发 `/api`）。
 
 已完成的核心范围包括：
 
 - 后端基础设施、Prisma 数据模型与迁移、JWT/验证码/RBAC/审计、Redis 会话与黑名单、文件存储、富文本清洗、积分/经验、定时任务和归档治理。
 - 管理后台真实接口化、系统监控、日志审计、内容/公告/轮播图、申请表单配置、发布限制、成员注销治理、个人/企业名片管理等运营能力。
-- 移动端注册登录、多身份、首页、需求、项目、活动报名/签到/电子票、社区/人才/企业、文章与评论、商城、空间预约、通知、积分/经验、申请、名片和账户安全等闭环。
-- M2-R 收尾治理：实名认证改为规则校验即时生效；注销保留冷静期与后台工单治理；文章下架统一为“已关闭”；服务申请与展示页申请流程下线。
+- 移动端注册登录、多身份、首页、需求、项目协作、活动报名/签到/电子票、社区/人才/企业、文章与评论、商城、空间预约、通知、积分/经验、申请、名片和账户安全等闭环。
+- 项目协作：项目含需求方/需求方身份/创建人/联系人/联系电话/联系邮箱/合同价格；需求立项由服务端照搬需求快照，社区自建由「新增项目」表单录入；需求方（含企业联系人）与承接方均可访问项目。
+- 名片与引导：个人名片「公开名片」开关（关闭后退出社区人才库、公开名片页 404）；首页新手任务默认折叠并紧随「发布需求」入口，「永久隐藏」按账号服务端持久化。
+- 术语与体验：移动端以「需求」指代需求（列表/搜索/收藏/文案），「项目」仅指立项后的协作项目；首页入口按已关联身份个性化；「我的需求」分为「进行中/历史记录」；下拉刷新、选项卡圆角、悬浮按钮位置等交互约束见移动端 Wiki。
 
-当前未开始或不在本阶段范围内：客户端 Web（`apps/client-web`）、微信小程序（M3）、微信登录、支付、CI/CD 和分布式部署。
+当前未开始或不在范围内：客户端 Web（`apps/client-web`）、微信小程序（M3）、微信登录、支付、CI/CD 和分布式部署。
 
-当前工作区存在较大规模未提交变更，下面的状态描述以工作区代码为准，不代表这些变更已经合并到远程分支。
-
-### 当前验证结果
-
-最近一次本地验证：
+### 验证结果
 
 | 验证项 | 结果 |
 |---|---|
+| `pnpm typecheck`（api + admin） | 通过 |
 | `pnpm build:api` | 通过 |
 | `pnpm build:admin` | 通过 |
 | `pnpm build:client-mobile` | 通过 |
-| `pnpm --filter @joinyuu/client-mobile test` | 通过，36 个测试 |
-| `pnpm --filter @joinyuu/admin test:ui` | 通过，6 个测试 |
-| 隔离数据库全量 e2e | 本次未执行；需要先准备 `apps/api/.env.it`、Docker PostgreSQL/Redis |
+| `pnpm --filter @joinyuu/client-mobile test` | 通过，60 个测试 |
+| `pnpm --filter @joinyuu/admin test:ui` | 通过，10 个测试 |
+| `pnpm lint`（全仓） | 通过 |
+| 隔离数据库全量 e2e | 需先准备 `apps/api/.env.it`（示例见 `apps/api/env.it.example`）、Docker PostgreSQL/Redis，并使用 `_it`/`_test` 结尾的隔离库 |
 
-代码规模会随收尾重构变化，精确数量以当前目录和 `schema.prisma` 为准：当前约 64 个 Prisma 模型、42 个迁移、管理后台 33 个 API 文件/60 个视图、移动端 21 个域 API 文件/64 个视图。
+代码规模以当前目录和 `schema.prisma` 为准：68 个 Prisma 模型、59 个迁移，管理后台 36 个 API 文件/64 个视图文件，移动端 21 个域 API 文件/66 个视图文件，后端 46 个测试文件。
 
 ## 技术栈
 
 | 层 | 选型 |
 |---|---|
 | 仓库 | pnpm Monorepo（`apps/` + `packages/`） |
-| 后端（M1/M1.5/M2-R 已完成） | NestJS 11 + Prisma 6 + RESTful API（`apps/api`，端口 7757） |
-| 数据库（M1/M1.5/M2-R 已完成） | PostgreSQL 17 + Redis 7.4（Docker Compose 本地开发） |
-| 管理后台 Web（当前） | Vue 3 + Vite + TypeScript + TDesign Vue Next + Pinia + Vue Router |
-| 客户端移动端（M2-R 已完成） | Vue 3 + Vite + TypeScript + TDesign Mobile Vue + Pinia + Vue Router |
-| 客户端 Web（M2，未开始） | Vue 3 + Vite + TypeScript + TDesign Vue Next + Pinia + Vue Router |
-| 微信小程序（M3，未开始） | TDesign WeChat MiniProgram |
+| 后端 | NestJS 11 + Prisma 6 + RESTful API（`apps/api`，端口 7757） |
+| 数据库 | PostgreSQL 17 + Redis 7.4（Docker Compose 本地开发） |
+| 管理后台 Web | Vue 3 + Vite + TypeScript + TDesign Vue Next + Pinia + Vue Router |
+| 客户端移动端 | Vue 3 + Vite + TypeScript + TDesign Mobile Vue + Pinia + Vue Router |
+| 客户端 Web（未开始） | Vue 3 + Vite + TypeScript + TDesign Vue Next + Pinia + Vue Router |
+| 微信小程序（未开始） | TDesign WeChat MiniProgram |
 
 ## 仓库结构
 
 ```
 apps/
-  admin/            # 管理后台 Web（全量接入真实接口；mock 已删除）
+  admin/            # 管理后台 Web（全量接入真实接口）
     src/
-      api/          # API 层 —— 当前 33 个文件，全部 HTTP 化
-      components/   # 共享组件（PageHeader/StatusTag/IdentityTags/RichEditor/TrendChart/ColumnController/BulkArchiveDialog/...）
+      api/          # API 层 —— 当前 36 个文件，全部 HTTP 化
+      components/   # 共享组件（PageHeader/StatusTag/IdentityTags/RichEditor/TrendChart/ColumnController/BulkArchiveDialog/ExportButton/ListEmptyState/...）
       constants/    # 状态映射 / 身份词汇表 / 权限目录（冻结）
       directives/   # v-permission 按钮级权限指令
       layouts/      # AdminLayout（唯一 App Shell）
-      router/       # 路由表（冻结，含 RBAC 路由守卫）
+      router/       # 路由表（冻结，含 RBAC 路由守卫；规范首页 = 工作台 /dashboard）
       stores/       # Pinia（auth/tabs/theme）
       types/        # 实体类型定义
       views/        # 页面（按领域分目录，system/ 含归档管理 ArchivePanel 等治理页）
   api/              # 后端服务（NestJS 11 + Prisma 6 + PostgreSQL 17 + Redis 7.4）
-    prisma/         # schema.prisma（当前 64 个模型）+ migrations/ + seed.ts + seed-data/（种子数据单一来源）
+    prisma/         # schema.prisma（当前 68 个模型）+ migrations/（59）+ seed.ts + seed-data/（种子数据单一来源）
     src/
-      common/       # 底座：Prisma/Redis（缓存+黑名单，降级回源）/响应包络/异常过滤/JWT+权限 Guard/装饰器/RBAC/审计（含快照）/前缀 ID 发号器/积分引擎/存储（本地磁盘）/HTML 清洗与工具
+      common/       # 底座：Prisma/Redis（缓存+黑名单，降级回源）/响应包络/异常过滤/JWT+权限 Guard/装饰器/RBAC/审计（含快照/上下文中间件）/前缀 ID 发号器/积分引擎/存储（本地磁盘）/HTML 清洗与工具
       modules/      # 按域模块：auth/users/enterprises/applications/demands/projects/events/mall/rules/workstations/spaces/contents/assets + system 子域（admins/login-logs/monitor/roles/trash/export）
       scheduler/    # 定时任务（需求/资讯定时发布、活动自动结束、租约临期、归档自动归档/自动删除）
     test/           # e2e / unit（隔离数据库执行；journey-flows 为三端联调）
   client-mobile/    # M2 纯移动端应用（M2-R 必做范围已完成）
     src/
-      api/          # mock/http 双模式；默认 http，显式 VITE_API_MODE=mock 可演示
-      mock/         # [MOCK-ONLY] 内存数据与 16 个 handler
-      views/mobile/ # 当前 64 个视图文件
+      api/          # HTTP 封装与域 API（统一请求 /api/app/**）
+      views/mobile/ # 当前 66 个视图文件
+      composables/  # 复用的页面逻辑（列表分页、路由同步、下拉刷新去顶判断等）
 packages/           # 预留（共享包）
 docs/
   wiki-admin-web.md     # 管理后台开发 Wiki（设计契约/组件规范/状态机/API 约定）
-  wiki-backend.md       # 后端开发 Wiki（数据模型/端点契约/业务规则/里程碑）
-  wiki-client-mobile.md # 移动客户端开发wiki
-  api-app-design.md     # M2 客户端 /api/app/** 端点设计
-  entity-fields.md       # 模型分域字段摘要（schema.prisma 为事实来源）
+  wiki-backend.md       # 后端开发 Wiki（数据模型/端点契约/业务规则）
+  wiki-client-mobile.md # 移动客户端开发 Wiki
+  api-app-design.md     # 客户端 /api/app/** 端点设计
+  entity-fields.md      # 模型分域字段摘要（schema.prisma 为事实来源）
 ```
 
 ## 开发命令
@@ -88,11 +88,15 @@ docs/
 pnpm install              # 安装依赖
 pnpm dev:admin            # 启动管理后台开发服务器（7758，代理 /api → 7757）
 pnpm build:admin          # 构建管理后台
+pnpm dev:client-mobile    # 启动移动端开发服务器（7759，代理 /api → 7757）
 pnpm build:client-mobile  # 构建移动端
 pnpm --filter @joinyuu/client-mobile test # 移动端组件/回归测试
 pnpm db:up                # 启动 PostgreSQL + Redis（Docker Compose，等待健康检查）
 pnpm dev:api              # 启动后端服务（NestJS，7757）
 pnpm build:api            # 构建后端
+pnpm typecheck            # 全仓工作区类型检查（api + admin）
+pnpm db:migrate           # 应用迁移（prisma migrate deploy）
+pnpm db:seed              # 写入种子数据
 pnpm db:reset             # 重建数据库（drop + migrate + 全量种子）
 pnpm dev:it               # 以隔离数据库/Redis 启动三端联调环境
 pnpm test:e2e:it          # 仅允许隔离数据库与非 0 Redis DB 的全量 e2e
@@ -101,7 +105,7 @@ pnpm --filter @joinyuu/api test:unit # 后端单元测试
 pnpm --filter @joinyuu/admin test:ui # 管理后台 UI 契约测试
 ```
 
-演示账号：`admin / admin123`（真实 JWT 登录，需输入图形验证码；种子另含 operator / auditor 等 RBAC 账号；需先 `pnpm db:up` + `pnpm db:reset` + `pnpm dev:api`）。
+演示账号：`admin / admin123`（真实 JWT 登录，需输入图形验证码；种子另含 operator / auditor 等 RBAC 账号）；移动端种子成员如 `13801210001 / user123`。需先 `pnpm db:up` + `pnpm db:reset` + `pnpm dev:api`。
 
 ## 文档索引（AI agent 必读）
 
@@ -113,24 +117,26 @@ pnpm --filter @joinyuu/admin test:ui # 管理后台 UI 契约测试
 | [docs/api-app-design.md](./docs/api-app-design.md) | 客户端 `/api/app/**` 正式契约 |
 | [docs/entity-fields.md](./docs/entity-fields.md) | 模型分域字段摘要（`schema.prisma` 为事实来源） |
 
-## 关键工程约定（摘要，详见 wiki-admin-web.md / wiki-backend.md）
+## 关键工程约定（摘要，详见各 Wiki）
 
 1. **契约冻结**：菜单/路由/状态映射/身份词汇表已冻结，不得私自重写导航、发明颜色字号或自造状态文案。
-2. **共享组件强制**：状态标签用 `StatusTag`、身份标签用 `IdentityTags`，禁止页面自造。
-3. **种子数据单一来源**：后端 `apps/api/prisma/seed-data/`（admin `src/mock/` 已删除）；种子写入 23 个 IdSequence 前缀（U/E/AP/D/P/EV/XE/EX/PT/G/RO/WS/WA/LS/S/SR/A/SU/CL/SC/AN/N/AL）与项目编号 `CODE-<year>`，其中投稿文章编号用 SU。
-4. **接口契约以 wiki-backend 与 api-app-design.md 为准**：admin `src/api/` 当前 33 个文件走真实 HTTP（`/api/admin/**`）；写操作由后端 `@RequirePermission` 与 `AuditService` 管控；客户端 `/api/app/**` M2-R 必做接入已完成。
-5. **表单校验时机**：弹窗规则 `trigger: 'submit'`，打开时 `clearValidate()`，避免 DatePicker 交互提前红框。
-6. **表格规范**：开启 `resizable` 的表格必须 `table-layout="fixed"` + `hover`；服务端排序用受控 `:sort` + `@sort-change`。
-7. **术语统一**：联系电话 / 办公位 / 社区企业 / 合作企业 / 经验值 / 审核 / 新增 / 归档；禁止回退旧词（联系方式、工位、审批、新建、回收站等）。
-8. **ID 展示规范**：实体 ID 用 `.id-tag`（同行内联）/ `.id-tag-block`（名称下方独立成行）标签；下拉与标签内名称统一为 `名称 [ID]`，同一视图内不重复展示同一 ID。
-9. **归档体系**：13 个业务域软删除（`deletedAt`/`deletedBy`）后进入归档管理（恢复/彻底删除 + 按域归档设置），自动归档/自动删除由调度器按设置执行；用户历史域（申请/需求/项目/活动/租赁/投稿/预约/订单）彻底删除与开启自动删除需三连确认。
-10. **列表交互收敛**：全站列表无表格批量操作、无刷新按钮；列设置（ColumnController）覆盖 20 个列表页；顶栏「全部关闭」等同于「关闭其他」（保留工作台与当前页）。
-11. **文档沉淀**：以当前 `docs/` 中的 Wiki、API 契约和实体字段文档为准；代码与文档冲突时先确认契约，再同步回写文档，避免复制可从代码生成的逐路由清单。
-12. **同文件编辑冲突**：批量编辑时避免对同一文件的并行写入（历史上多次造成改动丢失），重要改动后需读盘校验并 `pnpm build:admin` 验证。
+2. **共享组件强制**：状态标签用 `StatusTag`（移动端 `StateTag`）、身份标签用 `IdentityTags`（移动端 `IdentityTag`），禁止页面自造。
+3. **术语统一**：管理端 联系电话 / 办公位 / 社区企业 / 合作企业 / 经验值 / 审核 / 新增 / 归档；**移动端「需求」指需求（发布/响应/立项前），「项目」仅指立项后的协作项目**；禁止回退旧词（联系方式、工位、审批、新建、回收站等）。
+4. **种子数据单一来源**：后端 `apps/api/prisma/seed-data/`（admin `src/mock/` 已删除）；种子写入 23 个 IdSequence 前缀（U/E/AP/D/P/EV/XE/EX/PT/G/RO/WS/WA/LS/S/SR/A/SU/CL/SC/AN/N/AL）与项目编号 `CODE-<year>`，其中投稿文章编号用 SU。
+5. **接口契约以 wiki-backend 与 api-app-design.md 为准**：admin `src/api/` 走真实 HTTP（`/api/admin/**`）；写操作由后端 `@RequirePermission` 与 `AuditService` 管控；客户端 `/api/app/**` 接入已完成，三端均无本地 mock 数据源。
+6. **项目需求方口径**：需求立项生成的项目，需求方/创建人/联系方式/合同价格一律照搬需求快照（客户端传值不生效）；项目访问按需求方主体放行，企业主体解析到企业联系人。
+7. **表单校验时机**：弹窗规则 `trigger: 'submit'`，打开时 `clearValidate()`，避免 DatePicker 交互提前红框。
+8. **表格规范**：开启 `resizable` 的表格必须 `table-layout="fixed"` + `hover`；服务端排序用受控 `:sort` + `@sort-change`。
+9. **ID 展示规范**：实体 ID 用 `.id-tag`（同行内联）/ `.id-tag-block`（名称下方独立成行）标签；下拉与标签内名称统一为 `名称 [ID]`，同一视图内不重复展示同一 ID。
+10. **归档体系**：13 个业务域软删除（`deletedAt`/`deletedBy`）后进入归档管理（恢复/彻底删除 + 按域归档设置），自动归档/自动删除由调度器按设置执行；用户历史域（申请/需求/项目/活动/租赁/投稿/预约/订单）彻底删除与开启自动删除需三连确认。
+11. **列表交互收敛**：全站列表无表格批量操作、无刷新按钮；列设置（ColumnController）覆盖 20 个列表页；顶栏「全部关闭」等同于「关闭其他」（保留工作台与当前页）。
+12. **文档沉淀**：以当前 `docs/` 中的 Wiki、API 契约和实体字段文档为准；代码与文档冲突时先确认契约，再同步回写文档，避免复制可从代码生成的逐路由清单。
+13. **同文件编辑冲突**：批量编辑时避免对同一文件的并行写入（历史上多次造成改动丢失），重要改动后需读盘校验并 `pnpm build:admin` 验证。
 
 ## 核心业务状态机（已冻结）
 
 - **需求**：待审核 →（只读审核通过）→ 待发布 →（立即/定时发布）→ 已发布/定时发布中 →（到点自动）→ 已发布；分支：已驳回/已关闭/立项→已立项
+- **项目**：进行中 ⇄ 已暂停 → 已关闭 / 结项（全部里程碑验收通过自动结项）→ 归档；结项按承接占比发放项目经验值
 - **活动**：待发布 →（立即/定时发布）→ 已发布（报名中/暂停报名）→ 已结束/已取消
 - **身份模型**：一人多身份——个人用户（默认，积分挂靠）/社区个体（至多一个，有等级）/社区企业（可多个，有等级）/合作企业（可多个）
 - **归档**：各域终态/指定状态条目可软删除进入归档管理，支持恢复与彻底删除；自动归档/自动删除按域设置由调度器执行
@@ -138,4 +144,5 @@ pnpm --filter @joinyuu/admin test:ui # 管理后台 UI 契约测试
 ## Git 协作
 
 - 主分支 `main`，远程 `https://github.com/GaoshuoZhang/Joinyuu-Community.git`
-- 提交信息格式：`<type>: <描述>`（如 `feat: 新增需求定时发布`）
+- 提交信息格式：`<type>(<scope>): <描述>`（如 `feat(api,admin,client-mobile): 项目需求方快照、权限修复与三端交互治理`）
+- 提交前至少执行与改动范围对应的检查：`pnpm typecheck`、`pnpm lint`、对应工作区测试/构建；后端涉及迁移时先 `pnpm --filter @joinyuu/api exec prisma generate` 与 `pnpm db:migrate`。
