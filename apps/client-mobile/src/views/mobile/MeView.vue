@@ -11,12 +11,12 @@ import type { MyIdentitySummary } from '@/types'
 import { useAnimSuppress } from '@/composables/useAnimSuppress'
 import { useRefreshOnActivate } from '@/composables/useRefreshOnActivate'
 import { formatZhNumber } from '@/utils/format'
-import { buildProfileMoreEntries } from '@/utils/profileMenu'
+import { buildProfileMenuSections, type ProfileMenuEntry } from '@/utils/profileMenu'
 
 useAnimSuppress()
 
-/* 个人中心（精简版）：资料卡 + 关联身份 + 资产；其余记录/设置收进二级页
- * （/me/records、/me/settings），避免入口过多。身份不做全局切换（发布/提交时在表单内选择归属）。 */
+/* 个人中心：按身份、服务、权益、设置归类；详细业务记录和设置继续由二级页收纳。
+ * 身份不做全局切换，发布/提交时在表单内选择归属。 */
 const router = useRouter()
 const auth = useAuthStore()
 const notices = useNoticesStore()
@@ -26,37 +26,24 @@ const myIdentities = ref<MyIdentitySummary[]>([])
 /* 等级请求失败与「未绑定」是两回事：失败时给出可重试的说明，而不是静默显示「未绑定」 */
 const levelFailed = ref(false)
 
-const identityNote = computed(() => (myIdentities.value.length ? `${myIdentities.value.length} 个` : ''))
+const menuSections = computed(() =>
+  buildProfileMenuSections({
+    hasCommunityIndividual: auth.hasCommunityIndividual,
+    identityCount: myIdentities.value.length,
+    pointsLabel: `${formatZhNumber(auth.points)} 分`,
+    levelLabel: levelName.value,
+    levelFailed: levelFailed.value,
+    unread: notices.unread,
+  }),
+)
 
-const assetEntries = computed(() => {
-  /* emphasis：真实数值（积分/等级）用品牌色加重，与「券码/物流」这类说明性文案区分
-   * retry：仅请求失败的入口为 true，点击改为重试加载而非跳转 */
-  const entries: { path: string; label: string; note?: string; emphasis?: boolean; retry?: boolean }[] = [
-    { path: '/me/points', label: '我的积分', note: `${formatZhNumber(auth.points)} 分`, emphasis: true },
-    { path: '/me/orders', label: '我的订单', note: '券码 / 物流 / 评价' },
-  ]
-  if (auth.hasCommunityIndividual) {
-    entries.push({
-      path: '/me/experience',
-      label: '我的等级',
-      note: levelFailed.value ? '加载失败，点击重试' : levelName.value || '未绑定',
-      emphasis: Boolean(levelName.value),
-      retry: levelFailed.value,
-    })
-  }
-  return entries
-})
-
-/* 我的记录页已收录「我的租约」，此处不再重复展示同一 path 入口 */
-function onAssetTap(entry: { path: string; retry?: boolean }) {
-  if (entry.retry) {
+function onMenuTap(entry: ProfileMenuEntry) {
+  if (entry.action === 'retry-level') {
     void loadLevel()
     return
   }
   void router.push(entry.path)
 }
-
-const moreEntries = computed(() => buildProfileMoreEntries(auth.hasCommunityIndividual, notices.unread))
 
 async function loadIdentities() {
   if (!auth.isLogged) {
@@ -121,7 +108,13 @@ useRefreshOnActivate(() => void refreshMe())
 <template>
   <PullDownRefresh class="me-refresh" :value="refreshing" @refresh="onRefresh">
     <div class="page-fade-in me">
-      <section class="m-card profile pressable" v-pressable @click="router.push('/me/profile/edit')">
+      <button
+        type="button"
+        class="m-card profile profile-button pressable"
+        v-pressable
+        aria-label="编辑个人资料"
+        @click="router.push('/me/profile/edit')"
+      >
         <Avatar size="56px" class="avatar" hide-on-load-failed :image="auth.avatar">{{ auth.name.slice(0, 1) }}</Avatar>
         <div class="info">
           <p class="name">{{ auth.name }}</p>
@@ -131,32 +124,19 @@ useRefreshOnActivate(() => void refreshMe())
             <IdentityTag v-for="i in auth.profileIdentities" :key="i.type" :type="i.type" />
           </div>
         </div>
+      </button>
+
+      <section v-for="section in menuSections" :key="section.title" class="menu-section" :aria-labelledby="`me-${section.title}`">
+        <h2 :id="`me-${section.title}`" class="group-title">{{ section.title }}</h2>
+        <CellGroup theme="card">
+          <Cell v-for="entry in section.entries" :key="entry.path" :title="entry.label" arrow @click="onMenuTap(entry)">
+            <template v-if="entry.emphasis && entry.note" #note>
+              <span class="note-strong tabular-nums">{{ entry.note }}</span>
+            </template>
+            <template v-else-if="entry.note" #note>{{ entry.note }}</template>
+          </Cell>
+        </CellGroup>
       </section>
-
-      <p class="group-title">我的身份</p>
-      <CellGroup theme="card">
-        <Cell
-          title="关联身份"
-          :note="identityNote"
-          arrow
-          @click="router.push('/me/identities')"
-        />
-      </CellGroup>
-
-      <p class="group-title">我的资产</p>
-      <CellGroup theme="card">
-        <Cell v-for="e in assetEntries" :key="e.path" :title="e.label" arrow @click="onAssetTap(e)">
-          <template v-if="e.emphasis && e.note" #note>
-            <span class="note-strong tabular-nums">{{ e.note }}</span>
-          </template>
-          <template v-else-if="e.note" #note>{{ e.note }}</template>
-        </Cell>
-      </CellGroup>
-
-      <p class="group-title">更多</p>
-      <CellGroup theme="card">
-        <Cell v-for="e in moreEntries" :key="e.path" :title="e.label" :note="e.note" arrow @click="router.push(e.path)" />
-      </CellGroup>
     </div>
   </PullDownRefresh>
 </template>
@@ -185,6 +165,20 @@ useRefreshOnActivate(() => void refreshMe())
   display: flex;
   align-items: center;
   gap: var(--app-space-6);
+}
+
+.profile-button {
+  width: 100%;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.menu-section {
+  display: flex;
+  flex-direction: column;
+  gap: var(--app-space-3);
 }
 
 .avatar {
@@ -230,6 +224,7 @@ useRefreshOnActivate(() => void refreshMe())
 .group-title {
   margin: 0 var(--app-space-1);
   font-size: var(--app-font-caption);
+  font-weight: 500;
   color: var(--td-text-color-secondary);
 }
 

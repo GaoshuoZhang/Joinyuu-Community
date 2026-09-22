@@ -27,7 +27,7 @@
 | `pnpm build:api` | 通过 |
 | `pnpm build:admin` | 通过 |
 | `pnpm build:client-mobile` | 通过 |
-| `pnpm --filter @joinyuu/client-mobile test` | 通过，60 个测试 |
+| `pnpm --filter @joinyuu/client-mobile test` | 通过，61 个测试 |
 | `pnpm --filter @joinyuu/admin test:ui` | 通过，10 个测试 |
 | `pnpm lint`（全仓） | 通过 |
 | 隔离数据库全量 e2e | 需先准备 `apps/api/.env.it`（示例见 `apps/api/env.it.example`）、Docker PostgreSQL/Redis，并使用 `_it`/`_test` 结尾的隔离库 |

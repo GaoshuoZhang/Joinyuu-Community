@@ -4,27 +4,31 @@ import { useRouter } from 'vue-router'
 import { Cell, CellGroup } from 'tdesign-mobile-vue'
 import { useConfigStore } from '@/stores/config'
 
-/* 我的记录（二级收纳页）：项目/需求/响应/报名/预约/租约/投稿/申请/收藏/浏览历史。 */
+/* 我的记录（二级收纳页）：按业务流程归类项目、参与记录、场地服务与内容足迹。 */
 const router = useRouter()
 const config = useConfigStore()
 
-/* 按任务域分组的入口清单，各组内保持原有顺序；路由/文案与拆分前一致。
- * 与首页快捷入口同一口径（HomeView）：空间预约关闭时隐藏「我的预约 / 我的租约」。 */
+/* 按用户任务频率排序；与首页快捷入口同一口径，空间预约关闭时隐藏整个场地服务分组。 */
 const groups = computed<{ title: string; entries: { path: string; label: string }[] }[]>(() => {
   const list: { title: string; entries: { path: string; label: string }[] }[] = [
     {
-      title: '交易协作',
+      title: '项目与需求',
       entries: [
         { path: '/me/projects', label: '我的项目' },
         { path: '/me/demands', label: '我的需求' },
         { path: '/me/responses', label: '我的响应' },
-        { path: '/me/applications', label: '我的申请' },
       ],
     },
     {
-      title: '活动场地',
+      title: '申请与参与',
       entries: [
+        { path: '/me/applications', label: '我的申请' },
         { path: '/me/enrollments', label: '我的报名' },
+      ],
+    },
+    {
+      title: '场地服务',
+      entries: [
         ...(config.config.reservationOpen
           ? [
               { path: '/me/reservations', label: '我的预约' },
@@ -34,7 +38,7 @@ const groups = computed<{ title: string; entries: { path: string; label: string 
       ],
     },
     {
-      title: '内容与浏览',
+      title: '内容与足迹',
       entries: [
         { path: '/me/articles', label: '我的投稿' },
         { path: '/me/favorites', label: '我的收藏' },
@@ -50,7 +54,7 @@ const groups = computed<{ title: string; entries: { path: string; label: string 
 <template>
   <div class="page-fade-in me-records">
     <template v-for="g in groups" :key="g.title">
-      <p class="group-title">{{ g.title }}</p>
+      <h2 class="group-title">{{ g.title }}</h2>
       <CellGroup theme="card">
         <Cell v-for="e in g.entries" :key="e.path" :title="e.label" arrow @click="router.push(e.path)" />
       </CellGroup>
@@ -75,6 +79,7 @@ const groups = computed<{ title: string; entries: { path: string; label: string 
 .group-title {
   margin: 0 var(--app-space-1);
   font-size: var(--app-font-caption);
+  font-weight: 500;
   color: var(--td-text-color-secondary);
 }
 </style>
