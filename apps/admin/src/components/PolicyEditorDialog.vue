@@ -110,10 +110,14 @@ async function submit() {
     :header="record ? `编辑${mode === 'community' ? '社区政策' : '协议'}版本` : `新增${mode === 'community' ? '社区政策' : '协议'}版本`"
     width="880px"
     :close-on-overlay-click="false"
-    :confirm-btn="{ content: '保存版本', loading: submitting }"
     @update:visible="emit('update:visible', $event)"
-    @confirm="submit"
   >
+    <template #footer>
+      <div class="dialog-footer">
+        <t-button variant="text" theme="default" @click="emit('update:visible', false)">取消</t-button>
+        <t-button theme="primary" :loading="submitting" @click="submit">保存版本</t-button>
+      </div>
+    </template>
     <t-alert theme="info" class="editor-note">
       {{ mode === 'community' ? '社区政策将展示在移动端社区服务中；置顶政策优先展示。' : '已发布协议供注册与隐私设置读取，请确认版本号和生效日期后再保存。' }}
     </t-alert>
@@ -123,10 +127,10 @@ async function submit() {
           <t-select v-model="form.kind" :options="[{ label: '用户协议', value: 'agreement_user' }, { label: '隐私政策', value: 'agreement_privacy' }]" />
         </t-form-item>
         <t-form-item v-else label="政策分类" name="category">
-          <t-input v-model="form.category" maxlength="32" placeholder="如：人才政策、入驻指南…" />
+          <t-input clearable v-model="form.category" maxlength="32" placeholder="如：人才政策、入驻指南…" />
         </t-form-item>
         <t-form-item label="版本号" name="version">
-          <t-input v-model="form.version" maxlength="32" placeholder="如：2.1…" />
+          <t-input clearable v-model="form.version" maxlength="32" placeholder="如：2.1…" />
         </t-form-item>
         <t-form-item label="生效日期" name="effectiveAt">
           <t-date-picker v-model="form.effectiveAt" value-type="YYYY-MM-DD" clearable />
@@ -136,7 +140,7 @@ async function submit() {
         </t-form-item>
       </div>
       <t-form-item label="标题" name="title">
-        <t-input v-model="form.title" maxlength="128" placeholder="请输入清晰、可识别的标题…" />
+        <t-input clearable v-model="form.title" maxlength="128" placeholder="请输入清晰、可识别的标题…" />
       </t-form-item>
       <t-form-item label="摘要" name="summary">
         <t-textarea v-model="form.summary" :maxlength="255" :autosize="{ minRows: 2, maxRows: 4 }" placeholder="用于列表页快速说明适用范围和主要内容…" />
@@ -152,8 +156,8 @@ async function submit() {
         </div>
         <div v-if="form.attachments.length" class="attachment-list">
           <div v-for="(attachment, index) in form.attachments" :key="index" class="attachment-row">
-            <t-input v-model="attachment.name" maxlength="128" :aria-label="`附件 ${index + 1} 名称`" placeholder="附件名称…" />
-            <t-input v-model="attachment.url" maxlength="1000" :aria-label="`附件 ${index + 1} 地址`" placeholder="/api/public/files/... 或 https://...…" />
+            <t-input clearable v-model="attachment.name" maxlength="128" :aria-label="`附件 ${index + 1} 名称`" placeholder="附件名称…" />
+            <t-input clearable v-model="attachment.url" maxlength="1000" :aria-label="`附件 ${index + 1} 地址`" placeholder="/api/public/files/... 或 https://...…" />
             <t-button variant="text" theme="danger" shape="square" :aria-label="`删除附件 ${index + 1}`" @click="removeAttachment(index)"><DeleteIcon /></t-button>
           </div>
         </div>
@@ -173,7 +177,8 @@ async function submit() {
 .section-heading span, .field-help { color: var(--td-text-color-secondary); font-size: 12px; }
 .attachment-list { display: grid; gap: 8px; margin-bottom: 16px; }
 .attachment-row { display: grid; grid-template-columns: minmax(140px, 0.7fr) minmax(240px, 1.3fr) 32px; gap: 8px; align-items: center; }
-.featured-field :deep(.t-form__controls-content) { display: flex; align-items: center; gap: 10px; }
+/* 依赖 TDesign form 内部结构类 .t-form__controls-content：让控件与说明横向排列，无对应 API */
+.featured-field :deep(.t-form__controls-content) { display: flex; align-items: center; gap: 12px; }
 @media (max-width: 720px) {
   .form-grid, .attachment-row { grid-template-columns: 1fr; }
   .section-heading { align-items: flex-start; }

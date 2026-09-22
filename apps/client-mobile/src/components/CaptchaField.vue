@@ -9,10 +9,9 @@ withDefaults(
     loading?: boolean
     disabled?: boolean
     label?: string
-    error?: string
     clearable?: boolean
   }>(),
-  { image: '', loading: false, disabled: false, label: '验证码', error: '', clearable: false },
+  { image: '', loading: false, disabled: false, label: '验证码', clearable: false },
 )
 
 const emit = defineEmits<{ 'update:modelValue': [string]; refresh: [] }>()
@@ -43,11 +42,17 @@ const emit = defineEmits<{ 'update:modelValue': [string]; refresh: [] }>()
         <span v-else>刷新</span>
       </Button>
     </div>
-    <p v-if="error" class="error">{{ error }}</p>
   </div>
 </template>
 
 <style scoped>
+/* v48：TDesign 的 .t-form__controls-content 是 flex 容器，本组件作为 flex item 默认收缩为
+ * 内容宽，导致验证码图片右边缘比输入框/主按钮短一截（不右对齐）。显式撑满可用宽度。 */
+.field {
+  width: 100%;
+  min-width: 0;
+}
+
 .field label {
   display: block;
   margin-bottom:var(--app-space-3);
@@ -68,9 +73,11 @@ const emit = defineEmits<{ 'update:modelValue': [string]; refresh: [] }>()
 
 .captcha-button {
   flex-shrink: 0;
+  /* 官方按钮自带左右内距（--td-button-medium-padding-horizontal 默认 16px），会把 96px 宽的
+   * 验证码图挤到按钮中间，视觉上不右对齐（也与输入框右边缘错位）。用官方变量置零即可让图片
+   * 铺满按钮并与表单右边缘对齐；不要用 padding 覆盖，同权重会被库样式按加载顺序盖掉。 */
+  --td-button-medium-padding-horizontal: 0;
   min-width: 96px;
-  min-height: 40px;
-  padding:0;
   overflow: hidden;
 }
 
@@ -78,11 +85,5 @@ const emit = defineEmits<{ 'update:modelValue': [string]; refresh: [] }>()
   display: block;
   width: 96px;
   height: 40px;
-}
-
-.error {
-  margin:var(--app-space-2) 0 0;
-  font-size: var(--app-font-caption);
-  color: var(--td-error-color);
 }
 </style>

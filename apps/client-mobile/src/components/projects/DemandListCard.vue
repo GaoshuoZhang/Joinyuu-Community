@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { Tag } from 'tdesign-mobile-vue'
 import IdentityTag from '@/components/shared/IdentityTag.vue'
+import StateTag from '@/components/shared/StateTag.vue'
 import { demandDateText } from '@/constants/demand'
 import type { Demand } from '@/types'
 import { formatZhNumber } from '@/utils/format'
@@ -18,11 +19,13 @@ defineProps<{ demand: Demand; responded: boolean; to: string }>()
     <div class="d-meta">
       <span class="d-pub">
         <IdentityTag :type="demand.publisherIdentity" />
-        <span>{{ demand.publisherName }}</span>
+        <span class="d-name">{{ demand.publisherName }}</span>
       </span>
       <span v-if="demandDateText(demand)">{{ demandDateText(demand) }}</span>
     </div>
-    <Tag v-if="responded" class="d-flag" size="small" variant="light" theme="success">已响应</Tag>
+    <!-- v48：「已响应」是本人参与标记，不是业务生命周期状态，统一走 StateTag（品牌色中间态），
+         避免与「已发布/已立项」等 success 状态同色误读 -->
+    <StateTag v-if="responded" class="d-flag" kind="flag" value="responded" />
     <p class="d-resp" :class="{ 'is-zero': !demand.responseCount }">{{ formatZhNumber(demand.responseCount) }} 人响应</p>
   </router-link>
 </template>
@@ -49,7 +52,8 @@ defineProps<{ demand: Demand; responded: boolean; to: string }>()
   margin:0;
   flex: 1;
   min-width: 0;
-  font-size: var(--app-font-subtitle);
+  /* v48：与 MyDemandsView / MyResponsesView 的「同一层级列表卡片标题」口径一致（body 档 + 600） */
+  font-size: var(--app-font-body);
   font-weight: 600;
   line-height: 1.4;
   display: -webkit-box;
@@ -61,6 +65,8 @@ defineProps<{ demand: Demand; responded: boolean; to: string }>()
 .d-meta {
   display: flex;
   align-items: center;
+  /* v48：长发布者名 + 日期不再横向溢出，超出时换行 */
+  flex-wrap: wrap;
   gap: var(--app-space-6);
   margin-top: var(--app-space-4);
   font-size: var(--app-font-caption);
@@ -71,6 +77,15 @@ defineProps<{ demand: Demand; responded: boolean; to: string }>()
   display: inline-flex;
   align-items: center;
   gap:var(--app-space-3);
+  min-width: 0;
+}
+
+/* 发布者名单行超长时省略，保留身份图标与日期（flex-wrap 下仍可读） */
+.d-name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .d-flag {

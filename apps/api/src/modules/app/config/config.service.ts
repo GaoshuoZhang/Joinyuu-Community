@@ -71,7 +71,8 @@ export class ConfigService {
     const items = await this.redis.remember<DictEntry[]>(
       dictCacheKey(type),
       CACHE_TTL.stable,
-      () => this.prisma.dictEntry.findMany({ where: { type }, orderBy: { sort: 'asc' } }),
+      /* sort 并列（历史数据可能有重复值）时以 code 兜底，保证下发顺序与后台一致且稳定 */
+      () => this.prisma.dictEntry.findMany({ where: { type }, orderBy: [{ sort: 'asc' }, { code: 'asc' }] }),
     )
     return { type, items: this.enabledItems(items) }
   }

@@ -28,8 +28,11 @@ const canGoHome = computed(() => homePath.value !== route.path)
   display: flex;
   flex-direction: column;
   align-items: center;
+  justify-content: center;
   gap: 16px;
-  padding-top: 120px;
+  /* 垂直居中而非固定上边距：窄屏/短视口下不会被挤压错位 */
+  min-height: 60vh;
+  padding: 24px 16px;
 }
 
 .code {

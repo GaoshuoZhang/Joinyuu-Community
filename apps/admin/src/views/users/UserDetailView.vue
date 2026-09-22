@@ -9,6 +9,7 @@ import StatusTag from '@/components/StatusTag.vue'
 import IdentityTags from '@/components/IdentityTags.vue'
 import AdjustValueDialog from '@/components/AdjustValueDialog.vue'
 import UserCardTab from '@/components/UserCardTab.vue'
+import ListErrorState from '@/components/ListErrorState.vue'
 import { identityTypeMap, roleLabelMap } from '@/constants/identity'
 import { applicationTypeMap, normalizeUserGender, userGenderLabel, userGenderOptions } from '@/constants/status'
 import {
@@ -30,6 +31,7 @@ import {
   type UserSubmissionRecord,
 } from '@/api/users'
 import { fetchExternalEnterprises } from '@/api/external-enterprises'
+import { isNotFound } from '@/api/http'
 import { adjustExperience, adjustPoints, fetchExperienceRecords, fetchPointsRecords } from '@/api/ledgers'
 import { deriveReservationStatus } from '@/utils/reservation'
 import type { ExperienceRecord, PointsRecord, User, UserIdentity, ExternalEnterprise } from '@/types'
@@ -37,6 +39,7 @@ import type { ExperienceRecord, PointsRecord, User, UserIdentity, ExternalEnterp
 const route = useRoute()
 const router = useRouter()
 const loading = ref(true)
+const loadError = ref('')
 const user = ref<User | null>(null)
 const sensitiveVisible = ref(false)
 /** 合作企业档案缓存：external_enterprise 身份经"档案名 + 成员 uid"反查档案 ID */
@@ -544,16 +547,25 @@ async function loadDetail() {
   pointsRecords.value = await fetchPointsRecords(id)
 }
 
-onMounted(async () => {
+/* 详情加载：404 走「不存在」空态，其余错误保留原因并展示重试入口 */
+async function load() {
+  loading.value = true
+  loadError.value = ''
   try {
     await loadDetail()
     loadRecords()
   } catch (e) {
-    MessagePlugin.error(e instanceof Error ? e.message : '用户加载失败')
+    if (isNotFound(e)) {
+      user.value = null
+    } else {
+      loadError.value = e instanceof Error ? e.message : '用户加载失败'
+    }
   } finally {
     loading.value = false
   }
-})
+}
+
+onMounted(load)
 </script>
 
 <template>
@@ -568,6 +580,8 @@ onMounted(async () => {
       :row-col="[{ width: '100%', height: '208px' }, { width: '100%', height: '400px' }]"
       animation="gradient"
     />
+
+    <ListErrorState v-else-if="loadError" :message="loadError" :loading="loading" @retry="load" />
 
     <t-empty v-else-if="!user" description="用户不存在或已被删除" />
 
@@ -591,21 +605,21 @@ onMounted(async () => {
               {{ sensitiveVisible ? '隐藏敏感信息' : '显示敏感信息' }}
             </t-button>
             <template v-if="user.status !== 'deleted'">
-              <t-button variant="outline" @click="openEdit">编辑</t-button>
+              <t-button theme="primary" variant="outline" @click="openEdit">编辑</t-button>
               <t-button variant="outline" @click="openResetPwd">重置密码</t-button>
               <t-popconfirm
                 v-if="user.status === 'frozen'"
                 content="确认恢复该账号？恢复后冻结信息将被清除"
                 @confirm="onRestore"
               >
-                <t-button theme="primary" :loading="restoring">恢复</t-button>
+                <t-button :loading="restoring">恢复</t-button>
               </t-popconfirm>
               <t-button v-else theme="danger" @click="openFreeze">冻结</t-button>
             </template>
           </div>
         </div>
 
-        <t-descriptions :column="3" bordered table-layout="auto" class="profile-desc">
+        <t-descriptions :column="2" bordered class="profile-desc">
           <t-descriptions-item label="联系电话">
             <span class="channel-value">
               {{ sensitiveVisible ? (user.phone || '—') : maskPhone(user.phone) }}
@@ -634,7 +648,7 @@ onMounted(async () => {
           </t-descriptions-item>
           <t-descriptions-item label="微信 OpenID">{{ maskOpaqueId(user.wechatOpenid) }}</t-descriptions-item>
           <t-descriptions-item label="微信 UnionID">{{ maskOpaqueId(user.wechatUnionid) }}</t-descriptions-item>
-          <t-descriptions-item v-if="user.status === 'frozen'" label="冻结信息" :span="3">
+          <t-descriptions-item v-if="user.status === 'frozen'" label="冻结信息" :span="2">
             {{ user.frozenUntil ? `冻结至 ${user.frozenUntil}` : '长期冻结' }} · 原因：{{ user.frozenReason ?? '—' }}
           </t-descriptions-item>
           <t-descriptions-item label="积分（个人用户）">{{ user.points }}</t-descriptions-item>
@@ -642,7 +656,7 @@ onMounted(async () => {
           <t-descriptions-item label="最后活跃时间">{{ user.lastActiveAt }}</t-descriptions-item>
         </t-descriptions>
 
-        <p class="profile-bio">{{ user.bio }}</p>
+        <p class="profile-bio">{{ user.bio || '—' }}</p>
       </div>
 
       <!-- 身份信息 / 记录 / 经验值 / 积分 / 活跃记录 -->
@@ -745,7 +759,7 @@ onMounted(async () => {
                   </t-table>
                 </template>
               </template>
-              <t-empty v-else description="暂无记录" />
+              <t-empty v-else description="暂无申请记录" />
             </div>
           </t-tab-panel>
 
@@ -769,6 +783,7 @@ onMounted(async () => {
                     :data="currentDemands"
                     :columns="demandColumns"
                     :loading="recordsLoading"
+                    :row-attributes="{ style: { cursor: 'pointer' } }"
                     @row-click="({ row }: { row: UserDemandRecord }) => goDemandRecord(row)"
                   >
                     <template #status="{ row }">
@@ -791,6 +806,7 @@ onMounted(async () => {
                     :data="historyDemands"
                     :columns="demandColumns"
                     :loading="recordsLoading"
+                    :row-attributes="{ style: { cursor: 'pointer' } }"
                     @row-click="({ row }: { row: UserDemandRecord }) => goDemandRecord(row)"
                   >
                     <template #status="{ row }">
@@ -800,7 +816,7 @@ onMounted(async () => {
                   </t-table>
                 </template>
               </template>
-              <t-empty v-else description="暂无记录" />
+              <t-empty v-else description="暂无需求记录" />
             </div>
           </t-tab-panel>
 
@@ -824,6 +840,7 @@ onMounted(async () => {
                     :data="currentProjects"
                     :columns="projectColumns"
                     :loading="recordsLoading"
+                    :row-attributes="{ style: { cursor: 'pointer' } }"
                     @row-click="({ row }: { row: UserProjectRecord }) => goProjectRecord(row)"
                   >
                     <template #status="{ row }">
@@ -846,6 +863,7 @@ onMounted(async () => {
                     :data="historyProjects"
                     :columns="projectColumns"
                     :loading="recordsLoading"
+                    :row-attributes="{ style: { cursor: 'pointer' } }"
                     @row-click="({ row }: { row: UserProjectRecord }) => goProjectRecord(row)"
                   >
                     <template #status="{ row }">
@@ -855,7 +873,7 @@ onMounted(async () => {
                   </t-table>
                 </template>
               </template>
-              <t-empty v-else description="暂无记录" />
+              <t-empty v-else description="暂无项目记录" />
             </div>
           </t-tab-panel>
 
@@ -879,6 +897,7 @@ onMounted(async () => {
                     :data="currentEvents"
                     :columns="eventColumns"
                     :loading="recordsLoading"
+                    :row-attributes="{ style: { cursor: 'pointer' } }"
                     @row-click="({ row }: { row: UserEventRecord }) => goEventRecord(row)"
                   >
                     <template #status="{ row }">
@@ -902,6 +921,7 @@ onMounted(async () => {
                     :data="historyEvents"
                     :columns="eventColumns"
                     :loading="recordsLoading"
+                    :row-attributes="{ style: { cursor: 'pointer' } }"
                     @row-click="({ row }: { row: UserEventRecord }) => goEventRecord(row)"
                   >
                     <template #status="{ row }">
@@ -912,7 +932,7 @@ onMounted(async () => {
                   </t-table>
                 </template>
               </template>
-              <t-empty v-else description="暂无记录" />
+              <t-empty v-else description="暂无活动记录" />
             </div>
           </t-tab-panel>
 
@@ -936,6 +956,7 @@ onMounted(async () => {
                     :data="currentLeases"
                     :columns="recordLeaseColumns"
                     :loading="recordsLoading"
+                    :row-attributes="{ style: { cursor: 'pointer' } }"
                     @row-click="({ row }: { row: UserLeaseRecord }) => goLeaseRecord(row)"
                   >
                     <template #term="{ row }">{{ recordLeaseTerm(row) }}</template>
@@ -960,6 +981,7 @@ onMounted(async () => {
                     :data="historyLeases"
                     :columns="recordLeaseColumns"
                     :loading="recordsLoading"
+                    :row-attributes="{ style: { cursor: 'pointer' } }"
                     @row-click="({ row }: { row: UserLeaseRecord }) => goLeaseRecord(row)"
                   >
                     <template #term="{ row }">{{ recordLeaseTerm(row) }}</template>
@@ -971,7 +993,7 @@ onMounted(async () => {
                   </t-table>
                 </template>
               </template>
-              <t-empty v-else description="暂无记录" />
+              <t-empty v-else description="暂无租赁记录" />
             </div>
           </t-tab-panel>
 
@@ -1024,7 +1046,7 @@ onMounted(async () => {
                   </t-table>
                 </template>
               </template>
-              <t-empty v-else description="暂无记录" />
+              <t-empty v-else description="暂无投稿记录" />
             </div>
           </t-tab-panel>
 
@@ -1079,7 +1101,7 @@ onMounted(async () => {
                   </t-table>
                 </template>
               </template>
-              <t-empty v-else description="暂无记录" />
+              <t-empty v-else description="暂无预约记录" />
             </div>
           </t-tab-panel>
 
@@ -1155,7 +1177,7 @@ onMounted(async () => {
     <t-dialog
       v-model:visible="editVisible"
       header="编辑用户资料"
-      width="520px"
+      width="560px"
       @close="editVisible = false"
     >
       <template #footer>
@@ -1320,7 +1342,7 @@ onMounted(async () => {
 }
 
 .profile-name {
-  font-size: 18px;
+  font-size: 20px;
   font-weight: 600;
   line-height: 26px;
   color: var(--td-text-color-primary);
@@ -1338,20 +1360,15 @@ onMounted(async () => {
 .channel-value {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
+  gap: 8px;
 }
 
 .profile-bio {
   margin: 0;
-  font-size: 13px;
+  font-size: 14px;
   line-height: 22px;
   color: var(--td-text-color-secondary);
 }
-.card-edit { margin-top: 16px; }
-.card-edit { margin-top: 16px; }
-.card-edit { margin-top: 16px; }
-.card-edit { margin-top: 16px; }
-.card-edit { margin-top: 16px; }
 
 .identity-list {
   display: grid;
@@ -1400,7 +1417,7 @@ onMounted(async () => {
   display: flex;
   flex-wrap: wrap;
   gap: 8px 24px;
-  font-size: 13px;
+  font-size: 12px;
   color: var(--td-text-color-secondary);
 }
 
@@ -1427,7 +1444,7 @@ onMounted(async () => {
 
 .record-section-title {
   margin-bottom: 8px;
-  font-size: 13px;
+  font-size: 14px;
   font-weight: 600;
   color: var(--td-text-color-secondary);
 }
@@ -1456,7 +1473,7 @@ onMounted(async () => {
 }
 
 .exp-label {
-  font-size: 13px;
+  font-size: 12px;
   color: var(--td-text-color-secondary);
 }
 
@@ -1477,16 +1494,10 @@ onMounted(async () => {
   font-weight: 600;
 }
 
-.dialog-footer {
-  display: flex;
-  justify-content: flex-end;
-  gap: 8px;
-}
-
 .freeze-permanent {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 12px;
 }
 
 .freeze-tip {

@@ -234,9 +234,10 @@ onMounted(load)
 <template>
   <div class="page-fade-in">
     <PageHeader title="申请表单配置" description="使用可视化字段编辑器配置客户端申请表单；保存后立即生效" />
-    <div class="page-card" :class="{ loading }">
+    <div class="page-card">
       <ListErrorState v-if="loadError" :message="loadError" :loading="loading" @retry="load" />
-      <template v-else>
+      <!-- 首屏占位：configs 未返回前表单区为空，用加载态遮罩避免「空表单可编辑」的假象 -->
+      <t-loading v-else :loading="loading">
         <t-tabs :value="active" @change="(value: string | number) => select(value as ApplicationFormConfig['type'])">
           <t-tab-panel v-for="item in configs" :key="item.type" :value="item.type" :label="labels[item.type]" />
         </t-tabs>
@@ -320,7 +321,7 @@ onMounted(load)
 
           <div class="save-bar"><t-button theme="primary" type="submit" :loading="saving">保存配置</t-button></div>
         </t-form>
-      </template>
+      </t-loading>
     </div>
   </div>
 </template>
@@ -333,10 +334,10 @@ onMounted(load)
 .section-head, .field-card-head, .sub-editor-head, .advanced-toggle, .save-bar { display: flex; align-items: center; justify-content: space-between; gap: 16px; }
 .section-head { margin-bottom: 16px; }
 .section-head h2, .field-card-head h3, .sub-editor-head h4 { margin: 0; color: var(--td-text-color-primary); }
-.section-head h2 { font-size: 18px; }
-.field-card-head h3 { font-size: 15px; }
+.section-head h2 { font-size: 20px; }
+.field-card-head h3 { font-size: 16px; }
 .sub-editor-head h4 { font-size: 14px; }
-.section-head p, .advanced-toggle p { margin: 4px 0 0; color: var(--td-text-color-secondary); font-size: 13px; }
+.section-head p, .advanced-toggle p { margin: 4px 0 0; color: var(--td-text-color-secondary); font-size: 12px; }
 .field-list { display: grid; gap: 12px; }
 .field-card { padding: 16px; border: 1px solid var(--td-component-border); border-radius: var(--td-radius-medium); background: var(--td-bg-color-container); }
 .field-card-head { margin-bottom: 12px; padding-bottom: 12px; border-bottom: 1px solid var(--td-component-stroke); }

@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { useListQueryState } from '@/utils/listQuery'
 import ListErrorState from '@/components/ListErrorState.vue'
+import ListEmptyState from '@/components/ListEmptyState.vue'
 import { computed, onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { AddIcon, BuildingIcon, CheckCircleIcon, MapIcon, SettingIcon, ViewModuleIcon } from 'tdesign-icons-vue-next'
@@ -74,6 +75,15 @@ function setStatFilter(status: WorkstationStatus | '') {
   statusFilter.value = status
 }
 
+/* 空态筛选判定：状态/区域任一非空即视为筛选无结果 */
+const filterState = computed(() => ({ status: statusFilter.value, area: areaFilter.value }))
+
+/* 清除筛选：仅重置筛选条件（列表为客户端派生，无需重新请求） */
+function onReset() {
+  statusFilter.value = ''
+  areaFilter.value = ''
+}
+
 /* silent=true 静默刷新：区域规划保存后仅更新分组名称与区域选项，不触发加载遮罩（避免卡片板块闪烁） */
 async function load(silent = false) {
   if (!silent) loading.value = true
@@ -102,7 +112,7 @@ function leaseEndText(lease: Lease): string {
   today.setHours(0, 0, 0, 0)
   const days = Math.floor((end.getTime() - today.getTime()) / 86400000)
   const suffix = days > 0 ? `${days}天后到期` : days === 0 ? '今天到期' : `已过期${-days}天`
-  return `${lease.endDate} | ${suffix}`
+  return `${lease.endDate} ~ ${suffix}`
 }
 
 useListQueryState({}, undefined, { refs: { status: statusFilter, area: areaFilter }, live: true })
@@ -135,9 +145,11 @@ function goLease(row: Workstation) {
   router.push({ path: '/workstations/leases', query: { create: '1', workstationId: row.id } })
 }
 
-/* 查看租赁（已分配）：跳转该办公位当前租约详情页 */
+/* 查看租赁（已分配）：跳转该办公位当前租约详情页；
+ * 与办公室管理同口径：leaseId 缺失时回退按租约列表反查，避免「有租约却点不动」 */
 function goLeaseDetail(row: Workstation) {
-  if (row.leaseId) router.push(`/workstations/leases/${row.leaseId}`)
+  const id = row.leaseId ?? leaseOf(row)?.id
+  if (id) router.push(`/workstations/leases/${id}`)
 }
 
 function enterpriseHref(w: Workstation): string | undefined {
@@ -166,7 +178,7 @@ function enterpriseHref(w: Workstation): string | undefined {
       </template>
     </PageHeader>
 
-    <div class="stat-row">
+    <div class="stat-row stat-row--4">
       <StatCard
         class="stat-clickable"
         label="办公位总数"
@@ -201,8 +213,8 @@ function enterpriseHref(w: Workstation): string | undefined {
     </div>
 
     <div class="page-filter-bar">
-      <t-select clearable v-model="areaFilter" label="区域" :options="areaOptions" style="width: 220px" />
-      <t-select clearable v-model="statusFilter" label="状态" :options="statusOptions" style="width: 180px" />
+      <t-select class="ctl-w-xl" clearable v-model="areaFilter" label="区域" :options="areaOptions" />
+      <t-select class="ctl-w-lg" clearable v-model="statusFilter" label="状态" :options="statusOptions" />
     </div>
 
     <div class="legend-row">
@@ -212,12 +224,13 @@ function enterpriseHref(w: Workstation): string | undefined {
       <span class="legend-tip">卡片可「编辑」资料或「关联租赁」</span>
     </div>
 
-    <div v-for="g in areaGroups" :key="g.area" class="area-section">
-      <h4 class="area-title">
-        {{ g.area }}
-        <span class="area-count">{{ g.items.length }} 个办公位</span>
-      </h4>
-      <t-loading :loading="loading" size="small">
+    <!-- 单层加载遮罩包裹整个网格区：分组为空时首屏也能展示加载态（原先写在 v-for 内导致空分组无遮罩/多重遮罩） -->
+    <t-loading :loading="loading" size="small">
+      <div v-for="g in areaGroups" :key="g.area" class="area-section">
+        <h4 class="area-title">
+          {{ g.area }}
+          <span class="area-count">{{ g.items.length }} 个办公位</span>
+        </h4>
         <div class="ws-grid">
         <t-card
           v-for="w in g.items"
@@ -253,8 +266,8 @@ function enterpriseHref(w: Workstation): string | undefined {
               variant="text"
               size="small"
               theme="primary"
-              :disabled="!w.leaseId"
-              :title="w.leaseId ? '查看该办公位当前关联的租赁详情' : '未找到关联租约'"
+              :disabled="!(w.leaseId ?? leaseOf(w)?.id)"
+              :title="(w.leaseId ?? leaseOf(w)?.id) ? '查看该办公位当前关联的租赁详情' : '未找到关联租约'"
               @click="goLeaseDetail(w)"
             >
               查看租赁
@@ -273,10 +286,16 @@ function enterpriseHref(w: Workstation): string | undefined {
           </div>
         </t-card>
         </div>
-      </t-loading>
-    </div>
+      </div>
 
-    <t-empty v-if="areaGroups.length === 0" class="grid-empty" description="暂无符合条件的办公位" />
+      <ListEmptyState
+        v-if="!loading && areaGroups.length === 0"
+        class="grid-empty"
+        :query="filterState"
+        description="暂无办公位"
+        @clear="onReset"
+      />
+    </t-loading>
 
     <!-- 区域规划弹窗（保存后静默刷新分组名称，避免卡片板块闪烁） -->
     <AreaPlanDialog v-model:visible="areaPlanVisible" @success="load(true)" />
@@ -293,13 +312,6 @@ function enterpriseHref(w: Workstation): string | undefined {
 </template>
 
 <style scoped>
-.stat-row {
-  display: grid;
-  grid-template-columns: repeat(4, 1fr);
-  gap: 16px;
-  margin-bottom: 16px;
-}
-
 .legend-row {
   display: flex;
   gap: 20px;
@@ -309,7 +321,7 @@ function enterpriseHref(w: Workstation): string | undefined {
 .legend-item {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
+  gap: 8px;
   font-size: 12px;
   color: var(--td-text-color-secondary);
 }
@@ -352,7 +364,7 @@ function enterpriseHref(w: Workstation): string | undefined {
   align-items: center;
   gap: 8px;
   margin: 0 0 12px;
-  font-size: 14px;
+  font-size: 16px;
   font-weight: 600;
   color: var(--td-text-color-primary);
 }
@@ -366,7 +378,7 @@ function enterpriseHref(w: Workstation): string | undefined {
 .ws-grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(170px, 1fr));
-  gap: 12px;
+  gap: 16px;
 }
 
 /* 办公位卡片：t-card 为内核（边框/圆角/悬浮阴影来自 TDesign），状态底色覆盖容器背景 */
@@ -377,6 +389,9 @@ function enterpriseHref(w: Workstation): string | undefined {
   flex-direction: column;
 }
 
+/* 依赖 TDesign 内部类：t-loading 包裹层 .t-loading__parent 与 t-card 内容区 .t-card__body。
+ * 目的：卡片内容撑满高度（flex 链）+ 紧凑内边距；t-loading/t-card 无对应布局 API。
+ * TDesign 升级若调整这两个类名需同步检查。 */
 .ws-card :deep(.t-loading__parent) {
   flex: 1;
   display: flex;
@@ -385,10 +400,10 @@ function enterpriseHref(w: Workstation): string | undefined {
 
 .ws-card :deep(.t-card__body) {
   flex: 1;
-  padding: 12px;
+  padding: 14px 16px;
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: 8px;
 }
 
 .ws-card.is-idle {
@@ -410,7 +425,7 @@ function enterpriseHref(w: Workstation): string | undefined {
 }
 
 .ws-seat {
-  font-size: 15px;
+  font-size: 14px;
   font-weight: 600;
   color: var(--td-text-color-primary);
 }
@@ -423,7 +438,7 @@ function enterpriseHref(w: Workstation): string | undefined {
 .ws-enterprise-row {
   display: flex;
   align-items: center;
-  gap: 4px;
+  gap: 8px;
   min-width: 0;
 }
 
@@ -461,7 +476,7 @@ function enterpriseHref(w: Workstation): string | undefined {
   align-items: center;
   gap: 2px;
   margin-top: auto;
-  padding-top: 6px;
+  padding-top: 8px;
   border-top: 1px dashed var(--td-component-border);
 }
 </style>

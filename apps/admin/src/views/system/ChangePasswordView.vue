@@ -7,6 +7,7 @@ import { focusFirstInvalid } from '@/utils/form'
 import PageHeader from '@/components/PageHeader.vue'
 import { changePassword } from '@/api/auth'
 import { useAuthStore } from '@/stores/auth'
+import { firstAccessiblePath } from '@/router'
 
 /* 修改密码：原密码校验 + 新密码强度；改密后强制重登 */
 
@@ -53,6 +54,12 @@ async function onSubmit() {
     saving.value = false
   }
 }
+
+/* 密码过期被引导进本页时没有可回退的历史记录，此时回落到首个可访问页面 */
+function goBack() {
+  if (window.history.length > 1) router.back()
+  else router.push(firstAccessiblePath())
+}
 </script>
 
 <template>
@@ -62,17 +69,17 @@ async function onSubmit() {
     <div class="page-card form-card">
       <t-form ref="formRef" :data="form" :rules="rules" label-align="left" label-width="90px" @submit="onSubmit">
         <t-form-item label="原密码" name="oldPassword">
-          <t-input v-model="form.oldPassword" type="password" name="current-password" autocomplete="current-password" placeholder="当前登录密码…" style="width: 320px" />
+          <t-input class="ctl-w-2xl" clearable v-model="form.oldPassword" type="password" name="current-password" autocomplete="current-password" placeholder="当前登录密码…" />
         </t-form-item>
-        <t-form-item label="新密码" name="newPassword">
-          <t-input v-model="form.newPassword" type="password" name="new-password" autocomplete="new-password" placeholder="至少 8 位，包含字母与数字…" style="width: 320px" />
+        <t-form-item label="新密码" name="newPassword" help="至少 8 位，且需包含字母与数字">
+          <t-input class="ctl-w-2xl" clearable v-model="form.newPassword" type="password" name="new-password" autocomplete="new-password" placeholder="至少 8 位，包含字母与数字…" />
         </t-form-item>
         <t-form-item label="确认新密码" name="confirm">
-          <t-input v-model="form.confirm" type="password" name="confirm-password" autocomplete="new-password" placeholder="再次输入新密码…" style="width: 320px" />
+          <t-input class="ctl-w-2xl" clearable v-model="form.confirm" type="password" name="confirm-password" autocomplete="new-password" placeholder="再次输入新密码…" />
         </t-form-item>
         <t-form-item>
           <t-button theme="primary" type="submit" :loading="saving">确认修改</t-button>
-          <t-button variant="outline" @click="router.back()">返回</t-button>
+          <t-button variant="outline" @click="goBack">返回</t-button>
         </t-form-item>
       </t-form>
     </div>

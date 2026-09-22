@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { Button, CheckTag, Icon, Search, Tag } from 'tdesign-mobile-vue'
+import { Button, CheckTag, Icon, Loading, Search, Tag } from 'tdesign-mobile-vue'
 import { fetchArticles } from '@/api/contents'
 import { fetchEnterpriseList, fetchPolicies, fetchTalents } from '@/api/community'
 import { fetchDemands } from '@/api/demands'
@@ -169,10 +169,13 @@ onMounted(() => {
     </header>
     <Search v-model="keyword" placeholder="输入关键词后搜索…" @search="onSearchNow" />
 
-    <ListSkeleton v-if="loading" :rows="2" />
+    <!-- v46：仅首次搜索（还没有结果）用骨架屏；续搜保留旧结果，只在结果区上方给局部加载指示，
+         避免每次输入都切回骨架导致结果区闪烁 -->
+    <ListSkeleton v-if="loading && !results.length" :rows="2" />
     <EmptyBlock v-else-if="error" :text="error" action-text="重试" @action="onSearchNow" />
     <template v-else-if="hasKeyword">
       <p v-if="partialError" class="partial-error">{{ partialError }}</p>
+      <Loading v-if="loading" class="search-loading" text="搜索中…" />
       <div v-if="categoryOrder.length" class="count-chips">
         <CheckTag
           size="medium"
@@ -231,7 +234,9 @@ onMounted(() => {
 .result h2 { overflow: hidden; margin:0; font-size: var(--app-font-subtitle); text-overflow: ellipsis; white-space: nowrap; }
 .result p { display: -webkit-box; overflow: hidden; margin:var(--app-space-4) 0 0; color: var(--td-text-color-secondary); font-size: var(--app-font-caption); line-height: 1.7; -webkit-box-orient: vertical; -webkit-line-clamp: 2; }
 .search-guide { padding:var(--app-space-12) 0; color: var(--td-text-color-placeholder); font-size: var(--app-font-body); text-align: center; }
-.partial-error { margin:0; padding:var(--app-space-4) var(--app-space-5); border-radius: var(--td-radius-default); background: var(--td-warning-color-1, #fff1e9); color: var(--td-text-color-secondary); font-size: var(--app-font-caption); }
+.partial-error { margin:0; padding:var(--app-space-4) var(--app-space-5); border-radius: var(--td-radius-default); background: var(--td-warning-color-1); color: var(--td-text-color-secondary); font-size: var(--app-font-caption); }
+/* v46：续搜时的局部加载指示（结果区保留可见） */
+.search-loading { padding:var(--app-space-4) 0; }
 .count-chips { display: flex; flex-wrap: wrap; gap:var(--app-space-3); }
 .recent { display: flex; flex-direction: column; gap:var(--app-space-4); }
 .recent-head { display: flex; align-items: center; justify-content: space-between; font-size: var(--app-font-caption); color: var(--td-text-color-secondary); }

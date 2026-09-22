@@ -2,7 +2,7 @@
 import { onMounted, reactive, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { MessagePlugin } from 'tdesign-vue-next'
-import { CheckCircleIcon, RefreshIcon } from 'tdesign-icons-vue-next'
+import { CheckCircleIcon } from 'tdesign-icons-vue-next'
 import { useAuthStore } from '@/stores/auth'
 import { firstAccessiblePath } from '@/router'
 import { fetchCaptcha, type CaptchaResult } from '@/api/auth'
@@ -27,13 +27,18 @@ const rules: FormProps['rules'] = {
 const submitting = ref(false)
 
 const captcha = ref<CaptchaResult | null>(null)
+const captchaLoading = ref(false)
 
 async function loadCaptcha() {
+  if (captchaLoading.value) return
+  captchaLoading.value = true
   try {
     captcha.value = await fetchCaptcha()
   } catch (e) {
     captcha.value = null
     MessagePlugin.error(e instanceof Error ? e.message : '验证码加载失败，请点击刷新重试')
+  } finally {
+    captchaLoading.value = false
   }
 }
 
@@ -81,9 +86,9 @@ const showDemoAccount = import.meta.env.DEV || import.meta.env.VITE_SHOW_DEMO_AC
   <div class="login-page">
     <!-- 品牌区 -->
     <section class="login-brand">
-      <span class="island" style="width: 120px; height: 120px; right: 18%; top: 12%"></span>
-      <span class="island" style="width: 56px; height: 56px; right: 8%; top: 40%; background: rgba(255, 255, 255, 0.14)"></span>
-      <span class="island" style="width: 200px; height: 200px; left: -60px; bottom: 10%; background: rgba(123, 216, 245, 0.12)"></span>
+      <span class="island island-1"></span>
+      <span class="island island-2"></span>
+      <span class="island island-3"></span>
       <div class="login-brand-wave"></div>
 
       <div class="brand-content">
@@ -123,6 +128,7 @@ const showDemoAccount = import.meta.env.DEV || import.meta.env.VITE_SHOW_DEMO_AC
               name="username"
               autocomplete="username"
               :spellcheck="false"
+              aria-label="用户名"
               placeholder="请输入用户名…"
             />
           </t-form-item>
@@ -134,6 +140,7 @@ const showDemoAccount = import.meta.env.DEV || import.meta.env.VITE_SHOW_DEMO_AC
               clearable
               name="password"
               autocomplete="current-password"
+              aria-label="密码"
               placeholder="请输入密码…"
             />
           </t-form-item>
@@ -141,20 +148,32 @@ const showDemoAccount = import.meta.env.DEV || import.meta.env.VITE_SHOW_DEMO_AC
             <div class="captcha-row">
               <t-input
                 v-model="form.captcha"
+                class="captcha-input"
                 size="large"
                 clearable
                 maxlength="4"
                 name="captcha"
                 autocomplete="one-time-code"
+                aria-label="图形验证码"
                 placeholder="验证码…"
-                style="flex: 1"
               />
-              <button v-if="captcha" type="button" class="captcha-image-button" aria-label="刷新验证码" @click="loadCaptcha">
-                <img :src="captcha.image" class="captcha-img" alt="验证码" />
-              </button>
-              <t-button variant="text" shape="square" size="large" aria-label="刷新验证码" title="刷新验证码" @click="loadCaptcha">
-                <template #icon><RefreshIcon /></template>
-              </t-button>
+              <t-tooltip content="点击图片刷新验证码">
+                <button
+                  type="button"
+                  class="captcha-image-button"
+                  :aria-label="captchaLoading ? '验证码刷新中' : '刷新验证码'"
+                  @click="loadCaptcha"
+                >
+                  <img
+                    v-if="captcha"
+                    :src="captcha.image"
+                    class="captcha-img"
+                    :class="{ 'is-loading': captchaLoading }"
+                    alt="验证码"
+                  />
+                  <span v-else class="captcha-img captcha-fallback">{{ captchaLoading ? '刷新中…' : '点击刷新' }}</span>
+                </button>
+              </t-tooltip>
             </div>
           </t-form-item>
           <t-form-item>
@@ -213,28 +232,28 @@ const showDemoAccount = import.meta.env.DEV || import.meta.env.VITE_SHOW_DEMO_AC
 .brand-highlights li {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 12px;
   font-size: 14px;
   opacity: 0.92;
 }
 
 .form-title {
   margin: 0;
-  font-size: 22px;
+  font-size: 20px;
   font-weight: 600;
   color: var(--td-text-color-primary);
 }
 
 .form-desc {
-  margin: 6px 0 28px;
-  font-size: 13px;
+  margin: 8px 0 28px;
+  font-size: 12px;
   color: var(--td-text-color-secondary);
 }
 
 .demo-account {
   margin-top: 8px;
   padding: 10px 12px;
-  font-size: 13px;
+  font-size: 12px;
   color: var(--td-text-color-secondary);
   background: var(--td-bg-color-page);
   border-radius: var(--td-radius-medium);
@@ -254,6 +273,10 @@ const showDemoAccount = import.meta.env.DEV || import.meta.env.VITE_SHOW_DEMO_AC
   width: 100%;
 }
 
+.captcha-input {
+  flex: 1;
+}
+
 .captcha-img {
   width: 110px;
   height: 40px;
@@ -261,6 +284,23 @@ const showDemoAccount = import.meta.env.DEV || import.meta.env.VITE_SHOW_DEMO_AC
   border-radius: var(--td-radius-medium);
   flex-shrink: 0;
   display: block;
+  box-sizing: border-box;
+  transition: opacity 0.2s;
+}
+
+/* 刷新中：旧图半透明反馈加载状态 */
+.captcha-img.is-loading {
+  opacity: 0.4;
+}
+
+/* 验证码加载失败占位：与图片等尺寸，可点击重试 */
+.captcha-fallback {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 12px;
+  color: var(--td-text-color-placeholder);
+  background: var(--td-bg-color-secondarycontainer);
 }
 
 .captcha-image-button {
@@ -271,4 +311,9 @@ const showDemoAccount = import.meta.env.DEV || import.meta.env.VITE_SHOW_DEMO_AC
   border-radius: var(--td-radius-medium);
   cursor: pointer;
 }
+
+/* 品牌区装饰岛：在全局 .island 基类（tokens.css）上做定位/尺寸/透明度变体 */
+.island-1 { width: 120px; height: 120px; right: 18%; top: 12%; }
+.island-2 { width: 56px; height: 56px; right: 8%; top: 40%; background: rgba(255, 255, 255, 0.14); }
+.island-3 { width: 200px; height: 200px; left: -60px; bottom: 10%; background: rgba(123, 216, 245, 0.12); }
 </style>

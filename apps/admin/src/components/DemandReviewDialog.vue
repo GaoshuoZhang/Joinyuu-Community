@@ -1,6 +1,6 @@
 <script setup lang="ts">
-import { nextTick, ref, watch } from 'vue'
-import { MessagePlugin } from 'tdesign-vue-next'
+import { nextTick, reactive, ref, watch } from 'vue'
+import { MessagePlugin, type FormProps } from 'tdesign-vue-next'
 import { identityTypeMap } from '@/constants/identity'
 import { approveDemand, rejectDemand } from '@/api/demands'
 import type { Demand } from '@/types'
@@ -20,7 +20,10 @@ const emit = defineEmits<{
 
 type Phase = 'review' | 'reject'
 const phase = ref<Phase>('review')
-const rejectReason = ref('')
+const rejectForm = reactive({ rejectReason: '' })
+const rejectRules: FormProps['rules'] = {
+  rejectReason: [{ required: true, message: '请填写驳回原因', trigger: 'submit' }],
+}
 const submitting = ref(false)
 
 watch(
@@ -29,7 +32,7 @@ watch(
     if (!v) return
     /* 每次打开回到审核视图，清空驳回原因 */
     phase.value = 'review'
-    rejectReason.value = ''
+    rejectForm.rejectReason = ''
     nextTick(() => formRef.value?.clearValidate())
   },
 )
@@ -63,13 +66,11 @@ async function onApprove() {
 
 async function onConfirmReject() {
   if (!props.demand) return
-  if (!rejectReason.value.trim()) {
-    MessagePlugin.warning('请填写驳回原因')
-    return
-  }
+  const valid = await formRef.value.validate()
+  if (valid !== true) return
   submitting.value = true
   try {
-    await rejectDemand(props.demand.id, rejectReason.value.trim())
+    await rejectDemand(props.demand.id, rejectForm.rejectReason.trim())
     MessagePlugin.success('已驳回该需求')
     emit('update:visible', false)
     emit('success')
@@ -127,11 +128,11 @@ function publisherIdentityLabel(d: Demand): string {
       </template>
 
       <template v-else>
-        <t-form ref="formRef" label-align="top">
+        <t-form ref="formRef" :data="rejectForm" :rules="rejectRules" label-align="top">
           <p class="reject-tip">驳回后该需求将标记为「已驳回」并通知提交人，请填写驳回原因。</p>
-          <t-form-item :rules="[{ required: true, message: '请填写驳回原因', trigger: 'submit' }]" name="rejectReason">
+          <t-form-item name="rejectReason">
             <t-textarea
-              v-model="rejectReason"
+              v-model="rejectForm.rejectReason"
               placeholder="驳回原因（必填，将通知提交人）…"
               :autosize="{ minRows: 3, maxRows: 5 }"
             />
@@ -183,7 +184,7 @@ function publisherIdentityLabel(d: Demand): string {
 }
 
 .meta-item {
-  font-size: 13px;
+  font-size: 12px;
   color: var(--td-text-color-secondary);
 }
 
@@ -191,7 +192,8 @@ function publisherIdentityLabel(d: Demand): string {
   margin-bottom: 4px;
 }
 
-/* 联系邮箱等无空格长文本在描述表格中强制换行，避免溢出撑破抽屉 */
+/* 联系邮箱等无空格长文本在描述表格中强制换行，避免溢出撑破抽屉。
+ * 依赖 TDesign descriptions 内部类 .t-descriptions__content，组件无样式 API 可替代 */
 .review-desc :deep(.t-descriptions__content) {
   word-break: break-all;
   overflow-wrap: anywhere;
@@ -199,7 +201,7 @@ function publisherIdentityLabel(d: Demand): string {
 
 .block-title {
   margin: 16px 0 8px;
-  font-size: 15px;
+  font-size: 16px;
   font-weight: 600;
   color: var(--td-text-color-primary);
 }
@@ -221,7 +223,7 @@ function publisherIdentityLabel(d: Demand): string {
 
 .reject-tip {
   margin: 0 0 12px;
-  font-size: 13px;
+  font-size: 12px;
   color: var(--td-text-color-secondary);
 }
 </style>

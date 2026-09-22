@@ -166,8 +166,26 @@ export class TrashService {
       : rows
     filtered.sort((a, b) => (a.deletedAt < b.deletedAt ? 1 : a.deletedAt > b.deletedAt ? -1 : 0))
 
+    await this.fillGoodsCategoryLabels(rows)
+
     const start = (query.page - 1) * query.pageSize
     return { list: filtered.slice(start, start + query.pageSize), total: filtered.length }
+  }
+
+  /** 商品归档行的 category 存字典编码，附 categoryLabel 供列表展示名称（编码可能随字典调整，故实时回填） */
+  private async fillGoodsCategoryLabels(rows: ArchiveItemDto[]): Promise<void> {
+    const goodsRows = rows.filter((row) => row.domain === 'goods')
+    const codes = [...new Set(goodsRows.map((row) => String(row.data.category ?? '')).filter(Boolean))]
+    if (!codes.length) return
+    const entries = await this.prisma.dictEntry.findMany({
+      where: { type: 'goods_category', code: { in: codes } },
+      select: { code: true, label: true },
+    })
+    const labels = new Map(entries.map((entry) => [entry.code, entry.label]))
+    for (const row of goodsRows) {
+      const code = String(row.data.category ?? '')
+      row.data.categoryLabel = labels.get(code) ?? code
+    }
   }
 
   async restore(domain: string, id: string, operator: string): Promise<{ code: number }> {

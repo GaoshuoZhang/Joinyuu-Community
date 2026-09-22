@@ -2,15 +2,16 @@
 import { computed, onMounted, reactive, ref } from 'vue'
 import { useListQueryState } from '@/utils/listQuery'
 import { useRouter } from 'vue-router'
-import { SearchIcon, DownloadIcon } from 'tdesign-icons-vue-next'
-import { MessagePlugin } from 'tdesign-vue-next'
+import { SearchIcon } from 'tdesign-icons-vue-next'
 import PageHeader from '@/components/PageHeader.vue'
+import ExportButton from '@/components/ExportButton.vue'
+import ListEmptyState from '@/components/ListEmptyState.vue'
 import StatusTag from '@/components/StatusTag.vue'
 import IdentityTags from '@/components/IdentityTags.vue'
 import ColumnController from '@/components/ColumnController.vue'
 import { fetchIndividuals } from '@/api/individuals'
 import ListErrorState from '@/components/ListErrorState.vue'
-import { exportCsv, statusLabel } from '@/utils/exportCsv'
+import { statusLabel } from '@/utils/exportCsv'
 import type { User, UserIdentity } from '@/types'
 
 const router = useRouter()
@@ -116,22 +117,25 @@ function goDetail(row: User) {
   router.push(`/users/${row.uid}`)
 }
 
-/* 导出当前页社区个体列表为 CSV（联系电话统一脱敏输出） */
-function onExport() {
-  exportCsv(
-    '社区个体列表',
-    ['编号', '昵称', '联系电话', '个体等级', '积分', '状态', '注册时间'],
-    list.value.map((u) => [
-      u.uid,
-      `${u.nickname} [${u.uid}]`,
-      maskPhone(u.phone),
-      individualLevel(u),
-      u.points,
-      statusLabel('user', u.status),
-      u.registeredAt,
-    ]),
-  )
-  MessagePlugin.success(`已导出当前页 ${list.value.length} 条数据`)
+/* 导出配置：联系电话统一脱敏输出，避免绕过脱敏 */
+const exportHeaders = ['编号', '昵称', '联系电话', '个体等级', '积分', '状态', '注册时间']
+
+function mapRow(u: User): (string | number)[] {
+  return [
+    u.uid,
+    `${u.nickname} [${u.uid}]`,
+    maskPhone(u.phone),
+    individualLevel(u),
+    u.points,
+    statusLabel('user', u.status),
+    u.registeredAt,
+  ]
+}
+
+const pageExportRows = computed(() => list.value.map(mapRow))
+
+function fetchAllForExport(page: number, pageSize: number) {
+  return fetchIndividuals({ ...query, page, pageSize })
 }
 
 const { syncQuery } = useListQueryState(query, load)
@@ -150,41 +154,43 @@ onMounted(load)
           storage-key="individuals"
           :columns="columns.map((c) => ({ key: c.colKey, title: c.title }))"
         />
-        <t-button variant="outline" @click="onExport">
-          <template #icon><DownloadIcon /></template>
-          导出
-        </t-button>
+        <ExportButton
+          filename="社区个体列表"
+          :headers="exportHeaders"
+          :rows="pageExportRows"
+          :fetch-all="fetchAllForExport"
+          :map-row="mapRow"
+        />
       </template>
     </PageHeader>
 
     <div class="page-filter-bar">
       <t-input
         v-model="query.keyword"
-        class="filter-keyword"
+        class="ctl-w-xl"
         placeholder="搜索姓名/ID/联系电话…"
         clearable
         @enter="onSearch"
       />
-      <t-select
+      <t-select class="ctl-w-md"
         v-model="query.status"
         label="状态"
         :options="statusOptions"
         clearable
-        style="width: 150px"
         @change="onSearch"
       />
-      <t-button theme="primary" variant="outline" @click="onSearch">
+      <t-button @click="onSearch">
         <template #icon><SearchIcon /></template>
         查询
       </t-button>
-      <t-button variant="outline" theme="default" @click="onReset">
+      <t-button variant="outline" @click="onReset">
         重置
       </t-button>
     </div>
 
     <div class="page-card">
       <t-table
-        row-key="id"
+        row-key="uid"
         table-layout="fixed"
         hover
         resizable
@@ -192,13 +198,13 @@ onMounted(load)
         :columns="visibleColumns"
         :loading="loading"
         :pagination="pagination"
-        empty="暂无社区个体"
+        :row-attributes="{ style: { cursor: 'pointer' } }"
         @page-change="onPageChange"
         @row-click="({ row }: { row: User }) => goDetail(row)"
       >
         <template #user="{ row }">
           <div class="user-cell">
-            <t-avatar size="36px">{{ row.nickname.slice(0, 1) }}</t-avatar>
+            <t-avatar size="36px" :image="row.avatar">{{ row.nickname.slice(0, 1) }}</t-avatar>
             <div class="user-cell-info">
               <span class="user-name">{{ row.nickname }}</span>
               <t-tag class="id-tag-block" size="small" variant="light">{{ row.uid }}</t-tag>
@@ -222,16 +228,16 @@ onMounted(load)
             <t-button variant="text" size="small" @click="goDetail(row)">详情</t-button>
           </div>
         </template>
+
+        <template #empty>
+          <ListEmptyState :query="query" description="暂无社区个体" @clear="onReset" />
+        </template>
       </t-table>
     </div>
   </div>
 </template>
 
 <style scoped>
-.filter-keyword {
-  width: 240px;
-}
-
 .user-cell {
   display: flex;
   align-items: center;
@@ -246,6 +252,7 @@ onMounted(load)
 
 .user-name {
   font-size: 14px;
+  font-weight: 500;
   line-height: 22px;
   color: var(--td-text-color-primary);
 }

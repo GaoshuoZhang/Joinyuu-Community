@@ -70,6 +70,8 @@ export class AppCommunityService {
     for (const u of users) {
       const card = u.individualCard
       if (!card) continue
+      /* 关闭「公开名片」的用户不进人才库（缺省视为公开） */
+      if ((card.visibility as { isPublic?: boolean } | null)?.isPublic === false) continue
       /* Prisma 列表 has 仅精确匹配，技能子串命中在内存复核（与客户端 Mock 行为一致） */
       if (kw && !(card.displayName?.includes(kw) || u.nickname.includes(kw) || card.intro.includes(kw) || card.skills.some((s) => s.includes(kw)))) continue
       list.push({
@@ -98,7 +100,9 @@ export class AppCommunityService {
 
     const identity = user.identities[0]
     const tier = identity?.level != null ? await this.prisma.levelTier.findUnique({ where: { identityType_level: { identityType: 'community_individual', level: identity.level } } }) : null
-    const visibility = (card.visibility ?? {}) as { age?: boolean; politicalStatus?: boolean }
+    const visibility = (card.visibility ?? {}) as { age?: boolean; politicalStatus?: boolean; isPublic?: boolean }
+    /* 关闭「公开名片」：不对外暴露该名片 */
+    if (visibility.isPublic === false) throw new NotFoundException('该用户尚未公开名片')
 
     return {
       uid: user.uid,

@@ -2,6 +2,11 @@ import { IsBoolean, IsNotEmpty, IsOptional, IsString, MaxLength } from 'class-va
 
 /* 首页公告单例载荷（对照 apps/admin/src/api/announcements.ts HomeAnnouncementPayload） */
 export class HomeAnnouncementPayloadDto {
+  /** 兼容单例接口的定向更新：传 id 时仅更新该条；不传时沿用旧行为（覆盖最近一条） */
+  @IsOptional()
+  @IsString()
+  id?: string
+
   @IsString()
   @IsNotEmpty()
   title!: string

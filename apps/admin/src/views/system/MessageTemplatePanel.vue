@@ -1,8 +1,10 @@
 <script setup lang="ts">
 import { onMounted, reactive, ref } from 'vue'
 import { MessagePlugin } from 'tdesign-vue-next'
-import PageHeader from '@/components/PageHeader.vue'
+import { AddIcon } from 'tdesign-icons-vue-next'
 import ListErrorState from '@/components/ListErrorState.vue'
+import ListEmptyState from '@/components/ListEmptyState.vue'
+import StatusTag from '@/components/StatusTag.vue'
 import {
   createMessageTemplate,
   disableMessageTemplate,
@@ -23,29 +25,12 @@ import type {
 
 /* 消息中心 · 模板配置（简化）：创建即发布；编辑「保存」即对当前发布版本生效；
  * 历史版本保留，重新发布历史版本即为回滚。 */
-defineProps<{ inline?: boolean }>()
 const loading = ref(true)
 const loadError = ref('')
 const templates = ref<MessageTemplate[]>([])
 
 const KIND_LABEL: Record<string, string> = { sms: '短信', email: '邮件', inapp: '站内信' }
 const CATEGORY_LABEL: Record<string, string> = { security: '安全类', marketing: '营销类' }
-const VERSION_STATUS_LABEL: Record<string, string> = {
-  published: '已发布',
-  archived: '历史版本',
-  draft: '草稿',
-  pending: '待审核',
-  approved: '已通过',
-  rejected: '已驳回',
-}
-const VERSION_STATUS_THEME: Record<string, 'default' | 'success' | 'warning' | 'danger' | 'primary'> = {
-  draft: 'default',
-  pending: 'warning',
-  approved: 'success',
-  rejected: 'danger',
-  published: 'primary',
-  archived: 'default',
-}
 
 async function load() {
   loading.value = true
@@ -101,9 +86,14 @@ function parseVariables(text: string): string[] {
   return [...new Set(text.split(/[,，\s]+/).map((v) => v.trim()).filter(Boolean))]
 }
 
+/* 提交互斥：避免重复点击产生并发创建 */
+const submitting = ref(false)
+
 async function onCreate() {
+  if (submitting.value) return
   const valid = await createRef.value.validate()
   if (valid !== true) return
+  submitting.value = true
   try {
     await createMessageTemplate({
       code: createForm.code.trim(),
@@ -119,6 +109,8 @@ async function onCreate() {
     await load()
   } catch (error) {
     MessagePlugin.error(error instanceof Error ? error.message : '创建失败')
+  } finally {
+    submitting.value = false
   }
 }
 
@@ -192,15 +184,27 @@ async function onSavePublish() {
   )
 }
 
+/* ---------- 预览（Dialog 展示渲染后内容） ---------- */
+const previewVisible = ref(false)
+const previewLoading = ref(false)
+const previewSubject = ref('')
+const previewBody = ref('')
+
 async function onPreview() {
-  if (!detail.value) return
+  if (!detail.value || previewLoading.value) return
+  previewLoading.value = true
+  previewVisible.value = true
   try {
     const result = await previewMessageTemplate(detail.value.id, {
       variables: Object.fromEntries(detail.value.variables.map((v) => [v, `「${v}」`])),
     })
-    MessagePlugin.info(`预览：${result.subject ? `${result.subject} / ` : ''}${result.body}`)
+    previewSubject.value = result.subject ?? ''
+    previewBody.value = result.body
   } catch (error) {
     MessagePlugin.error(error instanceof Error ? error.message : '预览失败')
+    previewVisible.value = false
+  } finally {
+    previewLoading.value = false
   }
 }
 
@@ -277,53 +281,54 @@ function versionActionLabel(version: MessageTemplateVersion): string {
 </script>
 
 <template>
-  <div class="template-panel page-fade-in">
-    <PageHeader
-      v-if="!$props.inline"
-      title="模板配置"
-      description="短信 / 邮件 / 站内信模板；创建即发布，编辑保存即生效，历史版本可回滚"
-    >
-      <template #actions>
-        <t-button theme="primary" @click="openCreate">新增模板</t-button>
-      </template>
-    </PageHeader>
+  <div class="template-panel">
+    <!-- 本面板只作为「消息中心」的选项卡内容渲染（无独立路由），故用可见说明行替代会被嵌入态隐藏的 PageHeader -->
+    <p class="panel-hint">短信 / 邮箱 / 站内信模板；创建即发布，编辑保存即生效，历史版本可回滚</p>
 
     <ListErrorState v-if="loadError" :message="loadError" :loading="loading" @retry="load" />
 
-    <t-card :bordered="true" class="template-card">
-      <t-table row-key="id" :data="templates" :columns="columns" :loading="loading" table-layout="fixed" hover>
-        <template #name="{ row }"><span>{{ row.name }}</span></template>
-        <template #kind="{ row }">
-          <t-tag variant="light-outline" size="small">{{ KIND_LABEL[row.kind] || row.kind }}</t-tag>
-        </template>
-        <template #category="{ row }">
-          <t-tag :theme="row.category === 'security' ? 'warning' : 'default'" variant="light" size="small">
-            {{ CATEGORY_LABEL[row.category] || row.category }}
-          </t-tag>
-        </template>
-        <template #status="{ row }">
-          <t-tag :theme="row.status === 'published' ? 'success' : 'default'" variant="light" size="small">
-            {{ row.status === 'published' ? `已发布 v${row.currentVersion}` : '未发布' }}
-          </t-tag>
-        </template>
-        <template #variables="{ row }">
-          <span class="muted">{{ row.variables.join('、') || '—' }}</span>
-        </template>
-        <template #op="{ row }">
-          <t-space size="small">
-            <t-link theme="primary" hover="color" @click="openDetail(row)">编辑</t-link>
-            <t-link theme="primary" hover="color" @click="openTest(row)">测试发送</t-link>
-          </t-space>
-        </template>
-      </t-table>
-    </t-card>
+    <!-- 工具条只承载操作按钮：无边框行，避免白底描边卡片里孤立一个按钮；
+         按钮留在面板内（而非页头 actions），独立路由与聚合嵌入两种渲染下都可见 -->
+    <div class="panel-toolbar">
+      <t-button theme="primary" @click="openCreate">
+        <template #icon><AddIcon /></template>
+        新增模板
+      </t-button>
+    </div>
+
+    <t-table row-key="id" :data="templates" :columns="columns" :loading="loading" table-layout="fixed" hover resizable>
+      <template #kind="{ row }">
+        <t-tag variant="light-outline" size="small">{{ KIND_LABEL[row.kind] || row.kind }}</t-tag>
+      </template>
+      <template #category="{ row }">
+        <t-tag :theme="row.category === 'security' ? 'warning' : 'default'" variant="light" size="small">
+          {{ CATEGORY_LABEL[row.category] || row.category }}
+        </t-tag>
+      </template>
+      <template #status="{ row }">
+        <StatusTag entity="messageTemplate" :value="row.status" />
+        <span v-if="row.status === 'published'" class="muted version-tag">v{{ row.currentVersion }}</span>
+      </template>
+      <template #variables="{ row }">
+        <span class="muted">{{ row.variables.join('、') || '—' }}</span>
+      </template>
+      <template #op="{ row }">
+        <t-space size="small">
+          <t-link theme="primary" hover="color" @click="openDetail(row)">编辑</t-link>
+          <t-link theme="primary" hover="color" @click="openTest(row)">测试发送</t-link>
+        </t-space>
+      </template>
+
+      <template #empty>
+        <ListEmptyState description="暂无消息模板" />
+      </template>
+    </t-table>
 
     <t-dialog
       v-model:visible="createVisible"
       header="新增模板"
       width="640px"
-      :confirm-btn="{ content: '创建并发布', theme: 'primary' }"
-      @confirm="onCreate"
+      :footer="false"
     >
       <t-form ref="createRef" :data="createForm" label-align="top">
         <div class="form-grid">
@@ -360,6 +365,12 @@ function versionActionLabel(version: MessageTemplateVersion): string {
           <t-textarea v-model="createForm.body" :autosize="{ minRows: 3, maxRows: 6 }" placeholder="使用 {{变量}} 占位，如 验证码 {{code}}…" />
         </t-form-item>
       </t-form>
+      <template #footer>
+        <div class="dialog-footer">
+          <t-button theme="default" @click="createVisible = false">取消</t-button>
+          <t-button theme="primary" :loading="submitting" @click="onCreate">创建并发布</t-button>
+        </div>
+      </template>
     </t-dialog>
 
     <t-dialog
@@ -393,12 +404,19 @@ function versionActionLabel(version: MessageTemplateVersion): string {
             </t-form-item>
           </t-form>
 
+          <!-- 编辑弹窗为表单级动作（保存并发布 / 预览 / 下架）并附带说明文案，footer 空间不足以承载，
+               故此处保留 :footer="false" + 正文按钮区；创建与测试发送等确认型弹窗统一用 #footer 插槽 -->
           <t-space class="action-bar">
             <t-button theme="primary" @click="onSavePublish">保存并发布</t-button>
             <t-button theme="default" @click="onPreview">预览</t-button>
-            <t-button theme="danger" variant="outline" :disabled="detail.currentVersion === 0" @click="onDisable">
-              下架
-            </t-button>
+            <!-- 下架立即中止发送，补二次确认 -->
+            <t-popconfirm
+              theme="danger"
+              content="确认下架该模板？下架后停止发送，重新发布后恢复"
+              @confirm="onDisable"
+            >
+              <t-button theme="danger" variant="outline" :disabled="detail.currentVersion === 0">下架</t-button>
+            </t-popconfirm>
             <span class="muted action-hint">保存后立即可用于发送队列；如需恢复历史版本，在下表点「发布」回滚</span>
           </t-space>
 
@@ -407,25 +425,35 @@ function versionActionLabel(version: MessageTemplateVersion): string {
             row-key="id"
             :data="detail.versions"
             :columns="[
-              { colKey: 'version', title: '版本', width: 90 },
-              { colKey: 'subject', title: '主题', width: 160 },
-              { colKey: 'body', title: '正文' },
-              { colKey: 'status', title: '状态', width: 110 },
-              { colKey: 'createdAt', title: '创建时间', width: 160 },
-              { colKey: 'op', title: '操作', width: 110 },
+              { colKey: 'version', title: '版本', width: 80 },
+              { colKey: 'subject', title: '主题', width: 140 },
+              { colKey: 'body', title: '正文', minWidth: 180 },
+              { colKey: 'status', title: '状态', width: 100 },
+              { colKey: 'createdAt', title: '创建时间', width: 150 },
+              { colKey: 'op', title: '操作', width: 100, fixed: 'right' },
             ]"
             table-layout="fixed"
             hover
+            resizable
           >
             <template #version="{ row }">v{{ row.version }}</template>
             <template #body="{ row }"><span class="muted body-preview">{{ row.body }}</span></template>
             <template #status="{ row }">
-              <t-tag :theme="VERSION_STATUS_THEME[row.status] || 'default'" variant="light" size="small">
-                {{ VERSION_STATUS_LABEL[row.status] || row.status }}
-              </t-tag>
+              <StatusTag entity="messageTemplateVersion" :value="row.status" />
             </template>
             <template #op="{ row }">
-              <t-link v-if="versionActionLabel(row)" theme="primary" hover="color" @click="onPublish(row.version)">发布</t-link>
+              <!-- 发布历史版本即回滚，会覆盖当前发布版本，补二次确认 -->
+              <t-popconfirm
+                v-if="versionActionLabel(row)"
+                content="确认发布该历史版本？将回滚并覆盖当前发布版本"
+                @confirm="onPublish(row.version)"
+              >
+                <t-link theme="primary" hover="color">发布</t-link>
+              </t-popconfirm>
+            </template>
+
+            <template #empty>
+              <ListEmptyState description="暂无版本历史" />
             </template>
           </t-table>
         </template>
@@ -436,8 +464,7 @@ function versionActionLabel(version: MessageTemplateVersion): string {
       v-model:visible="testVisible"
       header="测试发送"
       width="560px"
-      :confirm-btn="{ content: '发送', theme: 'primary' }"
-      @confirm="onTestSend"
+      :footer="false"
     >
       <t-form ref="testRef" :data="testForm" label-align="top">
         <t-form-item label="收件人" name="recipient" :rules="[{ required: true, message: '请输入测试收件人' }]">
@@ -447,13 +474,37 @@ function versionActionLabel(version: MessageTemplateVersion): string {
           <t-input v-model="testForm.variables" clearable placeholder='如 {"code":"1234","minutes":"5"}…' />
         </t-form-item>
       </t-form>
+      <template #footer>
+        <div class="dialog-footer">
+          <t-button theme="default" @click="testVisible = false">取消</t-button>
+          <t-button theme="primary" @click="onTestSend">发送</t-button>
+        </div>
+      </template>
+    </t-dialog>
+
+    <t-dialog v-model:visible="previewVisible" header="模板预览" width="560px" :footer="false">
+      <t-loading :loading="previewLoading" size="small">
+        <div v-if="previewSubject" class="preview-subject">主题：{{ previewSubject }}</div>
+        <div class="preview-body">{{ previewBody }}</div>
+      </t-loading>
     </t-dialog>
   </div>
 </template>
 
 <style scoped>
-.template-card {
-  width: 100%;
+/* 选项卡内容顶部说明行：替代嵌入态下会被隐藏的 PageHeader 说明 */
+.panel-hint {
+  margin: 0 0 12px;
+  font-size: 12px;
+  line-height: 20px;
+  color: var(--td-text-color-secondary);
+}
+
+/* 面板工具条：右对齐操作按钮，无边框、无底色，与下方表格区区分层级 */
+.panel-toolbar {
+  display: flex;
+  justify-content: flex-end;
+  margin-bottom: 16px;
 }
 
 .section-title {
@@ -467,6 +518,12 @@ function versionActionLabel(version: MessageTemplateVersion): string {
   display: grid;
   grid-template-columns: 1fr 1fr;
   gap: 0 24px;
+}
+
+@media (max-width: 640px) {
+  .form-grid {
+    grid-template-columns: 1fr;
+  }
 }
 
 .action-bar {
@@ -483,10 +540,34 @@ function versionActionLabel(version: MessageTemplateVersion): string {
   font-size: 12px;
 }
 
+/* 主状态标签旁的版本号：与标签同一行并留出间距 */
+.version-tag {
+  margin-left: 6px;
+}
+
 .body-preview {
   display: -webkit-box;
   -webkit-line-clamp: 2;
   -webkit-box-orient: vertical;
   overflow: hidden;
+}
+
+.preview-subject {
+  margin-bottom: 12px;
+  font-size: 14px;
+  color: var(--td-text-color-primary);
+}
+
+/* 只读文本区域：限高可滚动，长正文不出弹窗 */
+.preview-body {
+  max-height: 360px;
+  overflow-y: auto;
+  padding: 12px;
+  font-size: 14px;
+  line-height: 1.7;
+  white-space: pre-wrap;
+  word-break: break-word;
+  background: var(--td-bg-color-secondarycontainer);
+  border-radius: var(--td-radius-medium);
 }
 </style>

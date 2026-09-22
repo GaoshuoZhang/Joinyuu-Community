@@ -1,4 +1,4 @@
-import { Module, ValidationPipe } from '@nestjs/common'
+import { MiddlewareConsumer, Module, NestModule, ValidationPipe } from '@nestjs/common'
 import { APP_FILTER, APP_GUARD, APP_INTERCEPTOR, APP_PIPE } from '@nestjs/core'
 import { ScheduleModule } from '@nestjs/schedule'
 import { validationExceptionFactory } from './common/pipes/validation-exception.factory'
@@ -6,6 +6,7 @@ import { PrismaModule } from './common/prisma/prisma.module'
 import { RedisModule } from './common/redis/redis.module'
 import { IdGeneratorModule } from './common/id-generator/id-generator.module'
 import { AuditModule } from './common/audit/audit.module'
+import { AuditContextMiddleware } from './common/audit/audit-context.middleware'
 import { RbacModule } from './common/rbac/rbac.module'
 import { StorageModule } from './common/storage/storage.module'
 import { PointsEngineModule } from './common/engine/points-engine/points-engine.module'
@@ -145,4 +146,12 @@ import { HttpExceptionFilter } from './common/filters/http-exception.filter'
     { provide: APP_FILTER, useClass: HttpExceptionFilter },
   ],
 })
-export class AppModule {}
+export class AppModule implements NestModule {
+  /* 全局注册审计请求上下文中间件（写入 req.ip，供 AuditService.record 缺省使用）。
+   * 路径用字符串 '/'：Nest 转成 Express app.use('/')（前缀匹配，覆盖全部请求）。
+   * 不用 '*'：Nest 会把 '*' 归一为 '/*'，而 Express 5 的 path-to-regexp 不接受裸通配符，启动即抛错；
+   * 也不用 { path:'/', method: RequestMethod.ALL }：那会走 app.all('/')，只匹配根路径。 */
+  configure(consumer: MiddlewareConsumer): void {
+    consumer.apply(AuditContextMiddleware).forRoutes('/')
+  }
+}

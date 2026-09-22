@@ -4,8 +4,11 @@ import App from './App.vue'
 import router from './router'
 import { permission } from './directives/permission'
 import { useThemeStore } from './stores/theme'
-import './styles/tokens.css'
+/* 顺序敏感：TDesign 基础样式先加载，本应用样式后加载。
+ * 两者存在同特异性的同名规则（如 .t-select__wrap 与工具类 .ctl-w-* 都只声明 width），
+ * 顺序决定胜负 —— 应用样式放前面会被组件库的 width:100% 覆盖，筛选控件全部撑满整行 */
 import 'tdesign-vue-next/es/style/index.css'
+import './styles/tokens.css'
 
 const app = createApp(App)
 const pinia = createPinia()

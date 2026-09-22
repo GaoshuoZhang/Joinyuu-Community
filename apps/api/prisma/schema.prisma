@@ -228,6 +228,8 @@ model User {
   bio                    String                      @db.Text
   avatar                 String?                     @db.VarChar(255)
   activities             Json                        @default("[]")
+  // 新手任务是否被用户永久隐藏（按账号持久化，跨浏览器/设备一致；仅客户端 UI 偏好）
+  activationDismissed    Boolean                     @default(false)
   identities             UserIdentity[]
   pointsRecords          PointsRecord[]
   enrollments            EventEnrollment[]
@@ -452,6 +454,18 @@ model Project {
   description    String              @db.Text
   memberCount    Int
   sourceDemandId String?             @db.VarChar(16)
+  // 需求方（立项时照搬需求发布方快照；社区自建项目由表单录入）：主体 ID（用户 uid / 企业 ID）+ 名称 + 身份快照
+  demanderId     String?             @db.VarChar(16)
+  demanderName   String?             @db.VarChar(128)
+  demanderIdentity Json?
+  // 创建人（需求立项取需求创建人/发布方；自建项目取当前操作人）
+  creatorName    String?             @db.VarChar(64)
+  creatorId      String?             @db.VarChar(16)
+  // 联系方式与合同价格（需求立项照搬需求；自建项目由表单录入）
+  contactName    String?             @db.VarChar(64)
+  contactPhone   String?             @db.VarChar(32)
+  contactEmail   String?             @db.VarChar(128)
+  contractPrice  String?             @db.VarChar(64)
   expReward      Int?
   closeReason    String?             @db.VarChar(255)
   finishedAt     String?             @db.VarChar(16)

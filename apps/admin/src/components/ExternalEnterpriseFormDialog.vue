@@ -230,12 +230,6 @@ function onClose() {
   gap: 0 16px;
 }
 
-.dialog-footer {
-  display: flex;
-  justify-content: flex-end;
-  gap: 8px;
-}
-
 .member-box {
   width: 100%;
 }

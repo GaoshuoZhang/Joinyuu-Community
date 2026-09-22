@@ -1,6 +1,8 @@
 <script setup lang="ts">
 import { ref, watch } from 'vue'
-import { Button, Toast } from 'tdesign-mobile-vue'
+import { Button, DialogPlugin, Toast } from 'tdesign-mobile-vue'
+import EmptyBlock from '@/components/shared/EmptyBlock.vue'
+import ListSkeleton from '@/components/ListSkeleton.vue'
 import StateTag from '@/components/shared/StateTag.vue'
 import type { MyResponseItem } from '@/types'
 import { formatLocalDateTime, formatZhNumber } from '@/utils/format'
@@ -42,74 +44,61 @@ function onSubmit() {
     Toast('请至少选择一位意向承接方')
     return
   }
-  emit('submit', [...selection.value])
+  /* v48：提交立项不可逆（需求转已选定、由社区管理员立项），二次确认时复述后果 */
+  DialogPlugin.confirm({
+    title: '提交立项',
+    content: `已选择 ${formatZhNumber(selection.value.length)} 位意向承接方。提交后将确定承接方并进入立项流程，不可更改。`,
+    cancelBtn: '再想想',
+    confirmBtn: '确认提交',
+    onConfirm: () => emit('submit', [...selection.value]),
+  })
 }
 </script>
 
 <template>
-  <p v-if="loading" class="owner-loading">响应加载中…</p>
-  <p v-else-if="error" class="owner-error">
-    响应加载失败
-    <Button class="relink" size="small" variant="text" theme="danger" @click="emit('retry')">重试</Button>
-  </p>
+  <ListSkeleton v-if="loading" :rows="2" />
+  <EmptyBlock v-else-if="error" text="响应加载失败" action-text="重试" @action="emit('retry')" />
+  <EmptyBlock v-else-if="!responses.length" :text="emptyNotice" />
   <template v-else>
-    <p v-if="!responses.length" class="notice">{{ emptyNotice }}</p>
-    <template v-else>
-      <div
-        v-for="r in responses"
-        :key="r.id"
-        class="owner-response"
-        :class="{ 'is-chosen': r.status === 'accepted' }"
-      >
-        <div class="owner-response-head">
-          <strong>{{ r.responderName ?? '响应方' }}</strong>
-          <StateTag kind="response" :value="r.status ?? 'pending'" />
-        </div>
-        <p class="owner-response-note">{{ r.note }}</p>
-        <p class="owner-response-meta">{{ formatLocalDateTime(r.at) }}</p>
-        <Button
-          v-if="canSelect && (r.status ?? 'pending') === 'pending'"
-          size="small"
-          variant="outline"
-          :theme="selection.includes(r.id) ? 'primary' : 'default'"
-          @click="toggleSelection(r.id)"
-        >
-          {{ selection.includes(r.id) ? '已选择' : '选择为意向承接方' }}
-        </Button>
+    <div
+      v-for="r in responses"
+      :key="r.id"
+      class="owner-response"
+      :class="{ 'is-chosen': r.status === 'accepted' }"
+    >
+      <div class="owner-response-head">
+        <strong>{{ r.responderName ?? '响应方' }}</strong>
+        <StateTag kind="response" :value="r.status ?? 'pending'" />
       </div>
-      <p v-if="canSelect" class="selection-tip">可多选意向承接方；提交后需求转为「已选定」，由社区管理员确认后立项</p>
+      <p class="owner-response-note">{{ r.note }}</p>
+      <p class="owner-response-meta">{{ formatLocalDateTime(r.at) }}</p>
       <Button
-        v-if="canSelect"
-        theme="primary"
-        block
-        class="submit-btn"
-        :loading="selecting"
-        @click="onSubmit"
+        v-if="canSelect && (r.status ?? 'pending') === 'pending'"
+        size="small"
+        variant="outline"
+        :theme="selection.includes(r.id) ? 'primary' : 'default'"
+        @click="toggleSelection(r.id)"
       >
-          提交立项{{ selection.length ? `（已选 ${formatZhNumber(selection.length)} 项）` : '' }}
+        {{ selection.includes(r.id) ? '已选择' : '选择为意向承接方' }}
       </Button>
-      <p v-else-if="demandStatus === 'selected'" class="notice done">等待社区管理员确认立项</p>
-    </template>
+    </div>
+    <p v-if="canSelect" class="selection-tip">可多选意向承接方；提交后需求转为「已选定」，由社区管理员确认后立项</p>
+    <Button
+      v-if="canSelect"
+      theme="primary"
+      block
+      class="submit-btn"
+      :loading="selecting"
+      @click="onSubmit"
+    >
+        提交立项{{ selection.length ? `（已选 ${formatZhNumber(selection.length)} 项）` : '' }}
+    </Button>
+    <p v-else-if="demandStatus === 'selected'" class="notice done">等待社区管理员确认立项</p>
   </template>
 </template>
 
 <style scoped>
-.owner-loading {
-  margin: 0;
-  font-size: var(--app-font-caption);
-  color: var(--td-text-color-secondary);
-}
-
-.owner-error {
-  margin: 0;
-  font-size: var(--app-font-caption);
-  color: var(--td-error-color);
-}
-
-.relink {
-  margin-left: var(--app-space-2);
-}
-
+/* 空态/错误态用 EmptyBlock 承载，仅保留「已选定等待立项」这一条状态提示 */
 .notice {
   margin: 0;
   font-size: var(--app-font-caption);

@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import ListErrorState from '@/components/ListErrorState.vue'
-import { nextTick, onMounted, reactive, ref, watch } from 'vue'
+import ListEmptyState from '@/components/ListEmptyState.vue'
+import { computed, nextTick, onMounted, reactive, ref, watch } from 'vue'
 import { MessagePlugin } from 'tdesign-vue-next'
 import type { FormProps } from 'tdesign-vue-next'
 import { AddIcon, DeleteIcon, EditIcon } from 'tdesign-icons-vue-next'
@@ -17,7 +18,6 @@ const acting = ref('')
 /* 总开关：关闭后客户端首页不展示轮播区域 */
 const carouselOpen = ref(true)
 const settingsSaving = ref(false)
-const settingsError = ref('')
 
 const columns = [
   { colKey: 'sort', title: '排序', width: 80 },
@@ -35,7 +35,6 @@ async function load() {
     list.value = rows
     carouselOpen.value = settings.carouselOpen
     loadError.value = ''
-    settingsError.value = ''
   } catch (e) {
     loadError.value = e instanceof Error ? e.message : '数据加载失败'
   } finally {
@@ -50,8 +49,7 @@ async function onToggleCarousel(value: boolean) {
     carouselOpen.value = value
     MessagePlugin.success(value ? '首页轮播图已开启' : '首页轮播图已关闭')
   } catch (e) {
-    settingsError.value = e instanceof Error ? e.message : '操作失败'
-    MessagePlugin.error(settingsError.value)
+    MessagePlugin.error(e instanceof Error ? e.message : '操作失败')
     carouselOpen.value = !value
   } finally {
     settingsSaving.value = false
@@ -120,6 +118,21 @@ watch(dialogVisible, (visible) => {
   nextTick(() => formRef.value?.clearValidate())
 })
 
+/* 图片地址解析：素材库给的是相对地址（形如 /api/public/files/…），
+ * 统一按当前 origin 解析为绝对地址，非法地址返回空串（表格缩略图与弹窗预览共用同一口径） */
+function resolveImageUrl(url?: string): string {
+  const raw = (url ?? '').trim()
+  if (!raw) return ''
+  try {
+    return new URL(raw, window.location.origin).toString()
+  } catch {
+    return ''
+  }
+}
+
+/* 弹窗图片即时预览：相对/绝对地址均可展示 */
+const imagePreviewUrl = computed(() => resolveImageUrl(form.imageUrl))
+
 const rules: FormProps['rules'] = {
   title: [{ required: true, message: '请输入轮播标题', trigger: 'submit' }],
 }
@@ -175,18 +188,23 @@ onMounted(load)
       <template #actions>
         <div class="carousel-switch">
           <span class="switch-label">首页轮播图</span>
-          <t-switch :value="carouselOpen" :loading="settingsSaving" @change="onToggleCarousel" />
+          <!-- 总开关直接作用于客户端首页：点击仅弹确认框，确认后才切换（switch 受控于 carouselOpen，不会先自行翻转） -->
+          <t-popconfirm
+            :content="carouselOpen ? '确认关闭首页轮播图？关闭后客户端首页不再展示轮播区域。' : '确认开启首页轮播图？开启后客户端首页恢复展示轮播区域。'"
+            @confirm="onToggleCarousel(!carouselOpen)"
+          >
+            <t-switch :value="carouselOpen" :loading="settingsSaving" />
+          </t-popconfirm>
         </div>
+        <t-button theme="primary" @click="openCreate">
+          <template #icon><AddIcon /></template>
+          新增轮播图
+        </t-button>
       </template>
     </PageHeader>
 
-    <div class="page-filter-bar">
-      <span class="panel-tip">轮播图按排序值升序展示，仅「展示」为开启的条目前端可见；图片留空时使用品牌渐变文字卡。</span>
-      <t-button theme="primary" @click="openCreate">
-        <template #icon><AddIcon /></template>
-        新增轮播图
-      </t-button>
-    </div>
+    <!-- 页面提示：非筛选控件，独立成行（本页无筛选控件，不占筛选条） -->
+    <p class="panel-tip">轮播图按排序值升序展示，仅「展示」为开启的条目前端可见；图片留空时使用品牌渐变文字卡。</p>
 
     <div class="page-card">
       <t-table
@@ -197,14 +215,20 @@ onMounted(load)
         :data="list"
         :columns="columns"
         :loading="loading"
-        empty="暂无轮播图"
       >
         <template #title="{ row }">
           <div class="cell-title">{{ row.title }}</div>
           <div class="cell-sub">{{ row.subtitle || row.id }}</div>
         </template>
         <template #imageUrl="{ row }">
-          <t-tag v-if="row.imageUrl" theme="primary" variant="light" size="small">已配置</t-tag>
+          <t-image
+            v-if="resolveImageUrl(row.imageUrl)"
+            class="banner-thumb"
+            :src="resolveImageUrl(row.imageUrl)"
+            :alt="row.title"
+            lazy
+            fit="cover"
+          />
           <span v-else class="cell-muted">文字卡</span>
         </template>
         <template #link="{ row }">
@@ -227,6 +251,9 @@ onMounted(load)
               </t-button>
             </t-popconfirm>
           </div>
+        </template>
+        <template #empty>
+          <ListEmptyState description="暂无轮播图" />
         </template>
       </t-table>
     </div>
@@ -254,6 +281,7 @@ onMounted(load)
         </t-form-item>
         <t-form-item label="图片地址" name="imageUrl">
           <t-input v-model="form.imageUrl" :maxlength="512" placeholder="素材库图片地址，可留空…" />
+          <t-image v-if="imagePreviewUrl" class="image-preview" :src="imagePreviewUrl" :alt="form.title" fit="cover" />
         </t-form-item>
         <t-form-item label="跳转路径" name="link">
           <t-input v-model="form.link" :maxlength="512" placeholder="移动端站内路径，如 /events…" />
@@ -273,6 +301,7 @@ onMounted(load)
 
 <style scoped>
 .panel-tip {
+  margin: 0 0 12px;
   font-size: 12px;
   color: var(--td-text-color-secondary);
 }
@@ -284,33 +313,28 @@ onMounted(load)
 }
 
 .switch-label {
-  font-size: 13px;
+  font-size: 14px;
   color: var(--td-text-color-secondary);
 }
 
-.cell-title {
-  font-weight: 500;
-  color: var(--td-text-color-primary);
+/* 缩略图：表格图片列与弹窗即时预览统一 72×40 cover 圆角 */
+.banner-thumb,
+.image-preview {
+  width: 72px;
+  height: 40px;
+  border-radius: var(--td-radius-default);
+  overflow: hidden;
+  flex-shrink: 0;
 }
 
-.cell-sub,
+.image-preview {
+  margin-top: 8px;
+}
+
+/* 行内 span 的次级文字：不能复用全局 .cell-sub（其 margin-top 对行内元素无效） */
 .cell-muted {
-  margin-top: 2px;
   font-size: 12px;
   color: var(--td-text-color-secondary);
-}
-
-.op-cell {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-  flex-wrap: nowrap;
-}
-
-.dialog-footer {
-  display: flex;
-  justify-content: flex-end;
-  gap: 8px;
 }
 
 .form-row {

@@ -47,6 +47,7 @@ const form = reactive({
   customLinks: [] as Entry[],
   showAge: true,
   showPoliticalStatus: true,
+  showPublic: true,
 })
 
 const loaded = ref(false)
@@ -72,6 +73,7 @@ function fillForm() {
   form.customLinks = (c.customLinks ?? []).map((l) => ({ label: l.label ?? '', url: l.url ?? '' }))
   form.showAge = c.visibility?.age ?? true
   form.showPoliticalStatus = c.visibility?.politicalStatus ?? true
+  form.showPublic = c.visibility?.isPublic ?? true
   baseline.value = formSnapshot.value
   loaded.value = true
 }
@@ -92,7 +94,6 @@ function removeEntry(key: (typeof INDIVIDUAL_LIST_SECTIONS)[number]['key'], inde
 
 async function onSave() {
   formErrors.displayName = !editable('displayName') || form.displayName.trim() ? '' : '请输入姓名'
-  formErrors.intro = !editable('intro') || form.intro.trim().length >= 10 ? '' : '个人简介至少 10 个字'
   const links = [...(editable('socials') ? form.socials : []), ...(editable('customLinks') ? form.customLinks : [])]
   formErrors.links = links.some((l) => (l.url ?? '').trim() && !/^https?:\/\//.test(l.url.trim())) ? '链接需以 http(s):// 开头' : ''
   const first = Object.values(formErrors).find(Boolean)
@@ -115,7 +116,7 @@ async function onSave() {
       honors: form.honors.map((h) => ({ name: h.name ?? '', date: h.date ?? '' })),
       socials: form.socials.map((l) => ({ label: l.label ?? '', url: l.url ?? '' })),
       customLinks: form.customLinks.map((l) => ({ label: l.label ?? '', url: l.url ?? '' })),
-      visibility: { age: form.showAge, politicalStatus: form.showPoliticalStatus },
+      visibility: { age: form.showAge, politicalStatus: form.showPoliticalStatus, isPublic: form.showPublic },
     })
     Toast('个人名片已保存')
     baseline.value = formSnapshot.value
@@ -152,6 +153,24 @@ async function onSave() {
         <p class="intro">{{ card.intro }}</p>
       </section>
 
+      <section v-if="editable('visibility')" class="m-card">
+        <h2 class="sec-title">公开可见性</h2>
+        <p class="privacy-tip">关闭后该字段不会出现在公开人才名片中。</p>
+        <div class="switch-row">
+          <span>公开名片</span>
+          <Switch v-model="form.showPublic" />
+        </div>
+        <p class="switch-hint">关闭后，你的个人名片将从社区人才库中隐藏，他人无法查看。</p>
+        <div class="switch-row">
+          <span>公开年龄</span>
+          <Switch v-model="form.showAge" />
+        </div>
+        <div class="switch-row">
+          <span>公开政治面貌</span>
+          <Switch v-model="form.showPoliticalStatus" />
+        </div>
+      </section>
+
       <section class="m-card">
         <h2 class="sec-title">基本信息</h2>
         <div v-if="editable('displayName')" class="field">
@@ -179,19 +198,6 @@ async function onSave() {
         <div v-if="editable('industryExperience')" class="field">
           <label>行业经验</label>
           <Textarea v-model="form.industryExperience" :autosize="{ minRows: 3, maxRows: 8 }" :maxlength="300" placeholder="所在行业、年限与代表成果…" />
-        </div>
-      </section>
-
-      <section v-if="editable('visibility')" class="m-card">
-        <h2 class="sec-title">公开可见性</h2>
-        <p class="privacy-tip">关闭后该字段不会出现在公开人才名片中。</p>
-        <div class="switch-row">
-          <span>公开年龄</span>
-          <Switch v-model="form.showAge" />
-        </div>
-        <div class="switch-row">
-          <span>公开政治面貌</span>
-          <Switch v-model="form.showPoliticalStatus" />
         </div>
       </section>
 
@@ -292,7 +298,8 @@ async function onSave() {
 }
 
 .privacy-tip {
-  margin:-2px 0 var(--app-space-5);
+  /* v46：取消 -2px 负外边距的魔法数，说明文字与标题的间距直接取间距 token */
+  margin:0 0 var(--app-space-5);
   font-size: var(--app-font-caption);
   color: var(--td-text-color-placeholder);
 }
@@ -308,6 +315,12 @@ async function onSave() {
 
 .switch-row:first-of-type {
   border-top: 0;
+}
+
+.switch-hint {
+  margin: calc(var(--app-space-3) * -1) 0 var(--app-space-4);
+  font-size: var(--app-font-caption);
+  color: var(--td-text-color-placeholder);
 }
 
 .skills {

@@ -2,7 +2,7 @@
 import { computed, onMounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useRouteQuerySync } from '@/composables/useRouteQuerySync'
-import { Button, CheckTag, Tag } from 'tdesign-mobile-vue'
+import { CheckTag, List, Tag } from 'tdesign-mobile-vue'
 import { listFavorites } from '@/api/favorites'
 import { useAsyncList } from '@/composables/useAsyncList'
 import { useIncrementalList } from '@/composables/useIncrementalList'
@@ -38,6 +38,14 @@ const FILTERS: { value: 'all' | FavoriteTargetType; label: string }[] = [
 const all = computed(() => data.value ?? [])
 const items = computed(() => (activeType.value === 'all' ? all.value : all.value.filter((item) => item.type === activeType.value)))
 const { visibleItems, hasMore, showMore } = useIncrementalList(items)
+const footerState = computed(() => (hasMore.value ? 'load-more' : ''))
+function loadMore() {
+  if (!hasMore.value) return
+  showMore()
+}
+function onListScroll(bottomDistance: number) {
+  if (bottomDistance < 60) loadMore()
+}
 
 /* 类型筛选同步 URL，便于分享/返回还原 */
 function pickType(value: 'all' | FavoriteTargetType) {
@@ -68,7 +76,7 @@ useRouteQuerySync('/me/favorites', (query) => {
         </CheckTag>
       </div>
       <EmptyBlock v-if="!items.length" text="该类型下暂无收藏" action-text="查看全部收藏" @action="pickType('all')" />
-      <div v-else class="stagger list">
+      <List v-else class="stagger list" :async-loading="footerState" @load-more="loadMore" @scroll="onListScroll">
         <p class="list-count">共 {{ formatZhNumber(items.length) }} 条</p>
         <router-link v-for="item in visibleItems" :key="item.id" class="m-card fav-card pressable" :to="`${TYPE_PATH[item.type]}${item.targetId}`">
           <div class="fav-head">
@@ -78,10 +86,7 @@ useRouteQuerySync('/me/favorites', (query) => {
           <p v-if="item.subtitle" class="fav-sub">{{ item.subtitle }}</p>
           <p class="fav-at">收藏于 {{ formatLocalDateTime(item.at) }}</p>
         </router-link>
-        <Button v-if="hasMore" block variant="outline" @click="showMore">
-          加载更多（剩余 {{ formatZhNumber(items.length - visibleItems.length) }} 条）
-        </Button>
-      </div>
+      </List>
     </template>
     <!-- v45：空状态补出口，避免二级页没有 TabBar 时成为死胡同 -->
     <EmptyBlock v-else text="暂无收藏，去项目、文章或活动页收藏感兴趣的内容" action-text="浏览需求" @action="router.push('/projects')" />

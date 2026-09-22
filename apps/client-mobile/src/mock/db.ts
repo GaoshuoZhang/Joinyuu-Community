@@ -134,6 +134,8 @@ export interface MockAccount {
   realNameVerifiedAt?: string
   /** v38：协议同意时间（版本化留痕为后端缺口） */
   agreementAt?: string
+  /** 是否已永久隐藏新手任务（[MOCK-ONLY] 后端按账号持久化） */
+  activationDismissed?: boolean
 }
 
 export const accounts: MockAccount[] = [
@@ -927,10 +929,11 @@ export function grantEnterpriseExperience(enterpriseId: string, delta: number, r
 
 /* ---------- 首页聚合卡片 ---------- */
 
-/* [MOCK-ONLY] v40 运营公告（后台公告发布后下发；接入期接 /api/app/announcements） */
+/* [MOCK-ONLY] v40 运营公告（后台公告发布后下发；接入期接 /api/app/announcements）
+ * 与后端一致：「启用」即 pinned，互锁保证至多一条启用；仅启用的公告下发到首页公告条 */
 export const announcements: HomeAnnouncement[] = [
-  { id: 'AN1001', title: '第二批社区企业招募启动，9 月 30 日截止', content: '第二批社区企业招募已启动：入驻可享共享会议室优先预约、需求广场发布与路演优先报名等权益。请在「企业合作」入口提交入驻申请，运营将于 3 个工作日内审核。', at: '2026-09-12 09:00', pinned: true },
-  { id: 'AN1002', title: '9 月 26 日年度路演日观众报名中', content: '聚屿社区年度路演日将于 9 月 26 日 13:30 在聚屿路演厅举行，十个社区项目登台路演，投资人现场点评。活动页可报名。', at: '2026-09-10 10:00' },
+  { id: 'AN1001', title: '第二批社区企业招募启动，9 月 30 日截止', content: '第二批社区企业招募已启动：入驻可享共享会议室优先预约、需求广场发布与路演优先报名等权益。请在「企业合作」入口提交入驻申请，运营将于 3 个工作日内审核。', at: '2026-09-12 09:00', pinned: true, link: '/intros/enterprise' },
+  { id: 'AN1002', title: '9 月 26 日年度路演日观众报名中', content: '聚屿社区年度路演日将于 9 月 26 日 13:30 在聚屿路演厅举行，十个社区项目登台路演，投资人现场点评。活动页可报名。', at: '2026-09-10 10:00', link: '/plaza?tab=events' },
   { id: 'AN1003', title: '共享会议室 A 隔音改造期间使用提示', content: '共享会议室 A 将于 9 月下旬进行隔音改造，施工期间预约可能受影响，请优先使用会议室 B 或咖啡区活动位。', at: '2026-09-08 15:00' },
 ]
 

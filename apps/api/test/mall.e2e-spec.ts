@@ -1,5 +1,5 @@
 /* M1-D 商城验收（wiki-backend.md §7.10/§8.1/§8.3）：
- * 兑换订单状态机（发货/完成/取消）+ 取消事务（source=redemption 退积分 + 回补库存）。
+ * 商品列表类型回填字典名称 + 兑换订单状态机（发货/完成/取消）+ 取消事务（source=redemption 退积分 + 回补库存）。
  * 前置：docker compose up + prisma migrate + seed（含 RO2003 待发货 U1005/G1002 380 分、G1002 库存 18） */
 import { INestApplication } from '@nestjs/common'
 import { Test } from '@nestjs/testing'
@@ -23,6 +23,24 @@ describe('M1-D mall 积分商城', () => {
 
   afterAll(async () => {
     await app.close()
+  })
+
+  it('商品列表：类型回填字典名称（categoryLabel）', async () => {
+    const [list, dict] = await Promise.all([
+      request(app.getHttpServer())
+        .get('/api/admin/mall/goods')
+        .query({ page: 1, pageSize: 10 })
+        .set('Authorization', `Bearer ${token}`),
+      request(app.getHttpServer()).get('/api/admin/dicts/goods_category').set('Authorization', `Bearer ${token}`),
+    ])
+    expect(list.status).toBe(200)
+    expect(list.body.data.list.length).toBeGreaterThan(0)
+    const labels = new Map<string, string>(
+      (dict.body.data as Array<{ code: string; label: string }>).map((e) => [e.code, e.label]),
+    )
+    for (const goods of list.body.data.list as Array<{ category: string; categoryLabel: string }>) {
+      expect(goods.categoryLabel).toBe(labels.get(goods.category))
+    }
   })
 
   it('非法流转 → 404/409 精确文案', async () => {

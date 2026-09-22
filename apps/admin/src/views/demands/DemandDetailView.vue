@@ -41,6 +41,11 @@ const respondentColumns = [
   { colKey: 'status', title: '状态', cell: 'status', width: 100 , ellipsis: true},
 ]
 
+/* 响应记录无唯一字段，按「响应人 + 序号」合成稳定行键，避免同名响应人键冲突 */
+const respondentRows = computed(() =>
+  (demand.value?.respondents ?? []).map((row, index) => ({ ...row, rowKey: `${row.name}-${index}` })),
+)
+
 async function load() {
   loading.value = true
   try {
@@ -156,6 +161,11 @@ function creatorLinkTarget(d: Demand): string | null {
   return null
 }
 
+/* 链接跳转（t-link 禁用态不触发 click，此处再兜底判空） */
+function goTarget(target: string | null) {
+  if (target) router.push(target)
+}
+
 
 /* 需求方身份快照 → 纯文本标签（企业仅显示 社区企业/合作企业，不追加成员标题） */
 function publisherIdentityLabel(d: Demand): string {
@@ -193,7 +203,7 @@ onMounted(load)
         <div class="head-main">
           <div class="head-info">
             <div class="head-title">
-              <span class="head-name">{{ demand.title }}</span>
+              <h3 class="head-name">{{ demand.title }}</h3>
               <StatusTag entity="demand" :value="demand.status" :scheduled-at="demand.scheduledAt" />
               <t-tag v-if="isArchived" theme="default" variant="light">已归档</t-tag>
               <t-tag variant="light">{{ demand.categoryLabel ?? demand.category }}</t-tag>
@@ -242,7 +252,9 @@ onMounted(load)
                 <t-button theme="primary" :loading="publishing" @click="onPublishNow">立即发布</t-button>
                 <t-button variant="outline" @click="openSchedule">定时发布</t-button>
                 <t-button variant="outline" @click="openEdit">编辑</t-button>
-                <t-button variant="outline" theme="danger" :loading="closing" @click="onCloseDemand">关闭</t-button>
+                <t-popconfirm content="确认关闭该需求？" @confirm="onCloseDemand">
+                  <t-button variant="outline" theme="danger" :loading="closing">关闭</t-button>
+                </t-popconfirm>
               </template>
               <template v-else-if="demand.status === 'scheduled'">
                 <t-popconfirm
@@ -258,7 +270,9 @@ onMounted(load)
               <template v-else-if="demand.status === 'published'">
                 <t-button theme="primary" @click="projectVisible = true">立项</t-button>
                 <t-button variant="outline" theme="warning" @click="onRetract">撤回发布</t-button>
-                <t-button variant="outline" theme="danger" :loading="closing" @click="onCloseDemand">关闭</t-button>
+                <t-popconfirm content="确认关闭该需求？" @confirm="onCloseDemand">
+                  <t-button variant="outline" theme="danger" :loading="closing">关闭</t-button>
+                </t-popconfirm>
               </template>
             </template>
             <t-button v-if="demand.status === 'projected'" variant="outline" @click="goProject">
@@ -270,17 +284,19 @@ onMounted(load)
         <t-descriptions :column="2" bordered class="head-desc">
           <t-descriptions-item label="编号">{{ demand.id }}</t-descriptions-item>
           <t-descriptions-item label="需求方">
-            <t-link theme="default" hover="color" :href="publisherLinkTarget(demand) ? '#' + publisherLinkTarget(demand) : undefined" :disabled="!publisherLinkTarget(demand)"
+            <t-link theme="default" hover="color" :disabled="!publisherLinkTarget(demand)"
               class="publisher-link"
               :class="{ clickable: publisherLinkTarget(demand) }"
+              @click="goTarget(publisherLinkTarget(demand))"
             >
               {{ demand.publisherName }}<t-tag v-if="demand.publisherId" class="id-tag" size="small" variant="light">{{ demand.publisherId }}</t-tag>
             </t-link>
           </t-descriptions-item>
           <t-descriptions-item label="创建人">
-            <t-link theme="default" hover="color" :href="creatorLinkTarget(demand) ? '#' + creatorLinkTarget(demand) : undefined" :disabled="!creatorLinkTarget(demand)"
+            <t-link theme="default" hover="color" :disabled="!creatorLinkTarget(demand)"
               class="publisher-link"
               :class="{ clickable: creatorLinkTarget(demand) }"
+              @click="goTarget(creatorLinkTarget(demand))"
             >
               {{ demand.creatorName || '—' }}<t-tag v-if="demand.creatorId" class="id-tag" size="small" variant="light">{{ demand.creatorId }}</t-tag>
             </t-link>
@@ -291,7 +307,7 @@ onMounted(load)
           <t-descriptions-item label="联系人">{{ demand.contactName ?? '—' }}</t-descriptions-item>
           <t-descriptions-item label="联系电话">{{ demand.contactPhone ?? '—' }}</t-descriptions-item>
           <t-descriptions-item label="联系邮箱">{{ demand.contactEmail ?? '—' }}</t-descriptions-item>
-          <t-descriptions-item label="预算">{{ demand.budget }}</t-descriptions-item>
+          <t-descriptions-item label="预算">{{ demand.budget || '—' }}</t-descriptions-item>
           <t-descriptions-item label="需求类型">
             {{ demand.demandType === 'investment' ? '找投资' : demand.demandType === 'cooperation' ? '找合作' : '找服务' }}
           </t-descriptions-item>
@@ -301,8 +317,8 @@ onMounted(load)
           <t-descriptions-item v-if="demand.demandType === 'investment'" label="可提供回报">{{ demand.returnOffer || '—' }}</t-descriptions-item>
           <t-descriptions-item v-if="demand.demandType === 'cooperation'" label="业务瓶颈">{{ demand.bottleneck || '—' }}</t-descriptions-item>
           <t-descriptions-item v-if="demand.demandType === 'cooperation'" label="期望合作方式">{{ demand.partnershipMode || '—' }}</t-descriptions-item>
-          <t-descriptions-item label="预期交付截止日">{{ demand.period }}</t-descriptions-item>
-          <t-descriptions-item label="报名截止时间">{{ demand.deadline }}</t-descriptions-item>
+          <t-descriptions-item label="预期交付截止日">{{ demand.period || '—' }}</t-descriptions-item>
+          <t-descriptions-item label="报名截止时间">{{ demand.deadline || '—' }}</t-descriptions-item>
           <t-descriptions-item v-if="demand.status === 'scheduled' && demand.scheduledAt" label="定时发布时间">
             {{ demand.scheduledAt }}（到点自动发布）
           </t-descriptions-item>
@@ -345,8 +361,8 @@ onMounted(load)
           <t-tab-panel value="respondents" label="响应记录">
             <div class="tab-body">
               <t-table
-                row-key="name"
-                :data="demand.respondents"
+                row-key="rowKey"
+                :data="respondentRows"
                 :columns="respondentColumns"
                 empty="暂无响应记录"
               >
@@ -407,16 +423,17 @@ onMounted(load)
 }
 
 .head-name {
-  font-size: 18px;
+  margin: 0;
+  font-size: 20px;
   font-weight: 600;
-  line-height: 26px;
+  line-height: 28px;
   color: var(--td-text-color-primary);
 }
 
 .visibility-row {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: 8px;
   flex-wrap: wrap;
 }
 

@@ -1,15 +1,18 @@
 <script setup lang="ts">
 import { computed, onMounted, reactive, ref } from 'vue'
-import { Button, Input, NoticeBar, Tag, Toast } from 'tdesign-mobile-vue'
+import { Button, Form, FormItem, Input, NoticeBar, Toast } from 'tdesign-mobile-vue'
+import type { FormInstanceFunctions, FormRules } from 'tdesign-mobile-vue'
 import { fetchRealName, submitRealName } from '@/api/me'
 import { ApiError } from '@/api/http'
 import EmptyBlock from '@/components/shared/EmptyBlock.vue'
+import StateTag from '@/components/shared/StateTag.vue'
 import ListSkeleton from '@/components/ListSkeleton.vue'
 import { useUnsavedGuard } from '@/composables/useUnsavedGuard'
 import { useConfigStore } from '@/stores/config'
 
 /* 实名核验（P1）：后台启用权威二要素核验并测试联通时展示「实名认证」，否则为「身份信息登记」；
- * 未完成 → 姓名 + 身份证号提交；已完成 → 脱敏展示（修改需联系运营）。 */
+ * 未完成 → 姓名 + 身份证号提交；已完成 → 脱敏展示（修改需联系运营）。
+ * v46：校验迁移到 t-form/rules——错误内联在字段下方，提交失败自动滚动到首个错误字段。 */
 const configStore = useConfigStore()
 const label = computed(() => configStore.realnameLabel)
 const isVerifiedMode = computed(() => configStore.realnameMode === 'verified')
@@ -37,29 +40,23 @@ onMounted(load)
 
 const form = reactive({ realName: '', citizenId: '' })
 const submitting = ref(false)
+const formRef = ref<FormInstanceFunctions>()
 const canSubmit = computed(() => !submitting.value)
 useUnsavedGuard(() => !verified.value && Boolean(form.realName.trim() || form.citizenId.trim()))
 
-const errors = reactive({ realName: '', citizenId: '' })
+const rules: FormRules<typeof form> = {
+  realName: [{ required: true, message: '请输入真实姓名' }],
+  citizenId: [
+    { required: true, message: '请输入正确的身份证号' },
+    { validator: (val: string) => !val.trim() || /^\d{17}[\dXx]$/.test(val.trim()), message: '请输入正确的身份证号' },
+  ],
+}
 
 async function onSubmit() {
   if (submitting.value) return
-  errors.realName = ''
-  errors.citizenId = ''
-  if (!form.realName.trim()) {
-    errors.realName = '请输入真实姓名'
-    Toast(errors.realName)
-    return
-  }
-  const citizenId = form.citizenId.trim()
-  if (!/^\d{17}[\dXx]$/.test(citizenId)) {
-    errors.citizenId = '请输入正确的身份证号'
-    Toast(errors.citizenId)
-    return
-  }
   submitting.value = true
   try {
-    await submitRealName({ realName: form.realName.trim(), citizenId })
+    await submitRealName({ realName: form.realName.trim(), citizenId: form.citizenId.trim() })
     Toast(isVerifiedMode.value ? '实名认证已完成' : '身份信息登记已完成')
     await load()
   } catch (e) {
@@ -67,6 +64,11 @@ async function onSubmit() {
   } finally {
     submitting.value = false
   }
+}
+
+function onRealNameSubmit({ validateResult }: { validateResult: unknown }) {
+  /* 校验失败：字段级错误已内联展示，scroll-to-first-error 负责滚动定位 */
+  if (validateResult === true) void onSubmit()
 }
 </script>
 
@@ -79,7 +81,7 @@ async function onSubmit() {
       <section class="m-card">
         <div class="sec-head">
           <h2 class="sec-title no-margin">{{ label }}</h2>
-          <Tag size="small" variant="light" theme="success">{{ isVerifiedMode ? '已认证' : '已登记' }}</Tag>
+          <StateTag kind="realname" :value="isVerifiedMode ? 'verified' : 'registered'" />
         </div>
         <div class="read-row">
           <span class="read-label">真实姓名</span>
@@ -108,19 +110,25 @@ async function onSubmit() {
         :content="isVerifiedMode ? '完成实名认证后可享受完整社区服务（企业合作、空间预约等）。' : '完成身份信息登记后可享受完整社区服务（企业合作、空间预约等）。'"
       />
       <section class="m-card">
-        <div class="field">
-          <label>真实姓名</label>
-          <Input v-model="form.realName" :maxlength="20" placeholder="请输入与证件一致的姓名…" clearable />
-          <p v-if="errors.realName" class="field-error">{{ errors.realName }}</p>
-        </div>
-        <div class="field">
-          <label>身份证号</label>
-          <Input v-model="form.citizenId" :maxlength="18" placeholder="请输入 18 位身份证号…" clearable />
-          <p v-if="errors.citizenId" class="field-error">{{ errors.citizenId }}</p>
-        </div>
-        <Button class="mobile-sticky-action" theme="primary" size="large" block :disabled="!canSubmit" :loading="submitting" @click="onSubmit">
-          {{ submitting ? '提交中…' : (isVerifiedMode ? '提交认证' : '提交登记') }}
-        </Button>
+        <Form
+          ref="formRef"
+          class="realname-form"
+          :data="form"
+          :rules="rules"
+          label-align="top"
+          scroll-to-first-error="smooth"
+          @submit="onRealNameSubmit"
+        >
+          <FormItem label="真实姓名" name="realName">
+            <Input v-model="form.realName" :maxlength="20" placeholder="请输入与证件一致的姓名…" clearable />
+          </FormItem>
+          <FormItem label="身份证号" name="citizenId">
+            <Input v-model="form.citizenId" inputmode="numeric" :maxlength="18" placeholder="请输入 18 位身份证号…" clearable />
+          </FormItem>
+          <Button class="mobile-sticky-action" theme="primary" size="large" block type="submit" :disabled="!canSubmit" :loading="submitting">
+            {{ submitting ? '提交中…' : (isVerifiedMode ? '提交认证' : '提交登记') }}
+          </Button>
+        </Form>
       </section>
       <p class="tip">
         {{ isVerifiedMode
@@ -157,21 +165,23 @@ async function onSubmit() {
   margin-bottom:0;
 }
 
-.field {
-  margin-bottom:var(--app-space-7);
+/* t-form-item 默认左右布局 + 底部 hairline；本页沿用「标签在上、白卡内联」的既有版式 */
+.realname-form :deep(.t-form__item) {
+  padding: 0;
+  margin: 0 0 var(--app-space-7);
+  border-bottom: none;
 }
 
-.field label {
-  display: block;
-  margin-bottom:var(--app-space-3);
+.realname-form :deep(.t-form__label) {
+  width: auto;
+  padding: 0;
+  margin-bottom: var(--app-space-3);
   font-size: var(--app-font-caption);
   color: var(--td-text-color-secondary);
 }
 
-.field-error {
-  margin:var(--app-space-3) 0 0;
-  font-size: var(--app-font-caption);
-  color: var(--td-error-color);
+.realname-form :deep(.t-form__controls) {
+  margin: 0;
 }
 
 .read-row {

@@ -9,13 +9,13 @@ export interface ActivationStep {
   path: string
 }
 
-/* 新手任务默认展开；折叠只影响当前展示，永久隐藏需单独确认。 */
+/* 新手任务默认折叠（v49）：先呈现「新手任务」标题行，展开后再看任务；永久隐藏需单独确认。 */
 defineProps<{ steps: ActivationStep[] }>()
 const emit = defineEmits<{ dismiss: [] }>()
 
 const PANEL_VALUE = 'activation-tasks'
 const PANEL_CONTENT_ID = 'activation-checklist-content'
-const expandedPanels = ref<Array<string | number>>([PANEL_VALUE])
+const expandedPanels = ref<Array<string | number>>([])
 const confirmVisible = ref(false)
 const isExpanded = () => expandedPanels.value.includes(PANEL_VALUE)
 

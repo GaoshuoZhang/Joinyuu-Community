@@ -11,7 +11,12 @@ const props = defineProps<{
   scheduledAt?: string
   /** 报名开关（entity 为 event 且 value 为 published 时，label 拼接 报名中/暂停报名） */
   enrollmentOpen?: boolean
+  /** 标签尺寸：列表用默认 medium，抽屉/窄容器传 small；不传时保持 t-tag 默认尺寸 */
+  size?: 'small' | 'medium' | 'large'
 }>()
+
+/* 词表未命中兜底文案：不把原始英文码直接暴露给使用者 */
+const UNKNOWN_LABEL = '未知状态'
 
 const isScheduled = computed(
   () =>
@@ -22,7 +27,7 @@ const isScheduled = computed(
 
 const conf = computed(() => {
   const entityMap = statusMap[props.entity] as Record<string, { label: string; theme: 'default' | 'primary' | 'success' | 'warning' | 'danger' }>
-  const base = entityMap[props.value] ?? { label: props.value, theme: 'default' as const }
+  const base = entityMap[props.value] ?? { label: UNKNOWN_LABEL, theme: 'default' as const }
   if (props.entity === 'event' && props.value === 'published') {
     return { ...base, label: `已发布（${props.enrollmentOpen ? '报名中' : '暂停报名'}）` }
   }
@@ -32,7 +37,7 @@ const conf = computed(() => {
 
 <template>
   <t-tooltip v-if="isScheduled" :content="`到点自动发布：${scheduledAt}`">
-    <t-tag :theme="conf.theme" variant="light">{{ scheduledAt }}</t-tag>
+    <t-tag :theme="conf.theme" variant="light" :size="size">{{ scheduledAt }}</t-tag>
   </t-tooltip>
-  <t-tag v-else :theme="conf.theme" variant="light">{{ conf.label }}</t-tag>
+  <t-tag v-else :theme="conf.theme" variant="light" :size="size">{{ conf.label }}</t-tag>
 </template>

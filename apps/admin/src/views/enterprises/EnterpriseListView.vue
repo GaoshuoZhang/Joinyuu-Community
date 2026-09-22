@@ -2,20 +2,21 @@
 import { computed, onMounted, reactive, ref } from 'vue'
 import { useListQueryState } from '@/utils/listQuery'
 import { useRouter } from 'vue-router'
-import { AddIcon, SearchIcon, DownloadIcon } from 'tdesign-icons-vue-next'
-import { MessagePlugin } from 'tdesign-vue-next'
+import { AddIcon, SearchIcon } from 'tdesign-icons-vue-next'
 import PageHeader from '@/components/PageHeader.vue'
+import ExportButton from '@/components/ExportButton.vue'
+import ListEmptyState from '@/components/ListEmptyState.vue'
 import StatusTag from '@/components/StatusTag.vue'
 import EnterpriseFormDialog from '@/components/EnterpriseFormDialog.vue'
 import ColumnController from '@/components/ColumnController.vue'
 import { fetchEnterprises } from '@/api/enterprises'
 import ListErrorState from '@/components/ListErrorState.vue'
 import { dictFallback, fetchDictEntries } from '@/api/dicts'
-import { exportCsv, statusLabel } from '@/utils/exportCsv'
+import { statusLabel } from '@/utils/exportCsv'
 import type { Enterprise } from '@/types'
 
 const router = useRouter()
-const loading = ref(false)
+const loading = ref(true)
 const loadError = ref('')
 const list = ref<Enterprise[]>([])
 const total = ref(0)
@@ -49,7 +50,7 @@ const columns = [
   { colKey: 'level', title: '企业等级', width: 130, cell: 'level' , ellipsis: true},
   { colKey: 'settledAt', title: '入驻时间', width: 120, cell: 'settledAt' , ellipsis: true},
   { colKey: 'status', title: '状态', width: 100, cell: 'status' , ellipsis: true},
-  { colKey: 'op', title: '操作', width: 80, cell: 'op' },
+  { colKey: 'op', title: '操作', width: 90, cell: 'op' },
 ]
 
 /* 列配置：本地持久化显隐/顺序 */
@@ -118,23 +119,26 @@ function openCreate() {
   formVisible.value = true
 }
 
-/* 导出当前页社区企业列表为 CSV */
-function onExport() {
-  exportCsv(
-    '社区企业列表',
-    ['编号', '企业名称', '行业', '规模', '入驻类型', '企业等级', '企业状态', '入驻时间'],
-    list.value.map((e) => [
-      e.id,
-      `${e.name} [${e.id}]`,
-      e.industry,
-      e.size,
-      e.leaseType,
-      e.level ? `Lv.${e.level}${e.levelName ? ` ${e.levelName}` : ''}` : '—',
-      statusLabel('enterprise', e.status),
-      e.settledAt ?? '—',
-    ]),
-  )
-  MessagePlugin.success(`已导出当前页 ${list.value.length} 条数据`)
+/* 导出配置 */
+const exportHeaders = ['编号', '企业名称', '行业', '规模', '入驻类型', '企业等级', '企业状态', '入驻时间']
+
+function mapRow(e: Enterprise): (string | number)[] {
+  return [
+    e.id,
+    `${e.name} [${e.id}]`,
+    e.industry,
+    e.size,
+    e.leaseType,
+    e.level ? `Lv.${e.level}${e.levelName ? ` ${e.levelName}` : ''}` : '—',
+    statusLabel('enterprise', e.status),
+    e.settledAt ?? '—',
+  ]
+}
+
+const pageExportRows = computed(() => list.value.map(mapRow))
+
+function fetchAllForExport(page: number, pageSize: number) {
+  return fetchEnterprises({ ...query, page, pageSize })
 }
 
 const { syncQuery } = useListQueryState(query, load)
@@ -163,10 +167,13 @@ onMounted(() => {
           storage-key="enterprises"
           :columns="columns.map((c) => ({ key: c.colKey, title: c.title }))"
         />
-        <t-button variant="outline" @click="onExport">
-          <template #icon><DownloadIcon /></template>
-          导出
-        </t-button>
+        <ExportButton
+          filename="社区企业列表"
+          :headers="exportHeaders"
+          :rows="pageExportRows"
+          :fetch-all="fetchAllForExport"
+          :map-row="mapRow"
+        />
         <t-button theme="primary" v-permission="'perm:enterprise:create'" @click="openCreate">
           <template #icon><AddIcon /></template>
           新增企业
@@ -175,30 +182,27 @@ onMounted(() => {
     </PageHeader>
 
     <div class="page-filter-bar">
-      <t-input
+      <t-input class="ctl-w-xl"
         v-model="query.keyword"
         placeholder="搜索企业名称/ID…"
         clearable
-        style="width: 220px"
         @enter="onSearch"
       />
-      <t-select
+      <t-select class="ctl-w-md"
         v-model="query.industry"
         label="行业"
         :options="industryOptions"
         clearable
-        style="width: 170px"
         @change="onSearch"
       />
-      <t-select
+      <t-select class="ctl-w-md"
         v-model="query.status"
         label="状态"
         :options="statusOptions"
         clearable
-        style="width: 150px"
         @change="onSearch"
       />
-      <t-button theme="primary" @click="onSearch">
+      <t-button @click="onSearch">
         <template #icon><SearchIcon /></template>
         查询
       </t-button>
@@ -217,7 +221,7 @@ onMounted(() => {
         :columns="visibleColumns"
         :loading="loading"
         :pagination="pagination"
-        empty="暂无企业"
+        :row-attributes="{ style: { cursor: 'pointer' } }"
         @page-change="onPageChange"
         @row-click="({ row }: { row: Enterprise }) => goDetail(row)"
       >
@@ -235,7 +239,6 @@ onMounted(() => {
           <span v-else>—</span>
         </template>
         <template #settledAt="{ row }">{{ row.settledAt ?? '—' }}</template>
-        
         <template #status="{ row }">
           <StatusTag entity="enterprise" :value="row.status" />
         </template>
@@ -243,6 +246,10 @@ onMounted(() => {
           <div class="op-cell" @click.stop>
             <t-button variant="text" size="small" @click="goDetail(row)">详情</t-button>
           </div>
+        </template>
+
+        <template #empty>
+          <ListEmptyState :query="query" description="暂无企业" @clear="onReset" />
         </template>
       </t-table>
     </div>
@@ -263,7 +270,6 @@ onMounted(() => {
   font-weight: 600;
   color: var(--td-brand-color);
   background: var(--td-brand-color-1);
-  border-radius: var(--td-radius-medium);
 }
 
 .ent-meta {
@@ -275,19 +281,16 @@ onMounted(() => {
 
 .ent-name {
   font-size: 14px;
+  font-weight: 500;
   color: var(--td-text-color-primary);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-:deep(.t-table__row) {
-  cursor: pointer;
-}
-
 .op-cell {
   display: inline-flex;
   align-items: center;
-  gap: 4px;
+  gap: 8px;
 }
 </style>

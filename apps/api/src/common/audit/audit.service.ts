@@ -3,6 +3,10 @@ import type { Prisma } from '@prisma/client'
 import { PrismaService } from '../prisma/prisma.service'
 import { IdGeneratorService } from '../id-generator/id-generator.service'
 import { formatNow } from '../utils/time'
+import { currentAuditContext } from './audit-context'
+
+/** 审计快照单字段文本上限：列表接口与 CSV 导出共用，超出截断（避免大 JSON 撑爆响应/单元格） */
+export const AUDIT_SNAPSHOT_MAX_CHARS = 4096
 
 export interface AuditInput {
   module: string
@@ -28,17 +32,19 @@ export class AuditService {
   ) {}
 
   async record(input: AuditInput): Promise<void> {
+    /* 缺省值来自请求上下文（中间件写入）：显式传入优先；无请求上下文（定时任务）时 ip 为空、operator 为「系统」 */
+    const ctx = currentAuditContext()
     const id = await this.ids.next('AL')
     await this.prisma.auditLog.create({
       data: {
         id,
-        operator: input.operator ?? '系统',
+        operator: input.operator ?? ctx?.request?.user?.name ?? '系统',
         module: input.module,
         action: input.action,
         target: input.target,
         detail: input.detail,
         at: formatNow(),
-        ip: input.ip,
+        ip: input.ip ?? ctx?.ip,
         before: input.before ?? undefined,
         after: input.after ?? undefined,
       },

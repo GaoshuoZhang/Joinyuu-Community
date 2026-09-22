@@ -1,8 +1,8 @@
 <script setup lang="ts">
-import { computed, onMounted, reactive, ref } from 'vue'
+import { computed, nextTick, onMounted, reactive, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useQueryTab } from '@/utils/navigation'
-import { MessagePlugin } from 'tdesign-vue-next'
+import { MessagePlugin, type FormProps } from 'tdesign-vue-next'
 import { ArrowLeftIcon } from 'tdesign-icons-vue-next'
 import StatusTag from '@/components/StatusTag.vue'
 import EventFormDialog from '@/components/EventFormDialog.vue'
@@ -221,17 +221,52 @@ function isReviewing(row: EventEnrollment, status: 'approved' | 'rejected') {
   return reviewing.value === `${row.userId}:${status}`
 }
 
-async function onReview(row: EventEnrollment, status: 'approved' | 'rejected') {
+async function onReview(row: EventEnrollment, status: 'approved') {
   if (!event.value) return
-  reviewing.value = `${row.userId}:${status}`
+  reviewing.value = `${row.userId}:approved`
   try {
     await reviewEventEnrollment(event.value.id, row.userId, status)
-    MessagePlugin.success(status === 'approved' ? '已通过该报名' : '已驳回该报名')
+    MessagePlugin.success('已通过该报名')
     await load(true)
   } catch {
     MessagePlugin.error('操作失败，请重试')
   } finally {
     reviewing.value = ''
+  }
+}
+
+/* 驳回必填原因（与报名审核列表页一致）：弹窗填写后提交，原因随通知下发申请人并记入审计 */
+const rejectVisible = ref(false)
+const rejectRow = ref<EventEnrollment | null>(null)
+const rejectFormRef = ref()
+const rejectForm = reactive({ reason: '' })
+const rejectSubmitting = ref(false)
+const rejectRules: FormProps['rules'] = {
+  reason: [{ required: true, message: '请填写驳回原因', trigger: 'submit' }],
+}
+
+function openReject(row: EventEnrollment) {
+  rejectRow.value = row
+  rejectForm.reason = ''
+  rejectVisible.value = true
+  nextTick(() => rejectFormRef.value?.clearValidate())
+}
+
+async function onConfirmReject() {
+  const row = rejectRow.value
+  if (!event.value || !row) return
+  const valid = await rejectFormRef.value.validate()
+  if (valid !== true) return
+  rejectSubmitting.value = true
+  try {
+    await reviewEventEnrollment(event.value.id, row.userId, 'rejected', rejectForm.reason)
+    MessagePlugin.success('已驳回该报名')
+    rejectVisible.value = false
+    await load(true)
+  } catch (e) {
+    MessagePlugin.error(e instanceof Error ? e.message : '操作失败，请重试')
+  } finally {
+    rejectSubmitting.value = false
   }
 }
 
@@ -292,12 +327,10 @@ onMounted(() => load())
 
 <template>
   <div class="event-detail page-fade-in">
-    <div class="back-row">
-      <t-button variant="text" @click="router.back()">
-        <template #icon><ArrowLeftIcon /></template>
-        返回
-      </t-button>
-    </div>
+    <t-button variant="text" theme="default" class="back-btn" @click="router.back()">
+      <template #icon><ArrowLeftIcon /></template>
+      返回
+    </t-button>
 
     <t-skeleton
       v-if="loading"
@@ -310,7 +343,7 @@ onMounted(() => load())
         <div class="head-main">
           <div class="head-info">
             <div class="head-title-row">
-              <h3 class="head-title">{{ event.title }}</h3>
+              <h3 class="head-name">{{ event.title }}</h3>
               <t-tag variant="light">{{ event.type }}</t-tag>
               <StatusTag
                 entity="event"
@@ -358,8 +391,8 @@ onMounted(() => load())
           <div class="head-actions">
             <template v-if="!isArchived">
               <template v-if="event.status === 'pending_release'">
-                <t-button variant="outline" @click="editVisible = true">编辑</t-button>
                 <t-button theme="primary" :loading="acting === 'publish-now'" @click="onPublishNow">立即发布</t-button>
+                <t-button variant="outline" @click="editVisible = true">编辑</t-button>
                 <t-button variant="outline" @click="openSchedule">定时发布</t-button>
                 <t-popconfirm content="确认取消该活动？取消后不可恢复" @confirm="onCancel">
                   <t-button variant="outline" theme="danger" :loading="acting === 'cancel'">取消活动</t-button>
@@ -423,7 +456,10 @@ onMounted(() => load())
             </t-tag>
           </t-descriptions-item>
           <t-descriptions-item label="报名截止时间">
-            {{ event.enrollmentDeadline || '不限（活动开始前均可报名）' }}
+            <t-tooltip v-if="!event.enrollmentDeadline" content="不限，活动开始前均可报名">
+              <span>—</span>
+            </t-tooltip>
+            <template v-else>{{ event.enrollmentDeadline }}</template>
           </t-descriptions-item>
           <t-descriptions-item label="签到范围">
             {{ event.venueLat && event.venueLng ? `${event.venueLat}, ${event.venueLng}（${event.checkinRadiusM ?? 200} 米）` : '未启用地理围栏' }}
@@ -489,9 +525,7 @@ onMounted(() => load())
                     <t-popconfirm content="确认通过该报名？" @confirm="onReview(row, 'approved')">
                       <t-button variant="text" :loading="isReviewing(row, 'approved')">通过</t-button>
                     </t-popconfirm>
-                    <t-popconfirm content="确认驳回该报名？" @confirm="onReview(row, 'rejected')">
-                      <t-button variant="text" :loading="isReviewing(row, 'rejected')">驳回</t-button>
-                    </t-popconfirm>
+                    <t-button variant="text" theme="danger" @click="openReject(row)">驳回</t-button>
                   </template>
                   <span v-else class="op-none">—</span>
                 </template>
@@ -546,7 +580,7 @@ onMounted(() => load())
           <t-tab-panel value="tickets" label="票务核销">
             <div class="tab-body">
               <div class="ticket-tools">
-                <t-input v-model="redeemCode" placeholder="输入 8 位核销码…" clearable style="width: 260px" @enter="onRedeemTicket" />
+                <t-input class="ctl-w-xl" v-model="redeemCode" placeholder="输入 8 位核销码…" clearable @enter="onRedeemTicket" />
                 <t-button theme="primary" :loading="redeeming" @click="onRedeemTicket">核销</t-button>
                 <t-button variant="outline" @click="exportTickets">导出票务名单</t-button>
               </div>
@@ -555,11 +589,11 @@ onMounted(() => load())
                 row-key="ticketNo"
                 :data="tickets"
                 :columns="[
-                  { colKey: 'ticketNo', title: '票号' },
-                  { colKey: 'redeemCode', title: '核销码' },
-                  { colKey: 'userName', title: '报名人' },
-                  { colKey: 'userId', title: '用户编号' },
-                  { colKey: 'redeemedAt', title: '核销状态', cell: 'redeemedAt' },
+                  { colKey: 'ticketNo', title: '票号', width: 160, ellipsis: true },
+                  { colKey: 'redeemCode', title: '核销码', width: 160, ellipsis: true },
+                  { colKey: 'userName', title: '报名人', width: 160, ellipsis: true },
+                  { colKey: 'userId', title: '用户编号', width: 160, ellipsis: true },
+                  { colKey: 'redeemedAt', title: '核销状态', cell: 'redeemedAt', width: 160, ellipsis: true },
                 ]"
               >
                 <template #redeemedAt="{ row }">
@@ -590,7 +624,7 @@ onMounted(() => load())
     <!-- 待发布：定时发布对话框 -->
     <EventScheduleDialog v-model:visible="scheduleVisible" :event="event" @success="() => load(true)" />
 
-    <t-dialog v-model:visible="rescheduleVisible" header="活动改期" width="560px" :confirm-btn="null" :cancel-btn="null">
+    <t-dialog v-model:visible="rescheduleVisible" header="活动改期" width="560px">
       <t-form :data="rescheduleForm" label-align="top">
         <div class="reschedule-grid">
           <t-form-item label="新开始时间" name="startTime">
@@ -609,13 +643,47 @@ onMounted(() => load())
         <t-button theme="primary" :loading="acting === 'reschedule'" @click="onReschedule">确认改期并通知</t-button>
       </template>
     </t-dialog>
+
+    <!-- 驳回原因对话框：必填，原因随站内通知下发申请人并记入审计 -->
+    <t-dialog
+      v-model:visible="rejectVisible"
+      header="驳回报名"
+      width="480px"
+      :close-on-overlay-click="!rejectSubmitting"
+    >
+      <p class="reject-tip">
+        {{ rejectRow ? `驳回 ${rejectRow.name} 的报名` : '' }}原因将通过站内通知告知申请人。
+      </p>
+      <t-form ref="rejectFormRef" :data="rejectForm" :rules="rejectRules">
+        <t-form-item name="reason">
+          <t-textarea
+            v-model="rejectForm.reason"
+            :maxlength="200"
+            :autosize="{ minRows: 3, maxRows: 5 }"
+            placeholder="请填写驳回原因（必填，将通知申请人）…"
+          />
+        </t-form-item>
+      </t-form>
+      <template #footer>
+        <div class="dialog-footer">
+          <t-button variant="text" theme="default" @click="rejectVisible = false">取消</t-button>
+          <t-button theme="danger" :loading="rejectSubmitting" @click="onConfirmReject">确认驳回</t-button>
+        </div>
+      </template>
+    </t-dialog>
   </div>
 </template>
 
 <style scoped>
-.back-row {
+.reject-tip {
+  margin: 0 0 12px;
+  font-size: 12px;
+  line-height: 22px;
+  color: var(--td-text-color-secondary);
+}
+
+.back-btn {
   margin-bottom: 12px;
-  margin-left: -8px;
 }
 
 .head-card {
@@ -642,17 +710,18 @@ onMounted(() => load())
   margin-bottom: 8px;
 }
 
-.head-title {
+.head-name {
   margin: 0;
-  font-size: 18px;
+  font-size: 20px;
   font-weight: 600;
+  line-height: 28px;
   color: var(--td-text-color-primary);
 }
 
 .visibility-row {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: 8px;
   flex-wrap: wrap;
 }
 
@@ -712,7 +781,7 @@ onMounted(() => load())
 
 .checkin-summary {
   margin-bottom: 12px;
-  font-size: 13px;
+  font-size: 12px;
   color: var(--td-text-color-secondary);
 }
 
@@ -736,5 +805,17 @@ onMounted(() => load())
   display: grid;
   grid-template-columns: 1fr 1fr;
   gap: 16px;
+}
+
+/* 窄屏：头部信息与操作区纵向堆叠、操作按钮换行，避免按钮被挤压溢出 */
+@media (max-width: 767px) {
+  .head-main {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .head-actions {
+    flex-wrap: wrap;
+  }
 }
 </style>

@@ -2,7 +2,7 @@
 import { defineAsyncComponent, nextTick, reactive, ref, watch } from 'vue'
 import { MessagePlugin } from 'tdesign-vue-next'
 import type { FormProps } from 'tdesign-vue-next'
-import { focusFirstInvalid } from '@/utils/form'
+import { focusFirstInvalid, useDialogDirtyGuard } from '@/utils/form'
 import { createArticle, fetchArticleColumns, updateArticle, updateSubmissionArticle } from '@/api/contents'
 import { fetchPublisherOptions } from '@/api/demands'
 import type { Article, ArticleChannel } from '@/types'
@@ -44,6 +44,9 @@ const form = reactive({
   /** 作者选中值（U:uid / E:id，空 = 未选） */
   authorValue: '',
 })
+
+/* 未保存保护：打开时记录基线，关闭前有改动需确认 */
+const { markBaseline, guardClose } = useDialogDirtyGuard(form)
 
 function resetForm() {
   if (props.mode === 'edit' && props.article) {
@@ -107,6 +110,7 @@ watch(
       }
     }
     /* 清除上次会话残留的校验红框（仅清状态，不动表单值） */
+    markBaseline()
     nextTick(() => formRef.value?.clearValidate())
   },
 )
@@ -188,7 +192,8 @@ async function onConfirm() {
 }
 
 function onClose() {
-  emit('update:visible', false)
+  /* 未保存保护：有改动时弹确认（见 useDialogDirtyGuard） */
+  guardClose(() => emit('update:visible', false))
 }
 </script>
 
@@ -257,12 +262,6 @@ function onClose() {
   display: grid;
   grid-template-columns: 1fr 1fr;
   gap: 0 16px;
-}
-
-.dialog-footer {
-  display: flex;
-  justify-content: flex-end;
-  gap: 8px;
 }
 
 .switch-tip {

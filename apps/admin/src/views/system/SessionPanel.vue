@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import ListErrorState from '@/components/ListErrorState.vue'
+import ListEmptyState from '@/components/ListEmptyState.vue'
 import { computed, onMounted, ref } from 'vue'
 import { MessagePlugin } from 'tdesign-vue-next'
 import { SearchIcon } from 'tdesign-icons-vue-next'
@@ -36,6 +37,9 @@ function onResetQuery() {
   keyword.value = ''
   appliedKeyword.value = ''
 }
+
+/* 空态筛选判定 */
+const filterState = computed(() => ({ keyword: appliedKeyword.value }))
 
 const columns = [
   { colKey: 'username', title: '账号', cell: 'username', width: 160 , ellipsis: true},
@@ -87,12 +91,12 @@ onMounted(load)
 </script>
 
 <template>
-  <div class="session-panel page-fade-in">
+  <div class="session-panel">
     <ListErrorState v-if="loadError" :message="loadError" :loading="loading" @retry="() => load()" />
     <PageHeader title="在线会话" description="当前在线的管理员会话；强制下线后对应令牌立即失效" />
 
     <div class="page-filter-bar">
-      <t-input v-model="keyword" class="filter-keyword" placeholder="搜索账号/姓名/IP…" clearable @enter="onQuery" />
+      <t-input v-model="keyword" class="ctl-w-xl" placeholder="搜索账号/姓名/IP…" clearable @enter="onQuery" />
       <t-button theme="primary" variant="outline" @click="onQuery">
         <template #icon><SearchIcon /></template>
         查询
@@ -101,51 +105,46 @@ onMounted(load)
         重置
       </t-button>
       <t-popconfirm content="确认强制下线其余全部在线会话？你当前的会话将保留。" @confirm="onKickAll">
-        <t-button variant="outline" theme="danger" class="filter-kick-all" :loading="kickingAll">
+        <t-button variant="outline" theme="danger" class="toolbar-right" :loading="kickingAll">
           一键强制下线
         </t-button>
       </t-popconfirm>
     </div>
 
-    <div class="page-card">
-      <t-table
-        row-key="jti"
-        table-layout="fixed"
-        hover
-        resizable
-        :data="filtered"
-        :columns="columns"
-        :loading="loading"
-        empty="暂无在线会话"
-      >
-        <template #username="{ row }">
-          <div class="user-cell">
-            <span class="user-name">{{ row.username }}</span>
-            <span class="user-sub">{{ row.name }}</span>
-          </div>
-        </template>
-        <template #op="{ row }">
-          <div class="op-cell" @click.stop>
-            <t-popconfirm content="确认强制下线该会话？" @confirm="onKick(row)">
-              <t-button variant="text" size="small" theme="danger" :loading="kicking === row.jti">
-                强制下线
-              </t-button>
-            </t-popconfirm>
-          </div>
-        </template>
-      </t-table>
-    </div>
+    <!-- 卡片由聚合壳（AccountRoleView）提供，面板内不再嵌套 page-card -->
+    <t-table
+      row-key="jti"
+      table-layout="fixed"
+      hover
+      resizable
+      :data="filtered"
+      :columns="columns"
+      :loading="loading"
+    >
+      <template #username="{ row }">
+        <div class="user-cell">
+          <span class="user-name">{{ row.username }}</span>
+          <span class="user-sub">{{ row.name }}</span>
+        </div>
+      </template>
+      <template #op="{ row }">
+        <div class="op-cell" @click.stop>
+          <t-popconfirm content="确认强制下线该会话？" @confirm="onKick(row)">
+            <t-button variant="text" size="small" theme="danger" :loading="kicking === row.jti">
+              强制下线
+            </t-button>
+          </t-popconfirm>
+        </div>
+      </template>
+
+      <template #empty>
+        <ListEmptyState :query="filterState" description="暂无在线会话" @clear="onResetQuery" />
+      </template>
+    </t-table>
   </div>
 </template>
 
 <style scoped>
-.filter-keyword {
-  width: 240px;
-}
-.filter-kick-all {
-  margin-left: auto;
-}
-
 .user-cell {
   display: flex;
   flex-direction: column;

@@ -201,11 +201,12 @@ function goOrders() {
 }
 
 .m-goods.has-fixed-actions {
-  padding-bottom: calc(112px + env(safe-area-inset-bottom));
+  padding-bottom: var(--app-action-bar-clearance);
 }
 
+/* 售罄态操作栏比常态多一行「暂时缺货」说明（.hint），需要更高净空 */
 .m-goods.has-fixed-actions.sold-out-actions {
-  padding-bottom: calc(184px + env(safe-area-inset-bottom));
+  padding-bottom: var(--app-action-bar-clearance-lg);
 }
 
 .goods-actions {
@@ -231,10 +232,13 @@ function goOrders() {
   background: none;
 }
 
+/* 地址较多时弹层内部滚动，保证底部「管理收货地址」按钮始终可达 */
 .addr-sheet {
   display: flex;
   flex-direction: column;
   gap:var(--app-space-5);
+  max-height: 70vh;
+  overflow-y: auto;
   padding: var(--app-space-8) var(--app-space-8) calc(var(--app-space-8) + env(safe-area-inset-bottom));
 }
 
@@ -334,4 +338,3 @@ function goOrders() {
   color: var(--td-text-color-placeholder);
 }
 </style>
-tyle>

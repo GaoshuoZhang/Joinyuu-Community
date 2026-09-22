@@ -22,8 +22,8 @@ const columns = [
   { colKey: 'exp', title: '经验值', cell: 'exp', width: 100, resizable: true , ellipsis: true},
   { colKey: 'description', title: '说明', ellipsis: true, width: 260, resizable: true },
   { colKey: 'status', title: '状态', cell: 'status', width: 95 , ellipsis: true},
-  { colKey: 'updatedAt', title: '更新时间', width: 145, resizable: true , ellipsis: true},
-  { colKey: 'op', title: '操作', cell: 'op', width: 130 },
+  { colKey: 'updatedAt', title: '更新时间', width: 160, resizable: true , ellipsis: true},
+  { colKey: 'op', title: '操作', cell: 'op', width: 160 },
 ]
 
 async function load() {
@@ -102,11 +102,10 @@ onMounted(load)
       <template #actions><t-button variant="outline" @click="router.push('/rules/experience-records')">经验值发放记录</t-button></template>
     </PageHeader>
 
-    <div class="page-filter-bar">
-      <span class="panel-tip">
-        触发项为固定制度（不可新增/删除），完成对应行为时自动累积经验值（仅社区个体/社区企业身份持有经验值）；停用规则不影响已发放经验值。
-      </span>
-    </div>
+    <!-- 纯说明文案不是筛选条件：用 info 提示条承载，避免被误读为筛选区 -->
+    <t-alert theme="info" class="rule-note">
+      触发项为固定制度（不可新增/删除），完成对应行为时自动累积经验值（仅社区个体/社区企业身份持有经验值）；停用规则不影响已发放经验值。
+    </t-alert>
 
     <div class="page-card">
       <t-table
@@ -176,7 +175,7 @@ onMounted(load)
       </t-descriptions>
       <t-form ref="formRef" :data="form" :rules="rules" label-align="top">
         <t-form-item label="发放经验值（N）" name="exp">
-          <t-input-number v-model="form.exp" :min="1" theme="column" style="width: 100%" />
+          <t-input-number v-model="form.exp" :min="1" :decimal-places="0" theme="column" class="w-full" />
         </t-form-item>
       </t-form>
     </t-dialog>
@@ -184,38 +183,17 @@ onMounted(load)
 </template>
 
 <style scoped>
-.panel-tip {
-  font-size: 12px;
-  color: var(--td-text-color-secondary);
+.w-full {
+  width: 100%;
 }
 
-.cell-title {
-  font-weight: 500;
-  color: var(--td-text-color-primary);
-}
-
-.cell-sub {
-  margin-top: 2px;
-  font-size: 12px;
-  color: var(--td-text-color-secondary);
+.rule-note {
+  margin-bottom: 16px;
 }
 
 .exp-add {
-  color: var(--td-brand-color);
+  color: var(--td-success-color);
   font-weight: 600;
-}
-
-.op-cell {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-  flex-wrap: nowrap;
-}
-
-.dialog-footer {
-  display: flex;
-  justify-content: flex-end;
-  gap: 8px;
 }
 
 .rule-desc {

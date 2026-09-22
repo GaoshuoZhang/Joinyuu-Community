@@ -2,7 +2,10 @@
 import { Avatar, Tag } from 'tdesign-mobile-vue'
 import type { TalentMember } from '@/types'
 
-/* 人才库卡片：头像 + 姓名 + 角色 + 简介 + 技能标签。 */
+/* 人才库卡片：头像 + 姓名 + 简介 + 技能标签。
+ * v46：移除自造的「角色」主属性标签——人才主属性口径统一为「等级」（在名片 TalentCardView 展示）：
+ * 后端 GET /community/talents 实际下发 role 恒为空字符串，该标签在生产环境不渲染，
+ * 保留只会与名片形成两种主属性口径；本卡不做数据源与契约变更。 */
 defineProps<{ talent: TalentMember; to: string }>()
 </script>
 
@@ -13,7 +16,6 @@ defineProps<{ talent: TalentMember; to: string }>()
         <Avatar size="40px" :image="talent.avatar" class="talent-avatar">{{ talent.name.slice(0, 1) }}</Avatar>
         <h3 class="title name">{{ talent.name }}</h3>
       </span>
-      <Tag v-if="talent.role" class="role-tag" size="small" variant="light" theme="primary">{{ talent.role }}</Tag>
     </div>
     <p class="intro">{{ talent.intro }}</p>
     <div v-if="talent.skills.length" class="skills">
@@ -50,10 +52,6 @@ defineProps<{ talent: TalentMember; to: string }>()
 .talent-avatar {
   flex-shrink: 0;
   font-size: var(--app-font-subtitle);
-}
-
-.role-tag {
-  flex-shrink: 0;
 }
 
 .title {

@@ -1,10 +1,10 @@
 <script setup lang="ts">
 import { Skeleton } from 'tdesign-mobile-vue'
 
-/* v39 列表骨架屏：首次加载替代整页 Spinner（shared/ 需零组件库依赖，故放在 components 根目录）。 */
-withDefaults(defineProps<{ rows?: number; theme?: 'text' | 'paragraph' | 'avatar' | 'image' }>(), {
+/* v39 列表骨架屏：首次加载替代整页 Spinner（shared/ 需零组件库依赖，故放在 components 根目录）。
+ * 全仓调用方只传 rows，原来的 theme prop 无人使用，已删除（模板固定 theme="text"）。 */
+withDefaults(defineProps<{ rows?: number }>(), {
   rows: 3,
-  theme: 'paragraph',
 })
 </script>
 

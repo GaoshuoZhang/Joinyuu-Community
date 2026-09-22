@@ -1,7 +1,6 @@
 <script setup lang="ts">
 import { computed, markRaw, onBeforeUnmount, onMounted, reactive, ref, watch, type Component } from 'vue'
 import { useRouter } from 'vue-router'
-import { MessagePlugin } from 'tdesign-vue-next'
 import {
   AppIcon,
   Building1Icon,
@@ -28,7 +27,8 @@ import TrendChart from '@/components/TrendChart.vue'
 import { applicationTypeMap } from '@/constants/status'
 import { useAuthStore } from '@/stores/auth'
 import { fetchDashboard, fetchTrend, type DashboardData, type TrendPoint } from '@/api/dashboard'
-import { fetchHomeAnnouncement, type HomeAnnouncement } from '@/api/announcements'
+import { fetchAnnouncements } from '@/api/announcements'
+import type { Announcement } from '@/types'
 import { fetchUsers } from '@/api/users'
 import { fetchIndividuals } from '@/api/individuals'
 import { fetchEnterprises } from '@/api/enterprises'
@@ -56,6 +56,7 @@ const visibleTodos = computed(() => (data.value?.todos ?? []).filter((todo) => a
 /* ---------- 趋势区块：成员/需求/活动/积分，按 3/7/15/30 天区间展示（真实接口 dashboard/trend） ---------- */
 const trendLoading = ref(false)
 const trend = ref<TrendPoint[]>([])
+const trendError = ref('')
 const trendTab = ref<'members' | 'demands' | 'events' | 'points'>('members')
 const trendDays = ref(30)
 
@@ -94,10 +95,14 @@ async function loadTrend(days: number) {
   trendLoading.value = true
   try {
     const points = await fetchTrend(days)
-    if (current === trendVersion) trend.value = points
+    if (current === trendVersion) {
+      trend.value = points
+      trendError.value = ''
+    }
   } catch (error) {
     if (current === trendVersion) {
-      MessagePlugin.error(error instanceof Error ? error.message : '趋势数据加载失败')
+      /* 保留错误态而非仅 toast：否则失败后 trend 为空会被渲染成「暂无趋势数据」 */
+      trendError.value = error instanceof Error ? error.message : '趋势数据加载失败'
     }
   } finally {
     if (current === trendVersion) trendLoading.value = false
@@ -108,17 +113,21 @@ watch(trendDays, (d) => {
   loadTrend(d)
 })
 
-/* ---------- 系统公告（与内容管理中的首页公告单例保持同一数据源） ---------- */
-const announcements = ref<HomeAnnouncement[]>([])
+/* ---------- 系统公告（与内容管理的首页公告列表同源：取前 3 条已发布公告，启用优先） ---------- */
+const announcements = ref<Announcement[]>([])
 const announcementsLoading = ref(false)
+const announcementsError = ref('')
 
 async function loadAnnouncements() {
   announcementsLoading.value = true
   try {
-    const res = await fetchHomeAnnouncement()
-    announcements.value = res.enabled && res.id ? [res] : []
-  } catch {
-    /* 公告加载失败静默 */
+    /* 取前 3 条已发布公告（服务端已按「启用优先 + 发布时间倒序」排序），启用的那条排最前 */
+    const res = await fetchAnnouncements({ page: 1, pageSize: 3, status: 'published' })
+    announcements.value = res.list
+    announcementsError.value = ''
+  } catch (error) {
+    /* 失败需与「无公告」区分，否则会把接口异常显示成「暂无公告」 */
+    announcementsError.value = error instanceof Error ? error.message : '公告加载失败'
   } finally {
     announcementsLoading.value = false
   }
@@ -252,19 +261,23 @@ const quickEntries = computed(() =>
 )
 
 /* 平台数据：六域计数（全部用户/社区个体/社区企业/合作企业/进行中项目/资讯内容；
- * 与各列表分页 total 同口径，前端并行聚合，任一失败不阻塞卡片） */
+ * 与各列表分页 total 同口径，前端并行聚合；任一失败显示 “—” 而非 0，避免误读为“没有数据”，点击可重试） */
 interface PlatformStat {
   label: string
-  value: number
+  value: number | null
   icon: unknown
   route: string
   perm: string
 }
 
 const platformStats = ref<PlatformStat[]>([])
+const statsLoading = ref(false)
+const statsFailed = computed(() => platformStats.value.some((s) => s.value == null))
 
 async function loadPlatformStats() {
-  const count = (p: Promise<{ total: number }>) => p.then((r) => r.total).catch(() => 0)
+  if (statsLoading.value) return
+  statsLoading.value = true
+  const count = (p: Promise<{ total: number }>) => p.then((r) => r.total).catch(() => null)
   const [users, individuals, enterprises, externals, projects, articles] = await Promise.all([
     count(fetchUsers({ page: 1, pageSize: 1 })),
     count(fetchIndividuals({ page: 1, pageSize: 1 })),
@@ -281,6 +294,7 @@ async function loadPlatformStats() {
     { label: '进行中的项目', value: projects, icon: markRaw(AppIcon), route: '/projects', perm: '/projects' },
     { label: '资讯内容', value: articles, icon: markRaw(Edit2Icon), route: '/contents/publish', perm: '/contents/publish' },
   ].filter((stat) => auth.hasPerm(stat.perm))
+  statsLoading.value = false
 }
 
 /* ESC 关闭「编辑布局」弹层：t-popup 仅 trigger=focus 时内置 ESC 处理，click 触发需自行监听 */
@@ -300,8 +314,8 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onLayoutKeydown))
           trigger="click"
           placement="bottom-right"
           :show-arrow="false"
-          :overlay-style="{ padding: '0' }"
-          :overlay-inner-style="{ background: 'transparent', boxShadow: 'none', borderRadius: '0', padding: '0' }"
+          overlay-class-name="layout-popup"
+          overlay-inner-class-name="layout-popup-inner"
         >
           <t-button variant="outline">
             <template #icon><SettingIcon /></template>
@@ -319,7 +333,7 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onLayoutKeydown))
                   <div class="layout-controls">
                     <ChevronUpIcon class="layout-move" role="button" tabindex="0" :aria-label="`上移${CARD_TITLES[k]}`" @click="moveCard(k, -1)" @keydown.enter.space.prevent="moveCard(k, -1)" />
                     <ChevronDownIcon class="layout-move" role="button" tabindex="0" :aria-label="`下移${CARD_TITLES[k]}`" @click="moveCard(k, 1)" @keydown.enter.space.prevent="moveCard(k, 1)" />
-                    <t-switch :value="cardOn[k]" size="small" @change="(v: boolean) => toggleCard(k, v)" />
+                    <t-switch :value="cardOn[k]" size="small" :aria-label="`${CARD_TITLES[k]}显隐开关`" @change="(v: boolean) => toggleCard(k, v)" />
                   </div>
                 </div>
               </div>
@@ -357,22 +371,43 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onLayoutKeydown))
         <section v-show="isCardOn('stats') && platformStats.length" class="dash-block page-card" :style="cardStyle('stats')">
           <div class="panel-head">
             <h3 class="panel-title">平台数据</h3>
+            <t-button v-if="statsFailed" variant="text" size="small" :loading="statsLoading" @click="loadPlatformStats">
+              重试
+            </t-button>
           </div>
           <div class="stats-grid">
-            <t-link
-              v-for="item in platformStats"
-              :key="item.label"
-              class="stats-cell clickable"
-              :href="`#${item.route}`"
-              theme="default"
-              hover="color"
-            >
-              <component :is="item.icon" class="stats-icon" />
-              <div class="stats-cell-main">
-                <span class="stats-value">{{ item.value.toLocaleString('zh-CN') }}</span>
-                <span class="stats-label">{{ item.label }}</span>
+            <template v-for="item in platformStats" :key="item.label">
+              <!-- 加载失败：显示 “—” 而非 0，点击重试 -->
+              <div
+                v-if="item.value == null"
+                class="stats-cell is-failed"
+                role="button"
+                tabindex="0"
+                title="数据加载失败，点击重试"
+                @click="loadPlatformStats"
+                @keydown.enter.prevent="loadPlatformStats"
+                @keydown.space.prevent="loadPlatformStats"
+              >
+                <component :is="item.icon" class="stats-icon" />
+                <div class="stats-cell-main">
+                  <span class="stats-value">{{ statsLoading ? '…' : '—' }}</span>
+                  <span class="stats-label">{{ item.label }}</span>
+                </div>
               </div>
-            </t-link>
+              <t-link
+                v-else
+                class="stats-cell clickable"
+                :href="`#${item.route}`"
+                theme="default"
+                hover="color"
+              >
+                <component :is="item.icon" class="stats-icon" />
+                <div class="stats-cell-main">
+                  <span class="stats-value">{{ item.value.toLocaleString('zh-CN') }}</span>
+                  <span class="stats-label">{{ item.label }}</span>
+                </div>
+              </t-link>
+            </template>
           </div>
         </section>
 
@@ -381,11 +416,12 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onLayoutKeydown))
             <h3 class="panel-title">系统公告</h3>
             <t-link href="#/contents/announcements" theme="primary" hover="color">全部</t-link>
           </div>
-          <t-empty v-if="!announcements.length && !announcementsLoading" description="暂无公告" />
+          <ListErrorState v-if="announcementsError" :message="announcementsError" :loading="announcementsLoading" @retry="loadAnnouncements" />
+          <t-empty v-else-if="!announcements.length && !announcementsLoading" description="暂无公告" />
           <div v-else class="notice-list">
             <t-link theme="default" hover="color" v-for="a in announcements" :key="a.id" class="todo-item dash-item" href="#/contents/announcements">
               <div class="todo-main">
-                <t-tag theme="success" variant="light" size="small">已开启</t-tag>
+                <t-tag :theme="a.pinned ? 'success' : 'default'" variant="light" size="small">{{ a.pinned ? '已启用' : '未启用' }}</t-tag>
                 <span class="todo-title">{{ a.title }}</span>
               </div>
               <div class="todo-meta">
@@ -438,12 +474,12 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onLayoutKeydown))
             >
               <div class="event-main">
                 <span class="event-title">{{ event.title }}</span>
-                <t-tag variant="outline" size="small">{{ event.type }}</t-tag>
+                <t-tag variant="light" size="small">{{ event.type }}</t-tag>
               </div>
               <div class="event-meta">
                 <span><TimeIcon /> {{ event.startTime }}</span>
                 <span><LocationIcon /> {{ event.location }}</span>
-                <span>已报名 {{ event.enrollments.filter((e) => e.status === 'approved').length }}/{{ event.capacity }}</span>
+                <span class="enroll-count">已报名 {{ event.enrollments.filter((e) => e.status === 'approved').length }}/{{ event.capacity }}</span>
               </div>
             </t-link>
           </div>
@@ -452,7 +488,7 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onLayoutKeydown))
 
       <!-- 30 日运营趋势 / 快捷入口：半屏并排 -->
       <div class="half-grid">
-        <section v-show="isCardOn('trend')" class="dash-block panel-card" :style="cardStyle('trend')">
+        <section v-show="isCardOn('trend')" class="dash-block page-card" :style="cardStyle('trend')">
           <div class="panel-head">
             <h3 class="panel-title">运营趋势</h3>
             <t-radio-group v-model="trendDays" variant="outline" size="small">
@@ -472,15 +508,17 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onLayoutKeydown))
                   v-if="trend.length"
                   :labels="trend.map((p) => p.date)"
                   :data="trend.map((p) => p[t.key])"
-                  :color="t.value === 'points' ? '#00A870' : '#0052D9'"
+                  :color="t.value === 'points' ? 'var(--td-success-color)' : 'var(--td-brand-color)'"
                   :height="220"
                 />
+                <ListErrorState v-else-if="trendError" :message="trendError" :loading="trendLoading" @retry="loadTrend(trendDays)" />
+                <t-empty v-else-if="!trendLoading" description="暂无趋势数据" />
               </t-loading>
             </t-tab-panel>
           </t-tabs>
         </section>
 
-        <section v-show="isCardOn('quick')" class="dash-block panel-card" :style="cardStyle('quick')">
+        <section v-show="isCardOn('quick')" class="dash-block page-card" :style="cardStyle('quick')">
           <div class="panel-head">
             <h3 class="panel-title">快捷入口</h3>
           </div>
@@ -504,6 +542,7 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onLayoutKeydown))
   gap: 16px;
 }
 
+/* 子网格 display:contents 不生成盒子，纵向间距统一交给 .dashboard-grid 的 gap */
 .dashboard-grid > .panel-grid,
 .dashboard-grid > .half-grid {
   display: contents;
@@ -524,21 +563,12 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onLayoutKeydown))
   display: grid;
   grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
   gap: 16px;
-  margin-bottom: 16px;
 }
 
 .half-grid {
   display: grid;
   grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
   gap: 16px;
-  margin-bottom: 16px;
-}
-
-.panel-card {
-  padding: 16px;
-  border: 1px solid var(--td-component-border);
-  border-radius: var(--td-radius-medium);
-  background: var(--td-bg-color-container);
 }
 
 .panel-head {
@@ -550,7 +580,7 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onLayoutKeydown))
 
 .panel-title {
   margin: 0;
-  font-size: 15px;
+  font-size: var(--td-font-size-body-large);
   font-weight: 600;
   color: var(--td-text-color-primary);
 }
@@ -623,6 +653,11 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onLayoutKeydown))
   gap: 4px;
 }
 
+/* 已报名 x/y 等宽数字，避免数值变化时抖动 */
+.enroll-count {
+  font-variant-numeric: tabular-nums;
+}
+
 /* ---------- 平台数据 ---------- */
 .stats-grid {
   display: grid;
@@ -634,11 +669,22 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onLayoutKeydown))
   min-width: 0;
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 12px;
   padding: 12px;
   border: 1px solid var(--td-component-border);
   border-radius: var(--td-radius-medium);
   background: var(--td-bg-color-secondarycontainer);
+}
+
+/* 加载失败的统计卡：可点击重试 */
+.stats-cell.is-failed {
+  cursor: pointer;
+  color: var(--td-text-color-placeholder);
+}
+
+.stats-cell.is-failed:focus-visible {
+  outline: 2px solid var(--td-brand-color);
+  outline-offset: 2px;
 }
 
 .stats-cell.clickable {
@@ -648,7 +694,7 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onLayoutKeydown))
 
 .stats-cell.clickable:hover {
   border-color: var(--td-brand-color);
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
+  box-shadow: var(--td-shadow-1);
 }
 
 .stats-icon {
@@ -663,7 +709,7 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onLayoutKeydown))
 }
 
 .stats-value {
-  font-size: 18px;
+  font-size: 20px;
   font-weight: 600;
   line-height: 1.2;
   color: var(--td-text-color-primary);
@@ -689,7 +735,7 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onLayoutKeydown))
   padding: 14px 8px;
   border: 1px solid var(--td-component-border);
   border-radius: var(--td-radius-medium);
-  font-size: 13px;
+  font-size: 14px;
   color: var(--td-text-color-secondary);
   cursor: pointer;
   transition: color 120ms ease, background-color 120ms ease, transform 120ms ease;
@@ -702,12 +748,24 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onLayoutKeydown))
 }
 
 .quick-icon {
-  font-size: 22px;
+  font-size: 20px;
 }
 
 /* ---------- 编辑布局弹层（仿「列设置」面板） ---------- */
 .dash-block {
   position: relative;
+}
+
+/* 浮层挂载到 body，scoped 选择器无法命中，故用 :global 收窄到本页唯一类名 */
+:global(.layout-popup) {
+  padding: 0;
+}
+
+:global(.layout-popup-inner) {
+  padding: 0;
+  background: transparent;
+  border-radius: 0;
+  box-shadow: none;
 }
 
 .layout-panel {
@@ -727,7 +785,7 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onLayoutKeydown))
 }
 
 .layout-panel-title {
-  font-size: 13px;
+  font-size: 14px;
   font-weight: 600;
   color: var(--td-text-color-primary);
 }
@@ -765,12 +823,8 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onLayoutKeydown))
   outline: none;
 }
 
-.layout-row:hover {
-  background: var(--td-bg-color-container-hover);
-}
-
 .layout-name {
-  font-size: 13px;
+  font-size: 12px;
   color: var(--td-text-color-primary);
 }
 
@@ -790,22 +844,24 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onLayoutKeydown))
 .trend-stat {
   display: flex;
   align-items: baseline;
-  gap: 6px;
-  font-size: 13px;
+  gap: 8px;
+  font-size: 12px;
   color: var(--td-text-color-secondary);
 }
 
 .trend-stat strong {
-  font-size: 18px;
+  font-size: 20px;
   font-weight: 600;
   color: var(--td-brand-color);
+  /* 复用全局等宽数字约定：切换 3/7/15/30 天区间时数值宽度不跳动 */
+  font-variant-numeric: tabular-nums;
 }
 
 .trend-body {
   min-height: 220px;
 }
 
-@media (max-width: 1100px) {
+@media (max-width: 1199px) {
   .stat-grid {
     grid-template-columns: repeat(3, minmax(0, 1fr));
   }
@@ -814,7 +870,7 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onLayoutKeydown))
   }
 }
 
-@media (max-width: 768px) {
+@media (max-width: 767px) {
   .dashboard-grid,
   .panel-grid,
   .half-grid {

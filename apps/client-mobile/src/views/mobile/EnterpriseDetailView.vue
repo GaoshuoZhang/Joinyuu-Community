@@ -52,12 +52,18 @@ function goEditCard() {
 }
 
 /* ---- 转移企业负责人（负责人） ---- */
+/* v46：手机号仅对有管理权限者完整展示，其余按 138****8888 脱敏（与企业成员区口径一致，仅 UI 层处理）。 */
+function maskPhone(value?: string): string {
+  const phone = value ?? ''
+  return /^\d{11}$/.test(phone) ? `${phone.slice(0, 3)}****${phone.slice(-4)}` : phone
+}
+
 const transferVisible = ref(false)
 const transferCandidates = computed<EnterpriseMemberInfo[]>(() => (data.value?.members ?? []).filter((m) => !m.isContact))
 const transferItems = computed(() =>
   transferCandidates.value.map((m) => ({
     label: `${m.name}${m.role ? ` · ${m.role}` : ''}`,
-    description: m.phone ?? '',
+    description: m.phone ? (canManageMembers.value ? m.phone : maskPhone(m.phone)) : '',
   })),
 )
 

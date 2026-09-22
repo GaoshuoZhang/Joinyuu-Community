@@ -319,7 +319,7 @@ onBeforeRouteLeave(async () => {
               name="leaseExpireRemindDays"
               :rules="[{ required: true, message: '请输入 1-90 的整数', trigger: 'submit' }]"
             >
-              <t-input-number v-model="form.leaseExpireRemindDays" :min="1" :max="90" :step="1" theme="column" style="width: 200px" />
+              <t-input-number class="ctl-w-lg" v-model="form.leaseExpireRemindDays" :min="1" :max="90" :step="1" theme="column" />
               <template #help>距到期不足该天数的租约将标记为「即将到期」并推送通知</template>
             </t-form-item>
             <t-form-item
@@ -327,7 +327,7 @@ onBeforeRouteLeave(async () => {
               name="uploadMaxSizeMb"
               :rules="[{ required: true, message: '请输入 1-100 的整数', trigger: 'submit' }]"
             >
-              <t-input-number v-model="form.uploadMaxSizeMb" :min="1" :max="100" :step="1" theme="column" style="width: 200px" />
+              <t-input-number class="ctl-w-lg" v-model="form.uploadMaxSizeMb" :min="1" :max="100" :step="1" theme="column" />
               <template #help>素材库与富文本图片上传的单文件大小上限（1-100 MB）</template>
             </t-form-item>
             <t-form-item
@@ -335,7 +335,7 @@ onBeforeRouteLeave(async () => {
               name="passwordExpireDays"
               :rules="[{ required: true, message: '请输入 0-3650 的整数', trigger: 'submit' }]"
             >
-              <t-input-number v-model="form.passwordExpireDays" :min="0" :max="3650" :step="1" theme="column" style="width: 200px" />
+              <t-input-number class="ctl-w-lg" v-model="form.passwordExpireDays" :min="0" :max="3650" :step="1" theme="column" />
               <template #help>0 表示不启用；超过有效期后登录将强制修改密码</template>
             </t-form-item>
           </div>
@@ -357,7 +357,7 @@ onBeforeRouteLeave(async () => {
               <t-form-item
                 label="核验供应商（单选）"
                 name="realnameVerifyProvider"
-                :rules="[{ required: true, message: '请选择核验供应商' }]"
+                :rules="[{ required: true, message: '请选择核验供应商', trigger: 'submit' }]"
               >
                 <t-select
                   :value="form.realnameVerifyProvider"
@@ -397,7 +397,7 @@ onBeforeRouteLeave(async () => {
                 <template #help>{{ field.hint || '' }}</template>
               </t-form-item>
             </div>
-            <div class="section-title">核验凭据</div>
+            <div class="section-subtitle">核验凭据</div>
             <div class="form-grid">
               <t-form-item label="凭据来源" name="realnameVerifyCredentialMode">
                 <t-select
@@ -464,7 +464,7 @@ onBeforeRouteLeave(async () => {
             <t-form-item
               label="Endpoint"
               name="minioEndpoint"
-              :rules="[{ required: true, message: '请输入 MinIO Endpoint' }]"
+              :rules="[{ required: true, message: '请输入 MinIO Endpoint', trigger: 'submit' }]"
             >
               <t-input v-model="form.minioEndpoint" clearable placeholder="如 127.0.0.1 / minio.example.com…" />
               <template #help>服务地址，不含协议与端口</template>
@@ -472,9 +472,9 @@ onBeforeRouteLeave(async () => {
             <t-form-item
               label="端口"
               name="minioPort"
-              :rules="[{ required: true, message: '请输入 1-65535 的端口' }]"
+              :rules="[{ required: true, message: '请输入 1-65535 的端口', trigger: 'submit' }]"
             >
-              <t-input-number v-model="form.minioPort" :min="1" :max="65535" :step="1" theme="column" style="width: 200px" />
+              <t-input-number class="ctl-w-lg" v-model="form.minioPort" :min="1" :max="65535" :step="1" theme="column" />
             </t-form-item>
             <t-form-item label="使用 HTTPS" name="minioUseSsl">
               <t-switch v-model="form.minioUseSsl" />
@@ -482,7 +482,7 @@ onBeforeRouteLeave(async () => {
             <t-form-item
               label="AccessKey"
               name="minioAccessKey"
-              :rules="[{ required: true, message: '请输入 AccessKey' }]"
+              :rules="[{ required: true, message: '请输入 AccessKey', trigger: 'submit' }]"
             >
               <t-input v-model="form.minioAccessKey" clearable autocomplete="off" placeholder="MinIO 访问密钥…" />
             </t-form-item>
@@ -505,8 +505,8 @@ onBeforeRouteLeave(async () => {
               label="Bucket"
               name="minioBucket"
               :rules="[
-                { required: true, message: '请输入 Bucket 名称' },
-                { pattern: /^[a-z0-9][a-z0-9.-]{1,62}$/, message: 'Bucket 名称格式不正确' },
+                { required: true, message: '请输入 Bucket 名称', trigger: 'submit' },
+                { pattern: /^[a-z0-9][a-z0-9.-]{1,62}$/, message: 'Bucket 名称格式不正确', trigger: 'submit' },
               ]"
             >
               <t-input v-model="form.minioBucket" clearable placeholder="如 joinyuu…" />
@@ -515,7 +515,9 @@ onBeforeRouteLeave(async () => {
           </div>
         </t-form>
         <div class="config-footer">
-          <t-button theme="primary" :loading="saving" :disabled="!!loadError" @click="onSave">保存配置</t-button>
+          <!-- 长表单底部才可触达保存：吸底并显式提示未保存状态，避免误以为已生效 -->
+          <span class="config-dirty-tip">{{ isDirty ? '有未保存的修改' : '暂无未保存修改' }}</span>
+          <t-button theme="primary" :loading="saving" :disabled="!!loadError || !isDirty" @click="onSave">保存配置</t-button>
         </div>
       </t-card>
     </t-loading>
@@ -539,16 +541,37 @@ onBeforeRouteLeave(async () => {
   color: var(--td-text-color-primary);
 }
 
+/* 子分区标题（如「核验凭据」）：低于父分区一级，避免与父标题同级同权重 */
+.section-subtitle {
+  margin: 8px 0 12px;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--td-text-color-secondary);
+}
+
+/* 分区之间用细分隔线过渡（参考 ArchivePanel .setting-section 写法） */
+.section-title:not(:first-child) {
+  padding-top: 16px;
+  border-top: 1px solid var(--td-component-stroke);
+}
+
 .form-grid {
   display: grid;
   grid-template-columns: 1fr 1fr;
   gap: 0 24px;
 }
 
+@media (max-width: 900px) {
+  .form-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* 与「运营参数」等分区统一为无框栅格：描边卡片行只此一处，与其他分区语言不一致 */
 .switch-grid {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px 24px;
   margin-bottom: 8px;
 }
 
@@ -556,9 +579,14 @@ onBeforeRouteLeave(async () => {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 12px 16px;
-  border: 1px solid var(--td-component-border);
-  border-radius: var(--td-radius-medium);
+  gap: 16px;
+  min-height: 32px;
+}
+
+@media (max-width: 900px) {
+  .switch-grid {
+    grid-template-columns: 1fr;
+  }
 }
 
 .switch-label {
@@ -572,9 +600,25 @@ onBeforeRouteLeave(async () => {
   color: var(--td-text-color-secondary);
 }
 
+/* 保存栏吸底：表单很长时无需滚到底即可保存（与 LevelTiersPanel 的吸底保存区一致） */
 .config-footer {
+  position: sticky;
+  bottom: 16px;
+  z-index: 5;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
   margin-top: 8px;
-  padding-top: 16px;
-  border-top: 1px solid var(--td-component-border);
+  padding: 12px 16px;
+  border: 1px solid var(--td-component-border);
+  border-radius: var(--td-radius-medium);
+  background: var(--td-bg-color-container);
+  box-shadow: var(--td-shadow-1);
+}
+
+.config-dirty-tip {
+  font-size: 12px;
+  color: var(--td-text-color-secondary);
 }
 </style>

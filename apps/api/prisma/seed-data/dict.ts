@@ -35,6 +35,7 @@ export const dicts: Record<DictType, DictEntry[]> = {
   ],
   goods_category: [
     { code: 'GC001', label: '实物商品', sort: 1, status: 'enabled' },
-    { code: 'GC003', label: '权益券', sort: 3, status: 'enabled' },
+    /* sort 与「连续且不重复」口径一致：GC002 留空，由新增字典项时按最小未占用序号补上 */
+    { code: 'GC003', label: '权益券', sort: 2, status: 'enabled' },
   ],
 }

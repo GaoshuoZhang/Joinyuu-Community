@@ -1,8 +1,11 @@
 <script setup lang="ts">
-import { reactive, watch } from 'vue'
-import { Button, Input, Popup } from 'tdesign-mobile-vue'
+import { nextTick, reactive, ref, watch } from 'vue'
+import { Button, Form, FormItem, Input, Popup } from 'tdesign-mobile-vue'
+import type { FormInstanceFunctions, FormRules } from 'tdesign-mobile-vue'
+import { isPhone } from '@/utils/validators'
 
-/* 邀请企业成员弹层：姓名/手机号/职位校验后交由父级提交。 */
+/* 邀请企业成员弹层：姓名/手机号/职位校验后交由父级提交。
+ * v46：校验迁移 t-form/rules——错误内联在字段下方，重新打开时清空上一轮校验状态。 */
 const props = defineProps<{ visible: boolean; submitting: boolean }>()
 const emit = defineEmits<{
   'update:visible': [boolean]
@@ -10,11 +13,16 @@ const emit = defineEmits<{
 }>()
 
 const form = reactive({ name: '', phone: '', role: '' })
-const errors = reactive({ name: '', phone: '', role: '' })
+const formRef = ref<FormInstanceFunctions>()
 
-watch(() => form.name, () => (errors.name = ''))
-watch(() => form.phone, () => (errors.phone = ''))
-watch(() => form.role, () => (errors.role = ''))
+const rules: FormRules<typeof form> = {
+  name: [{ required: true, message: '请输入成员姓名' }],
+  phone: [
+    { required: true, message: '请输入 11 位手机号' },
+    { validator: (val: string) => !val.trim() || isPhone(val), message: '请输入 11 位手机号' },
+  ],
+  role: [{ required: true, message: '请输入成员职位' }],
+}
 
 watch(
   () => props.visible,
@@ -23,29 +31,14 @@ watch(
     form.name = ''
     form.phone = ''
     form.role = ''
-    errors.name = ''
-    errors.phone = ''
-    errors.role = ''
+    /* 重新打开时清空上一轮的校验状态，避免残留错误提示 */
+    void nextTick(() => formRef.value?.clearValidate())
   },
 )
 
-function onSubmit() {
-  errors.name = ''
-  errors.phone = ''
-  errors.role = ''
-  if (!form.name.trim()) {
-    errors.name = '请输入成员姓名'
-    return
-  }
-  if (!/^1\d{10}$/.test(form.phone.trim())) {
-    errors.phone = '请输入 11 位手机号'
-    return
-  }
-  if (!form.role.trim()) {
-    errors.role = '请输入成员职位'
-    return
-  }
-  emit('submit', { name: form.name.trim(), phone: form.phone.trim(), role: form.role.trim() })
+function onInviteSubmit({ validateResult }: { validateResult: unknown }) {
+  /* 校验失败：字段级错误已内联展示，scroll-to-first-error 负责滚动定位 */
+  if (validateResult === true) emit('submit', { name: form.name.trim(), phone: form.phone.trim(), role: form.role.trim() })
 }
 </script>
 
@@ -58,24 +51,28 @@ function onSubmit() {
   >
     <div class="popup-body">
       <h3 class="popup-title">邀请企业成员</h3>
-      <div class="field">
-        <label>成员姓名</label>
-        <Input v-model="form.name" autocomplete="off" :maxlength="20" placeholder="请输入成员姓名…" clearable />
-        <p v-if="errors.name" class="field-error">{{ errors.name }}</p>
-      </div>
-      <div class="field">
-        <label>手机号</label>
-        <Input v-model="form.phone" type="tel" autocomplete="tel" :maxlength="11" placeholder="请输入 11 位手机号…" clearable />
-        <p v-if="errors.phone" class="field-error">{{ errors.phone }}</p>
-      </div>
-      <div class="field">
-        <label>职位</label>
-        <Input v-model="form.role" autocomplete="off" :maxlength="20" placeholder="如：产品负责人 / 设计总监…" clearable />
-        <p v-if="errors.role" class="field-error">{{ errors.role }}</p>
-      </div>
-      <Button theme="primary" size="large" block :loading="submitting" @click="onSubmit">
-        {{ submitting ? '发送中…' : '发送邀请' }}
-      </Button>
+      <Form
+        ref="formRef"
+        class="invite-form"
+        :data="form"
+        :rules="rules"
+        label-align="top"
+        scroll-to-first-error="smooth"
+        @submit="onInviteSubmit"
+      >
+        <FormItem label="成员姓名" name="name">
+          <Input v-model="form.name" autocomplete="off" :maxlength="20" placeholder="请输入成员姓名…" clearable />
+        </FormItem>
+        <FormItem label="手机号" name="phone">
+          <Input v-model="form.phone" type="tel" autocomplete="tel" :maxlength="11" placeholder="请输入 11 位手机号…" clearable />
+        </FormItem>
+        <FormItem label="职位" name="role">
+          <Input v-model="form.role" autocomplete="off" :maxlength="20" placeholder="如：产品负责人 / 设计总监…" clearable />
+        </FormItem>
+        <Button theme="primary" size="large" block type="submit" :loading="submitting">
+          {{ submitting ? '发送中…' : '发送邀请' }}
+        </Button>
+      </Form>
     </div>
   </Popup>
 </template>
@@ -84,7 +81,8 @@ function onSubmit() {
 .popup-body {
   box-sizing: border-box;
   width: 100%;
-  padding: 20px 16px calc(20px + env(safe-area-inset-bottom));
+  /* v46：内距改用间距 token 表达（原裸 px 20/16），安全区仍单独叠加 */
+  padding: var(--app-space-9) var(--app-space-8) calc(var(--app-space-9) + env(safe-area-inset-bottom));
   background: var(--td-bg-color-container);
   border-radius: var(--td-radius-large) var(--td-radius-large) 0 0;
 }
@@ -94,20 +92,22 @@ function onSubmit() {
   font-size: var(--app-font-title);
 }
 
-.field {
-  margin-bottom:var(--app-space-8);
+/* t-form-item 默认左右布局 + 底部 hairline；弹窗内沿用「标签在上」的紧凑版式 */
+.invite-form :deep(.t-form__item) {
+  padding: 0;
+  margin: 0 0 var(--app-space-8);
+  border-bottom: none;
 }
 
-.field label {
-  display: block;
+.invite-form :deep(.t-form__label) {
+  width: auto;
+  padding: 0;
   margin-bottom: var(--app-space-3);
   font-size: var(--app-font-body);
   color: var(--td-text-color-secondary);
 }
 
-.field-error {
-  margin: var(--app-space-3) 0 0;
-  font-size: var(--app-font-caption);
-  color: var(--td-error-color);
+.invite-form :deep(.t-form__controls) {
+  margin: 0;
 }
 </style>

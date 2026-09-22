@@ -47,7 +47,13 @@ watch(() => form.title, () => (errors.title = ''))
 watch(() => form.columnCode, () => (errors.column = ''))
 watch(() => form.asIdentity, () => (errors.identity = ''))
 const coverFiles = ref<UploadFile[]>([])
-const coverUrl = ref('')
+/* 封面以 Upload 的 files 为唯一来源（修改重提时用已有封面地址回显，用户可见且可替换/移除），
+ * 避免「移除封面」后仍从旧地址回退提交。 */
+const coverImageUrl = computed(() => {
+  const file = coverFiles.value[0]
+  const url = file?.response?.url ?? file?.url
+  return typeof url === 'string' ? url : ''
+})
 const bodyImageInput = ref<HTMLInputElement | null>(null)
 const pendingBodyAnchor = ref<ArticleInsertionAnchor | null>(null)
 const blocks = ref<ArticleContentBlock[]>([])
@@ -78,7 +84,7 @@ function deriveSummary(): string | undefined {
 }
 const editorSnapshot = computed(() => JSON.stringify({
   ...form,
-  coverUrl: coverUrl.value,
+  coverUrl: coverImageUrl.value,
   blocks: blocks.value.map((block) => block.type === 'text'
     ? { type: block.type, text: block.text }
     : { type: block.type, url: block.url }),
@@ -124,7 +130,10 @@ onMounted(async () => {
       form.asIdentity = payload.asIdentity
       form.asEnterpriseId = payload.asEnterpriseId ?? ''
       ensureVisibleIdentitySelection()
-      coverUrl.value = payload.coverUrl ?? ''
+      /* 已有封面回显到 Upload：用户能看到并可替换/移除 */
+      coverFiles.value = payload.coverUrl
+        ? [{ url: payload.coverUrl, name: '已有封面', status: 'success' }]
+        : []
       existingSummary.value = payload.summary ?? ''
       blocks.value = parseArticleContent(payload.content, () => nextBlockId.value++)
     } catch (e) {
@@ -190,10 +199,6 @@ async function onBodyImageChange(event: Event) {
   }
 }
 
-function onCoverSuccess(response: { url?: string }) {
-  if (response.url) coverUrl.value = response.url
-}
-
 function removeBlock(id: number) {
   blocks.value = blocks.value.filter((block) => block.id !== id)
 }
@@ -228,7 +233,7 @@ async function onSubmit() {
     columnCode: form.columnCode,
     asIdentity: form.asIdentity,
     ...(form.asIdentity === 'community_enterprise' && form.asEnterpriseId ? { asEnterpriseId: form.asEnterpriseId } : {}),
-    coverUrl: String(coverFiles.value[0]?.response?.url ?? coverFiles.value[0]?.url ?? coverUrl.value ?? '') || undefined,
+    coverUrl: coverImageUrl.value || undefined,
     content: content.value,
     summary: deriveSummary(),
   }
@@ -267,11 +272,11 @@ async function onSubmit() {
     </header>
 
     <div class="m-card form">
-      <div class="field"><label>标题</label><Input v-model="form.title" :maxlength="50" placeholder="请输入文章标题…" clearable /><p v-if="errors.title" class="field-error">{{ errors.title }}</p></div>
-      <div class="field"><span class="field-label">栏目</span><div class="chips"><CheckTag v-for="c in columns" :key="c.code" class="chip" size="medium" variant="light" :checked="form.columnCode === c.code" @change="form.columnCode = c.code">{{ c.label }}</CheckTag></div><p v-if="errors.column" class="field-error">{{ errors.column }}</p></div>
-      <div class="field"><span class="field-label">投稿身份</span><div class="chips"><CheckTag v-for="identity in identityOptions" :key="`${identity.type}:${identity.enterpriseId ?? ''}`" size="medium" variant="light" :checked="isIdentityPicked(identity)" @change="pickIdentity(identity)">{{ identityOptionLabel(identity, auth.name) }}</CheckTag></div><p v-if="errors.identity" class="field-error">{{ errors.identity }}</p></div>
-      <div class="field"><span class="field-label">文章封面（选填）</span><p class="field-help">建议使用清晰的横版图片，将展示在文章列表中。</p><Upload v-model:files="coverFiles" class="cover-upload" theme="grid" accept="image/*" :max="1" :size-limit="{ size: 10, unit: 'MB' }" :request-method="requestImage" @success="({ response }) => onCoverSuccess(response)" /></div>
-      <div class="field"><span class="field-label">正文</span><p class="field-help">在任意位置插入段落或图片，并通过上移、下移调整最终发布顺序。</p>
+      <div class="field"><label class="field-label">标题</label><Input v-model="form.title" :maxlength="50" placeholder="请输入文章标题…" clearable /><p v-if="errors.title" class="field-error">{{ errors.title }}</p></div>
+      <div class="field"><label class="field-label">栏目</label><div class="chips"><CheckTag v-for="c in columns" :key="c.code" class="chip" size="medium" variant="light" :checked="form.columnCode === c.code" @change="form.columnCode = c.code">{{ c.label }}</CheckTag></div><p v-if="errors.column" class="field-error">{{ errors.column }}</p></div>
+      <div class="field"><label class="field-label">投稿身份</label><div class="chips"><CheckTag v-for="identity in identityOptions" :key="`${identity.type}:${identity.enterpriseId ?? ''}`" size="medium" variant="light" :checked="isIdentityPicked(identity)" @change="pickIdentity(identity)">{{ identityOptionLabel(identity, auth.name) }}</CheckTag></div><p v-if="errors.identity" class="field-error">{{ errors.identity }}</p></div>
+      <div class="field"><label class="field-label">文章封面（选填）</label><p class="field-help">建议使用清晰的横版图片，将展示在文章列表中。</p><Upload v-model:files="coverFiles" class="cover-upload" theme="grid" accept="image/*" :max="1" :size-limit="{ size: 10, unit: 'MB' }" :request-method="requestImage" /></div>
+      <div class="field"><label class="field-label">正文</label><p class="field-help">在任意位置插入段落或图片，并通过上移、下移调整最终发布顺序。</p>
         <div class="editor-blocks">
           <template v-for="(block, index) in [...blocks, null]" :key="block?.id ?? 'editor-end'">
           <div class="insert-actions" :aria-label="`在第 ${index + 1} 个位置插入内容`">

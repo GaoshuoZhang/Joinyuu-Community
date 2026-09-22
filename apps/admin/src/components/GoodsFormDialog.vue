@@ -24,7 +24,12 @@ const emit = defineEmits<{
   (e: 'success'): void
 }>()
 
-const categoryOptions = ref(Object.entries(goodsCategoryMap).map(([value, label]) => ({ label, value })))
+/* 只取 GC 前缀的字典码：physical/voucher 为历史值，保留会产生重复选项（与 MallGoodsPanel 口径一致） */
+const categoryOptions = ref(
+  Object.entries(goodsCategoryMap)
+    .filter(([value]) => value.startsWith('GC'))
+    .map(([value, label]) => ({ label, value })),
+)
 
 /* 分类字典改为首次打开弹窗时按需加载：避免登录页/未打开时携带旧令牌请求（D-101） */
 let categoryPromise: Promise<void> | null = null
@@ -189,7 +194,7 @@ function onClose() {
   <t-dialog
     lazy
     destroy-on-close
-    :close-on-overlay-click="true"
+    :close-on-overlay-click="false"
     :visible="visible"
     :header="mode === 'create' ? '新增商品' : '编辑商品'"
     width="880px"
@@ -220,16 +225,16 @@ function onClose() {
           <t-select :clearable="false" v-model="form.fulfillment" :options="fulfillmentOptions" />
         </t-form-item>
         <t-form-item label="兑换积分" name="points">
-          <t-input-number v-model="form.points" :min="1" theme="column" style="width: 100%" />
+          <t-input-number v-model="form.points" :min="1" :decimal-places="0" theme="column" style="width: 100%" />
         </t-form-item>
       </div>
       <t-form-item label="库存" name="stock">
-        <t-input-number v-model="form.stock" :min="0" theme="column" style="width: 100%" />
+        <t-input-number v-model="form.stock" :min="0" :decimal-places="0" theme="column" style="width: 100%" />
       </t-form-item>
 
       <!-- 权益券：券码有效期（天下单时写入券码到期时间） -->
       <t-form-item v-if="form.fulfillment === 'voucher'" label="有效期（天）" name="validDays" help="兑换后券码有效期，到期后不可核销；留空按 30 天处理">
-        <t-input-number v-model="form.validDays" :min="1" :max="3650" theme="column" style="width: 100%" />
+        <t-input-number v-model="form.validDays" :min="1" :max="3650" :decimal-places="0" theme="column" style="width: 100%" />
       </t-form-item>
 
       <!-- 实物商品：发货方式（自提/邮寄），按选择显示自提地址或邮费 -->
@@ -256,7 +261,7 @@ function onClose() {
           name="shippingFee"
           help="0 = 包邮"
         >
-          <t-input-number v-model="form.shippingFee" :min="0" theme="column" style="width: 100%" />
+          <t-input-number v-model="form.shippingFee" :min="0" :decimal-places="0" theme="column" style="width: 100%" />
         </t-form-item>
       </template>
 
@@ -362,12 +367,6 @@ function onClose() {
   margin: -6px 0 12px;
   font-size: 12px;
   color: var(--td-text-color-secondary);
-}
-
-.dialog-footer {
-  display: flex;
-  justify-content: flex-end;
-  gap: 8px;
 }
 
 .cover-preview {

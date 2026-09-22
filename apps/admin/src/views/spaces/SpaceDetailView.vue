@@ -5,8 +5,10 @@ import { MessagePlugin } from 'tdesign-vue-next'
 import { ArrowLeftIcon, EditIcon } from 'tdesign-icons-vue-next'
 import PageHeader from '@/components/PageHeader.vue'
 import StatusTag from '@/components/StatusTag.vue'
+import ListErrorState from '@/components/ListErrorState.vue'
 import SpaceFormDialog from '@/components/SpaceFormDialog.vue'
 import { fetchReservations, fetchSpace, setSpaceStatus } from '@/api/spaces'
+import { isNotFound } from '@/api/http'
 import { spaceTypeMap, statusMap } from '@/constants/status'
 import { deriveReservationStatus } from '@/utils/reservation'
 import { formatMonthKey } from '@/utils/format'
@@ -18,6 +20,8 @@ const route = useRoute()
 const router = useRouter()
 
 const loading = ref(false)
+/* 非 404 的加载失败：展示错误与重试入口（404 仍走「不存在」空态） */
+const loadError = ref('')
 const space = ref<Space | null>(null)
 const reservations = ref<SpaceReservation[]>([])
 const acting = ref('')
@@ -53,6 +57,18 @@ const reservationModeText = computed(() =>
     : '免预约',
 )
 
+/* 页头描述：类型/位置空值过滤后以「 · 」拼接，全空显示 — */
+const headerDescription = computed(() => {
+  const parts = [spaceTypeMap[space.value?.type ?? 'meeting'], space.value?.location].filter(Boolean)
+  return parts.length > 0 ? parts.join(' · ') : '—'
+})
+
+/* 容量：空值整体显示 —（不带「人」单位） */
+const capacityText = computed(() => {
+  const c = space.value?.capacity
+  return c != null ? `${c} 人` : '—'
+})
+
 const detailColumns = [
   { colKey: 'user', title: '预约人', cell: 'user', width: 110 , ellipsis: true},
   { colKey: 'slot', title: '日期时段', cell: 'slot' , ellipsis: true},
@@ -76,9 +92,11 @@ const monthKey = computed(() => {
 
 const monthReservations = computed(() => reservations.value.filter((r) => r.date.startsWith(monthKey.value)))
 
-const periodText = computed(() =>
-  space.value?.allDay ? '全天开放' : `${space.value?.openTime ?? ''} ~ ${space.value?.closeTime ?? ''}`,
-)
+const periodText = computed(() => {
+  const s = space.value
+  if (!s) return '—'
+  return s.allDay ? '全天开放' : s.openTime && s.closeTime ? `${s.openTime} ~ ${s.closeTime}` : '—'
+})
 
 const equipmentText = computed(() =>
   space.value && space.value.equipment.length > 0 ? space.value.equipment.join('、') : '—',
@@ -92,6 +110,7 @@ const loadingMore = ref(false)
 
 async function load() {
   loading.value = true
+  loadError.value = ''
   try {
     const id = String(route.params.id)
     const [s, res] = await Promise.all([
@@ -103,7 +122,9 @@ async function load() {
     reservationTotal.value = res.total
     reservationPage.value = 1
   } catch (e) {
-    MessagePlugin.error(e instanceof Error ? e.message : '空间加载失败')
+    space.value = null
+    /* 404 = 空间不存在；其余错误保留具体原因并给出重试入口 */
+    if (!isNotFound(e)) loadError.value = e instanceof Error ? e.message : '空间加载失败'
   } finally {
     loading.value = false
   }
@@ -157,12 +178,12 @@ onMounted(load)
 
 <template>
   <div class="space-detail page-fade-in">
-    <t-button variant="text" theme="default" class="back-btn" @click="router.push('/spaces')">
+    <t-button variant="text" theme="default" class="back-btn" @click="router.back()">
       <template #icon><ArrowLeftIcon /></template>
       返回
     </t-button>
 
-    <PageHeader :title="space?.name ?? '空间详情'" :description="`${spaceTypeMap[space?.type ?? 'meeting'] ?? ''} · ${space?.location ?? ''}`">
+    <PageHeader :title="space?.name ?? '空间详情'" :description="headerDescription">
       <template #actions>
         <t-tag v-if="isArchived" theme="default" variant="light">已归档</t-tag>
         <template v-if="space && !isArchived">
@@ -192,19 +213,22 @@ onMounted(load)
     </PageHeader>
 
     <t-loading :loading="loading" size="small">
-      <t-empty v-if="!loading && !space" description="空间不存在、已归档或加载失败" />
+      <ListErrorState v-if="loadError" :message="loadError" :loading="loading" @retry="load" />
+      <t-empty v-else-if="!loading && !space" description="空间不存在" />
       <template v-else-if="space">
       <div class="page-card">
-        <t-descriptions :column="3" bordered>
+        <t-descriptions :column="2" bordered>
           <t-descriptions-item label="空间类型">{{ spaceTypeMap[space?.type ?? 'meeting'] ?? '—' }}</t-descriptions-item>
-          <t-descriptions-item label="容量">{{ space?.capacity ?? '—' }} 人</t-descriptions-item>
+          <t-descriptions-item label="容量">{{ capacityText }}</t-descriptions-item>
           <t-descriptions-item label="状态">
             <StatusTag v-if="space" entity="space" :value="space.status" />
           </t-descriptions-item>
           <t-descriptions-item label="开放时段">{{ periodText }}</t-descriptions-item>
-          <t-descriptions-item label="预约方式" :span="2">{{ reservationModeText }}</t-descriptions-item>
-          <t-descriptions-item label="配备设备" :span="3">{{ equipmentText }}</t-descriptions-item>
-          <t-descriptions-item label="空间说明" :span="3">{{ space?.description || '—' }}</t-descriptions-item>
+          <t-descriptions-item label="预约方式" :span="2">
+            <t-tag variant="outline" size="small">{{ reservationModeText }}</t-tag>
+          </t-descriptions-item>
+          <t-descriptions-item label="配备设备" :span="2">{{ equipmentText }}</t-descriptions-item>
+          <t-descriptions-item label="空间说明" :span="2">{{ space?.description || '—' }}</t-descriptions-item>
         </t-descriptions>
       </div>
 
@@ -238,11 +262,11 @@ onMounted(load)
               </template>
             </t-calendar>
             <div class="cal-legend">
-              <span class="cal-legend-item is-approved">待使用</span>
-              <span class="cal-legend-item is-using">使用中</span>
-              <span class="cal-legend-item is-pending">待审核</span>
-              <span class="cal-legend-item is-ended">已结束</span>
-              <span class="cal-legend-item is-muted">已驳回/已取消</span>
+              <span class="cal-legend-item is-approved"><i class="legend-dot is-approved" />待使用</span>
+              <span class="cal-legend-item is-using"><i class="legend-dot is-using" />使用中</span>
+              <span class="cal-legend-item is-pending"><i class="legend-dot is-pending" />待审核</span>
+              <span class="cal-legend-item is-ended"><i class="legend-dot is-ended" />已结束</span>
+              <span class="cal-legend-item is-muted"><i class="legend-dot is-muted" />已驳回/已取消</span>
             </div>
           </div>
           <div class="detail-col">
@@ -317,6 +341,8 @@ onMounted(load)
   align-items: start;
 }
 
+/* 全站中等宽度断点已统一为 1199px；此处 1100px 是为「日历 2/3 + 预约明细 1/3」双栏
+ * 塌陷专门校准的取值，并入 1199px 会过早塌成单列、浪费横向空间，故单独保留 */
 @media (max-width: 1100px) {
   .detail-grid {
     grid-template-columns: 1fr;
@@ -347,9 +373,11 @@ onMounted(load)
   color: var(--td-text-color-secondary);
 }
 
+/* 说明：.cal-item/.cal-more 是日历单元格插槽内插入的自有节点，
+ * 函数渲染的 DOM 不携带 scoped id，故须经 :deep 命中；并非覆盖 TDesign 内部类 */
 /* 日历单元格内追加的预约摘要 */
 .space-detail :deep(.cal-item) {
-  font-size: 11px;
+  font-size: 12px;
   line-height: 16px;
   padding: 0 2px;
   overflow: hidden;
@@ -380,7 +408,7 @@ onMounted(load)
 }
 
 .space-detail :deep(.cal-more) {
-  font-size: 11px;
+  font-size: 12px;
   color: var(--td-text-color-placeholder);
 }
 
@@ -391,7 +419,37 @@ onMounted(load)
 }
 
 .cal-legend-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
   font-size: 12px;
+}
+
+.legend-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: var(--td-radius-default);
+  display: inline-block;
+}
+
+.legend-dot.is-approved {
+  background: var(--td-success-color);
+}
+
+.legend-dot.is-using {
+  background: var(--td-brand-color);
+}
+
+.legend-dot.is-pending {
+  background: var(--td-warning-color);
+}
+
+.legend-dot.is-ended {
+  background: var(--td-text-color-placeholder);
+}
+
+.legend-dot.is-muted {
+  background: var(--td-text-color-placeholder);
 }
 
 .cal-legend-item.is-approved {

@@ -154,12 +154,6 @@ async function onConfirm() {
   gap: 0 16px;
 }
 
-.dialog-footer {
-  display: flex;
-  justify-content: flex-end;
-  gap: 8px;
-}
-
 @media (max-width: 767px) {
   .form-row {
     grid-template-columns: 1fr;

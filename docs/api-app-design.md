@@ -108,6 +108,7 @@
 | GET | /api/app/mall/goods/:id | 商品详情 |
 | POST | /api/app/mall/orders | 兑换下单：积分充足 + 库存充足（事务：扣积分+写流水+扣库存+建订单 `pending_shipment`） |
 | GET | /api/app/me/orders | 我的兑换订单 |
+| GET | /api/app/me/orders/:id | 我的兑换订单详情（仅订单本人；非本人/不存在 404，条目形状与列表项一致） |
 | GET | /api/app/spaces | 可预约空间列表（`needApproval`/时段/设备） |
 | GET | /api/app/spaces/:id/availability?date= | 某日开放时段；待审核/已通过预约与已发布活动标为 `occupied`，开放窗口之间不返回时段 |
 | POST | /api/app/spaces/reservations | 提交预约：canonical payload 为 `spaceId/date/start/end/topic?/attendees?/asIdentity?/asEnterpriseId?`；`reservationOpen` 校验 + 提交前冲突预检（pending/approved 预约与活动，409）→ 管理端审核；四类身份均可预约，企业身份以企业名/组织名生成服务端主体快照；成员代企业预约时服务端校验 `space_reserve` 权限（无权限 403） |

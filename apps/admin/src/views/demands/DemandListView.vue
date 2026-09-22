@@ -5,10 +5,12 @@ import { useListQueryState } from '@/utils/listQuery'
 import { useRouter } from 'vue-router'
 import { MessagePlugin } from 'tdesign-vue-next'
 import type { FormProps } from 'tdesign-vue-next'
-import { AddIcon, SearchIcon, DownloadIcon } from 'tdesign-icons-vue-next'
+import { AddIcon, SearchIcon } from 'tdesign-icons-vue-next'
 import PageHeader from '@/components/PageHeader.vue'
 import StatusTag from '@/components/StatusTag.vue'
 import ColumnController from '@/components/ColumnController.vue'
+import ExportButton from '@/components/ExportButton.vue'
+import ListEmptyState from '@/components/ListEmptyState.vue'
 import BulkArchiveDialog from '@/components/BulkArchiveDialog.vue'
 import DemandPublishDialog from '@/components/DemandPublishDialog.vue'
 import DemandReviewDialog from '@/components/DemandReviewDialog.vue'
@@ -17,7 +19,7 @@ import ContentTakedownDialog from '@/components/ContentTakedownDialog.vue'
 import ProjectFormDialog from '@/components/ProjectFormDialog.vue'
 import { archiveDemand, cancelDemandSchedule, closeDemand, fetchDemands, publishDemandNow, proxyRespondDemand, fetchPublisherOptions } from '@/api/demands'
 import { dictFallback, fetchDictEntries } from '@/api/dicts'
-import { exportAllRows, exportCsv, statusLabel } from '@/utils/exportCsv'
+import { statusLabel } from '@/utils/exportCsv'
 import { fetchPointsRules } from '@/api/mall'
 import { fetchEnterprise } from '@/api/enterprises'
 import { fetchExternalEnterprise } from '@/api/external-enterprises'
@@ -187,7 +189,12 @@ const loading = ref(true)
 const loadError = ref('')
 const list = ref<Demand[]>([])
 const total = ref(0)
-const closingId = ref('')
+/* 当前执行中的行操作标识：`${id}:publish-now | cancel-schedule | close | archive` */
+const acting = ref('')
+
+function isActing(row: Demand, action: 'publish-now' | 'cancel-schedule' | 'close' | 'archive') {
+  return acting.value === `${row.id}:${action}`
+}
 /* 用户详情「数据概览」跳转带入的提交人筛选 */
 const publisherName = ref('')
 /* 企业详情「数据概览」跳转带入的企业筛选（值为社区企业 ID 或合作企业 ID，标签显示名称） */
@@ -239,7 +246,7 @@ const columns = [
   { colKey: 'category', title: '类别', cell: 'category', width: 95, resizable: true , ellipsis: true},
   { colKey: 'demandType', title: '需求类型', cell: 'demandType', width: 100, resizable: true, ellipsis: true },
   { colKey: 'publisher', title: '需求方', cell: 'publisher', width: 200, resizable: true , ellipsis: true},
-  { colKey: 'budget', title: '预算', width: 125, resizable: true , ellipsis: true},
+  { colKey: 'budget', title: '预算', cell: 'budget', width: 125, resizable: true , ellipsis: true},
   { colKey: 'respondents', title: '响应', cell: 'respondents', width: 92, resizable: true , ellipsis: true},
   {
     colKey: 'createdAt',
@@ -261,7 +268,7 @@ const columns = [
   ellipsis: true,
   },
   { colKey: 'status', title: '状态', cell: 'status', width: 150, resizable: true , ellipsis: true},
-  { colKey: 'op', title: '操作', cell: 'op', width: 270 },
+  { colKey: 'op', title: '操作', cell: 'op', width: 300 },
 ]
 
 /* 列配置：本地持久化显隐/顺序 */
@@ -299,55 +306,27 @@ async function load() {
   }
 }
 
-/* 导出当前页需求列表为 CSV */
-function onExport() {
-  exportCsv(
-    '需求列表',
-    ['编号', '标题', '类别', '需求方', '预算', '响应数', '状态', '创建时间', '发布时间'],
-    list.value.map((d) => [
-      d.id,
-      d.title,
-      categoryText(d),
-      d.publisherName,
-      d.budget,
-      d.respondents.length,
-      statusLabel('demand', d.status),
-      d.createdAt,
-      d.publishedAt ?? '—',
-    ]),
-  )
-  MessagePlugin.success(`已导出当前页 ${list.value.length} 条数据`)
+/* 导出配置：当前页 / 全部结果（沿用列表筛选与排序） */
+const exportHeaders = ['编号', '标题', '类别', '需求方', '预算', '响应数', '状态', '创建时间', '发布时间']
+
+function mapRow(d: Demand): (string | number)[] {
+  return [
+    d.id,
+    d.title,
+    categoryText(d),
+    d.publisherName,
+    d.budget || '—',
+    d.respondents.length,
+    statusLabel('demand', d.status),
+    d.createdAt,
+    d.publishedAt ?? '—',
+  ]
 }
 
-/* 全量导出：按现有筛选条件拉取全部页后导出；服务端导出落地后切换 */
-const exportingAll = ref(false)
+const pageExportRows = computed(() => list.value.map(mapRow))
 
-async function onExportAll() {
-  exportingAll.value = true
-  try {
-    const count = await exportAllRows<Demand>(
-      '需求列表全量',
-      ['编号', '标题', '类别', '需求方', '预算', '响应数', '状态', '创建时间', '发布时间'],
-      (d) => [
-        d.id,
-        d.title,
-        categoryText(d),
-        d.publisherName,
-        d.budget,
-        d.respondents.length,
-        statusLabel('demand', d.status),
-        d.createdAt,
-        d.publishedAt ?? '—',
-      ],
-      (page, pageSize) =>
-        fetchDemands({ ...query, page, pageSize, sortBy: sortBy.value, sortOrder: sortOrder.value }),
-    )
-    MessagePlugin.success(`已导出全部 ${count} 条需求数据`)
-  } catch (e) {
-    MessagePlugin.error(e instanceof Error ? e.message : '导出失败')
-  } finally {
-    exportingAll.value = false
-  }
+function fetchAllForExport(page: number, pageSize: number) {
+  return fetchDemands({ ...query, page, pageSize, sortBy: sortBy.value, sortOrder: sortOrder.value })
 }
 
 /* 远程排序：表头点击 → 更新排序状态 → 重新加载（受控 :sort 保证表头指示器正确） */
@@ -423,10 +402,8 @@ function openSchedule(row: Demand) {
 }
 
 /* 待发布 → 立即发布 */
-const publishingId = ref('')
-
 async function onPublishNow(row: Demand) {
-  publishingId.value = row.id
+  acting.value = `${row.id}:publish-now`
   try {
     await publishDemandNow(row.id)
     MessagePlugin.success('需求已发布')
@@ -434,15 +411,13 @@ async function onPublishNow(row: Demand) {
   } catch (e) {
     MessagePlugin.error(e instanceof Error ? e.message : '操作失败')
   } finally {
-    publishingId.value = ''
+    acting.value = ''
   }
 }
 
 /* 定时发布中 → 取消定时发布，转回待发布 */
-const cancelSchedulingId = ref('')
-
 async function onCancelSchedule(row: Demand) {
-  cancelSchedulingId.value = row.id
+  acting.value = `${row.id}:cancel-schedule`
   try {
     await cancelDemandSchedule(row.id)
     MessagePlugin.success('已取消定时发布，需求转入待发布')
@@ -450,7 +425,7 @@ async function onCancelSchedule(row: Demand) {
   } catch (e) {
     MessagePlugin.error(e instanceof Error ? e.message : '操作失败')
   } finally {
-    cancelSchedulingId.value = ''
+    acting.value = ''
   }
 }
 
@@ -462,7 +437,7 @@ function onRetract(row: Demand) {
 
 /* 关闭 */
 async function onCloseDemand(row: Demand) {
-  closingId.value = row.id
+  acting.value = `${row.id}:close`
   try {
     await closeDemand(row.id)
     MessagePlugin.success('已关闭该需求')
@@ -470,15 +445,13 @@ async function onCloseDemand(row: Demand) {
   } catch (e) {
     MessagePlugin.error(e instanceof Error ? e.message : '操作失败')
   } finally {
-    closingId.value = ''
+    acting.value = ''
   }
 }
 
 /* 已驳回 / 已关闭 / 已立项 → 归档（可在归档管理中恢复） */
-const archivingId = ref('')
-
 async function onArchiveDemand(row: Demand) {
-  archivingId.value = row.id
+  acting.value = `${row.id}:archive`
   try {
     await archiveDemand(row.id)
     MessagePlugin.success('需求已归档')
@@ -486,7 +459,7 @@ async function onArchiveDemand(row: Demand) {
   } catch (e) {
     MessagePlugin.error(e instanceof Error ? e.message : '操作失败')
   } finally {
-    archivingId.value = ''
+    acting.value = ''
   }
 }
 
@@ -632,14 +605,13 @@ onMounted(() => {
         <t-button variant="outline" :loading="archivingAll" :disabled="archivingAll" @click="onBulkArchive">
           一键归档
         </t-button>
-        <t-button variant="outline" :loading="exportingAll" @click="onExportAll">
-          <template #icon><DownloadIcon /></template>
-          导出全部
-        </t-button>
-        <t-button variant="outline" @click="onExport">
-          <template #icon><DownloadIcon /></template>
-          导出
-        </t-button>
+        <ExportButton
+          filename="需求列表"
+          :headers="exportHeaders"
+          :rows="pageExportRows"
+          :fetch-all="fetchAllForExport"
+          :map-row="mapRow"
+        />
         <t-button theme="primary" @click="openCreate">
           <template #icon><AddIcon /></template>
           新增需求
@@ -650,36 +622,33 @@ onMounted(() => {
     <div class="page-filter-bar">
       <t-input
         v-model="query.keyword"
-        class="filter-keyword"
+        class="ctl-w-xl"
         placeholder="搜索标题/编号…"
         clearable
         @enter="onSearch"
       />
-      <t-select
+      <t-select class="ctl-w-md"
         v-model="query.category"
         label="类别"
         :options="categoryOptions"
         clearable
-        style="width: 150px"
         @change="onSearch"
       />
-      <t-select
+      <t-select class="ctl-w-sm"
         v-model="query.demandType"
         label="需求类型"
         :options="demandTypeOptions"
         clearable
-        style="width: 140px"
         @change="onSearch"
       />
-      <t-select
+      <t-select class="ctl-w-md"
         v-model="query.status"
         label="状态"
         :options="statusOptions"
         clearable
-        style="width: 150px"
         @change="onSearch"
       />
-      <t-button theme="primary" variant="outline" @click="onSearch">
+      <t-button @click="onSearch">
         <template #icon><SearchIcon /></template>
         查询
       </t-button>
@@ -717,7 +686,7 @@ onMounted(() => {
         :sort="tableSort"
         :loading="loading"
         :pagination="pagination"
-        empty="暂无需求"
+        :row-attributes="{ style: { cursor: 'pointer' } }"
         @page-change="onPageChange"
         @sort-change="onSortChange"
         @row-click="({ row }: { row: Demand }) => goDetail(row)"
@@ -768,6 +737,8 @@ onMounted(() => {
           </div>
         </template>
 
+        <template #budget="{ row }">{{ row.budget || '—' }}</template>
+
         <template #publishedAt="{ row }">{{ row.publishedAt ?? '—' }}</template>
 
         <template #status="{ row }">
@@ -794,7 +765,7 @@ onMounted(() => {
                   variant="text"
                   size="small"
                   theme="primary"
-                  :loading="publishingId === row.id"
+                  :loading="isActing(row, 'publish-now')"
                 >
                   立即发布
                 </t-button>
@@ -833,7 +804,7 @@ onMounted(() => {
                 variant="text"
                 size="small"
                 theme="warning"
-                :loading="cancelSchedulingId === row.id"
+                :loading="isActing(row, 'cancel-schedule')"
               >
                 取消定时发布
               </t-button>
@@ -847,7 +818,7 @@ onMounted(() => {
               content="确认关闭该需求？"
               @confirm="onCloseDemand(row)"
             >
-              <t-button variant="text" size="small" theme="danger" :loading="closingId === row.id">关闭</t-button>
+              <t-button variant="text" size="small" theme="danger" :loading="isActing(row, 'close')">关闭</t-button>
             </t-popconfirm>
             <!-- 代报名：置于关闭之后（published / projected 可用） -->
             <t-button
@@ -864,9 +835,13 @@ onMounted(() => {
               content="确认归档该需求？归档后可在归档管理中恢复"
               @confirm="onArchiveDemand(row)"
             >
-              <t-button variant="text" size="small" theme="warning" :loading="archivingId === row.id">归档</t-button>
+              <t-button variant="text" size="small" theme="warning" :loading="isActing(row, 'archive')">归档</t-button>
             </t-popconfirm>
           </div>
+        </template>
+
+        <template #empty>
+          <ListEmptyState :query="query" description="暂无需求" @clear="onReset" />
         </template>
       </t-table>
     </div>
@@ -945,10 +920,6 @@ onMounted(() => {
 </template>
 
 <style scoped>
-.filter-keyword {
-  width: 220px;
-}
-
 .demand-cell {
   display: flex;
   flex-direction: column;
@@ -991,12 +962,6 @@ onMounted(() => {
   flex-wrap: wrap;
 }
 
-.op-cell {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-  flex-wrap: nowrap;
-}
 .stack-cell {
   display: flex;
   flex-direction: column;
@@ -1005,6 +970,13 @@ onMounted(() => {
 }
 
 .pts-tag {
-  font-size: 11px;
+  font-size: 12px;
+}
+
+/* 代报名弹窗：两列栅格表单 + 右对齐底部操作区 */
+.form-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0 16px;
 }
 </style>

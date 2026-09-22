@@ -130,7 +130,6 @@ export async function updateIndividualCard(payload: MyIndividualCardPayload): Pr
     const displayName = (payload.displayName ?? '').trim()
     const intro = (payload.intro ?? '').trim()
     if (!displayName) fail(400, '请输入姓名')
-    if (intro.length < 10) fail(400, '个人简介至少 10 个字')
     const links = [...(payload.socials ?? []), ...(payload.customLinks ?? [])]
     if (links.some((l) => (l.url ?? '').trim() && !/^https?:\/\//.test(l.url.trim()))) {
       fail(400, '链接需以 http(s):// 开头')
@@ -163,6 +162,7 @@ export async function updateIndividualCard(payload: MyIndividualCardPayload): Pr
       visibility: {
         age: payload.visibility?.age ?? true,
         politicalStatus: payload.visibility?.politicalStatus ?? true,
+        isPublic: payload.visibility?.isPublic ?? true,
       },
     }
     const talent = talentMembers.find((t) => t.uid === account.uid)

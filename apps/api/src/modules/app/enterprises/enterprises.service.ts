@@ -64,7 +64,7 @@ export interface MyIndividualCardDto {
   customLinks: IndividualLinkSegment[]
   level?: number
   levelName?: string
-  visibility?: { age: boolean; politicalStatus: boolean }
+  visibility?: { age: boolean; politicalStatus: boolean; isPublic: boolean }
 }
 
 export interface MyEnterpriseCardDto {
@@ -265,7 +265,7 @@ export class AppEnterprisesService {
       politicalStatus: card?.politicalStatus ?? null,
       education: card?.education ?? [], work: card?.work ?? [], projects: card?.projects ?? [],
       honors: card?.honors ?? [], socials: card?.socials ?? [], customLinks: card?.customLinks ?? [],
-      visibility: card?.visibility ?? { age: true, politicalStatus: true },
+      visibility: card?.visibility ?? { age: true, politicalStatus: true, isPublic: true },
     }
   }
 
@@ -282,7 +282,7 @@ export class AppEnterprisesService {
           ? this.prisma.levelTier.findUnique({ where: { identityType_level: { identityType: 'community_individual', level: individual.level } } })
           : Promise.resolve(null),
       ])
-      const visibility = (card?.visibility ?? null) as unknown as { age?: boolean; politicalStatus?: boolean } | null
+      const visibility = (card?.visibility ?? null) as unknown as { age?: boolean; politicalStatus?: boolean; isPublic?: boolean } | null
       result.individual = {
         displayName: card?.displayName || user.realName || user.nickname,
         ...(user.avatar ? { avatar: user.avatar } : {}),
@@ -299,7 +299,7 @@ export class AppEnterprisesService {
         customLinks: (card?.customLinks ?? []) as unknown as IndividualLinkSegment[],
         ...(individual.level != null ? { level: individual.level } : {}),
         ...(tier?.label ? { levelName: tier.label } : {}),
-        ...(visibility ? { visibility: { age: visibility.age ?? true, politicalStatus: visibility.politicalStatus ?? true } } : {}),
+        ...(visibility ? { visibility: { age: visibility.age ?? true, politicalStatus: visibility.politicalStatus ?? true, isPublic: visibility.isPublic ?? true } } : {}),
       }
     }
 
@@ -350,10 +350,11 @@ export class AppEnterprisesService {
       const current = await tx.individualCard.findUnique({ where: { userId: uid } })
       const data = this.individualCardData(dto)
       if (dto.visibility !== undefined) {
-        const previous = (current?.visibility ?? {}) as { age?: boolean; politicalStatus?: boolean }
+        const previous = (current?.visibility ?? {}) as { age?: boolean; politicalStatus?: boolean; isPublic?: boolean }
         data.visibility = {
           age: dto.visibility.age ?? previous.age ?? true,
           politicalStatus: dto.visibility.politicalStatus ?? previous.politicalStatus ?? true,
+          isPublic: dto.visibility.isPublic ?? previous.isPublic ?? true,
         }
       }
       await tx.individualCard.upsert({ where: { userId: uid }, create: { userId: uid, ...data }, update: data })

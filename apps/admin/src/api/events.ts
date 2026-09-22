@@ -53,13 +53,17 @@ export async function fetchEventEnrollments(query: EventEnrollmentQuery): Promis
   return httpGet<PageResult<EventEnrollmentRecord>>(`/events/enrollments?${qs}`)
 }
 
-/* POST /api/admin/events/:id/enrollments/:userId/review，入参 { status: approved | rejected } */
+/* POST /api/admin/events/:id/enrollments/:userId/review，入参 { status: approved | rejected, reason? }（驳回必填原因） */
 export async function reviewEventEnrollment(
   eventId: string,
   userId: string,
   status: 'approved' | 'rejected',
+  reason?: string,
 ): Promise<{ code: number }> {
-  return httpPost<{ code: number }>(`/events/${eventId}/enrollments/${userId}/review`, { status })
+  return httpPost<{ code: number }>(`/events/${eventId}/enrollments/${userId}/review`, {
+    status,
+    ...(status === 'rejected' ? { reason: reason?.trim() ?? '' } : {}),
+  })
 }
 
 /* POST /api/admin/events/:id/checkin，入参 { userId } — 管理端手动签到 */

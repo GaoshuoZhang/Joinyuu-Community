@@ -25,8 +25,9 @@ function toAnnouncementDto(a: Announcement): Record<string, unknown> {
   return dto
 }
 
-/* 首页公告（wiki-backend.md §7.14）：单例编辑器（getHomeAnnouncement/saveHomeAnnouncement）；
- * 同时保留列表/新增/下架/重新发布/置顶等既有接口供归档与兼容使用；写操作留痕。 */
+/* 首页公告（wiki-backend.md §7.14）：多条目列表管理（列表/新增/编辑/下架/重新发布/启用/删除）；
+ * 「启用」即置顶（pinned）——互锁保证全局至多一条开启、允许全关；启用的一条展示在客户端首页搜索栏下方。
+ * GET/PUT /home 为兼容单例接口（工作台/旧调用方），新界面不再依赖。写操作留痕。 */
 @Injectable()
 export class AnnouncementsService {
   constructor(
@@ -34,6 +35,14 @@ export class AnnouncementsService {
     private readonly ids: IdGeneratorService,
     private readonly audit: AuditService,
   ) {}
+
+  /* 启用互锁：清空其它公告的置顶，保证首页公告条全局至多一条（同一事务内执行） */
+  private async clearOtherPinned(tx: Prisma.TransactionClient, keepId?: string): Promise<void> {
+    await tx.announcement.updateMany({
+      where: { pinned: true, deletedAt: null, ...(keepId ? { id: { not: keepId } } : {}) },
+      data: { pinned: false },
+    })
+  }
 
   async findAll(query: QueryAnnouncementsDto): Promise<{ list: Record<string, unknown>[]; total: number }> {
     const where: Prisma.AnnouncementWhereInput = { deletedAt: null }
@@ -79,33 +88,27 @@ export class AnnouncementsService {
     }
   }
 
-  /** 首页公告单例保存：开启时保持全局唯一（取消其他置顶），关闭后客户端不再展示 */
+  /** 首页公告单例保存（兼容接口）：传 id 时仅更新该条并执行启用互锁；不传时沿用旧行为（覆盖最近一条/首条新建） */
   async saveHomeAnnouncement(payload: HomeAnnouncementPayloadDto, operator: string): Promise<{ code: number }> {
     const now = formatNow()
     const title = payload.title.trim()
     const content = sanitizeHtml(payload.content).trim()
     const link = payload.link?.trim() || null
 
-    const existing = await this.prisma.announcement.findFirst({
-      where: { deletedAt: null },
-      orderBy: [{ pinned: 'desc' }, { publishedAt: 'desc' }, { id: 'desc' }],
-    })
-
-    let id = existing?.id ?? ''
-    await this.prisma.$transaction(async (tx) => {
-      if (payload.enabled) {
-        await tx.announcement.updateMany({
-          where: {
-            pinned: true,
-            deletedAt: null,
-            ...(existing ? { id: { not: existing.id } } : {}),
-          },
-          data: { pinned: false },
+    const target = payload.id
+      ? await this.prisma.announcement.findUnique({ where: { id: payload.id } })
+      : await this.prisma.announcement.findFirst({
+          where: { deletedAt: null },
+          orderBy: [{ pinned: 'desc' }, { publishedAt: 'desc' }, { id: 'desc' }],
         })
-      }
-      if (existing) {
+    if (payload.id && (!target || target.deletedAt)) throw new NotFoundException('公告不存在')
+
+    let id = target?.id ?? ''
+    await this.prisma.$transaction(async (tx) => {
+      if (payload.enabled) await this.clearOtherPinned(tx, target?.id)
+      if (target) {
         await tx.announcement.update({
-          where: { id: existing.id },
+          where: { id: target.id },
           data: {
             title,
             content,
@@ -137,7 +140,7 @@ export class AnnouncementsService {
       module: '内容管理',
       action: '保存首页公告',
       target: id,
-      before: existing ? { title: existing.title, pinned: existing.pinned } : undefined,
+      before: target ? { title: target.title, pinned: target.pinned } : undefined,
       after: { title, enabled: payload.enabled },
       operator,
     })
@@ -149,9 +152,7 @@ export class AnnouncementsService {
     const id = await this.ids.next('AN')
     const announcement = await this.prisma.$transaction(async (tx) => {
       /* 置顶公告全局唯一：新增即开启时先取消其他置顶 */
-      if (payload.pinned) {
-        await tx.announcement.updateMany({ where: { pinned: true, deletedAt: null }, data: { pinned: false } })
-      }
+      if (payload.pinned) await this.clearOtherPinned(tx)
       return tx.announcement.create({
         data: {
           id,
@@ -187,12 +188,7 @@ export class AnnouncementsService {
 
     await this.prisma.$transaction(async (tx) => {
       /* 开启置顶时保持全局唯一 */
-      if (payload.pinned) {
-        await tx.announcement.updateMany({
-          where: { pinned: true, deletedAt: null, id: { not: id } },
-          data: { pinned: false },
-        })
-      }
+      if (payload.pinned) await this.clearOtherPinned(tx, id)
       await tx.announcement.update({
         where: { id },
         data: {
@@ -264,15 +260,12 @@ export class AnnouncementsService {
     const item = await this.prisma.announcement.findUnique({ where: { id } })
     if (!item || item.deletedAt) throw new NotFoundException('公告不存在')
     const pinned = !item.pinned
+    /* 启用（置顶）要求已发布：下架内容不得展示在客户端首页，需先重新发布 */
+    if (pinned && item.status !== 'published') throw new ConflictException('仅已发布的公告可启用')
 
     await this.prisma.$transaction(async (tx) => {
-      /* 置顶公告全局唯一：开启本条时取消其他置顶 */
-      if (pinned) {
-        await tx.announcement.updateMany({
-          where: { pinned: true, deletedAt: null, id: { not: id } },
-          data: { pinned: false },
-        })
-      }
+      /* 启用互锁：开启本条时取消其他置顶（全局至多一条） */
+      if (pinned) await this.clearOtherPinned(tx, id)
       await tx.announcement.update({
         where: { id },
         data: { pinned, updatedAt: formatNow() },

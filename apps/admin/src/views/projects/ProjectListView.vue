@@ -4,22 +4,24 @@ import { useListQueryState } from '@/utils/listQuery'
 import { useRouter } from 'vue-router'
 import { MessagePlugin } from 'tdesign-vue-next'
 import type { FormProps } from 'tdesign-vue-next'
-import { AddIcon, SearchIcon, DownloadIcon } from 'tdesign-icons-vue-next'
+import { AddIcon, SearchIcon } from 'tdesign-icons-vue-next'
 import PageHeader from '@/components/PageHeader.vue'
 import StatusTag from '@/components/StatusTag.vue'
 import ColumnController from '@/components/ColumnController.vue'
 import BulkArchiveDialog from '@/components/BulkArchiveDialog.vue'
+import ExportButton from '@/components/ExportButton.vue'
+import ListEmptyState from '@/components/ListEmptyState.vue'
 import ProjectFormDialog from '@/components/ProjectFormDialog.vue'
 import { fetchProjects, pauseProject, resumeProject, closeProject, archiveProject } from '@/api/projects'
 import ListErrorState from '@/components/ListErrorState.vue'
 import { fetchEnterprise } from '@/api/enterprises'
 import { fetchExternalEnterprise } from '@/api/external-enterprises'
 import { fetchUser } from '@/api/users'
-import { exportCsv, statusLabel } from '@/utils/exportCsv'
+import { statusLabel } from '@/utils/exportCsv'
 import type { Project } from '@/types'
 
 const router = useRouter()
-const loading = ref(false)
+const loading = ref(true)
 const loadError = ref('')
 /* 当前执行中的行操作标识：`${id}:pause | resume | close | archive` */
 const acting = ref('')
@@ -63,11 +65,10 @@ const columns = [
     sortType: 'all',
   ellipsis: true,
   },
-  { colKey: 'memberCount', title: '成员数', width: 72, resizable: true , ellipsis: true},
   { colKey: 'progress', title: '进度', cell: 'progress', width: 120, resizable: true , ellipsis: true},
   { colKey: 'status', title: '状态', cell: 'status', width: 86, resizable: true , ellipsis: true},
   { colKey: 'duration', title: '起止时间', cell: 'duration', width: 150, resizable: true , ellipsis: true},
-  { colKey: 'op', title: '操作', cell: 'op', width: 140 },
+  { colKey: 'op', title: '操作', cell: 'op', width: 220 },
 ]
 
 /* 列配置：本地持久化显隐/顺序 */
@@ -235,10 +236,16 @@ async function onArchive(row: Project) {
 /* 一键归档：按当前筛选全量拉取，归档所选状态的已结项 / 已关闭项目 */
 const archivingAll = ref(false)
 const bulkVisible = ref(false)
+const bulkProgress = ref<{ done: number; total: number; failed: number } | null>(null)
+let bulkCancelled = false
 const bulkStatuses = [
   { label: '已结项', value: 'finished' },
   { label: '已关闭', value: 'closed' },
 ]
+
+function onBulkCancel() {
+  bulkCancelled = true
+}
 
 async function doBulkArchive(values: string[]) {
   const targets: Project[] = []
@@ -252,17 +259,34 @@ async function doBulkArchive(values: string[]) {
     MessagePlugin.info('没有符合所选状态的可归档项目')
     return
   }
+  /* 进度 + 可取消：逐条执行，取消后停止后续条目（见 BulkArchiveDialog 进度态） */
+  bulkCancelled = false
+  bulkProgress.value = { done: 0, total: pending.length, failed: 0 }
+  let done = 0
   let failed = 0
   for (const p of pending) {
+    if (bulkCancelled) break
     try {
       await archiveProject(p.id)
     } catch {
       failed++
     }
+    done++
+    bulkProgress.value = { done, total: pending.length, failed }
   }
-  if (pending.length - failed > 0) MessagePlugin.success(`已归档 ${pending.length - failed} 条项目`)
-  if (failed > 0) MessagePlugin.warning(`${failed} 条项目归档失败，请重试`)
+  bulkProgress.value = null
+  if (bulkCancelled) {
+    MessagePlugin.warning(`已取消执行：本次已归档 ${done - failed} 条`)
+  } else {
+    if (done - failed > 0) MessagePlugin.success(`已归档 ${done - failed} 条项目`)
+    if (failed > 0) MessagePlugin.warning(`${failed} 条项目归档失败，请重试`)
+  }
   await load()
+}
+
+/* 确认前预估影响条数：按所选状态取 total 求和（pageSize=1 仅取 total） */
+function countByStatus(status: string) {
+  return fetchProjects({ ...query, status, page: 1, pageSize: 1 }).then((r) => r.total)
 }
 
 function onBulkArchive() {
@@ -292,23 +316,26 @@ function durationOf(row: Project): string {
   return `${start || '—'} ~ ${end || '—'}`
 }
 
-/* 导出当前页项目列表为 CSV */
-function onExport() {
-  exportCsv(
-    '项目列表',
-    ['编号', '项目编号', '项目名称', '承接方（占比）', '进度', '状态', '立项日期', '起止时间'],
-    list.value.map((p) => [
-      p.id,
-      p.code,
-      p.name,
-      p.undertakers.map((t) => `${t.name} ${t.share}%`).join('、'),
-      `${p.progress}%`,
-      statusLabel('project', p.status),
-      p.initiatedAt,
-      durationOf(p),
-    ]),
-  )
-  MessagePlugin.success(`已导出当前页 ${list.value.length} 条数据`)
+/* 导出：当前页 / 全部结果（沿用列表筛选） */
+const exportHeaders = ['编号', '项目编号', '项目名称', '承接方（占比）', '进度', '状态', '立项日期', '起止时间']
+
+function mapRow(p: Project): (string | number)[] {
+  return [
+    p.id,
+    p.code,
+    p.name,
+    p.undertakers.map((t) => `${t.name} ${t.share}%`).join('、'),
+    `${p.progress}%`,
+    statusLabel('project', p.status),
+    p.initiatedAt,
+    durationOf(p),
+  ]
+}
+
+const pageExportRows = computed(() => list.value.map(mapRow))
+
+function fetchAllForExport(page: number, pageSize: number) {
+  return fetchProjects({ ...query, page, pageSize })
 }
 
 function onRowClick({ row }: { row: Project }) {
@@ -383,10 +410,13 @@ onMounted(() => {
         <t-button variant="outline" :loading="archivingAll" :disabled="archivingAll" @click="onBulkArchive">
           一键归档
         </t-button>
-        <t-button variant="outline" @click="onExport">
-          <template #icon><DownloadIcon /></template>
-          导出
-        </t-button>
+        <ExportButton
+          filename="项目列表"
+          :headers="exportHeaders"
+          :rows="pageExportRows"
+          :fetch-all="fetchAllForExport"
+          :map-row="mapRow"
+        />
         <t-button theme="primary" @click="openCreate">
           <template #icon><AddIcon /></template>
           新增项目
@@ -395,19 +425,17 @@ onMounted(() => {
     </PageHeader>
 
     <div class="page-filter-bar">
-      <t-input
+      <t-input class="ctl-w-xl"
         v-model="query.keyword"
         placeholder="搜索项目名称/编号…"
         clearable
-        style="width: 220px"
         @enter="onSearch"
       />
-      <t-select
+      <t-select class="ctl-w-md"
         v-model="query.status"
         label="状态"
         :options="statusOptions"
         clearable
-        style="width: 160px"
         @change="onSearch"
       />
       <t-button @click="onSearch">
@@ -448,6 +476,7 @@ onMounted(() => {
         :sort="tableSort"
         :loading="loading"
         :pagination="pagination"
+        :row-attributes="{ style: { cursor: 'pointer' } }"
         @page-change="onPageChange"
         @sort-change="onSortChange"
         @row-click="onRowClick"
@@ -495,15 +524,16 @@ onMounted(() => {
               编辑
             </t-button>
             <template v-if="row.status === 'running'">
-              <t-button
-                variant="text"
-                size="small"
-                theme="warning"
-                :loading="acting === row.id + ':pause'"
-                @click="onStatusChange(row, 'pause')"
-              >
-                暂停
-              </t-button>
+              <t-popconfirm content="确认暂停该项目？" @confirm="onStatusChange(row, 'pause')">
+                <t-button
+                  variant="text"
+                  size="small"
+                  theme="warning"
+                  :loading="acting === row.id + ':pause'"
+                >
+                  暂停
+                </t-button>
+              </t-popconfirm>
             </template>
             <template v-if="row.status === 'paused'">
               <t-button
@@ -528,7 +558,7 @@ onMounted(() => {
           </div>
         </template>
         <template #empty>
-          <t-empty description="暂无项目数据" />
+          <ListEmptyState :query="query" description="暂无项目数据" @clear="onReset" />
         </template>
       </t-table>
     </div>
@@ -571,32 +601,25 @@ onMounted(() => {
       title="一键归档 · 项目"
       :statuses="bulkStatuses"
       :loading="archivingAll"
+      :progress="bulkProgress"
+      :count-for-status="countByStatus"
       @confirm="onBulkConfirm"
+      @cancel="onBulkCancel"
     />
   </div>
 </template>
 
 <style scoped>
+/* 窄列下按钮文字也不换行（排列方式由全局 .op-cell 提供） */
 .op-cell {
-  display: flex;
-  align-items: center;
-  gap: 2px;
-  flex-wrap: nowrap;
   white-space: nowrap;
 }
 
+/* 本页标题需要单行省略，其余（字号/字重/主色）由全局 .cell-title 提供 */
 .cell-title {
-  font-weight: 500;
-  color: var(--td-text-color-primary);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-}
-
-.cell-sub {
-  margin-top: 2px;
-  font-size: 12px;
-  color: var(--td-text-color-secondary);
 }
 
 .ent-wrap {
@@ -609,10 +632,5 @@ onMounted(() => {
 .ent-more {
   font-size: 12px;
   color: var(--td-text-color-secondary);
-}
-.dialog-footer {
-  display: flex;
-  justify-content: flex-end;
-  gap: 8px;
 }
 </style>

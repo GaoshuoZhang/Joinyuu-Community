@@ -282,6 +282,19 @@ export interface Project {
   finishedAt?: string
   /** 归档时间（非空表示已归档，详情页写操作隐藏） */
   deletedAt?: string | null
+  /** 需求方（主体 ID / 名称 / 身份快照；需求立项照搬需求，社区自建由表单录入） */
+  demanderId?: string
+  demanderName?: string
+  demanderIdentity?: { type?: string; enterpriseName?: string; enterpriseId?: string; title?: string } | null
+  /** 创建人 */
+  creatorName?: string
+  creatorId?: string
+  /** 联系方式 */
+  contactName?: string
+  contactPhone?: string
+  contactEmail?: string
+  /** 合同价格 */
+  contractPrice?: string
 }
 
 export type EventStatus = 'pending_release' | 'scheduled' | 'published' | 'ended' | 'cancelled'
@@ -406,6 +419,16 @@ export interface ProjectInitPayload {
   milestones: MilestoneInput[]
   /** 自定义项目经验值（缺省 = 按经验值规则 project_completed 发放；结项时按承接占比分配） */
   expReward?: number
+  /* 需求方 / 创建人 / 联系方式 / 合同价格（社区自建项目录入；需求立项由服务端照搬需求） */
+  demanderId?: string
+  demanderName?: string
+  demanderIdentity?: { type: string; enterpriseId?: string; enterpriseName?: string; title?: string } | null
+  creatorName?: string
+  creatorId?: string
+  contactName?: string
+  contactPhone?: string
+  contactEmail?: string
+  contractPrice?: string
 }
 
 /* API 返回形状 */
@@ -490,6 +513,8 @@ export interface MallGoods {
   coverUrl?: string
   /** 实物商品 / 权益券 */
   category: GoodsCategory
+  /** 商品类型名称（后端按 goods_category 字典回填；编码已删除时回退为 category 原值） */
+  categoryLabel?: string
   /** 履约类型：实物配送 / 券码 */
   fulfillment: GoodsFulfillment
   /** 兑换所需积分 */
@@ -863,6 +888,14 @@ export interface AuditLog {
   target: string
   detail?: string
   at: string
+  /** 客户端来源 IP（系统/历史记录无请求上下文时为空） */
+  ip?: string
+  /** 字段变更前快照（后端超限时截断为字符串预览） */
+  before?: unknown
+  /** 字段变更后快照（同上） */
+  after?: unknown
+  /** 快照因超过体量上限被截断（列表接口的体量保护标记） */
+  snapshotTruncated?: boolean
 }
 
 export interface SystemConfig {

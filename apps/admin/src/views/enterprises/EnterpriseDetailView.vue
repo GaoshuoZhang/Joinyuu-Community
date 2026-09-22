@@ -7,6 +7,7 @@ import { ArrowLeftIcon, EditIcon } from 'tdesign-icons-vue-next'
 import StatusTag from '@/components/StatusTag.vue'
 import AdjustValueDialog from '@/components/AdjustValueDialog.vue'
 import EnterpriseFormDialog from '@/components/EnterpriseFormDialog.vue'
+import ListErrorState from '@/components/ListErrorState.vue'
 import { roleLabelMap } from '@/constants/identity'
 import {
   deleteEnterprise,
@@ -20,10 +21,12 @@ import { adjustExperience, fetchExperienceRecords } from '@/api/ledgers'
 import { deriveLeaseStatus, fetchLeases, type LeaseViewStatus } from '@/api/workstations'
 import type { Enterprise, ExperienceRecord, Lease, User, UserIdentity } from '@/types'
 import { fetchCard, type CardRow } from '@/api/cards'
+import { isNotFound } from '@/api/http'
 
 const route = useRoute()
 const router = useRouter()
 const loading = ref(true)
+const loadError = ref('')
 const enterprise = ref<Enterprise | null>(null)
 const members = ref<User[]>([])
 const tab = useQueryTab('info', ['info', 'card', 'leases', 'stats', 'members', 'experience'] as const)
@@ -86,6 +89,7 @@ const memberColumns = [
 
 async function load() {
   loading.value = true
+  loadError.value = ''
   try {
     const id = route.params.id as string
     const res = await fetchEnterprise(id)
@@ -93,9 +97,19 @@ async function load() {
     members.value = res.members
     if (tab.value === 'card') await loadCard()
     stats.value = await fetchEnterpriseStats(id)
-    experienceRecords.value = await fetchExperienceRecords('enterprise', id)
-  } catch {
-    MessagePlugin.error('企业信息加载失败')
+    recordsLoading.value = true
+    try {
+      experienceRecords.value = await fetchExperienceRecords('enterprise', id)
+    } finally {
+      recordsLoading.value = false
+    }
+  } catch (e) {
+    /* 404 = 企业不存在（走空态）；其余错误保留原因并展示重试入口 */
+    if (isNotFound(e)) {
+      enterprise.value = null
+    } else {
+      loadError.value = e instanceof Error ? e.message : '企业信息加载失败'
+    }
   } finally {
     loading.value = false
   }
@@ -214,18 +228,18 @@ onMounted(() => {
 
 <template>
   <div class="enterprise-detail page-fade-in">
-    <div class="back-row">
-      <t-button variant="text" @click="router.back()">
-        <template #icon><ArrowLeftIcon /></template>
-        返回
-      </t-button>
-    </div>
+    <t-button variant="text" theme="default" class="back-btn" @click="router.back()">
+      <template #icon><ArrowLeftIcon /></template>
+      返回
+    </t-button>
 
     <t-skeleton
       v-if="loading"
       :row-col="[{ width: '100%', height: '132px' }, { width: '100%', height: '360px' }]"
       animation="gradient"
     />
+
+    <ListErrorState v-else-if="loadError" :message="loadError" :loading="loading" @retry="load" />
 
     <template v-else-if="enterprise">
       <!-- 企业头部 -->
@@ -338,6 +352,8 @@ onMounted(() => {
               </div>
               <t-table
                 row-key="id"
+                table-layout="fixed"
+                resizable
                 :data="enterpriseLeases"
                 :columns="leaseColumns"
                 :loading="leasesLoading"
@@ -392,7 +408,7 @@ onMounted(() => {
           <t-tab-panel value="members" label="成员管理">
             <div class="tab-body">
               <t-table
-                row-key="id"
+                row-key="uid"
                 :data="members"
                 :columns="memberColumns"
                 empty="暂无企业成员"
@@ -463,12 +479,13 @@ onMounted(() => {
 </template>
 
 <style scoped>
-.back-row {
+.back-btn {
   margin-bottom: 12px;
 }
 
 .head-card {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   justify-content: space-between;
   gap: 16px;
@@ -484,7 +501,7 @@ onMounted(() => {
 
 .head-avatar {
   flex-shrink: 0;
-  font-size: 18px;
+  font-size: 20px;
   font-weight: 600;
   color: var(--td-brand-color);
   background: var(--td-brand-color-1);
@@ -505,7 +522,7 @@ onMounted(() => {
 }
 
 .head-name {
-  font-size: 18px;
+  font-size: 20px;
   font-weight: 600;
   color: var(--td-text-color-primary);
 }
@@ -524,6 +541,7 @@ onMounted(() => {
 
 .head-actions {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   gap: 8px;
   flex-shrink: 0;
@@ -540,7 +558,7 @@ onMounted(() => {
 
 .block-title {
   margin: 0 0 8px;
-  font-size: 15px;
+  font-size: 16px;
   font-weight: 600;
   color: var(--td-text-color-primary);
 }
@@ -590,7 +608,7 @@ onMounted(() => {
 }
 
 .stat-num {
-  font-size: 24px;
+  font-size: 20px;
   font-weight: 600;
   line-height: 32px;
   color: var(--td-brand-color);
@@ -598,7 +616,7 @@ onMounted(() => {
 }
 
 .stat-label {
-  font-size: 13px;
+  font-size: 12px;
   color: var(--td-text-color-secondary);
 }
 
@@ -616,7 +634,7 @@ onMounted(() => {
 }
 
 .exp-label {
-  font-size: 13px;
+  font-size: 12px;
   color: var(--td-text-color-secondary);
 }
 
@@ -651,29 +669,5 @@ onMounted(() => {
 
 .ws-tag {
   margin: 2px 4px 2px 0;
-}
-
-.cell-title {
-  font-weight: 500;
-  color: var(--td-text-color-primary);
-}
-
-.cell-sub {
-  margin-top: 2px;
-  font-size: 12px;
-  color: var(--td-text-color-secondary);
-}
-
-.drawer-footer {
-  position: sticky;
-  bottom: 0;
-  z-index: 1;
-  display: flex;
-  justify-content: flex-end;
-  gap: 8px;
-  margin-top: 16px;
-  padding: 12px 0;
-  border-top: 1px solid var(--td-component-border);
-  background: var(--td-bg-color-container);
 }
 </style>

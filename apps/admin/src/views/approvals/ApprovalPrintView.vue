@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { onMounted, ref } from 'vue'
+import { onBeforeUnmount, onMounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import ListErrorState from '@/components/ListErrorState.vue'
 import { fetchApplicationPrint } from '@/api/applications'
@@ -25,6 +25,29 @@ const actionTextMap: Record<string, string> = {
   withdraw: '撤回',
 }
 
+/* 打印回落浅色：本页颜色一律取 TDesign token，暗色主题下这些 token 会解析成深色值
+ * （--td-bg-color-container = 深灰），直接打印就是黑底白字。因此在「打印」这一瞬间
+ * 摘掉 :root 的 theme-mode 属性，让 token 回落到浅色取值；打印结束后按打印前的实际
+ * 属性还原。全程只操作 DOM 属性，不改 localStorage、不调用 theme store，
+ * 因此与 stores/theme.ts 的持久化状态互不冲突。 */
+let restoreThemeMode = false
+
+function enterPrintLight() {
+  restoreThemeMode = document.documentElement.getAttribute('theme-mode') === 'dark'
+  if (restoreThemeMode) {
+    document.documentElement.removeAttribute('theme-mode')
+    document.documentElement.style.colorScheme = 'light'
+  }
+}
+
+function restoreAppTheme() {
+  if (restoreThemeMode) {
+    document.documentElement.setAttribute('theme-mode', 'dark')
+    document.documentElement.style.colorScheme = 'dark'
+  }
+  restoreThemeMode = false
+}
+
 function doPrint() {
   window.print()
 }
@@ -46,7 +69,19 @@ async function load() {
   }
 }
 
-onMounted(load)
+onMounted(() => {
+  /* beforeprint/afterprint 同时覆盖「右上角打印按钮」与浏览器自带打印（Ctrl+P）两条路径 */
+  window.addEventListener('beforeprint', enterPrintLight)
+  window.addEventListener('afterprint', restoreAppTheme)
+  load()
+})
+
+onBeforeUnmount(() => {
+  window.removeEventListener('beforeprint', enterPrintLight)
+  window.removeEventListener('afterprint', restoreAppTheme)
+  /* 兜底：中途离开页面（浏览器未派发 afterprint）时也要还原主题 */
+  restoreAppTheme()
+})
 </script>
 
 <template>
@@ -150,8 +185,8 @@ onMounted(load)
   max-width: 820px;
   margin: 0 auto;
   padding: 48px 56px;
-  background: #fff;
-  color: #333;
+  background: var(--td-bg-color-container);
+  color: var(--td-text-color-primary);
   box-shadow: var(--td-shadow-2);
 }
 
@@ -163,7 +198,7 @@ onMounted(load)
 
 .doc-head {
   text-align: center;
-  border-bottom: 2px solid #333;
+  border-bottom: 2px solid var(--td-text-color-primary);
   padding-bottom: 16px;
   margin-bottom: 24px;
 }
@@ -177,13 +212,15 @@ onMounted(load)
 .doc-no {
   margin: 8px 0 0;
   font-size: 13px;
-  color: #666;
+  color: var(--td-text-color-secondary);
 }
 
+/* 单据样式全部走 TDesign token：屏幕预览随应用主题，打印时由 enterPrintLight()
+ * 把 :root 回落到浅色取值，故此处不再为打印稿单独固定灰阶 */
 .doc-section {
   margin: 24px 0 10px;
   font-size: 15px;
-  border-left: 4px solid #0052d9;
+  border-left: 4px solid var(--td-brand-color);
   padding-left: 8px;
 }
 
@@ -195,14 +232,14 @@ onMounted(load)
 
 .doc-table td,
 .doc-table th {
-  border: 1px solid #d9d9d9;
+  border: 1px solid var(--td-component-border);
   padding: 8px 12px;
 }
 
 .doc-table td.label {
   width: 110px;
-  background: #f7f8fa;
-  color: #666;
+  background: var(--td-bg-color-secondarycontainer);
+  color: var(--td-text-color-secondary);
   font-weight: 500;
 }
 
@@ -211,7 +248,7 @@ onMounted(load)
 }
 
 .doc-table th {
-  background: #f0f2f5;
+  background: var(--td-bg-color-secondarycontainer);
   text-align: left;
   font-weight: 500;
 }
@@ -220,14 +257,14 @@ onMounted(load)
   margin: 4px 0 0;
   font-size: 14px;
   line-height: 1.8;
-  color: #444;
+  color: var(--td-text-color-primary);
 }
 
 .doc-foot {
   margin-top: 40px;
   text-align: center;
   font-size: 12px;
-  color: #999;
+  color: var(--td-text-color-placeholder);
 }
 
 @media print {
@@ -244,6 +281,8 @@ onMounted(load)
     margin: 0;
     padding: 24px 32px;
     box-shadow: none;
+    /* 浏览器默认不打印背景色，表头与标签列底纹会丢失 */
+    print-color-adjust: exact;
   }
 }
 </style>

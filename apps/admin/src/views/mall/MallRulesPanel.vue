@@ -28,15 +28,30 @@ const catalogue: Record<string, { category: string; beneficiary: string; cadence
   daily_login: { category: '日常活跃', beneficiary: '登录用户', cadence: '每日首次登录' },
 }
 
-const rows = computed(() => list.value.map(rule => ({
-  ...rule,
-  category: catalogue[rule.code]?.category ?? '其他',
-  beneficiary: catalogue[rule.code]?.beneficiary ?? '行为用户',
-  cadence: catalogue[rule.code]?.cadence ?? '按触发事件',
-})))
+/* 分类分组：按 catalogue 定义顺序排序聚簇，「其他」兜底置尾 */
+const categoryOrder = [...new Set([...Object.values(catalogue).map((c) => c.category), '其他'])]
+
+const rows = computed(() => list.value
+  .map(rule => ({
+    ...rule,
+    category: catalogue[rule.code]?.category ?? '其他',
+    beneficiary: catalogue[rule.code]?.beneficiary ?? '行为用户',
+    cadence: catalogue[rule.code]?.cadence ?? '按触发事件',
+  }))
+  .sort((a, b) => categoryOrder.indexOf(a.category) - categoryOrder.indexOf(b.category)))
+
+/* 规则分类列纵向合并：每组首行向下合并同分类行，被覆盖单元格由表格自动跳过 */
+function onCategorySpan({ col, rowIndex }: { col: { colKey?: string }; rowIndex: number }) {
+  if (col.colKey !== 'category') return
+  if (rowIndex > 0 && rows.value[rowIndex - 1].category === rows.value[rowIndex].category) return
+  let count = 1
+  while (rowIndex + count < rows.value.length && rows.value[rowIndex + count].category === rows.value[rowIndex].category) count++
+  return { rowspan: count }
+}
 
 const columns = [
-  { colKey: 'category', title: '规则分类', width: 110 },
+  /* 分类列有 rowspan 纵向合并，拖拽改宽会破坏合并显示，故禁用该列列宽调整 */
+  { colKey: 'category', title: '规则分类', width: 110, resizable: false },
   { colKey: 'name', title: '触发项', cell: 'name', width: 180, resizable: true, ellipsis: true },
   { colKey: 'scene', title: '触发条件', ellipsis: true, width: 180 },
   { colKey: 'beneficiary', title: '发放对象', width: 120 },
@@ -44,8 +59,8 @@ const columns = [
   { colKey: 'points', title: '积分', cell: 'points', width: 90, resizable: true , ellipsis: true},
   { colKey: 'description', title: '说明', ellipsis: true, width: 260, resizable: true },
   { colKey: 'status', title: '状态', cell: 'status', width: 95 , ellipsis: true},
-  { colKey: 'updatedAt', title: '更新时间', width: 145, resizable: true , ellipsis: true},
-  { colKey: 'op', title: '操作', cell: 'op', width: 120 },
+  { colKey: 'updatedAt', title: '更新时间', width: 160, resizable: true , ellipsis: true},
+  { colKey: 'op', title: '操作', cell: 'op', width: 160 },
 ]
 
 async function load() {
@@ -124,11 +139,10 @@ onMounted(load)
       <template #actions><t-button variant="outline" @click="router.push('/rules/ledger')">积分发放记录</t-button></template>
     </PageHeader>
 
-    <div class="page-filter-bar">
-      <span class="panel-tip">
-        触发项为固定制度（不可新增/删除），完成对应行为时自动发放积分；扣除积分不设自动规则，由管理员在积分流水手动调整；停用规则不影响已发放积分。
-      </span>
-    </div>
+    <!-- 纯说明文案不是筛选条件：用 info 提示条承载，避免被误读为筛选区 -->
+    <t-alert theme="info" class="rule-note">
+      触发项为固定制度（不可新增/删除），完成对应行为时自动发放积分；扣除积分不设自动规则，由管理员在积分流水手动调整；停用规则不影响已发放积分。
+    </t-alert>
 
     <div class="page-card">
       <t-table
@@ -136,9 +150,11 @@ onMounted(load)
         table-layout="fixed"
         hover
         resizable
+        :disable-data-page="true"
         :data="rows"
         :columns="columns"
         :loading="loading"
+        :rowspan-and-colspan="onCategorySpan"
         empty="暂无积分规则"
       >
         <template #name="{ row }">
@@ -198,7 +214,7 @@ onMounted(load)
       </t-descriptions>
       <t-form ref="formRef" :data="form" :rules="rules" label-align="top">
         <t-form-item label="发放积分（N）" name="points">
-          <t-input-number v-model="form.points" :min="1" theme="column" style="width: 100%" />
+          <t-input-number v-model="form.points" :min="1" :decimal-places="0" theme="column" class="w-full" />
         </t-form-item>
       </t-form>
     </t-dialog>
@@ -206,38 +222,17 @@ onMounted(load)
 </template>
 
 <style scoped>
-.panel-tip {
-  font-size: 12px;
-  color: var(--td-text-color-secondary);
+.w-full {
+  width: 100%;
 }
 
-.cell-title {
-  font-weight: 500;
-  color: var(--td-text-color-primary);
-}
-
-.cell-sub {
-  margin-top: 2px;
-  font-size: 12px;
-  color: var(--td-text-color-secondary);
+.rule-note {
+  margin-bottom: 16px;
 }
 
 .delta-add {
   color: var(--td-success-color);
   font-weight: 600;
-}
-
-.op-cell {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-  flex-wrap: nowrap;
-}
-
-.dialog-footer {
-  display: flex;
-  justify-content: flex-end;
-  gap: 8px;
 }
 
 .rule-desc {

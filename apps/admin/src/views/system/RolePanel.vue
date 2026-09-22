@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import ListErrorState from '@/components/ListErrorState.vue'
+import ListEmptyState from '@/components/ListEmptyState.vue'
 import { computed, onMounted, reactive, ref } from 'vue'
 import { MessagePlugin } from 'tdesign-vue-next'
 import type { FormProps } from 'tdesign-vue-next'
@@ -88,6 +89,9 @@ const assignVisible = ref(false)
 const current = ref<AdminRole | null>(null)
 const checked = ref<string[]>([])
 const scopeDraft = ref<string[]>([])
+/* 打开弹窗时的快照：用于判断是否有未保存改动，避免重复提交 */
+const originalChecked = ref<string[]>([])
+const originalScope = ref<string[]>([])
 
 /* 权限分组目录：优先使用后端目录（新增权限点自动出现），失败回退内置副本 */
 type PermGroup = { name: string; perms: { code: string; name: string }[] }
@@ -116,7 +120,8 @@ const columns = [
   { colKey: 'code', title: '编码', width: 140 , ellipsis: true},
   { colKey: 'description', title: '说明', width: 200 , ellipsis: true},
   { colKey: 'permCount', title: '权限数', cell: 'permCount', width: 90 , ellipsis: true},
-  { colKey: 'dataScope', title: '数据范围', cell: 'dataScope', width: 220 , ellipsis: true},
+  /* 数据范围最多 7 个域标签：加宽并交由单元格自行换行，避免 ellipsis 截断后丢失信息 */
+  { colKey: 'dataScope', title: '数据范围', cell: 'dataScope', width: 280 },
   { colKey: 'op', title: '操作', cell: 'op', width: 120 },
 ]
 
@@ -140,6 +145,8 @@ function openAssign(role: AdminRole) {
   current.value = role
   checked.value = role.permCodes.includes('*') ? allCodes() : [...role.permCodes]
   scopeDraft.value = [...(role.dataScope ?? [])]
+  originalChecked.value = [...checked.value]
+  originalScope.value = [...scopeDraft.value]
   assignVisible.value = true
 }
 
@@ -154,6 +161,22 @@ function toggleGroup(groupPerms: { code: string }[], on: boolean) {
 
 const groupChecked = (groupPerms: { code: string }[]) =>
   groupPerms.every((p) => checked.value.includes(p.code))
+
+/* 分组半选态：组内既有已选也有未选时，父级复选框呈半选，避免「全选/全不选」二义 */
+const groupIndeterminate = (groupPerms: { code: string }[]) => {
+  const count = groupPerms.filter((p) => checked.value.includes(p.code)).length
+  return count > 0 && count < groupPerms.length
+}
+
+const sameSet = (a: string[], b: string[]) => [...a].sort().join('\u0000') === [...b].sort().join('\u0000')
+
+/* 超管保存恒传 ['*']，权限矩阵不可编辑，因此仅在普通角色下判断改动 */
+const dirty = computed(
+  () =>
+    !!current.value &&
+    !isSuper.value &&
+    (!sameSet(checked.value, originalChecked.value) || !sameSet(scopeDraft.value, originalScope.value)),
+)
 
 async function onSave() {
   if (!current.value) return
@@ -182,12 +205,12 @@ onMounted(() => {
 </script>
 
 <template>
-  <div class="role-panel page-fade-in">
+  <div class="role-panel">
     <ListErrorState v-if="loadError" :message="loadError" :loading="loading" @retry="() => load()" />
     <PageHeader title="角色权限" description="RBAC 角色与权限点管理：分配角色可见可操作的模块" />
 
     <div class="page-filter-bar">
-      <t-input v-model="keyword" class="filter-keyword" placeholder="搜索角色/编码/说明…" clearable @enter="onQuery" />
+      <t-input v-model="keyword" class="ctl-w-xl" placeholder="搜索角色/编码/说明…" clearable @enter="onQuery" />
       <t-button theme="primary" variant="outline" @click="onQuery">
         <template #icon><SearchIcon /></template>
         查询
@@ -195,46 +218,52 @@ onMounted(() => {
       <t-button variant="outline" theme="default" @click="onResetQuery">
         重置
       </t-button>
-      <t-button theme="primary" class="filter-create" @click="openCreate">
+      <t-button theme="primary" class="toolbar-right" @click="openCreate">
         <template #icon><AddIcon /></template>
         新增角色
       </t-button>
     </div>
 
-    <div class="page-card">
-      <t-table
-        row-key="id"
-        table-layout="fixed"
-        hover
-        resizable
-        :data="filtered"
-        :columns="columns"
-        :loading="loading"
-        empty="暂无角色"
-      >
-        <template #name="{ row }">
-          <div class="role-name">{{ row.name }}</div>
-        </template>
-        <template #permCount="{ row }">
-          <t-tag variant="light" :theme="row.permCodes.includes('*') ? 'primary' : 'default'">
-            {{ permCount(row) }}
+    <!-- 卡片由聚合壳（AccountRoleView）提供，面板内不再嵌套 page-card -->
+    <t-table
+      row-key="id"
+      table-layout="fixed"
+      hover
+      resizable
+      :data="filtered"
+      :columns="columns"
+      :loading="loading"
+    >
+      <template #name="{ row }">
+        <div class="role-name">{{ row.name }}</div>
+      </template>
+      <template #permCount="{ row }">
+        <t-tag variant="light" :theme="row.permCodes.includes('*') ? 'primary' : 'default'">
+          {{ permCount(row) }}
+        </t-tag>
+      </template>
+      <template #dataScope="{ row }">
+        <span v-if="!row.dataScope || row.dataScope.length === 0" class="scope-all">全部</span>
+        <span v-else class="scope-tags">
+          <t-tag v-for="d in row.dataScope.slice(0, 3)" :key="d" size="small" variant="light" class="scope-tag">
+            {{ scopeLabel(d) }}
           </t-tag>
-        </template>
-        <template #dataScope="{ row }">
-          <span v-if="!row.dataScope || row.dataScope.length === 0" class="scope-all">全部</span>
-          <template v-else>
-            <t-tag v-for="d in row.dataScope" :key="d" size="small" variant="light" class="scope-tag">
-              {{ scopeLabel(d) }}
-            </t-tag>
-          </template>
-        </template>
-        <template #op="{ row }">
-          <div class="op-cell" @click.stop>
-            <t-button variant="text" size="small" @click="openAssign(row)">权限配置</t-button>
-          </div>
-        </template>
-      </t-table>
-    </div>
+          <!-- 超出 3 个时折叠为 +N，悬浮可查看完整范围，避免列宽截断丢信息 -->
+          <t-tooltip v-if="row.dataScope.length > 3" :content="row.dataScope.map(scopeLabel).join('、')">
+            <t-tag size="small" variant="light-outline" class="scope-tag">+{{ row.dataScope.length - 3 }}</t-tag>
+          </t-tooltip>
+        </span>
+      </template>
+      <template #op="{ row }">
+        <div class="op-cell" @click.stop>
+          <t-button variant="text" size="small" @click="openAssign(row)">权限配置</t-button>
+        </div>
+      </template>
+
+      <template #empty>
+        <ListEmptyState :query="{ keyword: appliedKeyword }" description="暂无角色" @clear="onResetQuery" />
+      </template>
+    </t-table>
 
     <!-- 权限分配弹窗 -->
     <t-dialog
@@ -246,23 +275,24 @@ onMounted(() => {
       <template #footer>
         <div class="dialog-footer">
           <t-button variant="text" theme="default" @click="assignVisible = false">取消</t-button>
-          <t-button theme="primary" :loading="saving" @click="onSave">保存</t-button>
+          <t-button theme="primary" :loading="saving" :disabled="!dirty" @click="onSave">保存</t-button>
         </div>
       </template>
 
-      <div v-if="current" class="perm-body">
+      <div v-if="current" class="perm-body" :class="{ 'is-locked': isSuper }">
         <t-checkbox
           :model-value="checked.length === allCodes().length"
+          :indeterminate="checked.length > 0 && checked.length < allCodes().length"
+          :disabled="isSuper"
+          label="全选"
           @change="(v: boolean) => {
             checked = v ? allCodes() : []
           }"
-        >
-          全选
-        </t-checkbox>
+        />
         <t-alert
           v-if="isSuper"
           theme="info"
-          message="该角色为全量权限（*）：保存时保持全量（*），新增权限点自动生效；如需按权限点限制请修改其他角色。"
+          message="该角色为全量权限（*）：权限点不可编辑，保存时保持全量（*），新增权限点自动生效；如需按权限点限制请修改其他角色。"
           class="block-gap"
         />
         <div class="perm-group scope-group">
@@ -280,10 +310,14 @@ onMounted(() => {
             <span class="perm-group-name">{{ g.name }}</span>
             <t-checkbox
               :model-value="groupChecked(g.perms)"
+              :indeterminate="groupIndeterminate(g.perms)"
+              :disabled="isSuper"
+              label="全选"
+              :aria-label="`${g.name} 全选`"
               @change="(v: boolean) => toggleGroup(g.perms, v)"
             />
           </div>
-          <t-checkbox-group v-model="checked" class="perm-list">
+          <t-checkbox-group v-model="checked" :disabled="isSuper" class="perm-list">
             <t-checkbox v-for="p in g.perms" :key="p.code" :value="p.code" :label="p.name" />
           </t-checkbox-group>
         </div>
@@ -320,13 +354,6 @@ onMounted(() => {
 </template>
 
 <style scoped>
-.filter-keyword {
-  width: 240px;
-}
-.filter-create {
-  margin-left: auto;
-}
-
 .role-name {
   font-weight: 500;
   color: var(--td-text-color-primary);
@@ -336,17 +363,6 @@ onMounted(() => {
   display: flex;
   align-items: center;
   gap: 8px;
-}
-
-.dialog-footer {
-  display: flex;
-  justify-content: flex-end;
-  gap: 8px;
-}
-
-.perm-body {
-  max-height: 480px;
-  overflow-y: auto;
 }
 
 .block-gap {
@@ -383,8 +399,19 @@ onMounted(() => {
   color: var(--td-text-color-secondary);
 }
 
+.scope-tags {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: 4px 0;
+}
+
 .scope-tag {
   margin-right: 6px;
+}
+
+/* 超管：权限矩阵不可编辑，整体降透明度以示禁用态 */
+.perm-body.is-locked .perm-group {
+  opacity: 0.6;
 }
 
 .scope-hint {

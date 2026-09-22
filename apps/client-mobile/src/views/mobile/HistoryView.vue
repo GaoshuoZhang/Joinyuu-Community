@@ -49,8 +49,9 @@ function onClear() {
       action-text="看资讯"
       @action="router.push('/plaza?tab=articles')"
     />
-    <div v-else class="list">
-      <article v-for="item in items" :key="item.id" class="m-card row">
+    <div v-else class="list stagger">
+      <!-- v46：卡片补按压反馈（.pressable）——卡片本身不承载点击语义，跳转仍由内部链接负责 -->
+      <article v-for="item in items" :key="item.id" class="m-card row pressable">
         <router-link class="main" :to="`/articles/${item.id}`">
           <p class="title">{{ item.title }}</p>
           <p class="at">浏览于 {{ formatLocalDateTime(item.at) }}</p>

@@ -113,7 +113,7 @@ export class EventsController {
     @Body() dto: ReviewEnrollmentDto,
     @Req() req: AuthenticatedRequest,
   ) {
-    return this.events.reviewEnrollment(id, userId, dto.status, req.user?.name ?? '社区管理员')
+    return this.events.reviewEnrollment(id, userId, dto.status, req.user?.name ?? '社区管理员', dto.reason)
   }
 
   @HttpCode(200)

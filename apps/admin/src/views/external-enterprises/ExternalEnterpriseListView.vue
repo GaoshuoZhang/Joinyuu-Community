@@ -2,16 +2,16 @@
 import { computed, onMounted, reactive, ref } from 'vue'
 import { useListQueryState } from '@/utils/listQuery'
 import { useRouter } from 'vue-router'
-import { AddIcon, SearchIcon, DownloadIcon } from 'tdesign-icons-vue-next'
-import { MessagePlugin } from 'tdesign-vue-next'
+import { AddIcon, SearchIcon } from 'tdesign-icons-vue-next'
 import PageHeader from '@/components/PageHeader.vue'
+import ExportButton from '@/components/ExportButton.vue'
+import ListEmptyState from '@/components/ListEmptyState.vue'
 import ColumnController from '@/components/ColumnController.vue'
 import StatusTag from '@/components/StatusTag.vue'
 import ExternalEnterpriseFormDialog from '@/components/ExternalEnterpriseFormDialog.vue'
 import { fetchExternalEnterprises } from '@/api/external-enterprises'
 import ListErrorState from '@/components/ListErrorState.vue'
 import { dictFallback, fetchDictEntries } from '@/api/dicts'
-import { exportCsv } from '@/utils/exportCsv'
 import type { ExternalEnterprise } from '@/types'
 
 const router = useRouter()
@@ -45,7 +45,7 @@ const sortBy = ref<'registeredAt'>('registeredAt')
 const sortOrder = ref<'ascend' | 'descend'>('descend')
 
 const columns = [
-  { colKey: 'name', title: '企业名称', cell: 'name', width: 220 , ellipsis: true},
+  { colKey: 'name', title: '企业名称', cell: 'name', width: 230 , ellipsis: true},
   { colKey: 'industry', title: '行业', width: 120 , ellipsis: true},
   {
     colKey: 'registeredAt',
@@ -143,14 +143,17 @@ function openCreate() {
   formVisible.value = true
 }
 
-/* 导出当前页合作企业列表为 CSV */
-function onExport() {
-  exportCsv(
-    '合作企业列表',
-    ['编号', '企业名称', '行业', '登记日期', '关联成员数'],
-    list.value.map((e) => [e.id, `${e.name} [${e.id}]`, e.industry, e.registeredAt, e.members.length]),
-  )
-  MessagePlugin.success(`已导出当前页 ${list.value.length} 条数据`)
+/* 导出配置 */
+const exportHeaders = ['编号', '企业名称', '行业', '登记日期', '关联成员数']
+
+function mapRow(e: ExternalEnterprise): (string | number)[] {
+  return [e.id, `${e.name} [${e.id}]`, e.industry, e.registeredAt, e.members.length]
+}
+
+const pageExportRows = computed(() => list.value.map(mapRow))
+
+function fetchAllForExport(page: number, pageSize: number) {
+  return fetchExternalEnterprises({ ...query, page, pageSize })
 }
 
 const { syncQuery } = useListQueryState(query, load, { refs: { sortBy, sortOrder } })
@@ -179,10 +182,13 @@ onMounted(() => {
           storage-key="external-enterprises"
           :columns="columns.map((c) => ({ key: c.colKey, title: c.title }))"
         />
-        <t-button variant="outline" @click="onExport">
-          <template #icon><DownloadIcon /></template>
-          导出
-        </t-button>
+        <ExportButton
+          filename="合作企业列表"
+          :headers="exportHeaders"
+          :rows="pageExportRows"
+          :fetch-all="fetchAllForExport"
+          :map-row="mapRow"
+        />
         <t-button theme="primary" v-permission="'perm:external-enterprise:create'" @click="openCreate">
           <template #icon><AddIcon /></template>
           新增合作企业
@@ -193,32 +199,30 @@ onMounted(() => {
     <div class="page-filter-bar">
       <t-input
         v-model="query.keyword"
-        class="filter-keyword"
+        class="ctl-w-xl"
         placeholder="搜索企业ID/名称/行业…"
         clearable
         @enter="onSearch"
       />
-      <t-select
+      <t-select class="ctl-w-md"
         v-model="query.industry"
         label="行业"
         :options="industryOptions"
         clearable
-        style="width: 150px"
         @change="onSearch"
       />
-      <t-select
+      <t-select class="ctl-w-md"
         v-model="query.status"
         label="状态"
         :options="statusOptions"
         clearable
-        style="width: 130px"
         @change="onSearch"
       />
-      <t-button theme="primary" variant="outline" @click="onSearch">
+      <t-button @click="onSearch">
         <template #icon><SearchIcon /></template>
         查询
       </t-button>
-      <t-button variant="outline" theme="default" @click="onReset">
+      <t-button variant="outline" @click="onReset">
         重置
       </t-button>
     </div>
@@ -234,7 +238,7 @@ onMounted(() => {
         :sort="tableSort"
         :loading="loading"
         :pagination="pagination"
-        empty="暂无合作企业"
+        :row-attributes="{ style: { cursor: 'pointer' } }"
         @page-change="onPageChange"
         @sort-change="onSortChange"
         @row-click="({ row }: { row: ExternalEnterprise }) => goDetail(row)"
@@ -262,6 +266,10 @@ onMounted(() => {
             <t-button variant="text" size="small" @click="goDetail(row)">详情</t-button>
           </div>
         </template>
+
+        <template #empty>
+          <ListEmptyState :query="query" description="暂无合作企业" @clear="onReset" />
+        </template>
       </t-table>
     </div>
 
@@ -275,10 +283,6 @@ onMounted(() => {
 </template>
 
 <style scoped>
-.filter-keyword {
-  width: 240px;
-}
-
 .name-cell {
   display: flex;
   align-items: center;
@@ -294,7 +298,7 @@ onMounted(() => {
 
 .name-text {
   font-size: 14px;
-  font-weight: 600;
+  font-weight: 500;
   color: var(--td-text-color-primary);
 }
 

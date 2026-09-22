@@ -4,6 +4,7 @@ import { MessagePlugin } from 'tdesign-vue-next'
 import PageHeader from '@/components/PageHeader.vue'
 import ColumnController from '@/components/ColumnController.vue'
 import ListErrorState from '@/components/ListErrorState.vue'
+import ListEmptyState from '@/components/ListEmptyState.vue'
 import CardSegmentsEditor from '@/components/CardSegmentsEditor.vue'
 import { useListQueryState } from '@/utils/listQuery'
 import { cardFields, fetchCards, fetchCardSchema, saveCardSchema, updateCard, type CardRow, type CardType } from '@/api/cards'
@@ -47,6 +48,15 @@ async function load() {
   } catch (e) { if (current === version) loadError.value = e instanceof Error ? e.message : '加载失败' }
   finally { if (current === version) loading.value = false }
 }
+function onSearch() {
+  page.value = 1
+  load()
+}
+function onReset() {
+  keyword.value = ''
+  page.value = 1
+  load()
+}
 function open(row: CardRow) {
   selectedId.value = row.userId ?? row.id ?? ''
   for (const field of textFields.value) {
@@ -77,28 +87,34 @@ async function submit() {
   catch (e) { MessagePlugin.error(e instanceof Error ? e.message : '保存失败') }
   finally { submitting.value = false }
 }
+/* 空态判断只看关键词（type 为页签切换而非筛选条件） */
+const emptyQuery = computed(() => ({ keyword: keyword.value }))
 onMounted(load)
 </script>
 
 <template>
   <div class="page-fade-in">
     <PageHeader title="名片管理" description="维护公开名片与用户可编辑字段，保存后即时生效" />
+    <div class="page-filter-bar">
+      <t-input v-model="keyword" class="ctl-w-xl" clearable placeholder="搜索姓名、企业名或编号…" @enter="onSearch" @clear="onSearch" />
+      <t-button @click="onSearch">查询</t-button>
+      <t-button variant="outline" @click="onReset">重置</t-button>
+      <t-button @click="openSchema">配置用户可编辑字段</t-button>
+      <ColumnController v-model="visibleKeys" storage-key="card-management" :columns="allColumns.map(c => ({ key: c.colKey, title: c.title }))" />
+    </div>
     <div class="page-card">
       <t-tabs v-model="type" @change="page = 1; load()"><t-tab-panel value="individual" label="个人名片" /><t-tab-panel value="enterprise" label="企业名片" /></t-tabs>
-      <div class="page-filter-bar">
-        <t-input v-model="keyword" clearable placeholder="搜索姓名、企业名或编号…" @enter="page = 1; load()" @clear="page = 1; load()" />
-        <t-button variant="outline" @click="page = 1; load()">查询</t-button>
-        <t-button @click="openSchema">配置用户可编辑字段</t-button>
-        <ColumnController v-model="visibleKeys" storage-key="card-management" :columns="allColumns.map(c => ({ key: c.colKey, title: c.title }))" />
-      </div>
       <ListErrorState v-if="loadError" :message="loadError" :loading="loading" @retry="load" />
       <t-table :row-key="type === 'individual' ? 'userId' : 'id'" :data="rows" :columns="columns" :loading="loading" table-layout="fixed" hover resizable :pagination="{ current: page, pageSize: 20, total, showPageSize: false }" @page-change="(p: { current: number }) => { page = p.current; load() }">
         <template #name="{ row }">{{ row.displayName ?? row.name }}<t-tag class="id-tag-block" size="small" variant="light">{{ row.userId ?? row.id }}</t-tag></template>
-        <template #intro="{ row }">{{ row.intro ?? row.description }}</template>
+        <template #intro="{ row }">{{ (row.intro ?? row.description) || '—' }}</template>
         <template #op="{ row }"><t-button variant="text" theme="primary" @click="open(row)">查看/编辑</t-button></template>
+        <template #empty>
+          <ListEmptyState :query="emptyQuery" description="暂无名片" @clear="onReset" />
+        </template>
       </t-table>
     </div>
-    <t-dialog v-model:visible="schemaVisible" header="用户可编辑字段" :confirm-btn="{ content: '保存配置', loading: submitting }" @confirm="submitSchema">
+    <t-dialog v-model:visible="schemaVisible" header="用户可编辑字段" width="560px" :confirm-btn="{ content: '保存配置', loading: submitting }" @confirm="submitSchema">
       <p>未勾选字段将从客户端编辑表单隐藏；已有内容继续保留，后台仍可维护。</p>
       <t-checkbox-group v-model="editableFields"><t-checkbox v-for="field in cardFields[type]" :key="field.key" :value="field.key" :label="field.label" /></t-checkbox-group>
     </t-dialog>

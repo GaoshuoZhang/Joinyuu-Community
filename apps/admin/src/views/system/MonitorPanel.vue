@@ -3,6 +3,8 @@ import ListErrorState from '@/components/ListErrorState.vue'
 import { computed, onMounted, ref } from 'vue'
 import { MessagePlugin } from 'tdesign-vue-next'
 import PageHeader from '@/components/PageHeader.vue'
+import StatCard from '@/components/StatCard.vue'
+import StatusTag from '@/components/StatusTag.vue'
 import {
   fetchCronLogs,
   fetchMonitorOverview,
@@ -32,7 +34,8 @@ async function load(silent = false) {
 
 /* ---------- 服务健康 ---------- */
 const uptimeText = computed(() => {
-  const s = overview.value?.service.uptimeSec ?? 0
+  const s = overview.value?.service.uptimeSec
+  if (s == null) return '—'
   const days = Math.floor(s / 86400)
   const hours = Math.floor((s % 86400) / 3600)
   const mins = Math.floor((s % 3600) / 60)
@@ -47,6 +50,41 @@ function statusTag(s?: string) {
   }
   return map[s ?? ''] ?? { theme: 'default' as const, label: '—' }
 }
+
+/* StatCard 数值颜色：健康绿 / 亚健康橙 / 异常红（TStatistic 颜色风格） */
+const STATUS_STAT_COLOR: Record<string, string | undefined> = {
+  success: 'green',
+  warning: 'orange',
+  danger: 'red',
+  default: undefined,
+}
+
+const serviceStatusLabel = computed(() => statusTag(overview.value?.service.status).label)
+const serviceStatusColor = computed(() => STATUS_STAT_COLOR[statusTag(overview.value?.service.status).theme])
+
+/** 数值+单位整体判空：空值/加载中显示 —（不带单位尾巴） */
+const apiLatencyText = computed(() => {
+  const v = overview.value?.service.apiLatencyMs
+  return v == null ? '—' : `${v} ms`
+})
+
+const dbRedisText = computed(() => {
+  const db = overview.value?.service.db.latencyMs
+  const redis = overview.value?.service.redis.latencyMs
+  return `PostgreSQL ${db == null ? '—' : `${db}ms`} · Redis ${redis == null ? '—' : `${redis}ms`}`
+})
+
+/** 数据库/缓存健康标签：由真实 status/latency 派生，缺数据或异常时不得显示成功态 */
+const dbRedisHealth = computed<{ theme: 'success' | 'warning' | 'danger' | 'default'; label: string }>(() => {
+  const db = overview.value?.service.db
+  const redis = overview.value?.service.redis
+  if (!db || !redis) return { theme: 'default', label: '—' }
+  if (db.status === 'down' && redis.status === 'down') return { theme: 'danger', label: '数据库与缓存不可用' }
+  if (db.status === 'down') return { theme: 'danger', label: '数据库不可用' }
+  if (redis.status === 'down') return { theme: 'danger', label: '缓存不可用' }
+  if (!Number.isFinite(db.latencyMs) || !Number.isFinite(redis.latencyMs)) return { theme: 'warning', label: '状态未知' }
+  return { theme: 'success', label: '连接正常' }
+})
 
 /* ---------- Redis ---------- */
 const hitRatePct = computed(() => Math.round((overview.value?.redis.hitRate ?? 0) * 100))
@@ -117,40 +155,22 @@ onMounted(load)
     </PageHeader>
 
     <t-loading :loading="loading" size="small">
-      <!-- 服务健康卡 -->
+      <!-- 服务健康卡（共享 StatCard，保留四列响应式布局） -->
       <div class="monitor-stat-row">
-        <div class="monitor-stat-card">
-          <div class="monitor-stat-label">服务状态</div>
-          <div class="monitor-stat-value">
-            <t-tag :theme="statusTag(overview?.service.status).theme" variant="light" size="medium">
-              {{ statusTag(overview?.service.status).label }}
-            </t-tag>
-          </div>
-          <div class="monitor-stat-sub">
-            {{ overview?.service.name }} · v{{ overview?.service.version }} · {{ overview?.service.nodeEnv }}
-          </div>
-        </div>
-        <div class="monitor-stat-card">
-          <div class="monitor-stat-label">已运行</div>
-          <div class="monitor-stat-value">{{ uptimeText }}</div>
-          <div class="monitor-stat-sub">启动于 {{ overview?.service.startedAt }}</div>
-        </div>
-        <div class="monitor-stat-card">
-          <div class="monitor-stat-label">接口平均延迟</div>
-          <div class="monitor-stat-value">{{ overview?.service.apiLatencyMs ?? '—' }} ms</div>
-          <div class="monitor-stat-sub">近 5 分钟窗口</div>
-        </div>
-        <div class="monitor-stat-card">
-          <div class="monitor-stat-label">数据库 / 缓存</div>
-          <div class="monitor-stat-value">
-            <span>PostgreSQL {{ overview?.service.db.latencyMs }}ms</span>
-            <span class="dot-space">·</span>
-            <span>Redis {{ overview?.service.redis.latencyMs }}ms</span>
-          </div>
-          <div class="monitor-stat-sub">
-            <t-tag size="small" theme="success" variant="light">连接正常</t-tag>
-          </div>
-        </div>
+        <StatCard label="服务状态" :value="serviceStatusLabel" :color="serviceStatusColor">
+          <template #sub>{{ overview?.service.name }} · v{{ overview?.service.version }} · {{ overview?.service.nodeEnv }}</template>
+        </StatCard>
+        <StatCard label="已运行" :value="uptimeText">
+          <template #sub>启动于 {{ overview?.service.startedAt || '—' }}</template>
+        </StatCard>
+        <StatCard label="接口平均延迟" :value="apiLatencyText">
+          <template #sub>近 5 分钟窗口</template>
+        </StatCard>
+        <StatCard label="数据库 / 缓存" :value="dbRedisText">
+          <template #sub>
+            <t-tag size="small" :theme="dbRedisHealth.theme" variant="light">{{ dbRedisHealth.label }}</t-tag>
+          </template>
+        </StatCard>
       </div>
 
       <!-- Redis 概览 -->
@@ -171,7 +191,7 @@ onMounted(load)
           <div class="redis-cell">
             <div class="redis-label">键数量</div>
             <div class="redis-value">{{ overview?.redis.keys.toLocaleString('zh-CN') }}</div>
-            <div class="redis-sub">客户端连接 {{ overview?.redis.connectedClients }}</div>
+            <div class="redis-sub">客户端连接 {{ overview?.redis.connectedClients.toLocaleString('zh-CN') }}</div>
           </div>
           <div class="redis-cell">
             <div class="redis-label">版本 / 运行</div>
@@ -187,6 +207,7 @@ onMounted(load)
           row-key="name"
           hover
           table-layout="fixed"
+          resizable
           :data="overview?.jobs ?? []"
           :columns="jobColumns"
           :loading="loading"
@@ -194,13 +215,8 @@ onMounted(load)
         >
           <template #duration="{ row }">{{ row.lastRunDurationMs }} ms</template>
           <template #result="{ row }">
-            <t-tag
-              :theme="row.lastResult === 'success' ? 'success' : row.lastResult === 'failed' ? 'danger' : 'default'"
-              variant="light"
-              size="small"
-            >
-              {{ row.lastResult === 'success' ? '成功' : row.lastResult === 'failed' ? '失败' : '暂无' }}
-            </t-tag>
+            <StatusTag v-if="row.lastResult === 'success' || row.lastResult === 'failed'" entity="cron" :value="row.lastResult" />
+            <span v-else class="muted">暂无</span>
           </template>
           <template #op="{ row }">
             <t-button variant="text" size="small" @click="openLogs(row)">执行日志</t-button>
@@ -219,11 +235,13 @@ onMounted(load)
       size="560px"
       :close-btn="true"
       :close-on-esc-keydown="true"
+      :footer="false"
     >
       <ListErrorState v-if="logError" :message="logError" :loading="logLoading" @retry="job && openLogs(job)" />
       <t-table
         row-key="id"
         hover
+        table-layout="fixed"
         :data="logs"
         :columns="logColumns"
         :loading="logLoading"
@@ -231,9 +249,7 @@ onMounted(load)
         empty="暂无执行记录"
       >
         <template #result="{ row }">
-          <t-tag :theme="row.result === 'success' ? 'success' : 'danger'" variant="light" size="small">
-            {{ row.result === 'success' ? '成功' : '失败' }}
-          </t-tag>
+          <StatusTag entity="cron" :value="row.result" size="small" />
         </template>
       </t-table>
       <p class="log-tip">仅保留最近执行记录；失败任务可结合后端日志定位。</p>
@@ -249,42 +265,12 @@ onMounted(load)
   margin-bottom: 16px;
 }
 
-.monitor-stat-card {
-  min-width: 0;
-  padding: 16px;
-  border: 1px solid var(--td-component-border);
-  border-radius: var(--td-radius-medium);
-  background: var(--td-bg-color-container);
-}
-
-.monitor-stat-label {
-  font-size: 13px;
+.muted {
   color: var(--td-text-color-secondary);
-}
-
-.monitor-stat-value {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-  margin: 8px 0 4px;
-  font-size: 22px;
-  font-weight: 600;
-  color: var(--td-text-color-primary);
-  overflow-wrap: anywhere;
-}
-
-.dot-space {
-  color: var(--td-text-color-placeholder);
-  font-weight: 400;
-}
-
-.monitor-stat-sub {
   font-size: 12px;
-  color: var(--td-text-color-placeholder);
-  overflow-wrap: anywhere;
 }
 
-@media (max-width: 1100px) {
+@media (max-width: 1199px) {
   .monitor-stat-row,
   .redis-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -313,7 +299,7 @@ onMounted(load)
 }
 
 .redis-label {
-  font-size: 13px;
+  font-size: 12px;
   color: var(--td-text-color-secondary);
 }
 

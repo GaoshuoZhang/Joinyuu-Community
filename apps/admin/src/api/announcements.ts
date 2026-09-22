@@ -56,7 +56,7 @@ export async function deleteAnnouncement(id: string): Promise<{ code: number }> 
   return httpDelete<{ code: number }>(`/announcements/${id}`)
 }
 
-/* ---------- 首页公告单例（移动端首页搜索栏下方仅展示一条） ---------- */
+/* ---------- 首页公告单例（兼容接口：页面已改为列表管理，保留供旧调用方使用） ---------- */
 
 export interface HomeAnnouncement {
   id: string | null
@@ -69,6 +69,8 @@ export interface HomeAnnouncement {
 }
 
 export interface HomeAnnouncementPayload {
+  /** 传 id 时仅更新该条；不传时覆盖最近一条（服务端兼容分支） */
+  id?: string
   title: string
   content: string
   enabled: boolean

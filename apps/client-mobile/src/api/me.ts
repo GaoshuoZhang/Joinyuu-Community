@@ -19,6 +19,12 @@ export async function updateMe(payload: Partial<Pick<UserProfile, 'username' | '
   await httpPut('/me', payload)
 }
 
+/** POST /api/app/me/activation-dismissed — 永久隐藏新手任务（按账号持久化，跨浏览器一致） */
+export async function dismissActivation(): Promise<void> {
+  if (apiMode === 'mock') return (await import('@/mock/handlers/me')).dismissActivation()
+  await httpPost('/me/activation-dismissed')
+}
+
 /** GET /api/app/me/realname — 实名认证状态（姓名/证件号脱敏）。 */
 export async function fetchRealName(): Promise<RealNameInfo> {
   if (apiMode === 'mock') return (await import('@/mock/handlers/me')).fetchRealName()

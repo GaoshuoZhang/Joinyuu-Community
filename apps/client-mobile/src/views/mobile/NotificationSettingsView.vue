@@ -44,6 +44,13 @@ async function onToggle(item: NoticePreferenceType, enabled: boolean | number) {
     saving.value = false
   }
 }
+
+/* v46：Switch 官方高度 28px 低于 44px 触控基线，改为整行可点（Cell 行高含上下 16px 内边距），
+ * Switch 只承担视觉呈现；点 Switch 自身时 saving 已在 onToggle 内同步置位，行点击不会再触发一次。 */
+function onRowClick(item: NoticePreferenceType) {
+  if (!item.mutable || saving.value) return
+  void onToggle(item, item.muted)
+}
 </script>
 
 <template>
@@ -53,7 +60,15 @@ async function onToggle(item: NoticePreferenceType, enabled: boolean | number) {
     <template v-else>
       <p class="tip">关闭后该类站内信将不再写入消息中心；账号与安全通知始终送达。</p>
       <CellGroup theme="card">
-        <Cell v-for="item in types" :key="item.type" :title="item.label">
+        <!-- v46：整行可点切换（行级命中区 ≥44px）；不可关闭项给出行内原因说明且不响应点击 -->
+        <Cell
+          v-for="item in types"
+          :key="item.type"
+          :title="item.label"
+          :description="item.mutable ? '' : '账号与安全通知不可关闭'"
+          :hover="item.mutable && !saving"
+          @click="onRowClick(item)"
+        >
           <template #right-icon>
             <Switch
               :value="!item.muted"

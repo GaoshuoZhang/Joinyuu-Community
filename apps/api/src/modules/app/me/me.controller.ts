@@ -23,6 +23,13 @@ export class MeController {
     return this.me.updateMe(this.uid(req), dto)
   }
 
+  /** 永久隐藏新手任务（按账号持久化，跨浏览器一致；幂等） */
+  @HttpCode(200)
+  @Post('activation-dismissed')
+  dismissActivation(@Req() req: AppAuthenticatedRequest) {
+    return this.me.dismissActivation(this.uid(req))
+  }
+
   /** 我的积分流水（分页倒序，含 balance；keyword 可选，匹配事由/来源） */
   @Get('points-records')
   pointsRecords(

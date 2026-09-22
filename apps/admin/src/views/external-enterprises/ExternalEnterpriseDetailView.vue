@@ -6,6 +6,7 @@ import { MessagePlugin } from 'tdesign-vue-next'
 import { ArrowLeftIcon, EditIcon } from 'tdesign-icons-vue-next'
 import StatusTag from '@/components/StatusTag.vue'
 import ExternalEnterpriseFormDialog from '@/components/ExternalEnterpriseFormDialog.vue'
+import ListErrorState from '@/components/ListErrorState.vue'
 import {
   deleteExternalEnterprise,
   disableExternalEnterprise,
@@ -14,11 +15,13 @@ import {
   fetchExternalEnterpriseStats,
   type ExternalEnterpriseStats,
 } from '@/api/external-enterprises'
+import { isNotFound } from '@/api/http'
 import type { ExternalEnterprise, ExternalEnterpriseMember } from '@/types'
 
 const route = useRoute()
 const router = useRouter()
 const loading = ref(true)
+const loadError = ref('')
 const enterprise = ref<ExternalEnterprise | null>(null)
 const tab = useQueryTab('info', ['info', 'stats', 'members'] as const)
 const acting = ref('')
@@ -37,20 +40,25 @@ const memberColumns = [
 ]
 
 async function load() {
-  const id = route.params.id as string
-  enterprise.value = await fetchExternalEnterprise(id)
-  stats.value = await fetchExternalEnterpriseStats(id)
-}
-
-onMounted(async () => {
+  loading.value = true
+  loadError.value = ''
   try {
-    await load()
+    const id = route.params.id as string
+    enterprise.value = await fetchExternalEnterprise(id)
+    stats.value = await fetchExternalEnterpriseStats(id)
   } catch (e) {
-    MessagePlugin.error(e instanceof Error ? e.message : '合作企业加载失败')
+    /* 404 = 合作企业不存在（走空态）；其余错误保留原因并展示重试入口 */
+    if (isNotFound(e)) {
+      enterprise.value = null
+    } else {
+      loadError.value = e instanceof Error ? e.message : '合作企业加载失败'
+    }
   } finally {
     loading.value = false
   }
-})
+}
+
+onMounted(load)
 
 /* 数据概览卡片 → 跳转对应列表并自动筛选（有数据时可点击）
  * 以合作企业 ID（XE*）传参，列表按 ID 解析档案名后过滤，避免企业名歧义 */
@@ -117,6 +125,8 @@ async function onEnable() {
       animation="gradient"
     />
 
+    <ListErrorState v-else-if="loadError" :message="loadError" :loading="loading" @retry="load" />
+
     <t-empty v-else-if="!enterprise" description="合作企业不存在" />
 
     <template v-else>
@@ -128,9 +138,11 @@ async function onEnable() {
             <div class="head-title">
               <span class="head-name">{{ enterprise.name }}</span>
               <StatusTag entity="enterprise" :value="enterprise.status" />
-              <t-tag variant="light">{{ enterprise.industry }}</t-tag>
             </div>
             <div class="head-id">企业ID: <t-tag class="id-tag" size="small" variant="light">{{ enterprise.id }}</t-tag></div>
+            <div class="head-tags">
+              <t-tag variant="outline" size="small">{{ enterprise.industry }}</t-tag>
+            </div>
           </div>
         </div>
         <div class="head-actions">
@@ -267,6 +279,7 @@ async function onEnable() {
 
 .head-card {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   justify-content: space-between;
   gap: 16px;
@@ -282,10 +295,10 @@ async function onEnable() {
 
 .head-avatar {
   flex-shrink: 0;
-  font-size: 18px;
+  font-size: 20px;
   font-weight: 600;
-  color: var(--td-text-color-secondary);
-  background: var(--td-bg-color-page);
+  color: var(--td-brand-color);
+  background: var(--td-brand-color-1);
 }
 
 .head-info {
@@ -303,7 +316,7 @@ async function onEnable() {
 }
 
 .head-name {
-  font-size: 18px;
+  font-size: 20px;
   font-weight: 600;
   color: var(--td-text-color-primary);
 }
@@ -313,8 +326,16 @@ async function onEnable() {
   color: var(--td-text-color-secondary);
 }
 
+.head-tags {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
 .head-actions {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   gap: 8px;
   flex-shrink: 0;
@@ -330,7 +351,7 @@ async function onEnable() {
 
 .block-title {
   margin: 0 0 8px;
-  font-size: 15px;
+  font-size: 16px;
   font-weight: 600;
   color: var(--td-text-color-primary);
 }
@@ -380,7 +401,7 @@ async function onEnable() {
 }
 
 .stat-num {
-  font-size: 24px;
+  font-size: 20px;
   font-weight: 600;
   line-height: 32px;
   color: var(--td-brand-color);
@@ -388,7 +409,7 @@ async function onEnable() {
 }
 
 .stat-label {
-  font-size: 13px;
+  font-size: 12px;
   color: var(--td-text-color-secondary);
 }
 </style>

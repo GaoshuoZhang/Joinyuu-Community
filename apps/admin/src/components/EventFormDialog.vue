@@ -2,7 +2,7 @@
 import { defineAsyncComponent, nextTick, reactive, ref, watch } from 'vue'
 import { MessagePlugin } from 'tdesign-vue-next'
 import type { FormProps } from 'tdesign-vue-next'
-import { focusFirstInvalid } from '@/utils/form'
+import { focusFirstInvalid, useDialogDirtyGuard } from '@/utils/form'
 import { createEvent, updateEvent, type EventPayload } from '@/api/events'
 import { fetchPointsRules } from '@/api/mall'
 import { dictFallback, fetchDictEntries } from '@/api/dicts'
@@ -30,7 +30,8 @@ const typeOptions = ref(dictFallback.event_type.map((t) => ({ label: t, value: t
 
 const submitting = ref(false)
 const formRef = ref()
-const tagsText = ref('')
+/* 活动标签：t-tag-input 标签数组（回车新增，可整体清空），与空间表单同一方案 */
+const tags = ref<string[]>([])
 
 const form = reactive({
   title: '',
@@ -58,6 +59,9 @@ const form = reactive({
   checkinCloseMin: 30,
   cancelDeadlineHours: 24,
 })
+
+/* 未保存保护：打开时记录基线，关闭前有改动需确认 */
+const { markBaseline, guardClose } = useDialogDirtyGuard(form)
 
 /* 积分规则默认分值：报名奖励 / 签到奖励 */
 const rulePoints = reactive({ enroll: 5, checkin: 10 })
@@ -134,7 +138,7 @@ watch(
       form.cancelDeadlineHours = props.event.cancelDeadlineHours ?? 24
       customVisibility.value = props.event.visibilityIdentities.length > 0 || props.event.visibilityLevels.length > 0
       customEnrollment.value = props.event.enrollmentIdentities.length > 0 || props.event.enrollmentLevels.length > 0
-      tagsText.value = props.event.tags.join('，')
+      tags.value = [...props.event.tags]
     } else {
       form.title = ''
       form.coverUrl = ''
@@ -162,9 +166,10 @@ watch(
       form.cancelDeadlineHours = 24
       customVisibility.value = false
       customEnrollment.value = false
-      tagsText.value = ''
+      tags.value = []
     }
     /* 清除上次会话残留的校验红框（仅清状态，不动表单值） */
+    markBaseline()
     nextTick(() => formRef.value?.clearValidate())
   },
 )
@@ -186,13 +191,6 @@ const rules: FormProps['rules'] = {
   location: [{ required: true, message: '请输入地点', trigger: 'submit' }],
 }
 
-function parseTags(): string[] {
-  return tagsText.value
-    .split(/[,，]/)
-    .map((t) => t.trim())
-    .filter(Boolean)
-}
-
 async function onConfirm() {
   const valid = await formRef.value.validate()
   if (valid !== true) return focusFirstInvalid(formRef.value)
@@ -209,7 +207,7 @@ async function onConfirm() {
       speaker: form.speaker || '—',
       host: form.host,
       description: form.description,
-      tags: parseTags(),
+      tags: [...tags.value],
       visibilityIdentities: customVisibility.value ? form.visibilityIdentities : [],
       visibilityLevels: customVisibility.value ? form.visibilityLevels : [],
       enrollmentIdentities: customEnrollment.value ? form.enrollmentIdentities : [],
@@ -242,7 +240,8 @@ async function onConfirm() {
 }
 
 function onClose() {
-  emit('update:visible', false)
+  /* 未保存保护：有改动时弹确认（见 useDialogDirtyGuard） */
+  guardClose(() => emit('update:visible', false))
 }
 </script>
 
@@ -287,6 +286,7 @@ function onClose() {
             v-model="form.startTime"
             valueType="YYYY-MM-DD HH:mm"
             enable-time-picker
+            clearable
             style="width: 100%"
           />
         </t-form-item>
@@ -295,6 +295,7 @@ function onClose() {
             v-model="form.endTime"
             valueType="YYYY-MM-DD HH:mm"
             enable-time-picker
+            clearable
             style="width: 100%"
           />
         </t-form-item>
@@ -334,7 +335,7 @@ function onClose() {
           <t-input clearable v-model="form.speaker" placeholder="无则留空…" />
         </t-form-item>
         <t-form-item label="标签" name="tags">
-          <t-input clearable v-model="tagsText" placeholder="多个标签用逗号分隔…" />
+          <t-tag-input v-model="tags" clearable placeholder="输入标签后回车新增…" />
         </t-form-item>
       </div>
 
@@ -421,10 +422,10 @@ function onClose() {
 
       <div class="form-row">
         <t-form-item label="场地纬度" name="venueLat">
-          <t-input v-model="form.venueLat" placeholder="如 30.2741；留空不校验位置…" />
+          <t-input clearable v-model="form.venueLat" placeholder="如 30.2741；留空不校验位置…" />
         </t-form-item>
         <t-form-item label="场地经度" name="venueLng">
-          <t-input v-model="form.venueLng" placeholder="如 120.1551；留空不校验位置…" />
+          <t-input clearable v-model="form.venueLng" placeholder="如 120.1551；留空不校验位置…" />
         </t-form-item>
       </div>
       <div class="form-row">
@@ -466,12 +467,6 @@ function onClose() {
   .form-row {
     grid-template-columns: 1fr;
   }
-}
-
-.dialog-footer {
-  display: flex;
-  justify-content: flex-end;
-  gap: 8px;
 }
 
 .cover-preview {

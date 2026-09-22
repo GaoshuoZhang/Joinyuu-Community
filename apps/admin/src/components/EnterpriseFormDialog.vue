@@ -262,10 +262,4 @@ function onClose() {
   grid-template-columns: 1fr 1fr;
   gap: 0 16px;
 }
-
-.dialog-footer {
-  display: flex;
-  justify-content: flex-end;
-  gap: 8px;
-}
 </style>

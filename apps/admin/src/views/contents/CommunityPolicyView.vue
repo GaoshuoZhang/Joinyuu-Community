@@ -3,6 +3,7 @@ import { onMounted, ref } from 'vue'
 import { MessagePlugin } from 'tdesign-vue-next'
 import PageHeader from '@/components/PageHeader.vue'
 import ListErrorState from '@/components/ListErrorState.vue'
+import StatusTag from '@/components/StatusTag.vue'
 import PolicyEditorDialog from '@/components/PolicyEditorDialog.vue'
 import { createCommunityPolicy, fetchCommunityPolicies, updateCommunityPolicy, type AgreementPolicyPayload, type CommunityPolicyPayload, type PolicyRecord } from '@/api/policies'
 
@@ -16,13 +17,13 @@ const editing = ref<PolicyRecord | null>(null)
 const columns = [
   { colKey: 'id', title: '政策编号', width: 110, ellipsis: true },
   { colKey: 'title', title: '政策标题', minWidth: 230, ellipsis: true },
-  { colKey: 'category', title: '分类', width: 120, ellipsis: true },
-  { colKey: 'version', title: '版本', width: 90, ellipsis: true },
+  { colKey: 'category', title: '分类', cell: 'category', width: 120, ellipsis: true },
+  { colKey: 'version', title: '版本', cell: 'version', width: 90, ellipsis: true },
   { colKey: 'featured', title: '展示', cell: 'featured', width: 90 },
   { colKey: 'status', title: '状态', cell: 'status', width: 90 },
-  { colKey: 'publisher', title: '发布人', width: 120, ellipsis: true },
-  { colKey: 'updatedAt', title: '更新时间', width: 160, ellipsis: true },
-  { colKey: 'op', title: '操作', cell: 'op', width: 80 },
+  { colKey: 'publisher', title: '发布人', cell: 'publisher', width: 120, ellipsis: true },
+  { colKey: 'updatedAt', title: '更新时间', cell: 'updatedAt', width: 160, ellipsis: true },
+  { colKey: 'op', title: '操作', cell: 'op', width: 100 },
 ]
 
 async function load() {
@@ -61,10 +62,14 @@ onMounted(load)
     </PageHeader>
     <div class="page-card">
       <ListErrorState v-if="loadError" :message="loadError" :loading="loading" @retry="load" />
-      <t-table row-key="id" table-layout="fixed" hover resizable :data="rows" :columns="columns" :loading="loading" empty="暂无社区政策">
+      <t-table v-else row-key="id" table-layout="fixed" hover resizable :data="rows" :columns="columns" :loading="loading" empty="暂无社区政策">
+        <template #category="{ row }">{{ row.category || '—' }}</template>
+        <template #version="{ row }">{{ row.version || '—' }}</template>
         <template #featured="{ row }"><t-tag v-if="row.featured" theme="primary" variant="light">置顶</t-tag><span v-else class="muted">常规</span></template>
-        <template #status="{ row }"><t-tag :theme="row.status === 'published' ? 'success' : 'default'" variant="light">{{ row.status === 'published' ? '已发布' : '已归档' }}</t-tag></template>
-        <template #op="{ row }"><t-button variant="text" size="small" theme="primary" @click="openEditor(row)">编辑</t-button></template>
+        <template #status="{ row }"><StatusTag entity="communityPolicy" :value="row.status" /></template>
+        <template #publisher="{ row }">{{ row.publisher || '—' }}</template>
+        <template #updatedAt="{ row }">{{ row.updatedAt || '—' }}</template>
+        <template #op="{ row }"><t-button variant="text" size="small" @click="openEditor(row)">编辑</t-button></template>
       </t-table>
     </div>
     <PolicyEditorDialog v-model:visible="dialogVisible" mode="community" :record="editing" :submitting="submitting" @save="save" />

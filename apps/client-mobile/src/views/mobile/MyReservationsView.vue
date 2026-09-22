@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
-import { Button, DialogPlugin, Toast } from 'tdesign-mobile-vue'
+import { Button, DialogPlugin, Icon, List, Toast } from 'tdesign-mobile-vue'
 import { useAsyncList } from '@/composables/useAsyncList'
 import { cancelReservation, fetchMyReservations } from '@/api/spaces'
 import StateTag from '@/components/shared/StateTag.vue'
@@ -17,6 +17,14 @@ const { data, loading, error, run } = useAsyncList(fetchMyReservations)
 const router = useRouter()
 const reservations = computed(() => data.value ?? [])
 const { visibleItems, hasMore, showMore } = useIncrementalList(reservations)
+const footerState = computed(() => (hasMore.value ? 'load-more' : ''))
+function loadMore() {
+  if (!hasMore.value) return
+  showMore()
+}
+function onListScroll(bottomDistance: number) {
+  if (bottomDistance < 60) loadMore()
+}
 onMounted(run)
 
 const actingId = ref('')
@@ -56,7 +64,7 @@ async function doCancel(r: SpaceReservation) {
     <ListSkeleton v-if="loading" />
     <EmptyBlock v-else-if="error" :text="error" action-text="重试" @action="run" />
     <EmptyBlock v-else-if="!reservations.length" text="暂无预约记录，选择合适的场地和时段开始预约" action-text="预约空间" @action="router.push('/spaces')" />
-    <div v-else class="stagger list">
+    <List v-else class="stagger list" :async-loading="footerState" @load-more="loadMore" @scroll="onListScroll">
       <p class="list-count">共 {{ formatZhNumber(reservations.length) }} 条</p>
       <article
         v-for="r in visibleItems"
@@ -75,7 +83,7 @@ async function doCancel(r: SpaceReservation) {
           <IdentityTag :type="r.identityType" />
           <span class="subject-name">{{ r.subjectName }}</span>
         </p>
-        <p class="meta">📅 {{ formatLocalDate(r.date) }} · {{ r.start }} - {{ r.end }} · 提交于 {{ formatLocalDateTime(r.createdAt) }}</p>
+        <p class="meta"><Icon aria-hidden="true" name="calendar" size="14px" />{{ formatLocalDate(r.date) }} · {{ r.start }} - {{ r.end }} · 提交于 {{ formatLocalDateTime(r.createdAt) }}</p>
         <p v-if="r.rejectReason" class="reject-reason">驳回原因：{{ r.rejectReason }}</p>
         <div v-if="canCancel(r)" class="ops">
           <Button theme="danger" variant="outline" size="small" :disabled="actingId === r.id" @click.stop="onCancelTap(r)">
@@ -83,8 +91,7 @@ async function doCancel(r: SpaceReservation) {
           </Button>
         </div>
       </article>
-      <Button v-if="hasMore" block variant="outline" @click="showMore">加载更多（剩余 {{ formatZhNumber(reservations.length - visibleItems.length) }} 条）</Button>
-    </div>
+    </List>
   </div>
 </template>
 
@@ -120,6 +127,9 @@ async function doCancel(r: SpaceReservation) {
 }
 
 .meta {
+  display: flex;
+  align-items: center;
+  gap: var(--app-space-2);
   margin:var(--app-space-3) 0 0;
   font-size: var(--app-font-caption);
   color: var(--td-text-color-secondary);

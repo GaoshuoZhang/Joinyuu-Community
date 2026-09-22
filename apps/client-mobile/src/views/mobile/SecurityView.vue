@@ -368,9 +368,10 @@ async function onExport() {
       <Cell title="导出个人数据" :note="requests.export ? `已生成（${formatLocalDateTime(requests.export.at)}），点击下载` : '生成后站内信通知'" arrow @click="onExport" />
       <Cell
         title="注销账号"
-        :note="requests.deletion ? `申请处理中（${formatLocalDateTime(requests.deletion.at)}）` : ''"
-        arrow
-        @click="deletionVisible ? undefined : (deletionVisible = true)"
+        :description="requests.deletion ? `申请处理中（${formatLocalDateTime(requests.deletion.at)}）` : ''"
+        :arrow="!requests.deletion"
+        :hover="!requests.deletion"
+        @click="requests.deletion ? undefined : (deletionVisible = true)"
       />
     </CellGroup>
 
@@ -457,8 +458,9 @@ async function onExport() {
   border: 1px solid var(--td-component-border);
 }
 
+/* 分组标题口径与 MeView 等二级页一致（外层纵向 flex 的 gap 负责组间间距） */
 .group-title {
-  margin:var(--app-space-5) 0 0;
+  margin:0 var(--app-space-1);
   font-size: var(--app-font-caption);
   color: var(--td-text-color-secondary);
 }
@@ -509,8 +511,8 @@ async function onExport() {
 
 .code-button {
   flex-shrink: 0;
-  min-width: 108px;
-  min-height: 40px;
+  /* 固定宽度避免倒计时文案变化引起输入框宽度抖动（108px = 24×4 + 12） */
+  min-width: calc(var(--app-space-9) * 4 + var(--app-space-5));
 }
 
 .field-error {

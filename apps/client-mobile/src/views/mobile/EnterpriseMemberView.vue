@@ -64,24 +64,30 @@ function fillForm() {
 watch(member, fillForm, { immediate: true })
 
 const saving = ref(false)
+/* v46：字段级行内错误（职位/手机号），Toast 仅作提交被拦截时的汇总提示 */
+const formErrors = reactive({ role: '', phone: '' })
+function validate(): string {
+  if (!can('manage_members')) return ''
+  formErrors.role = form.role.trim() ? '' : '请输入成员职位'
+  const phone = form.phone.trim()
+  formErrors.phone = phone && !/^1\d{10}$/.test(phone) ? '请输入 11 位手机号' : ''
+  return formErrors.role || formErrors.phone
+}
+
 async function onSave() {
   if (!member.value) return
+  const firstError = validate()
+  if (firstError) {
+    Toast(firstError)
+    return
+  }
   const payload: Parameters<typeof updateEnterpriseMember>[1] = {
     memberUid: member.value.uid,
     memberName: member.value.name,
   }
   if (can('manage_members')) {
-    if (!form.role.trim()) {
-      Toast('请输入成员职位')
-      return
-    }
-    const phone = form.phone.trim()
-    if (phone && !/^1\d{10}$/.test(phone)) {
-      Toast('请输入 11 位手机号')
-      return
-    }
     payload.role = form.role.trim()
-    payload.phone = phone
+    payload.phone = form.phone.trim()
   }
   if (can('assign_permission') && !targetIsContact.value) {
     payload.permissions = [...form.permissions]
@@ -150,10 +156,12 @@ async function doRemove() {
           <div class="field">
             <label>职位</label>
             <Input v-model="form.role" :maxlength="20" placeholder="如：产品负责人 / 设计总监…" clearable />
+            <p v-if="formErrors.role" class="field-error">{{ formErrors.role }}</p>
           </div>
           <div class="field">
             <label>手机号</label>
             <Input v-model="form.phone" type="tel" :maxlength="11" placeholder="请输入 11 位手机号…" clearable />
+            <p v-if="formErrors.phone" class="field-error">{{ formErrors.phone }}</p>
           </div>
         </template>
         <template v-else>
@@ -253,10 +261,17 @@ async function doRemove() {
   margin-bottom:0;
 }
 
+.field-error {
+  margin:var(--app-space-3) 0 0;
+  font-size: var(--app-font-caption);
+  color: var(--td-error-color);
+}
+
 .field label {
   display: block;
   margin-bottom:var(--app-space-3);
-  font-size: var(--app-font-caption);
+  /* v46：表单标签与其它编辑页统一为 body 档（原 caption 偏小） */
+  font-size: var(--app-font-body);
   color: var(--td-text-color-secondary);
 }
 

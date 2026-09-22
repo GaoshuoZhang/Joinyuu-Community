@@ -2,11 +2,12 @@
 import { computed, defineAsyncComponent, nextTick, reactive, ref, watch } from 'vue'
 import { MessagePlugin } from 'tdesign-vue-next'
 import type { FormProps } from 'tdesign-vue-next'
-import { focusFirstInvalid } from '@/utils/form'
+import { focusFirstInvalid, useDialogDirtyGuard } from '@/utils/form'
 import { AddIcon, DeleteIcon } from 'tdesign-icons-vue-next'
-import { fetchUndertakerOptions, initiateProject, type UndertakerOption } from '@/api/demands'
+import { fetchPublisherOptions, fetchUndertakerOptions, initiateProject, type UndertakerOption } from '@/api/demands'
 import { createProject, updateProject } from '@/api/projects'
 import { fetchExperienceRules } from '@/api/rules'
+import { useAuthStore } from '@/stores/auth'
 import type { Demand, Milestone, MilestoneInput, Project } from '@/types'
 
 const RichEditor = defineAsyncComponent(() => import('@/components/RichEditor.vue'))
@@ -29,16 +30,69 @@ const emit = defineEmits<{
 
 const submitting = ref(false)
 const formRef = ref()
+const auth = useAuthStore()
 /* 「回填中」标记：编辑/重新新增回填承接方与占比期间，抑制均分重算，避免静默覆盖已有占比 */
 const initializing = ref(false)
 const undertakerOptions = ref<UndertakerOption[]>([])
+
+/* 需求方选项（用户 + 企业，含联系方式用于自动填充） */
+type PublisherUserOption = { uid: string; nickname: string; realName: string; phone: string; email: string; tag: '社区个体' | '个人用户' }
+type PublisherEnterpriseOption = { id: string; name: string; contactName: string; contactPhone: string; contactEmail?: string; tag: '社区企业' | '合作企业' }
+const publisherUsers = ref<PublisherUserOption[]>([])
+const publisherEnterprises = ref<PublisherEnterpriseOption[]>([])
 
 const form = reactive({
   projectName: '',
   undertakers: [] as string[],
   description: '',
   expReward: 100,
+  /** 需求方选择值：`user:<uid>` / `enterprise:<id>` / 自定义名称 */
+  demander: '',
+  creatorName: '',
+  contactName: '',
+  contactPhone: '',
+  contactEmail: '',
+  contractPrice: '',
 })
+
+/* 需求方下拉选项：企业在前、用户在后（与新增需求表单一致） */
+const demanderOptions = computed(() => [
+  ...publisherEnterprises.value.map((e) => ({ label: `${e.name}（${e.tag} · ${e.id}）`, value: `enterprise:${e.id}` })),
+  ...publisherUsers.value.map((u) => ({ label: `${u.realName || u.nickname}（${u.tag} · ${u.uid}）`, value: `user:${u.uid}` })),
+])
+
+/* 需求方身份：由所选主体自动识别（自定义需求方标记为自定义） */
+const demanderIdentityLabel = computed(() => {
+  const u = publisherUsers.value.find((x) => `user:${x.uid}` === form.demander)
+  if (u) return u.tag
+  const e = publisherEnterprises.value.find((x) => `enterprise:${x.id}` === form.demander)
+  if (e) return e.tag
+  return form.demander ? '自定义' : ''
+})
+
+/* 选择需求方后自动填充联系方式（自定义名称不覆盖已填内容） */
+watch(
+  () => form.demander,
+  (v) => {
+    if (initializing.value) return
+    const u = publisherUsers.value.find((x) => `user:${x.uid}` === v)
+    if (u) {
+      form.contactName = u.realName || u.nickname
+      form.contactPhone = u.phone
+      form.contactEmail = u.email
+      return
+    }
+    const e = publisherEnterprises.value.find((x) => `enterprise:${x.id}` === v)
+    if (e) {
+      form.contactName = e.contactName
+      form.contactPhone = e.contactPhone
+      form.contactEmail = e.contactEmail ?? ''
+    }
+  },
+)
+
+/* 未保存保护：打开时记录基线，关闭前有改动需确认 */
+const { markBaseline, guardClose } = useDialogDirtyGuard(form)
 
 /* 经验值规则默认值：项目结项奖励（关闭自定义时按此分配） */
 const ruleExp = ref(100)
@@ -57,6 +111,12 @@ function undertakerNameOf(v: string): string {
 
 function customContactsClear() {
   Object.keys(customContacts).forEach((k) => delete customContacts[k])
+}
+
+/** 编辑/重新新增回填需求方：主体 ID 前缀 U=用户，其余（E/XE）=企业；无 ID 时回落到名称（自定义） */
+function applyProjectDemander(p: Project) {
+  const id = p.demanderId ?? ''
+  form.demander = id ? (id.startsWith('U') ? `user:${id}` : `enterprise:${id}`) : (p.demanderName ?? '')
 }
 
 function ensureContact(key: string) {
@@ -131,12 +191,19 @@ watch(
       shares.value = props.project.undertakers.map((t) => t.share)
       milestones.value = normalizeMilestones(props.project.milestones)
       form.expReward = props.project.expReward ?? ruleExp.value
+      applyProjectDemander(props.project)
+      form.creatorName = props.project.creatorName ?? ''
+      form.contactName = props.project.contactName ?? ''
+      form.contactPhone = props.project.contactPhone ?? ''
+      form.contactEmail = props.project.contactEmail ?? ''
+      form.contractPrice = props.project.contractPrice ?? ''
       customContactsClear()
       props.project.undertakers
         .filter((t) => t.type === 'custom')
         .forEach((t) => {
           customContacts[t.name] = { contactName: t.contactName ?? '', phone: t.phone ?? '' }
         })
+      markBaseline()
       nextTick(() => {
         formRef.value?.clearValidate()
         initializing.value = false
@@ -154,12 +221,19 @@ watch(
         ? props.project.milestones.map((m) => ({ name: m.name, date: m.date, owners: [...(m.owners ?? [])] }))
         : [{ name: '', date: '', owners: [] }]
       form.expReward = props.project.expReward ?? ruleExp.value
+      applyProjectDemander(props.project)
+      form.creatorName = props.project.creatorName ?? ''
+      form.contactName = props.project.contactName ?? ''
+      form.contactPhone = props.project.contactPhone ?? ''
+      form.contactEmail = props.project.contactEmail ?? ''
+      form.contractPrice = props.project.contractPrice ?? ''
       customContactsClear()
       props.project.undertakers
         .filter((t) => t.type === 'custom')
         .forEach((t) => {
           customContacts[t.name] = { contactName: t.contactName ?? '', phone: t.phone ?? '' }
         })
+      markBaseline()
       nextTick(() => {
         formRef.value?.clearValidate()
         initializing.value = false
@@ -173,7 +247,15 @@ watch(
       shares.value = []
       milestones.value = buildFixedMilestones()
       form.expReward = ruleExp.value
+      /* 需求立项由服务端照搬需求快照；社区自建默认创建人为当前操作人 */
+      form.demander = ''
+      form.creatorName = auth.name
+      form.contactName = ''
+      form.contactPhone = ''
+      form.contactEmail = ''
+      form.contractPrice = ''
       customContactsClear()
+      markBaseline()
       /* 清除上次会话残留的校验红框（仅清状态，不动表单值） */
       nextTick(() => formRef.value?.clearValidate())
     }
@@ -193,6 +275,20 @@ watch(
 const ownerOptions = computed(() => form.undertakers.map((v) => ({ label: undertakerNameOf(v), value: undertakerNameOf(v) })))
 
 const shareSum = computed(() => shares.value.reduce((s, v) => s + (Number(v) || 0), 0))
+
+/* 里程碑必填校验：节点描述与日期必填，非固定节点责任方至少一项（固定「项目立项」责任方=全部承接方） */
+function validateMilestones(): { result: boolean; message: string } | boolean {
+  for (let i = 0; i < milestones.value.length; i++) {
+    const m = milestones.value[i]
+    if (!m.name.trim() || !m.date.trim()) {
+      return { result: false, message: `里程碑节点（第 ${i + 1} 个）需填写节点描述与日期` }
+    }
+    if (!m.fixed && m.owners.length === 0) {
+      return { result: false, message: `里程碑节点（第 ${i + 1} 个）责任方至少选择一项` }
+    }
+  }
+  return true
+}
 
 /* 规则 trigger 一律 submit：值变化(change)/失焦(blur)的自动校验全部跳过——
  * 弹窗打开重置表单或 DatePicker 面板交互均不会提前红框；确认时 formRef.validate()
@@ -218,6 +314,12 @@ function ensureOptions(): Promise<void> {
       fetchUndertakerOptions()
         .then((rows) => {
           undertakerOptions.value = rows
+        })
+        .catch(() => undefined),
+      fetchPublisherOptions()
+        .then((rows) => {
+          publisherUsers.value = rows.users
+          publisherEnterprises.value = rows.enterprises
         })
         .catch(() => undefined),
       fetchExperienceRules()
@@ -255,17 +357,8 @@ async function onConfirm() {
     MessagePlugin.warning('承接占比须为不小于 0 的整数，且合计为 100%')
     return
   }
-  /* 里程碑节点必填：节点描述/日期/责任方（固定节点责任方=全部承接方视为已填） */
-  for (let i = 0; i < milestones.value.length; i++) {
-    const m = milestones.value[i]
-    if (!m.name.trim() || !m.date.trim()) {
-      MessagePlugin.warning('里程碑节点（第 ' + (i + 1) + ' 个）需填写节点描述与日期')
-      return
-    }
-    if (!m.fixed && m.owners.length === 0) {
-      MessagePlugin.warning('里程碑节点（第 ' + (i + 1) + ' 个）责任方至少选择一项')
-      return
-    }
+  /* 固定「项目立项」责任方视为全部承接方，提交前清空其显式选择 */
+  for (const m of milestones.value) {
     if (m.fixed === 'start' && m.owners.length > 0) m.owners = []
   }
   submitting.value = true
@@ -278,6 +371,36 @@ async function onConfirm() {
       MessagePlugin.warning('自定义承接方需补全联系人与联系电话')
       return
     }
+    const isDemandInitiation = props.mode === 'create' && !!props.demand
+    const demanderUser = publisherUsers.value.find((x) => `user:${x.uid}` === form.demander)
+    const demanderEnterprise = publisherEnterprises.value.find((x) => `enterprise:${x.id}` === form.demander)
+    /* 需求立项：需求方信息由服务端照搬需求快照，不提交表单值 */
+    const demanderSnapshot = isDemandInitiation
+      ? {}
+      : {
+          demanderId: demanderUser?.uid ?? demanderEnterprise?.id ?? '',
+          demanderName: demanderUser
+            ? demanderUser.realName || demanderUser.nickname
+            : demanderEnterprise
+              ? demanderEnterprise.name
+              : form.demander.trim(),
+          demanderIdentity: demanderUser
+            ? { type: demanderUser.tag === '社区个体' ? 'community_individual' : 'individual', title: demanderUser.tag }
+            : demanderEnterprise
+              ? {
+                  type: demanderEnterprise.tag === '社区企业' ? 'community_enterprise' : 'external_enterprise',
+                  enterpriseId: demanderEnterprise.id,
+                  enterpriseName: demanderEnterprise.name,
+                }
+              : form.demander.trim()
+                ? { type: 'custom', title: '自定义' }
+                : null,
+          creatorName: form.creatorName.trim(),
+          contactName: form.contactName.trim(),
+          contactPhone: form.contactPhone.trim(),
+          contactEmail: form.contactEmail.trim(),
+          contractPrice: form.contractPrice.trim(),
+        }
     const payload = {
       undertakers: form.undertakers.map((v, i) => {
         const known = undertakerOptions.value.find((o) => o.value === v)
@@ -292,6 +415,7 @@ async function onConfirm() {
       description: form.description,
       milestones: milestones.value.map((m): MilestoneInput => ({ name: m.name, date: m.date, owners: m.owners })),
       expReward: form.expReward,
+      ...demanderSnapshot,
     }
     let project: Project
     if (props.mode === 'edit' && props.project) {
@@ -314,7 +438,8 @@ async function onConfirm() {
 }
 
 function onClose() {
-  emit('update:visible', false)
+  /* 未保存保护：有改动时弹确认（见 useDialogDirtyGuard） */
+  guardClose(() => emit('update:visible', false))
 }
 </script>
 
@@ -339,16 +464,60 @@ function onClose() {
     </template>
     <p v-if="demand" class="demand-context">立项需求：{{ demand.title }}（{{ demand.id }}）</p>
 
-    <t-form ref="formRef" :data="form" :rules="rules" label-align="top">
+    <t-form ref="formRef" :data="{ ...form, milestones: milestones }" :rules="rules" label-align="top">
       <t-form-item label="项目名称" name="projectName">
         <t-input clearable v-model="form.projectName" placeholder="需求立项默认取需求标题，可修改…" />
       </t-form-item>
+
+      <!-- 需求方信息：需求立项由服务端照搬需求快照（只读提示）；社区自建项目在此登记 -->
+      <template v-if="!demand">
+        <div class="scope-head">
+          <span class="scope-title">需求方信息</span>
+          <span class="scope-tip">社区自建项目需登记需求方与联系方式，便于后续对接与追溯</span>
+        </div>
+        <div class="form-row">
+          <t-form-item label="需求方">
+            <t-select
+              v-model="form.demander"
+              filterable
+              creatable
+              clearable
+              :options="demanderOptions"
+              placeholder="选择用户/企业，或输入自定义需求方…"
+            />
+          </t-form-item>
+          <t-form-item label="需求方身份">
+            <t-input :value="demanderIdentityLabel" disabled placeholder="选择需求方后自动识别…" />
+          </t-form-item>
+        </div>
+        <div class="form-row">
+          <t-form-item label="创建人">
+            <t-input clearable v-model="form.creatorName" placeholder="创建人…" />
+          </t-form-item>
+          <t-form-item label="合同价格">
+            <t-input clearable v-model="form.contractPrice" placeholder="如：¥50,000 / 面议…" />
+          </t-form-item>
+        </div>
+        <div class="form-row">
+          <t-form-item label="联系人">
+            <t-input clearable v-model="form.contactName" placeholder="联系人姓名…" />
+          </t-form-item>
+          <t-form-item label="联系电话">
+            <t-input clearable v-model="form.contactPhone" placeholder="联系电话…" />
+          </t-form-item>
+        </div>
+        <t-form-item label="联系邮箱">
+          <t-input clearable v-model="form.contactEmail" placeholder="联系邮箱…" />
+        </t-form-item>
+      </template>
+      <p v-else class="demand-context">需求方信息将照搬需求「{{ demand.publisherName }}」及其联系方式与预算口径</p>
       <t-form-item label="承接方（可多选/自定义）" name="undertakers">
         <t-select
           v-model="form.undertakers"
           multiple
           filterable
           creatable
+          clearable
           :options="undertakerOptions"
           placeholder="搜索或选择承接方（社区企业/合作企业/用户），可输入名称自定义新增…"
         />
@@ -390,13 +559,12 @@ function onClose() {
         </div>
         <div v-for="(v, i) in form.undertakers" :key="v" class="share-row">
           <span class="share-name">{{ undertakerNameOf(v) }}</span>
-          <t-input-number
+          <t-input-number class="ctl-w-sm"
             v-model="shares[i]"
             :min="0"
             :max="100"
             :step="1"
             theme="column"
-            style="width: 120px"
           />
           <span class="share-unit">%</span>
         </div>
@@ -409,6 +577,7 @@ function onClose() {
         <RichEditor v-model="form.description" placeholder="项目说明…" :min-height="320" />
       </t-form-item>
 
+      <t-form-item name="milestones" :rules="[{ validator: validateMilestones, trigger: 'submit' }]">
       <div class="milestone-block">
         <div class="milestone-head">
           <span class="milestone-label">里程碑节点</span>
@@ -445,7 +614,7 @@ function onClose() {
           <template v-else>
             <t-input clearable v-model="m.name" placeholder="节点描述 *…" />
             <t-date-picker clearable v-model="m.date" placeholder="日期 *…" />
-            <t-button variant="text" theme="danger" size="small" @click="removeMilestone(i)">
+            <t-button variant="text" theme="danger" size="small" :aria-label="`删除里程碑节点 ${i + 1}`" @click="removeMilestone(i)">
               <template #icon><DeleteIcon /></template>
             </t-button>
             <t-select
@@ -458,6 +627,7 @@ function onClose() {
           </template>
         </div>
       </div>
+      </t-form-item>
     </t-form>
   </t-dialog>
 </template>
@@ -466,16 +636,10 @@ function onClose() {
 .demand-context {
   margin: 0 0 16px;
   padding: 8px 12px;
-  font-size: 13px;
+  font-size: 12px;
   color: var(--td-text-color-secondary);
   background: var(--td-bg-color-page);
   border-radius: var(--td-radius-medium);
-}
-
-.dialog-footer {
-  display: flex;
-  justify-content: flex-end;
-  gap: 8px;
 }
 
 .form-row {
@@ -519,7 +683,7 @@ function onClose() {
 }
 
 .share-name {
-  font-size: 13px;
+  font-size: 14px;
   color: var(--td-text-color-primary);
   overflow: hidden;
   text-overflow: ellipsis;
@@ -527,12 +691,12 @@ function onClose() {
 }
 
 .share-unit {
-  font-size: 13px;
+  font-size: 12px;
   color: var(--td-text-color-secondary);
 }
 
 .share-sum {
-  font-size: 13px;
+  font-size: 12px;
   color: var(--td-text-color-secondary);
 }
 
@@ -566,6 +730,7 @@ function onClose() {
   min-width: 0;
 }
 
+/* 里程碑行：输入框/选择器在 grid 列内铺满并可收缩（min-width:0），依赖 TDesign 根类名 .t-input/.t-select */
 .milestone-row :deep(.t-input),
 .milestone-row :deep(.t-select) {
   width: 100%;
@@ -577,7 +742,9 @@ function onClose() {
   height: 32px;
 }
 
-.milestone-owners {
-  grid-column: 1 / -1;
+@media (max-width: 767px) {
+  .form-row {
+    grid-template-columns: 1fr;
+  }
 }
 </style>

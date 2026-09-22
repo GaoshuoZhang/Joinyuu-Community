@@ -49,7 +49,10 @@ defineEmits<{ toggleFavorite: []; share: []; login: [] }>()
 
     <div v-if="isLogged && (demand.contactName || demand.contactPhone || demand.contactEmail)" class="extras">
       <p v-if="demand.contactName"><b>联系人：</b>{{ demand.contactName }}</p>
-      <p v-if="demand.contactPhone"><b>联系电话：</b>{{ demand.contactPhone }}</p>
+      <p v-if="demand.contactPhone">
+        <b>联系电话：</b>
+        <a class="tel" :href="`tel:${demand.contactPhone}`">{{ demand.contactPhone }}</a>
+      </p>
       <p v-if="demand.contactEmail"><b>联系邮箱：</b>{{ demand.contactEmail }}</p>
     </div>
     <div v-else-if="!isLogged && (demand.contactName || demand.contactPhone || demand.contactEmail)" class="extras">
@@ -143,6 +146,16 @@ defineEmits<{ toggleFavorite: []; share: []; login: [] }>()
 .extras b {
   color: var(--td-text-color-primary);
   font-weight: 600;
+}
+
+/* 联系电话：tel: 可拨号链接，命中区抬到 44px 触控基线（同 LoginView 文字链口径）；
+ * 文字颜色继承信息行、不加下划线，不引入额外的链接样式（该行随之获得 44px 行高）。 */
+.tel {
+  display: inline-flex;
+  align-items: center;
+  min-height: 44px;
+  color: inherit;
+  text-decoration: none;
 }
 
 .contact-locked {

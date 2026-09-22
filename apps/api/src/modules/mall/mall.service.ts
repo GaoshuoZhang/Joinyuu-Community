@@ -41,6 +41,11 @@ export interface RedemptionOrderDto {
   usedAt?: string
 }
 
+/* 商品出参：category 存字典编码，另附 categoryLabel 供展示（前端渲染 x.categoryLabel ?? x.category） */
+export interface MallGoodsDto extends MallGoods {
+  categoryLabel: string
+}
+
 export interface PointsRuleDto {
   code: string
   name: string
@@ -69,7 +74,7 @@ export class MallService {
 
   /* ---------- 商品管理 ---------- */
 
-  async listGoods(query: QueryGoodsDto): Promise<{ list: MallGoods[]; total: number }> {
+  async listGoods(query: QueryGoodsDto): Promise<{ list: MallGoodsDto[]; total: number }> {
     const where: Prisma.MallGoodsWhereInput = { deletedAt: null }
     if (query.keyword) {
       const kw = query.keyword.trim()
@@ -107,7 +112,7 @@ export class MallService {
         : []
       const pos = new Map(pageIds.map((id, index) => [id, index]))
       list.sort((a, b) => (pos.get(a.id) ?? 0) - (pos.get(b.id) ?? 0))
-      return { list, total }
+      return { list: await this.withCategoryLabels(list), total }
     }
 
     const [list, total] = await Promise.all([
@@ -119,7 +124,7 @@ export class MallService {
       }),
       this.prisma.mallGoods.count({ where }),
     ])
-    return { list, total }
+    return { list: await this.withCategoryLabels(list), total }
   }
 
   async createGoods(dto: GoodsPayloadDto, operator: string): Promise<MallGoods> {
@@ -265,6 +270,19 @@ export class MallService {
       '权益券': 'GC003',
     }
     return aliases[category] ?? category
+  }
+
+  /** 商品类型字段保存字典编码；响应同时附带标签，编码已删除或历史直接保存标签时安全回退原值。 */
+  private async withCategoryLabels(goods: MallGoods[]): Promise<MallGoodsDto[]> {
+    const codes = [...new Set(goods.map((item) => item.category).filter(Boolean))]
+    const entries = codes.length
+      ? await this.prisma.dictEntry.findMany({
+          where: { type: 'goods_category', code: { in: codes } },
+          select: { code: true, label: true },
+        })
+      : []
+    const labels = new Map(entries.map((entry) => [entry.code, entry.label]))
+    return goods.map((item) => ({ ...item, categoryLabel: labels.get(item.category) ?? item.category }))
   }
 
   private resolveFulfillment(dto: GoodsPayloadDto): 'physical' | 'voucher' {

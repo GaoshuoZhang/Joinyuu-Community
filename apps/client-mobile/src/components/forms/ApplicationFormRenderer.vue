@@ -140,29 +140,34 @@ function uploadedOf(f: ApplicationFormField): UploadedFileInfo[] {
 const fieldErrors = reactive<Record<string, string>>({})
 
 async function onSubmit() {
+  if (submitting.value) return
   const s = schema.value
   if (!s) return
   Object.keys(fieldErrors).forEach((key) => delete fieldErrors[key])
+  /* v45：一次性跑完全部字段校验并汇总，避免逐个报错、用户反复提交 N 次 */
+  const messages: string[] = []
   for (const f of s.fields) {
     if (f.type === 'upload') {
       if (f.required && uploadedOf(f).length === 0) {
         fieldErrors[f.key] = `请上传${f.label}`
-        Toast(`请上传${f.label}`)
-        return
+        messages.push(fieldErrors[f.key])
       }
       continue
     }
     if (f.required && !values[f.key]?.trim()) {
       const message = f.type === 'select' || f.type === 'date' ? `请选择${f.label}` : `请填写${f.label}`
       fieldErrors[f.key] = message
-      Toast(message)
-      return
+      messages.push(message)
+      continue
     }
     if (f.type === 'select' && values[f.key] && !f.options?.some((option) => option.value === values[f.key])) {
       fieldErrors[f.key] = `${f.label}的选项无效`
-      Toast(fieldErrors[f.key])
-      return
+      messages.push(fieldErrors[f.key])
     }
+  }
+  if (messages.length) {
+    Toast(messages.length === 1 ? messages[0] : `还有 ${messages.length} 项待完善，请检查表单`)
+    return
   }
   const fields: Record<string, string | number | UploadedFileInfo[]> = {}
   for (const f of s.fields) {
@@ -295,12 +300,8 @@ async function onSubmit() {
   color: var(--td-text-color-secondary);
 }
 
-.state {
-  padding:var(--app-space-12) 0;
-}
-
 .tips {
-  border-left: 3px solid var(--td-brand-color);
+  border-left: var(--td-divider-border-width) solid var(--td-brand-color);
   padding:var(--app-space-7);
 }
 

@@ -494,6 +494,7 @@ export class EventsService {
     userId: string,
     status: 'approved' | 'rejected',
     operator: string,
+    reason?: string,
   ): Promise<{ code: number }> {
     const event = await this.prisma.communityEvent.findUnique({ where: { id: eventId } })
     if (!event) throw new NotFoundException('活动不存在')
@@ -538,7 +539,7 @@ export class EventsService {
       content:
         status === 'approved'
           ? `「${event.title}」报名已通过，请准时参加。`
-          : `「${event.title}」报名未通过审核。`,
+          : `「${event.title}」报名未通过审核：${reason ?? ''}`,
       link: '/me/enrollments',
     })
 
@@ -547,7 +548,7 @@ export class EventsService {
       action: status === 'approved' ? '报名审核通过' : '报名审核驳回',
       target: `${event.id} · ${enrollment.name}`,
       before: { status: 'pending' },
-      after: { status },
+      after: status === 'rejected' ? { status, reason: reason ?? '' } : { status },
       operator,
     })
     return { code: 0 }

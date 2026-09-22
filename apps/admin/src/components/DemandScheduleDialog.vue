@@ -1,6 +1,6 @@
 <script setup lang="ts">
-import { nextTick, ref, watch } from 'vue'
-import { MessagePlugin } from 'tdesign-vue-next'
+import { nextTick, reactive, ref, watch } from 'vue'
+import { MessagePlugin, type FormProps } from 'tdesign-vue-next'
 import { scheduleDemand } from '@/api/demands'
 import type { Demand } from '@/types'
 
@@ -16,27 +16,28 @@ const emit = defineEmits<{
   (e: 'success'): void
 }>()
 
-const scheduledAt = ref('')
+const form = reactive({ scheduledAt: '' })
+const rules: FormProps['rules'] = {
+  scheduledAt: [{ required: true, message: '请选择定时发布时间', trigger: 'submit' }],
+}
 const submitting = ref(false)
 
 watch(
   () => props.visible,
   (v) => {
     if (!v) return
-    scheduledAt.value = ''
+    form.scheduledAt = ''
   },
 )
 
 async function onConfirm() {
   if (!props.demand) return
-  if (!scheduledAt.value) {
-    MessagePlugin.warning('请选择定时发布时间')
-    return
-  }
+  const valid = await formRef.value.validate()
+  if (valid !== true) return
   submitting.value = true
   try {
-    await scheduleDemand(props.demand.id, scheduledAt.value)
-    MessagePlugin.success(`已设定定时发布，将于 ${scheduledAt.value} 自动发布`)
+    await scheduleDemand(props.demand.id, form.scheduledAt)
+    MessagePlugin.success(`已设定定时发布，将于 ${form.scheduledAt} 自动发布`)
     emit('update:visible', false)
     emit('success')
   } catch (e) {
@@ -78,10 +79,10 @@ const formRef = ref()
     <p class="dialog-tip">
       为「{{ demand?.title }}」设定定时发布时间，到点自动上架需求广场。留空则取消本次操作。
     </p>
-    <t-form ref="formRef" :rules="{ scheduledAt: [{ required: true, message: '请选择定时发布时间', trigger: 'submit' }] }" label-align="top">
+    <t-form ref="formRef" :data="form" :rules="rules" label-align="top">
       <t-form-item label="定时发布时间" name="scheduledAt">
         <t-date-picker
-          v-model="scheduledAt"
+          v-model="form.scheduledAt"
           valueType="YYYY-MM-DD HH:mm"
           enable-time-picker
           placeholder="到点自动发布…"
@@ -93,15 +94,10 @@ const formRef = ref()
 </template>
 
 <style scoped>
-.dialog-footer {
-  display: flex;
-  justify-content: flex-end;
-  gap: 8px;
-}
 
 .dialog-tip {
   margin: 0 0 12px;
-  font-size: 13px;
+  font-size: 12px;
   line-height: 1.6;
   color: var(--td-text-color-secondary);
 }

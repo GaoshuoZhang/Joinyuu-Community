@@ -1,6 +1,6 @@
 /* M1-E 系统管理域 e2e（wiki-backend.md §13 M1-E / §7.15 / §7.16）：
  * 覆盖：通知中心（最新在前 / 单条已读 / 全部已读）、操作日志（module 筛选 + keyword 跨字段）、
- * 数据字典（列表 / 新增 / label 全类型唯一 409 / 启停 / 删除重排 sort）、
+ * 数据字典（列表 / 新增 / label 全类型唯一 409 / 启停 / 删除重排 sort / 编码取最小未占用序号），
  * 系统配置（读写 + 校验文案）、工作台聚合（dashboard + todos）。
  * 前置：docker compose up + prisma migrate + seed（N9001+ 通知 / AL1001+ 审计 / 三类字典 / 单例配置）。 */
 import { INestApplication } from '@nestjs/common'
@@ -144,6 +144,17 @@ describe('M1-E system 系统管理域', () => {
     const delMissing = await del('/api/admin/dicts/demand_category/DC007')
     expect(delMissing.status).toBe(404)
     expect(delMissing.body).toEqual({ code: 404, message: '字典项不存在' })
+
+    /* 商品类型：编码取最小未占用序号（GC001/GC003 → 补 GC002），新增后 sort 连续且不重复 */
+    const goodsCreated = await post('/api/admin/dicts/goods_category').send({ label: '测试商品类型X' })
+    expect(goodsCreated.status).toBe(200)
+    expect(goodsCreated.body.data.code).toBe('GC002')
+    const afterGoodsCreate = await get('/api/admin/dicts/goods_category')
+    expect(afterGoodsCreate.body.data.map((e: { sort: number }) => e.sort)).toEqual([1, 2, 3])
+    const goodsRestored = await del('/api/admin/dicts/goods_category/GC002')
+    expect(goodsRestored.status).toBe(200)
+    const afterGoodsDel = await get('/api/admin/dicts/goods_category')
+    expect(afterGoodsDel.body.data.map((e: { sort: number }) => e.sort)).toEqual([1, 2])
   })
 
   it('工作台聚合：stats 计数 + 六域待办 + 待办审核前 5 + 近期活动前 4', async () => {

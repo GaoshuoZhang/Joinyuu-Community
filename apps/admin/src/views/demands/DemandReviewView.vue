@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, onMounted, reactive, ref } from 'vue'
 import ListErrorState from '@/components/ListErrorState.vue'
+import ListEmptyState from '@/components/ListEmptyState.vue'
 import { useListQueryState } from '@/utils/listQuery'
 import { useRouter } from 'vue-router'
 import { SearchIcon } from 'tdesign-icons-vue-next'
@@ -169,20 +170,19 @@ onMounted(() => {
     <div class="page-filter-bar">
       <t-input
         v-model="query.keyword"
-        class="filter-keyword"
+        class="ctl-w-xl"
         placeholder="搜索标题/编号…"
         clearable
         @enter="onSearch"
       />
-      <t-select
+      <t-select class="ctl-w-md"
         v-model="query.category"
         label="类别"
         :options="categoryOptions"
         clearable
-        style="width: 150px"
         @change="onSearch"
       />
-      <t-button theme="primary" variant="outline" @click="onSearch">
+      <t-button @click="onSearch">
         <template #icon><SearchIcon /></template>
         查询
       </t-button>
@@ -202,7 +202,6 @@ onMounted(() => {
         :sort="tableSort"
         :loading="loading"
         :pagination="pagination"
-        empty="暂无待审核的需求"
         @page-change="onPageChange"
         @sort-change="onSortChange"
         @row-click="({ row }: { row: Demand }) => goDetail(row)"
@@ -233,6 +232,10 @@ onMounted(() => {
             <t-button variant="text" size="small" theme="primary" @click="openReview(row)">审核</t-button>
           </div>
         </template>
+
+        <template #empty>
+          <ListEmptyState :query="query" :ignore="['status']" description="暂无待审核的需求" @clear="onReset" />
+        </template>
       </t-table>
     </div>
 
@@ -242,10 +245,6 @@ onMounted(() => {
 </template>
 
 <style scoped>
-.filter-keyword {
-  width: 220px;
-}
-
 .demand-cell {
   display: flex;
   flex-direction: column;
@@ -292,12 +291,5 @@ onMounted(() => {
   align-items: center;
   gap: 4px;
   flex-wrap: wrap;
-}
-
-.op-cell {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-  flex-wrap: nowrap;
 }
 </style>

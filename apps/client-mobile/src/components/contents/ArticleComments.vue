@@ -1,12 +1,14 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
-import { Avatar, Button, CheckTag, Tag, Textarea } from 'tdesign-mobile-vue'
+import { Avatar, Button, CheckTag, List, Loading, Tag, Textarea } from 'tdesign-mobile-vue'
 import { actionIdentityOptions, identityOptionLabel } from '@/stores/auth'
 import type { ArticleComment, UserIdentity } from '@/types'
 import { useIncrementalList } from '@/composables/useIncrementalList'
+import EmptyBlock from '@/components/shared/EmptyBlock.vue'
 import { formatLocalDateTime, formatZhNumber } from '@/utils/format'
 
-/* 文章评论区：列表（头像 + 昵称 + 发表身份）+ 评论输入（可选发表身份）；本人评论可删除。 */
+/* 文章评论区：列表（头像 + 昵称 + 发表身份）+ 评论输入（可选发表身份）；本人评论可删除。
+ * 列表加载态/失败态由父级传入，失败不再伪装成「暂无评论」（可重试）。 */
 const props = defineProps<{
   comments: ArticleComment[]
   identities: UserIdentity[]
@@ -14,6 +16,10 @@ const props = defineProps<{
   modelValue: string
   submitting: boolean
   error?: string
+  /** 评论列表加载中 */
+  loading?: boolean
+  /** 评论列表加载失败原因（展示提示 + 重试） */
+  loadError?: string
   /** 当前登录用户 uid：用于展示「删除」按钮 */
   currentUid?: string
 }>()
@@ -22,12 +28,21 @@ const emit = defineEmits<{
   'update:modelValue': [string]
   submit: [identity: UserIdentity | null]
   delete: [comment: ArticleComment]
+  retry: []
 }>()
 
 const identityOptions = computed(() => actionIdentityOptions(props.identities))
 const picked = ref<UserIdentity | null>(identityOptions.value[0] ?? null)
 const commentItems = computed(() => props.comments)
 const { visibleItems, hasMore, showMore } = useIncrementalList(commentItems)
+const footerState = computed(() => (hasMore.value ? 'load-more' : ''))
+function loadMore() {
+  if (!hasMore.value) return
+  showMore()
+}
+function onListScroll(bottomDistance: number) {
+  if (bottomDistance < 60) loadMore()
+}
 watch(
   identityOptions,
   (list) => {
@@ -46,7 +61,15 @@ function pick(identity: UserIdentity) {
 <template>
   <section class="comments">
     <h3 class="sec-title">评论（{{ formatZhNumber(comments.length) }}）</h3>
-    <div v-if="comments.length" class="comment-list">
+    <Loading v-if="loading" class="comment-loading" theme="circular" text="评论加载中…" />
+    <EmptyBlock
+      v-else-if="loadError"
+      class="comment-error"
+      :text="loadError"
+      action-text="重试"
+      @action="emit('retry')"
+    />
+    <List v-else-if="comments.length" class="comment-list" :async-loading="footerState" @load-more="loadMore" @scroll="onListScroll">
       <div v-for="item in visibleItems" :key="item.id" class="comment">
         <div class="comment-head">
           <span class="comment-author">
@@ -61,8 +84,7 @@ function pick(identity: UserIdentity) {
           <Button variant="text" size="extra-small" theme="danger" @click="emit('delete', item)">删除</Button>
         </div>
       </div>
-      <Button v-if="hasMore" block variant="outline" @click="showMore">加载更多评论（剩余 {{ formatZhNumber(comments.length - visibleItems.length) }} 条）</Button>
-    </div>
+    </List>
     <p v-else class="comment-empty">暂无评论，来说两句</p>
     <Textarea
       :model-value="modelValue"
@@ -155,7 +177,7 @@ function pick(identity: UserIdentity) {
 }
 
 .comment-content {
-  margin:var(--app-space-2) 0 0 calc(24px + var(--app-space-2));
+  margin:var(--app-space-2) 0 0 calc(var(--app-space-9) + var(--app-space-2));
   font-size: var(--app-font-body);
   line-height: 1.6;
   color: var(--td-text-color-secondary);
@@ -171,6 +193,16 @@ function pick(identity: UserIdentity) {
   margin:0 0 var(--app-space-4);
   font-size: var(--app-font-caption);
   color: var(--td-text-color-placeholder);
+}
+
+.comment-loading {
+  display: flex;
+  justify-content: center;
+  padding: var(--app-space-9) 0;
+}
+
+.comment-error {
+  margin-bottom: var(--app-space-4);
 }
 
 .identity-field {

@@ -1,17 +1,37 @@
 <script setup lang="ts">
 import { computed, onMounted, reactive, ref } from 'vue'
 import ListErrorState from '@/components/ListErrorState.vue'
+import ListEmptyState from '@/components/ListEmptyState.vue'
 import { useListQueryState } from '@/utils/listQuery'
 import PageHeader from '@/components/PageHeader.vue'
+import { auditModuleThemeMap } from '@/constants/status'
 import { fetchAuditLogs } from '@/api/auditLogs'
 import type { AuditLog, AuditModule } from '@/types'
 
 /* 操作日志：后台管理员的全部写操作记录（谁在何时对什么做了什么）。
- * 各域关键写操作由后端统一留痕（AuditInterceptor + AuditService，含 IP 与 before/after 快照） */
+ * 各域关键写操作由后端统一留痕（AuditContextMiddleware 写入请求上下文 + AuditService.record，
+ * 含访问 IP 与 before/after 快照） */
 const loading = ref(true)
 const loadError = ref('')
 const list = ref<AuditLog[]>([])
 const total = ref(0)
+
+/* 详情抽屉：直接使用列表行数据（含 ip/before/after），无需额外详情接口 */
+const drawerVisible = ref(false)
+const current = ref<AuditLog | null>(null)
+
+const hasSnapshot = computed(() => current.value?.before != null || current.value?.after != null)
+
+function openDetail(row: AuditLog) {
+  current.value = row
+  drawerVisible.value = true
+}
+
+/* 快照展示文本：结构化 JSON 美化输出；后端因体量超限截断后为字符串，原样展示 */
+function snapshotText(value: unknown): string {
+  if (value === undefined || value === null) return '—'
+  return typeof value === 'string' ? value : JSON.stringify(value, null, 2)
+}
 
 const query = reactive({
   page: 1,
@@ -41,31 +61,15 @@ const moduleOptions = [
   ].map((m) => ({ label: m, value: m })),
 ]
 
-const moduleThemeMap: Record<string, 'default' | 'primary' | 'success' | 'warning' | 'danger'> = {
-  社区成员: 'primary',
-  社区企业: 'primary',
-  合作企业: 'primary',
-  审核中心: 'warning',
-  需求管理: 'primary',
-  项目管理: 'success',
-  活动管理: 'success',
-  积分商城: 'warning',
-  空间管理: 'primary',
-  内容管理: 'success',
-  素材库: 'success',
-  RBAC: 'default',
-  系统管理: 'default',
-  归档管理: 'default',
-  认证: 'default',
-}
-
 const columns = [
   { colKey: 'at', title: '操作时间', width: 170 , ellipsis: true},
   { colKey: 'operator', title: '操作人', width: 110 , ellipsis: true},
+  { colKey: 'ip', title: 'IP 地址', cell: 'ip', width: 130 , ellipsis: true},
   { colKey: 'module', title: '模块', cell: 'module', width: 110 , ellipsis: true},
   { colKey: 'action', title: '动作', width: 130 , ellipsis: true},
   { colKey: 'target', title: '操作对象', cell: 'target', width: 220, resizable: true , ellipsis: true},
   { colKey: 'detail', title: '详情', cell: 'detail', width: 180, resizable: true , ellipsis: true},
+  { colKey: 'op', title: '操作', cell: 'op', width: 90 },
 ]
 
 const pagination = computed(() => ({
@@ -123,13 +127,13 @@ onMounted(load)
 </script>
 
 <template>
-  <div class="audit-panel page-fade-in">
+  <div class="audit-panel">
     <ListErrorState v-if="loadError" :message="loadError" :loading="loading" @retry="load" />
     <PageHeader title="操作日志" description="后台管理操作的完整留痕：谁在何时对什么做了什么" />
 
     <div class="page-filter-bar">
-      <t-input v-model="query.keyword" clearable placeholder="搜索操作对象/动作/详情/操作人…" style="width: 260px" @enter="onSearch" />
-      <t-select v-model="query.module" :options="moduleOptions" clearable style="width: 160px" @change="onSearch" />
+      <t-input class="ctl-w-xl" v-model="query.keyword" clearable placeholder="搜索操作对象/动作/详情/操作人…" @enter="onSearch" />
+      <t-select class="ctl-w-md" v-model="query.module" :options="moduleOptions" @change="onSearch" />
       <t-button theme="primary" @click="onSearch">查询</t-button>
       <t-button variant="outline" @click="onReset">重置</t-button>
     </div>
@@ -142,11 +146,13 @@ onMounted(load)
       :data="list"
       :columns="columns"
       :pagination="pagination"
-      empty="暂无操作日志"
       @page-change="onPageChange"
     >
       <template #module="{ row }">
-        <t-tag variant="light" :theme="moduleThemeMap[row.module] ?? 'default'">{{ moduleOf(row) }}</t-tag>
+        <t-tag variant="light" :theme="auditModuleThemeMap[row.module] ?? 'default'">{{ moduleOf(row) }}</t-tag>
+      </template>
+      <template #ip="{ row }">
+        <span class="cell-ip">{{ row.ip || '—' }}</span>
       </template>
       <template #target="{ row }">
         <span class="cell-target">{{ row.target }}</span>
@@ -154,7 +160,50 @@ onMounted(load)
       <template #detail="{ row }">
         <span class="cell-detail">{{ row.detail || '—' }}</span>
       </template>
+      <template #op="{ row }">
+        <t-button variant="text" theme="primary" size="small" @click="openDetail(row)">详情</t-button>
+      </template>
+
+      <template #empty>
+        <ListEmptyState :query="query" description="暂无操作日志" @clear="onReset" />
+      </template>
     </t-table>
+
+    <!-- 日志详情抽屉：基础信息 + 变更前/变更后快照对照 -->
+    <t-drawer
+      v-model:visible="drawerVisible"
+      header="操作日志详情"
+      size="560px"
+      :footer="false"
+      :close-btn="true"
+      :close-on-esc-keydown="true"
+    >
+      <template v-if="current">
+        <t-descriptions :column="2" bordered>
+          <t-descriptions-item label="操作时间">{{ current.at }}</t-descriptions-item>
+          <t-descriptions-item label="操作人">{{ current.operator }}</t-descriptions-item>
+          <t-descriptions-item label="IP 地址">{{ current.ip || '—' }}</t-descriptions-item>
+          <t-descriptions-item label="模块">{{ current.module }}</t-descriptions-item>
+          <t-descriptions-item label="动作">{{ current.action }}</t-descriptions-item>
+          <t-descriptions-item label="对象">{{ current.target }}</t-descriptions-item>
+          <t-descriptions-item label="备注" :span="2">{{ current.detail || '—' }}</t-descriptions-item>
+        </t-descriptions>
+
+        <h4 class="drawer-section-title">字段变更快照</h4>
+        <p v-if="current.snapshotTruncated" class="snapshot-tip">快照过大，以下内容已截断</p>
+        <div v-if="hasSnapshot" class="snapshot-grid">
+          <div class="snapshot-col">
+            <div class="snapshot-title">变更前</div>
+            <pre class="snapshot-pre">{{ snapshotText(current.before) }}</pre>
+          </div>
+          <div class="snapshot-col">
+            <div class="snapshot-title">变更后</div>
+            <pre class="snapshot-pre">{{ snapshotText(current.after) }}</pre>
+          </div>
+        </div>
+        <div v-else class="snapshot-empty">该操作无字段变更快照</div>
+      </template>
+    </t-drawer>
   </div>
 </template>
 
@@ -165,5 +214,66 @@ onMounted(load)
 
 .cell-detail {
   color: var(--td-text-color-secondary);
+}
+
+.cell-ip {
+  color: var(--td-text-color-secondary);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+}
+
+.drawer-section-title {
+  margin: 20px 0 12px;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--td-text-color-primary);
+}
+
+.snapshot-tip {
+  margin: 0 0 8px;
+  font-size: 12px;
+  color: var(--td-warning-color);
+}
+
+/* 变更前/变更后两栏对照；窄屏上下堆叠 */
+.snapshot-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+}
+
+.snapshot-col {
+  min-width: 0;
+}
+
+.snapshot-title {
+  margin-bottom: 4px;
+  font-size: 12px;
+  color: var(--td-text-color-secondary);
+}
+
+.snapshot-pre {
+  margin: 0;
+  max-height: 260px;
+  overflow: auto;
+  padding: 8px 10px;
+  border-radius: var(--td-radius-default);
+  background: var(--td-bg-color-container-hover);
+  color: var(--td-text-color-primary);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 12px;
+  line-height: 1.6;
+  white-space: pre-wrap;
+  word-break: break-all;
+}
+
+.snapshot-empty {
+  font-size: 13px;
+  color: var(--td-text-color-placeholder);
+}
+
+@media (max-width: 640px) {
+  .snapshot-grid {
+    grid-template-columns: 1fr;
+  }
 }
 </style>

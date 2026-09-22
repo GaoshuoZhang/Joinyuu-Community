@@ -1,4 +1,4 @@
-import { createRouter, createWebHashHistory } from 'vue-router'
+import { createRouter, createWebHashHistory, type RouteRecordNormalized } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
 import { getAllPermissionCodes } from '@/constants/permissions'
 import { scopeAllowsGroup } from '@/constants/scopes'
@@ -16,19 +16,30 @@ function requiredPerm(path: string): string | undefined {
   return undefined
 }
 
-/** 首个可访问路由：登录成功与兜底跳转的目标，避免无 /dashboard 权限的账号必然落地 403。
- * 按路由注册顺序取第一个「有标题、非参数化、权限与数据范围均放行」的静态路由；全不可访问时返回 /403 */
-export function firstAccessiblePath(): string {
+/** 规范首页：工作台。登录成功与 `/`、通配兜底均以此为目标 */
+export const HOME_PATH = '/dashboard'
+
+/** 单条路由是否放行：meta.perm（否则按权限目录推导）与数据范围均通过 */
+function isAccessible(record: RouteRecordNormalized): boolean {
   const auth = useAuthStore()
-  for (const record of router.getRoutes()) {
+  const perm = (record.meta.perm as string | string[] | undefined) ?? requiredPerm(record.path)
+  if (perm && !auth.hasPerm(perm)) return false
+  const group = record.meta.group as string | undefined
+  const scopeDomain = record.meta.scopeDomain as string | undefined
+  return !group || scopeAllowsGroup(auth.dataScope, auth.permissions, group, scopeDomain)
+}
+
+/** 首个可访问路由：登录成功与兜底跳转的目标。
+ * 工作台优先（首页契约）；不可访问时再按路由注册顺序（getRoutes 返回匹配分排序，不保证注册序）
+ * 取第一个「有标题、非参数化、权限与数据范围均放行」的静态路由；全不可访问时返回 /403 */
+export function firstAccessiblePath(): string {
+  const routes = router.getRoutes()
+  const home = routes.find((r) => r.path === HOME_PATH)
+  if (home && isAccessible(home)) return HOME_PATH
+  for (const record of routes) {
     const path = record.path
-    if (!record.meta?.title || path.includes(':') || path === '/login') continue
-    const perm = (record.meta.perm as string | string[] | undefined) ?? requiredPerm(path)
-    if (perm && !auth.hasPerm(perm)) continue
-    const group = record.meta.group as string | undefined
-    const scopeDomain = record.meta.scopeDomain as string | undefined
-    if (group && !scopeAllowsGroup(auth.dataScope, auth.permissions, group, scopeDomain)) continue
-    return path
+    if (!record.meta?.title || path.includes(':') || path === '/login' || path === HOME_PATH) continue
+    if (isAccessible(record)) return path
   }
   return '/403'
 }

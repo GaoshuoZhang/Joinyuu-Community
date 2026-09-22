@@ -1,21 +1,52 @@
 <script setup lang="ts">
-import { onMounted } from 'vue'
+import { computed, onMounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { Button } from 'tdesign-mobile-vue'
-import { fetchMyReservation } from '@/api/spaces'
+import { Button, DialogPlugin, Toast } from 'tdesign-mobile-vue'
+import { cancelReservation, fetchMyReservation } from '@/api/spaces'
 import { useAsyncList } from '@/composables/useAsyncList'
 import EmptyBlock from '@/components/shared/EmptyBlock.vue'
 import IdentityTag from '@/components/shared/IdentityTag.vue'
 import ListSkeleton from '@/components/ListSkeleton.vue'
 import StateTag from '@/components/shared/StateTag.vue'
 import type { SpaceReservationDetail } from '@/types'
-import { formatLocalDate, formatLocalDateTime, formatZhNumber } from '@/utils/format'
+import { formatLocalDate, formatLocalDateTime } from '@/utils/format'
 
 const route = useRoute()
 const router = useRouter()
 const id = String(route.params.id)
 const { data: reservation, loading, error, run } = useAsyncList<SpaceReservationDetail>(() => fetchMyReservation(id))
 onMounted(run)
+
+const acting = ref(false)
+/* 与「我的预约」列表口径一致：待审核/已通过可取消 */
+const canCancel = computed(() => reservation.value?.status === 'pending' || reservation.value?.status === 'approved')
+
+function onCancelTap() {
+  const item = reservation.value
+  if (!item) return
+  DialogPlugin.confirm({
+    title: '取消预约',
+    content: `确认取消「${item.spaceName}」${formatLocalDate(item.date)} ${item.start}-${item.end} 的预约？`,
+    cancelBtn: '保留预约',
+    confirmBtn: '确认取消',
+    onConfirm: () => {
+      void doCancel()
+    },
+  })
+}
+
+async function doCancel() {
+  acting.value = true
+  try {
+    await cancelReservation(id)
+    Toast('已取消预约')
+    await run()
+  } catch (e) {
+    Toast(e instanceof Error ? e.message : '取消失败，请稍后重试')
+  } finally {
+    acting.value = false
+  }
+}
 </script>
 
 <template>
@@ -32,7 +63,7 @@ onMounted(run)
         <h3>预约信息</h3>
         <dl class="fields">
           <dt>预约用途</dt><dd>{{ reservation.purpose || '未填写' }}</dd>
-          <dt>参与人数</dt><dd>{{ formatZhNumber(reservation.attendees) }} 人</dd>
+          <dt>参与人数</dt><dd class="tabular-nums">{{ reservation.attendees }} 人</dd>
           <template v-if="reservation.identityType"><dt>预约身份</dt><dd class="identity"><IdentityTag :type="reservation.identityType" /><span>{{ reservation.subjectName }}</span></dd></template>
         </dl>
       </section>
@@ -46,6 +77,9 @@ onMounted(run)
           </li>
         </ol>
       </section>
+      <Button v-if="canCancel" theme="danger" variant="outline" block :disabled="acting" @click="onCancelTap">
+        {{ acting ? '处理中…' : '取消预约' }}
+      </Button>
       <Button block variant="text" @click="router.push('/me/reservations')">返回我的预约</Button>
     </template>
   </div>

@@ -576,7 +576,20 @@ export class DemandsService {
       })
       if (claim.count !== 1) throw new ConflictException('该需求已立项或被处理')
 
-      const created = await this.projects.createProjectInHostTx(tx, dto)
+      /* 需求立项：项目需求方/创建人/联系方式/合同价格一律照搬需求快照（客户端传值不生效），
+       * 保证项目详情可追溯需求方，且需求发布方（含企业联系人）可访问项目 */
+      const created = await this.projects.createProjectInHostTx(tx, {
+        ...dto,
+        demanderId: demand.publisherId,
+        demanderName: demand.publisherName,
+        demanderIdentity: (demand.publisherIdentity ?? null) as Prisma.InputJsonValue | null,
+        creatorName: demand.creatorName ?? demand.publisherName,
+        creatorId: demand.creatorId ?? demand.publisherId,
+        contactName: demand.contactName ?? undefined,
+        contactPhone: demand.contactPhone ?? undefined,
+        contactEmail: demand.contactEmail ?? undefined,
+        contractPrice: demand.budget,
+      })
       await tx.project.update({ where: { id: created.id }, data: { sourceDemandId: demand.id } })
       await tx.demand.update({ where: { id: demand.id }, data: { projectId: created.id } })
 

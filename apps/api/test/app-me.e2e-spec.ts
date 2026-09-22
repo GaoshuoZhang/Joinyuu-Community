@@ -37,6 +37,29 @@ describe('M2-R R1 app 个人中心', () => {
     expect(types).toContain('community_enterprise')
   })
 
+  it('POST /me/activation-dismissed 永久隐藏新手任务并按账号持久化（幂等）', async () => {
+    const before = await appGet(app, token, '/api/app/me')
+    expect(before.body.data.activationDismissed).toBe(false)
+
+    const first = await appPost(app, token, '/api/app/me/activation-dismissed', {})
+    expect(first.status).toBe(200)
+    expect(first.body.code).toBe(0)
+
+    const after = await appGet(app, token, '/api/app/me')
+    expect(after.body.data.activationDismissed).toBe(true)
+
+    /* 幂等：重复调用仍 200，状态保持 */
+    const second = await appPost(app, token, '/api/app/me/activation-dismissed', {})
+    expect(second.status).toBe(200)
+    const again = await appGet(app, token, '/api/app/me')
+    expect(again.body.data.activationDismissed).toBe(true)
+
+    /* 不影响其他账号（换账号/换浏览器登录仍显示新手任务） */
+    const other = await appLoginAs(app, '13801210002', 'user123')
+    const otherMe = await appGet(app, other, '/api/app/me')
+    expect(otherMe.body.data.activationDismissed).toBe(false)
+  })
+
   it('PUT /me 更新昵称与简介生效', async () => {
     const res = await request(app.getHttpServer())
       .put('/api/app/me')

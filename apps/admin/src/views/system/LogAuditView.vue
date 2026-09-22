@@ -3,6 +3,7 @@ import { computed, markRaw, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
 import PageHeader from '@/components/PageHeader.vue'
+import EmbeddedScope from '@/components/EmbeddedScope.vue'
 import AuditLogPanel from './AuditLogPanel.vue'
 import LoginLogsPanel from './LoginLogsPanel.vue'
 
@@ -52,22 +53,22 @@ function onTabChange(v: string | number) {
 <template>
   <div class="log-audit-view page-fade-in">
     <PageHeader title="日志与审计" description="操作日志与登录日志的统一查询" />
+    <!-- 卡片由本聚合壳统一提供（子面板均不自带 page-card）；关闭 destroyOnHide 避免切 tab 重播入场动画与布局跳动 -->
     <div class="page-card">
-      <t-tabs v-model="activeTab" class="embed-tabs" @change="onTabChange">
-        <t-tab-panel v-for="t in tabs" :key="t.value" :value="t.value" :label="t.label">
-          <component :is="t.comp" />
-        </t-tab-panel>
-      </t-tabs>
+      <!-- 嵌入标记只能包住选项卡子树，否则本页页头也会一并隐藏 -->
+      <EmbeddedScope>
+        <t-tabs v-model="activeTab" class="embed-tabs" @change="onTabChange">
+          <t-tab-panel v-for="t in tabs" :key="t.value" :value="t.value" :label="t.label" :destroy-on-hide="false">
+            <component :is="t.comp" />
+          </t-tab-panel>
+        </t-tabs>
+      </EmbeddedScope>
     </div>
   </div>
 </template>
 
 <style scoped>
-/* 子页面自带 PageHeader：聚合页内隐藏，避免与聚合页标题重复 */
-.page-card :deep(.page-header) {
-  display: none;
-}
-
+/* 依赖 TDesign tabs 内部类 .t-tabs__content：嵌入选项卡时收紧顶部留白，无对应 API */
 .embed-tabs :deep(.t-tabs__content) {
   padding-top: 8px;
 }

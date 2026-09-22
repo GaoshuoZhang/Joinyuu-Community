@@ -58,11 +58,11 @@ export async function fetchHomeFeed(): Promise<HomeFeed> {
       hotEvents,
       latestDemands,
       topArticles,
-      /* v40：置顶优先 + 时间倒序取前 2 条 */
-      /* 与后端一致：首页顶部公告条仅下发「已开启置顶」的一条，全关则不下发 */
-      announcements: announcements.filter((a) => a.pinned).slice(0, 1)
+      /* 与后端一致：仅下发「已启用（pinned）」的公告，按启用优先 + 时间倒序取前 5 条（互锁保证至多一条） */
+      announcements: announcements
+        .filter((a) => a.pinned)
         .sort((a, b) => Number(b.pinned ?? false) - Number(a.pinned ?? false) || b.at.localeCompare(a.at))
-        .slice(0, 2),
+        .slice(0, 5),
     }
   }, 200)
 }

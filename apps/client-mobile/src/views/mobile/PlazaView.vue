@@ -10,9 +10,11 @@ import { useRefreshOnActivate } from '@/composables/useRefreshOnActivate'
 import { useAnimSuppress } from '@/composables/useAnimSuppress'
 import ListSkeleton from '@/components/ListSkeleton.vue'
 import EmptyBlock from '@/components/shared/EmptyBlock.vue'
+import StateTag from '@/components/shared/StateTag.vue'
 import type { CommunityEvent, Article, ArticleColumn, PageResult } from '@/types'
 import { onImageError } from '@/utils/imageFallback'
 import { useRouteQuerySync } from '@/composables/useRouteQuerySync'
+import { useTabSwipe } from '@/composables/useTabSwipe'
 import { formatLocalDate, formatLocalDateTime, formatZhNumber } from '@/utils/format'
 
 useAnimSuppress()
@@ -24,6 +26,15 @@ const router = useRouter()
 const auth = useAuthStore()
 
 const activeTab = ref(route.query.tab === 'articles' ? 'articles' : 'events')
+
+/* v48：Tabs 关闭官方滑动切换——官方 swipeable 会在横向 touchmove 上 preventDefault，
+ * 导致「资讯」栏目的 chips 无法左右划动查看。改用 useTabSwipe 自管手势（其内部排除 .chips/输入区），
+ * 既保住滑动手势切 Tab，也让 chips 恢复横向滚动。 */
+const { startSwipe, moveSwipe, cancelSwipe } = useTabSwipe(
+  () => ['events', 'articles'],
+  () => activeTab.value,
+  (value) => (activeTab.value = value),
+)
 
 const initialQ = String(route.query.q ?? '')
 const eventKeywordInput = ref(activeTab.value === 'events' ? initialQ : '')
@@ -72,7 +83,10 @@ function syncQuery() {
 }
 
 const columns = computed(() => columnData.value ?? [])
+/* 文章列表接口（GET /articles）返回完整数组、无 total 字段，数组长度即为总数；
+ * 活动列表接口返回 { list, total }，走 eventsTotal。 */
 const articles = computed(() => articleData.value ?? [])
+const articlesTotal = computed(() => articles.value.length)
 const eventsEmpty = computed(() => !eventsLoading.value && !eventsError.value && events.value.length === 0)
 const articlesEmpty = computed(() => !articlesLoading.value && !articlesError.value && articles.value.length === 0)
 
@@ -178,8 +192,14 @@ function clearArticleFilters() {
 
 <template>
   <PullDownRefresh :value="refreshing" @refresh="onRefresh">
-  <div class="page-fade-in m-plaza">
-    <Tabs v-model="activeTab" class="top-tabs">
+  <div
+    class="page-fade-in m-plaza"
+    @touchstart="startSwipe"
+    @touchmove="moveSwipe"
+    @touchend="cancelSwipe"
+    @touchcancel="cancelSwipe"
+  >
+    <Tabs v-model="activeTab" class="top-tabs" :swipeable="false">
       <TabPanel value="events" label="活动">
         <Search v-model="eventKeywordInput" class="tab-search" placeholder="搜索活动关键词…" />
         <ListSkeleton v-if="eventsLoading && !(events ?? []).length" />
@@ -202,7 +222,7 @@ function clearArticleFilters() {
             <div v-else class="card-cover card-cover-fallback"><Icon aria-hidden="true" name="calendar" size="28px" /></div>
             <div class="row-head">
               <Tag class="type-tag" size="small" variant="light" theme="primary">{{ ev.typeLabel }}</Tag>
-              <Tag v-if="enrolledIds.has(ev.id)" class="enrolled-flag" size="small" variant="light" theme="success">已报名</Tag>
+              <StateTag v-if="enrolledIds.has(ev.id)" class="enrolled-flag" kind="flag" value="enrolled" />
               <span class="capacity">人数限制 {{ formatZhNumber(ev.capacity) }} 人</span>
             </div>
             <h2 class="title">{{ ev.title }}</h2>
@@ -254,7 +274,7 @@ function clearArticleFilters() {
           @action="clearArticleFilters"
         />
         <div v-else class="stagger list">
-          <p class="list-count">共 {{ formatZhNumber(articles?.length ?? 0) }} 篇文章</p>
+          <p class="list-count">共 {{ formatZhNumber(articlesTotal) }} 篇文章</p>
           <article
             v-for="a in articles"
             :key="a.id"
@@ -263,8 +283,11 @@ function clearArticleFilters() {
           >
             <Image v-if="a.coverUrl" class="card-cover" :src="a.coverUrl" :alt="a.title" fit="cover" lazy @error="onImageError" />
             <div v-else class="card-cover card-cover-fallback"><Icon aria-hidden="true" name="image" size="28px" /></div>
-            <Tag class="col-tag" size="small" variant="light" theme="primary">{{ a.columnLabel }}</Tag>
-            <p class="title">{{ a.title }}</p>
+            <!-- v48：分类标签原先与标题贴在一起——改为独立成行并留出与活动卡片一致的间距 -->
+            <div class="tag-row">
+              <Tag class="col-tag" size="small" variant="light" theme="primary">{{ a.columnLabel }}</Tag>
+            </div>
+            <h2 class="title">{{ a.title }}</h2>
             <p class="summary">{{ a.summary }}</p>
             <p class="meta">{{ a.authorName }} · {{ formatLocalDate(a.publishedAt) }} · {{ formatZhNumber(a.views) }} 次浏览</p>
           </article>
@@ -343,6 +366,12 @@ function clearArticleFilters() {
   display: flex;
   justify-content: space-between;
   align-items: center;
+  margin-bottom:var(--app-space-4);
+}
+
+/* 资讯卡片分类标签行：与活动卡片 .row-head 同一间距口径（Tag 是 inline-flex，直接加下边距不生效） */
+.tag-row {
+  display: flex;
   margin-bottom:var(--app-space-4);
 }
 

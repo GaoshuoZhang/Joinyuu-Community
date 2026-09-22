@@ -2,7 +2,7 @@
 import { computed, nextTick, reactive, ref, watch } from 'vue'
 import { MessagePlugin } from 'tdesign-vue-next'
 import type { FormProps } from 'tdesign-vue-next'
-import { focusFirstInvalid } from '@/utils/form'
+import { focusFirstInvalid, useDialogDirtyGuard } from '@/utils/form'
 import { createLease, fetchRenterOptions, updateLease } from '@/api/workstations'
 import { workstationTypeMap } from '@/constants/status'
 import type { Lease, LeaseRenterType, RentPeriod, Workstation } from '@/types'
@@ -49,6 +49,9 @@ const form = reactive({
   note: '',
   reason: '',
 })
+
+/* 未保存保护：打开时记录基线，关闭前有改动需确认 */
+const { markBaseline, guardClose } = useDialogDirtyGuard(form)
 
 /* 付款周期选项与标签（单位用于"租金（元）/ N"动态标签） */
 const rentPeriodOptions = [
@@ -176,6 +179,7 @@ watch(
       form.reason = ''
     }
     /* 清除上次会话残留的校验红框（仅清状态，不动表单值） */
+    markBaseline()
     nextTick(() => formRef.value?.clearValidate())
   },
 )
@@ -252,7 +256,8 @@ async function onConfirm() {
 }
 
 function onClose() {
-  emit('update:visible', false)
+  /* 未保存保护：有改动时弹确认（见 useDialogDirtyGuard） */
+  guardClose(() => emit('update:visible', false))
 }
 </script>
 
@@ -289,6 +294,7 @@ function onClose() {
             placeholder="选择已注册的企业/个人用户，或直接输入新租赁方…"
             filterable
             creatable
+            clearable
             style="width: 100%"
           />
         </t-form-item>
@@ -314,6 +320,7 @@ function onClose() {
             <t-date-picker
               v-model="form.endDate"
               valueType="YYYY-MM-DD"
+              clearable
               :disabled="form.longTerm"
               style="flex: 1"
             />
@@ -377,6 +384,7 @@ function onClose() {
   width: 100%;
 }
 
+/* 租期单选按钮组均分宽度；t-radio-button 无均分 API，依赖其根类名 */
 .rent-period-group :deep(.t-radio-button) {
   flex: 1;
   justify-content: center;
@@ -388,12 +396,6 @@ function onClose() {
   }
 }
 
-.dialog-footer {
-  display: flex;
-  justify-content: flex-end;
-  gap: 8px;
-}
-
 .edit-tip {
   font-size: 12px;
   color: var(--td-text-color-secondary);
@@ -403,14 +405,14 @@ function onClose() {
 .end-date-row {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 12px;
   width: 100%;
 }
 
 .long-term-switch {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: 8px;
   flex-shrink: 0;
 }
 

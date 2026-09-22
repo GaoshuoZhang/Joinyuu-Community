@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
-import { Button } from 'tdesign-mobile-vue'
+import { List, Progress } from 'tdesign-mobile-vue'
 import { useAsyncList } from '@/composables/useAsyncList'
 import { fetchExperience } from '@/api/experience'
 import EmptyBlock from '@/components/shared/EmptyBlock.vue'
@@ -16,6 +16,14 @@ const router = useRouter()
 const records = computed(() => data.value?.records ?? [])
 const progress = computed(() => data.value ? experienceProgress(data.value) : null)
 const { visibleItems, hasMore, showMore } = useIncrementalList(records)
+const footerState = computed(() => (hasMore.value ? 'load-more' : ''))
+function loadMore() {
+  if (!hasMore.value) return
+  showMore()
+}
+function onListScroll(bottomDistance: number) {
+  if (bottomDistance < 60) loadMore()
+}
 onMounted(run)
 </script>
 
@@ -30,17 +38,19 @@ onMounted(run)
           <span class="identity">{{ data.identityLabel }}</span>
           <span class="lv tabular-nums">Lv.{{ data.level }} {{ data.levelName }}</span>
         </div>
-        <div class="bar">
-          <div
-            class="fill"
-            :style="{ width: `${progress?.percent ?? 0}%` }"
-          />
-        </div>
+        <!-- 经验进度：改用 TDesign Progress（line + 无内置百分比标签，说明文案仍在下方） -->
+        <Progress
+          theme="line"
+          :percentage="progress?.percent ?? 0"
+          :label="false"
+          color="var(--td-text-color-anti)"
+          track-color="color-mix(in srgb, var(--td-text-color-anti) 25%, transparent)"
+        />
         <p v-if="progress?.isHighestLevel" class="bar-meta">当前 {{ formatZhNumber(data.currentExperience) }} 经验 · 已达最高等级</p>
         <p v-else class="bar-meta">当前 {{ formatZhNumber(data.currentExperience) }} 经验 · 距下一级还需 {{ formatZhNumber(progress?.remaining ?? 0) }} 经验</p>
       </div>
       <EmptyBlock v-if="!records.length" text="暂无经验记录，参与社区项目和活动后将在这里展示" action-text="浏览项目" @action="router.push('/projects')" />
-      <div v-else class="m-card ledger stagger">
+      <List v-else class="m-card ledger stagger" :async-loading="footerState" @load-more="loadMore" @scroll="onListScroll">
         <div v-for="r in visibleItems" :key="r.id" class="row">
           <div>
             <p class="reason">{{ r.reason }}</p>
@@ -48,8 +58,7 @@ onMounted(run)
           </div>
           <span class="delta" :class="{ neg: r.delta < 0 }">{{ r.delta >= 0 ? '+' : '' }}{{ formatZhNumber(r.delta) }}</span>
         </div>
-        <Button v-if="hasMore" block variant="outline" @click="showMore">加载更多（剩余 {{ formatZhNumber(records.length - visibleItems.length) }} 条）</Button>
-      </div>
+      </List>
     </template>
   </div>
 </template>
@@ -85,19 +94,6 @@ onMounted(run)
   font-weight: 600;
 }
 
-.bar {
-  height: 8px;
-  border-radius: var(--td-radius-small);
-  background: color-mix(in srgb, var(--td-text-color-anti) 25%, transparent);
-  overflow: hidden;
-}
-
-.fill {
-  height: 100%;
-  border-radius: var(--td-radius-small);
-  background: var(--td-text-color-anti);
-}
-
 .bar-meta {
   margin:var(--app-space-4) 0 0;
   font-size: var(--app-font-caption);
@@ -114,11 +110,11 @@ onMounted(run)
   justify-content: space-between;
   gap:var(--app-space-5);
   padding:var(--app-space-6) 0;
-  border-bottom: 1px solid var(--td-component-border);
 }
 
-.row:last-child {
-  border-bottom: none;
+/* List 组件会在行尾常驻一个 loading wrapper 节点，:last-child 判定失效，改用相邻行画上边框（视觉等价） */
+.row + .row {
+  border-top: 1px solid var(--td-component-border);
 }
 
 .reason {

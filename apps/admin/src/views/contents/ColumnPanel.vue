@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import ListErrorState from '@/components/ListErrorState.vue'
+import ListEmptyState from '@/components/ListEmptyState.vue'
 import { computed, nextTick, onMounted, reactive, ref, watch } from 'vue'
 import { MessagePlugin } from 'tdesign-vue-next'
 import type { FormProps } from 'tdesign-vue-next'
@@ -24,7 +25,7 @@ const columns = [
   { colKey: 'articleCount', title: '文章数', cell: 'articleCount', width: 90, resizable: true , ellipsis: true},
   { colKey: 'submissionOpen', title: '开放投稿', cell: 'submissionOpen', width: 110, resizable: true , ellipsis: true},
   { colKey: 'status', title: '状态', cell: 'status', width: 90, resizable: true , ellipsis: true},
-  { colKey: 'createdAt', title: '创建时间', width: 130, resizable: true , ellipsis: true},
+  { colKey: 'createdAt', title: '创建时间', cell: 'createdAt', width: 160, resizable: true , ellipsis: true},
   { colKey: 'op', title: '操作', cell: 'op', width: 170 },
 ]
 
@@ -176,15 +177,15 @@ onMounted(load)
           storage-key="contents-columns"
           :columns="columns.map((c) => ({ key: c.colKey, title: c.title }))"
         />
+        <t-button theme="primary" @click="openCreate">
+          <template #icon><AddIcon /></template>
+          新增栏目
+        </t-button>
       </template>
     </PageHeader>
-    <div class="page-filter-bar">
-      <span class="panel-tip">栏目按排序权重升序展示于成员端；停用栏目仅不可再选择，已有文章不受影响。</span>
-      <t-button theme="primary" @click="openCreate">
-        <template #icon><AddIcon /></template>
-        新增栏目
-      </t-button>
-    </div>
+
+    <!-- 页面提示：非筛选控件，独立成行（本页无筛选控件，不占筛选条） -->
+    <p class="panel-tip">栏目按排序权重升序展示于成员端；停用栏目仅不可再选择，已有文章不受影响。</p>
 
     <div class="page-card">
       <t-table
@@ -195,13 +196,13 @@ onMounted(load)
         :data="list"
         :columns="visibleColumns"
         :loading="loading"
-        empty="暂无栏目"
       >
         <template #name="{ row }">
           <div class="cell-title">{{ row.name }}</div>
           <div class="cell-sub">{{ row.id }}</div>
         </template>
         <template #articleCount="{ row }">{{ row.articleCount ?? 0 }}</template>
+        <template #createdAt="{ row }">{{ row.createdAt || '—' }}</template>
         <template #submissionOpen="{ row }">
           <t-switch
             :value="row.submissionOpen"
@@ -223,10 +224,10 @@ onMounted(load)
               <t-button variant="text" size="small" @click="openEdit(row)">编辑</t-button>
               <t-popconfirm
                 v-if="row.status === 'enabled'"
-                content="确认停用该栏目？停用后该栏目下的文章对用户不再可见。"
+                content="确认停用该栏目？停用后成员端不再展示该栏目选项，已有文章不受影响。"
                 @confirm="onToggle(row)"
               >
-                <t-button variant="text" size="small" theme="danger" :loading="acting === row.id">
+                <t-button variant="text" size="small" :loading="acting === row.id">
                   停用
                 </t-button>
               </t-popconfirm>
@@ -251,6 +252,9 @@ onMounted(load)
             </template>
           </div>
         </template>
+        <template #empty>
+          <ListEmptyState description="暂无栏目" />
+        </template>
       </t-table>
     </div>
 
@@ -258,7 +262,7 @@ onMounted(load)
     <t-dialog
       :visible="dialogVisible"
       :header="dialogMode === 'create' ? '新增栏目' : '编辑栏目'"
-      width="520px"
+      width="560px"
       @close="dialogVisible = false"
     >
       <template #footer>
@@ -298,37 +302,14 @@ onMounted(load)
 
 <style scoped>
 .panel-tip {
+  margin: 0 0 12px;
   font-size: 12px;
   color: var(--td-text-color-secondary);
-}
-
-.cell-title {
-  font-weight: 500;
-  color: var(--td-text-color-primary);
-}
-
-.cell-sub {
-  margin-top: 2px;
-  font-size: 12px;
-  color: var(--td-text-color-secondary);
-}
-
-.op-cell {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-  flex-wrap: nowrap;
 }
 
 .system-note {
   font-size: 12px;
   color: var(--td-text-color-placeholder);
-}
-
-.dialog-footer {
-  display: flex;
-  justify-content: flex-end;
-  gap: 8px;
 }
 
 .form-row {
@@ -340,7 +321,7 @@ onMounted(load)
 .submission-row {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 12px;
 }
 
 .submission-tip {

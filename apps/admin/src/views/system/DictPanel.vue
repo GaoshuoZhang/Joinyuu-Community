@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { useListQueryState } from '@/utils/listQuery'
 import ListErrorState from '@/components/ListErrorState.vue'
+import ListEmptyState from '@/components/ListEmptyState.vue'
 import { computed, onMounted, ref } from 'vue'
 import { MessagePlugin } from 'tdesign-vue-next'
 import { AddIcon, DeleteIcon } from 'tdesign-icons-vue-next'
@@ -37,6 +38,12 @@ const columns = [
 ]
 
 const enabledCount = computed(() => entries.value.filter((e) => e.status === 'enabled').length)
+
+/** 页头描述拼接「启用中 x / y」统计（原筛选行标签移入，避免筛选区堆叠统计） */
+const headerDescription = computed(
+  () =>
+    `站点选项词汇的统一配置入口，各业务页面的下拉选项均从字典取用（启用中 ${enabledCount.value} / ${entries.value.length}）`,
+)
 
 async function load(silent = false) {
   syncQuery()
@@ -112,38 +119,36 @@ onMounted(load)
 <template>
   <div class="dict-panel page-fade-in">
     <ListErrorState v-if="loadError" :message="loadError" :loading="loading" @retry="() => load()" />
-    <PageHeader title="数据字典" description="站点选项词汇的统一配置入口，各业务页面的下拉选项均从字典取用">
-    </PageHeader>
+    <PageHeader title="数据字典" :description="headerDescription" />
 
     <div class="page-filter-bar">
-      <t-select v-model="activeType" :options="typeOptions" style="width: 180px" @change="onTypeChange" />
-      <t-input
+      <t-select class="ctl-w-lg" v-model="activeType" label="字典类型" :options="typeOptions" @change="onTypeChange" />
+      <t-input class="ctl-w-2xl"
         v-model="newLabel"
         clearable
         :placeholder="`新增${dictTypeMap[activeType]}项（新增即启用）…`"
-        style="width: 280px"
         @enter="onCreate"
       />
       <t-button theme="primary" :loading="submitting" @click="onCreate">
         <template #icon><AddIcon /></template>
         新增字典项
       </t-button>
-      <t-tag variant="light" theme="primary">启用中 {{ enabledCount }} / {{ entries.length }}</t-tag>
     </div>
 
     <t-table
       row-key="code"
       table-layout="fixed"
       hover
+      resizable
       :loading="loading"
       :data="entries"
       :columns="columns"
-      empty="暂无字典项"
     >
       <template #status="{ row }">
         <t-switch
           :value="row.status === 'enabled'"
           :loading="acting === row.code"
+          :aria-label="`字典项「${row.label}」启用状态`"
           @change="() => onToggle(row)"
         />
       </template>
@@ -157,6 +162,9 @@ onMounted(load)
           </t-popconfirm>
         </div>
       </template>
+      <template #empty>
+        <ListEmptyState description="暂无字典项" />
+      </template>
     </t-table>
 
     <p class="dict-tip">说明：字典项名称（label）即业务存储值，暂不支持改名；停用后各业务页面下拉不再展示该项，历史数据保持原样。</p>
@@ -164,11 +172,6 @@ onMounted(load)
 </template>
 
 <style scoped>
-.op-cell {
-  display: flex;
-  gap: 4px;
-}
-
 .dict-tip {
   margin: 12px 0 0;
   font-size: 12px;

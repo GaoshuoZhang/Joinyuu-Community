@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, onMounted, reactive, ref } from 'vue'
 import ListErrorState from '@/components/ListErrorState.vue'
+import ListEmptyState from '@/components/ListEmptyState.vue'
 import { useListQueryState } from '@/utils/listQuery'
 import { MessagePlugin } from 'tdesign-vue-next'
 import { AddIcon, DeleteIcon, SearchIcon } from 'tdesign-icons-vue-next'
@@ -50,9 +51,9 @@ const columns = [
   { colKey: 'author', title: '作者', cell: 'author', width: 150, resizable: true , ellipsis: true},
   { colKey: 'columns', title: '栏目', cell: 'columns', width: 110, resizable: true , ellipsis: true},
   { colKey: 'status', title: '状态', cell: 'status', width: 130, resizable: true , ellipsis: true},
-  { colKey: 'publishedAt', title: '发布时间', cell: 'publishedAt', width: 130, resizable: true , ellipsis: true},
+  { colKey: 'publishedAt', title: '发布时间', cell: 'publishedAt', width: 160, resizable: true , ellipsis: true},
   { colKey: 'views', title: '阅读量', width: 80 , ellipsis: true},
-  { colKey: 'op', title: '操作', cell: 'op', width: 250 },
+  { colKey: 'op', title: '操作', cell: 'op', width: 300 },
 ]
 
 /* 列配置：本地持久化显隐/顺序 */
@@ -226,8 +227,8 @@ onMounted(load)
     </PageHeader>
 
     <div class="page-filter-bar">
-      <t-input v-model="query.keyword" clearable placeholder="搜索标题/编号…" style="width: 220px" @enter="onSearch" />
-      <t-select v-model="query.status" label="状态" :options="statusOptions" style="width: 150px" @change="onSearch" />
+      <t-input class="ctl-w-xl" v-model="query.keyword" clearable placeholder="搜索标题/编号…" @enter="onSearch" />
+      <t-select class="ctl-w-md" v-model="query.status" label="状态" :options="statusOptions" @change="onSearch" />
       <t-button theme="primary" @click="onSearch">
         <template #icon><SearchIcon /></template>
         查询
@@ -235,94 +236,103 @@ onMounted(load)
       <t-button variant="outline" @click="onReset">重置</t-button>
     </div>
 
-    <t-table
-      row-key="id"
-      table-layout="fixed"
-      hover
-      resizable
-      :data="list"
-      :columns="visibleColumns"
-      :loading="loading"
-      :pagination="pagination"
-      empty="暂无资讯"
-      @page-change="onPageChange"
-      @row-click="({ row }: { row: Article }) => openView(row)"
-    >
-      <template #title="{ row }">
-        <div class="cell-title">
-          <span class="title-text">{{ row.title }}</span>
-          <span class="title-sub">{{ row.id }}</span>
-        </div>
-      </template>
-      <template #author="{ row }">
-          <span>{{ row.authorName || '—' }}<t-tag v-if="row.authorId" class="id-tag" size="small" variant="light">{{ row.authorId }}</t-tag></span>
-        </template>
-        <template #columns="{ row }">
-          <div class="col-tags">
-            <t-tag v-for="c in row.columnNames" :key="c" variant="light" size="small">{{ c }}</t-tag>
+    <div class="page-card">
+      <t-table
+        row-key="id"
+        table-layout="fixed"
+        hover
+        resizable
+        :row-attributes="{ style: { cursor: 'pointer' } }"
+        :data="list"
+        :columns="visibleColumns"
+        :loading="loading"
+        :pagination="pagination"
+        @page-change="onPageChange"
+        @row-click="({ row }: { row: Article }) => openView(row)"
+      >
+        <template #title="{ row }">
+          <div class="cell-title">
+            <span class="title-text">{{ row.title }}</span>
+            <span class="title-sub">{{ row.id }}</span>
           </div>
         </template>
-      <template #status="{ row }">
-        <StatusTag entity="article" :value="row.status" :scheduled-at="row.scheduledAt" />
-      </template>
-      <template #publishedAt="{ row }">{{ row.publishedAt ?? '—' }}</template>
-      <template #op="{ row }">
-        <div class="op-cell" @click.stop>
-          <!-- 待发布：编辑 / 定时发布 / 立即发布 / 归档；查看详情靠行点击 -->
-          <template v-if="row.status === 'pending_release'">
-            <t-button variant="text" size="small" @click="openEdit(row)">编辑</t-button>
-            <t-button variant="text" size="small" @click="openSchedule(row)">定时发布</t-button>
-            <t-popconfirm content="确认立即发布该文章？" @confirm="onPublishNow(row)">
-              <t-button variant="text" size="small" theme="primary" :loading="acting === row.id + ':publish'">
-                立即发布
-              </t-button>
-            </t-popconfirm>
-            <t-popconfirm content="确认归档该资讯？归档后可在归档管理中恢复" @confirm="onDelete(row)">
-              <t-button variant="text" size="small" theme="danger" :loading="acting === row.id + ':delete'">
-                <template #icon><DeleteIcon /></template>
-                归档
-              </t-button>
-            </t-popconfirm>
+        <template #author="{ row }">
+            <span>{{ row.authorName || '—' }}<t-tag v-if="row.authorId" class="id-tag" size="small" variant="light">{{ row.authorId }}</t-tag></span>
           </template>
+          <template #columns="{ row }">
+            <div class="col-tags">
+              <template v-if="row.columnNames?.length">
+                <t-tag v-for="c in row.columnNames" :key="c" variant="light" size="small">{{ c }}</t-tag>
+              </template>
+              <span v-else class="muted-dash">—</span>
+            </div>
+          </template>
+        <template #status="{ row }">
+          <StatusTag entity="article" :value="row.status" :scheduled-at="row.scheduledAt" />
+        </template>
+        <template #publishedAt="{ row }">{{ row.publishedAt ?? '—' }}</template>
+        <template #op="{ row }">
+          <div class="op-cell" @click.stop>
+            <!-- 待发布：编辑 / 定时发布 / 立即发布 / 归档；查看详情靠行点击 -->
+            <template v-if="row.status === 'pending_release'">
+              <t-button variant="text" size="small" @click="openEdit(row)">编辑</t-button>
+              <t-button variant="text" size="small" @click="openSchedule(row)">定时发布</t-button>
+              <t-popconfirm content="确认立即发布该文章？" @confirm="onPublishNow(row)">
+                <t-button variant="text" size="small" theme="primary" :loading="acting === row.id + ':publish'">
+                  立即发布
+                </t-button>
+              </t-popconfirm>
+              <t-popconfirm content="确认归档该资讯？归档后可在归档管理中恢复" @confirm="onDelete(row)">
+                <t-button variant="text" size="small" theme="danger" :loading="acting === row.id + ':delete'">
+                  <template #icon><DeleteIcon /></template>
+                  归档
+                </t-button>
+              </t-popconfirm>
+            </template>
 
-          <!-- 定时发布中：取消定时发布 / 立即发布 -->
-          <template v-else-if="row.status === 'scheduled'">
-            <t-popconfirm content="确认取消定时发布？该文章将转为「待发布」" @confirm="onCancelSchedule(row)">
-              <t-button
-                variant="text"
-                size="small"
-                theme="warning"
-                :loading="acting === row.id + ':cancel-schedule'"
-              >
-                取消定时发布
-              </t-button>
-            </t-popconfirm>
-            <t-popconfirm content="确认立即发布该文章？" @confirm="onPublishNow(row)">
-              <t-button variant="text" size="small" theme="primary" :loading="acting === row.id + ':publish'">
-                立即发布
-              </t-button>
-            </t-popconfirm>
-          </template>
+            <!-- 定时发布中：取消定时发布 / 立即发布 -->
+            <template v-else-if="row.status === 'scheduled'">
+              <t-popconfirm content="确认取消定时发布？该文章将转为「待发布」" @confirm="onCancelSchedule(row)">
+                <t-button
+                  variant="text"
+                  size="small"
+                  theme="warning"
+                  :loading="acting === row.id + ':cancel-schedule'"
+                >
+                  取消定时发布
+                </t-button>
+              </t-popconfirm>
+              <t-popconfirm content="确认立即发布该文章？" @confirm="onPublishNow(row)">
+                <t-button variant="text" size="small" theme="primary" :loading="acting === row.id + ':publish'">
+                  立即发布
+                </t-button>
+              </t-popconfirm>
+            </template>
 
-          <!-- 已发布：评论治理 / 下架（转待发布） -->
-          <template v-else-if="row.status === 'published'">
-            <t-button variant="text" size="small" @click="commentsRef?.open(row)">评论</t-button>
-            <t-button variant="text" size="small" theme="danger" @click="onWithdraw(row)">
-              下架
-            </t-button>
-          </template>
-          <template v-else-if="row.status === 'closed'">
-            <t-button variant="text" size="small" theme="primary" :loading="acting === row.id + ':restore'" @click="onRestore(row)">恢复</t-button>
-            <t-popconfirm content="确认归档该已关闭资讯？" @confirm="onDelete(row)">
-              <t-button variant="text" size="small" theme="danger" :loading="acting === row.id + ':delete'">
-                <template #icon><DeleteIcon /></template>
-                归档
+            <!-- 已发布：评论治理 / 下架（转待发布） -->
+            <template v-else-if="row.status === 'published'">
+              <t-button variant="text" size="small" @click="commentsRef?.open(row)">评论</t-button>
+              <t-button variant="text" size="small" theme="danger" @click="onWithdraw(row)">
+                下架
               </t-button>
-            </t-popconfirm>
-          </template>
-        </div>
-      </template>
-    </t-table>
+            </template>
+            <template v-else-if="row.status === 'closed'">
+              <t-button variant="text" size="small" theme="primary" :loading="acting === row.id + ':restore'" @click="onRestore(row)">恢复</t-button>
+              <t-popconfirm content="确认归档该已关闭资讯？" @confirm="onDelete(row)">
+                <t-button variant="text" size="small" theme="danger" :loading="acting === row.id + ':delete'">
+                  <template #icon><DeleteIcon /></template>
+                  归档
+                </t-button>
+              </t-popconfirm>
+            </template>
+          </div>
+        </template>
+
+        <template #empty>
+          <ListEmptyState :query="query" description="暂无资讯" @clear="onReset" />
+        </template>
+      </t-table>
+    </div>
 
     <ArticleFormDialog v-model:visible="formVisible" :mode="formMode" :article="current" channel="official" @success="load" />
     <ArticleScheduleDialog v-model:visible="scheduleVisible" :article="current" @success="load" />
@@ -333,10 +343,13 @@ onMounted(load)
 </template>
 
 <style scoped>
+/* 本页 .cell-title 是「标题 + 副行」的列容器而非标题文本本身，
+ * 需抵消全局 .cell-title 的字重，避免标题列整体变粗 */
 .cell-title {
   display: flex;
   flex-direction: column;
   min-width: 0;
+  font-weight: normal;
 }
 
 .title-text {
@@ -348,13 +361,17 @@ onMounted(load)
 
 .title-sub {
   font-size: 12px;
-  color: var(--td-text-color-placeholder);
+  color: var(--td-text-color-secondary);
 }
 
 .col-tags {
   display: flex;
   flex-wrap: wrap;
   gap: 4px;
+}
+
+.muted-dash {
+  color: var(--td-text-color-placeholder);
 }
 
 .op-cell {

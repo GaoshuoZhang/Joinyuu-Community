@@ -45,6 +45,8 @@ const typeLabel = { settle: '企业入驻', cooperation: '合作伙伴', individ
                 <span v-else>{{ file.name }}</span>
               </template>
             </dd>
+            <!-- 既无值也无附件时给出占位，避免整行只剩标签 -->
+            <dd v-else class="blank">未填写</dd>
           </template>
         </dl>
         <p v-if="application.note" class="note"><b>补充说明</b><br />{{ application.note }}</p>
@@ -74,9 +76,11 @@ h2, h3, p { margin: 0; }
 h2 { font-size: var(--app-font-subtitle); line-height: 1.45; }
 h3 { font-size: var(--app-font-body); }
 .hero p, .summary, .note { font-size: var(--app-font-caption); line-height: 1.7; color: var(--td-text-color-secondary); }
-.fields { display: grid; grid-template-columns: minmax(88px, auto) 1fr; gap: var(--app-space-4) var(--app-space-5); margin: 0; font-size: var(--app-font-body); }
+/* 标签列按各自内容自适应宽度（原 minmax(88px, auto) 为写死尺寸） */
+.fields { display: grid; grid-template-columns: auto 1fr; gap: var(--app-space-4) var(--app-space-5); margin: 0; font-size: var(--app-font-body); }
 .fields dt { color: var(--td-text-color-placeholder); }
 .fields dd { margin: 0; min-width: 0; overflow-wrap: anywhere; }
+.fields .blank { color: var(--td-text-color-placeholder); }
 .files { display: flex; flex-direction: column; gap: var(--app-space-2); }
 .files a { color: var(--td-brand-color); }
 .reject { border-color: var(--td-error-color-3); }

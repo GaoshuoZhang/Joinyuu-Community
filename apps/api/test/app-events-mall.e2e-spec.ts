@@ -323,4 +323,27 @@ describe('M2-R R2 app 活动与商城', () => {
     const expired = mine.body.data.list.find((item: { id: string }) => item.id === order.body.data.id)
     expect(expired.status).toBe('expired')
   })
+
+  it('商城：订单详情仅本人可见（非本人/不存在 404，形状与列表项一致）', async () => {
+    /* 种子订单 RO2004（U1001 的待使用权益券） */
+    const detail = await appGet(app, token, '/api/app/me/orders/RO2004')
+    expect(detail.status).toBe(200)
+    expect(detail.body.data).toMatchObject({
+      id: 'RO2004',
+      goodsId: 'G1005',
+      goodsName: '精品咖啡月卡',
+      fulfillment: 'voucher',
+      voucherCode: 'V20260906B',
+    })
+    expect(detail.body.data).not.toHaveProperty('userId')
+
+    /* 与列表项复用同一 DTO，客户端可直接复用 MyOrder 类型 */
+    const mine = await appGet(app, token, '/api/app/me/orders')
+    expect(detail.body.data).toEqual(mine.body.data.list.find((o: { id: string }) => o.id === 'RO2004'))
+
+    /* 不存在 / 非本人：一律 404，不暴露存在性 */
+    expect((await appGet(app, token, '/api/app/me/orders/RO9999')).status).toBe(404)
+    const outsider = await appLoginAs(app, '13801210009', 'user123')
+    expect((await appGet(app, outsider, '/api/app/me/orders/RO2004')).status).toBe(404)
+  })
 })

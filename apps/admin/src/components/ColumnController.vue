@@ -121,7 +121,9 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKeydown))
       <div class="col-panel">
         <div class="col-panel-head">
           <span class="col-panel-title">列设置</span>
-          <t-link theme="primary" hover="color" size="small" @click="onReset">重置</t-link>
+          <t-popconfirm content="确认重置列配置？当前列显隐与顺序将恢复为默认。" @confirm="onReset">
+            <t-link theme="primary" hover="color" size="small">重置</t-link>
+          </t-popconfirm>
         </div>
         <div class="col-list">
           <div v-for="c in columns" :key="c.key" class="col-row" :class="{ merged: !orderedKeys.includes(c.key) }">
@@ -145,6 +147,12 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKeydown))
 </template>
 
 <style scoped>
+/* 弹层展开时触发器给出可见激活态（品牌色与 .stat-card.is-active 同口径） */
+.is-active {
+  color: var(--td-brand-color);
+  border-color: var(--td-brand-color);
+}
+
 .col-panel {
   width: 220px;
   padding: 8px;
@@ -162,7 +170,7 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKeydown))
 }
 
 .col-panel-title {
-  font-size: 13px;
+  font-size: 14px;
   font-weight: 600;
   color: var(--td-text-color-primary);
 }

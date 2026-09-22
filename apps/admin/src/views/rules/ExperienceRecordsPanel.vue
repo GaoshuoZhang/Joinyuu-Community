@@ -14,10 +14,10 @@ const loadError = ref('')
 const list = ref<ExperienceRecord[]>([])
 const nameLabels = ref<Record<string, string>>({})
 
-/* 选项 label 形如「名称（ID）」，展示时拆出名称，ID 以标签单独呈现 */
-function displayName(id: string): string {
+/* 选项 label 形如「名称（ID）」，展示时拆出名称，ID 以标签单独呈现；映射未命中显示「未知用户/未知企业」 */
+function displayName(id: string, targetType: 'enterprise' | 'individual'): string {
   const label = nameLabels.value[id]
-  if (!label) return id
+  if (!label) return targetType === 'enterprise' ? '未知企业' : '未知用户'
   return label.replace(/（[^）]*）\s*$/, '')
 }
 
@@ -25,12 +25,27 @@ const columns = [
   { colKey: 'id', title: '流水号', width: 110 , ellipsis: true},
   { colKey: 'target', title: '归属', cell: 'target', width: 200, resizable: true , ellipsis: true},
   { colKey: 'exp', title: '经验值', cell: 'exp', width: 100, resizable: true , ellipsis: true},
-  { colKey: 'reason', title: '事由', ellipsis: true },
+  /* 事由文案长度不定：显式声明列宽，避免固定布局下按内容撑开列 */
+  { colKey: 'reason', title: '事由', width: 240, ellipsis: true },
   { colKey: 'at', title: '时间', width: 160, resizable: true , ellipsis: true},
 ]
 
+/* 前端分页：全量数据交由 t-table 内置分页本地切片（每页 20） */
+const page = ref(1)
+const pagination = computed(() => ({
+  current: page.value,
+  pageSize: 20,
+  total: list.value.length,
+  showPageSize: false,
+}))
+
+function onPageChange(p: { current: number }) {
+  page.value = p.current
+}
+
+/* 累计发放口径与积分发放记录一致：只累加正数（扣减不计入发放量） */
 const totalGranted = computed(() =>
-  list.value.reduce((s, r) => s + r.delta, 0),
+  list.value.filter((r) => r.delta > 0).reduce((s, r) => s + r.delta, 0),
 )
 
 async function load() {
@@ -62,7 +77,7 @@ onMounted(load)
     <ListErrorState v-if="loadError" :message="loadError" :loading="loading" @retry="() => load()" />
     <PageHeader title="经验值发放记录" description="系统按经验值规则自动发放的经验值记录（发放自动，扣除为管理员手动调整）" />
 
-    <div class="stat-row">
+    <div class="stat-row stat-row--3">
       <StatCard label="累计发放" :value="totalGranted" />
       <StatCard label="发放笔数" :value="list.length" />
       <StatCard label="覆盖归属数" :value="new Set(list.map((r) => r.targetId)).size" />
@@ -81,7 +96,9 @@ onMounted(load)
         :data="list"
         :columns="columns"
         :loading="loading"
+        :pagination="pagination"
         empty="暂无发放记录"
+        @page-change="onPageChange"
       >
         <template #target="{ row }">
           <div class="target-cell">
@@ -92,7 +109,7 @@ onMounted(load)
             >
               {{ row.targetType === 'enterprise' ? '企业' : '个人' }}
             </t-tag>
-            <span class="target-name">{{ displayName(row.targetId) }}<t-tag v-if="row.targetId" class="id-tag" size="small" variant="light">{{ row.targetId }}</t-tag></span>
+            <span class="target-name">{{ displayName(row.targetId, row.targetType) }}<t-tag v-if="row.targetId" class="id-tag" size="small" variant="light">{{ row.targetId }}</t-tag></span>
           </div>
         </template>
         <template #exp="{ row }">
@@ -104,13 +121,6 @@ onMounted(load)
 </template>
 
 <style scoped>
-.stat-row {
-  display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  gap: 16px;
-  margin-bottom: 16px;
-}
-
 .panel-tip {
   font-size: 12px;
   color: var(--td-text-color-secondary);
@@ -123,12 +133,12 @@ onMounted(load)
 }
 
 .target-name {
-  font-size: 13px;
+  font-size: 14px;
   color: var(--td-text-color-primary);
 }
 
 .exp-add {
-  color: var(--td-brand-color);
+  color: var(--td-success-color);
   font-weight: 600;
 }
 </style>

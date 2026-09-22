@@ -1,21 +1,23 @@
 <script setup lang="ts">
-import { computed, onMounted, reactive, ref } from 'vue'
+import { computed, nextTick, onMounted, reactive, ref } from 'vue'
 import { useRouter } from 'vue-router'
-import { MessagePlugin } from 'tdesign-vue-next'
-import { DownloadIcon, SearchIcon } from 'tdesign-icons-vue-next'
+import { MessagePlugin, type FormProps } from 'tdesign-vue-next'
+import { SearchIcon } from 'tdesign-icons-vue-next'
 import ListErrorState from '@/components/ListErrorState.vue'
 import PageHeader from '@/components/PageHeader.vue'
 import StatusTag from '@/components/StatusTag.vue'
 import IdentityTags from '@/components/IdentityTags.vue'
 import ColumnController from '@/components/ColumnController.vue'
+import ExportButton from '@/components/ExportButton.vue'
+import ListEmptyState from '@/components/ListEmptyState.vue'
 import { useListQueryState } from '@/utils/listQuery'
-import { exportCsv, statusLabel } from '@/utils/exportCsv'
+import { statusLabel } from '@/utils/exportCsv'
 import { fetchEventEnrollments, reviewEventEnrollment } from '@/api/events'
 import type { EventEnrollmentRecord, UserIdentity } from '@/types'
 
 /* 活动报名审核：跨活动汇总报名记录，按状态筛选后通过 / 驳回；行点击进入活动详情的报名管理 */
 const router = useRouter()
-const loading = ref(false)
+const loading = ref(true)
 const loadError = ref('')
 const list = ref<EventEnrollmentRecord[]>([])
 const total = ref(0)
@@ -41,7 +43,7 @@ const columns = [
   { colKey: 'event', title: '活动', cell: 'event', width: 220, resizable: true, ellipsis: true },
   { colKey: 'name', title: '报名人', cell: 'name', width: 150, resizable: true, ellipsis: true },
   { colKey: 'identities', title: '关联身份', cell: 'identities', width: 240, resizable: true, ellipsis: true },
-  { colKey: 'phone', title: '联系电话', width: 130, resizable: true, ellipsis: true },
+  { colKey: 'phone', title: '联系电话', cell: 'phone', width: 130, resizable: true, ellipsis: true },
   { colKey: 'appliedAt', title: '报名时间', width: 150, resizable: true, ellipsis: true },
   { colKey: 'status', title: '状态', cell: 'status', width: 100, resizable: true, ellipsis: true },
   { colKey: 'waitlistOrder', title: '候补顺序', cell: 'waitlistOrder', width: 100, resizable: true, ellipsis: true },
@@ -135,11 +137,11 @@ function isReviewing(row: EventEnrollmentRecord, status: 'approved' | 'rejected'
   return reviewing.value === `${row.eventId}:${row.userId}:${status}`
 }
 
-async function onReview(row: EventEnrollmentRecord, status: 'approved' | 'rejected') {
-  reviewing.value = `${row.eventId}:${row.userId}:${status}`
+async function onReview(row: EventEnrollmentRecord, status: 'approved') {
+  reviewing.value = `${row.eventId}:${row.userId}:approved`
   try {
     await reviewEventEnrollment(row.eventId, row.userId, status)
-    MessagePlugin.success(status === 'approved' ? '已通过该报名' : '已驳回该报名')
+    MessagePlugin.success('已通过该报名')
     await load()
   } catch (e) {
     MessagePlugin.error(e instanceof Error ? e.message : '操作失败')
@@ -148,25 +150,65 @@ async function onReview(row: EventEnrollmentRecord, status: 'approved' | 'reject
   }
 }
 
-/* 导出当前页报名记录为 CSV */
-function onExport() {
-  exportCsv(
-    '活动报名列表',
-    ['活动编号', '活动标题', '报名人', '用户ID', '关联身份', '联系电话', '报名时间', '状态', '候补顺序', '签到'],
-    list.value.map((e) => [
-      e.eventId,
-      e.eventTitle,
-      e.name,
-      e.userId,
-      relatedIdentities(e).map(identityText).join('、') || '—',
-      e.phone,
-      e.appliedAt,
-      statusLabel('enrollment', e.status),
-      e.waitlistOrder ?? '—',
-      e.checkedIn ? '已签到' : '未签到',
-    ]),
-  )
-  MessagePlugin.success(`已导出当前页 ${list.value.length} 条数据`)
+/* 驳回必填原因（与申请审核一致）：弹窗填写后提交，原因随站内通知下发申请人并记入审计 */
+const rejectVisible = ref(false)
+const rejectRow = ref<EventEnrollmentRecord | null>(null)
+const rejectFormRef = ref()
+const rejectForm = reactive({ reason: '' })
+const rejectSubmitting = ref(false)
+const rejectRules: FormProps['rules'] = {
+  reason: [{ required: true, message: '请填写驳回原因', trigger: 'submit' }],
+}
+
+function openReject(row: EventEnrollmentRecord) {
+  rejectRow.value = row
+  rejectForm.reason = ''
+  rejectVisible.value = true
+  nextTick(() => rejectFormRef.value?.clearValidate())
+}
+
+async function onConfirmReject() {
+  const row = rejectRow.value
+  if (!row) return
+  const valid = await rejectFormRef.value.validate()
+  if (valid !== true) return
+  rejectSubmitting.value = true
+  try {
+    await reviewEventEnrollment(row.eventId, row.userId, 'rejected', rejectForm.reason)
+    MessagePlugin.success('已驳回该报名')
+    rejectVisible.value = false
+    await load()
+  } catch (e) {
+    MessagePlugin.error(e instanceof Error ? e.message : '操作失败')
+  } finally {
+    rejectSubmitting.value = false
+  }
+}
+
+/* 导出：当前页 / 全部结果（沿用列表筛选） */
+const exportHeaders = [
+  '活动编号', '活动标题', '报名人', '用户ID', '关联身份', '联系电话', '报名时间', '状态', '候补顺序', '签到',
+]
+
+function mapRow(e: EventEnrollmentRecord): (string | number)[] {
+  return [
+    e.eventId,
+    e.eventTitle,
+    e.name,
+    e.userId,
+    relatedIdentities(e).map(identityText).join('、') || '—',
+    e.phone || '—',
+    e.appliedAt,
+    statusLabel('enrollment', e.status),
+    e.waitlistOrder ?? '—',
+    e.checkedIn ? '已签到' : '未签到',
+  ]
+}
+
+const pageExportRows = computed(() => list.value.map(mapRow))
+
+function fetchAllForExport(page: number, pageSize: number) {
+  return fetchEventEnrollments({ ...query, page, pageSize })
 }
 
 const { syncQuery } = useListQueryState(query, load)
@@ -185,10 +227,13 @@ onMounted(load)
           storage-key="event-enrollments"
           :columns="columns.map((c) => ({ key: c.colKey, title: c.title }))"
         />
-        <t-button variant="outline" @click="onExport">
-          <template #icon><DownloadIcon /></template>
-          导出
-        </t-button>
+        <ExportButton
+          filename="活动报名列表"
+          :headers="exportHeaders"
+          :rows="pageExportRows"
+          :fetch-all="fetchAllForExport"
+          :map-row="mapRow"
+        />
       </template>
     </PageHeader>
 
@@ -200,11 +245,10 @@ onMounted(load)
       </div>
 
       <div class="page-filter-bar">
-        <t-input
+        <t-input class="ctl-w-xl"
           v-model="query.keyword"
           placeholder="搜索报名人/身份/电话/活动…"
           clearable
-          style="width: 260px"
           @enter="onSearch"
         />
         <t-button @click="onSearch">
@@ -225,6 +269,7 @@ onMounted(load)
         :columns="visibleColumns"
         :loading="loading"
         :pagination="pagination"
+        :row-attributes="{ style: { cursor: 'pointer' } }"
         @page-change="onPageChange"
         @row-click="onRowClick"
       >
@@ -240,6 +285,7 @@ onMounted(load)
           <IdentityTags v-if="relatedIdentities(row).length" :identities="relatedIdentities(row)" />
           <span v-else class="muted-dash">—</span>
         </template>
+        <template #phone="{ row }">{{ row.phone || '—' }}</template>
         <template #status="{ row }">
           <StatusTag entity="enrollment" :value="row.status" />
         </template>
@@ -255,41 +301,57 @@ onMounted(load)
               <t-popconfirm content="确认通过该报名？通过后将按规则发放报名积分" @confirm="onReview(row, 'approved')">
                 <t-button variant="text" size="small" theme="primary" :loading="isReviewing(row, 'approved')">通过</t-button>
               </t-popconfirm>
-              <t-popconfirm content="确认驳回该报名？" @confirm="onReview(row, 'rejected')">
-                <t-button variant="text" size="small" theme="danger" :loading="isReviewing(row, 'rejected')">驳回</t-button>
-              </t-popconfirm>
+              <t-button variant="text" size="small" theme="danger" @click="openReject(row)">驳回</t-button>
             </template>
             <t-button variant="text" size="small" @click="goEvent(row)">活动详情</t-button>
           </div>
         </template>
         <template #empty>
-          <t-empty description="暂无报名记录" />
+          <ListEmptyState :query="query" :ignore="['status']" description="暂无报名记录" @clear="onReset" />
         </template>
       </t-table>
     </div>
+
+    <!-- 驳回原因对话框：必填，原因随站内通知下发申请人并记入审计 -->
+    <t-dialog
+      v-model:visible="rejectVisible"
+      header="驳回报名"
+      width="480px"
+      :close-on-overlay-click="!rejectSubmitting"
+      :confirm-btn="{ content: '确认驳回', theme: 'danger', loading: rejectSubmitting }"
+      cancel-btn="取消"
+      @confirm="onConfirmReject"
+    >
+      <p class="reject-tip">
+        {{ rejectRow ? `驳回 ${rejectRow.name} 对「${rejectRow.eventTitle}」的报名` : '' }}原因将通过站内通知告知申请人。
+      </p>
+      <t-form ref="rejectFormRef" :data="rejectForm" :rules="rejectRules">
+        <t-form-item name="reason">
+          <t-textarea
+            v-model="rejectForm.reason"
+            :maxlength="200"
+            :autosize="{ minRows: 3, maxRows: 5 }"
+            placeholder="请填写驳回原因（必填，将通知申请人）…"
+          />
+        </t-form-item>
+      </t-form>
+    </t-dialog>
   </div>
 </template>
 
 <style scoped>
+.reject-tip {
+  margin: 0 0 12px;
+  font-size: 12px;
+  line-height: 22px;
+  color: var(--td-text-color-secondary);
+}
+
 .tabs-row {
   margin-bottom: 16px;
 }
 
-.cell-title {
-  font-weight: 500;
-  color: var(--td-text-color-primary);
-}
-
-.cell-sub {
-  margin-top: 2px;
-  font-size: 12px;
-  color: var(--td-text-color-secondary);
-}
-
-.op-cell {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-  flex-wrap: nowrap;
+.muted-dash {
+  color: var(--td-text-color-placeholder);
 }
 </style>

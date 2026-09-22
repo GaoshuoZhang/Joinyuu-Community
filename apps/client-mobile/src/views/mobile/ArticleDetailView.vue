@@ -50,6 +50,8 @@ async function onShare() {
 const likeCount = ref(0)
 const liked = ref(false)
 const comments = ref<ArticleComment[]>([])
+const commentsLoading = ref(false)
+const commentsError = ref('')
 const commentText = ref('')
 const commentError = ref('')
 const commentIdentities = computed(() => actionIdentityOptions(auth.identities))
@@ -62,15 +64,22 @@ watch(article, (value) => {
   liked.value = value.liked ?? false
 })
 
+/* 评论加载：失败不伪装成「暂无评论」，交由评论区展示错误 + 重试 */
 async function loadComments() {
   if (!article.value?.commentsEnabled) {
     comments.value = []
+    commentsError.value = ''
     return
   }
+  commentsLoading.value = true
+  commentsError.value = ''
   try {
     comments.value = await fetchArticleComments(String(route.params.id))
-  } catch {
+  } catch (e) {
     comments.value = []
+    commentsError.value = e instanceof Error ? e.message : '评论加载失败，请稍后重试'
+  } finally {
+    commentsLoading.value = false
   }
 }
 
@@ -149,6 +158,11 @@ async function loadFavorite() {
 }
 
 async function onToggleFavorite() {
+  /* 与活动详情一致：先显式判登录，未登录直接跳登录并带 redirect，不依赖错误信息文本匹配 */
+  if (!auth.isLogged) {
+    await router.push({ path: '/login', query: { redirect: route.fullPath } })
+    return
+  }
   const next = !favorited.value
   favorited.value = next
   try {
@@ -157,10 +171,6 @@ async function onToggleFavorite() {
     Toast(favorited.value ? '已收藏' : '已取消收藏')
   } catch (e) {
     favorited.value = !next
-    if (e instanceof Error && e.message.includes('登录')) {
-      await router.push({ path: '/login', query: { redirect: route.fullPath } })
-      return
-    }
     Toast(e instanceof Error ? e.message : '操作失败，请稍后重试')
   }
 }
@@ -199,6 +209,8 @@ async function onToggleFavorite() {
         v-if="article.commentsEnabled"
         v-model="commentText"
         :comments="comments"
+        :loading="commentsLoading"
+        :load-error="commentsError"
         :identities="commentIdentities"
         :user-name="auth.name"
         :submitting="commenting"
@@ -206,6 +218,7 @@ async function onToggleFavorite() {
         :current-uid="auth.uid || undefined"
         @submit="onComment"
         @delete="onDeleteComment"
+        @retry="loadComments"
       />
       <section v-else class="m-card comments-disabled" aria-live="polite">该文章已关闭评论</section>
     </template>
@@ -249,7 +262,6 @@ async function onToggleFavorite() {
   color: var(--td-text-color-placeholder);
 }
 
-.cover,
 .cover { max-height: 240px; aspect-ratio: 16 / 9; }
 .comments-disabled {
   padding:var(--app-space-8);

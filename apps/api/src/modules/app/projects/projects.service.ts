@@ -40,6 +40,8 @@ export class AppProjectsService {
       this.prisma.demand.findMany({ where: { publisherId: uid }, select: { id: true } }),
       this.myEnterpriseIds(uid),
     ])
+    /* 需求方主体：本人 + 我关联的社区企业（企业代发的需求立项后，企业成员同样可见） */
+    const demanderSubjects = [uid, ...myEntIds]
     const matched = {
       OR: [
         { type: 'individual', refId: uid },
@@ -50,14 +52,25 @@ export class AppProjectsService {
     const projects = await this.prisma.project.findMany({
       where: {
         deletedAt: null,
-        OR: [{ undertakers: { some: matched } }, { sourceDemandId: { in: myDemandIds.map((d) => d.id) } }],
+        OR: [
+          { undertakers: { some: matched } },
+          { sourceDemandId: { in: myDemandIds.map((d) => d.id) } },
+          { demanderId: { in: demanderSubjects } },
+        ],
       },
       include: { undertakers: true, milestones: { orderBy: { id: 'asc' } } },
       orderBy: { initiatedAt: 'desc' },
     })
+    const demandIds = new Set(myDemandIds.map((d) => d.id))
+    const subjectSet = new Set(demanderSubjects)
     return Promise.all(
       projects.map((p) =>
-        this.toMyProject(uid, p, myDemandIds.some((d) => d.id === p.sourceDemandId), myEntIds),
+        this.toMyProject(
+          uid,
+          p,
+          p.demanderId != null ? subjectSet.has(p.demanderId) : demandIds.has(p.sourceDemandId ?? ''),
+          myEntIds,
+        ),
       ),
     )
   }
@@ -256,11 +269,14 @@ export class AppProjectsService {
 
     let initiatorUid: string | null = null
     let isInit = false
-    if (project.sourceDemandId) {
-      const demand = await this.prisma.demand.findUnique({ where: { id: project.sourceDemandId } })
-      initiatorUid = demand?.publisherId ?? null
-      isInit = demand?.publisherId === uid
-    }
+    const demand = project.sourceDemandId
+      ? await this.prisma.demand.findUnique({ where: { id: project.sourceDemandId } })
+      : null
+    /* 需求方主体：优先项目快照（demanderId），历史项目回退来源需求的发布方；
+     * 企业代发需求时主体为企业 ID，解析到该企业联系人（即收到「需求已达成合作」的用户）后放行 */
+    const demanderSubject = project.demanderId ?? demand?.publisherId ?? null
+    initiatorUid = await this.subjectUserId(demanderSubject)
+    isInit = (!!initiatorUid && initiatorUid === uid) || demand?.publisherId === uid
     const myEntIds = await this.myEnterpriseIds(uid)
     const isUnd = project.undertakers.some((u) =>
       (u.type === 'individual' && u.refId === uid) ||
@@ -277,6 +293,19 @@ export class AppProjectsService {
       select: { enterpriseId: true },
     })
     return rows.map((r) => r.enterpriseId as string)
+  }
+
+  /** 需求方主体 ID（用户 uid / 企业 ID）→ 对应可访问的用户 uid；无法解析返回 null。
+   * 企业主体落到企业联系人：后台代企业发需求时，站内信发给联系人，项目访问也按联系人口径放行。 */
+  private async subjectUserId(subjectId: string | null): Promise<string | null> {
+    if (!subjectId) return null
+    const user = await this.prisma.user.findUnique({ where: { uid: subjectId }, select: { uid: true } })
+    if (user) return user.uid
+    const enterprise = await this.prisma.enterprise.findUnique({
+      where: { id: subjectId },
+      select: { contactUserId: true },
+    })
+    return enterprise?.contactUserId ?? null
   }
 
   /** 项目在「我的项目」列表中的承接角色 */

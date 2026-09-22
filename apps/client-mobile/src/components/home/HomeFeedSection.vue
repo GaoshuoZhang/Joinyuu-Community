@@ -29,7 +29,8 @@ defineProps<{ title: string; items: FeedItem[]; emptyText: string; morePath?: st
       </router-link>
     </div>
     <EmptyBlock v-if="!items.length" :text="emptyText" />
-    <div v-else class="list">
+    <!-- v46：与首页其它区块、其它列表页一致，使用约定的 .stagger 交错载入 -->
+    <div v-else class="list stagger">
       <router-link
         v-for="item in items"
         :key="item.key"

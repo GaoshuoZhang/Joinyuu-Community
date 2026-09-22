@@ -1,13 +1,14 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { Avatar, Button, Cell, DialogPlugin, NoticeBar, Tag, Toast } from 'tdesign-mobile-vue'
+import { Avatar, Button, Cell, DialogPlugin, NoticeBar, Toast } from 'tdesign-mobile-vue'
 import { fetchInvitation, respondInvitation } from '@/api/enterprises'
 import { ApiError } from '@/api/http'
 import { useAsyncList } from '@/composables/useAsyncList'
 import EmptyBlock from '@/components/shared/EmptyBlock.vue'
 import ListSkeleton from '@/components/ListSkeleton.vue'
-import type { EnterpriseInvitation, InvitationAction } from '@/types'
+import StateTag from '@/components/shared/StateTag.vue'
+import type { InvitationAction } from '@/types'
 import { formatLocalDateTime } from '@/utils/format'
 
 /* 企业邀请详情：被邀请人确认加入 / 拒绝；
@@ -19,19 +20,28 @@ const invitationId = String(route.params.id)
 const { data, loading, error, run } = useAsyncList(() => fetchInvitation(invitationId))
 onMounted(run)
 
-type TagTheme = 'default' | 'primary' | 'success' | 'warning' | 'danger'
-const STATUS: Record<EnterpriseInvitation['status'], { label: string; theme: TagTheme }> = {
-  pending: { label: '待接受', theme: 'warning' },
-  accepted: { label: '已加入', theme: 'success' },
-  rejected: { label: '已拒绝', theme: 'default' },
-  revoked: { label: '已撤销', theme: 'default' },
-  expired: { label: '已过期', theme: 'default' },
-}
-const statusTag = computed(() => STATUS[data.value?.status ?? 'pending'])
+/* 终态结尾文案按状态区分：撤销/过期与「已拒绝」不是一回事，避免同屏与状态标签自相矛盾 */
+const resultTip = computed(() => {
+  const invitation = data.value
+  if (!invitation) return ''
+  switch (invitation.status) {
+    case 'accepted':
+      return `你已加入「${invitation.enterpriseName}」，可在「我的 → 关联身份」查看。`
+    case 'rejected':
+      return '你已拒绝该邀请，如为误操作可联系企业负责人重新邀请。'
+    case 'revoked':
+      return '邀请已被企业撤销。'
+    case 'expired':
+      return '邀请已过期，请联系企业负责人重新邀请。'
+    default:
+      return ''
+  }
+})
 
 const responding = ref(false)
 
 function onRespond(action: InvitationAction) {
+  if (responding.value) return
   if (action === 'reject') {
     DialogPlugin.confirm({
       title: '拒绝邀请',
@@ -44,10 +54,20 @@ function onRespond(action: InvitationAction) {
     })
     return
   }
-  void doRespond('accept')
+  /* 确认加入会写入企业成员（不可逆，退出需联系负责人），与「拒绝」同样需要二次确认 */
+  DialogPlugin.confirm({
+    title: '确认加入',
+    content: `确认以「${data.value?.role ?? '成员'}」身份加入「${data.value?.enterpriseName ?? '该企业'}」？加入后你的成员信息将出现在企业名片中。`,
+    cancelBtn: '再想想',
+    confirmBtn: '确认加入',
+    onConfirm: () => {
+      void doRespond('accept')
+    },
+  })
 }
 
 async function doRespond(action: InvitationAction) {
+  if (responding.value) return
   responding.value = true
   try {
     await respondInvitation(invitationId, action)
@@ -78,7 +98,7 @@ function goEnterprise() {
           <h2 class="ent-name">{{ data.enterpriseName }}</h2>
           <p class="ent-meta">{{ [data.enterpriseIndustry, data.enterpriseSize].filter(Boolean).join(' · ') }}</p>
         </div>
-        <Tag size="small" variant="light" :theme="statusTag.theme">{{ statusTag.label }}</Tag>
+        <StateTag kind="invitation" :value="data.status" />
       </section>
 
       <section class="m-card">
@@ -88,6 +108,7 @@ function goEnterprise() {
         <Cell title="联系电话" :note="data.phone" :bordered="false" />
         <Cell title="加入后职位" :note="data.role" :bordered="false" />
         <Cell title="邀请时间" :note="formatLocalDateTime(data.at)" :bordered="false" />
+        <Cell v-if="data.expiresAt" title="有效期至" :note="formatLocalDateTime(data.expiresAt)" :bordered="false" />
         <Cell v-if="data.respondedAt" title="处理时间" :note="formatLocalDateTime(data.respondedAt)" :bordered="false" />
       </section>
 
@@ -106,9 +127,7 @@ function goEnterprise() {
         <Button v-if="data.status === 'accepted'" theme="primary" variant="outline" size="large" block @click="goEnterprise">
           查看企业详情
         </Button>
-        <p class="result-tip">
-          {{ data.status === 'accepted' ? `你已加入「${data.enterpriseName}」，可在「我的 → 关联身份」查看。` : '你已拒绝该邀请，如为误操作可联系企业负责人重新邀请。' }}
-        </p>
+        <p class="result-tip">{{ resultTip }}</p>
       </template>
     </template>
   </div>

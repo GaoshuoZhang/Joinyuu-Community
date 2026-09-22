@@ -246,11 +246,9 @@ async function onDelete() {
   gap: 0 16px;
 }
 
+/* 页脚左端有 .footer-spacer 占位，需保持按钮与说明文字垂直居中 */
 .dialog-footer {
-  display: flex;
-  justify-content: flex-end;
   align-items: center;
-  gap: 8px;
 }
 
 .footer-spacer {

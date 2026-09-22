@@ -52,7 +52,8 @@ function onCancel() {
 </script>
 
 <template>
-  <t-dialog :visible="visible" header="定时发布" width="480px" :close-on-overlay-click="false" :close-on-esc-keydown="false" @close="onCancel">
+  <!-- 无脏数据（每次打开重置），允许 ESC 关闭；遮罩点击策略与同批调度类弹窗一致（不关闭） -->
+  <t-dialog :visible="visible" header="定时发布" width="480px" :close-on-overlay-click="false" :close-on-esc-keydown="true" @close="onCancel">
     <template #footer>
       <div class="dialog-footer">
         <t-button variant="text" theme="default" @click="onCancel">取消</t-button>
@@ -81,15 +82,10 @@ function onCancel() {
 </template>
 
 <style scoped>
-.dialog-footer {
-  display: flex;
-  justify-content: flex-end;
-  gap: 8px;
-}
 
 .dialog-tip {
   margin: 0 0 12px;
-  font-size: 13px;
+  font-size: 14px;
   line-height: 1.6;
   color: var(--td-text-color-secondary);
 }

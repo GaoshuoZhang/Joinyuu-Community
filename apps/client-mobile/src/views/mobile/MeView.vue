@@ -23,24 +23,38 @@ const notices = useNoticesStore()
 
 const levelName = ref('')
 const myIdentities = ref<MyIdentitySummary[]>([])
+/* 等级请求失败与「未绑定」是两回事：失败时给出可重试的说明，而不是静默显示「未绑定」 */
+const levelFailed = ref(false)
+
+const identityNote = computed(() => (myIdentities.value.length ? `${myIdentities.value.length} 个` : ''))
 
 const assetEntries = computed(() => {
-  /* emphasis：真实数值（积分/等级）用品牌色加重，与「券码/物流」这类说明性文案区分 */
-  const entries: { path: string; label: string; note?: string; emphasis?: boolean }[] = [
+  /* emphasis：真实数值（积分/等级）用品牌色加重，与「券码/物流」这类说明性文案区分
+   * retry：仅请求失败的入口为 true，点击改为重试加载而非跳转 */
+  const entries: { path: string; label: string; note?: string; emphasis?: boolean; retry?: boolean }[] = [
     { path: '/me/points', label: '我的积分', note: `${formatZhNumber(auth.points)} 分`, emphasis: true },
     { path: '/me/orders', label: '我的订单', note: '券码 / 物流 / 评价' },
-    { path: '/me/leases', label: '我的租约', note: '办公位 / 租期 / 租金' },
   ]
   if (auth.hasCommunityIndividual) {
     entries.push({
       path: '/me/experience',
       label: '我的等级',
-      note: levelName.value || '未绑定',
+      note: levelFailed.value ? '加载失败，点击重试' : levelName.value || '未绑定',
       emphasis: Boolean(levelName.value),
+      retry: levelFailed.value,
     })
   }
   return entries
 })
+
+/* 我的记录页已收录「我的租约」，此处不再重复展示同一 path 入口 */
+function onAssetTap(entry: { path: string; retry?: boolean }) {
+  if (entry.retry) {
+    void loadLevel()
+    return
+  }
+  void router.push(entry.path)
+}
 
 const moreEntries = computed(() => buildProfileMoreEntries(auth.hasCommunityIndividual, notices.unread))
 
@@ -57,6 +71,7 @@ async function loadIdentities() {
 }
 
 async function loadLevel() {
+  levelFailed.value = false
   if (!auth.isLogged || !auth.hasCommunityIndividual) {
     levelName.value = ''
     return
@@ -65,7 +80,9 @@ async function loadLevel() {
     const ex = await fetchExperience()
     levelName.value = `Lv.${ex.level} ${ex.levelName}`
   } catch {
-    /* 未绑定时忽略 */
+    /* 失败态：清空等级并在入口上提示重试（与「未绑定」区分） */
+    levelName.value = ''
+    levelFailed.value = true
   }
 }
 
@@ -105,7 +122,7 @@ useRefreshOnActivate(() => void refreshMe())
   <PullDownRefresh class="me-refresh" :value="refreshing" @refresh="onRefresh">
     <div class="page-fade-in me">
       <section class="m-card profile pressable" v-pressable @click="router.push('/me/profile/edit')">
-        <Avatar size="56px" class="avatar" :image="auth.avatar">{{ auth.name.slice(0, 1) }}</Avatar>
+        <Avatar size="56px" class="avatar" hide-on-load-failed :image="auth.avatar">{{ auth.name.slice(0, 1) }}</Avatar>
         <div class="info">
           <p class="name">{{ auth.name }}</p>
           <p v-if="auth.username" class="handle">@{{ auth.username }}</p>
@@ -116,10 +133,11 @@ useRefreshOnActivate(() => void refreshMe())
         </div>
       </section>
 
-      <CellGroup v-if="myIdentities.length" theme="card">
+      <p class="group-title">我的身份</p>
+      <CellGroup theme="card">
         <Cell
           title="关联身份"
-          :note="`${myIdentities.length} 个`"
+          :note="identityNote"
           arrow
           @click="router.push('/me/identities')"
         />
@@ -127,7 +145,7 @@ useRefreshOnActivate(() => void refreshMe())
 
       <p class="group-title">我的资产</p>
       <CellGroup theme="card">
-        <Cell v-for="e in assetEntries" :key="e.path" :title="e.label" arrow @click="router.push(e.path)">
+        <Cell v-for="e in assetEntries" :key="e.path" :title="e.label" arrow @click="onAssetTap(e)">
           <template v-if="e.emphasis && e.note" #note>
             <span class="note-strong tabular-nums">{{ e.note }}</span>
           </template>

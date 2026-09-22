@@ -1,29 +1,51 @@
 <script setup lang="ts">
-import { computed, onBeforeUnmount, reactive, ref } from 'vue'
+import { computed, nextTick, onBeforeUnmount, reactive, ref } from 'vue'
 import { useRouter } from 'vue-router'
-import { Button, Input, Radio, RadioGroup, Toast } from 'tdesign-mobile-vue'
+import { Button, Form, FormItem, Input, Radio, RadioGroup, Toast } from 'tdesign-mobile-vue'
+import type { FormInstanceFunctions, FormRules } from 'tdesign-mobile-vue'
 import { fetchRecoveryChannels, resetPassword, sendResetCode } from '@/api/auth'
 import { ApiError } from '@/api/http'
 import { useAuthStore } from '@/stores/auth'
+import { useUnsavedGuard } from '@/composables/useUnsavedGuard'
 import { isPasswordStrong, isSmsCode, PASSWORD_MSG, REQUIRED } from '@/utils/validators'
 import type { RecoveryChannels } from '@/types'
 
-/* 找回密码：两步——① 校验账号并取回已验证可信渠道（脱敏）；② 选渠道收码并重置新密码。 */
+/* 找回密码：两步——① 校验账号并取回已验证可信渠道（脱敏）；② 选渠道收码并重置新密码。
+ * v46：两步表单均迁移 t-form/rules——错误内联在字段下方，提交失败自动滚动到首个错误字段。 */
 const router = useRouter()
 const auth = useAuthStore()
 
 const step = ref<1 | 2>(1)
-const identifier = ref('')
 const channels = ref<RecoveryChannels | null>(null)
 const channel = ref<'email' | 'phone'>('email')
-const code = ref('')
-const password = ref('')
-const confirm = ref('')
+const form = reactive({ identifier: '', code: '', password: '', confirm: '' })
 const checking = ref(false)
 const sending = ref(false)
 const submitting = ref(false)
 const countdown = ref(0)
-const errors = reactive({ identifier: '', code: '', password: '', confirm: '' })
+const step2FormRef = ref<FormInstanceFunctions>()
+
+/* 改密表单离开保护：任一步有非空输入即视为未保存；重置成功后先 markClean 再跳转，避免误拦 */
+const hasUnsavedInput = computed(() => Boolean(
+  form.identifier.trim() || form.code.trim() || form.password || form.confirm,
+))
+const { markClean } = useUnsavedGuard(() => hasUnsavedInput.value)
+
+const identifierRules: FormRules<typeof form> = {
+  identifier: [{ required: true, message: REQUIRED('手机号/邮箱/用户名') }],
+}
+
+const resetRules: FormRules<typeof form> = {
+  code: [
+    { required: true, message: REQUIRED('6 位验证码') },
+    { validator: (val: string) => !val.trim() || isSmsCode(val), message: REQUIRED('6 位验证码') },
+  ],
+  password: [
+    { required: true, message: PASSWORD_MSG },
+    { validator: (val: string) => !val.trim() || isPasswordStrong(val), message: PASSWORD_MSG },
+  ],
+  confirm: [{ validator: (val: string) => val === form.password, message: '两次输入的密码不一致' }],
+}
 
 const availableChannels = computed(() => {
   const list: { value: 'email' | 'phone'; label: string; note: string }[] = []
@@ -49,11 +71,9 @@ function startCountdown(seconds = 60) {
 onBeforeUnmount(stopCountdown)
 
 async function onNext() {
-  errors.identifier = identifier.value.trim() ? '' : REQUIRED('手机号/邮箱/用户名')
-  if (errors.identifier) return void Toast(errors.identifier)
   checking.value = true
   try {
-    const result = await fetchRecoveryChannels(identifier.value.trim())
+    const result = await fetchRecoveryChannels(form.identifier.trim())
     channels.value = result
     if (!result.email && !result.phone) {
       Toast('该账号未绑定已验证的邮箱或手机号，请联系客服')
@@ -69,13 +89,19 @@ async function onNext() {
   }
 }
 
+function onNextSubmit({ validateResult }: { validateResult: unknown }) {
+  /* 校验失败：字段级错误已内联展示，scroll-to-first-error 负责滚动定位 */
+  if (validateResult === true) void onNext()
+}
+
 async function onSendCode() {
-  code.value = ''
-  errors.code = ''
+  form.code = ''
+  /* 清空验证码输入后不残留字段级错误提示 */
+  void nextTick(() => step2FormRef.value?.clearValidate(['code']))
   sending.value = true
   try {
     /* 由服务端按账号解析可信渠道并投递，客户端不接触真实收件地址 */
-    const result = await sendResetCode({ identifier: identifier.value.trim(), channel: channel.value })
+    const result = await sendResetCode({ identifier: form.identifier.trim(), channel: channel.value })
     Toast(result.devCode ? `验证码已发送（演示码 ${result.devCode}）` : '验证码已发送')
     startCountdown()
   } catch (e) {
@@ -86,38 +112,39 @@ async function onSendCode() {
 }
 
 async function onSubmit() {
-  errors.code = isSmsCode(code.value) ? '' : REQUIRED('6 位验证码')
-  errors.password = isPasswordStrong(password.value) ? '' : PASSWORD_MSG
-  errors.confirm = password.value === confirm.value ? '' : '两次输入的密码不一致'
-  const firstError = Object.values(errors).find(Boolean)
-  if (firstError) return void Toast(firstError)
   submitting.value = true
   try {
     await resetPassword({
-      identifier: identifier.value.trim(),
+      identifier: form.identifier.trim(),
       channel: channel.value,
-      code: code.value.trim(),
-      newPassword: password.value,
+      code: form.code.trim(),
+      newPassword: form.password,
     })
     Toast('密码已重置')
     /* 重置成功后服务端强制全端登出：清理本地会话并回到登录页 */
     auth.resetSession()
+    markClean()
     await router.replace('/login')
   } catch (e) {
     Toast(e instanceof ApiError ? e.message : '重置失败，请稍后重试')
-    code.value = ''
+    form.code = ''
+    /* API 失败清空验证码输入后不残留字段级错误提示 */
+    void nextTick(() => step2FormRef.value?.clearValidate(['code']))
   } finally {
     submitting.value = false
   }
 }
 
+function onResetSubmit({ validateResult }: { validateResult: unknown }) {
+  if (validateResult === true) void onSubmit()
+}
+
 function backToStep1() {
   step.value = 1
   channels.value = null
-  code.value = ''
-  password.value = ''
-  confirm.value = ''
-  Object.keys(errors).forEach((key) => { (errors as Record<string, string>)[key] = '' })
+  form.code = ''
+  form.password = ''
+  form.confirm = ''
   stopCountdown()
 }
 </script>
@@ -129,51 +156,59 @@ function backToStep1() {
       <p class="subtitle">{{ step === 1 ? '验证账号后通过可信渠道重置密码' : '选择验证方式并设置新密码' }}</p>
     </header>
 
-    <form v-if="step === 1" class="form" @submit.prevent="onNext">
-      <div class="field">
-        <label>手机号/邮箱/用户名</label>
-        <Input v-model="identifier" type="text" autocomplete="username" placeholder="请输入手机号/邮箱/用户名…" clearable @keyup.enter="onNext" />
-        <p v-if="errors.identifier" class="error">{{ errors.identifier }}</p>
-      </div>
-      <Button theme="primary" size="large" block :loading="checking" @click="onNext">下一步</Button>
+    <Form
+      v-if="step === 1"
+      class="form"
+      :data="form"
+      :rules="identifierRules"
+      label-align="top"
+      scroll-to-first-error="smooth"
+      @submit="onNextSubmit"
+    >
+      <FormItem label="手机号/邮箱/用户名" name="identifier">
+        <Input v-model="form.identifier" type="text" autocomplete="username" placeholder="请输入手机号/邮箱/用户名…" clearable />
+      </FormItem>
+      <Button theme="primary" size="large" block type="submit" :loading="checking">下一步</Button>
       <p class="swap">想起密码了？<router-link to="/login" class="link">返回登录</router-link></p>
-    </form>
+    </Form>
 
-    <form v-else class="form" @submit.prevent="onSubmit">
-      <div class="field">
-        <label>账号</label>
-        <Input :model-value="identifier" disabled />
-      </div>
+    <Form
+      v-else
+      ref="step2FormRef"
+      class="form"
+      :data="form"
+      :rules="resetRules"
+      label-align="top"
+      scroll-to-first-error="smooth"
+      @submit="onResetSubmit"
+    >
+      <FormItem label="账号">
+        <Input :model-value="form.identifier" disabled />
+      </FormItem>
       <div class="field">
         <span class="field-label">验证方式</span>
         <RadioGroup v-model="channel" class="channels">
           <Radio v-for="item in availableChannels" :key="item.value" :value="item.value" :label="`${item.label}（${item.note}）`" />
         </RadioGroup>
       </div>
-      <div class="field">
-        <label>验证码</label>
+      <FormItem label="验证码" name="code">
         <div class="code-row">
-          <Input v-model="code" class="code-input" :maxlength="6" inputmode="numeric" :spell-check="false" placeholder="请输入 6 位验证码…" clearable />
+          <Input v-model="form.code" class="code-input" :maxlength="6" inputmode="numeric" :spell-check="false" placeholder="请输入 6 位验证码…" clearable />
           <Button class="code-button" theme="light" :disabled="sending || countdown > 0" @click="onSendCode">
             {{ countdown > 0 ? `${countdown}s` : sending ? '发送中…' : '获取验证码' }}
           </Button>
         </div>
-        <p v-if="errors.code" class="error">{{ errors.code }}</p>
-      </div>
-      <div class="field">
-        <label>新密码</label>
-        <Input class="password-field" v-model="password" type="password" autocomplete="new-password" placeholder="至少 8 位，含字母与数字…" clearable />
-        <p v-if="errors.password" class="error">{{ errors.password }}</p>
-      </div>
-      <div class="field">
-        <label>确认新密码</label>
-        <Input class="password-field" v-model="confirm" type="password" autocomplete="new-password" placeholder="再次输入新密码…" clearable />
-        <p v-if="errors.confirm" class="error">{{ errors.confirm }}</p>
-      </div>
+      </FormItem>
+      <FormItem label="新密码" name="password">
+        <Input class="password-field" v-model="form.password" type="password" autocomplete="new-password" placeholder="至少 8 位，含字母与数字…" clearable />
+      </FormItem>
+      <FormItem label="确认新密码" name="confirm">
+        <Input class="password-field" v-model="form.confirm" type="password" autocomplete="new-password" placeholder="再次输入新密码…" clearable />
+      </FormItem>
 
-      <Button theme="primary" size="large" block :loading="submitting" @click="onSubmit">重置密码</Button>
-      <p class="swap"><a class="link" @click="backToStep1">返回上一步</a></p>
-    </form>
+      <Button theme="primary" size="large" block type="submit" :loading="submitting">重置密码</Button>
+      <p class="swap"><a v-pressable class="link" @click="backToStep1">返回上一步</a></p>
+    </Form>
   </main>
 </template>
 
@@ -186,7 +221,7 @@ function backToStep1() {
 }
 
 .hero {
-  padding:48px 0 var(--app-space-11);
+  padding:calc(var(--app-space-12) + var(--app-space-8)) 0 var(--app-space-11);
 }
 
 .title {
@@ -212,6 +247,25 @@ function backToStep1() {
   color: var(--td-text-color-secondary);
 }
 
+/* t-form-item 默认左右布局 + 底部 hairline；本页沿用「标签在上」的既有版式 */
+.form :deep(.t-form__item) {
+  padding: 0;
+  margin: 0 0 var(--app-space-8);
+  border-bottom: none;
+}
+
+.form :deep(.t-form__label) {
+  width: auto;
+  padding: 0;
+  margin-bottom: var(--app-space-3);
+  font-size: var(--app-font-caption);
+  color: var(--td-text-color-secondary);
+}
+
+.form :deep(.t-form__controls) {
+  margin: 0;
+}
+
 .channels {
   display: flex;
   flex-direction: column;
@@ -222,6 +276,9 @@ function backToStep1() {
   display: flex;
   align-items: center;
   gap:var(--app-space-5);
+  /* v48：与注册页同因——flex item 默认收缩为内容宽，导致验证码按钮不右对齐；撑满可用宽度 */
+  width: 100%;
+  min-width: 0;
 }
 
 .code-input {
@@ -232,13 +289,6 @@ function backToStep1() {
 .code-button {
   flex-shrink: 0;
   min-width: 108px;
-  min-height: 40px;
-}
-
-.error {
-  margin:var(--app-space-3) 0 0;
-  font-size: var(--app-font-caption);
-  color: var(--td-error-color);
 }
 
 .swap {

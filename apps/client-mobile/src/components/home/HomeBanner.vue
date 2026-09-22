@@ -55,6 +55,13 @@ function markImageFailed(banner: HomeBanner) {
           <Icon name="image-error" size="24px" />
           <span>图片暂不可用</span>
         </div>
+        <!-- v46：图片上直接压白字在浅色图下不可读，图片与文字之间加一层渐变遮罩（与明暗模式一致）。
+             仅图片正常显示时加；无图/图片失败的兜底是品牌渐变色块，不叠加多余遮罩。 -->
+        <div
+          v-if="b.imageUrl && !failedImages.has(imageKey(b))"
+          class="banner-scrim"
+          aria-hidden="true"
+        />
         <div class="banner-text">
           <p class="banner-title">{{ b.title }}</p>
           <p class="banner-sub">{{ b.subtitle }}</p>
@@ -114,6 +121,14 @@ function markImageFailed(banner: HomeBanner) {
   background: var(--client-brand-gradient);
   font-size: var(--app-font-caption);
   opacity: 0.72;
+}
+
+/* v46：文字区位于卡片上部，遮罩自上而下渐弱（渐变定义见 tokens.css --app-image-scrim）；
+ * 顶部 0.65 黑叠加即使底图接近纯白，白字（含 0.85 不透明度副标题）对比度仍可满足 WCAG AA 正文要求。 */
+.banner-scrim {
+  position: absolute;
+  inset: 0;
+  background: var(--app-image-scrim);
 }
 
 .banner-text {

@@ -18,7 +18,8 @@ function corsOrigins(): string[] {
 }
 
 /* 反向代理信任设置：Express 默认不信任代理，导致 req.ip 取到代理地址而非客户端真实 IP。
- * 审计（AuditInterceptor）与登录/验证码/短信/邮箱限流（auth/email-code/sms-code）都依赖 req.ip，
+ * 审计（AuditContextMiddleware 取 req.ip 供 AuditService.record 落库）与登录/验证码/短信/邮箱限流
+ * （auth/email-code/sms-code）都依赖 req.ip，
  * 置为 0/false 可关闭；默认信任一层代理。 */
 function trustProxySetting(raw?: string): boolean | number {
   if (raw === undefined) return 1

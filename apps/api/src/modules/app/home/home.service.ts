@@ -12,6 +12,8 @@ export interface HomeAnnouncementDto {
   content: string
   at: string
   pinned?: boolean
+  /** 站内跳转路径（后台配置的「跳转链接」，未配置为 undefined） */
+  link?: string
 }
 
 /** 首页轮播（对齐客户端 HomeBanner） */
@@ -65,7 +67,7 @@ export interface HomeFeedDto {
 }
 
 /* 首页聚合（M2-R R2 GET /api/app/home，@Public 或登录皆可）：
- * 站点信息 + 置顶公告（有效期内，全局仅一条）+ 运营 banner 位 + 精选活动/最新需求/置顶文章 + 未读数。
+ * 站点信息 + 已启用公告（置顶、有效期内；启用互锁全局至多一条）+ 运营 banner 位 + 精选活动/最新需求/置顶文章 + 未读数。
  * banner 运营位由系统开关和 HomeBanner 配置共同控制；未读数复用 notices 表（登录时）。
  * 该端点 @Public 绕过 AppJwtGuard，未读数通过可选 Bearer 令牌 best-effort 判定。 */
 @Injectable()
@@ -92,9 +94,10 @@ export class AppHomeService {
 
     const [announcements, banners, events, demands, articles, unread, identities] = await Promise.all([
       this.prisma.announcement.findMany({
-        /* 首页顶部公告条只消费「已开启置顶」的一条（全局唯一；全关则不下发） */
+        /* 首页顶部公告条消费「已启用（置顶）」且未过期、未归档的公告：
+         * 后台启用互锁保证至多一条，故此处只取一条（全关时为空数组） */
         where: { status: 'published', pinned: true, deletedAt: null, OR: [{ expireAt: null }, { expireAt: { gt: nowStr } }] },
-        orderBy: [{ publishedAt: 'desc' }, { id: 'desc' }],
+        orderBy: [{ pinned: 'desc' }, { publishedAt: 'desc' }, { id: 'desc' }],
         take: 1,
       }),
       carouselEnabled
@@ -178,6 +181,7 @@ export class AppHomeService {
         content: a.content,
         at: a.publishedAt,
         pinned: a.pinned || undefined,
+        link: a.link ?? undefined,
       })),
     }
   }

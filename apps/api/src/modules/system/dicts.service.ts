@@ -7,7 +7,8 @@ import { CACHE_TTL, dictCacheKey } from '../../common/redis/cache-keys'
 import type { DictEntryPayloadDto } from './dto/dict-entry-payload.dto'
 
 /* 数据字典（wiki-backend.md §7.15/§10）：站点选项词汇的单一来源。
- * label 即业务存储值（全类型唯一，不可改名）；新增/启停/删除；删除后重排 sort 保持连续。
+ * label 即业务存储值（全类型唯一，不可改名；商品类型例外，业务存 code、展示靠 label）；
+ * 新增/启停/删除；编码取「最小未占用序号」不跳号，sort 恒为 1..n 连续（新增/删除后重排）。
  * 管理页返回全量（含 disabled），下拉消费方自行按 status=enabled 过滤。
  * 读走 dicts:{type} 缓存（10min），写操作主动失效并留痕（含 before/after 快照）。 */
 export const DICT_TYPE_LABELS: Record<string, string> = {
@@ -35,7 +36,8 @@ export class DictsService {
   async findAll(type: string): Promise<DictEntry[]> {
     this.assertType(type)
     return this.redis.remember(dictCacheKey(type), CACHE_TTL.stable, () =>
-      this.prisma.dictEntry.findMany({ where: { type }, orderBy: { sort: 'asc' } }),
+      /* sort 并列（历史数据可能有重复值）时以 code 兜底，保证列表顺序稳定 */
+      this.prisma.dictEntry.findMany({ where: { type }, orderBy: [{ sort: 'asc' }, { code: 'asc' }] }),
     )
   }
 
@@ -48,16 +50,25 @@ export class DictsService {
     const dup = await this.prisma.dictEntry.findUnique({ where: { label } })
     if (dup) throw new ConflictException('字典项名称已存在')
 
-    const list = await this.prisma.dictEntry.findMany({ where: { type }, orderBy: { sort: 'asc' } })
-    const maxNum = list.reduce((m, e) => Math.max(m, Number(e.code.replace(/\D/g, '')) || 0), 0)
-    const code = `${DICT_TYPE_PREFIXES[type]}${String(maxNum + 1).padStart(3, '0')}`
-
-    const entry = await this.prisma.dictEntry
-      .create({
-        data: { type, code, label, sort: list.length + 1, status: 'enabled' },
+    const entry = await this.prisma
+      .$transaction(async (tx) => {
+        const list = await tx.dictEntry.findMany({ where: { type }, select: { code: true, sort: true } })
+        const code = `${DICT_TYPE_PREFIXES[type]}${String(nextCodeSeq(list)).padStart(3, '0')}`
+        const created = await tx.dictEntry.create({
+          data: {
+            type,
+            code,
+            label,
+            sort: list.reduce((max, item) => Math.max(max, item.sort), 0) + 1,
+            status: 'enabled',
+          },
+        })
+        /* 历史新增逻辑按「条目数 +1」写 sort，会留下重复/跳号；新增后统一重排为 1..n */
+        await normalizeSort(tx, type)
+        return (await tx.dictEntry.findUnique({ where: { type_code: { type, code } } })) ?? created
       })
       .catch((e: unknown) => {
-        /* 并发新增时按「当前最大序号 +1」拼码可能撞 type_code 唯一约束：转 409 供前端重试，
+        /* 并发新增时按「最小未占用序号」拼码仍可能撞 type_code 唯一约束：转 409 供前端重试，
          * 而不是把 Prisma 校验错误透传成 500 */
         if (e instanceof Prisma.PrismaClientKnownRequestError && e.code === 'P2002') {
           throw new ConflictException('字典编码冲突，请重试')
@@ -106,15 +117,7 @@ export class DictsService {
     /* 删除 + 同类型剩余项 sort 重排（保持 1..n 连续） */
     await this.prisma.$transaction(async (tx) => {
       await tx.dictEntry.delete({ where: { type_code: { type, code } } })
-      const rest = await tx.dictEntry.findMany({ where: { type }, orderBy: { sort: 'asc' } })
-      for (let i = 0; i < rest.length; i++) {
-        if (rest[i].sort !== i + 1) {
-          await tx.dictEntry.update({
-            where: { type_code: { type, code: rest[i].code } },
-            data: { sort: i + 1 },
-          })
-        }
-      }
+      await normalizeSort(tx, type)
     })
 
     await this.audit.record({
@@ -131,5 +134,31 @@ export class DictsService {
 
   private assertType(type: string): void {
     if (!DICT_TYPE_LABELS[type]) throw new BadRequestException('字典类型不存在')
+  }
+}
+
+/** 最小未占用序号：在既有编码的数字集合里取最小空缺（GC001/GC003 → 2），
+ * 避免「最大序号 +1」只增不减导致跳号（如 GC002）永远无法被补上 */
+function nextCodeSeq(list: { code: string }[]): number {
+  const used = new Set(list.map((item) => Number(item.code.replace(/\D/g, '')) || 0))
+  let seq = 1
+  while (used.has(seq)) seq += 1
+  return seq
+}
+
+/** 同类型 sort 重排为 1..n：按 sort asc、code asc 保持既有展示顺序，同时修掉历史重复值 */
+async function normalizeSort(tx: Prisma.TransactionClient, type: string): Promise<void> {
+  const list = await tx.dictEntry.findMany({
+    where: { type },
+    orderBy: [{ sort: 'asc' }, { code: 'asc' }],
+    select: { code: true, sort: true },
+  })
+  for (let i = 0; i < list.length; i += 1) {
+    if (list[i].sort !== i + 1) {
+      await tx.dictEntry.update({
+        where: { type_code: { type, code: list[i].code } },
+        data: { sort: i + 1 },
+      })
+    }
   }
 }

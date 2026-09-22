@@ -1,8 +1,9 @@
 <script setup lang="ts">
-import { Cell, DateTimePicker, Input, Popup, Textarea } from 'tdesign-mobile-vue'
+import { Button, Cell, DateTimePicker, Input, Popup, Textarea } from 'tdesign-mobile-vue'
 import type { DemandKind } from '@/types'
 
-/* 需求发布表单：按类型展示的扩展字段（期望交付/投资合作/合作诉求）。 */
+/* 需求发布表单：按类型展示的扩展字段（期望交付/投资合作/合作诉求）。
+ * 必填口径与 DemandFormView / ContactFields 一致：标签为「文案 + 红色 *」，错误行统一 .field-error。 */
 export interface DemandExtrasErrors {
   deliverable: string
   deliverBy: string
@@ -26,12 +27,17 @@ const cooperationNeed = defineModel<string>('cooperationNeed', { required: true 
 const returnOffer = defineModel<string>('returnOffer', { required: true })
 const bottleneck = defineModel<string>('bottleneck', { required: true })
 const partnershipMode = defineModel<string>('partnershipMode', { required: true })
+
+/** 清除已选日期：只置空字段值，不改动日期格式与提交载荷结构 */
+function clearDeliverBy() {
+  deliverBy.value = ''
+}
 </script>
 
 <template>
   <template v-if="kind === 'task'">
     <div class="field">
-      <label>期望交付</label>
+      <label>期望交付<span class="req"> *</span></label>
       <Textarea
         v-model="deliverable"
         :autosize="{ minRows: 3, maxRows: 6 }"
@@ -45,8 +51,19 @@ const partnershipMode = defineModel<string>('partnershipMode', { required: true 
       <Input v-model="budget" :maxlength="50" placeholder="如：¥8,000 - 15,000 / 面议…" clearable />
     </div>
     <div class="field">
-      <span class="field-label">预期交付日期</span>
-      <Cell class="date-trigger" :title="deliverBy || '请选择预期交付日期'" arrow @click="emit('update:showDeliverBy', true)" />
+      <span class="field-label">预期交付日期<span class="req"> *</span></span>
+      <!-- 未选日期时标题用弱化色（--td-cell-title-color）；已选时在 note 槽给出 44px 命中区的清除入口 -->
+      <Cell
+        class="date-trigger"
+        :class="{ 'is-empty': !deliverBy }"
+        :title="deliverBy || '请选择预期交付日期'"
+        arrow
+        @click="emit('update:showDeliverBy', true)"
+      >
+        <template v-if="deliverBy" #note>
+          <Button size="small" variant="text" class="date-clear" @click.stop="clearDeliverBy">清除</Button>
+        </template>
+      </Cell>
       <Popup :visible="showDeliverBy" placement="bottom" @update:visible="(value: boolean) => emit('update:showDeliverBy', value)">
         <DateTimePicker
           v-model="deliverBy"
@@ -64,7 +81,7 @@ const partnershipMode = defineModel<string>('partnershipMode', { required: true 
 
   <template v-else-if="kind === 'investment'">
     <div class="field">
-      <label>希望获得的投资 / 合作</label>
+      <label>希望获得的投资 / 合作<span class="req"> *</span></label>
       <Textarea
         v-model="cooperationNeed"
         :autosize="{ minRows: 3, maxRows: 6 }"
@@ -86,7 +103,7 @@ const partnershipMode = defineModel<string>('partnershipMode', { required: true 
 
   <template v-else>
     <div class="field">
-      <label>业务瓶颈与合作诉求</label>
+      <label>业务瓶颈与合作诉求<span class="req"> *</span></label>
       <Textarea
         v-model="bottleneck"
         :autosize="{ minRows: 3, maxRows: 6 }"
@@ -112,6 +129,8 @@ const partnershipMode = defineModel<string>('partnershipMode', { required: true 
 </template>
 
 <style scoped>
+/* 字段容器/错误/必填标识沿用 DemandFormView、ContactFields 的同一口径（scoped 样式无法跨组件复用宿主类名，
+ * 故这里保持逐条一致的声明，不引入第二套写法）。 */
 .field {
   margin-bottom: var(--app-space-8);
 }
@@ -130,8 +149,22 @@ const partnershipMode = defineModel<string>('partnershipMode', { required: true 
   color: var(--td-error-color);
 }
 
+/* 必填标识（与 SchemaField 的 .req 同口径） */
+.req {
+  color: var(--td-error-color);
+}
+
 .date-trigger {
   border: 1px solid var(--td-component-border);
   border-radius: var(--td-radius-large);
+}
+
+/* 未选日期：标题降级为占位色（复用官方 Cell 颜色变量，无需穿透子组件） */
+.date-trigger.is-empty {
+  --td-cell-title-color: var(--td-text-color-placeholder);
+}
+
+.date-clear {
+  margin-left: var(--app-space-3);
 }
 </style>

@@ -2,7 +2,7 @@
 import { computed, defineAsyncComponent, nextTick, reactive, ref, watch } from 'vue'
 import { MessagePlugin } from 'tdesign-vue-next'
 import type { FormProps } from 'tdesign-vue-next'
-import { focusFirstInvalid } from '@/utils/form'
+import { focusFirstInvalid, useDialogDirtyGuard } from '@/utils/form'
 import { createDemand, fetchPublisherOptions, updateDemand, type DemandPublishPayload } from '@/api/demands'
 import { dictFallback, fetchDictEntries } from '@/api/dicts'
 import { fetchUser } from '@/api/users'
@@ -151,6 +151,9 @@ const form = reactive<DemandPublishPayload & { customIdentityType: CustomPublish
   customIdentityType: '',
 })
 
+/* 未保存保护：打开时记录基线，关闭前有改动需确认 */
+const { markBaseline, guardClose } = useDialogDirtyGuard(form)
+
 /* 自定义开关：可见范围/可报名范围（关=不限） */
 const customVisibility = ref(false)
 const customEnrollment = ref(false)
@@ -296,6 +299,7 @@ watch(
       }
     }
     /* 清除上次会话残留的校验红框（仅清状态，不动表单值） */
+    markBaseline()
     nextTick(() => formRef.value?.clearValidate())
   },
 )
@@ -386,7 +390,8 @@ async function onConfirm() {
 }
 
 function onClose() {
-  emit('update:visible', false)
+  /* 未保存保护：有改动时弹确认（见 useDialogDirtyGuard） */
+  guardClose(() => emit('update:visible', false))
 }
 </script>
 
@@ -423,6 +428,7 @@ function onClose() {
             :options="publisherOptions"
             filterable
             creatable
+            clearable
             @change="(val: unknown) => applyPublisherContact(String(val ?? ''))"
             placeholder="选择已注册的个人用户/企业，或直接输入新需求方…"
           />
@@ -458,7 +464,7 @@ function onClose() {
       </t-form-item>
       <div class="form-row">
         <t-form-item label="需求类型" name="demandType">
-          <t-select v-model="form.demandType" :options="[
+          <t-select v-model="form.demandType" clearable :options="[
             { label: '找服务', value: 'task' },
             { label: '找投资', value: 'investment' },
             { label: '找合作', value: 'cooperation' },
@@ -510,6 +516,7 @@ function onClose() {
             v-model="form.deadline"
             valueType="YYYY-MM-DD HH:mm"
             enable-time-picker
+            clearable
             style="width: 100%"
           />
         </t-form-item>
@@ -638,11 +645,5 @@ function onClose() {
 .scope-tip {
   font-size: 12px;
   color: var(--td-text-color-secondary);
-}
-
-.dialog-footer {
-  display: flex;
-  justify-content: flex-end;
-  gap: 8px;
 }
 </style>

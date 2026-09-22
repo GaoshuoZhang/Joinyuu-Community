@@ -7,12 +7,15 @@ import type { FormProps } from 'tdesign-vue-next'
 import { ArrowLeftIcon } from 'tdesign-icons-vue-next'
 import StatusTag from '@/components/StatusTag.vue'
 import ProjectFormDialog from '@/components/ProjectFormDialog.vue'
+import ListErrorState from '@/components/ListErrorState.vue'
 import { fetchProject, pauseProject, resumeProject, closeProject, archiveProject } from '@/api/projects'
+import { isNotFound } from '@/api/http'
 import type { Milestone, Project, ProjectUndertaker } from '@/types'
 
 const route = useRoute()
 const router = useRouter()
 const loading = ref(true)
+const loadError = ref('')
 const project = ref<Project | null>(null)
 const tab = useQueryTab('info', ['info', 'milestones'] as const)
 /* 已归档条目：隐藏全部写操作，仅保留只读内容 */
@@ -31,19 +34,52 @@ const undertakerTypeMap: Record<ProjectUndertaker['type'], string> = {
   custom: '自定义',
 }
 
+/* 需求方身份快照 → 展示标签（立项照搬需求发布方身份；自建项目由表单识别） */
+const DEMANDER_IDENTITY_LABELS: Record<string, string> = {
+  individual: '个人用户',
+  community_individual: '社区个体',
+  community_enterprise: '社区企业',
+  external_enterprise: '合作企业',
+  custom: '自定义',
+}
+const demanderIdentityLabel = computed(() => {
+  const type = project.value?.demanderIdentity?.type
+  if (!type) return '—'
+  return DEMANDER_IDENTITY_LABELS[type] ?? type
+})
+
 /* 承接方卡片跳转：社区企业 → 社区企业详情；合作企业（XE 前缀）→ 合作企业详情；用户 → 用户详情；自定义不跳转 */
 function canGoUndertaker(u: ProjectUndertaker): boolean {
   if (u.type === 'custom') return false
   return !!u.id
 }
 
+/* 承接方详情路由：自定义（无 ID）返回空串 = 不生成 href、也不可跳转 */
+function undertakerPath(u: ProjectUndertaker): string {
+  if (!canGoUndertaker(u)) return ''
+  if (u.id.startsWith('XE')) return '/external-enterprises/' + u.id
+  return u.type === 'enterprise' ? '/enterprises/' + u.id : '/users/' + u.id
+}
+
+/* 跳转统一走 router.push：保留 t-link 的 href 只为键盘可达与新标签页语义，
+ * 点击时 prevent 阻止原生哈希跳转，避免与 push 重复导航 */
+function goPath(path: string) {
+  if (path) router.push(path)
+}
+
 
 async function load() {
   loading.value = true
+  loadError.value = ''
   try {
     project.value = await fetchProject(route.params.id as string)
   } catch (e) {
-    MessagePlugin.error(e instanceof Error ? e.message : '项目加载失败')
+    /* 404 = 项目不存在（走空态）；其余错误保留原因并展示重试入口 */
+    if (isNotFound(e)) {
+      project.value = null
+    } else {
+      loadError.value = e instanceof Error ? e.message : '项目加载失败'
+    }
   } finally {
     loading.value = false
   }
@@ -160,12 +196,10 @@ onMounted(load)
 
 <template>
   <div class="project-detail page-fade-in">
-    <div class="back-row">
-      <t-button variant="text" @click="router.back()">
-        <template #icon><ArrowLeftIcon /></template>
-        返回
-      </t-button>
-    </div>
+    <t-button variant="text" theme="default" class="back-btn" @click="router.back()">
+      <template #icon><ArrowLeftIcon /></template>
+      返回
+    </t-button>
 
     <t-skeleton
       v-if="loading"
@@ -173,12 +207,14 @@ onMounted(load)
       animation="gradient"
     />
 
+    <ListErrorState v-else-if="loadError" :message="loadError" :loading="loading" @retry="load" />
+
     <template v-else-if="project">
       <!-- 项目头部 -->
       <div class="page-card head-card">
         <div class="head-top">
           <div class="head-main">
-            <h3 class="head-title">{{ project.name }}</h3>
+            <h3 class="head-name">{{ project.name }}</h3>
             <span class="head-code">{{ project.code }}</span>
             <StatusTag entity="project" :value="project.status" />
             <t-tag v-if="isArchived" theme="default" variant="light">已归档</t-tag>
@@ -230,7 +266,7 @@ onMounted(load)
             </template>
           </div>
         </div>
-        <t-descriptions :column="3" bordered>
+        <t-descriptions :column="2" bordered>
           <t-descriptions-item label="立项日期">{{ project.initiatedAt }}</t-descriptions-item>
           <t-descriptions-item label="开始日期">{{ displayStartDate }}</t-descriptions-item>
           <t-descriptions-item label="结束日期">{{ displayEndDate }}</t-descriptions-item>
@@ -239,11 +275,18 @@ onMounted(load)
             <t-progress :percentage="project.progress" />
           </t-descriptions-item>
           <t-descriptions-item label="来源需求">
-            <t-link v-if="project.sourceDemandId" theme="primary" hover="color" :href="`#/demands/${project.sourceDemandId}`">
+            <t-link v-if="project.sourceDemandId" theme="primary" hover="color" :href="`#/demands/${project.sourceDemandId}`" @click.prevent="goPath(`/demands/${project.sourceDemandId}`)">
               {{ project.sourceDemandId }} · 详情
             </t-link>
             <span v-else class="muted">社区自建</span>
           </t-descriptions-item>
+          <t-descriptions-item label="需求方">{{ project.demanderName || '—' }}</t-descriptions-item>
+          <t-descriptions-item label="需求方身份">{{ demanderIdentityLabel }}</t-descriptions-item>
+          <t-descriptions-item label="创建人">{{ project.creatorName || '—' }}</t-descriptions-item>
+          <t-descriptions-item label="合同价格">{{ project.contractPrice || '—' }}</t-descriptions-item>
+          <t-descriptions-item label="联系人">{{ project.contactName || '—' }}</t-descriptions-item>
+          <t-descriptions-item label="联系电话">{{ project.contactPhone || '—' }}</t-descriptions-item>
+          <t-descriptions-item label="联系邮箱">{{ project.contactEmail || '—' }}</t-descriptions-item>
         </t-descriptions>
       </div>
 
@@ -255,11 +298,12 @@ onMounted(load)
               <div class="block">
                 <h4 class="block-title">承接方与占比</h4>
                 <div class="undertaker-list">
-                  <t-link theme="default" hover="color" :href="u.id.startsWith('XE') ? '#/external-enterprises/' + u.id : u.type === 'enterprise' ? '#/enterprises/' + u.id : '#/users/' + u.id" :disabled="!canGoUndertaker(u)"
+                  <t-link theme="default" hover="color" :href="undertakerPath(u) ? '#' + undertakerPath(u) : undefined" :disabled="!canGoUndertaker(u)"
                     v-for="u in project.undertakers"
                     :key="u.id + u.type"
                     class="undertaker-row"
                     :class="{ clickable: canGoUndertaker(u) }"
+                    @click.prevent="goPath(undertakerPath(u))"
                   >
                     <div class="ut-info">
                       <span class="ut-name">{{ u.name }}<t-tag v-if="u.id" class="id-tag" size="small" variant="light">{{ u.id }}</t-tag></span>
@@ -358,9 +402,8 @@ onMounted(load)
 </template>
 
 <style scoped>
-.back-row {
+.back-btn {
   margin-bottom: 12px;
-  margin-left: -8px;
 }
 
 .head-card {
@@ -389,10 +432,11 @@ onMounted(load)
   flex-shrink: 0;
 }
 
-.head-title {
+.head-name {
   margin: 0;
-  font-size: 18px;
+  font-size: 20px;
   font-weight: 600;
+  line-height: 28px;
   color: var(--td-text-color-primary);
 }
 
@@ -415,7 +459,7 @@ onMounted(load)
 
 .block-title {
   margin: 0 0 12px;
-  font-size: 15px;
+  font-size: 16px;
   font-weight: 600;
   color: var(--td-text-color-primary);
 }
@@ -475,7 +519,7 @@ onMounted(load)
 .ut-num {
   width: 44px;
   text-align: right;
-  font-size: 13px;
+  font-size: 14px;
   font-weight: 600;
   color: var(--td-text-color-primary);
   font-variant-numeric: tabular-nums;
@@ -538,9 +582,15 @@ onMounted(load)
   color: var(--td-text-color-secondary);
 }
 
-.dialog-footer {
-  display: flex;
-  justify-content: flex-end;
-  gap: 8px;
+/* 窄屏：头部信息与操作区纵向堆叠、操作按钮换行，避免按钮被挤压溢出 */
+@media (max-width: 767px) {
+  .head-top {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .head-actions {
+    flex-wrap: wrap;
+  }
 }
 </style>

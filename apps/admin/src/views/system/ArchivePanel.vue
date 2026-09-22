@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, onMounted, reactive, ref } from 'vue'
 import ListErrorState from '@/components/ListErrorState.vue'
+import ListEmptyState from '@/components/ListEmptyState.vue'
 import { useListQueryState } from '@/utils/listQuery'
 import { DialogPlugin, MessagePlugin } from 'tdesign-vue-next'
 import { DeleteIcon, RollbackIcon, SearchIcon, SettingIcon } from 'tdesign-icons-vue-next'
@@ -61,12 +62,6 @@ const applicationTypeTextMap: Record<string, string> = {
   exit: '企业退驻',
 }
 
-const applicationStatusTextMap: Record<string, string> = {
-  approved: '已通过',
-  rejected: '已驳回',
-  withdrawn: '已撤回',
-}
-
 const statusEntityMap: Record<string, StatusEntity> = {
   enterprise: 'enterprise',
   externalEnterprise: 'enterprise',
@@ -80,6 +75,7 @@ const statusEntityMap: Record<string, StatusEntity> = {
   reservation: 'reservation',
   goods: 'goods',
   order: 'redemption',
+  application: 'application',
 }
 
 interface ArchiveColumn {
@@ -296,11 +292,22 @@ function onReset() {
   load()
 }
 
+/* 空态筛选判定：仅关键字（域标签页属业务定位，不计入筛选） */
+const filterState = computed(() => ({ keyword: keyword.value }))
+
 function onPageChange(p: { current: number; pageSize: number }) {
   query.page = p.current
   query.pageSize = p.pageSize
   load()
 }
+
+const pagination = computed(() => ({
+  current: query.page,
+  pageSize: query.pageSize,
+  total: total.value,
+  showJumper: true,
+  pageSizeOptions: [10, 20, 50],
+}))
 
 async function onRestore(row: ArchiveItem) {
   acting.value = row.id + ':restore'
@@ -328,7 +335,8 @@ function confirmArchiveStep(header: string, body: string): Promise<boolean> {
     const dialog = DialogPlugin.confirm({
       header,
       body,
-      confirmBtn: '继续',
+      /* 前两步同为不可逆删除的前置确认，与第三步（强确认）保持一致用危险色 */
+      confirmBtn: { content: '继续', theme: 'danger' },
       cancelBtn: '取消',
       onConfirm: () => settle(true),
       onCancel: () => settle(false),
@@ -488,7 +496,7 @@ onMounted(load)
     <div class="page-filter-bar">
       <t-input
         v-model="keyword"
-        class="toolbar-keyword"
+        class="ctl-w-xl"
         clearable
         placeholder="搜索名称/编号…"
         @enter="onSearch"
@@ -515,11 +523,12 @@ onMounted(load)
         :data="list"
         :columns="columns"
         :loading="loading"
-        empty="暂无归档记录"
+        :pagination="pagination"
+        @page-change="onPageChange"
       >
-        <template #name="{ row }">{{ row.data.name }}</template>
+        <template #name="{ row }">{{ row.data.name || '—' }}</template>
         <template #industry="{ row }">{{ row.data.industry || '—' }}</template>
-        <template #title="{ row }">{{ row.data.title }}</template>
+        <template #title="{ row }">{{ row.data.title || '—' }}</template>
         <template #columnName="{ row }">{{ row.data.columnName || '—' }}</template>
         <template #authorName="{ row }">{{ row.data.authorName || '—' }}</template>
         <template #status="{ row }">
@@ -528,9 +537,6 @@ onMounted(load)
             entity="reservation"
             :value="deriveReservationStatus(row.data)"
           />
-          <span v-else-if="activeDomain === 'application'">
-            {{ applicationStatusTextMap[row.data.status] || row.data.status || '—' }}
-          </span>
           <StatusTag v-else :entity="statusEntity" :value="row.data.status" />
         </template>
         <template #applicationId="{ row }">{{ row.data.id }}</template>
@@ -544,10 +550,13 @@ onMounted(load)
         <template #code="{ row }">{{ row.data.code || '—' }}</template>
         <template #startTime="{ row }">{{ row.data.startTime || '—' }}</template>
         <template #renterName="{ row }">{{ row.data.renterName || '—' }}</template>
-        <template #userName="{ row }">{{ row.data.userName }}</template>
-        <template #spaceName="{ row }">{{ row.data.spaceName }}</template>
-        <template #timeSlot="{ row }">{{ row.data.date }} {{ row.data.startTime }}~{{ row.data.endTime }}</template>
-        <template #category="{ row }">{{ goodsCategoryMap[row.data.category] || row.data.category || '—' }}</template>
+        <template #userName="{ row }">{{ row.data.userName || '—' }}</template>
+        <template #spaceName="{ row }">{{ row.data.spaceName || '—' }}</template>
+        <template #timeSlot="{ row }">
+          <span v-if="row.data.date">{{ row.data.date }} {{ row.data.startTime }}~{{ row.data.endTime }}</span>
+          <span v-else>—</span>
+        </template>
+        <template #category="{ row }">{{ row.data.categoryLabel || goodsCategoryMap[row.data.category] || row.data.category || '—' }}</template>
         <template #points="{ row }">{{ row.data.points ?? '—' }}</template>
         <template #stock="{ row }">{{ row.data.stock ?? '—' }}</template>
         <template #redeemedCount="{ row }">{{ row.data.redeemedCount ?? '—' }}</template>
@@ -590,18 +599,11 @@ onMounted(load)
             </t-button>
           </div>
         </template>
-      </t-table>
 
-      <div class="table-footer">
-        <t-pagination
-          :current="query.page"
-          :page-size="query.pageSize"
-          :total="total"
-          :page-size-options="[10, 20, 50]"
-          show-jumper
-          @change="onPageChange"
-        />
-      </div>
+        <template #empty>
+          <ListEmptyState :query="filterState" description="暂无归档记录" @clear="onReset" />
+        </template>
+      </t-table>
     </div>
 
     <t-dialog
@@ -623,13 +625,12 @@ onMounted(load)
               <t-switch v-model="currentSetting.autoArchive" />
             </t-form-item>
             <t-form-item label="自动归档延时（天）">
-              <t-input-number
+              <t-input-number class="ctl-w-lg"
                 v-model="currentSetting.archiveDelayDays"
                 :min="0"
                 :max="365"
                 :step="1"
                 theme="column"
-                style="width: 200px"
                 :disabled="!currentSetting.autoArchive"
               />
             </t-form-item>
@@ -661,13 +662,12 @@ onMounted(load)
             </t-form-item>
             <div class="setting-desc">归档后超过延时天数将物理删除</div>
             <t-form-item label="自动删除延时（天）">
-              <t-input-number
+              <t-input-number class="ctl-w-lg"
                 v-model="currentSetting.purgeDelayDays"
                 :min="1"
                 :max="3650"
                 :step="1"
                 theme="column"
-                style="width: 200px"
                 :disabled="!currentSetting.autoPurge"
               />
             </t-form-item>
@@ -714,31 +714,11 @@ onMounted(load)
   margin-bottom: 16px;
 }
 
-.toolbar-keyword {
-  width: 240px;
-}
-
-.toolbar-right {
-  margin-left: auto;
-}
-
 .op-cell {
   display: flex;
   align-items: center;
   gap: 2px;
   flex-wrap: nowrap;
-}
-
-.table-footer {
-  display: flex;
-  justify-content: flex-end;
-  margin-top: 16px;
-}
-
-.dialog-footer {
-  display: flex;
-  justify-content: flex-end;
-  gap: 8px;
 }
 
 .setting-section {
@@ -789,7 +769,7 @@ onMounted(load)
 }
 
 .status-switch-label {
-  font-size: 13px;
+  font-size: 12px;
   color: var(--td-text-color-primary);
 }
 

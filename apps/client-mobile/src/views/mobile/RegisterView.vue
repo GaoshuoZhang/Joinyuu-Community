@@ -1,17 +1,20 @@
 <script setup lang="ts">
-import { computed, onBeforeUnmount, onMounted, reactive, ref } from 'vue'
+import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref } from 'vue'
 import { useRouter } from 'vue-router'
-import { Button, Checkbox, Input, NoticeBar, Radio, RadioGroup, Toast } from 'tdesign-mobile-vue'
+import { Button, Checkbox, Form, FormItem, Input, NoticeBar, Radio, RadioGroup, Toast } from 'tdesign-mobile-vue'
+import type { FormInstanceFunctions, FormRules } from 'tdesign-mobile-vue'
 import { fetchEmailAvailable, fetchSmsAvailable, sendEmailCode, sendSmsCode } from '@/api/auth'
 import { useAuthStore } from '@/stores/auth'
 import { useConfigStore } from '@/stores/config'
 import { useNoticesStore } from '@/stores/notices'
+import { useUnsavedGuard } from '@/composables/useUnsavedGuard'
 import { ApiError } from '@/api/http'
 import { CODE_MSG, EMAIL_MSG, isEmail, isPasswordStrong, isPhone, isSmsCode, PASSWORD_MSG, PHONE_MSG, REQUIRED } from '@/utils/validators'
 import 'tdesign-mobile-vue/es/style/index.css'
 
 /* 移动注册：邮箱/手机号双渠道（通道可用性由服务端下发）+ 验证码；注册成功即登录。
- * 昵称与用户名由服务端自动分配，注册后可在「我的资料」修改。 */
+ * 昵称与用户名由服务端自动分配，注册后可在「我的资料」修改。
+ * v46：校验迁移到 t-form/rules——错误内联在字段下方，提交失败自动滚动到首个错误字段。 */
 const router = useRouter()
 const auth = useAuthStore()
 const config = useConfigStore()
@@ -21,14 +24,39 @@ void config.ensureLoaded()
 const channel = ref<'email' | 'phone'>('email')
 const emailAvailable = ref(true)
 const smsAvailable = ref(false)
-const form = reactive({ email: '', phone: '', code: '', password: '', confirmPassword: '' })
+const form = reactive({ email: '', phone: '', code: '', password: '', confirmPassword: '', agreed: false })
 const submitting = ref(false)
 const sending = ref(false)
 const countdown = ref(0)
-const errors = reactive<Record<string, string>>({})
+const formRef = ref<FormInstanceFunctions>()
 const closed = computed(() => !config.config.registrationOpen)
-/* v38：注册须勾选同意协议（Mock 记录同意时间；真实后端需版本化留痕） */
-const agreed = ref(false)
+
+/* 长表单离开保护：任一字段有内容即视为未保存；注册成功后先 markClean 再跳转，避免误拦 */
+const hasUnsavedInput = computed(() => Boolean(
+  form.email.trim() || form.phone.trim() || form.code.trim() || form.password || form.confirmPassword,
+))
+const { markClean } = useUnsavedGuard(() => hasUnsavedInput.value)
+
+const rules: FormRules<typeof form> = {
+  email: [
+    { required: true, message: REQUIRED('邮箱') },
+    { validator: (val: string) => !val.trim() || isEmail(val), message: EMAIL_MSG },
+  ],
+  phone: [
+    { required: true, message: REQUIRED('手机号') },
+    { validator: (val: string) => !val.trim() || isPhone(val), message: PHONE_MSG },
+  ],
+  code: [
+    { required: true, message: CODE_MSG },
+    { validator: (val: string) => !val.trim() || isSmsCode(val), message: CODE_MSG },
+  ],
+  password: [
+    { required: true, message: PASSWORD_MSG },
+    { validator: (val: string) => !val.trim() || isPasswordStrong(val), message: PASSWORD_MSG },
+  ],
+  confirmPassword: [{ validator: (val: string) => val === form.password, message: '两次输入的密码不一致' }],
+  agreed: [{ validator: (val: unknown) => Boolean(val), message: '请阅读并同意《用户协议》与《隐私政策》' }],
+}
 
 /* 通道可用性：短信默认隐藏，仅确认可用时展示；邮箱不可用且短信可用时默认手机号。
  * 探测失败一律按「不可用」处理（不默认放开），并提示用户，避免误放行不可用通道 */
@@ -63,18 +91,9 @@ function startCountdown(seconds = 60) {
 onBeforeUnmount(stopCountdown)
 
 async function onSendCode() {
-  errors.email = ''
-  errors.phone = ''
-  errors.code = ''
-  if (channel.value === 'email') {
-    if (!isEmail(form.email)) {
-      errors.email = form.email.trim() ? EMAIL_MSG : REQUIRED('邮箱')
-      return void Toast(errors.email)
-    }
-  } else if (!isPhone(form.phone)) {
-    errors.phone = form.phone.trim() ? PHONE_MSG : REQUIRED('手机号')
-    return void Toast(errors.phone)
-  }
+  /* 发送验证码是独立动作：只校验当前通道字段，错误内联展示在字段下方 */
+  const valid = await formRef.value?.validate({ fields: [channel.value === 'email' ? 'email' : 'phone'] })
+  if (valid !== true) return
   sending.value = true
   try {
     const result = channel.value === 'email'
@@ -89,24 +108,8 @@ async function onSendCode() {
   }
 }
 
-function validate(): boolean {
-  Object.keys(errors).forEach((key) => { errors[key] = '' })
-  if (channel.value === 'email') {
-    if (!form.email.trim()) errors.email = REQUIRED('邮箱')
-    else if (!isEmail(form.email)) errors.email = EMAIL_MSG
-  } else if (!form.phone.trim()) errors.phone = REQUIRED('手机号')
-  else if (!isPhone(form.phone)) errors.phone = PHONE_MSG
-  errors.code = isSmsCode(form.code) ? '' : CODE_MSG
-  errors.password = isPasswordStrong(form.password) ? '' : PASSWORD_MSG
-  errors.confirmPassword = form.confirmPassword === form.password ? '' : '两次输入的密码不一致'
-  errors.agreed = agreed.value ? '' : '请阅读并同意《用户协议》与《隐私政策》'
-  const first = Object.values(errors).find((v) => v)
-  if (first) Toast(first)
-  return !first
-}
-
 async function onSubmit() {
-  if (closed.value || !validate()) return
+  if (closed.value) return
   submitting.value = true
   try {
     await auth.register({
@@ -116,17 +119,25 @@ async function onSubmit() {
       code: form.code.trim(),
       password: form.password,
       confirmPassword: form.confirmPassword,
-      agreed: agreed.value,
+      agreed: form.agreed,
     })
     notices.refreshUnread()
     Toast('注册成功，欢迎加入聚屿社区')
+    markClean()
     await router.push('/')
   } catch (e) {
     Toast(e instanceof ApiError ? e.message : '注册失败，请稍后重试')
     form.code = ''
+    /* API 失败清空验证码输入后不残留字段级错误提示 */
+    void nextTick(() => formRef.value?.clearValidate(['code']))
   } finally {
     submitting.value = false
   }
+}
+
+function onRegisterSubmit({ validateResult }: { validateResult: unknown }) {
+  /* 校验失败：字段级错误已内联展示，scroll-to-first-error 负责滚动定位 */
+  if (validateResult === true) void onSubmit()
 }
 </script>
 
@@ -140,7 +151,15 @@ async function onSubmit() {
     <NoticeBar v-if="closed" visible theme="warning" content="注册暂未开放，请稍后再试。" class="closed-tip" />
     <NoticeBar v-else-if="!currentChannelAvailable" visible theme="warning" content="所选注册方式暂未开放，请切换其他方式。" class="closed-tip" />
 
-    <form class="form" @submit.prevent="onSubmit">
+    <Form
+      ref="formRef"
+      class="form"
+      :data="form"
+      :rules="rules"
+      label-align="top"
+      scroll-to-first-error="smooth"
+      @submit="onRegisterSubmit"
+    >
       <div class="field">
         <span class="field-label">注册方式</span>
         <RadioGroup v-model="channel" class="channels">
@@ -148,13 +167,10 @@ async function onSubmit() {
           <Radio v-if="smsAvailable" value="phone" label="手机号注册" :disabled="closed" />
         </RadioGroup>
       </div>
-      <div v-if="channel === 'email'" class="field">
-        <label>邮箱</label>
-        <Input v-model="form.email" type="text" autocomplete="email" placeholder="请输入邮箱…" :disabled="closed" @keyup.enter="onSubmit" />
-        <p v-if="errors.email" class="error">{{ errors.email }}</p>
-      </div>
-      <div v-else class="field">
-        <label>手机号</label>
+      <FormItem v-if="channel === 'email'" label="邮箱" name="email">
+        <Input v-model="form.email" type="text" autocomplete="email" placeholder="请输入邮箱…" :disabled="closed" />
+      </FormItem>
+      <FormItem v-else label="手机号" name="phone">
         <Input
           v-model="form.phone"
           type="tel"
@@ -162,12 +178,9 @@ async function onSubmit() {
           :maxlength="11"
           placeholder="请输入手机号…"
           :disabled="closed"
-          @keyup.enter="onSubmit"
         />
-        <p v-if="errors.phone" class="error">{{ errors.phone }}</p>
-      </div>
-      <div class="field">
-        <label>验证码</label>
+      </FormItem>
+      <FormItem label="验证码" name="code">
         <div class="code-row">
           <Input
             v-model="form.code"
@@ -177,7 +190,6 @@ async function onSubmit() {
             :spell-check="false"
             placeholder="请输入 6 位验证码…"
             :disabled="closed"
-            @keyup.enter="onSubmit"
           />
           <Button
             class="code-button"
@@ -188,10 +200,8 @@ async function onSubmit() {
             {{ countdown > 0 ? `${countdown}s` : sending ? '发送中…' : '获取验证码' }}
           </Button>
         </div>
-        <p v-if="errors.code" class="error">{{ errors.code }}</p>
-      </div>
-      <div class="field">
-        <label>密码</label>
+      </FormItem>
+      <FormItem label="密码" name="password">
         <Input
           class="password-field"
           v-model="form.password"
@@ -199,12 +209,9 @@ async function onSubmit() {
           autocomplete="new-password"
           placeholder="密码（至少 8 位，含字母与数字）…"
           :disabled="closed"
-          @keyup.enter="onSubmit"
         />
-        <p v-if="errors.password" class="error">{{ errors.password }}</p>
-      </div>
-      <div class="field">
-        <label>确认密码</label>
+      </FormItem>
+      <FormItem label="确认密码" name="confirmPassword">
         <Input
           class="password-field"
           v-model="form.confirmPassword"
@@ -212,24 +219,21 @@ async function onSubmit() {
           autocomplete="new-password"
           placeholder="请再次输入密码…"
           :disabled="closed"
-          @keyup.enter="onSubmit"
         />
-        <p v-if="errors.confirmPassword" class="error">{{ errors.confirmPassword }}</p>
-      </div>
-      <div class="agreement">
-        <Checkbox :checked="agreed" :borderless="true" @change="(value: unknown) => (agreed = Boolean(value))">
+      </FormItem>
+      <FormItem name="agreed" class="agreement-item">
+        <Checkbox :checked="form.agreed" :borderless="true" @change="(value: unknown) => (form.agreed = Boolean(value))">
           <template #label>
             我已阅读并同意
             <router-link to="/privacy" class="link" @click.stop>《用户协议》与《隐私政策》</router-link>
           </template>
         </Checkbox>
-      </div>
-      <p v-if="errors.agreed" class="error agreement-error">{{ errors.agreed }}</p>
-      <Button theme="primary" size="large" block :loading="submitting" :disabled="submitting || closed" @click="onSubmit">
+      </FormItem>
+      <Button theme="primary" size="large" block type="submit" :loading="submitting" :disabled="submitting || closed">
         {{ closed ? '注册暂未开放' : submitting ? '注册中…' : '注 册' }}
       </Button>
       <p class="swap">已有账号？<router-link to="/login" class="link">直接登录</router-link></p>
-    </form>
+    </Form>
   </main>
 </template>
 
@@ -242,7 +246,7 @@ async function onSubmit() {
 }
 
 .hero {
-  padding:40px 0 var(--app-space-11);
+  padding:calc(var(--app-space-9) + var(--app-space-8)) 0 var(--app-space-11);
 }
 
 .title {
@@ -272,6 +276,37 @@ async function onSubmit() {
   color: var(--td-text-color-secondary);
 }
 
+/* t-form-item 默认左右布局 + 底部 hairline；本页沿用「标签在上」的既有版式 */
+.form :deep(.t-form__item) {
+  padding: 0;
+  margin: 0 0 var(--app-space-7);
+  border-bottom: none;
+}
+
+.form :deep(.t-form__label) {
+  width: auto;
+  padding: 0;
+  margin-bottom: var(--app-space-3);
+  font-size: var(--app-font-caption);
+  color: var(--td-text-color-secondary);
+}
+
+.form :deep(.t-form__controls) {
+  margin: 0;
+}
+
+/* 协议勾选：无表单标签（隐藏占位 label），沿用原 .agreement 的间距与字号 */
+.form :deep(.agreement-item) {
+  margin: var(--app-space-2) 0 var(--app-space-7);
+  font-size: var(--app-font-caption);
+  line-height: 1.7;
+  color: var(--td-text-color-secondary);
+}
+
+.form :deep(.agreement-item .t-form__label) {
+  display: none;
+}
+
 .channels {
   display: flex;
   gap:var(--app-space-10);
@@ -281,6 +316,10 @@ async function onSubmit() {
   display: flex;
   align-items: center;
   gap:var(--app-space-5);
+  /* v48：本行是 .t-form__controls-content（flex）里的 flex item，默认收缩为内容宽，
+   * 会让「获取验证码」按钮右边缘比主按钮短一截；显式撑满可用宽度。 */
+  width: 100%;
+  min-width: 0;
 }
 
 .code-input {
@@ -291,31 +330,6 @@ async function onSubmit() {
 .code-button {
   flex-shrink: 0;
   min-width: 108px;
-  min-height: 40px;
-}
-
-.agreement {
-  display: flex;
-  align-items: flex-start;
-  gap:var(--app-space-3);
-  margin:var(--app-space-2) 0 var(--app-space-7);
-  font-size: var(--app-font-caption);
-  line-height: 1.7;
-  color: var(--td-text-color-secondary);
-}
-
-.agreement .link {
-  color: var(--td-brand-color);
-}
-
-.agreement-error {
-  margin:-8px 0 var(--app-space-6);
-}
-
-.error {
-  margin:var(--app-space-2) 0 0;
-  font-size: var(--app-font-caption);
-  color: var(--td-error-color);
 }
 
 .swap {

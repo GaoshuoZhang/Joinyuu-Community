@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, onMounted, reactive, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { Button, CheckTag, Icon, Input, Tag, Textarea, Toast } from 'tdesign-mobile-vue'
+import { Button, CheckTag, Icon, Input, Loading, Tag, Textarea, Toast } from 'tdesign-mobile-vue'
 import { createDemand, fetchMyDemandPayload, resubmitDemand } from '@/api/demands'
 import { fetchMyIdentities } from '@/api/enterprises'
 import { ApiError } from '@/api/http'
@@ -44,7 +44,7 @@ const reviseId = String(route.query.revise ?? '')
 const revising = computed(() => !!reviseId)
 const auth = useAuthStore()
 const config = useConfigStore()
-const { items: dictItems, error: dictError, reload: reloadDict } = useDict(isInvest.value ? 'industry' : 'demand_category')
+const { items: dictItems, loading: dictLoading, error: dictError, reload: reloadDict } = useDict(isInvest.value ? 'industry' : 'demand_category')
 
 /** 发布身份选项：持「社区个体」时不再单列「个人用户」；含成员被授权「发布需求」的企业（代企业发布） */
 const delegatedIdentities = ref<UserIdentity[]>([])
@@ -148,31 +148,60 @@ onMounted(async () => {
   loaded.value = true
 })
 
-/* v38：行内校验（长表单 Toast 消失后用户找不到出错字段） */
+/* v38：行内校验（长表单 Toast 消失后用户找不到出错字段）
+ * v48：改为一处口径 + 手动定位 + 修正清错（本页保留自造字段容器，未迁移 t-form） */
 const errors = reactive({
   title: '', description: '', category: '', deliverable: '', deliverBy: '',
   cooperationNeed: '', bottleneck: '', contactName: '', contactPhone: '', contactEmail: '',
 })
+type FieldKey = keyof typeof errors
+
+/** 逐字段校验：提交与「修正后清错」共用同一份规则，避免两处口径漂移 */
+function fieldErrors(): { key: FieldKey; message: string }[] {
+  const list: { key: FieldKey; message: string }[] = []
+  const check = (key: FieldKey, invalid: boolean, message: string) => {
+    if (invalid) list.push({ key, message })
+  }
+  check('title', !form.title.trim(), `请输入${labels.value.title}`)
+  check('description', !form.description.trim(), `请输入${labels.value.desc}`)
+  check('category', !form.categoryCode, `请选择${labels.value.cat}`)
+  check('deliverable', isTask.value && !form.deliverable.trim(), '请输入期望交付')
+  check('deliverBy', isTask.value && !form.deliverBy, '请选择预期交付日期')
+  check('cooperationNeed', isInvest.value && !form.cooperationNeed.trim(), '请输入希望获得的投资 / 合作')
+  check('bottleneck', !isTask.value && !isInvest.value && !form.bottleneck.trim(), '请描述业务瓶颈与合作诉求')
+  check('contactName', !form.contactName.trim(), '请输入联系人')
+  check('contactPhone', !/^1\d{10}$/.test(form.contactPhone.trim()), '请输入 11 位手机号')
+  check('contactEmail', !!form.contactEmail.trim() && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.contactEmail.trim()), '请输入有效邮箱，如 name@example.com')
+  return list
+}
+
+/* 长表单：Toast 一闪而过后仍要能定位到出错字段（等价于 t-form 的 scroll-to-first-error）。
+ * 字段容器用 data-field 标记；DemandKindExtras 内部字段不可单独标记，用 data-field-group 指向整块。 */
+function scrollToField(key: FieldKey) {
+  document
+    .querySelector<HTMLElement>(`[data-field="${key}"], [data-field-group~="${key}"]`)
+    ?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+}
+
+/* v48：行内错误随用户修正即时清除——只清已恢复合法的字段，不提前抛出尚未提交过的错误 */
+watch(
+  form,
+  () => {
+    const invalid = new Set(fieldErrors().map((item) => item.key))
+    ;(Object.keys(errors) as FieldKey[]).forEach((key) => {
+      if (!invalid.has(key)) errors[key] = ''
+    })
+  },
+  { deep: true },
+)
 
 async function onSubmit() {
-  Object.keys(errors).forEach((key) => { (errors as Record<string, string>)[key] = '' })
-  let firstError = ''
-  const check = (key: keyof typeof errors, message: string) => {
-    if (!firstError) firstError = message
-    errors[key] = message
-  }
-  if (!form.title.trim()) check('title', `请输入${labels.value.title}`)
-  if (!form.description.trim()) check('description', `请输入${labels.value.desc}`)
-  if (!form.categoryCode) check('category', `请选择${labels.value.cat}`)
-  if (isTask.value && !form.deliverable.trim()) check('deliverable', '请输入期望交付')
-  if (isTask.value && !form.deliverBy) check('deliverBy', '请选择预期交付日期')
-  if (isInvest.value && !form.cooperationNeed.trim()) check('cooperationNeed', '请输入希望获得的投资 / 合作')
-  if (!isTask.value && !isInvest.value && !form.bottleneck.trim()) check('bottleneck', '请描述业务瓶颈与合作诉求')
-  if (!form.contactName.trim()) check('contactName', '请输入联系人')
-  if (!/^1\d{10}$/.test(form.contactPhone.trim())) check('contactPhone', '请输入 11 位手机号')
-  if (form.contactEmail.trim() && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.contactEmail.trim())) check('contactEmail', '请输入有效邮箱，如 name@example.com')
-  if (firstError) {
-    Toast(firstError)
+  const list = fieldErrors()
+  ;(Object.keys(errors) as FieldKey[]).forEach((key) => { errors[key] = '' })
+  list.forEach((item) => { errors[item.key] = item.message })
+  if (list.length) {
+    Toast(list[0].message)
+    scrollToField(list[0].key)
     return
   }
   if (!form.asIdentity) {
@@ -247,21 +276,26 @@ async function onSubmit() {
         </div>
       </div>
 
-      <div class="field">
-        <label>{{ labels.title }}</label>
+      <!-- v48：保留自造字段容器（DemandKindExtras 等子字段无法低成本迁移到 FormItem），
+           但补齐必填标识、错误定位与修正清错；主操作放入 form 内以支持回车提交 -->
+      <form class="demand-form" @submit.prevent="onSubmit">
+      <div class="field" data-field="title">
+        <label>{{ labels.title }}<span class="req"> *</span></label>
         <Input v-model="form.title" :maxlength="50" :placeholder="labels.titlePh" clearable />
         <p v-if="errors.title" class="field-error">{{ errors.title }}</p>
       </div>
 
-      <div class="field">
-        <label>{{ labels.desc }}</label>
+      <div class="field" data-field="description">
+        <label>{{ labels.desc }}<span class="req"> *</span></label>
         <Textarea v-model="form.description" :autosize="{ minRows: 4, maxRows: 10 }" :maxlength="1000" :placeholder="labels.descPh" />
         <p v-if="errors.description" class="field-error">{{ errors.description }}</p>
       </div>
 
-      <div class="field">
-        <span class="field-label">{{ labels.cat }}</span>
-        <div class="chips">
+      <div class="field" data-field="category">
+        <span class="field-label">{{ labels.cat }}<span class="req"> *</span></span>
+        <!-- v48：字典加载中给占位，避免字段区空白被误读为「无可选项」 -->
+        <Loading v-if="dictLoading" class="dict-loading" text="加载中…" />
+        <div v-else class="chips">
           <CheckTag
             v-for="c in dictItems"
             :key="c.code"
@@ -280,19 +314,22 @@ async function onSubmit() {
         <p v-else-if="errors.category" class="field-error">{{ errors.category }}</p>
       </div>
 
-      <DemandKindExtras
-        :kind="kind"
-        :errors="errors"
-        :today-str="todayStr"
-        v-model:show-deliver-by="showDeliverBy"
-        v-model:deliverable="form.deliverable"
-        v-model:budget="form.budget"
-        v-model:deliver-by="form.deliverBy"
-        v-model:cooperation-need="form.cooperationNeed"
-        v-model:return-offer="form.returnOffer"
-        v-model:bottleneck="form.bottleneck"
-        v-model:partnership-mode="form.partnershipMode"
-      />
+      <!-- 类型扩展字段由 DemandKindExtras 内部渲染，无法逐个标记，整块作为定位锚点 -->
+      <div data-field-group="deliverable deliverBy cooperationNeed bottleneck">
+        <DemandKindExtras
+          :kind="kind"
+          :errors="errors"
+          :today-str="todayStr"
+          v-model:show-deliver-by="showDeliverBy"
+          v-model:deliverable="form.deliverable"
+          v-model:budget="form.budget"
+          v-model:deliver-by="form.deliverBy"
+          v-model:cooperation-need="form.cooperationNeed"
+          v-model:return-offer="form.returnOffer"
+          v-model:bottleneck="form.bottleneck"
+          v-model:partnership-mode="form.partnershipMode"
+        />
+      </div>
 
       <ContactFields
         v-model:name="form.contactName"
@@ -303,18 +340,39 @@ async function onSubmit() {
         :email-error="errors.contactEmail"
       />
 
-      <div class="field">
-        <span class="field-label">发布身份</span>
+      <div class="field" data-field="identity">
+        <span class="field-label">发布身份<span class="req"> *</span></span>
         <IdentityPicker
+          v-if="identityOptions.length"
           :identities="identityOptions"
           :selected="form.asIdentity"
           :selected-enterprise-id="form.asEnterpriseId"
           :user-name="auth.name"
           @select="pickIdentity"
         />
+        <!-- v48：无可用身份时给出空态出口，否则字段区空白且提交必然失败 -->
+        <EmptyBlock
+          v-else
+          text="暂无可用的发布身份，请先完成身份信息登记或加入企业"
+          action-text="去登记"
+          @action="router.push('/me/realname')"
+        />
+        <p v-if="identityOptions.length" class="field-help">以企业身份发布的需求将归属该企业主体</p>
       </div>
 
-      <Button theme="primary" block class="submit-btn mobile-sticky-action" :loading="submitting" @click="onSubmit">{{ revising ? '重新提交' : '提交需求' }}</Button>
+      <Button
+        class="submit-btn mobile-sticky-action"
+        theme="primary"
+        size="large"
+        block
+        type="submit"
+        :disabled="!form.asIdentity"
+        :loading="submitting"
+      >
+        {{ revising ? '重新提交' : '提交需求' }}
+      </Button>
+      <p v-if="!form.asIdentity" class="field-help">暂无可用的发布身份，提交后需求无法归属，暂不能提交</p>
+      </form>
     </template>
   </div>
 </template>
@@ -346,6 +404,15 @@ async function onSubmit() {
   margin:var(--app-space-3) 0 0;
   font-size: var(--app-font-caption);
   color: var(--td-error-color);
+}
+
+/* 必填标识（与 SchemaField 的 .req 同口径） */
+.req {
+  color: var(--td-error-color);
+}
+
+.dict-loading {
+  padding: var(--app-space-4) 0;
 }
 
 .dict-retry {

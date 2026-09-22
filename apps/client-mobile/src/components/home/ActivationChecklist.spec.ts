@@ -21,18 +21,18 @@ const stubs = {
 }
 
 describe('ActivationChecklist', () => {
-  it('默认展开，并支持键盘可达的折叠按钮', async () => {
+  it('默认折叠，并支持键盘可达的折叠按钮', async () => {
     const wrapper = mount(ActivationChecklist, {
       props: { steps: [{ key: 'realname', label: '完成实名认证', done: false, path: '/me/realname' }] },
       global: { stubs },
     })
 
     const toggle = wrapper.get('.activation-toggle')
-    expect(toggle.attributes('aria-expanded')).toBe('true')
+    expect(toggle.attributes('aria-expanded')).toBe('false')
     expect(toggle.attributes('aria-controls')).toBe('activation-checklist-content')
 
     await toggle.trigger('click')
-    expect(toggle.attributes('aria-expanded')).toBe('false')
+    expect(toggle.attributes('aria-expanded')).toBe('true')
   })
 
   it('永久隐藏需确认后才派发 dismiss', async () => {

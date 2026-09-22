@@ -3,11 +3,13 @@ import { computed, onMounted, reactive, ref } from 'vue'
 import ListErrorState from '@/components/ListErrorState.vue'
 import { useListQueryState } from '@/utils/listQuery'
 import { MessagePlugin } from 'tdesign-vue-next'
-import { SearchIcon, DownloadIcon } from 'tdesign-icons-vue-next'
+import { SearchIcon } from 'tdesign-icons-vue-next'
 import PageHeader from '@/components/PageHeader.vue'
 import StatusTag from '@/components/StatusTag.vue'
 import BulkArchiveDialog from '@/components/BulkArchiveDialog.vue'
 import ColumnController from '@/components/ColumnController.vue'
+import ExportButton from '@/components/ExportButton.vue'
+import ListEmptyState from '@/components/ListEmptyState.vue'
 import {
   archiveOrder,
   cancelRedemptionOrder,
@@ -15,7 +17,7 @@ import {
   finishRedemptionOrder,
   shipRedemptionOrder,
 } from '@/api/mall'
-import { exportCsv, statusLabel } from '@/utils/exportCsv'
+import { statusLabel } from '@/utils/exportCsv'
 import type { RedemptionOrder } from '@/types'
 
 /* 兑换订单面板：发货 / 标记完成 / 取消（退积分回库存）/ 归档 + 收件信息详情抽屉 */
@@ -44,11 +46,12 @@ const statusOptions = [
 const dataColumns = [
   { colKey: 'id', title: '订单编号', width: 110 , ellipsis: true},
   { colKey: 'user', title: '兑换用户', cell: 'user', width: 130 , ellipsis: true},
-  { colKey: 'goodsName', title: '商品', ellipsis: true },
+  { colKey: 'goodsName', title: '商品', width: 200, resizable: true, ellipsis: true },
   { colKey: 'points', title: '兑换积分', width: 100, resizable: true , ellipsis: true},
   { colKey: 'status', title: '状态', cell: 'status', width: 100, resizable: true , ellipsis: true},
   { colKey: 'createdAt', title: '下单时间', width: 150, resizable: true , ellipsis: true},
-  { colKey: 'op', title: '操作', cell: 'op', width: 190 },
+  /* 操作列最宽场景为「发货 / 取消订单 / 详情」三按钮并排，需留足宽度避免换行溢出 */
+  { colKey: 'op', title: '操作', cell: 'op', width: 220 },
 ]
 
 /* 列配置：本地持久化显隐/顺序 */
@@ -176,7 +179,13 @@ async function onArchive(row: RedemptionOrder) {
 /* 一键归档：按当前筛选全量拉取，归档所选状态的已完成订单 */
 const archivingAll = ref(false)
 const bulkVisible = ref(false)
+const bulkProgress = ref<{ done: number; total: number; failed: number } | null>(null)
+let bulkCancelled = false
 const bulkStatuses = [{ label: '已完成', value: 'finished' }]
+
+function onBulkCancel() {
+  bulkCancelled = true
+}
 
 async function doBulkArchive(values: string[]) {
   const targets: RedemptionOrder[] = []
@@ -190,17 +199,34 @@ async function doBulkArchive(values: string[]) {
     MessagePlugin.info('没有符合所选状态的可归档订单')
     return
   }
+  /* 进度 + 可取消：逐条执行，取消后停止后续条目（与项目/活动等一键归档口径一致） */
+  bulkCancelled = false
+  bulkProgress.value = { done: 0, total: pending.length, failed: 0 }
+  let done = 0
   let failed = 0
   for (const o of pending) {
+    if (bulkCancelled) break
     try {
       await archiveOrder(o.id)
     } catch {
       failed++
     }
+    done++
+    bulkProgress.value = { done, total: pending.length, failed }
   }
-  if (pending.length - failed > 0) MessagePlugin.success(`已归档 ${pending.length - failed} 条订单`)
-  if (failed > 0) MessagePlugin.warning(`${failed} 条订单归档失败，请重试`)
+  bulkProgress.value = null
+  if (bulkCancelled) {
+    MessagePlugin.warning(`已取消执行：本次已归档 ${done - failed} 条`)
+  } else {
+    if (done - failed > 0) MessagePlugin.success(`已归档 ${done - failed} 条订单`)
+    if (failed > 0) MessagePlugin.warning(`${failed} 条订单归档失败，请重试`)
+  }
   await load()
+}
+
+/* 确认前预估影响条数：按所选状态取 total（pageSize=1 仅取 total） */
+function countByStatus(status: string) {
+  return fetchRedemptionOrders({ ...query, status, page: 1, pageSize: 1 }).then((r) => r.total)
 }
 
 function onBulkArchive() {
@@ -232,22 +258,32 @@ function isActing(row: RedemptionOrder, action: string) {
   return acting.value === `${row.id}:${action}`
 }
 
-/* 导出当前页兑换订单为 CSV */
-function onExport() {
-  exportCsv(
-    '兑换订单列表',
-    ['编号', '用户', '商品', '积分', '状态', '创建时间', '发货时间'],
-    list.value.map((o) => [
-      o.id,
-      `${o.userName} [${o.userId}]`,
-      o.goodsName,
-      o.points,
-      statusLabel('redemption', o.status),
-      o.createdAt,
-      o.shippedAt ?? '—',
-    ]),
-  )
-  MessagePlugin.success(`已导出当前页 ${list.value.length} 条数据`)
+/* 履约信息可能全为空（如待发货订单）：为空时整组不渲染，避免只出现一个空标题 */
+const hasFulfillment = computed(() => {
+  const o = current.value
+  if (!o) return false
+  return !!(o.shippedAt || o.trackingNo || o.recipientName || o.address || o.voucherCode || o.voucherExpiresAt || o.usedAt)
+})
+
+/* 导出配置 */
+const exportHeaders = ['编号', '用户', '商品', '积分', '状态', '创建时间', '发货时间']
+
+function mapRow(o: RedemptionOrder): (string | number)[] {
+  return [
+    o.id,
+    `${o.userName} [${o.userId}]`,
+    o.goodsName,
+    o.points,
+    statusLabel('redemption', o.status),
+    o.createdAt,
+    o.shippedAt ?? '—',
+  ]
+}
+
+const pageExportRows = computed(() => list.value.map(mapRow))
+
+function fetchAllForExport(page: number, pageSize: number) {
+  return fetchRedemptionOrders({ ...query, page, pageSize })
 }
 
 const { syncQuery } = useListQueryState(query, load)
@@ -268,27 +304,28 @@ onMounted(load)
         <t-button variant="outline" :loading="archivingAll" :disabled="archivingAll" @click="onBulkArchive">
           一键归档
         </t-button>
-        <t-button variant="outline" @click="onExport">
-          <template #icon><DownloadIcon /></template>
-          导出
-        </t-button>
+        <ExportButton
+          filename="兑换订单列表"
+          :headers="exportHeaders"
+          :rows="pageExportRows"
+          :fetch-all="fetchAllForExport"
+          :map-row="mapRow"
+        />
       </template>
     </PageHeader>
 
     <div class="page-filter-bar">
-      <t-input
+      <t-input class="ctl-w-xl"
         v-model="query.keyword"
         placeholder="搜索订单编号/用户/商品…"
         clearable
-        style="width: 240px"
         @enter="onSearch"
       />
-      <t-select
+      <t-select class="ctl-w-sm"
         v-model="query.status"
         label="状态"
         :options="statusOptions"
         clearable
-        style="width: 140px"
         @change="onSearch"
       />
       <t-button @click="onSearch">
@@ -310,7 +347,7 @@ onMounted(load)
   :columns="visibleColumns"
   :loading="loading"
   :pagination="pagination"
-  empty="暂无兑换订单"
+  :row-attributes="{ style: { cursor: 'pointer' } }"
   @page-change="onPageChange"
   @row-click="({ row }: { row: RedemptionOrder }) => openDetail(row)"
   >
@@ -358,6 +395,10 @@ onMounted(load)
             <t-button variant="text" size="small" @click="openDetail(row)">详情</t-button>
           </div>
         </template>
+
+        <template #empty>
+          <ListEmptyState :query="query" description="暂无兑换订单" @clear="onReset" />
+        </template>
       </t-table>
     </div>
 
@@ -366,27 +407,30 @@ onMounted(load)
       <template v-if="current">
         <div class="drawer-head">
           <span class="drawer-id">{{ current.id }}</span>
-          <StatusTag entity="redemption" :value="current.status" />
+          <StatusTag entity="redemption" :value="current.status" size="small" />
         </div>
-        <t-descriptions :column="1" bordered>
+        <!-- 按「订单 → 履约」分组并去掉描边：原单列 bordered 边框密度过高、两类信息混排 -->
+        <t-descriptions :column="1" title="订单信息">
           <t-descriptions-item label="兑换用户">{{ current.userName }}<t-tag class="id-tag" size="small" variant="light">{{ current.userId }}</t-tag></t-descriptions-item>
           <t-descriptions-item label="兑换商品">{{ current.goodsName }}</t-descriptions-item>
-          <t-descriptions-item label="消耗积分">{{ current.points }}</t-descriptions-item>
+          <t-descriptions-item label="消耗积分"><span class="delta-sub">-{{ current.points }}</span></t-descriptions-item>
           <t-descriptions-item label="下单时间">{{ current.createdAt }}</t-descriptions-item>
+          <t-descriptions-item v-if="current.finishedAt" label="完成时间">{{ current.finishedAt }}</t-descriptions-item>
+          <t-descriptions-item v-if="current.note" label="备注">{{ current.note }}</t-descriptions-item>
+        </t-descriptions>
+        <t-descriptions v-if="hasFulfillment" :column="1" title="履约与收货" class="drawer-desc">
           <t-descriptions-item v-if="current.shippedAt" label="发货时间">{{ current.shippedAt }}</t-descriptions-item>
           <t-descriptions-item v-if="current.trackingNo" label="运单号">{{ current.trackingNo }}</t-descriptions-item>
+          <t-descriptions-item v-if="current.recipientName" label="收件人">
+            {{ current.recipientName }}<template v-if="current.recipientPhone">（{{ current.recipientPhone }}）</template>
+          </t-descriptions-item>
+          <t-descriptions-item v-if="current.address" label="收件地址">{{ current.address }}</t-descriptions-item>
           <t-descriptions-item v-if="current.voucherCode" label="券码">
             {{ current.voucherCode }}
             <t-tag v-if="current.usedAt" class="id-tag" size="small" theme="success" variant="light">已核销</t-tag>
           </t-descriptions-item>
           <t-descriptions-item v-if="current.voucherExpiresAt" label="券码有效期至">{{ current.voucherExpiresAt }}</t-descriptions-item>
           <t-descriptions-item v-if="current.usedAt" label="核销时间">{{ current.usedAt }}</t-descriptions-item>
-          <t-descriptions-item v-if="current.finishedAt" label="完成时间">{{ current.finishedAt }}</t-descriptions-item>
-          <t-descriptions-item v-if="current.recipientName" label="收件人">
-            {{ current.recipientName }}（{{ current.recipientPhone }}）
-          </t-descriptions-item>
-          <t-descriptions-item v-if="current.address" label="收件地址">{{ current.address }}</t-descriptions-item>
-          <t-descriptions-item v-if="current.note" label="备注">{{ current.note }}</t-descriptions-item>
         </t-descriptions>
         <p v-if="current.status === 'cancelled'" class="drawer-tip">
           该订单已取消，积分已退回（见积分流水中「订单取消退回积分」记录）。
@@ -419,27 +463,18 @@ onMounted(load)
       title="一键归档 · 订单"
       :statuses="bulkStatuses"
       :loading="archivingAll"
+      :progress="bulkProgress"
+      :count-for-status="countByStatus"
       @confirm="onBulkConfirm"
+      @cancel="onBulkCancel"
     />
   </div>
 </template>
 
 <style scoped>
-.cell-title {
-  font-weight: 500;
-  color: var(--td-text-color-primary);
-}
-
 .delta-sub {
   color: var(--td-error-color);
   font-weight: 600;
-}
-
-.op-cell {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-  flex-wrap: nowrap;
 }
 
 .ship-form {
@@ -457,6 +492,10 @@ onMounted(load)
   font-size: 16px;
   font-weight: 600;
   color: var(--td-text-color-primary);
+}
+
+.drawer-desc {
+  margin-top: 16px;
 }
 
 .drawer-tip {

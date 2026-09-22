@@ -16,13 +16,14 @@ export class AnnouncementsController {
     return this.announcements.findAll(query)
   }
 
-  /* 首页公告单例：读取当前开启/最近一条（空表单兜底） */
+  /* 首页公告单例（兼容接口）：读取当前启用/最近一条（空表单兜底）；新界面已改为列表管理 */
   @Get('home')
   getHome() {
     return this.announcements.getHomeAnnouncement()
   }
 
-  /* 首页公告单例：保存内容与开启状态（需在 @Put(':id') 之前声明，避免 home 被当作 id 匹配） */
+  /* 首页公告单例（兼容接口）：保存内容与启用状态；传 id 仅更新该条，不传则覆盖最近一条。
+   * 需在 @Put(':id') 之前声明，避免 home 被当作 id 匹配 */
   @HttpCode(200)
   @Put('home')
   saveHome(@Body() dto: HomeAnnouncementPayloadDto, @Req() req: AuthenticatedRequest) {

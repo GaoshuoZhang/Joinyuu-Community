@@ -54,7 +54,7 @@ const statCells = computed<StatCell[]>(() => {
         </div>
       </section>
 
-      <Grid :column="2" :gutter="10">
+      <Grid :column="2" align="left" class="stats-grid">
         <GridItem
           v-for="cell in statCells"
           :key="cell.key"
@@ -63,10 +63,9 @@ const statCells = computed<StatCell[]>(() => {
           v-pressable="Boolean(cell.path)"
           @click="cell.path && router.push(cell.path)"
         >
-          <template #image>
-            <b class="stat-value">{{ formatZhNumber(cell.value) }}</b>
-          </template>
-          <template #text>{{ cell.label }}</template>
+          <!-- v45：数值改由 text 槽承载，避免塞进 48×48 的 image 槽被折行挤压 -->
+          <template #text><b class="stat-value">{{ formatZhNumber(cell.value) }}</b></template>
+          <template #description>{{ cell.label }}</template>
         </GridItem>
       </Grid>
 
@@ -110,9 +109,17 @@ const statCells = computed<StatCell[]>(() => {
   color: var(--td-text-color-secondary);
 }
 
+/* 宫格不传 gutter：官方会把 gutter 写成根节点内联 padding/gap，使宫格四周多出内缩、与
+ * 其它卡片左边缘不齐；间距改由下面这条 gap 统一控制（内联值无效被忽略，无需 !important）。 */
+.stats-grid {
+  gap: var(--app-space-6);
+}
+
 .stat-cell {
   --td-grid-item-bg-color: var(--td-bg-color-container);
   --td-grid-item-image-bg-color: transparent;
+  /* 无图项：image 槽留空时官方仍渲染 48×48 容器，压成 0 消除空档 */
+  --td-grid-item-image-width: 0;
 
   border: 1px solid var(--td-component-border);
   border-radius: var(--td-radius-large);

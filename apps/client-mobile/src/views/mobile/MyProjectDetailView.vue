@@ -11,6 +11,7 @@ import { useAsyncList } from '@/composables/useAsyncList'
 import { useAuthStore } from '@/stores/auth'
 import EmptyBlock from '@/components/shared/EmptyBlock.vue'
 import ListSkeleton from '@/components/ListSkeleton.vue'
+import StateTag from '@/components/shared/StateTag.vue'
 import type { Milestone, MyProject } from '@/types'
 import { formatLocalDateTime } from '@/utils/format'
 
@@ -24,7 +25,6 @@ onMounted(run)
 /* 离开页面回收附件 blob URL（避免详情页反复进出累积内存） */
 onBeforeUnmount(revokeProjectAttachmentUrls)
 
-const acting = ref(false)
 const note = ref('')
 const noteFor = ref('')
 /* v38：交付证据附件（图片，最多 1 张）与退回原因 */
@@ -60,14 +60,17 @@ function statusOf(m: Milestone): 'todo' | 'submitted' | 'accepted' {
   return m.status ?? (m.done ? 'accepted' : 'todo')
 }
 
-function statusLabel(m: Milestone): string {
+/* v48：状态标签统一走 StateTag（kind=milestone）——本项目内部用 todo 表示未提交，
+ * StateTag 的 milestone 集用 pending，这里做映射；未登记的值一律回落到「待提交」。 */
+function milestoneTag(m: Milestone): 'pending' | 'submitted' | 'accepted' {
   const status = statusOf(m)
-  return status === 'accepted' ? '已验收' : status === 'submitted' ? '待验收' : '待提交'
+  return status === 'submitted' || status === 'accepted' ? status : 'pending'
 }
 
-function statusTheme(m: Milestone): 'success' | 'warning' | 'default' {
-  const status = statusOf(m)
-  return status === 'accepted' ? 'success' : status === 'submitted' ? 'warning' : 'default'
+/* v48：进行中的里程碑操作，形如 `<里程碑 id>:<动作>`；只让被点的按钮进入 loading，其余按钮保持可点 */
+const actingOn = ref('')
+function isActing(m: Milestone, action: 'submit' | 'return' | 'accept'): boolean {
+  return actingOn.value === `${m.id}:${action}`
 }
 
 function askSubmit(m: Milestone) {
@@ -78,7 +81,8 @@ function askSubmit(m: Milestone) {
 }
 
 async function onSubmitMilestone(m: Milestone) {
-  acting.value = true
+  if (actingOn.value) return
+  actingOn.value = `${m.id}:submit`
   try {
     const attachments = evidenceFiles.value
       .filter((file) => file.status === 'success')
@@ -92,7 +96,7 @@ async function onSubmitMilestone(m: Milestone) {
   } catch (e) {
     Toast(e instanceof Error ? e.message : '提交失败，请稍后重试')
   } finally {
-    acting.value = false
+    actingOn.value = ''
   }
 }
 
@@ -108,7 +112,8 @@ async function onReturnMilestone(m: Milestone) {
     Toast(returnError.value)
     return
   }
-  acting.value = true
+  if (actingOn.value) return
+  actingOn.value = `${m.id}:return`
   try {
     await returnMilestone(projectId, m.id, returnReason.value.trim())
     Toast('已退回，等待承接方重新提交')
@@ -117,7 +122,7 @@ async function onReturnMilestone(m: Milestone) {
   } catch (e) {
     Toast(e instanceof Error ? e.message : '退回失败，请稍后重试')
   } finally {
-    acting.value = false
+    actingOn.value = ''
   }
 }
 
@@ -132,7 +137,8 @@ function askAccept(m: Milestone) {
 }
 
 async function onAcceptMilestone(m: Milestone) {
-  acting.value = true
+  if (actingOn.value) return
+  actingOn.value = `${m.id}:accept`
   try {
     await acceptMilestone(projectId, m.id)
     Toast('已验收')
@@ -140,7 +146,7 @@ async function onAcceptMilestone(m: Milestone) {
   } catch (e) {
     Toast(e instanceof Error ? e.message : '验收失败，请稍后重试')
   } finally {
-    acting.value = false
+    actingOn.value = ''
   }
 }
 </script>
@@ -153,7 +159,8 @@ async function onAcceptMilestone(m: Milestone) {
       <section class="m-card">
         <header class="head">
           <h2 class="title">{{ project.name }}</h2>
-          <Tag v-if="project.finishedAt" theme="success" variant="light" size="small">已结项</Tag>
+          <!-- v48：结项标记统一走 StateTag（kind=project），与列表页/详情页口径一致 -->
+          <StateTag v-if="project.finishedAt" kind="project" value="finished" />
           <Tag v-else theme="primary" variant="light" size="small">进行中</Tag>
         </header>
         <div class="meta">
@@ -175,7 +182,7 @@ async function onAcceptMilestone(m: Milestone) {
           <li v-for="m in project.milestones" :key="m.id" class="milestone">
             <div class="m-head">
               <span class="m-title">{{ m.title }}</span>
-              <Tag :theme="statusTheme(m)" variant="light" size="small">{{ statusLabel(m) }}</Tag>
+              <StateTag kind="milestone" :value="milestoneTag(m)" />
             </div>
             <p v-if="m.submitNote" class="m-note">交付说明：{{ m.submitNote }}</p>
             <div v-if="m.attachments?.length" class="m-evidence">
@@ -186,9 +193,10 @@ async function onAcceptMilestone(m: Milestone) {
 
             <template v-if="!isFinished">
               <template v-if="!isInitiator && statusOf(m) === 'todo'">
+                <label v-if="noteFor === m.id" class="m-field-label">交付说明（选填）</label>
                 <Textarea v-if="noteFor === m.id" v-model="note" :autosize="{ minRows: 2, maxRows: 4 }" :maxlength="120" placeholder="交付说明（选填）…" />
                 <div v-if="noteFor === m.id" class="m-upload">
-                  <span class="m-upload-label">交付证据（选填，1 张图片）</span>
+                  <span class="m-field-label">交付证据（选填，1 张图片）</span>
                   <Upload
                     v-model:files="evidenceFiles"
                     theme="grid"
@@ -200,23 +208,25 @@ async function onAcceptMilestone(m: Milestone) {
                 </div>
                 <div class="m-actions">
                   <template v-if="noteFor === m.id">
-                    <Button size="small" theme="primary" :disabled="acting" @click="onSubmitMilestone(m)">确认提交</Button>
-                    <Button size="small" variant="outline" :disabled="acting" @click="noteFor = ''">取消</Button>
+                    <Button size="small" theme="primary" :loading="isActing(m, 'submit')" @click="onSubmitMilestone(m)">确认提交</Button>
+                    <Button size="small" variant="outline" @click="noteFor = ''">取消</Button>
                   </template>
-                  <Button v-else size="small" theme="primary" variant="outline" @click="askSubmit(m)">提交完成</Button>
+                  <!-- v48：待提交里程碑的主操作用实心 primary，与验收侧实心主操作口径一致 -->
+                  <Button v-else size="small" theme="primary" @click="askSubmit(m)">提交完成</Button>
                 </div>
               </template>
               <template v-else-if="isInitiator && statusOf(m) === 'submitted'">
+                <label v-if="returnFor === m.id" class="m-field-label">退回原因（必填）</label>
                 <Textarea v-if="returnFor === m.id" v-model="returnReason" :autosize="{ minRows: 2, maxRows: 4 }" :maxlength="120" placeholder="退回原因（必填）…" />
                 <p v-if="returnFor === m.id && returnError" class="field-error">{{ returnError }}</p>
                 <div class="m-actions">
                   <template v-if="returnFor === m.id">
-                    <Button size="small" theme="danger" variant="outline" :disabled="acting" @click="onReturnMilestone(m)">确认退回</Button>
-                    <Button size="small" variant="outline" :disabled="acting" @click="returnFor = ''">取消</Button>
+                    <Button size="small" theme="danger" variant="outline" :loading="isActing(m, 'return')" @click="onReturnMilestone(m)">确认退回</Button>
+                    <Button size="small" variant="outline" @click="returnFor = ''">取消</Button>
                   </template>
                   <template v-else>
-                    <Button size="small" theme="primary" :disabled="acting" @click="askAccept(m)">验收通过</Button>
-                    <Button size="small" theme="danger" variant="outline" :disabled="acting" @click="askReturn(m)">退回修改</Button>
+                    <Button size="small" theme="primary" :loading="isActing(m, 'accept')" @click="askAccept(m)">验收通过</Button>
+                    <Button size="small" theme="danger" variant="outline" @click="askReturn(m)">退回修改</Button>
                   </template>
                 </div>
               </template>
@@ -259,8 +269,8 @@ async function onAcceptMilestone(m: Milestone) {
 }
 
 .role {
-  padding:var(--app-space-1) 7px;
-  border-radius: var(--td-tag-square-border-radius, 4px);
+  padding: var(--app-space-1) var(--app-space-3);
+  border-radius: var(--td-radius-small);
   background: var(--td-brand-color-1);
   color: var(--td-brand-color);
 }
@@ -375,7 +385,8 @@ async function onAcceptMilestone(m: Milestone) {
   margin-top:var(--app-space-4);
 }
 
-.m-upload-label {
+/* v48：交付说明 / 退回原因 / 交付证据的可见字段标签（原 .m-upload-label 收敛为通用名） */
+.m-field-label {
   display: block;
   margin-bottom:var(--app-space-3);
   font-size: var(--app-font-caption);

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref } from 'vue'
+import { computed, ref } from 'vue'
 import { Avatar, Toast, Upload } from 'tdesign-mobile-vue'
 import type { UploadFile } from 'tdesign-mobile-vue'
 import { uploadFile } from '@/api/uploads'
@@ -25,6 +25,14 @@ const emit = defineEmits<{ (e: 'update:image', url: string): void }>()
 
 const files = ref<UploadFile[]>([])
 const uploading = ref(false)
+
+/* 图片加载失败兜底：TDesign Avatar 的 hideOnLoadFailed 会连加载成功态一起跳过图片渲染，
+ * 故改用 onError 记下失败地址，让 Avatar 回退渲染默认插槽的首字/占位 */
+const failedImage = ref('')
+const avatarImage = computed(() => (props.image && props.image !== failedImage.value ? props.image : ''))
+function onAvatarError() {
+  failedImage.value = props.image
+}
 
 async function requestUpload(file: UploadFile | UploadFile[]) {
   const target = Array.isArray(file) ? file[0] : file
@@ -78,7 +86,7 @@ function updateFiles(value: UploadFile[]) {
   >
     <template #addContent>
       <span class="avatar-trigger" :class="`shape-${shape}`" :style="{ '--avatar-size': size }" :aria-label="shape === 'round' ? '上传企业 Logo' : '更换头像'">
-        <Avatar :size="size" :shape="shape" :image="image" class="avatar-el">{{ fallback }}</Avatar>
+        <Avatar :size="size" :shape="shape" :image="avatarImage" class="avatar-el" :on-error="onAvatarError">{{ fallback }}</Avatar>
         <span class="mask">{{ uploading ? '上传中…' : '更换' }}</span>
       </span>
     </template>

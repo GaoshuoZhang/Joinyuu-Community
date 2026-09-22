@@ -1,8 +1,9 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { Button } from 'tdesign-mobile-vue'
+import { Button, StepItem, Steps, Tag } from 'tdesign-mobile-vue'
 import { fetchRealName } from '@/api/me'
+import { fetchMyApplications } from '@/api/applications'
 import { useRefreshOnActivate } from '@/composables/useRefreshOnActivate'
 import { useAuthStore } from '@/stores/auth'
 
@@ -81,29 +82,47 @@ const kind = computed(() => {
 })
 const meta = computed(() => META[kind.value])
 const realNameVerified = ref<boolean | null>(null)
-const checkingRealName = ref(false)
-const talentNeedsRealName = computed(() => kind.value === 'talent' && auth.isLogged && realNameVerified.value === false)
-const talentSubmitBlocked = computed(() => kind.value === 'talent' && auth.isLogged && realNameVerified.value !== true)
+/* v49：已提交过人才登记（存在 individual 申请，或已获社区个体身份）→ CTA 改为「查看申请记录」 */
+const talentSubmitted = ref(false)
+const checkingStatus = ref(false)
+const talentNeedsRealName = computed(() => kind.value === 'talent' && auth.isLogged && !talentSubmitted.value && realNameVerified.value === false)
+const talentSubmitBlocked = computed(() => kind.value === 'talent' && auth.isLogged && !talentSubmitted.value && realNameVerified.value !== true)
+const ctaLabel = computed(() => (kind.value === 'talent' && talentSubmitted.value ? '查看申请记录' : meta.value.cta))
+const ctaDisabled = computed(() => checkingStatus.value || (!talentSubmitted.value && talentSubmitBlocked.value))
 
-async function loadRealNameStatus() {
+async function loadStatus() {
   if (kind.value !== 'talent' || !auth.isLogged) {
     realNameVerified.value = null
+    talentSubmitted.value = false
     return
   }
-  checkingRealName.value = true
+  checkingStatus.value = true
   try {
-    realNameVerified.value = (await fetchRealName()).verified
+    if (auth.hasCommunityIndividual) {
+      talentSubmitted.value = true
+      realNameVerified.value = true
+    } else {
+      const apps = await fetchMyApplications()
+      talentSubmitted.value = apps.some((a) => a.type === 'individual')
+      realNameVerified.value = talentSubmitted.value ? true : (await fetchRealName()).verified
+    }
   } catch {
+    talentSubmitted.value = false
     realNameVerified.value = false
   } finally {
-    checkingRealName.value = false
+    checkingStatus.value = false
   }
 }
 
-watch([kind, () => auth.isLogged], () => void loadRealNameStatus(), { immediate: true })
-useRefreshOnActivate(loadRealNameStatus)
+watch([kind, () => auth.isLogged], () => void loadStatus(), { immediate: true })
+useRefreshOnActivate(loadStatus)
 
 function goApply() {
+  /* 已提交过人才登记：进入申请记录（可查看进度/修改重提），不再重复提交 */
+  if (kind.value === 'talent' && talentSubmitted.value) {
+    void router.push('/me/applications')
+    return
+  }
   if (kind.value === 'talent' && !auth.isLogged) {
     void router.push({ path: '/login', query: { redirect: '/intros/talent' } })
     return
@@ -120,19 +139,17 @@ function goRealName() {
 <template>
   <div class="intro page-fade-in">
     <header class="hero">
-      <span class="badge">{{ meta.badge }}</span>
+      <Tag class="badge" theme="primary" variant="light" size="medium">{{ meta.badge }}</Tag>
       <p class="title">{{ meta.title }}</p>
       <p class="subtitle">{{ meta.subtitle }}</p>
     </header>
 
     <section class="m-card">
       <h2 class="sec-title">申请流程</h2>
-      <ol class="steps">
-        <li v-for="(s, i) in meta.steps" :key="i">
-          <span class="step-no">{{ i + 1 }}</span>
-          <span class="step-text">{{ s }}</span>
-        </li>
-      </ol>
+      <!-- 只读说明：纵向 Steps 表达步骤先后，readonly 关闭点击切换（current = 步骤数 → 全部为完成态，保持原品牌色圆点） -->
+      <Steps :current="meta.steps.length" layout="vertical" readonly>
+        <StepItem v-for="(s, i) in meta.steps" :key="i" :title="s" />
+      </Steps>
     </section>
 
     <section class="m-card">
@@ -150,7 +167,7 @@ function goRealName() {
     </section>
 
     <Button v-if="talentNeedsRealName" theme="primary" variant="outline" block size="large" class="verify-btn" @click="goRealName">进行实名认证</Button>
-    <Button theme="primary" block size="large" class="apply-btn" :disabled="talentSubmitBlocked || checkingRealName" @click="goApply">{{ meta.cta }}</Button>
+    <Button theme="primary" block size="large" class="apply-btn" :disabled="ctaDisabled" @click="goApply">{{ ctaLabel }}</Button>
     <p class="tip">登录后进入对应申请表单，社区运营将在 3 个工作日内完成审核</p>
   </div>
 </template>
@@ -167,14 +184,9 @@ function goRealName() {
   padding:var(--app-space-2) var(--app-space-1);
 }
 
+/* 徽标由官方 Tag 承担配色与圆角，这里只保留与标题的间距 */
 .badge {
-  display: inline-block;
-  margin-bottom:var(--app-space-4);
-  padding:var(--app-space-1) var(--app-space-4);
-  font-size: var(--app-font-caption);
-  border-radius: var(--td-tag-square-border-radius, 4px);
-  color: var(--td-brand-color);
-  background: var(--td-brand-color-light);
+  margin-bottom: var(--app-space-4);
 }
 
 .title {
@@ -191,40 +203,6 @@ function goRealName() {
 .sec-title {
   margin:0 0 var(--app-space-5);
   font-size: var(--app-font-subtitle);
-}
-
-.steps {
-  margin:0;
-  padding:0;
-  list-style: none;
-  display: flex;
-  flex-direction: column;
-  gap:var(--app-space-5);
-}
-
-.steps li {
-  display: flex;
-  align-items: flex-start;
-  gap:var(--app-space-5);
-}
-
-.step-no {
-  flex-shrink: 0;
-  display: grid;
-  place-items: center;
-  width: 20px;
-  height: 20px;
-  margin-top:var(--app-space-1);
-  font-size: var(--app-font-caption);
-  font-weight: 600;
-  border-radius: 50%;
-  color: var(--td-brand-color);
-  background: var(--td-brand-color-light);
-}
-
-.step-text {
-  font-size: var(--app-font-body);
-  line-height: 1.6;
 }
 
 .bullets {

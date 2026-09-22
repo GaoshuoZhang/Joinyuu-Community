@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
-import { Button, Icon, Toast } from 'tdesign-mobile-vue'
+import { Button, Icon, List, Toast } from 'tdesign-mobile-vue'
 import { cancelEnrollment, fetchMyEnrollments } from '@/api/events'
 import { useAsyncList } from '@/composables/useAsyncList'
 import { useIncrementalList } from '@/composables/useIncrementalList'
@@ -16,6 +16,14 @@ const { data, loading, error, run } = useAsyncList<PageResult<MyEnrollmentItem>>
 const router = useRouter()
 const enrollments = computed(() => data.value?.list ?? [])
 const { visibleItems, hasMore, showMore } = useIncrementalList(enrollments)
+const footerState = computed(() => (hasMore.value ? 'load-more' : ''))
+function loadMore() {
+  if (!hasMore.value) return
+  showMore()
+}
+function onListScroll(bottomDistance: number) {
+  if (bottomDistance < 60) loadMore()
+}
 onMounted(run)
 
 const actingId = ref('')
@@ -61,10 +69,10 @@ async function doCancel(item: MyEnrollmentItem) {
 </script>
 
 <template>
-  <div class="m-enrollments page-fade-in stagger">
+  <div class="m-enrollments page-fade-in">
     <ListSkeleton v-if="loading" />
     <EmptyBlock v-else-if="error" :text="error" action-text="重试" @action="run" />
-    <template v-else-if="enrollments.length > 0">
+    <List v-else-if="enrollments.length > 0" class="stagger list" :async-loading="footerState" @load-more="loadMore" @scroll="onListScroll">
       <p class="list-count">共 {{ formatZhNumber(enrollments.length) }} 条报名</p>
       <div
         v-for="item in visibleItems"
@@ -102,14 +110,11 @@ async function doCancel(item: MyEnrollmentItem) {
           </Button>
         </div>
       </div>
-      <Button v-if="hasMore" block variant="outline" @click="showMore">
-        加载更多（剩余 {{ formatZhNumber(enrollments.length - visibleItems.length) }} 条）
-      </Button>
-    </template>
+    </List>
     <template v-else>
-      <!-- v45：空状态补出口，避免二级页没有 TabBar 时成为死胡同 -->
-      <EmptyBlock text="暂无报名记录" action-text="看看活动" @action="router.push('/plaza?tab=events')" />
-      <router-link class="go-events" to="/plaza?tab=events">去看看活动<Icon aria-hidden="true" name="chevron-right" size="14px" /></router-link>
+      <!-- v45：空状态补出口，避免二级页没有 TabBar 时成为死胡同（单一主入口，不再叠加同义 CTA） -->
+      <EmptyBlock text="暂无报名记录" />
+      <Button theme="primary" block @click="router.push('/plaza?tab=events')">去看看活动</Button>
     </template>
   </div>
 </template>
@@ -122,14 +127,10 @@ async function doCancel(item: MyEnrollmentItem) {
   gap:var(--app-space-5);
 }
 
-.error-box {
-  text-align: center;
-  color: var(--td-error-color);
-  font-size: var(--app-font-caption);
-}
-
-.error-box p {
-  margin:0 0 var(--app-space-5);
+.list {
+  display: flex;
+  flex-direction: column;
+  gap:var(--app-space-5);
 }
 
 .row {
@@ -195,11 +196,6 @@ async function doCancel(item: MyEnrollmentItem) {
   margin-left: auto;
 }
 
-.checked {
-  font-size: var(--app-font-caption);
-  color: var(--td-success-color);
-}
-
 .checkin-link {
   display: inline-flex;
   align-items: center;
@@ -209,22 +205,5 @@ async function doCancel(item: MyEnrollmentItem) {
   color: var(--td-brand-color);
   text-decoration: none;
   cursor: pointer;
-}
-
-.placeholder {
-  flex: 1;
-}
-
-.go-events {
-  align-self: center;
-  display: inline-flex;
-  min-height: 44px;
-  align-items: center;
-  gap: var(--app-space-2);
-  padding: 0 var(--app-space-7);
-  border-radius: var(--td-radius-default);
-  background: var(--td-brand-color);
-  color: var(--td-text-color-anti);
-  text-decoration: none;
 }
 </style>

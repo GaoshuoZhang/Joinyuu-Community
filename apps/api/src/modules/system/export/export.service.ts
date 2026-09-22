@@ -1,6 +1,6 @@
 import { Injectable, NotFoundException } from '@nestjs/common'
 import { PrismaService } from '../../../common/prisma/prisma.service'
-import { AuditService } from '../../../common/audit/audit.service'
+import { AuditService, AUDIT_SNAPSHOT_MAX_CHARS } from '../../../common/audit/audit.service'
 import type { QueryExportDto } from './dto/query-export.dto'
 
 /** 单次导出行数上限：避免一次导出拉爆内存/响应体（超出部分截断，响应头 X-Export-Truncated 标注） */
@@ -183,10 +183,13 @@ export class ExportService {
         columns: [
           { label: '时间', value: (r) => r.at },
           { label: '操作人', value: (r) => r.operator },
+          { label: 'IP', value: (r) => r.ip ?? '' },
           { label: '模块', value: (r) => r.module },
           { label: '操作', value: (r) => r.action },
           { label: '对象', value: (r) => r.target },
           { label: '备注', value: (r) => r.detail ?? '' },
+          { label: '变更前', value: (r) => snapshotText(r.before) },
+          { label: '变更后', value: (r) => snapshotText(r.after) },
         ],
         fetch: (q) =>
           db.auditLog.findMany({
@@ -209,6 +212,13 @@ export class ExportService {
       },
     }
   }
+}
+
+/** 审计快照列：JSON 文本化（与列表接口同口径截断，避免单个 CSV 单元格过长） */
+function snapshotText(value: unknown): string {
+  if (value == null) return ''
+  const text = JSON.stringify(value)
+  return text.length > AUDIT_SNAPSHOT_MAX_CHARS ? `${text.slice(0, AUDIT_SNAPSHOT_MAX_CHARS)}…` : text
 }
 
 function escapeCsv(v: string | number): string {

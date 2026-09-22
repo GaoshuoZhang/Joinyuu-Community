@@ -8,10 +8,11 @@ import { useNoticesStore } from '@/stores/notices'
 import { useAsyncList } from '@/composables/useAsyncList'
 import { useRefreshOnActivate } from '@/composables/useRefreshOnActivate'
 import { useAnimSuppress } from '@/composables/useAnimSuppress'
+import { useAtTop } from '@/composables/useAtTop'
 import { fetchHomeFeed } from '@/api/home'
 import { fetchMyDemands, fetchMyResponses } from '@/api/demands'
 import { fetchMyEnrollments } from '@/api/events'
-import { fetchMe } from '@/api/me'
+import { fetchMe, dismissActivation as dismissActivationApi } from '@/api/me'
 import EmptyBlock from '@/components/shared/EmptyBlock.vue'
 import ListSkeleton from '@/components/ListSkeleton.vue'
 import HomeBanner from '@/components/home/HomeBanner.vue'
@@ -71,6 +72,12 @@ onMounted(() => {
   run()
 })
 
+/* v46：刷新失败不再把已加载的整页内容替换为错误块——无数据时才整页提示，
+ * 已有内容时保留内容并提示刷新失败，避免用户失去已读到的信息。 */
+watch(error, (message) => {
+  if (message && feed.value) Toast('刷新失败，请稍后重试')
+})
+
 /* KeepAlive 返回首页时刷新新手任务完成状态，并同步未读角标。 */
 useRefreshOnActivate(() => {
   void loadActivation()
@@ -118,6 +125,12 @@ async function loadActivation() {
       fetchMyEnrollments(),
     ])
     if (auth.uid !== uid || activationDismissed.value) return
+    /* 服务端已记录永久隐藏（换浏览器/设备也一致）：同步本地缓存并跳过引导 */
+    if (me.activationDismissed) {
+      activationDismissed.value = true
+      localStorage.setItem(`${ACTIVATION_KEY_PREFIX}${uid}`, '1')
+      return
+    }
     activationSteps.value = [
       { key: 'identity', label: '绑定社区身份', done: me.identities.some((item) => item.type !== 'individual'), path: '/intros/talent' },
       { key: 'realname', label: '完成实名认证', done: !!me.realNameVerified, path: '/me/realname' },
@@ -132,6 +145,8 @@ async function loadActivation() {
 
 /* v39：下拉刷新 */
 const refreshing = ref(false)
+/* 离顶时禁用下拉刷新：库内 isReachTop 会被行内 overflow 元素误判为已到顶，导致上滑被拦回弹 */
+const atTop = useAtTop()
 let refreshTimer: ReturnType<typeof setTimeout> | null = null
 
 async function onRefresh() {
@@ -156,8 +171,11 @@ onBeforeUnmount(() => {
 
 function dismissActivation() {
   if (!auth.uid) return
+  const uid = auth.uid
   activationDismissed.value = true
-  localStorage.setItem(`${ACTIVATION_KEY_PREFIX}${auth.uid}`, '1')
+  localStorage.setItem(`${ACTIVATION_KEY_PREFIX}${uid}`, '1')
+  /* 服务端持久化失败不影响本地隐藏（同浏览器仍生效），下次进入会重试同步 */
+  void dismissActivationApi().catch(() => undefined)
 }
 
 /* 铃铛未读角标：登录态以首页聚合未读数初始化（AppShell 冷启动另有轻量兜底刷新） */
@@ -176,7 +194,8 @@ function onSearch() {
 const reduceMotion =
   typeof window.matchMedia === 'function' && window.matchMedia('(prefers-reduced-motion: reduce)').matches
 
-/* v40：运营公告（置顶优先展示首条，点击查看全文） */
+/* v40：运营公告——后台多条维护、最多启用一条（互锁），故首页最多展示 1 条；点击查看全文 */
+const announcementItems = computed(() => feed.value?.announcements ?? [])
 const announcement = ref<HomeAnnouncement | null>(null)
 const announcementVisible = ref(false)
 
@@ -199,20 +218,28 @@ function goPublish() {
   void router.push('/demands/new')
 }
 
+/* v48：核心功能入口——企业合作 / 企业名片（人才登记）为「宽 2 单位 × 高 1 单位」两列卡，
+ * 文章投稿 / 积分商城 / 空间预约 / 活动计划为「宽 1 单位 × 高 1 单位」四列方形卡；
+ * 两组前置到搜索栏下方（用户视为核心功能），商城/空间预约入口按功能开关收敛（D-008）。
+ * v49：按已关联身份个性化——有企业身份（社区企业/合作企业，不含社区个体）→「企业管理」；
+ * 第二个入口固定为「个人名片」（有社区个体）或「人才登记」（无），不再显示企业名片卡片。 */
 const featureEntries = computed(() => {
+  const hasEnterpriseIdentity = auth.identities.some(
+    (item) => item.type === 'community_enterprise' || item.type === 'external_enterprise',
+  )
   const list: { path: string; icon: string; label: string; desc: string }[] = [
-    { path: '/intros/enterprise', icon: 'usergroup', label: '企业合作', desc: '入驻或成为伙伴' },
-    { path: '/intros/talent', icon: 'app', label: '人才登记', desc: '让企业找到你' },
+    hasEnterpriseIdentity
+      ? { path: '/me/identities?filter=enterprise', icon: 'usergroup', label: '企业管理', desc: '管理关联企业身份' }
+      : { path: '/intros/enterprise', icon: 'usergroup', label: '企业合作', desc: '入驻或成为伙伴' },
   ]
-  /* v39：已有社区企业身份时，第二个入口替换为「企业名片」（个性化） */
-  const enterprise = auth.identities.find((item) => item.type === 'community_enterprise' && item.enterpriseId)
-  if (enterprise) {
-    list[1] = { path: `/me/enterprises/${enterprise.enterpriseId}`, icon: 'app', label: '企业名片', desc: '管理企业与成员' }
+  if (auth.hasCommunityIndividual) {
+    list.push({ path: '/me/cards/individual', icon: 'app', label: '个人名片', desc: '完善个人展示' })
+  } else {
+    list.push({ path: '/intros/talent', icon: 'app', label: '人才登记', desc: '让企业找到你' })
   }
   return list
 })
 
-/* 快捷入口按功能开关收敛（D-008）：商城/空间预约关闭时同步隐藏入口 */
 const quickEntries = computed(() => {
   const list: { path: string; icon: string; label: string }[] = [
     { path: '/articles/new', icon: 'edit-1', label: '文章投稿' },
@@ -225,22 +252,45 @@ const quickEntries = computed(() => {
 </script>
 
 <template>
-  <PullDownRefresh :value="refreshing" @refresh="onRefresh">
+  <PullDownRefresh :value="refreshing" :disabled="!atTop" @refresh="onRefresh">
     <div class="home page-fade-in">
-      <!-- 顶部搜索：点击进入全局搜索页（focus 不跳转，保证键盘可达） -->
-      <Search v-model="searchKeyword" placeholder="搜索项目、活动、文章或社区服务…" @click="onSearch" @search="onSearch" />
+      <!-- 顶部搜索：点击进入全局搜索页（focus 不跳转，保证键盘可达）。
+           v46：这里是跳转入口而非输入框，readonly 避免先弹软键盘再跳页。 -->
+      <Search v-model="searchKeyword" readonly placeholder="搜索项目、活动、文章或社区服务…" @click="onSearch" @search="onSearch" />
 
+      <!-- v48：核心功能入口前置到搜索栏下方（2 单位宽卡 ×2 + 1 单位方形卡 ×4） -->
+      <HomeEntryGrids
+        :features="featureEntries"
+        :quick="quickEntries"
+        @open="(path: string) => router.push(path)"
+      />
+
+      <!-- v48：发布入口紧跟在四个方形入口之下（发布是最常用的核心动作），并保持描边次级形态 -->
+      <Button v-if="config.config.demandOpen" theme="primary" variant="outline" block size="large" class="publish-entry pressable" @click="goPublish">
+        <template #icon><Icon aria-hidden="true" name="flag" size="20px" /></template>
+        {{ auth.isLogged ? '发布需求 · 让社区一起帮你完成' : '登录后发布需求' }}
+        <template #suffix><Icon aria-hidden="true" name="chevron-right" size="16px" /></template>
+      </Button>
+
+      <!-- v49：新手任务紧随发布入口（默认折叠，展开后再看任务），不再收在页面底部 -->
+      <ActivationChecklist
+        v-if="showActivation"
+        :steps="visibleActivationSteps"
+        @dismiss="dismissActivation"
+      />
+
+      <!-- 运营公告：后台启用互锁保证至多一条，首页仅展示该条 -->
       <NoticeBar
-        v-if="feed?.announcements?.length"
+        v-if="announcementItems.length"
         visible
         theme="info"
         class="announce-bar"
-        :content="feed.announcements[0].title"
-        @click="onAnnouncement(feed.announcements[0])"
+        :content="announcementItems[0].title"
+        @click="onAnnouncement(announcementItems[0])"
       />
 
       <ListSkeleton v-if="loading && !feed" :rows="4" />
-      <EmptyBlock v-else-if="error" :text="error" action-text="重试" @action="run" />
+      <EmptyBlock v-else-if="error && !feed" :text="error" action-text="重试" @action="run" />
 
       <template v-else>
         <!-- 唯一运营位：轮播 -->
@@ -261,31 +311,11 @@ const quickEntries = computed(() => {
           more-path="/projects"
         />
 
-        <!-- 发布入口放在需求语境之后（先浏览、再发布），并降为描边次级按钮，不与轮播争焦点 -->
-        <Button v-if="config.config.demandOpen" theme="primary" variant="outline" block size="large" class="publish-entry pressable" @click="goPublish">
-          <template #icon><Icon aria-hidden="true" name="flag" size="20px" /></template>
-          {{ auth.isLogged ? '发布需求 · 让社区一起帮你完成' : '登录后发布需求' }}
-          <template #suffix><Icon aria-hidden="true" name="chevron-right" size="16px" /></template>
-        </Button>
-
         <HomeFeedSection
           title="最新资讯"
           :items="articleItems"
           empty-text="暂无最新资讯"
           more-path="/plaza?tab=articles"
-        />
-
-        <HomeEntryGrids
-          :features="featureEntries"
-          :quick="quickEntries"
-          @open="(path: string) => router.push(path)"
-        />
-
-        <!-- 新手任务收在内容之后：先看到内容，再决定是否开始引导 -->
-        <ActivationChecklist
-          v-if="showActivation"
-          :steps="visibleActivationSteps"
-          @dismiss="dismissActivation"
         />
       </template>
     </div>
@@ -308,4 +338,13 @@ const quickEntries = computed(() => {
   border-radius: var(--td-radius-large);
   cursor: pointer;
 }
+
+/* v46：公告标题可能很长——官方结构为「inline-block + nowrap」的硬裁切，
+ * 补 max-width 与省略号（保持单行信息层级与 48px 触控高度）。 */
+.announce-bar :deep(.t-notice-bar__content) {
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
 </style>

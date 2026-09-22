@@ -1,16 +1,18 @@
 <script setup lang="ts">
-import { reactive, ref } from 'vue'
+import { nextTick, reactive, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { Button, Input, Toast } from 'tdesign-mobile-vue'
+import { Button, Form, FormItem, Input, Toast } from 'tdesign-mobile-vue'
+import type { FormInstanceFunctions, FormRules } from 'tdesign-mobile-vue'
 import { useAuthStore } from '@/stores/auth'
 import { useNoticesStore } from '@/stores/notices'
 import { ApiError, apiMode } from '@/api/http'
-import { isCaptcha, REQUIRED } from '@/utils/validators'
+import { REQUIRED } from '@/utils/validators'
 import CaptchaField from '@/components/CaptchaField.vue'
 import { useCaptcha } from '@/composables/useCaptcha'
 import 'tdesign-mobile-vue/es/style/index.css'
 
-/* 移动登录：全屏表单（Mock 验证码 8888）；错误用 Toast 反馈。 */
+/* 移动登录：全屏表单（Mock 验证码 8888）。
+ * v46：校验迁移到 t-form/rules——错误内联在字段下方，提交失败自动滚动到首个错误字段。 */
 const router = useRouter()
 const route = useRoute()
 const auth = useAuthStore()
@@ -22,25 +24,29 @@ async function onRefreshCaptcha() {
   if (!result.ok) Toast(result.message ?? '验证码加载失败，请重试')
 }
 
+/* 首次加载验证码失败时提示一次（后续重试由 onRefreshCaptcha 自行提示）；
+ * captchaId 为空即视为加载失败——按加载结束的时刻判断，避免依赖刷新返回值 */
+let captchaFailureNotified = false
+watch(captchaLoading, (loading) => {
+  if (loading || captchaFailureNotified || captchaId.value) return
+  captchaFailureNotified = true
+  Toast('验证码加载失败，请点击图片重试')
+})
+
 const form = reactive({ identifier: '', password: '', captchaCode: '' })
 const submitting = ref(false)
-const errors = reactive({ identifier: '', password: '', captchaCode: '' })
+const formRef = ref<FormInstanceFunctions>()
 
-function validate(): boolean {
-  errors.identifier = form.identifier.trim() ? '' : REQUIRED('手机号/邮箱/用户名')
-  errors.password = form.password ? '' : REQUIRED('密码')
-  errors.captchaCode = isCaptcha(form.captchaCode) ? '' : REQUIRED('验证码')
-  return !errors.identifier && !errors.password && !errors.captchaCode
+const rules: FormRules<typeof form> = {
+  identifier: [{ required: true, message: REQUIRED('手机号/邮箱/用户名') }],
+  password: [{ required: true, message: REQUIRED('密码') }],
+  captchaCode: [{ required: true, message: REQUIRED('验证码') }],
 }
 
 async function onSubmit() {
-  if (!validate()) {
-    Toast(Object.values(errors).find((v) => v) ?? '请完善表单')
-    return
-  }
-  /* 验证码加载失败时 captchaId 为空，提交只会得到误导性错误：先拦截并提示 */
+  /* 验证码加载失败时 captchaId 为空，提交只会得到误导性错误：按钮保持可点，点击时说明原因 */
   if (!captchaId.value) {
-    Toast('请先获取验证码')
+    Toast('验证码加载失败，请点击图片重试')
     return
   }
   submitting.value = true
@@ -53,9 +59,16 @@ async function onSubmit() {
     Toast(e instanceof ApiError ? e.message : '登录失败，请稍后重试')
     form.captchaCode = ''
     await refreshCaptcha()
+    /* API 失败清空验证码输入后不残留字段级错误提示 */
+    void nextTick(() => formRef.value?.clearValidate(['captchaCode']))
   } finally {
     submitting.value = false
   }
+}
+
+function onLoginSubmit({ validateResult }: { validateResult: unknown }) {
+  /* 校验失败：字段级错误已内联展示，scroll-to-first-error 负责滚动定位 */
+  if (validateResult === true) void onSubmit()
 }
 </script>
 
@@ -67,32 +80,37 @@ async function onSubmit() {
       <p class="slogan">让每一座创业孤岛，在这里连成群岛。</p>
     </div>
 
-    <form class="form" @submit.prevent="onSubmit">
-      <div class="field">
-        <label>手机号/邮箱/用户名</label>
-        <Input v-model="form.identifier" type="text" autocomplete="username" placeholder="请输入手机号/邮箱/用户名…" clearable @keyup.enter="onSubmit" />
-        <p v-if="errors.identifier" class="error">{{ errors.identifier }}</p>
-      </div>
-      <div class="field">
-        <label>密码</label>
-        <Input class="password-field" v-model="form.password" type="password" autocomplete="current-password" placeholder="请输入密码…" clearable @keyup.enter="onSubmit" />
-        <p v-if="errors.password" class="error">{{ errors.password }}</p>
-        <p class="forgot"><router-link to="/forgot-password" class="link">忘记密码？</router-link></p>
-      </div>
-      <CaptchaField
-        v-model="form.captchaCode"
-        :image="captchaImage"
-        :loading="captchaLoading"
-        :error="errors.captchaCode"
-        @refresh="onRefreshCaptcha"
-        @keyup.enter="onSubmit"
-      />
+    <Form
+      ref="formRef"
+      class="form"
+      :data="form"
+      :rules="rules"
+      label-align="top"
+      scroll-to-first-error="smooth"
+      @submit="onLoginSubmit"
+    >
+      <FormItem label="手机号/邮箱/用户名" name="identifier">
+        <Input v-model="form.identifier" type="text" autocomplete="username" placeholder="请输入手机号/邮箱/用户名…" clearable />
+      </FormItem>
+      <FormItem label="密码" name="password">
+        <Input class="password-field" v-model="form.password" type="password" autocomplete="current-password" placeholder="请输入密码…" clearable />
+      </FormItem>
+      <FormItem name="captchaCode" class="captcha-item">
+        <CaptchaField
+          v-model="form.captchaCode"
+          :image="captchaImage"
+          :loading="captchaLoading"
+          @refresh="onRefreshCaptcha"
+        />
+      </FormItem>
 
-      <Button theme="primary" block size="large" :loading="submitting" :disabled="submitting || !captchaId" @click="onSubmit">登录</Button>
+      <Button theme="primary" block size="large" type="submit" :loading="submitting" :disabled="submitting">登录</Button>
+      <!-- v48：忘记密码从密码框右侧（与明文切换图标重叠）移到登录按钮下方、暂不登录上方 -->
+      <p class="forgot"><router-link to="/forgot-password" class="link">忘记密码？</router-link></p>
       <p class="guest"><router-link to="/" replace class="guest-link">暂不登录</router-link></p>
       <p class="swap">还没有账号？<router-link to="/register" class="link">立即注册</router-link></p>
       <p v-if="apiMode === 'mock'" class="demo">演示：13800000001 / client123</p>
-    </form>
+    </Form>
   </main>
 </template>
 
@@ -105,7 +123,7 @@ async function onSubmit() {
 }
 
 .hero {
-  padding:56px 0 var(--app-space-12);
+  padding:calc(var(--app-space-12) + var(--app-space-9)) 0 var(--app-space-12);
   text-align: center;
 }
 
@@ -133,21 +151,28 @@ async function onSubmit() {
   color: var(--td-text-color-secondary);
 }
 
-.field {
-  margin-bottom:var(--app-space-8);
+/* t-form-item 默认左右布局 + 底部 hairline；本页沿用「标签在上」的既有版式 */
+.form :deep(.t-form__item) {
+  padding: 0;
+  margin: 0 0 var(--app-space-8);
+  border-bottom: none;
 }
 
-.field label {
-  display: block;
-  margin-bottom:var(--app-space-3);
+.form :deep(.t-form__label) {
+  width: auto;
+  padding: 0;
+  margin-bottom: var(--app-space-3);
   font-size: var(--app-font-caption);
   color: var(--td-text-color-secondary);
 }
 
-.error {
-  margin:var(--app-space-2) 0 0;
-  font-size: var(--app-font-caption);
-  color: var(--td-error-color);
+.form :deep(.t-form__controls) {
+  margin: 0;
+}
+
+/* 图形验证码：CaptchaField 自带「验证码」标签，隐藏 FormItem 占位 label */
+.form :deep(.captcha-item .t-form__label) {
+  display: none;
 }
 
 .guest {
@@ -171,13 +196,23 @@ async function onSubmit() {
   color: var(--td-text-color-secondary);
 }
 
+/* 文字链（忘记密码/立即注册）：撑到 44px 命中区并居中，按压时降低不透明度 */
 .link {
+  display: inline-flex;
+  align-items: center;
+  min-height: 44px;
   color: var(--td-brand-color);
 }
 
+.link:active {
+  opacity: 0.72;
+}
+
+/* v48：忘记密码移到登录按钮下方（原先位于密码框右侧，与明文切换图标重叠），
+ * 与「暂不登录 / 立即注册」同为居中文字链，保留 44px 命中区。 */
 .forgot {
-  margin:var(--app-space-4) 0 0;
-  text-align: right;
+  margin:var(--app-space-6) 0 0;
+  text-align: center;
   font-size: var(--app-font-body);
 }
 
@@ -188,11 +223,11 @@ async function onSubmit() {
   color: var(--td-text-color-placeholder);
 }
 
+/* v48：官方 suffix 槽自带 padding-left: 12px；此前固定 flex-basis/width 为 24px，会连同内距
+ * 把明文切换图标挤出密码框右边缘 12px。宽度交回官方（flex: 0 0 auto），这里只保证垂直居中。 */
 .password-field :deep(.t-input__wrap--suffix-icon) {
-  display: grid;
-  flex: 0 0 24px;
-  width: 24px;
-  place-items: center;
+  display: flex;
+  align-items: center;
 }
 
 .password-field :deep(.t-input--password) {

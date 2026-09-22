@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, onMounted, reactive, ref } from 'vue'
 import ListErrorState from '@/components/ListErrorState.vue'
+import ListEmptyState from '@/components/ListEmptyState.vue'
 import { useListQueryState } from '@/utils/listQuery'
 import { MessagePlugin } from 'tdesign-vue-next'
 import { DeleteIcon, SearchIcon } from 'tdesign-icons-vue-next'
@@ -49,12 +50,12 @@ const statusOptions = [
 ]
 
 const columns = [
-  { colKey: 'title', title: '投稿', cell: 'title', width: 150, ellipsis: true, resizable: true },
+  { colKey: 'title', title: '投稿', cell: 'title', width: 160, ellipsis: true, resizable: true },
   { colKey: 'author', title: '投稿方', cell: 'author', width: 150, resizable: true , ellipsis: true},
   { colKey: 'columns', title: '栏目', cell: 'columns', width: 110, resizable: true , ellipsis: true},
   { colKey: 'status', title: '状态', cell: 'status', width: 130, resizable: true , ellipsis: true},
-  { colKey: 'createdAt', title: '提交时间', width: 130, resizable: true , ellipsis: true},
-  { colKey: 'op', title: '操作', cell: 'op', width: 220 },
+  { colKey: 'createdAt', title: '提交时间', cell: 'createdAt', width: 160, resizable: true , ellipsis: true},
+  { colKey: 'op', title: '操作', cell: 'op', width: 300 },
 ]
 
 /* 列配置：本地持久化显隐/顺序 */
@@ -148,11 +149,17 @@ async function onDelete(row: Article) {
 /* 一键归档：按当前筛选全量拉取，归档所选状态的已驳回 / 待发布投稿 */
 const archivingAll = ref(false)
 const bulkVisible = ref(false)
+const bulkProgress = ref<{ done: number; total: number; failed: number } | null>(null)
+let bulkCancelled = false
 const bulkStatuses = [
   { label: '已驳回', value: 'rejected' },
   { label: '待发布', value: 'pending_release' },
   { label: '已关闭', value: 'closed' },
 ]
+
+function onBulkCancel() {
+  bulkCancelled = true
+}
 
 async function doBulkArchive(values: string[]) {
   const targets: Article[] = []
@@ -166,16 +173,28 @@ async function doBulkArchive(values: string[]) {
     MessagePlugin.info('没有符合所选状态的可归档投稿')
     return
   }
+  /* 进度 + 可取消：逐条执行，取消后停止后续条目（见 BulkArchiveDialog 进度态） */
+  bulkCancelled = false
+  bulkProgress.value = { done: 0, total: pending.length, failed: 0 }
+  let done = 0
   let failed = 0
   for (const a of pending) {
+    if (bulkCancelled) break
     try {
       await deleteArticle(a.id)
     } catch {
       failed++
     }
+    done++
+    bulkProgress.value = { done, total: pending.length, failed }
   }
-  if (pending.length - failed > 0) MessagePlugin.success(`已归档 ${pending.length - failed} 条投稿`)
-  if (failed > 0) MessagePlugin.warning(`${failed} 条投稿归档失败，请重试`)
+  bulkProgress.value = null
+  if (bulkCancelled) {
+    MessagePlugin.warning(`已取消执行：本次已归档 ${done - failed} 条`)
+  } else {
+    if (done - failed > 0) MessagePlugin.success(`已归档 ${done - failed} 条投稿`)
+    if (failed > 0) MessagePlugin.warning(`${failed} 条投稿归档失败，请重试`)
+  }
   await load()
 }
 
@@ -283,8 +302,8 @@ onMounted(load)
     </PageHeader>
 
     <div class="page-filter-bar">
-      <t-input v-model="query.keyword" clearable placeholder="搜索标题/编号…" style="width: 220px" @enter="onSearch" />
-      <t-select v-model="query.status" label="状态" :options="statusOptions" style="width: 160px" @change="onSearch" />
+      <t-input class="ctl-w-xl" v-model="query.keyword" clearable placeholder="搜索标题/编号…" @enter="onSearch" />
+      <t-select class="ctl-w-md" v-model="query.status" label="状态" :options="statusOptions" @change="onSearch" />
       <t-button theme="primary" @click="onSearch">
         <template #icon><SearchIcon /></template>
         查询
@@ -292,110 +311,120 @@ onMounted(load)
       <t-button variant="outline" @click="onReset">重置</t-button>
     </div>
 
-    <t-table
-      row-key="id"
-      table-layout="fixed"
-      hover
-      resizable
-      :data="list"
-      :columns="visibleColumns"
-      :loading="loading"
-      :pagination="pagination"
-      empty="暂无投稿"
-      @page-change="onPageChange"
-      @row-click="onRowClick"
-    >
-      <template #title="{ row }">
-        <div class="cell-title">
-          <span class="title-text">{{ row.title }}</span>
-          <span class="title-sub">{{ row.id }}</span>
-        </div>
-      </template>
-      <template #author="{ row }">
-        <div class="cell-author">
-          <span>{{ row.authorName }}<t-tag v-if="row.authorId" class="id-tag" size="small" variant="light">{{ row.authorId }}</t-tag></span>
-          <span v-if="row.rejectedReason" class="reject-reason" :title="row.rejectedReason">已驳回：{{ row.rejectedReason }}</span>
-        </div>
-      </template>
-      <template #columns="{ row }">
-        <div class="col-tags">
-          <t-tag v-for="c in row.columnNames" :key="c" variant="light" size="small">{{ c }}</t-tag>
-        </div>
-      </template>
-      <template #status="{ row }">
-        <StatusTag entity="article" :value="row.status" :scheduled-at="row.scheduledAt" />
-      </template>
-      <template #op="{ row }">
-        <div class="op-cell" @click.stop>
-          <!-- 待审核：进入审核（可驳回/通过）；其余状态查看详情靠行点击 -->
-          <t-button v-if="row.status === 'pending'" variant="text" size="small" @click="openReview(row)">
-            审核
-          </t-button>
-          <!-- 待发布：编辑 / 定时发布 / 立即发布 / 归档 -->
-          <template v-if="row.status === 'pending_release'">
-            <t-button variant="text" size="small" @click="openEdit(row)">编辑</t-button>
-            <t-button variant="text" size="small" @click="openSchedule(row)">定时发布</t-button>
-            <t-popconfirm content="确认立即发布该文章？" @confirm="onPublishNow(row)">
-              <t-button variant="text" size="small" theme="primary" :loading="acting === row.id + ':publish'">
-                立即发布
-              </t-button>
-            </t-popconfirm>
-            <t-popconfirm content="确认归档该投稿？归档后可在归档管理中恢复" @confirm="onDelete(row)">
-              <t-button variant="text" size="small" theme="danger" :loading="acting === row.id + ':delete'">
-                <template #icon><DeleteIcon /></template>
-                归档
-              </t-button>
-            </t-popconfirm>
-          </template>
-
-          <!-- 定时发布中：取消定时发布 / 立即发布 -->
-          <template v-else-if="row.status === 'scheduled'">
-            <t-popconfirm content="确认取消定时发布？该文章将转为「待发布」" @confirm="onCancelSchedule(row)">
-              <t-button
-                variant="text"
-                size="small"
-                theme="warning"
-                :loading="acting === row.id + ':cancel-schedule'"
-              >
-                取消定时发布
-              </t-button>
-            </t-popconfirm>
-            <t-popconfirm content="确认立即发布该文章？" @confirm="onPublishNow(row)">
-              <t-button variant="text" size="small" theme="primary" :loading="acting === row.id + ':publish'">
-                立即发布
-              </t-button>
-            </t-popconfirm>
-          </template>
-
-          <!-- 已发布：评论治理 / 下架（转待发布） -->
-          <template v-else-if="row.status === 'published'">
-            <t-button variant="text" size="small" @click="commentsRef?.open(row)">评论</t-button>
-            <t-button variant="text" size="small" theme="danger" @click="onWithdraw(row)">
-              下架
+    <div class="page-card">
+      <t-table
+        row-key="id"
+        table-layout="fixed"
+        hover
+        resizable
+        :row-attributes="{ style: { cursor: 'pointer' } }"
+        :data="list"
+        :columns="visibleColumns"
+        :loading="loading"
+        :pagination="pagination"
+        @page-change="onPageChange"
+        @row-click="onRowClick"
+      >
+        <template #title="{ row }">
+          <div class="cell-title">
+            <span class="title-text">{{ row.title }}</span>
+            <span class="title-sub">{{ row.id }}</span>
+          </div>
+        </template>
+        <template #author="{ row }">
+          <div class="cell-author">
+            <span>{{ row.authorName || '—' }}<t-tag v-if="row.authorId" class="id-tag" size="small" variant="light">{{ row.authorId }}</t-tag></span>
+            <span v-if="row.rejectedReason" class="reject-reason" :title="row.rejectedReason">已驳回：{{ row.rejectedReason }}</span>
+          </div>
+        </template>
+        <template #createdAt="{ row }">{{ row.createdAt || '—' }}</template>
+        <template #columns="{ row }">
+          <div class="col-tags">
+            <template v-if="row.columnNames?.length">
+              <t-tag v-for="c in row.columnNames" :key="c" variant="light" size="small">{{ c }}</t-tag>
+            </template>
+            <span v-else class="muted-dash">—</span>
+          </div>
+        </template>
+        <template #status="{ row }">
+          <StatusTag entity="article" :value="row.status" :scheduled-at="row.scheduledAt" />
+        </template>
+        <template #op="{ row }">
+          <div class="op-cell" @click.stop>
+            <!-- 待审核：进入审核（可驳回/通过）；其余状态查看详情靠行点击 -->
+            <t-button v-if="row.status === 'pending'" variant="text" size="small" @click="openReview(row)">
+              审核
             </t-button>
-          </template>
+            <!-- 待发布：编辑 / 定时发布 / 立即发布 / 归档 -->
+            <template v-if="row.status === 'pending_release'">
+              <t-button variant="text" size="small" @click="openEdit(row)">编辑</t-button>
+              <t-button variant="text" size="small" @click="openSchedule(row)">定时发布</t-button>
+              <t-popconfirm content="确认立即发布该文章？" @confirm="onPublishNow(row)">
+                <t-button variant="text" size="small" theme="primary" :loading="acting === row.id + ':publish'">
+                  立即发布
+                </t-button>
+              </t-popconfirm>
+              <t-popconfirm content="确认归档该投稿？归档后可在归档管理中恢复" @confirm="onDelete(row)">
+                <t-button variant="text" size="small" theme="danger" :loading="acting === row.id + ':delete'">
+                  <template #icon><DeleteIcon /></template>
+                  归档
+                </t-button>
+              </t-popconfirm>
+            </template>
 
-          <!-- 已驳回：归档（移入归档管理，可恢复） -->
-          <template v-else-if="row.status === 'rejected'">
-            <t-popconfirm content="确认归档该投稿？归档后可在归档管理中恢复" @confirm="onDelete(row)">
-              <t-button variant="text" size="small" theme="danger" :loading="acting === row.id + ':delete'">
-                <template #icon><DeleteIcon /></template>
-                归档
+            <!-- 定时发布中：取消定时发布 / 立即发布 -->
+            <template v-else-if="row.status === 'scheduled'">
+              <t-popconfirm content="确认取消定时发布？该文章将转为「待发布」" @confirm="onCancelSchedule(row)">
+                <t-button
+                  variant="text"
+                  size="small"
+                  theme="warning"
+                  :loading="acting === row.id + ':cancel-schedule'"
+                >
+                  取消定时发布
+                </t-button>
+              </t-popconfirm>
+              <t-popconfirm content="确认立即发布该文章？" @confirm="onPublishNow(row)">
+                <t-button variant="text" size="small" theme="primary" :loading="acting === row.id + ':publish'">
+                  立即发布
+                </t-button>
+              </t-popconfirm>
+            </template>
+
+            <!-- 已发布：评论治理 / 下架（转待发布） -->
+            <template v-else-if="row.status === 'published'">
+              <t-button variant="text" size="small" @click="commentsRef?.open(row)">评论</t-button>
+              <t-button variant="text" size="small" theme="danger" @click="onWithdraw(row)">
+                下架
               </t-button>
-            </t-popconfirm>
-          </template>
-          <template v-else-if="row.status === 'closed'">
-            <t-button variant="text" size="small" theme="primary" :loading="acting === row.id + ':restore'" @click="onRestore(row)">恢复</t-button>
-            <t-popconfirm content="确认归档该已关闭投稿？" @confirm="onDelete(row)">
-              <t-button variant="text" size="small" theme="danger" :loading="acting === row.id + ':delete'">
-                <template #icon><DeleteIcon /></template>
-                归档
-              </t-button>
-            </t-popconfirm>
-          </template>
-        </div>
-      </template>
-    </t-table>
+            </template>
+
+            <!-- 已驳回：归档（移入归档管理，可恢复） -->
+            <template v-else-if="row.status === 'rejected'">
+              <t-popconfirm content="确认归档该投稿？归档后可在归档管理中恢复" @confirm="onDelete(row)">
+                <t-button variant="text" size="small" theme="danger" :loading="acting === row.id + ':delete'">
+                  <template #icon><DeleteIcon /></template>
+                  归档
+                </t-button>
+              </t-popconfirm>
+            </template>
+            <template v-else-if="row.status === 'closed'">
+              <t-button variant="text" size="small" theme="primary" :loading="acting === row.id + ':restore'" @click="onRestore(row)">恢复</t-button>
+              <t-popconfirm content="确认归档该已关闭投稿？" @confirm="onDelete(row)">
+                <t-button variant="text" size="small" theme="danger" :loading="acting === row.id + ':delete'">
+                  <template #icon><DeleteIcon /></template>
+                  归档
+                </t-button>
+              </t-popconfirm>
+            </template>
+          </div>
+        </template>
+
+        <template #empty>
+          <ListEmptyState :query="query" description="暂无投稿" @clear="onReset" />
+        </template>
+      </t-table>
+    </div>
 
     <ArticleReviewDialog v-model:visible="reviewVisible" :article="current" @success="load" />
     <ArticleReviewDialog v-model:visible="viewVisible" :article="current" readonly title="文章详情" />
@@ -410,16 +439,21 @@ onMounted(load)
       title="一键归档 · 投稿"
       :statuses="bulkStatuses"
       :loading="archivingAll"
+      :progress="bulkProgress"
       @confirm="onBulkConfirm"
+      @cancel="onBulkCancel"
     />
   </div>
 </template>
 
 <style scoped>
+/* 本页 .cell-title 是「标题 + 副行」的列容器而非标题文本本身，
+ * 需抵消全局 .cell-title 的字重，避免标题列整体变粗 */
 .cell-title {
   display: flex;
   flex-direction: column;
   min-width: 0;
+  font-weight: normal;
 }
 
 .title-text {
@@ -431,7 +465,7 @@ onMounted(load)
 
 .title-sub {
   font-size: 12px;
-  color: var(--td-text-color-placeholder);
+  color: var(--td-text-color-secondary);
 }
 
 .cell-author {
@@ -452,6 +486,10 @@ onMounted(load)
   display: flex;
   flex-wrap: wrap;
   gap: 4px;
+}
+
+.muted-dash {
+  color: var(--td-text-color-placeholder);
 }
 
 .op-cell {

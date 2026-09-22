@@ -28,6 +28,8 @@ const emit = defineEmits<{
 const submitting = ref(false)
 const formRef = ref()
 const areas = ref<WorkstationArea[]>([])
+/* 区域列表为异步拉取：加载中 areas 仍为空，需与"确实没有区域"区分 */
+const areasLoading = ref(false)
 const workstations = ref<Workstation[]>([])
 /* null = 新增模式；否则为编辑中的区域 ID */
 const editingId = ref<string | null>(null)
@@ -57,12 +59,15 @@ watch(
 )
 
 async function load() {
+  areasLoading.value = true
   try {
     const [areaList, wsList] = await Promise.all([fetchWorkstationAreas(), fetchWorkstations()])
     areas.value = areaList
     workstations.value = wsList
   } catch {
     MessagePlugin.error('区域数据加载失败')
+  } finally {
+    areasLoading.value = false
   }
 }
 
@@ -156,7 +161,7 @@ function onClose() {
           <t-input v-model="form.name" placeholder="如 D 区 · 创客办公位…" />
         </t-form-item>
         <t-form-item label="区域主类型" name="type">
-          <t-select v-model="form.type" :options="typeOptions" />
+          <t-select clearable v-model="form.type" :options="typeOptions" />
         </t-form-item>
       </div>
       <t-form-item label="区域说明" name="description">
@@ -197,7 +202,7 @@ function onClose() {
           </template>
         </t-list-item>
       </t-list>
-      <div v-if="areas.length === 0" class="area-empty">
+      <div v-if="!areasLoading && areas.length === 0" class="area-empty">
         暂无区域，请先在上方新增区域，再通过「新增办公位」新增办公位。
       </div>
     </div>
@@ -205,11 +210,6 @@ function onClose() {
 </template>
 
 <style scoped>
-.dialog-footer {
-  display: flex;
-  justify-content: flex-end;
-  gap: 8px;
-}
 
 .form-head {
   display: flex;
@@ -218,9 +218,10 @@ function onClose() {
   margin-bottom: 4px;
 }
 
+/* 区块标题须强于其下条目（.area-name 为 14px/500），否则层级倒挂 */
 .form-title {
   font-size: 14px;
-  font-weight: 400;
+  font-weight: 600;
   color: var(--td-text-color-primary);
 }
 
@@ -238,11 +239,12 @@ function onClose() {
 
 .area-list-title {
   margin-bottom: 8px;
-  font-size: 13px;
+  font-size: 14px;
   font-weight: 400;
   color: var(--td-text-color-primary);
 }
 
+/* 编辑态高亮：.is-editing 为自有状态类，叠加在 t-list-item 根节点上；须 :deep 穿透子组件根 */
 .area-list :deep(.t-list-item.is-editing) {
   background: var(--td-brand-color-1);
 }

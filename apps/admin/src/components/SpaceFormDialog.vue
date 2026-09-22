@@ -168,7 +168,7 @@ function onClose() {
           <t-input clearable v-model="form.location" placeholder="如 岛屿中心 2F…" />
         </t-form-item>
       </div>
-      <div class="form-row">
+      <div class="form-row form-row-single">
         <t-form-item label="全天开放" name="allDay">
           <div class="all-day-row">
             <t-switch v-model="form.allDay" />
@@ -184,14 +184,17 @@ function onClose() {
           <t-time-picker v-model="form.closeTime" format="HH:mm" clearable style="width: 100%" />
         </t-form-item>
       </div>
-      <div class="form-row">
+      <!-- 需预约 / 需审核各自独占整行：开关互斥隐藏时栅格不塌陷，避免右半列空白与字段跳动 -->
+      <div class="form-row form-row-single">
         <t-form-item label="需预约" name="needReservation">
           <div class="all-day-row">
             <t-switch v-model="form.needReservation" />
             <span class="all-day-tip">开启后成员需先预约方可使用该空间</span>
           </div>
         </t-form-item>
-        <t-form-item v-if="form.needReservation" label="需审核" name="needApproval">
+      </div>
+      <div v-if="form.needReservation" class="form-row form-row-single">
+        <t-form-item label="需审核" name="needApproval">
           <div class="all-day-row">
             <t-switch v-model="form.needApproval" />
             <span class="all-day-tip">开启后预约需管理员审核通过方可使用</span>
@@ -223,20 +226,19 @@ function onClose() {
   gap: 0 16px;
 }
 
+/* 单字段整行：不与相邻字段共用两列栅格（开关/开关组互斥隐藏时不留空半列） */
+.form-row-single {
+  grid-template-columns: 1fr;
+}
+
 .all-day-row {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 12px;
 }
 
 .all-day-tip {
   font-size: 12px;
   color: var(--td-text-color-secondary);
-}
-
-.dialog-footer {
-  display: flex;
-  justify-content: flex-end;
-  gap: 8px;
 }
 </style>

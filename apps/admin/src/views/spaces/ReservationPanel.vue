@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, onMounted, reactive, ref } from 'vue'
 import ListErrorState from '@/components/ListErrorState.vue'
+import ListEmptyState from '@/components/ListEmptyState.vue'
 import { useListQueryState } from '@/utils/listQuery'
 import { MessagePlugin } from 'tdesign-vue-next'
 import PageHeader from '@/components/PageHeader.vue'
@@ -120,6 +121,15 @@ function onDateChange() {
 function onPageChange(p: { current: number; pageSize: number }) {
   query.page = p.current
   query.pageSize = p.pageSize
+  load()
+}
+
+/* 空态「清除筛选」：重置 Tab/空间/日期后重新加载 */
+function onReset() {
+  query.status = ''
+  query.spaceId = ''
+  query.date = ''
+  query.page = 1
   load()
 }
 
@@ -262,41 +272,46 @@ onMounted(() => {
           storage-key="reservations"
           :columns="columns.map((c) => ({ key: c.colKey, title: c.title }))"
         />
+        <t-button variant="outline" :disabled="archivingAll" @click="onBulkArchive">
+          一键归档
+        </t-button>
       </template>
     </PageHeader>
 
-    <div class="page-card">
-      <div class="tabs-row">
-        <t-tabs :value="query.status" class="status-tabs" @change="onStatusChange">
-          <t-tab-panel value="" label="全部" />
-          <t-tab-panel value="pending" label="待审核" />
-          <t-tab-panel value="approved" label="待使用" />
-          <t-tab-panel value="using" label="使用中" />
-          <t-tab-panel value="ended" label="已结束" />
-          <t-tab-panel value="rejected" label="已驳回" />
-          <t-tab-panel value="cancelled" label="已取消" />
-        </t-tabs>
-        <t-select
-          v-model="query.spaceId"
-          label="空间"
-          :options="spaceOptions"
-          clearable
-          style="width: 170px; margin-left: 24px"
-          @change="onSpaceChange"
-        />
-        <t-date-picker
-          v-model="query.date"
-          valueType="YYYY-MM-DD"
-          clearable
-          placeholder="按预约日期筛选…"
-          style="width: 180px; margin-left: 24px"
-          @change="onDateChange"
-        />
-        <t-button class="bulk-archive-btn" variant="outline" :disabled="archivingAll" @click="onBulkArchive">
-          一键归档
-        </t-button>
-      </div>
+    <div class="tabs-row">
+      <t-tabs :value="query.status" class="status-tabs" @change="onStatusChange">
+        <t-tab-panel value="" label="全部" />
+        <t-tab-panel value="pending" label="待审核" />
+        <t-tab-panel value="approved" label="待使用" />
+        <t-tab-panel value="using" label="使用中" />
+        <t-tab-panel value="ended" label="已结束" />
+        <t-tab-panel value="rejected" label="已驳回" />
+        <t-tab-panel value="cancelled" label="已取消" />
+      </t-tabs>
+    </div>
 
+    <!-- 筛选条与内容卡片分离，与租赁管理/投稿内容等列表页同结构 -->
+    <div class="page-filter-bar">
+      <t-select
+        v-model="query.spaceId"
+        label="空间"
+        :options="spaceOptions"
+        clearable
+        class="ctl-w-md"
+        @change="onSpaceChange"
+      />
+      <t-date-picker
+        v-model="query.date"
+        label="日期"
+        valueType="YYYY-MM-DD"
+        clearable
+        placeholder="按预约日期筛选…"
+        class="ctl-w-lg"
+        @change="onDateChange"
+      />
+    </div>
+
+    <div class="page-card">
       <t-table
         row-key="id"
         table-layout="fixed"
@@ -306,7 +321,7 @@ onMounted(() => {
         :columns="visibleColumns"
         :loading="loading"
         :pagination="pagination"
-        empty="暂无预约"
+        :row-attributes="{ style: { cursor: 'pointer' } }"
         @page-change="onPageChange"
         @row-click="({ row }: { row: SpaceReservation }) => openDetail(row)"
       >
@@ -314,7 +329,7 @@ onMounted(() => {
           <div class="user-cell">
             <span class="user-name">{{ row.userName }}</span>
             <t-tag class="id-tag-block" size="small" variant="light">{{ row.userId }}</t-tag>
-            <span class="user-phone">{{ row.phone }}</span>
+            <span class="user-phone">{{ row.phone || '—' }}</span>
           </div>
         </template>
         <template #slot="{ row }">
@@ -339,7 +354,7 @@ onMounted(() => {
               content="确认取消该预约？"
               @confirm="onCancel(row)"
             >
-              <t-button variant="text" size="small" :loading="acting === row.id">取消</t-button>
+              <t-button variant="text" size="small" theme="danger" :loading="acting === row.id">取消</t-button>
             </t-popconfirm>
             <t-popconfirm
               v-if="['ended', 'rejected', 'cancelled'].includes(deriveReservationStatus(row))"
@@ -351,6 +366,10 @@ onMounted(() => {
               </t-button>
             </t-popconfirm>
           </div>
+        </template>
+
+        <template #empty>
+          <ListEmptyState :query="query" :ignore="['status']" description="暂无预约" @clear="onReset" />
         </template>
       </t-table>
     </div>
@@ -398,7 +417,7 @@ onMounted(() => {
     <t-drawer
       v-model:visible="dialogVisible"
       :header="dialogAction === 'approve' ? '通过预约' : '驳回预约'"
-      size="520px"
+      size="560px"
       :footer="false"
       :close-btn="true"
       :close-on-esc-keydown="true"
@@ -438,11 +457,9 @@ onMounted(() => {
 .tabs-row {
   display: flex;
   align-items: center;
+  flex-wrap: wrap;
+  gap: 8px 12px;
   margin-bottom: 16px;
-}
-
-.bulk-archive-btn {
-  margin-left: auto;
 }
 
 .user-cell {
@@ -462,13 +479,6 @@ onMounted(() => {
   color: var(--td-text-color-secondary);
 }
 
-.op-cell {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-  flex-wrap: nowrap;
-}
-
 .drawer-head {
   display: flex;
   align-items: center;
@@ -484,7 +494,7 @@ onMounted(() => {
 
 .drawer-summary {
   margin: 16px 0 0;
-  font-size: 13px;
+  font-size: 14px;
   line-height: 22px;
   color: var(--td-text-color-secondary);
 }
@@ -525,7 +535,7 @@ onMounted(() => {
 }
 
 .record-text {
-  font-size: 13px;
+  font-size: 14px;
   color: var(--td-text-color-primary);
 }
 

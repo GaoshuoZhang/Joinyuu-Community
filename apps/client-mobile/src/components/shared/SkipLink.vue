@@ -5,8 +5,8 @@
 <style scoped>
 .skip-link {
   position: fixed;
-  left: 8px;
-  top: -48px;
+  left: var(--app-space-3);
+  top: calc(-1 * (var(--app-space-12) + var(--app-space-8)));
   z-index: 1000;
   padding: var(--app-space-5) var(--app-space-7);
   border-radius: var(--td-radius-default);
@@ -17,7 +17,7 @@
 }
 
 .skip-link:focus {
-  top: calc(8px + env(safe-area-inset-top));
+  top: calc(var(--app-space-3) + env(safe-area-inset-top));
 }
 
 :global(#main:focus),

@@ -80,6 +80,8 @@ export interface UserProfile {
   points: number
   status: 'active' | 'frozen'
   registeredAt: string
+  /** 是否已永久隐藏新手任务（服务端按账号持久化，跨浏览器一致） */
+  activationDismissed?: boolean
   identities: UserIdentity[]
 }
 
@@ -212,6 +214,8 @@ export interface HomeAnnouncement {
   content: string
   at: string
   pinned?: boolean
+  /** 站内跳转路径（后台公告配置的「跳转链接」，未配置则不下发） */
+  link?: string
 }
 
 export interface HomeBanner {
@@ -784,6 +788,8 @@ export interface ReservationCreatePayload {
   start: string
   end: string
   topic?: string
+  /** 参与人数（1 ~ Space.capacity；缺省按 1 人） */
+  attendees?: number
   /** 以哪个身份预约（个人用户/社区个体/社区企业/合作企业） */
   asIdentity?: IdentityType
   /** 代企业预约时的企业 id（成员持 space_reserve 权限时；负责人不传） */
@@ -894,6 +900,8 @@ export interface EnterpriseShowcase {
 export interface CardVisibility {
   age: boolean
   politicalStatus: boolean
+  /** 是否公开名片：关闭后不出现在社区人才库、公开名片页不可见（缺省视为公开） */
+  isPublic?: boolean
 }
 
 export interface MyIndividualCard {

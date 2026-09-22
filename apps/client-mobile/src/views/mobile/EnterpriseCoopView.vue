@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
 import { useRouter } from 'vue-router'
-import { Button, Icon, Radio, Toast } from 'tdesign-mobile-vue'
+import { Button, Icon, Toast } from 'tdesign-mobile-vue'
 
 /* 企业合作 hub（/intros/enterprise）：两种合作方式对比与选择，CTA 进入对应申请表单。
  * 企业入驻 → 需办公空间，对应后台「社区企业」；合作伙伴 → 无需入驻，对应「合作企业」。 */
@@ -60,33 +60,40 @@ function onConfirm() {
       <p class="subtitle">两种合作方式，选择适合你的路径</p>
     </header>
 
-    <article
-      v-for="opt in options"
-      :key="opt.key"
-      class="m-card option"
-      :class="{ active: selected === opt.key }"
-      v-pressable
-      @click="selected = opt.key"
-    >
-      <div class="opt-head">
-        <span class="opt-icon"><Icon aria-hidden="true" :name="opt.icon" size="20px" /></span>
-        <div class="opt-title-wrap">
-          <h2 class="opt-title">{{ opt.title }}</h2>
-          <p class="opt-tagline">{{ opt.tagline }}</p>
+    <!-- v49：整卡可选（参考发布需求页）——卡片主体为原生 button，指示器用非交互 Icon，
+         「了解详细流程」链接作为 button 的兄弟节点，避免可交互元素嵌套；选中态切换背景与描边 -->
+    <article v-for="opt in options" :key="opt.key" class="m-card option" :class="{ active: selected === opt.key }">
+      <button
+        type="button"
+        class="option-select"
+        :aria-pressed="selected === opt.key"
+        :aria-label="`选择${opt.title}`"
+        @click="selected = opt.key"
+      >
+        <div class="opt-head">
+          <span class="opt-icon"><Icon aria-hidden="true" :name="opt.icon" size="20px" /></span>
+          <div class="opt-title-wrap">
+            <h2 class="opt-title">{{ opt.title }}</h2>
+            <p class="opt-tagline">{{ opt.tagline }}</p>
+          </div>
+          <Icon
+            aria-hidden="true"
+            class="opt-mark"
+            :name="selected === opt.key ? 'check-circle-filled' : 'circle'"
+            size="24px"
+          />
         </div>
-        <Radio
-          class="opt-radio"
-          :checked="selected === opt.key"
-          :aria-label="`选择${opt.title}`"
-          @click.stop
-          @change="selected = opt.key"
-        />
-      </div>
-      <ul class="points">
-        <li v-for="(p, i) in opt.points" :key="i">{{ p }}</li>
-      </ul>
-      <router-link class="intro-link" :to="opt.intro" @click.stop>了解详细流程 <Icon aria-hidden="true" name="chevron-right" size="14px" /></router-link>
+        <ul class="points">
+          <li v-for="(p, i) in opt.points" :key="i">{{ p }}</li>
+        </ul>
+      </button>
+      <router-link class="intro-link" :to="opt.intro">了解详细流程 <Icon aria-hidden="true" name="chevron-right" size="14px" /></router-link>
     </article>
+
+    <Button theme="primary" variant="text" block @click="router.push('/me/applications')">
+      查看申请记录
+      <template #suffix><Icon aria-hidden="true" name="chevron-right" size="14px" /></template>
+    </Button>
 
     <Teleport to="body">
       <div class="mobile-fixed-action-bar coop-actions">
@@ -106,7 +113,8 @@ function onConfirm() {
 }
 
 .coop-hub.has-fixed-actions {
-  padding-bottom: calc(112px + env(safe-area-inset-bottom));
+  /* v46：底部固定操作栏净空统一走共享变量，避免页面写死 112px */
+  padding-bottom: var(--app-action-bar-clearance);
 }
 
 .coop-actions {
@@ -131,14 +139,33 @@ function onConfirm() {
 }
 
 .option {
-  cursor: pointer;
+  /* 内距下沉到可点按钮，保证卡片内任意位置点击都能选中 */
+  padding:0;
   border: 1px solid var(--td-component-border);
-  transition: border-color 150ms ease, box-shadow 150ms ease;
+  overflow: hidden;
+  transition: border-color 150ms ease, background 150ms ease;
 }
 
 .option.active {
   border-color: var(--td-brand-color);
-  box-shadow: 0 0 0 2px var(--td-brand-color-light);
+  background: var(--td-brand-color-1);
+}
+
+.option-select {
+  display: block;
+  width: 100%;
+  padding: var(--app-space-8);
+  border: 0;
+  color: inherit;
+  background: transparent;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.option-select:focus-visible {
+  outline: 2px solid var(--td-brand-color);
+  outline-offset: -2px;
 }
 
 .opt-head {
@@ -148,10 +175,12 @@ function onConfirm() {
 }
 
 .opt-icon {
+  /* 图标底板尺寸：集中为局部变量（36px 介于间距 token 32/40 之间，直接写数字会与刻度混淆） */
+  --opt-icon-size: 36px;
   display: grid;
   place-items: center;
-  width: 36px;
-  height: 36px;
+  width: var(--opt-icon-size);
+  height: var(--opt-icon-size);
   flex-shrink: 0;
   border-radius: var(--td-radius-circle);
   color: var(--td-brand-color);
@@ -174,10 +203,15 @@ function onConfirm() {
   color: var(--td-text-color-secondary);
 }
 
-.opt-radio {
-  display: inline-flex;
-  width: auto;
+/* 选中指示器（非交互元素，选择行为由整卡按钮承担） */
+.opt-mark {
   flex-shrink: 0;
+  color: var(--td-text-color-placeholder);
+  transition: color 150ms ease;
+}
+
+.option.active .opt-mark {
+  color: var(--td-brand-color);
 }
 
 .points {
@@ -195,7 +229,7 @@ function onConfirm() {
   display: inline-flex;
   align-items: center;
   gap:var(--app-space-1);
-  margin-top:var(--app-space-4);
+  margin:0 var(--app-space-8) var(--app-space-6);
   min-height: 44px;
   font-size: var(--app-font-caption);
   color: var(--td-brand-color);

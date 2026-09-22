@@ -40,11 +40,34 @@
   /* 品牌渐变（客户端专属：后台登录页为内联渐变，客户端横幅/入口卡复用） */
   --client-brand-gradient: linear-gradient(135deg, var(--td-brand-color) 0%, var(--td-brand-color-5) 100%);
 
+  /* 图片上的文字遮罩（轮播等）：底图明暗不可控，用固定深色渐变保证白字对比度；
+   * 图片本身不随主题变化，故明暗模式共用同一套。 */
+  --app-image-scrim: linear-gradient(180deg, rgba(0, 0, 0, 0.65) 0%, rgba(0, 0, 0, 0.3) 100%);
+
   /* 顶栏滚动渐显底色（AppShell 按透明度合成，需随明暗主题切换） */
   --app-navbar-bg-rgb: 255, 255, 255;
 
   /* 底部固定操作栏投影（随主题加深） */
   --app-action-bar-shadow: 0 -2px 12px rgba(0, 0, 0, 0.06);
+
+  /* 固定底操作栏在页面内容底部的净空：栏内「按钮 44px + 说明行」+ 栏内上下内距 + 安全区。
+   * 页面对应引用，避免在页面里写死 112/170 这类与栏高强耦合的数字。
+   * -lg 用于说明文案可能折行成两行的栏（活动报名等）。 */
+  --app-action-bar-clearance: calc(112px + env(safe-area-inset-bottom));
+  --app-action-bar-clearance-lg: calc(170px + env(safe-area-inset-bottom));
+
+  /* 列表页浮动发布按钮（Fab）：直径 56px，浮在底部导航栏之上（Tab 页专用） */
+  --app-fab-size: 56px;
+  /* TDesign Mobile TabBar 实际占位：item 高度 --td-tab-bar-height 之外，每个 item 上下各
+   * 8px margin（库内 .t-tab-bar__item { margin: 8px 0 }），故真实高度 = 56 + 16 = 72px。
+   * 直接用 --app-mobile-tabbar-h 会低估 16px，导致 FAB 与导航栏贴死。 */
+  --app-tabbar-occupied-h: calc(var(--app-mobile-tabbar-h) + 16px);
+  --app-fab-offset: calc(var(--app-tabbar-occupied-h) + var(--app-space-8));
+  --app-fab-clearance: calc(var(--app-fab-size) + var(--app-space-9));
+
+  /* 首页入口宫格的「1 个单位」= 屏幕宽 4 单位中的 1 份：内容区宽扣掉 4 列布局的 3 个 gutter
+   * 后除以 4。宫格卡片高度统一按此约束：2 单位宽的卡高 1 单位、1 单位宽的卡为 1 单位方形。 */
+  --app-entry-unit: calc((100vw - var(--app-space-8) * 2 - var(--app-space-3) * 3) / 4);
 }
 
 /* ---------- 暗色模式 ---------- */
@@ -105,6 +128,23 @@ span[role='button']:not(.t-tag) {
   border-radius: var(--td-radius-large);
 }
 
+/* ---------- 可选筛选 chip（CheckTag）命中区 ---------- */
+/* 官方尺寸档 small/medium/large 实测仅约 22–26px 高（--td-tag-*-padding 为 1–2px），
+ * 低于本项目「交互目标 ≥44px」基线；官方无 height 类属性可达成，故只对可点击态抬升高度，
+ * 纯展示的状态 Tag 不受影响。三连类名提高特异性：库样式在 AppShell 中懒加载，
+ * 与官方单档位规则（.t-tag.t-tag--medium）同权重时会因加载顺序失效。
+ * 内部类名 t-tag--checkable（main.ts 亦用它识别可交互标签）；升级 TDesign 时需复核。
+ * flex:none 必须保留：筛选行（如 .chips）为不换行的横向滚动容器，chip 一旦可压缩，
+ * 会被压到 min-width 并让标签文字变成省略号。 */
+.t-tag.t-tag--checkable.t-tag--checkable {
+  flex: none;
+  min-height: 44px;
+  min-width: 44px;
+  justify-content: center;
+  padding-top: 0;
+  padding-bottom: 0;
+}
+
 /* ---------- 选项卡页（TDesign Tabs） ---------- */
 /* 标题条白底由页面上的 --td-tab-nav-background 控制（作用于 .t-tabs 根与 __wrapper）；
  * 内容区回填页面灰底，保持「灰底 + 白卡片」层次；手势监听绑定在 .t-tabs__content 上，
@@ -115,7 +155,10 @@ span[role='button']:not(.t-tag) {
 }
 
 @supports (height: 100dvh) {
-.top-tabs {
+/* 双类名提高特异性：库内 .t-tabs 与本类同为 (0,1,0)，且库样式后注入，单类名的
+ * background: transparent 会被 .t-tabs 的白色底覆盖——白色根元素正好补在 wrapper
+ * 底部圆角的缺口处，使选项卡下沿看似直角。 */
+.top-tabs.top-tabs {
   border-radius: var(--td-radius-large);
   overflow: hidden;
   /* 白底由 .t-tabs__wrapper 承担（可独立圆角），根元素透明避免圆角缺口露白 */
@@ -124,6 +167,9 @@ span[role='button']:not(.t-tag) {
 
 .top-tabs .t-tabs__wrapper {
   border-radius: var(--td-radius-large);
+  /* 库内 .t-tabs__nav::after 是全宽直角分隔线，不被圆角容器裁切时会盖住底部两角，
+   * 使选项卡下沿看似直角；由 wrapper 裁切，四角与顶部圆角保持一致。 */
+  overflow: hidden;
 }
 
 .top-tabs .t-tabs__content {
@@ -332,8 +378,10 @@ a {
   padding: 16px;
 }
 
-/* 长表单主操作：二级页不显示 TabBar，按钮吸附在拇指区并避让系统安全区。 */
-.mobile-sticky-action {
+/* 长表单主操作：二级页不显示 TabBar，按钮吸附在拇指区并避让系统安全区。
+ * 双类名提高特异性：库内 .t-button 同时声明 position:relative 且随 AppShell 懒加载后写入，
+ * 单类名会被覆盖导致吸底失效。 */
+.mobile-sticky-action.mobile-sticky-action {
   position: sticky;
   bottom: calc(var(--app-space-4) + env(safe-area-inset-bottom));
   z-index: 20;

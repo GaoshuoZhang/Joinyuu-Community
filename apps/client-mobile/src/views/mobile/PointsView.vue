@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
-import { Button, Search, Toast } from 'tdesign-mobile-vue'
+import { Button, List, Search, Toast } from 'tdesign-mobile-vue'
 import { useAuthStore } from '@/stores/auth'
 import { fetchPointsRecords } from '@/api/me'
 import EmptyBlock from '@/components/shared/EmptyBlock.vue'
@@ -60,9 +60,14 @@ onBeforeUnmount(() => window.clearTimeout(timer))
 
 const firstLoading = computed(() => loading.value && items.value.length === 0)
 const hasMore = computed(() => items.value.length < total.value)
+const footerState = computed(() => {
+  if (!items.value.length || error.value) return ''
+  if (loading.value) return 'loading'
+  return hasMore.value ? 'load-more' : ''
+})
 
 function loadMore() {
-  if (loading.value) return
+  if (!hasMore.value || loading.value) return
   const prev = page.value
   page.value = prev + 1
   void load().then(() => {
@@ -73,6 +78,10 @@ function loadMore() {
       error.value = ''
     }
   })
+}
+
+function onListScroll(bottomDistance: number) {
+  if (bottomDistance < 60) loadMore()
 }
 </script>
 
@@ -100,20 +109,19 @@ function loadMore() {
     />
     <template v-else>
       <p class="ledger-count">共 {{ formatZhNumber(total) }} 条流水</p>
-      <div class="m-card ledger stagger">
+      <List class="m-card ledger stagger" :async-loading="footerState" @load-more="loadMore" @scroll="onListScroll">
         <div v-for="r in items" :key="r.id" class="row">
           <div class="main">
             <p class="reason">{{ r.reason }}</p>
             <p class="meta">{{ pointsSourceLabel(r.source) }} · {{ formatLocalDateTime(r.at) }}</p>
           </div>
           <div class="side">
-            <span class="delta" :class="{ neg: r.delta < 0 }">{{ r.delta >= 0 ? '+' : '' }}{{ formatZhNumber(r.delta) }}</span>
-            <span class="balance">余额 {{ formatZhNumber(r.balance) }}</span>
+            <span class="delta tabular-nums" :class="{ neg: r.delta < 0 }">{{ r.delta >= 0 ? '+' : '' }}{{ formatZhNumber(r.delta) }}</span>
+            <span class="balance tabular-nums">余额 {{ formatZhNumber(r.balance) }}</span>
           </div>
         </div>
-      </div>
-      <Button v-if="hasMore" variant="outline" block class="more-btn" :loading="loading" @click="loadMore">加载更多</Button>
-      <p v-else class="ledger-end">已加载全部</p>
+      </List>
+      <p v-if="!hasMore" class="ledger-end">已加载全部</p>
     </template>
   </div>
 </template>
@@ -133,10 +141,6 @@ function loadMore() {
   margin:0 0 var(--app-space-4);
   font-size: var(--app-font-caption);
   color: var(--td-text-color-placeholder);
-}
-
-.more-btn {
-  margin-top:var(--app-space-6);
 }
 
 .ledger-end {
@@ -186,11 +190,11 @@ function loadMore() {
   justify-content: space-between;
   gap:var(--app-space-5);
   padding:var(--app-space-6) 0;
-  border-bottom: 1px solid var(--td-component-border);
 }
 
-.row:last-child {
-  border-bottom: none;
+/* List 组件会在行尾常驻一个 loading wrapper 节点，:last-child 判定失效，改用相邻行画上边框（视觉等价） */
+.row + .row {
+  border-top: 1px solid var(--td-component-border);
 }
 
 .reason {

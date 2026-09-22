@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
-import { Button, Icon, Radio, Tag, Toast } from 'tdesign-mobile-vue'
+import { Button, Icon, Tag, Toast } from 'tdesign-mobile-vue'
 import { useConfigStore } from '@/stores/config'
 import EmptyBlock from '@/components/shared/EmptyBlock.vue'
 import { DEMAND_KINDS } from '@/constants/demand'
@@ -49,22 +49,24 @@ function goForm() {
         <p class="desc">先选择需求类型，再填写对应表单；提交后进入审核，通过后公开展示</p>
       </header>
 
+      <!-- v48：整卡可点（v-pressable 已补 role=button / 键盘激活），指示器改用非交互 Icon，
+           不再在可点容器内嵌原生 Radio，避免嵌套可交互元素；选中态通过 aria-pressed 表达 -->
       <section
         v-for="item in DEMAND_KINDS"
         :key="item.kind"
         class="kind-card m-card"
         :class="{ active: selected === item.kind }"
+        :aria-pressed="selected === item.kind"
         v-pressable
         @click="selected = item.kind"
       >
         <div class="card-head">
           <h2 class="kind-title">{{ item.title }}</h2>
-          <Radio
-            class="kind-radio"
-            :checked="selected === item.kind"
-            :aria-label="`选择${item.title}`"
-            @click.stop
-            @change="selected = item.kind"
+          <Icon
+            aria-hidden="true"
+            class="kind-mark"
+            :name="selected === item.kind ? 'check-circle-filled' : 'circle'"
+            size="24px"
           />
         </div>
         <p class="tagline">{{ item.tagline }}</p>
@@ -145,10 +147,15 @@ function goForm() {
   font-size: var(--app-font-subtitle);
 }
 
-.kind-radio {
-  display: inline-flex;
-  width: auto;
+/* v48：选中指示器（非交互元素，选择行为由整卡点击承担） */
+.kind-mark {
   flex-shrink: 0;
+  color: var(--td-text-color-placeholder);
+  transition: color 150ms ease;
+}
+
+.kind-card.active .kind-mark {
+  color: var(--td-brand-color);
 }
 
 .tagline {

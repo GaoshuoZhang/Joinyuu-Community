@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
-import { useRoute } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
 import { Avatar, Button, Icon, Tag, Toast } from 'tdesign-mobile-vue'
 import { useAsyncList } from '@/composables/useAsyncList'
 import { fetchTalentCard } from '@/api/community'
@@ -13,6 +13,7 @@ import ListSkeleton from '@/components/ListSkeleton.vue'
 
 /* 公开人才名片（简历式）：人才库点入，展示个人资料头像与全部公开字段。 */
 const route = useRoute()
+const router = useRouter()
 const auth = useAuthStore()
 const uid = String(route.params.uid)
 const { data, loading, error, run } = useAsyncList(() => fetchTalentCard(uid))
@@ -167,6 +168,13 @@ async function onShare() {
         </a>
       </section>
     </template>
+    <!-- v46：名片不存在时（数据为空且无错误）补兜底出口，避免二级页整页空白成为死胡同 -->
+    <EmptyBlock
+      v-else
+      text="名片不存在或已下架"
+      action-text="浏览人才库"
+      @action="router.push('/community?tab=talent')"
+    />
   </div>
 </template>
 

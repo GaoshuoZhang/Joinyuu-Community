@@ -2,15 +2,16 @@
 import { computed, onMounted, reactive, ref } from 'vue'
 import { useListQueryState } from '@/utils/listQuery'
 import { useRouter } from 'vue-router'
-import { MessagePlugin } from 'tdesign-vue-next'
-import { SearchIcon, DownloadIcon, AddIcon, BrowseIcon, BrowseOffIcon } from 'tdesign-icons-vue-next'
+import { SearchIcon, AddIcon, BrowseIcon, BrowseOffIcon } from 'tdesign-icons-vue-next'
 import PageHeader from '@/components/PageHeader.vue'
+import ExportButton from '@/components/ExportButton.vue'
+import ListEmptyState from '@/components/ListEmptyState.vue'
 import StatusTag from '@/components/StatusTag.vue'
 import IdentityTags from '@/components/IdentityTags.vue'
 import ColumnController from '@/components/ColumnController.vue'
 import { userCategoryOptions, identityTypeMap } from '@/constants/identity'
 import { fetchUsers } from '@/api/users'
-import { exportCsv, statusLabel } from '@/utils/exportCsv'
+import { statusLabel } from '@/utils/exportCsv'
 import ListErrorState from '@/components/ListErrorState.vue'
 import UserFormDialog from '@/components/UserFormDialog.vue'
 import type { User } from '@/types'
@@ -27,6 +28,15 @@ function maskPhone(value?: string | null): string {
   if (!value) return '—'
   if (value.length < 8) return `${value.slice(0, 2)}****${value.slice(-2)}`
   return `${value.slice(0, 3)}****${value.slice(7)}`
+}
+
+/* 邮箱脱敏口径与用户详情页一致（保留本地部分前 2 位与域名），同一份数据的列表/详情/导出口径统一 */
+function maskEmail(value?: string | null): string {
+  if (!value) return '—'
+  const at = value.indexOf('@')
+  if (at <= 0) return `${value.slice(0, 2)}***`
+  const local = value.slice(0, at)
+  return `${local.slice(0, Math.min(2, local.length))}***${value.slice(at)}`
 }
 
 const query = reactive({
@@ -54,13 +64,14 @@ const realStatusOptions = [
 const columns = [
   { colKey: 'user', title: '用户', cell: 'user', width: 190 , ellipsis: true},
   { colKey: 'username', title: '用户名', cell: 'username', width: 150 , ellipsis: true},
-  { colKey: 'phone', title: 'phone-title', cell: 'phone', width: 145 , ellipsis: true},
+  /* 联系方式为手机号 + 邮箱双行，宽度需容纳完整邮箱（约 12px 字号 24 字符） */
+  { colKey: 'phone', title: 'phone-title', cell: 'phone', width: 200, ellipsis: true},
   { colKey: 'identities', title: '关联身份', cell: 'identities', width: 240 , ellipsis: true},
   { colKey: 'realStatus', title: '实名状态', cell: 'realStatus', width: 95 , ellipsis: true},
   { colKey: 'points', title: '积分', width: 80 , ellipsis: true},
   { colKey: 'status', title: '状态', cell: 'status', width: 95 , ellipsis: true},
   { colKey: 'registeredAt', title: '注册时间', width: 110 , ellipsis: true},
-  { colKey: 'op', title: '操作', cell: 'op', width: 140 },
+  { colKey: 'op', title: '操作', cell: 'op', width: 90 },
 ]
 
 /* 列配置：本地持久化显隐/顺序 */
@@ -112,27 +123,37 @@ function onReset() {
   load()
 }
 
-/* 导出当前页用户列表为 CSV（沿用列表脱敏状态：未点「显示联系电话」时导出遮罩值） */
-function onExport() {
-  exportCsv(
-    '用户列表',
-    ['编号', '用户名', '昵称', '联系电话', '关联身份', '实名状态', '积分', '状态', '注册时间'],
-    list.value.map((u) => [
-      u.uid,
-      u.username,
-      `${u.nickname} [${u.uid}]`,
-      phoneVisible.value ? u.phone : maskPhone(u.phone),
-      u.identities
-        .filter((i) => i.type !== 'individual')
-        .map((i) => identityTypeMap[i.type])
-        .join('、'),
-      u.realName && u.citizenId ? '已实名' : '未实名',
-      u.points,
-      statusLabel('user', u.status),
-      u.registeredAt,
-    ]),
-  )
-  MessagePlugin.success(`已导出当前页 ${list.value.length} 条数据`)
+/* 导出配置：与列表「联系方式」同口径——手机号 + 邮箱，未点「显示联系方式」时导出遮罩值 */
+const exportHeaders = ['编号', '用户名', '昵称', '联系方式', '关联身份', '实名状态', '积分', '状态', '注册时间']
+
+/* 联系方式列：手机号与邮箱以 “ / ” 合并为一格（CSV 单列无法承载双行），任一为空只导出另一项 */
+function contactText(u: User): string {
+  const phone = phoneVisible.value ? u.phone : maskPhone(u.phone)
+  const email = phoneVisible.value ? u.email : maskEmail(u.email)
+  return [phone, email].filter((v) => v && v !== '—').join(' / ') || '—'
+}
+
+function mapRow(u: User): (string | number)[] {
+  return [
+    u.uid,
+    u.username,
+    `${u.nickname} [${u.uid}]`,
+    contactText(u),
+    u.identities
+      .filter((i) => i.type !== 'individual')
+      .map((i) => identityTypeMap[i.type])
+      .join('、'),
+    u.realName && u.citizenId ? '已实名' : '未实名',
+    u.points,
+    statusLabel('user', u.status),
+    u.registeredAt,
+  ]
+}
+
+const pageExportRows = computed(() => list.value.map(mapRow))
+
+function fetchAllForExport(page: number, pageSize: number) {
+  return fetchUsers({ ...query, page, pageSize })
 }
 
 function onPageChange(p: { current: number; pageSize: number }) {
@@ -178,12 +199,15 @@ onMounted(load)
         <ColumnController
           v-model="visibleColKeys"
           storage-key="users"
-          :columns="columns.map((c) => ({ key: c.colKey, title: c.colKey === 'phone' ? '联系电话' : c.title }))"
+          :columns="columns.map((c) => ({ key: c.colKey, title: c.colKey === 'phone' ? '联系方式' : c.title }))"
         />
-        <t-button variant="outline" @click="onExport">
-          <template #icon><DownloadIcon /></template>
-          导出
-        </t-button>
+        <ExportButton
+          filename="用户列表"
+          :headers="exportHeaders"
+          :rows="pageExportRows"
+          :fetch-all="fetchAllForExport"
+          :map-row="mapRow"
+        />
         <t-button theme="primary" v-permission="'/users'" @click="formVisible = true">
           <template #icon><AddIcon /></template>
           新增用户
@@ -194,40 +218,37 @@ onMounted(load)
     <div class="page-filter-bar">
       <t-input
         v-model="query.keyword"
-        class="filter-keyword"
+        class="ctl-w-xl"
         placeholder="搜索用户名/昵称/UID/联系电话…"
         clearable
         @enter="onSearch"
       />
-      <t-select
+      <t-select class="ctl-w-md"
         v-model="query.category"
         label="身份"
         :options="userCategoryOptions"
         clearable
-        style="width: 150px"
         @change="onSearch"
       />
-      <t-select
+      <t-select class="ctl-w-md"
         v-model="query.status"
         label="状态"
         :options="statusOptions"
         clearable
-        style="width: 130px"
         @change="onSearch"
       />
-      <t-select
+      <t-select class="ctl-w-lg"
         v-model="query.realStatus"
         label="实名状态"
         :options="realStatusOptions"
         clearable
-        style="width: 180px"
         @change="onSearch"
       />
-      <t-button theme="primary" variant="outline" @click="onSearch">
+      <t-button @click="onSearch">
         <template #icon><SearchIcon /></template>
         查询
       </t-button>
-      <t-button variant="outline" theme="default" @click="onReset">
+      <t-button variant="outline" @click="onReset">
         重置
       </t-button>
     </div>
@@ -242,19 +263,19 @@ onMounted(load)
         :columns="visibleColumns"
         :loading="loading"
         :pagination="pagination"
-        empty="暂无用户"
+        :row-attributes="{ style: { cursor: 'pointer' } }"
         @page-change="onPageChange"
         @row-click="({ row }: { row: User }) => goDetail(row)"
       >
         <template #phone-title>
           <span class="phone-title">
-            联系电话
+            联系方式
             <t-button
               variant="text"
               size="small"
               shape="square"
-              :title="phoneVisible ? '隐藏联系电话' : '显示联系电话'"
-              :aria-label="phoneVisible ? '隐藏联系电话' : '显示联系电话'"
+              :title="phoneVisible ? '隐藏联系方式' : '显示联系方式'"
+              :aria-label="phoneVisible ? '隐藏联系方式' : '显示联系方式'"
               @click.stop="phoneVisible = !phoneVisible"
             >
               <template #icon><BrowseOffIcon v-if="phoneVisible" /><BrowseIcon v-else /></template>
@@ -262,8 +283,12 @@ onMounted(load)
           </span>
         </template>
 
+        <!-- 双行：手机号 + 邮箱，共用同一可见性开关（隐藏时各自脱敏） -->
         <template #phone="{ row }">
-          {{ phoneVisible ? (row.phone || '—') : maskPhone(row.phone) }}
+          <div class="contact-cell">
+            <span class="contact-line">{{ phoneVisible ? (row.phone || '—') : maskPhone(row.phone) }}</span>
+            <span class="contact-line contact-mail">{{ phoneVisible ? (row.email || '—') : maskEmail(row.email) }}</span>
+          </div>
         </template>
 
         <template #user="{ row }">
@@ -287,8 +312,7 @@ onMounted(load)
         </template>
 
         <template #realStatus="{ row }">
-          <t-tag v-if="isVerified(row)" theme="success" variant="light" size="small">已实名</t-tag>
-          <t-tag v-else theme="default" variant="light" size="small">未实名</t-tag>
+          <StatusTag entity="verified" :value="isVerified(row) ? 'verified' : 'unverified'" />
         </template>
 
         <template #status="{ row }">
@@ -306,6 +330,10 @@ onMounted(load)
             <t-button variant="text" size="small" @click="goDetail(row)">详情</t-button>
           </div>
         </template>
+
+        <template #empty>
+          <ListEmptyState :query="query" description="暂无用户" @clear="onReset" />
+        </template>
       </t-table>
     </div>
 
@@ -319,8 +347,25 @@ onMounted(load)
   align-items: center;
   gap: 4px;
 }
-.filter-keyword {
-  width: 240px;
+
+/* 联系方式双行：裁剪交给 TDesign 的省略号容器（nowrap + overflow:hidden），
+ * 双行内容不逐行裁剪，超长时仍由该容器判定溢出并悬浮展示完整值（与申请审核页双行单元格同一写法） */
+.contact-cell {
+  display: flex;
+  flex-direction: column;
+}
+
+.contact-line {
+  font-size: 14px;
+  line-height: 22px;
+  color: var(--td-text-color-primary);
+}
+
+/* 邮箱为次要联系方式：降一级字号与字色，两行仍属同一字段 */
+.contact-mail {
+  font-size: 12px;
+  line-height: 18px;
+  color: var(--td-text-color-secondary);
 }
 
 .user-cell {
@@ -348,7 +393,6 @@ onMounted(load)
 .op-cell {
   display: flex;
   align-items: center;
-  gap: 4px;
-  flex-wrap: nowrap;
+  gap: 8px;
 }
 </style>

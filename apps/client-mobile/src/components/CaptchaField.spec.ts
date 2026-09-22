@@ -3,13 +3,12 @@ import { mount } from '@vue/test-utils'
 import CaptchaField from './CaptchaField.vue'
 
 describe('CaptchaField', () => {
-  it('渲染标签、验证码图片与错误信息', () => {
+  it('渲染标签与验证码图片', () => {
     const wrapper = mount(CaptchaField, {
-      props: { modelValue: '', image: 'data:image/png;base64,xxx', label: '图形验证码', error: '请输入验证码' },
+      props: { modelValue: '', image: 'data:image/png;base64,xxx', label: '图形验证码' },
     })
     expect(wrapper.text()).toContain('图形验证码')
     expect(wrapper.find('img').attributes('src')).toBe('data:image/png;base64,xxx')
-    expect(wrapper.text()).toContain('请输入验证码')
   })
 
   it('点击刷新派发 refresh，输入派发 update:modelValue', async () => {

@@ -47,7 +47,7 @@ onMounted(run)
           </div>
           <div>
             <dt>租期</dt>
-            <dd>{{ leasePeriod(lease.longTerm, lease.startDate, lease.endDate) }}</dd>
+            <dd class="tabular-nums">{{ leasePeriod(lease.longTerm, lease.startDate, lease.endDate) }}</dd>
           </div>
           <div>
             <dt>租金</dt>

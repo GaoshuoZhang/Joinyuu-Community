@@ -8,6 +8,7 @@ import { useAnimSuppress } from '@/composables/useAnimSuppress'
 import { useConfigStore } from '@/stores/config'
 import { fetchSpaces } from '@/api/spaces'
 import EmptyBlock from '@/components/shared/EmptyBlock.vue'
+import StateTag from '@/components/shared/StateTag.vue'
 import ListSkeleton from '@/components/ListSkeleton.vue'
 import { formatZhNumber } from '@/utils/format'
 
@@ -44,7 +45,7 @@ useRefreshOnActivate(run)
         <div class="equip">
           <Tag v-for="e in s.equipment" :key="e" size="small" variant="light" theme="default">{{ e }}</Tag>
           <Tag size="small" variant="light" theme="primary">{{ s.needApproval ? '需审核' : '免审核' }}</Tag>
-          <Tag v-if="s.status === 'maintenance'" size="small" variant="light" theme="warning">维护中</Tag>
+          <StateTag v-if="s.status === 'maintenance'" kind="space" value="maintenance" />
         </div>
         <Button
           theme="primary"

@@ -9,6 +9,7 @@ import PageHeader from '@/components/PageHeader.vue'
 import StatusTag from '@/components/StatusTag.vue'
 import BulkArchiveDialog from '@/components/BulkArchiveDialog.vue'
 import ColumnController from '@/components/ColumnController.vue'
+import ListEmptyState from '@/components/ListEmptyState.vue'
 import { applicationTypeMap } from '@/constants/status'
 import { archiveApplication, approveApplication, fetchApplications, rejectApplication } from '@/api/applications'
 import type { Application } from '@/types'
@@ -99,6 +100,13 @@ function onTypeChange() {
   load()
 }
 
+/* 清除筛选：恢复默认类型，保留状态 tab */
+function onReset() {
+  query.type = ''
+  query.page = 1
+  load()
+}
+
 function onStatusChange(value: string | number) {
   query.status = String(value)
   query.page = 1
@@ -144,6 +152,8 @@ async function onArchive(row: Application) {
 /* 一键归档：全量拉取申请，归档所选状态的已通过 / 已驳回申请 */
 const archivingAll = ref(false)
 const bulkVisible = ref(false)
+const bulkProgress = ref<{ done: number; total: number; failed: number } | null>(null)
+let bulkCancelled = false
 const bulkStatuses = [
   { label: '已通过', value: 'approved' },
   { label: '已驳回', value: 'rejected' },
@@ -164,27 +174,48 @@ async function doBulkArchive(values: string[]) {
     MessagePlugin.info('没有符合所选状态的可归档申请')
     return
   }
+  /* 进度 + 可取消：逐条执行，取消后停止后续条目（见 BulkArchiveDialog 进度态） */
+  bulkCancelled = false
+  bulkProgress.value = { done: 0, total: pending.length, failed: 0 }
+  let done = 0
   let failed = 0
   for (const a of pending) {
+    if (bulkCancelled) break
     try {
       await archiveApplication(a.id)
     } catch {
       failed++
     }
+    done++
+    bulkProgress.value = { done, total: pending.length, failed }
   }
-  if (pending.length - failed > 0) {
-    MessagePlugin.success(
-      truncated
-        ? `已归档 ${pending.length - failed} 条申请，剩余请再次执行`
-        : `已归档 ${pending.length - failed} 条申请`,
-    )
+  bulkProgress.value = null
+  if (bulkCancelled) {
+    MessagePlugin.warning(`已取消执行：本次已归档 ${done - failed} 条`)
+  } else {
+    if (done - failed > 0) {
+      MessagePlugin.success(
+        truncated
+          ? `已归档 ${done - failed} 条申请，剩余请再次执行`
+          : `已归档 ${done - failed} 条申请`,
+      )
+    }
+    if (failed > 0) MessagePlugin.warning(`${failed} 条申请归档失败，请重试`)
   }
-  if (failed > 0) MessagePlugin.warning(`${failed} 条申请归档失败，请重试`)
   await load()
+}
+
+/* 确认前预估影响条数：按所选状态取 total 求和（pageSize=1 仅取 total；类型沿用当前筛选） */
+function countByStatus(status: string) {
+  return fetchApplications({ ...query, status, page: 1, pageSize: 1 }).then((r) => r.total)
 }
 
 function onBulkArchive() {
   bulkVisible.value = true
+}
+
+function onBulkCancel() {
+  bulkCancelled = true
 }
 
 async function onBulkConfirm(values: string[]) {
@@ -256,28 +287,30 @@ onMounted(load)
           storage-key="approvals"
           :columns="columns.map((c) => ({ key: c.colKey, title: c.title }))"
         />
+        <t-button variant="outline" :disabled="archivingAll" @click="onBulkArchive">
+          一键归档
+        </t-button>
       </template>
     </PageHeader>
 
     <div class="page-card">
-      <div class="tabs-row">
-        <t-tabs :value="query.status" class="status-tabs" @change="onStatusChange">
-          <t-tab-panel value="" label="全部" />
-          <t-tab-panel value="pending" label="待审核" />
-          <t-tab-panel value="approved" label="已通过" />
-          <t-tab-panel value="rejected" label="已驳回" />
-        </t-tabs>
+      <!-- 状态页签独占整行：与「申请类型」下拉同排时页签会被挤压，可用宽度不足即溢出成横向滚动箭头 -->
+      <t-tabs :value="query.status" class="status-tabs" @change="onStatusChange">
+        <t-tab-panel value="" label="全部" />
+        <t-tab-panel value="pending" label="待审核" />
+        <t-tab-panel value="approved" label="已通过" />
+        <t-tab-panel value="rejected" label="已驳回" />
+      </t-tabs>
+
+      <div class="filter-row">
         <t-select
           v-model="query.type"
+          class="ctl-w-md"
           label="申请类型"
           :options="typeOptions"
           clearable
-          style="width: 150px; margin-left: 24px"
           @change="onTypeChange"
         />
-        <t-button class="bulk-archive-btn" variant="outline" :disabled="archivingAll" @click="onBulkArchive">
-          一键归档
-        </t-button>
       </div>
 
       <t-table
@@ -289,10 +322,12 @@ onMounted(load)
         :columns="visibleColumns"
         :loading="loading"
         :pagination="pagination"
-        empty="暂无申请"
         @page-change="onPageChange"
         @row-click="({ row }: { row: Application }) => openDetail(row)"
       >
+        <template #empty>
+          <ListEmptyState :query="query" description="暂无申请" @clear="onReset" />
+        </template>
         <template #type="{ row }">
           <t-tag variant="light">{{ applicationTypeMap[row.type]?.label ?? row.type }}</t-tag>
         </template>
@@ -425,20 +460,26 @@ onMounted(load)
       title="一键归档 · 申请"
       :statuses="bulkStatuses"
       :loading="archivingAll"
+      :progress="bulkProgress"
+      :count-for-status="countByStatus"
       @confirm="onBulkConfirm"
+      @cancel="onBulkCancel"
     />
   </div>
 </template>
 
 <style scoped>
-.tabs-row {
-  display: flex;
-  align-items: center;
+.status-tabs {
   margin-bottom: 16px;
 }
 
-.bulk-archive-btn {
-  margin-left: auto;
+/* 申请类型筛选：页签下方的无边框筛选行，与表格同处一张卡片内 */
+.filter-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 12px;
+  margin-bottom: 16px;
 }
 
 .applicant-cell {
@@ -479,7 +520,7 @@ onMounted(load)
 
 .drawer-summary {
   margin: 16px 0 0;
-  font-size: 13px;
+  font-size: 14px;
   line-height: 22px;
   color: var(--td-text-color-secondary);
 }
@@ -534,7 +575,7 @@ onMounted(load)
 }
 
 .record-text {
-  font-size: 13px;
+  font-size: 14px;
   color: var(--td-text-color-primary);
 }
 

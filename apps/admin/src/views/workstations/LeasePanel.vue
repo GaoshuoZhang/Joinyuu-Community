@@ -4,15 +4,17 @@ import ListErrorState from '@/components/ListErrorState.vue'
 import { computed, onMounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { MessagePlugin } from 'tdesign-vue-next'
-import { AddIcon, DownloadIcon } from 'tdesign-icons-vue-next'
+import { AddIcon } from 'tdesign-icons-vue-next'
 import PageHeader from '@/components/PageHeader.vue'
 import StatusTag from '@/components/StatusTag.vue'
 import StatCard from '@/components/StatCard.vue'
 import BulkArchiveDialog from '@/components/BulkArchiveDialog.vue'
 import LeaseFormDialog from '@/components/LeaseFormDialog.vue'
 import ColumnController from '@/components/ColumnController.vue'
+import ExportButton from '@/components/ExportButton.vue'
+import ListEmptyState from '@/components/ListEmptyState.vue'
 import { archiveLease, deriveLeaseStatus, fetchLeases, fetchWorkstations, terminateLease, type LeaseViewStatus } from '@/api/workstations'
-import { exportCsv, statusLabel } from '@/utils/exportCsv'
+import { statusLabel } from '@/utils/exportCsv'
 import { formatDateOnly } from '@/utils/format'
 import type { Lease, Workstation } from '@/types'
 
@@ -73,8 +75,25 @@ function clearFilter() {
   renterType.value = ''
 }
 
+/* 空态筛选判定：状态/关键词/主体筛选任一非空即视为筛选无结果 */
+const filterState = computed(() => ({
+  status: statusFilter.value,
+  keyword: keyword.value,
+  renterId: renterId.value,
+  renterType: renterType.value,
+}))
+
+/* 清除全部筛选并重新加载 */
+function onReset() {
+  statusFilter.value = ''
+  keyword.value = ''
+  renterId.value = ''
+  renterType.value = ''
+  load()
+}
+
 const columns = [
-  { colKey: 'id', title: '租约编号', width: 110 , ellipsis: true},
+  { colKey: 'id', title: '租约编号', width: 110, resizable: true , ellipsis: true},
   { colKey: 'enterpriseName', title: '租赁方', cell: 'enterprise', width: 150, resizable: true , ellipsis: true},
   { colKey: 'workstationLabels', title: '办公位', cell: 'workstations', width: 150, resizable: true , ellipsis: true},
   { colKey: 'term', title: '租期', cell: 'term', width: 180, resizable: true , ellipsis: true},
@@ -228,24 +247,28 @@ function openEdit(row: Lease) {
   formVisible.value = true
 }
 
-/* 导出当前页租约列表为 CSV */
-function onExport() {
-  exportCsv(
-    '租约列表',
-    ['租约编号', '租赁方', '办公位', '租期', '租金', '联系人', '联系电话', '备注', '状态'],
-    filteredLeases.value.map((l) => [
-      l.id,
-      `${l.enterpriseName} [${l.enterpriseId || '未注册'}]`,
-      l.workstationLabels.join('、'),
-      l.longTerm ? `${l.startDate} ~ 长期` : `${l.startDate} ~ ${l.endDate}`,
-      `${l.monthlyRent} / ${rentPeriodLabel(l)}`,
-      l.contactName,
-      l.contactPhone,
-      l.note || '—',
-      statusLabel('lease', deriveLeaseStatus(l)),
-    ]),
-  )
-  MessagePlugin.success(`已导出当前页 ${filteredLeases.value.length} 条数据`)
+/* 导出配置：当前页=当前筛选结果；全量结果=接口全部租约（筛选为客户端过滤，接口无分页） */
+const exportHeaders = ['租约编号', '租赁方', '办公位', '租期', '租金', '联系人', '联系电话', '备注', '状态']
+
+function mapRow(l: Lease): (string | number)[] {
+  return [
+    l.id,
+    `${l.enterpriseName} [${l.enterpriseId || '未注册'}]`,
+    l.workstationLabels.join('、'),
+    l.longTerm ? `${l.startDate} ~ 长期` : `${l.startDate} ~ ${l.endDate}`,
+    `${l.monthlyRent} / ${rentPeriodLabel(l)}`,
+    l.contactName,
+    l.contactPhone,
+    l.note || '—',
+    statusLabel('lease', deriveLeaseStatus(l)),
+  ]
+}
+
+const pageExportRows = computed(() => filteredLeases.value.map(mapRow))
+
+async function fetchAllForExport(page: number, pageSize: number) {
+  const ls = await fetchLeases()
+  return { list: ls.slice((page - 1) * pageSize, page * pageSize), total: ls.length }
 }
 
 useListQueryState({}, undefined, { refs: { status: statusFilter, keyword, renterId, renterType }, live: true })
@@ -272,10 +295,13 @@ onMounted(async () => {
         <t-button variant="outline" :disabled="archivingAll" @click="onBulkArchive">
           一键归档
         </t-button>
-        <t-button variant="outline" @click="onExport">
-          <template #icon><DownloadIcon /></template>
-          导出
-        </t-button>
+        <ExportButton
+          filename="租约列表"
+          :headers="exportHeaders"
+          :rows="pageExportRows"
+          :fetch-all="fetchAllForExport"
+          :map-row="mapRow"
+        />
         <t-button theme="primary" @click="() => openCreate()">
           <template #icon><AddIcon /></template>
           新增租约
@@ -283,7 +309,7 @@ onMounted(async () => {
       </template>
     </PageHeader>
 
-    <div class="stat-row">
+    <div class="stat-row stat-row--4">
       <StatCard
         class="stat-clickable"
         label="生效中"
@@ -315,13 +341,12 @@ onMounted(async () => {
     </div>
 
     <div class="page-filter-bar">
-      <t-input
+      <t-input class="ctl-w-2xl"
         v-model="keyword"
         placeholder="搜索租约编号/办公位编号/租赁方/联系人/联系电话…"
         clearable
-        style="width: 320px"
       />
-      <t-select v-model="statusFilter" label="状态" :options="statusOptions" clearable style="width: 180px" />
+      <t-select class="ctl-w-lg" v-model="statusFilter" label="状态" :options="statusOptions" clearable />
       <template v-if="renterId">
         <t-tag closable variant="light" theme="primary" @close="clearFilter">
           仅显示「{{ renterName }}」的租约
@@ -338,7 +363,7 @@ onMounted(async () => {
         :data="filteredLeases"
         :columns="visibleColumns"
         :loading="loading"
-        empty="暂无租约"
+        :row-attributes="{ style: { cursor: 'pointer' } }"
         @row-click="onRowClick"
       >
         <template #enterprise="{ row }">
@@ -373,7 +398,7 @@ onMounted(async () => {
           <div class="op-cell" @click.stop>
             <t-button variant="text" size="small" @click="openPrint(row)">打印</t-button>
             <t-button
-              v-if="row.status === 'active'"
+              v-if="['active', 'expiring'].includes(deriveLeaseStatus(row))"
               variant="text"
               size="small"
               @click="openEdit(row)"
@@ -381,7 +406,7 @@ onMounted(async () => {
               编辑
             </t-button>
             <t-popconfirm
-              v-if="row.status === 'active'"
+              v-if="['active', 'expiring'].includes(deriveLeaseStatus(row))"
               content="确认终止该租约？关联办公位将立即释放"
               @confirm="onTerminate(row)"
             >
@@ -390,7 +415,7 @@ onMounted(async () => {
               </t-button>
             </t-popconfirm>
             <t-popconfirm
-              v-if="row.status === 'terminated'"
+              v-if="deriveLeaseStatus(row) === 'terminated'"
               content="确认归档该租约？归档后可在归档管理中恢复"
               @confirm="onArchive(row)"
             >
@@ -399,6 +424,10 @@ onMounted(async () => {
               </t-button>
             </t-popconfirm>
           </div>
+        </template>
+
+        <template #empty>
+          <ListEmptyState :query="filterState" description="暂无租约" @clear="onReset" />
         </template>
       </t-table>
     </div>
@@ -424,33 +453,8 @@ onMounted(async () => {
 </template>
 
 <style scoped>
-.stat-row {
-  display: grid;
-  grid-template-columns: repeat(4, 1fr);
-  gap: 16px;
-  margin-bottom: 16px;
-}
-
-.cell-title {
-  font-weight: 500;
-  color: var(--td-text-color-primary);
-}
-
-.cell-sub {
-  margin-top: 2px;
-  font-size: 12px;
-  color: var(--td-text-color-secondary);
-}
-
 .ws-tag {
   margin: 2px 4px 2px 0;
-}
-
-.op-cell {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-  flex-wrap: nowrap;
 }
 
 .terminated-at {

@@ -19,6 +19,11 @@ body,
   padding: 0;
 }
 
+/* 非 TDesign 组件包裹的普通文本（.rich-text、页面说明等）与组件字体保持一致 */
+body {
+  font-family: var(--td-font-family);
+}
+
 /* 键盘用户需要能清楚看到当前焦点；鼠标点击不会触发该轮廓。 */
 :focus-visible {
   outline: 2px solid var(--td-brand-color);
@@ -189,7 +194,7 @@ html[data-route-loading='true']::after {
 
 .page-header .page-desc {
   margin: 4px 0 0;
-  font-size: 13px;
+  font-size: 14px;
   color: var(--td-text-color-secondary);
 }
 
@@ -220,6 +225,19 @@ html[data-route-loading='true']::after {
   line-height: 20px;
 }
 
+/* 筛选/搜索控件定宽档位（取代行内 style="width:Npx"，约 4-8 档归一）：
+ * sm=140（原 120/130/140）、md=160（原 150/160/170）、lg=200（原 180/200）、
+ * xl=240（原 220/240/260）、2xl=280（原 280/320）
+ *
+ * 必须带 !important：TDesign 的按组件样式由自动导入按需注入，位置在本文件之后，
+ * 其 .t-select__wrap / .t-input__wrap { width: 100% } 与本工具类同特异性但更靠后，
+ * 不加权重会被覆盖 —— 筛选控件会撑满整行、挤压后续元素换行 */
+.ctl-w-sm { width: 140px !important; }
+.ctl-w-md { width: 160px !important; }
+.ctl-w-lg { width: 200px !important; }
+.ctl-w-xl { width: 240px !important; }
+.ctl-w-2xl { width: 280px !important; }
+
 /* 内容卡片 */
 .page-card {
   background: var(--td-bg-color-container);
@@ -228,9 +246,72 @@ html[data-route-loading='true']::after {
   padding: 16px;
 }
 
+/* ---------- 列表 / 表单页公共类 ---------- */
+
+/* 表格操作列按钮容器：操作按钮排成一行且不换行，列宽紧张时不会把行高撑高。
+ * 声明统一取自各页最普遍的写法（flex + 居中 + 4px 间距 + nowrap）。 */
+.op-cell {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex-wrap: nowrap;
+}
+
+/* 列表主标题：中等字重 + 主色。字号显式写成 14px（与 TDesign 表格单元格默认字号一致，
+ * 使该类的语义不依赖父级继承） */
+.cell-title {
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--td-text-color-primary);
+}
+
+/* 列表副行（编号 / 时间 / 电话）：12px 次级色，紧贴主标题下方独立成行 */
+.cell-sub {
+  margin-top: 2px;
+  font-size: 12px;
+  color: var(--td-text-color-secondary);
+}
+
+/* 弹窗自定义页脚：按钮组右对齐、8px 间距（TDesign 自定义 footer 不再自带布局） */
+.dialog-footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+/* 筛选条右端操作按钮（新建/批量操作）：靠 auto 外边距顶到最右端 */
+.toolbar-right {
+  margin-left: auto;
+}
+
+/* 汇总卡片行（统计卡）：只上提共性骨架（栅格 + 间距），列数属业务差异，
+ * 由各页附加 stat-row--3 / stat-row--4 给出。修饰类与 .stat-row 同权重、
+ * 依赖声明顺序生效，这样窄屏断点才覆盖得住列数（scoped 局部类权重更高会屏蔽全局断点）。 */
+.stat-row {
+  display: grid;
+  gap: 16px;
+  margin-bottom: 16px;
+}
+
+.stat-row--3 {
+  grid-template-columns: repeat(3, 1fr);
+}
+
+.stat-row--4 {
+  grid-template-columns: repeat(4, 1fr);
+}
+
+/* 中等宽度（内容区被侧栏挤窄）下四卡行收成两列 */
+@media (max-width: 1199px) {
+  .stat-row--4 {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
 /* 管理后台的数据表、统计指标与时间金额使用等宽数字，便于纵向比较。 */
 .t-table,
 .t-statistic,
+.t-descriptions,
 .stats-value,
 .stat-num,
 .redis-value,

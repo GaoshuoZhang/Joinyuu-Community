@@ -7,8 +7,8 @@ export interface ProfileMenuEntry {
 /** 「我的」页「更多」分组：人才登记仅向非社区个体用户展示。 */
 export function buildProfileMoreEntries(hasCommunityIndividual: boolean, unread: number): ProfileMenuEntry[] {
   const entries: ProfileMenuEntry[] = [
-    { path: '/me/records', label: '我的记录', note: '需求 / 报名 / 订单等' },
-    { path: '/me/settings', label: '设置', note: '资料 / 地址 / 账号安全' },
+    { path: '/me/records', label: '我的记录', note: '项目 / 需求 / 报名 / 预约等' },
+    { path: '/me/settings', label: '设置', note: '资料 / 地址 / 账号安全 / 通知' },
     { path: '/notices', label: '站内信', note: unread > 0 ? `${unread} 条未读` : '' },
   ]
   if (!hasCommunityIndividual) {

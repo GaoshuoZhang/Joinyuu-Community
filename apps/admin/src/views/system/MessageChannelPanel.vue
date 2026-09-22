@@ -1,8 +1,10 @@
 <script setup lang="ts">
 import { computed, onMounted, reactive, ref } from 'vue'
 import { MessagePlugin } from 'tdesign-vue-next'
-import PageHeader from '@/components/PageHeader.vue'
+import { AddIcon } from 'tdesign-icons-vue-next'
 import ListErrorState from '@/components/ListErrorState.vue'
+import ListEmptyState from '@/components/ListEmptyState.vue'
+import StatusTag from '@/components/StatusTag.vue'
 import {
   fetchMessageChannelCatalog,
   fetchMessageChannels,
@@ -19,7 +21,6 @@ import type {
 /* 消息中心 · 渠道配置（P0）：按 短信 / 邮箱 / 站内信 分块维护；
  * 非机密配置在后台直接维护，凭据支持「直接填写密钥」与「登记环境变量名」。
  * 配置后可在编辑弹窗内「保存并测试连通」，也可在列表行直接测试发送。 */
-defineProps<{ inline?: boolean }>()
 const loading = ref(true)
 const loadError = ref('')
 const channels = ref<MessageChannel[]>([])
@@ -67,15 +68,22 @@ function channelsOfKind(kind: MessageChannelKind): MessageChannel[] {
   return channels.value.filter((c) => c.kind === kind)
 }
 
+/* 启停切换互斥：请求期间该行开关保持 loading，避免并发切换 */
+const toggling = ref('')
+
 async function onToggle(row: MessageChannel, value: boolean) {
+  if (toggling.value) return
   const previous = row.enabled
   row.enabled = value
+  toggling.value = row.id
   try {
     await toggleMessageChannel(row.id, value)
     MessagePlugin.success(value ? '渠道已启用' : '渠道已停用')
   } catch (error) {
     row.enabled = previous
     MessagePlugin.error(error instanceof Error ? error.message : '操作失败')
+  } finally {
+    toggling.value = ''
   }
 }
 
@@ -368,80 +376,76 @@ function legacyFromToFields(value: string): { fromName: string; fromAddress: str
   return { fromAddress: value.trim(), fromName: '' }
 }
 
-function credentialTagText(row: MessageChannel): string {
-  if (row.credentialConfigured) return '已配置'
-  return row.missingCredentials.length ? `缺少 ${row.missingCredentials.length} 项` : '未配置'
+/** 凭据就绪状态：统一走 statusMap.messageCredential（已配置 / 凭据缺失 / 未配置） */
+function credentialStatus(row: MessageChannel): 'configured' | 'missing' | 'none' {
+  if (row.credentialConfigured) return 'configured'
+  return row.missingCredentials.length ? 'missing' : 'none'
 }
 </script>
 
 <template>
-  <div class="channel-panel page-fade-in">
-    <PageHeader
-      v-if="!$props.inline"
-      title="渠道配置"
-      description="短信 / 邮箱 / 站内信通道；凭据支持直接填写（只写脱敏）与环境变量注入"
-    >
-      <template #actions>
-        <t-button theme="primary" @click="openCreate()">新增渠道</t-button>
-      </template>
-    </PageHeader>
+  <div class="channel-panel">
+    <!-- 本面板只作为「消息中心」的选项卡内容渲染（无独立路由），故用可见说明行替代会被嵌入态隐藏的 PageHeader -->
+    <p class="panel-hint">短信 / 邮箱 / 站内信通道；凭据支持直接填写（只写脱敏）与环境变量注入</p>
 
     <ListErrorState v-if="loadError" :message="loadError" :loading="loading" @retry="load" />
 
-    <section v-for="group in KIND_GROUPS" :key="group.kind" class="kind-section">
+    <!-- 新增入口只保留在分组标题上（按类型定向新增），避免与顶部通用入口重复 -->
+    <section v-for="(group, index) in KIND_GROUPS" :key="group.kind" class="kind-section" :class="{ 'is-first': index === 0 }">
       <div class="kind-head">
-        <div>
+        <div class="kind-title-row">
           <span class="kind-title">{{ group.label }}配置</span>
           <span class="muted kind-desc">{{ group.desc }}</span>
         </div>
         <t-button theme="primary" variant="outline" size="small" @click="openCreate(group.kind)">
+          <template #icon><AddIcon /></template>
           新增{{ group.label }}渠道
         </t-button>
       </div>
-      <t-card :bordered="true" class="channel-card">
-        <t-table
-          row-key="id"
-          :data="channelsOfKind(group.kind)"
-          :columns="groupedColumns"
-          :loading="loading"
-          table-layout="fixed"
-          hover
-        >
-          <template #empty>
-            <div class="muted">暂无{{ group.label }}渠道</div>
-          </template>
-          <template #provider="{ row }">
-            <span>{{ row.providerLabel }}</span>
-          </template>
-          <template #enabled="{ row }">
-            <t-switch :value="row.enabled" @change="(value: boolean) => onToggle(row, value)" />
-          </template>
-          <template #credential="{ row }">
-            <t-tooltip :content="row.missingCredentials.join('、') || '凭据已就绪'">
-              <t-tag :theme="row.credentialConfigured ? 'success' : 'warning'" variant="light" size="small">
-                {{ credentialTagText(row) }}
-              </t-tag>
-            </t-tooltip>
-          </template>
-          <template #dailyLimit="{ row }">
-            <span>{{ row.dailyLimit > 0 ? row.dailyLimit : '不限' }}</span>
-          </template>
-          <template #op="{ row }">
-            <t-space size="small">
-              <t-link theme="primary" hover="color" @click="openEdit(row)">编辑</t-link>
-              <t-link theme="primary" hover="color" @click="openTest(row)">测试发送</t-link>
-            </t-space>
-          </template>
-        </t-table>
-      </t-card>
+      <t-table
+        row-key="id"
+        :data="channelsOfKind(group.kind)"
+        :columns="groupedColumns"
+        :loading="loading"
+        table-layout="fixed"
+        hover
+        resizable
+      >
+        <template #empty>
+          <ListEmptyState :description="`暂无${group.label}渠道`" />
+        </template>
+        <template #provider="{ row }">
+          <span>{{ row.providerLabel }}</span>
+        </template>
+        <template #enabled="{ row }">
+          <t-switch
+            :value="row.enabled"
+            :loading="toggling === row.id"
+            :aria-label="`渠道「${row.name}」启用状态`"
+            @change="(value: boolean) => onToggle(row, value)"
+          />
+        </template>
+        <template #credential="{ row }">
+          <t-tooltip :content="row.missingCredentials.join('、') || '凭据已就绪'">
+            <StatusTag entity="messageCredential" :value="credentialStatus(row)" size="small" />
+          </t-tooltip>
+        </template>
+        <template #dailyLimit="{ row }">
+          <span>{{ row.dailyLimit > 0 ? row.dailyLimit : '不限' }}</span>
+        </template>
+        <template #op="{ row }">
+          <t-space size="small">
+            <t-link theme="primary" hover="color" @click="openEdit(row)">编辑</t-link>
+            <t-link theme="primary" hover="color" @click="openTest(row)">测试发送</t-link>
+          </t-space>
+        </template>
+      </t-table>
     </section>
 
     <t-dialog
       v-model:visible="formVisible"
       :header="formMode === 'edit' ? '编辑渠道' : '新增渠道'"
       width="640px"
-      :confirm-btn="{ content: '保存', theme: 'primary', loading: saving }"
-      @confirm="onSave"
     >
       <t-form ref="formRef" :data="form" label-align="top">
         <div class="form-grid">
@@ -465,7 +469,7 @@ function credentialTagText(row: MessageChannel): string {
             <t-input v-model="form.name" clearable placeholder="如 阿里云短信主通道…" />
           </t-form-item>
           <t-form-item label="每日发送上限" name="dailyLimit">
-            <t-input-number v-model="form.dailyLimit" :min="0" :max="100000" :step="100" theme="column" style="width: 200px" />
+            <t-input-number class="ctl-w-lg" v-model="form.dailyLimit" :min="0" :max="100000" :step="100" theme="column" />
             <template #help>0 表示不限制</template>
           </t-form-item>
         </div>
@@ -532,11 +536,14 @@ function credentialTagText(row: MessageChannel): string {
         <t-form-item label="启用" name="enabled">
           <t-switch v-model="form.enabled" />
         </t-form-item>
-        <div class="test-action">
-          <t-button theme="primary" variant="outline" :loading="saving" @click="() => onSave(true)">保存并测试连通</t-button>
-          <span class="muted">保存当前配置后立即打开测试发送，验证渠道通路</span>
-        </div>
       </t-form>
+      <template #footer>
+        <div class="dialog-footer">
+          <t-button theme="default" @click="formVisible = false">取消</t-button>
+          <t-button theme="primary" variant="outline" :loading="saving" @click="onSave(true)">保存并测试连通</t-button>
+          <t-button theme="primary" :loading="saving" @click="onSave()">保存</t-button>
+        </div>
+      </template>
     </t-dialog>
 
     <t-dialog
@@ -568,8 +575,12 @@ function credentialTagText(row: MessageChannel): string {
 </template>
 
 <style scoped>
-.channel-card {
-  width: 100%;
+/* 选项卡内容顶部说明行：替代嵌入态下会被隐藏的 PageHeader 说明 */
+.panel-hint {
+  margin: 0 0 12px;
+  font-size: 12px;
+  line-height: 20px;
+  color: var(--td-text-color-secondary);
 }
 
 .section-title {
@@ -585,6 +596,17 @@ function credentialTagText(row: MessageChannel): string {
   gap: 0 24px;
 }
 
+@media (max-width: 640px) {
+  .form-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+.muted {
+  color: var(--td-text-color-secondary);
+  font-size: 12px;
+}
+
 .smtp-tip {
   margin-bottom: 16px;
 }
@@ -594,32 +616,40 @@ function credentialTagText(row: MessageChannel): string {
   white-space: pre-line;
 }
 
+/* 三类通道分组：表格直接落在聚合壳卡片内，用分隔线而非嵌套卡片区分分组 */
 .kind-section {
-  margin-bottom: 20px;
+  padding-top: 16px;
+  margin-bottom: 16px;
+  border-top: 1px solid var(--td-component-stroke);
+}
+
+.kind-section.is-first {
+  padding-top: 0;
+  border-top: none;
 }
 
 .kind-head {
   display: flex;
-  align-items: baseline;
+  align-items: center;
   justify-content: space-between;
-  margin-bottom: 10px;
+  gap: 16px;
+  margin-bottom: 12px;
+}
+
+.kind-title-row {
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
+  min-width: 0;
 }
 
 .kind-title {
-  font-size: 15px;
+  font-size: 16px;
   font-weight: 600;
   color: var(--td-text-color-primary);
 }
 
 .kind-desc {
-  margin-left: 12px;
   font-size: 12px;
-}
-
-.test-action {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  margin-top: 8px;
 }
 </style>

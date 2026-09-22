@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import ListErrorState from '@/components/ListErrorState.vue'
+import ListEmptyState from '@/components/ListEmptyState.vue'
 import { computed, onMounted, ref } from 'vue'
 import { MessagePlugin } from 'tdesign-vue-next'
 import { useRouter } from 'vue-router'
@@ -23,7 +24,7 @@ const acting = ref('')
 const columns = [
   { colKey: 'name', title: '空间', cell: 'name', width: 160, resizable: true , ellipsis: true},
   { colKey: 'type', title: '类型', cell: 'type', width: 100, resizable: true , ellipsis: true},
-  { colKey: 'capacity', title: '容量', width: 80, resizable: true , ellipsis: true},
+  { colKey: 'capacity', title: '容量', cell: 'capacity', width: 80, resizable: true , ellipsis: true},
   { colKey: 'location', title: '位置', width: 130, resizable: true , ellipsis: true},
   { colKey: 'booking', title: '预约方式', cell: 'booking', width: 150, resizable: true , ellipsis: true},
   { colKey: 'time', title: '开放时段', cell: 'time', width: 120, resizable: true , ellipsis: true},
@@ -88,6 +89,12 @@ function goDetail(row: Space) {
   router.push(`/spaces/${row.id}`)
 }
 
+/* 预约方式文案：与空间详情页「预约方式」同一文本口径（含免审核分支），避免两处口径漂移 */
+function bookingText(row: Space): string {
+  if (!row.needReservation) return '免预约'
+  return row.needApproval ? '需预约 · 需审核' : '需预约 · 免审核'
+}
+
 onMounted(load)
 </script>
 
@@ -108,9 +115,8 @@ onMounted(load)
       </template>
     </PageHeader>
 
-    <div class="page-filter-bar">
-      <span class="panel-tip">空间名被社区活动引用，重命名会要求同步活动数据。</span>
-    </div>
+    <!-- 页面提示：非筛选控件，独立成行，避免占用筛选条 -->
+    <p class="panel-tip">空间名被社区活动引用，重命名会要求同步活动数据。</p>
 
     <div class="page-card">
       <t-table
@@ -121,31 +127,27 @@ onMounted(load)
         :data="list"
         :columns="visibleColumns"
         :loading="loading"
-        empty="暂无空间"
+        :row-attributes="{ style: { cursor: 'pointer' } }"
         @row-click="({ row }: { row: Space }) => goDetail(row)"
       >
         <template #name="{ row }">
           <div class="cell-title">{{ row.name }}</div>
-          <div class="cell-sub">{{ row.id }}</div>
+          <t-tag class="id-tag-block" size="small" variant="light">{{ row.id }}</t-tag>
         </template>
         <template #type="{ row }">
           <t-tag variant="light">{{ spaceTypeMap[row.type] ?? row.type }}</t-tag>
         </template>
         <template #booking="{ row }">
-          <div class="booking-cell">
-            <t-tag :theme="row.needReservation ? 'primary' : 'default'" variant="light" size="small">
-              {{ row.needReservation ? '需预约' : '免预约' }}
-            </t-tag>
-            <t-tag v-if="row.needReservation" :theme="row.needApproval ? 'warning' : 'success'" variant="light" size="small">
-              {{ row.needApproval ? '需审核' : '免审核' }}
-            </t-tag>
-          </div>
+          <t-tag variant="outline" size="small">{{ bookingText(row) }}</t-tag>
+        </template>
+        <template #capacity="{ row }">
+          {{ row.capacity ?? '—' }}
         </template>
         <template #time="{ row }">
-          {{ row.allDay ? '全天开放' : `${row.openTime} ~ ${row.closeTime}` }}
+          {{ row.allDay ? '全天开放' : row.openTime && row.closeTime ? `${row.openTime} ~ ${row.closeTime}` : '—' }}
         </template>
         <template #equipment="{ row }">
-          <t-tag v-for="eq in row.equipment" :key="eq" variant="outline" class="eq-tag">{{ eq }}</t-tag>
+          <t-tag v-for="eq in row.equipment" :key="eq" variant="light" class="eq-tag">{{ eq }}</t-tag>
         </template>
         <template #status="{ row }">
           <StatusTag entity="space" :value="row.status" />
@@ -177,6 +179,10 @@ onMounted(load)
             </t-button>
           </div>
         </template>
+
+        <template #empty>
+          <ListEmptyState description="暂无空间" />
+        </template>
       </t-table>
     </div>
 
@@ -186,17 +192,7 @@ onMounted(load)
 
 <style scoped>
 .panel-tip {
-  font-size: 12px;
-  color: var(--td-text-color-secondary);
-}
-
-.cell-title {
-  font-weight: 500;
-  color: var(--td-text-color-primary);
-}
-
-.cell-sub {
-  margin-top: 2px;
+  margin: 0 0 12px;
   font-size: 12px;
   color: var(--td-text-color-secondary);
 }
@@ -204,19 +200,4 @@ onMounted(load)
 .eq-tag {
   margin: 2px 4px 2px 0;
 }
-
-.booking-cell {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-}
-
-.op-cell {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-  flex-wrap: nowrap;
-}
-
-
 </style>

@@ -1,7 +1,8 @@
 <script setup lang="ts">
-import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { computed, h, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { Button, PullDownRefresh, Tabs, TabPanel, Toast } from 'tdesign-mobile-vue'
+import { Fab, List, PullDownRefresh, Tabs, TabPanel, Toast } from 'tdesign-mobile-vue'
+import { AddIcon } from 'tdesign-icons-vue-next'
 import { fetchDemands, fetchMyResponses } from '@/api/demands'
 import { useAuthStore } from '@/stores/auth'
 import { useRefreshOnActivate } from '@/composables/useRefreshOnActivate'
@@ -9,7 +10,6 @@ import { useAnimSuppress } from '@/composables/useAnimSuppress'
 import { useRouteQuerySync } from '@/composables/useRouteQuerySync'
 import { useTabSwipe } from '@/composables/useTabSwipe'
 import ListSkeleton from '@/components/ListSkeleton.vue'
-import { useDict } from '@/composables/useDict'
 import EmptyBlock from '@/components/shared/EmptyBlock.vue'
 import DemandFilterBar from '@/components/projects/DemandFilterBar.vue'
 import DemandListCard from '@/components/projects/DemandListCard.vue'
@@ -23,13 +23,8 @@ useAnimSuppress()
 const route = useRoute()
 const router = useRouter()
 const auth = useAuthStore()
-const { items: demandCategories, error: demandCategoryError, reload: reloadDemandCategories } = useDict('demand_category')
-const { items: industries, error: industryError, reload: reloadIndustries } = useDict('industry')
-const filterDictError = computed(() => (activeTab.value === 'investment' ? industryError.value : demandCategoryError.value))
-function retryFilterDict() {
-  if (activeTab.value === 'investment') reloadIndustries()
-  else reloadDemandCategories()
-}
+/* v48：按用户要求移除分类筛选（原「分类字典 + chips」），筛选只保留类型选项卡与关键词搜索 */
+
 /* v43：新增「全部」选项卡（默认），可跨类型浏览需求 */
 const TABS: { kind: DemandKind | 'all'; title: string; searchPlaceholder: string }[] = [
   { kind: 'all', title: '全部', searchPlaceholder: '搜索需求关键词' },
@@ -37,16 +32,14 @@ const TABS: { kind: DemandKind | 'all'; title: string; searchPlaceholder: string
 ]
 const initialKind = TABS.some((tab) => tab.kind === String(route.query.kind)) ? (String(route.query.kind) as DemandKind | 'all') : 'all'
 const activeTab = ref<DemandKind | 'all'>(initialKind)
-const categories = computed(() => activeTab.value === 'investment' ? industries.value : demandCategories.value)
 
-/* v39：筛选条件（类型/分类/关键词）同步到 URL，返回或分享可还原 */
+/* v48：筛选条件（类型/关键词）同步到 URL，返回或分享可还原 */
 function syncQuery() {
   const query: Record<string, string> = {}
   if (activeTab.value !== 'all') query.kind = activeTab.value
-  if (category.value) query.category = category.value
   if (keyword.value) query.q = keyword.value
   const current = route.query as Record<string, string>
-  if (current.kind === query.kind && current.category === query.category && current.q === query.q) return
+  if (current.kind === query.kind && current.q === query.q && !current.category) return
   void router.replace({ query })
 }
 
@@ -58,7 +51,6 @@ const { startSwipe, moveSwipe, cancelSwipe } = useTabSwipe(
 
 const PAGE_SIZE = 10
 const page = ref(1)
-const category = ref(String(route.query.category ?? ''))
 const keyword = ref(String(route.query.q ?? ''))
 const keywordInput = ref(keyword.value)
 const items = ref<Demand[]>([])
@@ -87,7 +79,6 @@ async function run() {
       kind: activeTab.value === 'all' ? undefined : activeTab.value,
       page: requestedPage,
       pageSize: PAGE_SIZE,
-      category: category.value || undefined,
       keyword: keyword.value || undefined,
     })
     if (id !== requestId) return
@@ -113,7 +104,6 @@ watch(activeTab, () => {
   window.clearTimeout(searchTimer)
   keywordInput.value = ''
   keyword.value = ''
-  category.value = ''
   syncQuery()
   reload()
 })
@@ -129,7 +119,7 @@ useRefreshOnActivate(() => {
   void loadResponded()
 })
 
-const hasFilter = computed(() => activeTab.value !== 'all' || Boolean(category.value) || Boolean(keyword.value))
+const hasFilter = computed(() => activeTab.value !== 'all' || Boolean(keyword.value))
 
 /* v41：空态一键清除筛选；非「全部」Tab 由 watch(activeTab) 统一清筛选并 reload，避免重复请求 */
 function clearFilters() {
@@ -138,7 +128,6 @@ function clearFilters() {
     activeTab.value = 'all'
     return
   }
-  category.value = ''
   keyword.value = ''
   keywordInput.value = ''
   syncQuery()
@@ -148,23 +137,20 @@ function clearFilters() {
 const hasMore = computed(() => items.value.length < total.value)
 const firstLoading = computed(() => loading.value && items.value.length === 0)
 const firstError = computed(() => error.value && items.value.length === 0)
-
-function selectCategory(label: string) {
-  category.value = category.value === label ? '' : label
-  syncQuery()
-  reload()
-}
+const footerState = computed(() => {
+  if (!items.value.length || error.value) return ''
+  if (loading.value) return 'loading'
+  return hasMore.value ? 'load-more' : ''
+})
 
 /* v41：外部跳转（全局搜索「查看更多项目」等）带来的筛选参数同步 */
 let applyingQuery = false
 useRouteQuerySync('/projects', (q) => {
   const nextKind: DemandKind | 'all' = TABS.some((tab) => tab.kind === String(q.kind)) ? (String(q.kind) as DemandKind | 'all') : 'all'
-  const nextCategory = q.category ?? ''
   const nextKeyword = q.q ?? ''
-  if (nextKind === activeTab.value && nextCategory === category.value && nextKeyword === keyword.value && nextKeyword === keywordInput.value) return
+  if (nextKind === activeTab.value && nextKeyword === keyword.value && nextKeyword === keywordInput.value) return
   applyingQuery = true
   activeTab.value = nextKind
-  category.value = nextCategory
   keyword.value = nextKeyword
   keywordInput.value = nextKeyword
   void nextTick(() => {
@@ -187,7 +173,7 @@ watch(keywordInput, (val: string) => {
 onBeforeUnmount(() => window.clearTimeout(searchTimer))
 
 async function loadMore() {
-  if (loading.value) return
+  if (!hasMore.value || loading.value) return
   const prev = page.value
   const tab = activeTab.value
   page.value = prev + 1
@@ -196,6 +182,10 @@ async function loadMore() {
     page.value = prev
     Toast(error.value)
   }
+}
+
+function onListScroll(bottomDistance: number) {
+  if (bottomDistance < 60) loadMore()
 }
 
 /* v39：下拉刷新（保留当前筛选与分页） */
@@ -222,7 +212,7 @@ function onPublish() {
 </script>
 
 <template>
-  <PullDownRefresh :value="refreshing" @refresh="onRefresh">
+  <div>
   <div
     class="projects page-fade-in"
     @touchstart="startSwipe"
@@ -233,25 +223,20 @@ function onPublish() {
     <Tabs v-model="activeTab" class="top-tabs" :swipeable="false">
       <TabPanel v-for="kind in TABS" :key="kind.kind" :value="kind.kind" :label="kind.title">
         <div v-if="activeTab === kind.kind" class="tab-content">
+    <!-- 筛选条随页面滚动（不做吸顶）；下拉刷新覆盖筛选条与列表 -->
+    <PullDownRefresh :value="refreshing" @refresh="onRefresh">
     <DemandFilterBar
       v-model:keyword="keywordInput"
       :placeholder="kind.searchPlaceholder"
-      :categories="categories"
-      :category="category"
-      :dict-error="filterDictError"
-      @select-category="selectCategory"
-      @retry-dict="retryFilterDict"
+      class="filter-search"
     />
-
-    <!-- v45：发布入口移到筛选之后并降为描边次级按钮，避免整块品牌色把筛选区与列表切开 -->
-    <Button theme="primary" variant="outline" block class="publish" @click="onPublish">发布需求</Button>
 
     <ListSkeleton v-if="firstLoading" :rows="3" />
     <EmptyBlock v-else-if="firstError" :text="error" action-text="重试" @action="reload" />
     <EmptyBlock v-else-if="items.length === 0 && hasFilter" text="没有符合筛选的需求" action-text="清除筛选" @action="clearFilters" />
     <!-- v45：空状态补出口，避免二级页没有 TabBar 时成为死胡同 -->
     <EmptyBlock v-else-if="items.length === 0" text="暂无相关需求" action-text="发布需求" @action="onPublish" />
-    <div v-else class="list stagger">
+    <List v-else class="list stagger" :async-loading="footerState" @load-more="loadMore" @scroll="onListScroll">
       <p class="list-count">共 {{ formatZhNumber(total) }} 条</p>
       <DemandListCard
         v-for="d in items"
@@ -260,16 +245,22 @@ function onPublish() {
         :responded="respondedIds.has(d.id)"
         :to="`/demands/${d.id}`"
       />
-    </div>
-
-    <Button v-if="hasMore && !firstLoading" theme="default" variant="outline" block class="more-btn" :loading="loading" @click="loadMore">
-      加载更多
-    </Button>
+    </List>
+    </PullDownRefresh>
         </div>
       </TabPanel>
     </Tabs>
   </div>
-  </PullDownRefresh>
+  <!-- v47：发布入口改为悬浮 FAB（不再占据筛选区与列表之间的版面）；
+       放在页面根节点（不在下拉刷新轨道内），避免被其 transform 容器改变 fixed 定位基准；
+       bottom 用 --app-fab-offset（TabBar 高度 + 间距）并叠加底部安全区，避免刘海屏下压住 TabBar。 -->
+  <Fab
+    :icon="() => h(AddIcon, { size: '24px' })"
+    style="right: var(--app-space-8); bottom: calc(var(--app-fab-offset) + env(safe-area-inset-bottom));"
+    :button-props="{ 'aria-label': '发布需求' }"
+    @click="onPublish"
+  />
+  </div>
 </template>
 
 <style scoped>
@@ -292,22 +283,18 @@ function onPublish() {
   padding-top:var(--app-space-6);
 }
 
-.hint {
-  padding:var(--app-space-10);
-  color: var(--td-text-color-placeholder);
-  font-size: var(--app-font-caption);
-  text-align: center;
-  background: var(--td-bg-color-container);
-  border-radius: var(--td-radius-large);
+/* v48：搜索框与下方的统计文字/空态卡片同处下拉刷新轨道内，外层容器的 gap 不生效
+ * （该容器只有下拉刷新一个子元素，实际间距为 0）。这里补 12px，与「广场 > 活动」
+ * 搜索框到列表的间距保持一致。 */
+.filter-search {
+  margin-bottom: var(--app-space-5);
 }
 
 .list {
   display: flex;
   flex-direction: column;
   gap:var(--app-space-5);
-}
-
-.more-btn {
-  margin-top:var(--app-space-2);
+  /* v47：底部留出 FAB 净空，滚动到底时加载更多 footer / 最后一项不被悬浮按钮遮挡 */
+  padding-bottom: var(--app-fab-clearance);
 }
 </style>

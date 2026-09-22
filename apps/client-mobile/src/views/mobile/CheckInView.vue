@@ -1,11 +1,12 @@
 <script setup lang="ts">
-import { onMounted, ref } from 'vue'
+import { computed, onMounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { Button, Icon, QRCode, Result, Tag, Toast } from 'tdesign-mobile-vue'
+import { Button, Icon, QRCode, Result, Toast } from 'tdesign-mobile-vue'
 import { checkInEvent, fetchEvent, fetchEventTicket } from '@/api/events'
 import { getPosition } from '@/utils/geolocation'
 import EmptyBlock from '@/components/shared/EmptyBlock.vue'
 import ListSkeleton from '@/components/ListSkeleton.vue'
+import StateTag from '@/components/shared/StateTag.vue'
 import type { CommunityEvent, EventTicket } from '@/types'
 import type { GeoPosition } from '@/utils/geolocation'
 import { formatLocalDateTime, formatZhNumber } from '@/utils/format'
@@ -81,21 +82,27 @@ function backToDetail() {
   router.push(`/events/${eventId}`)
 }
 
-const ticketStatusText = () => {
-  if (!ticket.value) return ''
-  if (ticket.value.status === 'cancelled') return '已失效（活动取消）'
-  if (ticket.value.status === 'expired') return '已失效（活动结束）'
-  if (ticket.value.checkedIn || ticket.value.status === 'checked') return '已签到'
-  if (ticket.value.waitlistOrder) return '候补中'
-  return '有效'
-}
+/* 票状态统一交由 StateTag 的 ticket 状态集承载，页面不再自造文案与配色；
+ * 失效原因等补充说明由票面下方的一行说明文案承担。 */
+const ticketState = computed(() => {
+  const t = ticket.value
+  if (!t) return 'valid'
+  if (t.status === 'cancelled') return 'cancelled'
+  if (t.status === 'expired') return 'expired'
+  if (t.checkedIn || t.status === 'checked') return 'checked'
+  if (t.waitlistOrder) return 'waitlisted'
+  return 'valid'
+})
 
-const ticketStatusTheme = () => {
-  if (!ticket.value) return 'default'
-  if (ticket.value.status === 'cancelled' || ticket.value.status === 'expired') return 'danger'
-  if (ticket.value.checkedIn || ticket.value.status === 'checked') return 'success'
-  return ticket.value.waitlistOrder ? 'warning' : 'primary'
-}
+/* 二维码状态（TDesign QRCode 仅 active/expired/loading/scanned 四态）：
+ * 已失效（活动取消/结束）与候补中的凭证都不可核销，统一按「失效」呈现，避免扫码时才发现不可用。 */
+const qrStatus = computed<'active' | 'expired' | 'scanned'>(() => {
+  const t = ticket.value
+  if (!t) return 'expired'
+  if (t.status === 'cancelled' || t.status === 'expired' || t.waitlistOrder) return 'expired'
+  if (t.checkedIn || t.status === 'checked') return 'scanned'
+  return 'active'
+})
 
 const canCheckIn = () => Boolean(
   event.value
@@ -115,17 +122,17 @@ const canCheckIn = () => Boolean(
       <section v-if="ticket" class="ticket-card m-card" :class="{ invalid: ticket.status !== 'valid' }">
         <div class="ticket-head">
           <span class="brand" translate="no">聚屿社区 · 活动签到</span>
-          <Tag :theme="ticketStatusTheme()" variant="light" size="small">{{ ticketStatusText() }}</Tag>
+          <StateTag kind="ticket" :value="ticketState" />
         </div>
         <h2 class="title">{{ ticket.eventTitle }}</h2>
         <p class="meta"><Icon aria-hidden="true" name="time" size="16px" />{{ formatLocalDateTime(ticket.startTime) }}</p>
         <p class="meta"><Icon aria-hidden="true" name="location" size="16px" />{{ ticket.location }}</p>
-        <div class="qr-wrap"><QRCode :value="ticket.ticketCode" :size="140" level="M" aria-label="活动核销二维码" /></div>
+        <div class="qr-wrap"><QRCode :value="ticket.ticketCode" :size="140" level="M" :status="qrStatus" aria-label="活动核销二维码" /></div>
         <p class="code">核销码：<code translate="no">{{ ticket.ticketCode }}</code></p>
         <p class="ticket-hint">
           <template v-if="ticket.status === 'cancelled'">活动已取消，凭证自动失效。</template>
           <template v-else-if="ticket.status === 'expired'">活动已结束，未核销凭证已失效。</template>
-          <template v-else-if="ticket.checkedIn">你已完成签到，感谢参与。</template>
+          <template v-else-if="ticket.checkedIn || ticket.status === 'checked'">你已完成签到，感谢参与。</template>
           <template v-else-if="ticket.waitlistOrder">你当前为候补第 {{ formatZhNumber(ticket.waitlistOrder) }} 位，递补成功后将自动转为有效票。</template>
           <template v-else>到场后出示此凭证，并在下方完成定位签到。</template>
         </p>
@@ -246,7 +253,7 @@ const canCheckIn = () => Boolean(
   flex-direction: column;
   align-items: center;
   gap:var(--app-space-6);
-  padding:28px var(--app-space-9);
+  padding: var(--app-space-9);
   text-align: center;
 }
 

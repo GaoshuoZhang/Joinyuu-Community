@@ -13,7 +13,8 @@ const props = withDefaults(
     unit?: string
   }>(),
   {
-    color: '#0052D9',
+    // SVG presentation attribute 不支持 var()，token 色值统一经 :style 绑定生效
+    color: 'var(--td-brand-color)',
     height: 240,
     unit: '',
   },
@@ -121,14 +122,21 @@ const hoverInfo = computed(() => {
       >
         <defs>
           <linearGradient :id="fillId" x1="0" y1="0" x2="0" y2="1">
-            <stop offset="0%" :stop-color="props.color" stop-opacity="0.18" />
-            <stop offset="100%" :stop-color="props.color" stop-opacity="0.02" />
+            <stop offset="0%" :style="{ stopColor: props.color }" stop-opacity="0.18" />
+            <stop offset="100%" :style="{ stopColor: props.color }" stop-opacity="0.02" />
           </linearGradient>
         </defs>
 
         <!-- 网格 + y 轴刻度 -->
         <g v-for="t in ticks" :key="t.y">
-          <line :x1="PAD.left" :x2="W - PAD.right" :y1="t.y" :y2="t.y" stroke="var(--td-component-stroke)" stroke-width="1" />
+          <line
+            :x1="PAD.left"
+            :x2="W - PAD.right"
+            :y1="t.y"
+            :y2="t.y"
+            :style="{ stroke: 'var(--td-component-stroke)' }"
+            stroke-width="1"
+          />
           <text :x="PAD.left - 8" :y="t.y + 4" text-anchor="end" class="axis-text">
             {{ Math.round(t.v).toLocaleString('zh-CN') }}
           </text>
@@ -143,16 +151,42 @@ const hoverInfo = computed(() => {
 
         <!-- 面积与折线 -->
         <path :d="areaPath" :fill="`url(#${fillId})`" />
-        <polyline :points="points" fill="none" :stroke="props.color" stroke-width="2" stroke-linejoin="round" stroke-linecap="round" />
+        <polyline
+          :points="points"
+          fill="none"
+          :style="{ stroke: props.color }"
+          stroke-width="2"
+          stroke-linejoin="round"
+          stroke-linecap="round"
+        />
 
         <!-- 悬浮十字线 + 数据点 -->
         <g v-if="hoverInfo">
-          <line :x1="hoverInfo.x" :x2="hoverInfo.x" :y1="PAD.top" :y2="PAD.top + innerH" stroke="var(--td-brand-color)" stroke-width="1" stroke-dasharray="4 3" />
-          <circle :cx="hoverInfo.x" :cy="hoverInfo.y" r="4" :fill="props.color" stroke="#fff" stroke-width="2" />
+          <line
+            :x1="hoverInfo.x"
+            :x2="hoverInfo.x"
+            :y1="PAD.top"
+            :y2="PAD.top + innerH"
+            :style="{ stroke: 'var(--td-brand-color)' }"
+            stroke-width="1"
+            stroke-dasharray="4 3"
+          />
+          <circle
+            :cx="hoverInfo.x"
+            :cy="hoverInfo.y"
+            r="4"
+            :style="{ fill: props.color, stroke: 'var(--td-bg-color-container)' }"
+            stroke-width="2"
+          />
           <g :transform="`translate(${hoverInfo.x > W / 2 ? hoverInfo.x - 132 : hoverInfo.x + 10}, ${Math.max(0, hoverInfo.y - 52)})`">
-            <rect width="122" height="40" rx="6" fill="var(--td-bg-color-container)" stroke="var(--td-component-border)" />
+            <rect
+              width="122"
+              height="40"
+              rx="6"
+              :style="{ rx: 'var(--td-radius-medium)', fill: 'var(--td-bg-color-container)', stroke: 'var(--td-component-border)' }"
+            />
             <text :x="10" :y="16" class="tip-label">{{ hoverInfo.label }}</text>
-            <text :x="10" :y="33" class="tip-value" :fill="props.color">
+            <text :x="10" :y="33" class="tip-value" :style="{ fill: props.color }">
               {{ hoverInfo.value.toLocaleString('zh-CN') }}{{ unit }}
             </text>
           </g>
@@ -167,13 +201,18 @@ const hoverInfo = computed(() => {
   overflow-x: auto;
 }
 
+/* 窄容器下 SVG 不再等比缩小（否则 12px 轴标签会被压到不可读），改为横向滚动 */
+.chart-scroll svg {
+  min-width: 560px;
+}
+
 .axis-text {
-  font-size: 11px;
-  fill: var(--td-text-color-placeholder);
+  font-size: 12px;
+  fill: var(--td-text-color-secondary);
 }
 
 .tip-label {
-  font-size: 11px;
+  font-size: 12px;
   fill: var(--td-text-color-secondary);
 }
 

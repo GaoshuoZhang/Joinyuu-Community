@@ -104,17 +104,28 @@ export async function createOrder(goodsId: string, addressId?: string): Promise<
   })
 }
 
+/** 券码过期派生（列表与详情共用口径）：pending_use 且 voucherExpiresAt 已过 → expired（不可核销） */
+function deriveStatus(order: MyOrder, at: string): MyOrder {
+  return order.status === 'pending_use' && order.voucherExpiresAt && order.voucherExpiresAt <= at
+    ? { ...order, status: 'expired' as const }
+    : { ...order }
+}
+
 export async function fetchMyOrders(query: { page?: number; pageSize?: number } = {}): Promise<PageResult<MyOrder>> {
   return withLatency(() => {
     const uid = requireUid()
     const at = nowStamp()
-    /* 券码过期派生：pending_use 且 voucherExpiresAt 已过 → expired（不可核销） */
-    const all = (ordersByUid[uid] ?? []).map((order) => (
-      order.status === 'pending_use' && order.voucherExpiresAt && order.voucherExpiresAt <= at
-        ? { ...order, status: 'expired' as const }
-        : { ...order }
-    ))
-    return paginate(all, query.page, query.pageSize)
+    return paginate((ordersByUid[uid] ?? []).map((order) => deriveStatus(order, at)), query.page, query.pageSize)
+  })
+}
+
+/** 订单详情：仅本人可见，非本人/不存在一律 404（对齐后端 GET /api/app/me/orders/:id） */
+export async function fetchMyOrder(id: string): Promise<MyOrder> {
+  return withLatency(() => {
+    const uid = requireUid()
+    const order = (ordersByUid[uid] ?? []).find((item) => item.id === id)
+    if (!order) fail(404, '订单不存在')
+    return deriveStatus(order, nowStamp())
   })
 }
 

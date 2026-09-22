@@ -14,7 +14,8 @@ import type { Lease, Workstation } from '@/types'
 
 /* 租赁详情页：只读展示租约全量信息 + 办公位 + 终止时间，
  * 供租赁管理列表「详情」与办公位/办公室卡片「查看租赁」共用。
- * 头部操作与租赁管理列表 op 同步（active：编辑/终止；terminated：归档）。 */
+ * 头部操作与租赁管理列表 op 同步（生效中/即将到期：编辑/终止；已终止：归档），
+ * 一律按派生状态判定：存储态 active 的已到期租约不得再编辑/终止。 */
 const route = useRoute()
 const router = useRouter()
 const loading = ref(true)
@@ -40,7 +41,7 @@ const termText = computed(() => {
 const viewStatus = computed(() => (lease.value ? deriveLeaseStatus(lease.value) : 'active'))
 
 function goBack() {
-  router.push('/workstations/leases')
+  router.back()
 }
 
 /* 租赁方跳转：企业 → 社区企业详情；个人 → 用户详情（自定义不跳） */
@@ -116,28 +117,29 @@ onMounted(async () => {
       返回
     </t-button>
 
-    <PageHeader :title="`租赁详情 · ${lease?.id ?? ''}`" description="租约基础信息、办公位归属与联系人">
+    <!-- 租约编号统一在下方 descriptions 展示，页头标题不再重复同一 ID -->
+    <PageHeader title="租赁详情" description="租约基础信息、办公位归属与联系人">
       <template #actions>
         <t-tag v-if="isArchived" theme="default" variant="light">已归档</t-tag>
-        <t-button v-if="lease" @click="openPrint">打印租约</t-button>
+        <t-button v-if="lease" variant="outline" @click="openPrint">打印租约</t-button>
         <template v-if="lease && !isArchived">
-          <t-button v-if="lease.status === 'active'" variant="outline" @click="openEdit">
+          <t-button v-if="['active', 'expiring'].includes(viewStatus)" theme="primary" @click="openEdit">
             <template #icon><EditIcon /></template>
             编辑
           </t-button>
           <t-popconfirm
-            v-if="lease.status === 'active'"
+            v-if="['active', 'expiring'].includes(viewStatus)"
             content="确认终止该租约？关联办公位将立即释放"
             @confirm="onTerminate"
           >
             <t-button variant="outline" theme="danger" :loading="acting === 'terminate'">终止</t-button>
           </t-popconfirm>
           <t-popconfirm
-            v-if="lease.status === 'terminated'"
+            v-if="viewStatus === 'terminated'"
             content="确认归档该租约？归档后可在归档管理中恢复"
             @confirm="onArchive"
           >
-            <t-button variant="outline" theme="warning" :loading="acting === 'archive'">归档</t-button>
+            <t-button variant="outline" theme="danger" :loading="acting === 'archive'">归档</t-button>
           </t-popconfirm>
         </template>
       </template>

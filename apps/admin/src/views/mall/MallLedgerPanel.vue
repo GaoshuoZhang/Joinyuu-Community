@@ -13,10 +13,10 @@ const loadError = ref('')
 const list = ref<PointsRecord[]>([])
 const userLabels = ref<Record<string, string>>({})
 
-/* 选项 label 形如「昵称（UID）」，展示时拆出名称，ID 以标签单独呈现 */
+/* 选项 label 形如「昵称（UID）」，展示时拆出名称，ID 以标签单独呈现；映射未命中显示「未知用户」 */
 function displayName(id: string): string {
   const label = userLabels.value[id]
-  if (!label) return id
+  if (!label) return '未知用户'
   return label.replace(/（[^）]*）\s*$/, '')
 }
 
@@ -28,6 +28,19 @@ const columns = [
   { colKey: 'reason', title: '事由', ellipsis: true },
   { colKey: 'at', title: '时间', width: 160, resizable: true , ellipsis: true},
 ]
+
+/* 前端分页：全量数据交由 t-table 内置分页本地切片（每页 20） */
+const page = ref(1)
+const pagination = computed(() => ({
+  current: page.value,
+  pageSize: 20,
+  total: list.value.length,
+  showPageSize: false,
+}))
+
+function onPageChange(p: { current: number }) {
+  page.value = p.current
+}
 
 const totalGranted = computed(() =>
   list.value.filter((r) => r.delta > 0).reduce((s, r) => s + r.delta, 0),
@@ -57,7 +70,7 @@ onMounted(load)
     <ListErrorState v-if="loadError" :message="loadError" :loading="loading" @retry="() => load()" />
     <PageHeader title="积分发放记录" description="系统按积分规则自动发放的积分记录（发放自动，扣除为管理员手动调整）" />
 
-    <div class="stat-row">
+    <div class="stat-row stat-row--3">
       <StatCard label="累计发放" :value="totalGranted" />
       <StatCard label="发放笔数" :value="list.length" />
       <StatCard label="覆盖用户数" :value="new Set(list.map((r) => r.userId)).size" />
@@ -76,7 +89,9 @@ onMounted(load)
         :data="list"
         :columns="columns"
         :loading="loading"
+        :pagination="pagination"
         empty="暂无发放记录"
+        @page-change="onPageChange"
       >
         <template #user="{ row }">
           {{ displayName(row.userId) }}<t-tag v-if="row.userId" class="id-tag" size="small" variant="light">{{ row.userId }}</t-tag>
@@ -92,13 +107,6 @@ onMounted(load)
 </template>
 
 <style scoped>
-.stat-row {
-  display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  gap: 16px;
-  margin-bottom: 16px;
-}
-
 .panel-tip {
   font-size: 12px;
   color: var(--td-text-color-secondary);

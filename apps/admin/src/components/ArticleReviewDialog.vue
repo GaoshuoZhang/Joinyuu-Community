@@ -161,8 +161,8 @@ function onCancel() {
         >
           确认驳回
         </t-button>
-        <t-button v-else variant="outline" theme="danger" @click="rejecting = true">驳回</t-button>
-        <t-button v-if="!rejecting" theme="primary" :loading="acting === 'approve'" @click="onApprove">通过</t-button>
+        <t-button v-else variant="outline" theme="danger" :disabled="detailLoading" @click="rejecting = true">驳回</t-button>
+        <t-button v-if="!rejecting" theme="primary" :loading="acting === 'approve'" :disabled="detailLoading" @click="onApprove">通过</t-button>
       </template>
     </div>
   </t-drawer>
@@ -197,7 +197,7 @@ function onCancel() {
 }
 
 .meta-value {
-  font-size: 13px;
+  font-size: 14px;
   color: var(--td-text-color-primary);
   overflow: hidden;
   text-overflow: ellipsis;
@@ -230,7 +230,7 @@ function onCancel() {
 .block-tags {
   display: flex;
   flex-wrap: wrap;
-  gap: 6px;
+  gap: 8px;
   margin-top: 12px;
 }
 

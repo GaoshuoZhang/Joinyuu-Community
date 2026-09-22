@@ -162,6 +162,16 @@ export class AppMallService {
     return { list: rows.map((o) => this.toOrderDto(o)), total: rows.length }
   }
 
+  /** 订单详情：直接按 userId 收敛查询，非本人/不存在一律 404（不暴露存在性）；
+   * 与列表项复用同一 toOrderDto，保证形状一致、免去客户端本地 find。 */
+  async myOrder(uid: string, id: string) {
+    const order = await this.prisma.redemptionOrder.findFirst({
+      where: { id, userId: uid, deletedAt: null },
+    })
+    if (!order) throw new NotFoundException('订单不存在')
+    return this.toOrderDto(order)
+  }
+
   /* ---------- 订单履约 ---------- */
 
   async cancelOrder(uid: string, id: string): Promise<{ code: number }> {

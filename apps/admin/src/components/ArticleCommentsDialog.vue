@@ -1,11 +1,14 @@
 <script setup lang="ts">
 import { ref } from 'vue'
 import { DialogPlugin, MessagePlugin } from 'tdesign-vue-next'
+import ListEmptyState from '@/components/ListEmptyState.vue'
+import ListErrorState from '@/components/ListErrorState.vue'
 import { fetchArticleComments, removeArticleComment, type ArticleCommentItem } from '@/api/contents'
 
 const emit = defineEmits<{ (e: 'success'): void }>()
 const visible = ref(false)
 const loading = ref(false)
+const loadError = ref('')
 const removing = ref('')
 const reason = ref('')
 const commentsEnabled = ref(true)
@@ -25,12 +28,14 @@ function open(article: { id: string; title: string }) {
 async function load() {
   if (!articleId.value) return
   loading.value = true
+  loadError.value = ''
   try {
     const res = await fetchArticleComments(articleId.value)
     list.value = res.list
     commentsEnabled.value = res.commentsEnabled
   } catch (error) {
-    MessagePlugin.error(error instanceof Error ? error.message : '评论加载失败')
+    /* 加载失败单独置错误态：避免空列表被误显示成「暂无评论」 */
+    loadError.value = error instanceof Error ? error.message : '评论加载失败'
   } finally {
     loading.value = false
   }
@@ -73,27 +78,29 @@ defineExpose({ open })
       </t-tag>
       <t-input v-model="reason" class="reason-input" clearable placeholder="删除原因（选填，填写后通知作者）…" />
     </div>
-    <div v-if="loading" class="comments-loading">加载中…</div>
-    <div v-else-if="list.length === 0" class="comments-empty">暂无评论</div>
-    <ul v-else class="comments-list">
-      <li v-for="item in list" :key="item.id" class="comment-row">
-        <div class="comment-head">
-          <span class="comment-author">{{ item.userName }}</span>
-          <t-tag size="small" variant="light">{{ item.identityName || item.identityType }}</t-tag>
-          <span class="comment-at">{{ item.at }}</span>
-        </div>
-        <p class="comment-content">{{ item.content }}</p>
-        <t-button
-          variant="text"
-          size="small"
-          theme="danger"
-          :loading="removing === item.id"
-          @click="onRemove(item)"
-        >
-          删除
-        </t-button>
-      </li>
-    </ul>
+    <t-loading :loading="loading">
+      <ListErrorState v-if="loadError" :message="loadError" :loading="loading" @retry="load" />
+      <ListEmptyState v-else-if="!loading && list.length === 0" description="暂无评论" />
+      <ul v-else class="comments-list">
+        <li v-for="item in list" :key="item.id" class="comment-row">
+          <div class="comment-head">
+            <span class="comment-author">{{ item.userName }}</span>
+            <t-tag size="small" variant="light">{{ item.identityName || item.identityType }}</t-tag>
+            <span class="comment-at">{{ item.at }}</span>
+          </div>
+          <p class="comment-content">{{ item.content }}</p>
+          <t-button
+            variant="text"
+            size="small"
+            theme="danger"
+            :loading="removing === item.id"
+            @click="onRemove(item)"
+          >
+            删除
+          </t-button>
+        </li>
+      </ul>
+    </t-loading>
   </t-dialog>
 </template>
 
@@ -106,12 +113,6 @@ defineExpose({ open })
 }
 .reason-input {
   flex: 1;
-}
-.comments-loading,
-.comments-empty {
-  padding: 24px 0;
-  text-align: center;
-  color: var(--td-text-color-placeholder);
 }
 .comments-list {
   margin: 0;
@@ -126,7 +127,7 @@ defineExpose({ open })
 .comment-row {
   padding: 12px;
   border: 1px solid var(--td-component-border);
-  border-radius: var(--td-radius-default);
+  border-radius: var(--td-radius-large);
 }
 .comment-head {
   display: flex;

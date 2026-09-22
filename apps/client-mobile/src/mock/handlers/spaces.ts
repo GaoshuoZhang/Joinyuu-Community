@@ -66,6 +66,10 @@ export async function createReservation(payload: ReservationCreatePayload): Prom
     if (!space.openHours.some((window) => payload.start >= window.start && payload.end <= window.end)) {
       fail(400, `预约时间需在开放时段 ${space.openTime}-${space.closeTime} 内`)
     }
+    /* 参与人数口径同后端 create：缺省 1 人，必须为不小于 1 的整数且不超过空间容量 */
+    const attendees = payload.attendees ?? 1
+    if (!Number.isInteger(attendees) || attendees < 1) fail(400, '参与人数至少为 1 人')
+    if (attendees > space.capacity) fail(400, `参与人数不能超过空间容量 ${space.capacity} 人`)
     if (occupiedSlots(payload.spaceId, payload.date).some((s) => s.start < payload.end && payload.start < s.end)) {
       fail(409, '所选时段与已有预约冲突，请更换时段')
     }
@@ -98,7 +102,7 @@ export async function createReservation(payload: ReservationCreatePayload): Prom
       date: payload.date, start: payload.start, end: payload.end,
       status, createdAt,
       identityType, subjectName,
-      purpose: payload.topic?.trim() ?? '', attendees: 1,
+      purpose: payload.topic?.trim() ?? '', attendees,
       records: [{ at: createdAt, action: 'submit', title: '提交预约', text: `${space.name} ${payload.date} ${payload.start}-${payload.end} 预约提交` }],
     })
     /* [MOCK-ONLY] 通知触发点：预约已提交 */

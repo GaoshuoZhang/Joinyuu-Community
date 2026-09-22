@@ -1,9 +1,10 @@
 <script setup lang="ts">
 import { useListQueryState } from '@/utils/listQuery'
 import ListErrorState from '@/components/ListErrorState.vue'
+import ListEmptyState from '@/components/ListEmptyState.vue'
 import { computed, onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
-import { AddIcon, BuildingIcon, CheckCircleIcon, MapIcon, SettingIcon } from 'tdesign-icons-vue-next'
+import { AddIcon, BuildingIcon, CheckCircleIcon, MapIcon, SettingIcon, ViewModuleIcon } from 'tdesign-icons-vue-next'
 import PageHeader from '@/components/PageHeader.vue'
 import StatCard from '@/components/StatCard.vue'
 import StatusTag from '@/components/StatusTag.vue'
@@ -66,12 +67,21 @@ function leaseEndText(lease: Lease): string {
   today.setHours(0, 0, 0, 0)
   const days = Math.floor((end.getTime() - today.getTime()) / 86400000)
   const suffix = days > 0 ? `${days}天后到期` : days === 0 ? '今天到期' : `已过期${-days}天`
-  return `${lease.endDate} | ${suffix}`
+  return `${lease.endDate} ~ ${suffix}`
 }
 
 /* 状态卡片筛选：点击对应状态卡片筛选，点击「办公室总数」卡片取消（与状态下拉双向同步） */
 function setStatFilter(status: WorkstationStatus | '') {
   statusFilter.value = status
+}
+
+/* 空态筛选判定：状态/区域任一非空即视为筛选无结果 */
+const filterState = computed(() => ({ status: statusFilter.value, area: areaFilter.value }))
+
+/* 清除筛选：仅重置筛选条件（列表为客户端派生，无需重新请求） */
+function onReset() {
+  statusFilter.value = ''
+  areaFilter.value = ''
 }
 
 /* silent=true 静默刷新：区域规划保存后仅更新分组名称与区域选项，不触发加载遮罩（避免卡片板块闪烁） */
@@ -147,24 +157,24 @@ function enterpriseHref(w: Workstation): string | undefined {
         </t-button>
         <t-button theme="primary" @click="openCreate">
           <template #icon><AddIcon /></template>
-          新增办公位
+          新增办公室
         </t-button>
       </template>
     </PageHeader>
 
-    <div class="stat-row">
+    <div class="stat-row stat-row--4">
       <StatCard
         class="stat-clickable"
         label="办公室总数"
         :value="offices.length"
-        :icon="BuildingIcon"
+        :icon="ViewModuleIcon"
         @click="setStatFilter('')"
       />
       <StatCard
         class="stat-clickable"
         label="已分配"
         :value="assignedCount"
-        :icon="CheckCircleIcon"
+        :icon="BuildingIcon"
         :active="statusFilter === 'assigned'"
         @click="setStatFilter('assigned')"
       />
@@ -172,7 +182,7 @@ function enterpriseHref(w: Workstation): string | undefined {
         class="stat-clickable"
         label="空闲中"
         :value="idleCount"
-        :icon="MapIcon"
+        :icon="CheckCircleIcon"
         :active="statusFilter === 'idle'"
         @click="setStatFilter('idle')"
       />
@@ -187,8 +197,8 @@ function enterpriseHref(w: Workstation): string | undefined {
     </div>
 
     <div class="page-filter-bar">
-      <t-select clearable v-model="areaFilter" label="区域" :options="areaOptions" style="width: 220px" />
-      <t-select clearable v-model="statusFilter" label="状态" :options="statusOptions" style="width: 180px" />
+      <t-select class="ctl-w-xl" clearable v-model="areaFilter" label="区域" :options="areaOptions" />
+      <t-select class="ctl-w-lg" clearable v-model="statusFilter" label="状态" :options="statusOptions" />
     </div>
 
     <div class="legend-row">
@@ -199,6 +209,13 @@ function enterpriseHref(w: Workstation): string | undefined {
     </div>
 
     <t-loading :loading="loading" size="small">
+      <ListEmptyState
+        v-if="!loading && filteredOffices.length === 0"
+        class="grid-empty"
+        :query="filterState"
+        description="暂无办公室"
+        @clear="onReset"
+      />
       <div class="office-grid">
       <t-card
         v-for="w in filteredOffices"
@@ -209,12 +226,10 @@ function enterpriseHref(w: Workstation): string | undefined {
         hover-shadow
       >
         <div class="office-head">
-          <div>
-            <div class="office-seat">{{ w.seatNo }}</div>
-            <div class="office-area">{{ w.area }} · {{ workstationTypeMap[w.type] ?? w.type }}</div>
-          </div>
+          <span class="office-seat">{{ w.seatNo }}</span>
           <StatusTag entity="workstation" :value="w.status" />
         </div>
+        <div class="office-area">{{ w.area }} · {{ workstationTypeMap[w.type] ?? w.type }}</div>
         <div class="office-capacity">容纳 {{ w.capacity }} 人</div>
 
         <template v-if="w.enterpriseName">
@@ -255,8 +270,6 @@ function enterpriseHref(w: Workstation): string | undefined {
       </div>
       </t-loading>
 
-    <t-empty v-if="filteredOffices.length === 0" class="grid-empty" description="暂无符合条件的办公室" />
-
     <!-- 区域规划弹窗（保存后静默刷新分组名称，避免卡片板块闪烁） -->
     <AreaPlanDialog v-model:visible="areaPlanVisible" @success="load(true)" />
 
@@ -272,13 +285,6 @@ function enterpriseHref(w: Workstation): string | undefined {
 </template>
 
 <style scoped>
-.stat-row {
-  display: grid;
-  grid-template-columns: repeat(4, 1fr);
-  gap: 16px;
-  margin-bottom: 16px;
-}
-
 .legend-row {
   display: flex;
   align-items: center;
@@ -289,7 +295,7 @@ function enterpriseHref(w: Workstation): string | undefined {
 .legend-item {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
+  gap: 8px;
   font-size: 12px;
   color: var(--td-text-color-secondary);
 }
@@ -336,6 +342,9 @@ function enterpriseHref(w: Workstation): string | undefined {
   flex-direction: column;
 }
 
+/* 依赖 TDesign 内部类：t-loading 包裹层 .t-loading__parent 与 t-card 内容区 .t-card__body。
+ * 目的：卡片内容撑满高度（flex 链）+ 紧凑内边距；t-loading/t-card 无对应布局 API。
+ * TDesign 升级若调整这两个类名需同步检查。 */
 .office-card :deep(.t-loading__parent) {
   flex: 1;
   display: flex;
@@ -364,13 +373,13 @@ function enterpriseHref(w: Workstation): string | undefined {
 
 .office-head {
   display: flex;
-  align-items: flex-start;
+  align-items: center;
   justify-content: space-between;
   gap: 8px;
 }
 
 .office-seat {
-  font-size: 16px;
+  font-size: 14px;
   font-weight: 600;
   color: var(--td-text-color-primary);
 }
@@ -389,7 +398,7 @@ function enterpriseHref(w: Workstation): string | undefined {
 .office-enterprise-row {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: 8px;
   min-width: 0;
 }
 

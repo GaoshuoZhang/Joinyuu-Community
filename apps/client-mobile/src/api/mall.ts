@@ -32,6 +32,12 @@ export async function fetchMyOrders(query: { page?: number; pageSize?: number } 
   return httpGet<PageResult<MyOrder>>(`/me/orders?${qs}`)
 }
 
+/** GET /api/app/me/orders/:id — 我的兑换订单详情（非本人/不存在 → 404） */
+export async function fetchMyOrder(id: string): Promise<MyOrder> {
+  if (apiMode === 'mock') return (await import('@/mock/handlers/mall')).fetchMyOrder(id)
+  return httpGet<MyOrder>(`/me/orders/${id}`)
+}
+
 /** POST /api/app/mall/orders/:id/confirm — 确认收货（实物 shipped → completed）。 */
 /** POST /api/app/mall/orders/:id/review — 完成订单评价（1~5 星 + 可选文字） */
 export async function reviewOrder(id: string, rating: number, review?: string): Promise<void> {

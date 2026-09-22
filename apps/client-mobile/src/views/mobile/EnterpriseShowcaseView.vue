@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
-import { useRoute } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
 import { Button, Icon, Image, Toast } from 'tdesign-mobile-vue'
 import { useAsyncList } from '@/composables/useAsyncList'
 import { fetchEnterpriseShowcase } from '@/api/enterprises'
@@ -16,6 +16,7 @@ import type { EnterpriseShowcase } from '@/types'
  * 仅 published 可见（404 → 空态 + 返回）；名片申请入口在社区·企业库卡片（成员可见）。
  * 2026-09-17 起不再公示企业成员。 */
 const route = useRoute()
+const router = useRouter()
 const auth = useAuthStore()
 
 const { data, loading, error, run } = useAsyncList<EnterpriseShowcase>(() =>
@@ -71,9 +72,7 @@ onMounted(async () => {
 <template>
   <div class="page-fade-in m-showcase">
     <ListSkeleton v-if="loading" />
-    <template v-else-if="error">
-      <EmptyBlock :text="error" action-text="重试" @action="run" />
-    </template>
+    <EmptyBlock v-else-if="error" :text="error" action-text="重试" @action="run" />
     <template v-else-if="showcase">
       <section class="banner">
         <span class="badge">
@@ -127,6 +126,13 @@ onMounted(async () => {
         </Button>
       </div>
     </template>
+    <!-- v46：名片未发布/已下架时（数据为空且无错误）补兜底出口，避免二级页整页空白成为死胡同 -->
+    <EmptyBlock
+      v-else
+      text="名片不存在或已下架"
+      action-text="浏览企业库"
+      @action="router.push('/community?tab=enterprise')"
+    />
   </div>
 </template>
 
@@ -158,12 +164,16 @@ onMounted(async () => {
 }
 
 .badge {
+  /* 徽标尺寸与页面其它企业头像位（Avatar 52/56px）同口径，集中为局部变量避免裸 px 散落 */
+  --badge-size: 52px;
   flex-shrink: 0;
-  width: 52px;
-  height: 52px;
+  width: var(--badge-size);
+  height: var(--badge-size);
   display: grid;
   place-items: center;
   border-radius: var(--td-radius-large);
+  /* 首字底色：低版本 Safari 不支持 color-mix，先给半透明白兜底再叠加 color-mix，避免首字对比度丢失 */
+  background: rgba(255, 255, 255, 0.2);
   background: color-mix(in srgb, var(--td-text-color-anti) 20%, transparent);
   font-size: var(--app-font-title);
   font-weight: 600;
@@ -193,7 +203,8 @@ onMounted(async () => {
 
 .sec-title {
   margin:0 0 var(--app-space-4);
-  font-size: var(--app-font-body);
+  /* v46：与同名章节标题组件（企业详情 / 人才名片）统一为 subtitle 档 */
+  font-size: var(--app-font-subtitle);
 }
 
 .desc {

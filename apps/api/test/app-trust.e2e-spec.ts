@@ -221,4 +221,28 @@ describe('M2-R R3 实名/收藏/协议/社区', () => {
     const card = await appGet(app, token, `/api/app/community/talents/U1005`)
     expect(card.body.data.intro).toBe('更新后的个人简介')
   })
+
+  it('U1005 关闭「公开名片」后从人才库隐藏且公开名片 404，重新开启后恢复', async () => {
+    const off = await request(app.getHttpServer())
+      .put('/api/app/me/cards/individual')
+      .set('Authorization', `Bearer ${tokenU5}`)
+      .send({ visibility: { isPublic: false } })
+    expect(off.status).toBe(200)
+
+    const hidden = await appGet(app, token, `/api/app/community/talents/U1005`)
+    expect(hidden.status).toBe(404)
+    const listHidden = await appGet(app, token, '/api/app/community/talents')
+    expect(listHidden.body.data.some((t: { uid: string }) => t.uid === 'U1005')).toBe(false)
+
+    const on = await request(app.getHttpServer())
+      .put('/api/app/me/cards/individual')
+      .set('Authorization', `Bearer ${tokenU5}`)
+      .send({ visibility: { isPublic: true } })
+    expect(on.status).toBe(200)
+
+    const restored = await appGet(app, token, `/api/app/community/talents/U1005`)
+    expect(restored.status).toBe(200)
+    const listRestored = await appGet(app, token, '/api/app/community/talents')
+    expect(listRestored.body.data.some((t: { uid: string }) => t.uid === 'U1005')).toBe(true)
+  })
 })

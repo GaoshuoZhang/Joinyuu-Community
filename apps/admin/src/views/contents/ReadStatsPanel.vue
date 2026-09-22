@@ -20,6 +20,19 @@ const topViews = computed(() => (published.value.length === 0 ? 0 : Math.max(...
 /* 按阅读量倒序排行 */
 const ranked = computed(() => [...list.value].sort((a, b) => b.views - a.views))
 
+/* 前端分页：全量数据交由 t-table 内置分页本地切片（每页 20） */
+const page = ref(1)
+const pagination = computed(() => ({
+  current: page.value,
+  pageSize: 20,
+  total: ranked.value.length,
+  showPageSize: false,
+}))
+
+function onPageChange(p: { current: number }) {
+  page.value = p.current
+}
+
 const columns = [
   { colKey: 'rank', title: '排名', cell: 'rank', width: 80 , ellipsis: true},
   { colKey: 'title', title: '文章', cell: 'title', width: 260, resizable: true , ellipsis: true},
@@ -83,11 +96,11 @@ onMounted(load)
         />
       </template>
     </PageHeader>
-    <div class="stat-row">
-      <StatCard label="总阅读量" :value="totalViews" />
-      <StatCard label="已发布文章" :value="published.length" />
-      <StatCard label="篇均阅读" :value="avgViews" />
-      <StatCard label="单篇最高" :value="topViews" />
+    <div v-if="!loadError" class="stat-row stat-row--4">
+      <StatCard label="总阅读量" :value="totalViews" :loading="loading" />
+      <StatCard label="已发布文章" :value="published.length" :loading="loading" />
+      <StatCard label="篇均阅读" :value="avgViews" :loading="loading" />
+      <StatCard label="单篇最高" :value="topViews" :loading="loading" />
     </div>
 
     <div class="page-card">
@@ -99,7 +112,9 @@ onMounted(load)
         :data="ranked"
         :columns="visibleColumns"
         :loading="loading"
+        :pagination="pagination"
         empty="暂无文章"
+        @page-change="onPageChange"
       >
         <template #rank="{ row }">
           <span :class="['rank-badge', { 'is-top': ranked.indexOf(row) < 3 }]">
@@ -112,7 +127,10 @@ onMounted(load)
         </template>
         <template #columnNames="{ row }">
           <div class="col-tags">
-            <t-tag v-for="c in row.columnNames" :key="c" variant="light" size="small">{{ c }}</t-tag>
+            <template v-if="row.columnNames?.length">
+              <t-tag v-for="c in row.columnNames" :key="c" variant="light" size="small">{{ c }}</t-tag>
+            </template>
+            <span v-else class="muted-dash">—</span>
           </div>
         </template>
         <template #authorName="{ row }">
@@ -122,7 +140,7 @@ onMounted(load)
           <span class="views-num">{{ row.views }}</span>
         </template>
         <template #publishedAt="{ row }">
-          {{ row.publishedAt ?? '未发布' }}
+          {{ row.publishedAt || '—' }}
         </template>
       </t-table>
     </div>
@@ -130,46 +148,35 @@ onMounted(load)
 </template>
 
 <style scoped>
-.stat-row {
-  display: grid;
-  grid-template-columns: repeat(4, 1fr);
-  gap: 16px;
-  margin-bottom: 16px;
-}
-
+/* 名次徽标：两位名次宽度会超过高度，圆角须用固定 token，
+ * 用 50% 会被撑成椭圆（圆形只适用于等宽高元素） */
 .rank-badge {
   display: inline-flex;
   align-items: center;
   justify-content: center;
   min-width: 22px;
   height: 22px;
-  border-radius: 50%;
+  padding: 0 4px;
+  border-radius: var(--td-radius-default);
   font-size: 12px;
   color: var(--td-text-color-secondary);
   background: var(--td-bg-color-secondarycontainer);
 }
 
 .rank-badge.is-top {
-  color: #fff;
+  color: var(--td-text-color-anti);
   background: var(--td-brand-color);
   font-weight: 600;
-}
-
-.cell-title {
-  font-weight: 500;
-  color: var(--td-text-color-primary);
-}
-
-.cell-sub {
-  margin-top: 2px;
-  font-size: 12px;
-  color: var(--td-text-color-secondary);
 }
 
 .col-tags {
   display: flex;
   flex-wrap: wrap;
   gap: 4px;
+}
+
+.muted-dash {
+  color: var(--td-text-color-placeholder);
 }
 
 .views-num {

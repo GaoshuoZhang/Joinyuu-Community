@@ -53,8 +53,10 @@ export async function fetchPolicies(query: CommunityPoliciesQuery = {}): Promise
 export async function fetchTalents(query: TalentQuery = {}): Promise<TalentMember[]> {
   return withLatency(() => {
     const kw = query.keyword?.trim() ?? ''
+    /* 关闭「公开名片」的用户不进人才库（[MOCK-ONLY] 与后端口径一致） */
+    const visible = talentMembers.filter((t) => individualShowcases[t.uid]?.visibility?.isPublic !== false)
     /* 头像与个人资料同步（人才库列表展示） */
-    const list = talentMembers.map((t) => ({ ...t, avatar: accounts.find((a) => a.uid === t.uid)?.avatar }))
+    const list = visible.map((t) => ({ ...t, avatar: accounts.find((a) => a.uid === t.uid)?.avatar }))
     if (!kw) return list
     return list.filter((t) => matchKeyword(t.name + t.role + t.intro + t.skills.join(''), kw))
   }, 150)
@@ -67,6 +69,8 @@ export async function fetchTalentCard(uid: string): Promise<TalentCard> {
     const account = accounts.find((a) => a.uid === uid)
     const identity = account?.identities.find((i) => i.type === 'community_individual')
     const stored = individualShowcases[uid]
+    /* 关闭「公开名片」：不对外暴露该名片 */
+    if (stored?.visibility?.isPublic === false) fail(404, '人才名片不存在或未公开')
     const base: Partial<IndividualShowcase> = stored ?? (talent ? { displayName: talent.name, intro: talent.intro, skills: talent.skills } : {})
     if (!base.displayName) fail(404, '人才名片不存在或未公开')
     /* [MOCK-ONLY] v35 名片字段可见性：按保存的公开设置过滤敏感字段 */

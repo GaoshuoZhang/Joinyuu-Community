@@ -67,6 +67,8 @@ export class MeService {
       status: user.status,
       registeredAt: user.registeredAt,
       avatar: user.avatar ?? undefined,
+      /* 新手任务永久隐藏状态：按账号持久化，客户端据此跨浏览器一致地隐藏引导 */
+      activationDismissed: user.activationDismissed,
       identities: user.identities.map((i) => ({
         type: i.type,
         level: i.level ?? undefined,
@@ -96,6 +98,14 @@ export class MeService {
     if (dto.avatar !== undefined) data.avatar = dto.avatar.trim() || null
 
     await this.prisma.user.update({ where: { uid }, data })
+    return { code: 0 }
+  }
+
+  /** 永久隐藏新手任务（幂等）：按账号持久化，换浏览器/设备后不再显示。 */
+  async dismissActivation(uid: string): Promise<{ code: number }> {
+    const user = await this.prisma.user.findUnique({ where: { uid }, select: { uid: true } })
+    if (!user) throw new NotFoundException('用户不存在')
+    await this.prisma.user.update({ where: { uid }, data: { activationDismissed: true } })
     return { code: 0 }
   }
 

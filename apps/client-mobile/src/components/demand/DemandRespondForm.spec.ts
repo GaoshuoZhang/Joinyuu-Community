@@ -1,13 +1,23 @@
-import { describe, expect, it } from 'vitest'
+import { beforeAll, describe, expect, it } from 'vitest'
 import { nextTick } from 'vue'
-import { mount } from '@vue/test-utils'
+import { flushPromises, mount } from '@vue/test-utils'
 import DemandRespondForm from './DemandRespondForm.vue'
 import type { UserIdentity } from '@/types'
 
 describe('DemandRespondForm', () => {
+  beforeAll(() => {
+    /* jsdom 未实现 scrollIntoView：t-form 的 scroll-to-first-error 在校验失败时依赖它 */
+    if (!Element.prototype.scrollIntoView) {
+      Element.prototype.scrollIntoView = () => {}
+    }
+  })
+
   it('空内容提交时不派发事件并展示行内错误', async () => {
     const wrapper = mount(DemandRespondForm, { props: { identities: [], userName: '张三', submitting: false } })
-    await wrapper.get('button').trigger('click')
+    /* t-form 经由 <form> 的 submit 事件触发校验（jsdom 不支持 submit 按钮的激活行为） */
+    await wrapper.get('form').trigger('submit')
+    /* 校验链路为异步，等待校验结果与错误渲染完成 */
+    await flushPromises()
     expect(wrapper.emitted('respond')).toBeUndefined()
     expect(wrapper.text()).toContain('请输入响应说明')
   })
@@ -22,7 +32,8 @@ describe('DemandRespondForm', () => {
     const chips = wrapper.findAll('.t-tag--checkable')
     expect(chips.length).toBe(2)
     await chips[1].trigger('click')
-    await wrapper.findAll('button').at(-1)!.trigger('click')
+    await wrapper.get('form').trigger('submit')
+    await flushPromises()
     expect(wrapper.emitted('respond')?.at(-1)).toEqual(['我们可以承接这个需求', company])
   })
 
@@ -40,7 +51,8 @@ describe('DemandRespondForm', () => {
     expect(wrapper.text()).toContain('社区个体')
 
     await wrapper.get('textarea').setValue('可以承接')
-    await wrapper.findAll('button').at(-1)!.trigger('click')
+    await wrapper.get('form').trigger('submit')
+    await flushPromises()
     expect(wrapper.emitted('respond')?.at(-1)).toEqual(['可以承接', communityIndividual])
   })
 

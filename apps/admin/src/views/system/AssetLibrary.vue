@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { useListQueryState } from '@/utils/listQuery'
 import ListErrorState from '@/components/ListErrorState.vue'
+import ListEmptyState from '@/components/ListEmptyState.vue'
 import { computed, onMounted, ref } from 'vue'
 import { MessagePlugin } from 'tdesign-vue-next'
 import { DeleteIcon, UploadIcon } from 'tdesign-icons-vue-next'
@@ -32,12 +33,18 @@ function sourceText(a: MallAsset): string {
   return '未关联'
 }
 
-const totalSize = computed(() => {
-  const bytes = assets.value.reduce((s, a) => s + a.size, 0)
+/** 来源标签语义色：未关联用中性色，已关联按业务来源区分 */
+function sourceTheme(a: MallAsset): 'default' | 'primary' | 'success' {
+  if (!a.sourceId) return 'default'
+  return a.sourceType === 'article' ? 'primary' : 'success'
+}
+
+/** 字节大小自适应展示（B/KB/MB）：单卡与汇总共用 */
+function formatSize(bytes: number): string {
   if (bytes < 1024) return `${bytes} B`
   if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`
   return `${(bytes / 1024 / 1024).toFixed(2)} MB`
-})
+}
 
 const filtered = computed(() =>
   assets.value.filter(
@@ -46,6 +53,9 @@ const filtered = computed(() =>
       (!search.value || a.fileName.toLowerCase().includes(search.value.toLowerCase())),
   ),
 )
+
+/* 汇总口径与列表一致：数量与体积都按当前筛选结果统计 */
+const totalSize = computed(() => formatSize(filtered.value.reduce((s, a) => s + a.size, 0)))
 
 async function load(silent = false) {
   if (!silent) loading.value = true
@@ -148,6 +158,14 @@ async function onDelete(row: MallAsset) {
 
 useListQueryState({}, undefined, { refs: { source: activeSource, keyword: search }, live: true })
 
+/* 空态筛选判定：来源/关键字任一生效即视为筛选无结果 */
+const filterState = computed(() => ({ source: activeSource.value, keyword: search.value }))
+
+function onClearFilters() {
+  activeSource.value = ''
+  search.value = ''
+}
+
 onMounted(load)
 </script>
 
@@ -165,24 +183,31 @@ onMounted(load)
       </template>
     </PageHeader>
 
+    <p class="asset-summary">{{ filtered.length }} 个素材 · 共 {{ totalSize }}</p>
+
     <div class="page-filter-bar">
-      <t-select v-model="activeSource" :options="sourceOptions" style="width: 140px" />
-      <t-input v-model="search" clearable placeholder="按文件名搜索…" style="width: 240px" />
-      <t-tag variant="light" theme="primary">{{ filtered.length }} 个素材 · 共 {{ totalSize }}</t-tag>
+      <t-select class="ctl-w-sm" v-model="activeSource" :options="sourceOptions" />
+      <t-input class="ctl-w-xl" v-model="search" clearable placeholder="按文件名搜索…" />
     </div>
 
     <t-loading :loading="loading" size="small" class="asset-grid">
-      <div v-if="!filtered.length" class="asset-empty">暂无素材，点击右上角「上传图片」新增</div>
+      <ListEmptyState
+        v-if="!filtered.length"
+        class="asset-empty"
+        :query="filterState"
+        description="暂无素材，点击右上角「上传图片」新增"
+        @clear="onClearFilters"
+      />
       <div v-for="a in filtered" :key="a.id" class="asset-card">
         <div class="asset-thumb-wrap">
-          <img class="asset-thumb" :src="a.url" :alt="a.fileName" width="320" height="120" loading="lazy" decoding="async" />
-          <t-tag class="asset-badge" size="small" variant="light" theme="primary">{{ sourceText(a) }}</t-tag>
+          <img class="asset-thumb" :src="a.url" :alt="a.fileName" width="320" height="180" loading="lazy" decoding="async" />
+          <t-tag class="asset-badge" size="small" variant="light" :theme="sourceTheme(a)">{{ sourceText(a) }}</t-tag>
         </div>
         <div class="asset-info">
           <div class="asset-name" :title="a.fileName">{{ a.fileName }}</div>
           <div class="asset-meta">
             <span>{{ a.createdAt }}</span>
-            <span>{{ (a.size / 1024).toFixed(1) }} KB</span>
+            <span>{{ formatSize(a.size) }}</span>
           </div>
         </div>
         <div class="asset-op">
@@ -205,6 +230,12 @@ onMounted(load)
   display: none;
 }
 
+.asset-summary {
+  margin: -8px 0 16px;
+  font-size: 12px;
+  color: var(--td-text-color-secondary);
+}
+
 .asset-grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
@@ -214,9 +245,6 @@ onMounted(load)
 
 .asset-empty {
   grid-column: 1 / -1;
-  padding: 48px 0;
-  text-align: center;
-  color: var(--td-text-color-placeholder);
 }
 
 .asset-card {
@@ -242,10 +270,12 @@ onMounted(load)
   max-width: calc(100% - 16px);
 }
 
+/* 固定 16:9 比例：卡片宽度随栅格变化时缩略图不再被拉伸变形 */
 .asset-thumb {
   display: block;
   width: 100%;
-  height: 120px;
+  height: auto;
+  aspect-ratio: 16 / 9;
   object-fit: cover;
   background: var(--td-bg-color-page);
 }
@@ -258,7 +288,7 @@ onMounted(load)
   overflow: hidden;
   white-space: nowrap;
   text-overflow: ellipsis;
-  font-size: 13px;
+  font-size: 14px;
 }
 
 .asset-meta {

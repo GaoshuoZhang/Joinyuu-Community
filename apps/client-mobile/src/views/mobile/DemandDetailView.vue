@@ -28,8 +28,8 @@ const { data: demand, loading, error, run } = useAsyncList(() => fetchDemand(id)
 
 onMounted(async () => {
   await run()
-  await loadFavorite()
-  await loadOwnerResponses()
+  /* v48：收藏与发布者响应列表互相独立，并行拉取，避免串行 await 形成加载瀑布 */
+  await Promise.all([loadFavorite(), loadOwnerResponses()])
   void loadRespondIdentities()
 })
 
@@ -108,16 +108,27 @@ async function loadRespondIdentities() {
   }
 }
 
-const OWNER_EMPTY_NOTICES: Record<string, string> = {
-  pending: '审核结果将通过站内信通知',
-  pending_release: '发布后即可接受响应',
-  scheduled: '将在设定时间自动发布',
-  rejected: '可修改后重新提交审核',
-  withdrawn: '可修改后重新提交审核',
-  closed: '暂无可处理的响应',
-  projected: '协作项目已生成',
+/* 响应区状态提示：同一状态对发布者（关心审核/立项进展）与浏览者（能否响应）含义不同，
+ * 文案按 isMine 分支，避免把「发布者视角」的说明安到浏览者身上。
+ * done 表示该状态已是终态（按成功色呈现）。 */
+const STATUS_NOTICES: Record<string, { owner: string; viewer: string; done?: boolean }> = {
+  pending: { owner: '审核结果将通过站内信通知', viewer: '需求正在审核中，暂不能响应' },
+  pending_release: { owner: '发布后即可接受响应', viewer: '需求已通过审核，发布后即可响应' },
+  scheduled: { owner: '将在设定时间自动发布', viewer: '需求将在设定时间自动发布' },
+  rejected: { owner: '可修改后重新提交审核', viewer: '需求未通过审核，暂不能响应' },
+  withdrawn: { owner: '可修改后重新提交审核', viewer: '需求已撤回，暂不能响应' },
+  closed: { owner: '暂无可处理的响应', viewer: '需求已关闭，暂不接受响应' },
+  selected: { owner: '暂不接受新响应，等待社区管理员确认立项', viewer: '已选定承接方，等待社区管理员确认立项' },
+  projected: { owner: '协作项目已生成', viewer: '协作项目已生成', done: true },
 }
-const ownerEmptyNotice = computed(() => OWNER_EMPTY_NOTICES[demand.value?.status ?? ''] ?? '暂无响应')
+/* 发布者侧空态文案（DemandOwnerResponses 复用同一份口径） */
+const ownerEmptyNotice = computed(() => STATUS_NOTICES[demand.value?.status ?? '']?.owner ?? '暂无响应')
+/* 浏览者侧状态提示：无映射（已发布）时返回 null，交给响应表单 */
+const viewerNotice = computed(() => {
+  const meta = STATUS_NOTICES[demand.value?.status ?? '']
+  if (!meta) return null
+  return { text: isMine.value ? meta.owner : meta.viewer, done: meta.done === true }
+})
 
 async function loadOwnerResponses() {
   if (!isMine.value || !canViewResponses.value) return
@@ -227,14 +238,7 @@ async function onShare() {
           <p class="responded-note">{{ demand.myResponse?.message || '—' }}</p>
           <p class="responded-meta">{{ formatLocalDateTime(demand.myResponse?.at ?? '') }}</p>
         </div>
-        <p v-else-if="demand.status === 'projected'" class="notice done">协作项目已生成</p>
-        <p v-else-if="demand.status === 'selected'" class="notice">暂不接受新响应，等待社区管理员确认立项</p>
-        <p v-else-if="demand.status === 'pending_release'" class="notice">发布后即可接受响应</p>
-        <p v-else-if="demand.status === 'scheduled'" class="notice">将在设定时间自动发布</p>
-        <p v-else-if="demand.status === 'rejected'" class="notice">发布者可修改后重新提交审核</p>
-        <p v-else-if="demand.status === 'withdrawn'" class="notice">发布者可修改后重新提交审核</p>
-        <p v-else-if="demand.status === 'closed'" class="notice">暂不接受响应</p>
-        <p v-else-if="demand.status === 'pending'" class="notice">审核结果将通过站内信通知</p>
+        <p v-else-if="viewerNotice" class="notice" :class="{ done: viewerNotice.done }">{{ viewerNotice.text }}</p>
         <DemandRespondForm
           v-else
           ref="respondForm"

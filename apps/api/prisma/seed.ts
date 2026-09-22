@@ -1062,6 +1062,10 @@ async function main() {
         action: l.action,
         target: l.target,
         detail: l.detail ?? null,
+        /* 演示用的历史记录可能不带 ip/快照（早期数据），缺失时保持 null */
+        ip: l.ip ?? null,
+        before: l.before ?? undefined,
+        after: l.after ?? undefined,
         at: l.at,
       },
     })

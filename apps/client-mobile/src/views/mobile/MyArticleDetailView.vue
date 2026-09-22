@@ -34,7 +34,8 @@ onMounted(run)
       </article>
       <section v-if="article.rejectReason" class="m-card review"><h3>审核意见</h3><p>{{ article.rejectReason }}</p></section>
       <section class="m-card content"><h3>投稿正文</h3><RichTextBlock :html="article.content" /></section>
-      <Button block variant="text" @click="router.push('/me/articles')">返回我的投稿</Button>
+      <!-- 返回是二级页唯一出口，用描边按钮形态（非文字链）保持可识别与 44px 命中区 -->
+      <Button block variant="outline" @click="router.push('/me/articles')">返回我的投稿</Button>
     </template>
   </div>
 </template>

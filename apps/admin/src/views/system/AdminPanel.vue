@@ -1,9 +1,11 @@
 <script setup lang="ts">
 import { useListQueryState } from '@/utils/listQuery'
 import ListErrorState from '@/components/ListErrorState.vue'
-import { computed, onMounted, reactive, ref } from 'vue'
+import ListEmptyState from '@/components/ListEmptyState.vue'
+import StatusTag from '@/components/StatusTag.vue'
+import { computed, nextTick, onMounted, reactive, ref } from 'vue'
 import { MessagePlugin } from 'tdesign-vue-next'
-import type { FormProps } from 'tdesign-vue-next'
+import type { CustomValidateResolveType, FormProps } from 'tdesign-vue-next'
 import { focusFirstInvalid } from '@/utils/form'
 import { AddIcon, SearchIcon } from 'tdesign-icons-vue-next'
 import PageHeader from '@/components/PageHeader.vue'
@@ -24,7 +26,7 @@ const columns = [
   { colKey: 'account', title: '账号', cell: 'account', width: 180 , ellipsis: true},
   { colKey: 'roles', title: '角色', cell: 'roles', width: 200 , ellipsis: true},
   { colKey: 'status', title: '状态', cell: 'status', width: 90 , ellipsis: true},
-  { colKey: 'lastLoginAt', title: '最后登录', width: 160 , ellipsis: true},
+  { colKey: 'lastLoginAt', title: '最后登录', cell: 'lastLoginAt', width: 160 , ellipsis: true},
   { colKey: 'createdAt', title: '创建时间', width: 160 , ellipsis: true},
   { colKey: 'op', title: '操作', cell: 'op', width: 220 },
 ]
@@ -84,10 +86,11 @@ async function onSave() {
   try {
     const res = await saveAdmin(editingId.value, { ...form })
     if (editingId.value == null && res.initialPassword) {
-      MessagePlugin.success({
-        content: `管理员已新增，初始密码：${res.initialPassword}（请转告本人并尽快修改）`,
-        duration: 8000,
-      })
+      /* 初始密码仅此一次返回，改用常驻弹窗（可复制）承接，避免 8 秒 toast 错过即丢 */
+      createdAccount.username = form.username
+      createdAccount.password = res.initialPassword
+      passwordVisible.value = true
+      MessagePlugin.success('管理员已新增')
     } else {
       MessagePlugin.success(editingId.value == null ? '管理员已新增' : '修改已保存')
     }
@@ -97,6 +100,38 @@ async function onSave() {
     MessagePlugin.error(e instanceof Error ? e.message : '保存失败')
   } finally {
     saving.value = false
+  }
+}
+
+/* 初始密码展示：常驻弹窗 + 复制，需显式确认关闭（密码只返回一次） */
+const passwordVisible = ref(false)
+const createdAccount = reactive({ username: '', password: '' })
+
+/** 复制文本：优先 Clipboard API，非安全上下文（局域网 IP）回退 execCommand */
+async function copyPassword() {
+  const text = createdAccount.password
+  try {
+    if (navigator.clipboard?.writeText) {
+      await navigator.clipboard.writeText(text)
+      MessagePlugin.success('初始密码已复制到剪贴板')
+      return
+    }
+  } catch {
+    /* 权限拒绝/非安全上下文 → 走回退 */
+  }
+  try {
+    const ta = document.createElement('textarea')
+    ta.value = text
+    ta.style.position = 'fixed'
+    ta.style.opacity = '0'
+    document.body.appendChild(ta)
+    ta.select()
+    const ok = document.execCommand('copy')
+    ta.remove()
+    if (ok) MessagePlugin.success('初始密码已复制到剪贴板')
+    else MessagePlugin.error('复制失败，请手动复制')
+  } catch {
+    MessagePlugin.error('复制失败，请手动复制')
   }
 }
 
@@ -118,27 +153,51 @@ async function onToggleStatus(row: AdminAccount) {
   }
 }
 
-/* 重置密码 */
+/* 重置密码：规则对齐后端 ResetPasswordDto（≥8 位且含字母与数字）+ 同域二次输入约定 */
 const resetVisible = ref(false)
 const resetTarget = ref<AdminAccount | null>(null)
-const resetPassword = ref('')
+const resetFormRef = ref()
+const resetForm = reactive({ password: '', confirmPassword: '' })
 const resetting = ref(false)
+
+/* TDesign 自定义校验器第二参只带 { formData, name }，字段值须从 formData 读取 */
+function validateConfirmPassword(
+  _value: unknown,
+  params?: { formData: Record<string, unknown>; name: string },
+): CustomValidateResolveType {
+  if (params?.formData?.confirmPassword !== params?.formData?.password) {
+    return { result: false, message: '两次输入的密码不一致' }
+  }
+  return true
+}
+
+const resetRules: FormProps['rules'] = {
+  password: [
+    { required: true, message: '请输入新密码', trigger: 'submit' },
+    { min: 8, message: '新密码至少 8 位', trigger: 'submit' },
+    { pattern: /^(?=.*[A-Za-z])(?=.*\d).+$/, message: '新密码需同时包含字母和数字', trigger: 'submit' },
+  ],
+  confirmPassword: [
+    { required: true, message: '请再次输入新密码', trigger: 'submit' },
+    { validator: validateConfirmPassword, trigger: 'submit' },
+  ],
+}
 
 function openReset(row: AdminAccount) {
   resetTarget.value = row
-  resetPassword.value = ''
+  resetForm.password = ''
+  resetForm.confirmPassword = ''
   resetVisible.value = true
+  nextTick(() => resetFormRef.value?.clearValidate())
 }
 
 async function onReset() {
   if (!resetTarget.value) return
-  if (resetPassword.value.length < 8) {
-    MessagePlugin.warning('新密码至少 8 位')
-    return
-  }
+  const valid = await resetFormRef.value.validate()
+  if (valid !== true) return focusFirstInvalid(resetFormRef.value)
   resetting.value = true
   try {
-    await resetAdminPassword(resetTarget.value.id, resetPassword.value)
+    await resetAdminPassword(resetTarget.value.id, resetForm.password)
     MessagePlugin.success(`已重置「${resetTarget.value.username}」的密码`)
     resetVisible.value = false
   } catch (e) {
@@ -153,6 +212,9 @@ const filtered = computed(() => {
   if (!kw) return list.value
   return list.value.filter((a) => a.username.toLowerCase().includes(kw) || a.name.toLowerCase().includes(kw))
 })
+
+/* 空态筛选判定 */
+const filterState = computed(() => ({ keyword: appliedKeyword.value }))
 
 function onQuery() {
   appliedKeyword.value = keyword.value.trim()
@@ -172,12 +234,12 @@ onMounted(load)
 </script>
 
 <template>
-  <div class="admin-panel page-fade-in">
+  <div class="admin-panel">
     <ListErrorState v-if="loadError" :message="loadError" :loading="loading" @retry="() => load()" />
     <PageHeader title="管理员账号" description="多运营人员账号、角色分配与启停管理" />
 
     <div class="page-filter-bar">
-      <t-input v-model="keyword" class="filter-keyword" placeholder="搜索账号/姓名…" clearable @enter="onQuery" />
+      <t-input v-model="keyword" class="ctl-w-xl" placeholder="搜索账号/姓名…" clearable @enter="onQuery" />
       <t-button theme="primary" variant="outline" @click="onQuery">
         <template #icon><SearchIcon /></template>
         查询
@@ -185,58 +247,59 @@ onMounted(load)
       <t-button variant="outline" theme="default" @click="onResetQuery">
         重置
       </t-button>
-      <t-button theme="primary" class="filter-create" @click="openCreate">
+      <t-button theme="primary" class="toolbar-right" @click="openCreate">
         <template #icon><AddIcon /></template>
         新增管理员
       </t-button>
     </div>
 
-    <div class="page-card">
-      <t-table
-        row-key="id"
-        table-layout="fixed"
-        hover
-        resizable
-        :data="filtered"
-        :columns="columns"
-        :loading="loading"
-        empty="暂无管理员账号"
-      >
-        <template #account="{ row }">
-          <div class="account-cell">
-            <span class="account-name">{{ row.username }}</span>
-            <span class="account-sub">{{ row.name }}</span>
-          </div>
-        </template>
-        <template #roles="{ row }">
-          <div class="role-wrap">
-            <t-tag v-for="r in row.roleCodes" :key="r" variant="light" size="small">{{ roleLabels([r]) }}</t-tag>
-          </div>
-        </template>
-        <template #status="{ row }">
-          <t-tag :theme="row.status === 'active' ? 'success' : 'default'" variant="light">
-            {{ row.status === 'active' ? '正常' : '已停用' }}
-          </t-tag>
-        </template>
-        <template #op="{ row }">
-          <div class="op-cell" @click.stop>
-            <t-button variant="text" size="small" @click="openEdit(row)">编辑</t-button>
-            <t-button variant="text" size="small" @click="openReset(row)">重置密码</t-button>
-            <t-popconfirm
-              :content="row.status === 'active' ? '确认停用该账号？' : '确认启用该账号？'"
-              @confirm="onToggleStatus(row)"
+    <!-- 卡片由聚合壳（AccountRoleView）提供，面板内不再嵌套 page-card -->
+    <t-table
+      row-key="id"
+      table-layout="fixed"
+      hover
+      resizable
+      :data="filtered"
+      :columns="columns"
+      :loading="loading"
+    >
+      <template #account="{ row }">
+        <div class="account-cell">
+          <span class="account-name">{{ row.username }}</span>
+          <span class="account-sub">{{ row.name }}</span>
+        </div>
+      </template>
+      <template #roles="{ row }">
+        <div class="role-wrap">
+          <t-tag v-for="r in row.roleCodes" :key="r" variant="light" size="small">{{ roleLabels([r]) }}</t-tag>
+        </div>
+      </template>
+      <template #status="{ row }">
+        <StatusTag entity="admin" :value="row.status" />
+      </template>
+      <template #lastLoginAt="{ row }">{{ row.lastLoginAt || '—' }}</template>
+      <template #op="{ row }">
+        <div class="op-cell" @click.stop>
+          <t-button variant="text" size="small" @click="openEdit(row)">编辑</t-button>
+          <t-button variant="text" size="small" @click="openReset(row)">重置密码</t-button>
+          <t-popconfirm
+            :content="row.status === 'active' ? '确认停用该账号？' : '确认启用该账号？'"
+            @confirm="onToggleStatus(row)"
+          >
+            <t-button variant="text" size="small" :theme="row.status === 'active' ? 'danger' : 'primary'"
+              :loading="togglingId === row.id"
+              :disabled="togglingId != null"
             >
-              <t-button variant="text" size="small" :theme="row.status === 'active' ? 'danger' : 'primary'"
-                :loading="togglingId === row.id"
-                :disabled="togglingId != null"
-              >
-                {{ row.status === 'active' ? '停用' : '启用' }}
-              </t-button>
-            </t-popconfirm>
-          </div>
-        </template>
-      </t-table>
-    </div>
+              {{ row.status === 'active' ? '停用' : '启用' }}
+            </t-button>
+          </t-popconfirm>
+        </div>
+      </template>
+
+      <template #empty>
+        <ListEmptyState :query="filterState" description="暂无管理员账号" @clear="onResetQuery" />
+      </template>
+    </t-table>
 
     <!-- 新增 / 编辑弹窗 -->
     <t-dialog
@@ -274,23 +337,46 @@ onMounted(load)
       <template #footer>
         <div class="dialog-footer">
           <t-button variant="text" theme="default" @click="resetVisible = false">取消</t-button>
-          <t-button theme="primary" :loading="resetting" @click="onReset">确认重置</t-button>
+          <t-button theme="danger" :loading="resetting" @click="onReset">确认重置</t-button>
         </div>
       </template>
       <p class="reset-tip">将重置「{{ resetTarget?.username }}」的登录密码，重置后需使用新密码登录。</p>
-      <t-input v-model="resetPassword" type="password" name="reset-password" autocomplete="new-password" placeholder="新密码（至少 8 位）…" />
+      <t-form ref="resetFormRef" :data="resetForm" :rules="resetRules" label-align="top">
+        <t-form-item label="新密码" name="password">
+          <t-input v-model="resetForm.password" type="password" name="reset-password" autocomplete="new-password" placeholder="至少 8 位，须含字母和数字…" />
+        </t-form-item>
+        <t-form-item label="确认新密码" name="confirmPassword">
+          <t-input v-model="resetForm.confirmPassword" type="password" name="reset-password-confirm" autocomplete="new-password" placeholder="再次输入新密码…" />
+        </t-form-item>
+      </t-form>
+    </t-dialog>
+
+    <!-- 初始密码：仅返回一次，常驻展示直至显式确认 -->
+    <t-dialog
+      v-model:visible="passwordVisible"
+      header="管理员已新增"
+      width="480px"
+      :close-btn="false"
+      :close-on-overlay-click="false"
+      :close-on-esc-keydown="false"
+    >
+      <p class="reset-tip">
+        账号「{{ createdAccount.username }}」的初始密码仅显示这一次，请立即复制并转告本人，登录后尽快修改。
+      </p>
+      <div class="password-row">
+        <t-input :value="createdAccount.password" readonly aria-label="初始密码" />
+        <t-button theme="primary" variant="outline" @click="copyPassword">复制</t-button>
+      </div>
+      <template #footer>
+        <div class="dialog-footer">
+          <t-button theme="primary" @click="passwordVisible = false">我已妥善保存</t-button>
+        </div>
+      </template>
     </t-dialog>
   </div>
 </template>
 
 <style scoped>
-.filter-keyword {
-  width: 240px;
-}
-.filter-create {
-  margin-left: auto;
-}
-
 .account-cell {
   display: flex;
   flex-direction: column;
@@ -313,23 +399,16 @@ onMounted(load)
   gap: 4px;
 }
 
-.op-cell {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-  flex-wrap: nowrap;
-}
-
-.dialog-footer {
-  display: flex;
-  justify-content: flex-end;
-  gap: 8px;
-}
-
 .reset-tip {
   margin: 0 0 12px;
-  font-size: 13px;
+  font-size: 14px;
   line-height: 1.6;
   color: var(--td-text-color-secondary);
+}
+
+.password-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
 }
 </style>

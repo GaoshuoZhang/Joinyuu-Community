@@ -12,4 +12,8 @@ describe('HomeView content contract', () => {
     expect(source).toContain('empty-text="暂无最新资讯"')
     expect(source).not.toMatch(/为你推荐|最新项目|精选文章|recommendationItems/)
   })
+
+  it('发布需求入口只保留一处（最新需求区块下方不再重复）', () => {
+    expect(source.match(/publish-entry/g) ?? []).toHaveLength(1)
+  })
 })

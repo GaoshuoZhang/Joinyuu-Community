@@ -95,6 +95,9 @@ const enrollmentResult = ref<EventEnrollmentResult | null>(null)
 
 const isEnded = computed(() => event.value?.status === 'ended')
 const isCancelled = computed(() => event.value?.status === 'cancelled')
+/* 活动介绍：富文本 HTML 分支不能开 pre-wrap（源码缩进/换行会被原样渲染成可见空白），
+ * 仅纯文本分支需要 pre-wrap 保留换行（判定口径与 RichTextBlock 的富文本识别一致）。 */
+const descIsPlainText = computed(() => !/<\/?[a-z][^>]*>/i.test(event.value?.description ?? ''))
 const myStatus = computed(() => event.value?.myEnrollmentStatus)
 const myCheckedIn = computed(() => event.value?.myCheckedIn ?? false)
 /* 未结束/未取消时，报名操作区固定在底部，为内容区预留空间 */
@@ -264,7 +267,7 @@ async function onShare() {
 
       <section class="m-card">
         <h3 class="sec-title">活动介绍</h3>
-        <RichTextBlock class="desc" :html="event.description" />
+        <RichTextBlock class="desc" :class="{ 'desc-plain': descIsPlainText }" :html="event.description" />
       </section>
 
       <section v-if="isCancelled" class="m-card actions">
@@ -306,7 +309,7 @@ async function onShare() {
 }
 
 .m-detail.has-floating-enroll {
-  padding-bottom: calc(170px + env(safe-area-inset-bottom));
+  padding-bottom: var(--app-action-bar-clearance-lg);
 }
 
 .detail-cover {
@@ -331,7 +334,7 @@ async function onShare() {
   margin:0;
   padding:var(--app-space-5) var(--app-space-7);
   border-radius: var(--td-radius-large);
-  background: var(--td-error-color-1, #fdecee);
+  background: var(--td-error-color-1);
   border: 1px solid var(--td-error-color);
   color: var(--td-error-color);
   font-size: var(--app-font-caption);
@@ -382,6 +385,10 @@ async function onShare() {
   font-size: var(--app-font-body);
   line-height: 1.8;
   color: var(--td-text-color-secondary);
+}
+
+/* 仅纯文本正文保留换行；富 HTML 分支不开 pre-wrap，避免源码缩进被渲染成多余空白 */
+.desc-plain {
   white-space: pre-wrap;
 }
 

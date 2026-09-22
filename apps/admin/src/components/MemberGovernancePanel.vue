@@ -3,6 +3,7 @@ import { computed, onMounted, reactive, ref } from 'vue'
 import { MessagePlugin } from 'tdesign-vue-next'
 import ColumnController from '@/components/ColumnController.vue'
 import ListErrorState from '@/components/ListErrorState.vue'
+import ListEmptyState from '@/components/ListEmptyState.vue'
 import StatusTag from '@/components/StatusTag.vue'
 import { useListQueryState } from '@/utils/listQuery'
 import { fetchDeletions, reviewDeletion, type DeletionRow } from '@/api/memberGovernance'
@@ -42,6 +43,9 @@ async function load() {
   } catch (error) { if (current === version) loadError.value = error instanceof Error ? error.message : '加载失败' }
   finally { if (current === version) loading.value = false }
 }
+/* 空态筛选判定：状态筛选非空时提示「清除筛选」 */
+const filterState = computed(() => ({ status: status.value }))
+function onClearFilter() { status.value = ''; page.value = 1; load() }
 function open(row: DeletionRow, action: 'approve' | 'reject') {
   selectedId.value = row.id
   selectedName.value = row.user.nickname
@@ -62,7 +66,7 @@ onMounted(load)
 <template>
   <div class="page-card">
     <div class="page-filter-bar">
-      <t-select v-model="status" :options="options" aria-label="筛选状态" @change="page = 1; load()" />
+      <t-select v-model="status" :options="options" label="状态" @change="page = 1; load()" />
       <ColumnController v-model="visibleKeys" storage-key="member-governance-deletions" :columns="allColumns.map(column => ({ key: column.colKey, title: column.title }))" />
     </div>
     <ListErrorState v-if="loadError" :message="loadError" :loading="loading" @retry="load" />
@@ -71,11 +75,15 @@ onMounted(load)
       <template #id="{ row }"><t-tag class="id-tag" size="small" variant="light">{{ row.id }}</t-tag></template>
       <template #effectiveAt="{ row }">{{ row.effectiveAt || '—' }}<p v-if="row.status === 'cooling'" class="field-help">{{ remaining(row) }}</p></template>
       <template #status="{ row }"><StatusTag entity="accountDeletion" :value="row.status" /></template>
-      <template #op="{ row }"><template v-if="row.status === 'cooling'"><t-button variant="text" theme="primary" :disabled="cooling(row)" @click="open(row, 'approve')">确认注销</t-button><t-button variant="text" theme="danger" @click="open(row, 'reject')">驳回</t-button></template><span v-else>—</span></template>
+      <template #op="{ row }"><template v-if="row.status === 'cooling'"><t-button variant="text" theme="danger" :disabled="cooling(row)" @click="open(row, 'approve')">确认注销</t-button><t-button variant="text" @click="open(row, 'reject')">驳回</t-button><p v-if="cooling(row)" class="field-help">冷静期未满，暂不可注销</p></template><span v-else>—</span></template>
+
+      <template #empty>
+        <ListEmptyState :query="filterState" description="暂无注销申请" @clear="onClearFilter" />
+      </template>
     </t-table>
   </div>
-  <t-dialog v-model:visible="visible" :header="`${form.action === 'approve' ? '确认通过' : '确认驳回'} · ${selectedName}`" :confirm-btn="{ content: '确认执行', loading: submitting }" @confirm="submit">
+  <t-dialog v-model:visible="visible" :header="`${form.action === 'approve' ? '确认通过' : '确认驳回'} · ${selectedName}`" :confirm-btn="{ content: '确认执行', loading: submitting, theme: form.action === 'approve' ? 'danger' : 'primary' }" @confirm="submit">
     <p v-if="form.action === 'approve'">执行后账号将注销，登录会话失效，个人资料清除，业务历史保留。</p>
-    <t-form :data="form" label-align="top"><t-form-item label="复核说明" name="note" :rules="[{ required: true, message: '请填写复核说明' }]"><t-textarea v-model="form.note" :maxlength="255" placeholder="填写复核依据或驳回原因…" /></t-form-item></t-form>
+    <t-form :data="form" label-align="top"><t-form-item label="复核说明" name="note" :rules="[{ required: true, message: '请填写复核说明', trigger: 'submit' }]"><t-textarea v-model="form.note" :maxlength="255" placeholder="填写复核依据或驳回原因…" /></t-form-item></t-form>
   </t-dialog>
 </template>

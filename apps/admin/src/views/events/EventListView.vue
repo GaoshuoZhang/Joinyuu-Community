@@ -4,21 +4,24 @@ import ListErrorState from '@/components/ListErrorState.vue'
 import { useListQueryState } from '@/utils/listQuery'
 import { useRouter } from 'vue-router'
 import { MessagePlugin } from 'tdesign-vue-next'
-import { AddIcon, SearchIcon, DownloadIcon } from 'tdesign-icons-vue-next'
+import { AddIcon, SearchIcon } from 'tdesign-icons-vue-next'
 import PageHeader from '@/components/PageHeader.vue'
 import StatusTag from '@/components/StatusTag.vue'
 import ColumnController from '@/components/ColumnController.vue'
 import BulkArchiveDialog from '@/components/BulkArchiveDialog.vue'
+import ExportButton from '@/components/ExportButton.vue'
+import ListEmptyState from '@/components/ListEmptyState.vue'
 import EventFormDialog from '@/components/EventFormDialog.vue'
 import { dictFallback, fetchDictEntries } from '@/api/dicts'
-import { exportCsv, statusLabel } from '@/utils/exportCsv'
+import { fetchPointsRules } from '@/api/mall'
+import { statusLabel } from '@/utils/exportCsv'
 import EventScheduleDialog from '@/components/EventScheduleDialog.vue'
 import { archiveEvent, cancelEvent, cancelEventSchedule, fetchEvents, publishEventNow, setEventEnrollment, restoreCancelledEvent } from '@/api/events'
 import { fetchUser } from '@/api/users'
 import type { CommunityEvent } from '@/types'
 
 const router = useRouter()
-const loading = ref(false)
+const loading = ref(true)
 const loadError = ref('')
 const list = ref<CommunityEvent[]>([])
 const total = ref(0)
@@ -52,12 +55,13 @@ const statusOptions = [
 const sortBy = ref<'id' | 'startTime' | 'createdAt'>('id')
 const sortOrder = ref<'ascend' | 'descend'>('descend')
 
-const columns = computed(() => [
+const columns = [
   { colKey: 'title', title: '活动', cell: 'title', width: 220, resizable: true , ellipsis: true},
   { colKey: 'type', title: '类型', cell: 'type', width: 84, resizable: true , ellipsis: true},
   {
     colKey: 'startTime',
     title: '活动开始时间',
+    cell: 'startTime',
     ellipsis: true,
     width: 150,
     resizable: true,
@@ -78,14 +82,14 @@ const columns = computed(() => [
   { colKey: 'enrolled', title: '报名', cell: 'enrolled', width: 108, resizable: true , ellipsis: true},
   { colKey: 'checked', title: '签到', cell: 'checked', width: 108, resizable: true , ellipsis: true},
   { colKey: 'status', title: '状态', cell: 'status', width: 150, resizable: true , ellipsis: true},
-  { colKey: 'op', title: '操作', cell: 'op', width: 230 },
-])
+  { colKey: 'op', title: '操作', cell: 'op', width: 300 },
+]
 
-/* 列配置：本地持久化显隐/顺序（columns 为 computed，脚本内需 .value 解包） */
-const visibleColKeys = ref<string[]>(columns.value.map((c) => c.colKey))
+/* 列配置：本地持久化显隐/顺序 */
+const visibleColKeys = ref<string[]>(columns.map((c) => c.colKey))
 
 const visibleColumns = computed(() => {
-  const byKey = new Map(columns.value.map((c) => [c.colKey, c]))
+  const byKey = new Map(columns.map((c) => [c.colKey, c]))
   return visibleColKeys.value.map((k) => byKey.get(k)).filter(Boolean)
 })
 
@@ -168,6 +172,14 @@ function onRowClick({ row }: { row: CommunityEvent }) {
 /* 积分规则默认分值：活动未自定义时展示规则配置值 */
 const rulePoints = ref({ enroll: 5, checkin: 10 })
 
+/* 积分标签配色：等于积分规则默认值 = 绿色（沿用规则值）、自定义值 = 黄色 */
+function enrollPointsTheme(row: CommunityEvent): 'success' | 'warning' {
+  return (row.enrollPoints ?? rulePoints.value.enroll) === rulePoints.value.enroll ? 'success' : 'warning'
+}
+function checkinPointsTheme(row: CommunityEvent): 'success' | 'warning' {
+  return (row.checkinPoints ?? rulePoints.value.checkin) === rulePoints.value.checkin ? 'success' : 'warning'
+}
+
 function approvedCount(row: CommunityEvent) {
   return row.enrollments.filter((e) => e.status === 'approved').length
 }
@@ -197,10 +209,16 @@ async function onArchive(row: CommunityEvent) {
 /* 一键归档：按当前筛选全量拉取，归档所选状态的已结束 / 已取消活动 */
 const archivingAll = ref(false)
 const bulkVisible = ref(false)
+const bulkProgress = ref<{ done: number; total: number; failed: number } | null>(null)
+let bulkCancelled = false
 const bulkStatuses = [
   { label: '已结束', value: 'ended' },
   { label: '已取消', value: 'cancelled' },
 ]
+
+function onBulkCancel() {
+  bulkCancelled = true
+}
 
 async function doBulkArchive(values: string[]) {
   const targets: CommunityEvent[] = []
@@ -214,17 +232,34 @@ async function doBulkArchive(values: string[]) {
     MessagePlugin.info('没有符合所选状态的可归档活动')
     return
   }
+  /* 进度 + 可取消：逐条执行，取消后停止后续条目（见 BulkArchiveDialog 进度态） */
+  bulkCancelled = false
+  bulkProgress.value = { done: 0, total: pending.length, failed: 0 }
+  let done = 0
   let failed = 0
   for (const e of pending) {
+    if (bulkCancelled) break
     try {
       await archiveEvent(e.id)
     } catch {
       failed++
     }
+    done++
+    bulkProgress.value = { done, total: pending.length, failed }
   }
-  if (pending.length - failed > 0) MessagePlugin.success(`已归档 ${pending.length - failed} 条活动`)
-  if (failed > 0) MessagePlugin.warning(`${failed} 条活动归档失败，请重试`)
+  bulkProgress.value = null
+  if (bulkCancelled) {
+    MessagePlugin.warning(`已取消执行：本次已归档 ${done - failed} 条`)
+  } else {
+    if (done - failed > 0) MessagePlugin.success(`已归档 ${done - failed} 条活动`)
+    if (failed > 0) MessagePlugin.warning(`${failed} 条活动归档失败，请重试`)
+  }
   await load()
+}
+
+/* 确认前预估影响条数：按所选状态取 total 求和（pageSize=1 仅取 total） */
+function countByStatus(status: string) {
+  return fetchEvents({ ...query, status, page: 1, pageSize: 1 }).then((r) => r.total)
 }
 
 function onBulkArchive() {
@@ -367,6 +402,15 @@ const { syncQuery } = useListQueryState(query, load, { refs: { sortBy, sortOrder
 onMounted(() => {
   applyRouteFilter()
   load()
+  /* 积分规则默认值取自真实规则（标签配色依赖它，与需求列表同一思路） */
+  fetchPointsRules()
+    .then((rules) => {
+      rulePoints.value.enroll = rules.find((r) => r.code === 'activity_enroll_approved')?.points ?? 5
+      rulePoints.value.checkin = rules.find((r) => r.code === 'activity_checkin')?.points ?? 10
+    })
+    .catch(() => {
+      /* 规则加载失败保留默认值 */
+    })
   fetchDictEntries('event_type')
     .then((entries) => {
       const labels = entries.filter((e) => e.status === 'enabled').map((e) => ({ label: e.label, value: e.label }))
@@ -377,23 +421,26 @@ onMounted(() => {
     })
 })
 
-/* 导出当前页活动列表为 CSV */
-function onExport() {
-  exportCsv(
-    '活动列表',
-    ['编号', '活动标题', '类型', '开始时间', '结束时间', '地点', '报名（已通过/容量）', '状态'],
-    list.value.map((e) => [
-      e.id,
-      e.title,
-      e.type,
-      e.startTime,
-      e.endTime,
-      e.location,
-      `${e.enrollments.filter((en) => en.status === 'approved').length}/${e.capacity}`,
-      statusLabel('event', e.status),
-    ]),
-  )
-  MessagePlugin.success(`已导出当前页 ${list.value.length} 条数据`)
+/* 导出：当前页 / 全部结果（沿用列表筛选） */
+const exportHeaders = ['编号', '活动标题', '类型', '开始时间', '结束时间', '地点', '报名（已通过/容量）', '状态']
+
+function mapRow(e: CommunityEvent): (string | number)[] {
+  return [
+    e.id,
+    e.title,
+    e.type,
+    e.startTime,
+    e.endTime,
+    e.location,
+    `${e.enrollments.filter((en) => en.status === 'approved').length}/${e.capacity}`,
+    statusLabel('event', e.status),
+  ]
+}
+
+const pageExportRows = computed(() => list.value.map(mapRow))
+
+function fetchAllForExport(page: number, pageSize: number) {
+  return fetchEvents({ ...query, page, pageSize })
 }
 </script>
 
@@ -410,10 +457,13 @@ function onExport() {
         <t-button variant="outline" :loading="archivingAll" :disabled="archivingAll" @click="onBulkArchive">
           一键归档
         </t-button>
-        <t-button variant="outline" @click="onExport">
-          <template #icon><DownloadIcon /></template>
-          导出
-        </t-button>
+        <ExportButton
+          filename="活动列表"
+          :headers="exportHeaders"
+          :rows="pageExportRows"
+          :fetch-all="fetchAllForExport"
+          :map-row="mapRow"
+        />
         <t-button theme="primary" @click="openCreate">
           <template #icon><AddIcon /></template>
           新增活动
@@ -422,27 +472,24 @@ function onExport() {
     </PageHeader>
 
     <div class="page-filter-bar">
-      <t-input
+      <t-input class="ctl-w-xl"
         v-model="query.keyword"
         placeholder="搜索活动标题/编号…"
         clearable
-        style="width: 220px"
         @enter="onSearch"
       />
-      <t-select
+      <t-select class="ctl-w-md"
         v-model="query.type"
         label="类型"
         :options="typeOptions"
         clearable
-        style="width: 150px"
         @change="onSearch"
       />
-      <t-select
+      <t-select class="ctl-w-md"
         v-model="query.status"
         label="状态"
         :options="statusOptions"
         clearable
-        style="width: 160px"
         @change="onSearch"
       />
       <t-button @click="onSearch">
@@ -474,6 +521,7 @@ function onExport() {
         :sort="tableSort"
         :loading="loading"
         :pagination="pagination"
+        :row-attributes="{ style: { cursor: 'pointer' } }"
         @page-change="onPageChange"
         @sort-change="onSortChange"
         @row-click="onRowClick"
@@ -485,30 +533,22 @@ function onExport() {
         <template #type="{ row }">
           <t-tag variant="light">{{ row.type }}</t-tag>
         </template>
+        <template #startTime="{ row }">{{ row.startTime || '—' }}</template>
         <template #createdAt="{ row }">{{ row.createdAt ?? '—' }}</template>
         <template #enrolled="{ row }">
           <div class="stack-cell">
             <span>{{ approvedCount(row) }}/{{ row.capacity }}</span>
-            <t-tag
-              :theme="row.enrollPoints != null ? 'warning' : 'success'"
-              variant="light"
-              size="small"
-              class="pts-tag"
-            >
-              {{ row.enrollPoints ?? rulePoints.enroll }}积分
+            <!-- 标签色：等于积分规则值=绿色（未自定义），活动自定义值=黄色 -->
+            <t-tag :theme="enrollPointsTheme(row)" variant="light" size="small">
+              {{ row.enrollPoints != null ? `自定义 ${row.enrollPoints}积分` : `统一 ${rulePoints.enroll}积分` }}
             </t-tag>
           </div>
         </template>
         <template #checked="{ row }">
           <div class="stack-cell">
             <span>{{ checkedCount(row) }}/{{ approvedCount(row) }}</span>
-            <t-tag
-              :theme="row.checkinPoints != null ? 'warning' : 'success'"
-              variant="light"
-              size="small"
-              class="pts-tag"
-            >
-              {{ row.checkinPoints ?? rulePoints.checkin }}积分
+            <t-tag :theme="checkinPointsTheme(row)" variant="light" size="small">
+              {{ row.checkinPoints != null ? `自定义 ${row.checkinPoints}积分` : `统一 ${rulePoints.checkin}积分` }}
             </t-tag>
           </div>
         </template>
@@ -580,7 +620,7 @@ function onExport() {
           </div>
         </template>
         <template #empty>
-          <t-empty description="暂无活动数据" />
+          <ListEmptyState :query="query" description="暂无活动数据" @clear="onReset" />
         </template>
       </t-table>
     </div>
@@ -597,37 +637,19 @@ function onExport() {
       title="一键归档 · 活动"
       :statuses="bulkStatuses"
       :loading="archivingAll"
+      :progress="bulkProgress"
+      :count-for-status="countByStatus"
       @confirm="onBulkConfirm"
+      @cancel="onBulkCancel"
     />
   </div>
 </template>
 
 <style scoped>
-.cell-title {
-  font-weight: 500;
-  color: var(--td-text-color-primary);
-}
-
-.cell-sub {
-  margin-top: 2px;
-  font-size: 12px;
-  color: var(--td-text-color-secondary);
-}
-
-.op-cell {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-  flex-wrap: nowrap;
-}
 .stack-cell {
   display: flex;
   flex-direction: column;
   align-items: center;
   gap: 3px;
-}
-
-.pts-tag {
-  font-size: 11px;
 }
 </style>

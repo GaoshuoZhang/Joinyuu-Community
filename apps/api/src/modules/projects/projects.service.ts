@@ -1,5 +1,6 @@
 import { BadRequestException, ConflictException, Injectable, NotFoundException } from '@nestjs/common'
-import type { Milestone, Prisma, Project, ProjectUndertaker } from '@prisma/client'
+import { Prisma } from '@prisma/client'
+import type { Milestone, Project, ProjectUndertaker } from '@prisma/client'
 import { PrismaService } from '../../common/prisma/prisma.service'
 import { IdGeneratorService } from '../../common/id-generator/id-generator.service'
 import { AuditService } from '../../common/audit/audit.service'
@@ -34,6 +35,18 @@ export interface ProjectCreatePayload {
   description: string
   milestones: MilestoneInput[]
   expReward?: number
+  /* 需求方 / 创建人 / 联系方式 / 合同价格：
+   * - 需求立项：由服务端按来源需求快照覆盖（客户端传值不生效）；
+   * - 社区自建：由「新增项目」表单录入。 */
+  demanderId?: string
+  demanderName?: string
+  demanderIdentity?: Prisma.InputJsonValue | null
+  creatorName?: string
+  creatorId?: string
+  contactName?: string
+  contactPhone?: string
+  contactEmail?: string
+  contractPrice?: string
 }
 
 /* 返回形状与 apps/admin/src/types/index.ts 逐字段一致 */
@@ -72,6 +85,16 @@ export interface ProjectDto {
   closeReason?: string
   finishedAt?: string
   deletedAt?: string
+  /* 需求方 / 创建人 / 联系方式 / 合同价格（历史项目可能缺省） */
+  demanderId?: string
+  demanderName?: string
+  demanderIdentity?: unknown
+  creatorName?: string
+  creatorId?: string
+  contactName?: string
+  contactPhone?: string
+  contactEmail?: string
+  contractPrice?: string
 }
 
 type ProjectWithRelations = Project & { undertakers: ProjectUndertaker[]; milestones: Milestone[] }
@@ -243,7 +266,10 @@ export class ProjectsService {
   /* 锁定签名（demands-api 复用）：新增项目（无来源需求）
    * 承接方非空、share 合计 100、名称解析（404 承接企业/承接人不存在）、code=JY-YYYY-NN 按年原子发号 */
   async createProject(payload: ProjectCreatePayload, operator: string): Promise<ProjectDto> {
-    const project = await this.prisma.$transaction((tx) => this.createProjectInHostTx(tx, payload))
+    /* 社区自建项目：创建人缺省取当前操作人 */
+    const project = await this.prisma.$transaction((tx) =>
+      this.createProjectInHostTx(tx, { ...payload, creatorName: payload.creatorName ?? operator }),
+    )
 
     await this.audit.record({
       module: '项目管理',
@@ -301,6 +327,15 @@ export class ProjectsService {
         description: sanitizeHtml(payload.description),
         memberCount: undertakers.length,
         expReward: payload.expReward ?? null,
+        demanderId: payload.demanderId ?? null,
+        demanderName: payload.demanderName ?? null,
+        demanderIdentity: payload.demanderIdentity ?? Prisma.DbNull,
+        creatorName: payload.creatorName ?? null,
+        creatorId: payload.creatorId ?? null,
+        contactName: payload.contactName ?? null,
+        contactPhone: payload.contactPhone ?? null,
+        contactEmail: payload.contactEmail ?? null,
+        contractPrice: payload.contractPrice ?? null,
       },
     })
 
@@ -363,6 +398,15 @@ export class ProjectsService {
           ...(payload.startDate != null ? { startDate: payload.startDate } : {}),
           ...(payload.endDate != null ? { endDate: payload.endDate } : {}),
           description: sanitizeHtml(payload.description),
+          ...(payload.demanderId != null ? { demanderId: payload.demanderId } : {}),
+          ...(payload.demanderName != null ? { demanderName: payload.demanderName } : {}),
+          ...(payload.demanderIdentity !== undefined ? { demanderIdentity: payload.demanderIdentity ?? Prisma.DbNull } : {}),
+          ...(payload.creatorName != null ? { creatorName: payload.creatorName } : {}),
+          ...(payload.creatorId != null ? { creatorId: payload.creatorId } : {}),
+          ...(payload.contactName != null ? { contactName: payload.contactName } : {}),
+          ...(payload.contactPhone != null ? { contactPhone: payload.contactPhone } : {}),
+          ...(payload.contactEmail != null ? { contactEmail: payload.contactEmail } : {}),
+          ...(payload.contractPrice != null ? { contractPrice: payload.contractPrice } : {}),
         },
       })
 
@@ -657,5 +701,14 @@ function toProjectDto(project: ProjectWithRelations): ProjectDto {
   if (project.expReward != null) dto.expReward = project.expReward
   if (project.closeReason != null) dto.closeReason = project.closeReason
   if (project.deletedAt != null) dto.deletedAt = project.deletedAt
+  if (project.demanderId != null) dto.demanderId = project.demanderId
+  if (project.demanderName != null) dto.demanderName = project.demanderName
+  if (project.demanderIdentity != null) dto.demanderIdentity = project.demanderIdentity
+  if (project.creatorName != null) dto.creatorName = project.creatorName
+  if (project.creatorId != null) dto.creatorId = project.creatorId
+  if (project.contactName != null) dto.contactName = project.contactName
+  if (project.contactPhone != null) dto.contactPhone = project.contactPhone
+  if (project.contactEmail != null) dto.contactEmail = project.contactEmail
+  if (project.contractPrice != null) dto.contractPrice = project.contractPrice
   return dto
 }

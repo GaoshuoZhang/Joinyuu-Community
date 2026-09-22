@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
-import { Button, DialogPlugin, Toast } from 'tdesign-mobile-vue'
+import { Button, DialogPlugin, List, Toast } from 'tdesign-mobile-vue'
 import { useAsyncList } from '@/composables/useAsyncList'
 import { useIncrementalList } from '@/composables/useIncrementalList'
 import { fetchMyArticles, withdrawArticle } from '@/api/contents'
@@ -17,6 +17,14 @@ const { data, loading, error, run } = useAsyncList<MySubmittedArticle[]>(fetchMy
 
 const items = computed(() => data.value ?? [])
 const { visibleItems, hasMore, showMore } = useIncrementalList(items)
+const footerState = computed(() => (hasMore.value ? 'load-more' : ''))
+function loadMore() {
+  if (!hasMore.value) return
+  showMore()
+}
+function onListScroll(bottomDistance: number) {
+  if (bottomDistance < 60) loadMore()
+}
 const empty = computed(() => !loading.value && !error.value && items.value.length === 0)
 
 function onRevise(a: MySubmittedArticle) {
@@ -55,11 +63,11 @@ onMounted(run)
     <ListSkeleton v-if="loading" />
     <EmptyBlock v-else-if="error" :text="error" action-text="重试" @action="run" />
     <template v-else-if="empty">
-      <!-- v45：空状态补出口，避免二级页没有 TabBar 时成为死胡同 -->
-      <EmptyBlock text="还没有投稿，去写一篇吧" action-text="写一篇投稿" @action="router.push('/articles/new')" />
+      <!-- v45：空状态补出口，避免二级页没有 TabBar 时成为死胡同（单一主入口，不再叠加同义 CTA） -->
+      <EmptyBlock text="还没有投稿，去写一篇吧" />
       <Button theme="primary" block @click="router.push('/articles/new')">去投稿</Button>
     </template>
-    <div v-else class="stagger list">
+    <List v-else class="stagger list" :async-loading="footerState" @load-more="loadMore" @scroll="onListScroll">
       <p class="list-count">共 {{ formatZhNumber(items.length) }} 篇</p>
       <section
         v-for="a in visibleItems"
@@ -89,10 +97,7 @@ onMounted(run)
           </Button>
         </div>
       </section>
-      <Button v-if="hasMore" block variant="outline" @click="showMore">
-        加载更多（剩余 {{ formatZhNumber(items.length - visibleItems.length) }} 篇）
-      </Button>
-    </div>
+    </List>
   </div>
 </template>
 
@@ -139,12 +144,6 @@ onMounted(run)
   margin:var(--app-space-4) 0 0;
   font-size: var(--app-font-caption);
   color: var(--td-error-color);
-}
-
-.hint {
-  margin:var(--app-space-2) 0 0;
-  font-size: var(--app-font-caption);
-  color: var(--td-text-color-secondary);
 }
 
 .ops {

@@ -295,6 +295,7 @@ async function handleDropdown(item: { value?: string | number }) {
         aria-label="返回工作台"
         href="#/dashboard"
       >
+        <!-- 品牌标识：色值为品牌资产，刻意不随主题切换 -->
         <svg class="logo-mark" viewBox="0 0 32 32" aria-hidden="true">
           <rect width="32" height="32" rx="7" fill="#0052D9" />
           <circle cx="12.5" cy="14" r="5" fill="#7BD8F5" />
@@ -515,12 +516,12 @@ async function handleDropdown(item: { value?: string | number }) {
       </div>
 
       <div class="side-footer">
-        <div class="footer-btn" role="button" tabindex="0" @click="toggleAllGroups" @keydown.enter.space.prevent="toggleAllGroups">
+        <div class="footer-btn" role="button" tabindex="0" :aria-label="isAllExpanded ? '全部折叠' : '全部展开'" @click="toggleAllGroups" @keydown.enter.space.prevent="toggleAllGroups">
           <ChevronUpIcon v-if="isAllExpanded" />
           <ChevronDownIcon v-else />
           <span v-if="!collapsed">{{ isAllExpanded ? '全部折叠' : '全部展开' }}</span>
         </div>
-        <div class="footer-btn" role="button" tabindex="0" @click="collapsed = !collapsed" @keydown.enter.space.prevent="collapsed = !collapsed">
+        <div class="footer-btn" role="button" tabindex="0" :aria-label="collapsed ? '展开菜单' : '收起菜单'" @click="collapsed = !collapsed" @keydown.enter.space.prevent="collapsed = !collapsed">
           <ChevronLeftIcon :class="{ 'rotate-180': collapsed }" />
           <span v-if="!collapsed">收起菜单</span>
         </div>
@@ -578,7 +579,7 @@ async function handleDropdown(item: { value?: string | number }) {
             </template>
           </t-button>
           <t-popup
-            v-model:popupVisible="noticeVisible"
+            v-model:visible="noticeVisible"
             trigger="click"
             placement="bottom-right"
             :show-arrow="false"
@@ -601,31 +602,34 @@ async function handleDropdown(item: { value?: string | number }) {
                   <t-button v-if="unreadCount > 0" theme="primary" variant="text" size="small" @click="onReadAll">全部已读</t-button>
                 </div>
                 <div class="notice-list">
-                  <ListErrorState v-if="noticeError" :message="noticeError" :loading="noticeLoading" @retry="loadNotifications" />
-                  <t-link theme="default" hover="color"
-                    v-for="n in noticeList"
-                    :key="n.id"
-                    class="notice-item"
-                    :class="{ 'is-unread': !n.read }"
-                    :href="n.link ? router.resolve(n.link).href : undefined"
-                    :role="n.link ? undefined : 'button'"
-                    :tabindex="n.link ? undefined : 0"
-                    @click="onNoticeClick(n)"
-                    @keydown.enter.space="!n.link && onNoticeClick(n)"
-                  >
-                    <div class="notice-item-head">
-                      <span class="notice-dot" v-if="!n.read"></span>
-                      <span class="notice-item-title">{{ n.title }}</span>
-                    </div>
-                    <div class="notice-item-content">{{ n.content }}</div>
-                    <div class="notice-item-time">{{ n.at }}</div>
-                  </t-link>
-                  <t-empty v-if="!noticeError && !noticeLoading && !noticeList.length" description="暂无通知" size="small" />
+                  <!-- 加载中给骨架容器，避免首次打开浮层时整块空白 -->
+                  <t-loading :loading="noticeLoading" size="small" class="notice-body">
+                    <ListErrorState v-if="noticeError" :message="noticeError" :loading="noticeLoading" @retry="loadNotifications" />
+                    <t-link theme="default" hover="color"
+                      v-for="n in noticeList"
+                      :key="n.id"
+                      class="notice-item"
+                      :class="{ 'is-unread': !n.read }"
+                      :href="n.link ? router.resolve(n.link).href : undefined"
+                      :role="n.link ? undefined : 'button'"
+                      :tabindex="n.link ? undefined : 0"
+                      @click="onNoticeClick(n)"
+                      @keydown.enter.space="!n.link && onNoticeClick(n)"
+                    >
+                      <div class="notice-item-head">
+                        <span class="notice-dot" v-if="!n.read"></span>
+                        <span class="notice-item-title">{{ n.title }}</span>
+                      </div>
+                      <div class="notice-item-content">{{ n.content }}</div>
+                      <div class="notice-item-time">{{ n.at }}</div>
+                    </t-link>
+                    <t-empty v-if="!noticeError && !noticeLoading && !noticeList.length" description="暂无通知" size="small" />
+                  </t-loading>
                 </div>
               </div>
             </template>
           </t-popup>
-          <t-dropdown :options="dropdownOptions" @click="handleDropdown">
+          <t-dropdown :options="dropdownOptions" trigger="click" @click="handleDropdown">
             <div
               class="admin-chip"
               role="button"
@@ -709,7 +713,7 @@ async function handleDropdown(item: { value?: string | number }) {
 }
 
 .logo-text {
-  font-size: 15px;
+  font-size: 14px;
   font-weight: 600;
   color: var(--td-text-color-primary);
   white-space: nowrap;
@@ -811,6 +815,8 @@ async function handleDropdown(item: { value?: string | number }) {
 
 .notice-panel {
   width: 340px;
+  /* 窄屏浮层不能横向溢出视口 */
+  max-width: calc(100vw - 24px);
 }
 
 .notice-head {
@@ -833,13 +839,18 @@ async function handleDropdown(item: { value?: string | number }) {
   overscroll-behavior: contain;
 }
 
+.notice-body {
+  /* 加载遮罩需要可用高度，否则空列表下只剩一条细缝 */
+  min-height: 96px;
+}
+
 .notice-item {
   display: block;
   white-space: normal;
   text-align: left;
   padding: 10px 16px;
   cursor: pointer;
-  border-bottom: 1px solid var(--td-bg-color-page);
+  border-bottom: 1px solid var(--td-component-stroke);
   transition: background 120ms ease;
 }
 
@@ -866,7 +877,7 @@ async function handleDropdown(item: { value?: string | number }) {
 }
 
 .notice-item-title {
-  font-size: 13px;
+  font-size: 14px;
   font-weight: 600;
   color: var(--td-text-color-primary);
 }
@@ -924,7 +935,7 @@ async function handleDropdown(item: { value?: string | number }) {
   align-items: center;
   gap: 4px;
   will-change: transform;
-  transition: transform 0.3s cubic-bezier(0.38, 0, 0.24, 1);
+  transition: transform 0.2s cubic-bezier(0.38, 0, 0.24, 1);
 }
 
 .tab-close-all {
@@ -943,7 +954,8 @@ async function handleDropdown(item: { value?: string | number }) {
   gap: 4px;
   flex-shrink: 0;
   height: 28px;
-  padding: 0 10px;
+  /* 左侧内边距交给 .tab-title 承担：整块可点区域与指针反馈一致 */
+  padding: 0 10px 0 0;
   border: 1px solid var(--td-component-border);
   border-radius: var(--td-radius-default);
   font-size: 12px;
@@ -965,6 +977,10 @@ async function handleDropdown(item: { value?: string | number }) {
 }
 
 .tab-title {
+  display: flex;
+  align-items: center;
+  align-self: stretch;
+  padding-left: 10px;
   white-space: nowrap;
 }
 
@@ -990,5 +1006,12 @@ async function handleDropdown(item: { value?: string | number }) {
   overflow-y: auto;
   padding: 16px 20px;
   background: var(--td-bg-color-page);
+}
+
+/* 窄屏收紧内容边距 */
+@media (max-width: 767px) {
+  .page-scroll {
+    padding: 12px;
+  }
 }
 </style>

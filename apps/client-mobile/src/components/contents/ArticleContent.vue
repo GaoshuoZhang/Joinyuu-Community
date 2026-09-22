@@ -8,7 +8,9 @@ import { onImageError } from '@/utils/imageFallback'
 const props = defineProps<{ content: string }>()
 
 const isRichContent = computed(() => /<\/?[a-z][^>]*>/i.test(props.content))
-const richContent = computed(() => DOMPurify.sanitize(props.content))
+/* 禁用内联 style：后端内容里的内联前景/背景色会绕过主题 token 写死浅色，暗色模式下正文不可读；
+ * class 保留（代码块的 language-* 等既有用法依赖它），图片仍受 .rich-content img 的 max-width:100% 约束。 */
+const richContent = computed(() => DOMPurify.sanitize(props.content, { FORBID_ATTR: ['style'] }))
 const contentBlocks = computed(() =>
   props.content
     .split('\n')
@@ -51,7 +53,8 @@ const contentBlocks = computed(() =>
 .para {
   margin:0 0 var(--app-space-6);
   font-size: var(--app-font-body);
-  line-height: 1.85;
+  /* v48：与 RichTextBlock（活动/需求等富文本正文）统一行高，避免同一「正文」场景两套口径 */
+  line-height: 1.8;
   color: var(--td-text-color-primary);
 }
 
@@ -62,7 +65,7 @@ const contentBlocks = computed(() =>
 .rich-content {
   overflow-wrap: anywhere;
   font-size: var(--app-font-body);
-  line-height: 1.85;
+  line-height: 1.8;
   color: var(--td-text-color-primary);
 }
 

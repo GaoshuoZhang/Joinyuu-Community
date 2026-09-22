@@ -32,6 +32,7 @@ function toProfile(uid: string): UserProfile {
     points: account.points,
     status: account.status,
     registeredAt: account.registeredAt,
+    activationDismissed: account.activationDismissed,
     identities: account.identities,
   }
 }
@@ -76,8 +77,16 @@ export async function updateMe(payload: Partial<Pick<UserProfile, 'username' | '
   })
 }
 
-/* ---------- 实名认证（[MOCK-ONLY] 缺口 §7.1-18；真实后端需三要素/公安库核验） ---------- */
+/** 永久隐藏新手任务（幂等；[MOCK-ONLY] 后端按账号持久化） */
+export async function dismissActivation(): Promise<void> {
+  await withLatency(() => {
+    const account = accounts.find((a) => a.uid === requireUid())
+    if (!account) fail(404, '用户不存在')
+    account.activationDismissed = true
+  }, 120)
+}
 
+/* ---------- 实名认证（[MOCK-ONLY] 缺口 §7.1-18；真实后端需三要素/公安库核验） ---------- */
 function maskRealName(name: string): string {
   if (name.length <= 1) return name
   return name[0] + '*'.repeat(name.length - 1)

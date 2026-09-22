@@ -74,6 +74,12 @@ export class AppMeOrdersController {
     return this.mall.myOrders(this.uid(req))
   }
 
+  /** 我的订单详情（仅订单本人；非本人/不存在 404） */
+  @Get('orders/:id')
+  myOrder(@Req() req: AppAuthenticatedRequest, @Param('id') id: string) {
+    return this.mall.myOrder(this.uid(req), id)
+  }
+
   private uid(req: AppAuthenticatedRequest): string {
     return req.user?.sub ?? ''
   }

@@ -3,8 +3,28 @@ import { computed } from 'vue'
 import { Tag } from 'tdesign-mobile-vue'
 
 /* 状态标签：TDesign Tag 轻封装（kind 决定状态集，配色与 admin StatusTag 口径一致：
- * warning=待定 / success=通过 / danger=驳回 / primary=中间态 / default=终态）。 */
-const props = defineProps<{ kind: 'demand' | 'response' | 'enroll' | 'order' | 'reservation' | 'article' | 'application' | 'lease'; value: string }>()
+ * warning=待定 / success=通过 / danger=驳回 / primary=中间态 / default=终态）。
+ * 页面禁止自定状态文案与颜色：新增状态先在此登记 kind，再在页面引用。 */
+const props = defineProps<{
+  kind:
+    | 'demand'
+    | 'response'
+    | 'enroll'
+    | 'order'
+    | 'reservation'
+    | 'article'
+    | 'application'
+    | 'lease'
+    | 'invitation'
+    | 'milestone'
+    | 'ticket'
+    | 'goods'
+    | 'space'
+    | 'project'
+    | 'realname'
+    | 'flag'
+  value: string
+}>()
 
 type Tone = 'default' | 'primary' | 'success' | 'warning' | 'danger'
 
@@ -69,6 +89,51 @@ const map: Record<string, Record<string, { label: string; tone: Tone }>> = {
     expiring: { label: '即将到期', tone: 'warning' },
     expired: { label: '已到期', tone: 'danger' },
     terminated: { label: '已终止', tone: 'default' },
+  },
+  /* 企业成员邀请（/me/invitations/:id、企业成员区） */
+  invitation: {
+    pending: { label: '待接受', tone: 'warning' },
+    accepted: { label: '已加入', tone: 'success' },
+    rejected: { label: '已拒绝', tone: 'default' },
+    revoked: { label: '已撤销', tone: 'default' },
+    expired: { label: '已过期', tone: 'default' },
+  },
+  /* 项目里程碑交付验收 */
+  milestone: {
+    pending: { label: '待提交', tone: 'default' },
+    submitted: { label: '待验收', tone: 'warning' },
+    accepted: { label: '已验收', tone: 'success' },
+  },
+  /* 活动电子票（`cancelled` / `expired` 分别表示活动取消与活动结束后的失效） */
+  ticket: {
+    valid: { label: '有效', tone: 'primary' },
+    checked: { label: '已签到', tone: 'success' },
+    waitlisted: { label: '候补中', tone: 'warning' },
+    cancelled: { label: '已失效（活动取消）', tone: 'danger' },
+    expired: { label: '已失效（活动结束）', tone: 'danger' },
+  },
+  /* 积分商品库存状态 */
+  goods: {
+    sold_out: { label: '已售罄', tone: 'warning' },
+  },
+  /* 空间开放状态 */
+  space: {
+    open: { label: '开放中', tone: 'success' },
+    maintenance: { label: '维护中', tone: 'warning' },
+  },
+  /* 项目结项标记 */
+  project: {
+    finished: { label: '已结项', tone: 'success' },
+  },
+  /* 实名认证 / 身份信息登记 */
+  realname: {
+    verified: { label: '已认证', tone: 'success' },
+    registered: { label: '已登记', tone: 'success' },
+  },
+  /* 本人的参与标记（已响应/已报名），与业务生命周期状态区分：统一用品牌色中间态 */
+  flag: {
+    responded: { label: '已响应', tone: 'primary' },
+    enrolled: { label: '已报名', tone: 'primary' },
   },
 }
 

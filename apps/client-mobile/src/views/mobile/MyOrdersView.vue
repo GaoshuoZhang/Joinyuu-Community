@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
-import { Button, Icon, TabPanel, Tabs } from 'tdesign-mobile-vue'
+import { Icon, List, TabPanel, Tabs } from 'tdesign-mobile-vue'
 import { fetchMyOrders } from '@/api/mall'
 import { useAsyncList } from '@/composables/useAsyncList'
 import { useIncrementalList } from '@/composables/useIncrementalList'
@@ -42,6 +42,14 @@ const filtered = computed(() => {
   return orders.value.filter((order) => UNFINISHED_STATUSES.includes(String(order.status)))
 })
 const { visibleItems, hasMore, showMore } = useIncrementalList(filtered)
+const footerState = computed(() => (hasMore.value ? 'load-more' : ''))
+function loadMore() {
+  if (!hasMore.value) return
+  showMore()
+}
+function onListScroll(bottomDistance: number) {
+  if (bottomDistance < 60) loadMore()
+}
 
 const { startSwipe, moveSwipe, cancelSwipe } = useTabSwipe(
   () => TAB_VALUES,
@@ -69,7 +77,7 @@ function goDetail(order: MyOrder) {
           <EmptyBlock v-else-if="error" :text="error" action-text="重试" @action="run" />
           <!-- v45：空状态补出口，避免二级页没有 TabBar 时成为死胡同 -->
           <EmptyBlock v-else-if="!filtered.length" :text="tab.value === 'all' ? '暂无兑换订单' : `暂无${tab.label}订单`" action-text="去积分商城" @action="router.push('/mall')" />
-          <template v-else>
+          <List v-else class="list stagger" :async-loading="footerState" @load-more="loadMore" @scroll="onListScroll">
             <p class="list-count">共 {{ formatZhNumber(filtered.length) }} 笔订单</p>
             <article
               v-for="order in visibleItems"
@@ -86,14 +94,11 @@ function goDetail(order: MyOrder) {
               <p v-if="order.voucherCode" class="voucher">
                 兑换码：<code translate="no">{{ order.voucherCode }}</code>
               </p>
-              <p v-else-if="order.trackingNo" class="meta">物流单号：{{ order.trackingNo }}</p>
-              <p class="meta">下单时间：{{ formatLocalDateTime(order.createdAt) }}</p>
+              <p v-else-if="order.trackingNo" class="meta tabular-nums">物流单号：{{ order.trackingNo }}</p>
+              <p class="meta tabular-nums">下单时间：{{ formatLocalDateTime(order.createdAt) }}</p>
               <span class="detail-link">查看详情<Icon aria-hidden="true" name="chevron-right" size="14px" /></span>
             </article>
-            <Button v-if="hasMore" block variant="outline" @click="showMore">
-              加载更多（剩余 {{ formatZhNumber(filtered.length - visibleItems.length) }} 笔）
-            </Button>
-          </template>
+          </List>
         </div>
       </TabPanel>
     </Tabs>
@@ -117,6 +122,12 @@ function goDetail(order: MyOrder) {
   flex-direction: column;
   gap: var(--app-space-5);
   padding-top: var(--app-space-6);
+}
+
+.list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--app-space-5);
 }
 
 .list-count {

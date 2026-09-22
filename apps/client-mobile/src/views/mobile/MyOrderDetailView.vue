@@ -2,11 +2,12 @@
 import { computed, onMounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { Button, DialogPlugin, Icon, Popup, QRCode, Rate, Textarea, Toast } from 'tdesign-mobile-vue'
-import { cancelOrder, confirmOrder, fetchMyOrders, reviewOrder, useOrder } from '@/api/mall'
+import { cancelOrder, confirmOrder, fetchMyOrder, reviewOrder, useOrder } from '@/api/mall'
+import { ApiError } from '@/api/http'
 import { useAsyncList } from '@/composables/useAsyncList'
 import EmptyBlock from '@/components/shared/EmptyBlock.vue'
 import ListSkeleton from '@/components/ListSkeleton.vue'
-import type { MyOrder, PageResult } from '@/types'
+import type { MyOrder } from '@/types'
 import StateTag from '@/components/shared/StateTag.vue'
 import { useBusinessNow } from '@/composables/useBusinessNow'
 import { formatLocalDateTime, formatZhNumber, parseLocalDateTime } from '@/utils/format'
@@ -16,10 +17,19 @@ const route = useRoute()
 const router = useRouter()
 const id = String(route.params.id)
 const businessNowMs = useBusinessNow()
-const { data, loading, error, run } = useAsyncList<PageResult<MyOrder>>(fetchMyOrders)
-onMounted(run)
 
-const order = computed(() => (data.value?.list ?? []).find((item) => item.id === id))
+/** 独立详情接口；404（不存在或非本人）归一到页面既有的「订单不存在或已删除」文案 */
+async function loadOrder(): Promise<MyOrder> {
+  try {
+    return await fetchMyOrder(id)
+  } catch (e) {
+    if (e instanceof ApiError && e.code === 404) throw new Error('订单不存在或已删除')
+    throw e
+  }
+}
+
+const { data: order, loading, error, run } = useAsyncList<MyOrder>(loadOrder)
+onMounted(run)
 
 function isExpired(item: MyOrder): boolean {
   if (String(item.status) === 'expired') return true
@@ -304,6 +314,7 @@ async function onReviewSubmit() {
 .times p {
   margin: 0 0 var(--app-space-2);
   font-size: var(--app-font-caption);
+  font-variant-numeric: tabular-nums;
   color: var(--td-text-color-placeholder);
 }
 

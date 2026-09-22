@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
-import { Button, DialogPlugin, Toast } from 'tdesign-mobile-vue'
+import { Button, DialogPlugin, List, Toast } from 'tdesign-mobile-vue'
 import { fetchMyResponses, withdrawResponse } from '@/api/demands'
 import { useAsyncList } from '@/composables/useAsyncList'
 import EmptyBlock from '@/components/shared/EmptyBlock.vue'
@@ -19,6 +19,14 @@ onMounted(run)
 
 const items = computed(() => data.value ?? [])
 const { visibleItems, hasMore, showMore } = useIncrementalList(items)
+const footerState = computed(() => (hasMore.value ? 'load-more' : ''))
+function loadMore() {
+  if (!hasMore.value) return
+  showMore()
+}
+function onListScroll(bottomDistance: number) {
+  if (bottomDistance < 60) loadMore()
+}
 
 function statusOf(item: MyResponseItem): string {
   return item.withdrawnAt ? 'withdrawn' : item.status ?? 'pending'
@@ -56,33 +64,28 @@ function onWithdraw(item: MyResponseItem) {
     <ListSkeleton v-if="loading" />
     <EmptyBlock v-else-if="error" :text="error" action-text="重试" @action="run" />
     <EmptyBlock v-else-if="items.length === 0" text="暂无响应记录，去需求广场看看适合你的合作机会" action-text="浏览需求" @action="router.push('/projects')" />
-    <div v-else class="list stagger">
+    <List v-else class="list stagger" :async-loading="footerState" @load-more="loadMore" @scroll="onListScroll">
       <p class="list-count">共 {{ formatZhNumber(items.length) }} 条</p>
-      <article
-        v-for="r in visibleItems"
-        :key="r.id"
-        class="resp-row m-card"
-        role="link"
-        tabindex="0"
-        @click="router.push(`/demands/${r.demandId}`)"
-        @keydown.enter.self="router.push(`/demands/${r.demandId}`)"
-      >
-        <h2 class="row-title">{{ r.demandTitle }}</h2>
-        <p class="row-note">{{ r.note }}</p>
-        <p v-if="r.status || r.withdrawnAt" class="row-status">
-          <StateTag kind="response" :value="statusOf(r)" />
-          <span v-if="r.rejectReason">{{ r.rejectReason }}</span>
-        </p>
-        <p class="row-at">响应于 {{ formatLocalDateTime(r.at) }}</p>
+      <article v-for="r in visibleItems" :key="r.id" class="resp-row m-card">
+        <!-- v48：与 MyDemandsView 一致，主体用 router-link 承载跳转（语义强于 article + role="link"），
+             撤回/重新响应按钮放在链接之外，避免嵌套可交互元素 -->
+        <router-link class="resp-main" :to="`/demands/${r.demandId}`">
+          <h2 class="row-title">{{ r.demandTitle }}</h2>
+          <p class="row-note">{{ r.note }}</p>
+          <p v-if="r.status || r.withdrawnAt" class="row-status">
+            <StateTag kind="response" :value="statusOf(r)" />
+            <span v-if="r.rejectReason" class="row-reject">驳回原因：{{ r.rejectReason }}</span>
+          </p>
+          <p class="row-at">响应于 {{ formatLocalDateTime(r.at) }}</p>
+        </router-link>
         <div v-if="r.withdrawnAt" class="row-ops">
-          <Button size="small" variant="outline" @click.stop="router.push(`/demands/${r.demandId}`)">重新响应</Button>
+          <Button size="small" variant="outline" @click="router.push(`/demands/${r.demandId}`)">重新响应</Button>
         </div>
         <div v-else-if="canWithdraw(r)" class="row-ops">
-          <Button size="small" variant="outline" theme="danger" :loading="withdrawing === r.id" @click.stop="onWithdraw(r)">撤回响应</Button>
+          <Button size="small" variant="outline" theme="danger" :loading="withdrawing === r.id" @click="onWithdraw(r)">撤回响应</Button>
         </div>
       </article>
-      <Button v-if="hasMore" block variant="outline" @click="showMore">加载更多（剩余 {{ formatZhNumber(items.length - visibleItems.length) }} 条）</Button>
-    </div>
+    </List>
   </div>
 </template>
 
@@ -103,11 +106,16 @@ function onWithdraw(item: MyResponseItem) {
 .row-title {
   margin: 0;
   font-size: var(--app-font-body);
+  font-weight: 600;
   line-height: 1.45;
 }
 
-.resp-row { cursor: pointer; }
-.resp-row:focus-visible { outline: 2px solid var(--td-brand-color); outline-offset: 2px; }
+/* v48：卡片主体用 router-link 承载跳转（与 MyDemandsView 的 .demand-main 同口径） */
+.resp-main {
+  display: block;
+  color: inherit;
+  text-decoration: none;
+}
 
 .row-ops {
   display: flex;
@@ -117,7 +125,7 @@ function onWithdraw(item: MyResponseItem) {
 
 .row-note {
   margin:var(--app-space-3) 0 0;
-  font-size: var(--app-font-caption);
+  font-size: var(--app-font-body);
   line-height: 1.7;
   color: var(--td-text-color-secondary);
 }
@@ -131,9 +139,15 @@ function onWithdraw(item: MyResponseItem) {
 .row-status {
   display: flex;
   align-items: center;
+  flex-wrap: wrap;
   gap:var(--app-space-4);
   margin:var(--app-space-4) 0 0;
-  font-size: var(--app-font-caption);
+  font-size: var(--app-font-body);
   color: var(--td-text-color-secondary);
+}
+
+/* v48：驳回原因补标签并提升到正文档（与 MyDemandsView 的驳回口径一致） */
+.row-reject {
+  color: var(--td-error-color);
 }
 </style>

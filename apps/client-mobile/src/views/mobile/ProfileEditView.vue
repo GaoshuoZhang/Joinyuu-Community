@@ -1,7 +1,19 @@
 <script setup lang="ts">
 import { computed, onMounted, reactive, ref } from 'vue'
 import { useRouter } from 'vue-router'
-import { Button, Cell, CellGroup, Input, Radio, RadioGroup, Textarea, Toast } from 'tdesign-mobile-vue'
+import {
+  Button,
+  Cell,
+  CellGroup,
+  Form,
+  FormItem,
+  Input,
+  Radio,
+  RadioGroup,
+  Textarea,
+  Toast,
+} from 'tdesign-mobile-vue'
+import type { FormInstanceFunctions, FormRules } from 'tdesign-mobile-vue'
 import { fetchMe, fetchRealName, updateMe } from '@/api/me'
 import { ApiError } from '@/api/http'
 import { useAuthStore } from '@/stores/auth'
@@ -24,11 +36,13 @@ import {
 } from '@/utils/validators'
 
 /* 资料编辑：头像（点头像直接上传替换）/ 用户名 / 昵称 / 性别 / 简介 + 实名认证入口。
- * 邮箱与手机号变更在「账号与安全」通过验证码完成，此处不提供编辑。 */
+ * 邮箱与手机号变更在「账号与安全」通过验证码完成，此处不提供编辑。
+ * v46：校验迁移到 t-form/rules——错误内联在字段下方，提交失败自动滚动到首个错误字段。 */
 const router = useRouter()
 const auth = useAuthStore()
 const form = reactive({ username: '', nickname: '', avatar: '', gender: 'unknown' as 'male' | 'female' | 'unknown', bio: '' })
 const submitting = ref(false)
+const formRef = ref<FormInstanceFunctions>()
 
 const baseline = ref('')
 const formSnapshot = computed(() => JSON.stringify(form))
@@ -44,20 +58,19 @@ const realNameNote = computed(() => {
   return realNameVerified.value ? verifiedWord : unverifiedWord
 })
 
-const usernameError = computed(() => {
-  const value = form.username.trim()
-  if (!value) return REQUIRED('用户名')
-  if (!isUsername(value)) return USERNAME_MSG
-  if (isReservedUsername(value)) return USERNAME_RESERVED_MSG
-  return ''
-})
-const nicknameError = computed(() => {
-  const value = form.nickname.trim()
-  if (!value) return NICKNAME_MSG
-  if (!isNickname(value)) return NICKNAME_TOO_LONG_MSG
-  if (isReservedNickname(value)) return NICKNAME_RESERVED_MSG
-  return ''
-})
+const rules: FormRules<typeof form> = {
+  username: [
+    { required: true, message: REQUIRED('用户名') },
+    { validator: (val: string) => !val.trim() || isUsername(val), message: USERNAME_MSG },
+    { validator: (val: string) => !val.trim() || !isReservedUsername(val), message: USERNAME_RESERVED_MSG },
+  ],
+  nickname: [
+    { required: true, message: NICKNAME_MSG },
+    { validator: (val: string) => !val.trim() || isNickname(val), message: NICKNAME_TOO_LONG_MSG },
+    { validator: (val: string) => !val.trim() || !isReservedNickname(val), message: NICKNAME_RESERVED_MSG },
+  ],
+}
+
 const loading = ref(true)
 const loadError = ref('')
 const loaded = ref(false)
@@ -94,11 +107,6 @@ onMounted(() => {
 })
 
 async function onSave() {
-  const firstError = usernameError.value || nicknameError.value
-  if (firstError) {
-    Toast(firstError)
-    return
-  }
   submitting.value = true
   try {
     await updateMe({
@@ -121,6 +129,11 @@ async function onSave() {
     submitting.value = false
   }
 }
+
+function onSubmit({ validateResult }: { validateResult: unknown }) {
+  /* 校验失败：字段级错误已内联展示，scroll-to-first-error 负责滚动定位 */
+  if (validateResult === true) void onSave()
+}
 </script>
 
 <template>
@@ -129,47 +142,50 @@ async function onSave() {
     <EmptyBlock v-else-if="loadError" :text="loadError" action-text="重试" @action="load" />
     <template v-else>
     <div class="m-card">
-      <div class="field">
-        <span class="field-label">头像</span>
-        <AvatarUploader
-          :image="form.avatar"
-          :fallback="form.nickname.slice(0, 1) || auth.name.slice(0, 1)"
-          size="64px"
-          biz-type="avatar"
-          @update:image="form.avatar = $event"
-        />
-      </div>
-      <div class="field">
-        <label>用户名</label>
-        <Input v-model="form.username" autocomplete="username" :spell-check="false" :maxlength="20" placeholder="字母开头，4-20 位字母/数字/下划线…" clearable />
-        <p class="field-hint">全站唯一，可用于登录；修改后请用新用户名登录。</p>
-        <p v-if="usernameError" class="field-error">{{ usernameError }}</p>
-      </div>
-      <div class="field">
-        <label>昵称</label>
-        <Input v-model="form.nickname" autocomplete="off" :spell-check="false" :maxlength="20" placeholder="社区展示名…" clearable />
-        <p v-if="nicknameError" class="field-error">{{ nicknameError }}</p>
-      </div>
-      <div class="field">
-        <span class="field-label">性别</span>
-        <RadioGroup v-model="form.gender" class="genders">
-          <Radio value="unknown" label="保密" />
-          <Radio value="male" label="男" />
-          <Radio value="female" label="女" />
-        </RadioGroup>
-      </div>
-      <div class="field">
-        <label>个人简介</label>
-        <Textarea
-          v-model="form.bio"
-          :autosize="{ minRows: 4, maxRows: 10 }"
-          :maxlength="200"
-          placeholder="介绍一下自己…"
-        />
-      </div>
-      <Button class="mobile-sticky-action" theme="primary" size="large" block :loading="submitting" @click="onSave">
-        {{ submitting ? '保存中…' : '保存' }}
-      </Button>
+      <Form
+        ref="formRef"
+        class="profile-form"
+        :data="form"
+        :rules="rules"
+        label-align="top"
+        scroll-to-first-error="smooth"
+        @submit="onSubmit"
+      >
+        <div class="field">
+          <span class="field-label">头像</span>
+          <AvatarUploader
+            :image="form.avatar"
+            :fallback="form.nickname.slice(0, 1) || auth.name.slice(0, 1)"
+            size="64px"
+            biz-type="avatar"
+            @update:image="form.avatar = $event"
+          />
+        </div>
+        <FormItem label="用户名" name="username" help="全站唯一，可用于登录；修改后请用新用户名登录。">
+          <Input v-model="form.username" autocomplete="username" :spell-check="false" :maxlength="20" placeholder="字母开头，4-20 位字母/数字/下划线…" clearable />
+        </FormItem>
+        <FormItem label="昵称" name="nickname">
+          <Input v-model="form.nickname" autocomplete="off" :spell-check="false" :maxlength="20" placeholder="社区展示名…" clearable />
+        </FormItem>
+        <FormItem label="性别">
+          <RadioGroup v-model="form.gender" class="genders">
+            <Radio value="unknown" label="保密" />
+            <Radio value="male" label="男" />
+            <Radio value="female" label="女" />
+          </RadioGroup>
+        </FormItem>
+        <FormItem label="个人简介" name="bio">
+          <Textarea
+            v-model="form.bio"
+            :autosize="{ minRows: 4, maxRows: 10 }"
+            :maxlength="200"
+            placeholder="介绍一下自己…"
+          />
+        </FormItem>
+        <Button class="mobile-sticky-action" theme="primary" size="large" block type="submit" :loading="submitting">
+          {{ submitting ? '保存中…' : '保存' }}
+        </Button>
+      </Form>
     </div>
 
     <CellGroup theme="card" class="security">
@@ -188,7 +204,6 @@ async function onSave() {
   margin-bottom:var(--app-space-8);
 }
 
-.field label,
 .field .field-label {
   display: block;
   font-size: var(--app-font-body);
@@ -196,15 +211,34 @@ async function onSave() {
   margin-bottom:var(--app-space-3);
 }
 
+/* t-form-item 默认左右布局 + 底部 hairline；本页沿用「标签在上、白卡内联」的既有版式 */
+.profile-form :deep(.t-form__item) {
+  padding: 0;
+  margin: 0 0 var(--app-space-8);
+  border-bottom: none;
+}
+
+.profile-form :deep(.t-form__label) {
+  width: auto;
+  padding: 0;
+  margin-bottom: var(--app-space-3);
+  font-size: var(--app-font-body);
+  color: var(--td-text-color-secondary);
+}
+
+.profile-form :deep(.t-form__controls) {
+  margin: 0;
+}
+
+.profile-form :deep(.t-form__item-help) {
+  margin-top: var(--app-space-3);
+  font-size: var(--app-font-caption);
+  color: var(--td-text-color-placeholder);
+}
+
 .genders {
   display: flex;
   gap:var(--app-space-10);
-}
-
-.field-hint {
-  margin:var(--app-space-3) 0 0;
-  font-size: var(--app-font-caption);
-  color: var(--td-text-color-placeholder);
 }
 
 .security {

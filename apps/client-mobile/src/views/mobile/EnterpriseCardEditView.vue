@@ -1,10 +1,12 @@
 <script setup lang="ts">
 import { computed, onMounted, reactive, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { Button, CheckTag, Input, Textarea, Toast } from 'tdesign-mobile-vue'
+import { Button, Cell, CheckTag, DateTimePicker, Input, Popup, Textarea, Toast } from 'tdesign-mobile-vue'
 import { fetchCardSchema, fetchEnterpriseDetail, updateMyEnterprise } from '@/api/enterprises'
 import { useAsyncList } from '@/composables/useAsyncList'
+import { useBusinessNow } from '@/composables/useBusinessNow'
 import { useUnsavedGuard } from '@/composables/useUnsavedGuard'
+import { formatLocalDate } from '@/utils/format'
 import { ApiError } from '@/api/http'
 import EmptyBlock from '@/components/shared/EmptyBlock.vue'
 import ListSkeleton from '@/components/ListSkeleton.vue'
@@ -55,6 +57,32 @@ const websiteError = computed(() => {
   return /^https?:\/\//i.test(url) ? '' : '官网需以 http(s):// 开头'
 })
 
+/* v46：字段级行内错误（与 websiteError 同口径：绑定 .field-error 展示）；Toast 仅作提交被拦截时的汇总提示 */
+const formErrors = reactive({ industry: '', size: '', description: '' })
+function validate(): string {
+  formErrors.industry = editable('industry') && !form.industry.trim() ? '请输入所属行业' : ''
+  formErrors.size = editable('size') && !form.size ? '请选择企业规模' : ''
+  formErrors.description = editable('description') && form.description.trim().length < 10 ? '企业简介至少 10 个字' : ''
+  return formErrors.industry || formErrors.size || formErrors.description || websiteError.value
+}
+
+/* v46：成立时间改为月份选择器（mode="month" + format="YYYY-MM"），与后端 foundedAt 口径（如 2019-05）一致，
+ * 避免自由文本产生非法格式；上限取业务当下月份，不允许选择未来月份。 */
+const foundedVisible = ref(false)
+const foundedValue = ref('')
+const businessNowMs = useBusinessNow()
+const nowMonth = computed(() => formatLocalDate(businessNowMs.value).slice(0, 7))
+
+function openFoundedPicker() {
+  foundedValue.value = form.foundedAt || nowMonth.value
+  foundedVisible.value = true
+}
+
+function onFoundedConfirm(value: unknown) {
+  form.foundedAt = String(value)
+  foundedVisible.value = false
+}
+
 const baseline = ref('')
 const formSnapshot = computed(() => JSON.stringify(form))
 const { markClean } = useUnsavedGuard(() => Boolean(data.value) && formSnapshot.value !== baseline.value)
@@ -75,20 +103,9 @@ function fillForm() {
 }
 
 async function onSave() {
-  if (editable('industry') && !form.industry.trim()) {
-    Toast('请输入所属行业')
-    return
-  }
-  if (editable('size') && !form.size) {
-    Toast('请选择企业规模')
-    return
-  }
-  if (editable('description') && form.description.trim().length < 10) {
-    Toast('企业简介至少 10 个字')
-    return
-  }
-  if (websiteError.value) {
-    Toast(websiteError.value)
+  const firstError = validate()
+  if (firstError) {
+    Toast(firstError)
     return
   }
   submitting.value = true
@@ -142,6 +159,7 @@ async function onSave() {
         <div v-if="editable('industry')" class="field">
           <label>所属行业</label>
           <Input v-model="form.industry" :maxlength="20" placeholder="如：人工智能…" clearable />
+          <p v-if="formErrors.industry" class="field-error">{{ formErrors.industry }}</p>
         </div>
         <div v-if="editable('size')" class="field">
           <span class="field-label">企业规模</span>
@@ -158,10 +176,22 @@ async function onSave() {
               {{ s }}
             </CheckTag>
           </div>
+          <p v-if="formErrors.size" class="field-error">{{ formErrors.size }}</p>
         </div>
         <div v-if="editable('foundedAt')" class="field">
-          <label>成立时间</label>
-          <Input v-model="form.foundedAt" :maxlength="20" placeholder="如：2019-05…" clearable />
+          <span class="field-label">成立时间</span>
+          <Cell class="date-trigger" :title="form.foundedAt || '请选择成立时间'" arrow @click="openFoundedPicker" />
+          <Popup v-model:visible="foundedVisible" placement="bottom">
+            <DateTimePicker
+              v-model="foundedValue"
+              mode="month"
+              format="YYYY-MM"
+              :end="nowMonth"
+              title="选择成立时间"
+              @confirm="onFoundedConfirm"
+              @cancel="foundedVisible = false"
+            />
+          </Popup>
         </div>
         <div v-if="editable('website')" class="field">
           <label>企业官网</label>
@@ -175,6 +205,7 @@ async function onSave() {
         <div v-if="editable('description')" class="field">
           <label>企业简介</label>
           <Textarea v-model="form.description" :autosize="{ minRows: 4, maxRows: 10 }" :maxlength="300" placeholder="介绍主营业务、团队优势与合作方向…" />
+          <p v-if="formErrors.description" class="field-error">{{ formErrors.description }}</p>
         </div>
         <div v-if="editable('services')" class="field">
           <label>主营业务 / 服务</label>
@@ -229,6 +260,12 @@ async function onSave() {
 
 .chip {
   margin:0;
+}
+
+/* 月份选择器触发项：与输入框同规格（白底 + 统一圆角/描边） */
+.date-trigger {
+  border: 1px solid var(--td-component-border);
+  border-radius: var(--td-radius-large);
 }
 
 .tip {

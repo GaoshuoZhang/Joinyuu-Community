@@ -1,12 +1,13 @@
 <script setup lang="ts">
 import { computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
-import { Button, Icon, Progress, Tag } from 'tdesign-mobile-vue'
+import { List, Progress, Tag } from 'tdesign-mobile-vue'
 import { useAsyncList } from '@/composables/useAsyncList'
 import { useIncrementalList } from '@/composables/useIncrementalList'
 import { fetchMyProjects } from '@/api/projects'
 import EmptyBlock from '@/components/shared/EmptyBlock.vue'
 import ListSkeleton from '@/components/ListSkeleton.vue'
+import StateTag from '@/components/shared/StateTag.vue'
 import type { Milestone, MyProject } from '@/types'
 import { formatZhNumber } from '@/utils/format'
 
@@ -16,13 +17,21 @@ const { data, loading, error, run } = useAsyncList<MyProject[]>(fetchMyProjects)
 
 const projects = computed(() => data.value ?? [])
 const { visibleItems, hasMore, showMore } = useIncrementalList(projects)
+const footerState = computed(() => (hasMore.value ? 'load-more' : ''))
+function loadMore() {
+  if (!hasMore.value) return
+  showMore()
+}
+function onListScroll(bottomDistance: number) {
+  if (bottomDistance < 60) loadMore()
+}
 const empty = computed(() => !loading.value && !error.value && projects.value.length === 0)
 
-function milestoneState(m: Milestone): { icon: string; accepted: boolean } {
+/* v48：里程碑状态统一走 StateTag（kind=milestone），与详情页口径一致——
+ * 本项目内部用 todo 表示未提交，StateTag 用 pending，需映射；未登记的值回落到「待提交」。 */
+function milestoneTag(m: Milestone): string {
   const status = m.status ?? (m.done ? 'accepted' : 'todo')
-  if (status === 'accepted') return { icon: 'check-circle-filled', accepted: true }
-  if (status === 'submitted') return { icon: 'time', accepted: false }
-  return { icon: 'circle', accepted: false }
+  return status === 'submitted' || status === 'accepted' ? status : 'pending'
 }
 
 onMounted(run)
@@ -34,12 +43,13 @@ onMounted(run)
     <EmptyBlock v-else-if="error" :text="error" action-text="重试" @action="run" />
     <!-- v45：空状态补出口，避免二级页没有 TabBar 时成为死胡同 -->
     <EmptyBlock v-else-if="empty" text="暂无承接中的项目" action-text="浏览需求" @action="router.push('/projects')" />
-    <div v-else class="stagger list">
+    <List v-else class="stagger list" :async-loading="footerState" @load-more="loadMore" @scroll="onListScroll">
       <p class="list-count">共 {{ formatZhNumber(projects.length) }} 个</p>
       <section v-for="p in visibleItems" :key="p.id" class="m-card project-card" v-pressable @click="router.push(`/me/projects/${p.id}`)">
         <header class="row">
           <h2 class="name">{{ p.name }}</h2>
-          <Tag v-if="p.finishedAt" theme="success" variant="light" size="small">已结项</Tag>
+          <!-- v48：结项状态统一走 StateTag（kind=project），与详情页口径一致 -->
+          <StateTag v-if="p.finishedAt" kind="project" value="finished" />
           <Tag v-if="p.role === '需求发起方'" theme="success" variant="light" size="small">需求发起方</Tag>
           <Tag v-else-if="p.role === '本人承接'" theme="primary" variant="light" size="small">本人承接</Tag>
           <template v-else>
@@ -53,22 +63,14 @@ onMounted(run)
         <Progress class="progress" :percentage="p.progress" />
 
         <ul v-if="p.milestones.length" class="milestones">
-          <li v-for="m in p.milestones" :key="m.id" class="milestone" :class="{ done: m.done }">
-            <Icon aria-hidden="true"
-              :name="milestoneState(m).icon"
-              size="16px"
-              class="mark"
-              :class="{ accepted: milestoneState(m).accepted }"
-            />
+          <li v-for="m in p.milestones" :key="m.id" class="milestone">
+            <StateTag kind="milestone" :value="milestoneTag(m)" />
             <span class="m-title">{{ m.title }}</span>
           </li>
         </ul>
         <p v-else class="milestones-empty">暂无里程碑</p>
       </section>
-      <Button v-if="hasMore" block variant="outline" @click="showMore">
-        加载更多（剩余 {{ formatZhNumber(projects.length - visibleItems.length) }} 个）
-      </Button>
-    </div>
+    </List>
   </div>
 </template>
 
@@ -139,16 +141,9 @@ onMounted(run)
   color: var(--td-text-color-secondary);
 }
 
-.milestone.done {
-  color: var(--td-text-color-primary);
-}
-
-.milestone .mark {
-  flex-shrink: 0;
-}
-
-.milestone .mark.accepted {
-  color: var(--td-success-color);
+/* v48：状态文案由 StateTag 承载（图标无文案、无图例，与详情页口径不一致） */
+.milestone .m-title {
+  min-width: 0;
 }
 
 .milestones-empty {

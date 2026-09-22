@@ -4,6 +4,7 @@ import { MessagePlugin } from 'tdesign-vue-next'
 import PageHeader from '@/components/PageHeader.vue'
 import ListErrorState from '@/components/ListErrorState.vue'
 import PolicyEditorDialog from '@/components/PolicyEditorDialog.vue'
+import StatusTag from '@/components/StatusTag.vue'
 import { createAgreementPolicy, fetchAgreementPolicies, updateAgreementPolicy, type AgreementPolicyPayload, type CommunityPolicyPayload, type PolicyRecord } from '@/api/policies'
 
 const loading = ref(false)
@@ -20,7 +21,7 @@ const columns = [
   { colKey: 'title', title: '协议标题', minWidth: 260, ellipsis: true },
   { colKey: 'kind', title: '协议类型', cell: 'kind', width: 110 },
   { colKey: 'version', title: '版本', width: 90, ellipsis: true },
-  { colKey: 'effectiveAt', title: '生效日期', width: 120, ellipsis: true },
+  { colKey: 'effectiveAt', title: '生效日期', width: 160, ellipsis: true },
   { colKey: 'status', title: '状态', cell: 'status', width: 90 },
   { colKey: 'publisher', title: '发布人', width: 120, ellipsis: true },
   { colKey: 'updatedAt', title: '更新时间', width: 160, ellipsis: true },
@@ -65,7 +66,7 @@ onMounted(load)
       <ListErrorState v-if="loadError" :message="loadError" :loading="loading" @retry="load" />
       <t-table row-key="id" table-layout="fixed" hover resizable :data="rows" :columns="columns" :loading="loading" empty="暂无协议版本">
         <template #kind="{ row }"><t-tag variant="light">{{ policyKindText(row.kind) }}</t-tag></template>
-        <template #status="{ row }"><t-tag :theme="row.status === 'published' ? 'success' : 'default'" variant="light">{{ row.status === 'published' ? '已发布' : '已归档' }}</t-tag></template>
+        <template #status="{ row }"><StatusTag entity="communityPolicy" :value="row.status" /></template>
         <template #op="{ row }"><t-button variant="text" size="small" theme="primary" @click="openEditor(row)">编辑</t-button></template>
       </t-table>
     </div>

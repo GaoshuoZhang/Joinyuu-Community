@@ -10,6 +10,7 @@ import { useRouteQuerySync } from '@/composables/useRouteQuerySync'
 import { useDict } from '@/composables/useDict'
 import { useAuthStore } from '@/stores/auth'
 import EmptyBlock from '@/components/shared/EmptyBlock.vue'
+import StateTag from '@/components/shared/StateTag.vue'
 import ListSkeleton from '@/components/ListSkeleton.vue'
 import type { Goods, PageResult } from '@/types'
 import { onImageError } from '@/utils/imageFallback'
@@ -17,12 +18,13 @@ import { formatZhNumber } from '@/utils/format'
 
 useAnimSuppress()
 
-/* 移动积分商城：商品纵列卡片（已过滤下架与零库存）；mallOpen 关闭时 API 抛错 → EmptyBlock 展示。
+/* 移动积分商城：商品纵列卡片；下架商品由接口过滤，库存 0 仍在列并标记「已售罄」；
+ * mallOpen 关闭时 API 抛错 → EmptyBlock 展示。
  * v40：商品分类筛选（字典 goods_category）并同步 URL。 */
 const router = useRouter()
 const route = useRoute()
 const auth = useAuthStore()
-const { items: categories } = useDict('goods_category')
+const { items: categories, refresh: refreshCategories } = useDict('goods_category')
 
 const category = ref(String(route.query.category ?? ''))
 const { data, loading, error, run } = useAsyncList<PageResult<Goods>>(() => fetchGoods({ category: category.value || undefined }))
@@ -63,9 +65,11 @@ onMounted(() => {
   run()
 })
 
-/* v38：返回时刷新商品列表（积分与库存可能变化） */
+/* v38：返回时刷新商品列表（积分与库存可能变化）；v48：同时强制回源字典，
+ * 后台新增商品类型后无需整页刷新即可出现在筛选 chip 中 */
 useRefreshOnActivate(() => {
   run()
+  void refreshCategories()
   void auth.refreshProfile()
 })
 </script>
@@ -97,7 +101,7 @@ useRefreshOnActivate(() => {
     <EmptyBlock
       v-else-if="goodsList.length === 0"
       text="暂无可兑换商品"
-      :action-text="category ? '查看全部商品' : undefined"
+      :action-text="category ? '清除筛选' : undefined"
       @action="pickCategory('')"
     />
     <div v-else class="goods-list stagger">
@@ -113,8 +117,9 @@ useRefreshOnActivate(() => {
         </div>
         <p class="desc">{{ g.description }}</p>
         <p class="stock">
+          <!-- v47：售罄（不可兑换）用 StateTag 的 goods 状态集标出；卡片主热区仍可点进详情查看说明 -->
           <template v-if="g.stock > 0">库存 {{ formatZhNumber(g.stock) }}</template>
-          <template v-else>已售罄</template>
+          <StateTag v-else kind="goods" value="sold_out" />
         </p>
       </router-link>
     </div>
@@ -224,10 +229,13 @@ useRefreshOnActivate(() => {
   overflow: hidden;
 }
 
+/* 价格档位高于商品名（body）一级，与详情页 title 档形成一致的层级递进；
+ * 数字等宽避免两列网格里价格跳动 */
 .cost {
   flex-shrink: 0;
-  font-size: var(--app-font-body);
+  font-size: var(--app-font-subtitle);
   font-weight: 600;
+  font-variant-numeric: tabular-nums;
   color: var(--td-brand-color);
 }
 

@@ -274,7 +274,7 @@ watch(policies, () => {
         />
         <template v-else>
           <template v-if="(policies ?? []).length">
-            <div class="service-section-head"><h2>服务指引</h2><span>{{ formatZhNumber(policies?.length ?? 0) }} 条内容</span></div>
+            <div class="service-section-head"><h2>服务指引</h2><span class="list-count">{{ formatZhNumber(policies?.length ?? 0) }} 条内容</span></div>
             <div class="list stagger">
               <PolicyCard v-for="p in policies" :key="p.id" :policy="p" @open="openPolicy(p)" />
             </div>
@@ -345,9 +345,8 @@ watch(policies, () => {
 }
 
 .tab-search {
-  /* 与选项卡标题条拉开间距 */
-  margin-top:var(--app-space-6);
-  margin-bottom:var(--app-space-6);
+  /* 与选项卡标题条拉开间距（v46 合并原先重复声明的两条规则，上下同值 12px，布局不变） */
+  margin: var(--app-space-6) 0;
 }
 
 .service-categories {
@@ -365,11 +364,7 @@ watch(policies, () => {
 .service-section-head { display: flex; align-items: baseline; justify-content: space-between; margin:0 var(--app-space-1) var(--app-space-4); }
 /* v45：区块标题统一为 20px 层级，与首页「最新需求/最新资讯」口径一致；计数改用次级文字色 */
 .service-section-head h2 { margin:0; font-size: var(--app-font-title); font-weight: 600; line-height: 1.4; }
-.service-section-head span { color: var(--td-text-color-secondary); font-size: var(--app-font-caption); }
-
-.tab-search {
-  margin-bottom:var(--app-space-5);
-}
+/* v46：计数统一走全局 .list-count（与人才库/企业库列表口径一致），不再单独定义 span 样式 */
 
 .list {
   display: flex;

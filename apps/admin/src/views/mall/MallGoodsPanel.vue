@@ -3,15 +3,17 @@ import { computed, onMounted, reactive, ref } from 'vue'
 import ListErrorState from '@/components/ListErrorState.vue'
 import { useListQueryState } from '@/utils/listQuery'
 import { MessagePlugin } from 'tdesign-vue-next'
-import { AddIcon, SearchIcon, DownloadIcon } from 'tdesign-icons-vue-next'
+import { AddIcon, SearchIcon } from 'tdesign-icons-vue-next'
 import PageHeader from '@/components/PageHeader.vue'
 import StatusTag from '@/components/StatusTag.vue'
 import GoodsFormDialog from '@/components/GoodsFormDialog.vue'
 import ColumnController from '@/components/ColumnController.vue'
+import ExportButton from '@/components/ExportButton.vue'
+import ListEmptyState from '@/components/ListEmptyState.vue'
 import { fetchGoods, toggleGoodsStatus, archiveGoods } from '@/api/mall'
 import { goodsCategoryMap } from '@/constants/status'
 import { fetchDictEntries } from '@/api/dicts'
-import { exportCsv, statusLabel } from '@/utils/exportCsv'
+import { statusLabel } from '@/utils/exportCsv'
 import type { MallGoods } from '@/types'
 
 /* 商品管理面板：列表 + 上架/下架/归档 + 新增/编辑（新增商品默认下架） */
@@ -29,9 +31,12 @@ const query = reactive({
   status: '',
 })
 
+/* 只取 GC 前缀的字典码：goodsCategoryMap 中的 physical/voucher 为历史值，保留会产生重复选项 */
 const categoryOptions = ref([
   { label: '全部', value: '' },
-  ...Object.entries(goodsCategoryMap).map(([value, label]) => ({ label, value })),
+  ...Object.entries(goodsCategoryMap)
+    .filter(([value]) => value.startsWith('GC'))
+    .map(([value, label]) => ({ label, value })),
 ])
 
 const statusOptions = [
@@ -153,23 +158,26 @@ function openEdit(row: MallGoods) {
   formVisible.value = true
 }
 
-/* 导出当前页商品列表为 CSV */
-function onExport() {
-  exportCsv(
-    '商品列表',
-    ['编号', '商品名称', '类型', '所需积分', '库存', '累计兑换', '状态', '创建时间'],
-    list.value.map((g) => [
-      g.id,
-      g.name,
-      goodsCategoryMap[g.category] ?? g.category,
-      g.points,
-      g.stock,
-      g.redeemedCount,
-      statusLabel('goods', g.status),
-      g.createdAt,
-    ]),
-  )
-  MessagePlugin.success(`已导出当前页 ${list.value.length} 条数据`)
+/* 导出配置 */
+const exportHeaders = ['编号', '商品名称', '类型', '所需积分', '库存', '累计兑换', '状态', '创建时间']
+
+function mapRow(g: MallGoods): (string | number)[] {
+  return [
+    g.id,
+    g.name,
+    g.categoryLabel ?? goodsCategoryMap[g.category] ?? g.category,
+    g.points,
+    g.stock,
+    g.redeemedCount,
+    statusLabel('goods', g.status),
+    g.createdAt,
+  ]
+}
+
+const pageExportRows = computed(() => list.value.map(mapRow))
+
+function fetchAllForExport(page: number, pageSize: number) {
+  return fetchGoods({ ...query, page, pageSize })
 }
 
 const { syncQuery } = useListQueryState(query, load)
@@ -197,10 +205,13 @@ onMounted(() => {
           storage-key="mall-goods"
           :columns="dataColumns.map((c) => ({ key: c.colKey, title: c.title }))"
         />
-        <t-button variant="outline" @click="onExport">
-          <template #icon><DownloadIcon /></template>
-          导出
-        </t-button>
+        <ExportButton
+          filename="商品列表"
+          :headers="exportHeaders"
+          :rows="pageExportRows"
+          :fetch-all="fetchAllForExport"
+          :map-row="mapRow"
+        />
         <t-button theme="primary" @click="openCreate">
           <template #icon><AddIcon /></template>
           新增商品
@@ -209,27 +220,24 @@ onMounted(() => {
     </PageHeader>
 
     <div class="page-filter-bar">
-      <t-input
+      <t-input class="ctl-w-xl"
         v-model="query.keyword"
         placeholder="搜索商品名称/编号…"
         clearable
-        style="width: 220px"
         @enter="onSearch"
       />
-      <t-select
+      <t-select class="ctl-w-md"
         v-model="query.category"
         label="类型"
         :options="categoryOptions"
         clearable
-        style="width: 150px"
         @change="onSearch"
       />
-      <t-select
+      <t-select class="ctl-w-sm"
         v-model="query.status"
         label="状态"
         :options="statusOptions"
         clearable
-        style="width: 140px"
         @change="onSearch"
       />
       <t-button @click="onSearch">
@@ -251,7 +259,6 @@ onMounted(() => {
   :columns="visibleColumns"
   :loading="loading"
   :pagination="pagination"
-  empty="暂无商品"
   @page-change="onPageChange"
   >
         <template #name="{ row }">
@@ -259,7 +266,8 @@ onMounted(() => {
           <div class="cell-sub">{{ row.id }}</div>
         </template>
         <template #category="{ row }">
-          <t-tag variant="light">{{ goodsCategoryMap[row.category] ?? row.category }}</t-tag>
+          <!-- 类型名称由后端按字典回填 categoryLabel，硬编码词表仅作兜底（历史 physical/voucher 值） -->
+          <t-tag variant="light">{{ row.categoryLabel ?? goodsCategoryMap[row.category] ?? row.category }}</t-tag>
         </template>
         <template #stock="{ row }">
           <span :class="{ 'stock-out': row.stock === 0 }">{{ row.stock }}</span>
@@ -289,6 +297,7 @@ onMounted(() => {
             >
               上架
             </t-button>
+            <!-- 归档可恢复，非不可逆删除：语义色与订单页统一为 warning -->
             <t-popconfirm
               v-if="row.status === 'off'"
               content="确认归档该商品？归档后可在归档管理中恢复"
@@ -297,13 +306,17 @@ onMounted(() => {
               <t-button
                 variant="text"
                 size="small"
-                theme="danger"
+                theme="warning"
                 :loading="acting === row.id + ':archive'"
               >
                 归档
               </t-button>
             </t-popconfirm>
           </div>
+        </template>
+
+        <template #empty>
+          <ListEmptyState :query="query" description="暂无商品" @clear="onReset" />
         </template>
       </t-table>
     </div>
@@ -313,26 +326,8 @@ onMounted(() => {
 </template>
 
 <style scoped>
-.cell-title {
-  font-weight: 500;
-  color: var(--td-text-color-primary);
-}
-
-.cell-sub {
-  margin-top: 2px;
-  font-size: 12px;
-  color: var(--td-text-color-secondary);
-}
-
 .stock-out {
   color: var(--td-error-color);
   font-weight: 600;
-}
-
-.op-cell {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-  flex-wrap: nowrap;
 }
 </style>

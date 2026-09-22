@@ -1,7 +1,7 @@
 <script setup lang="ts">
-import { onMounted, ref } from 'vue'
+import { computed, onMounted, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
-import { Badge, Button, Toast } from 'tdesign-mobile-vue'
+import { Badge, Button, Cell, List, Toast } from 'tdesign-mobile-vue'
 import { ApiError } from '@/api/http'
 import { downloadPersonalData } from '@/api/me'
 import { useNoticesStore } from '@/stores/notices'
@@ -31,7 +31,19 @@ const notices = useNoticesStore()
 
 const { loading, error, run } = useAsyncList(() => notices.refreshAll())
 
+const hasMore = computed(() => notices.list.length < notices.total)
+const footerState = computed(() => {
+  if (!notices.list.length || error.value) return ''
+  if (notices.loadingMore) return 'loading'
+  return hasMore.value ? 'load-more' : ''
+})
+
 onMounted(run)
+
+/* v46：刷新失败不再把已有列表替换为整页错误块——无数据时才整页提示，有数据时用 Toast 提示。 */
+watch(error, (message) => {
+  if (message && notices.list.length) Toast('刷新失败，请稍后重试')
+})
 
 const readingAll = ref(false)
 
@@ -68,12 +80,16 @@ async function onReadAll() {
   }
 }
 
-async function onLoadMore() {
+async function loadMore() {
   try {
     await notices.loadMore()
   } catch (e) {
     Toast(e instanceof ApiError ? e.message : '加载更多失败，请稍后重试')
   }
+}
+
+function onListScroll(bottomDistance: number) {
+  if (bottomDistance < 60) loadMore()
 }
 
 </script>
@@ -94,23 +110,32 @@ async function onLoadMore() {
     </div>
 
     <ListSkeleton v-if="loading" />
-    <EmptyBlock v-else-if="error" :text="error" action-text="重试" @action="run" />
+    <EmptyBlock v-else-if="error && !notices.list.length" :text="error" action-text="重试" @action="run" />
     <EmptyBlock v-else-if="notices.list.length === 0" text="暂无站内信" />
-    <div v-else class="list stagger">
+    <List v-else class="list stagger" :async-loading="footerState" @load-more="loadMore" @scroll="onListScroll">
       <p class="list-count">共 {{ formatZhNumber(notices.total) }} 条</p>
-      <Button v-for="n in notices.list" :key="n.id" variant="text" block class="notice-item m-card pressable" :class="{ unread: !n.read }" @click="onItemClick(n)">
-        <span class="n-head">
+      <!-- v46：列表项按约定用 Cell 承载（此前用 Button，读屏会把整条站内信播报成按钮）；
+           整行可点进入详情，Cell 自带 16px 上下内边距满足 44px 触控。 -->
+      <Cell
+        v-for="n in notices.list"
+        :key="n.id"
+        class="notice-item m-card"
+        :class="{ unread: !n.read }"
+        :bordered="false"
+        hover
+        @click="onItemClick(n)"
+      >
+        <template #title>
           <Badge :dot="!n.read" class="n-badge">
             <span class="n-title">{{ n.title }}</span>
           </Badge>
-        </span>
-        <span class="n-content">{{ n.content }}</span>
-        <span class="n-at">{{ TYPE_LABELS[n.type] ?? '通知' }} · {{ formatLocalDateTime(n.at) }}</span>
-      </Button>
-      <Button v-if="notices.list.length < notices.total" block variant="outline" :loading="notices.loadingMore" @click="onLoadMore">
-        加载更多（剩余 {{ formatZhNumber(notices.total - notices.list.length) }} 条）
-      </Button>
-    </div>
+        </template>
+        <template #description>
+          <span class="n-content">{{ n.content }}</span>
+          <span class="n-at">{{ TYPE_LABELS[n.type] ?? '通知' }} · {{ formatLocalDateTime(n.at) }}</span>
+        </template>
+      </Cell>
+    </List>
 
   </div>
 </template>
@@ -146,20 +171,10 @@ async function onLoadMore() {
   gap:var(--app-space-5);
 }
 
+/* v46：Cell 承载列表项——卡片外观沿用 .m-card，内边距与 Cell 官方 16px 一致 */
 .notice-item {
-  display: block;
-  width: 100%;
-  height: auto;
   color: inherit;
   text-align: left;
-  white-space: normal;
-  cursor: pointer;
-}
-
-.n-head {
-  display: flex;
-  align-items: center;
-  gap:var(--app-space-4);
 }
 
 .n-badge {
@@ -168,7 +183,6 @@ async function onLoadMore() {
 }
 
 .n-title {
-  flex: 1;
   font-size: var(--app-font-body);
   line-height: 1.45;
 }

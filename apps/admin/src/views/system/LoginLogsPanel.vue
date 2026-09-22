@@ -1,6 +1,8 @@
 <script setup lang="ts">
 import { computed, onMounted, reactive, ref } from 'vue'
 import ListErrorState from '@/components/ListErrorState.vue'
+import ListEmptyState from '@/components/ListEmptyState.vue'
+import StatusTag from '@/components/StatusTag.vue'
 import { useListQueryState } from '@/utils/listQuery'
 import { SearchIcon } from 'tdesign-icons-vue-next'
 import { MessagePlugin } from 'tdesign-vue-next'
@@ -99,30 +101,36 @@ function onRangeChange(v: TdDateRangePickerProps['value']) {
   query.range = Array.isArray(v) ? (v as string[]) : ['', '']
 }
 
+/* 空态筛选判定：range 为空串占位（['', '']）时视为未筛选（组件按数组长度判断） */
+const filterState = computed(() => ({
+  status: query.status,
+  keyword: query.keyword,
+  range: query.range.filter((v) => v),
+}))
+
 const { syncQuery } = useListQueryState(query, load, { prefix: 'login.' })
 
 onMounted(load)
 </script>
 
 <template>
-  <div class="login-logs-panel page-fade-in">
+  <!-- 内嵌于「日志与审计」聚合壳：入场动画由壳层统一承担，避免双层重播 -->
+  <div class="login-logs-panel">
     <ListErrorState v-if="loadError" :message="loadError" :loading="loading" @retry="load" />
-    <PageHeader title="登录日志" description="管理员登录成功与失败记录，用于安全审计与异常排查">
-    </PageHeader>
+    <PageHeader title="登录日志" description="管理员登录成功与失败记录，用于安全审计与异常排查" />
 
     <div class="page-filter-bar">
-      <t-input
+      <t-input class="ctl-w-xl"
         v-model="query.keyword"
         clearable
         placeholder="搜索账号/姓名/IP…"
-        style="width: 200px"
         @enter="onSearch"
       />
-      <t-select v-model="query.status" label="状态" :options="statusOptions" style="width: 140px" @change="onSearch" />
+      <t-select class="ctl-w-sm" v-model="query.status" label="状态" :options="statusOptions" @change="onSearch" />
       <t-date-range-picker
         v-model="query.range"
         :clearable="true"
-        :style="{ width: 260 }"
+        class="ctl-w-xl"
         separator="至"
         @change="onRangeChange"
       />
@@ -142,7 +150,6 @@ onMounted(load)
       :columns="columns"
       :loading="loading"
       :pagination="pagination"
-      empty="暂无登录日志"
       @page-change="onPageChange"
     >
       <template #user="{ row }">
@@ -152,17 +159,15 @@ onMounted(load)
         </div>
       </template>
       <template #status="{ row }">
-        <t-tag
-          :theme="row.status === 'success' ? 'success' : row.status === 'locked' ? 'warning' : 'danger'"
-          variant="light"
-          size="small"
-        >
-          {{ row.status === 'success' ? '成功' : row.status === 'locked' ? '锁定' : '失败' }}
-        </t-tag>
+        <StatusTag entity="loginLog" :value="row.status" />
       </template>
       <template #failedReason="{ row }">
         <span v-if="row.failedReason" class="fail-reason">{{ row.failedReason }}</span>
         <span v-else class="muted">—</span>
+      </template>
+
+      <template #empty>
+        <ListEmptyState :query="filterState" description="暂无登录日志" @clear="onReset" />
       </template>
     </t-table>
   </div>

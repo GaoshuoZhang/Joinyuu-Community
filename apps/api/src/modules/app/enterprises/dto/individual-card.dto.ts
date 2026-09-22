@@ -9,6 +9,11 @@ export class IndividualCardVisibilityDto {
   @ValidateIf((_object, value) => value !== undefined)
   @IsBoolean()
   politicalStatus?: boolean
+
+  /** 是否公开名片：false 时不出现在人才库、公开名片页返回 404（缺省视为公开） */
+  @ValidateIf((_object, value) => value !== undefined)
+  @IsBoolean()
+  isPublic?: boolean
 }
 
 /** 个人名片分段：教育经历 */
