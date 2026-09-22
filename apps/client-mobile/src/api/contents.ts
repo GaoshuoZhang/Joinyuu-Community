@@ -1,9 +1,10 @@
 import { httpDelete, httpGet, httpPost } from './http'
 import type { Article, ArticleColumn, ArticleComment, ArticleCreatePayload, IdentityType, MySubmittedArticle, MySubmittedArticleDetail } from '@/types'
 
-/** GET /api/app/article-columns — 栏目列表（enabled） */
-export async function fetchColumns(): Promise<ArticleColumn[]> {
-  return httpGet<ArticleColumn[]>('/article-columns')
+/** GET /api/app/article-columns — 栏目列表（enabled）；
+ * submission=true 仅返回开放投稿栏目（投稿页使用，广场浏览筛选不受开关影响） */
+export async function fetchColumns(options: { submission?: boolean } = {}): Promise<ArticleColumn[]> {
+  return httpGet<ArticleColumn[]>(`/article-columns${options.submission ? '?submission=1' : ''}`)
 }
 
 /** GET /api/app/articles — 文章列表（published，栏目筛选/关键词） */

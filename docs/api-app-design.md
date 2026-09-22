@@ -116,7 +116,7 @@
 | GET | /api/app/me/reservations | 我的预约（可取消 pending/approved）；返回 `identityType`/`subjectName` 主体快照 |
 | GET | /api/app/articles | 文章列表（`published`，栏目筛选/关键词；浏览量详情时 +1） |
 | GET | /api/app/articles/:id | 文章详情 |
-| GET | /api/app/article-columns | 栏目列表（enabled） |
+| GET | /api/app/article-columns | 栏目列表（enabled）；`?submission=1` 仅返回开放投稿栏目（投稿页使用，广场浏览筛选不受开关影响） |
 | POST | /api/app/articles | 投递文章（channel=submitted，编号 SU 前缀）：提交即待审核，审核通过转待发布（状态机同 wiki §8.1，作者身份快照） |
 | GET | /api/app/me/articles | 我投递的文章（含驳回原因，可再提交） |
 | GET | /api/app/enterprises/:id | 企业展示页（`logo`/`foundedAt`/`website`/`address`/`services`/`advantages` 精致名片字段） |

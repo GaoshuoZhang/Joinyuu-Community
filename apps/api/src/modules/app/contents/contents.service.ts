@@ -101,10 +101,10 @@ export class AppContentsService {
     return { jwt: this.jwt, redis: this.redis, prisma: this.prisma }
   }
 
-  /** 栏目列表（enabled 且非系统保留；对齐客户端按 code/label 输出） */
-  async articleColumns(): Promise<ArticleColumnDto[]> {
+  /** 栏目列表（enabled 且非系统保留；forSubmission=true 时仅开放投稿栏目；对齐客户端按 code/label 输出） */
+  async articleColumns(forSubmission = false): Promise<ArticleColumnDto[]> {
     const rows = await this.prisma.articleColumn.findMany({
-      where: { status: 'enabled', system: false },
+      where: { status: 'enabled', system: false, ...(forSubmission ? { submissionOpen: true } : {}) },
       orderBy: { sort: 'asc' },
     })
     return rows.map((c) => ({ code: c.id, label: c.name }))
@@ -441,7 +441,10 @@ export class AppContentsService {
     const ids = [columnId, columnCode].filter((v): v is string => !!v)
     for (const cid of ids) {
       const column = await this.prisma.articleColumn.findFirst({ where: { id: cid, status: 'enabled' } })
-      if (column) return column
+      if (!column) continue
+      /* 服务端二次校验开放投稿：客户端下拉列表已过滤，仍防直接构造请求绕过 */
+      if (!column.submissionOpen) throw new BadRequestException('该栏目已关闭投稿，请选择其他栏目')
+      return column
     }
     return null
   }

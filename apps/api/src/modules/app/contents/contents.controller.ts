@@ -9,11 +9,11 @@ import { Public } from '../../../common/decorators/public.decorator'
 export class AppContentsController {
   constructor(private readonly contents: AppContentsService) {}
 
-  /** 栏目列表（enabled） */
+  /** 栏目列表（enabled）；submission=1 仅返回开放投稿栏目（投稿页使用） */
   @Public()
   @Get('article-columns')
-  columns(): Promise<ArticleColumnDto[]> {
-    return this.contents.articleColumns()
+  columns(@Query('submission') submission?: string): Promise<ArticleColumnDto[]> {
+    return this.contents.articleColumns(submission === '1' || submission === 'true')
   }
 
   /** 文章列表（published，栏目/关键词；客户端传 column=栏目 id，兼容 columnId） */

@@ -31,7 +31,9 @@ const route = useRoute()
 const reviseId = String(route.query.revise ?? '')
 const revising = computed(() => !!reviseId)
 const auth = useAuthStore()
-const { data: columnData, run: loadColumns } = useAsyncList<ArticleColumn[]>(fetchColumns)
+const { data: columnData, loading: columnsLoading, error: columnsError, run: loadColumns } = useAsyncList<ArticleColumn[]>(
+  () => fetchColumns({ submission: true }),
+)
 const delegatedIdentities = ref<UserIdentity[]>([])
 const identityOptions = computed(() => {
   const base = auth.identities
@@ -127,6 +129,11 @@ onMounted(async () => {
       const payload = await fetchMyArticlePayload(reviseId)
       form.title = payload.title
       form.columnCode = payload.columnCode
+      /* 原栏目已关闭投稿/停用后不再出现在开放列表中：清空选择并提示重选，避免提交时才报错 */
+      if (form.columnCode && columnData.value && !columns.value.some((c) => c.code === form.columnCode)) {
+        form.columnCode = ''
+        Toast('原栏目已关闭投稿，请重新选择栏目')
+      }
       form.asIdentity = payload.asIdentity
       form.asEnterpriseId = payload.asEnterpriseId ?? ''
       ensureVisibleIdentitySelection()
@@ -273,7 +280,7 @@ async function onSubmit() {
 
     <div class="m-card form">
       <div class="field"><label class="field-label">标题</label><Input v-model="form.title" :maxlength="50" placeholder="请输入文章标题…" clearable /><p v-if="errors.title" class="field-error">{{ errors.title }}</p></div>
-      <div class="field"><label class="field-label">栏目</label><div class="chips"><CheckTag v-for="c in columns" :key="c.code" class="chip" size="medium" variant="light" :checked="form.columnCode === c.code" @change="form.columnCode = c.code">{{ c.label }}</CheckTag></div><p v-if="errors.column" class="field-error">{{ errors.column }}</p></div>
+      <div class="field"><label class="field-label">栏目</label><div class="chips"><CheckTag v-for="c in columns" :key="c.code" class="chip" size="medium" variant="light" :checked="form.columnCode === c.code" @change="form.columnCode = c.code">{{ c.label }}</CheckTag></div><p v-if="!columnsLoading && !columnsError && columnData && !columns.length" class="field-help">暂无可投稿栏目，请稍后再试</p><p v-if="errors.column" class="field-error">{{ errors.column }}</p></div>
       <div class="field"><label class="field-label">投稿身份</label><div class="chips"><CheckTag v-for="identity in identityOptions" :key="`${identity.type}:${identity.enterpriseId ?? ''}`" size="medium" variant="light" :checked="isIdentityPicked(identity)" @change="pickIdentity(identity)">{{ identityOptionLabel(identity, auth.name) }}</CheckTag></div><p v-if="errors.identity" class="field-error">{{ errors.identity }}</p></div>
       <div class="field"><label class="field-label">文章封面（选填）</label><p class="field-help">建议使用清晰的横版图片，将展示在文章列表中。</p><Upload v-model:files="coverFiles" class="cover-upload" theme="grid" accept="image/*" :max="1" :size-limit="{ size: 10, unit: 'MB' }" :request-method="requestImage" /></div>
       <div class="field"><label class="field-label">正文</label><p class="field-help">在任意位置插入段落或图片，并通过上移、下移调整最终发布顺序。</p>

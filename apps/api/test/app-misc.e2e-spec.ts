@@ -126,6 +126,49 @@ describe('M2-R R2 app 空间/内容/申请/首页/搜索/上传', () => {
     expect(typeof like.body.data.likeCount).toBe('number')
   })
 
+  it('栏目开放投稿开关：投稿页仅下发开放栏目，关闭栏目不可投稿/重提', async () => {
+    const prisma = app.get(PrismaService)
+    const open = await prisma.articleColumn.findFirstOrThrow({ where: { submissionOpen: true, system: false, status: 'enabled' } })
+    const closed = await prisma.articleColumn.findFirstOrThrow({ where: { submissionOpen: false, system: false, status: 'enabled' } })
+
+    /* 广场浏览仍可见全部启用栏目（含关闭投稿栏目），仅投稿页按开关过滤 */
+    const all = await appGet(app, token, '/api/app/article-columns')
+    expect(all.body.data.some((c: { code: string }) => c.code === closed.id)).toBe(true)
+
+    const forSubmission = await appGet(app, token, '/api/app/article-columns?submission=1')
+    expect(forSubmission.body.data.some((c: { code: string }) => c.code === open.id)).toBe(true)
+    expect(forSubmission.body.data.some((c: { code: string }) => c.code === closed.id)).toBe(false)
+
+    /* 直接构造请求绕过投稿页也不可提交到关闭栏目 */
+    const denied = await appPost(app, token, '/api/app/articles', {
+      title: '关闭栏目投稿',
+      columnId: closed.id,
+      content: '<p>正文</p>',
+      asIdentity: 'individual',
+    })
+    expect(denied.status).toBe(400)
+    expect(denied.body.message).toBe('该栏目已关闭投稿，请选择其他栏目')
+
+    /* 修改重提同样校验开关 */
+    const created = await appPost(app, token, '/api/app/articles', {
+      title: '可撤回投稿',
+      columnId: open.id,
+      content: '<p>正文</p>',
+      asIdentity: 'individual',
+    })
+    expect(created.status).toBe(200)
+    const articleId: string = created.body.data.id
+    expect((await appPost(app, token, `/api/app/me/articles/${articleId}/withdraw`, {})).status).toBe(200)
+    const resubmit = await appPost(app, token, `/api/app/me/articles/${articleId}/resubmit`, {
+      title: '重提到关闭栏目',
+      columnId: closed.id,
+      content: '<p>正文</p>',
+      asIdentity: 'individual',
+    })
+    expect(resubmit.status).toBe(400)
+    expect(resubmit.body.message).toBe('该栏目已关闭投稿，请选择其他栏目')
+  })
+
   it('文章关闭评论后 DTO 下发 false，评论 GET/POST 均返回 409', async () => {
     const prisma = app.get(PrismaService)
     const article = await prisma.article.findFirstOrThrow({ where: { status: 'published', deletedAt: null } })
