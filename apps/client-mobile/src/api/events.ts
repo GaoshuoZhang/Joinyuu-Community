@@ -1,11 +1,10 @@
-import { DEFAULT_LIST_PAGE_SIZE, apiMode, httpGet, httpPost } from './http'
+import { DEFAULT_LIST_PAGE_SIZE, httpGet, httpPost } from './http'
 import type { CheckinPayload, CommunityEvent, EventEnrollmentResult, EventFeedbackPayload, EventTicket, MyEnrollmentItem, MyEventFeedback, PageResult } from '@/types'
 
 /** GET /api/app/events — 活动中心；HTTP 模式由服务端执行状态和可见范围过滤。 */
 export async function fetchEvents(query: { type?: string; keyword?: string; page?: number; pageSize?: number } = {}): Promise<PageResult<CommunityEvent>> {
   const page = query.page ?? 1
   const pageSize = query.pageSize ?? DEFAULT_LIST_PAGE_SIZE
-  if (apiMode === 'mock') return (await import('@/mock/handlers/events')).fetchEvents({ ...query, page, pageSize })
   const qs = new URLSearchParams({ page: String(page), pageSize: String(pageSize) })
   if (query.type) qs.set('type', query.type)
   if (query.keyword) qs.set('keyword', query.keyword)
@@ -14,37 +13,31 @@ export async function fetchEvents(query: { type?: string; keyword?: string; page
 
 /** GET /api/app/events/:id — 详情（人数限制/我的报名态） */
 export async function fetchEvent(id: string): Promise<CommunityEvent> {
-  if (apiMode === 'mock') return (await import('@/mock/handlers/events')).fetchEvent(id)
   return httpGet<CommunityEvent>(`/events/${id}`)
 }
 
 /** POST /api/app/events/:id/enroll — 报名（截止/容量/范围校验；满员进入候补） */
 export async function enrollEvent(id: string): Promise<EventEnrollmentResult> {
-  if (apiMode === 'mock') return (await import('@/mock/handlers/events')).enrollEvent(id)
   return httpPost<EventEnrollmentResult>(`/events/${id}/enroll`)
 }
 
 /** POST /api/app/events/:id/enroll/cancel — 取消报名（开始前 24 小时截止；释放名额自动递补候补） */
 export async function cancelEnrollment(id: string): Promise<void> {
-  if (apiMode === 'mock') return (await import('@/mock/handlers/events')).cancelEnrollment(id)
   await httpPost(`/events/${id}/enroll/cancel`)
 }
 
 /** 我的活动反馈（是否已评价）。 */
 export async function fetchMyEventFeedback(eventId: string): Promise<MyEventFeedback | null> {
-  if (apiMode === 'mock') return (await import('@/mock/handlers/events')).fetchMyEventFeedback(eventId)
   return httpGet<MyEventFeedback | null>(`/events/${eventId}/feedback`)
 }
 
 /** 提交活动反馈（仅活动结束且参与过）。 */
 export async function submitEventFeedback(eventId: string, payload: EventFeedbackPayload): Promise<void> {
-  if (apiMode === 'mock') return (await import('@/mock/handlers/events')).submitEventFeedback(eventId, payload)
   await httpPost(`/events/${eventId}/feedback`, payload)
 }
 
 /** GET /api/app/events/:id/ticket — 当前用户在该活动的电子票。 */
 export async function fetchEventTicket(id: string): Promise<EventTicket> {
-  if (apiMode === 'mock') return (await import('@/mock/handlers/events')).fetchEventTicket(id)
   return httpGet<EventTicket>(`/events/${id}/ticket`)
 }
 
@@ -52,13 +45,11 @@ export async function fetchEventTicket(id: string): Promise<EventTicket> {
 export async function fetchMyEnrollments(query: { page?: number; pageSize?: number } = {}): Promise<PageResult<MyEnrollmentItem>> {
   const page = query.page ?? 1
   const pageSize = query.pageSize ?? DEFAULT_LIST_PAGE_SIZE
-  if (apiMode === 'mock') return (await import('@/mock/handlers/events')).fetchMyEnrollments({ ...query, page, pageSize })
   const qs = new URLSearchParams({ page: String(page), pageSize: String(pageSize) })
   return httpGet<PageResult<MyEnrollmentItem>>(`/me/enrollments?${qs}`)
 }
 
 /** POST /api/app/events/:id/check-in — 签到；服务端校验围栏、时间窗、防重并发放积分。 */
 export async function checkInEvent(id: string, payload: CheckinPayload): Promise<{ pointsAwarded: number }> {
-  if (apiMode === 'mock') return (await import('@/mock/handlers/events')).checkInEvent(id, payload)
   return httpPost<{ pointsAwarded: number }>(`/events/${id}/check-in`, payload)
 }

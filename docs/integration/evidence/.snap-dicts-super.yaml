@@ -1,7 +1,0 @@
-- main [ref=f4e3]:
-  - generic [ref=f4e4]:
-    - generic [ref=f4e5]:
-      - generic [ref=f4e6]: "403"
-      - generic [ref=f4e8]: 暂无数据
-      - generic [ref=f4e9]: 无权限访问该页面，请联系管理员开通权限
-    - button "返回工作台" [ref=f4e10] [cursor=pointer]

@@ -1,6 +1,6 @@
-/* 请求封装：包络解包 + 统一错误 + 401 拦截。
- * Mock 模式（VITE_API_MODE=mock）下由 src/mock/handlers 提供实现；
- * http 模式走 /api 真实请求并作为默认模式。视图层只依赖 src/api/*.ts 的函数签名。 */
+/* 请求封装：统一 fetch + Bearer token + 包络解包（body.data）+ 统一错误 + 401 拦截。
+ * 开发经 vite proxy 转发到 http://127.0.0.1:7757，生产由部署期网关统一转发 /api。
+ * 视图层只依赖 src/api/*.ts 的函数签名。 */
 
 export class ApiError extends Error {
   code: number
@@ -10,9 +10,6 @@ export class ApiError extends Error {
     this.code = code
   }
 }
-
-/** Mock 延迟（毫秒），模拟真实网络 */
-export const MOCK_LATENCY = 260
 
 type Envelope<T> = { code: number; data: T }
 type ErrorEnvelope = { code: number; message: string }
@@ -129,5 +126,3 @@ export async function httpDownload(path: string): Promise<Blob> {
 export function httpUpload<T>(path: string, form: FormData): Promise<T> {
   return request<T>(path, { method: 'POST', body: form })
 }
-
-export const apiMode: 'mock' | 'http' = import.meta.env.VITE_API_MODE === 'mock' ? 'mock' : 'http'

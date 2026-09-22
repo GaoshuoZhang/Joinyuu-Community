@@ -16,7 +16,7 @@ import { useBusinessNow } from '@/composables/useBusinessNow'
 import { formatLocalDate } from '@/utils/format'
 
 /* schema 驱动的申请表单渲染器（服务端下发自定义字段并提供资料上传）。
- * 三个独立流程页（企业入驻/合作伙伴/人才登记）各自引入本组件，字段来自 mock schema；
+ * 三个独立流程页（企业入驻/合作伙伴/人才登记）各自引入本组件，字段来自服务端下发的 schema；
  * v34 支持 ?revise=<申请 id> 修改重提（附件需重新上传）。 */
 const props = defineProps<{ type: ApplicationType }>()
 const router = useRouter()
@@ -108,7 +108,7 @@ function onDateConfirm(val: unknown) {
   dateVisible.value = false
 }
 
-/* ---- upload：Mock 转 data URL；HTTP 走 POST /api/app/uploads ---- */
+/* ---- upload：POST /api/app/uploads，返回可访问的 URL ---- */
 async function requestUpload(file: UploadFile | UploadFile[]) {
   const target = Array.isArray(file) ? file[0] : file
   const raw = target?.raw as File | undefined

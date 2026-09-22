@@ -1,5 +1,0 @@
-- main [ref=f73e2]:
-  - generic [ref=f73e3]:
-    - paragraph [ref=f73e5]: 实物兑换将寄送到默认地址
-    - generic [ref=f73e6]: 暂无收货地址，添加后可用于实物兑换
-    - button "新增收货地址" [ref=f73e9] [cursor=pointer]

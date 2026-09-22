@@ -18,7 +18,7 @@
 
 ## 2. 社区成员域（7）
 
-- **User** — 用户（uid PK U；**username 登录标识/全站唯一**；nickname 展示昵称/全站唯一；**phone?/email? 可空且非空时全站唯一**；**phoneVerifiedAt?/emailVerifiedAt? 可信通知渠道标记**（非空=该渠道已验证，可用于找回密码与接收通知）；gender；avatar?；status active/frozen；realName?/citizenId?/verifiedAt?；微信字段 M3 预留；frozenUntil?/frozenReason?；points 积分余额；registeredAt/lastActiveAt；bio；activities Json）
+- **User** — 用户（uid PK U；**username 登录标识/全站唯一**；nickname 展示昵称/全站唯一；**phone?/email? 可空且非空时全站唯一**；**phoneVerifiedAt?/emailVerifiedAt? 可信通知渠道标记**（非空=该渠道已验证，可用于找回密码与接收通知）；gender；avatar?；status active/frozen；realName?/citizenId?/verifiedAt?；微信字段 M3 预留；frozenUntil?/frozenReason?；points 积分余额；registeredAt/lastActiveAt；bio；activities Json；**activationDismissed Bool 默认 false（永久隐藏新手任务，按账号持久化，跨浏览器一致）**）
 - **UserIdentity** — 一人多身份（userId 级联；type individual/community_individual/community_enterprise/external_enterprise；enterpriseId?/enterpriseName?/role?/title；level?/experience? 仅社区两类持有；唯一 userId+type+enterpriseId）
 - **Enterprise** — 社区企业（id E；name/industry/size/foundedAt/settledAt?/leaseType；status pending 默认/active/exited/disabled；experience 企业经验；contactUserId? 关联个人用户 + contactTitle 职位 + contactName/contactPhone/contactEmail?；description/tags；deletedAt?/deletedBy?；**stage 已删**）
 - **ExternalEnterpriseProfile** — 合作企业档案（id XE；name/industry；status active/disabled；size/foundedAt；description；registeredAt（登记日期=填表通过审核当天）；deletedAt?/deletedBy?；聚合视图 = 档案 + external_enterprise 身份派生成员，不建独立实体表）
@@ -30,7 +30,7 @@
 
 - **Demand** — 需求（id D；状态机 pending→pending_release→published|scheduled→selected→projected/closed/rejected；publisherId/publisherName/publisherIdentity Json?；contactName?/contactPhone?/contactEmail?；budget/period/deadline；scheduledAt?/publishedAt?；可见/可报名范围四数组；description/tags；rejectedReason?/matchedRespondent?/projectId?/respondPoints?；creatorName?/creatorId?；deletedAt?/deletedBy?/archivableAt?）
 - **DemandRespondent** — 需求响应（demandId 级联；name/enterprise/phone?/email?/quote?/message/at；status pending/accepted/rejected/closed（contacted 为历史值））
-- **Project** — 项目（id P；code JY-YYYY-NN 唯一；status running/paused/closed/finished；progress；startDate/endDate/initiatedAt；description/memberCount；sourceDemandId?/expReward?/closeReason?；deletedAt?/deletedBy?/archivableAt?）
+- **Project** — 项目（id P；code JY-YYYY-NN 唯一；status running/paused/closed/finished；progress；startDate/endDate/initiatedAt；description/memberCount；sourceDemandId?/expReward?/closeReason?；**demanderId?/demanderName?/demanderIdentity Json?（需求方主体/名称/身份快照，需求立项照搬需求、自建由表单录入）**；**creatorName?/creatorId?（创建人）**；**contactName?/contactPhone?/contactEmail?（联系方式）**；**contractPrice?（合同价格）**；deletedAt?/deletedBy?/archivableAt?）
 - **ProjectUndertaker** — 承接方（type enterprise/individual/custom；refId/name；share 合计须 100；contactName?/phone?）
 - **Milestone** — 里程碑（status todo/active/done；date；owners[] 负责承接方）
 - **CommunityEvent** — 活动（id EV；状态机 pending_release→published|scheduled→ended/cancelled；startTime/endTime/location/capacity/speaker/host；enrollmentOpen/requireReview/enrollmentDeadline?/scheduledAt?；报名范围四数组；enrollPoints?/checkinPoints?；description/tags；deletedAt?/deletedBy?/archivableAt?）
@@ -73,7 +73,7 @@
 - **DictEntry** — 数据字典（type+code 联合 PK；type demand_category/industry/event_type/goods_category；label 全类型唯一；sort/status）
 - **ArchiveSetting** — 归档设置（domain PK；autoArchive/archiveDelayDays 自动归档延时；autoPurge/purgeDelayDays 自动删除延时；archiveStatuses Json? 按状态开关）
 
-## 7.1 P0 消息中心（2026-09-20）
+## 7.1 P0 消息中心
 
 - **MessageChannel** — 消息渠道（id MC；kind sms/email/inapp；provider aliyun_sms/tencent_sms/smtp/inapp/dry_run；name/enabled（kind+provider 唯一）；config Json? 非机密参数（signName/host/port/secure/fromAddress 发件人邮箱/fromName 显示名/from 旧版兼容/templateMapping 等）；**credentialMode inline|env**（默认 env；inline=后台直接填写密钥，只写/GET 只回掩码/审计不记录；env=登记变量名）；credentialEnv Json?；dailyLimit 0=不限；remark?/createdAt/updatedAt/updatedBy）
 - **MessageTemplate** — 消息模板（id MT；code 唯一；name/kind/category security|marketing；variables Json? 变量白名单；status draft|published（**保存即发布**：创建即 v1 published，编辑「保存」原地更新当前发布版本并以 published 生效；下架回 draft）；currentVersion；updatedAt/updatedBy）
@@ -83,15 +83,15 @@
 - **ContactConsent** — 渠道合规同意/营销退订（id 自增；userId+channelKind+purpose 唯一；consented；at）
 - **UserNotificationPreference**（扩展）— 新增 quietHoursStart?/quietHoursEnd?（HH:mm，两者都填才生效）与 channelPrefs Json?（按渠道的营销接收偏好）；security 类通知不受两者约束
 
-## 8. M2-R 新增模型与字段扩展（2026-09-16；R1 已实施，R2~R4 规划）
+## 8. 新增模型与字段扩展
 
 > M2-R 迁移已经完成。字段口径以 `schema.prisma` 为事实源，并与客户端类型及 `api-app-design.md` 保持同步。
 
-### 8.1 新增模型（27；含 2026-09-17 下线与新增调整）
+### 8.1 新增模型（27）
 
 | 批次 | 模型 | 说明（前缀/关键字段） |
 |---|---|---|
-| R1 | UserNotification | 站内信（id UN；userId；type audit_result/enroll_result/order/points/system/invite/transfer/report/article/demand/project/mall/service + link?；title/content/at；read Bool）。单一列表、无归档、无分类偏好（2026-09-17 简化；`archived` 与 `UserNotificationPreference` 已移除）（§7.1-1） |
+| R1 | UserNotification | 站内信（id UN；userId；type audit_result/enroll_result/order/points/system/invite/transfer/report/article/demand/project/mall/service + link?；title/content/at；read Bool）。单一列表、无归档、无分类偏好（`archived` 与 `UserNotificationPreference` 已移除）（§7.1-1） |
 | R1 | Address | 收货地址簿（id AD；userId；name/phone/region/detail；isDefault 唯一约束；createdAt/updatedAt）（§7.7 A1） |
 | R1 | AgreementConsent | 协议同意留痕（userId+agreementType+version 联合唯一；consentedAt；注册同时记录用户协议与隐私政策）（§7.7 A3/A11） |
 | R1 | AccountDeletionRequest | 注销申请（id；userId；status pending/cooling(7 天)/approved/cancelled；requestedAt/effectiveAt?；复核工单） |
@@ -110,14 +110,14 @@
 | R2 | ApplicationFormConfig | 申请表单配置（type/title/subtitle/submitLabel/tips/fields） |
 | R3 | IndividualCard | 个人名片（userId 唯一、data Json、published、updatedAt） |
 | R4 | AnalyticsEvent | 埋点（eventType 12 项：login/register/demand_publish/demand_respond/event_enroll/checkin/mall_order/article_submit/space_reserve/favorite/report/search；userId?；at；payload Json?）（§7.1-22） |
-| 2026-09-17 | HomeBanner / ArticleTakedown | 首页轮播图与文章下架记录（见 §6；ServiceApplication 社区服务申请已下线，社区政策与通用申请审核保留） |
+| 扩展 | HomeBanner / ArticleTakedown | 首页轮播图与文章下架记录（见 §6；ServiceApplication 社区服务申请已下线，社区政策与通用申请审核保留） |
 | 规则重构 | PublishingLimitRule / PublishingLimitUsage | 按身份和动态等级设置四类每日发布限制；业务写入同事务占用，失败回滚、取消不返还 |
 
-### 8.2 既有模型字段扩展（15）
+### 8.2 既有模型字段扩展（17）
 
 | 批次 | 模型 | 新增字段 |
 |---|---|---|
-| R1 | User | avatar?；phone 唯一约束 |
+| R1 | User | avatar?；phone 唯一约束；activationDismissed Bool 默认 false（新手任务永久隐藏，按账号持久化） |
 | R1 | PointsRecord | dedupeKey? 唯一，用于积分发放幂等 |
 | R2 | CommunityEvent | venueLat/venueLng/checkinRadiusM/checkinOpenMin/checkinCloseMin（签到几何与时间窗）；cancelDeadlineHours（取消时限，默认 24）；rescheduledTo?（postponed 改期目标；状态机增 postponed） |
 | R2 | EventEnrollment | waitlisted Bool + waitlistOrder Int?（候补与递补顺序）；checkinLat/checkinLng/checkinMethod（自助/补签） |
@@ -132,14 +132,7 @@
 | R2 | Article | likeCount/commentCount（冗余列，事务更新，Q7 决） |
 | R3 | Enterprise | logo?/website?/address?/services[]?/advantages[]?（精致名片字段，负责人可编辑） |
 | R3 | UserIdentity | permissions[]（8 项枚举 publish_demand/respond_demand/space_reserve/article_submit/manage_members/invite_member/assign_permission/edit_card；负责人全部、成员由负责人分配） |
+| 扩展 | Project | demanderId?/demanderName?/demanderIdentity Json?（需求方主体/名称/身份快照；需求立项照搬需求、自建由表单录入）；creatorName?/creatorId?（创建人）；contactName?/contactPhone?/contactEmail?（联系方式）；contractPrice?（合同价格） |
+| 扩展 | IndividualCard | `data.visibility` 增 `isPublic`（公开名片开关；false 时退出社区人才库、公开名片页 404；缺省视为公开） |
 
-**卡片字段配置**：个人名片（`User`/UserIdentity 派生字段）与社区企业名片（`Enterprise` 字段）均**免审核保存即公开**；admin 后台可**查看/编辑**个人与企业名片，并可配置用户可编辑字段白名单，由 `GET /api/app/card-schema/:type` 下发。
-
-## 修订记录
-
-| 日期 | 摘要 |
-|---|---|
-| 2026-09-10 | 初版：按 M1 落地的 35 模型分域沉淀字段清单（M1-E 收尾任务） |
-| 2026-09-12 | M1.5 同步：模型 35 → 43（新增 AdminRole/AdminPermission/AdminUserRole/AdminRolePermission/LoginLog/SchedulerLog/MallAsset/ArchiveSetting）；Enterprise 删 stage、增 contactUserId/contactTitle 与软删列；ExternalEnterpriseProfile 增 status/size/foundedAt 与软删列；Application 扩为 settle/individual/cooperation/identity 并增归档列；Demand 增 creatorName/creatorId、Project/CommunityEvent/Article/Announcement/Lease/SpaceReservation/MallGoods/RedemptionOrder 增 deletedAt/archivableAt；MallGoods 增发货方式/自提地址/运费/可见与可下单范围、status 增 restock；SystemConfig 删 dailyLoginPoints、增 uploadMaxSizeMb；MallAsset 增 sourceType/sourceId；DictEntry 增 goods_category；Article 重构 channel（official A / submitted SU）与状态机；PointsRule 9 项、ExperienceRule 6 项 |
-| 2026-09-16 | M2-R 规划扩展：新增 §8 新增模型（22，R1~R4 分组）与既有模型字段扩展（13）；R0 决策定稿——Q1 MallGoods category 改字典分类 + 新增 fulfillment；Q3 新建 Policy；Q4 电子票 HMAC + 签到即核销；Q7 点赞/评论冗余计数列；Q8 个人/企业名片均免审核、后台可查看编辑并可配置名片可编辑字段（card-schema 下发） |
-| 2026-09-17 | 需求撮合调整：Demand 状态机增 `selected`（发布者选定意向承接方，等待管理员立项；matchedRespondent 记录被选人）；DemandRespondent 现行状态 pending/accepted/rejected/closed（contacted 仅历史种子），撤回以 withdrawnAt 判别 |
+**卡片字段配置**：个人名片（`User`/UserIdentity 派生字段）与社区企业名片（`Enterprise` 字段）均**免审核保存即公开**；admin 后台可**查看/编辑**个人与企业名片，并可配置用户可编辑字段白名单，由 `GET /api/app/card-schema/:type` 下发。个人名片 `visibility.isPublic=false` 时从人才库隐藏（§8.2）。

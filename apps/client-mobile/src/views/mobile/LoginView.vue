@@ -5,13 +5,13 @@ import { Button, Form, FormItem, Input, Toast } from 'tdesign-mobile-vue'
 import type { FormInstanceFunctions, FormRules } from 'tdesign-mobile-vue'
 import { useAuthStore } from '@/stores/auth'
 import { useNoticesStore } from '@/stores/notices'
-import { ApiError, apiMode } from '@/api/http'
+import { ApiError } from '@/api/http'
 import { REQUIRED } from '@/utils/validators'
 import CaptchaField from '@/components/CaptchaField.vue'
 import { useCaptcha } from '@/composables/useCaptcha'
 import 'tdesign-mobile-vue/es/style/index.css'
 
-/* 移动登录：全屏表单（Mock 验证码 8888）。
+/* 移动登录：全屏表单（服务端图形验证码）。
  * v46：校验迁移到 t-form/rules——错误内联在字段下方，提交失败自动滚动到首个错误字段。 */
 const router = useRouter()
 const route = useRoute()
@@ -109,7 +109,6 @@ function onLoginSubmit({ validateResult }: { validateResult: unknown }) {
       <p class="forgot"><router-link to="/forgot-password" class="link">忘记密码？</router-link></p>
       <p class="guest"><router-link to="/" replace class="guest-link">暂不登录</router-link></p>
       <p class="swap">还没有账号？<router-link to="/register" class="link">立即注册</router-link></p>
-      <p v-if="apiMode === 'mock'" class="demo">演示：13800000001 / client123</p>
     </Form>
   </main>
 </template>

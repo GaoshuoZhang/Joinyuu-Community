@@ -9,7 +9,7 @@ import type { AuthResult, IdentityType, LoginPayload, RegisterPayload, UserIdent
 const TOKEN_KEY = 'joinyuu_client_token'
 const IDENTITY_KEY = 'joinyuu_client_identity'
 
-/** 从 JWT（真实或 mock 同形态）读取 exp（秒）；无法解析返回 0（视为「未知」不做过期拦截，服务端为准） */
+/** 从 JWT 读取 exp（秒）；无法解析返回 0（视为「未知」不做过期拦截，服务端为准） */
 export function readTokenExp(raw: string): number {
   try {
     const payload = raw.split('.')[1]
@@ -128,7 +128,7 @@ export const useAuthStore = defineStore('auth', () => {
     useNoticesStore().reset()
   }
 
-  /* 启动即清理已过期令牌（http 与 mock 同口径），避免「已登录但接口全 401」的假象 */
+  /* 启动即清理已过期令牌，避免「已登录但接口全 401」的假象 */
   if (token.value && tokenExp.value !== 0 && tokenExp.value * 1000 <= Date.now()) resetSession()
 
   async function logout() {

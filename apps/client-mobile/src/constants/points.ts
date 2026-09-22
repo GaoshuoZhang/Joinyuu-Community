@@ -6,7 +6,7 @@ export const POINTS_SOURCE_LABELS: Record<string, string> = {
   redemption: '商城兑换',
 }
 
-/** 来源码 → 中文；未知码原样返回，兼容历史中文来源（如 Mock 数据）。 */
+/** 来源码 → 中文；未知码原样返回，兼容历史中文来源。 */
 export function pointsSourceLabel(source?: string | null): string {
   if (!source) return '积分变动'
   return POINTS_SOURCE_LABELS[source] ?? source

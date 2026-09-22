@@ -35,7 +35,6 @@ const isolation = parseIsolation()
 const childEnv = {
   ...process.env,
   NODE_ENV: mode === 'test' ? 'test' : 'development',
-  VITE_API_MODE: 'http',
 }
 
 function run(command, args, options = {}) {

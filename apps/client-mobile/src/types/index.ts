@@ -1,6 +1,5 @@
 /* 客户端实体与 API 类型（独立声明，不依赖 admin）。
- * 字段口径对齐 docs/api-app-design.md 与 docs/entity-fields.md；
- * 正式能力默认走 HTTP；仅开发者工具专用类型保留 [MOCK-ONLY] 标注。 */
+ * 字段口径对齐 docs/api-app-design.md 与 docs/entity-fields.md。 */
 
 /* ---------- 通用 ---------- */
 
@@ -762,7 +761,7 @@ export interface SpaceReservation {
   /** 预约主体名称（企业名/组织名；个人身份存昵称） */
   subjectName?: string
   rejectReason?: string
-  /** Mock 持久化也保留详情字段，列表页无需展示。 */
+  /** 详情字段，列表页无需展示。 */
   purpose?: string
   attendees?: number
   records?: ReviewTimelineItem[]

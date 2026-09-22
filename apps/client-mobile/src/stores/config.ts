@@ -29,11 +29,5 @@ export const useConfigStore = defineStore('config', () => {
     loaded = true
   }
 
-  /** [MOCK-ONLY] devtools 开关面板实时覆写（接入期由管理端系统配置驱动） */
-  function override(next: Partial<AppConfig>): void {
-    config.value = { ...config.value, ...next }
-    loaded = true
-  }
-
-  return { config, realnameMode, realnameLabel, ensureLoaded, override }
+  return { config, realnameMode, realnameLabel, ensureLoaded }
 })

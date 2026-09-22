@@ -1,4 +1,4 @@
-/** v39：本机阅读历史（localStorage，最多 10 条；仅客户端偏好，不参与 Mock 业务数据）。 */
+/** v39：本机阅读历史（localStorage，最多 10 条；仅客户端偏好，不写入服务端）。 */
 
 import { formatLocalDateTime } from './format'
 

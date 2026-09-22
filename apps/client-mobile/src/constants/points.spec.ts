@@ -8,7 +8,7 @@ describe('pointsSourceLabel', () => {
     expect(pointsSourceLabel('redemption')).toBe('商城兑换')
   })
 
-  it('keeps Chinese sources from legacy/mock data as-is', () => {
+  it('keeps Chinese sources from legacy data as-is', () => {
     expect(pointsSourceLabel('商城兑换')).toBe('商城兑换')
     expect(pointsSourceLabel('管理员调整')).toBe('管理员调整')
   })

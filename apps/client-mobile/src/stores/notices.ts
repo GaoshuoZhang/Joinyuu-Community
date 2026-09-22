@@ -51,7 +51,7 @@ export const useNoticesStore = defineStore('notices', () => {
 
   async function read(id: string): Promise<void> {
     const item = list.value.find((n) => n.id === id)
-    /* 先取未读快照：mock 层与列表共享对象引用，await 后 item.read 已被置真 */
+    /* 先取未读快照：标记已读后列表项的 read 会被置真 */
     const wasUnread = !!item && !item.read
     await markNoticeRead(id)
     if (item) item.read = true

@@ -1,9 +1,9 @@
 # 聚屿社区 · 客户端 API 设计（/api/app/**）
 
-> 2026-09-20 契约调整：实名认证通过身份证规则校验后立即生效，查询返回 `{ verified, realName?, citizenIdMasked?, verifiedAt? }`，不再经过后台人工复核。`GET /card-schema/:type`（individual/enterprise）返回 `{type, editableFields[]}`。个人/企业名片 PUT 为部分更新：省略保留，空串清空，用户提交禁用字段 403；后台 `/api/admin/cards/**` 可维护全部名片字段。注销冷静期 7 天，届满由工作人员执行，执行前可撤回，已注销账号不可登录或恢复。
+> 契约要点：实名认证通过身份证规则校验后立即生效，查询返回 `{ verified, realName?, citizenIdMasked?, verifiedAt? }`，不经过后台人工复核。`GET /card-schema/:type`（individual/enterprise）返回 `{type, editableFields[]}`。个人/企业名片 PUT 为部分更新：省略保留，空串清空，用户提交禁用字段 403；后台 `/api/admin/cards/**` 可维护全部名片字段。注销冷静期 7 天，届满由工作人员执行，执行前可撤回，已注销账号不可登录或恢复。
 
 > M2 客户端 Web（居民端）端点设计。依据：M0 冻结的实体模型与状态流（`docs/wiki-admin-web.md`）、
-> 后端既有契约与业务规则（`docs/wiki-backend.md` §4/§5/§8）及当前 Prisma 数据模型（69 模型）。
+> 后端既有契约与业务规则（`docs/wiki-backend.md` §4/§5/§8）及当前 Prisma 数据模型（68 模型）。
 > 本文档为 M2 实施的契约基线：实施前如有调整，先改本文档（记录变更）再改代码（wiki-backend §14 契约变更流程）。
 > 状态：**M2-R 已完成，本文为 `/api/app/**` 正式契约**。偏差先更新本文档，再按 wiki-backend 的契约变更流程修改代码。
 
@@ -58,7 +58,8 @@
 | GET | /api/app/application-form/:type | 申请表单 schema：`type` = settle 企业入驻 / cooperation 合作伙伴 / individual 人才登记；返回字段定义与提交按钮文案，客户端按后台配置的 schema 渲染 |
 | POST | /api/app/applications | 提交申请：schema 驱动字段（`fields`: key → string \| number \| 附件数组）；upload 字段值为 `POST /api/app/uploads` 返回的 `{ key, name, size, type, url }` 数组 → 管理端「申请审核」 |
 | GET | /api/app/me/cards | 我的个人名片（社区个体；简历式分段字段） |
-| PUT | /api/app/me/cards/individual | 保存个人名片：`displayName/age/politicalStatus/intro/industryExperience/skills` + 可增删分段 `education/work/projects/honors/socials/customLinks`（条目数组）；头像同步个人资料（只读）；真实后端应提交审核；保存后公开到社区人才库 |
+| PUT | /api/app/me/cards/individual | 保存个人名片：`displayName/age/politicalStatus/intro/industryExperience/skills` + 可增删分段 `education/work/projects/honors/socials/customLinks`（条目数组）+ `visibility`（`age/politicalStatus/isPublic`）；头像同步个人资料（只读）；免审保存即公开到社区人才库；`visibility.isPublic=false` 时退出人才库、公开名片页 404 |
+| POST | /api/app/me/activation-dismissed | 永久隐藏新手任务（幂等）：按账号持久化 `User.activationDismissed`；客户端换浏览器/设备后一致隐藏，`GET /me` 下发该字段 |
 | GET | /api/app/me/identities | 我的关联身份列表：社区个体 + 我关联的社区企业/合作企业（可多个）；企业项含 `roleLabel`（负责人/成员）、`isContact`、`permissions`（成员权限；负责人为全部）与 `enterpriseId` 详情入口；「我的」页有关联身份时显示「关联身份」入口 |
 | GET | /api/app/me/enterprises/:id | 企业详情：关联人可查看；含企业信息（`logo` 企业 Logo、`foundedAt` 成立时间、`website` 官网、`address` 办公地点、`services` 主营业务、`advantages` 核心优势）、成员列表（含 `isContact`、职位与 `permissions`）、`myPermissions`（我在该企业的权限集合；负责人为全部）、负责人、待接受邀请（仅负责人）与退驻/注销申请状态 |
 | PUT | /api/app/me/enterprises/:id | 修改企业基本信息（需 `edit_card` 权限；负责人默认拥有；行业/规模/简介/`logo`/成立时间/官网/办公地点/主营业务/核心优势；保存即生效） |
@@ -66,7 +67,7 @@
 | POST | /api/app/me/enterprises/:id/invite | 邀请企业成员（需 `invite_member` 权限；姓名 + 手机号 + **职位 `role` 必填**）：生成邀请记录并发站内信；手机号需已注册，已是成员/重复邀请/邀请自己分别 409；未注册手机号短信邀请属于后置替换项 |
 | PUT | /api/app/me/enterprises/:id/member | 修改企业成员信息：`memberUid?`/`memberName` + `role`/`phone`（需 `manage_members`；phone 为空串表示清空，冲突 409）+ `permissions`（需 `assign_permission`；负责人不可被分配，8 项枚举） |
 | POST | /api/app/me/enterprises/:id/remove-member | 移除企业成员（需 `manage_members` 权限；`memberUid?`/`memberName`；负责人本人需先转移负责人，否则 409） |
-| POST | /api/app/me/enterprises/:id/exit-application | 申请企业退驻/注销（可选 `reason`）→ 管理端审核；mock 记录 pending 状态 |
+| POST | /api/app/me/enterprises/:id/exit-application | 申请企业退驻/注销（可选 `reason`）→ 管理端审核，记录 pending 状态 |
 | GET | /api/app/invitations/:id | 企业成员邀请详情（被邀请人本人或邀请方负责人可看，否则 403）：企业概要（`enterpriseLogo/enterpriseIndustry/enterpriseSize`）+ 邀请人/受邀成员/职位/状态（pending/accepted/rejected）与时间 |
 | POST | /api/app/invitations/:id/respond | 被邀请人处理邀请（body `action=accept\|reject`，仅被邀请人）：接受则写入企业成员并通知负责人；已处理 409 |
 
@@ -80,8 +81,8 @@
 | GET | /api/app/me/demands | 我发布的需求（全状态，含 `kind`） |
 | POST | /api/app/demands/:id/respond | 响应需求：`published` 校验、不可响应自己的需求、防重复；通过后触发 `demand_responded` 积分（发放给响应成员，M2 批次） |
 | GET | /api/app/me/responses | 我的需求响应记录 |
-| POST | /api/app/me/responses/:id/withdraw | [MOCK-ONLY·缺口 §7.1-19] 响应者撤回待处理响应（撤回后可重新响应）；已处理 409 |
-| GET | /api/app/me/demands/:id/responses | [MOCK-ONLY·缺口 §7.1-19] 需求发布者查看响应列表（响应方快照 + `status=pending/accepted/rejected` + 审核时间/驳回原因）；非发布者 403 |
+| POST | /api/app/me/responses/:id/withdraw | 响应者撤回待处理响应（撤回后可重新响应）；已处理 409 |
+| GET | /api/app/me/demands/:id/responses | 需求发布者查看响应列表（响应方快照 + `status=pending/accepted/rejected` + 审核时间/驳回原因）；非发布者 403 |
 | POST | /api/app/me/demands/:id/select | 发布者选择意向承接方（`responseIds[]` 多选，去重且非空，全部须为本人需求下未撤回的待处理响应）；需求转 `selected`（`matchedRespondent` 记录被选人），被选响应转 `accepted` 并通知本人，未选中响应保持待处理（不可驳回）；不生成项目，由管理员在后台完成立项 |
 
 ## 7. 活动中心
@@ -100,10 +101,10 @@
 
 | 方法 | 路径 | 说明 |
 |---|---|---|
-| GET | /api/app/me/projects | 我承接的项目（需求发起方 / 本人或其社区企业身份所在企业承接；进度与里程碑状态） |
-| GET | /api/app/me/projects/:id | 项目详情（参与双方可看）：参与人、来源需求、进度与里程碑交付验收状态——[MOCK-ONLY·缺口 §7.1-19] |
-| POST | /api/app/me/projects/:id/milestones/:milestoneId/submit | [MOCK-ONLY·缺口 §7.1-19] 承接方提交里程碑完成（可附说明）→ 待发起方验收；发起方调用 403 |
-| POST | /api/app/me/projects/:id/milestones/:milestoneId/accept | [MOCK-ONLY·缺口 §7.1-19] 发起方验收里程碑；全部验收通过自动结项并按 wiki-backend §8.6 发放 `project_completed` 经验 |
+| GET | /api/app/me/projects | 我承接的项目（需求发起方 / 本人或其社区企业身份所在企业承接；进度与里程碑状态）。需求发起方按项目 `demanderId` 判定：主体为企业 ID 时解析到该企业联系人（后台代企业发需求立项后，联系人同样可见） |
+| GET | /api/app/me/projects/:id | 项目详情（需求方与承接方可看）：参与人、来源需求、进度与里程碑交付验收状态 |
+| POST | /api/app/me/projects/:id/milestones/:milestoneId/submit | 承接方提交里程碑完成（可附说明）→ 待发起方验收；发起方调用 403 |
+| POST | /api/app/me/projects/:id/milestones/:milestoneId/accept | 发起方验收里程碑；全部验收通过自动结项并按 wiki-backend §8.6 发放 `project_completed` 经验 |
 | GET | /api/app/mall/goods | 商品列表：`on` 且有库存优先（`restock` 库存为 0 不展示）；`mallOpen` 关闭 → 400 |
 | GET | /api/app/mall/goods/:id | 商品详情 |
 | POST | /api/app/mall/orders | 兑换下单：积分充足 + 库存充足（事务：扣积分+写流水+扣库存+建订单 `pending_shipment`） |
@@ -121,9 +122,9 @@
 | GET | /api/app/enterprises/:id | 企业展示页（`logo`/`foundedAt`/`website`/`address`/`services`/`advantages` 精致名片字段） |
 | POST | /api/app/uploads | 申请资料 / 配图上传：multipart（`file` + `bizType`），仅图片与 PDF（魔数嗅探），大小限制同系统配置；返回 `{ key, name, size, type, url }` |
 
-### 8.1 v33~v37 Mock 超界端点（已转正为正式契约，2026-09-16）
+### 8.1 需求撮合与项目履约端点
 
-> 本节端点均已在 M2-R 转正并实现；历史 `[MOCK-ONLY]` 标记不再具有契约意义。
+> 本节端点均已实现并接入真实后端。
 
 | 方法 | 路径 | 说明 |
 |---|---|---|
@@ -142,7 +143,7 @@
 | GET | /api/app/me/favorites · POST /api/app/me/favorites/toggle | 收藏需求 / 文章 / 活动与切换 |
 | POST | /api/app/me/enterprises/invitations/:id/revoke | 撤销待接受的企业成员邀请（邀请 7 天有效期） |
 | GET | /api/app/me/transfer-requests · POST /:id/respond · /:id/cancel | 负责人转移请求列表 / 目标成员接受或拒绝 / 发起方撤销（接受后变更负责人） |
-| POST | /api/app/analytics/events | Mock 埋点漏斗（登录/注册/发布/响应/报名/签到/下单/投稿/预约/收藏/举报/搜索）；真实接入为数据平台上报 |
+| POST | /api/app/analytics/events | 行为埋点旁路上报（登录/注册/发布/响应/报名/签到/下单/投稿/预约/收藏/举报/搜索）；失败不影响业务交互 |
 | GET/POST/PUT/DELETE | /api/app/me/addresses(/:id) | v38 收货地址簿（默认地址唯一）；实物订单创建必带 `addressId` 并写入收货快照 |
 | POST | /api/app/auth/reset-password · /auth/change-phone · /me/change-password | v38 找回密码（短信码+限频）/ 换绑手机号（新号验证码+占用 409）/ 登录态改密（原密码校验，成功后其他会话失效） |
 | POST | /api/app/me/deletion-request · /me/data-export | v38 注销申请（运营复核）与个人数据导出（异步打包 + 站内信） |
@@ -155,7 +156,7 @@
 | POST/GET | /api/app/articles/:id/likes/toggle · /articles/:id/comments | v38 文章点赞与评论（评论 2-200 字，过滤屏蔽用户） |
 | POST | /api/app/auth/register（`agreed` 必填） | v38 注册须同意用户协议与隐私政策并留痕 |
 
-### 8.2 v40~v43 Mock 端点转正（2026-09-16 新增，正式契约）
+### 8.2 撤回/重提/申诉与回填端点
 
 > 本节源自 v40~v43 客户端能力，现均为正式契约。
 
@@ -168,7 +169,7 @@
 | GET | /api/app/me/realname-rights | 当前发布限制展示：个人实名状态、社区个体/社区企业等级对应的需求发布、文章投稿、活动报名与空间预约额度；企业额度按企业主体共享 |
 | GET | /api/app/me/stats | 个人数据看板：积分/经验/需求/响应/项目/活动/签到聚合口径（E5） |
 | GET | /api/app/me/enterprise-workbench | 企业工作台：企业维度聚合（需求/响应/项目/成员统计），仅成员/负责人可看（E7） |
-| — | ~~/api/app/service-applications~~ | 社区公共服务申请已于 2026-09-17 下线（社区政策浏览与通用申请审核保留） |
+| — | ~~/api/app/service-applications~~ | 社区公共服务申请已下线（社区政策浏览与通用申请审核保留） |
 | POST | /api/app/mall/orders/:id/review | 订单评价：1~5 星 + 文字（每单一次；需订单 finished） |
 | GET/POST | /api/app/me/history | 浏览历史：本机阅读历史增量上报/拉取/分页；DELETE 清空（D7） |
 | GET | /api/app/card-schema/:type | 名片可编辑字段 schema 下发（`type=individual\|enterprise`；后台可配置用户可填字段） |
@@ -195,9 +196,9 @@
 | M2-B | 需求广场（浏览/提交/响应）+ 活动中心（浏览/报名）+ 可见范围过滤 |
 | M2-C | 商城兑换 + 空间预约 + 文章投递 + 企业名片申请 + 申请审核闭环联动 |
 
-> M2-R R0～R4 已完成，验收与覆盖边界见 `m2-r-closeout.md`。
+> 客户端接口已按本文档实现并接入真实 HTTP；当前状态与验证见 [README](../README.md)。
 
-## 12. 站内信（R1 新增，正式契约；2026-09-17 简化为单一列表）
+## 12. 站内信
 
 > 缺口 §7.1-1。`UserNotification` 模型（id UN；type audit_result/enroll_result/order/points/system/invite/transfer/report/article/demand/project/mall/service + link?；title/content/at/read；userId）。**不再有归档与分类偏好**：全部消息同一列表，按时间倒序；`NotificationService` 始终写入。
 
@@ -207,31 +208,6 @@
 | GET | /api/app/notices/unread-count | 未读数（首页/顶栏角标） |
 | POST | /api/app/notices/:id/read | 标记已读（幂等） |
 | POST | /api/app/notices/read-all | 全部已读 |
-| — | ~~/api/app/notices/:id/archive~~ · ~~/api/app/me/notices/prefs~~ | 归档与通知偏好端点已于 2026-09-17 移除（404） |
+| — | ~~/api/app/notices/:id/archive~~ · ~~/api/app/me/notices/prefs~~ | 归档与通知偏好端点已移除（404） |
 
 **触发点**（R2/R3 各业务接线，均经 `NotificationService.pushNotice()`）：申请/需求/投稿/报名/预约审核结果、订单下单/发货/取消/补货、签到成功、注册欢迎、企业邀请/接受/拒绝/成员更新、负责人转移请求/结果、举报处置回执、活动候补递补、改期/取消通知、里程碑提交/验收/退回、数据导出完成。
-
-## 修订记录
-
-| 日期 | 摘要 |
-|---|---|
-| 2026-09-10 | 初版：M1-E 产出 M2 客户端端点设计稿（覆盖注册登录/多身份、需求、活动、项目、商城、空间、内容、展示页、个人中心） |
-| 2026-09-12 | 按 M1.5 现状同步：申请类型扩为 settle/individual/cooperation/identity（企业入驻/个体入驻/企业合作/身份绑定）；「外部企业」→「合作企业」、审批→审核；每日登录积分改由 PointsRule `daily_login` 控制（`SystemConfig.dailyLoginPoints` 已删）；投稿编号 SU 前缀与文章状态机口径更新；模型数 43 |
-| 2026-09-13 | 企业合作/人才登记流程重构：新增申请表单 schema（`GET /application-form/:type`，后台可配置自定义字段）与 app 通用上传（`POST /uploads`，图片/PDF）约定；`POST /applications` 改为 schema 驱动字段 + 附件数组（identity 身份绑定保留 `identityType`） |
-| 2026-09-13 | 需求类型与专属字段：`POST /demands` 增 `kind/categoryDict` 与三类需求专属字段；列表、详情与「我的需求」返回 `kind` |
-| 2026-09-13 | 我的展示页自助编辑：新增 `GET/PUT /api/app/me/showcase`，后续由名片契约替代 |
-| 2026-09-13 | 展示页更名「名片」并补充个人/企业名片、企业管理、邀请、负责人转移与退驻接口 |
-| 2026-09-14 | 身份资产隔离：积分仅社区个体/个人用户可查看；新增按身份读取经验与等级接口 |
-| 2026-09-14 | 主体快照对齐：`POST /demands` 明确四类身份（含合作企业）均可发布全部类型，`publisherName` 按主体取企业名/组织名；`POST /spaces/reservations` 增 `asIdentity`（四类身份均可预约，企业主体记企业名/组织名），`GET /me/reservations` 返回 `identityType/subjectName` |
-| 2026-09-14 | **身份模型收敛：移除全局「当前身份」切换**——身份仅在发布/提交表单内选择（归属快照）；「我的」页不再有身份切换，经验页按个人维度取数（`identity` 参数保留兼容）；企业能力收敛为「企业管理」：`GET /me/enterprises`（关联企业列表）+ `GET/PUT /me/enterprises/:id` + `POST /me/enterprises/:id/transfer-contact` / `invite` / `exit-application`（负责人可写、成员只读）；移除 `PUT /me/cards/enterprise` 与旧 `/me/enterprise` 系列端点 |
-| 2026-09-14 | 「企业管理」升级为「关联身份」：列表端点由 `GET /me/enterprises` 改为 `GET /me/identities`（含社区个体 + 全部关联社区企业/合作企业，可多个）；企业详情与操作仍为 `/me/enterprises/:id` 系列 |
-| 2026-09-14 | 需求表单调整：`deadline` 不再收集（保留历史字段展示，日期展示优先 `deliverBy`）；task 新增 `deliverBy`（预期交付日期）；三类需求新增 `contactName/contactPhone/contactEmail` 联系人信息；持有社区个体身份时发布身份选项不再单列个人用户 |
-| 2026-09-14 | 头像与企业管理增强：`PUT /me` 增 `avatar`（头像上传 url）；企业增 `logo`（企业详情/展示页返回，`PUT /me/enterprises/:id` 可保存）；邀请成员增必填 `role` 职位，新增 `PUT /me/enterprises/:id/member-role`（负责人可修改成员职位） |
-| 2026-09-14 | 个人名片简历化 + 企业名片丰富 + 头像同步：`PUT /me/cards/individual` 扩为分段字段（age/politicalStatus/industryExperience + education/work/projects/honors/socials/customLinks 可增删），新增 `GET /community/talents/:uid`（公开人才名片，头像取个人资料）；企业名片增 `foundedAt/website/address/services/advantages`（详情与展示页返回、负责人可编辑）；头像与 Logo 改为点头像直接上传/替换 |
-| 2026-09-14 | 企业管理细化：新增 `POST /me/enterprises/:id/remove-member`（负责人可移除成员，负责人本人需先转移）；企业名片编辑独立成页（企业详情仅保留负责人/成员/退驻模块 + 「编辑企业名片」入口，编辑仍走 `PUT /me/enterprises/:id`）；企业名片页标题与人才名片底栏归属「社区」Tab |
-| 2026-09-14 | 企业成员邀请改为邀请记录 + 站内信 + 接受/拒绝闭环，并补充成员职位与手机号维护 |
-| 2026-09-14 | **企业成员权限体系**：成员增 `permissions`（8 项枚举：`publish_demand/respond_demand/space_reserve/article_submit/manage_members/invite_member/assign_permission/edit_card`），负责人默认全部；`PUT /me/enterprises/:id/member` 支持分配权限（需 `assign_permission`，role/phone 需 `manage_members`）；`invite`/`remove-member`/`PUT /me/enterprises/:id` 分别校验 `invite_member`/`manage_members`/`edit_card`；`GET /me/identities` 与 `GET /me/enterprises/:id` 返回 `permissions`/`myPermissions`；`POST /demands` 与 `POST /spaces/reservations` 支持 `asEnterpriseId` 代企业主体（校验对应成员权限）；响应需求/文章投稿的代企业主体字段待后续批次 |
-| 2026-09-15 | 登记需求撮合、项目协作、撤回重提、商城履约、信任治理、收藏、提醒与埋点契约 |
-| 2026-09-15 | 新增实名认证查询/提交与脱敏展示契约 |
-| 2026-09-16 | M2-R R0 将客户端 Mock 能力转正为正式契约，并补充首页、电子票、沟通、协作、看板、工作台、评价、名片字段与政策端点 |
-| 2026-09-21 | **注册/找回密码/改密/绑定细化**：注册改为默认邮箱注册（可选手机号，视短信通道可用性），任一渠道均须验证码验证，验证后成为「可信通知渠道」；新增 `username`（登录标识，全站唯一，注册自动分配）与 `nickname` 唯一化（保留名单）；登录标识支持手机号/邮箱/用户名；找回密码必须走已验证可信渠道（新增 `GET /auth/recovery-channels`、`POST /auth/reset-code/send`）；新增 `POST /auth/change-phone`、`POST /auth/change-email`（绑定与更换均须验证新值）；`POST /me/change-password` 成功后强制退出全部会话；`phone`/`email` 改为可空且唯一；「我的申请」改为按 uid 归属（`Application.userId`，兼容历史按手机号匹配） |

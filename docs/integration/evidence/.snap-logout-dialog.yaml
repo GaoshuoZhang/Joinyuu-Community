@@ -1,8 +1,0 @@
-- dialog [ref=f10e80]:
-  - dialog [ref=f10e81]:
-    - generic [ref=f10e82]:
-      - generic [ref=f10e83]: 退出登录
-      - generic [ref=f10e84]: 确认退出当前账号？未保存的编辑内容将丢失。
-    - generic [ref=f10e86]:
-      - button "取消" [active] [ref=f10e87] [cursor=pointer]
-      - button "确认退出" [ref=f10e89] [cursor=pointer]
