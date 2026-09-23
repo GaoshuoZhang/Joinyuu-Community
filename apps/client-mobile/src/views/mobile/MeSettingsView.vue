@@ -76,8 +76,10 @@ async function doLogout() {
       <Cell class="logout" title="退出登录" :bordered="false" @click="onLogout" />
     </CellGroup>
 
+    <!-- TDesign 该版本 ActionSheet 只发 update:modelValue（cancel/close 事件不触发），
+         因此必须用 v-model 而非 v-model:visible；取消与点遮罩关闭都走该事件 -->
     <ActionSheet
-      v-model:visible="themeSheetVisible"
+      v-model="themeSheetVisible"
       theme="list"
       description="深色模式"
       cancel-text="取消"

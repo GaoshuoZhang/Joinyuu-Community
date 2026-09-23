@@ -286,14 +286,14 @@ async function doExit() {
       </section>
     </template>
 
+    <!-- TDesign 该版本 ActionSheet 只发 update:modelValue（cancel/close 不触发），用 v-model 才能
+         让取消/点遮罩关闭生效 -->
     <ActionSheet
-      v-model:visible="transferVisible"
+      v-model="transferVisible"
       :items="transferItems"
       description="选择新的企业负责人（仅企业成员）"
       cancel-text="取消"
       :popup-props="{ closeOnOverlayClick: true }"
-      @close="transferVisible = false"
-      @cancel="transferVisible = false"
       @selected="onTransferSelected"
     />
 
