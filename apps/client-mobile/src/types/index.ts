@@ -81,6 +81,8 @@ export interface UserProfile {
   registeredAt: string
   /** 是否已永久隐藏新手任务（服务端按账号持久化，跨浏览器一致） */
   activationDismissed?: boolean
+  /** 用户名下次可修改时间（YYYY-MM-DD HH:mm）；null=当前可修改（90 天限改一次） */
+  usernameChangeableAt?: string | null
   identities: UserIdentity[]
 }
 

@@ -18,7 +18,7 @@
 
 ## 2. 社区成员域（7）
 
-- **User** — 用户（uid PK U；**username 登录标识/全站唯一**；nickname 展示昵称/全站唯一；**phone?/email? 可空且非空时全站唯一**；**phoneVerifiedAt?/emailVerifiedAt? 可信通知渠道标记**（非空=该渠道已验证，可用于找回密码与接收通知）；gender；avatar?；status active/frozen；realName?/citizenId?/verifiedAt?；微信字段 M3 预留；frozenUntil?/frozenReason?；points 积分余额；registeredAt/lastActiveAt；bio；activities Json；**activationDismissed Bool 默认 false（永久隐藏新手任务，按账号持久化，跨浏览器一致）**）
+- **User** — 用户（uid PK U；**username 登录标识/全站唯一**；nickname 展示昵称/全站唯一；**phone?/email? 可空且非空时全站唯一**；**phoneVerifiedAt?/emailVerifiedAt? 可信通知渠道标记**（非空=该渠道已验证，可用于找回密码与接收通知）；gender；avatar?；status active/frozen；realName?/citizenId?/verifiedAt?；微信字段 M3 预留；frozenUntil?/frozenReason?；points 积分余额；registeredAt/lastActiveAt；bio；activities Json；**activationDismissed Bool 默认 false（永久隐藏新手任务，按账号持久化，跨浏览器一致）**；**usernameChangedAt?（最近一次用户名修改时间，每 90 天仅可修改一次）**）
 - **UserIdentity** — 一人多身份（userId 级联；type individual/community_individual/community_enterprise/external_enterprise；enterpriseId?/enterpriseName?/role?/title；level?/experience? 仅社区两类持有；唯一 userId+type+enterpriseId）
 - **Enterprise** — 社区企业（id E；name/industry/size/foundedAt/settledAt?/leaseType；status pending 默认/active/exited/disabled；experience 企业经验；contactUserId? 关联个人用户 + contactTitle 职位 + contactName/contactPhone/contactEmail?；description/tags；deletedAt?/deletedBy?；**stage 已删**）
 - **ExternalEnterpriseProfile** — 合作企业档案（id XE；name/industry；status active/disabled；size/foundedAt；description；registeredAt（登记日期=填表通过审核当天）；deletedAt?/deletedBy?；聚合视图 = 档案 + external_enterprise 身份派生成员，不建独立实体表）
@@ -117,7 +117,7 @@
 
 | 批次 | 模型 | 新增字段 |
 |---|---|---|
-| R1 | User | avatar?；phone 唯一约束；activationDismissed Bool 默认 false（新手任务永久隐藏，按账号持久化） |
+| R1 | User | avatar?；phone 唯一约束；activationDismissed Bool 默认 false（新手任务永久隐藏，按账号持久化）；usernameChangedAt?（用户名每 90 天限改一次） |
 | R1 | PointsRecord | dedupeKey? 唯一，用于积分发放幂等 |
 | R2 | CommunityEvent | venueLat/venueLng/checkinRadiusM/checkinOpenMin/checkinCloseMin（签到几何与时间窗）；cancelDeadlineHours（取消时限，默认 24）；rescheduledTo?（postponed 改期目标；状态机增 postponed） |
 | R2 | EventEnrollment | waitlisted Bool + waitlistOrder Int?（候补与递补顺序）；checkinLat/checkinLng/checkinMethod（自助/补签） |

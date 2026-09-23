@@ -222,6 +222,8 @@ model User {
   frozenReason           String?                     @db.VarChar(255)
   passwordHash           String?                     @db.VarChar(255)
   passwordUpdatedAt      String?                     @db.VarChar(16)
+  // 用户名修改时间；每 90 天仅可修改一次（null=从未修改，可随时修改）
+  usernameChangedAt      String?                     @db.VarChar(16)
   points                 Int                         @default(0)
   registeredAt           String                      @db.VarChar(16)
   lastActiveAt           String                      @db.VarChar(16)

@@ -51,6 +51,15 @@ const { markClean } = useUnsavedGuard(() => loaded.value && formSnapshot.value !
 /* 实名入口（P1）：后端启用并测试联通权威核验时称「实名认证」，否则称「身份信息登记」 */
 const configStore = useConfigStore()
 const realNameVerified = ref<boolean | null>(null)
+/* 用户名 90 天限改：服务端下发下次可修改时间；锁定期间禁用输入并说明原因 */
+const usernameChangeableAt = ref<string | null>(null)
+const usernameLocked = computed(() => Boolean(usernameChangeableAt.value))
+const usernameHelp = computed(() => {
+  const changeableDate = usernameChangeableAt.value?.slice(0, 10)
+  return usernameLocked.value
+    ? `用户名是账号的唯一凭证，可用于登录，90天可修改一次，${changeableDate}后可修改。`
+    : '用户名是账号的唯一凭证，可用于登录，90天可修改一次，当前可修改。'
+})
 const realNameNote = computed(() => {
   if (realNameVerified.value === null) return ''
   const verifiedWord = configStore.realnameMode === 'verified' ? '已认证' : '已登记'
@@ -89,6 +98,7 @@ async function load() {
       baseline.value = formSnapshot.value
     }
     loaded.value = true
+    usernameChangeableAt.value = me.usernameChangeableAt ?? null
     try {
       const rn = await fetchRealName()
       realNameVerified.value = rn.verified
@@ -161,8 +171,8 @@ function onSubmit({ validateResult }: { validateResult: unknown }) {
             @update:image="form.avatar = $event"
           />
         </div>
-        <FormItem label="用户名" name="username" help="全站唯一，可用于登录；修改后请用新用户名登录。">
-          <Input v-model="form.username" autocomplete="username" :spell-check="false" :maxlength="20" placeholder="字母开头，4-20 位字母/数字/下划线…" clearable />
+        <FormItem label="用户名" name="username" :help="usernameHelp">
+          <Input v-model="form.username" autocomplete="username" :spell-check="false" :maxlength="20" :disabled="usernameLocked" placeholder="字母开头，4-20 位字母/数字/下划线…" clearable />
         </FormItem>
         <FormItem label="昵称" name="nickname">
           <Input v-model="form.nickname" autocomplete="off" :spell-check="false" :maxlength="20" placeholder="社区展示名…" clearable />

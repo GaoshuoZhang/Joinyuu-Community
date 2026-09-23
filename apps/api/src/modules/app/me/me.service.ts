@@ -31,6 +31,9 @@ const IDENTITY_LABEL: Record<string, string> = {
 /** 注销冷静期（天）：申请后 effectiveAt = requestedAt + 7 天 */
 const DELETION_COOLING_DAYS = 7
 
+/** 用户名修改冷却（天）：登录标识每 90 天仅可修改一次 */
+const USERNAME_CHANGE_INTERVAL_DAYS = 90
+
 /** 个人中心与账号安全（/api/app/me）：资料聚合、积分/经验流水、改密/换绑、注销与导出 */
 @Injectable()
 export class MeService {
@@ -69,6 +72,8 @@ export class MeService {
       avatar: user.avatar ?? undefined,
       /* 新手任务永久隐藏状态：按账号持久化，客户端据此跨浏览器一致地隐藏引导 */
       activationDismissed: user.activationDismissed,
+      /* 用户名 90 天限改：null=当前可修改；否则为下次可修改时间（YYYY-MM-DD HH:mm） */
+      usernameChangeableAt: this.usernameChangeableAt(user.usernameChangedAt),
       identities: user.identities.map((i) => ({
         type: i.type,
         level: i.level ?? undefined,
@@ -87,8 +92,17 @@ export class MeService {
     if (!user) throw new NotFoundException('用户不存在')
 
     const data: Prisma.UserUpdateInput = {}
-    if (dto.username !== undefined && dto.username.trim()) {
-      data.username = await this.identityNames.assertUsernameAvailable(dto.username, uid)
+    const nextUsername = dto.username?.trim()
+    /* 用户名仅在真正变更时校验：90 天冷却 + 全站唯一/保留名；同值提交不占用冷却 */
+    if (nextUsername && nextUsername !== user.username) {
+      const changeableAt = this.usernameChangeableAt(user.usernameChangedAt)
+      if (changeableAt) {
+        throw new BadRequestException(
+          `用户名每 ${USERNAME_CHANGE_INTERVAL_DAYS} 天仅可修改一次，下次可修改时间：${changeableAt}`,
+        )
+      }
+      data.username = await this.identityNames.assertUsernameAvailable(nextUsername, uid)
+      data.usernameChangedAt = formatNow()
     }
     if (dto.nickname !== undefined && dto.nickname.trim()) {
       data.nickname = await this.identityNames.assertNicknameAvailable(dto.nickname, uid)
@@ -319,6 +333,13 @@ export class MeService {
   }
 
   /* ---------- 内部工具 ---------- */
+
+  /** 用户名锁定状态：返回下次可修改时间（YYYY-MM-DD HH:mm）；从未修改或已满冷却期返回 null */
+  private usernameChangeableAt(changedAt: string | null): string | null {
+    if (!changedAt) return null
+    const next = this.addDaysTime(changedAt, USERNAME_CHANGE_INTERVAL_DAYS)
+    return new Date(next.replace(' ', 'T')).getTime() <= Date.now() ? null : next
+  }
 
   /** 时间字符串（YYYY-MM-DD HH:mm）加天数 */
   private addDaysTime(timeStr: string, days: number): string {

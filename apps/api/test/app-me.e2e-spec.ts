@@ -6,6 +6,8 @@ import request from 'supertest'
 import { AppModule } from '../src/app.module'
 import { reseed } from './helpers/reseed'
 import { appGet, appLoginAs, appLoginRequest, appPost } from './helpers/app-login'
+import { PrismaService } from '../src/common/prisma/prisma.service'
+import { addDays, formatToday } from '../src/common/utils/time'
 
 describe('M2-R R1 app 个人中心', () => {
   let app: INestApplication
@@ -77,6 +79,52 @@ describe('M2-R R1 app 个人中心', () => {
     expect(me.body.data.nickname).toBe('陈屿（测试）')
     expect(me.body.data.bio).toBe('更新后的简介')
     expect(me.body.data.avatar).toBe('/api/public/files/test/avatar.png')
+  })
+
+  it('用户名 90 天仅可修改一次：冷却期拒绝并下发可修改时间，期满恢复', async () => {
+    const prisma = app.get(PrismaService)
+    const before = await appGet(app, token, '/api/app/me')
+    expect(before.body.data.usernameChangeableAt).toBeNull()
+
+    const first = await request(app.getHttpServer())
+      .put('/api/app/me')
+      .set('Authorization', `Bearer ${token}`)
+      .send({ username: 'chenyu_e2e_1' })
+    expect(first.status).toBe(200)
+
+    const locked = await appGet(app, token, '/api/app/me')
+    expect(locked.body.data.username).toBe('chenyu_e2e_1')
+    expect(typeof locked.body.data.usernameChangeableAt).toBe('string')
+
+    /* 冷却期内再次改名拒绝；同值提交与其他字段更新不受影响 */
+    const second = await request(app.getHttpServer())
+      .put('/api/app/me')
+      .set('Authorization', `Bearer ${token}`)
+      .send({ username: 'chenyu_e2e_2' })
+    expect(second.status).toBe(400)
+    expect(second.body.message).toContain('90 天')
+
+    const profileOnly = await request(app.getHttpServer())
+      .put('/api/app/me')
+      .set('Authorization', `Bearer ${token}`)
+      .send({ username: 'chenyu_e2e_1', bio: '冷却期仍可改简介' })
+    expect(profileOnly.status).toBe(200)
+    expect((await appGet(app, token, '/api/app/me')).body.data.bio).toBe('冷却期仍可改简介')
+
+    /* 回拨修改时间到 90 天前：冷却解除，可再次修改 */
+    await prisma.user.update({
+      where: { uid: 'U1001' },
+      data: { usernameChangedAt: `${addDays(formatToday(), -91)} 00:00` },
+    })
+    const third = await request(app.getHttpServer())
+      .put('/api/app/me')
+      .set('Authorization', `Bearer ${token}`)
+      .send({ username: 'chenyu_e2e_3' })
+    expect(third.status).toBe(200)
+    const relocked = await appGet(app, token, '/api/app/me')
+    expect(relocked.body.data.username).toBe('chenyu_e2e_3')
+    /* 改名成功即重新进入冷却：下次可修改时间为新的 90 天后 */
+    expect(typeof relocked.body.data.usernameChangeableAt).toBe('string')
   })
 
   it('GET /me/points-records 分页返回积分流水', async () => {

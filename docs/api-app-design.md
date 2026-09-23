@@ -48,8 +48,8 @@
 
 | 方法 | 路径 | 说明 |
 |---|---|---|
-| GET | /api/app/me | 资料 + 身份列表（含各身份经验/等级）+ 积分余额 |
-| PUT | /api/app/me | 更新昵称/头像/性别/简介等可编辑字段（头像为 `POST /uploads` 返回的 url） |
+| GET | /api/app/me | 资料 + 身份列表（含各身份经验/等级）+ 积分余额；`usernameChangeableAt` 下发用户名下次可修改时间（90 天限改一次，null=当前可改） |
+| PUT | /api/app/me | 更新昵称/头像/性别/简介等可编辑字段（头像为 `POST /uploads` 返回的 url）；用户名仅在与当前值不同时校验，90 天冷却内 400，成功后记录 `usernameChangedAt` |
 | GET | /api/app/me/points-records | 我的积分流水（分页，含 balance）；积分按身份隔离：仅社区个体/个人用户可查看 |
 | GET | /api/app/me/realname | 实名认证状态：`{ verified, realName? 脱敏（首字）, citizenIdMasked? 前 4 后 4, verifiedAt? }` |
 | PUT | /api/app/me/realname | 提交实名认证：`realName` + `citizenId`（18 位，含校验码）；规则校验通过后立即认证并记录 `verifiedAt`，已认证返回 409 |
