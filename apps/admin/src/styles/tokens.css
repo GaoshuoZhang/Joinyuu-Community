@@ -113,7 +113,10 @@ html[data-route-loading='true']::after {
 
 /* wangEditor 暗色模式（R 增强）：编辑器全部用 --w-e-* CSS 变量着色，
  * 暗色下按 TDesign dark 配色（深灰表面 + 白字 + 细分隔线）覆盖同名变量，
- * 随应用 theme-mode="dark"（:root[theme-mode='dark']）联动切换 */
+ * 随应用 theme-mode="dark"（:root[theme-mode='dark']）联动切换。
+ * 色值豁免说明：此处为第三方编辑器变量桥接（非业务色），部分变量会被编辑器
+ * 内部拼入 rgba()/渐变等函数，无法安全引用 var(--td-*) token；取色均对齐
+ * TDesign dark 调色板（gray-brand-1/13、gray-1~4、brand-color-4 等），升级时对照校准 */
 :root[theme-mode='dark'] {
   --w-e-textarea-bg-color: transparent;
   --w-e-textarea-color: #e6e6ea;
@@ -237,6 +240,8 @@ html[data-route-loading='true']::after {
 .ctl-w-lg { width: 200px !important; }
 .ctl-w-xl { width: 240px !important; }
 .ctl-w-2xl { width: 280px !important; }
+/* 表单内撑满（取代散落的行内 style="width:100%"） */
+.ctl-w-full { width: 100% !important; }
 
 /* 内容卡片 */
 .page-card {

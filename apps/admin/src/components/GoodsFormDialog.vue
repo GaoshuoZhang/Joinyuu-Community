@@ -225,16 +225,16 @@ function onClose() {
           <t-select :clearable="false" v-model="form.fulfillment" :options="fulfillmentOptions" />
         </t-form-item>
         <t-form-item label="兑换积分" name="points">
-          <t-input-number v-model="form.points" :min="1" :decimal-places="0" theme="column" style="width: 100%" />
+          <t-input-number v-model="form.points" :min="1" :decimal-places="0" theme="column" class="ctl-w-full" />
         </t-form-item>
       </div>
       <t-form-item label="库存" name="stock">
-        <t-input-number v-model="form.stock" :min="0" :decimal-places="0" theme="column" style="width: 100%" />
+        <t-input-number v-model="form.stock" :min="0" :decimal-places="0" theme="column" class="ctl-w-full" />
       </t-form-item>
 
       <!-- 权益券：券码有效期（天下单时写入券码到期时间） -->
       <t-form-item v-if="form.fulfillment === 'voucher'" label="有效期（天）" name="validDays" help="兑换后券码有效期，到期后不可核销；留空按 30 天处理">
-        <t-input-number v-model="form.validDays" :min="1" :max="3650" :decimal-places="0" theme="column" style="width: 100%" />
+        <t-input-number v-model="form.validDays" :min="1" :max="3650" :decimal-places="0" theme="column" class="ctl-w-full" />
       </t-form-item>
 
       <!-- 实物商品：发货方式（自提/邮寄），按选择显示自提地址或邮费 -->
@@ -261,7 +261,7 @@ function onClose() {
           name="shippingFee"
           help="0 = 包邮"
         >
-          <t-input-number v-model="form.shippingFee" :min="0" :decimal-places="0" theme="column" style="width: 100%" />
+          <t-input-number v-model="form.shippingFee" :min="0" :decimal-places="0" theme="column" class="ctl-w-full" />
         </t-form-item>
       </template>
 

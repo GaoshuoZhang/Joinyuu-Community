@@ -13,7 +13,10 @@ export interface PermissionGroup {
 }
 
 export const permissionGroups: PermissionGroup[] = [
-  { name: '工作台', perms: [{ code: '/dashboard', name: '工作台' }] },
+  { name: '工作台', perms: [
+    { code: '/dashboard', name: '工作台' },
+    { code: '/user-messages', name: '用户留言' },
+  ] },
   {
     name: '社区成员',
     perms: [

@@ -81,9 +81,16 @@ async function onNext() {
     }
     channel.value = result.email ? 'email' : 'phone'
     step.value = 2
-  } catch {
-    /* 统一话术：不区分「账号未注册/未绑定」，避免账号枚举 */
-    Toast('若账号存在，将通过可信渠道发送验证码')
+  } catch (e) {
+    /* 反枚举：账号校验类失败（服务端业务码）统一话术，不区分「未注册/未绑定」；
+     * 但网络/超时类错误（code 0/408）必须明确提示重试，否则用户看到「假成功」话术却毫无进展 */
+    const code = e instanceof ApiError ? e.code : -1
+    if (code === 0 || code === 408 || code === -1) {
+      Toast(e instanceof ApiError && e.code === 408 ? '请求超时，请重试' : '网络异常，请稍后重试')
+    } else {
+      /* 统一话术：不区分「账号未注册/未绑定」，避免账号枚举 */
+      Toast('若账号存在，将通过可信渠道发送验证码')
+    }
   } finally {
     checking.value = false
   }
@@ -303,11 +310,20 @@ function backToStep1() {
   cursor: pointer;
 }
 
+/* 密码显隐图标：内部类名 t-input__wrap--suffix-icon（官方无命中区/尺寸类 API，点击处理器挂在图标 SVG 上）。
+ * 视觉保持 24px，用 padding 把 SVG 命中区抬到 44px 触控基线；升级 TDesign 时需复核类名与 DOM 结构。 */
 .password-field :deep(.t-input__wrap--suffix-icon) {
   display: grid;
-  flex: 0 0 24px;
-  width: 24px;
+  flex: 0 0 44px;
+  width: 44px;
   place-items: center;
+}
+
+.password-field :deep(.t-input__wrap--suffix-icon svg) {
+  width: 24px;
+  height: 24px;
+  padding: 10px;
+  box-sizing: content-box;
 }
 
 .password-field :deep(.t-input--password) {

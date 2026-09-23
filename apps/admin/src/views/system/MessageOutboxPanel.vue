@@ -114,23 +114,34 @@ const columns = [
   { colKey: 'op', title: '操作', width: 150, fixed: 'right' as const },
 ]
 
+/* 行级操作互斥：连点重试会多次调用接口造成真实重投递 */
+const actingId = ref<string | null>(null)
+
 async function onRetry(row: OutboxMessage) {
+  if (actingId.value) return
+  actingId.value = row.id
   try {
     await retryOutboxMessage(row.id)
     MessagePlugin.success('已加入待发送')
     await load()
   } catch (error) {
     MessagePlugin.error(error instanceof Error ? error.message : '重试失败')
+  } finally {
+    actingId.value = null
   }
 }
 
 async function onDiscard(row: OutboxMessage) {
+  if (actingId.value) return
+  actingId.value = row.id
   try {
     await discardOutboxMessage(row.id)
     MessagePlugin.success('已终止投递')
     await load()
   } catch (error) {
     MessagePlugin.error(error instanceof Error ? error.message : '终止失败')
+  } finally {
+    actingId.value = null
   }
 }
 
@@ -157,9 +168,6 @@ async function openLogs(row: OutboxMessage) {
 
 <template>
   <div class="outbox-panel">
-    <!-- 本面板只作为「消息中心」的选项卡内容渲染（无独立路由），故用可见说明行替代会被嵌入态隐藏的 PageHeader -->
-    <p class="panel-hint">消息投递状态与投递日志；重试退避与死信由后台定时任务自动执行</p>
-
     <ListErrorState v-if="loadError" :message="loadError" :loading="loading" @retry="load" />
 
     <!-- 状态芯片：既是投递概览也是筛选入口（点击筛选、再点取消），固定顺序 + 语义色。
@@ -200,54 +208,57 @@ async function openLogs(row: OutboxMessage) {
       <t-button variant="outline" theme="default" @click="onReset">重置</t-button>
     </div>
 
-    <t-table row-key="id" :data="list" :columns="columns" :loading="loading" table-layout="fixed" hover resizable
-      :pagination="pagination" @page-change="onPageChange">
-      <template #templateCode="{ row }">
-        <span>{{ row.templateCode || '—' }}</span>
-        <t-tag v-if="row.security" theme="warning" variant="light" size="small" class="security-tag">安全</t-tag>
-      </template>
-      <template #recipient="{ row }">
-        <span>{{ row.recipient || '—' }}</span>
-      </template>
-      <template #channelKind="{ row }">
-        <t-tag variant="light-outline" size="small">{{ KIND_LABEL[row.channelKind] || row.channelKind }}</t-tag>
-      </template>
-      <template #status="{ row }">
-        <StatusTag entity="outbox" :value="row.status" />
-      </template>
-      <template #attempts="{ row }">
-        <span>{{ row.attempts }} / {{ row.maxAttempts }}</span>
-      </template>
-      <template #lastError="{ row }">
-        <span class="muted error-text">{{ row.lastError || '—' }}</span>
-      </template>
-      <template #op="{ row }">
-        <t-space size="small">
-          <t-link theme="primary" hover="color" @click="openLogs(row)">日志</t-link>
-          <t-link
-            v-if="row.status === 'failed' || row.status === 'dead' || row.status === 'skipped'"
-            theme="primary"
-            hover="color"
-            @click="onRetry(row)"
-          >
-            重试
-          </t-link>
-          <!-- 终止投递不可逆（不再重试），补二次确认 -->
-          <t-popconfirm
-            v-if="row.status === 'pending' || row.status === 'failed'"
-            theme="danger"
-            content="确认终止该投递？终止后不再重试且不可恢复"
-            @confirm="onDiscard(row)"
-          >
-            <t-link theme="danger" hover="color">终止</t-link>
-          </t-popconfirm>
-        </t-space>
-      </template>
+    <div class="page-card">
+      <t-table row-key="id" :data="list" :columns="columns" :loading="loading" table-layout="fixed" hover resizable
+        :pagination="pagination" @page-change="onPageChange">
+        <template #templateCode="{ row }">
+          <span>{{ row.templateCode || '—' }}</span>
+          <t-tag v-if="row.security" theme="warning" variant="light" size="small" class="security-tag">安全</t-tag>
+        </template>
+        <template #recipient="{ row }">
+          <span>{{ row.recipient || '—' }}</span>
+        </template>
+        <template #channelKind="{ row }">
+          <t-tag variant="light-outline" size="small">{{ KIND_LABEL[row.channelKind] || row.channelKind }}</t-tag>
+        </template>
+        <template #status="{ row }">
+          <StatusTag entity="outbox" :value="row.status" />
+        </template>
+        <template #attempts="{ row }">
+          <span>{{ row.attempts }} / {{ row.maxAttempts }}</span>
+        </template>
+        <template #lastError="{ row }">
+          <span class="muted error-text">{{ row.lastError || '—' }}</span>
+        </template>
+        <template #op="{ row }">
+          <t-space size="small">
+            <t-link theme="primary" hover="color" @click="openLogs(row)">日志</t-link>
+            <t-link
+              v-if="row.status === 'failed' || row.status === 'dead' || row.status === 'skipped'"
+              theme="primary"
+              hover="color"
+              :disabled="actingId === row.id"
+              @click="onRetry(row)"
+            >
+              {{ actingId === row.id ? '重试中…' : '重试' }}
+            </t-link>
+            <!-- 终止投递不可逆（不再重试），补二次确认 -->
+            <t-popconfirm
+              v-if="row.status === 'pending' || row.status === 'failed'"
+              theme="danger"
+              content="确认终止该投递？终止后不再重试且不可恢复"
+              @confirm="onDiscard(row)"
+            >
+              <t-link theme="danger" hover="color">终止</t-link>
+            </t-popconfirm>
+          </t-space>
+        </template>
 
-      <template #empty>
-        <ListEmptyState :query="query" description="暂无发送记录" @clear="onReset" />
-      </template>
-    </t-table>
+        <template #empty>
+          <ListEmptyState :query="query" description="暂无发送记录" @clear="onReset" />
+        </template>
+      </t-table>
+    </div>
 
     <t-dialog v-model:visible="logsVisible" header="投递日志" width="720px" :footer="false">
       <t-loading :loading="logsLoading" size="small">
@@ -281,14 +292,6 @@ async function openLogs(row: OutboxMessage) {
 </template>
 
 <style scoped>
-/* 选项卡内容顶部说明行：替代嵌入态下会被隐藏的 PageHeader 说明 */
-.panel-hint {
-  margin: 0 0 12px;
-  font-size: 12px;
-  line-height: 20px;
-  color: var(--td-text-color-secondary);
-}
-
 /* 状态芯片行：与筛选条同宽，间距 8px（4px 基数） */
 .outbox-chips {
   display: flex;

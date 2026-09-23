@@ -58,6 +58,8 @@ import { AppFavoritesModule } from './modules/app/favorites/favorites.module'
 import { AppPoliciesModule } from './modules/app/policies/policies.module'
 import { AppLeasesModule } from './modules/app/leases/leases.module'
 import { EngagementModule } from './modules/app/engagement/engagement.module'
+import { AppMessagesModule } from './modules/app/messages/messages.module'
+import { UserMessagesModule } from './modules/user-messages/user-messages.module'
 import { MessagingModule } from './modules/messaging/messaging.module'
 import { SchedulerModule } from './scheduler/scheduler.module'
 import { HealthController } from './health/health.controller'
@@ -128,6 +130,8 @@ import { HttpExceptionFilter } from './common/filters/http-exception.filter'
     AppPoliciesModule,
     AppLeasesModule,
     EngagementModule,
+    AppMessagesModule,
+    UserMessagesModule,
     MessagingModule,
     SchedulerModule,
   ],

@@ -18,7 +18,7 @@ defineProps<{ demand: Demand; responded: boolean; to: string }>()
     </div>
     <div class="d-meta">
       <span class="d-pub">
-        <IdentityTag :type="demand.publisherIdentity" />
+        <IdentityTag :type="demand.publisherIdentity" :label="demand.publisherIdentityLabel" />
         <span class="d-name">{{ demand.publisherName }}</span>
       </span>
       <span v-if="demandDateText(demand)">{{ demandDateText(demand) }}</span>

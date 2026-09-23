@@ -26,7 +26,7 @@ defineProps<{ events: HomeEventCard[] }>()
         <h3 class="hot-title">{{ e.title }}</h3>
         <p class="hot-meta"><Icon aria-hidden="true" name="time" size="13px" />{{ formatLocalDateTime(e.startTime) }}</p>
         <p class="hot-meta"><Icon aria-hidden="true" name="location" size="13px" />{{ e.location }}</p>
-        <p class="hot-enrolled">人数限制 {{ formatZhNumber(e.capacity) }} 人</p>
+        <p class="hot-enrolled">限 {{ formatZhNumber(e.capacity) }} 人参加</p>
       </router-link>
     </div>
   </section>

@@ -295,7 +295,7 @@ function onClose() {
             filterable
             creatable
             clearable
-            style="width: 100%"
+            class="ctl-w-full"
           />
         </t-form-item>
       </div>
@@ -313,7 +313,7 @@ function onClose() {
       <div v-else class="edit-tip">换办公位需终止原租约后重新新增（编辑仅支持租期/租金/联系人）</div>
       <div class="form-row">
         <t-form-item label="租赁开始日期" name="startDate">
-          <t-date-picker clearable v-model="form.startDate" valueType="YYYY-MM-DD" style="width: 100%" />
+          <t-date-picker clearable v-model="form.startDate" valueType="YYYY-MM-DD" class="ctl-w-full" />
         </t-form-item>
         <t-form-item label="租赁结束日期" name="endDate">
           <div class="end-date-row">
@@ -342,7 +342,7 @@ function onClose() {
           />
         </t-form-item>
         <t-form-item :label="`租金（元）/ ${rentPeriodLabel}`" name="monthlyRent">
-          <t-input-number v-model="form.monthlyRent" :min="0" theme="column" style="width: 100%" placeholder="月租周期选办公位后可自动累加…" />
+          <t-input-number v-model="form.monthlyRent" :min="0" theme="column" class="ctl-w-full" placeholder="月租周期选办公位后可自动累加…" />
         </t-form-item>
       </div>
       <div class="form-row">

@@ -7,6 +7,7 @@ import {
   BuildingIcon,
   CalendarIcon,
   CartIcon,
+  ChatIcon,
   CheckCircleIcon,
   ChevronDownIcon,
   ChevronLeftIcon,
@@ -316,6 +317,12 @@ async function handleDropdown(item: { value?: string | number }) {
           <t-menu-item value="/dashboard">
             <template #icon><DashboardIcon /></template>
             工作台
+          </t-menu-item>
+
+          <!-- 一级菜单：用户留言（客户端留言的查看与回复），置于工作台之下 -->
+          <t-menu-item value="/user-messages" v-permission="'/user-messages'">
+            <template #icon><ChatIcon /></template>
+            用户留言
           </t-menu-item>
 
           <t-submenu v-if="canSee(['/users', '/individuals', '/enterprises', '/external-enterprises', '/approvals', '/card-management'], '社区成员')" value="group-members" title="社区成员">

@@ -16,6 +16,7 @@ const ROUTE_TITLES: Record<string, string> = {
   plaza: '广场',
   me: '我的',
   'my-stats': '数据看板',
+  'me-messages': '我的留言',
   'demand-new': '发布需求',
   'demand-new-task': '找服务',
   'demand-new-invest': '找投资',

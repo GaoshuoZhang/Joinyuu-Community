@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, onMounted, reactive, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { Button, CheckTag, Icon, Image, Input, Textarea, Toast, Upload } from 'tdesign-mobile-vue'
+import { Button, CheckTag, DialogPlugin, Icon, Image, Input, Textarea, Toast, Upload } from 'tdesign-mobile-vue'
 import type { UploadFile } from 'tdesign-mobile-vue'
 import { useAsyncList } from '@/composables/useAsyncList'
 import { useUnsavedGuard } from '@/composables/useUnsavedGuard'
@@ -58,6 +58,9 @@ const coverImageUrl = computed(() => {
 })
 const bodyImageInput = ref<HTMLInputElement | null>(null)
 const pendingBodyAnchor = ref<ArticleInsertionAnchor | null>(null)
+/* 正文插图上传中：记录触发插入位用于按钮 loading，并禁用全部插入入口防重复触发 */
+const bodyUploadingAt = ref<number | null>(null)
+const pendingBodyIndex = ref<number | null>(null)
 const blocks = ref<ArticleContentBlock[]>([])
 const nextBlockId = ref(1)
 const submitting = ref(false)
@@ -182,6 +185,7 @@ function insertImage(response: { url?: string; anchor?: ArticleInsertionAnchor }
 
 /* 正文插图：隐藏文件输入 + 普通按钮，保证插入入口始终可见 */
 function triggerBodyImage(index: number) {
+  pendingBodyIndex.value = index
   pendingBodyAnchor.value = articleInsertionAnchor(blocks.value, index)
   bodyImageInput.value?.click()
 }
@@ -198,16 +202,31 @@ async function onBodyImageChange(event: Event) {
     Toast('正文插图仅支持图片文件')
     return
   }
+  bodyUploadingAt.value = pendingBodyIndex.value
+  pendingBodyIndex.value = null
   try {
     const info = await uploadFile(file, 'article')
     insertImage({ url: info.url, anchor })
   } catch (e) {
     Toast(e instanceof ApiError ? e.message : '上传失败，请重试')
+  } finally {
+    bodyUploadingAt.value = null
   }
 }
 
+/* 删除内容块不可恢复（可能含数百字正文/已上传配图），与页内其它破坏性操作一致需二次确认 */
 function removeBlock(id: number) {
-  blocks.value = blocks.value.filter((block) => block.id !== id)
+  const dialog = DialogPlugin.confirm({
+    title: '删除该内容块？',
+    content: '删除后不可恢复。',
+    cancelBtn: '取消',
+    confirmBtn: '删除',
+    onConfirm: () => {
+      blocks.value = blocks.value.filter((block) => block.id !== id)
+      dialog.destroy()
+    },
+    onClose: () => dialog.destroy(),
+  })
 }
 
 function moveBlock(index: number, offset: -1 | 1) {
@@ -279,21 +298,21 @@ async function onSubmit() {
     </header>
 
     <div class="m-card form">
-      <div class="field"><label class="field-label">标题</label><Input v-model="form.title" :maxlength="50" placeholder="请输入文章标题…" clearable /><p v-if="errors.title" class="field-error">{{ errors.title }}</p></div>
-      <div class="field"><label class="field-label">栏目</label><div class="chips"><CheckTag v-for="c in columns" :key="c.code" class="chip" size="medium" variant="light" :checked="form.columnCode === c.code" @change="form.columnCode = c.code">{{ c.label }}</CheckTag></div><p v-if="!columnsLoading && !columnsError && columnData && !columns.length" class="field-help">暂无可投稿栏目，请稍后再试</p><p v-if="errors.column" class="field-error">{{ errors.column }}</p></div>
-      <div class="field"><label class="field-label">投稿身份</label><div class="chips"><CheckTag v-for="identity in identityOptions" :key="`${identity.type}:${identity.enterpriseId ?? ''}`" size="medium" variant="light" :checked="isIdentityPicked(identity)" @change="pickIdentity(identity)">{{ identityOptionLabel(identity, auth.name) }}</CheckTag></div><p v-if="errors.identity" class="field-error">{{ errors.identity }}</p></div>
+      <div class="field"><label class="field-label">标题<span class="req"> *</span></label><Input v-model="form.title" :maxlength="50" placeholder="请输入文章标题…" clearable /><p v-if="errors.title" class="field-error">{{ errors.title }}</p></div>
+      <div class="field"><label class="field-label">栏目<span class="req"> *</span></label><div class="chips"><CheckTag v-for="c in columns" :key="c.code" class="chip" size="medium" variant="light" :checked="form.columnCode === c.code" @change="form.columnCode = c.code">{{ c.label }}</CheckTag></div><p v-if="!columnsLoading && !columnsError && columnData && !columns.length" class="field-help">暂无可投稿栏目，请稍后再试</p><p v-if="errors.column" class="field-error">{{ errors.column }}</p></div>
+      <div class="field"><label class="field-label">投稿身份<span class="req"> *</span></label><div class="chips"><CheckTag v-for="identity in identityOptions" :key="`${identity.type}:${identity.enterpriseId ?? ''}`" size="medium" variant="light" :checked="isIdentityPicked(identity)" @change="pickIdentity(identity)">{{ identityOptionLabel(identity, auth.name) }}</CheckTag></div><p v-if="errors.identity" class="field-error">{{ errors.identity }}</p></div>
       <div class="field"><label class="field-label">文章封面（选填）</label><p class="field-help">建议使用清晰的横版图片，将展示在文章列表中。</p><Upload v-model:files="coverFiles" class="cover-upload" theme="grid" accept="image/*" :max="1" :size-limit="{ size: 10, unit: 'MB' }" :request-method="requestImage" /></div>
       <div class="field"><label class="field-label">正文</label><p class="field-help">在任意位置插入段落或图片，并通过上移、下移调整最终发布顺序。</p>
         <div class="editor-blocks">
           <template v-for="(block, index) in [...blocks, null]" :key="block?.id ?? 'editor-end'">
-          <div class="insert-actions" :aria-label="`在第 ${index + 1} 个位置插入内容`">
-            <Button size="small" theme="light" @click="insertText(index)">
+          <div class="insert-actions" role="group" :aria-label="`在第 ${index + 1} 个位置插入内容`">
+            <Button size="small" theme="light" :disabled="bodyUploadingAt !== null" @click="insertText(index)">
               <template #icon><Icon aria-hidden="true" name="textbox" size="16px" /></template>
               插入段落
             </Button>
-            <Button size="small" theme="light" @click="triggerBodyImage(index)">
+            <Button size="small" theme="light" :loading="bodyUploadingAt === index" :disabled="bodyUploadingAt !== null && bodyUploadingAt !== index" @click="triggerBodyImage(index)">
               <template #icon><Icon aria-hidden="true" name="image" size="16px" /></template>
-              插入图片
+              {{ bodyUploadingAt === index ? '上传中…' : '插入图片' }}
             </Button>
           </div>
           <div v-if="block" class="editor-block">
@@ -329,6 +348,6 @@ async function onSubmit() {
 <style scoped>
 .m-new-article { display: flex; flex-direction: column; gap:var(--app-space-6); padding:var(--app-space-8); }
 .head { padding:0 var(--app-space-1); }.head .page-desc { margin:0; color: var(--td-text-color-secondary); font-size: var(--app-font-body); }
-.field { margin-bottom:var(--app-space-9); }.field label, .field .field-label { display: block; margin-bottom:var(--app-space-3); color: var(--td-text-color-secondary); font-size: var(--app-font-caption); }.field-help { margin:-2px 0 var(--app-space-4); }
+.field { margin-bottom:var(--app-space-9); }.field label, .field .field-label { display: block; margin-bottom:var(--app-space-3); color: var(--td-text-color-secondary); font-size: var(--app-font-caption); }.req { color: var(--td-error-color); }.field-help { margin:-2px 0 var(--app-space-4); }
 .chips { display: flex; flex-wrap: wrap; gap:var(--app-space-4); }.field-error { margin:var(--app-space-3) 0 0; font-size: var(--app-font-caption); color: var(--td-error-color); }.cover-upload { width: fit-content; grid-template-columns: var(--td-upload-width, 80px); justify-content: start; padding: 0; }.editor-blocks { display: flex; flex-direction: column; gap:var(--app-space-6); }.editor-block { padding:var(--app-space-5); border: 1px solid var(--td-component-border); border-radius: var(--td-radius-large); background: var(--td-bg-color-secondarycontainer); }.block-toolbar { display: flex; align-items: center; justify-content: space-between; gap: var(--app-space-4); margin-bottom: var(--app-space-3); }.block-order { min-width: 0; color: var(--td-text-color-secondary); font-size: var(--app-font-caption); }.block-actions { display: flex; align-items: center; flex-shrink: 0; }.block-actions :deep(.t-button) { min-width: 44px; padding: 0; }.insert-actions { display: flex; align-items: center; gap:var(--app-space-5); }.insert-actions :deep(.t-button--size-small) { min-height: 44px; }.body-image-input { display: none; }.image-block { margin:0; overflow: hidden; border-radius: var(--td-radius-default); background: var(--td-bg-color-container); }.image-block img { display: block; width: 100%; max-height: 280px; object-fit: cover; aspect-ratio: 16 / 9; }.count { margin:var(--app-space-4) 0 0; color: var(--td-error-color); font-size: var(--app-font-caption); text-align: center; }.count.ready { color: var(--td-text-color-placeholder); }
 </style>

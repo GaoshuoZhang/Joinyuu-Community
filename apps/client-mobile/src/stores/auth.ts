@@ -29,6 +29,8 @@ export const IDENTITY_LABELS: Record<IdentityType, string> = {
   community_individual: '社区个体',
   community_enterprise: '社区企业',
   external_enterprise: '合作企业',
+  /* 社区官方（后台自建需求）：实际文案取身份快照里的工作人员角色名，此处为兜底 */
+  official: '社区官方',
 }
 
 /** 「发布身份」选项文案：个人身份展示昵称，企业身份展示企业名/组织名（即发布后列表展示的发布方） */

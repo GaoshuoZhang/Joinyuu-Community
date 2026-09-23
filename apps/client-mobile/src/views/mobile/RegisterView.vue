@@ -168,7 +168,7 @@ function onRegisterSubmit({ validateResult }: { validateResult: unknown }) {
         </RadioGroup>
       </div>
       <FormItem v-if="channel === 'email'" label="邮箱" name="email">
-        <Input v-model="form.email" type="text" autocomplete="email" placeholder="请输入邮箱…" :disabled="closed" />
+        <Input v-model="form.email" type="text" inputmode="email" autocomplete="email" placeholder="请输入邮箱…" :disabled="closed" />
       </FormItem>
       <FormItem v-else label="手机号" name="phone">
         <Input
@@ -343,11 +343,20 @@ function onRegisterSubmit({ validateResult }: { validateResult: unknown }) {
   color: var(--td-brand-color);
 }
 
+/* 密码显隐图标：内部类名 t-input__wrap--suffix-icon（官方无命中区/尺寸类 API，点击处理器挂在图标 SVG 上）。
+ * 视觉保持 24px，用 padding 把 SVG 命中区抬到 44px 触控基线；升级 TDesign 时需复核类名与 DOM 结构。 */
 .password-field :deep(.t-input__wrap--suffix-icon) {
   display: grid;
-  flex: 0 0 24px;
-  width: 24px;
+  flex: 0 0 44px;
+  width: 44px;
   place-items: center;
+}
+
+.password-field :deep(.t-input__wrap--suffix-icon svg) {
+  width: 24px;
+  height: 24px;
+  padding: 10px;
+  box-sizing: content-box;
 }
 
 .password-field :deep(.t-input--password) {

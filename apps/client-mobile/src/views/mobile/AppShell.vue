@@ -129,13 +129,12 @@ const pageTitle = computed(() => {
 })
 
 /* v41/v43：削减动画——Tab 间切换不播放页面过渡；缓存页再次激活的入场动画抑制由
- * useAnimSuppress 在页面根元素上处理（避免 shell 类切换让离场页重放动画）。 */
-const transitionName = ref('page')
-const removeAnimGuard = router.beforeEach((to, from) => {
-  transitionName.value = Boolean(to.meta.keepAlive) && Boolean(from.meta.keepAlive) ? 'none' : 'page'
-  return true
-})
-onBeforeUnmount(removeAnimGuard)
+ * useAnimSuppress 在页面根元素上处理（避免 shell 类切换让离场页重放动画）。
+ * v50：二级页入场不再用 Transition mode="out-in"——「旧页淡出→空窗→新页淡入」两段动画
+ * 期间会露出灰色页面底色（表现为点击进二级页时「先闪一下」），且与页面根元素自带的
+ * .page-fade-in 叠加成双重淡入（透明度相乘，前段几乎全透明）。改为旧页即时移除、
+ * 入场动效统一交给 .page-fade-in 单段淡入；Tab→Tab 的缓存页由 useAnimSuppress 抑制重放，
+ * 保持无动画切换。 */
 
 /* v41：深链进入二级页时，返回按板块回到来源列表而不是一律回首页 */
 const BACK_FALLBACK: Record<string, string> = {
@@ -215,13 +214,12 @@ function onNotices() {
     />
 
     <main id="main" class="m-content" :class="{ 'has-tabbar': isTab }" tabindex="-1">
-      <!-- v38：列表/浏览页 KeepAlive，保留筛选、分页与滚动位置；详情页即时重建；v41：Tab 间切换无过渡 -->
+      <!-- v38：列表/浏览页 KeepAlive，保留筛选、分页与滚动位置；详情页即时重建；
+           v50：不再包 Transition——out-in 的淡出空窗会露灰底（「闪一下」），入场动效由页面根元素 .page-fade-in 单段完成 -->
       <router-view v-slot="{ Component, route: current }">
-        <Transition :name="transitionName" mode="out-in">
-          <KeepAlive :include="KEEP_ALIVE_NAMES">
-            <component :is="Component" :key="current.meta.keepAlive ? String(current.name) : current.fullPath" />
-          </KeepAlive>
-        </Transition>
+        <KeepAlive :include="KEEP_ALIVE_NAMES">
+          <component :is="Component" :key="current.meta.keepAlive ? String(current.name) : current.fullPath" />
+        </KeepAlive>
       </router-view>
     </main>
 
@@ -276,21 +274,8 @@ function onNotices() {
   --td-notice-bar-warning-color: var(--td-warning-color);
 }
 
-/* 页面切换过渡（v41：更快、仅淡入淡出；Tab 间切换走 none 无过渡） */
-.page-enter-active,
-.page-leave-active {
-  transition: opacity 140ms ease;
-}
-
-.none-enter-active,
-.none-leave-active {
-  transition: none;
-}
-
-.page-enter-from,
-.page-leave-to {
-  opacity: 0;
-}
+/* v50：页面切换过渡样式已移除——out-in 两段动画的淡出空窗露灰底（「闪一下」根因），
+ * 入场动效统一由 tokens.css 的 .page-fade-in 单段淡入承担 */
 
 /* 右上角：头像（点击进「我的」） */
 .nav-me {

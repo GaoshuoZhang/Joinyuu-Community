@@ -35,6 +35,7 @@ const archiveTabs = [
   { value: 'goods', label: '商品' },
   { value: 'order', label: '商城订单' },
   { value: 'application', label: '申请审核' },
+  { value: 'userMessage', label: '用户留言' },
 ]
 
 /* 用户个人历史信息域：彻底删除或开启自动删除需三连确认（含强确认输入） */
@@ -47,6 +48,7 @@ const USER_HISTORY_DOMAINS = new Set([
   'submission',
   'reservation',
   'order',
+  'userMessage',
 ])
 
 const STRONG_CONFIRM_TEXT = '永久删除'
@@ -76,6 +78,7 @@ const statusEntityMap: Record<string, StatusEntity> = {
   goods: 'goods',
   order: 'redemption',
   application: 'application',
+  userMessage: 'userMessage',
 }
 
 interface ArchiveColumn {
@@ -169,7 +172,7 @@ const columns = computed<ArchiveColumn[]>(() => {
     case 'demand':
       return [
         { colKey: 'title', title: '标题', cell: 'title', width: 240, resizable: true, ellipsis: true },
-        { colKey: 'publisherName', title: '需求方', cell: 'publisherName', width: 120, resizable: true, ellipsis: true },
+        { colKey: 'publisherName', title: '提交人', cell: 'publisherName', width: 120, resizable: true, ellipsis: true },
         { colKey: 'status', title: '状态', cell: 'status', width: 100, resizable: true, ellipsis: true },
         deletedAt,
         deletedBy,
@@ -248,6 +251,16 @@ const columns = computed<ArchiveColumn[]>(() => {
         deletedBy,
         op,
       ]
+    case 'userMessage':
+      return [
+        { colKey: 'title', title: '留言主题', cell: 'title', width: 240, resizable: true, ellipsis: true },
+        { colKey: 'userName', title: '留言人', cell: 'userName', width: 140, resizable: true, ellipsis: true },
+        { colKey: 'status', title: '状态', cell: 'status', width: 100, resizable: true, ellipsis: true },
+        { colKey: 'createdAt', title: '提交时间', cell: 'createdAt', width: 170, resizable: true, ellipsis: true },
+        deletedAt,
+        deletedBy,
+        op,
+      ]
     default:
       return [deletedAt, deletedBy, op]
   }
@@ -267,8 +280,8 @@ async function load() {
     list.value = res.list
     total.value = res.total
   } catch (e) {
+    /* 错误经 ListErrorState 组件呈现，不再重复弹 toast */
     loadError.value = e instanceof Error ? e.message : '数据加载失败'
-    MessagePlugin.error(e instanceof Error ? e.message : '数据加载失败')
   } finally {
     loading.value = false
   }

@@ -279,7 +279,7 @@ onMounted(load)
             <t-input v-model="form.name" placeholder="如 创投观察…" />
           </t-form-item>
           <t-form-item label="排序权重" name="sort">
-            <t-input-number v-model="form.sort" :min="1" theme="column" style="width: 100%" />
+            <t-input-number v-model="form.sort" :min="1" theme="column" class="ctl-w-full" />
           </t-form-item>
         </div>
         <t-form-item label="栏目说明" name="description">

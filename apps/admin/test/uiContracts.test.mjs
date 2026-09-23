@@ -40,7 +40,7 @@ test('persistent error renders actual TDesign alert and disables retry while loa
 })
 
 test('every standalone list load has a persistent error branch and an in-template retry action', () => {
-  assert.equal(lists.length, 45, 'update the inventory deliberately when adding a list')
+  assert.equal(lists.length, 46, 'update the inventory deliberately when adding a list')
   for (const path of lists) {
     const source = readFileSync(path, 'utf8')
     const { descriptor, errors } = parse(source)

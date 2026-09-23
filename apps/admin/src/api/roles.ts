@@ -33,14 +33,9 @@ export async function createRole(payload: { code: string; name: string; descript
   return httpPost<AdminRole>('/roles', payload)
 }
 
-/** PUT /api/admin/roles/:id/permissions — 入参 { permCodes } */
-export async function saveRolePermissions(id: string, permCodes: string[]): Promise<{ code: number }> {
-  return httpPut<{ code: number }>(`/roles/${id}/permissions`, { permCodes })
-}
-
-/** PUT /api/admin/roles/:id/scope — 入参 { dataScope }（空数组 = 不限制全部域） */
-export async function saveRoleScope(id: string, dataScope: string[]): Promise<{ code: number }> {
-  return httpPut<{ code: number }>(`/roles/${id}/scope`, { dataScope })
+/** PUT /api/admin/roles/:id/assignment — 权限 + 数据范围合并保存（后端单事务，避免部分失败中间态） */
+export async function saveRoleAssignment(id: string, permCodes: string[], dataScope: string[]): Promise<{ code: number }> {
+  return httpPut<{ code: number }>(`/roles/${id}/assignment`, { permCodes, dataScope })
 }
 
 /** GET /api/admin/permissions/catalog — 权限点目录（按模块分组） */

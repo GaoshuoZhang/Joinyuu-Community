@@ -9,6 +9,14 @@ export const identityTypeMap: Record<IdentityType, string> = {
   external_enterprise: '合作企业',
   external_individual: '外部个人',
   external_company: '外部企业',
+  official: '社区官方',
+}
+
+/* 身份标签文案：社区官方（后台自建需求）优先展示身份快照里的工作人员角色名 */
+export function identityLabelOf(identity: { type?: string; title?: string | null } | null | undefined): string {
+  if (!identity?.type) return '—'
+  if (identity.type === 'official') return identity.title?.trim() || identityTypeMap.official
+  return identityTypeMap[identity.type as IdentityType] ?? '—'
 }
 
 export const roleLabelMap: Record<'founder' | 'admin' | 'member', string> = {

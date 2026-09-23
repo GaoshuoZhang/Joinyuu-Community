@@ -319,7 +319,7 @@ onBeforeRouteLeave(async () => {
               name="leaseExpireRemindDays"
               :rules="[{ required: true, message: '请输入 1-90 的整数', trigger: 'submit' }]"
             >
-              <t-input-number class="ctl-w-lg" v-model="form.leaseExpireRemindDays" :min="1" :max="90" :step="1" theme="column" />
+              <t-input-number class="ctl-w-full" v-model="form.leaseExpireRemindDays" :min="1" :max="90" :step="1" theme="column" />
               <template #help>距到期不足该天数的租约将标记为「即将到期」并推送通知</template>
             </t-form-item>
             <t-form-item
@@ -327,7 +327,7 @@ onBeforeRouteLeave(async () => {
               name="uploadMaxSizeMb"
               :rules="[{ required: true, message: '请输入 1-100 的整数', trigger: 'submit' }]"
             >
-              <t-input-number class="ctl-w-lg" v-model="form.uploadMaxSizeMb" :min="1" :max="100" :step="1" theme="column" />
+              <t-input-number class="ctl-w-full" v-model="form.uploadMaxSizeMb" :min="1" :max="100" :step="1" theme="column" />
               <template #help>素材库与富文本图片上传的单文件大小上限（1-100 MB）</template>
             </t-form-item>
             <t-form-item
@@ -335,7 +335,7 @@ onBeforeRouteLeave(async () => {
               name="passwordExpireDays"
               :rules="[{ required: true, message: '请输入 0-3650 的整数', trigger: 'submit' }]"
             >
-              <t-input-number class="ctl-w-lg" v-model="form.passwordExpireDays" :min="0" :max="3650" :step="1" theme="column" />
+              <t-input-number class="ctl-w-full" v-model="form.passwordExpireDays" :min="0" :max="3650" :step="1" theme="column" />
               <template #help>0 表示不启用；超过有效期后登录将强制修改密码</template>
             </t-form-item>
           </div>

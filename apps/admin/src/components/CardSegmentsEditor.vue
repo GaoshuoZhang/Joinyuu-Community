@@ -8,7 +8,10 @@ function remove(index: number) { model.value = model.value.filter((_, i) => i !=
   <div class="segments">
     <div v-for="(row, index) in model" :key="index" class="segment">
       <t-input v-for="field in fields" :key="field.key" v-model="row[field.key]" :label="field.label" :aria-label="`${field.label} ${index + 1}`" :maxlength="300" />
-      <t-button variant="text" theme="danger" @click="remove(index)">删除此项</t-button>
+      <!-- 删除即从 model 移除并随保存落库，补二次确认 -->
+      <t-popconfirm content="确认删除该条目？" @confirm="remove(index)">
+        <t-button variant="text" theme="danger">删除此项</t-button>
+      </t-popconfirm>
     </div>
     <t-button variant="outline" @click="add">新增条目</t-button>
   </div>

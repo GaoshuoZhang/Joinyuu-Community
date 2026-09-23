@@ -33,6 +33,8 @@ const websiteHref = computed(() => {
 /* v40：收藏企业名片 */
 const favorited = ref(false)
 async function loadFavorite() {
+  /* 公开路由：游客不请求收藏列表，避免 401 被统一拦截跳登录 */
+  if (!auth.isLogged) return
   try {
     const list = await listFavorites()
     favorited.value = list.some((item) => item.type === 'enterprise' && item.targetId === String(route.params.id))

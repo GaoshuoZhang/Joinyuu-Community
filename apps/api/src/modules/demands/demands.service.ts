@@ -13,7 +13,6 @@ import { NotificationService } from '../../common/notify/notification.service'
 import { formatNow } from '../../common/utils/time'
 import { normalizeScheduledAt } from '../../common/utils/schedule-time'
 import { sanitizeHtml } from '../../common/utils/sanitize-html'
-import { toIdentityDto } from '../users/user.mapper'
 import { ProjectsService } from '../projects/projects.service'
 import { PointsEngineService } from '../../common/engine/points-engine/points-engine.service'
 import type { QueryDemandsDto } from './dto/query-demands.dto'
@@ -39,6 +38,14 @@ export interface RespondentDto {
   status: string
 }
 
+/** 后台自建需求的提交人来源：当前登录工作人员（账号名 + 姓名） */
+export interface DemandOperator {
+  /** 管理员账号名（写入 publisherId） */
+  username: string
+  /** 管理员姓名（写入 publisherName） */
+  name: string
+}
+
 export interface DemandDto {
   id: string
   title: string
@@ -58,6 +65,8 @@ export interface DemandDto {
   contactName?: string
   contactPhone?: string
   contactEmail?: string
+  /** 公开联系人：true 时客户端（含未登录游客）可见联系人信息 */
+  contactPublic: boolean
   budget: string
   period: string
   deadline: string
@@ -67,8 +76,6 @@ export interface DemandDto {
   enrollmentIdentities: string[]
   enrollmentLevels: string[]
   status: string
-  creatorName?: string
-  creatorId?: string
   createdAt: string
   publishedAt?: string
   description: string
@@ -131,6 +138,7 @@ function toDemandDto(d: DemandWithRespondents): DemandDto {
     publisherId: d.publisherId,
     publisherName: d.publisherName,
     publisherIdentity: d.publisherIdentity,
+    contactPublic: d.contactPublic,
     budget: d.budget,
     period: d.period,
     deadline: d.deadline,
@@ -144,14 +152,12 @@ function toDemandDto(d: DemandWithRespondents): DemandDto {
     tags: d.tags,
     respondents: d.respondents.map(toRespondentDto),
   }
-  if (d.creatorName != null) dto.creatorName = d.creatorName
   if (d.deliverable != null) dto.deliverable = d.deliverable
   if (d.deliverBy != null) dto.deliverBy = d.deliverBy
   if (d.cooperationNeed != null) dto.cooperationNeed = d.cooperationNeed
   if (d.returnOffer != null) dto.returnOffer = d.returnOffer
   if (d.bottleneck != null) dto.bottleneck = d.bottleneck
   if (d.partnershipMode != null) dto.partnershipMode = d.partnershipMode
-  if (d.creatorId != null) dto.creatorId = d.creatorId
   if (d.contactName != null) dto.contactName = d.contactName
   if (d.contactPhone != null) dto.contactPhone = d.contactPhone
   if (d.contactEmail != null) dto.contactEmail = d.contactEmail
@@ -167,7 +173,7 @@ function toDemandDto(d: DemandWithRespondents): DemandDto {
 
 /* 需求域（wiki-backend.md §7.6/§8.1/§8.7）：
  * 状态机 pending → pending_release → published|scheduled → projected/closed/rejected 等服务端 409 强制；
- * 发布方身份快照 resolvePublisherIdentity 服务端化；代报名写 DemandRespondent；
+ * 发布方身份快照 resolveStaffPublisher 服务端化（后台自建需求提交人=当前工作人员）；代报名写 DemandRespondent；
  * 立项复用 ProjectsService.createProject 后双向关联 demand.projectId ↔ project.sourceDemandId。 */
 @Injectable()
 export class DemandsService {
@@ -285,24 +291,18 @@ export class DemandsService {
     return (await this.withCategoryLabels([toDemandDto(demand)]))[0]
   }
 
-  async create(dto: CreateDemandDto, operator: string): Promise<DemandDto> {
-    const publisherName = await this.resolvePublisherName(dto)
-    const publisherIdentity = await this.resolvePublisherIdentity(
-      dto.publisherType,
-      dto.publisherId,
-      dto.publisherIdentity,
-    )
+  async create(dto: CreateDemandDto, operator: DemandOperator): Promise<DemandDto> {
+    const publisher = await this.resolveStaffPublisher(operator)
 
     const id = await this.ids.next('D')
     const demand = await this.prisma.demand.create({
       data: {
         ...this.editableData(dto),
         id,
-        publisherId: dto.publisherId,
-        publisherName,
-        publisherIdentity: publisherIdentity ?? Prisma.DbNull,
+        publisherId: publisher.id,
+        publisherName: publisher.name,
+        publisherIdentity: publisher.identity,
         status: 'pending_release',
-        creatorName: operator,
         createdAt: formatNow(),
         tags: [],
       },
@@ -313,9 +313,9 @@ export class DemandsService {
       module: '需求管理',
       action: '新增需求',
       target: `${demand.id} · ${demand.title}`,
-      detail: `需求方：${demand.publisherName}`,
+      detail: `提交人：${demand.publisherName}`,
       after: { status: demand.status },
-      operator,
+      operator: operator.name,
     })
 
     return (await this.withCategoryLabels([toDemandDto(demand)]))[0]
@@ -577,14 +577,15 @@ export class DemandsService {
       if (claim.count !== 1) throw new ConflictException('该需求已立项或被处理')
 
       /* 需求立项：项目需求方/创建人/联系方式/合同价格一律照搬需求快照（客户端传值不生效），
-       * 保证项目详情可追溯需求方，且需求发布方（含企业联系人）可访问项目 */
+       * 保证项目详情可追溯需求方，且需求发布方（含企业联系人）可访问项目。
+       * 需求已无独立「创建人」字段，项目的创建人取需求提交人（发布方）。 */
       const created = await this.projects.createProjectInHostTx(tx, {
         ...dto,
         demanderId: demand.publisherId,
         demanderName: demand.publisherName,
         demanderIdentity: (demand.publisherIdentity ?? null) as Prisma.InputJsonValue | null,
-        creatorName: demand.creatorName ?? demand.publisherName,
-        creatorId: demand.creatorId ?? demand.publisherId,
+        creatorName: demand.publisherName,
+        creatorId: demand.publisherId,
         contactName: demand.contactName ?? undefined,
         contactPhone: demand.contactPhone ?? undefined,
         contactEmail: demand.contactEmail ?? undefined,
@@ -718,58 +719,25 @@ export class DemandsService {
     }
   }
 
-  /* 提交人三类来源存在性校验与名称解析 */
-  private async resolvePublisherName(dto: CreateDemandDto): Promise<string> {
-    if (dto.publisherType === 'individual') {
-      const user = await this.prisma.user.findUnique({ where: { uid: dto.publisherId } })
-      if (!user) throw new BadRequestException(`提交用户不存在（uid=${dto.publisherId}）`)
-      return user.nickname
+  /* 后台自建需求的提交人：一律取当前登录工作人员（账号名 + 姓名 + 角色名）。
+   * 需求由社区自行创建，不存在客户端注册用户作为提交人，故不再提供人工选择提交人的入口。 */
+  private async resolveStaffPublisher(
+    operator: DemandOperator,
+  ): Promise<{ id: string; name: string; identity: Prisma.InputJsonValue }> {
+    const admin = await this.prisma.adminUser.findUnique({
+      where: { username: operator.username },
+      include: { roles: { include: { role: { select: { name: true, sort: true } } } } },
+    })
+    const roleNames = (admin?.roles ?? [])
+      .slice()
+      .sort((a, b) => a.role.sort - b.role.sort)
+      .map((link) => link.role.name)
+    return {
+      /* publisherId 存管理员账号名（非 U/E/XE 前缀，后台列表不渲染为可跳转主体） */
+      id: operator.username.slice(0, 16),
+      name: admin?.name || operator.name || '社区管理员',
+      identity: { type: 'official', title: roleNames.join('、') || '社区管理员' },
     }
-    if (dto.publisherType === 'enterprise') {
-      const enterprise = await this.prisma.enterprise.findUnique({ where: { id: dto.publisherId } })
-      if (!enterprise) throw new BadRequestException('提交企业不存在')
-      return enterprise.name
-    }
-    const name = (dto.publisherName ?? '').trim()
-    if (!name) throw new BadRequestException('请输入提交人名称')
-    return name
-  }
-
-  /* 发布方身份快照：
-   * enterprise → 社区企业/合作企业；individual → 持社区个体身份则标社区个体，否则个人用户；custom → 传入快照或 null */
-  private async resolvePublisherIdentity(
-    publisherType: string,
-    publisherId: string,
-    payloadIdentity: unknown,
-  ): Promise<Prisma.InputJsonValue | null> {
-    if (publisherType === 'enterprise') {
-      const ent = await this.prisma.enterprise.findUnique({ where: { id: publisherId } })
-      if (ent) {
-        return {
-          type: 'community_enterprise',
-          enterpriseId: ent.id,
-          enterpriseName: ent.name,
-          role: 'member',
-          title: '社区企业成员',
-        }
-      }
-      const ext = await this.prisma.externalEnterpriseProfile.findUnique({ where: { id: publisherId } })
-      if (ext) {
-        return { type: 'external_enterprise', enterpriseName: ext.name, title: '合作企业' }
-      }
-      return null
-    }
-    if (publisherType === 'individual') {
-      const user = await this.prisma.user.findUnique({
-        where: { uid: publisherId },
-        include: { identities: true },
-      })
-      if (!user) return null
-      const attached = user.identities.find((i) => i.type === 'community_individual')
-      if (attached) return toIdentityDto(attached) as unknown as Prisma.InputJsonValue
-      return { type: 'individual', title: '个人用户' }
-    }
-    return (payloadIdentity as Prisma.InputJsonValue) ?? null
   }
 
   /** 类别字段保存字典 code；响应同时附带标签，已删除或历史直接保存标签时安全回退原值。 */
@@ -807,6 +775,7 @@ export class DemandsService {
       contactName: dto.contactName ?? null,
       contactPhone: dto.contactPhone ?? null,
       contactEmail: dto.contactEmail || null,
+      contactPublic: dto.contactPublic ?? false,
       respondPoints: dto.respondPoints ?? null,
     }
   }

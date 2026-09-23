@@ -23,6 +23,7 @@ const props = defineProps<{
     | 'project'
     | 'realname'
     | 'flag'
+    | 'userMessage'
   value: string
 }>()
 
@@ -134,6 +135,11 @@ const map: Record<string, Record<string, { label: string; tone: Tone }>> = {
   flag: {
     responded: { label: '已响应', tone: 'primary' },
     enrolled: { label: '已报名', tone: 'primary' },
+  },
+  /* 用户留言处理状态（与后台 StatusTag 的 userMessage 口径一致） */
+  userMessage: {
+    pending: { label: '待回复', tone: 'warning' },
+    replied: { label: '已回复', tone: 'success' },
   },
 }
 

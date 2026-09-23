@@ -7,6 +7,7 @@ import { fetchDemands, fetchMyResponses } from '@/api/demands'
 import { useAuthStore } from '@/stores/auth'
 import { useRefreshOnActivate } from '@/composables/useRefreshOnActivate'
 import { useAnimSuppress } from '@/composables/useAnimSuppress'
+import { useAtTop } from '@/composables/useAtTop'
 import { useRouteQuerySync } from '@/composables/useRouteQuerySync'
 import { useTabSwipe } from '@/composables/useTabSwipe'
 import ListSkeleton from '@/components/ListSkeleton.vue'
@@ -190,6 +191,8 @@ function onListScroll(bottomDistance: number) {
 
 /* v39：下拉刷新（保留当前筛选与分页） */
 const refreshing = ref(false)
+/* 离顶时禁用下拉刷新：库内 isReachTop 会被两行截断标题等 overflow 元素误判为已到顶 */
+const atTop = useAtTop()
 
 async function onRefresh() {
   refreshing.value = true
@@ -213,6 +216,8 @@ function onPublish() {
 
 <template>
   <div>
+  <!-- 下拉刷新统一为页面级（与首页/社区/广场/我的一致）：指示器出现在选项卡标题上方 -->
+  <PullDownRefresh :value="refreshing" :disabled="!atTop" @refresh="onRefresh">
   <div
     class="projects page-fade-in"
     @touchstart="startSwipe"
@@ -223,34 +228,33 @@ function onPublish() {
     <Tabs v-model="activeTab" class="top-tabs" :swipeable="false">
       <TabPanel v-for="kind in TABS" :key="kind.kind" :value="kind.kind" :label="kind.title">
         <div v-if="activeTab === kind.kind" class="tab-content">
-    <!-- 筛选条随页面滚动（不做吸顶）；下拉刷新覆盖筛选条与列表 -->
-    <PullDownRefresh :value="refreshing" @refresh="onRefresh">
-    <DemandFilterBar
-      v-model:keyword="keywordInput"
-      :placeholder="kind.searchPlaceholder"
-      class="filter-search"
-    />
+          <!-- 筛选条随页面滚动（不做吸顶）；下拉刷新覆盖整页 -->
+          <DemandFilterBar
+            v-model:keyword="keywordInput"
+            :placeholder="kind.searchPlaceholder"
+            class="filter-search"
+          />
 
-    <ListSkeleton v-if="firstLoading" :rows="3" />
-    <EmptyBlock v-else-if="firstError" :text="error" action-text="重试" @action="reload" />
-    <EmptyBlock v-else-if="items.length === 0 && hasFilter" text="没有符合筛选的需求" action-text="清除筛选" @action="clearFilters" />
-    <!-- v45：空状态补出口，避免二级页没有 TabBar 时成为死胡同 -->
-    <EmptyBlock v-else-if="items.length === 0" text="暂无相关需求" action-text="发布需求" @action="onPublish" />
-    <List v-else class="list stagger" :async-loading="footerState" @load-more="loadMore" @scroll="onListScroll">
-      <p class="list-count">共 {{ formatZhNumber(total) }} 条</p>
-      <DemandListCard
-        v-for="d in items"
-        :key="d.id"
-        :demand="d"
-        :responded="respondedIds.has(d.id)"
-        :to="`/demands/${d.id}`"
-      />
-    </List>
-    </PullDownRefresh>
+          <ListSkeleton v-if="firstLoading" :rows="3" />
+          <EmptyBlock v-else-if="firstError" :text="error" action-text="重试" @action="reload" />
+          <EmptyBlock v-else-if="items.length === 0 && hasFilter" text="没有符合筛选的需求" action-text="清除筛选" @action="clearFilters" />
+          <!-- v45：空状态补出口，避免二级页没有 TabBar 时成为死胡同 -->
+          <EmptyBlock v-else-if="items.length === 0" text="暂无相关需求" action-text="发布需求" @action="onPublish" />
+          <List v-else class="list stagger" :async-loading="footerState" @load-more="loadMore" @scroll="onListScroll">
+            <p class="list-count">共 {{ formatZhNumber(total) }} 条</p>
+            <DemandListCard
+              v-for="d in items"
+              :key="d.id"
+              :demand="d"
+              :responded="respondedIds.has(d.id)"
+              :to="`/demands/${d.id}`"
+            />
+          </List>
         </div>
       </TabPanel>
     </Tabs>
   </div>
+  </PullDownRefresh>
   <!-- v47：发布入口改为悬浮 FAB（不再占据筛选区与列表之间的版面）；
        放在页面根节点（不在下拉刷新轨道内），避免被其 transform 容器改变 fixed 定位基准；
        bottom 用 --app-fab-offset（TabBar 高度 + 间距）并叠加底部安全区，避免刘海屏下压住 TabBar。 -->
@@ -281,13 +285,6 @@ function onPublish() {
   flex-direction: column;
   gap:var(--app-space-6);
   padding-top:var(--app-space-6);
-}
-
-/* v48：搜索框与下方的统计文字/空态卡片同处下拉刷新轨道内，外层容器的 gap 不生效
- * （该容器只有下拉刷新一个子元素，实际间距为 0）。这里补 12px，与「广场 > 活动」
- * 搜索框到列表的间距保持一致。 */
-.filter-search {
-  margin-bottom: var(--app-space-5);
 }
 
 .list {

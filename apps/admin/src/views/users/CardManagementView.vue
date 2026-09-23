@@ -7,6 +7,7 @@ import ListErrorState from '@/components/ListErrorState.vue'
 import ListEmptyState from '@/components/ListEmptyState.vue'
 import CardSegmentsEditor from '@/components/CardSegmentsEditor.vue'
 import { useListQueryState } from '@/utils/listQuery'
+import { useDialogDirtyGuard } from '@/utils/form'
 import { cardFields, fetchCards, fetchCardSchema, saveCardSchema, updateCard, type CardRow, type CardType } from '@/api/cards'
 
 const type = ref<CardType>('individual')
@@ -24,6 +25,8 @@ const selectedId = ref('')
 const form = reactive<Record<string, string>>({})
 const segments = reactive<Record<string, Record<string, string>[]>>({ education: [], work: [], projects: [], honors: [], socials: [], customLinks: [] })
 const visibility = reactive({ age: true, politicalStatus: true })
+/* 未保存保护：基线覆盖文本字段 + 分段条目 + 隐私开关（嵌套 reactive 一并序列化） */
+const { markBaseline, guardClose } = useDialogDirtyGuard(reactive({ form, segments, visibility }))
 const segmentFields: Record<string, { key: string; label: string }[]> = Object.fromEntries(Object.entries({
   education: { school: '学校', major: '专业', degree: '学位', period: '起止时间' },
   work: { company: '公司', title: '职位', period: '起止时间', description: '工作内容' },
@@ -65,6 +68,7 @@ function open(row: CardRow) {
   }
   for (const key of Object.keys(segmentFields)) segments[key] = JSON.parse(JSON.stringify(row[key as keyof CardRow] ?? []))
   Object.assign(visibility, row.visibility ?? { age: true, politicalStatus: true })
+  markBaseline()
   visible.value = true
 }
 async function openSchema() {
@@ -86,6 +90,10 @@ async function submit() {
   try { await updateCard(type.value, selectedId.value, payload); visible.value = false; MessagePlugin.success('名片已更新'); await load() }
   catch (e) { MessagePlugin.error(e instanceof Error ? e.message : '保存失败') }
   finally { submitting.value = false }
+}
+/* 未保存保护：有改动时关闭需确认（见 useDialogDirtyGuard） */
+function onCardClose() {
+  guardClose(() => { visible.value = false })
 }
 /* 空态判断只看关键词（type 为页签切换而非筛选条件） */
 const emptyQuery = computed(() => ({ keyword: keyword.value }))
@@ -118,7 +126,8 @@ onMounted(load)
       <p>未勾选字段将从客户端编辑表单隐藏；已有内容继续保留，后台仍可维护。</p>
       <t-checkbox-group v-model="editableFields"><t-checkbox v-for="field in cardFields[type]" :key="field.key" :value="field.key" :label="field.label" /></t-checkbox-group>
     </t-dialog>
-    <t-dialog v-model:visible="visible" header="编辑名片" width="720px" :confirm-btn="{ content: '保存名片', loading: submitting }" @confirm="submit">
+    <!-- 关闭走 guardClose：有未保存修改时先确认（不用 v-model:visible，避免直接置 false 绕过守卫） -->
+    <t-dialog :visible="visible" header="编辑名片" width="720px" :confirm-btn="{ content: '保存名片', loading: submitting }" @confirm="submit" @close="onCardClose">
       <t-form :data="form" label-align="top">
         <t-form-item v-for="field in textFields" :key="field.key" :label="field.label" :name="field.key"><t-textarea v-if="['intro', 'description', 'industryExperience', 'services', 'advantages'].includes(field.key)" v-model="form[field.key]" :name="field.key" :placeholder="`${field.label}…`" :maxlength="500" /><t-input v-else v-model="form[field.key]" :name="field.key" :placeholder="`${field.label}…`" :maxlength="255" /></t-form-item>
       </t-form>

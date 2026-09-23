@@ -65,6 +65,8 @@ async function onSubmitFeedback(payload: { rating: number; comment: string }) {
 /* v37 收藏 */
 const favorited = ref(false)
 async function loadFavorite() {
+  /* 公开路由：游客不请求收藏列表，避免 401 被统一拦截跳登录 */
+  if (!auth.isLogged) return
   try {
     const list = await listFavorites()
     favorited.value = list.some((item) => item.type === 'event' && item.targetId === eventId)
@@ -248,7 +250,7 @@ async function onShare() {
         <p class="meta"><Icon aria-hidden="true" name="time" size="14px" />{{ formatLocalDateTime(event.startTime) }} ~ {{ formatLocalDateTime(event.endTime) }}</p>
         <p class="meta"><Icon aria-hidden="true" name="location" size="14px" />{{ event.location }}</p>
         <p class="meta"><Icon aria-hidden="true" name="alarm" size="14px" />报名截止：{{ formatLocalDateTime(event.enrollmentDeadline) }}<span v-if="event.requireReview"> · 报名需审核</span></p>
-        <p class="meta"><Icon aria-hidden="true" name="usergroup" size="14px" />人数限制 {{ formatZhNumber(event.capacity) }} 人</p>
+        <p class="meta"><Icon aria-hidden="true" name="usergroup" size="14px" />限 {{ formatZhNumber(event.capacity) }} 人参加</p>
         <div class="fav-row">
           <Button size="small" variant="outline" @click="onToggleFavorite">
             <template #icon><Icon aria-hidden="true" :name="favorited ? 'star-filled' : 'star'" size="16px" /></template>
@@ -271,7 +273,9 @@ async function onShare() {
       </section>
 
       <section v-if="isCancelled" class="m-card actions">
-        <p class="hint">活动已取消，无需到场；如有疑问请联系社区运营。</p>
+        <!-- 留言入口需登录（/me/messages 为登录页），游客保留原文案 -->
+        <p v-if="auth.isLogged" class="hint">活动已取消，无需到场；如有疑问可<router-link class="contact-link" to="/me/messages">给社区留言</router-link>，工作人员会回复你。</p>
+        <p v-else class="hint">活动已取消，无需到场；如有疑问请联系社区运营。</p>
       </section>
       <section v-else-if="isEnded" class="m-card actions">
         <p class="hint">活动已结束，感谢关注。</p>
@@ -390,6 +394,11 @@ async function onShare() {
 /* 仅纯文本正文保留换行；富 HTML 分支不开 pre-wrap，避免源码缩进被渲染成多余空白 */
 .desc-plain {
   white-space: pre-wrap;
+}
+
+/* 取消态「给社区留言」文字链 */
+.contact-link {
+  color: var(--td-brand-color);
 }
 
 </style>

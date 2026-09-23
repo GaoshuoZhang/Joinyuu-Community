@@ -288,7 +288,7 @@ onMounted(load)
         </t-form-item>
         <div class="form-row">
           <t-form-item label="排序值" name="sort">
-            <t-input-number v-model="form.sort" :min="0" theme="column" style="width: 100%" />
+            <t-input-number v-model="form.sort" :min="0" theme="column" class="ctl-w-full" />
           </t-form-item>
           <t-form-item label="展示" name="enabled">
             <t-switch v-model="form.enabled" />

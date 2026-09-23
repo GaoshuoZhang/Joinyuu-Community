@@ -175,7 +175,7 @@ onMounted(load)
       </t-descriptions>
       <t-form ref="formRef" :data="form" :rules="rules" label-align="top">
         <t-form-item label="发放经验值（N）" name="exp">
-          <t-input-number v-model="form.exp" :min="1" :decimal-places="0" theme="column" class="w-full" />
+          <t-input-number v-model="form.exp" :min="1" :decimal-places="0" theme="column" class="ctl-w-full" />
         </t-form-item>
       </t-form>
     </t-dialog>
@@ -183,10 +183,6 @@ onMounted(load)
 </template>
 
 <style scoped>
-.w-full {
-  width: 100%;
-}
-
 .rule-note {
   margin-bottom: 16px;
 }

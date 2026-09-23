@@ -15,6 +15,7 @@ defineEmits<{ 'update:visible': [boolean] }>()
     :visible="visible"
     placement="bottom"
     class="policy-pop"
+    :aria-label="policy ? `政策详情：${policy.title}` : '政策详情'"
     @update:visible="(value: boolean) => $emit('update:visible', value)"
   >
     <div v-if="policy" class="pop-body">
@@ -101,6 +102,10 @@ defineEmits<{ 'update:visible': [boolean] }>()
 }
 
 .pop-body .p-files a {
+  /* 附件行为可点链接：抬升到 44px 触控基线（与 DemandInfoCard 的 tel 链接同口径） */
+  display: flex;
+  align-items: center;
+  min-height: 44px;
   color: var(--td-brand-color);
 }
 </style>

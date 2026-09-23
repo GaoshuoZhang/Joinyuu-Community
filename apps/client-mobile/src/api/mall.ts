@@ -1,5 +1,5 @@
 import { DEFAULT_LIST_PAGE_SIZE, httpGet, httpPost } from './http'
-import type { Goods, MyOrder, PageResult } from '@/types'
+import type { Goods, GoodsShippingMethod, MyOrder, PageResult } from '@/types'
 
 /** GET /api/app/mall/goods — 商品列表（on/restock 均可见，库存 0 展示售罄；mallOpen 关闭 → 400） */
 export async function fetchGoods(query: { category?: string; page?: number; pageSize?: number } = {}): Promise<PageResult<Goods>> {
@@ -15,9 +15,14 @@ export async function fetchGoodsDetail(id: string): Promise<Goods> {
   return httpGet<Goods>(`/mall/goods/${id}`)
 }
 
-/** POST /api/app/mall/orders — 兑换下单（事务：扣积分 + 流水 + 扣库存 + 建单） */
-export async function createOrder(goodsId: string, addressId?: string): Promise<{ id: string; remainingPoints: number }> {
-  return httpPost<{ id: string; remainingPoints: number }>('/mall/orders', { goodsId, addressId })
+/** POST /api/app/mall/orders — 兑换下单（事务：扣积分 + 流水 + 扣库存 + 建单）。
+ * 实物商品：shippingMethod 必传（商品仅支持单一方式时服务端自动兜底）；邮寄需带 addressId。 */
+export async function createOrder(payload: {
+  goodsId: string
+  shippingMethod?: GoodsShippingMethod
+  addressId?: string
+}): Promise<{ id: string; remainingPoints: number }> {
+  return httpPost<{ id: string; remainingPoints: number }>('/mall/orders', payload)
 }
 
 /** GET /api/app/me/orders — 我的兑换订单 */

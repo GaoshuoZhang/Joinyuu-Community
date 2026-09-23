@@ -384,6 +384,8 @@ model Demand {
   contactName          String?            @db.VarChar(64)
   contactPhone         String?            @db.VarChar(32)
   contactEmail         String?            @db.VarChar(128)
+  // 公开联系人开关：true 时客户端（含未登录游客）可见联系人姓名/电话/邮箱；false 时客户端一律不可见（后台始终可见）
+  contactPublic        Boolean            @default(false)
   budget               String             @db.VarChar(64)
   period               String             @db.VarChar(32)
   deadline             String             @db.VarChar(16)
@@ -404,8 +406,6 @@ model Demand {
   respondents          DemandRespondent[]
   deletedAt            String?            @db.VarChar(16)
   deletedBy            String?            @db.VarChar(64)
-  creatorName          String?            @db.VarChar(64)
-  creatorId            String?            @db.VarChar(16)
   archivableAt         String?            @db.VarChar(16)
 
   @@index([status])
@@ -688,6 +688,10 @@ model RedemptionOrder {
   points           Int
   // M2-R R2：履约类型快照
   fulfillment      String  @default("physical") @db.VarChar(16)
+  // 实物商品所选发货方式快照：pickup 自提 | delivery 邮寄（历史邮寄订单为空）
+  shippingMethod   String? @db.VarChar(16)
+  // 自提订单的自提地址快照（下单时从商品 pickupAddress 复制）
+  pickupAddress    String? @db.VarChar(255)
   status           String  @db.VarChar(24) // pending_shipment | shipped | finished | cancelled + pending_use（权益券，R2）
   createdAt        String  @db.VarChar(16)
   shippedAt        String? @db.VarChar(16)
@@ -1013,6 +1017,32 @@ model Favorite {
 
   @@unique([userId, targetType, targetId])
   @@index([userId])
+}
+
+// 用户留言（M2-R R4）：客户端登录用户提交，后台「用户留言」页查看与回复；
+// 客户端可查看自己的留言与后台回复，后台回复时向用户推送站内信。
+model UserMessage {
+  id           String  @id @db.VarChar(16)
+  userId       String  @db.VarChar(16)
+  title        String  @db.VarChar(128)
+  content      String  @db.Text
+  // pending 待回复 | replied 已回复
+  status       String  @db.VarChar(16)
+  createdAt    String  @db.VarChar(16)
+  replyContent String? @db.Text
+  repliedAt    String? @db.VarChar(16)
+  // 回复人（后台工作人员姓名）
+  repliedBy    String? @db.VarChar(64)
+  // 归档体系（同需求/投稿等域）：replied 时写 archivableAt，归档写 deletedAt/deletedBy
+  archivableAt String? @db.VarChar(16)
+  deletedAt    String? @db.VarChar(16)
+  deletedBy    String? @db.VarChar(64)
+
+  @@index([userId])
+  @@index([status])
+  @@index([createdAt])
+  @@index([archivableAt])
+  @@index([deletedAt])
 }
 
 // ---------- 系统管理域 ----------

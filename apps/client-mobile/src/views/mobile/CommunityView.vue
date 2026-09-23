@@ -1,13 +1,14 @@
 <script setup lang="ts">
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { CheckTag, PullDownRefresh, Search, Tabs, TabPanel, Toast } from 'tdesign-mobile-vue'
+import { Button, CheckTag, PullDownRefresh, Search, Tabs, TabPanel, Toast } from 'tdesign-mobile-vue'
 import { fetchEnterpriseList, fetchPolicies, fetchTalents } from '@/api/community'
 import { useAsyncList } from '@/composables/useAsyncList'
 import ListSkeleton from '@/components/ListSkeleton.vue'
 import EmptyBlock from '@/components/shared/EmptyBlock.vue'
 import type { CommunityPolicy, EnterpriseRecord, TalentMember } from '@/types'
 import { useAnimSuppress } from '@/composables/useAnimSuppress'
+import { useAtTop } from '@/composables/useAtTop'
 import { useTabSwipe } from '@/composables/useTabSwipe'
 import PolicyPopup from '@/components/community/PolicyPopup.vue'
 import PolicyCard from '@/components/community/PolicyCard.vue'
@@ -25,6 +26,8 @@ const router = useRouter()
 const route = useRoute()
 /* v39：下拉刷新 */
 const refreshing = ref(false)
+/* 离顶时禁用下拉刷新：库内 isReachTop 会被截断文本等 overflow 元素误判为已到顶 */
+const atTop = useAtTop()
 
 async function onRefresh() {
   refreshing.value = true
@@ -73,7 +76,7 @@ const { data: enterprises, loading: enterprisesLoading, error: enterprisesError,
   )
 
 /* v41：分类选项基于全量政策，避免选中后其余分类消失 */
-const { data: allPolicies, run: runAllPolicies } = useAsyncList<CommunityPolicy[]>(() => fetchPolicies({}))
+const { data: allPolicies, error: allPoliciesError, run: runAllPolicies } = useAsyncList<CommunityPolicy[]>(() => fetchPolicies({}))
 const serviceCategories = computed(() => [...new Set((allPolicies.value ?? []).map((item) => item.category))])
 const selectedCategory = ref(String(route.query.category ?? ''))
 
@@ -246,7 +249,7 @@ watch(policies, () => {
 </script>
 
 <template>
-  <PullDownRefresh :value="refreshing" @refresh="onRefresh">
+  <PullDownRefresh :value="refreshing" :disabled="!atTop" @refresh="onRefresh">
   <div
     class="m-community page-fade-in"
     @touchstart="startSwipe"
@@ -263,6 +266,11 @@ watch(policies, () => {
           <CheckTag size="medium" variant="light" :checked="!selectedCategory" @change="selectedCategory = ''">全部</CheckTag>
           <CheckTag v-for="category in serviceCategories" :key="category" size="medium" variant="light" :checked="selectedCategory === category" @change="selectedCategory = category">{{ category }}</CheckTag>
         </div>
+        <!-- 分类字典加载失败不再静默：给出可重试提示（列表仍可浏览，仅缺分类筛选） -->
+        <p v-else-if="allPoliciesError" class="categories-error">
+          分类加载失败
+          <Button size="small" variant="text" theme="primary" @click="runAllPolicies">重试</Button>
+        </p>
 
         <ListSkeleton v-if="policiesLoading && !(policies ?? []).length" />
         <EmptyBlock v-else-if="policiesError" :text="policiesError" action-text="重试" @action="runPolicies" />
@@ -360,6 +368,15 @@ watch(policies, () => {
 .service-categories::-webkit-scrollbar { display: none; }
 
 .service-categories :deep(.t-tag) { flex: 0 0 auto; }
+
+.categories-error {
+  display: flex;
+  align-items: center;
+  gap: var(--app-space-3);
+  margin: 0 0 var(--app-space-6);
+  font-size: var(--app-font-caption);
+  color: var(--td-text-color-secondary);
+}
 
 .service-section-head { display: flex; align-items: baseline; justify-content: space-between; margin:0 var(--app-space-1) var(--app-space-4); }
 /* v45：区块标题统一为 20px 层级，与首页「最新需求/最新资讯」口径一致；计数改用次级文字色 */

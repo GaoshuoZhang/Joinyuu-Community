@@ -25,6 +25,8 @@ export const router = createRouter({
         { path: 'plaza', name: 'plaza', component: () => import('@/views/mobile/PlazaView.vue'), meta: { keepAlive: true } },
         { path: 'me', name: 'me', component: () => import('@/views/mobile/MeView.vue'), meta: { requiresAuth: true, keepAlive: true } },
         { path: 'me/stats', name: 'my-stats', component: () => import('@/views/mobile/MyStatsView.vue'), meta: { requiresAuth: true } },
+        /* 用户留言：提交留言并查看社区回复（入口在「我的」与「社区 > 社区服务」） */
+        { path: 'me/messages', name: 'me-messages', component: () => import('@/views/mobile/MyMessagesView.vue'), meta: { requiresAuth: true } },
 
         /* ---- 需求发布（类型 hub + 独立表单）/ 详情（需求语境）---- */
         { path: 'demands/new', name: 'demand-new', component: () => import('@/views/mobile/DemandPublishHubView.vue'), meta: { requiresAuth: true } },

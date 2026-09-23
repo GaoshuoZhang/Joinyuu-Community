@@ -237,29 +237,30 @@ onMounted(load)
       </template>
     </PageHeader>
 
+    <!-- 状态选项卡与筛选栏置于卡片外（契约：筛选栏不进入 .page-card，避免 .t-select__wrap 撑行历史问题复发） -->
+    <div class="tabs-row">
+      <t-tabs :value="query.status" class="status-tabs" @change="onStatusChange">
+        <t-tab-panel v-for="tab in statusTabs" :key="tab.value" :value="tab.value" :label="tab.label" />
+      </t-tabs>
+    </div>
+
+    <div class="page-filter-bar">
+      <t-input class="ctl-w-xl"
+        v-model="query.keyword"
+        placeholder="搜索报名人/身份/电话/活动…"
+        clearable
+        @enter="onSearch"
+      />
+      <t-button @click="onSearch">
+        <template #icon><SearchIcon /></template>
+        查询
+      </t-button>
+      <t-button variant="outline" @click="onReset">
+        重置
+      </t-button>
+    </div>
+
     <div class="page-card">
-      <div class="tabs-row">
-        <t-tabs :value="query.status" class="status-tabs" @change="onStatusChange">
-          <t-tab-panel v-for="tab in statusTabs" :key="tab.value" :value="tab.value" :label="tab.label" />
-        </t-tabs>
-      </div>
-
-      <div class="page-filter-bar">
-        <t-input class="ctl-w-xl"
-          v-model="query.keyword"
-          placeholder="搜索报名人/身份/电话/活动…"
-          clearable
-          @enter="onSearch"
-        />
-        <t-button @click="onSearch">
-          <template #icon><SearchIcon /></template>
-          查询
-        </t-button>
-        <t-button variant="outline" @click="onReset">
-          重置
-        </t-button>
-      </div>
-
       <t-table
         :row-key="(row: EventEnrollmentRecord) => `${row.eventId}:${row.userId}`"
         table-layout="fixed"
@@ -291,9 +292,7 @@ onMounted(load)
         </template>
         <template #waitlistOrder="{ row }">{{ row.waitlistOrder ?? '—' }}</template>
         <template #checkedIn="{ row }">
-          <t-tag :theme="row.checkedIn ? 'success' : 'default'" variant="light" size="small">
-            {{ row.checkedIn ? '已签到' : '未签到' }}
-          </t-tag>
+          <StatusTag entity="checkin" :value="row.checkedIn ? 'checked' : 'unchecked'" size="small" />
         </template>
         <template #op="{ row }">
           <div class="op-cell" @click.stop>

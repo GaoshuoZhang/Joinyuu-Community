@@ -10,7 +10,7 @@ import DemandReviewDialog from '@/components/DemandReviewDialog.vue'
 import ColumnController from '@/components/ColumnController.vue'
 import { fetchDemands } from '@/api/demands'
 import { dictFallback, fetchDictEntries } from '@/api/dicts'
-import { identityTypeMap } from '@/constants/identity'
+import { identityLabelOf } from '@/constants/identity'
 import type { Demand } from '@/types'
 
 /* 需求审核：固定筛选「待审核」状态的需求集中审核。
@@ -43,7 +43,7 @@ const categoryText = (demand: Demand) => demand.categoryLabel ?? demand.category
 const columns = [
   { colKey: 'title', title: '需求', cell: 'title', width: 210, resizable: true , ellipsis: true},
   { colKey: 'category', title: '类别', cell: 'category', width: 95, resizable: true , ellipsis: true},
-  { colKey: 'publisher', title: '需求方', cell: 'publisher', width: 200, resizable: true , ellipsis: true},
+  { colKey: 'publisher', title: '提交人', cell: 'publisher', width: 200, resizable: true , ellipsis: true},
   { colKey: 'budget', title: '预算', width: 125, resizable: true , ellipsis: true},
   {
     colKey: 'createdAt',
@@ -123,11 +123,9 @@ function goDetail(row: Demand) {
   router.push(`/demands/${row.id}`)
 }
 
-/* 需求方身份快照 → 纯文本标签（企业仅显示 社区企业/合作企业，不追加成员标题） */
+/* 提交人身份快照 → 纯文本标签（社区官方显示工作人员角色名；企业仅显示 社区企业/合作企业，不追加成员标题） */
 function publisherIdentityLabel(row: Demand): string {
-  const type = row.publisherIdentity?.type
-  if (!type) return '—'
-  return identityTypeMap[type] ?? '—'
+  return identityLabelOf(row.publisherIdentity)
 }
 
 /* 只读审核对话框（通过 = 转待发布；驳回需填原因） */
@@ -204,6 +202,7 @@ onMounted(() => {
         :pagination="pagination"
         @page-change="onPageChange"
         @sort-change="onSortChange"
+        :row-attributes="{ style: { cursor: 'pointer' } }"
         @row-click="({ row }: { row: Demand }) => goDetail(row)"
       >
         <template #title="{ row }">

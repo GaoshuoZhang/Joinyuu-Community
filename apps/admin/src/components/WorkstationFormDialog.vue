@@ -199,7 +199,7 @@ async function onDelete() {
           <t-input clearable v-model="form.seatNo" :placeholder="seatNoTip" />
         </t-form-item>
         <t-form-item label="容纳人数" name="capacity">
-          <t-input-number v-model="form.capacity" :min="1" theme="column" style="width: 100%" />
+          <t-input-number v-model="form.capacity" :min="1" theme="column" class="ctl-w-full" />
         </t-form-item>
       </div>
       <t-form-item label="办公位类型" name="type">
@@ -211,12 +211,12 @@ async function onDelete() {
             v-model="form.defaultMonthlyRent"
             :min="0"
             theme="column"
-            style="width: 100%"
+            class="ctl-w-full"
             placeholder="选填；月租租约自动累加用…"
           />
         </t-form-item>
         <t-form-item v-if="form.type === 'office'" label="面积（㎡）" name="areaSqm">
-          <t-input-number v-model="form.areaSqm" :min="0" theme="column" style="width: 100%" placeholder="选填…" />
+          <t-input-number v-model="form.areaSqm" :min="0" theme="column" class="ctl-w-full" placeholder="选填…" />
         </t-form-item>
       </div>
       <t-form-item label="备注" name="note">

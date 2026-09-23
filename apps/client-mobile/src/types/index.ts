@@ -38,7 +38,7 @@ export interface DictItem {
 
 /* ---------- 身份与用户 ---------- */
 
-export type IdentityType = 'individual' | 'community_individual' | 'community_enterprise' | 'external_enterprise'
+export type IdentityType = 'individual' | 'community_individual' | 'community_enterprise' | 'external_enterprise' | 'official'
 
 export interface UserIdentity {
   type: IdentityType
@@ -172,6 +172,20 @@ export interface UserNotice {
   read: boolean
   /** 点击跳转的业务路由（可选） */
   link?: string
+}
+
+/** 我的留言（客户端提交，后台回复）：status pending 待回复 | replied 已回复 */
+export interface MyMessage {
+  id: string
+  title: string
+  content: string
+  status: 'pending' | 'replied'
+  createdAt: string
+  /** 后台回复内容与回复时间（已回复时下发） */
+  replyContent?: string
+  repliedAt?: string
+  /** 回复人（社区工作人员姓名） */
+  repliedBy?: string
 }
 
 /** 通知偏好：类型目录 + 已静音集合（mutable=false 的类型不可关闭） */
@@ -472,6 +486,8 @@ export interface Demand {
   publisherUid?: string
   publisherName: string
   publisherIdentity: IdentityType
+  /** 社区自建需求（official）的身份快照文案：创建该需求的工作人员角色名 */
+  publisherIdentityLabel?: string
   /** 截止日期（表单已不再收集，保留历史数据展示；新需求以 deliverBy 为准） */
   deadline?: string
   /** task：预期交付日期（希望在这一天之前完成） */
@@ -671,7 +687,14 @@ export interface Goods {
   category?: string
   /** 权益券有效期（天）：仅权益券下发，空值按 30 天兜底 */
   validDays?: number
+  /** 实物商品发货方式：pickup 自提 | delivery 邮寄（权益券为空数组） */
+  shippingMethods?: GoodsShippingMethod[]
+  /** 自提地址：商品支持自提时下发，兑换前需向用户提示 */
+  pickupAddress?: string
 }
+
+/** 实物商品发货方式 */
+export type GoodsShippingMethod = 'pickup' | 'delivery'
 
 export interface MyOrder {
   id: string
@@ -694,6 +717,10 @@ export interface MyOrder {
   recipientName?: string
   recipientPhone?: string
   recipientAddress?: string
+  /** physical：所选发货方式（pickup 自提 | delivery 邮寄；历史邮寄订单可能为空） */
+  shippingMethod?: GoodsShippingMethod
+  /** 自提订单：自提地址快照 */
+  pickupAddress?: string
   createdAt: string
   shippedAt?: string
   usedAt?: string

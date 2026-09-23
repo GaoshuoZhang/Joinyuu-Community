@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { nextTick, reactive, ref, watch } from 'vue'
 import { MessagePlugin, type FormProps } from 'tdesign-vue-next'
-import { identityTypeMap } from '@/constants/identity'
+import { identityLabelOf } from '@/constants/identity'
 import { approveDemand, rejectDemand } from '@/api/demands'
 import type { Demand } from '@/types'
 
@@ -81,11 +81,9 @@ async function onConfirmReject() {
   }
 }
 
-/* 需求方身份快照 → 纯文本标签（企业仅显示 社区企业/合作企业，不追加成员标题） */
+/* 提交人身份快照 → 纯文本标签（社区官方显示工作人员角色名；企业仅显示 社区企业/合作企业，不追加成员标题） */
 function publisherIdentityLabel(d: Demand): string {
-  const type = d.publisherIdentity?.type
-  if (!type) return '—'
-  return identityTypeMap[type] ?? '—'
+  return identityLabelOf(d.publisherIdentity)
 }
 </script>
 
@@ -110,8 +108,8 @@ function publisherIdentityLabel(d: Demand): string {
         </div>
 
         <t-descriptions :column="2" bordered class="review-desc">
-          <t-descriptions-item label="需求方">{{ demand.publisherName }}<t-tag v-if="demand.publisherId" class="id-tag" size="small" variant="light">{{ demand.publisherId }}</t-tag></t-descriptions-item>
-          <t-descriptions-item label="需求方身份">
+          <t-descriptions-item label="提交人">{{ demand.publisherName }}<t-tag v-if="demand.publisherId" class="id-tag" size="small" variant="light">{{ demand.publisherId }}</t-tag></t-descriptions-item>
+          <t-descriptions-item label="提交人身份">
             <span>{{ publisherIdentityLabel(demand) }}</span>
           </t-descriptions-item>
           <t-descriptions-item label="联系人">{{ demand.contactName ?? '—' }}</t-descriptions-item>

@@ -5,6 +5,7 @@ import { RolesService, type AdminRoleDto, type PermissionGroupDto } from './role
 import { CreateRoleDto } from './dto/create-role.dto'
 import { SaveRolePermissionsDto } from './dto/save-role-permissions.dto'
 import { SaveRoleScopeDto } from './dto/save-role-scope.dto'
+import { SaveRoleAssignmentDto } from './dto/save-role-assignment.dto'
 
 @Controller('api/admin')
 export class RolesController {
@@ -49,6 +50,19 @@ export class RolesController {
     const user = req.user
     if (!user) throw new UnauthorizedException('未登录或登录已过期')
     return this.roles.saveScope(id, dto.dataScope, { username: user.sub, name: user.name })
+  }
+
+  @Put('roles/:id/assignment')
+  @HttpCode(200)
+  @RequirePermission('/system/roles')
+  saveAssignment(
+    @Param('id') id: string,
+    @Body() dto: SaveRoleAssignmentDto,
+    @Req() req: AuthenticatedRequest,
+  ): Promise<{ code: number }> {
+    const user = req.user
+    if (!user) throw new UnauthorizedException('未登录或登录已过期')
+    return this.roles.saveAssignment(id, dto.permCodes, dto.dataScope, { username: user.sub, name: user.name })
   }
 
   @Get('permissions/catalog')

@@ -75,6 +75,12 @@ const router = createRouter({
           component: () => import('@/views/dashboard/DashboardView.vue'),
           meta: { title: '工作台' },
         },
+        /* 一级菜单：用户留言（客户端留言的查看与回复），紧随工作台 */
+        {
+          path: 'user-messages',
+          component: () => import('@/views/user-messages/UserMessageListView.vue'),
+          meta: { title: '用户留言', perm: '/user-messages' },
+        },
         {
           path: 'users',
           component: () => import('@/views/users/UserListView.vue'),

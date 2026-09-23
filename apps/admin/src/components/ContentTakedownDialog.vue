@@ -42,7 +42,7 @@ defineExpose({ open })
     <template #footer>
       <div class="dialog-footer">
         <t-button variant="text" theme="default" @click="visible = false">取消</t-button>
-        <t-button theme="primary" :loading="submitting" @click="submit">确认下架</t-button>
+        <t-button theme="danger" :loading="submitting" @click="submit">确认下架</t-button>
       </div>
     </template>
     <p>确认下架「{{ target?.title }}」？{{ target?.type === 'article' ? '下架后状态为已关闭。' : '下架后转为待发布。' }}</p>

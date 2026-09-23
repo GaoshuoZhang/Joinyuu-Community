@@ -31,6 +31,7 @@ export interface SeedAdminAccount {
 /* 权限点目录（按模块分组，sort 顺序即前端渲染顺序） */
 export const permissionCatalog: SeedPermission[] = [
   { code: '/dashboard', name: '工作台', module: '工作台', authType: 'menu', sort: 1 },
+  { code: '/user-messages', name: '用户留言', module: '工作台', authType: 'menu', sort: 2 },
 
   { code: '/users', name: '用户管理', module: '社区成员', authType: 'menu', sort: 10 },
   { code: '/individuals', name: '社区个体', module: '社区成员', authType: 'menu', sort: 11 },
@@ -112,6 +113,7 @@ export const adminRoles: SeedRole[] = [
     sort: 2,
     permCodes: [
       '/dashboard',
+      '/user-messages',
       '/demands',
       '/demands/review',
       '/projects',

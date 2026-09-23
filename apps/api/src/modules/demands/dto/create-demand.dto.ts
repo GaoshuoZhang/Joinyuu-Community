@@ -1,23 +1,10 @@
 import { Type } from 'class-transformer'
-import { IsArray, IsIn, IsInt, IsOptional, IsString, Min } from 'class-validator'
+import { IsArray, IsBoolean, IsIn, IsInt, IsOptional, IsString, Min } from 'class-validator'
 
 /* POST /api/admin/demands 入参（DemandCreatePayload）
- * publisherIdentity 为提交身份快照（Json 透传），仅 custom 时使用；
- * individual/enterprise 由服务端 resolvePublisherIdentity 重解析，忽略客户端传入值 */
+ * 后台自建需求：提交人/提交人身份一律由服务端按当前登录工作人员派生（账号名 + 姓名 + 角色名），
+ * 不接受客户端传入，故本 DTO 不再包含 publisher* 字段 */
 export class CreateDemandDto {
-  @IsString()
-  publisherId!: string
-
-  @IsOptional()
-  @IsString()
-  publisherName?: string
-
-  @IsIn(['individual', 'enterprise', 'custom'])
-  publisherType!: 'individual' | 'enterprise' | 'custom'
-
-  @IsOptional()
-  publisherIdentity?: Record<string, unknown> | null
-
   @IsString()
   title!: string
 
@@ -91,6 +78,11 @@ export class CreateDemandDto {
   @IsOptional()
   @IsString()
   contactEmail?: string
+
+  /** 公开联系人：开启后客户端（含未登录游客）可见联系人姓名/电话/邮箱；默认关闭 */
+  @IsOptional()
+  @IsBoolean()
+  contactPublic?: boolean
 
   @IsOptional()
   @Type(() => Number)

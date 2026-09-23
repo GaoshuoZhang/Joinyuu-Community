@@ -451,9 +451,8 @@ onMounted(() => load())
           <t-descriptions-item label="报名数">{{ approvedCount }} 人</t-descriptions-item>
           <t-descriptions-item label="签到数">{{ checkedCount }} 人</t-descriptions-item>
           <t-descriptions-item label="报名审核">
-            <t-tag variant="light" :theme="event.requireReview ? 'warning' : 'success'">
-              {{ event.requireReview ? '需审核' : '无需审核（报名即通过）' }}
-            </t-tag>
+            <StatusTag entity="reviewMode" :value="event.requireReview ? 'required' : 'optional'" />
+            <span v-if="!event.requireReview" class="field-help">报名即通过</span>
           </t-descriptions-item>
           <t-descriptions-item label="报名截止时间">
             <t-tooltip v-if="!event.enrollmentDeadline" content="不限，活动开始前均可报名">
@@ -550,10 +549,8 @@ onMounted(() => load())
                   {{ row.name }}<t-tag class="id-tag" size="small" variant="light">{{ row.userId }}</t-tag>
                 </template>
                 <template #checkState="{ row }">
-                  <t-tag v-if="row.checkedIn" theme="success" variant="light">
-                    已签到 {{ checkInTime(row) }}
-                  </t-tag>
-                  <t-tag v-else theme="warning" variant="light">未签到</t-tag>
+                  <StatusTag entity="checkin" :value="row.checkedIn ? 'checked' : 'unchecked'" />
+                  <span v-if="row.checkedIn" class="field-help">{{ checkInTime(row) }}</span>
                 </template>
                 <template #checkinMethod="{ row }">
                   {{ row.checkinMethod === 'self' ? '自助签到' : row.checkinMethod === 'admin' ? '管理端补签' : '—' }}
@@ -597,9 +594,8 @@ onMounted(() => load())
                 ]"
               >
                 <template #redeemedAt="{ row }">
-                  <t-tag :theme="row.redeemedAt ? 'success' : 'warning'" variant="light">
-                    {{ row.redeemedAt || '未核销' }}
-                  </t-tag>
+                  <StatusTag entity="redeem" :value="row.redeemedAt ? 'redeemed' : 'unredeemed'" />
+                  <span v-if="row.redeemedAt" class="field-help">{{ row.redeemedAt }}</span>
                 </template>
               </t-table>
               <t-empty v-else description="暂无已签发电子票" />
@@ -628,10 +624,10 @@ onMounted(() => load())
       <t-form :data="rescheduleForm" label-align="top">
         <div class="reschedule-grid">
           <t-form-item label="新开始时间" name="startTime">
-            <t-date-picker v-model="rescheduleForm.startTime" valueType="YYYY-MM-DD HH:mm" enable-time-picker style="width: 100%" />
+            <t-date-picker v-model="rescheduleForm.startTime" valueType="YYYY-MM-DD HH:mm" enable-time-picker class="ctl-w-full" />
           </t-form-item>
           <t-form-item label="新结束时间" name="endTime">
-            <t-date-picker v-model="rescheduleForm.endTime" valueType="YYYY-MM-DD HH:mm" enable-time-picker style="width: 100%" />
+            <t-date-picker v-model="rescheduleForm.endTime" valueType="YYYY-MM-DD HH:mm" enable-time-picker class="ctl-w-full" />
           </t-form-item>
         </div>
         <t-form-item label="改期原因" name="reason">

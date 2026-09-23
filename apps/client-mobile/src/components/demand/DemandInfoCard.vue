@@ -7,9 +7,10 @@ import type { Demand } from '@/types'
 import RichTextBlock from '@/components/shared/RichTextBlock.vue'
 import { formatZhNumber } from '@/utils/format'
 
-/* 需求详情信息卡：标题/状态/分类/发布方/描述/分类扩展字段/联系信息/收藏分享。 */
-defineProps<{ demand: Demand; favorited: boolean; isLogged: boolean }>()
-defineEmits<{ toggleFavorite: []; share: []; login: [] }>()
+/* 需求详情信息卡：标题/状态/分类/发布方/描述/分类扩展字段/联系信息/收藏分享。
+ * 联系信息由后端按需求「公开联系人」开关下发：开启时（含未登录访客）展示，关闭时不下发。 */
+defineProps<{ demand: Demand; favorited: boolean }>()
+defineEmits<{ toggleFavorite: []; share: [] }>()
 </script>
 
 <template>
@@ -22,7 +23,7 @@ defineEmits<{ toggleFavorite: []; share: []; login: [] }>()
       <Tag class="cat" size="small" variant="light" theme="primary">{{ demand.categoryLabel }}</Tag>
       <Tag v-if="demand.kind" class="kind" size="small" variant="light" theme="default">{{ DEMAND_KIND_LABELS[demand.kind] }}</Tag>
       <span class="pub">
-        <IdentityTag :type="demand.publisherIdentity" />
+        <IdentityTag :type="demand.publisherIdentity" :label="demand.publisherIdentityLabel" />
         <span>{{ demand.publisherName }}</span>
       </span>
     </div>
@@ -47,22 +48,13 @@ defineEmits<{ toggleFavorite: []; share: []; login: [] }>()
       <p v-if="demand.returnOffer"><b>可提供资源：</b>{{ demand.returnOffer }}</p>
     </div>
 
-    <div v-if="isLogged && (demand.contactName || demand.contactPhone || demand.contactEmail)" class="extras">
+    <div v-if="demand.contactName || demand.contactPhone || demand.contactEmail" class="extras">
       <p v-if="demand.contactName"><b>联系人：</b>{{ demand.contactName }}</p>
       <p v-if="demand.contactPhone">
         <b>联系电话：</b>
         <a class="tel" :href="`tel:${demand.contactPhone}`">{{ demand.contactPhone }}</a>
       </p>
       <p v-if="demand.contactEmail"><b>联系邮箱：</b>{{ demand.contactEmail }}</p>
-    </div>
-    <div v-else-if="!isLogged && (demand.contactName || demand.contactPhone || demand.contactEmail)" class="extras">
-      <p class="contact-locked">
-        联系信息仅对登录用户可见
-        <Button class="relink" size="small" variant="text" @click="$emit('login')">
-          登录后查看
-          <template #suffix><Icon aria-hidden="true" name="chevron-right" size="12px" /></template>
-        </Button>
-      </p>
     </div>
     <div class="fav-row">
       <Button size="small" variant="outline" @click="$emit('toggleFavorite')">
@@ -156,14 +148,6 @@ defineEmits<{ toggleFavorite: []; share: []; login: [] }>()
   min-height: 44px;
   color: inherit;
   text-decoration: none;
-}
-
-.contact-locked {
-  color: var(--td-text-color-placeholder);
-}
-
-.relink {
-  margin-left: var(--app-space-2);
 }
 
 .fav-row {

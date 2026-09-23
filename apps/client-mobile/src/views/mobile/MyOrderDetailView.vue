@@ -178,6 +178,11 @@ async function onReviewSubmit() {
         </template>
 
         <template v-else>
+          <!-- 自提订单：展示自提地址快照；邮寄订单：展示收货信息 -->
+          <p v-if="order.shippingMethod === 'pickup'" class="info pickup-info">
+            <Icon aria-hidden="true" name="location" size="14px" />
+            到店自提：{{ order.pickupAddress || '请联系社区运营确认自提点' }}，凭本订单向工作人员核销。
+          </p>
           <p v-if="order.recipientAddress" class="info">收货：{{ order.recipientName }} {{ order.recipientPhone }} · {{ order.recipientAddress }}</p>
           <p v-if="order.trackingNo" class="info">物流单号：{{ order.trackingNo }}</p>
         </template>
@@ -304,6 +309,17 @@ async function onReviewSubmit() {
   font-size: var(--app-font-caption);
   line-height: 1.7;
   color: var(--td-text-color-secondary);
+}
+
+/* 自提地址提示：品牌浅底强调，与收货信息区分 */
+.pickup-info {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--app-space-2);
+  padding: var(--app-space-4) var(--app-space-5);
+  border-radius: var(--td-radius-default);
+  background: var(--td-brand-color-1);
+  color: var(--td-text-color-primary);
 }
 
 .times {

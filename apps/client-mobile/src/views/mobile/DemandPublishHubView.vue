@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
-import { Button, Icon, Tag, Toast } from 'tdesign-mobile-vue'
+import { Button, Icon, Tag } from 'tdesign-mobile-vue'
 import { useConfigStore } from '@/stores/config'
 import EmptyBlock from '@/components/shared/EmptyBlock.vue'
 import { DEMAND_KINDS } from '@/constants/demand'
@@ -30,10 +30,8 @@ onMounted(async () => {
 })
 
 function goForm() {
-  if (!selected.value) {
-    Toast('请先选择需求类型')
-    return
-  }
+  /* 未选择类型时按钮为 disabled（ctaText 已提示「请先选择需求类型」），无需再 Toast */
+  if (!selected.value) return
   void router.push(FORM_ROUTES[selected.value])
 }
 </script>
@@ -105,7 +103,7 @@ function goForm() {
 }
 
 .publish-hub.has-fixed-actions {
-  padding-bottom: calc(88px + env(safe-area-inset-bottom));
+  padding-bottom: var(--app-action-bar-clearance-sm);
 }
 
 .publish-actions {

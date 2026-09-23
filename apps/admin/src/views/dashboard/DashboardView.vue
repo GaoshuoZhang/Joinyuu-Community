@@ -119,6 +119,8 @@ const announcementsLoading = ref(false)
 const announcementsError = ref('')
 
 async function loadAnnouncements() {
+  /* 无权限时不发请求：卡片本身已按权限隐藏，避免 403 噪音与无用往返 */
+  if (!auth.hasPerm('/contents/announcements')) return
   announcementsLoading.value = true
   try {
     /* 取前 3 条已发布公告（服务端已按「启用优先 + 发布时间倒序」排序），启用的那条排最前 */
@@ -278,22 +280,17 @@ async function loadPlatformStats() {
   if (statsLoading.value) return
   statsLoading.value = true
   const count = (p: Promise<{ total: number }>) => p.then((r) => r.total).catch(() => null)
-  const [users, individuals, enterprises, externals, projects, articles] = await Promise.all([
-    count(fetchUsers({ page: 1, pageSize: 1 })),
-    count(fetchIndividuals({ page: 1, pageSize: 1 })),
-    count(fetchEnterprises({ page: 1, pageSize: 1 })),
-    count(fetchExternalEnterprises({ page: 1, pageSize: 1 })),
-    count(fetchProjects({ page: 1, pageSize: 1 })),
-    count(fetchArticles({ page: 1, pageSize: 1 })),
-  ])
-  platformStats.value = [
-    { label: '全部用户', value: users, icon: markRaw(UserIcon), route: '/users', perm: '/users' },
-    { label: '社区个体', value: individuals, icon: markRaw(UserCircleIcon), route: '/individuals', perm: '/individuals' },
-    { label: '社区企业', value: enterprises, icon: markRaw(BuildingIcon), route: '/enterprises', perm: '/enterprises' },
-    { label: '合作企业', value: externals, icon: markRaw(Building1Icon), route: '/external-enterprises', perm: '/external-enterprises' },
-    { label: '进行中的项目', value: projects, icon: markRaw(AppIcon), route: '/projects', perm: '/projects' },
-    { label: '资讯内容', value: articles, icon: markRaw(Edit2Icon), route: '/contents/publish', perm: '/contents/publish' },
-  ].filter((stat) => auth.hasPerm(stat.perm))
+  /* 先按权限收敛再请求：无权限账号不打必然 403 的接口 */
+  const defs: { label: string; icon: unknown; route: string; perm: string; fetch: () => Promise<{ total: number }> }[] = [
+    { label: '全部用户', icon: markRaw(UserIcon), route: '/users', perm: '/users', fetch: () => fetchUsers({ page: 1, pageSize: 1 }) },
+    { label: '社区个体', icon: markRaw(UserCircleIcon), route: '/individuals', perm: '/individuals', fetch: () => fetchIndividuals({ page: 1, pageSize: 1 }) },
+    { label: '社区企业', icon: markRaw(BuildingIcon), route: '/enterprises', perm: '/enterprises', fetch: () => fetchEnterprises({ page: 1, pageSize: 1 }) },
+    { label: '合作企业', icon: markRaw(Building1Icon), route: '/external-enterprises', perm: '/external-enterprises', fetch: () => fetchExternalEnterprises({ page: 1, pageSize: 1 }) },
+    { label: '进行中的项目', icon: markRaw(AppIcon), route: '/projects', perm: '/projects', fetch: () => fetchProjects({ page: 1, pageSize: 1 }) },
+    { label: '资讯内容', icon: markRaw(Edit2Icon), route: '/contents/publish', perm: '/contents/publish', fetch: () => fetchArticles({ page: 1, pageSize: 1 }) },
+  ].filter((d) => auth.hasPerm(d.perm))
+  const totals = await Promise.all(defs.map((d) => count(d.fetch())))
+  platformStats.value = defs.map((d, i) => ({ label: d.label, value: totals[i], icon: d.icon as PlatformStat['icon'], route: d.route, perm: d.perm }))
   statsLoading.value = false
 }
 
@@ -421,7 +418,7 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onLayoutKeydown))
           <div v-else class="notice-list">
             <t-link theme="default" hover="color" v-for="a in announcements" :key="a.id" class="todo-item dash-item" href="#/contents/announcements">
               <div class="todo-main">
-                <t-tag :theme="a.pinned ? 'success' : 'default'" variant="light" size="small">{{ a.pinned ? '已启用' : '未启用' }}</t-tag>
+                <StatusTag entity="enabledFlag" :value="a.pinned ? 'enabled' : 'disabled'" size="small" />
                 <span class="todo-title">{{ a.title }}</span>
               </div>
               <div class="todo-meta">

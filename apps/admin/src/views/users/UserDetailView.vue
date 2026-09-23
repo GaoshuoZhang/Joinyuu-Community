@@ -623,23 +623,18 @@ onMounted(load)
           <t-descriptions-item label="联系电话">
             <span class="channel-value">
               {{ sensitiveVisible ? (user.phone || '—') : maskPhone(user.phone) }}
-              <t-tag :theme="user.phoneVerified ? 'success' : 'default'" variant="light" size="small">
-                {{ user.phoneVerified ? '已验证' : '未验证' }}
-              </t-tag>
+              <StatusTag entity="contactVerified" :value="user.phoneVerified ? 'verified' : 'unverified'" size="small" />
             </span>
           </t-descriptions-item>
           <t-descriptions-item label="邮箱">
             <span class="channel-value">
               {{ sensitiveVisible ? (user.email || '—') : maskEmail(user.email) }}
-              <t-tag :theme="user.emailVerified ? 'success' : 'default'" variant="light" size="small">
-                {{ user.emailVerified ? '已验证' : '未验证' }}
-              </t-tag>
+              <StatusTag entity="contactVerified" :value="user.emailVerified ? 'verified' : 'unverified'" size="small" />
             </span>
           </t-descriptions-item>
           <t-descriptions-item label="性别">{{ userGenderLabel(user.gender) }}</t-descriptions-item>
           <t-descriptions-item label="实名状态">
-            <t-tag v-if="user.realName && user.citizenId" theme="success" variant="light" size="small">已实名</t-tag>
-            <t-tag v-else theme="default" variant="light" size="small">未实名</t-tag>
+            <StatusTag entity="verified" :value="user.realName && user.citizenId ? 'verified' : 'unverified'" size="small" />
           </t-descriptions-item>
           <t-descriptions-item label="真实姓名">{{ user.realName ?? '—' }}</t-descriptions-item>
           <t-descriptions-item label="身份证号">{{ sensitiveVisible ? (user.citizenId ?? '—') : maskCitizenId(user.citizenId) }}</t-descriptions-item>
@@ -1248,7 +1243,7 @@ onMounted(load)
             enable-time-picker
             clearable
             placeholder="选择冻结截止时间…"
-            style="width: 100%"
+            class="ctl-w-full"
           />
         </t-form-item>
       </t-form>

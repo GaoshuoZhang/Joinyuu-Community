@@ -57,8 +57,8 @@ const usernameLocked = computed(() => Boolean(usernameChangeableAt.value))
 const usernameHelp = computed(() => {
   const changeableDate = usernameChangeableAt.value?.slice(0, 10)
   return usernameLocked.value
-    ? `用户名是账号的唯一凭证，可用于登录，90天可修改一次，${changeableDate}后可修改。`
-    : '用户名是账号的唯一凭证，可用于登录，90天可修改一次，当前可修改。'
+    ? `用户名是账号的唯一凭证，可用于登录，90 天可修改一次，${changeableDate} 后可修改。`
+    : '用户名是账号的唯一凭证，可用于登录，90 天可修改一次，当前可修改。'
 })
 const realNameNote = computed(() => {
   if (realNameVerified.value === null) return ''
@@ -189,6 +189,7 @@ function onSubmit({ validateResult }: { validateResult: unknown }) {
             v-model="form.bio"
             :autosize="{ minRows: 4, maxRows: 10 }"
             :maxlength="200"
+            indicator
             placeholder="介绍一下自己…"
           />
         </FormItem>

@@ -27,11 +27,13 @@ import { fetchUser } from '@/api/users'
 import type { Demand, UserIdentity } from '@/types'
 
 /* 发布方身份兜底：历史数据无快照时按编号前缀推导（E→社区企业 / XE→合作企业 / U→仅个人用户标「个人用户」） */
-/* 需求方标签映射：
+/* 提交人标签映射：
  * 企业 → 社区企业/合作企业；社区个体 → 社区个体；仅个人用户 → 个人用户；自定义 → 未录入 */
 function publisherTagOf(row: Demand): { text: string; theme: 'default' | 'primary'; variant: 'light' | 'outline' } | null {
   const id = publisherIdentityOf(row)
   if (id) {
+    /* 社区官方：后台自建需求，展示身份快照里的工作人员角色名 */
+    if (id.type === 'official') return { text: id.title?.trim() || '社区官方', theme: 'primary', variant: 'light' }
     if (id.type === 'community_enterprise') return { text: '社区企业', theme: 'primary', variant: 'light' }
     if (id.type === 'external_enterprise') return { text: '合作企业', theme: 'default', variant: 'outline' }
     if (id.type === 'community_individual') return { text: '社区个体', theme: 'primary', variant: 'light' }
@@ -44,7 +46,7 @@ function publisherTagOf(row: Demand): { text: string; theme: 'default' | 'primar
   return { text: '未录入', theme: 'default', variant: 'outline' }
 }
 
-/* 需求方显示名：企业=企业名；个人/社区个体=昵称（即真实姓名）；自定义=联系人 */
+/* 提交人显示名：企业=企业名；个人/社区个体=昵称（即真实姓名）；自定义=联系人 */
 function publisherNameOf(row: Demand): string {
   if (!row.publisherId) return row.contactName || row.publisherName || '—'
   return row.publisherName || '—'
@@ -245,7 +247,7 @@ const columns = [
   { colKey: 'title', title: '需求', cell: 'title', width: 210, resizable: true , ellipsis: true},
   { colKey: 'category', title: '类别', cell: 'category', width: 95, resizable: true , ellipsis: true},
   { colKey: 'demandType', title: '需求类型', cell: 'demandType', width: 100, resizable: true, ellipsis: true },
-  { colKey: 'publisher', title: '需求方', cell: 'publisher', width: 200, resizable: true , ellipsis: true},
+  { colKey: 'publisher', title: '提交人', cell: 'publisher', width: 200, resizable: true , ellipsis: true},
   { colKey: 'budget', title: '预算', cell: 'budget', width: 125, resizable: true , ellipsis: true},
   { colKey: 'respondents', title: '响应', cell: 'respondents', width: 92, resizable: true , ellipsis: true},
   {
@@ -307,7 +309,7 @@ async function load() {
 }
 
 /* 导出配置：当前页 / 全部结果（沿用列表筛选与排序） */
-const exportHeaders = ['编号', '标题', '类别', '需求方', '预算', '响应数', '状态', '创建时间', '发布时间']
+const exportHeaders = ['编号', '标题', '类别', '提交人', '预算', '响应数', '状态', '创建时间', '发布时间']
 
 function mapRow(d: Demand): (string | number)[] {
   return [

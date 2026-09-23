@@ -1,4 +1,4 @@
-import type { Demand, PageResult, Project, ProjectInitPayload, UserIdentity } from '@/types'
+import type { Demand, PageResult, Project, ProjectInitPayload } from '@/types'
 import { httpGet, httpPatch, httpPost, httpPut } from './http'
 
 export interface DemandQuery {
@@ -39,8 +39,6 @@ export async function fetchDemand(id: string): Promise<Demand> {
 }
 
 export interface DemandPublishPayload {
-  /** 表单内部字段：需求方选择器值（U:uid / E:id / 自定义名称），仅前端表单使用，不随 payload 提交 */
-  publisherValue?: string
   title: string
   category: string
   demandType?: 'task' | 'investment' | 'cooperation'
@@ -65,6 +63,8 @@ export interface DemandPublishPayload {
   contactPhone: string
   /** 提交人联系邮箱（选填） */
   contactEmail?: string
+  /** 公开联系人：开启后客户端（含未登录游客）可见联系人姓名/电话/邮箱；默认关闭 */
+  contactPublic: boolean
   /** 响应需求奖励积分（历史缺省值按积分规则发放） */
   respondPoints?: number
 }
@@ -162,26 +162,12 @@ export async function fetchPublisherOptions(): Promise<{
 }
 
 export interface DemandCreatePayload extends DemandPublishPayload {
-  /** 提交人 ID：individual=用户 ID / enterprise=企业 ID / custom=空串 */
-  publisherId: string
-  /** 自定义提交人名称（publisherType=custom 时使用） */
-  publisherName?: string
-  /** 提交人类型（决定联系电话自动填充与身份快照来源） */
-  publisherType: 'individual' | 'enterprise' | 'custom'
-  /** 提交身份快照（仅 individual 时存在） */
-  publisherIdentity: UserIdentity | null
-  /** 提交人联系电话（必填） */
-  contactPhone: string
-  /** 提交人联系邮箱（选填） */
-  contactEmail?: string
   scheduledAt?: string
 }
 
-/* POST /api/admin/demands — 后台直接新增需求（选定提交用户与其提交身份）
- * 设置 scheduledAt 时进入定时发布中状态，到点自动发布；否则立即发布
- * publisherValue 为前端表单内部字段（需求方选择器），不随 payload 提交 */
+/* POST /api/admin/demands — 后台直接新增需求
+ * 提交人（账号名/姓名/角色名）由服务端取当前登录工作人员，不由表单提交；
+ * 设置 scheduledAt 时进入定时发布中状态，到点自动发布；否则立即发布 */
 export async function createDemand(payload: DemandCreatePayload): Promise<Demand> {
-  const { publisherValue: _publisherValue, ...body } = payload
-  void _publisherValue
-  return httpPost<Demand>('/demands', body)
+  return httpPost<Demand>('/demands', payload)
 }

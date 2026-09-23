@@ -330,10 +330,11 @@ async function main() {
     'goods',
     'order',
     'application',
+    'userMessage',
   ]) {
     await prisma.archiveSetting.create({ data: { domain } })
   }
-  counts.ArchiveSetting = 13
+  counts.ArchiveSetting = 14
 
   for (const [type, entries] of Object.entries(dicts) as Array<[string, Array<{ code: string; label: string; sort: number; status?: string }>]>) {
     await prisma.dictEntry.createMany({
@@ -526,15 +527,6 @@ async function main() {
         matchedRespondent: d.matchedRespondent ?? null,
         projectId: d.projectId ?? null,
         respondPoints: d.respondPoints ?? null,
-        creatorName:
-          d.publisherIdentity && ['community_enterprise', 'external_enterprise'].includes(d.publisherIdentity.type)
-            ? (d.contactName ?? d.publisherName)
-            : d.publisherName,
-        /* 创建人：发布方为用户本人时取 publisherId；企业类需求的正常流程为个人用户代企业提交，
-         * 创建人即联系人本人，按联系人手机号回查用户 UID（种子联系人全部命中用户表） */
-        creatorId: (d.publisherId ?? '').startsWith('U')
-          ? d.publisherId
-          : (users.find((u: { phone: string }) => u.phone === d.contactPhone)?.uid ?? null),
       },
     })
     for (const r of d.respondents) {

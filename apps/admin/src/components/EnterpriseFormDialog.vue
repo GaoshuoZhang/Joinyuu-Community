@@ -220,7 +220,7 @@ function onClose() {
           <t-select v-model="form.leaseType" :options="leaseTypeOptions" clearable placeholder="选择入驻类型…" />
         </t-form-item>
         <t-form-item label="成立时间" name="foundedAt">
-          <t-date-picker v-model="form.foundedAt" valueType="YYYY-MM" clearable style="width: 100%" />
+          <t-date-picker v-model="form.foundedAt" valueType="YYYY-MM" clearable class="ctl-w-full" />
         </t-form-item>
       </div>
       <t-form-item label="联系人（关联用户）" name="contactUserId">

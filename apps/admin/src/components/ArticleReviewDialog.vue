@@ -20,6 +20,7 @@ const emit = defineEmits<{
 
 const rejecting = ref(false)
 const reason = ref('')
+const reasonRef = ref()
 const acting = ref('')
 const detail = ref<Article | null>(null)
 const detailLoading = ref(false)
@@ -60,10 +61,9 @@ async function onApprove() {
 
 async function onReject() {
   if (!props.article) return
-  if (!reason.value.trim()) {
-    MessagePlugin.warning('请填写驳回原因')
-    return
-  }
+  /* 校验挂表单就地标红（与 AdjustValueDialog/AdminPanel 口径一致），不用 toast */
+  const valid = await reasonRef.value?.validate()
+  if (valid !== true) return
   acting.value = 'reject'
   try {
     await reviewArticle(props.article.id, 'rejected', reason.value.trim())
@@ -142,9 +142,11 @@ function onCancel() {
          </div>
        </template>
 
-      <div v-if="rejecting" class="reject-box">
-        <t-textarea v-model="reason" :autosize="{ minRows: 2, maxRows: 4 }" placeholder="请填写驳回原因（通知投稿人）…" maxlength="200" />
-      </div>
+      <t-form v-if="rejecting" ref="reasonRef" :data="{ reason }" class="reject-box">
+        <t-form-item name="reason" :rules="[{ required: true, message: '请填写驳回原因', trigger: 'submit' }]">
+          <t-textarea v-model="reason" :autosize="{ minRows: 2, maxRows: 4 }" placeholder="请填写驳回原因（通知投稿人）…" maxlength="200" />
+        </t-form-item>
+      </t-form>
     </div>
     </t-loading>
 

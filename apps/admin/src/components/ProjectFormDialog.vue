@@ -548,7 +548,7 @@ function onClose() {
       </div>
 
       <t-form-item :label="`项目经验值（规则值：${ruleExp}）`" name="expReward">
-        <t-input-number v-model="form.expReward" :min="0" theme="column" style="width: 100%" />
+        <t-input-number v-model="form.expReward" :min="0" theme="column" class="ctl-w-full" />
       </t-form-item>
 
       <!-- 承接占比 -->

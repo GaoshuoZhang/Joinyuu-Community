@@ -19,7 +19,9 @@ const emit = defineEmits<{ 'update:modelValue': [string]; refresh: [] }>()
 
 <template>
   <div class="field">
-    <label>{{ label }}</label>
+    <!-- 验证码在各宿主页面均为必填，且宿主通常隐藏 FormItem 自带 label（由本组件标签承担），
+         故必填星号在此统一渲染 -->
+    <label>{{ label }}<span class="req"> *</span></label>
     <div class="captcha-row">
       <Input
         class="captcha-input"
@@ -58,6 +60,10 @@ const emit = defineEmits<{ 'update:modelValue': [string]; refresh: [] }>()
   margin-bottom:var(--app-space-3);
   font-size: var(--app-font-caption);
   color: var(--td-text-color-secondary);
+}
+
+.req {
+  color: var(--td-error-color);
 }
 
 .captcha-row {

@@ -1,5 +1,5 @@
 import { Type } from 'class-transformer'
-import { IsArray, IsIn, IsInt, IsOptional, IsString, Min } from 'class-validator'
+import { IsArray, IsBoolean, IsIn, IsInt, IsOptional, IsString, Min } from 'class-validator'
 
 /* PUT /api/admin/demands/:id 入参（DemandPublishPayload，编辑不改状态/提交人） */
 export class UpdateDemandDto {
@@ -76,6 +76,11 @@ export class UpdateDemandDto {
   @IsOptional()
   @IsString()
   contactEmail?: string
+
+  /** 公开联系人：开启后客户端（含未登录游客）可见联系人姓名/电话/邮箱；默认关闭 */
+  @IsOptional()
+  @IsBoolean()
+  contactPublic?: boolean
 
   @IsOptional()
   @Type(() => Number)

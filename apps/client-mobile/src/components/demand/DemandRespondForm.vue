@@ -4,6 +4,7 @@ import { Button, Form, FormItem, Textarea, Toast } from 'tdesign-mobile-vue'
 import type { FormInstanceFunctions, FormRules } from 'tdesign-mobile-vue'
 import IdentityPicker from '@/components/forms/IdentityPicker.vue'
 import { actionIdentityOptions } from '@/stores/auth'
+import { useUnsavedGuard } from '@/composables/useUnsavedGuard'
 import type { UserIdentity } from '@/types'
 
 /* 响应需求表单：响应说明 + 单选响应身份（标签展示，默认第一个可选身份）；提交后由父级刷新并调用 clearNote。
@@ -14,6 +15,9 @@ const emit = defineEmits<{ respond: [note: string, identity: UserIdentity] }>()
 
 const form = reactive({ note: '' })
 const formRef = ref<FormInstanceFunctions>()
+/* 离开保护：响应说明最长 500 字，有输入未提交时离开需确认；
+ * 提交成功后父级调用 clearNote 清空，isDirty 自然归 false，不会误拦 */
+useUnsavedGuard(() => form.note.trim().length > 0)
 const identityOptions = computed(() => actionIdentityOptions(props.identities))
 const picked = ref<UserIdentity | null>(identityOptions.value[0] ?? null)
 

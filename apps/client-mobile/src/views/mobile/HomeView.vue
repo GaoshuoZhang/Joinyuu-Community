@@ -139,7 +139,8 @@ async function loadActivation() {
       { key: 'enroll', label: '报名一场活动', done: enrollments.list.length > 0, path: '/plaza?tab=events' },
     ]
   } catch {
-    if (auth.uid === uid) activationSteps.value = []
+    /* 加载失败保留上次步骤（下拉刷新会重试），避免任务卡「凭空蒸发」；
+     * 跨账号切换时 watch(auth.uid) 已先行清空，不存在旧数据残留 */
   }
 }
 
@@ -255,8 +256,9 @@ const quickEntries = computed(() => {
   <PullDownRefresh :value="refreshing" :disabled="!atTop" @refresh="onRefresh">
     <div class="home page-fade-in">
       <!-- 顶部搜索：点击进入全局搜索页（focus 不跳转，保证键盘可达）。
-           v46：这里是跳转入口而非输入框，readonly 避免先弹软键盘再跳页。 -->
-      <Search v-model="searchKeyword" readonly placeholder="搜索需求、活动、文章或社区服务…" @click="onSearch" @search="onSearch" />
+           v46：这里是跳转入口而非输入框，readonly 避免先弹软键盘再跳页。
+           键盘 Enter 走 submit 事件（TDesign Search 回车发 onSubmit，@search 是输入联想事件、readonly 下永不触发）。 -->
+      <Search v-model="searchKeyword" readonly placeholder="搜索需求、活动、文章或社区服务…" @click="onSearch" @submit="onSearch" />
 
       <!-- v48：核心功能入口前置到搜索栏下方（2 单位宽卡 ×2 + 1 单位方形卡 ×4） -->
       <HomeEntryGrids
@@ -279,15 +281,19 @@ const quickEntries = computed(() => {
         @dismiss="dismissActivation"
       />
 
-      <!-- 运营公告：后台启用互锁保证至多一条，首页仅展示该条 -->
+      <!-- 运营公告：后台启用互锁保证至多一条，首页仅展示该条。
+           v-pressable 补 role=button/tabindex/键盘激活；suffixIcon 提供「可点开」的视觉暗示。 -->
       <NoticeBar
         v-if="announcementItems.length"
+        v-pressable
         visible
         theme="info"
         class="announce-bar"
         :content="announcementItems[0].title"
         @click="onAnnouncement(announcementItems[0])"
-      />
+      >
+        <template #suffixIcon><Icon aria-hidden="true" name="chevron-right" size="16px" /></template>
+      </NoticeBar>
 
       <ListSkeleton v-if="loading && !feed" :rows="4" />
       <EmptyBlock v-else-if="error && !feed" :text="error" action-text="重试" @action="run" />

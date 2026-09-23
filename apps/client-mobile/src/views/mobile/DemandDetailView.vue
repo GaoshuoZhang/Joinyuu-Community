@@ -24,7 +24,9 @@ const router = useRouter()
 const auth = useAuthStore()
 
 const id = String(route.params.id)
-const { data: demand, loading, error, run } = useAsyncList(() => fetchDemand(id))
+const { data: demand, loading, error, errorCode, run } = useAsyncList(() => fetchDemand(id))
+/* 404（资源不存在/不可见）重试无意义：主操作改为「返回需求广场」，其余错误保留「重试」 */
+const notFound = computed(() => errorCode.value === 404)
 
 onMounted(async () => {
   await run()
@@ -36,6 +38,8 @@ onMounted(async () => {
 /* v37 收藏 */
 const favorited = ref(false)
 async function loadFavorite() {
+  /* 公开路由：游客不请求收藏列表，避免 401 被统一拦截跳登录 */
+  if (!auth.isLogged) return
   try {
     const list = await listFavorites()
     favorited.value = list.some((item) => item.type === 'demand' && item.targetId === id)
@@ -201,16 +205,18 @@ async function onShare() {
     />
     <ListSkeleton v-else-if="loading" />
     <template v-else-if="error">
-      <EmptyBlock :text="error" action-text="重试" @action="run" />
+      <EmptyBlock
+        :text="error"
+        :action-text="notFound ? '返回需求广场' : '重试'"
+        @action="notFound ? router.replace('/projects') : run()"
+      />
     </template>
     <template v-else-if="demand">
       <DemandInfoCard
         :demand="demand"
         :favorited="favorited"
-        :is-logged="auth.isLogged"
         @toggle-favorite="onToggleFavorite"
         @share="onShare"
-        @login="router.push(`/login?redirect=${route.fullPath}`)"
       />
 
       <div class="m-card">

@@ -60,19 +60,27 @@ function onRevise(d: MyDemandItem) {
   void router.push(`${REVISE_ROUTES[d.kind ?? 'task']}?revise=${d.id}`)
 }
 
+/* 撤回进行中：记录当前撤回的需求 id，按钮进入 loading 并阻止重复触发（Dialog 关闭后到列表刷新前有空窗） */
+const withdrawingId = ref('')
+
 function onWithdrawDemand(d: MyDemandItem) {
+  if (withdrawingId.value) return
   DialogPlugin.confirm({
     title: '撤回需求',
     content: `撤回后「${d.title}」将不再进入审核，可在列表中修改重提。`,
     cancelBtn: '取消',
     confirmBtn: '确认撤回',
     onConfirm: async () => {
+      if (withdrawingId.value) return
+      withdrawingId.value = d.id
       try {
         await withdrawDemand(d.id)
         Toast('已撤回需求')
         await run()
       } catch (e) {
         Toast(e instanceof Error ? e.message : '撤回失败，请稍后重试')
+      } finally {
+        withdrawingId.value = ''
       }
     },
   })
@@ -119,7 +127,7 @@ function onWithdrawDemand(d: MyDemandItem) {
                 <p v-if="d.rejectReason" class="reject">驳回原因：{{ d.rejectReason }}</p>
               </router-link>
               <div v-if="d.status === 'pending' || d.status === 'rejected' || d.status === 'withdrawn'" class="row-ops">
-                <Button v-if="d.status === 'pending'" size="small" variant="outline" @click.stop="onWithdrawDemand(d)">撤回</Button>
+                <Button v-if="d.status === 'pending'" size="small" variant="outline" :loading="withdrawingId === d.id" @click.stop="onWithdrawDemand(d)">撤回</Button>
                 <Button v-if="d.status === 'rejected' || d.status === 'withdrawn'" size="small" theme="primary" variant="outline" @click.stop="onRevise(d)">修改重提</Button>
               </div>
             </article>

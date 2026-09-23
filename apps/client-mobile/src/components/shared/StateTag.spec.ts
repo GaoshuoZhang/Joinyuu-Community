@@ -14,6 +14,8 @@ describe('StateTag', () => {
     expect(mount(StateTag, { props: { kind: 'lease', value: 'expiring' } }).text()).toBe('即将到期')
     expect(mount(StateTag, { props: { kind: 'lease', value: 'expired' } }).text()).toBe('已到期')
     expect(mount(StateTag, { props: { kind: 'lease', value: 'terminated' } }).text()).toBe('已终止')
+    expect(mount(StateTag, { props: { kind: 'userMessage', value: 'pending' } }).text()).toBe('待回复')
+    expect(mount(StateTag, { props: { kind: 'userMessage', value: 'replied' } }).text()).toBe('已回复')
   })
 
   it('未知状态回退为原值', () => {
@@ -26,5 +28,10 @@ describe('IdentityTag', () => {
     expect(mount(IdentityTag, { props: { type: 'community_enterprise' } }).text()).toBe('社区企业')
     expect(mount(IdentityTag, { props: { type: 'external_enterprise' } }).text()).toBe('合作企业')
     expect(mount(IdentityTag, { props: { type: 'individual' } }).text()).toBe('个人用户')
+  })
+
+  it('社区官方（后台自建需求）优先展示工作人员角色名', () => {
+    expect(mount(IdentityTag, { props: { type: 'official', label: '运营' } }).text()).toBe('运营')
+    expect(mount(IdentityTag, { props: { type: 'official' } }).text()).toBe('社区官方')
   })
 })

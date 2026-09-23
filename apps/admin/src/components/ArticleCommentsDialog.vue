@@ -3,6 +3,7 @@ import { ref } from 'vue'
 import { DialogPlugin, MessagePlugin } from 'tdesign-vue-next'
 import ListEmptyState from '@/components/ListEmptyState.vue'
 import ListErrorState from '@/components/ListErrorState.vue'
+import StatusTag from '@/components/StatusTag.vue'
 import { fetchArticleComments, removeArticleComment, type ArticleCommentItem } from '@/api/contents'
 
 const emit = defineEmits<{ (e: 'success'): void }>()
@@ -73,9 +74,7 @@ defineExpose({ open })
 <template>
   <t-dialog v-model:visible="visible" :header="`评论治理 · ${articleTitle}`" width="720px" :footer="false">
     <div class="comments-toolbar">
-      <t-tag :theme="commentsEnabled ? 'success' : 'default'" variant="light">
-        {{ commentsEnabled ? '评论已开启' : '评论已关闭' }}
-      </t-tag>
+      <StatusTag entity="commentState" :value="commentsEnabled ? 'enabled' : 'disabled'" />
       <t-input v-model="reason" class="reason-input" clearable placeholder="删除原因（选填，填写后通知作者）…" />
     </div>
     <t-loading :loading="loading">

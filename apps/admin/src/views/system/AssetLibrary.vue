@@ -183,7 +183,8 @@ onMounted(load)
       </template>
     </PageHeader>
 
-    <p class="asset-summary">{{ filtered.length }} 个素材 · 共 {{ totalSize }}</p>
+    <!-- 计数为 0 时隐藏摘要：避免与下方空态「暂无素材」重复冗余 -->
+    <p v-if="filtered.length" class="asset-summary">{{ filtered.length }} 个素材 · 共 {{ totalSize }}</p>
 
     <div class="page-filter-bar">
       <t-select class="ctl-w-sm" v-model="activeSource" :options="sourceOptions" />

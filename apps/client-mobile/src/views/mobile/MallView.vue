@@ -14,7 +14,7 @@ import StateTag from '@/components/shared/StateTag.vue'
 import ListSkeleton from '@/components/ListSkeleton.vue'
 import type { Goods, PageResult } from '@/types'
 import { onImageError } from '@/utils/imageFallback'
-import { formatZhNumber } from '@/utils/format'
+import { formatZhNumber, plainTextSummary } from '@/utils/format'
 
 useAnimSuppress()
 
@@ -76,10 +76,14 @@ useRefreshOnActivate(() => {
 
 <template>
   <div class="m-mall page-fade-in">
-    <section v-if="auth.isLogged" class="points-bar">
-      <span>当前积分</span>
-      <strong class="tabular-nums">{{ formatZhNumber(auth.points) }}</strong>
-      <router-link class="points-rule" to="/mall/rules">积分规则<Icon aria-hidden="true" name="chevron-right" size="12px" /></router-link>
+    <section v-if="auth.isLogged" class="points-banner">
+      <div class="points-main">
+        <p class="points-label">当前积分</p>
+        <p class="points-value tabular-nums">{{ formatZhNumber(auth.points) }}</p>
+      </div>
+      <router-link class="points-rule" to="/mall/rules">
+        积分规则<Icon aria-hidden="true" name="chevron-right" size="14px" />
+      </router-link>
     </section>
 
     <div class="chips">
@@ -115,7 +119,7 @@ useRefreshOnActivate(() => {
           <h2 class="name">{{ g.name }}</h2>
           <span class="cost">{{ formatZhNumber(g.pointsCost) }} 积分</span>
         </div>
-        <p class="desc">{{ g.description }}</p>
+        <p class="desc">{{ plainTextSummary(g.description) }}</p>
         <p class="stock">
           <!-- v47：售罄（不可兑换）用 StateTag 的 goods 状态集标出；卡片主热区仍可点进详情查看说明 -->
           <template v-if="g.stock > 0">库存 {{ formatZhNumber(g.stock) }}</template>
@@ -141,30 +145,41 @@ useRefreshOnActivate(() => {
   padding-bottom:var(--app-space-1);
 }
 
-.points-bar {
-  align-self: flex-end;
+/* 积分横幅：品牌渐变通栏卡片（复用 --client-brand-gradient，与首页入口卡同源），
+ * 左侧「当前积分 + 大数字」为主视觉，右侧「积分规则」文字链；取代此前右上角孤立小胶囊 */
+.points-banner {
   display: flex;
   align-items: center;
-  gap:var(--app-space-4);
-  padding:var(--app-space-3) var(--app-space-7);
+  justify-content: space-between;
+  gap: var(--app-space-5);
+  padding: var(--app-space-6) var(--app-space-7);
   border-radius: var(--td-radius-large);
-  background: var(--td-brand-color-1);
-  font-size: var(--app-font-caption);
-  color: var(--td-text-color-secondary);
+  background: var(--client-brand-gradient);
+  color: var(--td-text-color-anti);
 }
 
-.points-bar strong {
-  color: var(--td-brand-color);
-  font-size: var(--app-font-subtitle);
+.points-label {
+  margin: 0;
+  font-size: var(--app-font-caption);
+  opacity: 0.85;
+}
+
+.points-value {
+  margin: var(--app-space-1) 0 0;
+  font-size: var(--app-font-title);
+  font-weight: 700;
+  line-height: 1.2;
 }
 
 .points-rule {
   display: inline-flex;
   align-items: center;
-  gap:var(--app-space-1);
+  gap: var(--app-space-1);
   min-height: 44px;
-  margin-left:var(--app-space-2);
-  color: var(--td-brand-color);
+  padding: 0 var(--app-space-2);
+  font-size: var(--app-font-caption);
+  color: var(--td-text-color-anti);
+  opacity: 0.92;
   text-decoration: none;
   cursor: pointer;
 }

@@ -4,6 +4,7 @@ import { DialogPlugin, MessagePlugin } from 'tdesign-vue-next'
 import { AddIcon, DeleteIcon } from 'tdesign-icons-vue-next'
 import ListErrorState from '@/components/ListErrorState.vue'
 import PageHeader from '@/components/PageHeader.vue'
+import { useListQueryState } from '@/utils/listQuery'
 import { fetchLevelTiers, saveLevelTiers } from '@/api/rules'
 import type { LevelTier, LevelTierScope } from '@/types'
 
@@ -79,6 +80,7 @@ async function changeScope(value: string | number) {
   }
   activeScope.value = next
   if (!tiers[next].length) await load(next)
+  syncQuery()
 }
 
 function addLevel() {
@@ -110,6 +112,11 @@ async function onSave() {
     saving.value = false
   }
 }
+
+/* 选项卡状态同步 URL（scope=community_enterprise）：刷新/回退不丢失当前身份 */
+const { syncQuery } = useListQueryState({}, () => {
+  if (!tiers[activeScope.value].length) void load()
+}, { refs: { activeScope } })
 
 onMounted(() => load())
 </script>
@@ -174,7 +181,7 @@ onMounted(() => load())
 .tier-head, .tier-row { display: grid; grid-template-columns: 90px minmax(160px, 1fr) minmax(180px, 220px) 48px; gap: 16px; align-items: center; }
 .tier-head { padding-bottom: 10px; border-bottom: 1px solid var(--td-component-border); font-size: 12px; font-weight: 500; }
 .tier-row { padding: 10px 0; border-bottom: 1px dashed var(--td-component-border); }
-/* 单元格包裹元素需可收缩，并让内部输入控件撑满（等价于原先把控件直接作为网格项） */
+/* 依赖 TDesign 内部类 .t-input / .t-input-number：单元格包裹元素下让内部输入控件撑满（控件默认固定宽），无对应公开 API；升级 TDesign 时复核类名 */
 .tier-cell { min-width: 0; }
 .tier-cell :deep(.t-input), .tier-cell :deep(.t-input-number) { width: 100%; }
 .tier-actions { padding-top: 16px; }

@@ -28,7 +28,10 @@ const emit = defineEmits<{
       <template v-if="myStatus === 'pending'">
         <p class="bar-line">审核结果将通过站内信通知</p>
         <Button v-if="!myCheckedIn && !cancelBlocked" theme="default" variant="outline" block :disabled="acting" @click="emit('cancel')">取消报名</Button>
-        <p v-else-if="!myCheckedIn" class="bar-hint">距活动开始不足 24 小时，如需取消请联系社区运营</p>
+        <p v-else-if="!myCheckedIn" class="bar-hint">
+          距活动开始不足 24 小时，如需取消<template v-if="loggedIn">可<router-link class="bar-link" to="/me/messages">给社区留言</router-link>协助处理</template>
+          <template v-else>请联系社区运营</template>
+        </p>
       </template>
 
       <template v-else-if="myStatus === 'approved'">
@@ -36,7 +39,10 @@ const emit = defineEmits<{
         <p v-else class="bar-line">记得准时参加</p>
         <Button v-if="!myCheckedIn" theme="primary" block :disabled="acting" @click="emit('checkIn')">签到</Button>
         <Button v-if="!cancelBlocked" theme="default" variant="outline" block :disabled="acting" @click="emit('cancel')">取消报名</Button>
-        <p v-else class="bar-hint">距活动开始不足 24 小时，如需取消请联系社区运营</p>
+        <p v-else class="bar-hint">
+          距活动开始不足 24 小时，如需取消<template v-if="loggedIn">可<router-link class="bar-link" to="/me/messages">给社区留言</router-link>协助处理</template>
+          <template v-else>请联系社区运营</template>
+        </p>
       </template>
 
       <template v-else-if="myStatus === 'waitlisted'">
@@ -92,6 +98,11 @@ const emit = defineEmits<{
   font-size: var(--app-font-caption);
   color: var(--td-text-color-placeholder);
   line-height: 1.6;
+}
+
+/* 留言入口：文字链形态，内联在提示文案中 */
+.bar-link {
+  color: var(--td-brand-color);
 }
 
 .bar-reason {

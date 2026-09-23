@@ -61,7 +61,7 @@ function onCancel() {
       </div>
     </template>
 
-    <p class="dialog-tip">为「{{ article?.title }}」设定定时发布时间，到点自动发布上架。留空则取消本次操作。</p>
+    <p class="dialog-tip">为「{{ article?.title }}」设定定时发布时间，到点自动发布上架。</p>
     <t-form
       ref="formRef"
       :data="{ scheduledAt }"
@@ -74,7 +74,7 @@ function onCancel() {
           valueType="YYYY-MM-DD HH:mm"
           enable-time-picker
           placeholder="到点自动发布…"
-          style="width: 100%"
+          class="ctl-w-full"
         />
       </t-form-item>
     </t-form>

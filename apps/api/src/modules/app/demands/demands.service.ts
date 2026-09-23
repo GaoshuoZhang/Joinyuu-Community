@@ -86,7 +86,7 @@ export class AppDemandsService {
       }),
     ])
     const counts = await this.responseCounts(rows.map((d) => d.id))
-    return { list: await this.toListItems(rows, counts, !!uid), total }
+    return { list: await this.toListItems(rows, counts), total }
   }
 
   /** 需求详情（不可见 → 404，不暴露存在性） */
@@ -122,7 +122,7 @@ export class AppDemandsService {
       if (mine) myResponse = mine
     }
 
-    const [item] = await this.toListItems([demand], new Map([[demand.id, count]]), !!uid)
+    const [item] = await this.toListItems([demand], new Map([[demand.id, count]]))
     return {
       ...item,
       description: demand.description,
@@ -189,7 +189,7 @@ export class AppDemandsService {
     if (status) where.status = status
     const rows = await this.prisma.demand.findMany({ where, orderBy: { createdAt: 'desc' } })
     const counts = await this.responseCounts(rows.map((d) => d.id))
-    const items = await this.toListItems(rows, counts, true)
+    const items = await this.toListItems(rows, counts)
     return items.map((item, index) => {
       const d = rows[index]
       return {
@@ -718,7 +718,7 @@ export class AppDemandsService {
   }
 
   /** 需求库保存字典 code；对 App 契约统一下发人可读标签，并兼容历史直接保存标签的数据。 */
-  private async toListItems(demands: Demand[], counts: Map<string, number>, withContact: boolean) {
+  private async toListItems(demands: Demand[], counts: Map<string, number>) {
     const codes = [...new Set(demands.map((d) => d.category).filter(Boolean))]
     const entries = codes.length
       ? await this.prisma.dictEntry.findMany({
@@ -727,11 +727,12 @@ export class AppDemandsService {
         })
       : []
     const labels = new Map(entries.map((entry) => [entry.code, entry.label]))
-    return demands.map((demand) => this.toListItem(demand, counts.get(demand.id) ?? 0, withContact, labels))
+    return demands.map((demand) => this.toListItem(demand, counts.get(demand.id) ?? 0, labels))
   }
 
-  /** 列表/详情条目（联系人仅登录用户可见） */
-  private toListItem(demand: Demand, responseCount: number, withContact: boolean, categoryLabels = new Map<string, string>()) {
+  /** 列表/详情条目：联系人仅在需求开启「公开联系人」时下发（含未登录游客），否则一律不下发 */
+  private toListItem(demand: Demand, responseCount: number, categoryLabels = new Map<string, string>()) {
+    const officialLabel = this.officialIdentityLabel(demand.publisherIdentity)
     return {
       id: demand.id,
       title: demand.title,
@@ -742,8 +743,9 @@ export class AppDemandsService {
       publisherUid: demand.publisherId,
       publisherName: demand.publisherName,
       publisherIdentity: this.identityType(demand.publisherIdentity),
+      ...(officialLabel ? { publisherIdentityLabel: officialLabel } : {}),
       responseCount,
-      ...(withContact
+      ...(demand.contactPublic
         ? {
             contactName: demand.contactName ?? undefined,
             contactPhone: demand.contactPhone ?? undefined,
@@ -765,6 +767,15 @@ export class AppDemandsService {
     if (!json || typeof json !== 'object') return 'individual'
     const v = json as Record<string, unknown>
     return typeof v.type === 'string' ? v.type : 'individual'
+  }
+
+  /** 社区自建需求（type=official）的角色名标签；其余身份返回 undefined 由客户端按 type 映射文案 */
+  private officialIdentityLabel(json: Prisma.JsonValue | null | undefined): string | undefined {
+    if (!json || typeof json !== 'object') return undefined
+    const v = json as Record<string, unknown>
+    if (v.type !== 'official') return undefined
+    const title = typeof v.title === 'string' ? v.title.trim() : ''
+    return title || '社区官方'
   }
 
   /** 持有社区个体身份时默认社区个体，否则 individual */

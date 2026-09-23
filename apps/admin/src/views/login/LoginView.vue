@@ -312,7 +312,8 @@ const showDemoAccount = import.meta.env.DEV || import.meta.env.VITE_SHOW_DEMO_AC
   cursor: pointer;
 }
 
-/* 品牌区装饰岛：在全局 .island 基类（tokens.css）上做定位/尺寸/透明度变体 */
+/* 品牌区装饰岛：在全局 .island 基类（tokens.css）上做定位/尺寸/透明度变体。
+ * 色值豁免：品牌资产装饰色（与 tokens.css 登录品牌区渐变同口径，刻意不随主题切换） */
 .island-1 { width: 120px; height: 120px; right: 18%; top: 12%; }
 .island-2 { width: 56px; height: 56px; right: 8%; top: 40%; background: rgba(255, 255, 255, 0.14); }
 .island-3 { width: 200px; height: 200px; left: -60px; bottom: 10%; background: rgba(123, 216, 245, 0.12); }

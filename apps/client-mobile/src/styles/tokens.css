@@ -55,6 +55,9 @@
    * -lg 用于说明文案可能折行成两行的栏（活动报名等）。 */
   --app-action-bar-clearance: calc(112px + env(safe-area-inset-bottom));
   --app-action-bar-clearance-lg: calc(170px + env(safe-area-inset-bottom));
+  /* 单按钮吸底栏（.mobile-fixed-action-bar 内仅一个 44px 按钮、无说明行）的净空：
+   * 栏内上内距 12 + 按钮 44 + 栏内下内距 8 = 64，其余为呼吸空间（沿用发布 Hub 既有 88px 口径）。 */
+  --app-action-bar-clearance-sm: calc(88px + env(safe-area-inset-bottom));
 
   /* 列表页浮动发布按钮（Fab）：直径 56px，浮在底部导航栏之上（Tab 页专用） */
   --app-fab-size: 56px;

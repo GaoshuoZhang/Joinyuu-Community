@@ -123,7 +123,9 @@ function onRealNameSubmit({ validateResult }: { validateResult: unknown }) {
             <Input v-model="form.realName" :maxlength="20" placeholder="请输入与证件一致的姓名…" clearable />
           </FormItem>
           <FormItem label="身份证号" name="citizenId">
-            <Input v-model="form.citizenId" inputmode="numeric" :maxlength="18" placeholder="请输入 18 位身份证号…" clearable />
+            <!-- 校验口径允许末位 X/x（/^\d{17}[\dXx]$/），inputmode="numeric" 唤起纯数字键盘会阻塞该类用户，
+                 故用默认文本键盘（数字区优先由系统决定），placeholder 说明末位字母直接输入 -->
+            <Input v-model="form.citizenId" type="text" :maxlength="18" placeholder="请输入 18 位身份证号，末位 X 直接输入字母…" clearable />
           </FormItem>
           <Button class="mobile-sticky-action" theme="primary" size="large" block type="submit" :disabled="!canSubmit" :loading="submitting">
             {{ submitting ? '提交中…' : (isVerifiedMode ? '提交认证' : '提交登记') }}

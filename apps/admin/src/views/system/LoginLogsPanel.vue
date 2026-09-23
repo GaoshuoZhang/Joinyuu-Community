@@ -5,8 +5,6 @@ import ListEmptyState from '@/components/ListEmptyState.vue'
 import StatusTag from '@/components/StatusTag.vue'
 import { useListQueryState } from '@/utils/listQuery'
 import { SearchIcon } from 'tdesign-icons-vue-next'
-import { MessagePlugin } from 'tdesign-vue-next'
-import PageHeader from '@/components/PageHeader.vue'
 import { fetchLoginLogs, type LoginLog } from '@/api/login-logs'
 import type { TdDateRangePickerProps } from 'tdesign-vue-next'
 
@@ -70,8 +68,8 @@ async function load() {
     }
   } catch (e) {
     if (current === version) {
+      /* 错误经 ListErrorState 组件呈现，不再重复弹 toast */
       loadError.value = e instanceof Error ? e.message : '数据加载失败'
-      MessagePlugin.error(e instanceof Error ? e.message : '数据加载失败')
     }
   } finally {
     if (current === version) loading.value = false
@@ -117,7 +115,6 @@ onMounted(load)
   <!-- 内嵌于「日志与审计」聚合壳：入场动画由壳层统一承担，避免双层重播 -->
   <div class="login-logs-panel">
     <ListErrorState v-if="loadError" :message="loadError" :loading="loading" @retry="load" />
-    <PageHeader title="登录日志" description="管理员登录成功与失败记录，用于安全审计与异常排查" />
 
     <div class="page-filter-bar">
       <t-input class="ctl-w-xl"
@@ -141,35 +138,37 @@ onMounted(load)
       <t-button variant="outline" @click="onReset">重置</t-button>
     </div>
 
-    <t-table
-      row-key="id"
-      table-layout="fixed"
-      hover
-      resizable
-      :data="list"
-      :columns="columns"
-      :loading="loading"
-      :pagination="pagination"
-      @page-change="onPageChange"
-    >
-      <template #user="{ row }">
-        <div class="cell-user">
-          <span class="user-name">{{ row.name }}</span>
-          <span class="user-sub">{{ row.username }}</span>
-        </div>
-      </template>
-      <template #status="{ row }">
-        <StatusTag entity="loginLog" :value="row.status" />
-      </template>
-      <template #failedReason="{ row }">
-        <span v-if="row.failedReason" class="fail-reason">{{ row.failedReason }}</span>
-        <span v-else class="muted">—</span>
-      </template>
+    <div class="page-card">
+      <t-table
+        row-key="id"
+        table-layout="fixed"
+        hover
+        resizable
+        :data="list"
+        :columns="columns"
+        :loading="loading"
+        :pagination="pagination"
+        @page-change="onPageChange"
+      >
+        <template #user="{ row }">
+          <div class="cell-user">
+            <span class="user-name">{{ row.name }}</span>
+            <span class="user-sub">{{ row.username }}</span>
+          </div>
+        </template>
+        <template #status="{ row }">
+          <StatusTag entity="loginLog" :value="row.status" />
+        </template>
+        <template #failedReason="{ row }">
+          <span v-if="row.failedReason" class="fail-reason">{{ row.failedReason }}</span>
+          <span v-else class="muted">—</span>
+        </template>
 
-      <template #empty>
-        <ListEmptyState :query="filterState" description="暂无登录日志" @clear="onReset" />
-      </template>
-    </t-table>
+        <template #empty>
+          <ListEmptyState :query="filterState" description="暂无登录日志" @clear="onReset" />
+        </template>
+      </t-table>
+    </div>
   </div>
 </template>
 

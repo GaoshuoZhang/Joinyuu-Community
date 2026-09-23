@@ -118,6 +118,11 @@ const DOMAIN_DEFS: Record<string, DomainDef> = {
       { value: 'rejected', label: '已驳回' },
     ],
   },
+  userMessage: {
+    label: '用户留言',
+    autoArchive: true,
+    archiveStatuses: [{ value: 'replied', label: '已回复' }],
+  },
 }
 
 const DOMAIN_ORDER = Object.keys(DOMAIN_DEFS)
@@ -433,6 +438,13 @@ export class TrashService {
         })
         return r.count
       }
+      case 'userMessage': {
+        const r = await db.userMessage.updateMany({
+          where: { ...base, status: { in: enabled } },
+          data: { deletedAt: now, deletedBy: ARCHIVE_OPERATOR },
+        })
+        return r.count
+      }
       default:
         return 0
     }
@@ -710,6 +722,37 @@ export class TrashService {
             },
           }),
         ...soft(db.application),
+      },
+      userMessage: {
+        label: DOMAIN_DEFS.userMessage.label,
+        titleOf: (r) => String(r.title),
+        /* 留言人展示名需回填（UserMessage 只存 userId），口径同后台「用户留言」列表：真实姓名优先，其次昵称 */
+        listDeleted: async () => {
+          const rows = await db.userMessage.findMany({
+            where: deletedWhere,
+            orderBy: { deletedAt: 'desc' },
+            select: {
+              id: true,
+              userId: true,
+              title: true,
+              status: true,
+              createdAt: true,
+              repliedAt: true,
+              deletedAt: true,
+              deletedBy: true,
+            },
+          })
+          const uids = [...new Set(rows.map((r) => r.userId))]
+          const users = uids.length
+            ? await db.user.findMany({
+                where: { uid: { in: uids } },
+                select: { uid: true, nickname: true, realName: true },
+              })
+            : []
+          const nameByUid = new Map(users.map((u) => [u.uid, u.realName || u.nickname]))
+          return rows.map((r) => ({ ...r, userName: nameByUid.get(r.userId) ?? '—' }))
+        },
+        ...soft(db.userMessage),
       },
     }
   }

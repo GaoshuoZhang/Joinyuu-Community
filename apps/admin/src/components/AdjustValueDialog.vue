@@ -87,7 +87,7 @@ function onClose() {
         </t-radio-group>
       </t-form-item>
       <t-form-item label="数量" name="amount">
-        <t-input-number v-model="form.amount" :min="1" :step="1" :decimal-places="0" theme="column" style="width: 100%" />
+        <t-input-number v-model="form.amount" :min="1" :step="1" :decimal-places="0" theme="column" class="ctl-w-full" />
       </t-form-item>
       <t-form-item label="调整事由" name="reason">
         <t-textarea

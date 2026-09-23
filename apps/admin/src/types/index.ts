@@ -11,6 +11,8 @@ export type IdentityType =
   | 'external_enterprise'
   | 'external_individual'
   | 'external_company'
+  /** 社区官方：后台自建需求的提交人身份（title 为工作人员角色名） */
+  | 'official'
 
 export interface UserIdentity {
   type: IdentityType
@@ -184,16 +186,14 @@ export interface Demand {
   publisherName: string
   /** 提交时所选身份快照（企业/未注册提交人无身份快照） */
   publisherIdentity: UserIdentity | null
-  /** 创建人（后台代创建时记录操作管理员名；与需求方可能不同） */
-  creatorName?: string | null
-  /** 创建人 ID（创建人为系统用户时记录其 UID；管理员代建时为空，不展示标签/跳转） */
-  creatorId?: string | null
   /** 联系人姓名（企业提交=企业联系人 / 个人提交=个人真实姓名 / 自定义手填；新增/编辑表单必填） */
   contactName?: string
   /** 提交人联系电话（新增/编辑表单必填；历史数据可能缺省） */
   contactPhone?: string
   /** 提交人联系邮箱（选填） */
   contactEmail?: string
+  /** 公开联系人：开启后客户端（含未登录游客）可见联系人姓名/电话/邮箱；默认关闭 */
+  contactPublic: boolean
   budget: string
   /** 项目周期，如「4 周」 */
   period: string

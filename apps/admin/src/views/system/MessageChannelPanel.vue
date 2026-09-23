@@ -385,13 +385,11 @@ function credentialStatus(row: MessageChannel): 'configured' | 'missing' | 'none
 
 <template>
   <div class="channel-panel">
-    <!-- 本面板只作为「消息中心」的选项卡内容渲染（无独立路由），故用可见说明行替代会被嵌入态隐藏的 PageHeader -->
-    <p class="panel-hint">短信 / 邮箱 / 站内信通道；凭据支持直接填写（只写脱敏）与环境变量注入</p>
-
     <ListErrorState v-if="loadError" :message="loadError" :loading="loading" @retry="load" />
 
-    <!-- 新增入口只保留在分组标题上（按类型定向新增），避免与顶部通用入口重复 -->
-    <section v-for="(group, index) in KIND_GROUPS" :key="group.kind" class="kind-section" :class="{ 'is-first': index === 0 }">
+    <!-- 新增入口只保留在分组标题上（按类型定向新增），避免与顶部通用入口重复；
+         分组卡片由面板自带（聚合壳不再包 page-card） -->
+    <section v-for="(group, index) in KIND_GROUPS" :key="group.kind" class="kind-section page-card" :class="{ 'is-first': index === 0 }">
       <div class="kind-head">
         <div class="kind-title-row">
           <span class="kind-title">{{ group.label }}配置</span>
@@ -575,14 +573,6 @@ function credentialStatus(row: MessageChannel): 'configured' | 'missing' | 'none
 </template>
 
 <style scoped>
-/* 选项卡内容顶部说明行：替代嵌入态下会被隐藏的 PageHeader 说明 */
-.panel-hint {
-  margin: 0 0 12px;
-  font-size: 12px;
-  line-height: 20px;
-  color: var(--td-text-color-secondary);
-}
-
 .section-title {
   margin: 8px 0 16px;
   font-size: 14px;
@@ -616,16 +606,9 @@ function credentialStatus(row: MessageChannel): 'configured' | 'missing' | 'none
   white-space: pre-line;
 }
 
-/* 三类通道分组：表格直接落在聚合壳卡片内，用分隔线而非嵌套卡片区分分组 */
+/* 分组改为独立卡片（page-card）：去掉原分隔线，卡片间距统一 16px */
 .kind-section {
-  padding-top: 16px;
   margin-bottom: 16px;
-  border-top: 1px solid var(--td-component-stroke);
-}
-
-.kind-section.is-first {
-  padding-top: 0;
-  border-top: none;
 }
 
 .kind-head {

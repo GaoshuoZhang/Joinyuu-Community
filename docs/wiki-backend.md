@@ -50,8 +50,8 @@
 ```
 apps/api/
   prisma/
-    schema.prisma        # 全量实体建模（68 模型，见 entity-fields.md）
-    migrations/          # prisma migrate 产出（59 个迁移）
+    schema.prisma        # 全量实体建模（69 模型，见 entity-fields.md）
+    migrations/          # prisma migrate 产出（63 个迁移）
     seed.ts              # 演示种子（见第 11 节）
     seed-data/           # 各域种子数据（seed 唯一数据源；api tsconfig exclude）
   src/
@@ -193,13 +193,13 @@ TZ=Asia/Shanghai
 - **派生值不落列**（M0 明确口径）：用户实名状态（realName+citizenId 均填）、用户 stats（详情接口实时 COUNT）、租约 expiring/expired（读取派生）、"个人用户"筛选（仅持 individual 身份）、工作台趋势（按日聚合）。
 - 金额/积分为整数（分或元按 M0 现状：租金/预算为元字符串或整数、积分为整数）；枚举一律 String + 应用层枚举校验（保持与前端字符串契约一致，不用 PG enum，降低迁移摩擦）。
 
-### 5.2 核心表摘要（完整 68 模型见 `entity-fields.md`）
+### 5.2 核心表摘要（完整 69 模型见 `entity-fields.md`）
 
 | 分组 | Prisma 模型 | 主键前缀 | 要点 |
 |---|---|---|---|
 | 认证 | AdminUser | 自增 | username 唯一、passwordHash（bcryptjs）、name（展示名）、status(active/disabled)、lastLoginAt?；种子 4 账号 admin/operator/auditor/space-ops（初始密码 admin123） |
 | 认证 | AdminRole | R1~R4 | code 唯一、name/description/sort/createdAt；内置 super/operator/auditor/space-ops 四角色 |
-| 认证 | AdminPermission | code（PK） | RBAC 权限点目录（当前 55 码）：菜单路径或 `perm:xxx` 按钮码 + name/module/authType(menu/button)/sort |
+| 认证 | AdminPermission | code（PK） | RBAC 权限点目录（当前 56 码）：菜单路径或 `perm:xxx` 按钮码 + name/module/authType(menu/button)/sort |
 | 认证 | AdminUserRole | 自增 | 管理员-角色关联，唯一 (adminUserId, roleId) |
 | 认证 | AdminRolePermission | 自增 | 角色-权限点关联，唯一 (roleId, permissionCode)；角色变更即时失效权限缓存 |
 | 认证 | LoginLog | LL | loginAt/username/ip/device/status(success/fail/locked)/failReason?；登录成功/失败/锁定均写 |
@@ -211,7 +211,7 @@ TZ=Asia/Shanghai
 | 成员 | Enterprise | E | industry/size/foundedAt/settledAt/leaseType/status(active/pending/exited/disabled)/experience?/**contactUserId?（关联个人用户，社区企业必须关联）**/contactTitle/contact*/description/tags/**deletedAt?/deletedBy?**；M1.5 删除=软删归档（存在进行中租约时 409），可在归档管理恢复/彻底删除；不支持自动归档 |
 | 成员 | ExternalEnterpriseProfile | XE | 合作企业档案（name/industry/status(active/disabled)/size/foundedAt/description/registeredAt（登记日期）/**deletedAt?/deletedBy?**）；**ExternalEnterprise 聚合视图 = 档案 + identities(type=external_enterprise 且 enterpriseName 匹配) 派生成员，不建独立表**；删除=软删归档；不支持自动归档 |
 | 审核 | Application | AP | type(**settle/individual/cooperation/exit 四类**)/applicantName/applicantPhone/targetName/submittedAt/status/summary/details Json/records Json/**deletedAt?/deletedBy?/archivableAt?**；通过时授予身份（见 8.6） |
-| 需求 | Demand | D | 状态机字段 + publisherId/publisherName/publisherIdentity(Json)/contactName?/contactPhone?/contactEmail?/budget/period/deadline/scheduledAt?/publishedAt?/visibilityIdentities[]/visibilityLevels[]/enrollmentIdentities[]/enrollmentLevels[]/respondPoints?/rejectedReason?/projectId?/tags[]/**creatorName?/creatorId?（创建人展示名 / 用户 ID，用户记录聚合按 creatorId∪publisherId）**/**deletedAt?/deletedBy?/archivableAt?** |
+| 需求 | Demand | D | 状态机字段 + publisherId/publisherName/publisherIdentity(Json)/contactName?/contactPhone?/contactEmail?/budget/period/deadline/scheduledAt?/publishedAt?/visibilityIdentities[]/visibilityLevels[]/enrollmentIdentities[]/enrollmentLevels[]/respondPoints?/rejectedReason?/projectId?/tags[]/**deletedAt?/deletedBy?/archivableAt?** |
 | 需求 | DemandRespondent | 自增 | demandId FK + name/enterprise/phone?/email?/quote?/message/at/status(pending/contacted/closed) |
 | 项目 | Project | P | code（JY-YYYY-NN）/status(running/paused/closed/finished)/progress/startDate/endDate/initiatedAt/description/memberCount/sourceDemandId?/expReward?/closeReason?/**demanderId?/demanderName?/demanderIdentity Json?（需求方主体/名称/身份快照）/creatorName?/creatorId?（创建人）/contactName?/contactPhone?/contactEmail?（联系方式）/contractPrice?（合同价格）**/**deletedAt?/deletedBy?/archivableAt?** |
 | 项目 | ProjectUndertaker | 自增 | projectId FK + type(enterprise/individual/custom)/refId(企业或用户 ID)/name(展示快照)/share/contactName?/phone?；合计=100 应用层校验 |
@@ -265,9 +265,9 @@ TZ=Asia/Shanghai
 
 ### 6.2 RBAC 权限模型（M1.5 R1/R2）
 
-- **权限码 = 菜单路径或 `perm:xxx` 按钮码**，当前共 **55 码**（种子 `permissionCatalog` 为唯一目录），`*` 为超级管理员全量标记；`@RequirePermission(code | code[])` 支持 any-of 语义；`PermissionGuard` 叠加在 `JwtAuthGuard` 之后，权限集合命中任一所需码或含 `*` 放行，否则 403「无权限执行该操作」；未声明 `@RequirePermission` 的端点仅需登录。
+- **权限码 = 菜单路径或 `perm:xxx` 按钮码**，当前共 **56 码**（种子 `permissionCatalog` 为唯一目录），`*` 为超级管理员全量标记；`@RequirePermission(code | code[])` 支持 any-of 语义；`PermissionGuard` 叠加在 `JwtAuthGuard` 之后，权限集合命中任一所需码或含 `*` 放行，否则 403「无权限执行该操作」；未声明 `@RequirePermission` 的端点仅需登录。
 - **覆盖范围**：36 个 controller 中，34 个属于 admin；其中 33 个挂 `@RequirePermission`，`notifications` 有意仅登录。`health` 与 `files`（公开文件读取）为公开 controller。无声明 controller 内的个别端点（如 `GET /enterprises/options`、`GET /users/options`）仅需登录。
-- **权限目录（按模块）**：工作台 `/dashboard`；社区成员 `/users`、`/individuals`、`/enterprises`、`/external-enterprises`、`/approvals` + 企业按钮码 `perm:enterprise:create|update|disable|enable|delete`、`perm:external-enterprise:create|update|disable|enable|delete`；业务运营 `/demands`、`/demands/review`、`/projects`、`/events`；空间管理 `/workstations`、`/workstations/offices`、`/workstations/leases`、`/spaces`、`/spaces/reservations`；内容管理 `/contents/publish`、`/contents/submissions`、`/contents/columns`、`/contents/stats`、`/contents/policies`、`/contents/banners`、`/contents/announcements`；积分商城 `/mall/goods`、`/mall/orders`；规则管理 `/rules/points`、`/rules/experience`、`/rules/levels`、`/rules/publishing-limits`、`/rules/ledger`、`/rules/experience-records`；系统管理 `/system/dicts`、`/system/config`、`/system/policies`、`/logs/audit`、`/system/roles`、`/system/admins`、`/system/sessions`、`/system/assets`、`/system/monitor`、`/logs/login`、`/system/trash`、`/system/export`、`/governance`、`/card-management`、`/member-governance`（服务申请 `/engagement/services` 已随功能下线移除）。
+- **权限目录（按模块）**：工作台 `/dashboard`、`/user-messages`；社区成员 `/users`、`/individuals`、`/enterprises`、`/external-enterprises`、`/approvals` + 企业按钮码 `perm:enterprise:create|update|disable|enable|delete`、`perm:external-enterprise:create|update|disable|enable|delete`；业务运营 `/demands`、`/demands/review`、`/projects`、`/events`；空间管理 `/workstations`、`/workstations/offices`、`/workstations/leases`、`/spaces`、`/spaces/reservations`；内容管理 `/contents/publish`、`/contents/submissions`、`/contents/columns`、`/contents/stats`、`/contents/policies`、`/contents/banners`、`/contents/announcements`；积分商城 `/mall/goods`、`/mall/orders`；规则管理 `/rules/points`、`/rules/experience`、`/rules/levels`、`/rules/publishing-limits`、`/rules/ledger`、`/rules/experience-records`；系统管理 `/system/dicts`、`/system/config`、`/system/policies`、`/logs/audit`、`/system/roles`、`/system/admins`、`/system/sessions`、`/system/assets`、`/system/monitor`、`/logs/login`、`/system/trash`、`/system/export`、`/governance`、`/card-management`、`/member-governance`（服务申请 `/engagement/services` 已随功能下线移除）。
 - **内置角色**（`AdminRole` + `AdminRolePermission`）：`super`（`*` 全量）、`operator`（业务运营+内容+商城）、`auditor`（审核类）、`space-ops`（空间域）；角色权限保存即时失效关联管理员的权限缓存（`auth:admin:perms:<username>`，TTL 2h）。
 - **权限点目录接口**：`GET /api/admin/permissions/catalog` 按模块分组返回，供角色勾选矩阵渲染。
 - 数据范围已按 7 个业务域实现：`AdminRole.dataScope` + `DomainScopeGuard` 对 URL 域做允许/拒绝；当前仍无行级、组织级、所有者级或租户级过滤。
@@ -358,8 +358,8 @@ TZ=Asia/Shanghai
 |---|---|---|
 | GET | /api/admin/demands | query：page/pageSize/keyword(标题/ID)/category/status/publisherId/enterprise(社区企业按 enterpriseId、合作企业按档案名)/sortBy(createdAt 默认、publishedAt 空值排最后、id)/sortOrder；默认过滤已归档 |
 | GET | /api/admin/demands/:id | 详情含 respondents |
-| POST | /api/admin/demands | DemandCreatePayload（publisherType: individual/enterprise/custom + publisherId + 表单字段）；**创建即 pending_release**，creatorName=登录管理员；publisherIdentity 快照按 8.7 解析；预算未填自动"面议" |
-| PUT | /api/admin/demands/:id | 编辑（pending_release/published 可用，不改状态） |
+| POST | /api/admin/demands | DemandCreatePayload（表单字段，含 `contactPublic` 公开联系人开关）；**创建即 pending_release**；**提交人由服务端取当前登录工作人员（publisherId=账号名、publisherName=姓名、publisherIdentity=`{type:'official',title:角色名}`），不接受前端传入**；预算未填自动"面议" |
+| PUT | /api/admin/demands/:id | 编辑（pending_release/published 可用，不改状态）；可改 `contactPublic` |
 | POST | /api/admin/demands/:id/approve | pending → pending_release |
 | POST | /api/admin/demands/:id/reject | `{ reason }` 必填 → rejected + archivableAt |
 | POST | /api/admin/demands/:id/publish-now | pending_release → published（写 publishedAt） |
@@ -599,7 +599,17 @@ TZ=Asia/Shanghai
 
 **邮件（SMTP）配置说明**：`from` 单字段已拆分为 `fromAddress`（发件人邮箱地址，必填）+ `fromName`（显示名，选填）；旧版 `from`（如 `聚屿社区 <no-reply@example.com>`）仍兼容读取，管理端编辑时会自动拆分。驱动发送前做「发件人 = SMTP 认证用户名」一致性预检，不一致以 `warnings[]` 回显（不阻断发送），并在 553/535/网络类错误信息中追加中文排障建议（授权码、端口放行等）。目录中 SMTP 的凭据项带 `credentialConfigFields` 说明（授权码提示）。
 
-**端点总计：265**（`/api/admin/**` 路由装饰器；`/api/app/**` 124 个另计，`GET /api/health`、`GET /api/public/files/:key` 两个 `@Public` 端点未计入）。
+### 7.18 用户留言 user-messages（3）
+
+| 方法 | 路径 | 说明 |
+|---|---|---|
+| GET | /api/admin/user-messages | 分页列表 + `status`（pending 待回复/replied 已回复）+ `keyword`（主题/内容/用户 UID）+ `sortBy=createdAt`/`sortOrder=ascend\|descend` 筛选排序；**默认待回复置顶**，显式传 `sortBy=createdAt` 时改为纯按提交时间排序；自动排除已归档；回填留言人展示名（真实姓名优先，其次昵称）与手机号；权限 `/user-messages`（超管 + 运营） |
+| POST | /api/admin/user-messages/:id/reply | `{ content }`（2-1000 字，纯文本 sanitize）→ `pending` 条件更新为 `replied`（幂等守卫，重复回复 409）并写入 `repliedBy`（当前登录工作人员姓名）与 `archivableAt`；成功后向留言人推送站内信（type=system，link=`/me/messages`） |
+| POST | /api/admin/user-messages/:id/archive | 归档留言（仅 `replied`，否则 409）→ 写入 `deletedAt`/`deletedBy`，从列表与客户端「我的留言」消失，可在「归档管理 > 用户留言」恢复；审计「用户留言 · 归档留言」 |
+
+**客户端侧**：`POST/GET /api/app/me/messages`（登录用户提交留言 / 查看自己的留言与后台回复，已归档不下发），见 `api-app-design.md` §8.1。
+
+**端点总计：268**（`/api/admin/**` 路由装饰器；`/api/app/**` 126 个另计，`GET /api/health`、`GET /api/public/files/:key` 两个 `@Public` 端点未计入）。
 
 ## 8. 业务规则服务端化
 
@@ -687,11 +697,11 @@ TZ=Asia/Shanghai
 ### 8.10 归档体系（M1.5 R12，归档管理）
 
 - **软删除语义**：归档 = 对 `deletedAt/deletedBy` 赋值（各域归档端点与自动归档任务写入），记录从业务列表消失但保留在归档管理页；`deletedAt` 为"已归档标记"，`archivableAt` 为"可归档计时起点"（见 §5.1）。
-- **13 个标签页**（与 `TrashService` DOMAIN_DEFS、Seed 13 条 ArchiveSetting、前端归档管理一致）：社区企业 / 合作企业 / 资讯发布 / 投稿内容 / 公告栏 / 需求 / 项目 / 活动 / 租赁 / 空间预约 / 商品 / 商城订单 / 申请审核。共享 Article 模型的资讯与投稿按 `channel` 拆分两个标签页。
-- **可归档状态**：资讯=待发布；投稿=待发布/已驳回；公告=已下架；需求=已驳回/已关闭/已立项；项目=已结项/已关闭；活动=已结束/已取消；租赁=已终止；空间预约=已结束/已驳回/已取消；商品=已下架；商城订单=已完成；申请=已通过/已驳回。企业/合作企业为直接归档（删除入口），**不支持自动归档**。
+- **14 个标签页**（与 `TrashService` DOMAIN_DEFS、Seed 14 条 ArchiveSetting、前端归档管理一致）：社区企业 / 合作企业 / 资讯发布 / 投稿内容 / 公告栏 / 需求 / 项目 / 活动 / 租赁 / 空间预约 / 商品 / 商城订单 / 申请审核 / 用户留言。共享 Article 模型的资讯与投稿按 `channel` 拆分两个标签页。
+- **可归档状态**：资讯=待发布；投稿=待发布/已驳回；公告=已下架；需求=已驳回/已关闭/已立项；项目=已结项/已关闭；活动=已结束/已取消；租赁=已终止；空间预约=已结束/已驳回/已取消；商品=已下架；商城订单=已完成；申请=已通过/已驳回；用户留言=已回复。企业/合作企业为直接归档（删除入口），**不支持自动归档**。
 - **归档管理端点**：`GET /trash`（跨域列表，domain 标签页 + keyword）、`GET/PUT /trash/settings(/:domain)`（每标签页独立配置）、`POST /trash/:domain/:id/restore`（恢复，限定 deletedAt 非空）、`POST /trash/:domain/:id/purge`（物理删除 + 审计；外键冲突 409）。
 - **自动归档/自动删除**：设置项 `autoArchive` + `archiveDelayDays`（0-365）、`autoPurge` + `purgeDelayDays`（1-3650）、`archiveStatuses`（按状态开关）；由调度任务每 5 分钟执行；purge 外键冲突时跳过等待人工处理。
-- **用户历史域彻底删除三重确认**：前端对用户历史域（企业/合作企业/申请/需求/项目/活动/租赁/空间预约/商品/商城订单等用户历史相关标签页）的彻底删除或开启自动删除需三重确认（两次确认 + 输入「永久删除」）；后端 `purge` 仍以 409/404 兜底。
+- **用户历史域彻底删除三重确认**：前端对用户历史域（申请/需求/项目/活动/租赁/空间预约/商品/商城订单/投稿/用户留言等用户历史相关标签页）的彻底删除或开启自动删除需三重确认（两次确认 + 输入「永久删除」）；后端 `purge` 仍以 409/404 兜底。
 - 归档操作留痕：module=「归档管理」，action=恢复对象/彻底删除对象/更新归档设置。
 
 ### 8.11 素材上传与公开读取（M1.5 R4）

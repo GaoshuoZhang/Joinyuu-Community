@@ -64,11 +64,12 @@ onMounted(load)
 </script>
 
 <template>
+  <!-- 筛选栏置于卡片外（契约：筛选栏不进入 .page-card） -->
+  <div class="page-filter-bar">
+    <t-select v-model="status" :options="options" label="状态" class="ctl-w-md" @change="page = 1; load()" />
+    <ColumnController v-model="visibleKeys" storage-key="member-governance-deletions" :columns="allColumns.map(column => ({ key: column.colKey, title: column.title }))" />
+  </div>
   <div class="page-card">
-    <div class="page-filter-bar">
-      <t-select v-model="status" :options="options" label="状态" @change="page = 1; load()" />
-      <ColumnController v-model="visibleKeys" storage-key="member-governance-deletions" :columns="allColumns.map(column => ({ key: column.colKey, title: column.title }))" />
-    </div>
     <ListErrorState v-if="loadError" :message="loadError" :loading="loading" @retry="load" />
     <t-table row-key="id" :data="rows" :columns="columns" :loading="loading" table-layout="fixed" hover resizable :pagination="{ current: page, pageSize: 20, total, showPageSize: false }" @page-change="(value: { current: number }) => { page = value.current; load() }">
       <template #user="{ row }"><span>{{ row.user.nickname }}</span><t-tag class="id-tag-block" size="small" variant="light">{{ row.userId }}</t-tag></template>

@@ -8,7 +8,7 @@
 
 - **AdminUser** — 管理端账号（id 自增；username 唯一；passwordHash bcrypt；name 展示名；status active/disabled；lastLoginAt?；createdAt/updatedAt DateTime；种子 admin/admin123）
 - **AdminRole** — RBAC 角色（id R1+；code 唯一；name/description/sort/createdAt；内置 super/operator/auditor/space-ops）
-- **AdminPermission** — 权限点目录（code PK：菜单路径或 perm:xxx 按钮码；name/module；authType menu|button；sort；当前共 55 码）
+- **AdminPermission** — 权限点目录（code PK：菜单路径或 perm:xxx 按钮码；name/module；authType menu|button；sort；当前共 56 码）
 - **AdminUserRole** — 管理员-角色关联（adminUserId+roleId 联合唯一）
 - **AdminRolePermission** — 角色-权限点关联（roleId+permissionCode 联合唯一）
 - **LoginLog** — 登录日志（id LL；loginAt 秒级；username/ip/device；status success/fail/locked；failReason?；索引 loginAt/status）
@@ -28,7 +28,7 @@
 
 ## 3. 业务运营域（7）
 
-- **Demand** — 需求（id D；状态机 pending→pending_release→published|scheduled→selected→projected/closed/rejected；publisherId/publisherName/publisherIdentity Json?；contactName?/contactPhone?/contactEmail?；budget/period/deadline；scheduledAt?/publishedAt?；可见/可报名范围四数组；description/tags；rejectedReason?/matchedRespondent?/projectId?/respondPoints?；creatorName?/creatorId?；deletedAt?/deletedBy?/archivableAt?）
+- **Demand** — 需求（id D；状态机 pending→pending_release→published|scheduled→selected→projected/closed/rejected；publisherId/publisherName/publisherIdentity Json?（提交人主体/名称/身份快照）；contactName?/contactPhone?/contactEmail?；**contactPublic Bool 默认 false（公开联系人开关：开启后客户端含未登录游客可见联系人信息，关闭时客户端一律不可见、后台始终可见）**；budget/period/deadline；scheduledAt?/publishedAt?；可见/可报名范围四数组；description/tags；rejectedReason?/matchedRespondent?/projectId?/respondPoints?；deletedAt?/deletedBy?/archivableAt?）
 - **DemandRespondent** — 需求响应（demandId 级联；name/enterprise/phone?/email?/quote?/message/at；status pending/accepted/rejected/closed（contacted 为历史值））
 - **Project** — 项目（id P；code JY-YYYY-NN 唯一；status running/paused/closed/finished；progress；startDate/endDate/initiatedAt；description/memberCount；sourceDemandId?/expReward?/closeReason?；**demanderId?/demanderName?/demanderIdentity Json?（需求方主体/名称/身份快照，需求立项照搬需求、自建由表单录入）**；**creatorName?/creatorId?（创建人）**；**contactName?/contactPhone?/contactEmail?（联系方式）**；**contractPrice?（合同价格）**；deletedAt?/deletedBy?/archivableAt?）
 - **ProjectUndertaker** — 承接方（type enterprise/individual/custom；refId/name；share 合计须 100；contactName?/phone?）
@@ -110,6 +110,7 @@
 | R2 | ApplicationFormConfig | 申请表单配置（type/title/subtitle/submitLabel/tips/fields） |
 | R3 | IndividualCard | 个人名片（userId 唯一、data Json、published、updatedAt） |
 | R4 | AnalyticsEvent | 埋点（eventType 12 项：login/register/demand_publish/demand_respond/event_enroll/checkin/mall_order/article_submit/space_reserve/favorite/report/search；userId?；at；payload Json?）（§7.1-22） |
+| R4 | UserMessage | 用户留言（id UM；userId；title/content 纯文本 sanitize；status pending 待回复/replied 已回复；createdAt；replyContent?/repliedAt?/repliedBy? 回复人姓名；archivableAt? 回复时写入/deletedAt?/deletedBy? 归档字段，可在「归档管理 > 用户留言」恢复；后台「用户留言」页回复并推送站内信，客户端在「我的 > 我的留言」查看）（R4） |
 | 扩展 | HomeBanner / ArticleTakedown | 首页轮播图与文章下架记录（见 §6；ServiceApplication 社区服务申请已下线，社区政策与通用申请审核保留） |
 | 规则重构 | PublishingLimitRule / PublishingLimitUsage | 按身份和动态等级设置四类每日发布限制；业务写入同事务占用，失败回滚、取消不返还 |
 
@@ -134,5 +135,6 @@
 | R3 | UserIdentity | permissions[]（8 项枚举 publish_demand/respond_demand/space_reserve/article_submit/manage_members/invite_member/assign_permission/edit_card；负责人全部、成员由负责人分配） |
 | 扩展 | Project | demanderId?/demanderName?/demanderIdentity Json?（需求方主体/名称/身份快照；需求立项照搬需求、自建由表单录入）；creatorName?/creatorId?（创建人）；contactName?/contactPhone?/contactEmail?（联系方式）；contractPrice?（合同价格） |
 | 扩展 | IndividualCard | `data.visibility` 增 `isPublic`（公开名片开关；false 时退出社区人才库、公开名片页 404；缺省视为公开） |
+| 扩展 | Demand | contactPublic Bool 默认 false（公开联系人开关：开启后客户端含未登录游客可见 contactName/contactPhone/contactEmail，关闭时客户端一律不可见、后台始终可见）；creatorName/creatorId 已删（提交人取 publisherName/publisherId） |
 
 **卡片字段配置**：个人名片（`User`/UserIdentity 派生字段）与社区企业名片（`Enterprise` 字段）均**免审核保存即公开**；admin 后台可**查看/编辑**个人与企业名片，并可配置用户可编辑字段白名单，由 `GET /api/app/card-schema/:type` 下发。个人名片 `visibility.isPublic=false` 时从人才库隐藏（§8.2）。

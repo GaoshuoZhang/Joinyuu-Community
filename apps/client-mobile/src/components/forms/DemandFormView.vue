@@ -11,6 +11,7 @@ import { useDict } from '@/composables/useDict'
 import { useUnsavedGuard } from '@/composables/useUnsavedGuard'
 import { useBusinessNow } from '@/composables/useBusinessNow'
 import EmptyBlock from '@/components/shared/EmptyBlock.vue'
+import ListSkeleton from '@/components/ListSkeleton.vue'
 import IdentityPicker from '@/components/forms/IdentityPicker.vue'
 import ContactFields from '@/components/forms/ContactFields.vue'
 import DemandKindExtras from '@/components/forms/DemandKindExtras.vue'
@@ -102,6 +103,8 @@ function ensureVisibleIdentitySelection() {
 
 watch(identityOptions, ensureVisibleIdentitySelection, { deep: true })
 const loaded = ref(false)
+/* 修改重提：原需求数据加载期间渲染骨架，避免用户先填后被回填覆盖（无声吞掉输入） */
+const payloadLoading = ref(false)
 const baseline = ref('')
 const formSnapshot = computed(() => JSON.stringify(form))
 useUnsavedGuard(() => loaded.value && !submittedId.value && formSnapshot.value !== baseline.value)
@@ -119,6 +122,7 @@ onMounted(async () => {
     /* 未登录或接口异常时仅展示自有身份 */
   }
   if (reviseId) {
+    payloadLoading.value = true
     try {
       const p = await fetchMyDemandPayload(reviseId)
       form.title = p.title
@@ -139,6 +143,8 @@ onMounted(async () => {
       ensureVisibleIdentitySelection()
     } catch (e) {
       Toast(e instanceof ApiError ? e.message : '加载原需求失败')
+    } finally {
+      payloadLoading.value = false
     }
     baseline.value = formSnapshot.value
     loaded.value = true
@@ -262,6 +268,10 @@ async function onSubmit() {
       <EmptyBlock text="发布功能暂未开放" />
     </div>
 
+    <template v-else-if="payloadLoading">
+      <!-- 修改重提加载原需求中：骨架占位，加载完成后表单才允许编辑 -->
+      <ListSkeleton :rows="4" />
+    </template>
     <template v-else-if="!submittedId">
       <p v-if="revising" class="revision-label">修改重提</p>
       <p class="subtitle">{{ revising ? '修改后将重新进入审核队列' : '提交后进入审核，通过后展示在需求列表' }}</p>
@@ -350,12 +360,13 @@ async function onSubmit() {
           :user-name="auth.name"
           @select="pickIdentity"
         />
-        <!-- v48：无可用身份时给出空态出口，否则字段区空白且提交必然失败 -->
+        <!-- v48：无可用身份时给出空态出口，否则字段区空白且提交必然失败。
+             出口指向身份管理页：该页同时提供实名登记与企业合作（加入企业）两条路径 -->
         <EmptyBlock
           v-else
           text="暂无可用的发布身份，请先完成身份信息登记或加入企业"
-          action-text="去登记"
-          @action="router.push('/me/realname')"
+          action-text="去处理身份"
+          @action="router.push('/me/identities')"
         />
         <p v-if="identityOptions.length" class="field-help">以企业身份发布的需求将归属该企业主体</p>
       </div>
@@ -371,7 +382,7 @@ async function onSubmit() {
       >
         {{ revising ? '重新提交' : '提交需求' }}
       </Button>
-      <p v-if="!form.asIdentity" class="field-help">暂无可用的发布身份，提交后需求无法归属，暂不能提交</p>
+      <p v-if="!form.asIdentity" class="field-help">暂无可用的发布身份，无法提交。请先完成身份信息登记或加入企业</p>
       </form>
     </template>
   </div>

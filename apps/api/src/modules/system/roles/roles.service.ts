@@ -103,32 +103,7 @@ export class RolesService {
     const role = await this.prisma.adminRole.findUnique({ where: { id } })
     if (!role) throw new NotFoundException('角色不存在')
 
-    const unique = [...new Set(permCodes)]
-    if (unique.includes('*') && unique.length > 1) {
-      throw new BadRequestException('全量权限（*）不可与其他权限码同时保存')
-    }
-    if (!unique.includes('*')) {
-      const known = await this.prisma.adminPermission.findMany({ select: { code: true } })
-      const knownSet = new Set(known.map((p) => p.code))
-      const invalid = unique.filter((c) => !knownSet.has(c))
-      if (invalid.length > 0) throw new BadRequestException(`存在无效权限码：${invalid.join('、')}`)
-    }
-
-    /* 提权防护：超管角色仅超管可改且必须保留 '*'；非超管不可授予 '*' 或自身权限之外的权限码 */
-    const operatorCodes = await this.permissions.getPermCodes(operator.username)
-    const operatorIsSuper = operatorCodes.includes('*')
-    if (role.code === 'super') {
-      if (!operatorIsSuper) throw new ForbiddenException('仅超级管理员可修改超级管理员角色')
-      if (unique.length !== 1 || unique[0] !== '*') {
-        throw new BadRequestException('超级管理员角色必须保留全量权限（*）')
-      }
-    } else if (!operatorIsSuper) {
-      if (unique.includes('*')) throw new ForbiddenException('仅超级管理员可分配全量权限')
-      const exceeded = unique.filter((c) => !operatorCodes.includes(c))
-      if (exceeded.length > 0) {
-        throw new ForbiddenException(`不可分配超出自身权限范围的权限码：${exceeded.join('、')}`)
-      }
-    }
+    const unique = await this.validatePermCodes(role, permCodes, operator)
 
     await this.prisma.$transaction(async (tx) => {
       await tx.adminRolePermission.deleteMany({ where: { roleId: id } })
@@ -172,6 +147,82 @@ export class RolesService {
       operator: operator.name,
     })
     return { code: 0 }
+  }
+
+  /**
+   * 合并保存角色权限 + 数据范围：单事务落库（权限集合替换 + dataScope 更新），
+   * 取代前端「先 scope 后 permissions」两次串行请求——部分失败会留下
+   * 「新范围 + 旧权限」的 RBAC 中间态。校验口径与两个单接口保持一致。
+   */
+  async saveAssignment(
+    id: string,
+    permCodes: string[],
+    dataScope: string[],
+    operator: { username: string; name: string },
+  ): Promise<{ code: number }> {
+    const role = await this.prisma.adminRole.findUnique({ where: { id } })
+    if (!role) throw new NotFoundException('角色不存在')
+    /* saveScope 的超管限制在合并接口同样适用 */
+    if (role.code === 'super' && dataScope.length > 0) {
+      throw new BadRequestException('超级管理员角色不可限制数据范围')
+    }
+
+    const unique = await this.validatePermCodes(role, permCodes, operator)
+    const scope = [...new Set(dataScope)]
+
+    await this.prisma.$transaction(async (tx) => {
+      await tx.adminRolePermission.deleteMany({ where: { roleId: id } })
+      if (unique.length > 0) {
+        await tx.adminRolePermission.createMany({
+          data: unique.map((code) => ({ roleId: id, permissionCode: code })),
+        })
+      }
+      await tx.adminRole.update({ where: { id }, data: { dataScope: scope } })
+    })
+    await this.permissions.invalidateByRole(id)
+    await this.audit.record({
+      module: 'RBAC',
+      action: '保存角色权限配置',
+      target: `${role.code} · ${role.name}`,
+      detail: `${unique.includes('*') ? '全量权限' : `${unique.length} 个权限点`}；${scope.length === 0 ? '范围不限制（全部域）' : `数据范围：${scope.join('、')}`}`,
+      operator: operator.name,
+    })
+    return { code: 0 }
+  }
+
+  /** 权限码集合校验（单接口与合并接口共用）：格式、有效性、提权防护；返回去重后的集合 */
+  private async validatePermCodes(
+    role: { code: string },
+    permCodes: string[],
+    operator: { username: string; name: string },
+  ): Promise<string[]> {
+    const unique = [...new Set(permCodes)]
+    if (unique.includes('*') && unique.length > 1) {
+      throw new BadRequestException('全量权限（*）不可与其他权限码同时保存')
+    }
+    if (!unique.includes('*')) {
+      const known = await this.prisma.adminPermission.findMany({ select: { code: true } })
+      const knownSet = new Set(known.map((p) => p.code))
+      const invalid = unique.filter((c) => !knownSet.has(c))
+      if (invalid.length > 0) throw new BadRequestException(`存在无效权限码：${invalid.join('、')}`)
+    }
+
+    /* 提权防护：超管角色仅超管可改且必须保留 '*'；非超管不可授予 '*' 或自身权限之外的权限码 */
+    const operatorCodes = await this.permissions.getPermCodes(operator.username)
+    const operatorIsSuper = operatorCodes.includes('*')
+    if (role.code === 'super') {
+      if (!operatorIsSuper) throw new ForbiddenException('仅超级管理员可修改超级管理员角色')
+      if (unique.length !== 1 || unique[0] !== '*') {
+        throw new BadRequestException('超级管理员角色必须保留全量权限（*）')
+      }
+    } else if (!operatorIsSuper) {
+      if (unique.includes('*')) throw new ForbiddenException('仅超级管理员可分配全量权限')
+      const exceeded = unique.filter((c) => !operatorCodes.includes(c))
+      if (exceeded.length > 0) {
+        throw new ForbiddenException(`不可分配超出自身权限范围的权限码：${exceeded.join('、')}`)
+      }
+    }
+    return unique
   }
 
   /** 权限点目录（按模块分组，供角色权限矩阵渲染） */

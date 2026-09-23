@@ -352,7 +352,7 @@ describe('M2-R 三端联调：注册/实名/入驻/需求/项目/活动/商城/�
     const goods = await appGet(app, buyer, '/api/app/mall/goods')
     const goodsRows = asList<{ id: string }>(goods.body.data)
     const target = goodsRows.find((g) => g.id === 'G1003') ?? goodsRows[0]
-    const order = await appPost(app, buyer, '/api/app/mall/orders', { goodsId: target.id, addressId: addr.body.data.id })
+    const order = await appPost(app, buyer, '/api/app/mall/orders', { goodsId: target.id, shippingMethod: 'delivery', addressId: addr.body.data.id })
     expect(order.status).toBe(200)
     const orderId = order.body.data.id
 

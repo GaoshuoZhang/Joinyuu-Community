@@ -5,14 +5,12 @@ import { computed, onMounted, reactive, ref } from 'vue'
 import { MessagePlugin } from 'tdesign-vue-next'
 import type { FormProps } from 'tdesign-vue-next'
 import { AddIcon, SearchIcon } from 'tdesign-icons-vue-next'
-import PageHeader from '@/components/PageHeader.vue'
 import { focusFirstInvalid } from '@/utils/form'
 import {
   createRole,
   fetchPermissionCatalog,
   fetchRoles,
-  saveRolePermissions,
-  saveRoleScope,
+  saveRoleAssignment,
   type AdminRole,
 } from '@/api/roles'
 import { permissionGroups as builtinPermissionGroups } from '@/constants/permissions'
@@ -184,8 +182,8 @@ async function onSave() {
   try {
     /* 超管角色后端强制全量（*）：保存恒传 ['*']，避免显式集合固化丢失后续新增权限点 */
     const codes = isSuper.value ? ['*'] : checked.value
-    if (!isSuper.value) await saveRoleScope(current.value.id, scopeDraft.value)
-    await saveRolePermissions(current.value.id, codes)
+    /* 权限 + 数据范围合并为单事务保存：避免两步串行请求部分失败留下 RBAC 中间态 */
+    await saveRoleAssignment(current.value.id, codes, isSuper.value ? [] : scopeDraft.value)
     await load()
     MessagePlugin.success('角色权限已保存')
     assignVisible.value = false
@@ -207,7 +205,6 @@ onMounted(() => {
 <template>
   <div class="role-panel">
     <ListErrorState v-if="loadError" :message="loadError" :loading="loading" @retry="() => load()" />
-    <PageHeader title="角色权限" description="RBAC 角色与权限点管理：分配角色可见可操作的模块" />
 
     <div class="page-filter-bar">
       <t-input v-model="keyword" class="ctl-w-xl" placeholder="搜索角色/编码/说明…" clearable @enter="onQuery" />
@@ -224,46 +221,47 @@ onMounted(() => {
       </t-button>
     </div>
 
-    <!-- 卡片由聚合壳（AccountRoleView）提供，面板内不再嵌套 page-card -->
-    <t-table
-      row-key="id"
-      table-layout="fixed"
-      hover
-      resizable
-      :data="filtered"
-      :columns="columns"
-      :loading="loading"
-    >
-      <template #name="{ row }">
-        <div class="role-name">{{ row.name }}</div>
-      </template>
-      <template #permCount="{ row }">
-        <t-tag variant="light" :theme="row.permCodes.includes('*') ? 'primary' : 'default'">
-          {{ permCount(row) }}
-        </t-tag>
-      </template>
-      <template #dataScope="{ row }">
-        <span v-if="!row.dataScope || row.dataScope.length === 0" class="scope-all">全部</span>
-        <span v-else class="scope-tags">
-          <t-tag v-for="d in row.dataScope.slice(0, 3)" :key="d" size="small" variant="light" class="scope-tag">
-            {{ scopeLabel(d) }}
+    <div class="page-card">
+      <t-table
+        row-key="id"
+        table-layout="fixed"
+        hover
+        resizable
+        :data="filtered"
+        :columns="columns"
+        :loading="loading"
+      >
+        <template #name="{ row }">
+          <div class="role-name">{{ row.name }}</div>
+        </template>
+        <template #permCount="{ row }">
+          <t-tag variant="light" :theme="row.permCodes.includes('*') ? 'primary' : 'default'">
+            {{ permCount(row) }}
           </t-tag>
-          <!-- 超出 3 个时折叠为 +N，悬浮可查看完整范围，避免列宽截断丢信息 -->
-          <t-tooltip v-if="row.dataScope.length > 3" :content="row.dataScope.map(scopeLabel).join('、')">
-            <t-tag size="small" variant="light-outline" class="scope-tag">+{{ row.dataScope.length - 3 }}</t-tag>
-          </t-tooltip>
-        </span>
-      </template>
-      <template #op="{ row }">
-        <div class="op-cell" @click.stop>
-          <t-button variant="text" size="small" @click="openAssign(row)">权限配置</t-button>
-        </div>
-      </template>
+        </template>
+        <template #dataScope="{ row }">
+          <span v-if="!row.dataScope || row.dataScope.length === 0" class="scope-all">全部</span>
+          <span v-else class="scope-tags">
+            <t-tag v-for="d in row.dataScope.slice(0, 3)" :key="d" size="small" variant="light" class="scope-tag">
+              {{ scopeLabel(d) }}
+            </t-tag>
+            <!-- 超出 3 个时折叠为 +N，悬浮可查看完整范围，避免列宽截断丢信息 -->
+            <t-tooltip v-if="row.dataScope.length > 3" :content="row.dataScope.map(scopeLabel).join('、')">
+              <t-tag size="small" variant="light-outline" class="scope-tag">+{{ row.dataScope.length - 3 }}</t-tag>
+            </t-tooltip>
+          </span>
+        </template>
+        <template #op="{ row }">
+          <div class="op-cell" @click.stop>
+            <t-button variant="text" size="small" @click="openAssign(row)">权限配置</t-button>
+          </div>
+        </template>
 
-      <template #empty>
-        <ListEmptyState :query="{ keyword: appliedKeyword }" description="暂无角色" @clear="onResetQuery" />
-      </template>
-    </t-table>
+        <template #empty>
+          <ListEmptyState :query="{ keyword: appliedKeyword }" description="暂无角色" @clear="onResetQuery" />
+        </template>
+      </t-table>
+    </div>
 
     <!-- 权限分配弹窗 -->
     <t-dialog

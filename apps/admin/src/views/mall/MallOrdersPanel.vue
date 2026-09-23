@@ -427,7 +427,7 @@ onMounted(load)
           <t-descriptions-item v-if="current.address" label="收件地址">{{ current.address }}</t-descriptions-item>
           <t-descriptions-item v-if="current.voucherCode" label="券码">
             {{ current.voucherCode }}
-            <t-tag v-if="current.usedAt" class="id-tag" size="small" theme="success" variant="light">已核销</t-tag>
+            <StatusTag v-if="current.usedAt" entity="redeem" value="redeemed" class="id-tag" size="small" />
           </t-descriptions-item>
           <t-descriptions-item v-if="current.voucherExpiresAt" label="券码有效期至">{{ current.voucherExpiresAt }}</t-descriptions-item>
           <t-descriptions-item v-if="current.usedAt" label="核销时间">{{ current.usedAt }}</t-descriptions-item>

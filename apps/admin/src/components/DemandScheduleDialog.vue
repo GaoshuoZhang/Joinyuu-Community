@@ -77,7 +77,7 @@ const formRef = ref()
     </template>
 
     <p class="dialog-tip">
-      为「{{ demand?.title }}」设定定时发布时间，到点自动上架需求广场。留空则取消本次操作。
+      为「{{ demand?.title }}」设定定时发布时间，到点自动上架需求广场。
     </p>
     <t-form ref="formRef" :data="form" :rules="rules" label-align="top">
       <t-form-item label="定时发布时间" name="scheduledAt">
@@ -86,7 +86,7 @@ const formRef = ref()
           valueType="YYYY-MM-DD HH:mm"
           enable-time-picker
           placeholder="到点自动发布…"
-          style="width: 100%"
+          class="ctl-w-full"
         />
       </t-form-item>
     </t-form>

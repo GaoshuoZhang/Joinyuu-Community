@@ -277,7 +277,7 @@ function onClose() {
           <t-select clearable v-model="form.type" :options="typeOptions" />
         </t-form-item>
         <t-form-item label="容量" name="capacity">
-          <t-input-number v-model="form.capacity" :min="1" theme="column" style="width: 100%" />
+          <t-input-number v-model="form.capacity" :min="1" theme="column" class="ctl-w-full" />
         </t-form-item>
       </div>
       <div class="form-row">
@@ -287,7 +287,7 @@ function onClose() {
             valueType="YYYY-MM-DD HH:mm"
             enable-time-picker
             clearable
-            style="width: 100%"
+            class="ctl-w-full"
           />
         </t-form-item>
         <t-form-item label="结束时间" name="endTime">
@@ -296,7 +296,7 @@ function onClose() {
             valueType="YYYY-MM-DD HH:mm"
             enable-time-picker
             clearable
-            style="width: 100%"
+            class="ctl-w-full"
           />
         </t-form-item>
       </div>
@@ -308,7 +308,7 @@ function onClose() {
             enable-time-picker
             clearable
             placeholder="留空 = 不限，活动开始前均可报名…"
-            style="width: 100%"
+            class="ctl-w-full"
           />
         </t-form-item>
         <t-form-item name="requireReview">
@@ -399,7 +399,7 @@ function onClose() {
             </template>
             <t-popup content="默认使用积分规则值，可直接为本活动调整报名奖励" show-arrow>
               <div class="reward-input-trigger">
-                <t-input-number v-model="form.enrollPoints" :min="0" theme="column" style="width: 100%" />
+                <t-input-number v-model="form.enrollPoints" :min="0" theme="column" class="ctl-w-full" />
               </div>
             </t-popup>
           </t-form-item>
@@ -413,7 +413,7 @@ function onClose() {
             </template>
             <t-popup content="默认使用积分规则值，可直接为本活动调整签到奖励" show-arrow>
               <div class="reward-input-trigger">
-                <t-input-number v-model="form.checkinPoints" :min="0" theme="column" style="width: 100%" />
+                <t-input-number v-model="form.checkinPoints" :min="0" theme="column" class="ctl-w-full" />
               </div>
             </t-popup>
           </t-form-item>
@@ -430,18 +430,18 @@ function onClose() {
       </div>
       <div class="form-row">
         <t-form-item label="签到半径（米）" name="checkinRadiusM">
-          <t-input-number v-model="form.checkinRadiusM" :min="1" theme="column" style="width: 100%" />
+          <t-input-number v-model="form.checkinRadiusM" :min="1" theme="column" class="ctl-w-full" />
         </t-form-item>
         <t-form-item label="取消报名时限（开场前小时）" name="cancelDeadlineHours">
-          <t-input-number v-model="form.cancelDeadlineHours" :min="0" theme="column" style="width: 100%" />
+          <t-input-number v-model="form.cancelDeadlineHours" :min="0" theme="column" class="ctl-w-full" />
         </t-form-item>
       </div>
       <div class="form-row">
         <t-form-item label="签到提前开放（分钟）" name="checkinOpenMin">
-          <t-input-number v-model="form.checkinOpenMin" :min="0" theme="column" style="width: 100%" />
+          <t-input-number v-model="form.checkinOpenMin" :min="0" theme="column" class="ctl-w-full" />
         </t-form-item>
         <t-form-item label="签到延后关闭（分钟）" name="checkinCloseMin">
-          <t-input-number v-model="form.checkinCloseMin" :min="0" theme="column" style="width: 100%" />
+          <t-input-number v-model="form.checkinCloseMin" :min="0" theme="column" class="ctl-w-full" />
         </t-form-item>
       </div>
 

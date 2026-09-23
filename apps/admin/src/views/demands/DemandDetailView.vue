@@ -10,7 +10,7 @@ import DemandReviewDialog from '@/components/DemandReviewDialog.vue'
 import DemandScheduleDialog from '@/components/DemandScheduleDialog.vue'
 import ContentTakedownDialog from '@/components/ContentTakedownDialog.vue'
 import ProjectFormDialog from '@/components/ProjectFormDialog.vue'
-import { identityTypeMap, userLevelMap } from '@/constants/identity'
+import { identityLabelOf, identityTypeMap, userLevelMap } from '@/constants/identity'
 import { cancelDemandSchedule, closeDemand, fetchDemand, publishDemandNow } from '@/api/demands'
 import { isNotFound } from '@/api/http'
 import ListErrorState from '@/components/ListErrorState.vue'
@@ -155,23 +155,15 @@ function publisherLinkTarget(d: Demand): string | null {
   return null
 }
 
-/* 创建人跳转：创建人为注册用户（U 前缀）时 → 用户详情，其余（管理员代建等）不跳 */
-function creatorLinkTarget(d: Demand): string | null {
-  if (d.creatorId && d.creatorId.startsWith('U')) return `/users/${d.creatorId}`
-  return null
-}
-
 /* 链接跳转（t-link 禁用态不触发 click，此处再兜底判空） */
 function goTarget(target: string | null) {
   if (target) router.push(target)
 }
 
 
-/* 需求方身份快照 → 纯文本标签（企业仅显示 社区企业/合作企业，不追加成员标题） */
+/* 提交人身份快照 → 纯文本标签（社区官方显示工作人员角色名；企业仅显示 社区企业/合作企业，不追加成员标题） */
 function publisherIdentityLabel(d: Demand): string {
-  const type = d.publisherIdentity?.type
-  if (!type) return '—'
-  return identityTypeMap[type] ?? '—'
+  return identityLabelOf(d.publisherIdentity)
 }
 function goProject() {
   if (demand.value?.projectId) router.push(`/projects/${demand.value.projectId}`)
@@ -283,7 +275,7 @@ onMounted(load)
 
         <t-descriptions :column="2" bordered class="head-desc">
           <t-descriptions-item label="编号">{{ demand.id }}</t-descriptions-item>
-          <t-descriptions-item label="需求方">
+          <t-descriptions-item label="提交人">
             <t-link theme="default" hover="color" :disabled="!publisherLinkTarget(demand)"
               class="publisher-link"
               :class="{ clickable: publisherLinkTarget(demand) }"
@@ -292,21 +284,13 @@ onMounted(load)
               {{ demand.publisherName }}<t-tag v-if="demand.publisherId" class="id-tag" size="small" variant="light">{{ demand.publisherId }}</t-tag>
             </t-link>
           </t-descriptions-item>
-          <t-descriptions-item label="创建人">
-            <t-link theme="default" hover="color" :disabled="!creatorLinkTarget(demand)"
-              class="publisher-link"
-              :class="{ clickable: creatorLinkTarget(demand) }"
-              @click="goTarget(creatorLinkTarget(demand))"
-            >
-              {{ demand.creatorName || '—' }}<t-tag v-if="demand.creatorId" class="id-tag" size="small" variant="light">{{ demand.creatorId }}</t-tag>
-            </t-link>
-          </t-descriptions-item>
-          <t-descriptions-item label="需求方身份">
+          <t-descriptions-item label="提交人身份">
             <span>{{ publisherIdentityLabel(demand) }}</span>
           </t-descriptions-item>
           <t-descriptions-item label="联系人">{{ demand.contactName ?? '—' }}</t-descriptions-item>
           <t-descriptions-item label="联系电话">{{ demand.contactPhone ?? '—' }}</t-descriptions-item>
           <t-descriptions-item label="联系邮箱">{{ demand.contactEmail ?? '—' }}</t-descriptions-item>
+          <t-descriptions-item label="公开联系人">{{ demand.contactPublic ? '已开启（客户端可见）' : '未开启（客户端不可见）' }}</t-descriptions-item>
           <t-descriptions-item label="预算">{{ demand.budget || '—' }}</t-descriptions-item>
           <t-descriptions-item label="需求类型">
             {{ demand.demandType === 'investment' ? '找投资' : demand.demandType === 'cooperation' ? '找合作' : '找服务' }}

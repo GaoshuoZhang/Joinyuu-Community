@@ -63,6 +63,7 @@ export function buildProfileMenuSections(context: ProfileMenuContext): ProfileMe
       title: '消息与设置',
       entries: [
         { path: '/notices', label: '站内信', note: context.unread > 0 ? `${context.unread} 条未读` : undefined },
+        { path: '/me/messages', label: '我的留言', note: '向社区留言 / 查看回复' },
         { path: '/me/settings', label: '设置', note: '资料 / 地址 / 安全 / 通知' },
       ],
     },

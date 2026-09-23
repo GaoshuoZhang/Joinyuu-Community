@@ -194,7 +194,7 @@ export class UsersService {
         select: { id: true, type: true, targetName: true, status: true, submittedAt: true, summary: true, deletedAt: true },
       }),
       this.prisma.demand.findMany({
-        where: { OR: [{ creatorId: id }, { publisherId: id }] },
+        where: { publisherId: id },
         orderBy: { createdAt: 'desc' },
         select: { id: true, title: true, status: true, createdAt: true, deletedAt: true },
       }),

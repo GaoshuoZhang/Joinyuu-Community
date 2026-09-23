@@ -8,6 +8,7 @@ import { fetchArticles, fetchColumns } from '@/api/contents'
 import { useAsyncList } from '@/composables/useAsyncList'
 import { useRefreshOnActivate } from '@/composables/useRefreshOnActivate'
 import { useAnimSuppress } from '@/composables/useAnimSuppress'
+import { useAtTop } from '@/composables/useAtTop'
 import ListSkeleton from '@/components/ListSkeleton.vue'
 import EmptyBlock from '@/components/shared/EmptyBlock.vue'
 import StateTag from '@/components/shared/StateTag.vue'
@@ -92,6 +93,8 @@ const articlesEmpty = computed(() => !articlesLoading.value && !articlesError.va
 
 /* v39：下拉刷新 */
 const refreshing = ref(false)
+/* 离顶时禁用下拉刷新：库内 isReachTop 会被两行截断摘要等 overflow 元素误判为已到顶 */
+const atTop = useAtTop()
 
 async function onRefresh() {
   refreshing.value = true
@@ -191,7 +194,7 @@ function clearArticleFilters() {
 </script>
 
 <template>
-  <PullDownRefresh :value="refreshing" @refresh="onRefresh">
+  <PullDownRefresh :value="refreshing" :disabled="!atTop" @refresh="onRefresh">
   <div
     class="page-fade-in m-plaza"
     @touchstart="startSwipe"
@@ -223,7 +226,7 @@ function clearArticleFilters() {
             <div class="row-head">
               <Tag class="type-tag" size="small" variant="light" theme="primary">{{ ev.typeLabel }}</Tag>
               <StateTag v-if="enrolledIds.has(ev.id)" class="enrolled-flag" kind="flag" value="enrolled" />
-              <span class="capacity">人数限制 {{ formatZhNumber(ev.capacity) }} 人</span>
+              <span class="capacity">限 {{ formatZhNumber(ev.capacity) }} 人参加</span>
             </div>
             <h2 class="title">{{ ev.title }}</h2>
             <p class="meta event-meta">
@@ -360,6 +363,13 @@ function clearArticleFilters() {
   height: 96px;
   background: var(--td-brand-color-1);
   color: var(--td-brand-color);
+}
+
+/* 封面加载失败：全局 .img-fallback 兜底（min-height 90px）与 132px 封面区高度错位会露白，
+ * 让失败占位铺满封面容器 */
+.card-cover :deep(.img-fallback) {
+  width: 100%;
+  height: 100%;
 }
 
 .row-head {

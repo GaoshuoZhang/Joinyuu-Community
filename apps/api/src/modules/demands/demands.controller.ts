@@ -40,7 +40,11 @@ export class DemandsController {
   @HttpCode(200)
   @Post()
   create(@Body() dto: CreateDemandDto, @Req() req: AuthenticatedRequest): Promise<DemandDto> {
-    return this.demands.create(dto, req.user?.name ?? '社区管理员')
+    /* 提交人取当前登录工作人员：账号名（sub）写入 publisherId，姓名（name）写入 publisherName，角色名写入身份快照 */
+    return this.demands.create(dto, {
+      username: req.user?.sub ?? '',
+      name: req.user?.name ?? '社区管理员',
+    })
   }
 
   @RequirePermission('/demands')

@@ -135,37 +135,40 @@ onMounted(load)
       </t-button>
     </div>
 
-    <t-table
-      row-key="code"
-      table-layout="fixed"
-      hover
-      resizable
-      :loading="loading"
-      :data="entries"
-      :columns="columns"
-    >
-      <template #status="{ row }">
-        <t-switch
-          :value="row.status === 'enabled'"
-          :loading="acting === row.code"
-          :aria-label="`字典项「${row.label}」启用状态`"
-          @change="() => onToggle(row)"
-        />
-      </template>
-      <template #op="{ row }">
-        <div class="op-cell">
-          <t-popconfirm content="确认删除该字典项？已产生的历史业务数据不受影响，仅不再作为选项下发。" @confirm="onDelete(row)">
-            <t-button variant="text" theme="danger" size="small" :loading="acting === row.code">
-              <template #icon><DeleteIcon /></template>
-              删除
-            </t-button>
-          </t-popconfirm>
-        </div>
-      </template>
-      <template #empty>
-        <ListEmptyState description="暂无字典项" />
-      </template>
-    </t-table>
+    <!-- 表格包 page-card：与全站列表页（含 /system 内角色/日志/归档等）视觉层级一致 -->
+    <div class="page-card">
+      <t-table
+        row-key="code"
+        table-layout="fixed"
+        hover
+        resizable
+        :loading="loading"
+        :data="entries"
+        :columns="columns"
+      >
+        <template #status="{ row }">
+          <t-switch
+            :value="row.status === 'enabled'"
+            :loading="acting === row.code"
+            :aria-label="`字典项「${row.label}」启用状态`"
+            @change="() => onToggle(row)"
+          />
+        </template>
+        <template #op="{ row }">
+          <div class="op-cell">
+            <t-popconfirm content="确认删除该字典项？已产生的历史业务数据不受影响，仅不再作为选项下发。" @confirm="onDelete(row)">
+              <t-button variant="text" theme="danger" size="small" :loading="acting === row.code">
+                <template #icon><DeleteIcon /></template>
+                删除
+              </t-button>
+            </t-popconfirm>
+          </div>
+        </template>
+        <template #empty>
+          <ListEmptyState description="暂无字典项" />
+        </template>
+      </t-table>
+    </div>
 
     <p class="dict-tip">说明：字典项名称（label）即业务存储值，暂不支持改名；停用后各业务页面下拉不再展示该项，历史数据保持原样。</p>
   </div>

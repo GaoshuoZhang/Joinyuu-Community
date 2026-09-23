@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, h, onMounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { Button, Cell, DialogPlugin, Image, Popup, Tag, Toast } from 'tdesign-mobile-vue'
+import { Button, Cell, CheckTag, DialogPlugin, Icon, Image, Popup, Tag, Toast } from 'tdesign-mobile-vue'
 import { createOrder, fetchGoodsDetail } from '@/api/mall'
 import { listAddresses } from '@/api/addresses'
 import { useAsyncList } from '@/composables/useAsyncList'
@@ -11,10 +11,12 @@ import { onImageError } from '@/utils/imageFallback'
 import RichTextBlock from '@/components/shared/RichTextBlock.vue'
 import ListSkeleton from '@/components/ListSkeleton.vue'
 import FlowResult from '@/components/FlowResult.vue'
-import type { AddressItem, Goods } from '@/types'
+import type { AddressItem, Goods, GoodsShippingMethod } from '@/types'
 import { formatZhNumber } from '@/utils/format'
 
-/* 移动商品详情：信息展示 + 立即兑换（确认弹层含扣减后余额预览）；未登录跳登录，成功提示剩余积分后进入我的订单 */
+/* 移动商品详情：信息展示 + 立即兑换（确认弹层含扣减后余额预览）；未登录跳登录，成功提示剩余积分后进入我的订单。
+ * 实物商品发货方式：商品同时支持自提与邮寄时，兑换前必须二选一；仅支持一种时自动选定。
+ * 选自提时提示商品配置的自提地址，选邮寄时走收货地址选择。 */
 const route = useRoute()
 const router = useRouter()
 const auth = useAuthStore()
@@ -22,11 +24,24 @@ const goodsId = route.params.id as string
 
 const { data: goods, loading, error, run } = useAsyncList<Goods>(() => fetchGoodsDetail(goodsId))
 
-/* v38：实物商品需选择收货地址 */
+/* v38：实物商品邮寄需选择收货地址 */
 const addresses = ref<AddressItem[]>([])
 const selectedAddressId = ref('')
 const addressPickerVisible = ref(false)
 const selectedAddress = computed(() => addresses.value.find((item) => item.id === selectedAddressId.value) ?? null)
+
+/* 发货方式：双支持时由用户选择；单一方式自动选定 */
+const shippingOptions = computed<GoodsShippingMethod[]>(() => {
+  const methods = goods.value?.shippingMethods ?? []
+  if (goods.value?.fulfillment !== 'physical') return []
+  if (methods.length === 0) return ['delivery']
+  return methods
+})
+const chosenMethod = ref<GoodsShippingMethod | ''>('')
+const selectedMethod = computed<GoodsShippingMethod | null>(() =>
+  chosenMethod.value || (shippingOptions.value.length === 1 ? shippingOptions.value[0] : null),
+)
+const bothMethods = computed(() => shippingOptions.value.length > 1)
 
 async function loadAddresses() {
   if (!auth.isLogged || goods.value?.fulfillment !== 'physical') return
@@ -68,23 +83,33 @@ function onRedeem() {
   }
   const item = goods.value
   if (!item) return
-  if (item.fulfillment === 'physical' && !selectedAddress.value) {
-    Toast('请先添加并选择收货地址')
-    void router.push('/me/addresses')
-    return
+  if (item.fulfillment === 'physical') {
+    if (bothMethods.value && !chosenMethod.value) {
+      Toast('请先选择自提或邮寄')
+      return
+    }
+    if (selectedMethod.value === 'delivery' && !selectedAddress.value) {
+      Toast('请先添加并选择收货地址')
+      void router.push('/me/addresses')
+      return
+    }
   }
   if (auth.points < item.pointsCost) {
     Toast(`积分不足，还差 ${formatZhNumber(item.pointsCost - auth.points)} 积分`)
     return
   }
   const remaining = auth.points - item.pointsCost
+  const method = selectedMethod.value
   DialogPlugin.confirm({
     title: '确认兑换',
     content: () =>
       h('div', { class: 'order-confirm' }, [
         h('p', { class: 'order-confirm__line' }, `商品：${item.name}`),
         h('p', { class: 'order-confirm__line' }, `消耗积分：${formatZhNumber(item.pointsCost)}`),
-        item.fulfillment === 'physical' && selectedAddress.value
+        method === 'pickup'
+          ? h('p', { class: 'order-confirm__line' }, `自提：${item.pickupAddress || '请联系社区运营确认自提点'}`)
+          : null,
+        method === 'delivery' && selectedAddress.value
           ? h('p', { class: 'order-confirm__line' }, `收货：${selectedAddress.value.name} ${selectedAddress.value.phone}，${selectedAddress.value.address}`)
           : null,
         h('p', { class: 'order-confirm__line' }, `兑换后剩余：${formatZhNumber(remaining)} 积分`),
@@ -102,12 +127,19 @@ async function submitOrder(item: Goods) {
   if (submitting.value) return
   submitting.value = true
   try {
-    const res = await createOrder(item.id, item.fulfillment === 'physical' ? selectedAddressId.value || undefined : undefined)
+    const method = selectedMethod.value
+    const res = await createOrder({
+      goodsId: item.id,
+      shippingMethod: item.fulfillment === 'physical' ? method ?? undefined : undefined,
+      addressId: item.fulfillment === 'physical' && method === 'delivery' ? selectedAddressId.value || undefined : undefined,
+    })
     orderedId.value = res.id
     remainingPoints.value = res.remainingPoints
     orderedTip.value = item.fulfillment === 'voucher'
       ? '券码已发放，可在订单详情中查看并使用。'
-      : '实物商品将在运营发货后更新物流信息。'
+      : method === 'pickup'
+        ? `请到「${item.pickupAddress || '社区运营处'}」领取，凭订单详情向工作人员核销。`
+        : '实物商品将在运营发货后更新物流信息。'
     auth.points = res.remainingPoints
   } catch (e) {
     Toast(e instanceof Error ? e.message : '兑换失败，请稍后重试')
@@ -149,8 +181,31 @@ function goOrders() {
         </div>
       </section>
 
+      <!-- 实物商品：发货方式选择（双支持时二选一）→ 自提提示地址 / 邮寄选择收货地址 -->
       <section v-if="goods.fulfillment === 'physical'" class="m-card">
+        <template v-if="bothMethods">
+          <p class="ship-title">选择领取方式<span class="req"> *</span></p>
+          <div class="ship-options">
+            <CheckTag
+              v-for="m in shippingOptions"
+              :key="m"
+              size="medium"
+              variant="light"
+              :checked="selectedMethod === m"
+              @change="chosenMethod = m"
+            >{{ m === 'pickup' ? '到店自提' : '快递邮寄' }}</CheckTag>
+          </div>
+          <p v-if="selectedMethod === 'pickup'" class="ship-pickup">
+            <Icon aria-hidden="true" name="location" size="14px" />
+            自提地址：{{ goods.pickupAddress || '下单后可联系社区运营确认自提点' }}
+          </p>
+        </template>
+        <p v-else-if="selectedMethod === 'pickup'" class="ship-pickup">
+          <Icon aria-hidden="true" name="location" size="14px" />
+          本商品仅支持到店自提，自提地址：{{ goods.pickupAddress || '下单后可联系社区运营确认自提点' }}
+        </p>
         <Cell
+          v-if="selectedMethod === 'delivery'"
           class="address-cell"
           title="收货地址"
           :note="selectedAddress ? `${selectedAddress.name} ${selectedAddress.phone} · ${selectedAddress.address}` : '请选择收货地址'"
@@ -230,6 +285,35 @@ function goOrders() {
 .address-cell {
   padding:0;
   background: none;
+}
+
+/* 发货方式选择区 */
+.ship-title {
+  margin: 0 0 var(--app-space-3);
+  font-size: var(--app-font-body);
+  color: var(--td-text-color-secondary);
+}
+
+.req {
+  color: var(--td-error-color);
+}
+
+.ship-options {
+  display: flex;
+  gap: var(--app-space-4);
+}
+
+.ship-pickup {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--app-space-2);
+  margin: var(--app-space-5) 0 0;
+  padding: var(--app-space-4) var(--app-space-5);
+  border-radius: var(--td-radius-default);
+  background: var(--td-brand-color-1);
+  font-size: var(--app-font-caption);
+  line-height: 1.6;
+  color: var(--td-text-color-primary);
 }
 
 /* 地址较多时弹层内部滚动，保证底部「管理收货地址」按钮始终可达 */

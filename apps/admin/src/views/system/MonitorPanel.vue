@@ -5,6 +5,7 @@ import { MessagePlugin } from 'tdesign-vue-next'
 import PageHeader from '@/components/PageHeader.vue'
 import StatCard from '@/components/StatCard.vue'
 import StatusTag from '@/components/StatusTag.vue'
+import { statusMap } from '@/constants/status'
 import {
   fetchCronLogs,
   fetchMonitorOverview,
@@ -42,13 +43,10 @@ const uptimeText = computed(() => {
   return days > 0 ? `${days} 天 ${hours} 时` : hours > 0 ? `${hours} 时 ${mins} 分` : `${mins} 分`
 })
 
-function statusTag(s?: string) {
-  const map: Record<string, { theme: 'success' | 'warning' | 'danger'; label: string }> = {
-    healthy: { theme: 'success', label: '健康' },
-    degraded: { theme: 'warning', label: '亚健康' },
-    down: { theme: 'danger', label: '异常' },
-  }
-  return map[s ?? ''] ?? { theme: 'default' as const, label: '—' }
+/* 服务健康态：固定枚举经 status.ts 词表（与 StatusTag 同源）；StatCard 大数字颜色复用同一 theme */
+function statusTag(s?: string): { theme: 'success' | 'warning' | 'danger' | 'default'; label: string } {
+  const conf = statusMap.serviceHealth[s as keyof typeof statusMap.serviceHealth]
+  return conf ?? { theme: 'default', label: '—' }
 }
 
 /* StatCard 数值颜色：健康绿 / 亚健康橙 / 异常红（TStatistic 颜色风格） */
@@ -74,7 +72,8 @@ const dbRedisText = computed(() => {
   return `PostgreSQL ${db == null ? '—' : `${db}ms`} · Redis ${redis == null ? '—' : `${redis}ms`}`
 })
 
-/** 数据库/缓存健康标签：由真实 status/latency 派生，缺数据或异常时不得显示成功态 */
+/** 数据库/缓存健康标签：由真实 status/latency 组合派生的动态诊断文案（非固定枚举），
+ * 刻意不走 StatusTag 词表；缺数据或异常时不得显示成功态 */
 const dbRedisHealth = computed<{ theme: 'success' | 'warning' | 'danger' | 'default'; label: string }>(() => {
   const db = overview.value?.service.db
   const redis = overview.value?.service.redis
@@ -166,10 +165,10 @@ onMounted(load)
         <StatCard label="接口平均延迟" :value="apiLatencyText">
           <template #sub>近 5 分钟窗口</template>
         </StatCard>
-        <StatCard label="数据库 / 缓存" :value="dbRedisText">
-          <template #sub>
-            <t-tag size="small" :theme="dbRedisHealth.theme" variant="light">{{ dbRedisHealth.label }}</t-tag>
-          </template>
+        <!-- 健康词作数值（与「服务状态」卡同构，随 theme 着色），延迟明细放 sub（overflow-wrap 可换行），
+             避免长串 PostgreSQL xms · Redis yms 在数值区溢出裁切 -->
+        <StatCard label="数据库 / 缓存" :value="dbRedisHealth.label" :color="STATUS_STAT_COLOR[dbRedisHealth.theme]">
+          <template #sub>{{ dbRedisText }}</template>
         </StatCard>
       </div>
 

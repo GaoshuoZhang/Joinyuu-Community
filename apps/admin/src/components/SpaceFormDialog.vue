@@ -162,7 +162,7 @@ function onClose() {
       </div>
       <div class="form-row">
         <t-form-item label="容纳人数" name="capacity">
-          <t-input-number v-model="form.capacity" :min="1" theme="column" style="width: 100%" />
+          <t-input-number v-model="form.capacity" :min="1" theme="column" class="ctl-w-full" />
         </t-form-item>
         <t-form-item label="位置" name="location">
           <t-input clearable v-model="form.location" placeholder="如 岛屿中心 2F…" />
@@ -178,10 +178,10 @@ function onClose() {
       </div>
       <div v-if="!form.allDay" class="form-row">
         <t-form-item label="开放时间" name="openTime">
-          <t-time-picker v-model="form.openTime" format="HH:mm" clearable style="width: 100%" />
+          <t-time-picker v-model="form.openTime" format="HH:mm" clearable class="ctl-w-full" />
         </t-form-item>
         <t-form-item label="关闭时间" name="closeTime">
-          <t-time-picker v-model="form.closeTime" format="HH:mm" clearable style="width: 100%" />
+          <t-time-picker v-model="form.closeTime" format="HH:mm" clearable class="ctl-w-full" />
         </t-form-item>
       </div>
       <!-- 需预约 / 需审核各自独占整行：开关互斥隐藏时栅格不塌陷，避免右半列空白与字段跳动 -->

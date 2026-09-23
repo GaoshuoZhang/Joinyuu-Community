@@ -15,6 +15,10 @@ export const statusMap = {
     frozen: { label: '已冻结', theme: 'danger' },
     deleted: { label: '已注销', theme: 'default' },
   },
+  userMessage: {
+    pending: { label: '待回复', theme: 'warning' },
+    replied: { label: '已回复', theme: 'success' },
+  },
   verified: {
     verified: { label: '已实名', theme: 'success' },
     unverified: { label: '未实名', theme: 'default' },
@@ -163,6 +167,42 @@ export const statusMap = {
     configured: { label: '已配置', theme: 'success' },
     missing: { label: '凭据缺失', theme: 'warning' },
     none: { label: '未配置', theme: 'warning' },
+  },
+  /* 系统监控：服务健康态（固定枚举；DB/Redis 组合诊断文案为派生动态文案，留在页面本地） */
+  serviceHealth: {
+    healthy: { label: '健康', theme: 'success' },
+    degraded: { label: '亚健康', theme: 'warning' },
+    down: { label: '异常', theme: 'danger' },
+  },
+  /* 通用启用开关态（公告、评论治理等） */
+  enabledFlag: {
+    enabled: { label: '已启用', theme: 'success' },
+    disabled: { label: '未启用', theme: 'default' },
+  },
+  /* 文章评论开关态（评论治理弹窗） */
+  commentState: {
+    enabled: { label: '评论已开启', theme: 'success' },
+    disabled: { label: '评论已关闭', theme: 'default' },
+  },
+  /* 活动报名签到态 */
+  checkin: {
+    checked: { label: '已签到', theme: 'success' },
+    unchecked: { label: '未签到', theme: 'default' },
+  },
+  /* 活动报名审核配置 */
+  reviewMode: {
+    required: { label: '需审核', theme: 'warning' },
+    optional: { label: '无需审核', theme: 'success' },
+  },
+  /* 商城兑换核销态 */
+  redeem: {
+    redeemed: { label: '已核销', theme: 'success' },
+    unredeemed: { label: '待核销', theme: 'warning' },
+  },
+  /* 手机/邮箱联系方式验证态 */
+  contactVerified: {
+    verified: { label: '已验证', theme: 'success' },
+    unverified: { label: '未验证', theme: 'default' },
   },
 } as const
 

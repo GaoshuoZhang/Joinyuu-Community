@@ -26,6 +26,14 @@ const myIdentities = ref<MyIdentitySummary[]>([])
 /* 等级请求失败与「未绑定」是两回事：失败时给出可重试的说明，而不是静默显示「未绑定」 */
 const levelFailed = ref(false)
 
+/* 头像加载失败兜底：与 AvatarUploader 同口径——TDesign Avatar 的 hideOnLoadFailed 会连
+ * 加载成功态一起跳过图片渲染，故用 onError 记下失败地址，回退渲染默认插槽的首字 */
+const failedAvatar = ref('')
+const avatarImage = computed(() => (auth.avatar && auth.avatar !== failedAvatar.value ? auth.avatar : ''))
+function onAvatarError() {
+  failedAvatar.value = auth.avatar
+}
+
 const menuSections = computed(() =>
   buildProfileMenuSections({
     hasCommunityIndividual: auth.hasCommunityIndividual,
@@ -108,14 +116,15 @@ useRefreshOnActivate(() => void refreshMe())
 <template>
   <PullDownRefresh class="me-refresh" :value="refreshing" @refresh="onRefresh">
     <div class="page-fade-in me">
-      <button
-        type="button"
+      <!-- button 内容模型仅允许 phrasing content，卡内含 p/div 会破坏 AT 解析；
+           改用 div + v-pressable（补 role=button/tabindex/键盘激活） -->
+      <div
         class="m-card profile profile-button pressable"
         v-pressable
         aria-label="编辑个人资料"
         @click="router.push('/me/profile/edit')"
       >
-        <Avatar size="56px" class="avatar" hide-on-load-failed :image="auth.avatar">{{ auth.name.slice(0, 1) }}</Avatar>
+        <Avatar size="56px" class="avatar" :image="avatarImage" :on-error="onAvatarError">{{ auth.name.slice(0, 1) }}</Avatar>
         <div class="info">
           <p class="name">{{ auth.name }}</p>
           <p v-if="auth.username" class="handle">@{{ auth.username }}</p>
@@ -124,7 +133,7 @@ useRefreshOnActivate(() => void refreshMe())
             <IdentityTag v-for="i in auth.profileIdentities" :key="i.type" :type="i.type" />
           </div>
         </div>
-      </button>
+      </div>
 
       <section v-for="section in menuSections" :key="section.title" class="menu-section" :aria-labelledby="`me-${section.title}`">
         <h2 :id="`me-${section.title}`" class="group-title">{{ section.title }}</h2>

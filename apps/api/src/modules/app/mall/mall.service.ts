@@ -82,13 +82,28 @@ export class AppMallService {
     if (user.points < goods.points) throw new BadRequestException('积分不足')
 
     let address: { name: string; phone: string; region: string; detail: string } | null = null
+    /* 实物商品发货方式分流：商品支持自提+邮寄时下单必须显式选择；仅支持一种时按唯一方式兜底 */
+    let shippingMethod: 'pickup' | 'delivery' | null = null
     if (goods.fulfillment === 'physical') {
-      if (!dto.addressId) throw new BadRequestException('请先选择收货地址')
-      const addr = await this.prisma.address.findFirst({
-        where: { id: dto.addressId, userId: uid },
-      })
-      if (!addr) throw new BadRequestException('请先选择收货地址')
-      address = { name: addr.name, phone: addr.phone, region: addr.region, detail: addr.detail }
+      const methods = goods.shippingMethods ?? []
+      const supportsPickup = methods.includes('pickup')
+      const supportsDelivery = methods.includes('delivery') || methods.length === 0
+      if (supportsPickup && supportsDelivery) {
+        if (dto.shippingMethod !== 'pickup' && dto.shippingMethod !== 'delivery') {
+          throw new BadRequestException('请选择自提或邮寄')
+        }
+        shippingMethod = dto.shippingMethod
+      } else {
+        shippingMethod = supportsPickup ? 'pickup' : 'delivery'
+      }
+      if (shippingMethod === 'delivery') {
+        if (!dto.addressId) throw new BadRequestException('请先选择收货地址')
+        const addr = await this.prisma.address.findFirst({
+          where: { id: dto.addressId, userId: uid },
+        })
+        if (!addr) throw new BadRequestException('请先选择收货地址')
+        address = { name: addr.name, phone: addr.phone, region: addr.region, detail: addr.detail }
+      }
     }
 
     /* 防重复提交（同一用户同一商品短时间窗口） */
@@ -136,7 +151,7 @@ export class AppMallService {
 
         orderId = await this.ids.next('RO', tx)
         await tx.redemptionOrder.create({
-          data: this.buildOrderData(orderId, uid, user.nickname, goods, dto, address),
+          data: this.buildOrderData(orderId, uid, user.nickname, goods, dto, address, shippingMethod),
         })
       })
     } catch (error) {
@@ -280,9 +295,10 @@ export class AppMallService {
     id: string,
     userId: string,
     userName: string,
-    goods: { id: string; name: string; points: number; fulfillment: string; validDays: number | null },
+    goods: { id: string; name: string; points: number; fulfillment: string; validDays: number | null; pickupAddress: string | null },
     dto: CreateOrderDto,
     address: { name: string; phone: string; region: string; detail: string } | null,
+    shippingMethod: 'pickup' | 'delivery' | null,
   ): Prisma.RedemptionOrderCreateInput {
     const now = formatNow()
     const fulfillment = goods.fulfillment
@@ -299,10 +315,15 @@ export class AppMallService {
       createdAt: now,
       note: dto.remark?.trim() || null,
     }
-    if (physical) {
-      data.recipientName = address!.name
-      data.recipientPhone = address!.phone
-      data.address = address!.region ? `${address!.region} ${address!.detail}` : address!.detail
+    if (physical && shippingMethod) {
+      data.shippingMethod = shippingMethod
+      /* 自提：快照商品自提地址（后续商品改址不影响已生成订单）；不写收货地址字段 */
+      if (shippingMethod === 'pickup') data.pickupAddress = goods.pickupAddress
+    }
+    if (physical && shippingMethod === 'delivery' && address) {
+      data.recipientName = address.name
+      data.recipientPhone = address.phone
+      data.address = address.region ? `${address.region} ${address.detail}` : address.detail
       data.addressId = dto.addressId ?? null
     }
     if (fulfillment === 'voucher') {
@@ -323,6 +344,8 @@ export class AppMallService {
     stock: number
     validDays: number | null
     description: string
+    shippingMethods: string[]
+    pickupAddress: string | null
   }) {
     return {
       id: g.id,
@@ -335,6 +358,9 @@ export class AppMallService {
       stock: g.stock,
       validDays: g.fulfillment === 'voucher' ? g.validDays ?? DEFAULT_VOUCHER_VALID_DAYS : undefined,
       description: g.description,
+      /* 实物商品发货方式（pickup 自提 | delivery 邮寄）与自提地址：客户端据此渲染选择与提示 */
+      shippingMethods: g.fulfillment === 'physical' ? g.shippingMethods : [],
+      pickupAddress: g.fulfillment === 'physical' && g.shippingMethods.includes('pickup') ? g.pickupAddress ?? undefined : undefined,
     }
   }
 
@@ -354,6 +380,8 @@ export class AppMallService {
       dto.status = 'expired'
     }
     if (o.trackingNo != null) dto.trackingNo = o.trackingNo
+    if (o.shippingMethod != null) dto.shippingMethod = o.shippingMethod
+    if (o.pickupAddress != null) dto.pickupAddress = o.pickupAddress
     if (o.rating != null) dto.rating = o.rating
     if (o.reviewComment != null) dto.review = o.reviewComment
     if (o.recipientName != null) dto.recipientName = o.recipientName

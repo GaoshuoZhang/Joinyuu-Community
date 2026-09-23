@@ -132,7 +132,7 @@ function onClose() {
             enable-time-picker
             clearable
             placeholder="留空表示长期有效…"
-            style="width: 100%"
+            class="ctl-w-full"
           />
         </t-form-item>
         <t-form-item label="跳转链接" name="link">

@@ -3,19 +3,18 @@ import { computed, defineAsyncComponent, nextTick, reactive, ref, watch } from '
 import { MessagePlugin } from 'tdesign-vue-next'
 import type { FormProps } from 'tdesign-vue-next'
 import { focusFirstInvalid, useDialogDirtyGuard } from '@/utils/form'
-import { createDemand, fetchPublisherOptions, updateDemand, type DemandPublishPayload } from '@/api/demands'
+import { createDemand, updateDemand, type DemandPublishPayload } from '@/api/demands'
 import { dictFallback, fetchDictEntries } from '@/api/dicts'
-import { fetchUser } from '@/api/users'
 import { fetchPointsRules } from '@/api/mall'
-import { identityTypeMap, userLevelOptions, visibilityIdentityOptions } from '@/constants/identity'
-import type { Demand, User, UserIdentity } from '@/types'
+import { userLevelOptions, visibilityIdentityOptions } from '@/constants/identity'
+import type { Demand } from '@/types'
 
 const RichEditor = defineAsyncComponent(() => import('@/components/RichEditor.vue'))
 
 /* 需求弹窗（双模式共用）：
- * - create：后台直接新增需求，需求方可选已注册个人用户/企业（自动填充联系电话），
- *   或直接输入未注册需求方新增条目；新增即保存为「待发布」，由列表操作触发发布
- * - edit：待发布 / 已发布需求再编辑（不改状态）
+ * - create：后台直接新增需求。需求由社区自行创建，提交人与提交人身份由服务端按当前登录工作人员
+ *   （账号名 + 姓名 + 角色名）派生，表单不再提供选择入口；新增即保存为「待发布」，由列表操作触发发布
+ * - edit：待发布 / 已发布需求再编辑（不改状态、不改提交人）
  * 可报名范围默认与可见范围一致，可单独调整（提供一键同步） */
 const props = defineProps<{
   visible: boolean
@@ -45,88 +44,9 @@ const categoryCodeByLabel = ref<Record<string, string>>({})
 const submitting = ref(false)
 const formRef = ref()
 
-/* create 模式：需求方（可新增新条目）与提交身份 */
-const publisherUsers = ref<{ uid: string; nickname: string; realName: string; phone: string; email: string; tag: '社区个体' | '个人用户' }[]>([])
-const publisherEnterprises = ref<{ id: string; name: string; contactName: string; contactPhone: string; contactEmail?: string; tag: '社区企业' | '合作企业' }[]>([])
-const publisherId = ref('')
-const publisherName = ref('')
-const publisherType = ref<'individual' | 'enterprise' | 'custom'>('individual')
-const publisherUser = ref<User | null>(null)
+/* 公开联系人开关（新增/编辑共用）：默认关闭，开启后客户端（含未登录游客）可见联系人信息 */
 
-async function loadPublisherOptions() {
-  try {
-    const opts = await fetchPublisherOptions()
-    publisherUsers.value = opts.users
-    publisherEnterprises.value = opts.enterprises
-    /* 选项就绪后重放当前选中值，确保联系电话填充不依赖触发时序 */
-    if (form.publisherValue) applyPublisherContact(form.publisherValue)
-  } catch {
-    MessagePlugin.error('提交人选项加载失败')
-  }
-}
-
-/* 选择需求方 → 解析类型并自动填充联系电话（未注册条目不填充）；
- * 注册个人用户 → 拉取身份列表供选择提交身份 */
-/* 注：watch 须在 form 声明之后（getter 立即求值，置于 form 之前会 TDZ 报错：Cannot access 'form' before initialization） */
-
-function applyPublisherContact(v: string) {
-  publisherUser.value = null
-  if (v.startsWith('E:')) {
-    const e = publisherEnterprises.value.find((x) => 'E:' + x.id === v)
-    if (!e) return
-    publisherId.value = e.id
-    publisherName.value = e.name
-    publisherType.value = 'enterprise'
-    /* 企业提交：联系人 = 企业联系人（企业整体决策场景） */
-    form.contactName = e.contactName ?? e.name
-    form.contactPhone = e.contactPhone
-    form.contactEmail = e.contactEmail ?? ''
-  } else if (v.startsWith('U:')) {
-    const u = publisherUsers.value.find((x) => 'U:' + x.uid === v)
-    if (!u) return
-    publisherId.value = u.uid
-    publisherName.value = u.nickname
-    publisherType.value = 'individual'
-    /* 个人提交：联系人 = 个人真实姓名 */
-    form.contactName = u.realName ?? u.nickname
-    form.contactPhone = u.phone
-    form.contactEmail = u.email
-    fetchUser(u.uid)
-      .then((user) => {
-        publisherUser.value = user
-      })
-      .catch(() => {
-        publisherUser.value = null
-      })
-  } else if (v) {
-    /* creatable 自建条目：值即名称 */
-    publisherId.value = ''
-    publisherName.value = v
-    publisherType.value = 'custom'
-    /* 非注册用户自建：联系人与联系电话均手填 */
-    form.contactName = ''
-    form.contactPhone = ''
-    form.contactEmail = ''
-  }
-}
-
-/* 提交人选项：全部企业 + 全部个人用户；配合 creatable 支持直接输入未注册提交人 */
-const publisherOptions = computed(() => [
-  ...publisherEnterprises.value.map((e) => ({ label: `${e.name}（${e.tag} · ${e.id}）`, value: `E:${e.id}` })),
-  ...publisherUsers.value.map((u) => ({ label: `${u.nickname}（${u.tag} · ${u.uid}）`, value: `U:${u.uid}` })),
-])
-
-
-/* 自定义需求方身份（未注册需求方） */
-type CustomPublisherIdentityType = 'external_individual' | 'external_company'
-
-const customIdentityOptions = [
-  { label: identityTypeMap.external_individual, value: 'external_individual' },
-  { label: identityTypeMap.external_company, value: 'external_company' },
-]
-
-const form = reactive<DemandPublishPayload & { customIdentityType: CustomPublisherIdentityType | '' } & { publisherValue: string }>({
-  publisherValue: '',
+const form = reactive<DemandPublishPayload>({
   title: '',
   category: '',
   demandType: 'task',
@@ -147,8 +67,8 @@ const form = reactive<DemandPublishPayload & { customIdentityType: CustomPublish
   contactName: '',
   contactPhone: '',
   contactEmail: '',
+  contactPublic: false,
   respondPoints: 20,
-  customIdentityType: '',
 })
 
 /* 未保存保护：打开时记录基线，关闭前有改动需确认 */
@@ -157,12 +77,6 @@ const { markBaseline, guardClose } = useDialogDirtyGuard(form)
 /* 自定义开关：可见范围/可报名范围（关=不限） */
 const customVisibility = ref(false)
 const customEnrollment = ref(false)
-
-/* watch 在 form 声明之后注册：getter 立即求值 form.publisherValue，置于 form 之前会 TDZ 报错 */
-watch(
-  () => form.publisherValue,
-  (v) => applyPublisherContact(v),
-)
 
 /* 选项加载放在 form 声明之后（避免引用 form 的时序隐患），改为首次打开弹窗时按需加载（D-101） */
 
@@ -175,7 +89,6 @@ function ensureOptions(): Promise<void> {
   if (optionsLoaded.value) return Promise.resolve()
   if (!optionsPromise) {
     optionsPromise = Promise.all([
-      loadPublisherOptions(),
       fetchPointsRules()
         .then((rules) => {
           rulePoints.respond = rules.find((r) => r.code === 'demand_responded')?.points ?? 20
@@ -233,15 +146,10 @@ watch(
       form.contactName = ''
       form.contactPhone = ''
       form.contactEmail = ''
+      form.contactPublic = false
       customVisibility.value = false
       customEnrollment.value = false
       form.respondPoints = rulePoints.respond
-      form.publisherValue = ''
-      publisherId.value = ''
-      publisherName.value = ''
-      publisherType.value = 'individual'
-      publisherUser.value = null
-      form.customIdentityType = ''
     } else {
       form.title = props.demand.title
       /* 兼容旧数据直接存标签；再次保存时归一为当前字典 code。 */
@@ -267,36 +175,11 @@ watch(
       customVisibility.value = props.demand.visibilityIdentities.length > 0 || props.demand.visibilityLevels.length > 0
       customEnrollment.value = props.demand.enrollmentIdentities.length > 0 || props.demand.enrollmentLevels.length > 0
       form.respondPoints = props.demand.respondPoints ?? rulePoints.respond
-      publisherId.value = props.demand.publisherId
-      publisherName.value = props.demand.publisherName
-      /* 需求方回填 → 三态自动填充联系人/联系电话 → 以保存记录为准（自定义与历史记录不丢） */
-      form.publisherValue = props.demand.publisherId.startsWith('E')
-        ? `E:${props.demand.publisherId}`
-        : props.demand.publisherId.startsWith('U')
-          ? `U:${props.demand.publisherId}`
-          : props.demand.publisherName
-      publisherType.value = props.demand.publisherId.startsWith('E')
-        ? 'enterprise'
-        : props.demand.publisherId.startsWith('U')
-          ? 'individual'
-          : 'custom'
-      const identityType = props.demand.publisherIdentity?.type
-      form.customIdentityType =
-        identityType === 'external_individual' || identityType === 'external_company' ? identityType : ''
-      applyPublisherContact(form.publisherValue)
+      /* 提交人由服务端按工作人员派生，编辑不回填也不可改 */
       if (props.demand.contactName != null) form.contactName = props.demand.contactName
       if (props.demand.contactPhone != null) form.contactPhone = props.demand.contactPhone
       if (props.demand.contactEmail != null) form.contactEmail = props.demand.contactEmail
-      if (publisherType.value === 'individual') {
-        try {
-          const user = await fetchUser(props.demand.publisherId)
-          publisherUser.value = user
-        } catch {
-          publisherUser.value = null
-        }
-      } else {
-        publisherUser.value = null
-      }
+      form.contactPublic = props.demand.contactPublic === true
     }
     /* 清除上次会话残留的校验红框（仅清状态，不动表单值） */
     markBaseline()
@@ -317,7 +200,6 @@ const rules = computed<FormProps['rules']>(() => ({
   title: [{ required: true, message: '请输入需求标题', trigger: 'submit' }],
   category: [{ required: true, message: '请选择类别', trigger: 'submit' }],
   deadline: [{ required: true, message: '请选择报名截止时间', trigger: 'submit' }],
-  publisherValue: [{ required: true, message: '请选择或输入提交人', trigger: 'submit' }],
   contactName: [{ required: true, message: '请输入联系人', trigger: 'submit' }],
   contactPhone: [{ required: true, message: '请输入联系电话', trigger: 'submit' }],
 }))
@@ -325,58 +207,30 @@ const rules = computed<FormProps['rules']>(() => ({
 async function onConfirm() {
   const valid = await formRef.value.validate()
   if (valid !== true) return focusFirstInvalid(formRef.value)
-  /* 联系人/联系电话仅在"选择需求方"时自动填充一次（@change/watch 触发）；
-   * 确认保存不做重解析，保留用户手动修改的值 */
-  if (!form.publisherValue.trim()) {
-    MessagePlugin.warning('请选择或输入需求方')
-    return
-  }
-  if (!publisherId.value && publisherType.value !== 'custom') {
-    MessagePlugin.warning('请选择已注册的需求方或输入名称')
-    return
-  }
-  if (publisherType.value === 'custom' && !form.customIdentityType) {
-    MessagePlugin.warning('请选择需求方身份')
-    return
-  }
   submitting.value = true
   try {
-    const customType = publisherType.value === 'custom' ? form.customIdentityType : ''
-    const customIdentity: UserIdentity | null = customType
-      ? { type: customType, title: identityTypeMap[customType] }
-      : null
-    const { customIdentityType: _customIdentityType, ...formBody } = form
-    void _customIdentityType
     if (props.mode === 'create') {
       /* 新增需求：新增即保存为「待发布」（无草稿、无定时发布），由列表操作决定立即/定时发布；
-       * 提交身份快照：自定义需求方 = 外部个人/外部企业；注册个人用户 = 其首个身份 */
-      const identity =
-        customIdentity ??
-        (publisherType.value === 'individual' ? publisherUser.value?.identities[0] ?? null : null)
+       * 提交人/提交人身份由服务端按当前登录工作人员派生，此处不传 */
       const demand = await createDemand({
-        ...formBody,
-        budget: formBody.budget.trim() || '面议',
-        publisherId: publisherId.value,
-        publisherName: publisherName.value,
-        publisherType: publisherType.value,
-        publisherIdentity: identity,
-        visibilityIdentities: customVisibility.value ? formBody.visibilityIdentities : [],
-        visibilityLevels: customVisibility.value ? formBody.visibilityLevels : [],
-        enrollmentIdentities: customEnrollment.value ? formBody.enrollmentIdentities : [],
-        enrollmentLevels: customEnrollment.value ? formBody.enrollmentLevels : [],
-        respondPoints: formBody.respondPoints,
+        ...form,
+        budget: form.budget.trim() || '面议',
+        visibilityIdentities: customVisibility.value ? form.visibilityIdentities : [],
+        visibilityLevels: customVisibility.value ? form.visibilityLevels : [],
+        enrollmentIdentities: customEnrollment.value ? form.enrollmentIdentities : [],
+        enrollmentLevels: customEnrollment.value ? form.enrollmentLevels : [],
+        respondPoints: form.respondPoints,
       })
       MessagePlugin.success(`需求已新增，进入待发布状态（${demand.id}）`)
     } else if (props.demand) {
       await updateDemand(props.demand.id, {
-        ...formBody,
-        budget: formBody.budget.trim() || '面议',
-        visibilityIdentities: customVisibility.value ? formBody.visibilityIdentities : [],
-        visibilityLevels: customVisibility.value ? formBody.visibilityLevels : [],
-        enrollmentIdentities: customEnrollment.value ? formBody.enrollmentIdentities : [],
-        enrollmentLevels: customEnrollment.value ? formBody.enrollmentLevels : [],
-        respondPoints: formBody.respondPoints,
-        ...(customIdentity ? { publisherIdentity: customIdentity } : {}),
+        ...form,
+        budget: form.budget.trim() || '面议',
+        visibilityIdentities: customVisibility.value ? form.visibilityIdentities : [],
+        visibilityLevels: customVisibility.value ? form.visibilityLevels : [],
+        enrollmentIdentities: customEnrollment.value ? form.enrollmentIdentities : [],
+        enrollmentLevels: customEnrollment.value ? form.enrollmentLevels : [],
+        respondPoints: form.respondPoints,
       })
       MessagePlugin.success('修改已保存')
     }
@@ -414,50 +268,30 @@ function onClose() {
         </t-button>
       </div>
     </template>
-    <t-form ref="formRef" :data="{ ...form, publisherId: publisherId }" :rules="rules" label-align="top">
-      <!-- create 模式：提交人（可新增新条目）与提交身份 -->
-      <template v-if="mode === 'create'">
-        <t-form-item name="publisherValue">
-          <template #label>
-            <t-popup content="未注册的需求方可直接输入名称新增；选中已注册企业/个人用户将自动填充联系电话" show-arrow>
-              <span class="scope-popup-trigger">需求方</span>
-            </t-popup>
-          </template>
-          <t-select
-            v-model="form.publisherValue"
-            :options="publisherOptions"
-            filterable
-            creatable
-            clearable
-            @change="(val: unknown) => applyPublisherContact(String(val ?? ''))"
-            placeholder="选择已注册的个人用户/企业，或直接输入新需求方…"
-          />
-        </t-form-item>
-      </template>
-      <t-form-item v-else label="需求方" name="publisherValue">
-        <t-input :value="publisherName" disabled placeholder="提交人不可变更…" />
-      </t-form-item>
-
-      <t-form-item v-if="publisherType === 'custom'" label="需求方身份" name="customIdentityType">
-        <t-select
-          v-model="form.customIdentityType"
-          :options="customIdentityOptions"
-          clearable
-          placeholder="请选择需求方身份…"
-        />
-      </t-form-item>
-
+    <t-form ref="formRef" :data="form" :rules="rules" label-align="top">
       <div class="form-row">
         <t-form-item label="联系人" name="contactName">
-          <t-input clearable v-model="form.contactName" placeholder="企业提交自动填企业联系人…" />
+          <t-input clearable v-model="form.contactName" placeholder="请输入联系人姓名…" />
         </t-form-item>
         <t-form-item label="联系电话" name="contactPhone">
-          <t-input clearable v-model="form.contactPhone" name="contact-phone" type="tel" inputmode="tel" autocomplete="tel" placeholder="选已注册需求方后自动填充…" />
+          <t-input clearable v-model="form.contactPhone" name="contact-phone" type="tel" inputmode="tel" autocomplete="tel" placeholder="请输入 11 位手机号…" />
         </t-form-item>
         <t-form-item label="联系邮箱" name="contactEmail">
           <t-input clearable v-model="form.contactEmail" name="contact-email" inputmode="email" autocomplete="email" placeholder="选填…" />
         </t-form-item>
       </div>
+
+      <t-form-item name="contactPublic">
+        <template #label>
+          <t-popup content="开启后客户端（含未登录访客）可见该需求的联系人与联系方式；关闭则客户端一律不可见，后台始终可见" show-arrow>
+            <span class="scope-popup-trigger">公开联系人</span>
+          </t-popup>
+        </template>
+        <div class="contact-public-row">
+          <t-switch v-model="form.contactPublic" />
+          <span class="scope-tip">{{ form.contactPublic ? '客户端可见联系人信息' : '客户端不可见联系人信息（默认）' }}</span>
+        </div>
+      </t-form-item>
 
       <t-form-item label="需求标题" name="title">
         <t-input clearable v-model="form.title" placeholder="请输入需求标题…" />
@@ -482,7 +316,7 @@ function onClose() {
           <t-input v-model="form.deliverable" clearable placeholder="说明期望获得的成果…" />
         </t-form-item>
         <t-form-item label="预期交付日期" name="deliverBy">
-          <t-date-picker v-model="form.deliverBy" valueType="YYYY-MM-DD" clearable style="width: 100%" />
+          <t-date-picker v-model="form.deliverBy" valueType="YYYY-MM-DD" clearable class="ctl-w-full" />
         </t-form-item>
       </div>
       <div v-else-if="form.demandType === 'investment'" class="form-row">
@@ -507,7 +341,7 @@ function onClose() {
             v-model="form.period"
             valueType="YYYY-MM-DD"
             clearable
-            style="width: 100%"
+            class="ctl-w-full"
             placeholder="请选择预期交付截止日…"
           />
         </t-form-item>
@@ -517,7 +351,7 @@ function onClose() {
             valueType="YYYY-MM-DD HH:mm"
             enable-time-picker
             clearable
-            style="width: 100%"
+            class="ctl-w-full"
           />
         </t-form-item>
       </div>
@@ -580,7 +414,7 @@ function onClose() {
         </template>
         <t-popup content="默认使用积分规则值，可直接为本需求调整响应奖励" show-arrow>
           <div class="reward-input-trigger">
-            <t-input-number v-model="form.respondPoints" :min="0" theme="column" style="width: 100%" />
+            <t-input-number v-model="form.respondPoints" :min="0" theme="column" class="ctl-w-full" />
           </div>
         </t-popup>
       </t-form-item>
@@ -640,6 +474,12 @@ function onClose() {
 
 .reward-input-trigger {
   width: 100%;
+}
+
+.contact-public-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
 }
 
 .scope-tip {

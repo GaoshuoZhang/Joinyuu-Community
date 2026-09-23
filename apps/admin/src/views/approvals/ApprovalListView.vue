@@ -323,6 +323,7 @@ onMounted(load)
         :loading="loading"
         :pagination="pagination"
         @page-change="onPageChange"
+        :row-attributes="{ style: { cursor: 'pointer' } }"
         @row-click="({ row }: { row: Application }) => openDetail(row)"
       >
         <template #empty>

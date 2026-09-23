@@ -194,7 +194,7 @@ function onClose() {
       </div>
       <div class="form-row">
         <t-form-item label="成立时间" name="foundedAt">
-          <t-date-picker v-model="form.foundedAt" valueType="YYYY-MM" clearable style="width: 100%" />
+          <t-date-picker v-model="form.foundedAt" valueType="YYYY-MM" clearable class="ctl-w-full" />
         </t-form-item>
       </div>
       <t-form-item label="企业简介" name="description">

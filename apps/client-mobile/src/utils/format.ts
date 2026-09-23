@@ -38,3 +38,18 @@ export function formatLocalDateTime(value: Date | number | string): string {
 export function formatLocalDate(value: Date | number | string): string {
   return formatLocalDateTime(value).slice(0, 10)
 }
+
+/** 商品描述等富文本在纯文本场景（列表卡片摘要）下的降级展示：
+ * 剥离 HTML 标签并压缩空白，避免出现「<p>权益券：…」字面标签。
+ * 详情/正文富文本请走 RichTextBlock（DOMPurify 清洗后渲染），不要用本函数。 */
+export function plainTextSummary(html: string): string {
+  return html
+    .replace(/<[^>]*>/g, ' ')
+    .replace(/&nbsp;/gi, ' ')
+    .replace(/&amp;/gi, '&')
+    .replace(/&lt;/gi, '<')
+    .replace(/&gt;/gi, '>')
+    .replace(/&quot;/gi, '"')
+    .replace(/\s+/g, ' ')
+    .trim()
+}

@@ -76,9 +76,10 @@ onMounted(load)
       <StatCard label="覆盖用户数" :value="new Set(list.map((r) => r.userId)).size" />
     </div>
 
-    <div class="page-filter-bar">
-      <span class="panel-tip">仅记录规则自动发放；管理员手动调整与商城兑换扣减不在此列。</span>
-    </div>
+    <!-- 纯说明文案不是筛选条件：用 info 提示条承载（与 MallRulesPanel 口径一致） -->
+    <t-alert theme="info" class="ledger-note">
+      仅记录规则自动发放；管理员手动调整与商城兑换扣减不在此列。
+    </t-alert>
 
     <div class="page-card">
       <t-table
@@ -107,9 +108,8 @@ onMounted(load)
 </template>
 
 <style scoped>
-.panel-tip {
-  font-size: 12px;
-  color: var(--td-text-color-secondary);
+.ledger-note {
+  margin-bottom: 16px;
 }
 
 .delta-add {

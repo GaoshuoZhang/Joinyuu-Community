@@ -70,13 +70,14 @@
 | POST | /api/app/me/enterprises/:id/exit-application | 申请企业退驻/注销（可选 `reason`）→ 管理端审核，记录 pending 状态 |
 | GET | /api/app/invitations/:id | 企业成员邀请详情（被邀请人本人或邀请方负责人可看，否则 403）：企业概要（`enterpriseLogo/enterpriseIndustry/enterpriseSize`）+ 邀请人/受邀成员/职位/状态（pending/accepted/rejected）与时间 |
 | POST | /api/app/invitations/:id/respond | 被邀请人处理邀请（body `action=accept\|reject`，仅被邀请人）：接受则写入企业成员并通知负责人；已处理 409 |
+| POST/GET | /api/app/me/messages | 用户留言：`POST` 提交留言（`title` 2-60 字 + `content` 5-1000 字，纯文本 sanitize）→ `pending` 待回复；`GET` 我的留言（倒序，含 `status`、后台回复 `replyContent/repliedAt/repliedBy`；已归档留言不下发）。后台在「用户留言」页回复并推送站内信（link `/me/messages`）；入口在「我的」页（`/me/messages`） |
 
 ## 6. 需求广场
 
 | 方法 | 路径 | 说明 |
 |---|---|---|
-| GET | /api/app/demands | 浏览列表：仅 `published`；按可见范围过滤（§9）；分页/类别/关键词；可选 `kind=task\|investment\|cooperation` 按需求类型筛选（分页与 total 统计前执行，省略时不限；历史无 kind 数据按 task）；返回 `kind`（task 找服务 / investment 找投资 / cooperation 找合作）与类型专属字段（task 含 `deliverBy` 预期交付日期；各类型含联系人 `contactName/contactPhone/contactEmail`） |
-| GET | /api/app/demands/:id | 详情（不可见 → 404，不暴露存在性；发布者可查看本人任意状态需求，其余人仅 `published` 且可见范围命中）；含响应数、`kind` 与类型专属字段（task: deliverable/budget/deliverBy；investment: cooperationNeed/returnOffer；cooperation: bottleneck/partnershipMode/returnOffer）与联系人信息；本人已响应时附 `myResponse: { message, at, status }`（`withdrawnAt` 非空即视为未响应，客户端据此隐藏响应入口并展示响应说明） |
+| GET | /api/app/demands | 浏览列表：仅 `published`；按可见范围过滤（§9）；分页/类别/关键词；可选 `kind=task\|investment\|cooperation` 按需求类型筛选（分页与 total 统计前执行，省略时不限；历史无 kind 数据按 task）；返回 `kind`（task 找服务 / investment 找投资 / cooperation 找合作）与类型专属字段（task 含 `deliverBy` 预期交付日期）；**联系人 `contactName/contactPhone/contactEmail` 仅在需求 `contactPublic=true` 时下发（含未登录游客），否则一律不下发**；社区自建需求（后台创建）返回 `publisherIdentity='official'` + `publisherIdentityLabel`（创建工作人员角色名） |
+| GET | /api/app/demands/:id | 详情（不可见 → 404，不暴露存在性；发布者可查看本人任意状态需求，其余人仅 `published` 且可见范围命中）；含响应数、`kind` 与类型专属字段（task: deliverable/budget/deliverBy；investment: cooperationNeed/returnOffer；cooperation: bottleneck/partnershipMode/returnOffer）与联系人信息（**同样按 `contactPublic` 下发**）；本人已响应时附 `myResponse: { message, at, status }`（`withdrawnAt` 非空即视为未响应，客户端据此隐藏响应入口并展示响应说明） |
 | POST | /api/app/demands | 提交需求：`demandOpen` 开关校验；`kind` 必填（task/investment/cooperation）；`categoryDict` 指定类目字典（task/cooperation→demand_category，investment→industry）；task 必填 `deliverable`（可选 `budget`）与 `deliverBy`（预期交付日期，希望在该日期前完成），investment 必填 `cooperationNeed`（可选 `returnOffer`），cooperation 必填 `bottleneck`（可选 `partnershipMode`/`returnOffer`）；`contactName`/`contactPhone` 必填、`contactEmail` 选填（校验格式）；`deadline` 不再收集（历史字段保留展示）；`asIdentity` 四类身份均可发布（含合作企业，类型不限），持有社区个体身份时不再单列个人用户选项；发布方身份快照按 wiki §8.7，`publisherName` 按主体取企业名/组织名（个人取昵称）；成员代企业发布时传 `asEnterpriseId`（服务端校验成员 `publish_demand` 权限，无权限 403）；创建即 `pending` → 管理端审核 |
 | GET | /api/app/me/demands | 我发布的需求（全状态，含 `kind`） |
 | POST | /api/app/demands/:id/respond | 响应需求：`published` 校验、不可响应自己的需求、防重复；通过后触发 `demand_responded` 积分（发放给响应成员，M2 批次） |

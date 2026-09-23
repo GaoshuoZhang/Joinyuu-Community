@@ -87,7 +87,9 @@ function goBack() {
 </template>
 
 <style scoped>
+/* 窄表单卡居中：避免宽屏下左对齐、右侧大片留白 */
 .form-card {
   max-width: 560px;
+  margin-inline: auto;
 }
 </style>

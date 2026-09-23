@@ -3,7 +3,6 @@ import { computed, onMounted, reactive, ref } from 'vue'
 import ListErrorState from '@/components/ListErrorState.vue'
 import ListEmptyState from '@/components/ListEmptyState.vue'
 import { useListQueryState } from '@/utils/listQuery'
-import PageHeader from '@/components/PageHeader.vue'
 import { auditModuleThemeMap } from '@/constants/status'
 import { fetchAuditLogs } from '@/api/auditLogs'
 import type { AuditLog, AuditModule } from '@/types'
@@ -129,7 +128,6 @@ onMounted(load)
 <template>
   <div class="audit-panel">
     <ListErrorState v-if="loadError" :message="loadError" :loading="loading" @retry="load" />
-    <PageHeader title="操作日志" description="后台管理操作的完整留痕：谁在何时对什么做了什么" />
 
     <div class="page-filter-bar">
       <t-input class="ctl-w-xl" v-model="query.keyword" clearable placeholder="搜索操作对象/动作/详情/操作人…" @enter="onSearch" />
@@ -138,16 +136,17 @@ onMounted(load)
       <t-button variant="outline" @click="onReset">重置</t-button>
     </div>
 
-    <t-table
-      row-key="id"
-      table-layout="fixed"
-      hover
-      :loading="loading"
-      :data="list"
-      :columns="columns"
-      :pagination="pagination"
-      @page-change="onPageChange"
-    >
+    <div class="page-card">
+      <t-table
+        row-key="id"
+        table-layout="fixed"
+        hover
+        :loading="loading"
+        :data="list"
+        :columns="columns"
+        :pagination="pagination"
+        @page-change="onPageChange"
+      >
       <template #module="{ row }">
         <t-tag variant="light" :theme="auditModuleThemeMap[row.module] ?? 'default'">{{ moduleOf(row) }}</t-tag>
       </template>
@@ -167,7 +166,8 @@ onMounted(load)
       <template #empty>
         <ListEmptyState :query="query" description="暂无操作日志" @clear="onReset" />
       </template>
-    </t-table>
+      </t-table>
+    </div>
 
     <!-- 日志详情抽屉：基础信息 + 变更前/变更后快照对照 -->
     <t-drawer

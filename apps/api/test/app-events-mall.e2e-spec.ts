@@ -218,6 +218,8 @@ describe('M2-R R2 app 活动与商城', () => {
       const addressId: string = addr.body.data.id
       const order = await appPost(app, token, '/api/app/mall/orders', {
         goodsId: physical.id,
+        /* 实物商品支持自提+邮寄，下单必须显式选择发货方式 */
+        shippingMethod: 'delivery',
         addressId,
       })
       expect(order.status).toBe(200)

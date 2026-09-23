@@ -8,7 +8,6 @@ import { MessagePlugin } from 'tdesign-vue-next'
 import type { CustomValidateResolveType, FormProps } from 'tdesign-vue-next'
 import { focusFirstInvalid } from '@/utils/form'
 import { AddIcon, SearchIcon } from 'tdesign-icons-vue-next'
-import PageHeader from '@/components/PageHeader.vue'
 import { fetchAdmins, saveAdmin, updateAdminStatus, resetAdminPassword, type AdminAccount } from '@/api/admins'
 import { fetchRoles } from '@/api/roles'
 
@@ -236,7 +235,6 @@ onMounted(load)
 <template>
   <div class="admin-panel">
     <ListErrorState v-if="loadError" :message="loadError" :loading="loading" @retry="() => load()" />
-    <PageHeader title="管理员账号" description="多运营人员账号、角色分配与启停管理" />
 
     <div class="page-filter-bar">
       <t-input v-model="keyword" class="ctl-w-xl" placeholder="搜索账号/姓名…" clearable @enter="onQuery" />
@@ -253,53 +251,54 @@ onMounted(load)
       </t-button>
     </div>
 
-    <!-- 卡片由聚合壳（AccountRoleView）提供，面板内不再嵌套 page-card -->
-    <t-table
-      row-key="id"
-      table-layout="fixed"
-      hover
-      resizable
-      :data="filtered"
-      :columns="columns"
-      :loading="loading"
-    >
-      <template #account="{ row }">
-        <div class="account-cell">
-          <span class="account-name">{{ row.username }}</span>
-          <span class="account-sub">{{ row.name }}</span>
-        </div>
-      </template>
-      <template #roles="{ row }">
-        <div class="role-wrap">
-          <t-tag v-for="r in row.roleCodes" :key="r" variant="light" size="small">{{ roleLabels([r]) }}</t-tag>
-        </div>
-      </template>
-      <template #status="{ row }">
-        <StatusTag entity="admin" :value="row.status" />
-      </template>
-      <template #lastLoginAt="{ row }">{{ row.lastLoginAt || '—' }}</template>
-      <template #op="{ row }">
-        <div class="op-cell" @click.stop>
-          <t-button variant="text" size="small" @click="openEdit(row)">编辑</t-button>
-          <t-button variant="text" size="small" @click="openReset(row)">重置密码</t-button>
-          <t-popconfirm
-            :content="row.status === 'active' ? '确认停用该账号？' : '确认启用该账号？'"
-            @confirm="onToggleStatus(row)"
-          >
-            <t-button variant="text" size="small" :theme="row.status === 'active' ? 'danger' : 'primary'"
-              :loading="togglingId === row.id"
-              :disabled="togglingId != null"
+    <div class="page-card">
+      <t-table
+        row-key="id"
+        table-layout="fixed"
+        hover
+        resizable
+        :data="filtered"
+        :columns="columns"
+        :loading="loading"
+      >
+        <template #account="{ row }">
+          <div class="account-cell">
+            <span class="account-name">{{ row.username }}</span>
+            <span class="account-sub">{{ row.name }}</span>
+          </div>
+        </template>
+        <template #roles="{ row }">
+          <div class="role-wrap">
+            <t-tag v-for="r in row.roleCodes" :key="r" variant="light" size="small">{{ roleLabels([r]) }}</t-tag>
+          </div>
+        </template>
+        <template #status="{ row }">
+          <StatusTag entity="admin" :value="row.status" />
+        </template>
+        <template #lastLoginAt="{ row }">{{ row.lastLoginAt || '—' }}</template>
+        <template #op="{ row }">
+          <div class="op-cell" @click.stop>
+            <t-button variant="text" size="small" @click="openEdit(row)">编辑</t-button>
+            <t-button variant="text" size="small" @click="openReset(row)">重置密码</t-button>
+            <t-popconfirm
+              :content="row.status === 'active' ? '确认停用该账号？' : '确认启用该账号？'"
+              @confirm="onToggleStatus(row)"
             >
-              {{ row.status === 'active' ? '停用' : '启用' }}
-            </t-button>
-          </t-popconfirm>
-        </div>
-      </template>
+              <t-button variant="text" size="small" :theme="row.status === 'active' ? 'danger' : 'primary'"
+                :loading="togglingId === row.id"
+                :disabled="togglingId != null"
+              >
+                {{ row.status === 'active' ? '停用' : '启用' }}
+              </t-button>
+            </t-popconfirm>
+          </div>
+        </template>
 
-      <template #empty>
-        <ListEmptyState :query="filterState" description="暂无管理员账号" @clear="onResetQuery" />
-      </template>
-    </t-table>
+        <template #empty>
+          <ListEmptyState :query="filterState" description="暂无管理员账号" @clear="onResetQuery" />
+        </template>
+      </t-table>
+    </div>
 
     <!-- 新增 / 编辑弹窗 -->
     <t-dialog
