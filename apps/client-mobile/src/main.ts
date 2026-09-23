@@ -33,18 +33,71 @@ window.addEventListener('joinyuu:unauthorized', (event) => {
  * 3）Toast / 行内表单错误播报到 aria-live（去重，避免同一文案播报两次）；
  * 4）Dialog/Popup 补 role="dialog" 与 aria-modal。 */
 let a11yFieldSeq = 0
+const LABELABLE_SELECTOR =
+  'input:not([type="hidden"]):not([type="file"]), textarea, select'
+
+/** 从 label 向上找「只含一个可标注控件」的最近容器：TDesign FormItem 的 label 与控件是
+ * 兄弟节点（label 所在层没有 input），需要到 .t-form__item-wrap 才能关联。两类情况即停：
+ * 1）容器内出现多个控件（如性别单选组）——歧义，不强行指认；
+ * 2）容器内出现第二个 label——已跨出本字段范围（如整张表单）——继续向上会把分组标题
+ *    误挂到别的字段（实测表单逐字段挂载时，首个已存在的输入会被错误复用）。 */
+function findLabelField(label: HTMLLabelElement): HTMLElement | null {
+  let node: HTMLElement | null = label.parentElement
+  for (let depth = 0; node && node !== document.body && depth < 6; depth++) {
+    const fields = node.querySelectorAll<HTMLElement>(LABELABLE_SELECTOR)
+    if (fields.length > 1) return null
+    if (node.querySelectorAll('label').length > 1) return null
+    if (fields.length === 1) return fields[0]
+    node = node.parentElement
+  }
+  return null
+}
+
 function patchA11yFields(root: ParentNode = document) {
   root.querySelectorAll('input, textarea').forEach((el) => {
     if (!el.id) el.id = `fld-${++a11yFieldSeq}-${el.tagName.toLowerCase()}`
     if (!el.getAttribute('name')) el.setAttribute('name', el.id)
-    if (!el.getAttribute('aria-label') && el.getAttribute('placeholder')) {
-      el.setAttribute('aria-label', el.getAttribute('placeholder') as string)
+    if (el.getAttribute('aria-label')) return
+    const placeholder = el.getAttribute('placeholder')
+    if (placeholder) {
+      el.setAttribute('aria-label', placeholder)
+      return
     }
+    /* 单选/复选的可访问名称来自 TDesign 兄弟节点的可视文案（原生 input 为空壳） */
+    const optionText = el
+      .closest('.t-radio, .t-checkbox')
+      ?.querySelector('.t-radio__title, .t-checkbox__title')
+      ?.textContent?.trim()
+    if (optionText) el.setAttribute('aria-label', optionText)
   })
-  root.querySelectorAll('label:not([for])').forEach((label) => {
-    const field = label.parentElement?.querySelector<HTMLElement>('input:not([type="hidden"]):not([type="file"]), textarea')
-    if (field) label.setAttribute('for', field.id)
-  })
+  /* 空 for（TDesign FormItem 会渲染 <label for="">）与无 for 同样视为未关联，
+   * 否则 Chrome 会报「label 的 for 不匹配任何 id」，同时影响自动填充与读屏 */
+  const labels: HTMLLabelElement[] = [
+    ...(root instanceof HTMLLabelElement ? [root] : []),
+    ...root.querySelectorAll<HTMLLabelElement>('label'),
+  ]
+  for (const label of labels) {
+    const forAttr = label.getAttribute('for')
+    if (forAttr && document.getElementById(forAttr)) continue
+    const field = findLabelField(label)
+    if (field) {
+      label.setAttribute('for', field.id)
+      continue
+    }
+    /* 无法关联表单控件的标签：<label> 语义要求必须关联控件（否则 Chrome 报
+     * 「A <label> isn't associated with a form field」）。空占位标签直接移除；
+     * 分组标题（性别、栏目等）转为 span 并保留类名/文本，视觉与样式不变。 */
+    if (!label.textContent?.trim() && !label.querySelector('input, textarea, select')) {
+      label.remove()
+      continue
+    }
+    const span = document.createElement('span')
+    for (const attr of Array.from(label.attributes)) {
+      if (attr.name !== 'for') span.setAttribute(attr.name, attr.value)
+    }
+    while (label.firstChild) span.appendChild(label.firstChild)
+    label.replaceWith(span)
+  }
 }
 
 let lastAnnounced = { text: '', at: 0 }

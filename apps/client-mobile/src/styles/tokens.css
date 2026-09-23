@@ -128,6 +128,14 @@ span[role='button']:not(.t-tag) {
   border-radius: var(--td-radius-large);
 }
 
+/* TDesign FormItem 的 controls-content 是 row flex 容器，Textarea 作为 flex item 默认
+ * flex:0 1 auto，会被压缩为内容宽（个人简介、响应说明等长文本域无法铺满）；
+ * 统一撑满可用宽度，避免逐页重复修补。 */
+.t-form__controls-content > .t-textarea {
+  flex: 1;
+  min-width: 0;
+}
+
 /* ---------- 可选筛选 chip（CheckTag）命中区 ---------- */
 /* 官方尺寸档 small/medium/large 实测仅约 22–26px 高（--td-tag-*-padding 为 1–2px），
  * 低于本项目「交互目标 ≥44px」基线；官方无 height 类属性可达成，故只对可点击态抬升高度，

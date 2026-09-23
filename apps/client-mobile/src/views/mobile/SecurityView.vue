@@ -385,14 +385,16 @@ async function onExport() {
     <EmptyBlock v-if="loadError" :text="loadError" action-text="重试" @action="loadAll" />
 
     <Popup :visible="pwdVisible" placement="bottom" :close-btn="true" @update:visible="requestSheetClose('password', $event)">
-      <div class="sheet">
+      <!-- 密码框必须位于 form 内：否则浏览器报「Password field is not contained in a form」，
+           且密码管理器无法识别该表单；回车提交也由此获得 -->
+      <form class="sheet" @submit.prevent="onPwdSave">
         <h2 class="sheet-title">修改登录密码</h2>
         <div class="field"><label>原密码</label><Input v-model="pwdForm.oldPassword" type="password" autocomplete="current-password" placeholder="请输入原密码…" clearable /><p v-if="pwdErrors.oldPassword" class="field-error">{{ pwdErrors.oldPassword }}</p></div>
         <div class="field"><label>新密码</label><Input v-model="pwdForm.password" type="password" autocomplete="new-password" placeholder="至少 8 位，含字母与数字…" clearable /><p v-if="pwdErrors.password" class="field-error">{{ pwdErrors.password }}</p></div>
         <div class="field"><label>确认新密码</label><Input v-model="pwdForm.confirm" type="password" autocomplete="new-password" placeholder="再次输入新密码…" clearable /><p v-if="pwdErrors.confirm" class="field-error">{{ pwdErrors.confirm }}</p></div>
         <p class="sheet-tip">修改成功后需使用新密码重新登录。</p>
-        <Button theme="primary" size="large" block :loading="pwdSaving" @click="onPwdSave">保存</Button>
-      </div>
+        <Button theme="primary" size="large" block type="submit" :loading="pwdSaving">保存</Button>
+      </form>
     </Popup>
 
     <Popup :visible="phoneVisible" placement="bottom" :close-btn="true" @update:visible="requestSheetClose('phone', $event)">
