@@ -21,3 +21,4 @@ apps/api/.tmp/
 !apps/api/src/modules/app/uploads/**
 .trae
 .opencode/
+.agents/
