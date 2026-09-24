@@ -54,30 +54,38 @@ defineEmits<{ open: [path: string] }>()
 </template>
 
 <style scoped>
-/* 卡片：白底 + 1px 边框（与页面其它卡片同一视觉语言），高度统一为 1 单位 */
+/* 卡片：白底 + 1px 边框（与页面其它卡片同一视觉语言），高度统一为 1 单位。
+ * justify-content 居中：库内 .t-grid-item 为 flex 纵向布局且未设主轴对齐，
+ * 固定高度下内容会贴顶（方形卡尤其明显）；卡片内容整体垂直居中。 */
 .feature-item,
 .quick-item {
   --td-grid-item-bg-color: var(--td-bg-color-container);
   --td-grid-item-image-bg-color: transparent;
 
   min-height: var(--app-entry-unit);
+  justify-content: center;
   border-radius: var(--td-radius-large);
   border: 1px solid var(--td-component-border);
   overflow: hidden;
 }
 
-/* 宽 2 单位卡：官方横向布局默认左右内距为 0（16px 0），卡片有边框需补内距 */
+/* 宽 2 单位卡：官方横向布局默认左右内距为 0（16px 0），卡片有边框需补内距；
+ * 图标槽默认 48px（--td-grid-item-image-width），而气泡只有 36px —— 收窄到 36px，
+ * 把省下的 12px 让给文案（375px 下文字区 82px → 94px，六字副标题才能单行不折行）。 */
 .feature-item {
   --td-grid-item-horizontal-padding: var(--app-space-6);
+  --td-grid-item-image-width: 36px;
 }
 
-/* 1 单位方形卡：宽高都等于 1 个单位——用 aspect-ratio 与网格列宽严格一致成方；
- * align-self 避免被网格行高拉伸而失效。官方图片槽默认 48px 会把卡片顶高，收到 32px 并收紧内距。 */
+/* 1 单位方形卡：宽高都按下限「1 单位」约束（不用 aspect-ratio 硬锁方形——
+ * 窄屏上四字标签 + 图标略超方形高度时，硬比例会把文字裁掉；同排各项由网格行统一等高）。
+ * 图标槽按 column=4 命中 --middle 档（基础档 --td-grid-item-image-width 不生效），
+ * 收到 28px 与气泡同宽；左右内距归零、文案上边距与上下内距收紧，
+ * 让「图标 + 四字标签」在 320px 宽设备上也能完整落在卡片内。 */
 .quick-item {
-  aspect-ratio: 1;
-  align-self: center;
-  --td-grid-item-image-width: 32px;
-  --td-grid-item-vertical-padding: var(--app-space-6) var(--app-space-3);
+  --td-grid-item-image-middle-width: 28px;
+  --td-grid-item-text-padding-top: var(--app-space-1);
+  --td-grid-item-vertical-padding: var(--app-space-3) 0;
 }
 
 /* 品牌色图标气泡：两种卡片共用 */
@@ -98,20 +106,20 @@ defineEmits<{ open: [path: string] }>()
 
 .feature-label {
   display: block;
-  font-size: var(--app-font-subtitle);
-  font-weight: 600;
+  font: var(--app-type-card-title);
   color: var(--td-text-color-primary);
 }
 
 .feature-desc {
   display: block;
-  font-size: var(--app-font-caption);
+  font: var(--app-type-body-sm);
   color: var(--td-text-color-secondary);
 }
 
 .quick-label {
   display: block;
-  font-size: var(--app-font-body);
+  /* 单行四字标签：收紧行高（默认 1.5），让方形卡内的图标 + 文案纵向排布不超卡片下限高度 */
+  font: var(--app-type-card-title);
   color: var(--td-text-color-primary);
 }
 </style>

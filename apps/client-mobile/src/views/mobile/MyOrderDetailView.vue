@@ -176,7 +176,7 @@ async function onReviewSubmit() {
 }
 
 .review-field { display: flex; flex-direction: column; gap: var(--app-space-3); }
-.review-label { font-size: var(--app-font-caption); color: var(--td-text-color-secondary); }
+.review-label { font: var(--app-type-body-sm); color: var(--td-text-color-secondary); }
 
 .state {
   padding: var(--app-space-10) 0;
@@ -203,17 +203,14 @@ async function onReviewSubmit() {
 
 .name {
   margin: 0;
-  font-size: var(--app-font-title);
-  font-weight: 600;
-  line-height: 1.4;
+  font: var(--app-type-page-title);
 }
 
 .cost {
   margin: 0;
+  font: var(--app-type-numeric);
   font-variant-numeric: tabular-nums;
-  font-size: var(--app-font-body);
-  font-weight: 600;
-  color: var(--td-brand-color);
+  color: var(--td-text-color-brand);
 }
 
 .qr-wrap {
@@ -227,13 +224,13 @@ async function onReviewSubmit() {
 .code {
   margin: 0;
   text-align: center;
-  font-size: var(--app-font-body);
+  font: var(--app-type-body);
   color: var(--td-text-color-secondary);
 }
 
 .code code {
   color: var(--td-text-color-primary);
-  font-weight: 600;
+  font: var(--app-type-emphasis);
   letter-spacing: 1px;
 }
 
@@ -241,14 +238,13 @@ async function onReviewSubmit() {
 .hint {
   margin: 0;
   text-align: center;
-  font-size: var(--app-font-caption);
+  font: var(--app-type-caption);
   color: var(--td-text-color-placeholder);
 }
 
 .info {
   margin: 0;
-  font-size: var(--app-font-caption);
-  line-height: 1.7;
+  font: var(--app-type-body-sm);
   color: var(--td-text-color-secondary);
 }
 
@@ -270,7 +266,7 @@ async function onReviewSubmit() {
 
 .times p {
   margin: 0 0 var(--app-space-2);
-  font-size: var(--app-font-caption);
+  font: var(--app-type-caption);
   font-variant-numeric: tabular-nums;
   color: var(--td-text-color-placeholder);
 }
@@ -288,7 +284,7 @@ async function onReviewSubmit() {
 .reviewed {
   margin: 0;
   text-align: center;
-  font-size: var(--app-font-caption);
+  font: var(--app-type-caption);
   color: var(--td-text-color-secondary);
 }
 
@@ -306,6 +302,6 @@ async function onReviewSubmit() {
 
 .review-title {
   margin: 0;
-  font-size: var(--app-font-subtitle);
+  font: var(--app-type-section);
 }
 </style>

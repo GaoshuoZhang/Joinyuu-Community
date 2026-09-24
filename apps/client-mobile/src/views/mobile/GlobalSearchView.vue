@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { Button, CheckTag, Icon, Loading, Search, Tag } from 'tdesign-mobile-vue'
+import { Button, CheckTag, Loading, Search, Tag } from 'tdesign-mobile-vue'
 import { fetchArticles } from '@/api/contents'
 import { fetchEnterpriseList, fetchPolicies, fetchTalents } from '@/api/community'
 import { fetchDemands } from '@/api/demands'
@@ -12,7 +12,7 @@ import EmptyBlock from '@/components/shared/EmptyBlock.vue'
 import ListSkeleton from '@/components/ListSkeleton.vue'
 import { useAnimSuppress } from '@/composables/useAnimSuppress'
 import { useRouteQuerySync } from '@/composables/useRouteQuerySync'
-import { formatLocalDateTime, formatZhNumber } from '@/utils/format'
+import { formatLocalDateTime, formatZhNumber, plainTextSummary } from '@/utils/format'
 
 useAnimSuppress()
 
@@ -37,7 +37,6 @@ const categoryOrder = computed(() => Object.keys(counts.value))
 /* v40：分类 chips 可点击过滤 */
 const activeKind = ref('')
 const visibleResults = computed(() => (activeKind.value ? results.value.filter((item) => item.kind === activeKind.value) : results.value))
-const demandHasResults = ref(false)
 
 const recent = ref<string[]>(loadRecent())
 function loadRecent(): string[] {
@@ -63,7 +62,7 @@ function clearRecent() {
 }
 function useRecent(q: string) {
   keyword.value = q
-  void search()
+  onSearchNow()
 }
 
 let searchId = 0
@@ -97,15 +96,14 @@ async function search() {
     /* v38：旧请求不覆盖新关键词结果 */
     if (id !== searchId) return
     activeKind.value = ''
-    demandHasResults.value = (demandRes?.list.length ?? 0) > 0
     results.value = [
-      ...(demandRes?.list ?? []).map((item) => ({ id: item.id, kind: '需求', title: item.title, summary: item.description, path: `/demands/${item.id}` })),
+      ...(demandRes?.list ?? []).map((item) => ({ id: item.id, kind: '需求', title: item.title, summary: plainTextSummary(item.description), path: `/demands/${item.id}` })),
       ...(events?.list ?? []).map((item) => ({ id: item.id, kind: '活动', title: item.title, summary: `${formatLocalDateTime(item.startTime)} · ${item.location}`, path: `/events/${item.id}` })),
-      ...articles.map((item) => ({ id: item.id, kind: '文章', title: item.title, summary: item.summary, path: `/articles/${item.id}` })),
-      ...policies.map((item) => ({ id: item.id, kind: '社区服务', title: item.title, summary: item.summary, path: `/community?tab=service&policy=${item.id}` })),
-      ...talents.map((item) => ({ id: item.uid, kind: '人才', title: item.name, summary: `${item.role} · ${item.intro}`, path: `/talents/${item.uid}` })),
+      ...articles.map((item) => ({ id: item.id, kind: '文章', title: item.title, summary: plainTextSummary(item.summary), path: `/articles/${item.id}` })),
+      ...policies.map((item) => ({ id: item.id, kind: '社区服务', title: item.title, summary: plainTextSummary(item.summary), path: `/community?tab=service&policy=${item.id}` })),
+      ...talents.map((item) => ({ id: item.uid, kind: '人才', title: item.name, summary: plainTextSummary(`${item.role} · ${item.intro}`), path: `/talents/${item.uid}` })),
       ...enterprises
-        .map((item) => ({ id: item.id, kind: '企业', title: item.name, summary: `${item.industry} · ${item.description}`, path: `/enterprises/${item.id}` })),
+        .map((item) => ({ id: item.id, kind: '企业', title: item.name, summary: plainTextSummary(`${item.industry} · ${item.description}`), path: `/enterprises/${item.id}` })),
       ...spaces
         .filter((item) => item.name.includes(q) || item.location.includes(q))
         .map((item) => ({ id: item.id, kind: '空间', title: item.name, summary: `${item.location} · 可容纳 ${formatZhNumber(item.capacity)} 人`, path: `/spaces/${item.id}/reserve` })),
@@ -127,13 +125,14 @@ let searchTimer: number | undefined
 watch(keyword, () => {
   window.clearTimeout(searchTimer)
   searchId += 1
+  results.value = []
+  activeKind.value = ''
+  partialError.value = ''
   /* 清空仅重置本地结果，不更新路由 */
   if (!keyword.value.trim()) {
     searchId += 1
     loading.value = false
-    results.value = []
     error.value = ''
-    partialError.value = ''
     return
   }
   /* 防抖等待也属于搜索过程，避免先闪现空结果再显示命中内容。 */
@@ -169,8 +168,7 @@ onMounted(() => {
     </header>
     <Search v-model="keyword" placeholder="输入关键词后搜索…" @search="onSearchNow" />
 
-    <!-- v46：仅首次搜索（还没有结果）用骨架屏；续搜保留旧结果，只在结果区上方给局部加载指示，
-         避免每次输入都切回骨架导致结果区闪烁 -->
+    <!-- 关键词变化立即清除上一词的结果；等待与请求期间只显示加载态。 -->
     <ListSkeleton v-if="loading && !results.length" :rows="2" />
     <EmptyBlock v-else-if="error" :text="error" action-text="重试" @action="onSearchNow" />
     <template v-else-if="hasKeyword">
@@ -196,10 +194,6 @@ onMounted(() => {
           {{ c }} {{ formatZhNumber(counts[c] ?? 0) }}
         </CheckTag>
       </div>
-      <Button v-if="demandHasResults" size="small" variant="outline" block @click="router.push(`/projects?q=${encodeURIComponent(keyword.trim())}`)">
-        查看更多需求
-        <template #suffix><Icon aria-hidden="true" name="chevron-right" size="14px" /></template>
-      </Button>
       <EmptyBlock v-if="!visibleResults.length" text="没有找到相关内容，换个关键词试试" />
       <div v-else class="result-list stagger">
         <router-link v-for="item in visibleResults" :key="`${item.kind}-${item.id}`" class="m-card result pressable" :to="item.path">
@@ -226,20 +220,20 @@ onMounted(() => {
 <style scoped>
 .global-search { display: flex; flex-direction: column; gap:var(--app-space-6); padding:var(--app-space-8); }
 .head { padding:0 var(--app-space-1); }
-.head .page-desc { margin:0; font-size: var(--app-font-caption); color: var(--td-text-color-secondary); }
+.head .page-desc { margin:0; font: var(--app-type-body-sm); color: var(--td-text-color-secondary); }
 .state { display: flex; align-items: center; justify-content: center; width: 100%; min-height: 120px; padding:var(--app-space-12) 0; }
 .result-list { display: flex; flex-direction: column; gap:var(--app-space-5); }
 .result { color: inherit; text-decoration: none; cursor: pointer; }
 .result-head { display: flex; align-items: center; gap:var(--app-space-4); }
-.result h2 { overflow: hidden; margin:0; font-size: var(--app-font-subtitle); text-overflow: ellipsis; white-space: nowrap; }
-.result p { display: -webkit-box; overflow: hidden; margin:var(--app-space-4) 0 0; color: var(--td-text-color-secondary); font-size: var(--app-font-caption); line-height: 1.7; -webkit-box-orient: vertical; -webkit-line-clamp: 2; }
-.search-guide { padding:var(--app-space-12) 0; color: var(--td-text-color-placeholder); font-size: var(--app-font-body); text-align: center; }
-.partial-error { margin:0; padding:var(--app-space-4) var(--app-space-5); border-radius: var(--td-radius-default); background: var(--td-warning-color-1); color: var(--td-text-color-secondary); font-size: var(--app-font-caption); }
-/* v46：续搜时的局部加载指示（结果区保留可见） */
+.result h2 { overflow: hidden; margin:0; font: var(--app-type-card-title); text-overflow: ellipsis; white-space: nowrap; }
+.result p { display: -webkit-box; overflow: hidden; margin:var(--app-space-4) 0 0; color: var(--td-text-color-secondary); font: var(--app-type-body-sm); -webkit-box-orient: vertical; -webkit-line-clamp: 2; }
+.search-guide { padding:var(--app-space-12) 0; color: var(--td-text-color-placeholder); font: var(--app-type-body); text-align: center; }
+.partial-error { margin:0; padding:var(--app-space-4) var(--app-space-5); border-radius: var(--td-radius-default); background: var(--td-warning-color-1); color: var(--td-text-color-secondary); font: var(--app-type-caption); }
+/* 同一关键词重新搜索时的局部加载指示 */
 .search-loading { padding:var(--app-space-4) 0; }
 .count-chips { display: flex; flex-wrap: wrap; gap:var(--app-space-3); }
 .recent { display: flex; flex-direction: column; gap:var(--app-space-4); }
-.recent-head { display: flex; align-items: center; justify-content: space-between; font-size: var(--app-font-caption); color: var(--td-text-color-secondary); }
+.recent-head { display: flex; align-items: center; justify-content: space-between; font: var(--app-type-body-sm); color: var(--td-text-color-secondary); }
 .recent-head :deep(.t-button) { color: var(--td-brand-color); }
 .recent-chips { display: flex; flex-wrap: wrap; gap:var(--app-space-4); }
 </style>

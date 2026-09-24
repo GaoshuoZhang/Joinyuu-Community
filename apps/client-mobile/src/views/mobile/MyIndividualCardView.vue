@@ -239,7 +239,7 @@ async function onSave() {
 
 .field-error {
   margin:var(--app-space-3) 0 0;
-  font-size: var(--app-font-caption);
+  font: var(--app-type-caption);
   color: var(--td-error-color);
 }
 
@@ -252,8 +252,7 @@ async function onSave() {
 
 .avatar {
   flex-shrink: 0;
-  font-size: var(--app-font-title);
-  font-weight: 600;
+  font: var(--app-type-display);
 }
 
 .info {
@@ -263,20 +262,18 @@ async function onSave() {
 
 .name {
   margin:0 0 var(--app-space-2);
-  font-size: var(--app-font-title);
-  font-weight: 600;
+  font: var(--app-type-page-title);
 }
 
 .age {
   margin-left:var(--app-space-4);
-  font-size: var(--app-font-caption);
-  font-weight: 400;
+  font: var(--app-type-caption);
   color: var(--td-text-color-secondary);
 }
 
 .level {
   margin:0;
-  font-size: var(--app-font-caption);
+  font: var(--app-type-caption);
   color: var(--td-text-color-secondary);
 }
 
@@ -291,7 +288,7 @@ async function onSave() {
   justify-content: flex-end;
   gap:var(--app-space-1);
   min-height: 44px;
-  font-size: var(--app-font-caption);
+  font: var(--app-type-body-sm);
   color: var(--td-brand-color);
   text-decoration: none;
   cursor: pointer;
@@ -300,7 +297,7 @@ async function onSave() {
 .privacy-tip {
   /* v46：取消 -2px 负外边距的魔法数，说明文字与标题的间距直接取间距 token */
   margin:0 0 var(--app-space-5);
-  font-size: var(--app-font-caption);
+  font: var(--app-type-body-sm);
   color: var(--td-text-color-placeholder);
 }
 
@@ -309,7 +306,7 @@ async function onSave() {
   align-items: center;
   justify-content: space-between;
   padding:var(--app-space-5) 0;
-  font-size: var(--app-font-body);
+  font: var(--app-type-body);
   border-top: 1px solid var(--td-component-border);
 }
 
@@ -319,7 +316,7 @@ async function onSave() {
 
 .switch-hint {
   margin: calc(var(--app-space-3) * -1) 0 var(--app-space-4);
-  font-size: var(--app-font-caption);
+  font: var(--app-type-caption);
   color: var(--td-text-color-placeholder);
 }
 
@@ -336,8 +333,7 @@ async function onSave() {
 
 .intro {
   margin:var(--app-space-6) 0 0;
-  font-size: var(--app-font-body);
-  line-height: 1.8;
+  font: var(--app-type-body-relaxed);
   color: var(--td-text-color-secondary);
   white-space: pre-wrap;
 }
@@ -351,7 +347,7 @@ async function onSave() {
 
 .sec-title {
   margin:0 0 var(--app-space-6);
-  font-size: var(--app-font-subtitle);
+  font: var(--app-type-section);
 }
 
 .sec-title.no-margin {
@@ -360,7 +356,7 @@ async function onSave() {
 
 .empty-tip {
   margin:0;
-  font-size: var(--app-font-caption);
+  font: var(--app-type-caption);
   color: var(--td-text-color-placeholder);
 }
 
@@ -391,13 +387,13 @@ async function onSave() {
 .field label {
   display: block;
   margin-bottom:var(--app-space-3);
-  font-size: var(--app-font-body);
+  font: var(--app-type-body);
   color: var(--td-text-color-secondary);
 }
 
 .tip {
   margin:var(--app-space-5) 0 0;
-  font-size: var(--app-font-caption);
+  font: var(--app-type-caption);
   color: var(--td-text-color-placeholder);
 }
 </style>

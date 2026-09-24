@@ -92,7 +92,7 @@ function memberNote(m: EnterpriseMemberInfo): string {
 <style scoped>
 .sec-title {
   margin: 0 0 var(--app-space-6);
-  font-size: var(--app-font-subtitle);
+  font: var(--app-type-section);
 }
 
 .sec-title.no-margin {
@@ -120,7 +120,7 @@ function memberNote(m: EnterpriseMemberInfo): string {
 
 .members-hint {
   margin: var(--app-space-3) 0 0;
-  font-size: var(--app-font-caption);
+  font: var(--app-type-body-sm);
   color: var(--td-text-color-placeholder);
 }
 </style>

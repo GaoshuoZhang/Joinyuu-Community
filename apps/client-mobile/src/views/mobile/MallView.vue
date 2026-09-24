@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { CheckTag, Icon, Image } from 'tdesign-mobile-vue'
+import { CheckTag, Icon, Image, Tag } from 'tdesign-mobile-vue'
 import { fetchGoods } from '@/api/mall'
 import { useAsyncList } from '@/composables/useAsyncList'
 import { useRefreshOnActivate } from '@/composables/useRefreshOnActivate'
@@ -15,6 +15,7 @@ import ListSkeleton from '@/components/ListSkeleton.vue'
 import type { Goods, PageResult } from '@/types'
 import { onImageError } from '@/utils/imageFallback'
 import { formatZhNumber, plainTextSummary } from '@/utils/format'
+import { discountedPoints } from '@/utils/points'
 
 useAnimSuppress()
 
@@ -31,6 +32,17 @@ const { data, loading, error, run } = useAsyncList<PageResult<Goods>>(() => fetc
 /* v46：列表接口返回 { list, total }，总数用于展示真实商品数（不再受默认分页截断） */
 const goodsList = computed(() => data.value?.list ?? [])
 const goodsTotal = computed(() => data.value?.total ?? 0)
+
+/* 等级折扣：折后价低于原价时列表卡片才展示原价删除线 */
+function isDiscounted(goods: Goods): boolean {
+  return discountedPoints(goods.pointsCost, auth.pointsDiscount) < goods.pointsCost
+}
+
+/* 类别标签：中文名取字典 goods_category；字典未含该 code（已删/停用）时回退展示原值 */
+function categoryLabel(goods: Goods): string {
+  if (!goods.category) return ''
+  return categories.value.find((item) => item.code === goods.category)?.label ?? goods.category
+}
 
 /* v45：无封面商品的占位字形——按商品分类区分（权益券 GC003 / 其他），
  * 取代此前 8 件商品共用同一张大块占位的做法；真实封面（coverUrl）仍然优先。 */
@@ -116,10 +128,16 @@ useRefreshOnActivate(() => {
              改为按履约类型给出的小字形，卡片更紧凑、一屏可比较更多商品 -->
         <span v-else class="goods-glyph"><Icon aria-hidden="true" :name="glyphFor(g)" size="20px" /></span>
         <div class="row">
+          <!-- 类别标签：中文名取字典 goods_category（任意类别都展示，含自定义新增类别） -->
+          <Tag v-if="categoryLabel(g)" size="small" variant="light" theme="primary">{{ categoryLabel(g) }}</Tag>
           <h2 class="name">{{ g.name }}</h2>
-          <span class="cost">{{ formatZhNumber(g.pointsCost) }} 积分</span>
+          <span class="cost">
+            <!-- v49：等级折扣价 = round(原价 × 折扣 ÷ 10)；有折扣时折后价在前、原价删除线在后 -->
+            {{ formatZhNumber(discountedPoints(g.pointsCost, auth.pointsDiscount)) }} 积分
+            <s v-if="isDiscounted(g)" class="cost-origin tabular-nums">{{ formatZhNumber(g.pointsCost) }} 积分</s>
+          </span>
         </div>
-        <p class="desc">{{ plainTextSummary(g.description) }}</p>
+        <p class="desc" :class="{ 'voucher-desc': g.category === 'GC003' }">{{ plainTextSummary(g.description) }}</p>
         <p class="stock">
           <!-- v47：售罄（不可兑换）用 StateTag 的 goods 状态集标出；卡片主热区仍可点进详情查看说明 -->
           <template v-if="g.stock > 0">库存 {{ formatZhNumber(g.stock) }}</template>
@@ -160,15 +178,13 @@ useRefreshOnActivate(() => {
 
 .points-label {
   margin: 0;
-  font-size: var(--app-font-caption);
+  font: var(--app-type-body-sm);
   opacity: 0.85;
 }
 
 .points-value {
   margin: var(--app-space-1) 0 0;
-  font-size: var(--app-font-title);
-  font-weight: 700;
-  line-height: 1.2;
+  font: var(--app-type-numeric-lg);
 }
 
 .points-rule {
@@ -177,7 +193,7 @@ useRefreshOnActivate(() => {
   gap: var(--app-space-1);
   min-height: 44px;
   padding: 0 var(--app-space-2);
-  font-size: var(--app-font-caption);
+  font: var(--app-type-body-sm);
   color: var(--td-text-color-anti);
   opacity: 0.92;
   text-decoration: none;
@@ -235,39 +251,47 @@ useRefreshOnActivate(() => {
 
 .name {
   margin:0;
-  font-size: var(--app-font-body);
-  font-weight: 600;
-  line-height: 1.4;
+  font: var(--app-type-card-title);
   display: -webkit-box;
-  -webkit-line-clamp: 2;
+  -webkit-line-clamp: 3;
   -webkit-box-orient: vertical;
   overflow: hidden;
 }
 
-/* 价格档位高于商品名（body）一级，与详情页 title 档形成一致的层级递进；
+/* 价格档位高于商品名（card-title）一级，与详情页 numeric-lg 档形成一致的层级递进；
  * 数字等宽避免两列网格里价格跳动 */
 .cost {
   flex-shrink: 0;
-  font-size: var(--app-font-subtitle);
-  font-weight: 600;
+  font: var(--app-type-numeric);
   font-variant-numeric: tabular-nums;
   color: var(--td-brand-color);
 }
 
+/* 等级折扣：原价删除线（折后价为主价格，置于其前） */
+.cost-origin {
+  margin-left: var(--app-space-2);
+  font: var(--app-type-body-sm);
+  color: var(--td-text-color-placeholder);
+  text-decoration: line-through;
+}
+
 .desc {
   margin:0 0 var(--app-space-3);
-  font-size: var(--app-font-caption);
+  font: var(--app-type-body-sm);
   color: var(--td-text-color-secondary);
-  line-height: 1.6;
   display: -webkit-box;
   -webkit-line-clamp: 1;
   -webkit-box-orient: vertical;
   overflow: hidden;
 }
 
+.voucher-desc {
+  -webkit-line-clamp: 3;
+}
+
 .stock {
   margin:auto 0 0;
-  font-size: var(--app-font-caption);
+  font: var(--app-type-caption);
   color: var(--td-text-color-placeholder);
 }
 </style>

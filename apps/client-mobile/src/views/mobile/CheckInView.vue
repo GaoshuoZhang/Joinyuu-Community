@@ -189,8 +189,7 @@ const canCheckIn = () => Boolean(
 
 .title {
   margin:0 0 var(--app-space-5);
-  font-size: var(--app-font-subtitle);
-  line-height: 1.4;
+  font: var(--app-type-card-title);
 }
 
 .ticket-card {
@@ -217,7 +216,7 @@ const canCheckIn = () => Boolean(
 .ticket-hint,
 .code {
   margin: 0;
-  font-size: var(--app-font-caption);
+  font: var(--app-type-caption);
   color: var(--td-text-color-secondary);
 }
 
@@ -235,7 +234,7 @@ const canCheckIn = () => Boolean(
 
 .code code {
   color: var(--td-text-color-primary);
-  font-weight: 600;
+  font: var(--app-type-emphasis-sm);
   letter-spacing: 1px;
 }
 
@@ -244,7 +243,7 @@ const canCheckIn = () => Boolean(
   display: flex;
   align-items: flex-start;
   gap:var(--app-space-2);
-  font-size: var(--app-font-caption);
+  font: var(--app-type-caption);
   color: var(--td-text-color-secondary);
 }
 
@@ -259,46 +258,43 @@ const canCheckIn = () => Boolean(
 
 .coord {
   margin:0;
-  font-size: var(--app-font-caption);
+  font: var(--app-type-caption);
   color: var(--td-text-color-secondary);
 }
 
 .geo-hint {
   margin:0;
-  font-size: var(--app-font-caption);
+  font: var(--app-type-caption);
   color: var(--td-text-color-placeholder);
 }
 
 .fail {
   margin:0;
-  font-size: var(--app-font-caption);
+  font: var(--app-type-caption);
   color: var(--td-error-color);
-  line-height: 1.6;
 }
 
 .tip {
   margin:0;
-  font-size: var(--app-font-caption);
+  font: var(--app-type-caption);
   color: var(--td-text-color-placeholder);
 }
 
 .success-title {
   margin:0;
-  font-size: var(--app-font-title);
-  font-weight: 600;
+  font: var(--app-type-page-title);
   color: var(--td-success-color);
 }
 
 .success-points {
   margin:0;
-  font-size: var(--app-font-body);
+  font: var(--app-type-emphasis);
   color: var(--td-brand-color);
-  font-weight: 600;
 }
 
 .success-tip {
   margin:0 0 var(--app-space-4);
-  font-size: var(--app-font-caption);
+  font: var(--app-type-caption);
   color: var(--td-text-color-secondary);
 }
 </style>

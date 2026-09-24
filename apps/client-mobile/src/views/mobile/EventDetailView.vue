@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue'
+import { computed, h, onMounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { Button, DialogPlugin, Icon, Image, Tag, Toast } from 'tdesign-mobile-vue'
 import { cancelEnrollment, enrollEvent, fetchEvent, fetchMyEventFeedback, submitEventFeedback } from '@/api/events'
@@ -95,8 +95,17 @@ async function onToggleFavorite() {
 const acting = ref(false)
 const enrollmentResult = ref<EventEnrollmentResult | null>(null)
 
-const isEnded = computed(() => event.value?.status === 'ended')
+const isEnded = computed(() => {
+  const ev = event.value
+  if (!ev) return false
+  const end = parseLocalDateTime(ev.endTime)
+  return ev.status === 'ended' || (end !== null && end.getTime() <= businessNowMs.value)
+})
 const isCancelled = computed(() => event.value?.status === 'cancelled')
+const enrollmentDeadlineLabel = computed(() => {
+  const value = event.value?.enrollmentDeadline
+  return value && parseLocalDateTime(value) ? formatLocalDateTime(value) : '未设固定截止时间'
+})
 /* 活动介绍：富文本 HTML 分支不能开 pre-wrap（源码缩进/换行会被原样渲染成可见空白），
  * 仅纯文本分支需要 pre-wrap 保留换行（判定口径与 RichTextBlock 的富文本识别一致）。 */
 const descIsPlainText = computed(() => !/<\/?[a-z][^>]*>/i.test(event.value?.description ?? ''))
@@ -148,6 +157,24 @@ async function onEnroll() {
     await router.push({ path: '/login', query: { redirect: route.fullPath } })
     return
   }
+  const ev = event.value
+  if (!ev || acting.value || disableReason.value) return
+  DialogPlugin.confirm({
+    title: '确认活动报名',
+    content: () => h('div', { style: 'text-align: left' }, [
+      h('p', { style: 'margin: 0 0 var(--app-space-3)' }, `活动：${ev.title}`),
+      h('p', { style: 'margin: 0 0 var(--app-space-3)' }, `时间：${formatLocalDateTime(ev.startTime)}`),
+      h('p', { style: 'margin: 0 0 var(--app-space-3)' }, `地点：${ev.location}`),
+      h('p', { style: 'margin: 0' }, ev.requireReview ? '提交后需等待审核；满员时将按顺序候补。' : '确认后完成报名；满员时将按顺序候补。'),
+    ]),
+    cancelBtn: '返回查看',
+    confirmBtn: '确认报名',
+    onConfirm: () => { void submitEnrollment() },
+  })
+}
+
+async function submitEnrollment() {
+  if (acting.value) return
   acting.value = true
   try {
     const res = await enrollEvent(eventId)
@@ -249,7 +276,7 @@ async function onShare() {
         <h2 class="title">{{ event.title }}</h2>
         <p class="meta"><Icon aria-hidden="true" name="time" size="14px" />{{ formatLocalDateTime(event.startTime) }} ~ {{ formatLocalDateTime(event.endTime) }}</p>
         <p class="meta"><Icon aria-hidden="true" name="location" size="14px" />{{ event.location }}</p>
-        <p class="meta"><Icon aria-hidden="true" name="alarm" size="14px" />报名截止：{{ formatLocalDateTime(event.enrollmentDeadline) }}<span v-if="event.requireReview"> · 报名需审核</span></p>
+        <p class="meta"><Icon aria-hidden="true" name="alarm" size="14px" />报名截止：{{ enrollmentDeadlineLabel }}<span v-if="event.requireReview"> · 报名需审核</span></p>
         <p class="meta"><Icon aria-hidden="true" name="usergroup" size="14px" />限 {{ formatZhNumber(event.capacity) }} 人参加</p>
         <div class="fav-row">
           <Button size="small" variant="outline" @click="onToggleFavorite">
@@ -331,7 +358,7 @@ async function onShare() {
   background: var(--td-bg-color-page);
   border: 1px solid var(--td-component-border);
   color: var(--td-text-color-secondary);
-  font-size: var(--app-font-caption);
+  font: var(--app-type-caption);
 }
 
 .cancelled-banner {
@@ -341,7 +368,7 @@ async function onShare() {
   background: var(--td-error-color-1);
   border: 1px solid var(--td-error-color);
   color: var(--td-error-color);
-  font-size: var(--app-font-caption);
+  font: var(--app-type-caption);
 }
 
 .fav-row {
@@ -366,8 +393,7 @@ async function onShare() {
 
 .title {
   margin:0 0 var(--app-space-6);
-  font-size: var(--app-font-title);
-  line-height: 1.4;
+  font: var(--app-type-page-title);
 }
 
 .meta {
@@ -375,19 +401,18 @@ async function onShare() {
   display: flex;
   align-items: center;
   gap:var(--app-space-2);
-  font-size: var(--app-font-caption);
+  font: var(--app-type-caption);
   color: var(--td-text-color-secondary);
 }
 
 .sec-title {
   margin:0 0 var(--app-space-4);
-  font-size: var(--app-font-body);
+  font: var(--app-type-section);
 }
 
 .desc {
   margin:0;
-  font-size: var(--app-font-body);
-  line-height: 1.8;
+  font: var(--app-type-body-relaxed);
   color: var(--td-text-color-secondary);
 }
 

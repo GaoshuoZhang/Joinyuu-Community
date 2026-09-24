@@ -15,6 +15,7 @@ import EmptyBlock from '@/components/shared/EmptyBlock.vue'
 import DemandFilterBar from '@/components/projects/DemandFilterBar.vue'
 import DemandListCard from '@/components/projects/DemandListCard.vue'
 import { DEMAND_KINDS } from '@/constants/demand'
+import { REFRESH_LOADING_PROPS } from '@/constants/refresh'
 import type { Demand, DemandKind } from '@/types'
 import { formatZhNumber } from '@/utils/format'
 
@@ -217,7 +218,7 @@ function onPublish() {
 <template>
   <div>
   <!-- 下拉刷新统一为页面级（与首页/社区/广场/我的一致）：指示器出现在选项卡标题上方 -->
-  <PullDownRefresh :value="refreshing" :disabled="!atTop" @refresh="onRefresh">
+  <PullDownRefresh :value="refreshing" :disabled="!atTop" :loading-props="REFRESH_LOADING_PROPS" @refresh="onRefresh">
   <div
     class="projects page-fade-in"
     @touchstart="startSwipe"

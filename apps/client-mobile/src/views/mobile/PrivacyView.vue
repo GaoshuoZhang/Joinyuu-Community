@@ -94,7 +94,7 @@ const sections = computed(() =>
 .updated,
 .demo-tip {
   margin:0;
-  font-size: var(--app-font-caption);
+  font: var(--app-type-caption);
   color: var(--td-text-color-placeholder);
 }
 
@@ -105,31 +105,30 @@ const sections = computed(() =>
 
 .doc-head h2 {
   margin:0;
-  font-size: var(--app-font-subtitle);
+  font: var(--app-type-section);
 }
 
 .doc-meta {
   display: inline-block;
   margin-top:var(--app-space-2);
-  font-size: var(--app-font-caption);
+  font: var(--app-type-caption);
   color: var(--td-text-color-placeholder);
 }
 
 .m-card h2 {
   margin:0 0 var(--app-space-4);
-  font-size: var(--app-font-body);
+  font: var(--app-type-card-title);
 }
 
 .m-card p {
   margin:0;
-  font-size: var(--app-font-body);
-  line-height: 1.9;
+  font: var(--app-type-body-relaxed);
   color: var(--td-text-color-secondary);
 }
 
 .rich-content :deep(h2) {
   margin:var(--app-space-8) 0 var(--app-space-4);
-  font-size: var(--app-font-body);
+  font: var(--app-type-card-title);
   color: var(--td-text-color-primary);
 }
 
@@ -139,8 +138,7 @@ const sections = computed(() =>
 
 .rich-content :deep(p) {
   margin:0 0 var(--app-space-4);
-  font-size: var(--app-font-body);
-  line-height: 1.9;
+  font: var(--app-type-body-relaxed);
   color: var(--td-text-color-secondary);
 }
 

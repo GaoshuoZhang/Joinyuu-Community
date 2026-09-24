@@ -233,12 +233,12 @@ function backToStep1() {
 
 .title {
   margin:0 0 var(--app-space-3);
-  font-size: var(--app-font-title);
+  font: var(--app-type-page-title);
 }
 
 .subtitle {
   margin:0;
-  font-size: var(--app-font-caption);
+  font: var(--app-type-body-sm);
   color: var(--td-text-color-secondary);
 }
 
@@ -250,7 +250,7 @@ function backToStep1() {
 .field .field-label {
   display: block;
   margin-bottom:var(--app-space-3);
-  font-size: var(--app-font-caption);
+  font: var(--app-type-body-sm);
   color: var(--td-text-color-secondary);
 }
 
@@ -265,7 +265,7 @@ function backToStep1() {
   width: auto;
   padding: 0;
   margin-bottom: var(--app-space-3);
-  font-size: var(--app-font-caption);
+  font: var(--app-type-body-sm);
   color: var(--td-text-color-secondary);
 }
 
@@ -301,7 +301,7 @@ function backToStep1() {
 .swap {
   margin:var(--app-space-7) 0 0;
   text-align: center;
-  font-size: var(--app-font-caption);
+  font: var(--app-type-body-sm);
   color: var(--td-text-color-secondary);
 }
 

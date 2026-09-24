@@ -43,17 +43,21 @@ useRefreshOnActivate(run)
           <span class="meta-item"><Icon aria-hidden="true" name="time" size="14px" />{{ s.openTime }}-{{ s.closeTime }}</span>
         </p>
         <div class="equip">
+          <Tag size="small" variant="light" :theme="s.feePerHour > 0 ? 'warning' : 'success'">
+            {{ s.feePerHour > 0 ? `${s.feePerHour} 积分/小时` : '免费' }}
+          </Tag>
           <Tag v-for="e in s.equipment" :key="e" size="small" variant="light" theme="default">{{ e }}</Tag>
           <Tag size="small" variant="light" theme="primary">{{ s.needApproval ? '需审核' : '免审核' }}</Tag>
           <StateTag v-if="s.status === 'maintenance'" kind="space" value="maintenance" />
         </div>
         <Button
           theme="primary"
+          variant="outline"
           block
           :disabled="s.status === 'maintenance' || !reservationOpen"
           @click="router.push(`/spaces/${s.id}/reserve`)"
         >
-          {{ !reservationOpen ? '预约暂未开放' : s.status === 'maintenance' ? '维护中，暂不可预约' : '预约' }}
+          {{ !reservationOpen ? '预约暂未开放' : s.status === 'maintenance' ? '维护中，暂不可预约' : '查看可约时段' }}
         </Button>
       </article>
     </div>
@@ -62,13 +66,13 @@ useRefreshOnActivate(run)
 
 <style scoped>
 .page { padding:var(--app-space-8); }
-.title { margin:0 0 var(--app-space-6); font-size: var(--app-font-title); }
+.title { margin:0 0 var(--app-space-6); font: var(--app-type-page-title); }
 .closed-tip { margin-bottom: var(--app-space-5); }
-.tip { padding:var(--app-space-10); color: var(--td-text-color-placeholder); font-size: var(--app-font-caption); background: var(--td-bg-color-container); border-radius: var(--td-radius-large); }
+.tip { padding:var(--app-space-10); color: var(--td-text-color-placeholder); font: var(--app-type-body-sm); background: var(--td-bg-color-container); border-radius: var(--td-radius-large); }
 .tip.danger { color: var(--td-error-color); }
 .list { display: flex; flex-direction: column; gap:var(--app-space-6); }
-.name { margin:0 0 var(--app-space-3); font-size: var(--app-font-subtitle); }
-.meta { display: flex; flex-wrap: wrap; align-items: center; gap:var(--app-space-5); margin:0 0 var(--app-space-4); font-size: var(--app-font-caption); color: var(--td-text-color-secondary); }
+.name { margin:0 0 var(--app-space-3); font: var(--app-type-card-title); }
+.meta { display: flex; flex-wrap: wrap; align-items: center; gap:var(--app-space-5); margin:0 0 var(--app-space-4); font: var(--app-type-caption); color: var(--td-text-color-secondary); }
 .meta-item { display: inline-flex; align-items: center; gap:var(--app-space-2); }
 .equip { display: flex; flex-wrap: wrap; gap:var(--app-space-3); margin-bottom:var(--app-space-6); }
 </style>

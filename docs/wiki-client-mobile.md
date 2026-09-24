@@ -54,15 +54,24 @@
 
 ### 交互约束
 
-- **下拉刷新**：`PullDownRefresh` 内部按触摸目标的 `overflow` 祖先判断是否到顶，横向滚动容器与截断文本会被误判；页面使用 `useAtTop()` 在离顶时 `:disabled` 下拉刷新，避免上滑被拦截回弹。
+- **下拉刷新**：`PullDownRefresh` 内部按触摸目标的 `overflow` 祖先判断是否到顶，横向滚动容器与截断文本会被误判；页面使用 `useAtTop()` 在离顶时 `:disabled` 下拉刷新，避免上滑被拦截回弹。**指示器统一 `:loading-props="REFRESH_LOADING_PROPS"`**（`constants/refresh.ts`，`{ theme: 'spinner' }`）：TDesign Loading 默认 `circular` 用 `conic-gradient` + CSS mask 画 0.5px 发丝圈，不支持 mask 的 WebView 会退化成一块蓝色楔形，`spinner`（12 根旋转短线，无 mask）各端一致。
 - **选项卡底部圆角**：`.top-tabs` 根元素须保持透明（双类名提升特异性，压过库内白底），白底与圆角由 `.t-tabs__wrapper` 承担并按需裁切，避免直角分隔线盖住底部圆角。
 - **悬浮按钮**：`--app-fab-offset` 以 TabBar 真实占位（`--app-tabbar-occupied-h`，56 + 16px margin）计算，禁止直接用 `--app-mobile-tabbar-h` 造成贴底。
 - **ActionSheet 关闭**：当前 TDesign 版本只发 `update:modelValue`（`cancel`/`close`/`update:visible` 均不触发），弹窗必须用 `v-model` 绑定，取消与点遮罩才能关闭。
 - **表单可访问性**：`main.ts` 统一修补 TDesign 表单（补 input id/name、label for、单选/复选 aria-label）；label 无法关联控件时（空 `for=""`、分组标题、空占位）不得保留为 `<label>`：空占位移除、分组标题转 `<span>` 保留类名与样式。向上关联仅限“单控件且单 label”的最近容器，防止跨字段误挂。
 
+### 排版规范（Token First）
+
+- **唯一入口**：组件内字号/字重/行高/字体栈必须整体引用 L2 角色档 —— `font: var(--app-type-*)`（`page-title` / `section` / `card-title` / `body` / `body-relaxed` / `body-sm` / `emphasis` / `emphasis-sm` / `caption` / `numeric-lg` / `numeric` / `display`）；禁止单独声明 `font-size` / `font-weight` / `line-height` / `font-family`，禁止任何字面量。复合简写没有单独挑字号/字重的位置，杜绝「看起来差不多就选一个」。`display` 专供头像首字/企业字标/徽标这类单个字的装饰性大字，不得与 `page-title`/`section` 混用（否则改标题档会连带改变头像字号）。
+- **三层结构**（`styles/tokens.css`）：L1 原始档（`--app-fs-*` / `--app-fw-*` / `--app-leading-*`，字面量唯一允许出现处，组件不得直接引用）→ L2 角色档（复合 `font:` 简写，一次锁定字号+行高+字重+字体栈）→ L3 TDesign 映射（库内 `--td-font-size-*` 原始档与 `--td-font-family` / `--td-form-label-font-size` 指向 L1；必须 `:root:root` 提特异性，库样式在路由组件里懒加载、晚于 tokens.css 注入）。headline/display 档未映射（仅 typography 文档组件使用，未接入本 App）。
+- **12px 档**：`--app-type-caption` 用于标签/角标/元信息（时间、计数、提示、表单 field-help）。TDesign 小标签、TabBar 标签、角标计数已由 L3 从 10px 抬到 12px（行高沿用库值，盒子高度不变）。
+- **强制校验**：`scripts/check-typography.mjs`（挂在 `npm run lint`）。2026-09-25 完成全量迁移（87 个文件 / 610 处声明，基线清空，`typography-allowlist.txt` 已删除）；此后任何非角色档声明都会直接拦截。确需破例在声明行（或紧邻上一行）写 `/* typography-token-exempt: 原因 */`，原因里写明升级复核点。
+- **例外**：`font-variant-numeric: tabular-nums`（数值等宽，须写在 `font:` 之后）与 TDesign 通过 props（`size` / `theme`）表达的尺寸，不算重写。
+- **迁移期的两处有意外观变化（已确认）**：18px 卡片条目标题统一收到 16px；14px 元信息统一收到 12px。22px 的头像首字/字标归入 `display` 档（18px）。
+
 ## 6. 主要页面
 
-- 首页：搜索入口、身份个性化功能入口、发布需求、折叠的新手任务（可永久隐藏）、公告、轮播、近期活动、最新需求/资讯。
+- 首页：搜索入口、轮播、身份个性化功能入口、发布需求、折叠的新手任务（可永久隐藏）、公告、近期活动、最新需求/资讯（轮播为搜索栏下方首个运营位）。
 - 需求（`/projects`）：类型选项卡 + 搜索 + 发布入口（悬浮 FAB）、需求详情、响应与发布者选定承接方。
 - 社区：政策、人才库、企业库、公开名片。
 - 广场：活动与文章。

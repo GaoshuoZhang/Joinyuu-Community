@@ -176,12 +176,12 @@ defineExpose({ scrollToCard })
 }
 
 .identity {
-  font-size: var(--app-font-caption);
+  font: var(--app-type-caption);
   opacity: 0.85;
 }
 
 .current-badge {
-  font-size: var(--app-font-caption);
+  font: var(--app-type-caption); /* typography-token-exempt: 紧随其后的 line-height 是徽章胶囊高度约束（零余量行高贴合 3px 内距），角色档行高（1.5）会把徽章撑高约 4px；升级复核角色档是否引入紧凑行高档 */
   line-height: 1;
   padding: 3px var(--app-space-2);
   border-radius: 4px;
@@ -190,7 +190,7 @@ defineExpose({ scrollToCard })
 }
 
 .reached-badge {
-  font-size: var(--app-font-caption);
+  font: var(--app-type-caption); /* typography-token-exempt: 同上，徽章胶囊高度约束，角色档行高会撑高徽章；升级复核角色档是否引入紧凑行高档 */
   line-height: 1;
   padding: 3px var(--app-space-2);
   border-radius: 4px;
@@ -202,7 +202,7 @@ defineExpose({ scrollToCard })
   display: inline-flex;
   align-items: center;
   gap: 2px;
-  font-size: var(--app-font-caption);
+  font: var(--app-type-caption); /* typography-token-exempt: 同上，徽章胶囊高度约束，角色档行高会撑高徽章；升级复核角色档是否引入紧凑行高档 */
   line-height: 1;
   padding: 3px var(--app-space-2);
   border-radius: 4px;
@@ -218,18 +218,17 @@ defineExpose({ scrollToCard })
 }
 
 .lv-num {
-  font-size: var(--app-font-title);
-  font-weight: 700;
+  font: var(--app-type-numeric-lg);
+  font-variant-numeric: tabular-nums;
 }
 
 .lv-name {
-  font-size: var(--app-font-subtitle);
-  font-weight: 600;
+  font: var(--app-type-card-title);
 }
 
 .meta {
   margin: 0;
-  font-size: var(--app-font-caption);
+  font: var(--app-type-caption);
   opacity: 0.85;
 }
 
@@ -244,8 +243,7 @@ defineExpose({ scrollToCard })
 }
 
 .right-item {
-  font-size: var(--app-font-caption);
-  line-height: 1.6;
+  font: var(--app-type-body-sm);
   opacity: 0.92;
 }
 </style>

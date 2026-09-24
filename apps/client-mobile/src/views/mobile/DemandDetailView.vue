@@ -268,12 +268,12 @@ async function onShare() {
 
 .sub {
   margin: 0 0 var(--app-space-5);
-  font-size: var(--app-font-subtitle);
+  font: var(--app-type-section);
 }
 
 .notice {
   margin: 0;
-  font-size: var(--app-font-caption);
+  font: var(--app-type-caption);
   color: var(--td-text-color-secondary);
   background: var(--td-bg-color-page);
   border: 1px dashed var(--td-component-border);
@@ -299,22 +299,20 @@ async function onShare() {
   align-items: center;
   justify-content: space-between;
   gap: var(--app-space-4);
-  font-size: var(--app-font-body);
-  font-weight: 600;
+  font: var(--app-type-emphasis);
   color: var(--td-success-color);
 }
 
 .responded-note {
   margin: var(--app-space-4) 0 0;
-  font-size: var(--app-font-body);
-  line-height: 1.7;
+  font: var(--app-type-body-relaxed);
   white-space: pre-wrap;
   color: var(--td-text-color-primary);
 }
 
 .responded-meta {
   margin: var(--app-space-4) 0 0;
-  font-size: var(--app-font-caption);
+  font: var(--app-type-caption);
   color: var(--td-text-color-secondary);
 }
 </style>

@@ -129,15 +129,14 @@ useRouteQuerySync('/me/favorites', (query) => {
 .fav-title {
   flex: 1;
   margin:0;
-  font-size: var(--app-font-body);
-  line-height: 1.45;
+  font: var(--app-type-card-title);
   min-width: 0;
 }
 
 .fav-sub,
 .fav-at {
   margin:var(--app-space-3) 0 0;
-  font-size: var(--app-font-caption);
+  font: var(--app-type-body-sm);
   color: var(--td-text-color-secondary);
 }
 

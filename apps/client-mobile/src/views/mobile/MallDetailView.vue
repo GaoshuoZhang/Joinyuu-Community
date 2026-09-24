@@ -12,6 +12,7 @@ import ListSkeleton from '@/components/ListSkeleton.vue'
 import FlowResult from '@/components/FlowResult.vue'
 import type { Goods } from '@/types'
 import { formatZhNumber } from '@/utils/format'
+import { discountLabel, discountedPoints } from '@/utils/points'
 
 /* 移动商品详情（统一券码兑换）：信息展示 + 立即兑换（确认弹层含扣减后余额预览）；
  * 未登录跳登录，成功提示剩余积分后进入我的订单。兑换后凭券码到现场由工作人员核销。 */
@@ -32,6 +33,9 @@ const orderedId = ref('')
 const remainingPoints = ref<number | null>(null)
 
 const soldOut = computed(() => (goods.value?.stock ?? 0) <= 0)
+/* 等级折扣价：实扣 = round(商品积分 × 折扣 ÷ 10)（与后端同一算法，实扣以后端为准） */
+const chargedPoints = computed(() => discountedPoints(goods.value?.pointsCost ?? 0, auth.pointsDiscount))
+const discounted = computed(() => chargedPoints.value < (goods.value?.pointsCost ?? 0))
 const validDaysText = computed(() =>
   goods.value?.validDays ? `兑换后 ${goods.value.validDays} 天内有效，过期未使用自动退回积分` : '兑换后 30 天内有效，过期未使用自动退回积分',
 )
@@ -43,17 +47,20 @@ function onRedeem() {
   }
   const item = goods.value
   if (!item) return
-  if (auth.points < item.pointsCost) {
-    Toast(`积分不足，还差 ${formatZhNumber(item.pointsCost - auth.points)} 积分`)
+  if (auth.points < chargedPoints.value) {
+    Toast(`积分不足，还差 ${formatZhNumber(chargedPoints.value - auth.points)} 积分`)
     return
   }
-  const remaining = auth.points - item.pointsCost
+  const remaining = auth.points - chargedPoints.value
   DialogPlugin.confirm({
     title: '确认兑换',
     content: () =>
       h('div', { class: 'order-confirm' }, [
         h('p', { class: 'order-confirm__line' }, `商品：${item.name}`),
-        h('p', { class: 'order-confirm__line' }, `消耗积分：${formatZhNumber(item.pointsCost)}`),
+        ...(discounted.value
+          ? [h('p', { class: 'order-confirm__line' }, `价格：${formatZhNumber(item.pointsCost)} 积分 · ${discountLabel(auth.pointsDiscount)}（${formatZhNumber(chargedPoints.value)} 积分）`)]
+          : []),
+        h('p', { class: 'order-confirm__line' }, `消耗积分：${formatZhNumber(chargedPoints.value)}`),
         h('p', { class: 'order-confirm__line' }, `兑换后剩余：${formatZhNumber(remaining)} 积分`),
       ]),
     cancelBtn: '再想想',
@@ -104,7 +111,12 @@ function goOrders() {
       <section class="m-card main">
         <Image v-if="goods.coverUrl" class="detail-cover" :src="goods.coverUrl" :alt="goods.name" fit="cover" @error="onImageError" />
         <h2 class="name">{{ goods.name }}</h2>
-        <p class="cost"><span class="tabular-nums">{{ formatZhNumber(goods.pointsCost) }}</span> <span>积分</span></p>
+        <p class="cost">
+          <span class="tabular-nums">{{ formatZhNumber(chargedPoints) }}</span> <span>积分</span>
+          <!-- 等级折扣：展示折后价 + 原价删除线（无折扣时不显示原价） -->
+          <s v-if="discounted" class="cost-origin tabular-nums">{{ formatZhNumber(goods.pointsCost) }} 积分</s>
+          <span v-if="discounted" class="cost-tag">{{ discountLabel(auth.pointsDiscount) }}</span>
+        </p>
         <p class="stock">库存 {{ formatZhNumber(goods.stock) }}</p>
         <p class="valid-days"><Icon aria-hidden="true" name="time" size="14px" />{{ validDaysText }}</p>
         <div class="desc">
@@ -175,7 +187,7 @@ function goOrders() {
   align-items: center;
   gap: var(--app-space-2);
   margin:0 0 var(--app-space-7);
-  font-size: var(--app-font-caption);
+  font: var(--app-type-body-sm);
   color: var(--td-text-color-secondary);
 }
 
@@ -191,39 +203,51 @@ function goOrders() {
   align-items: center;
   gap: var(--app-space-2);
   margin:0;
-  font-size: var(--app-font-body);
-  font-weight: 600;
+  font: var(--app-type-card-title);
   color: var(--td-brand-color);
 }
 
 .voucher-notice__line {
   margin:0;
-  font-size: var(--app-font-caption);
-  line-height: 1.7;
+  font: var(--app-type-body-sm);
   color: var(--td-text-color-secondary);
 }
 
 .name {
   margin:0 0 var(--app-space-6);
-  font-size: var(--app-font-title);
-  line-height: 1.4;
+  font: var(--app-type-page-title);
 }
 
 .cost {
   margin:0 0 var(--app-space-3);
-  font-size: var(--app-font-title);
-  font-weight: 600;
+  font: var(--app-type-numeric-lg);
   color: var(--td-brand-color);
 }
 
 .cost span {
-  font-size: var(--app-font-caption);
-  font-weight: 400;
+  font: var(--app-type-body-sm);
+}
+
+/* 等级折扣：原价删除线 + 折扣标签（无折扣时不渲染） */
+.cost-origin {
+  margin-left: var(--app-space-3);
+  font: var(--app-type-body-sm);
+  color: var(--td-text-color-placeholder);
+  text-decoration: line-through;
+}
+
+.cost-tag {
+  margin-left: var(--app-space-3);
+  padding: 0 var(--app-space-2);
+  border-radius: var(--td-radius-small);
+  font: var(--app-type-caption);
+  color: var(--td-warning-color);
+  background: var(--td-warning-color-1);
 }
 
 .stock {
   margin:0 0 var(--app-space-3);
-  font-size: var(--app-font-caption);
+  font: var(--app-type-caption);
   color: var(--td-text-color-secondary);
 }
 
@@ -234,13 +258,12 @@ function goOrders() {
 
 .desc h3 {
   margin:0 0 var(--app-space-3);
-  font-size: var(--app-font-body);
+  font: var(--app-type-card-title);
 }
 
 .desc p {
   margin:0;
-  font-size: var(--app-font-body);
-  line-height: 1.8;
+  font: var(--app-type-body-relaxed);
   color: var(--td-text-color-secondary);
   white-space: pre-wrap;
 }
@@ -248,13 +271,13 @@ function goOrders() {
 .own-points {
   margin:0;
   text-align: center;
-  font-size: var(--app-font-caption);
+  font: var(--app-type-body-sm);
   color: var(--td-text-color-secondary);
 }
 
 .hint {
   margin:0;
-  font-size: var(--app-font-caption);
+  font: var(--app-type-caption);
   color: var(--td-text-color-placeholder);
 }
 </style>

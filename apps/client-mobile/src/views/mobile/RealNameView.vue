@@ -160,7 +160,7 @@ function onRealNameSubmit({ validateResult }: { validateResult: unknown }) {
 
 .sec-title {
   margin:0 0 var(--app-space-6);
-  font-size: var(--app-font-subtitle);
+  font: var(--app-type-section);
 }
 
 .sec-title.no-margin {
@@ -178,7 +178,7 @@ function onRealNameSubmit({ validateResult }: { validateResult: unknown }) {
   width: auto;
   padding: 0;
   margin-bottom: var(--app-space-3);
-  font-size: var(--app-font-caption);
+  font: var(--app-type-body-sm);
   color: var(--td-text-color-secondary);
 }
 
@@ -190,7 +190,7 @@ function onRealNameSubmit({ validateResult }: { validateResult: unknown }) {
   display: flex;
   gap:var(--app-space-4);
   margin-bottom:var(--app-space-5);
-  font-size: var(--app-font-body);
+  font: var(--app-type-body);
 }
 
 .read-row:last-child {
@@ -210,7 +210,7 @@ function onRealNameSubmit({ validateResult }: { validateResult: unknown }) {
 
 .tip {
   margin:0;
-  font-size: var(--app-font-caption);
+  font: var(--app-type-caption);
   color: var(--td-text-color-placeholder);
   text-align: center;
 }

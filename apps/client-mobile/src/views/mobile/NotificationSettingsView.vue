@@ -93,8 +93,7 @@ function onRowClick(item: NoticePreferenceType) {
 .tip {
   margin: 0;
   padding: 0 var(--app-space-1);
-  font-size: var(--app-font-caption);
-  line-height: 1.6;
+  font: var(--app-type-body-sm);
   color: var(--td-text-color-secondary);
 }
 

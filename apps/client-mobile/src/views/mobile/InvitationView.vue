@@ -150,8 +150,7 @@ function goEnterprise() {
 
 .ent-logo {
   flex-shrink: 0;
-  font-size: var(--app-font-title);
-  font-weight: 600;
+  font: var(--app-type-display);
 }
 
 .ent-info {
@@ -161,24 +160,24 @@ function goEnterprise() {
 
 .ent-name {
   margin:0 0 var(--app-space-2);
-  font-size: var(--app-font-title);
-  font-weight: 600;
+  font: var(--app-type-page-title);
 }
 
 .ent-meta {
   margin:0;
-  font-size: var(--app-font-caption);
+  font: var(--app-type-caption);
   color: var(--td-text-color-secondary);
 }
 
 .sec-title {
   margin:0 0 var(--app-space-3);
-  font-size: var(--app-font-body);
+  /* 与全站同名章节标题（企业详情 / 人才名片 / 活动详情）统一为 section 角色档 */
+  font: var(--app-type-section);
 }
 
 .result-tip {
   margin:0;
-  font-size: var(--app-font-caption);
+  font: var(--app-type-body-sm);
   color: var(--td-text-color-secondary);
   text-align: center;
 }

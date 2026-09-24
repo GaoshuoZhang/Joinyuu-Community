@@ -1,6 +1,8 @@
 <script setup lang="ts">
+import { ref } from 'vue'
 import { Button, Cell, DateTimePicker, Input, Popup, Textarea } from 'tdesign-mobile-vue'
 import type { DemandKind } from '@/types'
+import { formatLocalDate } from '@/utils/format'
 
 /* 需求发布表单：按类型展示的扩展字段（期望交付/投资合作/合作诉求）。
  * 必填口径与 DemandFormView / ContactFields 一致：标签为「文案 + 红色 *」，错误行统一 .field-error。 */
@@ -11,7 +13,7 @@ export interface DemandExtrasErrors {
   bottleneck: string
 }
 
-defineProps<{
+const props = defineProps<{
   kind: DemandKind
   errors: DemandExtrasErrors
   todayStr: string
@@ -27,6 +29,17 @@ const cooperationNeed = defineModel<string>('cooperationNeed', { required: true 
 const returnOffer = defineModel<string>('returnOffer', { required: true })
 const bottleneck = defineModel<string>('bottleneck', { required: true })
 const partnershipMode = defineModel<string>('partnershipMode', { required: true })
+const draftDeliverBy = ref('')
+
+function openDeliverBy() {
+  draftDeliverBy.value = deliverBy.value || props.todayStr
+  emit('update:showDeliverBy', true)
+}
+
+function confirmDeliverBy(value: string | number | Date) {
+  deliverBy.value = typeof value === 'string' ? value : formatLocalDate(value)
+  emit('update:showDeliverBy', false)
+}
 
 /** 清除已选日期：只置空字段值，不改动日期格式与提交载荷结构 */
 function clearDeliverBy() {
@@ -58,7 +71,7 @@ function clearDeliverBy() {
         :class="{ 'is-empty': !deliverBy }"
         :title="deliverBy || '请选择预期交付日期'"
         arrow
-        @click="emit('update:showDeliverBy', true)"
+        @click="openDeliverBy"
       >
         <template v-if="deliverBy" #note>
           <Button size="small" variant="text" class="date-clear" @click.stop="clearDeliverBy">清除</Button>
@@ -66,12 +79,12 @@ function clearDeliverBy() {
       </Cell>
       <Popup :visible="showDeliverBy" placement="bottom" @update:visible="(value: boolean) => emit('update:showDeliverBy', value)">
         <DateTimePicker
-          v-model="deliverBy"
+          v-model="draftDeliverBy"
           mode="date"
           format="YYYY-MM-DD"
           :start="todayStr"
           title="选择预期交付日期"
-          @confirm="emit('update:showDeliverBy', false)"
+          @confirm="confirmDeliverBy"
           @cancel="emit('update:showDeliverBy', false)"
         />
       </Popup>
@@ -138,14 +151,14 @@ function clearDeliverBy() {
 .field label,
 .field .field-label {
   display: block;
-  font-size: var(--app-font-body);
+  font: var(--app-type-body);
   margin-bottom: var(--app-space-4);
   color: var(--td-text-color-secondary);
 }
 
 .field-error {
   margin: var(--app-space-3) 0 0;
-  font-size: var(--app-font-caption);
+  font: var(--app-type-caption);
   color: var(--td-error-color);
 }
 

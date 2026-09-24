@@ -256,8 +256,7 @@ async function onAcceptMilestone(m: Milestone) {
 .title {
   flex: 1;
   margin:0;
-  font-size: var(--app-font-title);
-  line-height: 1.45;
+  font: var(--app-type-page-title);
 }
 
 .meta {
@@ -265,7 +264,7 @@ async function onAcceptMilestone(m: Milestone) {
   align-items: center;
   gap:var(--app-space-6);
   margin-top:var(--app-space-5);
-  font-size: var(--app-font-caption);
+  font: var(--app-type-caption);
 }
 
 .role {
@@ -293,7 +292,7 @@ async function onAcceptMilestone(m: Milestone) {
 
 .participants p {
   margin:0 0 var(--app-space-3);
-  font-size: var(--app-font-body);
+  font: var(--app-type-body);
   color: var(--td-text-color-secondary);
 }
 
@@ -303,7 +302,7 @@ async function onAcceptMilestone(m: Milestone) {
 
 .participants b {
   color: var(--td-text-color-primary);
-  font-weight: 600;
+  font: var(--app-type-emphasis);
 }
 
 .participants .unknown {
@@ -316,12 +315,12 @@ async function onAcceptMilestone(m: Milestone) {
 
 .sub {
   margin:0 0 var(--app-space-4);
-  font-size: var(--app-font-subtitle);
+  font: var(--app-type-section);
 }
 
 .hint {
   margin:0;
-  font-size: var(--app-font-caption);
+  font: var(--app-type-caption);
   color: var(--td-text-color-placeholder);
 }
 
@@ -345,7 +344,7 @@ async function onAcceptMilestone(m: Milestone) {
   align-items: center;
   justify-content: space-between;
   gap:var(--app-space-4);
-  font-size: var(--app-font-body);
+  font: var(--app-type-card-title);
 }
 
 .m-title {
@@ -355,15 +354,13 @@ async function onAcceptMilestone(m: Milestone) {
 .m-note,
 .m-time {
   margin:var(--app-space-3) 0 0;
-  font-size: var(--app-font-caption);
-  line-height: 1.6;
+  font: var(--app-type-body-sm);
   color: var(--td-text-color-secondary);
 }
 
 .m-return {
   margin:var(--app-space-3) 0 0;
-  font-size: var(--app-font-caption);
-  line-height: 1.6;
+  font: var(--app-type-body-sm);
   color: var(--td-error-color);
 }
 
@@ -389,7 +386,7 @@ async function onAcceptMilestone(m: Milestone) {
 .m-field-label {
   display: block;
   margin-bottom:var(--app-space-3);
-  font-size: var(--app-font-caption);
+  font: var(--app-type-body-sm);
   color: var(--td-text-color-secondary);
 }
 
@@ -406,7 +403,7 @@ async function onAcceptMilestone(m: Milestone) {
 
 .field-error {
   margin:var(--app-space-3) 0 0;
-  font-size: var(--app-font-caption);
+  font: var(--app-type-caption);
   color: var(--td-error-color);
 }
 </style>

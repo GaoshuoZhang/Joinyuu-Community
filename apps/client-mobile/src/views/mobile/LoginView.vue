@@ -134,19 +134,18 @@ function onLoginSubmit({ validateResult }: { validateResult: unknown }) {
   border-radius: var(--td-radius-large);
   background: var(--client-brand-gradient);
   color: var(--td-text-color-anti);
-  font-weight: 600;
-  font-size: var(--app-font-title);
+  font: var(--app-type-display);
   margin-bottom:var(--app-space-7);
 }
 
 .title {
   margin:0 0 var(--app-space-3);
-  font-size: var(--app-font-title);
+  font: var(--app-type-page-title);
 }
 
 .slogan {
   margin:0;
-  font-size: var(--app-font-caption);
+  font: var(--app-type-body-sm);
   color: var(--td-text-color-secondary);
 }
 
@@ -161,7 +160,7 @@ function onLoginSubmit({ validateResult }: { validateResult: unknown }) {
   width: auto;
   padding: 0;
   margin-bottom: var(--app-space-3);
-  font-size: var(--app-font-caption);
+  font: var(--app-type-body-sm);
   color: var(--td-text-color-secondary);
 }
 
@@ -177,7 +176,7 @@ function onLoginSubmit({ validateResult }: { validateResult: unknown }) {
 .guest {
   margin:var(--app-space-6) 0 0;
   text-align: center;
-  font-size: var(--app-font-body);
+  font: var(--app-type-body);
 }
 
 .guest-link {
@@ -191,7 +190,7 @@ function onLoginSubmit({ validateResult }: { validateResult: unknown }) {
 .swap {
   margin:var(--app-space-9) 0 0;
   text-align: center;
-  font-size: var(--app-font-body);
+  font: var(--app-type-body);
   color: var(--td-text-color-secondary);
 }
 
@@ -212,13 +211,13 @@ function onLoginSubmit({ validateResult }: { validateResult: unknown }) {
 .forgot {
   margin:var(--app-space-6) 0 0;
   text-align: center;
-  font-size: var(--app-font-body);
+  font: var(--app-type-body);
 }
 
 .demo {
   margin:var(--app-space-6) 0 0;
   text-align: center;
-  font-size: var(--app-font-caption);
+  font: var(--app-type-caption);
   color: var(--td-text-color-placeholder);
 }
 

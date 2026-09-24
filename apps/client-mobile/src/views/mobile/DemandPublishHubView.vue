@@ -55,6 +55,7 @@ function goForm() {
         class="kind-card m-card"
         :class="{ active: selected === item.kind }"
         :aria-pressed="selected === item.kind"
+        :aria-expanded="selected === item.kind"
         v-pressable
         @click="selected = item.kind"
       >
@@ -68,15 +69,18 @@ function goForm() {
           />
         </div>
         <p class="tagline">{{ item.tagline }}</p>
-        <div class="process">
-          <template v-for="(s, i) in item.process" :key="s">
-            <Tag class="step" size="small" variant="light" theme="primary">{{ s }}</Tag>
-            <Icon aria-hidden="true" v-if="i < item.process.length - 1" name="chevron-right" size="12px" class="arrow" />
-          </template>
+        <p class="kind-fit">{{ item.bullets[0] }}</p>
+        <div v-if="selected === item.kind" class="kind-details">
+          <div class="process">
+            <template v-for="(s, i) in item.process" :key="s">
+              <Tag class="step" size="small" variant="light" theme="primary">{{ s }}</Tag>
+              <Icon aria-hidden="true" v-if="i < item.process.length - 1" name="chevron-right" size="12px" class="arrow" />
+            </template>
+          </div>
+          <ul class="bullets">
+            <li v-for="b in item.bullets.slice(1)" :key="b">{{ b }}</li>
+          </ul>
         </div>
-        <ul class="bullets">
-          <li v-for="b in item.bullets" :key="b">{{ b }}</li>
-        </ul>
       </section>
 
       <Button theme="primary" variant="text" block @click="router.push('/me/demands')">
@@ -118,7 +122,7 @@ function goForm() {
 
 .head .desc {
   margin:0;
-  font-size: var(--app-font-caption);
+  font: var(--app-type-body-sm);
   color: var(--td-text-color-secondary);
 }
 
@@ -142,7 +146,7 @@ function goForm() {
 
 .kind-title {
   margin:0;
-  font-size: var(--app-font-subtitle);
+  font: var(--app-type-card-title);
 }
 
 /* v48：选中指示器（非交互元素，选择行为由整卡点击承担） */
@@ -158,9 +162,20 @@ function goForm() {
 
 .tagline {
   margin:var(--app-space-4) 0 0;
-  font-size: var(--app-font-body);
+  font: var(--app-type-body);
   color: var(--td-text-color-secondary);
-  line-height: 1.6;
+}
+
+.kind-fit {
+  margin: var(--app-space-3) 0 0;
+  font: var(--app-type-body-sm);
+  color: var(--td-text-color-secondary);
+}
+
+.kind-details {
+  margin-top: var(--app-space-5);
+  padding-top: var(--app-space-5);
+  border-top: 1px solid var(--td-component-border);
 }
 
 /* 推进流程：步骤 chips + 箭头 */
@@ -169,7 +184,6 @@ function goForm() {
   flex-wrap: wrap;
   align-items: center;
   gap:var(--app-space-2);
-  margin-top:var(--app-space-5);
 }
 
 .arrow {
@@ -185,9 +199,8 @@ function goForm() {
 }
 
 .bullets li {
-  font-size: var(--app-font-caption);
+  font: var(--app-type-body-sm);
   color: var(--td-text-color-secondary);
-  line-height: 1.6;
 }
 
 </style>

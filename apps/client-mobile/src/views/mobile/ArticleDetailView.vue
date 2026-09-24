@@ -254,13 +254,12 @@ async function onToggleFavorite() {
 
 .title {
   margin:var(--app-space-4) 0 var(--app-space-3);
-  font-size: var(--app-font-title);
-  line-height: 1.45;
+  font: var(--app-type-page-title);
 }
 
 .meta {
   margin:0;
-  font-size: var(--app-font-caption);
+  font: var(--app-type-caption);
   color: var(--td-text-color-placeholder);
 }
 
@@ -269,7 +268,7 @@ async function onToggleFavorite() {
   padding:var(--app-space-8);
   text-align: center;
   color: var(--td-text-color-secondary);
-  font-size: var(--app-font-body);
+  font: var(--app-type-body);
 }
 
 </style>

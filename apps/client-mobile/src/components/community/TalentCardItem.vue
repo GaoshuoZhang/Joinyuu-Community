@@ -17,7 +17,7 @@ defineProps<{ talent: TalentMember; to: string }>()
         <h3 class="title name">{{ talent.name }}</h3>
       </span>
     </div>
-    <p class="intro">{{ talent.intro }}</p>
+    <p class="intro" :class="{ 'empty-intro': !talent.intro?.trim() }">{{ talent.intro?.trim() || '该成员暂未填写简介' }}</p>
     <div v-if="talent.skills.length" class="skills">
       <Tag v-for="s in talent.skills" :key="s" size="small" variant="light" theme="default" class="skill">
         {{ s }}
@@ -51,14 +51,12 @@ defineProps<{ talent: TalentMember; to: string }>()
 
 .talent-avatar {
   flex-shrink: 0;
-  font-size: var(--app-font-subtitle);
+  font: var(--app-type-display);
 }
 
 .title {
   margin:0;
-  font-size: var(--app-font-subtitle);
-  font-weight: 600;
-  line-height: 1.45;
+  font: var(--app-type-card-title);
   color: var(--td-text-color-primary);
   min-width: 0;
 }
@@ -71,13 +69,16 @@ defineProps<{ talent: TalentMember; to: string }>()
 
 .intro {
   margin: var(--app-space-3) 0 0;
-  font-size: var(--app-font-body);
-  line-height: 1.7;
+  font: var(--app-type-body);
   color: var(--td-text-color-secondary);
   display: -webkit-box;
   -webkit-line-clamp: 2;
   -webkit-box-orient: vertical;
   overflow: hidden;
+}
+
+.empty-intro {
+  color: var(--td-text-color-placeholder);
 }
 
 .skills {

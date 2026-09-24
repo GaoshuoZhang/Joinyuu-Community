@@ -139,14 +139,14 @@ function onListScroll(bottomDistance: number) {
 
 .ledger-count {
   margin:0 0 var(--app-space-4);
-  font-size: var(--app-font-caption);
+  font: var(--app-type-caption);
   color: var(--td-text-color-placeholder);
 }
 
 .ledger-end {
   margin:var(--app-space-6) 0 0;
   text-align: center;
-  font-size: var(--app-font-caption);
+  font: var(--app-type-caption);
   color: var(--td-text-color-placeholder);
 }
 
@@ -162,13 +162,12 @@ function onListScroll(bottomDistance: number) {
 }
 
 .label {
-  font-size: var(--app-font-caption);
+  font: var(--app-type-body-sm);
   opacity: 0.85;
 }
 
 .value {
-  font-size: var(--app-font-title);
-  font-weight: 600;
+  font: var(--app-type-numeric-lg);
 }
 
 .ledger-search {
@@ -199,12 +198,12 @@ function onListScroll(bottomDistance: number) {
 
 .reason {
   margin:0 0 var(--app-space-2);
-  font-size: var(--app-font-body);
+  font: var(--app-type-body);
 }
 
 .meta {
   margin:0;
-  font-size: var(--app-font-caption);
+  font: var(--app-type-caption);
   color: var(--td-text-color-secondary);
 }
 
@@ -213,9 +212,8 @@ function onListScroll(bottomDistance: number) {
 }
 
 .delta {
-  font-weight: 600;
   color: var(--td-success-color);
-  font-size: var(--app-font-body);
+  font: var(--app-type-emphasis);
 }
 
 .delta.neg {
@@ -224,7 +222,7 @@ function onListScroll(bottomDistance: number) {
 
 .balance {
   display: block;
-  font-size: var(--app-font-caption);
+  font: var(--app-type-caption);
   color: var(--td-text-color-secondary);
 }
 </style>

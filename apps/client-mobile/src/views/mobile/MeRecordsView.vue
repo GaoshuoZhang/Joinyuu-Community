@@ -1,11 +1,9 @@
 <script setup lang="ts">
 import { computed } from 'vue'
-import { useRouter } from 'vue-router'
 import { Cell, CellGroup } from 'tdesign-mobile-vue'
 import { useConfigStore } from '@/stores/config'
 
 /* 我的记录（二级收纳页）：按业务流程归类项目、参与记录、场地服务与内容足迹。 */
-const router = useRouter()
 const config = useConfigStore()
 
 /* 按用户任务频率排序；与首页快捷入口同一口径，空间预约关闭时隐藏整个场地服务分组。 */
@@ -56,7 +54,9 @@ const groups = computed<{ title: string; entries: { path: string; label: string 
     <template v-for="g in groups" :key="g.title">
       <h2 class="group-title">{{ g.title }}</h2>
       <CellGroup theme="card">
-        <Cell v-for="e in g.entries" :key="e.path" :title="e.label" arrow @click="router.push(e.path)" />
+        <router-link v-for="e in g.entries" :key="e.path" class="cell-link" :to="e.path" :aria-label="e.label">
+          <Cell :title="e.label" arrow />
+        </router-link>
       </CellGroup>
     </template>
   </div>
@@ -78,8 +78,10 @@ const groups = computed<{ title: string; entries: { path: string; label: string 
 
 .group-title {
   margin: 0 var(--app-space-1);
-  font-size: var(--app-font-caption);
-  font-weight: 500;
+  font: var(--app-type-emphasis-sm);
   color: var(--td-text-color-secondary);
 }
+
+.cell-link { display: block; color: inherit; text-decoration: none; }
+.cell-link:focus-visible { outline: 2px solid var(--td-brand-color); outline-offset: -2px; }
 </style>

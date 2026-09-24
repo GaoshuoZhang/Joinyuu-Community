@@ -103,19 +103,18 @@ onMounted(run)
 .name {
   flex: 1;
   margin:0;
-  font-size: var(--app-font-body);
-  line-height: 1.4;
+  font: var(--app-type-card-title);
   min-width: 0;
 }
 
 .ent {
-  font-size: var(--app-font-caption);
+  font: var(--app-type-caption);
   color: var(--td-text-color-secondary);
 }
 
 .partner {
   margin:var(--app-space-4) 0 0;
-  font-size: var(--app-font-caption);
+  font: var(--app-type-caption);
   color: var(--td-text-color-secondary);
 }
 
@@ -137,7 +136,7 @@ onMounted(run)
   display: flex;
   align-items: center;
   gap:var(--app-space-4);
-  font-size: var(--app-font-caption);
+  font: var(--app-type-caption);
   color: var(--td-text-color-secondary);
 }
 
@@ -150,7 +149,7 @@ onMounted(run)
   margin:var(--app-space-5) 0 0;
   padding-top:var(--app-space-5);
   border-top: 1px dashed var(--td-component-border);
-  font-size: var(--app-font-caption);
+  font: var(--app-type-caption);
   color: var(--td-text-color-placeholder);
 }
 </style>

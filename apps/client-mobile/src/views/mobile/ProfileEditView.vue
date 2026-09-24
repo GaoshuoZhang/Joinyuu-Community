@@ -179,9 +179,9 @@ function onSubmit({ validateResult }: { validateResult: unknown }) {
         </FormItem>
         <FormItem label="性别">
           <RadioGroup v-model="form.gender" class="genders">
-            <Radio value="unknown" label="保密" />
-            <Radio value="male" label="男" />
-            <Radio value="female" label="女" />
+            <Radio value="unknown" label="保密" :block="false" borderless />
+            <Radio value="male" label="男" :block="false" borderless />
+            <Radio value="female" label="女" :block="false" borderless />
           </RadioGroup>
         </FormItem>
         <FormItem label="个人简介" name="bio">
@@ -217,7 +217,7 @@ function onSubmit({ validateResult }: { validateResult: unknown }) {
 
 .field .field-label {
   display: block;
-  font-size: var(--app-font-body);
+  font: var(--app-type-body);
   color: var(--td-text-color-secondary);
   margin-bottom:var(--app-space-3);
 }
@@ -233,7 +233,7 @@ function onSubmit({ validateResult }: { validateResult: unknown }) {
   width: auto;
   padding: 0;
   margin-bottom: var(--app-space-3);
-  font-size: var(--app-font-body);
+  font: var(--app-type-body);
   color: var(--td-text-color-secondary);
 }
 
@@ -243,13 +243,19 @@ function onSubmit({ validateResult }: { validateResult: unknown }) {
 
 .profile-form :deep(.t-form__item-help) {
   margin-top: var(--app-space-3);
-  font-size: var(--app-font-caption);
+  font: var(--app-type-caption);
   color: var(--td-text-color-placeholder);
 }
 
 .genders {
-  display: flex;
-  gap:var(--app-space-10);
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: var(--app-space-4);
+}
+
+.genders :deep(.t-radio) {
+  min-height: 44px;
+  white-space: nowrap;
 }
 
 .security {

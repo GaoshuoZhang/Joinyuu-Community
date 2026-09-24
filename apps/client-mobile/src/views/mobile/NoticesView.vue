@@ -60,12 +60,20 @@ async function onItemClick(n: UserNotice) {
     /* 下载失败给出反馈，避免点击后无响应 */
     try {
       await downloadPersonalData(n.link)
+      Toast('已开始下载，请在浏览器下载列表中查看')
     } catch (e) {
       Toast(e instanceof ApiError ? e.message : '下载失败，请稍后重试')
     }
     return
   }
-  if (n.link) await router.push(n.link)
+  if (n.link) {
+    await router.push(n.link)
+    return
+  }
+  if (n.title === '个人数据导出已生成') {
+    Toast('请在账号与安全中查看个人数据导出')
+    await router.push('/me/security')
+  }
 }
 
 async function onReadAll() {
@@ -133,6 +141,9 @@ function onListScroll(bottomDistance: number) {
         <template #description>
           <span class="n-content">{{ n.content }}</span>
           <span class="n-at">{{ TYPE_LABELS[n.type] ?? '通知' }} · {{ formatLocalDateTime(n.at) }}</span>
+          <span v-if="n.link || n.title === '个人数据导出已生成'" class="n-action">
+            {{ n.link?.startsWith('/api/app/me/data-exports/') ? '下载文件' : n.link ? '查看详情' : '前往账号与安全' }}
+          </span>
         </template>
       </Cell>
     </List>
@@ -155,14 +166,13 @@ function onListScroll(bottomDistance: number) {
 }
 
 .unread-count {
-  font-size: var(--app-font-caption);
+  font: var(--app-type-emphasis-sm);
   color: var(--td-error-color);
-  font-weight: 600;
 }
 
 .unread-count.zero {
+  font: var(--app-type-body-sm);
   color: var(--td-text-color-placeholder);
-  font-weight: 400;
 }
 
 .list {
@@ -183,26 +193,31 @@ function onListScroll(bottomDistance: number) {
 }
 
 .n-title {
-  font-size: var(--app-font-body);
-  line-height: 1.45;
+  font: var(--app-type-body);
 }
 
 .notice-item.unread .n-title {
-  font-weight: 600;
+  font: var(--app-type-card-title);
 }
 
 .n-content {
   display: block;
   margin:var(--app-space-3) 0 0;
-  font-size: var(--app-font-caption);
-  line-height: 1.7;
+  font: var(--app-type-body-sm);
   color: var(--td-text-color-secondary);
 }
 
 .n-at {
   display: block;
   margin:var(--app-space-3) 0 0;
-  font-size: var(--app-font-caption);
+  font: var(--app-type-caption);
   color: var(--td-text-color-placeholder);
+}
+
+.n-action {
+  display: block;
+  margin-top: var(--app-space-3);
+  font: var(--app-type-emphasis-sm);
+  color: var(--td-text-color-brand);
 }
 </style>

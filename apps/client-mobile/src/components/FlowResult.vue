@@ -38,7 +38,8 @@ defineEmits<{ primary: []; secondary: [] }>()
 .reference {
   margin: 0;
   color: var(--td-text-color-secondary);
-  font-size: var(--app-font-body);
+  font: var(--app-type-body);
+  font-variant-numeric: tabular-nums;
 }
 
 .actions {

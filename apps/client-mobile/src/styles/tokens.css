@@ -12,11 +12,49 @@
   --app-mobile-tabbar-h: 56px;
   --app-content-max: 1120px;
 
-  /* 应用字号刻度：只保留 4 档（12/14/16/20），页面不再写裸 px、不再新增步进 */
-  --app-font-caption: 12px;
-  --app-font-body: 14px;
-  --app-font-subtitle: 16px;
-  --app-font-title: 20px;
+  /* ============ 排版（Token First）============
+   * 原则：字号 / 字重 / 行高 / 字体栈的字面量只允许出现在本文件；
+   * 组件内禁止单独写 font-size / font-weight / line-height（列表见 scripts/check-typography.mjs，已挂 lint），
+   * 只能整体引用 L2 角色档：`font: var(--app-type-*)` —— 复合简写没有单独挑字重的位置。
+   * L1 原始档只被 L2 引用，组件不得直接使用（--app-fs-* / --app-fw-* / --app-leading-*）。 */
+
+  --app-font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Hiragino Sans GB',
+    'Microsoft YaHei', sans-serif;
+
+  /* L1 字号档：正文按视口宽流体降档（首页入口宫格是「四字一格」的极限排版，
+   * 固定 16px 在 320-375px 宽设备上会折行溢出）；12px 档供元信息/标签/角标使用 */
+  --app-fs-caption-xs: 12px;
+  --app-fs-caption: 14px;
+  --app-fs-body: clamp(14px, 4.267vw, 16px);
+  --app-fs-subtitle: clamp(16px, 4.8vw, 18px);
+  --app-fs-title: clamp(19px, 5.867vw, 22px);
+
+  /* L1 字重档：仅三档 —— 400 正文/辅助、600 标题与强调、700 大数字展示 */
+  --app-fw-regular: 400;
+  --app-fw-strong: 600;
+  --app-fw-numeric: 700;
+
+  /* L1 行高档：无单位比例，随流体字号等比缩放（中文正文基线 1.5） */
+  --app-leading-tight: 1.35;
+  --app-leading-title: 1.4;
+  --app-leading-body: 1.5;
+  --app-leading-relaxed: 1.65;
+
+  /* L2 角色档：复合 font 简写，一次锁定 字号+行高+字重+字体栈 */
+  --app-type-page-title: var(--app-fw-strong) var(--app-fs-title) / var(--app-leading-title) var(--app-font-family);
+  --app-type-section: var(--app-fw-strong) var(--app-fs-subtitle) / var(--app-leading-title) var(--app-font-family);
+  --app-type-card-title: var(--app-fw-strong) var(--app-fs-body) / var(--app-leading-title) var(--app-font-family);
+  --app-type-body: var(--app-fw-regular) var(--app-fs-body) / var(--app-leading-body) var(--app-font-family);
+  --app-type-body-relaxed: var(--app-fw-regular) var(--app-fs-body) / var(--app-leading-relaxed) var(--app-font-family);
+  --app-type-body-sm: var(--app-fw-regular) var(--app-fs-caption) / var(--app-leading-body) var(--app-font-family);
+  --app-type-emphasis: var(--app-fw-strong) var(--app-fs-body) / var(--app-leading-body) var(--app-font-family);
+  --app-type-emphasis-sm: var(--app-fw-strong) var(--app-fs-caption) / var(--app-leading-body) var(--app-font-family);
+  --app-type-caption: var(--app-fw-regular) var(--app-fs-caption-xs) / var(--app-leading-body) var(--app-font-family);
+  --app-type-numeric-lg: var(--app-fw-numeric) var(--app-fs-title) / var(--app-leading-tight) var(--app-font-family);
+  --app-type-numeric: var(--app-fw-strong) var(--app-fs-subtitle) / var(--app-leading-tight) var(--app-font-family);
+  /* 展示字形：头像首字、企业字标、徽标等「单个字/字符」的装饰性大字。
+   * 独立成档，避免挂到 page-title/section 上——否则改标题档会连带改变头像字号 */
+  --app-type-display: var(--app-fw-strong) var(--app-fs-subtitle) / var(--app-leading-tight) var(--app-font-family);
 
   /* TDesign Mobile 官方 Button 变量：移动端所有按钮命中高度不低于 44px。 */
   --td-button-medium-height: 44px;
@@ -73,6 +111,47 @@
   --app-entry-unit: calc((100vw - var(--app-space-8) * 2 - var(--app-space-3) * 3) / 4);
 }
 
+/* ---------- L3：TDesign 字体变量全量映射 ----------
+ * 目的：TDesign 组件内部文字（TabBar 标签、size=small 标签、角标、按钮、单元格…）
+ * 统一到 L1 刻度，不再自带 10/12/14/16 的另一套（10px 中文在移动端不可读）。
+ * 必须 :root:root 提高特异性：库样式在路由组件（AppShell / Login / Register）里懒加载，
+ * 晚于本文件注入，同权重 (0,1,0) 时会被库的 :root 覆盖（与项目既有「双类名」约定同理）。
+ * 只覆盖原始档即可：库内 --td-font-body-* / --td-font-mark-* 等复合变量引用这些原始变量，
+ * 无需 :deep() 覆盖内部类。库行高保持原值（16/20/22px），故标签与角标盒子高度不变。
+ * 未映射：--td-font-size-headline-* / display-*（仅 typography 文档组件使用，本 App 未接入；
+ * 将来若接入，先补 24px 以上档再映射）。升级 TDesign 时复核以上变量名。 */
+:root:root {
+  --td-font-family: var(--app-font-family);
+  --td-font-family-medium: var(--app-font-family);
+
+  /* link 12/14/16 保持不变，只把来源指向 L1 */
+  --td-font-size-link-small: var(--app-fs-caption-xs);
+  --td-font-size-link-medium: var(--app-fs-caption);
+  --td-font-size-link-large: var(--app-fs-body);
+
+  /* mark（600 字重档）10/12/14/16 → 12/12/14/16 */
+  --td-font-size-mark-extraSmall: var(--app-fs-caption-xs);
+  --td-font-size-mark-small: var(--app-fs-caption-xs);
+  --td-font-size-mark-medium: var(--app-fs-caption);
+  --td-font-size-mark-large: var(--app-fs-body);
+
+  /* body 10/12/14/16 → 12/12/14/16
+   * extraSmall 是 TabBar 标签（带图标时自动套 small 档）、size=small 标签、角标计数的来源 */
+  --td-font-size-body-extraSmall: var(--app-fs-caption-xs);
+  --td-font-size-body-small: var(--app-fs-caption-xs);
+  --td-font-size-body-medium: var(--app-fs-caption);
+  --td-font-size-body-large: var(--app-fs-body);
+
+  /* title 14/16/18/20 → 14/16/18/22（仅 calendar / guide 组件使用；extraLarge 本 App 未使用） */
+  --td-font-size-title-small: var(--app-fs-caption);
+  --td-font-size-title-medium: var(--app-fs-body);
+  --td-font-size-title-large: var(--app-fs-subtitle);
+  --td-font-size-title-extraLarge: var(--app-fs-title);
+
+  /* 表单标签字号：TDesign 默认 16px（--td-font-size-m），统一到 L1 正文档 */
+  --td-form-label-font-size: var(--app-fs-body);
+}
+
 /* ---------- 暗色模式 ---------- */
 /* theme.ts 依据「跟随系统/手动」在 html 上切换 .dark 与 theme-mode；
  * TDesign Mobile 的 :root.dark / :root[theme-mode='dark'] 变量随之生效，
@@ -85,6 +164,10 @@
 :root[theme-mode='dark'] {
   --app-navbar-bg-rgb: 36, 36, 36;
   --app-action-bar-shadow: 0 -2px 12px rgba(0, 0, 0, 0.45);
+  --td-text-color-secondary: rgba(255, 255, 255, 0.78);
+  --td-text-color-placeholder: rgba(255, 255, 255, 0.7);
+  --td-text-color-brand: var(--td-brand-color-10);
+  --td-tag-primary-color: var(--td-brand-color-10);
   color-scheme: dark;
 }
 
@@ -235,9 +318,7 @@ body,
 }
 
 body {
-  font-family:
-    -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Hiragino Sans GB',
-    'Microsoft YaHei', sans-serif;
+  font-family: var(--app-font-family);
   color: var(--td-text-color-primary);
   background: var(--td-bg-color-page);
   -webkit-font-smoothing: antialiased;
@@ -266,15 +347,13 @@ a {
 
 .page-header .page-title {
   margin: 0;
-  font-size: var(--app-font-title);
-  font-weight: 600;
-  line-height: 1.4;
+  font: var(--app-type-page-title);
   color: var(--td-text-color-primary);
 }
 
 .page-header .page-desc {
   margin: 4px 0 0;
-  font-size: var(--app-font-body);
+  font: var(--app-type-body);
   color: var(--td-text-color-secondary);
 }
 
@@ -309,8 +388,7 @@ a {
 .field-help {
   margin-top: 4px;
   color: var(--td-text-color-placeholder);
-  font-size: var(--app-font-caption);
-  line-height: 20px;
+  font: var(--app-type-caption);
 }
 
 /* 页面载入动效：淡入上移（v41 缩短为 150ms，削弱重复动画负担）
@@ -485,7 +563,7 @@ a {
 /* v39 列表计数；v45 合并重复声明，统一为次级文字色 */
 .list-count {
   margin: 0 var(--app-space-1);
-  font-size: var(--app-font-caption);
+  font: var(--app-type-caption);
   color: var(--td-text-color-secondary);
 }
 

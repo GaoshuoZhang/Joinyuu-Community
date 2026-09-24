@@ -110,9 +110,7 @@ function confirmDismiss() {
   border: 0;
   color: var(--td-text-color-primary);
   background: transparent;
-  font: inherit;
-  font-size: var(--app-font-subtitle);
-  font-weight: 600;
+  font: var(--app-type-section);
   text-align: left;
   cursor: pointer;
 }
@@ -123,13 +121,13 @@ function confirmDismiss() {
 }
 
 .activation-hide {
-  font-size: var(--app-font-caption);
+  font: var(--app-type-body-sm);
   color: var(--td-text-color-placeholder);
 }
 
 .activation-desc {
   margin: 0 0 var(--app-space-5);
-  font-size: var(--app-font-caption);
+  font: var(--app-type-body-sm);
   color: var(--td-text-color-secondary);
 }
 
@@ -147,7 +145,7 @@ function confirmDismiss() {
   align-items: center;
   gap: var(--app-space-4);
   min-height: 44px;
-  font-size: var(--app-font-body);
+  font: var(--app-type-body);
   color: var(--td-text-color-primary);
   text-decoration: none;
   cursor: pointer;

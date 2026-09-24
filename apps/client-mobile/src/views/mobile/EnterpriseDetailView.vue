@@ -363,8 +363,7 @@ async function doExit() {
 
 .ent-logo {
   flex-shrink: 0;
-  font-size: var(--app-font-title);
-  font-weight: 600;
+  font: var(--app-type-display);
 }
 
 .ent-info {
@@ -374,13 +373,12 @@ async function doExit() {
 
 .ent-name {
   margin:0 0 var(--app-space-2);
-  font-size: var(--app-font-title);
-  font-weight: 600;
+  font: var(--app-type-page-title);
 }
 
 .ent-meta {
   margin:0;
-  font-size: var(--app-font-caption);
+  font: var(--app-type-caption);
   color: var(--td-text-color-secondary);
 }
 
@@ -392,7 +390,7 @@ async function doExit() {
 
 .sec-title {
   margin:0 0 var(--app-space-6);
-  font-size: var(--app-font-subtitle);
+  font: var(--app-type-section);
 }
 
 .level-section {
@@ -401,7 +399,7 @@ async function doExit() {
 
 .level-error {
   margin:0;
-  font-size: var(--app-font-caption);
+  font: var(--app-type-caption);
   color: var(--td-text-color-secondary);
 }
 
@@ -420,26 +418,24 @@ async function doExit() {
 
 .contact-name {
   margin:0 0 var(--app-space-2);
-  font-size: var(--app-font-subtitle);
-  font-weight: 600;
+  font: var(--app-type-card-title);
 }
 
 .contact-hint {
   margin:0;
-  font-size: var(--app-font-caption);
+  font: var(--app-type-caption);
   color: var(--td-text-color-secondary);
 }
 
 .exit-desc {
   margin:0 0 var(--app-space-6);
-  font-size: var(--app-font-caption);
-  line-height: 1.7;
+  font: var(--app-type-body-sm);
   color: var(--td-text-color-secondary);
 }
 
 .exit-reason {
   margin:var(--app-space-4) 0 0;
-  font-size: var(--app-font-caption);
+  font: var(--app-type-body-sm);
   color: var(--td-text-color-secondary);
 }
 

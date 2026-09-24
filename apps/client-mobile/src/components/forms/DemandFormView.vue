@@ -402,18 +402,18 @@ async function onSubmit() {
   border-radius: var(--td-radius-round);
   background: var(--td-warning-color-1);
   color: var(--td-warning-color);
-  font-size: var(--app-font-caption);
+  font: var(--app-type-caption);
 }
 
 .subtitle {
   margin:0 0 var(--app-space-6);
-  font-size: var(--app-font-caption);
+  font: var(--app-type-body-sm);
   color: var(--td-text-color-secondary);
 }
 
 .field-error {
   margin:var(--app-space-3) 0 0;
-  font-size: var(--app-font-caption);
+  font: var(--app-type-caption);
   color: var(--td-error-color);
 }
 
@@ -438,7 +438,7 @@ async function onSubmit() {
 
 .flow-label {
   display: block;
-  font-size: var(--app-font-caption);
+  font: var(--app-type-body-sm);
   color: var(--td-text-color-secondary);
   margin-bottom:var(--app-space-4);
 }
@@ -461,7 +461,7 @@ async function onSubmit() {
 .field label,
 .field .field-label {
   display: block;
-  font-size: var(--app-font-body);
+  font: var(--app-type-body);
   margin-bottom:var(--app-space-4);
   color: var(--td-text-color-secondary);
 }

@@ -78,8 +78,7 @@ defineEmits<{ toggleFavorite: []; share: [] }>()
 
 .title {
   margin:0;
-  font-size: var(--app-font-title);
-  line-height: 1.45;
+  font: var(--app-type-page-title);
   flex: 1;
 }
 
@@ -89,7 +88,7 @@ defineEmits<{ toggleFavorite: []; share: [] }>()
   flex-wrap: wrap;
   gap: var(--app-space-5);
   margin-top: var(--app-space-5);
-  font-size: var(--app-font-caption);
+  font: var(--app-type-caption);
   color: var(--td-text-color-secondary);
 }
 
@@ -106,14 +105,13 @@ defineEmits<{ toggleFavorite: []; share: [] }>()
 
 .deadline {
   margin: var(--app-space-4) 0 0;
-  font-size: var(--app-font-caption);
+  font: var(--app-type-caption);
   color: var(--td-text-color-secondary);
 }
 
 .desc {
   margin: var(--app-space-7) 0 0;
-  font-size: var(--app-font-body);
-  line-height: 1.8;
+  font: var(--app-type-body-relaxed);
   white-space: pre-wrap;
   color: var(--td-text-color-primary);
 }
@@ -126,8 +124,7 @@ defineEmits<{ toggleFavorite: []; share: [] }>()
 
 .extras p {
   margin: 0 0 var(--app-space-3);
-  font-size: var(--app-font-body);
-  line-height: 1.7;
+  font: var(--app-type-body);
   color: var(--td-text-color-secondary);
 }
 
@@ -137,7 +134,7 @@ defineEmits<{ toggleFavorite: []; share: [] }>()
 
 .extras b {
   color: var(--td-text-color-primary);
-  font-weight: 600;
+  font: var(--app-type-emphasis);
 }
 
 /* 联系电话：tel: 可拨号链接，命中区抬到 44px 触控基线（同 LoginView 文字链口径）；

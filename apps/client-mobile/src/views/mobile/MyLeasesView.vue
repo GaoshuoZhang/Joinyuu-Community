@@ -94,12 +94,12 @@ onMounted(run)
 .lease-type {
   margin: 0 0 var(--app-space-2);
   color: var(--td-text-color-secondary);
-  font-size: var(--app-font-caption);
+  font: var(--app-type-caption);
 }
 
 h2 {
   margin: 0;
-  font-size: var(--app-font-body);
+  font: var(--app-type-card-title);
   overflow-wrap: anywhere;
 }
 
@@ -119,7 +119,7 @@ h2 {
 dt,
 dd {
   margin: 0;
-  font-size: var(--app-font-body);
+  font: var(--app-type-body);
 }
 
 dt {
@@ -133,7 +133,7 @@ dd {
 }
 
 .rent {
-  font-weight: 600;
+  font: var(--app-type-numeric);
   font-variant-numeric: tabular-nums;
 }
 </style>

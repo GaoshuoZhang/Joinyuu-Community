@@ -42,9 +42,7 @@ defineProps<{ events: HomeEventCard[] }>()
 
 .block-head h2 {
   margin:0;
-  font-size: var(--app-font-title);
-  font-weight: 600;
-  line-height: 1.4;
+  font: var(--app-type-section);
 }
 
 .more {
@@ -53,7 +51,7 @@ defineProps<{ events: HomeEventCard[] }>()
   gap: var(--app-space-1);
   min-width: 44px;
   min-height: 44px;
-  font-size: var(--app-font-caption);
+  font: var(--app-type-body-sm);
   color: var(--td-brand-color);
   text-decoration: none;
   cursor: pointer;
@@ -85,9 +83,7 @@ defineProps<{ events: HomeEventCard[] }>()
 
 .hot-title {
   margin: var(--app-space-4) 0;
-  font-size: var(--app-font-subtitle);
-  font-weight: 600;
-  line-height: 1.4;
+  font: var(--app-type-card-title);
   display: -webkit-box;
   -webkit-line-clamp: 2;
   -webkit-box-orient: vertical;
@@ -99,14 +95,14 @@ defineProps<{ events: HomeEventCard[] }>()
   display: flex;
   align-items: center;
   gap:var(--app-space-2);
-  font-size: var(--app-font-caption);
+  font: var(--app-type-caption);
   color: var(--td-text-color-secondary);
 }
 
 /* v45：人数上限不是「有人响应」这类有效信号，撤掉品牌色强调 */
 .hot-enrolled {
   margin: var(--app-space-3) 0 0;
-  font-size: var(--app-font-caption);
+  font: var(--app-type-caption);
   color: var(--td-text-color-secondary);
 }
 </style>

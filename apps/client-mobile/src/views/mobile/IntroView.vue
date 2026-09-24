@@ -191,18 +191,18 @@ function goRealName() {
 
 .title {
   margin:0 0 var(--app-space-2);
-  font-size: var(--app-font-title);
+  font: var(--app-type-page-title);
 }
 
 .subtitle {
   margin:0;
-  font-size: var(--app-font-body);
+  font: var(--app-type-body);
   color: var(--td-text-color-secondary);
 }
 
 .sec-title {
   margin:0 0 var(--app-space-5);
-  font-size: var(--app-font-subtitle);
+  font: var(--app-type-section);
 }
 
 .bullets {
@@ -211,8 +211,7 @@ function goRealName() {
 }
 
 .bullets li {
-  font-size: var(--app-font-body);
-  line-height: 1.9;
+  font: var(--app-type-body);
   color: var(--td-text-color-secondary);
 }
 
@@ -227,7 +226,7 @@ function goRealName() {
 .tip {
   margin:0;
   text-align: center;
-  font-size: var(--app-font-caption);
+  font: var(--app-type-caption);
   color: var(--td-text-color-placeholder);
 }
 </style>

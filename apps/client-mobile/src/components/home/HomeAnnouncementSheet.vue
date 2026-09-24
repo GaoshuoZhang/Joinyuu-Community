@@ -48,13 +48,12 @@ function onOpenLink() {
 
 .announce-title {
   margin:0;
-  font-size: var(--app-font-subtitle);
-  line-height: 1.5;
+  font: var(--app-type-section);
 }
 
 .announce-at {
   margin:0;
-  font-size: var(--app-font-caption);
+  font: var(--app-type-caption);
   color: var(--td-text-color-placeholder);
 }
 
@@ -66,8 +65,7 @@ function onOpenLink() {
   max-height: 72vh;
   overflow-y: auto;
   margin:0;
-  font-size: var(--app-font-body);
-  line-height: 1.9;
+  font: var(--app-type-body-relaxed);
   color: var(--td-text-color-secondary);
 }
 </style>

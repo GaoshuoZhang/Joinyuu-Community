@@ -52,9 +52,8 @@ const contentBlocks = computed(() =>
 
 .para {
   margin:0 0 var(--app-space-6);
-  font-size: var(--app-font-body);
   /* v48：与 RichTextBlock（活动/需求等富文本正文）统一行高，避免同一「正文」场景两套口径 */
-  line-height: 1.8;
+  font: var(--app-type-body-relaxed);
   color: var(--td-text-color-primary);
 }
 
@@ -64,8 +63,7 @@ const contentBlocks = computed(() =>
 
 .rich-content {
   overflow-wrap: anywhere;
-  font-size: var(--app-font-body);
-  line-height: 1.8;
+  font: var(--app-type-body-relaxed);
   color: var(--td-text-color-primary);
 }
 
@@ -82,13 +80,12 @@ const contentBlocks = computed(() =>
 .rich-content :deep(h3),
 .rich-content :deep(h4) {
   margin:var(--app-space-10) 0 var(--app-space-4);
-  line-height: 1.45;
 }
 
-.rich-content :deep(h1) { font-size: var(--app-font-title); }
-.rich-content :deep(h2) { font-size: var(--app-font-title); }
+.rich-content :deep(h1) { font: var(--app-type-page-title); }
+.rich-content :deep(h2) { font: var(--app-type-page-title); }
 .rich-content :deep(h3),
-.rich-content :deep(h4) { font-size: var(--app-font-subtitle); }
+.rich-content :deep(h4) { font: var(--app-type-section); }
 .rich-content :deep(ul),
 .rich-content :deep(ol) { padding-left:var(--app-space-11); }
 .rich-content :deep(blockquote) { padding-left:var(--app-space-6); border-left: 3px solid var(--td-component-border); color: var(--td-text-color-secondary); }

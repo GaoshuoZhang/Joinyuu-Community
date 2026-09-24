@@ -52,10 +52,8 @@ defineProps<{ demand: Demand; responded: boolean; to: string }>()
   margin:0;
   flex: 1;
   min-width: 0;
-  /* v48：与 MyDemandsView / MyResponsesView 的「同一层级列表卡片标题」口径一致（body 档 + 600） */
-  font-size: var(--app-font-body);
-  font-weight: 600;
-  line-height: 1.4;
+  /* v48：与 MyDemandsView / MyResponsesView 的「同一层级列表卡片标题」口径一致（card-title 角色档） */
+  font: var(--app-type-card-title);
   display: -webkit-box;
   -webkit-line-clamp: 2;
   -webkit-box-orient: vertical;
@@ -69,7 +67,7 @@ defineProps<{ demand: Demand; responded: boolean; to: string }>()
   flex-wrap: wrap;
   gap: var(--app-space-6);
   margin-top: var(--app-space-4);
-  font-size: var(--app-font-caption);
+  font: var(--app-type-caption);
   color: var(--td-text-color-secondary);
 }
 
@@ -95,15 +93,15 @@ defineProps<{ demand: Demand; responded: boolean; to: string }>()
 
 .d-resp {
   margin: var(--app-space-3) 0 0;
+  font: var(--app-type-emphasis-sm);
   font-variant-numeric: tabular-nums;
-  font-size: var(--app-font-caption);
   color: var(--td-brand-color);
-  font-weight: 600;
 }
 
 /* v45：0 响应不再是有效信号，撤掉品牌色强调，把强调色留给真的有人响应的需求 */
 .d-resp.is-zero {
+  font: var(--app-type-body-sm);
+  font-variant-numeric: tabular-nums;
   color: var(--td-text-color-secondary);
-  font-weight: 400;
 }
 </style>

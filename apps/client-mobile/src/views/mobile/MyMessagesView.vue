@@ -10,6 +10,7 @@ import StateTag from '@/components/shared/StateTag.vue'
 import type { MyMessage } from '@/types'
 import { formatLocalDateTime, formatZhNumber } from '@/utils/format'
 import { useUnsavedGuard } from '@/composables/useUnsavedGuard'
+import { REFRESH_LOADING_PROPS } from '@/constants/refresh'
 
 /* 我的留言：向社区留言（主题 + 正文）并查看社区回复。
  * 入口在「我的」页与「社区 > 社区服务」页；回复由后台「用户留言」页发出，同时推送站内信。 */
@@ -87,7 +88,7 @@ async function onSubmit({ validateResult }: { validateResult: unknown }) {
 </script>
 
 <template>
-  <PullDownRefresh class="messages-refresh" :value="refreshing" @refresh="onRefresh">
+  <PullDownRefresh class="messages-refresh" :value="refreshing" :loading-props="REFRESH_LOADING_PROPS" @refresh="onRefresh">
     <div class="m-messages page-fade-in">
       <!-- 留言表单：登录用户均可提交（页面路由已要求登录） -->
       <section class="m-card">
@@ -168,14 +169,12 @@ async function onSubmit({ validateResult }: { validateResult: unknown }) {
 
 .sec-title {
   margin: 0;
-  font-size: var(--app-font-subtitle);
-  font-weight: 600;
+  font: var(--app-type-section);
 }
 
 .sec-desc {
   margin: var(--app-space-3) 0 0;
-  font-size: var(--app-font-caption);
-  line-height: 1.7;
+  font: var(--app-type-body-sm);
   color: var(--td-text-color-secondary);
 }
 
@@ -197,7 +196,7 @@ async function onSubmit({ validateResult }: { validateResult: unknown }) {
   width: auto;
   padding: 0;
   margin-bottom: var(--app-space-3);
-  font-size: var(--app-font-caption);
+  font: var(--app-type-body-sm);
   color: var(--td-text-color-secondary);
 }
 
@@ -219,8 +218,7 @@ async function onSubmit({ validateResult }: { validateResult: unknown }) {
 
 .sec-head h2 {
   margin: 0;
-  font-size: var(--app-font-title);
-  font-weight: 600;
+  font: var(--app-type-page-title);
 }
 
 .list {
@@ -239,15 +237,12 @@ async function onSubmit({ validateResult }: { validateResult: unknown }) {
   margin: 0;
   flex: 1;
   min-width: 0;
-  font-size: var(--app-font-body);
-  font-weight: 600;
-  line-height: 1.45;
+  font: var(--app-type-card-title);
 }
 
 .msg-content {
   margin: var(--app-space-4) 0 0;
-  font-size: var(--app-font-body);
-  line-height: 1.7;
+  font: var(--app-type-body-relaxed);
   white-space: pre-wrap;
   word-break: break-word;
   color: var(--td-text-color-primary);
@@ -255,7 +250,7 @@ async function onSubmit({ validateResult }: { validateResult: unknown }) {
 
 .msg-at {
   margin: var(--app-space-3) 0 0;
-  font-size: var(--app-font-caption);
+  font: var(--app-type-caption);
   color: var(--td-text-color-placeholder);
 }
 
@@ -268,15 +263,13 @@ async function onSubmit({ validateResult }: { validateResult: unknown }) {
 
 .reply-head {
   margin: 0;
-  font-size: var(--app-font-caption);
-  font-weight: 600;
+  font: var(--app-type-emphasis-sm);
   color: var(--td-brand-color);
 }
 
 .reply-content {
   margin: var(--app-space-3) 0 0;
-  font-size: var(--app-font-body);
-  line-height: 1.7;
+  font: var(--app-type-body-relaxed);
   white-space: pre-wrap;
   word-break: break-word;
   color: var(--td-text-color-primary);
@@ -284,13 +277,13 @@ async function onSubmit({ validateResult }: { validateResult: unknown }) {
 
 .reply-at {
   margin: var(--app-space-3) 0 0;
-  font-size: var(--app-font-caption);
+  font: var(--app-type-caption);
   color: var(--td-text-color-secondary);
 }
 
 .pending-tip {
   margin: var(--app-space-4) 0 0;
-  font-size: var(--app-font-caption);
+  font: var(--app-type-caption);
   color: var(--td-text-color-placeholder);
 }
 </style>

@@ -48,7 +48,7 @@ function submit() {
 <style scoped>
 .fb-label {
   margin: 0 0 var(--app-space-4);
-  font-size: var(--app-font-body);
+  font: var(--app-type-body);
   color: var(--td-text-color-secondary);
 }
 
@@ -59,13 +59,13 @@ function submit() {
 }
 
 .fb-field-label {
-  font-size: var(--app-font-caption);
+  font: var(--app-type-body-sm);
   color: var(--td-text-color-secondary);
 }
 
 .field-error {
   margin: 0;
-  font-size: var(--app-font-caption);
+  font: var(--app-type-caption);
   color: var(--td-error-color);
 }
 
@@ -74,7 +74,7 @@ function submit() {
   display: flex;
   align-items: center;
   gap: var(--app-space-4);
-  font-size: var(--app-font-body);
+  font: var(--app-type-body);
   color: var(--td-text-color-secondary);
 }
 

@@ -12,7 +12,7 @@
   border-radius: var(--td-radius-default);
   background: var(--td-brand-color);
   color: var(--td-text-color-anti);
-  font-size: var(--app-font-body);
+  font: var(--app-type-body);
   transition: top 160ms ease;
 }
 

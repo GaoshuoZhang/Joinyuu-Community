@@ -105,9 +105,7 @@ function onWithdraw(item: MyResponseItem) {
 
 .row-title {
   margin: 0;
-  font-size: var(--app-font-body);
-  font-weight: 600;
-  line-height: 1.45;
+  font: var(--app-type-card-title);
 }
 
 /* v48：卡片主体用 router-link 承载跳转（与 MyDemandsView 的 .demand-main 同口径） */
@@ -125,14 +123,13 @@ function onWithdraw(item: MyResponseItem) {
 
 .row-note {
   margin:var(--app-space-3) 0 0;
-  font-size: var(--app-font-body);
-  line-height: 1.7;
+  font: var(--app-type-body);
   color: var(--td-text-color-secondary);
 }
 
 .row-at {
   margin:var(--app-space-3) 0 0;
-  font-size: var(--app-font-caption);
+  font: var(--app-type-caption);
   color: var(--td-text-color-placeholder);
 }
 
@@ -142,7 +139,7 @@ function onWithdraw(item: MyResponseItem) {
   flex-wrap: wrap;
   gap:var(--app-space-4);
   margin:var(--app-space-4) 0 0;
-  font-size: var(--app-font-body);
+  font: var(--app-type-body);
   color: var(--td-text-color-secondary);
 }
 

@@ -149,8 +149,7 @@ function goDetail(order: MyOrder) {
   margin: 0;
   flex: 1;
   min-width: 0;
-  font-size: var(--app-font-body);
-  font-weight: 600;
+  font: var(--app-type-card-title);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -158,10 +157,9 @@ function goDetail(order: MyOrder) {
 
 .cost {
   margin: 0 0 var(--app-space-3);
+  font: var(--app-type-numeric);
   font-variant-numeric: tabular-nums;
-  font-size: var(--app-font-body);
-  font-weight: 600;
-  color: var(--td-brand-color);
+  color: var(--td-text-color-brand);
 }
 
 .voucher {
@@ -169,7 +167,7 @@ function goDetail(order: MyOrder) {
   align-items: center;
   gap: var(--app-space-4);
   margin: 0 0 var(--app-space-3);
-  font-size: var(--app-font-caption);
+  font: var(--app-type-caption);
   color: var(--td-text-color-secondary);
 }
 
@@ -178,13 +176,13 @@ function goDetail(order: MyOrder) {
   border-radius: var(--td-radius-small);
   background: var(--td-bg-color-secondarycontainer);
   color: var(--td-brand-color);
-  font-weight: 600;
+  font: var(--app-type-emphasis-sm);
   letter-spacing: 0.5px;
 }
 
 .meta {
   margin: 0;
-  font-size: var(--app-font-caption);
+  font: var(--app-type-caption);
   color: var(--td-text-color-secondary);
 }
 
@@ -194,7 +192,7 @@ function goDetail(order: MyOrder) {
   gap: var(--app-space-1);
   align-self: flex-end;
   margin-top: var(--app-space-3);
-  font-size: var(--app-font-caption);
+  font: var(--app-type-body-sm);
   color: var(--td-brand-color);
 }
 </style>

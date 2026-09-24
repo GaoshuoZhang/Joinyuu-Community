@@ -227,8 +227,7 @@ async function doRemove() {
 
 .avatar {
   flex-shrink: 0;
-  font-size: var(--app-font-title);
-  font-weight: 600;
+  font: var(--app-type-display);
 }
 
 .info {
@@ -238,19 +237,18 @@ async function doRemove() {
 
 .name {
   margin:0 0 var(--app-space-2);
-  font-size: var(--app-font-title);
-  font-weight: 600;
+  font: var(--app-type-page-title);
 }
 
 .meta {
   margin:0;
-  font-size: var(--app-font-caption);
+  font: var(--app-type-caption);
   color: var(--td-text-color-secondary);
 }
 
 .sec-title {
   margin:0 0 var(--app-space-6);
-  font-size: var(--app-font-subtitle);
+  font: var(--app-type-section);
 }
 
 .field {
@@ -263,7 +261,7 @@ async function doRemove() {
 
 .field-error {
   margin:var(--app-space-3) 0 0;
-  font-size: var(--app-font-caption);
+  font: var(--app-type-caption);
   color: var(--td-error-color);
 }
 
@@ -271,7 +269,7 @@ async function doRemove() {
   display: block;
   margin-bottom:var(--app-space-3);
   /* v46：表单标签与其它编辑页统一为 body 档（原 caption 偏小） */
-  font-size: var(--app-font-body);
+  font: var(--app-type-body);
   color: var(--td-text-color-secondary);
 }
 
@@ -279,7 +277,7 @@ async function doRemove() {
   display: flex;
   gap:var(--app-space-4);
   margin-bottom:var(--app-space-5);
-  font-size: var(--app-font-body);
+  font: var(--app-type-body);
 }
 
 .read-row:last-child {
@@ -299,13 +297,13 @@ async function doRemove() {
 
 .perm-hint {
   margin:0 0 var(--app-space-5);
-  font-size: var(--app-font-caption);
+  font: var(--app-type-caption);
   color: var(--td-text-color-secondary);
 }
 
 .perm-tip {
   margin:0;
-  font-size: var(--app-font-body);
+  font: var(--app-type-body);
   color: var(--td-text-color-secondary);
 }
 
@@ -315,7 +313,7 @@ async function doRemove() {
 
 .page-tip {
   margin:0;
-  font-size: var(--app-font-caption);
+  font: var(--app-type-caption);
   color: var(--td-text-color-placeholder);
   text-align: center;
 }

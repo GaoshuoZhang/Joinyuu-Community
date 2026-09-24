@@ -10,6 +10,7 @@ import { useAnimSuppress } from '@/composables/useAnimSuppress'
 import { useRefreshOnActivate } from '@/composables/useRefreshOnActivate'
 import { formatZhNumber } from '@/utils/format'
 import { buildProfileMenuLayout, type ProfileMenuEntry, type ProfileStat } from '@/utils/profileMenu'
+import { REFRESH_LOADING_PROPS } from '@/constants/refresh'
 
 useAnimSuppress()
 
@@ -106,7 +107,7 @@ useRefreshOnActivate(() => void refreshMe())
 </script>
 
 <template>
-  <PullDownRefresh class="me-refresh" :value="refreshing" @refresh="onRefresh">
+  <PullDownRefresh class="me-refresh" :value="refreshing" :loading-props="REFRESH_LOADING_PROPS" @refresh="onRefresh">
     <div class="page-fade-in me">
       <!-- button 内容模型仅允许 phrasing content，卡内含 p/div 会破坏 AT 解析；
            改用 div + v-pressable（补 role=button/tabindex/键盘激活） -->
@@ -194,7 +195,7 @@ useRefreshOnActivate(() => void refreshMe())
 
 .profile-button {
   width: 100%;
-  color: inherit;
+  color: inherit; /* typography-token-exempt: 下一行 font: inherit 是 div 容器上 button 时期遗留的字体 reset（div 默认即继承字体），无角色档可表达；升级复核点：容器改回 button 元素时需重新评估该 reset */
   font: inherit;
   text-align: left;
   cursor: pointer;
@@ -224,10 +225,8 @@ useRefreshOnActivate(() => void refreshMe())
 
 .stat-value {
   margin: 0;
-  font-size: var(--app-font-title);
-  font-weight: 700;
-  color: var(--td-brand-color);
-  line-height: 1.3;
+  font: var(--app-type-numeric-lg);
+  color: var(--td-text-color-brand);
 }
 
 .stat-label {
@@ -235,7 +234,7 @@ useRefreshOnActivate(() => void refreshMe())
   align-items: center;
   gap: 2px;
   margin: 0;
-  font-size: var(--app-font-caption);
+  font: var(--app-type-caption);
   color: var(--td-text-color-secondary);
 }
 
@@ -264,18 +263,17 @@ useRefreshOnActivate(() => void refreshMe())
   height: 44px;
   border-radius: var(--td-radius-large);
   background: var(--td-brand-color-1);
-  color: var(--td-brand-color);
+  color: var(--td-text-color-brand);
 }
 
 .grid-label {
   margin: 0;
-  font-size: var(--app-font-caption);
+  font: var(--app-type-caption);
   color: var(--td-text-color-primary);
 }
 
 .avatar {
-  font-size: var(--app-font-title);
-  font-weight: 600;
+  font: var(--app-type-display);
 }
 
 .info {
@@ -285,19 +283,18 @@ useRefreshOnActivate(() => void refreshMe())
 
 .name {
   margin: 0 0 var(--app-space-2);
-  font-size: var(--app-font-title);
-  font-weight: 600;
+  font: var(--app-type-page-title);
 }
 
 .uid {
   margin: 0 0 var(--app-space-3);
-  font-size: var(--app-font-caption);
+  font: var(--app-type-caption);
   color: var(--td-text-color-secondary);
 }
 
 .handle {
   margin: 0 0 var(--app-space-2);
-  font-size: var(--app-font-caption);
+  font: var(--app-type-caption);
   color: var(--td-text-color-placeholder);
 }
 

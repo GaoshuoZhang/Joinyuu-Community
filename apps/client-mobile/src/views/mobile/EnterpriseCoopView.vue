@@ -129,12 +129,12 @@ function onConfirm() {
 
 .title {
   margin:0 0 var(--app-space-2);
-  font-size: var(--app-font-title);
+  font: var(--app-type-page-title);
 }
 
 .subtitle {
   margin:0;
-  font-size: var(--app-font-body);
+  font: var(--app-type-body);
   color: var(--td-text-color-secondary);
 }
 
@@ -157,8 +157,7 @@ function onConfirm() {
   padding: var(--app-space-8);
   border: 0;
   color: inherit;
-  background: transparent;
-  font: inherit;
+  background: transparent; font: inherit; /* typography-token-exempt: 原生 button 需继承卡片父级排版，非角色档可表达；升级时复核是否可改为角色档 */
   text-align: left;
   cursor: pointer;
 }
@@ -194,12 +193,12 @@ function onConfirm() {
 
 .opt-title {
   margin:0 0 var(--app-space-1);
-  font-size: var(--app-font-subtitle);
+  font: var(--app-type-card-title);
 }
 
 .opt-tagline {
   margin:0;
-  font-size: var(--app-font-caption);
+  font: var(--app-type-body-sm);
   color: var(--td-text-color-secondary);
 }
 
@@ -220,8 +219,7 @@ function onConfirm() {
 }
 
 .points li {
-  font-size: var(--app-font-caption);
-  line-height: 1.9;
+  font: var(--app-type-body-sm);
   color: var(--td-text-color-secondary);
 }
 
@@ -231,7 +229,7 @@ function onConfirm() {
   gap:var(--app-space-1);
   margin:0 var(--app-space-8) var(--app-space-6);
   min-height: 44px;
-  font-size: var(--app-font-caption);
+  font: var(--app-type-body-sm);
   color: var(--td-brand-color);
   text-decoration: none;
   cursor: pointer;
@@ -240,7 +238,7 @@ function onConfirm() {
 .tip {
   margin:0;
   text-align: center;
-  font-size: var(--app-font-caption);
+  font: var(--app-type-caption);
   color: var(--td-text-color-placeholder);
 }
 </style>

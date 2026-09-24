@@ -51,14 +51,14 @@ defineEmits<{
 
 .field label {
   display: block;
-  font-size: var(--app-font-body);
+  font: var(--app-type-body);
   margin-bottom: var(--app-space-4);
   color: var(--td-text-color-secondary);
 }
 
 .field-error {
   margin: var(--app-space-3) 0 0;
-  font-size: var(--app-font-caption);
+  font: var(--app-type-caption);
   color: var(--td-error-color);
 }
 

@@ -83,7 +83,8 @@ async function doCancel(r: SpaceReservation) {
           <IdentityTag :type="r.identityType" />
           <span class="subject-name">{{ r.subjectName }}</span>
         </p>
-        <p class="meta"><Icon aria-hidden="true" name="calendar" size="14px" />{{ formatLocalDate(r.date) }} · {{ r.start }} - {{ r.end }} · 提交于 {{ formatLocalDateTime(r.createdAt) }}</p>
+        <p class="meta"><Icon aria-hidden="true" name="calendar" size="14px" />{{ formatLocalDate(r.date) }} · {{ r.start }} - {{ r.end }}</p>
+        <p class="submitted-at">提交于 {{ formatLocalDateTime(r.createdAt) }}</p>
         <p v-if="r.rejectReason" class="reject-reason">驳回原因：{{ r.rejectReason }}</p>
         <div v-if="canCancel(r)" class="ops">
           <Button theme="danger" variant="outline" size="small" :disabled="actingId === r.id" @click.stop="onCancelTap(r)">
@@ -122,7 +123,7 @@ async function doCancel(r: SpaceReservation) {
 
 .name {
   margin:0;
-  font-size: var(--app-font-body);
+  font: var(--app-type-card-title);
   min-width: 0;
 }
 
@@ -131,14 +132,20 @@ async function doCancel(r: SpaceReservation) {
   align-items: center;
   gap: var(--app-space-2);
   margin:var(--app-space-3) 0 0;
-  font-size: var(--app-font-caption);
+  font: var(--app-type-caption);
   color: var(--td-text-color-secondary);
+}
+
+.submitted-at {
+  margin: var(--app-space-4) 0 0;
+  font: var(--app-type-caption);
+  color: var(--td-text-color-placeholder);
 }
 
 .reject-reason {
   margin:var(--app-space-4) 0 0;
   color: var(--td-error-color);
-  font-size: var(--app-font-caption);
+  font: var(--app-type-caption);
 }
 
 .subject {
@@ -146,7 +153,7 @@ async function doCancel(r: SpaceReservation) {
   align-items: center;
   gap:var(--app-space-3);
   margin:var(--app-space-4) 0 0;
-  font-size: var(--app-font-caption);
+  font: var(--app-type-caption);
 }
 
 .subject-name {

@@ -97,5 +97,6 @@ export async function restoreSession(): Promise<AuthResult | null> {
     avatar: me.avatar,
     identities: me.identities,
     points: me.points,
+    pointsDiscount: me.pointsDiscount,
   }
 }

@@ -251,12 +251,12 @@ function onRegisterSubmit({ validateResult }: { validateResult: unknown }) {
 
 .title {
   margin:0 0 var(--app-space-3);
-  font-size: var(--app-font-title);
+  font: var(--app-type-page-title);
 }
 
 .sub {
   margin:0;
-  font-size: var(--app-font-caption);
+  font: var(--app-type-body-sm);
   color: var(--td-text-color-secondary);
 }
 
@@ -272,7 +272,7 @@ function onRegisterSubmit({ validateResult }: { validateResult: unknown }) {
 .field .field-label {
   display: block;
   margin-bottom:var(--app-space-3);
-  font-size: var(--app-font-caption);
+  font: var(--app-type-body-sm);
   color: var(--td-text-color-secondary);
 }
 
@@ -287,7 +287,7 @@ function onRegisterSubmit({ validateResult }: { validateResult: unknown }) {
   width: auto;
   padding: 0;
   margin-bottom: var(--app-space-3);
-  font-size: var(--app-font-caption);
+  font: var(--app-type-body-sm);
   color: var(--td-text-color-secondary);
 }
 
@@ -298,8 +298,7 @@ function onRegisterSubmit({ validateResult }: { validateResult: unknown }) {
 /* 协议勾选：无表单标签（隐藏占位 label），沿用原 .agreement 的间距与字号 */
 .form :deep(.agreement-item) {
   margin: var(--app-space-2) 0 var(--app-space-7);
-  font-size: var(--app-font-caption);
-  line-height: 1.7;
+  font: var(--app-type-body-sm);
   color: var(--td-text-color-secondary);
 }
 
@@ -335,7 +334,7 @@ function onRegisterSubmit({ validateResult }: { validateResult: unknown }) {
 .swap {
   margin:var(--app-space-9) 0 0;
   text-align: center;
-  font-size: var(--app-font-body);
+  font: var(--app-type-body);
   color: var(--td-text-color-secondary);
 }
 

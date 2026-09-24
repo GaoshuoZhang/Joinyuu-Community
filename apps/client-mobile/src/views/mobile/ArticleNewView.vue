@@ -63,6 +63,7 @@ const bodyUploadingAt = ref<number | null>(null)
 const pendingBodyIndex = ref<number | null>(null)
 const blocks = ref<ArticleContentBlock[]>([])
 const nextBlockId = ref(1)
+const activeBlockToolsId = ref<number | null>(null)
 const submitting = ref(false)
 const submittedId = ref('')
 const loaded = ref(false)
@@ -146,6 +147,7 @@ onMounted(async () => {
         : []
       existingSummary.value = payload.summary ?? ''
       blocks.value = parseArticleContent(payload.content, () => nextBlockId.value++)
+      if (!blocks.value.length) insertText(0)
     } catch (e) {
       Toast(e instanceof ApiError ? e.message : '加载原投稿失败')
     }
@@ -155,6 +157,7 @@ onMounted(async () => {
   }
   const first = identityOptions.value[0]
   if (first) pickIdentity(first)
+  insertText(0)
   baseline.value = editorSnapshot.value
   loaded.value = true
 })
@@ -223,6 +226,8 @@ function removeBlock(id: number) {
     confirmBtn: '删除',
     onConfirm: () => {
       blocks.value = blocks.value.filter((block) => block.id !== id)
+      activeBlockToolsId.value = null
+      if (!blocks.value.length) insertText(0)
       dialog.destroy()
     },
     onClose: () => dialog.destroy(),
@@ -302,10 +307,10 @@ async function onSubmit() {
       <div class="field"><label class="field-label">栏目<span class="req"> *</span></label><div class="chips"><CheckTag v-for="c in columns" :key="c.code" class="chip" size="medium" variant="light" :checked="form.columnCode === c.code" @change="form.columnCode = c.code">{{ c.label }}</CheckTag></div><p v-if="!columnsLoading && !columnsError && columnData && !columns.length" class="field-help">暂无可投稿栏目，请稍后再试</p><p v-if="errors.column" class="field-error">{{ errors.column }}</p></div>
       <div class="field"><label class="field-label">投稿身份<span class="req"> *</span></label><div class="chips"><CheckTag v-for="identity in identityOptions" :key="`${identity.type}:${identity.enterpriseId ?? ''}`" size="medium" variant="light" :checked="isIdentityPicked(identity)" @change="pickIdentity(identity)">{{ identityOptionLabel(identity, auth.name) }}</CheckTag></div><p v-if="errors.identity" class="field-error">{{ errors.identity }}</p></div>
       <div class="field"><label class="field-label">文章封面（选填）</label><p class="field-help">建议使用清晰的横版图片，将展示在文章列表中。</p><Upload v-model:files="coverFiles" class="cover-upload" theme="grid" accept="image/*" :max="1" :size-limit="{ size: 10, unit: 'MB' }" :request-method="requestImage" /></div>
-      <div class="field"><label class="field-label">正文</label><p class="field-help">在任意位置插入段落或图片，并通过上移、下移调整最终发布顺序。</p>
+      <div class="field"><label class="field-label">正文</label><p class="field-help">直接输入正文；需要图文混排时，可在段落间插入图片或新段落。至少 {{ MIN_CONTENT }} 字。</p>
         <div class="editor-blocks">
           <template v-for="(block, index) in [...blocks, null]" :key="block?.id ?? 'editor-end'">
-          <div class="insert-actions" role="group" :aria-label="`在第 ${index + 1} 个位置插入内容`">
+          <div v-if="index > 0 || !blocks.length" class="insert-actions" role="group" :aria-label="`在第 ${index + 1} 个位置插入内容`">
             <Button size="small" theme="light" :disabled="bodyUploadingAt !== null" @click="insertText(index)">
               <template #icon><Icon aria-hidden="true" name="textbox" size="16px" /></template>
               插入段落
@@ -318,7 +323,8 @@ async function onSubmit() {
           <div v-if="block" class="editor-block">
             <div class="block-toolbar">
               <span class="block-order">内容 {{ index + 1 }} · {{ block.type === 'image' ? '图片' : '文字' }}</span>
-              <div class="block-actions">
+              <Button size="small" variant="text" :aria-expanded="activeBlockToolsId === block.id" @click="activeBlockToolsId = activeBlockToolsId === block.id ? null : block.id">调整</Button>
+              <div v-if="activeBlockToolsId === block.id" class="block-actions">
                 <Button size="small" variant="text" shape="square" :disabled="index === 0" :aria-label="`上移第 ${index + 1} 个内容块`" @click="moveBlock(index, -1)">
                   <template #icon><Icon aria-hidden="true" name="arrow-up" size="18px" /></template>
                 </Button>
@@ -336,7 +342,7 @@ async function onSubmit() {
           </template>
         </div>
         <input ref="bodyImageInput" class="body-image-input" type="file" accept="image/*" @change="onBodyImageChange" />
-        <p class="count" :class="{ ready: contentReady }">输入统计：{{ formatZhNumber(contentLength) }}字 | {{ formatZhNumber(imageCount) }}图</p>
+        <p class="count" :class="{ ready: contentReady }">正文 {{ formatZhNumber(contentLength) }}/{{ MIN_CONTENT }} 字 · {{ formatZhNumber(imageCount) }} 图</p>
         <p v-if="errors.content" class="field-error">{{ errors.content }}</p>
       </div>
       <Button class="mobile-sticky-action" theme="primary" size="large" block :loading="submitting" @click="onSubmit">{{ contentReady ? (revising ? '重新提交' : '提交投稿') : `投稿内容需≥${MIN_CONTENT}字` }}</Button>
@@ -347,7 +353,7 @@ async function onSubmit() {
 
 <style scoped>
 .m-new-article { display: flex; flex-direction: column; gap:var(--app-space-6); padding:var(--app-space-8); }
-.head { padding:0 var(--app-space-1); }.head .page-desc { margin:0; color: var(--td-text-color-secondary); font-size: var(--app-font-body); }
-.field { margin-bottom:var(--app-space-9); }.field label, .field .field-label { display: block; margin-bottom:var(--app-space-3); color: var(--td-text-color-secondary); font-size: var(--app-font-caption); }.req { color: var(--td-error-color); }.field-help { margin:-2px 0 var(--app-space-4); }
-.chips { display: flex; flex-wrap: wrap; gap:var(--app-space-4); }.field-error { margin:var(--app-space-3) 0 0; font-size: var(--app-font-caption); color: var(--td-error-color); }.cover-upload { width: fit-content; grid-template-columns: var(--td-upload-width, 80px); justify-content: start; padding: 0; }.editor-blocks { display: flex; flex-direction: column; gap:var(--app-space-6); }.editor-block { padding:var(--app-space-5); border: 1px solid var(--td-component-border); border-radius: var(--td-radius-large); background: var(--td-bg-color-secondarycontainer); }.block-toolbar { display: flex; align-items: center; justify-content: space-between; gap: var(--app-space-4); margin-bottom: var(--app-space-3); }.block-order { min-width: 0; color: var(--td-text-color-secondary); font-size: var(--app-font-caption); }.block-actions { display: flex; align-items: center; flex-shrink: 0; }.block-actions :deep(.t-button) { min-width: 44px; padding: 0; }.insert-actions { display: flex; align-items: center; gap:var(--app-space-5); }.insert-actions :deep(.t-button--size-small) { min-height: 44px; }.body-image-input { display: none; }.image-block { margin:0; overflow: hidden; border-radius: var(--td-radius-default); background: var(--td-bg-color-container); }.image-block img { display: block; width: 100%; max-height: 280px; object-fit: cover; aspect-ratio: 16 / 9; }.count { margin:var(--app-space-4) 0 0; color: var(--td-error-color); font-size: var(--app-font-caption); text-align: center; }.count.ready { color: var(--td-text-color-placeholder); }
+.head { padding:0 var(--app-space-1); }.head .page-desc { margin:0; color: var(--td-text-color-secondary); font: var(--app-type-body); }
+.field { margin-bottom:var(--app-space-9); }.field label, .field .field-label { display: block; margin-bottom:var(--app-space-3); color: var(--td-text-color-secondary); font: var(--app-type-body-sm); }.req { color: var(--td-error-color); }.field-help { margin:-2px 0 var(--app-space-4); }
+.chips { display: flex; flex-wrap: wrap; gap:var(--app-space-4); }.field-error { margin:var(--app-space-3) 0 0; font: var(--app-type-caption); color: var(--td-error-color); }.cover-upload { width: fit-content; grid-template-columns: var(--td-upload-width, 80px); justify-content: start; padding: 0; }.editor-blocks { display: flex; flex-direction: column; gap:var(--app-space-6); }.editor-block { padding:var(--app-space-5); border: 1px solid var(--td-component-border); border-radius: var(--td-radius-large); background: var(--td-bg-color-secondarycontainer); }.block-toolbar { display: flex; align-items: center; justify-content: space-between; gap: var(--app-space-4); margin-bottom: var(--app-space-3); }.block-order { min-width: 0; color: var(--td-text-color-secondary); font: var(--app-type-caption); }.block-actions { display: flex; align-items: center; flex-shrink: 0; }.block-actions :deep(.t-button) { min-width: 44px; padding: 0; }.insert-actions { display: flex; align-items: center; gap:var(--app-space-5); }.insert-actions :deep(.t-button--size-small) { min-height: 44px; }.body-image-input { display: none; }.image-block { margin:0; overflow: hidden; border-radius: var(--td-radius-default); background: var(--td-bg-color-container); }.image-block img { display: block; width: 100%; max-height: 280px; object-fit: cover; aspect-ratio: 16 / 9; }.count { margin:var(--app-space-4) 0 0; color: var(--td-error-color); font: var(--app-type-caption); text-align: center; }.count.ready { color: var(--td-text-color-placeholder); }
 </style>

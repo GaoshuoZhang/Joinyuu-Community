@@ -179,10 +179,8 @@ function onWithdrawDemand(d: MyDemandItem) {
 
 .row-title {
   margin:0;
-  /* v48：列表卡片标题基准档（body + 600），与 DemandListCard / MyResponsesView 统一 */
-  font-size: var(--app-font-body);
-  font-weight: 600;
-  line-height: 1.45;
+  /* v48：列表卡片标题基准档（card-title 角色档），与 DemandListCard / MyResponsesView 统一 */
+  font: var(--app-type-card-title);
 }
 
 .row-meta {
@@ -191,7 +189,7 @@ function onWithdrawDemand(d: MyDemandItem) {
   flex-wrap: wrap;
   gap:var(--app-space-5);
   margin-top:var(--app-space-4);
-  font-size: var(--app-font-caption);
+  font: var(--app-type-caption);
   color: var(--td-text-color-secondary);
 }
 
@@ -202,13 +200,13 @@ function onWithdrawDemand(d: MyDemandItem) {
 
 .row-time {
   margin:var(--app-space-3) 0 0;
-  font-size: var(--app-font-caption);
+  font: var(--app-type-caption);
   color: var(--td-text-color-placeholder);
 }
 
 .reject {
   margin:var(--app-space-4) 0 0;
-  font-size: var(--app-font-caption);
+  font: var(--app-type-caption);
   color: var(--td-error-color);
 }
 

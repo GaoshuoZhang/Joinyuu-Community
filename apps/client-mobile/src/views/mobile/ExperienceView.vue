@@ -96,14 +96,14 @@ onMounted(() => {
 .next-hint {
   margin:0 0 var(--app-space-7);
   padding:0 var(--app-space-1);
-  font-size: var(--app-font-caption);
+  font: var(--app-type-caption);
   color:var(--td-text-color-secondary);
   text-align: center;
 }
 
 .rights-error {
   margin:0 0 var(--app-space-7);
-  font-size: var(--app-font-caption);
+  font: var(--app-type-caption);
   color:var(--td-text-color-secondary);
   text-align: center;
 }
@@ -112,7 +112,7 @@ onMounted(() => {
   border: none;
   background: none;
   padding: 0;
-  font: inherit;
+  font: var(--app-type-caption);
   color: var(--td-brand-color);
   cursor: pointer;
   min-height: 44px;
@@ -137,17 +137,17 @@ onMounted(() => {
 
 .reason {
   margin:0 0 var(--app-space-2);
-  font-size: var(--app-font-body);
+  font: var(--app-type-body);
 }
 
 .meta {
   margin:0;
-  font-size: var(--app-font-caption);
+  font: var(--app-type-caption);
   color: var(--td-text-color-secondary);
 }
 
 .delta {
-  font-weight: 600;
+  font: var(--app-type-emphasis);
   color: var(--td-success-color);
 }
 

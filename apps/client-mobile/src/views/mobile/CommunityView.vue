@@ -16,6 +16,7 @@ import TalentCardItem from '@/components/community/TalentCardItem.vue'
 import EnterpriseCardItem from '@/components/community/EnterpriseCardItem.vue'
 import { useRouteQuerySync } from '@/composables/useRouteQuerySync'
 import { formatZhNumber } from '@/utils/format'
+import { REFRESH_LOADING_PROPS } from '@/constants/refresh'
 
 useAnimSuppress()
 
@@ -249,7 +250,7 @@ watch(policies, () => {
 </script>
 
 <template>
-  <PullDownRefresh :value="refreshing" :disabled="!atTop" @refresh="onRefresh">
+  <PullDownRefresh :value="refreshing" :disabled="!atTop" :loading-props="REFRESH_LOADING_PROPS" @refresh="onRefresh">
   <div
     class="m-community page-fade-in"
     @touchstart="startSwipe"
@@ -374,13 +375,13 @@ watch(policies, () => {
   align-items: center;
   gap: var(--app-space-3);
   margin: 0 0 var(--app-space-6);
-  font-size: var(--app-font-caption);
+  font: var(--app-type-caption);
   color: var(--td-text-color-secondary);
 }
 
 .service-section-head { display: flex; align-items: baseline; justify-content: space-between; margin:0 var(--app-space-1) var(--app-space-4); }
-/* v45：区块标题统一为 20px 层级，与首页「最新需求/最新资讯」口径一致；计数改用次级文字色 */
-.service-section-head h2 { margin:0; font-size: var(--app-font-title); font-weight: 600; line-height: 1.4; }
+/* v45：区块标题统一为 section 角色档（18px 层级），与首页「最新需求/最新资讯」口径一致；计数改用次级文字色 */
+.service-section-head h2 { margin:0; font: var(--app-type-section); }
 /* v46：计数统一走全局 .list-count（与人才库/企业库列表口径一致），不再单独定义 span 样式 */
 
 .list {

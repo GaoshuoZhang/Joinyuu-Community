@@ -101,7 +101,7 @@ function onSubmit() {
 /* 空态/错误态用 EmptyBlock 承载，仅保留「已选定等待立项」这一条状态提示 */
 .notice {
   margin: 0;
-  font-size: var(--app-font-caption);
+  font: var(--app-type-body-sm);
   color: var(--td-text-color-secondary);
   background: var(--td-bg-color-page);
   border: 1px dashed var(--td-component-border);
@@ -135,26 +135,25 @@ function onSubmit() {
   align-items: center;
   justify-content: space-between;
   gap: var(--app-space-4);
-  font-size: var(--app-font-body);
+  font: var(--app-type-body);
 }
 
 .owner-response-note {
   margin: var(--app-space-4) 0 0;
-  font-size: var(--app-font-body);
-  line-height: 1.7;
+  font: var(--app-type-body);
   white-space: pre-wrap;
   color: var(--td-text-color-primary);
 }
 
 .owner-response-meta {
   margin: var(--app-space-4) 0 0;
-  font-size: var(--app-font-caption);
+  font: var(--app-type-caption);
   color: var(--td-text-color-placeholder);
 }
 
 .selection-tip {
   margin: var(--app-space-5) 0 0;
-  font-size: var(--app-font-caption);
+  font: var(--app-type-body-sm);
   color: var(--td-text-color-secondary);
 }
 

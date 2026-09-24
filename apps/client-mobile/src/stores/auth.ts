@@ -3,6 +3,7 @@ import { computed, ref } from 'vue'
 import * as authApi from '@/api/auth'
 import { ApiError } from '@/api/http'
 import { fetchMe } from '@/api/me'
+import { FULL_PRICE_DISCOUNT, normalizeDiscount } from '@/utils/points'
 import { useNoticesStore } from './notices'
 import type { AuthResult, IdentityType, LoginPayload, RegisterPayload, UserIdentity } from '@/types'
 
@@ -57,6 +58,8 @@ export const useAuthStore = defineStore('auth', () => {
   const avatar = ref('')
   const identities = ref<UserIdentity[]>([])
   const points = ref(0)
+  /** 积分消费折扣：1 = 1 折 … 10 = 原价（服务端按社区个体等级下发，商城/空间预约展示折后价） */
+  const pointsDiscount = ref(FULL_PRICE_DISCOUNT)
 
   /** 令牌存在且未过期（exp 可解析时才做过期判定） */
   const isLogged = computed(
@@ -104,6 +107,7 @@ export const useAuthStore = defineStore('auth', () => {
     avatar.value = result.avatar ?? ''
     identities.value = result.identities
     points.value = result.points
+    pointsDiscount.value = normalizeDiscount(result.pointsDiscount)
   }
 
   async function login(payload: LoginPayload) {
@@ -125,6 +129,7 @@ export const useAuthStore = defineStore('auth', () => {
     avatar.value = ''
     identities.value = []
     points.value = 0
+    pointsDiscount.value = FULL_PRICE_DISCOUNT
     localStorage.removeItem(TOKEN_KEY)
     localStorage.removeItem(IDENTITY_KEY)
     useNoticesStore().reset()
@@ -149,13 +154,14 @@ export const useAuthStore = defineStore('auth', () => {
       avatar.value = me.avatar ?? ''
       identities.value = me.identities
       points.value = me.points
+      pointsDiscount.value = normalizeDiscount(me.pointsDiscount)
     } catch {
       /* 拉取失败时保留本地缓存 */
     }
   }
 
   return {
-    token, uid, username, name, avatar, identities, points,
+    token, uid, username, name, avatar, identities, points, pointsDiscount,
     isLogged, primaryIdentity, hasCommunityIndividual, profileIdentities,
     ensureRestored, login, register, logout, resetSession, refreshProfile,
   }

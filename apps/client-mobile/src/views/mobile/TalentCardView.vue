@@ -86,7 +86,7 @@ async function onShare() {
 
       <section class="m-card">
         <h3 class="sec-title">个人简介</h3>
-        <p class="desc">{{ card.intro }}</p>
+        <p class="desc" :class="{ 'empty-intro': !card.intro?.trim() }">{{ card.intro?.trim() || '该成员暂未填写简介' }}</p>
       </section>
 
       <div class="actions">
@@ -201,8 +201,7 @@ async function onShare() {
 
 .avatar {
   flex-shrink: 0;
-  font-size: var(--app-font-title);
-  font-weight: 600;
+  font: var(--app-type-page-title);
 }
 
 .hero-info {
@@ -211,8 +210,7 @@ async function onShare() {
 
 .name {
   margin:0 0 var(--app-space-3);
-  font-size: var(--app-font-title);
-  font-weight: 600;
+  font: var(--app-type-page-title);
 }
 
 .meta {
@@ -223,21 +221,24 @@ async function onShare() {
 }
 
 .meta-item {
-  font-size: var(--app-font-caption);
+  font: var(--app-type-caption);
   color: var(--td-text-color-secondary);
 }
 
 .sec-title {
   margin:0 0 var(--app-space-5);
-  font-size: var(--app-font-subtitle);
+  font: var(--app-type-section);
 }
 
 .desc {
   margin:0;
-  font-size: var(--app-font-body);
-  line-height: 1.8;
+  font: var(--app-type-body-relaxed);
   color: var(--td-text-color-secondary);
   white-space: pre-wrap;
+}
+
+.empty-intro {
+  color: var(--td-text-color-placeholder);
 }
 
 .skills {
@@ -275,29 +276,26 @@ async function onShare() {
 }
 
 .entry-title {
-  font-size: var(--app-font-body);
-  font-weight: 600;
+  font: var(--app-type-card-title);
   color: var(--td-text-color-primary);
 }
 
 .entry-role {
   margin-left:var(--app-space-4);
-  font-size: var(--app-font-caption);
-  font-weight: 400;
+  font: var(--app-type-body-sm);
   color: var(--td-text-color-secondary);
 }
 
 .entry-period {
   flex-shrink: 0;
-  font-size: var(--app-font-caption);
+  font: var(--app-type-caption);
   color: var(--td-text-color-placeholder);
 }
 
 .entry-sub,
 .entry-desc {
   margin:var(--app-space-3) 0 0;
-  font-size: var(--app-font-caption);
-  line-height: 1.7;
+  font: var(--app-type-body-sm);
   color: var(--td-text-color-secondary);
   white-space: pre-wrap;
 }
@@ -317,7 +315,7 @@ async function onShare() {
 }
 
 .link-label {
-  font-size: var(--app-font-body);
+  font: var(--app-type-body);
   color: var(--td-brand-color);
 }
 

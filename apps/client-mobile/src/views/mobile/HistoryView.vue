@@ -98,19 +98,18 @@ function onClear() {
 
 .title {
   margin:0;
-  font-size: var(--app-font-body);
-  line-height: 1.45;
+  font: var(--app-type-card-title);
 }
 
 .at {
   margin:var(--app-space-3) 0 0;
-  font-size: var(--app-font-caption);
+  font: var(--app-type-caption);
   color: var(--td-text-color-secondary);
 }
 
 .remove {
   flex-shrink: 0;
   color: var(--td-text-color-placeholder);
-  font-size: var(--app-font-caption);
+  font: var(--app-type-body-sm);
 }
 </style>

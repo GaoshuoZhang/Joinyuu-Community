@@ -95,14 +95,14 @@ const statCells = computed<StatCell[]>(() => {
 }
 
 .points-label {
-  font-size: var(--app-font-caption);
+  font: var(--app-type-caption);
   color: var(--td-text-color-secondary);
 }
 
 .points-value {
-  font-size: var(--app-font-title);
-  color: var(--td-brand-color);
+  font: var(--app-type-numeric-lg);
   font-variant-numeric: tabular-nums;
+  color: var(--td-text-color-brand);
 }
 
 .points-value.spent {
@@ -133,14 +133,13 @@ const statCells = computed<StatCell[]>(() => {
 }
 
 .stat-value {
-  font-size: var(--app-font-title);
-  line-height: 1.2;
+  font: var(--app-type-numeric-lg);
   font-variant-numeric: tabular-nums;
 }
 
 .footnote {
   margin:0;
-  font-size: var(--app-font-caption);
+  font: var(--app-type-caption);
   color: var(--td-text-color-placeholder);
 }
 </style>

@@ -123,7 +123,7 @@ defineExpose({ clearNote })
   width: auto;
   padding: 0;
   margin-bottom: var(--app-space-3);
-  font-size: var(--app-font-caption);
+  font: var(--app-type-body-sm);
   color: var(--td-text-color-secondary);
 }
 
@@ -132,7 +132,7 @@ defineExpose({ clearNote })
 }
 
 .identity-label {
-  font-size: var(--app-font-caption);
+  font: var(--app-type-body-sm);
   color: var(--td-text-color-secondary);
 }
 

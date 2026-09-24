@@ -287,7 +287,7 @@ async function onSubmit() {
   border-radius: var(--td-radius-round);
   background: var(--td-warning-color-1);
   color: var(--td-warning-color);
-  font-size: var(--app-font-caption);
+  font: var(--app-type-caption);
 }
 
 .head {
@@ -296,7 +296,7 @@ async function onSubmit() {
 
 .head .subtitle {
   margin:0;
-  font-size: var(--app-font-body);
+  font: var(--app-type-body);
   color: var(--td-text-color-secondary);
 }
 
@@ -308,23 +308,20 @@ async function onSubmit() {
 .tips-title {
   margin:0 0 var(--app-space-4);
   color: var(--td-text-color-primary);
-  font-size: var(--app-font-body);
-  font-weight: 600;
+  font: var(--app-type-card-title);
 }
 
 .tip-line {
   display: flex;
   gap:var(--app-space-4);
   margin:0 0 var(--app-space-2);
-  font-size: var(--app-font-caption);
-  line-height: 1.8;
+  font: var(--app-type-body-sm);
   color: var(--td-text-color-secondary);
 }
 
 .tip-line span {
   color: var(--td-brand-color);
-  font-size: var(--app-font-caption);
-  font-weight: 600;
+  font: var(--app-type-emphasis-sm);
 }
 
 .form {

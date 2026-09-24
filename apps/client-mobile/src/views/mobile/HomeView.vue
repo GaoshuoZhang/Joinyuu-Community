@@ -25,6 +25,7 @@ import type { FeedItem } from '@/components/home/HomeFeedSection.vue'
 import { demandDateText } from '@/constants/demand'
 import type { HomeAnnouncement } from '@/types'
 import { formatLocalDate, formatZhNumber } from '@/utils/format'
+import { REFRESH_LOADING_PROPS } from '@/constants/refresh'
 
 useAnimSuppress()
 
@@ -185,11 +186,50 @@ watch(feed, (f) => {
 })
 
 const searchKeyword = ref('')
+const searchActionText = ref('')
+let searchBlurTimer: ReturnType<typeof setTimeout> | null = null
 
-/* 首页搜索直达跨域搜索页，保留关键词以便用户继续检索。 */
-function onSearch() {
-  void router.push({ path: '/search', query: searchKeyword.value.trim() ? { q: searchKeyword.value.trim() } : undefined })
+/* 首页直接输入关键词，只有提交搜索后才进入结果页。 */
+function onSearch(value = searchKeyword.value) {
+  const keyword = value.trim()
+  if (!keyword) {
+    Toast('请输入搜索关键词')
+    return
+  }
+  searchActionText.value = ''
+  void router.push({ path: '/search', query: { q: keyword } })
 }
+
+function onSearchFocus() {
+  if (searchBlurTimer) clearTimeout(searchBlurTimer)
+  searchBlurTimer = null
+  searchActionText.value = '搜索'
+}
+
+function onSearchBlur() {
+  // 点击 TDesign Search 的 action 时，输入框会先 blur；延后收起以保留本次点击。
+  if (searchBlurTimer) clearTimeout(searchBlurTimer)
+  searchBlurTimer = setTimeout(() => {
+    searchActionText.value = ''
+    searchBlurTimer = null
+  }, 180)
+}
+
+function onSearchActionClick() {
+  if (searchBlurTimer) clearTimeout(searchBlurTimer)
+  searchBlurTimer = null
+  searchActionText.value = ''
+  onSearch()
+}
+
+function onSearchSubmit(context: { value: string }) {
+  onSearch(context.value)
+}
+
+onBeforeUnmount(() => {
+  if (searchBlurTimer) clearTimeout(searchBlurTimer)
+  searchBlurTimer = null
+})
 
 /* v38：遵守系统「减少动态效果」设置，关闭轮播自动播放 */
 const reduceMotion =
@@ -230,8 +270,8 @@ const featureEntries = computed(() => {
   )
   const list: { path: string; icon: string; label: string; desc: string }[] = [
     hasEnterpriseIdentity
-      ? { path: '/me/identities?filter=enterprise', icon: 'usergroup', label: '企业管理', desc: '管理关联企业身份' }
-      : { path: '/intros/enterprise', icon: 'usergroup', label: '企业合作', desc: '入驻或成为伙伴' },
+      ? { path: '/me/identities?filter=enterprise', icon: 'usergroup', label: '企业管理', desc: '管理关联企业' }
+      : { path: '/intros/enterprise', icon: 'usergroup', label: '企业合作', desc: '成为合作伙伴' },
   ]
   if (auth.hasCommunityIndividual) {
     list.push({ path: '/me/cards/individual', icon: 'app', label: '个人名片', desc: '完善个人展示' })
@@ -253,12 +293,26 @@ const quickEntries = computed(() => {
 </script>
 
 <template>
-  <PullDownRefresh :value="refreshing" :disabled="!atTop" @refresh="onRefresh">
+  <PullDownRefresh :value="refreshing" :disabled="!atTop" :loading-props="REFRESH_LOADING_PROPS" @refresh="onRefresh">
     <div class="home page-fade-in">
-      <!-- 顶部搜索：点击进入全局搜索页（focus 不跳转，保证键盘可达）。
-           v46：这里是跳转入口而非输入框，readonly 避免先弹软键盘再跳页。
-           键盘 Enter 走 submit 事件（TDesign Search 回车发 onSubmit，@search 是输入联想事件、readonly 下永不触发）。 -->
-      <Search v-model="searchKeyword" readonly placeholder="搜索需求、活动、文章或社区服务…" @click="onSearch" @submit="onSearch" />
+      <Search
+        v-model="searchKeyword"
+        class="home-search"
+        :action="searchActionText"
+        placeholder="搜索需求、活动、文章或社区服务…"
+        @focus="onSearchFocus"
+        @blur="onSearchBlur"
+        @action-click="onSearchActionClick"
+        @submit="onSearchSubmit"
+      />
+
+      <!-- 唯一运营位：轮播（v50 移动到搜索栏下方，作为首屏运营位） -->
+      <HomeBanner
+        v-if="feed?.carouselEnabled !== false && feed?.banners?.length"
+        :banners="feed.banners"
+        :reduce-motion="reduceMotion"
+        @select="onBannerClick"
+      />
 
       <!-- v48：核心功能入口前置到搜索栏下方（2 单位宽卡 ×2 + 1 单位方形卡 ×4） -->
       <HomeEntryGrids
@@ -299,14 +353,6 @@ const quickEntries = computed(() => {
       <EmptyBlock v-else-if="error && !feed" :text="error" action-text="重试" @action="run" />
 
       <template v-else>
-        <!-- 唯一运营位：轮播 -->
-        <HomeBanner
-          v-if="feed?.carouselEnabled !== false && feed?.banners?.length"
-          :banners="feed.banners"
-          :reduce-motion="reduceMotion"
-          @select="onBannerClick"
-        />
-
         <!-- v45 内容优先：先让用户看到社区里有什么，再出现引导与入口 -->
         <HotEventStrip :events="feed?.hotEvents ?? []" />
 
@@ -338,6 +384,10 @@ const quickEntries = computed(() => {
   padding: var(--app-space-8);
 }
 
+.home-search {
+  --td-search-height: 44px;
+}
+.home-search :deep(.t-search__search-action) { display: flex; align-items: center; min-height: 44px; }
 
 .announce-bar {
   margin:0;

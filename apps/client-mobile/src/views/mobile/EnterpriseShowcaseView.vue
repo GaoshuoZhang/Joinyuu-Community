@@ -177,8 +177,7 @@ onMounted(async () => {
   /* 首字底色：低版本 Safari 不支持 color-mix，先给半透明白兜底再叠加 color-mix，避免首字对比度丢失 */
   background: rgba(255, 255, 255, 0.2);
   background: color-mix(in srgb, var(--td-text-color-anti) 20%, transparent);
-  font-size: var(--app-font-title);
-  font-weight: 600;
+  font: var(--app-type-display);
   overflow: hidden;
 }
 
@@ -193,26 +192,24 @@ onMounted(async () => {
 
 .name {
   margin:0 0 var(--app-space-2);
-  font-size: var(--app-font-title);
-  line-height: 1.3;
+  font: var(--app-type-page-title);
 }
 
 .tags {
   margin:0;
-  font-size: var(--app-font-caption);
+  font: var(--app-type-caption);
   opacity: 0.85;
 }
 
 .sec-title {
   margin:0 0 var(--app-space-4);
-  /* v46：与同名章节标题组件（企业详情 / 人才名片）统一为 subtitle 档 */
-  font-size: var(--app-font-subtitle);
+  /* v46：与同名章节标题组件（企业详情 / 人才名片）统一为 section 角色档 */
+  font: var(--app-type-section);
 }
 
 .desc {
   margin:0;
-  font-size: var(--app-font-body);
-  line-height: 1.8;
+  font: var(--app-type-body-relaxed);
   color: var(--td-text-color-primary);
   white-space: pre-wrap;
 }
@@ -221,7 +218,7 @@ onMounted(async () => {
   display: flex;
   gap:var(--app-space-5);
   margin:0 0 var(--app-space-4);
-  font-size: var(--app-font-body);
+  font: var(--app-type-body);
   color: var(--td-text-color-secondary);
 }
 

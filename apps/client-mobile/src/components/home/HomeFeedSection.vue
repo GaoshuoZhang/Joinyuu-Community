@@ -59,9 +59,7 @@ defineProps<{ title: string; items: FeedItem[]; emptyText: string; morePath?: st
 
 .block-head h2 {
   margin:0;
-  font-size: var(--app-font-title);
-  font-weight: 600;
-  line-height: 1.4;
+  font: var(--app-type-section);
 }
 
 .more {
@@ -70,7 +68,7 @@ defineProps<{ title: string; items: FeedItem[]; emptyText: string; morePath?: st
   gap: var(--app-space-1);
   min-width: 44px;
   min-height: 44px;
-  font-size: var(--app-font-caption);
+  font: var(--app-type-body-sm);
   color: var(--td-brand-color);
   text-decoration: none;
   cursor: pointer;
@@ -98,9 +96,7 @@ defineProps<{ title: string; items: FeedItem[]; emptyText: string; morePath?: st
   margin:0;
   flex: 1;
   min-width: 0;
-  font-size: var(--app-font-subtitle);
-  font-weight: 600;
-  line-height: 1.4;
+  font: var(--app-type-card-title);
   display: -webkit-box;
   -webkit-line-clamp: 2;
   -webkit-box-orient: vertical;
@@ -119,7 +115,7 @@ defineProps<{ title: string; items: FeedItem[]; emptyText: string; morePath?: st
   column-gap: var(--app-space-6);
   row-gap: var(--app-space-3);
   margin-top: var(--app-space-4);
-  font-size: var(--app-font-caption);
+  font: var(--app-type-caption);
   color: var(--td-text-color-secondary);
 }
 
@@ -138,8 +134,8 @@ defineProps<{ title: string; items: FeedItem[]; emptyText: string; morePath?: st
 .d-resp {
   flex-basis: 100%;
   margin-left:0;
+  font: var(--app-type-emphasis-sm);
   font-variant-numeric: tabular-nums;
   color: var(--td-brand-color);
-  font-weight: 600;
 }
 </style>

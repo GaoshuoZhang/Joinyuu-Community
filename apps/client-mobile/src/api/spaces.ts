@@ -16,9 +16,12 @@ export async function fetchSpaceDetail(id: string): Promise<Space> {
   return httpGet<Space>(`/spaces/${id}`)
 }
 
-/** POST /api/app/spaces/reservations — 提交预约（开关校验 + 冲突预检 409；needApproval 进 pending） */
-export async function createReservation(payload: ReservationCreatePayload): Promise<{ status: 'pending' | 'approved' }> {
-  return httpPost<{ status: 'pending' | 'approved' }>('/spaces/reservations', payload)
+/** POST /api/app/spaces/reservations — 提交预约（开关校验 + 冲突预检 409 + 费用扣分；needApproval 进 pending）；
+ * 返回 pointsSpent = 本次实际扣除的积分（免费空间为 0） */
+export async function createReservation(
+  payload: ReservationCreatePayload,
+): Promise<{ status: 'pending' | 'approved'; pointsSpent: number }> {
+  return httpPost<{ status: 'pending' | 'approved'; pointsSpent: number }>('/spaces/reservations', payload)
 }
 
 /** GET /api/app/me/reservations — 我的预约 */

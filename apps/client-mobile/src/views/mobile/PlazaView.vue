@@ -17,6 +17,7 @@ import { onImageError } from '@/utils/imageFallback'
 import { useRouteQuerySync } from '@/composables/useRouteQuerySync'
 import { useTabSwipe } from '@/composables/useTabSwipe'
 import { formatLocalDate, formatLocalDateTime, formatZhNumber } from '@/utils/format'
+import { REFRESH_LOADING_PROPS } from '@/constants/refresh'
 
 useAnimSuppress()
 
@@ -84,6 +85,7 @@ function syncQuery() {
 }
 
 const columns = computed(() => columnData.value ?? [])
+const chipRow = ref<HTMLElement | null>(null)
 /* 文章列表接口（GET /articles）返回完整数组、无 total 字段，数组长度即为总数；
  * 活动列表接口返回 { list, total }，走 eventsTotal。 */
 const articles = computed(() => articleData.value ?? [])
@@ -179,6 +181,11 @@ function pickColumn(code: string) {
   activeColumn.value = code
   syncQuery()
   loadArticles()
+  void nextTick(() => {
+    const index = code ? columns.value.findIndex((column) => column.code === code) + 1 : 0
+    const chips = chipRow.value?.querySelectorAll<HTMLElement>('.chip')
+    chips?.[Math.max(index, 0)]?.scrollIntoView({ block: 'nearest', inline: 'center', behavior: 'smooth' })
+  })
 }
 
 function clearEventFilters() {
@@ -194,7 +201,7 @@ function clearArticleFilters() {
 </script>
 
 <template>
-  <PullDownRefresh :value="refreshing" :disabled="!atTop" @refresh="onRefresh">
+  <PullDownRefresh :value="refreshing" :disabled="!atTop" :loading-props="REFRESH_LOADING_PROPS" @refresh="onRefresh">
   <div
     class="page-fade-in m-plaza"
     @touchstart="startSwipe"
@@ -222,7 +229,6 @@ function clearArticleFilters() {
             @click="router.push(`/events/${ev.id}`)"
           >
             <Image v-if="ev.coverUrl" class="card-cover" :src="ev.coverUrl" :alt="ev.title" fit="cover" lazy @error="onImageError" />
-            <div v-else class="card-cover card-cover-fallback"><Icon aria-hidden="true" name="calendar" size="28px" /></div>
             <div class="row-head">
               <Tag class="type-tag" size="small" variant="light" theme="primary">{{ ev.typeLabel }}</Tag>
               <StateTag v-if="enrolledIds.has(ev.id)" class="enrolled-flag" kind="flag" value="enrolled" />
@@ -245,7 +251,8 @@ function clearArticleFilters() {
 
       <TabPanel value="articles" label="资讯">
         <Search v-model="articleKeywordInput" class="tab-search" placeholder="搜索资讯关键词…" />
-        <div class="chips">
+        <div class="column-filter-head"><span>栏目筛选</span><span>左右滑动查看更多 →</span></div>
+        <div ref="chipRow" class="chips" aria-label="资讯栏目，可左右滑动查看更多">
           <CheckTag
             class="chip"
             size="medium"
@@ -285,7 +292,6 @@ function clearArticleFilters() {
             @click="router.push(`/articles/${a.id}`)"
           >
             <Image v-if="a.coverUrl" class="card-cover" :src="a.coverUrl" :alt="a.title" fit="cover" lazy @error="onImageError" />
-            <div v-else class="card-cover card-cover-fallback"><Icon aria-hidden="true" name="image" size="28px" /></div>
             <!-- v48：分类标签原先与标题贴在一起——改为独立成行并留出与活动卡片一致的间距 -->
             <div class="tag-row">
               <Tag class="col-tag" size="small" variant="light" theme="primary">{{ a.columnLabel }}</Tag>
@@ -328,7 +334,19 @@ function clearArticleFilters() {
   overflow-x: auto;
   scrollbar-width: none;
   margin-bottom:var(--app-space-6);
+  scroll-padding-inline: var(--app-space-8);
+  touch-action: pan-x;
 }
+
+.column-filter-head {
+  display: flex;
+  justify-content: space-between;
+  gap: var(--app-space-4);
+  margin-bottom: var(--app-space-3);
+  color: var(--td-text-color-secondary);
+  font: var(--app-type-body-sm);
+}
+.column-filter-head span:last-child { color: var(--td-brand-color); }
 
 .chips::-webkit-scrollbar {
   display: none;
@@ -354,15 +372,6 @@ function clearArticleFilters() {
   width: calc(100% + var(--app-space-8) * 2);
   height: 132px;
   margin: calc(var(--app-space-8) * -1) calc(var(--app-space-8) * -1) var(--app-space-6);
-}
-
-/* 无封面时收敛为品牌浅底条形占位，避免大块灰底空洞 */
-.card-cover-fallback {
-  display: grid;
-  place-items: center;
-  height: 96px;
-  background: var(--td-brand-color-1);
-  color: var(--td-brand-color);
 }
 
 /* 封面加载失败：全局 .img-fallback 兜底（min-height 90px）与 132px 封面区高度错位会露白，
@@ -397,22 +406,19 @@ function clearArticleFilters() {
 /* v45：人数上限不是有效信号，撤掉品牌色强调（与首页近期活动口径一致） */
 .capacity {
   margin-left:auto;
-  font-size: var(--app-font-caption);
+  font: var(--app-type-caption);
   color: var(--td-text-color-secondary);
 }
 
 .title {
   margin:0 0 var(--app-space-4);
-  font-size: var(--app-font-subtitle);
-  font-weight: 600;
-  line-height: 1.4;
+  font: var(--app-type-card-title);
 }
 
 .summary {
   margin:0 0 var(--app-space-4);
-  font-size: var(--app-font-caption);
+  font: var(--app-type-body-sm);
   color: var(--td-text-color-secondary);
-  line-height: 1.6;
   display: -webkit-box;
   -webkit-line-clamp: 2;
   -webkit-box-orient: vertical;
@@ -421,7 +427,7 @@ function clearArticleFilters() {
 
 .meta {
   margin:0;
-  font-size: var(--app-font-caption);
+  font: var(--app-type-caption);
   color: var(--td-text-color-placeholder);
 }
 

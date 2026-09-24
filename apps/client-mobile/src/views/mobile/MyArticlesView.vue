@@ -129,20 +129,19 @@ onMounted(run)
 .title {
   flex: 1;
   margin:0;
-  font-size: var(--app-font-body);
-  line-height: 1.4;
+  font: var(--app-type-card-title);
   min-width: 0;
 }
 
 .meta {
   margin:var(--app-space-3) 0 0;
-  font-size: var(--app-font-caption);
+  font: var(--app-type-caption);
   color: var(--td-text-color-placeholder);
 }
 
 .reject {
   margin:var(--app-space-4) 0 0;
-  font-size: var(--app-font-caption);
+  font: var(--app-type-caption);
   color: var(--td-error-color);
 }
 

@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, h, nextTick, onMounted, reactive, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { Loading, Button, Cell, CheckTag, DateTimePicker, DialogPlugin, Form, FormItem, Input, NoticeBar, Popup, Stepper, Toast } from 'tdesign-mobile-vue'
+import { Loading, Button, Cell, CheckTag, DateTimePicker, DialogPlugin, Form, FormItem, Input, NoticeBar, Popup, Stepper, Tag, Toast } from 'tdesign-mobile-vue'
 import type { FormInstanceFunctions, FormRules } from 'tdesign-mobile-vue'
 import { fetchAvailability, fetchSpaceDetail, createReservation } from '@/api/spaces'
 import { fetchMyIdentities } from '@/api/enterprises'
@@ -13,7 +13,8 @@ import type { IdentityType, Space, SpaceSlot, UserIdentity } from '@/types'
 import { useUnsavedGuard } from '@/composables/useUnsavedGuard'
 import { useBusinessNow } from '@/composables/useBusinessNow'
 import { formatLocalDate } from '@/utils/format'
-import { availabilityEndpoints, canStartAt, formatSpaceDuration, validateSpaceRange } from '@/utils/spaceRange'
+import { discountLabel, discountedPoints } from '@/utils/points'
+import { availabilityEndpoints, billableHours, canStartAt, formatSpaceDuration, spaceFeePoints, timeToMinutes, validateSpaceRange } from '@/utils/spaceRange'
 
 /* 移动预约：日期 + 时段 chips（占用禁选）+ 主题 + 身份（个人/企业主体）+ 提交 */
 const route = useRoute()
@@ -27,21 +28,16 @@ const spaceError = ref('')
 const businessNowMs = useBusinessNow()
 const today = computed(() => formatLocalDate(businessNowMs.value))
 const date = ref(today.value)
-/* 可选日期上限：后端按 space.advanceDays 校验最大可提前天数（与页面「最多提前 N 天预约」对应），
- * 日期选择器同步传 :end，超范围日期直接不可选，不必等提交后再报错 */
-const maxDate = computed(() => {
-  const days = space.value?.advanceDays
-  if (!days) return undefined
-  const limit = new Date(businessNowMs.value)
-  limit.setDate(limit.getDate() + days)
-  return formatLocalDate(limit.getTime())
-})
+/* 可选时段与日期范围只由后台设置决定：时段按空间「开放时间-关闭时间」下发，
+ * 日期上限不设限（后台没有「最多提前 N 天」配置入口），仅不能早于今天。 */
 const slots = ref<SpaceSlot[]>([])
 const slotsLoading = ref(false)
 const slotsError = ref('')
 let slotsRequestId = 0
 /* 预约身份选项：持社区个体时不再单独展示基础「个人用户」；含成员被授权「空间预约」的企业（代企业预约） */
 const delegatedIdentities = ref<UserIdentity[]>([])
+/* 各社区企业的积分消费折扣（企业 id → 折扣；代企业预约时按企业等级折算费用） */
+const enterpriseDiscounts = ref<Record<string, number>>({})
 const identityOptions = computed(() => {
   const base = auth.identities
   const extra = delegatedIdentities.value.filter(
@@ -62,7 +58,10 @@ const maxAttendees = computed(() => Math.max(space.value?.capacity ?? 1, 1))
 const formRef = ref<FormInstanceFunctions>()
 const submitting = ref(false)
 const resultStatus = ref<'' | 'pending' | 'approved'>('')
+/* 后端实际扣除的积分（用于结果提示；免费空间为 0） */
+const resultPoints = ref(0)
 const datePickerVisible = ref(false)
+const draftDate = ref(date.value)
 const loaded = ref(false)
 const baseline = ref('')
 const formSnapshot = computed(() => JSON.stringify({ date: date.value, ...form }))
@@ -103,6 +102,11 @@ onMounted(async () => {
     delegatedIdentities.value = identities
       .filter((i) => i.type === 'community_enterprise' && i.enterpriseId && (i.isContact || (i.permissions ?? []).includes('space_reserve')))
       .map((i): UserIdentity => ({ type: 'community_enterprise', enterpriseId: i.enterpriseId, enterpriseName: i.name }))
+    enterpriseDiscounts.value = Object.fromEntries(
+      identities
+        .filter((i) => i.type === 'community_enterprise' && i.enterpriseId)
+        .map((i) => [i.enterpriseId as string, i.pointsDiscount]),
+    )
   } catch {
     /* 未登录或接口异常时仅展示自有身份 */
   }
@@ -152,16 +156,59 @@ const endpoints = computed(() => availabilityEndpoints(slots.value))
 const fullyBooked = computed(() => slots.value.length > 0 && slots.value.every((slot) => slot.occupied))
 const selectedRange = computed(() => {
   if (!form.start || !form.end) return null
-  return validateSpaceRange(slots.value, form.start, form.end, space.value?.maxHours ?? 0)
+  return validateSpaceRange(slots.value, form.start, form.end)
 })
 const durationLabel = computed(() => {
   return selectedRange.value?.valid ? formatSpaceDuration(form.start, form.end) : ''
 })
 
+/* 费用：原价 = 每小时积分 × 计费小时（不足 1 小时按 1 小时计）；再按等级折扣折算（1 = 1 折 … 10 = 原价） */
+const baseFeePoints = computed(() => spaceFeePoints(space.value?.feePerHour ?? 0, form.start, form.end))
+/* 折扣取值：代企业预约用企业等级折扣，其余用本人社区个体等级折扣（服务端同口径） */
+const feeDiscount = computed(() => {
+  if (form.asIdentity === 'community_enterprise' && form.asEnterpriseId) {
+    return enterpriseDiscounts.value[form.asEnterpriseId] ?? auth.pointsDiscount
+  }
+  return auth.pointsDiscount
+})
+const feePoints = computed(() => discountedPoints(baseFeePoints.value, feeDiscount.value))
+/* 余额不足：提交按钮不可用（后端扣费同样兜底；未登录时不按余额拦截，交由接口鉴权提示） */
+const feeInsufficient = computed(() => feePoints.value > 0 && auth.isLogged && auth.points < feePoints.value)
+/* 时长含不足 1 小时的部分时标注计费小时；有折扣时补折扣标注（如全天开放 23:59 结束 = N 小时 59 分） */
+const feeHint = computed(() => {
+  if (feePoints.value <= 0 || !form.start || !form.end) return ''
+  const hours = (timeToMinutes(form.end) - timeToMinutes(form.start)) % 60 === 0 ? '' : ` · 按 ${billableHours(form.start, form.end)} 小时计费`
+  const discount = feePoints.value < baseFeePoints.value ? ` · ${discountLabel(feeDiscount.value)}` : ''
+  return `${hours}${discount}`
+})
+const submitLabel = computed(() => {
+  if (submitting.value) return '提交中…'
+  if (feeInsufficient.value) return `积分不足（需 ${feePoints.value} 积分）`
+  return feePoints.value > 0 ? `提交预约（消耗 ${feePoints.value} 积分）` : '提交预约'
+})
+const resultNotice = computed(() => {
+  if (!resultStatus.value) return ''
+  const head = resultStatus.value === 'approved' ? '预约成功！' : '预约已提交，等待社区运营审核。'
+  if (resultPoints.value <= 0) return head
+  return resultStatus.value === 'approved'
+    ? `${head}已消耗 ${resultPoints.value} 积分。`
+    : `${head}已消耗 ${resultPoints.value} 积分，驳回将全额退回。`
+})
+
+/* 选中区间的整点都进入选中态：起止端点 + 区间内整点 */
+function isPointChecked(point: string): boolean {
+  if (!form.start) return false
+  if (!form.end) return form.start === point
+  return form.start <= point && point <= form.end
+}
+
 /* v46：校验迁移 t-form/rules——时段与身份 chips 的选择逻辑不变，错误内联到对应字段下方 */
 const rules = computed<FormRules<typeof form>>(() => ({
-  start: [{ required: true, message: '请选择开始时间' }],
-  end: [{ validator: (val: string) => !!val && !!selectedRange.value?.valid, message: '请选择有效的结束时间' }],
+  /* 起止时间同属一处 chips，合并为一条规则（原先挂在 end 字段的规则随该 FormItem 一并移除） */
+  start: [{
+    validator: () => !!form.start && !!form.end && !!selectedRange.value?.valid,
+    message: '请选择完整的预约时段',
+  }],
   asIdentity: [{ required: true, message: '请选择预约身份' }],
   attendees: [{
     validator: (val: number) => {
@@ -178,17 +225,38 @@ function onAttendeesChange(value: string | number) {
 }
 
 function endpointDisabled(time: string): boolean {
-  if (!form.start || form.end) return !canStartAt(slots.value, time)
-  return !validateSpaceRange(slots.value, form.start, time, space.value?.maxHours ?? 0).valid
+  if (!form.start || form.end) return isPastStart(time) || !canStartAt(slots.value, time)
+  return !validateSpaceRange(slots.value, form.start, time).valid
+}
+
+function isPastStart(time: string): boolean {
+  if (date.value !== today.value) return false
+  const now = new Date(businessNowMs.value)
+  const currentTime = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`
+  return time <= currentTime
 }
 
 function pickEndpoint(time: string) {
+  if (endpointDisabled(time)) return
   if (!form.start || form.end) {
     form.start = time
     form.end = ''
     return
   }
-  if (validateSpaceRange(slots.value, form.start, time, space.value?.maxHours ?? 0).valid) form.end = time
+  if (validateSpaceRange(slots.value, form.start, time).valid) form.end = time
+}
+
+function openDatePicker() {
+  draftDate.value = date.value
+  datePickerVisible.value = true
+}
+
+function confirmDate(value: string | number | Date) {
+  datePickerVisible.value = false
+  const nextDate = typeof value === 'string' ? value : formatLocalDate(value)
+  if (nextDate === date.value) return
+  date.value = nextDate
+  void loadSlots()
 }
 
 function clearRange() {
@@ -200,6 +268,11 @@ function clearRange() {
 
 async function submitReservation() {
   if (submitting.value || resultStatus.value) return
+  if (form.start && isPastStart(form.start)) {
+    Toast('开始时间已过，请选择之后的时段或其他日期')
+    clearRange()
+    return
+  }
   if (space.value?.status === 'maintenance') {
     Toast('该空间维护中，暂不可预约')
     return
@@ -217,11 +290,14 @@ async function submitReservation() {
       end: form.end,
       topic: form.topic,
       attendees: form.attendees,
-      asIdentity: form.asIdentity,
+      asIdentity: form.asIdentity || undefined,
       ...(form.asIdentity === 'community_enterprise' && form.asEnterpriseId ? { asEnterpriseId: form.asEnterpriseId } : {}),
     })
     resultStatus.value = res.status
+    resultPoints.value = res.pointsSpent
     Toast(res.status === 'approved' ? '预约成功' : '预约已提交，待审核')
+    /* 扣分后同步余额：返回列表页/再次预约时按钮的可用性按最新积分判断 */
+    void auth.refreshProfile()
   } catch (e) {
     Toast(e instanceof ApiError ? e.message : '提交失败，请稍后重试')
   } finally {
@@ -229,9 +305,14 @@ async function submitReservation() {
   }
 }
 
-/* 提交前二次确认（与兑换/取消等写操作口径一致）：摘要时间、时长与身份，并说明审核后果 */
+/* 提交前二次确认（与兑换/取消等写操作口径一致）：摘要时间、时长、费用与身份，并说明审核后果 */
 function confirmSubmit() {
   if (submitting.value || resultStatus.value) return
+  if (form.start && isPastStart(form.start)) {
+    Toast('开始时间已过，请重新选择时段')
+    clearRange()
+    return
+  }
   const item = space.value
   if (!item) return
   const identity = identityOptions.value.find(isIdentityPicked)
@@ -241,6 +322,11 @@ function confirmSubmit() {
       h('div', { style: 'text-align: left' }, [
         h('p', { style: 'margin: 0 0 var(--app-space-3)' }, `空间：${item.name}`),
         h('p', { style: 'margin: 0 0 var(--app-space-3)' }, `时间：${date.value} ${form.start}-${form.end} · ${durationLabel.value}`),
+        ...(feePoints.value > 0
+          ? [h('p', { style: 'margin: 0 0 var(--app-space-3)' }, `费用：消耗 ${feePoints.value} 积分（按 ${billableHours(form.start, form.end)} 小时${
+            feePoints.value < baseFeePoints.value ? `，${discountLabel(feeDiscount.value)}后` : ''
+          }）`)]
+          : []),
         h('p', { style: 'margin: 0 0 var(--app-space-3)' }, `预约身份：${identity ? identityOptionLabel(identity, auth.name) : '—'}`),
         h(
           'p',
@@ -278,13 +364,23 @@ function goMine() {
       content="该空间维护中，暂不可预约，请留意恢复通知。"
     />
     <div class="m-card head">
-      <h2 class="page-title">{{ space?.name ?? '空间预约' }}</h2>
+      <div class="head-top">
+        <h2 class="page-title">{{ space?.name ?? '空间预约' }}</h2>
+        <!-- 费用：0 表示免费（后台「费用」栏维护） -->
+        <Tag size="small" variant="light" :theme="(space?.feePerHour ?? 0) > 0 ? 'warning' : 'success'">
+          {{ (space?.feePerHour ?? 0) > 0 ? `${space?.feePerHour} 积分/小时` : '免费' }}
+        </Tag>
+      </div>
       <p class="page-desc">{{ space?.location }} · {{ space?.needApproval ? '需审核' : '免审核' }} · {{ space?.openTime }}-{{ space?.closeTime }}</p>
-      <p class="page-desc">规则：单次最长 {{ space?.maxHours }} 小时 · 最多提前 {{ space?.advanceDays }} 天预约</p>
+      <!-- 可用设备（后台「配备设备」维护）：后台没有预约规则配置，此处展示空间实际配备 -->
+      <div v-if="space?.equipment?.length" class="head-equip">
+        <span class="equip-label">可用设备</span>
+        <Tag v-for="item in space?.equipment ?? []" :key="item" size="small" variant="light" theme="default">{{ item }}</Tag>
+      </div>
     </div>
 
     <div class="m-card">
-      <Cell class="date-cell" title="预约日期" :note="date" arrow :bordered="false" @click="datePickerVisible = true" />
+      <Cell class="date-cell" title="预约日期" :note="date" arrow :bordered="false" @click="openDatePicker" />
     </div>
 
     <Form
@@ -297,43 +393,47 @@ function goMine() {
       @submit="onSubmit"
     >
       <div class="m-card form-card">
-        <FormItem class="slot-item" label="选择预约时段" name="start">
-          <div v-if="form.start" class="range-heading">
-            <Button size="small" variant="text" @click="clearRange">清除选择</Button>
-          </div>
-          <Loading v-if="slotsLoading" class="slots-loading" text="加载中…" />
-          <template v-else-if="slotsError">
-            <p class="slots-error">{{ slotsError }}</p>
-            <Button size="small" variant="outline" @click="loadSlots">重新加载时段</Button>
+        <!-- 标签行放「清除选择」：label 元素会隐式关联第一个可关联后代（此处即按钮），
+             把标签文案的点击转发成按钮点击，故显式给 for 传空串切断隐式关联（时段 chips 非可关联元素，无副作用）；
+             必填星号是 label::before 生成的 inline 内容，与行内 flex 容器不同行会单独成行，故本项不显示星号。 -->
+        <FormItem class="slot-item" name="start" :required-mark="false" for="">
+          <template #label>
+            <div class="slot-head">
+              <span>选择预约时段</span>
+              <Button size="small" variant="text" :disabled="!form.start" @click="clearRange">清除选择</Button>
+            </div>
           </template>
-          <EmptyBlock v-else-if="slots.length === 0" text="当天未设置开放时段" />
-          <EmptyBlock v-else-if="fullyBooked" text="当天时段已约满" />
-          <template v-else>
-          <div class="range-summary">
-            <span :class="{ active: form.start }">开始 {{ form.start || '待选择' }}</span>
-            <span class="range-arrow">→</span>
-            <span :class="{ active: form.end }">结束 {{ form.end || '待选择' }}</span>
-            <strong v-if="durationLabel">{{ durationLabel }}</strong>
+          <div class="slot-picker">
+            <Loading v-if="slotsLoading" class="slots-loading" text="加载中…" />
+            <template v-else-if="slotsError">
+              <p class="slots-error">{{ slotsError }}</p>
+              <Button size="small" variant="outline" @click="loadSlots">重新加载时段</Button>
+            </template>
+            <EmptyBlock v-else-if="slots.length === 0" text="当天未设置开放时段" />
+            <EmptyBlock v-else-if="fullyBooked" text="当天时段已约满" />
+            <template v-else>
+              <div class="range-summary">
+                <span :class="{ active: form.start }">开始 {{ form.start || '待选择' }}</span>
+                <span class="range-arrow">→</span>
+                <span :class="{ active: form.end }">结束 {{ form.end || '待选择' }}</span>
+                <strong v-if="durationLabel">{{ durationLabel }}{{ feeHint }}</strong>
+              </div>
+              <div class="slots">
+                <CheckTag
+                  v-for="point in endpoints"
+                  :key="point"
+                  class="slot"
+                  size="medium"
+                  variant="light"
+                  :checked="isPointChecked(point)"
+                  :disabled="endpointDisabled(point)"
+                  @change="pickEndpoint(point)"
+                >
+                  {{ point }}
+                </CheckTag>
+              </div>
+            </template>
           </div>
-          <div class="slots">
-            <CheckTag
-              v-for="point in endpoints"
-              :key="point"
-              class="slot"
-              size="medium"
-              variant="light"
-              :checked="form.start === point || form.end === point"
-              :disabled="endpointDisabled(point)"
-              @change="pickEndpoint(point)"
-            >
-              {{ point }}
-            </CheckTag>
-          </div>
-          </template>
-        </FormItem>
-        <!-- 结束时间与开始时间共用同一组时段 chips，此处只承载 end 字段的校验提示 -->
-        <FormItem class="slot-item" name="end">
-          <p class="field-help">先点开始时间，再点结束时间；灰色时间不可选，不可跨越占用或非开放时段。</p>
         </FormItem>
       </div>
 
@@ -344,14 +444,13 @@ function goMine() {
       </div>
 
       <div class="m-card form-card">
-        <FormItem label="参与人数" name="attendees">
+        <FormItem label="参与人数" name="attendees" :help="`至少 1 人，不超过该空间容量 ${maxAttendees} 人`">
           <Stepper :value="form.attendees" :min="1" :max="maxAttendees" theme="filled" @change="onAttendeesChange" />
-          <p class="field-help">至少 1 人，不超过该空间容量 {{ maxAttendees }} 人</p>
         </FormItem>
       </div>
 
       <div class="m-card form-card">
-        <FormItem label="以哪个身份预约" name="asIdentity">
+        <FormItem label="预约身份" name="asIdentity">
           <div class="chips">
             <CheckTag
               v-for="i in identityOptions"
@@ -364,12 +463,19 @@ function goMine() {
               {{ identityOptionLabel(i, auth.name) }}
             </CheckTag>
           </div>
-          <p class="field-help">企业身份预约将计为企业主体的预约记录</p>
         </FormItem>
       </div>
 
-      <Button class="mobile-sticky-action" theme="primary" size="large" block type="submit" :disabled="submitBlocked" :loading="submitting">
-        {{ submitting ? '提交中…' : '提交预约' }}
+      <Button
+        class="mobile-sticky-action"
+        theme="primary"
+        size="large"
+        block
+        type="submit"
+        :disabled="submitBlocked || feeInsufficient"
+        :loading="submitting"
+      >
+        {{ submitLabel }}
       </Button>
     </Form>
     <Button theme="primary" variant="text" block class="mine-link" @click="goMine">查看我的预约</Button>
@@ -378,18 +484,17 @@ function goMine() {
       v-if="resultStatus"
       visible
       :theme="resultStatus === 'approved' ? 'success' : 'warning'"
-      :content="resultStatus === 'approved' ? '预约成功！' : '预约已提交，等待社区运营审核。'"
+      :content="resultNotice"
     />
 
     <Popup v-model:visible="datePickerVisible" placement="bottom">
       <DateTimePicker
-        v-model="date"
+        v-model="draftDate"
         mode="date"
         format="YYYY-MM-DD"
         :start="today"
-        :end="maxDate"
         title="选择预约日期"
-        @confirm="datePickerVisible = false; loadSlots()"
+        @confirm="confirmDate"
         @cancel="datePickerVisible = false"
       />
     </Popup>
@@ -406,13 +511,36 @@ function goMine() {
 }
 
 .head .page-title {
+  margin: 0;
+  font: var(--app-type-page-title);
+}
+
+/* 标题 + 费用标签同行（左标题、右费用） */
+.head-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap:var(--app-space-3);
   margin:0 0 var(--app-space-2);
-  font-size: var(--app-font-title);
 }
 
 .head .page-desc {
   margin:0;
-  font-size: var(--app-font-caption);
+  font: var(--app-type-caption);
+  color: var(--td-text-color-secondary);
+}
+
+/* 可用设备：沿用空间列表（SpacesView）的设备标签形态 */
+.head-equip {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap:var(--app-space-3);
+  margin-top:var(--app-space-5);
+}
+
+.head .equip-label {
+  font: var(--app-type-body-sm);
   color: var(--td-text-color-secondary);
 }
 
@@ -423,17 +551,20 @@ function goMine() {
 
 .slots-error {
   margin:0 0 var(--app-space-4);
-  font-size: var(--app-font-caption);
+  font: var(--app-type-body-sm);
   color: var(--td-error-color);
 }
 
 /* 表单版式用官方能力：label-align="top"（标签在上）+ 官方标签字号变量；
- * 不再用 :deep() 改写 t-form 内部类，标签保持可见。 */
-.reserve-form {
+ * 不再用 :deep() 改写 t-form 内部类，标签保持可见。
+ * 库内 .t-form 根元素自带容器白底（--td-bg-color-container），会把表单卡片之间的
+ * 页面灰底缝隙填成白色；此处让它透明，缝隙回到页面底色。
+ * 双类名提高特异性：库样式懒加载后写入，单类名会按加载顺序被覆盖。 */
+.reserve-form.reserve-form {
   display: flex;
   flex-direction: column;
   gap:var(--app-space-6);
-  --td-form-label-font-size: var(--app-font-body);
+  background: transparent;
 }
 
 /* 表单卡片：内距交给 t-form-item 自带的内距，避免与本类叠加造成双重留白 */
@@ -441,21 +572,30 @@ function goMine() {
   padding: 0;
 }
 
-.range-heading {
+/* 标签行：左「选择预约时段」+ 右「清除选择」同行。
+ * 负 margin 抵消库内 .t-form__label 的 padding-right: 16px（无对应 API），使按钮右缘与下方 chips 对齐；
+ * 升级 TDesign 时需复核该内距。 */
+.slot-head {
   display: flex;
-  justify-content: flex-end;
-  margin-bottom:var(--app-space-4);
+  align-items: center;
+  justify-content: space-between;
+  gap:var(--app-space-3);
+  margin-right: -16px;
 }
+
+.slot-picker { width: 100%; min-width: 0; }
 
 .range-summary {
   display: flex;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
   align-items: center;
   gap:var(--app-space-3);
   margin-bottom:var(--app-space-4);
-  font-size:var(--app-font-body);
+  min-height: 44px;
+  font: var(--app-type-body);
   color:var(--td-text-color-placeholder);
 }
+.range-summary span { white-space: nowrap; }
 
 .range-summary .active,
 .range-summary strong {
@@ -464,7 +604,7 @@ function goMine() {
 
 .range-summary strong {
   margin-left:auto;
-  font-weight:600;
+  font: var(--app-type-emphasis);
 }
 
 .range-arrow {
@@ -472,10 +612,11 @@ function goMine() {
 }
 
 .slots {
-  display: flex;
-  flex-wrap: wrap;
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
   gap:var(--app-space-4);
 }
+.slot { display: flex; min-width: 0; min-height: 44px; align-items: center; justify-content: center; }
 
 .slots-loading {
   padding:var(--app-space-4) 0;
@@ -485,12 +626,6 @@ function goMine() {
   display: flex;
   flex-wrap: wrap;
   gap:var(--app-space-4);
-}
-
-.field-help {
-  margin:var(--app-space-4) 0 0;
-  font-size: var(--app-font-caption);
-  color: var(--td-text-color-placeholder);
 }
 
 .mine-link {

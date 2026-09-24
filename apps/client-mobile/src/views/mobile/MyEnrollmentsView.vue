@@ -5,15 +5,17 @@ import { Button, Icon, List, Toast } from 'tdesign-mobile-vue'
 import { cancelEnrollment, fetchMyEnrollments } from '@/api/events'
 import { useAsyncList } from '@/composables/useAsyncList'
 import { useIncrementalList } from '@/composables/useIncrementalList'
+import { useBusinessNow } from '@/composables/useBusinessNow'
 import EmptyBlock from '@/components/shared/EmptyBlock.vue'
 import ListSkeleton from '@/components/ListSkeleton.vue'
 import StateTag from '@/components/shared/StateTag.vue'
 import type { MyEnrollmentItem, PageResult } from '@/types'
-import { formatLocalDateTime, formatZhNumber } from '@/utils/format'
+import { formatLocalDateTime, formatZhNumber, parseLocalDateTime } from '@/utils/format'
 
 /* 移动我的报名：报名卡片 + 签到入口/已签到标识；取消报名二次确认（两段式按钮）+ Toast */
 const { data, loading, error, run } = useAsyncList<PageResult<MyEnrollmentItem>>(() => fetchMyEnrollments())
 const router = useRouter()
+const businessNowMs = useBusinessNow()
 const enrollments = computed(() => data.value?.list ?? [])
 const { visibleItems, hasMore, showMore } = useIncrementalList(enrollments)
 const footerState = computed(() => (hasMore.value ? 'load-more' : ''))
@@ -35,9 +37,22 @@ onBeforeUnmount(() => {
   confirmTimer = null
 })
 
+function isEventEnded(item: MyEnrollmentItem) {
+  if (item.eventStatus === 'ended') return true
+  const end = parseLocalDateTime(item.endTime ?? '')
+  if (end) return end.getTime() <= businessNowMs.value
+  const start = parseLocalDateTime(item.rescheduledTo ?? item.startTime)
+  return start !== null && start.getTime() + 24 * 60 * 60 * 1000 <= businessNowMs.value
+}
+
 function canCancel(item: MyEnrollmentItem) {
-  /* v38：候补中可随时退出；正式报名开始前 24 小时内不可取消（由服务端校验并返回原因） */
-  return !item.checkedIn && (item.status === 'pending' || item.status === 'approved' || item.status === 'waitlisted')
+  if (item.checkedIn || item.eventStatus === 'cancelled' || isEventEnded(item)) return false
+  if (item.status === 'approved') {
+    const start = parseLocalDateTime(item.rescheduledTo ?? item.startTime)
+    const hours = item.cancelDeadlineHours ?? 24
+    return start !== null && start.getTime() - businessNowMs.value > hours * 60 * 60 * 1000
+  }
+  return item.status === 'pending' || item.status === 'waitlisted'
 }
 
 function onCancelTap(item: MyEnrollmentItem) {
@@ -93,10 +108,12 @@ async function doCancel(item: MyEnrollmentItem) {
         </p>
         <p v-if="item.eventStatus === 'cancelled'" class="cancel-note">活动已取消，报名已同步取消</p>
         <p v-else-if="item.rescheduledTo" class="waitlist-note">活动改期至 {{ formatLocalDateTime(item.rescheduledTo) }}</p>
+        <p v-if="item.eventStatus !== 'cancelled' && isEventEnded(item)" class="ended-note">活动已结束</p>
+        <p v-else-if="item.status === 'approved' && !canCancel(item) && !item.checkedIn" class="ended-note">已过取消报名截止时间</p>
         <p v-if="item.rejectReason" class="reject-reason">驳回原因：{{ item.rejectReason }}</p>
         <div class="ops">
-          <router-link v-if="item.status === 'approved' || item.checkedIn" class="checkin-link" :to="`/events/${item.eventId}/check-in`" @click.stop>
-            {{ item.checkedIn ? '查看签到' : '签到' }}<Icon aria-hidden="true" name="chevron-right" size="12px" />
+          <router-link v-if="item.checkedIn || (item.status === 'approved' && !isEventEnded(item) && item.eventStatus !== 'cancelled')" class="checkin-link" :to="`/events/${item.eventId}/check-in`" @click.stop>
+            {{ item.checkedIn ? '查看签到' : '查看签到凭证' }}<Icon aria-hidden="true" name="chevron-right" size="12px" />
           </router-link>
           <Button
             v-if="canCancel(item)"
@@ -145,8 +162,7 @@ async function doCancel(item: MyEnrollmentItem) {
   display: inline-flex;
   min-height: 44px;
   align-items: center;
-  font-size: var(--app-font-body);
-  font-weight: 600;
+  font: var(--app-type-card-title);
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -162,26 +178,32 @@ async function doCancel(item: MyEnrollmentItem) {
   align-items: center;
   gap:var(--app-space-2);
   margin:0 0 var(--app-space-6);
-  font-size: var(--app-font-caption);
+  font: var(--app-type-caption);
   color: var(--td-text-color-secondary);
 }
 
 .reject-reason {
   margin:0 0 var(--app-space-5);
   color: var(--td-error-color);
-  font-size: var(--app-font-caption);
+  font: var(--app-type-caption);
 }
 
 .waitlist-note {
   margin:0 0 var(--app-space-5);
   color: var(--td-brand-color);
-  font-size: var(--app-font-caption);
+  font: var(--app-type-caption);
 }
 
 .cancel-note {
   margin:0 0 var(--app-space-5);
   color: var(--td-error-color);
-  font-size: var(--app-font-caption);
+  font: var(--app-type-caption);
+}
+
+.ended-note {
+  margin:0 0 var(--app-space-5);
+  color: var(--td-text-color-secondary);
+  font: var(--app-type-caption);
 }
 
 .ops {
@@ -201,7 +223,7 @@ async function doCancel(item: MyEnrollmentItem) {
   align-items: center;
   gap:var(--app-space-1);
   min-height: 44px;
-  font-size: var(--app-font-caption);
+  font: var(--app-type-body-sm);
   color: var(--td-brand-color);
   text-decoration: none;
   cursor: pointer;

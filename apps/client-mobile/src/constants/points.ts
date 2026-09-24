@@ -4,6 +4,7 @@ export const POINTS_SOURCE_LABELS: Record<string, string> = {
   rule: '自动发放',
   manual: '手动发放',
   redemption: '商城兑换',
+  space: '空间预约',
 }
 
 /** 来源码 → 中文；未知码原样返回，兼容历史中文来源。 */

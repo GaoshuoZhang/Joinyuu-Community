@@ -244,10 +244,7 @@ function onNotices() {
 }
 
 /* 页标题为 h1（Navbar 默认渲染 span，视觉与库内 title 一致） */
-.navbar-title {
-  margin:0;
-  font: var(--td-navbar-title-font);
-}
+.navbar-title { margin:0; font: var(--td-navbar-title-font); /* typography-token-exempt: 需跟随 TDesign Navbar 标题字体变量保持与库内 title 一致，改角色档会改变导航栏标题字号；升级 TDesign 时复核 --td-navbar-title-font */ }
 
 .m-shell {
   --td-tab-bar-height: var(--app-mobile-tabbar-h);

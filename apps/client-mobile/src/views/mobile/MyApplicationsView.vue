@@ -104,8 +104,7 @@ function onWithdraw(a: { id: string; targetName: string }) {
 
 .hint {
   margin:0 var(--app-space-1);
-  font-size: var(--app-font-caption);
-  line-height: 1.7;
+  font: var(--app-type-body-sm);
   color: var(--td-text-color-placeholder);
 }
 
@@ -132,21 +131,19 @@ function onWithdraw(a: { id: string; targetName: string }) {
 }
 
 .type {
-  font-size: var(--app-font-body);
-  font-weight: 600;
+  font: var(--app-type-card-title);
 }
 
 .target {
   margin:0 0 var(--app-space-3);
-  font-size: var(--app-font-caption);
+  font: var(--app-type-caption);
   color: var(--td-text-color-secondary);
 }
 
 /* 长摘要/长文件名必须能换行并在两行内截断，避免横向溢出撑破卡片 */
 .summary {
   margin:0 0 var(--app-space-3);
-  font-size: var(--app-font-caption);
-  line-height: 1.7;
+  font: var(--app-type-body-sm);
   color: var(--td-text-color-primary);
   overflow-wrap: anywhere;
   word-break: break-word;
@@ -158,7 +155,7 @@ function onWithdraw(a: { id: string; targetName: string }) {
 
 .files {
   margin:0 0 var(--app-space-3);
-  font-size: var(--app-font-caption);
+  font: var(--app-type-caption);
   color: var(--td-text-color-placeholder);
   overflow-wrap: anywhere;
   word-break: break-word;
@@ -170,13 +167,13 @@ function onWithdraw(a: { id: string; targetName: string }) {
 
 .meta {
   margin:0;
-  font-size: var(--app-font-caption);
+  font: var(--app-type-caption);
   color: var(--td-text-color-placeholder);
 }
 
 .reject {
   margin:var(--app-space-3) 0 0;
-  font-size: var(--app-font-caption);
+  font: var(--app-type-caption);
   color: var(--td-error-color);
 }
 

@@ -235,7 +235,7 @@ async function onSave() {
 
 .field-error {
   margin:var(--app-space-3) 0 0;
-  font-size: var(--app-font-caption);
+  font: var(--app-type-caption);
   color: var(--td-error-color);
 }
 
@@ -248,7 +248,7 @@ async function onSave() {
 .field .field-label {
   display: block;
   margin-bottom:var(--app-space-3);
-  font-size: var(--app-font-body);
+  font: var(--app-type-body);
   color: var(--td-text-color-secondary);
 }
 
@@ -270,7 +270,7 @@ async function onSave() {
 
 .tip {
   margin:var(--app-space-5) 0 0;
-  font-size: var(--app-font-caption);
+  font: var(--app-type-caption);
   color: var(--td-text-color-placeholder);
 }
 </style>

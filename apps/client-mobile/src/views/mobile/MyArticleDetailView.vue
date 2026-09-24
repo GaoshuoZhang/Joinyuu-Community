@@ -43,11 +43,11 @@ onMounted(run)
 <style scoped>
 .detail-page { padding: var(--app-space-8); display: flex; flex-direction: column; gap: var(--app-space-5); }
 .article-head, .content, .review { display: flex; flex-direction: column; gap: var(--app-space-4); }
-.head { display: flex; align-items: center; justify-content: space-between; gap: var(--app-space-4); font-size: var(--app-font-caption); color: var(--td-brand-color); }
+.head { display: flex; align-items: center; justify-content: space-between; gap: var(--app-space-4); font: var(--app-type-caption); color: var(--td-brand-color); }
 h2, h3, p { margin: 0; }
-h2 { font-size: var(--app-font-subtitle); line-height: 1.45; }
-h3 { font-size: var(--app-font-body); }
-.article-head p { font-size: var(--app-font-caption); color: var(--td-text-color-placeholder); }
+h2 { font: var(--app-type-section); }
+h3 { font: var(--app-type-card-title); }
+.article-head p { font: var(--app-type-caption); color: var(--td-text-color-placeholder); }
 .review { border-color: var(--td-error-color-3); }
-.review p { font-size: var(--app-font-body); line-height: 1.7; color: var(--td-error-color); }
+.review p { font: var(--app-type-body); color: var(--td-error-color); }
 </style>

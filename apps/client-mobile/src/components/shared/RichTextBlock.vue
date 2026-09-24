@@ -16,8 +16,7 @@ const safe = computed(() => DOMPurify.sanitize(props.html ?? '', { FORBID_ATTR: 
 
 <style scoped>
 .rich-text {
-  font-size: var(--app-font-body);
-  line-height: 1.8;
+  font: var(--app-type-body-relaxed);
   color: var(--td-text-color-secondary);
   overflow-wrap: anywhere;
 }
@@ -38,18 +37,17 @@ const safe = computed(() => DOMPurify.sanitize(props.html ?? '', { FORBID_ATTR: 
 .rich-text :deep(h3),
 .rich-text :deep(h4) {
   margin: 0 0 var(--app-space-4);
-  line-height: 1.45;
   color: var(--td-text-color-primary);
 }
 
 .rich-text :deep(h1),
 .rich-text :deep(h2) {
-  font-size: var(--app-font-title);
+  font: var(--app-type-page-title);
 }
 
 .rich-text :deep(h3),
 .rich-text :deep(h4) {
-  font-size: var(--app-font-subtitle);
+  font: var(--app-type-section);
 }
 
 .rich-text :deep(ul),

@@ -158,18 +158,17 @@ function onTap(item: MyIdentitySummary) {
 
 .transfer-title {
   margin:0;
-  font-size: var(--app-font-body);
+  font: var(--app-type-section);
 }
 
 .transfer-ent {
   margin:0;
-  font-size: var(--app-font-body);
-  font-weight: 600;
+  font: var(--app-type-card-title);
 }
 
 .transfer-desc {
   margin:var(--app-space-3) 0 0;
-  font-size: var(--app-font-caption);
+  font: var(--app-type-body-sm);
   color: var(--td-text-color-secondary);
 }
 
@@ -192,8 +191,7 @@ function onTap(item: MyIdentitySummary) {
 
 .id-name {
   margin:var(--app-space-4) 0 0;
-  font-size: var(--app-font-subtitle);
-  font-weight: 600;
+  font: var(--app-type-card-title);
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -202,7 +200,7 @@ function onTap(item: MyIdentitySummary) {
 
 .id-sub {
   margin:var(--app-space-3) 0 0;
-  font-size: var(--app-font-caption);
+  font: var(--app-type-body-sm);
   color: var(--td-text-color-secondary);
 }
 
@@ -212,7 +210,7 @@ function onTap(item: MyIdentitySummary) {
   align-items: center;
   justify-content: space-between;
   gap:var(--app-space-4);
-  font-size: var(--app-font-caption);
+  font: var(--app-type-body-sm);
 }
 
 .id-foot .entry {
@@ -230,7 +228,6 @@ function onTap(item: MyIdentitySummary) {
 .id-foot .arrow {
   flex-shrink: 0;
   color: var(--td-text-color-placeholder);
-  font-size: var(--app-font-subtitle);
 }
 
 .coop-block {

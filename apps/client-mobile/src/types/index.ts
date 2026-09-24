@@ -77,6 +77,8 @@ export interface UserProfile {
   gender: 'male' | 'female' | 'unknown'
   bio?: string
   points: number
+  /** 积分消费折扣：1 = 1 折 … 10 = 原价（等级规则配置；商城与空间预约按此展示折后价） */
+  pointsDiscount: number
   status: 'active' | 'frozen'
   registeredAt: string
   /** 是否已永久隐藏新手任务（服务端按账号持久化，跨浏览器一致） */
@@ -438,6 +440,8 @@ export interface AuthResult {
   avatar?: string
   identities: UserIdentity[]
   points: number
+  /** 积分消费折扣：1 = 1 折 … 10 = 原价 */
+  pointsDiscount: number
 }
 
 /* ---------- 经验值流水（GET /api/app/me/experience-records） ---------- */
@@ -629,6 +633,8 @@ export interface MyEnrollmentItem {
   eventId: string
   eventTitle: string
   startTime: string
+  endTime?: string
+  cancelDeadlineHours?: number
   location: string
   status: 'pending' | 'approved' | 'waitlisted' | 'rejected' | 'cancelled'
   checkedIn: boolean
@@ -712,16 +718,12 @@ export interface Space {
   capacity: number
   equipment: string[]
   needApproval: boolean
+  /** 预约费用（积分/小时）；0 = 免费使用 */
+  feePerHour: number
   openTime: string
   closeTime: string
   /** 开放 / 维护中（维护中不可预约） */
   status: 'open' | 'maintenance'
-  /** 单次最长预约小时数 */
-  maxHours: number
-  /** 最多可提前预约天数 */
-  advanceDays: number
-  /** 可预约开放窗口；窗口之间的空档不可跨越 */
-  openHours: { start: string; end: string }[]
   /** 空间说明（设备与服务提示） */
   description?: string
 }
@@ -730,6 +732,8 @@ export interface SpaceSlot {
   start: string
   end: string
   occupied: boolean
+  /** 占用来源：空间预约 / 已发布社区活动（用于页面标注占用原因） */
+  type?: 'reservation' | 'event'
 }
 
 export interface SpaceReservation {
@@ -763,6 +767,8 @@ export interface ReviewTimelineItem {
 export interface SpaceReservationDetail extends SpaceReservation {
   purpose: string
   attendees: number
+  /** 本单实际消耗的积分（0 = 免费空间；驳回/取消已全额退回） */
+  feePoints: number
   records: ReviewTimelineItem[]
 }
 
@@ -984,6 +990,8 @@ export interface MyIdentitySummary {
   permissions?: EnterpriseMemberPermission[]
   /** 企业身份的详情入口（无记录的合作企业组织无此字段） */
   enterpriseId?: string
+  /** 该身份消费积分时的等级折扣（1 = 1 折 … 10 = 原价；个人身份取本人社区个体等级、企业身份取企业等级） */
+  pointsDiscount: number
 }
 
 export interface EnterpriseMemberInfo {

@@ -58,7 +58,7 @@ const emit = defineEmits<{ 'update:modelValue': [string]; refresh: [] }>()
 .field label {
   display: block;
   margin-bottom:var(--app-space-3);
-  font-size: var(--app-font-caption);
+  font: var(--app-type-body-sm);
   color: var(--td-text-color-secondary);
 }
 

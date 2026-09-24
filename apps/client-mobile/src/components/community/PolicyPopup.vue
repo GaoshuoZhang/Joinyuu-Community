@@ -58,29 +58,26 @@ defineEmits<{ 'update:visible': [boolean] }>()
 
 .pop-body .p-title {
   margin:0;
-  font-size: var(--app-font-title);
-  line-height: 1.5;
+  font: var(--app-type-page-title);
   color: var(--td-text-color-primary);
 }
 
 .pop-body .p-summary {
   margin:0;
-  font-size: var(--app-font-body);
-  line-height: 1.7;
+  font: var(--app-type-body);
   color: var(--td-text-color-secondary);
 }
 
 .pop-body .p-content {
   margin:0;
-  font-size: var(--app-font-body);
-  line-height: 1.9;
+  font: var(--app-type-body-relaxed);
   color: var(--td-text-color-primary);
   white-space: pre-wrap;
 }
 
 .pop-body .p-updated {
   margin:0;
-  font-size: var(--app-font-caption);
+  font: var(--app-type-caption);
   color: var(--td-text-color-placeholder);
 }
 
@@ -89,7 +86,7 @@ defineEmits<{ 'update:visible': [boolean] }>()
   flex-wrap: wrap;
   gap: var(--app-space-5);
   margin: var(--app-space-5) 0 var(--app-space-1);
-  font-size: var(--app-font-caption);
+  font: var(--app-type-caption);
   color: var(--td-text-color-secondary);
 }
 
@@ -98,7 +95,7 @@ defineEmits<{ 'update:visible': [boolean] }>()
   flex-direction: column;
   gap: var(--app-space-3);
   margin-top: var(--app-space-4);
-  font-size: var(--app-font-caption);
+  font: var(--app-type-body-sm);
 }
 
 .pop-body .p-files a {

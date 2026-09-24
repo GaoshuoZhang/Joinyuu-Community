@@ -37,22 +37,19 @@ defineEmits<{ open: [] }>()
 }
 
 .updated {
-  font-size: var(--app-font-caption);
+  font: var(--app-type-caption);
   color: var(--td-text-color-secondary);
 }
 
 .title {
   margin: 0;
-  font-size: var(--app-font-subtitle);
-  font-weight: 600;
-  line-height: 1.45;
+  font: var(--app-type-card-title);
   color: var(--td-text-color-primary);
 }
 
 .summary {
   margin: var(--app-space-3) 0 0;
-  font-size: var(--app-font-body);
-  line-height: 1.7;
+  font: var(--app-type-body);
   color: var(--td-text-color-secondary);
   display: -webkit-box;
   -webkit-line-clamp: 2;

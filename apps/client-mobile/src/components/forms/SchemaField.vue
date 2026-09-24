@@ -123,7 +123,7 @@ function optionLabel(field: ApplicationFormField, value: string): string {
 .field .field-label {
   display: block;
   margin-bottom:var(--app-space-4);
-  font-size: var(--app-font-body);
+  font: var(--app-type-body);
   color: var(--td-text-color-secondary);
 }
 
@@ -137,7 +137,7 @@ function optionLabel(field: ApplicationFormField, value: string): string {
 }
 
 .picker-cell :deep(.t-cell__title) {
-  font-size: var(--app-font-body);
+  font: var(--app-type-body);
 }
 
 .picker-cell.empty :deep(.t-cell__title) {
@@ -146,13 +146,13 @@ function optionLabel(field: ApplicationFormField, value: string): string {
 
 .field-error {
   margin:var(--app-space-3) 0 0;
-  font-size: var(--app-font-caption);
+  font: var(--app-type-caption);
   color: var(--td-error-color);
 }
 
 .help {
   margin:var(--app-space-3) 0 0;
-  font-size: var(--app-font-caption);
+  font: var(--app-type-caption);
   color: var(--td-text-color-placeholder);
 }
 </style>

@@ -47,13 +47,14 @@ const rules = ref([
 
 .intro-desc {
   margin:var(--app-space-3) 0 0;
-  font-size: var(--app-font-body);
+  font: var(--app-type-body);
   color: var(--td-text-color-secondary);
 }
 
 .section-title {
   margin:0 0 var(--app-space-4);
-  font-size: var(--app-font-body);
+  /* 与全站章节标题（.sec-title 等）统一为 section 角色档 */
+  font: var(--app-type-section);
 }
 
 .chips {
@@ -65,8 +66,7 @@ const rules = ref([
 .rule-list {
   margin:0;
   padding-left:var(--app-space-9);
-  font-size: var(--app-font-body);
-  line-height: 1.9;
+  font: var(--app-type-body-relaxed);
   color: var(--td-text-color-secondary);
 }
 </style>

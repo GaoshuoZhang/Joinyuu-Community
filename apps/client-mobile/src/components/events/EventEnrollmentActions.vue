@@ -85,7 +85,7 @@ const emit = defineEmits<{
   display: flex;
   align-items: center;
   gap: var(--app-space-4);
-  font-size: var(--app-font-body);
+  font: var(--app-type-body);
   color: var(--td-text-color-secondary);
 }
 
@@ -95,9 +95,8 @@ const emit = defineEmits<{
 
 .bar-hint {
   margin: 0;
-  font-size: var(--app-font-caption);
+  font: var(--app-type-body-sm);
   color: var(--td-text-color-placeholder);
-  line-height: 1.6;
 }
 
 /* 留言入口：文字链形态，内联在提示文案中 */
@@ -107,8 +106,7 @@ const emit = defineEmits<{
 
 .bar-reason {
   margin: 0;
-  font-size: var(--app-font-caption);
+  font: var(--app-type-body-sm);
   color: var(--td-error-color);
-  line-height: 1.6;
 }
 </style>

@@ -134,7 +134,7 @@ function updateFiles(value: UploadFile[]) {
   height: var(--avatar-size, 56px);
   flex-shrink: 0;
   overflow: hidden;
-  border-radius: var(--td-radius-circle);
+  border-radius: var(--td-radius-circle); /* typography-token-exempt: 紧随其后的 line-height 是行盒归一（inline-flex 收拢基线间隙），非文字排版且角色档无行高 0；升级复核角色档是否引入行高 0 档 */
   line-height: 0;
 }
 
@@ -145,8 +145,7 @@ function updateFiles(value: UploadFile[]) {
 .avatar-el {
   width: 100%;
   height: 100%;
-  font-size: var(--app-font-title);
-  font-weight: 600;
+  font: var(--app-type-page-title);
 }
 
 .mask {
@@ -156,8 +155,7 @@ function updateFiles(value: UploadFile[]) {
   bottom: 0;
   padding:1px 0 var(--app-space-1);
   text-align: center;
-  font-size: var(--app-font-caption);
-  line-height: 1.4;
+  font: var(--app-type-caption);
   color: var(--td-text-color-anti);
   background: var(--td-mask-active);
   pointer-events: none;

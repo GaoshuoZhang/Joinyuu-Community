@@ -463,14 +463,14 @@ async function onExport() {
 /* 分组标题口径与 MeView 等二级页一致（外层纵向 flex 的 gap 负责组间间距） */
 .group-title {
   margin:0 var(--app-space-1);
-  font-size: var(--app-font-caption);
+  font: var(--app-type-body-sm);
   color: var(--td-text-color-secondary);
 }
 
 .empty-tip {
   margin:0;
   padding:var(--app-space-4) var(--app-space-1);
-  font-size: var(--app-font-caption);
+  font: var(--app-type-body-sm);
   color: var(--td-text-color-placeholder);
 }
 
@@ -483,20 +483,19 @@ async function onExport() {
 
 .sheet-title {
   margin:0;
-  font-size: var(--app-font-subtitle);
+  font: var(--app-type-section);
 }
 
 .sheet-tip {
   margin:0;
-  font-size: var(--app-font-caption);
-  line-height: 1.7;
+  font: var(--app-type-body-sm);
   color: var(--td-text-color-secondary);
 }
 
 .field label {
   display: block;
   margin-bottom:var(--app-space-3);
-  font-size: var(--app-font-caption);
+  font: var(--app-type-body-sm);
   color: var(--td-text-color-secondary);
 }
 
@@ -519,7 +518,7 @@ async function onExport() {
 
 .field-error {
   margin:var(--app-space-3) 0 0;
-  font-size: var(--app-font-caption);
+  font: var(--app-type-caption);
   color: var(--td-error-color);
 }
 

@@ -126,7 +126,7 @@ function pick(identity: UserIdentity) {
 
 .sec-title {
   margin:0 0 var(--app-space-4);
-  font-size: var(--app-font-body);
+  font: var(--app-type-section);
 }
 
 .comment-list {
@@ -152,8 +152,7 @@ function pick(identity: UserIdentity) {
   align-items: center;
   gap: var(--app-space-2);
   min-width: 0;
-  font-size: var(--app-font-body);
-  font-weight: 600;
+  font: var(--app-type-emphasis);
 }
 
 .comment-avatar {
@@ -172,14 +171,13 @@ function pick(identity: UserIdentity) {
 
 .comment-at {
   flex-shrink: 0;
-  font-size: var(--app-font-caption);
+  font: var(--app-type-caption);
   color: var(--td-text-color-placeholder);
 }
 
 .comment-content {
   margin:var(--app-space-2) 0 0 calc(var(--app-space-9) + var(--app-space-2));
-  font-size: var(--app-font-body);
-  line-height: 1.6;
+  font: var(--app-type-body);
   color: var(--td-text-color-secondary);
 }
 
@@ -191,7 +189,7 @@ function pick(identity: UserIdentity) {
 
 .comment-empty {
   margin:0 0 var(--app-space-4);
-  font-size: var(--app-font-caption);
+  font: var(--app-type-body-sm);
   color: var(--td-text-color-placeholder);
 }
 
@@ -213,7 +211,7 @@ function pick(identity: UserIdentity) {
 }
 
 .identity-label {
-  font-size: var(--app-font-caption);
+  font: var(--app-type-body-sm);
   color: var(--td-text-color-secondary);
 }
 
@@ -245,7 +243,7 @@ function pick(identity: UserIdentity) {
 .field-error {
   flex: 1;
   margin:0;
-  font-size: var(--app-font-caption);
+  font: var(--app-type-caption);
   color: var(--td-error-color);
 }
 </style>

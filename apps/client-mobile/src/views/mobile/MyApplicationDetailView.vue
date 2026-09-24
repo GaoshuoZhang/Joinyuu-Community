@@ -71,25 +71,25 @@ const typeLabel = { settle: '企业入驻', cooperation: '合作伙伴', individ
 .detail-page { padding: var(--app-space-8); display: flex; flex-direction: column; gap: var(--app-space-5); }
 .hero, .section { display: flex; flex-direction: column; gap: var(--app-space-4); }
 .head { display: flex; align-items: center; justify-content: space-between; gap: var(--app-space-4); }
-.kind { font-size: var(--app-font-caption); color: var(--td-brand-color); }
+.kind { font: var(--app-type-caption); color: var(--td-brand-color); }
 h2, h3, p { margin: 0; }
-h2 { font-size: var(--app-font-subtitle); line-height: 1.45; }
-h3 { font-size: var(--app-font-body); }
-.hero p, .summary, .note { font-size: var(--app-font-caption); line-height: 1.7; color: var(--td-text-color-secondary); }
+h2 { font: var(--app-type-section); }
+h3 { font: var(--app-type-card-title); }
+.hero p, .summary, .note { font: var(--app-type-body-sm); color: var(--td-text-color-secondary); }
 /* 标签列按各自内容自适应宽度（原 minmax(88px, auto) 为写死尺寸） */
-.fields { display: grid; grid-template-columns: auto 1fr; gap: var(--app-space-4) var(--app-space-5); margin: 0; font-size: var(--app-font-body); }
+.fields { display: grid; grid-template-columns: auto 1fr; gap: var(--app-space-4) var(--app-space-5); margin: 0; font: var(--app-type-body); }
 .fields dt { color: var(--td-text-color-placeholder); }
 .fields dd { margin: 0; min-width: 0; overflow-wrap: anywhere; }
 .fields .blank { color: var(--td-text-color-placeholder); }
 .files { display: flex; flex-direction: column; gap: var(--app-space-2); }
 .files a { color: var(--td-brand-color); }
 .reject { border-color: var(--td-error-color-3); }
-.reject p { color: var(--td-error-color); font-size: var(--app-font-body); line-height: 1.7; }
+.reject p { color: var(--td-error-color); font: var(--app-type-body); }
 .timeline { margin: 0; padding: 0; list-style: none; }
 .timeline li { position: relative; padding: 0 0 var(--app-space-5) var(--app-space-7); border-left: 1px solid var(--td-component-border); }
 .timeline li:last-child { padding-bottom: 0; }
 .timeline li::before { content: ''; position: absolute; left: -5px; top: 4px; width: 9px; height: 9px; border-radius: 50%; background: var(--td-brand-color); }
-.timeline b, .timeline span { display: block; font-size: var(--app-font-caption); }
+.timeline b, .timeline span { display: block; font: var(--app-type-emphasis-sm); }
 .timeline span, .timeline small { color: var(--td-text-color-placeholder); }
-.timeline p { margin-top: var(--app-space-2); font-size: var(--app-font-caption); line-height: 1.6; color: var(--td-text-color-secondary); }
+.timeline p { margin-top: var(--app-space-2); font: var(--app-type-body-sm); color: var(--td-text-color-secondary); }
 </style>

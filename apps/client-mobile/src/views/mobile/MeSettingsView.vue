@@ -66,13 +66,15 @@ async function doLogout() {
 <template>
   <div class="page-fade-in me-settings">
     <CellGroup theme="card">
-      <Cell v-for="e in entries" :key="e.path" :title="e.label" arrow @click="router.push(e.path)" />
+      <router-link v-for="e in entries" :key="e.path" class="cell-link" :to="e.path" :aria-label="e.label">
+        <Cell :title="e.label" arrow />
+      </router-link>
     </CellGroup>
     <CellGroup theme="card">
-      <Cell title="深色模式" :note="themeLabel" arrow @click="themeSheetVisible = true" />
+      <button class="cell-action" type="button" :aria-label="`深色模式，当前${themeLabel}`" @click="themeSheetVisible = true"><Cell title="深色模式" :note="themeLabel" arrow /></button>
     </CellGroup>
     <CellGroup theme="card">
-      <Cell class="logout" title="退出登录" :bordered="false" @click="onLogout" />
+      <button class="cell-action" type="button" @click="onLogout"><Cell class="logout" title="退出登录" :bordered="false" /></button>
     </CellGroup>
 
     <!-- TDesign 该版本 ActionSheet 只发 update:modelValue（cancel/close 事件不触发），
@@ -107,4 +109,8 @@ async function doLogout() {
   --td-cell-title-color: var(--td-error-color);
   color: var(--td-error-color);
 }
+
+.cell-link { display: block; color: inherit; text-decoration: none; }
+.cell-action { display: block; width: 100%; padding: 0; border: 0; background: transparent; text-align: left; cursor: pointer; }
+.cell-link:focus-visible, .cell-action:focus-visible { outline: 2px solid var(--td-brand-color); outline-offset: -2px; }
 </style>

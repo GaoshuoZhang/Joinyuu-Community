@@ -19,19 +19,17 @@ describe('space range selection', () => {
   })
 
   it('accepts a contiguous free range and derives its duration', () => {
-    expect(validateSpaceRange(slots, '09:00', '11:00', 4)).toEqual({ valid: true, durationHours: 2 })
+    expect(validateSpaceRange(slots, '09:00', '11:00')).toEqual({ valid: true, durationHours: 2 })
   })
 
   it('rejects ranges that cross occupied intervals or schedule gaps', () => {
-    expect(validateSpaceRange(slots, '10:00', '12:00', 4).reason).toBe('occupied')
-    expect(validateSpaceRange(slots, '10:00', '14:00', 4).reason).toBe('occupied')
-    expect(validateSpaceRange(slots, '14:00', '16:00', 4).reason).toBe('gap')
+    expect(validateSpaceRange(slots, '10:00', '12:00').reason).toBe('occupied')
+    expect(validateSpaceRange(slots, '10:00', '14:00').reason).toBe('occupied')
+    expect(validateSpaceRange(slots, '14:00', '16:00').reason).toBe('gap')
   })
 
-  it('rejects non-later endpoints and ranges over maxHours', () => {
-    expect(validateSpaceRange(slots, '10:00', '10:00', 4).reason).toBe('end_not_later')
-    expect(validateSpaceRange(slots, '09:00', '11:00', 1).reason).toBe('exceeds_max')
-    expect(validateSpaceRange(slots, '09:00', '11:00', 0).valid).toBe(true)
+  it('rejects non-later endpoints', () => {
+    expect(validateSpaceRange(slots, '10:00', '10:00').reason).toBe('end_not_later')
   })
 
   it('formats exact and partial-hour ranges without rounding', () => {

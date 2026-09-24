@@ -89,7 +89,7 @@ function onInviteSubmit({ validateResult }: { validateResult: unknown }) {
 
 .popup-title {
   margin: 0 0 var(--app-space-8);
-  font-size: var(--app-font-title);
+  font: var(--app-type-page-title);
 }
 
 /* t-form-item 默认左右布局 + 底部 hairline；弹窗内沿用「标签在上」的紧凑版式 */
@@ -103,7 +103,7 @@ function onInviteSubmit({ validateResult }: { validateResult: unknown }) {
   width: auto;
   padding: 0;
   margin-bottom: var(--app-space-3);
-  font-size: var(--app-font-body);
+  font: var(--app-type-body);
   color: var(--td-text-color-secondary);
 }
 

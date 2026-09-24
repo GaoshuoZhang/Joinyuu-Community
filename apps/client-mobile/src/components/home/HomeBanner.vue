@@ -92,7 +92,6 @@ function markImageFailed(banner: HomeBanner) {
   color: var(--td-text-color-anti);
   overflow: hidden;
   background: var(--client-brand-gradient);
-  font: inherit;
   text-align: left;
   cursor: pointer;
 }
@@ -119,7 +118,7 @@ function markImageFailed(banner: HomeBanner) {
   gap: var(--app-space-3);
   color: var(--td-text-color-anti);
   background: var(--client-brand-gradient);
-  font-size: var(--app-font-caption);
+  font: var(--app-type-caption);
   opacity: 0.72;
 }
 
@@ -139,14 +138,13 @@ function markImageFailed(banner: HomeBanner) {
 .banner-title {
   position: relative;
   margin: 0 0 var(--app-space-3);
-  font-size: var(--app-font-title);
-  font-weight: 600;
+  font: var(--app-type-page-title);
 }
 
 .banner-sub {
   position: relative;
   margin:0;
-  font-size: var(--app-font-caption);
+  font: var(--app-type-body-sm);
   opacity: 0.85;
 }
 </style>
