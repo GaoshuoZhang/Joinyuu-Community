@@ -1,6 +1,6 @@
 import { Body, Controller, Get, HttpCode, Param, Post, Put, Query } from '@nestjs/common'
 import { RequirePermission } from '../../common/decorators/require-permission.decorator'
-import { SpacesService, type SpaceDto, type SpaceOccupancy, type ReservationDto } from './spaces.service'
+import { SpacesService, type SpaceDto, type SpaceEventOccupancyDto, type SpaceOccupancy, type ReservationDto } from './spaces.service'
 import { SpacePayloadDto } from './dto/space-payload.dto'
 import { SpaceStatusDto } from './dto/space-status.dto'
 import { UsageBoardQueryDto } from './dto/usage-board-query.dto'
@@ -19,6 +19,12 @@ export class SpacesController {
   @Get('usage-board')
   usageBoard(@Query() query: UsageBoardQueryDto): Promise<SpaceOccupancy[]> {
     return this.spaces.usageBoard(query.date)
+  }
+
+  /* 空间的活动占用明细（详情页日历/清单用；已发布活动按日展开） */
+  @Get(':id/event-occupancy')
+  eventOccupancy(@Param('id') id: string): Promise<SpaceEventOccupancyDto[]> {
+    return this.spaces.eventOccupancy(id)
   }
 
   @Get(':id')

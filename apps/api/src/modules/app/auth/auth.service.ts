@@ -14,6 +14,7 @@ import { PrismaService } from '../../../common/prisma/prisma.service'
 import { RedisService } from '../../../common/redis/redis.service'
 import { IdGeneratorService } from '../../../common/id-generator/id-generator.service'
 import { PointsEngineService } from '../../../common/engine/points-engine/points-engine.service'
+import { FULL_PRICE_DISCOUNT, resolveUserPointsDiscount } from '../../../common/points/points-discount'
 import { NotificationService } from '../../../common/notify/notification.service'
 import { IdentityNameService } from '../../../common/identity/identity-name.service'
 import { normalizeUsername } from '../../../common/identity/identity-names'
@@ -47,7 +48,7 @@ const IDENTITY_LABEL: Record<string, string> = {
   external_enterprise: '合作企业',
 }
 
-/** 登录/注册成功响应的数据形状（token + 用户快照 + 身份摘要 + 积分余额） */
+/** 登录/注册成功响应的数据形状（token + 用户快照 + 身份摘要 + 积分余额 + 积分消费折扣） */
 export interface AppLoginResult {
   token: string
   uid: string
@@ -57,6 +58,8 @@ export interface AppLoginResult {
   name: string
   identities: AppIdentitySnapshot[]
   points: number
+  /** 积分消费折扣：1 = 1 折 … 10 = 原价（客户端据此刻画折后价） */
+  pointsDiscount: number
 }
 
 type AppIdentitySnapshot = AppJwtPayload['identities'][number]
@@ -227,6 +230,8 @@ export class AuthService {
       name: nickname,
       identities: [{ type: 'individual', label: '个人用户' }],
       points: 0,
+      /* 新用户无社区个体等级：按原价 */
+      pointsDiscount: FULL_PRICE_DISCOUNT,
     }
   }
 
@@ -272,6 +277,7 @@ export class AuthService {
       name: user.nickname,
       identities,
       points: fresh?.points ?? 0,
+      pointsDiscount: await resolveUserPointsDiscount(this.prisma, user.uid),
     }
   }
 

@@ -8,6 +8,8 @@ import { PrismaService } from '../../common/prisma/prisma.service'
 import { IdGeneratorService } from '../../common/id-generator/id-generator.service'
 import { AuditService } from '../../common/audit/audit.service'
 import { formatNow } from '../../common/utils/time'
+import { eventBlocksWindow, eventDates, eventOccupiesSpace, eventWindowOn } from '../../common/spaces/event-occupancy'
+import { refundSpaceFee } from '../../common/spaces/booking-fee'
 import type { SpacePayloadDto } from './dto/space-payload.dto'
 import type { QueryReservationsDto } from './dto/query-reservations.dto'
 
@@ -35,6 +37,8 @@ export interface SpaceDto {
   allDay: boolean
   needReservation: boolean
   needApproval: boolean
+  /** 预约费用（积分/小时）；0 = 免费 */
+  feePerHour: number
   equipment: string[]
   status: string
   description: string
@@ -69,6 +73,16 @@ export interface SpaceOccupancy {
   source: 'reservation' | 'event'
 }
 
+/** 空间的活动占用项（按日展开；startTime/endTime 为该日的占用时段，跨天活动按天裁剪） */
+export interface SpaceEventOccupancyDto {
+  eventId: string
+  date: string
+  startTime: string
+  endTime: string
+  title: string
+  host: string
+}
+
 function toSpaceDto(s: Space): SpaceDto {
   return {
     id: s.id,
@@ -81,6 +95,7 @@ function toSpaceDto(s: Space): SpaceDto {
     allDay: s.allDay,
     needReservation: s.needReservation,
     needApproval: s.needApproval,
+    feePerHour: s.feePerHour,
     equipment: s.equipment,
     status: s.status,
     description: s.description,
@@ -234,6 +249,15 @@ export class SpacesService {
             : {}),
         },
       })
+
+      /* 驳回即退费：退回该预约已扣的积分（与状态迁移同事务） */
+      if (status === 'rejected') {
+        await refundSpaceFee(tx, this.ids, {
+          userId: fresh.userId,
+          points: fresh.feePoints,
+          reason: `空间预约驳回退回积分（${fresh.id}）`,
+        })
+      }
     })
 
     await this.audit.record({
@@ -248,6 +272,7 @@ export class SpacesService {
     return { code: 0 }
   }
 
+  /** 管理端取消预约：pending/approved 可取消；已扣费用全额退回（状态条件抢占，避免重复退分） */
   async cancelReservation(id: string): Promise<{ code: number }> {
     const reservation = await this.prisma.spaceReservation.findFirst({
       where: { id, deletedAt: null },
@@ -257,9 +282,17 @@ export class SpacesService {
       throw new ConflictException('仅待审核或已通过的预约可取消')
     }
 
-    await this.prisma.spaceReservation.update({
-      where: { id },
-      data: { status: 'cancelled', archivableAt: formatNow() },
+    await this.prisma.$transaction(async (tx) => {
+      const claimed = await tx.spaceReservation.updateMany({
+        where: { id, status: { in: ['pending', 'approved'] }, deletedAt: null },
+        data: { status: 'cancelled', archivableAt: formatNow() },
+      })
+      if (claimed.count !== 1) throw new ConflictException('仅待审核或已通过的预约可取消')
+      await refundSpaceFee(tx, this.ids, {
+        userId: reservation.userId,
+        points: reservation.feePoints,
+        reason: `后台取消空间预约退回积分（${reservation.id}）`,
+      })
     })
     return { code: 0 }
   }
@@ -308,19 +341,20 @@ export class SpacesService {
     }))
 
     const events = await this.prisma.communityEvent.findMany({
-      where: { status: 'published', startTime: { startsWith: date }, deletedAt: null },
+      where: { status: 'published', deletedAt: null },
     })
     if (events.length > 0) {
-      const spaces = await this.prisma.space.findMany()
-      const byName = new Map(spaces.map((s) => [s.name, s]))
+      const spaces = await this.prisma.space.findMany({ where: { deletedAt: null } })
       for (const e of events) {
-        const space = byName.get(e.location)
-        if (!space) continue
+        /* 活动占用口径与客户端可约时段一致（地点命中空间 + 该日占用时段） */
+        const space = spaces.find((s) => eventOccupiesSpace(e, s))
+        const win = space ? eventWindowOn(e, date) : null
+        if (!space || !win) continue
         list.push({
           spaceId: space.id,
           spaceName: space.name,
-          startTime: e.startTime.slice(11, 16),
-          endTime: e.endTime.slice(11, 16),
+          startTime: win.start,
+          endTime: win.end,
           title: `社区活动「${e.title}」`,
           organizer: e.host,
           source: 'event',
@@ -330,6 +364,26 @@ export class SpacesService {
 
     list.sort((a, b) => a.spaceId.localeCompare(b.spaceId) || a.startTime.localeCompare(b.startTime))
     return list
+  }
+
+  /** 空间的活动占用明细（按日展开）：空间详情页的预约日历与明细列表据此展示活动占用 */
+  async eventOccupancy(id: string): Promise<SpaceEventOccupancyDto[]> {
+    const space = await this.prisma.space.findUnique({ where: { id } })
+    if (!space) throw new NotFoundException('空间不存在')
+
+    const events = await this.prisma.communityEvent.findMany({
+      where: { status: 'published', deletedAt: null },
+    })
+    const rows: SpaceEventOccupancyDto[] = []
+    for (const e of events) {
+      if (!eventOccupiesSpace(e, space)) continue
+      for (const date of eventDates(e)) {
+        const win = eventWindowOn(e, date)
+        if (!win) continue
+        rows.push({ eventId: e.id, date, startTime: win.start, endTime: win.end, title: e.title, host: e.host })
+      }
+    }
+    return rows.sort((a, b) => a.date.localeCompare(b.date) || a.startTime.localeCompare(b.startTime))
   }
 
   /* 审核通过前时段冲突校验（两条分支）；db 注入事务客户端时在事务内复核，避免并发双通过 */
@@ -353,21 +407,15 @@ export class SpacesService {
     const space = await db.space.findUnique({ where: { id: reservation.spaceId } })
     if (!space) return
     const events = await db.communityEvent.findMany({
-      where: {
-        status: 'published',
-        location: space.name,
-        startTime: { startsWith: reservation.date },
-      },
+      where: { status: 'published', deletedAt: null },
     })
-    const eventClash = events.some((e) => {
-      const eventStart = e.startTime.slice(11, 16)
-      const eventEnd = e.endTime.slice(11, 16)
-      return reservation.startTime < eventEnd && eventStart < reservation.endTime
-    })
+    const eventClash = events.some(
+      (e) => eventOccupiesSpace(e, space) && eventBlocksWindow(e, reservation.date, reservation.startTime, reservation.endTime),
+    )
     if (eventClash) throw new ConflictException('该时段被社区活动占用，无法通过')
   }
 
-  /* 新增/编辑共用字段（allDay 存 00:00/23:59；needApproval 联动 needReservation） */
+  /* 新增/编辑共用字段（allDay 存 00:00/23:59；needApproval 联动 needReservation；feePerHour 0=免费） */
   private spaceData(payload: SpacePayloadDto) {
     const allDay = payload.allDay
     return {
@@ -380,6 +428,7 @@ export class SpacesService {
       allDay,
       needReservation: payload.needReservation,
       needApproval: payload.needReservation ? payload.needApproval : false,
+      feePerHour: payload.feePerHour ?? 0,
       equipment: payload.equipment,
       description: payload.description,
     }

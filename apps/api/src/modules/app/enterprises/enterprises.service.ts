@@ -18,6 +18,7 @@ import { IdGeneratorService } from '../../../common/id-generator/id-generator.se
 import { NotificationService } from '../../../common/notify/notification.service'
 import { formatNow } from '../../../common/utils/time'
 import { AuditService } from '../../../common/audit/audit.service'
+import { FULL_PRICE_DISCOUNT, resolveEnterprisePointsDiscount, resolveUserPointsDiscount } from '../../../common/points/points-discount'
 import {
   assertEnterprisePermission,
   ENTERPRISE_PERMISSIONS,
@@ -92,6 +93,8 @@ export interface MyIdentitySummaryDto {
   isContact?: boolean
   permissions?: string[]
   enterpriseId?: string
+  /** 该身份消费积分时的等级折扣（1 = 1 折 … 10 = 原价；个人身份取本人社区个体等级、企业身份取企业等级） */
+  pointsDiscount: number
 }
 
 export interface EnterpriseMemberDto {
@@ -398,6 +401,7 @@ export class AppEnterprisesService {
         label: '社区个体',
         name: user.nickname,
         subtitle: '',
+        pointsDiscount: await resolveUserPointsDiscount(this.prisma, uid),
       })
     }
 
@@ -422,6 +426,7 @@ export class AppEnterprisesService {
           isContact,
           permissions: isContact ? [...ENTERPRISE_PERMISSIONS] : identity.permissions,
           enterpriseId: ent.id,
+          pointsDiscount: await resolveEnterprisePointsDiscount(this.prisma, ent.id),
         })
       }
     }
@@ -436,6 +441,8 @@ export class AppEnterprisesService {
         label: '合作企业',
         name,
         subtitle: identity.title,
+        /* 合作企业无等级体系：消费积分按原价 */
+        pointsDiscount: FULL_PRICE_DISCOUNT,
       })
     }
     return list

@@ -1,5 +1,5 @@
 import { Type } from 'class-transformer'
-import { IsArray, IsBoolean, IsIn, IsInt, IsNotEmpty, IsString, Min } from 'class-validator'
+import { IsArray, IsBoolean, IsIn, IsInt, IsNotEmpty, IsOptional, IsString, Min } from 'class-validator'
 
 /* 空间新增/编辑载荷（对照 apps/admin/src/api/spaces.ts SpacePayload） */
 export class SpacePayloadDto {
@@ -33,6 +33,13 @@ export class SpacePayloadDto {
 
   @IsBoolean()
   needApproval!: boolean
+
+  /** 费用（积分/小时）；0 = 免费。缺省按 0 处理（兼容不含该字段的历史载荷） */
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(0)
+  feePerHour?: number
 
   @IsArray()
   @IsString({ each: true })

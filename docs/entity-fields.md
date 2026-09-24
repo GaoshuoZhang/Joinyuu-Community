@@ -24,7 +24,7 @@
 - **ExternalEnterpriseProfile** — 合作企业档案（id XE；name/industry；status active/disabled；size/foundedAt；description；registeredAt（登记日期=填表通过审核当天）；deletedAt?/deletedBy?；聚合视图 = 档案 + external_enterprise 身份派生成员，不建独立实体表）
 - **Application** — 申请审核（id AP；type settle 企业入驻/individual 个体入驻/cooperation 企业合作/exit 企业退驻；applicantName/applicantPhone/**userId? 申请人 uid（「我的申请」按 uid 归属，历史数据回退按手机号匹配）**；targetName；submittedAt；status pending/approved/rejected；summary；details Json 表单明细；records Json 审核时间线；deletedAt?/deletedBy?/archivableAt?）
 - **ExperienceRecord** — 经验流水（id EX；targetType enterprise/individual；targetId；delta/balance/reason/at/operator；source rule/manual）
-- **PointsRecord** — 积分流水（id PT；userId；delta/balance/reason/at/operator；source rule/manual/redemption；dedupeKey? 唯一，用于积分发放幂等）
+- **PointsRecord** — 积分流水（id PT；userId；delta/balance/reason/at/operator；source rule/manual/redemption/space；dedupeKey? 唯一，用于积分发放幂等）
 
 ## 3. 业务运营域（7）
 
@@ -42,7 +42,7 @@
 - **RedemptionOrder** — 兑换订单（id RO；统一券码兑换，状态机 pending_use→finished（后台核销）/cancelled（退款，含过期自动退款）；userId/userName + goodsId/goodsName/points；createdAt/finishedAt?/note?；voucherCode/voucherExpiresAt/usedAt?；cancelReason?/cancelledAt?；deletedAt?/deletedBy?/archivableAt?）
 - **PointsRule** — 积分规则（code PK 固定 9 项：activity_checkin/activity_enroll_approved/article_accepted/demand_published/demand_responded/demand_undertaken/project_milestone/identity_first_bind/daily_login（默认停用）；name/scene/description 写死；points 可编辑；status）
 - **ExperienceRule** — 经验值规则（code PK 固定 6 项：activity_checkin/activity_enroll_approved/article_accepted/project_undertaken/project_completed/identity_first_bind；exp/status 可编辑）
-- **LevelTier** — 等级梯度（identityType+level 联合 PK；社区个体与社区企业分别维护 1-10 级标签和门槛）
+- **LevelTier** — 等级梯度（identityType+level 联合 PK；社区个体与社区企业分别维护 1-10 级标签和门槛；pointsDiscount 积分消费折扣：1 = 1 折 … 10 = 原价，支持一位小数（默认 10））
 - **PublishingLimitRule** — 发布限制（identityType+level+action 联合 PK；四类 action：需求发布、文章投稿、活动报名、空间预约；`-1` 不限、`0` 禁止）
 - **PublishingLimitUsage** — 每日发布限制用量（subjectType+subjectId+action+date 联合 PK；社区企业按企业主体共享）
 
@@ -52,8 +52,8 @@
 - **Workstation** — 工位（id WS；seatNo 唯一；areaId 外键；type/capacity；status idle/assigned/maintenance；占用冗余 enterpriseId?/enterpriseName?/leaseId?（assigned 仅经租约）；defaultMonthlyRent?/areaSqm?/note?）
 - **Lease** — 租约（id LS；renterId/renterName/renterType enterprise/individual/custom；startDate/endDate（长期为空串）/longTerm；status active/terminated，expiring/expired 读取派生；monthlyRent/rentPeriod day|week|month|year；contactName/contactPhone；terminatedAt?；deletedAt?/deletedBy?/archivableAt?）
 - **LeaseWorkstation** — 租约-工位关联（leaseId+workstationId 联合 PK；保留终止后历史归属）
-- **Space** — 公共空间（id S；name/type meeting/roadshow/meeting_room/multi/study；capacity/location/openTime/closeTime/allDay；needReservation/needApproval；equipment[]；status；description；deletedAt?/deletedBy?）
-- **SpaceReservation** — 空间预约（id SR；userId/userName/phone；spaceId/spaceName；date/startTime/endTime/purpose/attendees；status pending→approved/rejected/cancelled；submittedAt；records Json 审核时间线；rejectReason?；deletedAt?/deletedBy?/archivableAt?）
+- **Space** — 公共空间（id S；name/type meeting/roadshow/meeting_room/multi/study；capacity/location/openTime/closeTime/allDay；needReservation/needApproval；feePerHour（预约费用：积分/小时，0=免费）；equipment[]；status；description；deletedAt?/deletedBy?）
+- **SpaceReservation** — 空间预约（id SR；userId/userName/phone；spaceId/spaceName；date/startTime/endTime/purpose/attendees；feePoints（本单实际消耗积分，驳回/取消按此退回）；status pending→approved/rejected/cancelled；submittedAt；records Json 审核时间线；rejectReason?；deletedAt?/deletedBy?/archivableAt?）
 
 ## 6. 内容管理（6）
 
@@ -70,7 +70,7 @@
 - **SystemConfig** — 系统配置（单例 id=1；siteName/siteSlogan；registrationOpen/mallOpen/demandOpen/reservationOpen；realnameRequired；homeCarouselOpen 首页轮播总开关；leaseExpireRemindDays；uploadMaxSizeMb 上传上限 MB 1-100 默认 10（素材库/富文本共用）；minioEnabled/minioEndpoint/minioPort/minioUseSsl/minioAccessKey/minioSecretKey/minioBucket；**P1 实名核验** realnameVerifyEnabled/realnameVerifyProvider(''|aliyun|tencent)/realnameVerifyConfig/realnameVerifyCredentialEnv/realnameVerifyCredentialMode(inline|env)/realnameVerifyTestOk/realnameVerifyTestedAt；updatedAt/updatedBy；**dailyLoginPoints 已删**）
   - 密钥安全（P0）：`minioSecretKey` 只写不读——管理端 GET 只回 `minioSecretKeyConfigured`/`minioSecretKeyMasked`/`minioCredentialSource`，审计快照不含密钥原文；凭据可经 `MINIO_SECRET_KEY`/`MINIO_ACCESS_KEY` 环境变量优先注入。
   - 实名核验（P1）：`realnameVerifyCredentialMode=inline` 时凭据为**后台直接填写的密钥**（只写、GET 只回掩码 `realnameVerifyCredentialMasked`、审计快照凭据字段恒为空）；`env` 时仅登记环境变量名。启用 + `realnameVerifyTestOk=true` 时客户端 `realnameMode=verified`（「实名认证」），否则 `registration`（「身份信息登记」）；任一核验配置变更会把 `realnameVerifyTestOk` 重置为 false 并要求重新测试联通。
-- **DictEntry** — 数据字典（type+code 联合 PK；type demand_category/industry/event_type/goods_category；label 全类型唯一；sort/status）
+- **DictEntry** — 数据字典（type+code 联合 PK；type demand_category/industry/event_type/goods_category；label 全类型唯一；sort/status；**商品类别另有类别级 visibilityIdentities/visibilityLevels/orderIdentities/orderLevels**，空数组 = 不限，其余类型恒为空）
 - **ArchiveSetting** — 归档设置（domain PK；autoArchive/archiveDelayDays 自动归档延时；autoPurge/purgeDelayDays 自动删除延时；archiveStatuses Json? 按状态开关）
 
 ## 7.1 P0 消息中心
@@ -135,5 +135,8 @@
 | 扩展 | Project | demanderId?/demanderName?/demanderIdentity Json?（需求方主体/名称/身份快照；需求立项照搬需求、自建由表单录入）；creatorName?/creatorId?（创建人）；contactName?/contactPhone?/contactEmail?（联系方式）；contractPrice?（合同价格） |
 | 扩展 | IndividualCard | `data.visibility` 增 `isPublic`（公开名片开关；false 时退出社区人才库、公开名片页 404；缺省视为公开） |
 | 扩展 | Demand | contactPublic Bool 默认 false（公开联系人开关：开启后客户端含未登录游客可见 contactName/contactPhone/contactEmail，关闭时客户端一律不可见、后台始终可见）；creatorName/creatorId 已删（提交人取 publisherName/publisherId） |
+| 扩展 | Space | feePerHour Int 默认 0（预约费用：积分/小时，0=免费；后台空间表单维护，客户端空间列表与预约页展示） |
+| 扩展 | SpaceReservation | feePoints Int 默认 0（该单实际消耗积分；审核驳回与用户/后台取消均全额退回，写 source=space 流水） |
+| 扩展 | LevelTier | pointsDiscount Float 默认 10（积分消费折扣：1 = 1 折 … 10 = 原价，支持一位小数如 8.5 = 85 折；商城兑换与空间预约按等级折扣扣分，折扣口径见 wiki-backend §8.8） |
 
 **卡片字段配置**：个人名片（`User`/UserIdentity 派生字段）与社区企业名片（`Enterprise` 字段）均**免审核保存即公开**；admin 后台可**查看/编辑**个人与企业名片，并可配置用户可编辑字段白名单，由 `GET /api/app/card-schema/:type` 下发。个人名片 `visibility.isPublic=false` 时从人才库隐藏（§8.2）。

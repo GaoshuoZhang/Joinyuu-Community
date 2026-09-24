@@ -9,16 +9,13 @@ import type { CommunityEvent, Prisma, Space, SpaceReservation } from '@prisma/cl
 import { PrismaService } from '../../../common/prisma/prisma.service'
 import { IdGeneratorService } from '../../../common/id-generator/id-generator.service'
 import { NotificationService } from '../../../common/notify/notification.service'
-import { addDays, formatNow, formatToday } from '../../../common/utils/time'
+import { formatNow, formatToday } from '../../../common/utils/time'
 import { assertEnterprisePermission } from '../../../common/enterprise/enterprise-permission'
 import { consumePublishingLimit } from '../../../common/enterprise/publishing-limits'
+import { eventBlocksWindow, eventCoversDate, eventOccupiesSpace, eventWindowOn } from '../../../common/spaces/event-occupancy'
+import { billableHours, chargeSpaceFee, refundSpaceFee, reservationFeePoints } from '../../../common/spaces/booking-fee'
+import { discountLabel, discountedPoints, resolveEnterprisePointsDiscount, resolveUserPointsDiscount } from '../../../common/points/points-discount'
 import type { CreateReservationDto } from './dto/create-reservation.dto'
-
-/** 开放时段窗口 */
-interface OpenWindow {
-  start: string
-  end: string
-}
 
 /** 空间列表项/详情 DTO（对齐客户端 Space：status=open|maintenance） */
 export interface SpaceDto {
@@ -30,11 +27,10 @@ export interface SpaceDto {
   openTime: string
   closeTime: string
   needApproval: boolean
+  /** 预约费用（积分/小时）；0 = 免费 */
+  feePerHour: number
   equipment: string[]
   status: 'open' | 'maintenance'
-  maxHours: number
-  advanceDays: number
-  openHours: OpenWindow[]
   description: string
 }
 
@@ -64,6 +60,8 @@ export interface ReservationTimelineDto {
 export interface MyReservationDetailDto extends MyReservationDto {
   purpose: string
   attendees: number
+  /** 本单实际消耗的积分（0 = 免费空间；驳回/取消已全额退回） */
+  feePoints: number
   records: ReservationTimelineDto[]
 }
 
@@ -76,7 +74,10 @@ export interface SpaceSlotDto {
 }
 
 /* 空间预约（M2-R R2 /api/app/spaces）：可预约空间浏览、按日可用时段、
- * 提交预约（规则校验 + 冲突预检 409）、我的预约与取消。
+ * 提交预约（开放时段校验 + 冲突预检 409 + 费用扣分）、我的预约与取消（退费）。
+ * 可约时段唯一口径 = 后台「开放时间-关闭时间」（Space.openTime/closeTime），
+ * 后台没有规则配置入口，故不再按 maxHours/advanceDays 等字段设限。
+ * 费用口径见 common/spaces/booking-fee.ts（不足 1 小时按 1 小时计）。
  * 企业成员代企业预约校验 space_reserve 权限；needApproval 空间进入 pending 待审核。 */
 @Injectable()
 export class AppSpacesService {
@@ -101,7 +102,7 @@ export class AppSpacesService {
     return toSpaceDto(space)
   }
 
-  /** 某日可用时段：待审核/已通过预约 + 已发布活动占用。 */
+  /** 某日可用时段：按空间「开放时间-关闭时间」逐小时切片；待审核/已通过预约 + 已发布活动占用（口径见 event-occupancy）。 */
   async availability(id: string, date: string): Promise<SpaceSlotDto[]> {
     const space = await this.findReservable(id)
     const [reserved, events] = await Promise.all([
@@ -111,24 +112,29 @@ export class AppSpacesService {
       this.publishedEventsOn(date),
     ])
     const occupiedReservations = reserved.filter((r) => r.startTime < r.endTime)
-    const occupiedEvents = events.filter((e) => this.eventOccupiesSpace(e, space))
+    /* 活动占用：命中空间地点后取「该日」的占用时段（跨天活动按天裁剪） */
+    const eventWindows = events
+      .filter((e) => eventOccupiesSpace(e, space))
+      .map((e) => eventWindowOn(e, date))
+      .filter((win): win is { start: string; end: string } => win !== null)
     const slots: SpaceSlotDto[] = []
-    for (const window of this.openWindows(space)) {
-      const open = toMinutes(window.start)
-      const close = toMinutes(window.end)
-      for (let cursor = open; cursor < close; cursor += 60) {
-        const start = fromMinutes(cursor)
-        const end = fromMinutes(Math.min(cursor + 60, close))
-        const res = occupiedReservations.some((r) => overlaps(r.startTime, r.endTime, start, end))
-        const evt = occupiedEvents.some((e) => overlaps(toHHMM(e.startTime), toHHMM(e.endTime), start, end))
-        slots.push({ start, end, occupied: res || evt, type: res ? 'reservation' : evt ? 'event' : undefined })
-      }
+    const open = toMinutes(space.openTime)
+    const close = toMinutes(space.closeTime)
+    for (let cursor = open; cursor < close; cursor += 60) {
+      const start = fromMinutes(cursor)
+      const end = fromMinutes(Math.min(cursor + 60, close))
+      const res = occupiedReservations.some((r) => overlaps(r.startTime, r.endTime, start, end))
+      const evt = eventWindows.some((win) => overlaps(win.start, win.end, start, end))
+      slots.push({ start, end, occupied: res || evt, type: res ? 'reservation' : evt ? 'event' : undefined })
     }
     return slots
   }
 
-  /** 提交预约：规则校验（维护/提前天数/最长时长/开放时段）+ 冲突预检（pending/approved 预约或活动 409） */
-  async create(user: { uid: string; name: string }, dto: CreateReservationDto): Promise<{ status: 'pending' | 'approved' }> {
+  /** 提交预约：开放时段校验（维护/开放时间-关闭时间）+ 冲突预检（pending/approved 预约或活动 409）+ 费用扣分 */
+  async create(
+    user: { uid: string; name: string },
+    dto: CreateReservationDto,
+  ): Promise<{ status: 'pending' | 'approved'; pointsSpent: number }> {
     const cfg = await this.prisma.systemConfig.findUnique({ where: { id: 1 } })
     if (cfg && cfg.reservationOpen === false) throw new BadRequestException('空间预约暂未开放')
     const account = await this.prisma.user.findUnique({ where: { uid: user.uid } })
@@ -145,10 +151,6 @@ export class AppSpacesService {
       throw new BadRequestException('预约日期格式不正确')
     }
     if (date < formatToday()) throw new BadRequestException('预约日期不能早于今天')
-    const advanceDays = space.advanceDays ?? 0
-    if (advanceDays > 0 && date > addDays(formatToday(), advanceDays)) {
-      throw new BadRequestException(`仅支持提前 ${advanceDays} 天预约`)
-    }
 
     const start = dto.start
     const end = dto.end
@@ -159,13 +161,24 @@ export class AppSpacesService {
     if (date === formatToday() && start <= formatNow().slice(11, 16)) {
       throw new BadRequestException('预约时段已过期，请选择晚于当前时间的时段')
     }
-    const durationHours = (toMinutes(end) - toMinutes(start)) / 60
-    const maxHours = space.maxHours ?? 0
-    if (maxHours > 0 && durationHours > maxHours) throw new BadRequestException(`单次预约最长 ${maxHours} 小时`)
-    if (!this.withinOpenHours(space, start, end)) throw new BadRequestException('不在开放时段内')
+    if (start < space.openTime || end > space.closeTime) {
+      throw new BadRequestException(`开放时段为 ${space.openTime}-${space.closeTime}，请在该时段内预约`)
+    }
     const attendees = dto.attendees ?? 1
     if (!Number.isInteger(attendees) || attendees < 1) throw new BadRequestException('参与人数至少为 1 人')
     if (attendees > space.capacity) throw new BadRequestException(`参与人数不能超过空间容量 ${space.capacity} 人`)
+
+    /* 费用 = 原价（计费小时 × 每小时积分）再按等级折扣折算：
+     * 代企业预约取企业的社区企业等级折扣，其余取本人社区个体等级折扣（口径见 common/points/points-discount）。
+     * 真正扣费在事务内条件扣减兜底，此处预检余额。 */
+    const baseFee = reservationFeePoints(space.feePerHour, start, end)
+    const discount = dto.asEnterpriseId
+      ? await resolveEnterprisePointsDiscount(this.prisma, dto.asEnterpriseId)
+      : await resolveUserPointsDiscount(this.prisma, user.uid)
+    const feePoints = discountedPoints(baseFee, discount)
+    if (feePoints > (account?.points ?? 0)) {
+      throw new BadRequestException(`积分不足，本次预约需 ${feePoints} 积分`)
+    }
 
     /* 提交前冲突预检：待审核/已通过预约或已发布活动占用时间重叠 → 409 */
     const [reserved, events] = await Promise.all([
@@ -175,9 +188,7 @@ export class AppSpacesService {
       this.publishedEventsOn(date),
     ])
     const eventHit = events.some(
-      (e) =>
-        this.eventOccupiesSpace(e, space) &&
-        overlaps(toHHMM(e.startTime), toHHMM(e.endTime), start, end),
+      (e) => eventOccupiesSpace(e, space) && eventBlocksWindow(e, date, start, end),
     )
     const resHit = reserved.some(
       (r) =>
@@ -230,6 +241,12 @@ export class AppSpacesService {
         select: { id: true },
       })
       if (conflicting) throw new ConflictException('该时段已被预约，请选择其他时间')
+      /* 费用扣分（与预约单、额度、冲突检查同事务：任一步失败整体回滚） */
+      await chargeSpaceFee(tx, this.ids, {
+        userId: user.uid,
+        points: feePoints,
+        reason: `空间预约 ${space.name} ${date} ${start}-${end}（${billableHours(start, end)} 小时${discountLabel(discount)}）`,
+      })
       await tx.spaceReservation.create({
         data: {
           id: reservationId,
@@ -243,9 +260,13 @@ export class AppSpacesService {
           endTime: end,
           purpose: (dto.topic || '').trim(),
           attendees,
+          feePoints,
           status,
           submittedAt: now,
-          records: [{ at: now, action: 'submit', text: `${space.name} ${date} ${start}-${end} 预约提交` }],
+          records: [
+            { at: now, action: 'submit', text: `${space.name} ${date} ${start}-${end} 预约提交` },
+            ...(!space.needApproval ? [{ at: now, action: 'approve', step: '预约自动通过', text: '该空间免审核，预约提交后立即生效' }] : []),
+          ],
           identityType,
           subjectName,
           asEnterpriseId: dto.asEnterpriseId ?? null,
@@ -256,10 +277,12 @@ export class AppSpacesService {
     await this.notify.pushNotice(user.uid, {
       type: 'system',
       title: status === 'approved' ? '预约成功' : '预约已提交，待审核',
-      content: `「${space.name}」${date} ${start}-${end} ${status === 'approved' ? '预约成功。' : '预约已提交，审核通过后将通知你。'}`,
+      content: `「${space.name}」${date} ${start}-${end} ${status === 'approved' ? '预约成功。' : '预约已提交，审核通过后将通知你。'}${
+        feePoints > 0 ? `已扣除 ${feePoints} 积分。` : ''
+      }`,
       link: '/me/reservations',
     })
-    return { status }
+    return { status, pointsSpent: feePoints }
   }
 
   /** 我的预约（submittedAt 倒序；含 identityType/subjectName 主体快照） */
@@ -281,11 +304,12 @@ export class AppSpacesService {
       ...toMyReservationDto(reservation),
       purpose: reservation.purpose,
       attendees: reservation.attendees,
+      feePoints: reservation.feePoints,
       records: toReservationTimeline(reservation.records),
     }
   }
 
-  /** 取消预约：本人 + pending/approved 可取消（approved 释放占用） */
+  /** 取消预约：本人 + pending/approved 可取消（approved 释放占用；已扣费用全额退回） */
   async cancel(uid: string, id: string): Promise<{ code: number }> {
     const reservation = await this.prisma.spaceReservation.findUnique({ where: { id } })
     if (!reservation || reservation.deletedAt) throw new NotFoundException('预约不存在')
@@ -294,17 +318,29 @@ export class AppSpacesService {
       throw new ConflictException('当前状态不可取消')
     }
     const records = (reservation.records as Prisma.JsonArray) ?? []
-    await this.prisma.spaceReservation.update({
-      where: { id },
-      data: {
-        status: 'cancelled',
-        records: [...records, { at: formatNow(), action: 'cancel', text: `${reservation.spaceName} ${reservation.date} 的预约已取消` }],
-      },
+    const now = formatNow()
+    await this.prisma.$transaction(async (tx) => {
+      /* 状态条件抢占取消权：并发请求只有一个进入退费逻辑，避免重复退分 */
+      const claimed = await tx.spaceReservation.updateMany({
+        where: { id, userId: uid, status: { in: ['pending', 'approved'] }, deletedAt: null },
+        data: {
+          status: 'cancelled',
+          records: [...records, { at: now, action: 'cancel', text: `${reservation.spaceName} ${reservation.date} 的预约已取消` }],
+        },
+      })
+      if (claimed.count !== 1) throw new ConflictException('当前状态不可取消')
+      await refundSpaceFee(tx, this.ids, {
+        userId: uid,
+        points: reservation.feePoints,
+        reason: `取消空间预约退回积分（${reservation.id}）`,
+      })
     })
     await this.notify.pushNotice(uid, {
       type: 'system',
       title: '预约已取消',
-      content: `「${reservation.spaceName}」${reservation.date} ${reservation.startTime}-${reservation.endTime} 的预约已取消。`,
+      content: `「${reservation.spaceName}」${reservation.date} ${reservation.startTime}-${reservation.endTime} 的预约已取消。${
+        reservation.feePoints > 0 ? `${reservation.feePoints} 积分已退回。` : ''
+      }`,
       link: '/me/reservations',
     })
     return { code: 0 }
@@ -328,35 +364,11 @@ export class AppSpacesService {
     })
   }
 
-  /** 开放时段窗口（优先 Json openHours，缺省用 openTime-closeTime）。 */
-  private openWindows(space: Space): OpenWindow[] {
-    const raw = space.openHours as OpenWindow[] | null | undefined
-    return Array.isArray(raw) && raw.length > 0 ? raw : [{ start: space.openTime, end: space.closeTime }]
-  }
-
-  private withinOpenHours(space: Space, start: string, end: string): boolean {
-    const raw = space.openHours as OpenWindow[] | null | undefined
-    const windows = Array.isArray(raw) && raw.length > 0 ? raw : [{ start: space.openTime, end: space.closeTime }]
-    return windows.some((w) => start >= w.start && end <= w.end)
-  }
-
   private async publishedEventsOn(date: string): Promise<CommunityEvent[]> {
     const events = await this.prisma.communityEvent.findMany({
       where: { status: 'published', deletedAt: null },
     })
-    return events.filter((e) => e.startTime.slice(0, 10) <= date && date <= e.endTime.slice(0, 10))
-  }
-
-  /** 活动占用空间判定：活动 location 命中空间名（或与空间地址完全一致）。
-   * schema 无 spaceId 外键，故按位置近似匹配：仅用「空间名」做包含匹配 + 「空间地址」做完全等值匹配，
-   * 避免用楼层级地址（如「岛屿中心 2F」）做包含匹配导致同层多个空间互相误判，也避免空串恒真。 */
-  private eventOccupiesSpace(event: CommunityEvent, space: Space): boolean {
-    const loc = (event.location ?? '').trim()
-    if (!loc) return false
-    const name = (space.name ?? '').trim()
-    const address = (space.location ?? '').trim()
-    if (name && loc.includes(name)) return true
-    return Boolean(address) && loc === address
+    return events.filter((e) => eventCoversDate(e, date))
   }
 
   private async resolveSubjectName(
@@ -379,11 +391,6 @@ export class AppSpacesService {
 }
 
 function toSpaceDto(s: Space): SpaceDto {
-  const raw = s.openHours as OpenWindow[] | null | undefined
-  const openHours =
-    Array.isArray(raw) && raw.length > 0
-      ? raw.map((w) => ({ start: w.start, end: w.end }))
-      : [{ start: s.openTime, end: s.closeTime }]
   return {
     id: s.id,
     name: s.name,
@@ -393,11 +400,9 @@ function toSpaceDto(s: Space): SpaceDto {
     openTime: s.openTime,
     closeTime: s.closeTime,
     needApproval: s.needApproval,
+    feePerHour: s.feePerHour,
     equipment: s.equipment,
     status: s.status === 'maintenance' ? 'maintenance' : 'open',
-    maxHours: s.maxHours ?? 0,
-    advanceDays: s.advanceDays ?? 0,
-    openHours,
     description: s.description,
   }
 }
@@ -455,11 +460,6 @@ function fromMinutes(minutes: number): string {
 function isTime(value: string): boolean {
   if (!/^([01]\d|2[0-3]):[0-5]\d$/.test(value)) return false
   return Number.isFinite(toMinutes(value))
-}
-
-/** 'YYYY-MM-DD HH:mm' → 'HH:mm'（取日期时间串的时分段） */
-function toHHMM(dt: string): string {
-  return dt.length >= 16 ? dt.slice(11, 16) : dt
 }
 
 function overlaps(as: string, ae: string, bs: string, be: string): boolean {

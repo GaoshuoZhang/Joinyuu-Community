@@ -13,7 +13,6 @@ describe('AppSpacesService availability', () => {
           location: '1F',
           openTime: '09:00',
           closeTime: '12:00',
-          openHours: [{ start: '09:00', end: '12:00' }],
         }),
       },
       spaceReservation: {

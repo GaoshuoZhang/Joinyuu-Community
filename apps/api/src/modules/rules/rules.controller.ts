@@ -55,8 +55,8 @@ export class RulesController {
 
   @RequirePermission('/rules/publishing-limits')
   @Get('publishing-limits')
-  listPublishingLimits(@Query('identityType') identityType?: string) {
-    return this.rules.listPublishingLimits(identityType)
+  listPublishingLimits(@Query('identityType') identityType?: string, @Query('scope') scope?: string) {
+    return this.rules.listPublishingLimits(identityType, scope)
   }
 
   @RequirePermission('/rules/publishing-limits')

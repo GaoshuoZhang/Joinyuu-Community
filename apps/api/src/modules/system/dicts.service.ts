@@ -4,11 +4,12 @@ import { PrismaService } from '../../common/prisma/prisma.service'
 import { AuditService } from '../../common/audit/audit.service'
 import { RedisService } from '../../common/redis/redis.service'
 import { CACHE_TTL, dictCacheKey } from '../../common/redis/cache-keys'
-import type { DictEntryPayloadDto } from './dto/dict-entry-payload.dto'
+import type { DictEntryPayloadDto, UpdateDictEntryDto } from './dto/dict-entry-payload.dto'
 
 /* 数据字典（wiki-backend.md §7.15/§10）：站点选项词汇的单一来源。
  * label 即业务存储值（全类型唯一，不可改名；商品类型例外，业务存 code、展示靠 label）；
- * 新增/启停/删除；编码取「最小未占用序号」不跳号，sort 恒为 1..n 连续（新增/删除后重排）。
+ * 新增/编辑/启停/删除；编码取「最小未占用序号」不跳号，sort 恒为 1..n 连续（新增/删除后重排）。
+ * 商品类别（goods_category）另有类别级可见/可下单范围（见 scopeData），在「商品管理 > 商品类别」弹窗维护。
  * 管理页返回全量（含 disabled），下拉消费方自行按 status=enabled 过滤。
  * 读走 dicts:{type} 缓存（10min），写操作主动失效并留痕（含 before/after 快照）。 */
 export const DICT_TYPE_LABELS: Record<string, string> = {
@@ -23,6 +24,28 @@ const DICT_TYPE_PREFIXES: Record<string, string> = {
   industry: 'IN',
   event_type: 'ET',
   goods_category: 'GC',
+}
+
+/* ---------- 字典项维护 ---------- */
+
+/** 商品类别范围字段 → 待写入值：仅提交的字段参与更新（trim 去空项；空数组 = 不限） */
+function scopeValues(payload: DictEntryPayloadDto | UpdateDictEntryDto): {
+  visibilityIdentities?: string[]
+  visibilityLevels?: string[]
+  orderIdentities?: string[]
+  orderLevels?: string[]
+} {
+  const clean = (value?: string[]) => value === undefined ? undefined : value.map((item) => item.trim()).filter(Boolean)
+  const data: ReturnType<typeof scopeValues> = {}
+  const visibilityIdentities = clean(payload.visibilityIdentities)
+  const visibilityLevels = clean(payload.visibilityLevels)
+  const orderIdentities = clean(payload.orderIdentities)
+  const orderLevels = clean(payload.orderLevels)
+  if (visibilityIdentities) data.visibilityIdentities = visibilityIdentities
+  if (visibilityLevels) data.visibilityLevels = visibilityLevels
+  if (orderIdentities) data.orderIdentities = orderIdentities
+  if (orderLevels) data.orderLevels = orderLevels
+  return data
 }
 
 @Injectable()
@@ -61,6 +84,7 @@ export class DictsService {
             label,
             sort: list.reduce((max, item) => Math.max(max, item.sort), 0) + 1,
             status: 'enabled',
+            ...scopeValues(payload),
           },
         })
         /* 历史新增逻辑按「条目数 +1」写 sort，会留下重复/跳号；新增后统一重排为 1..n */
@@ -86,6 +110,49 @@ export class DictsService {
 
     await this.redis.delCache(dictCacheKey(type))
     return entry
+  }
+
+  /** 编辑字典项：名称与商品类别范围均可选提交（未提交字段保持原值） */
+  async update(type: string, code: string, payload: UpdateDictEntryDto, operator: string): Promise<DictEntry> {
+    this.assertType(type)
+    const entry = await this.prisma.dictEntry.findUnique({ where: { type_code: { type, code } } })
+    if (!entry) throw new NotFoundException('字典项不存在')
+
+    const label = payload.label === undefined ? undefined : payload.label.trim()
+    if (label !== undefined && !label) throw new BadRequestException('请输入字典项名称')
+    if (label && label !== entry.label) {
+      const dup = await this.prisma.dictEntry.findUnique({ where: { label } })
+      if (dup) throw new ConflictException('字典项名称已存在')
+    }
+
+    const updated = await this.prisma.dictEntry.update({
+      where: { type_code: { type, code } },
+      data: { ...(label ? { label } : {}), ...scopeValues(payload) },
+    })
+
+    await this.audit.record({
+      module: '系统管理',
+      action: '编辑字典项',
+      target: `${DICT_TYPE_LABELS[type]} · ${updated.label}`,
+      before: {
+        label: entry.label,
+        visibilityIdentities: entry.visibilityIdentities,
+        visibilityLevels: entry.visibilityLevels,
+        orderIdentities: entry.orderIdentities,
+        orderLevels: entry.orderLevels,
+      },
+      after: {
+        label: updated.label,
+        visibilityIdentities: updated.visibilityIdentities,
+        visibilityLevels: updated.visibilityLevels,
+        orderIdentities: updated.orderIdentities,
+        orderLevels: updated.orderLevels,
+      },
+      operator,
+    })
+
+    await this.redis.delCache(dictCacheKey(type))
+    return updated
   }
 
   async toggle(type: string, code: string, operator: string): Promise<{ code: number }> {

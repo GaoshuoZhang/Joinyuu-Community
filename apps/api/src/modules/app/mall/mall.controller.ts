@@ -21,13 +21,14 @@ export class AppMallController {
     @Query('category') category?: string,
     @Query('keyword') keyword?: string,
   ) {
-    return this.mall.listGoods(query.page, query.pageSize, category, keyword)
+    /* 可见范围按需方身份过滤：已登录取用户身份，游客按无身份（仅不限范围商品可见） */
+    return this.mall.listGoods(query.page, query.pageSize, category, keyword, this.uid(req))
   }
 
   @Public()
   @Get('goods/:id')
   goodsDetail(@Req() req: AppAuthenticatedRequest, @Param('id') id: string) {
-    return this.mall.goodsDetail(id)
+    return this.mall.goodsDetail(id, this.uid(req))
   }
 
   @HttpCode(200)

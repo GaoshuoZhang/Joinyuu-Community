@@ -30,9 +30,12 @@ export class AppSpacesController {
     return this.spaces.availability(id, date ?? '')
   }
 
-  /** 提交预约（规则校验 + 冲突预检 409；needApproval 进 pending） */
+  /** 提交预约（开放时段校验 + 冲突预检 409 + 费用扣分；needApproval 进 pending） */
   @Post('spaces/reservations')
-  create(@Req() req: AppAuthenticatedRequest, @Body() dto: CreateReservationDto): Promise<{ status: 'pending' | 'approved' }> {
+  create(
+    @Req() req: AppAuthenticatedRequest,
+    @Body() dto: CreateReservationDto,
+  ): Promise<{ status: 'pending' | 'approved'; pointsSpent: number }> {
     return this.spaces.create(this.user(req), dto)
   }
 
@@ -48,7 +51,7 @@ export class AppSpacesController {
     return this.spaces.myReservationDetail(this.user(req).uid, id)
   }
 
-  /** 取消预约（pending/approved 可取消） */
+  /** 取消预约（pending/approved 可取消，已扣费用全额退回） */
   @HttpCode(200)
   @Post('spaces/reservations/:id/cancel')
   cancel(@Req() req: AppAuthenticatedRequest, @Param('id') id: string): Promise<{ code: number }> {

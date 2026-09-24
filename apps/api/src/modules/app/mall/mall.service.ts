@@ -5,12 +5,13 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common'
-import type { Prisma, RedemptionOrder } from '@prisma/client'
+import type { DictEntry, MallGoods, Prisma, RedemptionOrder } from '@prisma/client'
 import { PrismaService } from '../../../common/prisma/prisma.service'
 import { IdGeneratorService } from '../../../common/id-generator/id-generator.service'
 import { RedisService } from '../../../common/redis/redis.service'
 import { NotificationService } from '../../../common/notify/notification.service'
 import { formatNow } from '../../../common/utils/time'
+import { discountLabel, discountedPoints, resolveUserPointsDiscount } from '../../../common/points/points-discount'
 import { CreateOrderDto } from './dto/create-order.dto'
 import { ReviewOrderDto } from './dto/review-order.dto'
 
@@ -24,6 +25,8 @@ const DEFAULT_VOUCHER_VALID_DAYS = 30
  * 商品列表/详情（mallOpen 开关 + on/restock 均可见，库存为 0 时前端展示售罄）、
  * 兑换下单（单事务：校验库存→扣积分+流水→扣库存→建单并签发券码，按商品 validDays 计算有效期）、
  * 退款（仅待使用券，核销前可退：退积分+回补库存）、订单评价。
+ * 可见/可下单范围门槛：商品自身范围 + 所属「商品类别」（字典 goods_category）范围都需通过（空数组 = 不限）；
+ * 不可见一律 404（不暴露存在性），可下单范围外下单 403；游客按无身份处理（仅不限范围商品可见）。
  * 券码由后台工作人员现场核销（pending_use → finished），用户不可自主核销；
  * 过期未使用的券由定时任务自动退款（见 SchedulerService）。 */
 @Injectable()
@@ -37,15 +40,21 @@ export class AppMallService {
 
   /* ---------- 商品 ---------- */
 
-  async listGoods(page: number, pageSize: number, category?: string, keyword?: string) {
+  async listGoods(page: number, pageSize: number, category?: string, keyword?: string, uid?: string) {
     await this.assertMallOpen()
+    const identities = await this.loadIdentities(uid)
+    /* 类别门槛：类别级可见范围不通过的一律剔除（类别字典很小，直接内存判定） */
+    const blocked = await this.blockedCategories(identities, 'visibility')
+    const conds: Prisma.MallGoodsWhereInput[] = [this.goodsVisibilityCond(identities)]
+    if (blocked.length) conds.push({ category: { notIn: blocked } })
+    if (category) conds.push({ category })
+    const kw = keyword?.trim()
+    if (kw) conds.push({ name: { contains: kw, mode: 'insensitive' } })
     const where: Prisma.MallGoodsWhereInput = {
       status: { in: ['on', 'restock'] },
       deletedAt: null,
+      AND: conds,
     }
-    const kw = keyword?.trim()
-    if (kw) where.OR = [{ name: { contains: kw, mode: 'insensitive' } }]
-    if (category) where.category = category
 
     const [rows, total] = await Promise.all([
       this.prisma.mallGoods.findMany({
@@ -59,12 +68,16 @@ export class AppMallService {
     return { list: rows.map((g) => this.toGoodsDto(g)), total }
   }
 
-  async goodsDetail(id: string) {
+  async goodsDetail(id: string, uid?: string) {
     await this.assertMallOpen()
     const goods = await this.prisma.mallGoods.findFirst({
       where: { id, deletedAt: null, status: { in: ['on', 'restock'] } },
     })
     if (!goods) throw new NotFoundException('商品不存在')
+    const identities = await this.loadIdentities(uid)
+    const category = await this.categoryEntry(goods.category)
+    /* 可见范围外一律 404，不暴露存在性 */
+    if (!this.canSee(goods, category, identities)) throw new NotFoundException('商品不存在')
     return this.toGoodsDto(goods)
   }
 
@@ -77,10 +90,18 @@ export class AppMallService {
     })
     /* 缺货商品保持可见（restock），下单由事务内库存条件拦截为「库存不足」 */
     if (!goods || (goods.status !== 'on' && goods.status !== 'restock')) throw new NotFoundException('商品不存在')
+    /* 可见 / 可下单范围门槛（类别 + 商品自身）：可见范围外按不存在处理，可下单范围外明确 403 */
+    const identities = await this.loadIdentities(uid)
+    const category = await this.categoryEntry(goods.category)
+    if (!this.canSee(goods, category, identities)) throw new NotFoundException('商品不存在')
+    if (!this.canOrder(goods, category, identities)) throw new ForbiddenException('当前身份暂不可兑换该商品')
 
     const user = await this.prisma.user.findUnique({ where: { uid } })
     if (!user) throw new BadRequestException('用户不存在')
-    if (user.points < goods.points) throw new BadRequestException('积分不足')
+    /* 等级折扣（个人消费取本人社区个体等级折扣）：实扣 = round(商品积分 × 折扣 ÷ 10)（口径见 common/points/points-discount） */
+    const discount = await resolveUserPointsDiscount(this.prisma, uid)
+    const charged = discountedPoints(goods.points, discount)
+    if (user.points < charged) throw new BadRequestException('积分不足')
 
     /* 防重复提交（同一用户同一商品短时间窗口） */
     const dedupeKey = `mall:order:dp:${uid}:${dto.goodsId}`
@@ -106,8 +127,8 @@ export class AppMallService {
 
         /* 事务内原子条件扣减积分：余额不足则整体回滚，避免并发下的丢失更新（超兑） */
         const deducted = await tx.user.updateMany({
-          where: { uid, points: { gte: goods.points } },
-          data: { points: { decrement: goods.points } },
+          where: { uid, points: { gte: charged } },
+          data: { points: { decrement: charged } },
         })
         if (deducted.count !== 1) throw new BadRequestException('积分不足')
         const afterDeduct = await tx.user.findUnique({ where: { uid }, select: { points: true } })
@@ -116,9 +137,9 @@ export class AppMallService {
           data: {
             id: await this.ids.next('PT', tx),
             userId: uid,
-            delta: -goods.points,
+            delta: -charged,
             balance: remaining,
-            reason: `兑换 ${goods.name}（${goods.id}）`,
+            reason: `兑换 ${goods.name}（${goods.id}）${discountLabel(discount)}`,
             at: formatNow(),
             operator: '系统',
             source: 'redemption',
@@ -127,7 +148,8 @@ export class AppMallService {
 
         orderId = await this.ids.next('RO', tx)
         await tx.redemptionOrder.create({
-          data: this.buildOrderData(orderId, uid, user.nickname, goods, dto),
+          /* 订单 points 存实扣额（退款/展示同一口径） */
+          data: this.buildOrderData(orderId, uid, user.nickname, goods, dto, charged),
         })
       })
     } catch (error) {
@@ -138,7 +160,7 @@ export class AppMallService {
     await this.notify.pushNotice(uid, {
       type: 'mall',
       title: '兑换成功',
-      content: `您已成功兑换「${goods.name}」，消耗 ${goods.points} 积分，请凭券码到现场核销使用。`,
+      content: `您已成功兑换「${goods.name}」，消耗 ${charged} 积分，请凭券码到现场核销使用。`,
     })
     return { id: orderId, remainingPoints: remaining }
   }
@@ -233,6 +255,79 @@ export class AppMallService {
 
   /* ---------- 内部工具 ---------- */
 
+  /* ---------- 可见/可下单范围（门槛：商品类别范围 + 商品自身范围都需通过） ---------- */
+
+  /** 取用户身份集（type + level），供范围过滤（与活动/需求列表同口径）；游客/未登录 = 无身份 */
+  private async loadIdentities(uid?: string): Promise<Array<{ type: string; level: number | null }>> {
+    if (!uid) return []
+    return this.prisma.userIdentity.findMany({ where: { userId: uid }, select: { type: true, level: true } })
+  }
+
+  /** 范围过滤：按「单个身份」联合判定（类型命中且等级命中），多身份取并集；两组都为空 = 不限 */
+  private scopeMatches(
+    identityTypes: string[],
+    levels: string[],
+    identities: Array<{ type: string; level: number | null }>,
+  ): boolean {
+    if (identityTypes.length === 0 && levels.length === 0) return true
+    return identities.some(
+      (i) =>
+        (identityTypes.length === 0 || identityTypes.includes(i.type)) &&
+        (levels.length === 0 || (i.level != null && levels.includes(String(i.level)))),
+    )
+  }
+
+  /** 类别字典项（type=goods_category，含类别级范围） */
+  private categoryEntry(code: string): Promise<DictEntry | null> {
+    return this.prisma.dictEntry.findUnique({ where: { type_code: { type: 'goods_category', code } } })
+  }
+
+  /** 类别门槛不通过的类别 code 列表（可见用 category.visibility*，可下单用 category.order*） */
+  private async blockedCategories(
+    identities: Array<{ type: string; level: number | null }>,
+    field: 'visibility' | 'order',
+  ): Promise<string[]> {
+    const entries = await this.prisma.dictEntry.findMany({ where: { type: 'goods_category' } })
+    return entries
+      .filter((entry) => !this.scopeMatches(
+        field === 'visibility' ? entry.visibilityIdentities : entry.orderIdentities,
+        field === 'visibility' ? entry.visibilityLevels : entry.orderLevels,
+        identities,
+      ))
+      .map((entry) => entry.code)
+  }
+
+  /** 可见判定：类别可见范围 + 商品自身可见范围都通过 */
+  private canSee(goods: MallGoods, category: DictEntry | null, identities: Array<{ type: string; level: number | null }>): boolean {
+    return this.scopeMatches(goods.visibilityIdentities, goods.visibilityLevels, identities)
+      && this.scopeMatches(category?.visibilityIdentities ?? [], category?.visibilityLevels ?? [], identities)
+  }
+
+  /** 可下单判定：先需可见，且类别与商品自身的可下单范围都通过 */
+  private canOrder(goods: MallGoods, category: DictEntry | null, identities: Array<{ type: string; level: number | null }>): boolean {
+    return this.canSee(goods, category, identities)
+      && this.scopeMatches(goods.orderIdentities, goods.orderLevels, identities)
+      && this.scopeMatches(category?.orderIdentities ?? [], category?.orderLevels ?? [], identities)
+  }
+
+  /** 商品自身可见范围 → SQL 条件（无身份时按最严格：仅不限范围商品可见） */
+  private goodsVisibilityCond(identities: Array<{ type: string; level: number | null }>): Prisma.MallGoodsWhereInput {
+    if (identities.length === 0) {
+      return { visibilityIdentities: { isEmpty: true }, visibilityLevels: { isEmpty: true } }
+    }
+    const branches: Prisma.MallGoodsWhereInput[] = identities.map((i) => {
+      const typeCond: Prisma.MallGoodsWhereInput = {
+        OR: [{ visibilityIdentities: { isEmpty: true } }, { visibilityIdentities: { has: i.type } }],
+      }
+      const levelCond: Prisma.MallGoodsWhereInput =
+        i.level != null
+          ? { OR: [{ visibilityLevels: { isEmpty: true } }, { visibilityLevels: { has: String(i.level) } }] }
+          : { visibilityLevels: { isEmpty: true } }
+      return { AND: [typeCond, levelCond] }
+    })
+    return { OR: branches }
+  }
+
   private async assertMallOpen(): Promise<void> {
     const cfg = await this.prisma.systemConfig.findUnique({ where: { id: 1 } })
     if (cfg && cfg.mallOpen === false) throw new BadRequestException('积分商城暂未开放')
@@ -244,6 +339,8 @@ export class AppMallService {
     userName: string,
     goods: { id: string; name: string; points: number; validDays: number | null },
     dto: CreateOrderDto,
+    /** 实扣积分（等级折扣后；原价时与 goods.points 相同） */
+    points: number,
   ): Prisma.RedemptionOrderCreateInput {
     const now = formatNow()
     const validDays = goods.validDays && goods.validDays > 0 ? goods.validDays : DEFAULT_VOUCHER_VALID_DAYS
@@ -253,7 +350,7 @@ export class AppMallService {
       userName,
       goodsId: goods.id,
       goodsName: goods.name,
-      points: goods.points,
+      points,
       status: 'pending_use',
       createdAt: now,
       note: dto.remark?.trim() || null,

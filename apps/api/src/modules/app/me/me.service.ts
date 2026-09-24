@@ -17,6 +17,7 @@ import { AppSessionService } from '../../../common/app-session/app-session.servi
 import { StorageService } from '../../../common/storage/storage.service'
 import { formatNow } from '../../../common/utils/time'
 import { normalizeGender } from '../../../common/utils/gender'
+import { resolveUserPointsDiscount } from '../../../common/points/points-discount'
 import type { UpdateMeDto } from './dto/update-me.dto'
 import type { ChangePasswordDto } from './dto/change-password.dto'
 import type { DeletionRequestDto } from './dto/deletion-request.dto'
@@ -54,6 +55,8 @@ export class MeService {
       include: { identities: { orderBy: { id: 'asc' } } },
     })
     if (!user) throw new NotFoundException('用户不存在')
+    /* 积分消费折扣（1 = 1 折 … 10 = 原价）：个人消费按本人社区个体等级，客户端据此展示折后价 */
+    const pointsDiscount = await resolveUserPointsDiscount(this.prisma, uid)
 
     return {
       uid: user.uid,
@@ -67,6 +70,7 @@ export class MeService {
       phoneVerified: Boolean(user.phone && user.phoneVerifiedAt),
       bio: user.bio,
       points: user.points,
+      pointsDiscount,
       realName: user.realName ?? undefined,
       status: user.status,
       registeredAt: user.registeredAt,

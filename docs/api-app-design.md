@@ -48,7 +48,7 @@
 
 | 方法 | 路径 | 说明 |
 |---|---|---|
-| GET | /api/app/me | 资料 + 身份列表（含各身份经验/等级）+ 积分余额；`usernameChangeableAt` 下发用户名下次可修改时间（90 天限改一次，null=当前可改） |
+| GET | /api/app/me | 资料 + 身份列表（含各身份经验/等级）+ 积分余额 + `pointsDiscount`（积分消费折扣：1 = 1 折 … 10 = 原价，按本人社区个体等级）；`usernameChangeableAt` 下发用户名下次可修改时间（90 天限改一次，null=当前可改） |
 | PUT | /api/app/me | 更新昵称/头像/性别/简介等可编辑字段（头像为 `POST /uploads` 返回的 url）；用户名仅在与当前值不同时校验，90 天冷却内 400，成功后记录 `usernameChangedAt` |
 | GET | /api/app/me/points-records | 我的积分流水（分页，含 balance）；积分按身份隔离：仅社区个体/个人用户可查看 |
 | GET | /api/app/me/realname | 实名认证状态：`{ verified, realName? 脱敏（首字）, citizenIdMasked? 前 4 后 4, verifiedAt? }` |
@@ -60,7 +60,7 @@
 | GET | /api/app/me/cards | 我的个人名片（社区个体；简历式分段字段） |
 | PUT | /api/app/me/cards/individual | 保存个人名片：`displayName/age/politicalStatus/intro/industryExperience/skills` + 可增删分段 `education/work/projects/honors/socials/customLinks`（条目数组）+ `visibility`（`age/politicalStatus/isPublic`）；头像同步个人资料（只读）；免审保存即公开到社区人才库；`visibility.isPublic=false` 时退出人才库、公开名片页 404 |
 | POST | /api/app/me/activation-dismissed | 永久隐藏新手任务（幂等）：按账号持久化 `User.activationDismissed`；客户端换浏览器/设备后一致隐藏，`GET /me` 下发该字段 |
-| GET | /api/app/me/identities | 我的关联身份列表：社区个体 + 我关联的社区企业/合作企业（可多个）；企业项含 `roleLabel`（负责人/成员）、`isContact`、`permissions`（成员权限；负责人为全部）与 `enterpriseId` 详情入口；「我的」页有关联身份时显示「关联身份」入口 |
+| GET | /api/app/me/identities | 我的关联身份列表：社区个体 + 我关联的社区企业/合作企业（可多个）；企业项含 `roleLabel`（负责人/成员）、`isContact`、`permissions`（成员权限；负责人为全部）与 `enterpriseId` 详情入口；每项附 `pointsDiscount`（该身份消费积分时的等级折扣：个人身份取本人社区个体等级、企业身份取企业等级、合作企业按原价）；「我的」页有关联身份时显示「关联身份」入口 |
 | GET | /api/app/me/enterprises/:id | 企业详情：关联人可查看；含企业信息（`logo` 企业 Logo、`foundedAt` 成立时间、`website` 官网、`address` 办公地点、`services` 主营业务、`advantages` 核心优势）、成员列表（含 `isContact`、职位与 `permissions`）、`myPermissions`（我在该企业的权限集合；负责人为全部）、负责人、待接受邀请（仅负责人）与退驻/注销申请状态 |
 | PUT | /api/app/me/enterprises/:id | 修改企业基本信息（需 `edit_card` 权限；负责人默认拥有；行业/规模/简介/`logo`/成立时间/官网/办公地点/主营业务/核心优势；保存即生效） |
 | POST | /api/app/me/enterprises/:id/transfer-contact | 转移企业负责人（后台字段「联系人」= `contactUserId`，**仅负责人本人**）：`memberUid?` / `memberName`；转移后原负责人转为只读成员 |
@@ -106,15 +106,16 @@
 | GET | /api/app/me/projects/:id | 项目详情（需求方与承接方可看）：参与人、来源需求、进度与里程碑交付验收状态 |
 | POST | /api/app/me/projects/:id/milestones/:milestoneId/submit | 承接方提交里程碑完成（可附说明）→ 待发起方验收；发起方调用 403 |
 | POST | /api/app/me/projects/:id/milestones/:milestoneId/accept | 发起方验收里程碑；全部验收通过自动结项并按 wiki-backend §8.6 发放 `project_completed` 经验 |
-| GET | /api/app/mall/goods | 商品列表：`on` 且有库存优先（`restock` 库存为 0 不展示）；`mallOpen` 关闭 → 400 |
-| GET | /api/app/mall/goods/:id | 商品详情 |
-| POST | /api/app/mall/orders | 兑换下单（统一券码）：积分充足 + 库存充足（事务：扣积分+写流水+扣库存+建订单 `pending_use` 并签发 `voucherCode`/`voucherExpiresAt`） |
+| GET | /api/app/mall/goods | 商品列表：`on` 且有库存优先（`restock` 库存为 0 不展示）；`mallOpen` 关闭 → 400；**按需方身份过滤可见范围**（商品自身 + 所属商品类别的可见范围都需通过；游客/未登录按无身份，仅「不限」商品可见） |
+| GET | /api/app/mall/goods/:id | 商品详情（可见范围外一律 404，不暴露存在性；口径同列表） |
+| POST | /api/app/mall/orders | 兑换下单（统一券码）：**范围门槛**（商品 + 类别的可见/可下单范围都需通过，可见外 404、可下单外 403「当前身份暂不可兑换该商品」）+ **等级折扣实扣**（实扣 = round(商品积分 × 折扣 ÷ 10)，折扣取本人社区个体等级，无等级按原价；订单 `points` 存实扣额，退款按实扣退）+ 积分充足 + 库存充足（事务：扣积分+写流水+扣库存+建订单 `pending_use` 并签发 `voucherCode`/`voucherExpiresAt`） |
 | GET | /api/app/me/orders | 我的兑换订单 |
 | GET | /api/app/me/orders/:id | 我的兑换订单详情（仅订单本人；非本人/不存在 404，条目形状与列表项一致） |
-| GET | /api/app/spaces | 可预约空间列表（`needApproval`/时段/设备） |
-| GET | /api/app/spaces/:id/availability?date= | 某日开放时段；待审核/已通过预约与已发布活动标为 `occupied`，开放窗口之间不返回时段 |
-| POST | /api/app/spaces/reservations | 提交预约：canonical payload 为 `spaceId/date/start/end/topic?/attendees?/asIdentity?/asEnterpriseId?`；`reservationOpen` 校验 + 提交前冲突预检（pending/approved 预约与活动，409）→ 管理端审核；四类身份均可预约，企业身份以企业名/组织名生成服务端主体快照；成员代企业预约时服务端校验 `space_reserve` 权限（无权限 403） |
-| GET | /api/app/me/reservations | 我的预约（可取消 pending/approved）；返回 `identityType`/`subjectName` 主体快照 |
+| GET | /api/app/spaces | 可预约空间列表（`needApproval`/时段/设备/`feePerHour` 费用：积分每小时，0=免费） |
+| GET | /api/app/spaces/:id/availability?date= | 某日可约时段：按空间「开放时间-关闭时间」逐小时切片（后台无预约规则配置入口，不设单次时长/提前天数限制；未开放预约、维护中或不存在一律 404）；待审核/已通过预约与命中空间的已发布活动标为 `occupied`，并返回 `type`（`reservation`/`event`）标注占用来源 |
+| POST | /api/app/spaces/reservations | 提交预约：canonical payload 为 `spaceId/date/start/end/topic?/attendees?/asIdentity?/asEnterpriseId?`；`reservationOpen` 开关校验 + 开放时段校验（须落在空间「开放时间-关闭时间」内，当天时段不得早于当前时刻）+ 提交前冲突预检（pending/approved 预约与命中空间的已发布活动，活动命中与按天裁剪口径见 wiki-backend §8.8，409）+ **费用扣分**（费用 = 计费小时 × `feePerHour` 再按等级折扣折算：代企业预约取企业等级折扣、其余取本人社区个体等级折扣，实扣 = round(原价 × 折扣 ÷ 10)；计费小时不足 1 小时按 1 小时计；事务内条件扣减，余额不足 400「积分不足」并写 `source=space` 流水）→ 返回 `{ status, pointsSpent }`；管理端审核驳回或预约取消时全额退回（见 wiki-backend §8.8）。四类身份均可预约，企业身份以企业名/组织名生成服务端主体快照；成员代企业预约时服务端校验 `space_reserve` 权限（无权限 403） |
+| GET | /api/app/me/reservations | 我的预约（可取消 pending/approved，取消全额退回已扣积分）；返回 `identityType`/`subjectName` 主体快照 |
+| GET | /api/app/me/reservations/:id | 我的预约详情（仅本人，非本人/不存在 404）；含 `purpose`/`attendees`/`records` 时间线与 `feePoints`（本单实际消耗积分，0=免费） |
 | GET | /api/app/articles | 文章列表（`published`，栏目筛选/关键词；浏览量详情时 +1） |
 | GET | /api/app/articles/:id | 文章详情 |
 | GET | /api/app/article-columns | 栏目列表（enabled）；`?submission=1` 仅返回开放投稿栏目（投稿页使用，广场浏览筛选不受开关影响） |
@@ -165,7 +166,7 @@
 | GET | /api/app/home | 首页聚合：siteInfo + 功能开关 + 公告 `announcements`（有效期内、置顶优先取 2，Announcement 增 `expireAt/link`）+ 轮播 `carouselEnabled` 与 `banners`（专用 `HomeBanner`，仅 enabled、按 sort 升序；受 SystemConfig.homeCarouselOpen 总开关控制，关闭时 `carouselEnabled=false` 且 `banners=[]`）+ 精选活动/最新需求/置顶文章/未读数（缺口 §7.1-3 扩展） |
 | GET | /api/app/events/:id/ticket | 电子票（按活动，移动端唯一入口）：报名 approved 签发 `ticketNo` + HMAC 确定性核销码（HMAC-SHA256(eventId+ticketId+secret) 截断），返回 `eventId/eventTitle/startTime/location/ticketCode/status(valid/checked/cancelled)/checkedIn/waitlistOrder`；签到成功即核销（E1）。原 `GET /me/enrollments/:id/ticket`（返回 ticketNo/redeemCode）已于对齐修复中移除 |
 | GET/POST | /api/app/me/demands/:id/messages | 需求沟通留言板：`GET` 消息列表（仅需求发布方与响应方可见，未读计数）+ `POST` 发言，消息可追溯（E2） |
-| GET | /api/app/me/realname-rights | 当前发布限制展示：个人实名状态、社区个体/社区企业等级对应的需求发布、文章投稿、活动报名与空间预约额度；企业额度按企业主体共享 |
+| GET | /api/app/me/realname-rights | 当前发布限制展示：个人实名状态、社区个体/社区企业等级对应的需求发布、文章投稿额度与积分消费折扣（活动报名/空间预约不再按等级区分，故等级卡不展示；按身份组的额度在「个人用户规则」页维护）；企业额度按企业主体共享 |
 | GET | /api/app/me/stats | 个人数据看板：积分/经验/需求/响应/项目/活动/签到聚合口径（E5） |
 | GET | /api/app/me/enterprise-workbench | 企业工作台：企业维度聚合（需求/响应/项目/成员统计），仅成员/负责人可看（E7） |
 | — | ~~/api/app/service-applications~~ | 社区公共服务申请已下线（社区政策浏览与通用申请审核保留） |

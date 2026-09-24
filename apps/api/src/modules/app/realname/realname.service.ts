@@ -13,6 +13,7 @@ import { RealnameVerifyError } from '../../../common/realname/realname-verifier'
 import type { UpdateRealnameDto } from './dto/update-realname.dto'
 import { currentPublishingLimits } from '../../../common/enterprise/publishing-limits'
 import { formatNow } from '../../../common/utils/time'
+import { discountText } from '../../../common/points/points-discount'
 
 /** GB 11643 身份证校验码：17 位数字加权因子与校验位映射（校验位 X 为大写） */
 const ID_WEIGHTS = [7, 9, 10, 5, 8, 4, 2, 1, 6, 3, 7, 9, 10, 5, 8, 4, 2]
@@ -143,6 +144,8 @@ export class AppRealnameService {
     const tiers = await this.prisma.levelTier.findMany()
     const tierLabel = new Map(tiers.map((t) => [`${t.identityType}:${t.level}`, t.label]))
     const thresholdOf = new Map(tiers.map((t) => [`${t.identityType}:${t.level}`, t.threshold]))
+    /* 积分消费折扣（等级规则页配置）：等级权益卡展示用（未配置按原价） */
+    const discountOf = new Map(tiers.map((t) => [`${t.identityType}:${t.level}`, t.pointsDiscount]))
     const label = (n: number) => n < 0 ? '不限' : `${n} 次/日`
     const grouped = new Map<string, typeof rules>()
     for (const rule of rules) {
@@ -167,7 +170,20 @@ export class AppRealnameService {
         active,
         items: first.identityType === 'personal_unverified' && config?.realnameRequired
           ? ['当前社区要求先完成实名认证后再操作']
-          : [`需求发布：${label(limit('demand_publish'))}`, `文章投稿：${label(limit('article_publish'))}`, `活动报名：${label(limit('event_enroll'))}`, `空间预约：${label(limit('space_reserve'))}`],
+          : first.identityType.startsWith('community_')
+            /* 等级权益卡：活动报名 / 空间预约不再按等级区分（按身份组的额度在「个人用户规则」页维护），故不展示；
+             * 折扣：1 = 1 折 … 10 = 原价（支持一位小数） */
+            ? [
+              `需求发布：${label(limit('demand_publish'))}`,
+              `文章投稿：${label(limit('article_publish'))}`,
+              `积分消费折扣：${discountText(discountOf.get(`${first.identityType}:${first.level}`))}`,
+            ]
+            : [
+              `需求发布：${label(limit('demand_publish'))}`,
+              `文章投稿：${label(limit('article_publish'))}`,
+              `活动报名：${label(limit('event_enroll'))}`,
+              `空间预约：${label(limit('space_reserve'))}`,
+            ],
         limits: Object.fromEntries(group.map(item => [item.action, item.dailyLimit])),
       }
     })

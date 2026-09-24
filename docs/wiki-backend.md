@@ -219,7 +219,7 @@ TZ=Asia/Shanghai
 | 活动 | CommunityEvent | EV | 状态机字段 + createdAt/startTime/endTime/location/capacity/speaker/host/enrollmentOpen/visibility*/enrollment*/requireReview/enrollmentDeadline?/scheduledAt?/enrollPoints?/checkinPoints?/tags[]/**deletedAt?/deletedBy?/archivableAt?**（自动结束任务写 ended+archivableAt） |
 | 活动 | EventEnrollment | 自增 | 复合唯一 (eventId, userId)；userId/name/enterprise/phone/appliedAt/status(pending/approved/rejected)/checkedIn/checkInAt? |
 | 账本 | ExperienceRecord | EX | targetType(enterprise/individual)/targetId/delta/balance/reason/at/operator/source(rule/manual) |
-| 账本 | PointsRecord | PT | userId FK/delta/balance/reason/at/operator/source(rule/manual/redemption)/dedupeKey? 唯一（积分发放幂等） |
+| 账本 | PointsRecord | PT | userId FK/delta/balance/reason/at/operator/source(rule/manual/redemption/space)/dedupeKey? 唯一（积分发放幂等） |
 | 商城 | MallGoods | G | name/category(GC001 实物商品 / GC003 权益券；字典 goods_category)/points/stock/**status(on/off/restock 三态，库存为 0 记 restock)**/description/redeemedCount/validDays?（券码有效期天，空按 30 天兜底）/createdAt/**visibilityIdentities[]/visibilityLevels[]/orderIdentities[]/orderLevels[]（可见/可下单范围）**/**deletedAt?/deletedBy?/archivableAt?** |
 | 商城 | RedemptionOrder | RO | userId/userName(快照)/goodsId/goodsName(快照)/points/status(pending_use/finished/cancelled 三态，统一券码)/createdAt/finishedAt?/note?/cancelReason?/**voucherCode(下单即签发)/voucherExpiresAt(按商品 validDays 计算，过期自动退款)/usedAt?**/**deletedAt?/deletedBy?/archivableAt?** |
 | 规则 | PointsRule | code（PK） | 9 条固定触发项（见 8.4）；name/scene/description 写死；points 可编辑；status |
@@ -241,7 +241,7 @@ TZ=Asia/Shanghai
 | 系统 | AdminNotification | N | type(approval/demand_review/reservation/showcase/article/lease/schedule)/title/content/at/read/link? |
 | 系统 | AuditLog | AL | operator/module/action/target/detail?/at/ip?/before Json?/after Json?；查询返回 M0 形状（不含 ip/before/after） |
 | 系统 | SystemConfig | 单例(id=1) | siteName/siteSlogan/registrationOpen/mallOpen/demandOpen/reservationOpen/realnameRequired/**homeCarouselOpen(首页轮播总开关)**/leaseExpireRemindDays(1-90)/**uploadMaxSizeMb(1-100，默认 10；上传与富文本图片共用，dailyLoginPoints 已删除)**/passwordExpireDays/MinIO 配置/updatedAt/updatedBy |
-| 系统 | DictEntry | 复合 (type, code) | type(**demand_category/industry/event_type/goods_category**)/code(DC/IN/ET/GC 前缀自增)/label 全类型唯一/sort/status(enabled/disabled) |
+| 系统 | DictEntry | 复合 (type, code) | type(**demand_category/industry/event_type/goods_category**)/code(DC/IN/ET/GC 前缀自增)/label 全类型唯一/sort/status(enabled/disabled)；**goods_category 另有类别级 visibilityIdentities/visibilityLevels/orderIdentities/orderLevels**（空数组 = 不限，其余类型恒为空） |
 | 系统 | ArchiveSetting | domain（PK） | 归档设置（13 域）：autoArchive/archiveDelayDays(0-365)/autoPurge/purgeDelayDays(1-3650)/archiveStatuses Json?（按状态开关）；企业/合作企业不支持自动归档 |
 | App | UserNotification | UN | userId FK 级联；type/title/content/at/link?/read；站内信为单一列表（无归档、无分类偏好；`archived`/`UserNotificationPreference` 已移除） |
 | App | Address | AD | userId FK 级联；name/phone/region/detail/isDefault/createdAt/updatedAt；每用户最多一个默认地址（部分唯一索引） |
@@ -442,8 +442,10 @@ TZ=Asia/Shanghai
 | PUT | /api/admin/rules/experience/:code | `{ exp }` 正整数 |
 | POST | /api/admin/rules/experience/:code/toggle-status | 启用↔停用 |
 | GET | /api/admin/rules/experience-issuance | 仅 source=rule 的经验流水；权限 `/rules/experience-records` |
-| GET | /api/admin/rules/levels | 等级梯度 level 升序；权限 `/rules/levels` |
-| PUT | /api/admin/rules/levels | 整组保存 body `{ tiers: [{ level, label, threshold }] }`（前端函数签名收数组、请求时包一层）；1-10 级、门槛逐级递增；梯度变更仅影响后续结算 |
+| GET | /api/admin/rules/levels | 等级梯度 level 升序 + 该等级每日需求发布/文章投稿额度 + 积分消费折扣；等级行取共用缓存 `rules:levels`，额度实时合并；权限 `/rules/levels` |
+| PUT | /api/admin/rules/levels | 整组保存 body `{ identityType, tiers: [{ level, label, threshold, pointsDiscount?, demandPublishLimit?, articleSubmitLimit? }] }`（前端函数签名收数组、请求时包一层）；1-10 级、门槛逐级递增、折扣 1-10、额度 -1/0..10000；事务内同时写 LevelTier 与 PublishingLimitRule（未提交的动作保留既有额度）；梯度变更仅影响后续结算 |
+| GET | /api/admin/rules/publishing-limits | query：`identityType?`（单身份组）/ `scope=personal`（仅个人用户未实名、已实名两行）；按身份组+等级聚合四类每日额度（-1 不限 / 0 禁止）；权限 `/rules/publishing-limits` |
+| PUT | /api/admin/rules/publishing-limits | body `{ rules: [{ scope, level?, demandPublishLimit, articleSubmitLimit, eventEnrollLimit, spaceReserveLimit }] }`；逐行 upsert（个人身份组 level=0；社区身份需等级已存在）；等级相关额度亦可在等级规则页随梯度保存 |
 
 ### 7.12 办公位与租约 workstations（17，含选项与打印）
 
@@ -472,14 +474,15 @@ TZ=Asia/Shanghai
 | 方法 | 路径 | 说明 |
 |---|---|---|
 | GET | /api/admin/spaces | 全量按 ID 升序；权限 `/spaces` |
-| GET | /api/admin/spaces/usage-board | query：date；当日已通过预约 + 同名空间已发布活动合并占用（source 区分） |
+| GET | /api/admin/spaces/usage-board | query：date；当日占用 = 已通过预约 + 命中该空间的已发布活动（source 区分；命中与按天裁剪口径见 §8.8） |
+| GET | /api/admin/spaces/:id/event-occupancy | 空间的活动占用明细：已发布活动按日展开（跨天按天裁剪），返回 `{ eventId, date, startTime, endTime, title, host }`；空间详情页日历与占用明细用 |
 | GET | /api/admin/spaces/:id | 详情含预约列表（空间详情页日历/明细用） |
-| POST | /api/admin/spaces | 创建即 available；allDay 时存 00:00/23:59；needApproval 联动 needReservation |
-| PUT | /api/admin/spaces/:id | 编辑基础信息（状态走独立接口） |
+| POST | /api/admin/spaces | 创建即 available；allDay 时存 00:00/23:59；needApproval 联动 needReservation；feePerHour 缺省 0（0=免费） |
+| PUT | /api/admin/spaces/:id | 编辑基础信息（状态走独立接口；含 feePerHour） |
 | POST | /api/admin/spaces/:id/status | `{ status: available/maintenance/disabled }` |
 | GET | /api/admin/space-reservations | query：page/pageSize/keyword(用户/空间/ID)/spaceId/status/date；默认过滤已归档；权限 `/spaces/reservations` |
-| POST | /api/admin/space-reservations/:id/review | `{ status, comment? }`；approved 前冲突校验（见 8.8）；重复审核报错；写审核时间线；rejected 写 archivableAt |
-| POST | /api/admin/space-reservations/:id/cancel | pending/approved 可取消 + archivableAt |
+| POST | /api/admin/space-reservations/:id/review | `{ status, comment? }`；approved 前冲突校验（见 8.8）；重复审核报错；写审核时间线；rejected 写 archivableAt 并全额退回已扣积分（见 8.8） |
+| POST | /api/admin/space-reservations/:id/cancel | pending/approved 可取消 + archivableAt + 全额退回已扣积分 |
 | POST | /api/admin/space-reservations/:id/archive | 仅已结束（approved 且日期时段已过）/rejected/cancelled 可归档（软删） |
 
 ### 7.14 内容 contents / announcements（24）
@@ -529,9 +532,11 @@ TZ=Asia/Shanghai
 | GET | /api/admin/system/config/realname/catalog | 实名核验供应商目录（配置字段 + 凭据变量名，供表单渲染）；权限 `/system/config` |
 | POST | /api/admin/system/config/realname/test | 测试联通：用格式合法的固定样例调用所选供应商，**接口可返回业务结果即算联通**（不要求核验一致）；成功写 `realnameVerifyTestOk=true` + `realnameVerifyTestedAt` 并清 `config:system` 缓存；失败写 false 并返回带阿里云 `Recommend` 的诊断信息 |
 | GET | /api/admin/dicts/:type | 按 sort 升序（管理页返回全量含 disabled）；type 四类 demand_category/industry/event_type/goods_category；权限 `/system/dicts` |
-| POST | /api/admin/dicts/:type | `{ label }`；label 全类型唯一；创建即启用（code 按类型前缀 DC/IN/ET/GC 自增） |
+| POST | /api/admin/dicts/:type | `{ label, visibilityIdentities?, visibilityLevels?, orderIdentities?, orderLevels? }`；label 全类型唯一；创建即启用（code 按类型前缀 DC/IN/ET/GC 自增）；后四项仅 goods_category 使用（类别级可见/可下单范围，空数组 = 不限） |
+| PUT | /api/admin/dicts/:type/:code | `{ label?, visibilityIdentities?, visibilityLevels?, orderIdentities?, orderLevels? }`；未提交字段保持原值（前端编辑弹窗整表单提交）；label 改名同样走全类型唯一校验；权限 `/system/dicts` |
 | POST | /api/admin/dicts/:type/:code/toggle-status | 启用↔停用 |
 | DELETE | /api/admin/dicts/:type/:code | 删除并重排同类型 sort；历史引用值不受影响 |
+| — | 字典维护入口（前端） | 后台**无独立字典页**：按类型分置各业务页页头弹窗——需求管理「需求类别」/ 活动列表「活动类型」/ 社区企业「行业管理」/ 商品管理「商品类别」；上述接口与权限码 `/system/dicts` 不变，仅入口位置迁移 |
 | GET | /api/admin/roles | 角色列表（含权限码集合）；权限 `/system/roles` |
 | POST | /api/admin/roles | 新增自定义角色 `{ code, name, description? }`；code 小写字母开头仅含小写字母/数字/下划线（2-32）且唯一（409）、不可用内置 `super`（400）、名称唯一（409）；ID 走 R 前缀发号、sort 追加、初始无权限点；审计「RBAC · 新增角色」 |
 | PUT | /api/admin/roles/:id/permissions | `{ permCodes }`；超管角色仅超管可改且必须保留 `['*']`；非超管不可越权分配；变更即时失效关联管理员权限缓存 |
@@ -685,11 +690,31 @@ TZ=Asia/Shanghai
 - 需求立项时由服务端把需求快照写入项目：`demanderId=demand.publisherId`、`demanderName=publisherName`、`demanderIdentity=publisherIdentity`、`creatorName/creatorId=demand.creatorName/creatorId ?? 发布方`、联系方式照搬、`contractPrice=demand.budget`；客户端提交的同名字段不生效；社区自建项目由「新增项目」表单录入，`creatorName` 缺省取当前操作人。
 - 项目访问按需求方主体放行：`AppProjectsService.subjectUserId()` 将需求方主体解析为用户 uid（主体为企业 ID 时解析到企业 `contactUserId`），并与承接方匹配一起决定「需求发起方/承接方/403」；`myProjects` 同时按 `undertakers`、来源需求发布方与 `demanderId`（本人 + 关联企业）匹配。历史项目由迁移从来源需求回填需求方字段。
 
-### 8.8 空间预约冲突校验（审核通过前）
+### 8.8 空间占用与预约费用口径（客户端可约时段 / 审核冲突校验 / 使用看板 / 空间详情统一）
 
-- 同空间同日**已通过预约**时段重叠（`start < other.end && other.start < end`，排除已归档）→ 409"该时段已有已通过的预约，无法重复占用"。
-- 同名空间当日**已发布社区活动**（location=空间名、日期=预约日）时段重叠 → 409"该时段被社区活动占用，无法通过"。
+唯一实现：`apps/api/src/common/spaces/event-occupancy.ts`（占用）与 `apps/api/src/common/spaces/booking-fee.ts`（费用）；客户端 `AppSpacesService.availability`/`create`/`cancel`、后台 `SpacesService.assertNoConflict`/`usageBoard`/`eventOccupancy`/`reviewReservation`/`cancelReservation` 共用，避免多处口径分叉。
+
+- **活动命中空间**：活动 `location` 包含空间名（`loc.includes(name)`），或与空间 `location`（楼层地址）**完全相等**；地点为空不命中。schema 无 spaceId 外键，故按地点文本近似匹配——不用楼层地址做包含匹配，避免同层多个空间互相误判。
+- **按日展开**：跨天活动在首日占用到 `23:59`、末日从 `00:00` 起、中间日整天占用；`eventCoversDate` 判定是否覆盖某日，`eventWindowOn` 给出该日占用时段（HH:mm），`eventBlocksWindow` 判定与该日某时窗是否重叠。
+- 同空间同日**已通过预约**时段重叠（`start < other.end && other.start < end`，排除已归档）→ 审核 409"该时段已有已通过的预约，无法重复占用"。
+- 命中空间的当日**已发布活动**与预约时段重叠 → 审核 409"该时段被社区活动占用，无法通过"；客户端提交预约时同口径预检 → 409"该时段已被预约，请选择其他时间"。
+- 客户端 `GET /api/app/spaces/:id/availability` 返回的 `type` 标注占用来源（`reservation`/`event`），供客户端按来源展示或过滤。
 - 重复审核（非 pending）报 409「该预约已处理，请勿重复审核」。
+
+**预约费用（积分）**
+
+- `Space.feePerHour`：预约费用（积分/小时），0 = 免费使用；后台空间表单「费用」栏维护，客户端空间列表与预约页展示。
+- 计费小时 = 向上取整到整小时（不足 1 小时按 1 小时计）：全天开放空间结束时间为 23:59，故 `N 小时 59 分` 按 `N+1` 小时计费；费用 = 计费小时 × `feePerHour`。
+- 扣费时机：客户端提交预约（`POST /api/app/spaces/reservations`）时，在预约事务内条件扣减积分（余额不足整体回滚 → 400「积分不足，无法预约该空间」）并写负向流水（`source=space`）；实扣金额写入 `SpaceReservation.feePoints`，响应回传 `pointsSpent`。
+- 退回口径（全额）：审核驳回（`/api/admin/space-reservations/:id/review` 驳回分支）、用户取消（`POST /api/app/spaces/reservations/:id/cancel`）、后台取消（`POST /api/admin/space-reservations/:id/cancel`）均退回 `feePoints` 并写正向流水（`source=space`）；取消类接口以「状态条件更新」抢占，避免并发重复退分。
+
+**积分消费折扣（跨场景统一下沉于 `apps/api/src/common/points/points-discount.ts`）**
+
+- 取值：1 = 1 折 … 10 = 原价（默认 10，**支持一位小数**如 8.5 = 85 折）；折后价 = `round(原价 × 折扣 ÷ 10)`（内部按「十分位整数」计算，避免浮点误差），不足 1 分四舍五入。
+- 存量/缺省：等级行未配置折扣时按原价 10 处理（保存等级梯度时缺省写 10）。
+- 按谁取：个人消费（商城兑换）取用户自己的「社区个体」等级折扣；代企业消费（代企业预约空间）取所代表企业的「社区企业」等级折扣；无对应身份/等级行 → 原价。
+- 生效点：商城兑换（`AppMallService.createOrder`，订单 `points` 存实扣额，退款按实扣退）与空间预约费用（`AppSpacesService.create`，`feePoints` 存实扣额）；流水 `reason` 追加「N 折」标注。
+- 下发：`GET /api/app/me` 与 `GET /api/app/me/identities` 各回带 `pointsDiscount`（登录/注册响应同），客户端据此展示折后价并按折后价判定余额是否充足。
 
 ### 8.9 快照与联动的既有口径（服务端保持）
 
@@ -713,6 +738,13 @@ TZ=Asia/Shanghai
 - `DELETE /assets/:id`：删库 + 删存储对象（对象删除失败仅告警）。
 - 公开读取 `GET /api/public/files/:key`：按 storeKey 反查素材后返回二进制，带 `nosniff` / `Content-Disposition` / `no-cache`。
 - 文章保存时按正文 URL 反查素材并绑定 `sourceType`(article/submission) + `sourceId`（文章 ID）。
+
+### 8.12 积分商城可见/可下单范围门槛（商品 + 商品类别）
+
+- 两级门槛：商品自身 `visibilityIdentities/visibilityLevels`（可见）与 `orderIdentities/orderLevels`（可下单）+ 所属**商品类别**（字典 `goods_category`，在「商品管理 > 商品类别」弹窗维护的同类四项）**都需通过**；两组都为空 = 不限。
+- 命中口径与活动/需求一致：按「单个身份」联合判定（身份类型命中且等级命中），多身份取并集（`AppMallService.scopeMatches`）；等级仅社区个体/社区企业身份拥有。
+- 生效点：列表按可见范围过滤（商品自身用 SQL 条件，类别范围不通过的类别直接剔除，分页与 total 同源）、详情不可见一律 404（不暴露存在性）、下单先判可见（404）再判可下单（403「当前身份暂不可兑换该商品」）；游客/未登录按无身份处理，仅「不限」商品可见。
+- 类别维护：编码 GC 前缀自动分配，可新增/改名/启停/删除（`PUT /api/admin/dicts/goods_category/:code` 随整表单提交范围）；范围为空的类别等同不限（存量数据即为此态，行为与改造前一致）。
 
 ## 9. 审计与通知
 

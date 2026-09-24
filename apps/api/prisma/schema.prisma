@@ -634,7 +634,7 @@ model PointsRecord {
   reason    String  @db.VarChar(255)
   at        String  @db.VarChar(16)
   operator  String  @db.VarChar(64)
-  source    String  @db.VarChar(16) // rule | manual | redemption
+  source    String  @db.VarChar(16) // rule | manual | redemption | space
   dedupeKey String? @unique @db.VarChar(128)
   user      User    @relation(fields: [userId], references: [uid], onDelete: Restrict)
 
@@ -732,6 +732,8 @@ model LevelTier {
   level        Int
   label        String @db.VarChar(32)
   threshold    Int
+  // 积分消费折扣：1 = 1 折 … 10 = 原价（支持一位小数，如 8.5 = 85 折；默认 10）
+  pointsDiscount Float  @default(10)
 
   @@id([identityType, level])
 }
@@ -815,6 +817,8 @@ model Space {
   allDay          Boolean  @default(false)
   needReservation Boolean  @default(false)
   needApproval    Boolean  @default(false)
+  // 预约费用（积分/小时）；0 = 免费使用
+  feePerHour      Int      @default(0)
   equipment       String[]
   status          String   @default("available") @db.VarChar(16) // available | maintenance（R2 维护中）
   maxHours        Int? // R2：单次预约最长时长（小时）
@@ -839,6 +843,8 @@ model SpaceReservation {
   endTime        String  @db.VarChar(8)
   purpose        String  @db.VarChar(255)
   attendees      Int
+  // 该预约实际消耗的积分（提交时按 计费小时 × 空间 feePerHour 扣除；驳回/取消按此退回）
+  feePoints      Int     @default(0)
   status         String  @db.VarChar(16) // pending | approved | rejected | cancelled
   submittedAt    String  @db.VarChar(16)
   records        Json    @default("[]")
@@ -1119,6 +1125,12 @@ model DictEntry {
   label  String @db.VarChar(64)
   sort   Int
   status String @default("enabled") @db.VarChar(8)
+  // 商品类别专属（type=goods_category）：类别级可见/可下单范围门槛（空数组 = 不限）；
+  // 商品需「类别范围 + 商品自身范围」同时通过才可见/可下单，其余字典类型该四项恒为空数组
+  visibilityIdentities String[]
+  visibilityLevels     String[]
+  orderIdentities      String[]
+  orderLevels          String[]
 
   @@id([type, code])
   @@unique([label])

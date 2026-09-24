@@ -306,6 +306,8 @@ export class AppEventsService {
         eventId: r.eventId,
         eventTitle: r.event.title,
         startTime: r.event.startTime,
+        endTime: r.event.endTime,
+        cancelDeadlineHours: r.event.cancelDeadlineHours ?? 24,
         location: r.event.location,
         status: r.status,
         checkedIn: r.checkedIn,
