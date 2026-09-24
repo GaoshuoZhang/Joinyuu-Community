@@ -44,7 +44,7 @@ const columns = [
   { colKey: 'username', title: '账号', cell: 'username', width: 160 , ellipsis: true},
   { colKey: 'ip', title: 'IP', width: 130 , ellipsis: true},
   { colKey: 'device', title: '设备', width: 200 , ellipsis: true},
-  { colKey: 'loginAt', title: '登录时间', width: 160 , ellipsis: true},
+  { colKey: 'loginAt', title: '登录时间', width: 170 , ellipsis: true},
   { colKey: 'op', title: '操作', cell: 'op', width: 110 },
 ]
 

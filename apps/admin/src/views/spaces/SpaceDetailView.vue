@@ -7,14 +7,15 @@ import PageHeader from '@/components/PageHeader.vue'
 import StatusTag from '@/components/StatusTag.vue'
 import ListErrorState from '@/components/ListErrorState.vue'
 import SpaceFormDialog from '@/components/SpaceFormDialog.vue'
-import { fetchReservations, fetchSpace, setSpaceStatus } from '@/api/spaces'
+import { fetchReservations, fetchSpace, fetchSpaceEventOccupancy, setSpaceStatus, type SpaceEventOccupancy } from '@/api/spaces'
 import { isNotFound } from '@/api/http'
 import { spaceTypeMap, statusMap } from '@/constants/status'
 import { deriveReservationStatus } from '@/utils/reservation'
 import { formatMonthKey } from '@/utils/format'
 import type { Space, SpaceReservation } from '@/types'
 
-/* 空间详情页：空间信息 + Calendar 日历（cellAppend 追加当日预约详情）+ 预约明细表。
+/* 空间详情页：空间信息 + Calendar 日历（cellAppend 追加当日占用详情）+ 占用明细表。
+ * 占用 = 空间预约（六态）+ 已发布活动占用（口径与客户端可约时段一致，后端按日展开）。
  * 头部操作与公共空间列表 op 同步（可用：编辑/维护/停用；维护或停用：恢复可用）。 */
 const route = useRoute()
 const router = useRouter()
@@ -24,29 +25,84 @@ const loading = ref(false)
 const loadError = ref('')
 const space = ref<Space | null>(null)
 const reservations = ref<SpaceReservation[]>([])
+const eventOccupancies = ref<SpaceEventOccupancy[]>([])
 const acting = ref('')
 const formVisible = ref(false)
 /* 已归档条目：隐藏写操作（编辑/状态变更），只读内容保留 */
 const isArchived = computed(() => !!space.value?.deletedAt)
 
-/* 预约按日期分组：日历 cellAppend 按 formattedDate 直接取数 */
+/* 占用行（预约 + 活动合并）：日历与明细列表共用同一份数据；按 source 区分字段 */
+interface OccupancyBase {
+  key: string
+  date: string
+  startTime: string
+  endTime: string
+  /** 预约人 / 活动主办方 */
+  subject: string
+  /** 预约用途 / 活动标题 */
+  title: string
+}
+
+interface ReservationOccupancyRow extends OccupancyBase {
+  source: 'reservation'
+  /** 预约人 ID */
+  subjectTag: string
+  /** 预约六态派生（与 StatusTag / 列表页口径一致） */
+  status: keyof typeof statusMap.reservation
+}
+
+interface EventOccupancyRow extends OccupancyBase {
+  source: 'event'
+}
+
+type OccupancyRow = ReservationOccupancyRow | EventOccupancyRow
+
+const occupancyRows = computed<OccupancyRow[]>(() => {
+  const rows: OccupancyRow[] = reservations.value.map((r) => ({
+    key: `r:${r.id}`,
+    source: 'reservation',
+    date: r.date,
+    startTime: r.startTime,
+    endTime: r.endTime,
+    subject: r.userName,
+    subjectTag: r.userId,
+    title: r.purpose,
+    status: deriveReservationStatus(r),
+  }))
+  for (const e of eventOccupancies.value) {
+    rows.push({
+      key: `e:${e.eventId}:${e.date}`,
+      source: 'event',
+      date: e.date,
+      startTime: e.startTime,
+      endTime: e.endTime,
+      subject: e.host,
+      title: e.title,
+    })
+  }
+  return rows.sort((a, b) => a.date.localeCompare(b.date) || a.startTime.localeCompare(b.startTime))
+})
+
+/* 占用按日期分组：日历 cellAppend 按 formattedDate 直接取数 */
 const byDate = computed(() => {
-  const map: Record<string, SpaceReservation[]> = {}
-  for (const r of reservations.value) {
-    if (!map[r.date]) map[r.date] = []
-    map[r.date].push(r)
+  const map: Record<string, OccupancyRow[]> = {}
+  for (const row of occupancyRows.value) {
+    if (!map[row.date]) map[row.date] = []
+    map[row.date].push(row)
   }
   return map
 })
 
-/* 日历单元格当日预约（不存在返回空数组，模板中可安全遍历） */
-function reservationsOn(formattedDate: string): SpaceReservation[] {
+/* 日历单元格当日占用（不存在返回空数组，模板中可安全遍历） */
+function occupanciesOn(formattedDate: string): OccupancyRow[] {
   return byDate.value[formattedDate] ?? []
 }
 
-/* 预约状态文案：统一走六态派生（与 StatusTag / 列表页口径一致） */
-function reservationStatusLabel(r: SpaceReservation): string {
-  return statusMap.reservation[deriveReservationStatus(r)].label
+/* 日历条目悬停说明：预约显示预约人/用途/状态，活动占用显示活动名/主办方 */
+function occupancyTooltip(row: OccupancyRow): string {
+  const slot = `${row.date} ${row.startTime} ~ ${row.endTime}`
+  if (row.source === 'event') return `${slot} 社区活动「${row.title}」（${row.subject}）`
+  return `${slot} ${row.subject}（${row.title}）· ${statusMap.reservation[row.status].label}`
 }
 
 const reservationModeText = computed(() =>
@@ -69,8 +125,9 @@ const capacityText = computed(() => {
   return c != null ? `${c} 人` : '—'
 })
 
+/* 明细列：预约与活动占用共用（状态列按来源分别渲染 StatusTag / 活动占用标签） */
 const detailColumns = [
-  { colKey: 'user', title: '预约人', cell: 'user', width: 110 , ellipsis: true},
+  { colKey: 'subject', title: '预约人 / 主办方', cell: 'subject', width: 110 , ellipsis: true},
   { colKey: 'slot', title: '日期时段', cell: 'slot' , ellipsis: true},
   { colKey: 'status', title: '状态', cell: 'status', width: 84 , ellipsis: true},
 ]
@@ -90,7 +147,7 @@ const monthKey = computed(() => {
   return formatMonthKey(d)
 })
 
-const monthReservations = computed(() => reservations.value.filter((r) => r.date.startsWith(monthKey.value)))
+const monthReservations = computed(() => occupancyRows.value.filter((row) => row.date.startsWith(monthKey.value)))
 
 const periodText = computed(() => {
   const s = space.value
@@ -113,16 +170,20 @@ async function load() {
   loadError.value = ''
   try {
     const id = String(route.params.id)
-    const [s, res] = await Promise.all([
+    const [s, res, events] = await Promise.all([
       fetchSpace(id),
       fetchReservations({ page: 1, pageSize: RESERVATION_PAGE_SIZE, spaceId: id }),
+      fetchSpaceEventOccupancy(id),
     ])
     space.value = s
     reservations.value = res.list
+    eventOccupancies.value = events
     reservationTotal.value = res.total
     reservationPage.value = 1
   } catch (e) {
     space.value = null
+    reservations.value = []
+    eventOccupancies.value = []
     /* 404 = 空间不存在；其余错误保留具体原因并给出重试入口 */
     if (!isNotFound(e)) loadError.value = e instanceof Error ? e.message : '空间加载失败'
   } finally {
@@ -227,36 +288,43 @@ onMounted(load)
           <t-descriptions-item label="预约方式" :span="2">
             <t-tag variant="outline" size="small">{{ reservationModeText }}</t-tag>
           </t-descriptions-item>
+          <!-- 费用：积分/小时，0 = 免费使用；预约提交时按计费小时扣除（不足 1 小时按 1 小时计） -->
+          <t-descriptions-item label="费用" :span="2">
+            <t-tag v-if="(space?.feePerHour ?? 0) > 0" variant="light" theme="warning" size="small">
+              {{ space?.feePerHour }} 积分/小时
+            </t-tag>
+            <t-tag v-else variant="light" theme="success" size="small">免费</t-tag>
+          </t-descriptions-item>
           <t-descriptions-item label="配备设备" :span="2">{{ equipmentText }}</t-descriptions-item>
           <t-descriptions-item label="空间说明" :span="2">{{ space?.description || '—' }}</t-descriptions-item>
         </t-descriptions>
       </div>
 
-      <!-- 预约日历（2/3 宽）+ 当月预约明细（1/3 宽） -->
+      <!-- 占用日历（2/3 宽）+ 当月占用明细（1/3 宽）：预约与活动占用合并展示 -->
       <div class="page-card calendar-card">
         <div class="detail-grid">
           <div class="calendar-col">
             <h4 class="card-section-title">预约日历</h4>
-            <!-- cellAppend：在日历单元格原内容之后追加当日预约摘要。
+            <!-- cellAppend：在日历单元格原内容之后追加当日占用摘要（预约 + 活动占用）。
                  插槽作用域 = CalendarCell 本体（源码链路完整验证：calendar-cell.mjs renderContent(name, void 0, { params: cellData })
                  → useContent 包一层 { params: cellData } → useTNodeJSX 里 getParams 再拆掉包装 → handleSlots 把 cellData 本体传给插槽）。
                  因此 #cellAppend="cell" 才正确；写成 "{ cell }" 或 "{ params }" 都会让解构结果为 undefined 而崩溃
                  （每个单元格一次渲染错误，tbody 整体渲染失败 → 只剩控制器和星期表头）。勿改回解构写法。
-                 belongTo === 0 表示本月日期；日期取值统一走 reservationsOn()，不存在返回空数组 -->
+                 belongTo === 0 表示本月日期；日期取值统一走 occupanciesOn()，不存在返回空数组 -->
             <t-calendar :controller-config="calendarController" @controller-change="onControllerChange">
               <template #cellAppend="cell">
-                <template v-if="cell.belongTo === 0 && reservationsOn(cell.formattedDate).length > 0">
+                <template v-if="cell.belongTo === 0 && occupanciesOn(cell.formattedDate).length > 0">
                   <div
-                    v-for="r in reservationsOn(cell.formattedDate).slice(0, 3)"
-                    :key="r.id"
+                    v-for="row in occupanciesOn(cell.formattedDate).slice(0, 3)"
+                    :key="row.key"
                     class="cal-item"
-                    :class="`is-${deriveReservationStatus(r)}`"
-                    :title="`${r.date} ${r.startTime} ~ ${r.endTime} ${r.userName}（${r.purpose}）· ${reservationStatusLabel(r)}`"
+                    :class="row.source === 'event' ? 'is-event' : `is-${row.status}`"
+                    :title="occupancyTooltip(row)"
                   >
-                    {{ r.startTime }} {{ r.userName }}
+                    {{ row.startTime }} {{ row.source === 'event' ? row.title : row.subject }}
                   </div>
-                  <div v-if="reservationsOn(cell.formattedDate).length > 3" class="cal-more">
-                    共 {{ reservationsOn(cell.formattedDate).length }} 条预约
+                  <div v-if="occupanciesOn(cell.formattedDate).length > 3" class="cal-more">
+                    共 {{ occupanciesOn(cell.formattedDate).length }} 条占用
                   </div>
                 </template>
               </template>
@@ -267,29 +335,35 @@ onMounted(load)
               <span class="cal-legend-item is-pending"><i class="legend-dot is-pending" />待审核</span>
               <span class="cal-legend-item is-ended"><i class="legend-dot is-ended" />已结束</span>
               <span class="cal-legend-item is-muted"><i class="legend-dot is-muted" />已驳回/已取消</span>
+              <span class="cal-legend-item is-event"><i class="legend-dot is-event" />活动占用</span>
             </div>
           </div>
           <div class="detail-col">
-            <h4 class="card-section-title">{{ monthKey }} 明细（{{ monthReservations.length }}）</h4>
+            <h4 class="card-section-title">{{ monthKey }} 占用明细（{{ monthReservations.length }}）</h4>
             <t-table
-              row-key="id"
+              row-key="key"
               hover
               size="small"
               :data="monthReservations"
               :columns="detailColumns"
-              empty="该月暂无预约"
+              empty="该月暂无占用"
             >
-              <template #user="{ row }">
-                {{ row.userName }}<t-tag class="id-tag" size="small" variant="light">{{ row.userId }}</t-tag>
+              <template #subject="{ row }">
+                <template v-if="row.source === 'reservation'">
+                  {{ row.subject }}<t-tag class="id-tag" size="small" variant="light">{{ row.subjectTag }}</t-tag>
+                </template>
+                <template v-else>{{ row.subject }}</template>
               </template>
               <template #slot="{ row }">
                 <div class="slot-cell">
                   <span>{{ row.date }}</span>
                   <span class="slot-time">{{ row.startTime }} ~ {{ row.endTime }}</span>
+                  <span v-if="row.source === 'event'" class="slot-time">社区活动「{{ row.title }}」</span>
                 </div>
               </template>
               <template #status="{ row }">
-                <StatusTag entity="reservation" :value="deriveReservationStatus(row)" />
+                <StatusTag v-if="row.source === 'reservation'" entity="reservation" :value="row.status" />
+                <t-tag v-else theme="danger" variant="light" size="small">活动占用</t-tag>
               </template>
             </t-table>
             <div v-if="reservations.length < reservationTotal" class="more-row">
@@ -407,6 +481,11 @@ onMounted(load)
   text-decoration: line-through;
 }
 
+/* 活动占用（已发布活动）：用 error 色与预约五态区分，表示该时段不可预约 */
+.space-detail :deep(.cal-item.is-event) {
+  color: var(--td-error-color);
+}
+
 .space-detail :deep(.cal-more) {
   font-size: 12px;
   color: var(--td-text-color-placeholder);
@@ -452,6 +531,10 @@ onMounted(load)
   background: var(--td-text-color-placeholder);
 }
 
+.legend-dot.is-event {
+  background: var(--td-error-color);
+}
+
 .cal-legend-item.is-approved {
   color: var(--td-success-color);
 }
@@ -470,5 +553,9 @@ onMounted(load)
 
 .cal-legend-item.is-muted {
   color: var(--td-text-color-placeholder);
+}
+
+.cal-legend-item.is-event {
+  color: var(--td-error-color);
 }
 </style>

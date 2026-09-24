@@ -179,7 +179,7 @@ const enrollmentColumns = [
   { colKey: 'name', title: '报名人', width: 100 , ellipsis: true},
   { colKey: 'enterprise', title: '所属企业', width: 150, ellipsis: true },
   { colKey: 'phone', title: '联系电话', width: 130 , ellipsis: true},
-  { colKey: 'appliedAt', title: '报名时间', width: 150 , ellipsis: true},
+  { colKey: 'appliedAt', title: '报名时间', width: 170 , ellipsis: true},
   { colKey: 'status', title: '状态', cell: 'status', width: 96 , ellipsis: true},
   { colKey: 'waitlistOrder', title: '候补顺序', cell: 'waitlistOrder', width: 96, ellipsis: true },
   { colKey: 'op', title: '操作', cell: 'op', width: 120 },
@@ -691,11 +691,14 @@ onMounted(() => load())
   align-items: flex-start;
   justify-content: space-between;
   gap: 16px;
+  /* 窄屏：操作区整行落到左侧信息块下方，不把标题挤成逐字竖排（同 .page-header） */
+  flex-wrap: wrap;
   margin-bottom: 16px;
 }
 
 .head-info {
-  min-width: 0;
+  flex: 1 1 auto;
+  min-width: 240px;
 }
 
 .head-title-row {
@@ -744,6 +747,10 @@ onMounted(() => load())
   align-items: center;
   gap: 8px;
   flex-shrink: 0;
+  /* 换行后仍贴右（同 .page-header-actions） */
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  margin-left: auto;
 }
 
 .tab-body {

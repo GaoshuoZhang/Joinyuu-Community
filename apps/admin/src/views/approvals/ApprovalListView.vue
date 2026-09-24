@@ -49,7 +49,7 @@ const columns = [
   { colKey: 'applicant', title: '申请人', cell: 'applicant', width: 140 , ellipsis: true},
   { colKey: 'targetName', title: '申请对象', width: 160, ellipsis: true },
   { colKey: 'summary', title: '摘要', ellipsis: true },
-  { colKey: 'submittedAt', title: '提交时间', width: 150 , ellipsis: true},
+  { colKey: 'submittedAt', title: '提交时间', width: 170 , ellipsis: true},
   { colKey: 'status', title: '状态', cell: 'status', width: 100 , ellipsis: true},
   { colKey: 'op', title: '操作', cell: 'op', width: 140 },
 ]

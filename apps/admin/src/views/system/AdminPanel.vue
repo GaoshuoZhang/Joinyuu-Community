@@ -25,8 +25,8 @@ const columns = [
   { colKey: 'account', title: '账号', cell: 'account', width: 180 , ellipsis: true},
   { colKey: 'roles', title: '角色', cell: 'roles', width: 200 , ellipsis: true},
   { colKey: 'status', title: '状态', cell: 'status', width: 90 , ellipsis: true},
-  { colKey: 'lastLoginAt', title: '最后登录', cell: 'lastLoginAt', width: 160 , ellipsis: true},
-  { colKey: 'createdAt', title: '创建时间', width: 160 , ellipsis: true},
+  { colKey: 'lastLoginAt', title: '最后登录', cell: 'lastLoginAt', width: 170 , ellipsis: true},
+  { colKey: 'createdAt', title: '创建时间', width: 170 , ellipsis: true},
   { colKey: 'op', title: '操作', cell: 'op', width: 220 },
 ]
 

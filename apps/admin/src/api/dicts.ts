@@ -1,12 +1,8 @@
 import type { DictEntry, DictType } from '@/types'
-import { httpDelete, httpGet, httpPost } from './http'
+import { httpDelete, httpGet, httpPost, httpPut } from './http'
 
-export const dictTypeMap: Record<DictType, string> = {
-  demand_category: '需求类别',
-  industry: '行业',
-  event_type: '活动类型',
-  goods_category: '商品类型',
-}
+/* 字典维护入口：各业务页右上角弹窗（需求类别 → 需求管理页；活动类型 → 活动列表页；
+ * 行业 → 社区企业页；商品类别 → 商品管理页）。写操作走 /system/dicts 权限码。 */
 
 /* 字典加载失败的回退词表（与种子数据初始值一致；页面兜底用，正常不会触发） */
 export const dictFallback: Record<DictType, string[]> = {
@@ -36,11 +32,21 @@ export async function fetchDictEntries(type: DictType): Promise<DictEntry[]> {
 
 export interface DictEntryPayload {
   label: string
+  /* 商品类别专属：类别级可见/可下单范围（空数组 = 不限）；其余字典类型不提交 */
+  visibilityIdentities?: string[]
+  visibilityLevels?: string[]
+  orderIdentities?: string[]
+  orderLevels?: string[]
 }
 
 /* POST /api/admin/dicts/:type — 新增字典项（label 全类型唯一，新增即启用） */
 export async function createDictEntry(type: DictType, payload: DictEntryPayload): Promise<DictEntry> {
   return httpPost<DictEntry>(`/dicts/${type}`, payload)
+}
+
+/* PUT /api/admin/dicts/:type/:code — 编辑字典项（名称 + 商品类别范围；整表单提交） */
+export async function updateDictEntry(type: DictType, code: string, payload: DictEntryPayload): Promise<DictEntry> {
+  return httpPut<DictEntry>(`/dicts/${type}/${code}`, payload)
 }
 
 /* POST /api/admin/dicts/:type/:code/toggle-status — 启用/停用（停用后选项不再下发） */

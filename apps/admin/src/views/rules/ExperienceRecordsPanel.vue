@@ -27,7 +27,7 @@ const columns = [
   { colKey: 'exp', title: '经验值', cell: 'exp', width: 100, resizable: true , ellipsis: true},
   /* 事由文案长度不定：显式声明列宽，避免固定布局下按内容撑开列 */
   { colKey: 'reason', title: '事由', width: 240, ellipsis: true },
-  { colKey: 'at', title: '时间', width: 160, resizable: true , ellipsis: true},
+  { colKey: 'at', title: '时间', width: 170, resizable: true , ellipsis: true},
 ]
 
 /* 前端分页：全量数据交由 t-table 内置分页本地切片（每页 20） */

@@ -65,14 +65,14 @@ const enterpriseLeases = computed(() =>
 const leaseColumns = [
   { colKey: 'id', title: '租约编号', width: 110 , ellipsis: true},
   { colKey: 'workstationLabels', title: '办公位', cell: 'workstations', width: 150, resizable: true , ellipsis: true},
-  { colKey: 'term', title: '租期', cell: 'term', width: 180, resizable: true , ellipsis: true},
+  { colKey: 'term', title: '租期', cell: 'term', width: 220, resizable: true , ellipsis: true},
   { colKey: 'monthlyRent', title: '租金（元）', cell: 'rent', width: 110, resizable: true , ellipsis: true},
   { colKey: 'contactName', title: '联系人', cell: 'contact', width: 140, resizable: true , ellipsis: true},
   { colKey: 'status', title: '状态', cell: 'status', width: 110, resizable: true , ellipsis: true},
 ]
 
 const experienceColumns = [
-  { colKey: 'at', title: '时间', width: 150 , ellipsis: true},
+  { colKey: 'at', title: '时间', width: 170 , ellipsis: true},
   { colKey: 'delta', title: '变动', cell: 'delta', width: 90 , ellipsis: true},
   { colKey: 'balance', title: '余额', width: 90 , ellipsis: true},
   { colKey: 'reason', title: '事由', ellipsis: true },

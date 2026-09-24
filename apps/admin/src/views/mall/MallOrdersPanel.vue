@@ -44,7 +44,7 @@ const dataColumns = [
   { colKey: 'points', title: '兑换积分', width: 90, resizable: true , ellipsis: true},
   { colKey: 'voucherCode', title: '券码', cell: 'voucherCode', width: 130 , ellipsis: true},
   { colKey: 'status', title: '状态', cell: 'status', width: 90, resizable: true , ellipsis: true},
-  { colKey: 'createdAt', title: '下单时间', width: 150, resizable: true , ellipsis: true},
+  { colKey: 'createdAt', title: '下单时间', width: 170, resizable: true , ellipsis: true},
   /* 操作列最宽场景为「核销 / 退款 / 详情」三按钮并排，需留足宽度避免换行溢出 */
   { colKey: 'op', title: '操作', cell: 'op', width: 200 },
 ]

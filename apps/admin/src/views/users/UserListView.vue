@@ -70,7 +70,7 @@ const columns = [
   { colKey: 'realStatus', title: '实名状态', cell: 'realStatus', width: 95 , ellipsis: true},
   { colKey: 'points', title: '积分', width: 80 , ellipsis: true},
   { colKey: 'status', title: '状态', cell: 'status', width: 95 , ellipsis: true},
-  { colKey: 'registeredAt', title: '注册时间', width: 110 , ellipsis: true},
+  { colKey: 'registeredAt', title: '注册时间', width: 170 , ellipsis: true},
   { colKey: 'op', title: '操作', cell: 'op', width: 90 },
 ]
 

@@ -37,6 +37,8 @@ const form = reactive({
   closeTime: '18:00',
   needReservation: false,
   needApproval: false,
+  /** 预约费用（积分/小时）；0 = 免费 */
+  feePerHour: 0,
   description: '',
 })
 
@@ -62,6 +64,7 @@ watch(
       form.closeTime = props.space.closeTime
       form.needReservation = props.space.needReservation ?? false
       form.needApproval = props.space.needApproval ?? false
+      form.feePerHour = props.space.feePerHour ?? 0
       form.description = props.space.description
       equipmentTags.value = [...props.space.equipment]
     } else {
@@ -74,6 +77,7 @@ watch(
       form.closeTime = '18:00'
       form.needReservation = false
       form.needApproval = false
+      form.feePerHour = 0
       form.description = ''
       equipmentTags.value = []
     }
@@ -110,6 +114,7 @@ async function onConfirm() {
       closeTime: form.allDay ? '23:59' : form.closeTime,
       needReservation: form.needReservation,
       needApproval: form.needReservation ? form.needApproval : false,
+      feePerHour: form.feePerHour,
       equipment: [...equipmentTags.value],
       description: form.description,
     }
@@ -199,6 +204,11 @@ function onClose() {
             <t-switch v-model="form.needApproval" />
             <span class="all-day-tip">开启后预约需管理员审核通过方可使用</span>
           </div>
+        </t-form-item>
+      </div>
+      <div class="form-row form-row-single">
+        <t-form-item label="费用" name="feePerHour" help="0 表示免费使用；按「积分/小时」计费，不足 1 小时按 1 小时计">
+          <t-input-number v-model="form.feePerHour" :min="0" theme="normal" suffix="积分/小时" class="ctl-w-full" />
         </t-form-item>
       </div>
       <t-form-item label="配备设备" name="equipment">

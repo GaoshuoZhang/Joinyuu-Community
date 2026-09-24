@@ -50,7 +50,7 @@ const columns = [
   {
     colKey: 'registeredAt',
     title: '登记日期',
-    width: 110,
+    width: 170,
     sorter: true,
     sortType: 'all',
   ellipsis: true,

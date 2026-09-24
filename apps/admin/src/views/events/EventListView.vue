@@ -4,7 +4,7 @@ import ListErrorState from '@/components/ListErrorState.vue'
 import { useListQueryState } from '@/utils/listQuery'
 import { useRouter } from 'vue-router'
 import { MessagePlugin } from 'tdesign-vue-next'
-import { AddIcon, SearchIcon } from 'tdesign-icons-vue-next'
+import { AddIcon, SearchIcon, ViewListIcon } from 'tdesign-icons-vue-next'
 import PageHeader from '@/components/PageHeader.vue'
 import StatusTag from '@/components/StatusTag.vue'
 import ColumnController from '@/components/ColumnController.vue'
@@ -12,6 +12,7 @@ import BulkArchiveDialog from '@/components/BulkArchiveDialog.vue'
 import ExportButton from '@/components/ExportButton.vue'
 import ListEmptyState from '@/components/ListEmptyState.vue'
 import EventFormDialog from '@/components/EventFormDialog.vue'
+import DictEntriesDialog from '@/components/DictEntriesDialog.vue'
 import { dictFallback, fetchDictEntries } from '@/api/dicts'
 import { fetchPointsRules } from '@/api/mall'
 import { statusLabel } from '@/utils/exportCsv'
@@ -39,6 +40,9 @@ const query = reactive({
   participant: '',
 })
 
+/* 活动类型维护弹窗（原「数据字典 > 活动类型」入口；label 即业务存储值，故仅支持新增/启停/删除） */
+const typeDialogVisible = ref(false)
+
 /* 活动类型选项来自数据字典，加载失败回退默认词表 */
 const typeOptions = ref([{ label: '全部', value: '' }, ...dictFallback.event_type.map((t) => ({ label: t, value: t }))])
 
@@ -63,7 +67,7 @@ const columns = [
     title: '活动开始时间',
     cell: 'startTime',
     ellipsis: true,
-    width: 150,
+    width: 170,
     resizable: true,
     sorter: true,
     sortType: 'all',
@@ -72,7 +76,7 @@ const columns = [
     colKey: 'createdAt',
     title: '创建时间',
     cell: 'createdAt',
-    width: 150,
+    width: 170,
     resizable: true,
     sorter: true,
     sortType: 'all',
@@ -411,15 +415,20 @@ onMounted(() => {
     .catch(() => {
       /* 规则加载失败保留默认值 */
     })
-  fetchDictEntries('event_type')
-    .then((entries) => {
-      const labels = entries.filter((e) => e.status === 'enabled').map((e) => ({ label: e.label, value: e.label }))
-      if (labels.length) typeOptions.value = [{ label: '全部', value: '' }, ...labels]
-    })
-    .catch(() => {
-      /* 字典加载失败保留回退词表 */
-    })
+  void loadEventTypes()
 })
+
+/* 活动类型下拉（含「活动类型」弹窗保存后的刷新；原「数据字典 > 活动类型」入口迁移至此）：
+ * 该页类型的 value 与存储值一致（均为 label），故 value 取 label */
+async function loadEventTypes() {
+  try {
+    const entries = await fetchDictEntries('event_type')
+    const labels = entries.filter((e) => e.status === 'enabled').map((e) => ({ label: e.label, value: e.label }))
+    if (labels.length) typeOptions.value = [{ label: '全部', value: '' }, ...labels]
+  } catch {
+    /* 字典加载失败保留回退词表 */
+  }
+}
 
 /* 导出：当前页 / 全部结果（沿用列表筛选） */
 const exportHeaders = ['编号', '活动标题', '类型', '开始时间', '结束时间', '地点', '报名（已通过/容量）', '状态']
@@ -454,6 +463,10 @@ function fetchAllForExport(page: number, pageSize: number) {
           storage-key="events"
           :columns="columns.map((c) => ({ key: c.colKey, title: c.title }))"
         />
+        <t-button variant="outline" @click="typeDialogVisible = true">
+          <template #icon><ViewListIcon /></template>
+          活动类型
+        </t-button>
         <t-button variant="outline" :loading="archivingAll" :disabled="archivingAll" @click="onBulkArchive">
           一键归档
         </t-button>
@@ -470,6 +483,8 @@ function fetchAllForExport(page: number, pageSize: number) {
         </t-button>
       </template>
     </PageHeader>
+
+    <DictEntriesDialog v-model:visible="typeDialogVisible" type="event_type" title="活动类型" @success="loadEventTypes" />
 
     <div class="page-filter-bar">
       <t-input class="ctl-w-xl"
@@ -538,9 +553,9 @@ function fetchAllForExport(page: number, pageSize: number) {
         <template #enrolled="{ row }">
           <div class="stack-cell">
             <span>{{ approvedCount(row) }}/{{ row.capacity }}</span>
-            <!-- 标签色：等于积分规则值=绿色（未自定义），活动自定义值=黄色 -->
+            <!-- 只标数值：标签色区分来源（绿色=沿用积分规则值，黄色=活动自定义值） -->
             <t-tag :theme="enrollPointsTheme(row)" variant="light" size="small">
-              {{ row.enrollPoints != null ? `自定义 ${row.enrollPoints}积分` : `统一 ${rulePoints.enroll}积分` }}
+              {{ row.enrollPoints ?? rulePoints.enroll }}积分
             </t-tag>
           </div>
         </template>
@@ -548,7 +563,7 @@ function fetchAllForExport(page: number, pageSize: number) {
           <div class="stack-cell">
             <span>{{ checkedCount(row) }}/{{ approvedCount(row) }}</span>
             <t-tag :theme="checkinPointsTheme(row)" variant="light" size="small">
-              {{ row.checkinPoints != null ? `自定义 ${row.checkinPoints}积分` : `统一 ${rulePoints.checkin}积分` }}
+              {{ row.checkinPoints ?? rulePoints.checkin }}积分
             </t-tag>
           </div>
         </template>

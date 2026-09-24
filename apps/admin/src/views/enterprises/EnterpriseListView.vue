@@ -2,12 +2,13 @@
 import { computed, onMounted, reactive, ref } from 'vue'
 import { useListQueryState } from '@/utils/listQuery'
 import { useRouter } from 'vue-router'
-import { AddIcon, SearchIcon } from 'tdesign-icons-vue-next'
+import { AddIcon, SearchIcon, ViewListIcon } from 'tdesign-icons-vue-next'
 import PageHeader from '@/components/PageHeader.vue'
 import ExportButton from '@/components/ExportButton.vue'
 import ListEmptyState from '@/components/ListEmptyState.vue'
 import StatusTag from '@/components/StatusTag.vue'
 import EnterpriseFormDialog from '@/components/EnterpriseFormDialog.vue'
+import DictEntriesDialog from '@/components/DictEntriesDialog.vue'
 import ColumnController from '@/components/ColumnController.vue'
 import { fetchEnterprises } from '@/api/enterprises'
 import ListErrorState from '@/components/ListErrorState.vue'
@@ -29,6 +30,9 @@ const query = reactive({
   status: '',
 })
 
+/* 行业维护弹窗（原「数据字典 > 行业」入口；label 即业务存储值，故仅支持新增/启停/删除） */
+const industryDialogVisible = ref(false)
+
 /* 行业选项来自数据字典，加载失败回退默认词表 */
 const industryOptions = ref([
   { label: '全部', value: '' },
@@ -48,7 +52,7 @@ const columns = [
   { colKey: 'size', title: '规模', width: 110 , ellipsis: true},
   { colKey: 'leaseType', title: '入驻类型', width: 120 , ellipsis: true},
   { colKey: 'level', title: '企业等级', width: 130, cell: 'level' , ellipsis: true},
-  { colKey: 'settledAt', title: '入驻时间', width: 120, cell: 'settledAt' , ellipsis: true},
+  { colKey: 'settledAt', title: '入驻时间', width: 170, cell: 'settledAt' , ellipsis: true},
   { colKey: 'status', title: '状态', width: 100, cell: 'status' , ellipsis: true},
   { colKey: 'op', title: '操作', width: 90, cell: 'op' },
 ]
@@ -145,15 +149,20 @@ const { syncQuery } = useListQueryState(query, load)
 
 onMounted(() => {
   load()
-  fetchDictEntries('industry')
-    .then((entries) => {
-      const labels = entries.filter((e) => e.status === 'enabled').map((e) => ({ label: e.label, value: e.label }))
-      if (labels.length) industryOptions.value = [{ label: '全部', value: '' }, ...labels]
-    })
-    .catch(() => {
-      /* 字典加载失败保留回退词表 */
-    })
+  void loadIndustries()
 })
+
+/* 行业下拉（含「行业管理」弹窗保存后的刷新；原「数据字典 > 行业」入口迁移至此）：
+ * 该页行业的 value 与存储值一致（均为 label），故 value 取 label */
+async function loadIndustries() {
+  try {
+    const entries = await fetchDictEntries('industry')
+    const labels = entries.filter((e) => e.status === 'enabled').map((e) => ({ label: e.label, value: e.label }))
+    if (labels.length) industryOptions.value = [{ label: '全部', value: '' }, ...labels]
+  } catch {
+    /* 字典加载失败保留回退词表 */
+  }
+}
 </script>
 
 <template>
@@ -167,6 +176,10 @@ onMounted(() => {
           storage-key="enterprises"
           :columns="columns.map((c) => ({ key: c.colKey, title: c.title }))"
         />
+        <t-button variant="outline" @click="industryDialogVisible = true">
+          <template #icon><ViewListIcon /></template>
+          行业管理
+        </t-button>
         <ExportButton
           filename="社区企业列表"
           :headers="exportHeaders"
@@ -180,6 +193,8 @@ onMounted(() => {
         </t-button>
       </template>
     </PageHeader>
+
+    <DictEntriesDialog v-model:visible="industryDialogVisible" type="industry" title="行业管理" entry-name="行业" @success="loadIndustries" />
 
     <div class="page-filter-bar">
       <t-input class="ctl-w-xl"

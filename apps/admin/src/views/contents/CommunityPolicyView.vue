@@ -22,7 +22,7 @@ const columns = [
   { colKey: 'featured', title: '展示', cell: 'featured', width: 90 },
   { colKey: 'status', title: '状态', cell: 'status', width: 90 },
   { colKey: 'publisher', title: '发布人', cell: 'publisher', width: 120, ellipsis: true },
-  { colKey: 'updatedAt', title: '更新时间', cell: 'updatedAt', width: 160, ellipsis: true },
+  { colKey: 'updatedAt', title: '更新时间', cell: 'updatedAt', width: 170, ellipsis: true },
   { colKey: 'op', title: '操作', cell: 'op', width: 100 },
 ]
 

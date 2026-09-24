@@ -595,6 +595,12 @@ export interface LevelTier {
   label: string
   /** 达到该等级所需累计经验值门槛 */
   threshold: number
+  /** 积分消费折扣：1 = 1 折 … 10 = 原价（支持一位小数，如 8.5 = 85 折；商城兑换 / 空间预约费用按等级折扣扣分） */
+  pointsDiscount: number
+  /** 该等级每日需求发布额度（-1 不限 / 0 禁止 / 正整数） */
+  demandPublishLimit: number
+  /** 该等级每日文章投稿额度 */
+  articleSubmitLimit: number
 }
 
 export type LevelTierScope = 'community_individual' | 'community_enterprise'
@@ -729,6 +735,8 @@ export interface Space {
   needReservation?: boolean
   /** 是否需要审核（仅 needReservation 开启时有效） */
   needApproval?: boolean
+  /** 预约费用（积分/小时）；0 = 免费使用 */
+  feePerHour: number
   /** 配备设备 */
   equipment: string[]
   status: SpaceStatus
@@ -1115,6 +1123,11 @@ export interface DictEntry {
   label: string
   sort: number
   status: 'enabled' | 'disabled'
+  /* 商品类别（type=goods_category）专属：类别级可见/可下单范围门槛（空数组 = 不限）；其余字典类型恒为空数组 */
+  visibilityIdentities: string[]
+  visibilityLevels: string[]
+  orderIdentities: string[]
+  orderLevels: string[]
 }
 
 /* ---------- 首页轮播图（内容管理） ---------- */

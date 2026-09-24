@@ -27,7 +27,8 @@ const columns = [
   { colKey: 'capacity', title: '容量', cell: 'capacity', width: 80, resizable: true , ellipsis: true},
   { colKey: 'location', title: '位置', width: 130, resizable: true , ellipsis: true},
   { colKey: 'booking', title: '预约方式', cell: 'booking', width: 150, resizable: true , ellipsis: true},
-  { colKey: 'time', title: '开放时段', cell: 'time', width: 120, resizable: true , ellipsis: true},
+  { colKey: 'fee', title: '费用', cell: 'fee', width: 120, resizable: true , ellipsis: true},
+  { colKey: 'time', title: '开放时段', cell: 'time', width: 140, resizable: true , ellipsis: true},
   { colKey: 'equipment', title: '设备', cell: 'equipment', width: 200, resizable: true , ellipsis: true},
   { colKey: 'status', title: '状态', cell: 'status', width: 100, resizable: true , ellipsis: true},
   { colKey: 'op', title: '操作', cell: 'op', width: 210 },
@@ -139,6 +140,13 @@ onMounted(load)
         </template>
         <template #booking="{ row }">
           <t-tag variant="outline" size="small">{{ bookingText(row) }}</t-tag>
+        </template>
+        <template #fee="{ row }">
+          <!-- 费用：积分/小时，0 = 免费（与客户端空间列表同一展示口径） -->
+          <t-tag v-if="row.feePerHour > 0" variant="light" theme="warning" size="small">
+            {{ row.feePerHour }} 积分/小时
+          </t-tag>
+          <t-tag v-else variant="light" theme="success" size="small">免费</t-tag>
         </template>
         <template #capacity="{ row }">
           {{ row.capacity ?? '—' }}

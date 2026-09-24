@@ -36,22 +36,24 @@ export async function fetchExperienceIssuanceRecords(): Promise<ExperienceRecord
 
 /* ---------- 等级梯度（整组保存，最低 1 级、最多 10 级，门槛严格递增） ---------- */
 
-/* GET /api/admin/rules/levels — 等级梯度（level 升序） */
+/* GET /api/admin/rules/levels — 等级梯度（level 升序）+ 该等级每日需求发布/文章投稿额度 + 积分消费折扣 */
 export async function fetchLevelTiers(scope: LevelTierScope): Promise<ScopedLevelTiers> {
   const tiers = await httpGet<LevelTier[]>(`/rules/levels?identityType=${scope}`)
   return { scope, tiers }
 }
 
-/* PUT /api/admin/rules/levels — 整组保存等级梯度 { tiers: [{ level, label, threshold }] }；
- * 保存后需重算存量社区个体/社区企业身份的等级（梯度变更仅影响后续结算） */
+/* PUT /api/admin/rules/levels — 整组保存等级梯度
+ * { identityType, tiers: [{ level, label, threshold, pointsDiscount, demandPublishLimit, articleSubmitLimit }] }；
+ * 保存后需重算存量社区个体/社区企业身份的等级（梯度变更仅影响后续结算），发布额度与折扣随同事务写入 */
 export async function saveLevelTiers(scope: LevelTierScope, tiers: LevelTier[]): Promise<{ code: number }> {
   return httpPut<{ code: number }>('/rules/levels', { identityType: scope, tiers })
 }
 
-/* ---------- 发布限制（身份组固定，社区身份按动态等级展开） ---------- */
+/* ---------- 发布限制（个人用户固定身份组；社区身份额度按等级在等级规则页维护） ---------- */
 
+/* GET /api/admin/rules/publishing-limits?scope=personal — 个人用户（未实名/已实名）两行 */
 export async function fetchPublishLimits(): Promise<PublishLimitRule[]> {
-  return httpGet<PublishLimitRule[]>('/rules/publishing-limits')
+  return httpGet<PublishLimitRule[]>('/rules/publishing-limits?scope=personal')
 }
 
 export async function savePublishLimits(rules: PublishLimitRule[]): Promise<{ code: number }> {

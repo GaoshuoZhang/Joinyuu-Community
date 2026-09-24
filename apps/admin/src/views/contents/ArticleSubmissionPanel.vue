@@ -54,7 +54,7 @@ const columns = [
   { colKey: 'author', title: '投稿方', cell: 'author', width: 150, resizable: true , ellipsis: true},
   { colKey: 'columns', title: '栏目', cell: 'columns', width: 110, resizable: true , ellipsis: true},
   { colKey: 'status', title: '状态', cell: 'status', width: 130, resizable: true , ellipsis: true},
-  { colKey: 'createdAt', title: '提交时间', cell: 'createdAt', width: 160, resizable: true , ellipsis: true},
+  { colKey: 'createdAt', title: '提交时间', cell: 'createdAt', width: 170, resizable: true , ellipsis: true},
   { colKey: 'op', title: '操作', cell: 'op', width: 300 },
 ]
 

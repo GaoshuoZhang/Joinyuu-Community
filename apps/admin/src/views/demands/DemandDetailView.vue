@@ -37,7 +37,7 @@ const respondentColumns = [
   { colKey: 'name', title: '响应人', width: 120 , ellipsis: true},
   { colKey: 'enterprise', title: '所属', width: 160, ellipsis: true },
   { colKey: 'message', title: '留言', ellipsis: true },
-  { colKey: 'at', title: '时间', width: 150 , ellipsis: true},
+  { colKey: 'at', title: '时间', width: 170 , ellipsis: true},
   { colKey: 'status', title: '状态', cell: 'status', width: 100 , ellipsis: true},
 ]
 

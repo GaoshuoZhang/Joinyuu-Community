@@ -45,7 +45,7 @@ const columns = [
   { colKey: 'id', title: '预约编号', width: 110 , ellipsis: true},
   { colKey: 'user', title: '预约人', cell: 'user', width: 120 , ellipsis: true},
   { colKey: 'spaceName', title: '空间', width: 120, ellipsis: true },
-  { colKey: 'slot', title: '日期 / 时段', cell: 'slot', width: 170, resizable: true , ellipsis: true},
+  { colKey: 'slot', title: '日期 / 时段', cell: 'slot', width: 220, resizable: true , ellipsis: true},
   { colKey: 'purpose', title: '用途', ellipsis: true },
   { colKey: 'attendees', title: '人数', width: 70, resizable: true , ellipsis: true},
   { colKey: 'status', title: '状态', cell: 'status', width: 100, resizable: true , ellipsis: true},

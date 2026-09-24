@@ -198,7 +198,7 @@ const router = createRouter({
         {
           path: 'rules/publishing-limits',
           component: () => import('@/views/rules/PublishLimitsPanel.vue'),
-          meta: { title: '发布限制', group: '规则管理', perm: '/rules/publishing-limits' },
+          meta: { title: '个人用户规则', group: '规则管理', perm: '/rules/publishing-limits' },
         },
         {
           path: 'workstations',
@@ -269,11 +269,6 @@ const router = createRouter({
           path: 'contents/announcements',
           component: () => import('@/views/contents/AnnouncementsPanel.vue'),
           meta: { title: '首页公告', group: '内容管理' },
-        },
-        {
-          path: 'system/dicts',
-          component: () => import('@/views/system/DictPanel.vue'),
-          meta: { title: '数据字典', group: '系统管理' },
         },
         {
           path: 'system/config',

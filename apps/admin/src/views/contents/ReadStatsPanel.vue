@@ -39,7 +39,7 @@ const columns = [
   { colKey: 'columnNames', title: '栏目', cell: 'columnNames', width: 120, resizable: true , ellipsis: true},
   { colKey: 'authorName', title: '作者', width: 120, resizable: true , ellipsis: true},
   { colKey: 'views', title: '阅读量', cell: 'views', width: 100, resizable: true , ellipsis: true},
-  { colKey: 'publishedAt', title: '发布时间', cell: 'publishedAt', width: 160, resizable: true , ellipsis: true},
+  { colKey: 'publishedAt', title: '发布时间', cell: 'publishedAt', width: 170, resizable: true , ellipsis: true},
 ]
 
 /* 列配置：本地持久化显隐/顺序 */

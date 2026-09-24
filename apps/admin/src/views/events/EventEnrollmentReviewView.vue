@@ -44,7 +44,7 @@ const columns = [
   { colKey: 'name', title: '报名人', cell: 'name', width: 150, resizable: true, ellipsis: true },
   { colKey: 'identities', title: '关联身份', cell: 'identities', width: 240, resizable: true, ellipsis: true },
   { colKey: 'phone', title: '联系电话', cell: 'phone', width: 130, resizable: true, ellipsis: true },
-  { colKey: 'appliedAt', title: '报名时间', width: 150, resizable: true, ellipsis: true },
+  { colKey: 'appliedAt', title: '报名时间', width: 170, resizable: true, ellipsis: true },
   { colKey: 'status', title: '状态', cell: 'status', width: 100, resizable: true, ellipsis: true },
   { colKey: 'waitlistOrder', title: '候补顺序', cell: 'waitlistOrder', width: 100, resizable: true, ellipsis: true },
   { colKey: 'checkedIn', title: '签到', cell: 'checkedIn', width: 90, resizable: true, ellipsis: true },

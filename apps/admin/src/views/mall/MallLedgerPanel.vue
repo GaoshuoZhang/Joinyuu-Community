@@ -26,7 +26,7 @@ const columns = [
   { colKey: 'delta', title: '变动', cell: 'delta', width: 90, resizable: true , ellipsis: true},
   { colKey: 'balance', title: '变动后余额', width: 110, resizable: true , ellipsis: true},
   { colKey: 'reason', title: '事由', ellipsis: true },
-  { colKey: 'at', title: '时间', width: 160, resizable: true , ellipsis: true},
+  { colKey: 'at', title: '时间', width: 170, resizable: true , ellipsis: true},
 ]
 
 /* 前端分页：全量数据交由 t-table 内置分页本地切片（每页 20） */

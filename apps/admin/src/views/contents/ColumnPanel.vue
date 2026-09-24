@@ -25,7 +25,7 @@ const columns = [
   { colKey: 'articleCount', title: '文章数', cell: 'articleCount', width: 90, resizable: true , ellipsis: true},
   { colKey: 'submissionOpen', title: '开放投稿', cell: 'submissionOpen', width: 110, resizable: true , ellipsis: true},
   { colKey: 'status', title: '状态', cell: 'status', width: 90, resizable: true , ellipsis: true},
-  { colKey: 'createdAt', title: '创建时间', cell: 'createdAt', width: 160, resizable: true , ellipsis: true},
+  { colKey: 'createdAt', title: '创建时间', cell: 'createdAt', width: 170, resizable: true , ellipsis: true},
   { colKey: 'op', title: '操作', cell: 'op', width: 170 },
 ]
 

@@ -342,7 +342,7 @@ const pointsAdjustVisible = ref(false)
 const pointsAdjusting = ref(false)
 
 const ledgerColumns = [
-  { colKey: 'at', title: '时间', width: 150 , ellipsis: true},
+  { colKey: 'at', title: '时间', width: 170 , ellipsis: true},
   { colKey: 'delta', title: '变动', cell: 'delta', width: 90 , ellipsis: true},
   { colKey: 'balance', title: '余额', width: 90 , ellipsis: true},
   { colKey: 'reason', title: '事由', ellipsis: true },
@@ -411,14 +411,14 @@ const applicationColumns = [
   { colKey: 'type', title: '申请类型', width: 110, cell: 'appType' },
   { colKey: 'targetName', title: '申请对象', ellipsis: true },
   { colKey: 'status', title: '状态', width: 100, cell: 'status' },
-  { colKey: 'submittedAt', title: '提交时间', width: 150, ellipsis: true },
+  { colKey: 'submittedAt', title: '提交时间', width: 170, ellipsis: true },
 ]
 
 const demandColumns = [
   { colKey: 'id', title: '需求编号', width: 110, ellipsis: true },
   { colKey: 'title', title: '需求标题', ellipsis: true },
   { colKey: 'status', title: '状态', width: 100, cell: 'status' },
-  { colKey: 'createdAt', title: '创建时间', width: 150, ellipsis: true },
+  { colKey: 'createdAt', title: '创建时间', width: 170, ellipsis: true },
 ]
 
 const projectColumns = [
@@ -426,7 +426,7 @@ const projectColumns = [
   { colKey: 'name', title: '项目名称', ellipsis: true },
   { colKey: 'code', title: '项目代号', width: 120, ellipsis: true },
   { colKey: 'status', title: '状态', width: 100, cell: 'status' },
-  { colKey: 'initiatedAt', title: '立项时间', width: 150, ellipsis: true },
+  { colKey: 'initiatedAt', title: '立项时间', width: 170, ellipsis: true },
 ]
 
 const eventColumns = [
@@ -439,23 +439,23 @@ const eventColumns = [
 const recordLeaseColumns = [
   { colKey: 'id', title: '租约编号', width: 110, ellipsis: true },
   { colKey: 'renterName', title: '租赁方', ellipsis: true },
-  { colKey: 'term', title: '租期', width: 210, cell: 'term' },
+  { colKey: 'term', title: '租期', width: 220, cell: 'term' },
   { colKey: 'status', title: '状态', width: 100, cell: 'status' },
-  { colKey: 'terminatedAt', title: '终止时间', width: 150, ellipsis: true, cell: 'terminatedAt' },
+  { colKey: 'terminatedAt', title: '终止时间', width: 170, ellipsis: true, cell: 'terminatedAt' },
 ]
 
 const submissionColumns = [
   { colKey: 'id', title: '投稿编号', width: 110, ellipsis: true },
   { colKey: 'title', title: '稿件标题', ellipsis: true },
   { colKey: 'status', title: '状态', width: 100, cell: 'status' },
-  { colKey: 'createdAt', title: '投稿时间', width: 150, ellipsis: true },
+  { colKey: 'createdAt', title: '投稿时间', width: 170, ellipsis: true },
 ]
 
 const reservationColumns = [
   { colKey: 'id', title: '预约编号', width: 110, ellipsis: true },
   { colKey: 'spaceName', title: '空间名称', ellipsis: true },
-  { colKey: 'date', title: '预约日期', width: 120 },
-  { colKey: 'time', title: '使用时段', width: 150, cell: 'time' },
+  { colKey: 'date', title: '预约日期', width: 170 },
+  { colKey: 'time', title: '使用时段', width: 140, cell: 'time' },
   { colKey: 'status', title: '状态', width: 100, cell: 'status' },
 ]
 

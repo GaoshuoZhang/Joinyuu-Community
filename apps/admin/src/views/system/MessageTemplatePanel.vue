@@ -440,7 +440,7 @@ function versionActionLabel(version: MessageTemplateVersion): string {
               { colKey: 'subject', title: '主题', width: 140 },
               { colKey: 'body', title: '正文', minWidth: 180 },
               { colKey: 'status', title: '状态', width: 100 },
-              { colKey: 'createdAt', title: '创建时间', width: 150 },
+              { colKey: 'createdAt', title: '创建时间', width: 170 },
               { colKey: 'op', title: '操作', width: 100, fixed: 'right' },
             ]"
             table-layout="fixed"

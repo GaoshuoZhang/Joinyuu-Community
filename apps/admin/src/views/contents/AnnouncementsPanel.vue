@@ -44,7 +44,7 @@ const columns = [
   { colKey: 'status', title: '状态', cell: 'status', width: 90, resizable: true, ellipsis: true },
   { colKey: 'enabled', title: '启用', cell: 'enabled', width: 90, resizable: true, ellipsis: true },
   { colKey: 'expireAt', title: '有效期', cell: 'expireAt', width: 190, resizable: true, ellipsis: true },
-  { colKey: 'publishedAt', title: '发布时间', cell: 'publishedAt', width: 160, resizable: true, ellipsis: true },
+  { colKey: 'publishedAt', title: '发布时间', cell: 'publishedAt', width: 170, resizable: true, ellipsis: true },
   { colKey: 'link', title: '跳转链接', cell: 'link', width: 180, resizable: true, ellipsis: true },
   { colKey: 'op', title: '操作', cell: 'op', width: 200 },
 ]

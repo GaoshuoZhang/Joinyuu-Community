@@ -39,7 +39,7 @@ const columns = [
   { colKey: 'others', title: '其他关联身份', cell: 'others' , ellipsis: true},
   { colKey: 'points', title: '积分', width: 85 , ellipsis: true},
   { colKey: 'status', title: '状态', cell: 'status', width: 95 , ellipsis: true},
-  { colKey: 'registeredAt', title: '注册时间', width: 115 , ellipsis: true},
+  { colKey: 'registeredAt', title: '注册时间', width: 170 , ellipsis: true},
   { colKey: 'op', title: '操作', cell: 'op', width: 90 },
 ]
 

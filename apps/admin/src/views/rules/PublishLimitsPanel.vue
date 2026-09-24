@@ -12,17 +12,12 @@ const loadError = ref('')
 type EditablePublishLimitRule = PublishLimitRule & { key: string }
 const rows = ref<EditablePublishLimitRule[]>([])
 
-const scopeOrder: PublishLimitScope[] = [
-  'personal_unverified',
-  'personal_verified',
-  'community_individual',
-  'community_enterprise',
-]
-const scopeLabels: Record<PublishLimitScope, string> = {
+/* 个人用户规则页：仅个人用户（未实名/已实名）两个固定身份组；
+ * 社区个体/社区企业的按等级额度与积分消费折扣在「等级规则」页维护（PublishingLimitRule 同一张表） */
+const scopeOrder: PublishLimitScope[] = ['personal_unverified', 'personal_verified']
+const scopeLabels: Record<'personal_unverified' | 'personal_verified', string> = {
   personal_unverified: '个人用户 · 未实名',
   personal_verified: '个人用户 · 已实名',
-  community_individual: '社区个体',
-  community_enterprise: '社区企业',
 }
 const limitKeys = ['demandPublishLimit', 'articleSubmitLimit', 'eventEnrollLimit', 'spaceReserveLimit'] as const
 const columns = [
@@ -41,10 +36,7 @@ function limitNote(value: number): string {
   if (value === 0) return '禁止'
   return ''
 }
-const sortedRows = computed(() => [...rows.value].sort((a, b) => {
-  const scopeDelta = scopeOrder.indexOf(a.scope) - scopeOrder.indexOf(b.scope)
-  return scopeDelta || (a.level ?? 0) - (b.level ?? 0)
-}))
+const sortedRows = computed(() => [...rows.value].sort((a, b) => scopeOrder.indexOf(a.scope) - scopeOrder.indexOf(b.scope)))
 
 async function load() {
   loading.value = true
@@ -67,7 +59,7 @@ async function onSave() {
   saving.value = true
   try {
     await savePublishLimits(rows.value.map(({ key: _key, ...row }) => row))
-    MessagePlugin.success('发布限制已保存')
+    MessagePlugin.success('个人用户规则已保存')
     await load()
   } catch (e) {
     MessagePlugin.error(e instanceof Error ? e.message : '保存失败')
@@ -81,7 +73,7 @@ onMounted(load)
 
 <template>
   <div class="publish-limits-panel page-fade-in">
-    <PageHeader title="发布限制" description="按身份与社区等级配置每日业务操作额度" />
+    <PageHeader title="个人用户规则" description="个人用户（未实名 / 已实名）的每日业务操作额度；社区个体与社区企业的额度按等级在「等级规则」页配置" />
     <t-alert theme="info">
       <div class="rule-guide" role="note">
         <span><strong>-1</strong> 表示不限次数</span>
@@ -91,10 +83,9 @@ onMounted(load)
     </t-alert>
     <ListErrorState v-if="loadError" :message="loadError" :loading="loading" @retry="load" />
     <div class="page-card">
-      <t-table row-key="key" table-layout="fixed" resizable :data="sortedRows" :columns="columns" :loading="loading" empty="暂无发布限制规则">
+      <t-table row-key="key" table-layout="fixed" resizable :data="sortedRows" :columns="columns" :loading="loading" empty="暂无个人用户规则">
         <template #scope="{ row }">
-          <div class="scope-name">{{ scopeLabels[row.scope as PublishLimitScope] }}</div>
-          <div v-if="row.scope.startsWith('community_')" class="scope-note">按当前身份等级命中</div>
+          <div class="scope-name">{{ scopeLabels[row.scope as 'personal_unverified' | 'personal_verified'] }}</div>
         </template>
         <template #level="{ row }">
           <div v-if="row.level" class="level-cell"><span>{{ row.level }} 级</span><small>{{ row.levelLabel || '未命名' }}</small></div>
@@ -119,7 +110,7 @@ onMounted(load)
     </div>
     <div class="page-card save-card">
       <span class="save-tip">保存后新发生的需求发布、文章投稿、活动报名和空间预约立即按新额度校验。</span>
-      <t-button theme="primary" :loading="saving" :disabled="loading || !rows.length" @click="onSave">保存发布限制</t-button>
+      <t-button theme="primary" :loading="saving" :disabled="loading || !rows.length" @click="onSave">保存规则</t-button>
     </div>
   </div>
 </template>

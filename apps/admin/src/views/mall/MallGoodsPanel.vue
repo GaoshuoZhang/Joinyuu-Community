@@ -3,10 +3,11 @@ import { computed, onMounted, reactive, ref } from 'vue'
 import ListErrorState from '@/components/ListErrorState.vue'
 import { useListQueryState } from '@/utils/listQuery'
 import { MessagePlugin } from 'tdesign-vue-next'
-import { AddIcon, SearchIcon } from 'tdesign-icons-vue-next'
+import { AddIcon, SearchIcon, ViewListIcon } from 'tdesign-icons-vue-next'
 import PageHeader from '@/components/PageHeader.vue'
 import StatusTag from '@/components/StatusTag.vue'
 import GoodsFormDialog from '@/components/GoodsFormDialog.vue'
+import GoodsCategoryDialog from '@/components/GoodsCategoryDialog.vue'
 import ColumnController from '@/components/ColumnController.vue'
 import ExportButton from '@/components/ExportButton.vue'
 import ListEmptyState from '@/components/ListEmptyState.vue'
@@ -46,6 +47,9 @@ const statusOptions = [
   { label: '待补货', value: 'restock' },
 ]
 
+/* 商品类别维护弹窗（原「数据字典 > 商品类型」入口，含类别级可见/可下单范围） */
+const categoryDialogVisible = ref(false)
+
 const dataColumns = [
   { colKey: 'name', title: '商品', cell: 'name', width: 220, resizable: true , ellipsis: true},
   { colKey: 'category', title: '类型', cell: 'category', width: 100, resizable: true , ellipsis: true},
@@ -53,7 +57,7 @@ const dataColumns = [
   { colKey: 'stock', title: '库存', cell: 'stock', width: 90, resizable: true , ellipsis: true},
   { colKey: 'redeemedCount', title: '累计兑换', width: 100, resizable: true , ellipsis: true},
   { colKey: 'status', title: '状态', cell: 'status', width: 100, resizable: true , ellipsis: true},
-  { colKey: 'createdAt', title: '创建时间', width: 150, resizable: true , ellipsis: true},
+  { colKey: 'createdAt', title: '创建时间', width: 170, resizable: true , ellipsis: true},
   { colKey: 'op', title: '操作', cell: 'op', width: 170 },
 ]
 
@@ -184,15 +188,21 @@ const { syncQuery } = useListQueryState(query, load)
 
 onMounted(() => {
   load()
-  fetchDictEntries('goods_category')
-    .then((entries) => {
-      const options = entries
-        .filter((e) => e.status === 'enabled')
-        .map((e) => ({ label: e.label, value: e.code }))
-      if (options.length) categoryOptions.value = [{ label: '全部', value: '' }, ...options]
-    })
-    .catch(() => undefined)
+  void loadCategories()
 })
+
+/** 类别下拉（含「商品类别」弹窗保存后的刷新）：取字典启用项 */
+async function loadCategories() {
+  try {
+    const entries = await fetchDictEntries('goods_category')
+    const options = entries
+      .filter((e) => e.status === 'enabled')
+      .map((e) => ({ label: e.label, value: e.code }))
+    if (options.length) categoryOptions.value = [{ label: '全部', value: '' }, ...options]
+  } catch {
+    /* 字典不可用时保留本地兜底选项 */
+  }
+}
 </script>
 
 <template>
@@ -212,12 +222,18 @@ onMounted(() => {
           :fetch-all="fetchAllForExport"
           :map-row="mapRow"
         />
+        <t-button variant="outline" @click="categoryDialogVisible = true">
+          <template #icon><ViewListIcon /></template>
+          商品类别
+        </t-button>
         <t-button theme="primary" @click="openCreate">
           <template #icon><AddIcon /></template>
           新增商品
         </t-button>
       </template>
     </PageHeader>
+
+    <GoodsCategoryDialog v-model:visible="categoryDialogVisible" @success="loadCategories" />
 
     <div class="page-filter-bar">
       <t-input class="ctl-w-xl"

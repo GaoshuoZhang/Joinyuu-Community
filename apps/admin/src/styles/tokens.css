@@ -184,7 +184,16 @@ html[data-route-loading='true']::after {
   align-items: flex-end;
   justify-content: space-between;
   gap: 16px;
+  /* 窄屏换行：内容区被侧栏挤窄（或窗口收窄）时，右侧操作区整行落到标题下方，
+   * 而不是把标题块压成逐字竖排（标题块另有 min-width 兜底，见 .page-header-main） */
+  flex-wrap: wrap;
   margin-bottom: 16px;
+}
+
+/* 标题块：低于下限宽度就让操作区换行。20px 标题 + 14px 描述在 260px 内可正常排两行 */
+.page-header-main {
+  flex: 1 1 auto;
+  min-width: 260px;
 }
 
 .page-header .page-title {
@@ -206,6 +215,10 @@ html[data-route-loading='true']::after {
   align-items: center;
   gap: 8px;
   flex-shrink: 0;
+  /* 操作按钮自身也允许换行（超窄时排成两行），换行后仍贴右 */
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  margin-left: auto;
 }
 
 /* 筛选区统一包裹 */

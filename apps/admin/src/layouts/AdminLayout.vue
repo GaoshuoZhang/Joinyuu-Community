@@ -470,20 +470,16 @@ async function handleDropdown(item: { value?: string | number }) {
             </t-menu-item>
             <t-menu-item value="/rules/publishing-limits" v-permission="'/rules/publishing-limits'">
               <template #icon><SettingIcon /></template>
-              发布限制
+              个人用户规则
             </t-menu-item>
           </t-submenu>
 
           <t-submenu
-            v-if="canSee(['/system/dicts', '/system/config', '/logs/audit', '/logs/login', '/system/roles', '/system/admins', '/system/sessions', '/system/assets', '/system/monitor', '/system/trash', '/system/policies', '/system/messages'], '系统管理') || canSee(['/approvals', '/member-governance'], '系统管理', 'members')"
+            v-if="canSee(['/system/config', '/logs/audit', '/logs/login', '/system/roles', '/system/admins', '/system/sessions', '/system/assets', '/system/monitor', '/system/trash', '/system/policies', '/system/messages'], '系统管理') || canSee(['/approvals', '/member-governance'], '系统管理', 'members')"
             value="group-system"
             title="系统管理"
           >
             <template #icon><LayersIcon /></template>
-            <t-menu-item value="/system/dicts" v-permission="'/system/dicts'">
-              <template #icon><AppIcon /></template>
-              数据字典
-            </t-menu-item>
             <t-menu-item value="/system/config" v-permission="'/system/config'">
               <template #icon><SettingIcon /></template>
               系统配置

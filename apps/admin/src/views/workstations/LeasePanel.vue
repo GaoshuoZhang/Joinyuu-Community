@@ -96,7 +96,7 @@ const columns = [
   { colKey: 'id', title: '租约编号', width: 110, resizable: true , ellipsis: true},
   { colKey: 'enterpriseName', title: '租赁方', cell: 'enterprise', width: 150, resizable: true , ellipsis: true},
   { colKey: 'workstationLabels', title: '办公位', cell: 'workstations', width: 150, resizable: true , ellipsis: true},
-  { colKey: 'term', title: '租期', cell: 'term', width: 180, resizable: true , ellipsis: true},
+  { colKey: 'term', title: '租期', cell: 'term', width: 220, resizable: true , ellipsis: true},
   { colKey: 'monthlyRent', title: '租金（元）', cell: 'rent', width: 110, resizable: true , ellipsis: true},
   { colKey: 'contactName', title: '联系人', cell: 'contact', width: 140, resizable: true , ellipsis: true},
   { colKey: 'note', title: '备注', cell: 'note', width: 140, resizable: true , ellipsis: true},

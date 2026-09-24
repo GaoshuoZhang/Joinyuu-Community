@@ -32,6 +32,8 @@ export interface SpacePayload {
   needReservation: boolean
   /** 是否需要审核（needReservation 开启时有效） */
   needApproval: boolean
+  /** 预约费用（积分/小时）；0 = 免费使用 */
+  feePerHour: number
   equipment: string[]
   description: string
 }
@@ -112,4 +114,21 @@ export interface SpaceOccupancy {
 /* GET /api/admin/spaces/usage-board?date — 指定日期的空间占用视图 */
 export async function fetchSpaceUsageBoard(date: string): Promise<SpaceOccupancy[]> {
   return httpGet<SpaceOccupancy[]>(`/spaces/usage-board?date=${date}`)
+}
+
+/* ---------- 空间的活动占用（详情页日历/明细用） ---------- */
+
+/** 活动占用项：按日展开，startTime/endTime 为该日的占用时段（跨天活动按天裁剪） */
+export interface SpaceEventOccupancy {
+  eventId: string
+  date: string
+  startTime: string
+  endTime: string
+  title: string
+  host: string
+}
+
+/* GET /api/admin/spaces/:id/event-occupancy — 空间名/地址命中的已发布活动（与客户端可约时段同一口径） */
+export async function fetchSpaceEventOccupancy(spaceId: string): Promise<SpaceEventOccupancy[]> {
+  return httpGet<SpaceEventOccupancy[]>(`/spaces/${spaceId}/event-occupancy`)
 }

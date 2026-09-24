@@ -85,7 +85,7 @@ export const permissionGroups: PermissionGroup[] = [
       { code: '/rules/levels', name: '等级规则' },
       { code: '/rules/ledger', name: '积分发放记录' },
       { code: '/rules/experience-records', name: '经验值发放记录' },
-      { code: '/rules/publishing-limits', name: '发布限制' },
+      { code: '/rules/publishing-limits', name: '个人用户规则' },
     ],
   },
   {

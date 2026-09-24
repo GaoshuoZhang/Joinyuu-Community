@@ -5,6 +5,7 @@ import type { FormProps } from 'tdesign-vue-next'
 import { focusFirstInvalid, useDialogDirtyGuard } from '@/utils/form'
 import { createEvent, updateEvent, type EventPayload } from '@/api/events'
 import { fetchPointsRules } from '@/api/mall'
+import { fetchSpaces } from '@/api/spaces'
 import { dictFallback, fetchDictEntries } from '@/api/dicts'
 import { userLevelOptions, visibilityIdentityOptions } from '@/constants/identity'
 import type { CommunityEvent } from '@/types'
@@ -27,6 +28,9 @@ const emit = defineEmits<{
 
 /* 活动类型选项来自数据字典，加载失败回退默认词表 */
 const typeOptions = ref(dictFallback.event_type.map((t) => ({ label: t, value: t })))
+
+/* 地点下拉：可选空间（占用口径按空间名/地址匹配），也允许自行输入不在空间列表里的地点 */
+const spaceOptions = ref<{ label: string; value: string; title: string }[]>([])
 
 const submitting = ref(false)
 const formRef = ref()
@@ -94,6 +98,17 @@ function ensureOptions(): Promise<void> {
         })
         .catch(() => {
           /* 字典加载失败保留回退词表 */
+        }),
+      fetchSpaces()
+        .then((spaces) => {
+          spaceOptions.value = spaces.map((s) => ({
+            label: s.name,
+            value: s.name,
+            title: s.location ? `${s.name}（${s.location}）` : s.name,
+          }))
+        })
+        .catch(() => {
+          /* 空间加载失败仍可自行输入地点 */
         }),
     ])
       .then(() => {
@@ -323,8 +338,15 @@ function onClose() {
         </t-form-item>
       </div>
       <div class="form-row">
-        <t-form-item label="地点" name="location">
-          <t-input clearable v-model="form.location" placeholder="如 聚屿路演厅…" />
+        <t-form-item label="地点" name="location" help="选择空间后，该空间的可预约时段会自动避开本活动；其他地点可自行输入">
+          <t-select
+            v-model="form.location"
+            filterable
+            creatable
+            clearable
+            :options="spaceOptions"
+            placeholder="选择空间，或输入其他地点…"
+          />
         </t-form-item>
         <t-form-item label="主办方" name="host">
           <t-input clearable v-model="form.host" placeholder="如 聚屿社区…" />

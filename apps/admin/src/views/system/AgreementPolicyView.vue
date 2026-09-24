@@ -21,10 +21,10 @@ const columns = [
   { colKey: 'title', title: '协议标题', minWidth: 260, ellipsis: true },
   { colKey: 'kind', title: '协议类型', cell: 'kind', width: 110 },
   { colKey: 'version', title: '版本', width: 90, ellipsis: true },
-  { colKey: 'effectiveAt', title: '生效日期', width: 160, ellipsis: true },
+  { colKey: 'effectiveAt', title: '生效日期', width: 170, ellipsis: true },
   { colKey: 'status', title: '状态', cell: 'status', width: 90 },
   { colKey: 'publisher', title: '发布人', width: 120, ellipsis: true },
-  { colKey: 'updatedAt', title: '更新时间', width: 160, ellipsis: true },
+  { colKey: 'updatedAt', title: '更新时间', width: 170, ellipsis: true },
   { colKey: 'op', title: '操作', cell: 'op', width: 80 },
 ]
 

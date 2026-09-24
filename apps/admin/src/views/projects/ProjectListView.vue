@@ -59,7 +59,7 @@ const columns = [
   {
     colKey: 'initiatedAt',
     title: '立项日期',
-    width: 110,
+    width: 170,
     resizable: true,
     sorter: true,
     sortType: 'all',
@@ -67,7 +67,7 @@ const columns = [
   },
   { colKey: 'progress', title: '进度', cell: 'progress', width: 120, resizable: true , ellipsis: true},
   { colKey: 'status', title: '状态', cell: 'status', width: 86, resizable: true , ellipsis: true},
-  { colKey: 'duration', title: '起止时间', cell: 'duration', width: 150, resizable: true , ellipsis: true},
+  { colKey: 'duration', title: '起止时间', cell: 'duration', width: 220, resizable: true , ellipsis: true},
   { colKey: 'op', title: '操作', cell: 'op', width: 220 },
 ]
 

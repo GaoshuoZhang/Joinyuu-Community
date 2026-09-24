@@ -415,6 +415,8 @@ onMounted(load)
   align-items: center;
   justify-content: space-between;
   gap: 12px;
+  /* 窄屏：操作区整行落到左侧信息块下方，不把标题挤成逐字竖排（同 .page-header） */
+  flex-wrap: wrap;
   margin-bottom: 16px;
 }
 
@@ -422,6 +424,8 @@ onMounted(load)
   display: flex;
   flex-wrap: wrap;
   align-items: center;
+  flex: 1 1 auto;
+  min-width: 240px;
   gap: 12px;
 }
 
@@ -430,6 +434,10 @@ onMounted(load)
   align-items: center;
   gap: 8px;
   flex-shrink: 0;
+  /* 换行后仍贴右（同 .page-header-actions） */
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  margin-left: auto;
 }
 
 .head-name {

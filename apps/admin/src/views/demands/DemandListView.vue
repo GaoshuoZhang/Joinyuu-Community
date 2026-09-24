@@ -5,13 +5,14 @@ import { useListQueryState } from '@/utils/listQuery'
 import { useRouter } from 'vue-router'
 import { MessagePlugin } from 'tdesign-vue-next'
 import type { FormProps } from 'tdesign-vue-next'
-import { AddIcon, SearchIcon } from 'tdesign-icons-vue-next'
+import { AddIcon, SearchIcon, ViewListIcon } from 'tdesign-icons-vue-next'
 import PageHeader from '@/components/PageHeader.vue'
 import StatusTag from '@/components/StatusTag.vue'
 import ColumnController from '@/components/ColumnController.vue'
 import ExportButton from '@/components/ExportButton.vue'
 import ListEmptyState from '@/components/ListEmptyState.vue'
 import BulkArchiveDialog from '@/components/BulkArchiveDialog.vue'
+import DictEntriesDialog from '@/components/DictEntriesDialog.vue'
 import DemandPublishDialog from '@/components/DemandPublishDialog.vue'
 import DemandReviewDialog from '@/components/DemandReviewDialog.vue'
 import DemandScheduleDialog from '@/components/DemandScheduleDialog.vue'
@@ -25,6 +26,9 @@ import { fetchEnterprise } from '@/api/enterprises'
 import { fetchExternalEnterprise } from '@/api/external-enterprises'
 import { fetchUser } from '@/api/users'
 import type { Demand, UserIdentity } from '@/types'
+
+/* 需求类别维护弹窗（原「数据字典 > 需求类别」入口，label 即业务存储值故仅支持新增/启停/删除） */
+const categoryDialogVisible = ref(false)
 
 /* 发布方身份兜底：历史数据无快照时按编号前缀推导（E→社区企业 / XE→合作企业 / U→仅个人用户标「个人用户」） */
 /* 提交人标签映射：
@@ -253,7 +257,7 @@ const columns = [
   {
     colKey: 'createdAt',
     title: '创建时间',
-    width: 150,
+    width: 170,
     resizable: true,
     sorter: true,
     sortType: 'all',
@@ -263,7 +267,7 @@ const columns = [
     colKey: 'publishedAt',
     title: '发布时间',
     cell: 'publishedAt',
-    width: 150,
+    width: 170,
     resizable: true,
     sorter: true,
     sortType: 'all',
@@ -583,15 +587,19 @@ const { syncQuery } = useListQueryState(query, load, { refs: { sortBy, sortOrder
 onMounted(() => {
   applyRouteFilter()
   load()
-  fetchDictEntries('demand_category')
-    .then((entries) => {
-      const options = entries.filter((e) => e.status === 'enabled').map((e) => ({ label: e.label, value: e.code }))
-      if (options.length) categoryOptions.value = [{ label: '全部', value: '' }, ...options]
-    })
-    .catch(() => {
-      /* 字典加载失败保留回退词表 */
-    })
+  void loadCategories()
 })
+
+/* 需求类别下拉（含「需求类别」弹窗保存后的刷新；原「数据字典 > 需求类别」入口迁移至此）：取字典启用项 */
+async function loadCategories() {
+  try {
+    const entries = await fetchDictEntries('demand_category')
+    const options = entries.filter((e) => e.status === 'enabled').map((e) => ({ label: e.label, value: e.code }))
+    if (options.length) categoryOptions.value = [{ label: '全部', value: '' }, ...options]
+  } catch {
+    /* 字典加载失败保留回退词表 */
+  }
+}
 </script>
 
 <template>
@@ -604,6 +612,10 @@ onMounted(() => {
           storage-key="demands"
           :columns="columns.map((c) => ({ key: c.colKey, title: c.title }))"
         />
+        <t-button variant="outline" @click="categoryDialogVisible = true">
+          <template #icon><ViewListIcon /></template>
+          需求类别
+        </t-button>
         <t-button variant="outline" :loading="archivingAll" :disabled="archivingAll" @click="onBulkArchive">
           一键归档
         </t-button>
@@ -620,6 +632,8 @@ onMounted(() => {
         </t-button>
       </template>
     </PageHeader>
+
+    <DictEntriesDialog v-model:visible="categoryDialogVisible" type="demand_category" title="需求类别" @success="loadCategories" />
 
     <div class="page-filter-bar">
       <t-input

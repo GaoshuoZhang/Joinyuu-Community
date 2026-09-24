@@ -22,7 +22,7 @@ const columns = [
   { colKey: 'exp', title: '经验值', cell: 'exp', width: 100, resizable: true , ellipsis: true},
   { colKey: 'description', title: '说明', ellipsis: true, width: 260, resizable: true },
   { colKey: 'status', title: '状态', cell: 'status', width: 95 , ellipsis: true},
-  { colKey: 'updatedAt', title: '更新时间', width: 160, resizable: true , ellipsis: true},
+  { colKey: 'updatedAt', title: '更新时间', width: 170, resizable: true , ellipsis: true},
   { colKey: 'op', title: '操作', cell: 'op', width: 160 },
 ]
 

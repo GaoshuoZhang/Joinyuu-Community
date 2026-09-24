@@ -22,7 +22,7 @@ const form = reactive({ action: 'reject' as 'approve' | 'reject', note: '' })
 
 const allColumns = [
   { colKey: 'id', title: '工单编号', width: 115 }, { colKey: 'user', title: '用户', width: 160 },
-  { colKey: 'reason', title: '申请原因', width: 190 }, { colKey: 'requestedAt', title: '申请时间', width: 160 },
+  { colKey: 'reason', title: '申请原因', width: 190 }, { colKey: 'requestedAt', title: '申请时间', width: 170 },
   { colKey: 'effectiveAt', title: '冷静期届满', width: 180 }, { colKey: 'status', title: '状态', width: 100 },
   { colKey: 'reviewNote', title: '复核说明', width: 200 }, { colKey: 'op', title: '操作', width: 190 },
 ]

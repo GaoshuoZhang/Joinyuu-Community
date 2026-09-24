@@ -41,7 +41,7 @@ const allColumns = [
   {
     colKey: 'createdAt',
     title: '提交时间',
-    width: 150,
+    width: 170,
     resizable: true,
     sorter: true,
     sortType: 'all',

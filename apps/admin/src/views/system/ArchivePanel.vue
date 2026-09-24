@@ -209,7 +209,7 @@ const columns = computed<ArchiveColumn[]>(() => {
       return [
         { colKey: 'userName', title: '预约人', cell: 'userName', width: 120, resizable: true, ellipsis: true },
         { colKey: 'spaceName', title: '空间', cell: 'spaceName', width: 130, resizable: true, ellipsis: true },
-        { colKey: 'timeSlot', title: '日期时段', cell: 'timeSlot', width: 200, resizable: true, ellipsis: true },
+        { colKey: 'timeSlot', title: '日期时段', cell: 'timeSlot', width: 220, resizable: true, ellipsis: true },
         { colKey: 'status', title: '状态', cell: 'status', width: 100, resizable: true, ellipsis: true },
         deletedAt,
         deletedBy,
