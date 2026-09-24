@@ -194,7 +194,7 @@ export class AppSpacesService {
       throw new ConflictException('你已预约该时段，请勿重复提交')
     }
 
-    /* 主体快照：代企业 → 校验 space_reserve 权限并记企业名；否则按身份推导 */
+    /* 主体快照：代企业 → 校验 space_reserve 权限并记企业名；否则按身份推导并校验持有关系 */
     let identityType = dto.asIdentity || 'individual'
     let subjectName = ''
     if (dto.asEnterpriseId) {
@@ -205,6 +205,9 @@ export class AppSpacesService {
       subjectName = subjectName || enterprise.name
     } else if (identityType === 'community_enterprise') {
       throw new BadRequestException('请选择要代表的社区企业')
+    } else if (identityType !== 'individual') {
+      const held = await this.prisma.userIdentity.findFirst({ where: { userId: user.uid, type: identityType } })
+      if (!held) throw new BadRequestException('您暂未关联该身份')
     }
     if (!subjectName) subjectName = await this.resolveSubjectName(user, identityType, dto.asEnterpriseId)
 

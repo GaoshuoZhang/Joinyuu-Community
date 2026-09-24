@@ -31,7 +31,7 @@ export class NotificationService {
     }
   }
 
-  /** 工作人员下架内容时调用；理由为空不发信，举报提交本身不调用此方法。
+  /** 工作人员下架内容时调用；理由为空不发信。
    * 在删除评论前调用；通知和状态变更随同一事务提交或回滚。
    */
   async notifyContentTakedown(

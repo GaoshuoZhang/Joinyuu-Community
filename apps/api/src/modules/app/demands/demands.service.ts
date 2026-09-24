@@ -141,6 +141,7 @@ export class AppDemandsService {
     await this.assertDemandOpen()
     await assertRealnameAllowed(this.prisma, uid, 'publish')
     this.assertKindFields(dto)
+    await this.assertCategoryCode(dto)
     const user = await this.requireUser(uid)
     const publisher = await this.resolvePublisher(uid, name, user, dto)
 
@@ -406,6 +407,7 @@ export class AppDemandsService {
       throw new ConflictException('仅已撤回或已驳回的需求可重新提交')
     }
     this.assertKindFields(dto)
+    await this.assertCategoryCode(dto)
     const user = await this.requireUser(uid)
     const publisher = await this.resolvePublisher(uid, '', user, dto)
 
@@ -516,6 +518,15 @@ export class AppDemandsService {
     }
   }
 
+  /** 类目编码按字典校验（demand_category / industry）：非法编码返回 400，避免写入无法映射类目标签的数据 */
+  private async assertCategoryCode(dto: CreateDemandDto): Promise<void> {
+    const entry = await this.prisma.dictEntry.findFirst({
+      where: { type: dto.categoryDict, code: dto.categoryCode },
+      select: { code: true },
+    })
+    if (!entry) throw new BadRequestException(dto.kind === 'investment' ? '请选择有效的所属行业' : '请选择有效的需求类别')
+  }
+
   private async requireUser(uid: string): Promise<User> {
     const user = await this.prisma.user.findUnique({ where: { uid } })
     if (!user) throw new NotFoundException('用户不存在')
@@ -581,14 +592,16 @@ export class AppDemandsService {
     }
 
     const asIdentity = dto.asIdentity ?? this.defaultIdentity(identities)
-    if (asIdentity === 'community_individual' && identities.some((i) => i.type === 'community_individual')) {
+    if (asIdentity === 'community_individual') {
+      if (!identities.some((i) => i.type === 'community_individual')) throw new BadRequestException('您暂未关联该身份')
       return { name: user.nickname, identity: { type: 'community_individual', level: null } }
     }
     if (asIdentity === 'external_enterprise') {
       const ext = identities.find((i) => i.type === 'external_enterprise')
+      if (!ext) throw new BadRequestException('您暂未关联该身份')
       return {
-        name: ext?.enterpriseName || user.nickname,
-        identity: { type: 'external_enterprise', enterpriseName: ext?.enterpriseName ?? null },
+        name: ext.enterpriseName || user.nickname,
+        identity: { type: 'external_enterprise', enterpriseName: ext.enterpriseName ?? null },
       }
     }
     if (asIdentity === 'community_enterprise') {

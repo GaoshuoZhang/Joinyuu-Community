@@ -434,7 +434,7 @@ export class ContentsService {
     return { code: 0 }
   }
 
-  /** 恢复管理员主动下架的文章；举报处置下架必须从原举报恢复。 */
+  /** 恢复管理员下架的文章。 */
   async restoreArticle(id: string, operator: string): Promise<{ code: number }> {
     const article = await this.prisma.article.findUnique({ where: { id } })
     if (!article || article.deletedAt) throw new NotFoundException('文章不存在')

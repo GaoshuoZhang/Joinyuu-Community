@@ -36,7 +36,7 @@ describe('M2-R R3 管理端下架/退驻/协议留痕', () => {
     const ownerId = (await prisma.enterprise.findUniqueOrThrow({ where: { id: 'E2004' } })).contactUserId!
     const noticeCount = () => prisma.userNotification.count({ where: { userId: ownerId, title: { startsWith: '内容下架：' } } })
     const before = await noticeCount()
-    // 不需要新的举报，工作人员可主动下架；空白理由也不发信。
+    // 工作人员可主动下架；空白理由也不发信。
     const retract = (body: object) => request(app.getHttpServer()).post('/api/admin/demands/D4002/retract').set('Authorization', `Bearer ${admin}`).send(body)
     expect((await retract({ takedownReason: '   ' })).status).toBe(200)
     expect(await noticeCount()).toBe(before)

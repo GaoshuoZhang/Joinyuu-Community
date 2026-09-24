@@ -86,7 +86,7 @@ interface Snapshot {
 /* 内容与投稿（M2-R R2 /api/app/contents 与 /api/app/articles、me/articles）：
  * 浏览 published 文章（详情浏览量 +1、返回点赞/评论计数）、栏目、投稿（SU 前缀、channel=submitted、status=pending）、
  * 我的投稿（撤回/重提/回填）、点赞切换（Favorite targetType='article' 存我的点赞 + Article.likeCount 事务增减）。
- * 评论使用 ArticleComment 表并在事务内维护 Article.commentCount；R3 起评论列表叠加用户屏蔽过滤。 */
+ * 评论使用 ArticleComment 表并在事务内维护 Article.commentCount。 */
 @Injectable()
 export class AppContentsService {
   constructor(
