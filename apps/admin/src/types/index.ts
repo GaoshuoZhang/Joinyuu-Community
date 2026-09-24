@@ -504,19 +504,16 @@ export interface ExternalEnterprise {
 /* ---------- 积分商城 ---------- */
 
 export type GoodsCategory = string
-export type GoodsFulfillment = 'physical' | 'voucher'
 export type GoodsStatus = 'on' | 'off' | 'restock'
 
 export interface MallGoods {
   id: string
   name: string
   coverUrl?: string
-  /** 实物商品 / 权益券 */
+  /** 商品分类（goods_category 字典 code） */
   category: GoodsCategory
   /** 商品类型名称（后端按 goods_category 字典回填；编码已删除时回退为 category 原值） */
   categoryLabel?: string
-  /** 履约类型：实物配送 / 券码 */
-  fulfillment: GoodsFulfillment
   /** 兑换所需积分 */
   points: number
   /** 库存（虚拟/权益券可设较大值） */
@@ -525,15 +522,9 @@ export interface MallGoods {
   description: string
   /** 累计兑换次数 */
   redeemedCount: number
-  /** 权益券有效期（天）：仅权益券有效，空值按 30 天兜底 */
+  /** 券码有效期（天）：统一券码兑换，空值按 30 天兜底 */
   validDays?: number | null
   createdAt: string
-  /** 发货方式（仅实物商品）：pickup 自提 / delivery 邮寄 */
-  shippingMethods?: Array<'pickup' | 'delivery'>
-  /** 自提地址（选择自提时必填） */
-  pickupAddress?: string
-  /** 运费（元，0=包邮；选择邮寄时有效） */
-  shippingFee?: number
   /** 自定义可见范围：身份与等级（空数组=不限） */
   visibilityIdentities?: IdentityType[]
   visibilityLevels?: string[]
@@ -542,7 +533,7 @@ export interface MallGoods {
   orderLevels?: string[]
 }
 
-export type RedemptionOrderStatus = 'pending_shipment' | 'shipped' | 'finished' | 'cancelled'
+export type RedemptionOrderStatus = 'pending_use' | 'finished' | 'cancelled'
 
 export interface RedemptionOrder {
   id: string
@@ -554,21 +545,14 @@ export interface RedemptionOrder {
   points: number
   status: RedemptionOrderStatus
   createdAt: string
-  /** 发货时间（shipped/finished 时存在） */
-  shippedAt?: string
-  /** 完成时间（finished 时存在，模拟层标记完成） */
+  /** 完成时间（finished 核销时存在） */
   finishedAt?: string
-  /** 收件信息（实物商品） */
-  recipientName?: string
-  recipientPhone?: string
-  address?: string
   note?: string
   /** 取消原因（cancelled 时存在，积分原路退回） */
   cancelReason?: string
-  trackingNo?: string
-  /** 权益券：券码 / 有效期 / 核销时间 */
-  voucherCode?: string
-  voucherExpiresAt?: string
+  /** 券码 / 有效期 / 核销时间（统一券码兑换，下单即签发） */
+  voucherCode: string
+  voucherExpiresAt: string
   usedAt?: string
 }
 
@@ -777,7 +761,7 @@ export interface SpaceReservation {
 
 /* ---------- 资讯内容 ---------- */
 
-/** 文章状态：closed 为管理员或举报治理下架；withdrawn 仅用于成员主动撤回投稿。 */
+/** 文章状态：closed 为管理员下架；withdrawn 仅用于成员主动撤回投稿。 */
 export type ArticleStatus = 'pending' | 'rejected' | 'pending_release' | 'scheduled' | 'published' | 'closed'
 
 /** 文章来源：official=社区自行发布（资讯发布）/ submitted=用户投稿（投稿内容） */

@@ -40,7 +40,6 @@ import { AppAuthModule } from './modules/app/auth/auth.module'
 import { AppMeModule } from './modules/app/me/me.module'
 import { AppConfigModule } from './modules/app/config/config.module'
 import { AppNoticesModule } from './modules/app/notices/notices.module'
-import { AppAddressesModule } from './modules/app/addresses/addresses.module'
 import { AppDemandsModule } from './modules/app/demands/demands.module'
 import { AppProjectsModule } from './modules/app/projects/projects.module'
 import { AppEventsModule } from './modules/app/events/events.module'
@@ -112,7 +111,6 @@ import { HttpExceptionFilter } from './common/filters/http-exception.filter'
     AppMeModule,
     AppConfigModule,
     AppNoticesModule,
-    AppAddressesModule,
     AppDemandsModule,
     AppProjectsModule,
     AppEventsModule,

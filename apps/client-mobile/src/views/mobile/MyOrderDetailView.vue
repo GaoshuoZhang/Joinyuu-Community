@@ -2,7 +2,7 @@
 import { computed, onMounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { Button, DialogPlugin, Icon, Popup, QRCode, Rate, Textarea, Toast } from 'tdesign-mobile-vue'
-import { cancelOrder, confirmOrder, fetchMyOrder, reviewOrder, useOrder } from '@/api/mall'
+import { cancelOrder, fetchMyOrder, reviewOrder } from '@/api/mall'
 import { ApiError } from '@/api/http'
 import { useAsyncList } from '@/composables/useAsyncList'
 import EmptyBlock from '@/components/shared/EmptyBlock.vue'
@@ -12,7 +12,8 @@ import StateTag from '@/components/shared/StateTag.vue'
 import { useBusinessNow } from '@/composables/useBusinessNow'
 import { formatLocalDateTime, formatZhNumber, parseLocalDateTime } from '@/utils/format'
 
-/* 订单详情：待使用的券码展示兑换码与二维码（参考活动签到电子票），并支持核销/收货/取消/评价。 */
+/* 订单详情（统一券码兑换三态）：待使用展示券码与二维码供现场核销，核销前可申请退款；
+ * 已完成可评价；已取消/已过期仅展示状态（过期未使用由系统自动退回积分）。 */
 const route = useRoute()
 const router = useRouter()
 const id = String(route.params.id)
@@ -37,7 +38,10 @@ function isExpired(item: MyOrder): boolean {
   return expiresAt ? expiresAt.getTime() < businessNowMs.value : false
 }
 
+/** 券码可用（展示二维码、可核销）：待使用且未过期 */
 const canUse = computed(() => !!order.value && String(order.value.status) === 'pending_use' && !isExpired(order.value))
+/** 可退款：待使用且未过期（过期券由定时任务自动退款，无需手动操作） */
+const canRefund = computed(() => canUse.value)
 
 async function copyCode(code: string) {
   try {
@@ -50,70 +54,22 @@ async function copyCode(code: string) {
 
 const acting = ref(false)
 
-function onUse() {
-  const item = order.value
-  if (!item) return
-  DialogPlugin.confirm({
-    title: '使用卡券',
-    content: `确认已使用「${item.goodsName}」？使用后订单将完成。`,
-    cancelBtn: '取消',
-    confirmBtn: '确认使用',
-    onConfirm: () => void doUse(item),
-  })
-}
-
-async function doUse(item: MyOrder) {
-  acting.value = true
-  try {
-    await useOrder(item.id)
-    Toast('卡券已使用')
-    await run()
-  } catch (e) {
-    Toast(e instanceof Error ? e.message : '使用失败，请稍后重试')
-  } finally {
-    acting.value = false
-  }
-}
-
-function onConfirmReceipt() {
-  const item = order.value
-  if (!item) return
-  DialogPlugin.confirm({
-    title: '确认收货',
-    content: `确认已收到「${item.goodsName}」？确认后订单将完成。`,
-    cancelBtn: '取消',
-    confirmBtn: '确认收货',
-    onConfirm: async () => {
-      acting.value = true
-      try {
-        await confirmOrder(item.id)
-        Toast('已确认收货')
-        await run()
-      } catch (e) {
-        Toast(e instanceof Error ? e.message : '操作失败，请稍后重试')
-      } finally {
-        acting.value = false
-      }
-    },
-  })
-}
-
 function onCancelOrder() {
   const item = order.value
   if (!item) return
   DialogPlugin.confirm({
-    title: '取消兑换',
-    content: `取消后 ${formatZhNumber(item.pointsCost)} 积分将退回，库存恢复。确认取消？`,
+    title: '申请退款',
+    content: `退款后 ${formatZhNumber(item.pointsCost)} 积分将原路退回，库存恢复。确认退款？`,
     cancelBtn: '再想想',
-    confirmBtn: '确认取消',
+    confirmBtn: '确认退款',
     onConfirm: async () => {
       acting.value = true
       try {
         await cancelOrder(item.id)
-        Toast('订单已取消，积分已退回')
+        Toast('已退款，积分已退回')
         await run()
       } catch (e) {
-        Toast(e instanceof Error ? e.message : '取消失败，请稍后重试')
+        Toast(e instanceof Error ? e.message : '退款失败，请稍后重试')
       } finally {
         acting.value = false
       }
@@ -164,45 +120,30 @@ async function onReviewSubmit() {
         </div>
         <p class="cost">{{ formatZhNumber(order.pointsCost) }} 积分</p>
 
-        <template v-if="order.voucherCode">
-          <div v-if="canUse" class="qr-wrap">
-            <QRCode :value="order.voucherCode" :size="140" level="M" aria-label="卡券核销二维码" />
-          </div>
-          <p class="code">兑换码：<code translate="no">{{ order.voucherCode }}</code></p>
-          <p v-if="order.voucherExpiresAt" class="expiry">
-            {{ isExpired(order) ? `已于 ${formatLocalDateTime(order.voucherExpiresAt)} 过期` : `有效期至 ${formatLocalDateTime(order.voucherExpiresAt)}` }}
-          </p>
-          <p v-if="!canUse" class="hint">
-            {{ String(order.status) === 'completed' ? '该卡券已核销' : isExpired(order) ? '该卡券已过期，无法核销' : '该卡券已取消' }}
-          </p>
-        </template>
-
-        <template v-else>
-          <!-- 自提订单：展示自提地址快照；邮寄订单：展示收货信息 -->
-          <p v-if="order.shippingMethod === 'pickup'" class="info pickup-info">
-            <Icon aria-hidden="true" name="location" size="14px" />
-            到店自提：{{ order.pickupAddress || '请联系社区运营确认自提点' }}，凭本订单向工作人员核销。
-          </p>
-          <p v-if="order.recipientAddress" class="info">收货：{{ order.recipientName }} {{ order.recipientPhone }} · {{ order.recipientAddress }}</p>
-          <p v-if="order.trackingNo" class="info">物流单号：{{ order.trackingNo }}</p>
-        </template>
+        <div v-if="canUse" class="qr-wrap">
+          <QRCode :value="order.voucherCode" :size="140" level="M" aria-label="券码核销二维码" />
+        </div>
+        <p class="code">兑换码：<code translate="no">{{ order.voucherCode }}</code></p>
+        <p class="expiry">
+          {{ isExpired(order) ? `已于 ${formatLocalDateTime(order.voucherExpiresAt)} 过期` : `有效期至 ${formatLocalDateTime(order.voucherExpiresAt)}` }}
+        </p>
+        <p v-if="!canUse" class="hint">
+          {{ String(order.status) === 'completed' ? '该券码已核销' : String(order.status) === 'cancelled' ? '该订单已取消' : '该券码已过期，积分将由系统自动退回' }}
+        </p>
 
         <div class="times">
           <p>下单时间：{{ formatLocalDateTime(order.createdAt) }}</p>
-          <p v-if="order.shippedAt">发货时间：{{ formatLocalDateTime(order.shippedAt) }}</p>
-          <p v-if="order.usedAt">使用时间：{{ formatLocalDateTime(order.usedAt) }}</p>
+          <p v-if="order.usedAt">核销时间：{{ formatLocalDateTime(order.usedAt) }}</p>
           <p v-if="order.finishedAt">完成时间：{{ formatLocalDateTime(order.finishedAt) }}</p>
         </div>
       </section>
 
       <section class="m-card ops">
-        <Button v-if="canUse" theme="primary" block :loading="acting" @click="onUse">立即使用</Button>
-        <Button v-if="canUse && order.voucherCode" variant="outline" block @click="copyCode(order.voucherCode)">
+        <Button v-if="canUse" variant="outline" block @click="copyCode(order!.voucherCode)">
           <template #icon><Icon aria-hidden="true" name="copy" size="16px" /></template>
           复制兑换码
         </Button>
-        <Button v-if="order.status === 'shipped'" theme="primary" block :loading="acting" @click="onConfirmReceipt">确认收货</Button>
-        <Button v-if="order.status === 'pending_shipment'" variant="outline" block :loading="acting" @click="onCancelOrder">取消兑换</Button>
+        <Button v-if="canRefund" theme="danger" variant="outline" block :loading="acting" @click="onCancelOrder">申请退款</Button>
         <template v-if="order.status === 'completed'">
           <Button v-if="!order.rating" theme="primary" block @click="openReview">评价本次兑换</Button>
           <p v-else class="reviewed">

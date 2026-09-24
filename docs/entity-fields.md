@@ -38,8 +38,8 @@
 
 ## 4. 积分商城与规则（5）
 
-- **MallGoods** — 商品（id G；category GC001 实物商品 / GC003 权益券；fulfillment physical|voucher；points/stock；status on/off/restock（库存为 0）；description/redeemedCount/createdAt；shippingMethods[] pickup|delivery + pickupAddress? + shippingFee?；visibilityIdentities/visibilityLevels 可见范围、orderIdentities/orderLevels 可下单范围；deletedAt?/deletedBy?/archivableAt?）
-- **RedemptionOrder** — 兑换订单（id RO；状态机 pending_shipment→shipped→finished/cancelled；userId/userName + goodsId/goodsName/points；createdAt/shippedAt?/finishedAt?；recipientName?/recipientPhone?/address?/note?；cancelReason?；deletedAt?/deletedBy?/archivableAt?）
+- **MallGoods** — 商品（id G；category GC001 实物商品 / GC003 权益券；points/stock；status on/off/restock（库存为 0）；description/redeemedCount/validDays?（券码有效期天，空按 30 天兜底）/createdAt；visibilityIdentities/visibilityLevels 可见范围、orderIdentities/orderLevels 可下单范围；deletedAt?/deletedBy?/archivableAt?）
+- **RedemptionOrder** — 兑换订单（id RO；统一券码兑换，状态机 pending_use→finished（后台核销）/cancelled（退款，含过期自动退款）；userId/userName + goodsId/goodsName/points；createdAt/finishedAt?/note?；voucherCode/voucherExpiresAt/usedAt?；cancelReason?/cancelledAt?；deletedAt?/deletedBy?/archivableAt?）
 - **PointsRule** — 积分规则（code PK 固定 9 项：activity_checkin/activity_enroll_approved/article_accepted/demand_published/demand_responded/demand_undertaken/project_milestone/identity_first_bind/daily_login（默认停用）；name/scene/description 写死；points 可编辑；status）
 - **ExperienceRule** — 经验值规则（code PK 固定 6 项：activity_checkin/activity_enroll_approved/article_accepted/project_undertaken/project_completed/identity_first_bind；exp/status 可编辑）
 - **LevelTier** — 等级梯度（identityType+level 联合 PK；社区个体与社区企业分别维护 1-10 级标签和门槛）
@@ -87,12 +87,11 @@
 
 > M2-R 迁移已经完成。字段口径以 `schema.prisma` 为事实源，并与客户端类型及 `api-app-design.md` 保持同步。
 
-### 8.1 新增模型（27）
+### 8.1 新增模型（26）
 
 | 批次 | 模型 | 说明（前缀/关键字段） |
 |---|---|---|
 | R1 | UserNotification | 站内信（id UN；userId；type audit_result/enroll_result/order/points/system/invite/transfer/report/article/demand/project/mall/service + link?；title/content/at；read Bool）。单一列表、无归档、无分类偏好（`archived` 与 `UserNotificationPreference` 已移除）（§7.1-1） |
-| R1 | Address | 收货地址簿（id AD；userId；name/phone/region/detail；isDefault 唯一约束；createdAt/updatedAt）（§7.7 A1） |
 | R1 | AgreementConsent | 协议同意留痕（userId+agreementType+version 联合唯一；consentedAt；注册同时记录用户协议与隐私政策）（§7.7 A3/A11） |
 | R1 | AccountDeletionRequest | 注销申请（id；userId；status pending/cooling(7 天)/approved/cancelled；requestedAt/effectiveAt?；复核工单） |
 | R2 | DemandMessage | 需求沟通留言（demandId；senderId;content；at；仅发布方与响应方可见）（E2） |
@@ -125,8 +124,8 @@
 | R2 | Demand | demandType task/investment/cooperation；task 专属 deliverable?/budget?/deliverBy?（预期交付日期）；investment 专属 cooperationNeed?/returnOffer?；cooperation 专属 bottleneck?/partnershipMode?；三类型通用 contactName/contactPhone/contactEmail？；projectId?（立项回填）；deadline 停用保留展示 |
 | R2 | DemandRespondent | **userId 关联（必加）**；status 扩展 pending/contacted/closed → +accepted/rejected；reviewAt?/rejectReason?/withdrawnAt? |
 | R2 | Milestone | 交付状态扩展 todo → +submitted/returned（accept 沿用 done）；attachments[]（证据上传）；returnReason?；submitAt?/acceptAt?/returnedAt? |
-| R2 | MallGoods | **category 语义改造（Q1 决）**：category → goods_category 字典分类（GC code）；新增 fulfillment physical/voucher/service 承载履约类型；旧 category 数据迁移到 fulfillment |
-| R2 | RedemptionOrder | fulfillment 快照；voucherCode?/voucherExpiresAt?（券码 30 天）；trackingNo?（物流单号）；cancelledAt?；rating?/reviewComment?（每单一次评价）；recipientName/recipientPhone/address 已有（地址簿写入路径 A1） |
+| R2 | MallGoods | **category 语义改造（Q1 决）**：category → goods_category 字典分类（GC code）。**统一券码兑换改造**：移除 fulfillment/shippingMethods/pickupAddress/shippingFee，validDays 承载券码有效期（空按 30 天兜底） |
+| R2 | RedemptionOrder | **统一券码兑换改造**：状态收敛 pending_use/finished/cancelled 三态；voucherCode/voucherExpiresAt 非空（下单即签发，过期自动退款）；usedAt?（后台核销时间）；cancelledAt?；rating?/reviewComment?（每单一次评价）；移除 fulfillment/shippingMethod/pickupAddress/shippedAt/recipientName/recipientPhone/address/addressId/trackingNo |
 | R2 | Space | status 增 maintenance（维护中）；maxHours?/advanceDays?/openHours?（预约规则） |
 | R2 | SpaceReservation | identityType/subjectName（主体快照）；asEnterpriseId?（代企业，校验 space_reserve） |
 | R2 | Announcement | expireAt?/link?（有效期与跳转，D2） |

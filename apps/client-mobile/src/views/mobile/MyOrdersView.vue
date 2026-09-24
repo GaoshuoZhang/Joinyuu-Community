@@ -12,9 +12,9 @@ import type { MyOrder, PageResult } from '@/types'
 import StateTag from '@/components/shared/StateTag.vue'
 import { formatLocalDateTime, formatZhNumber } from '@/utils/format'
 
-/* 我的订单：整页左右滑动切换「全部 / 未完成 / 已过期 / 已完成」（默认未完成）；
- * 未完成含数字券与实物订单（发货后仍留在未完成，确认收货后转入已完成）。
- * 权益券过期后进入「已过期」（不可核销，可查看券码与有效期）。
+/* 我的订单（统一券码兑换）：整页左右滑动切换「全部 / 未完成 / 已过期 / 已完成」（默认未完成）；
+ * 未完成 = 待使用券（核销前可在详情中申请退款）。
+ * 券码过期后进入「已过期」（积分由系统自动退回，可查看券码与有效期）。
  * 点击进入订单详情查看券码与二维码。 */
 const router = useRouter()
 /* v46：列表接口返回 { list, total }，一次取满整页，避免默认分页导致后续订单不可见 */
@@ -29,10 +29,10 @@ const TABS: { value: OrderTab; label: string }[] = [
   { value: 'expired', label: '已过期' },
   { value: 'completed', label: '已完成' },
 ]
-/* 默认展示未完成（券码核销与待收货主场景） */
+/* 默认展示未完成（券码核销主场景） */
 const activeTab = ref<OrderTab>('unfinished')
 
-const UNFINISHED_STATUSES = ['pending_use', 'pending_shipment', 'shipped']
+const UNFINISHED_STATUSES = ['pending_use']
 
 const orders = computed(() => data.value?.list ?? [])
 const filtered = computed(() => {
@@ -91,10 +91,9 @@ function goDetail(order: MyOrder) {
                 <StateTag kind="order" :value="order.status" />
               </div>
               <p class="cost">{{ formatZhNumber(order.pointsCost) }} 积分</p>
-              <p v-if="order.voucherCode" class="voucher">
+              <p class="voucher">
                 兑换码：<code translate="no">{{ order.voucherCode }}</code>
               </p>
-              <p v-else-if="order.trackingNo" class="meta tabular-nums">物流单号：{{ order.trackingNo }}</p>
               <p class="meta tabular-nums">下单时间：{{ formatLocalDateTime(order.createdAt) }}</p>
               <span class="detail-link">查看详情<Icon aria-hidden="true" name="chevron-right" size="14px" /></span>
             </article>

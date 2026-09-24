@@ -177,7 +177,6 @@ async function main() {
   await prisma.pointsRecord.deleteMany()
   /* M2-R R1 新增表（挂靠 user 的可变状态；必须随 User 一起清，避免孤儿残留导致 next 重号 P2002） */
   await prisma.userNotification.deleteMany()
-  await prisma.address.deleteMany()
   await prisma.agreementConsent.deleteMany()
   await prisma.accountDeletionRequest.deleteMany()
   /* M2-R R3 新增表 */
@@ -704,23 +703,19 @@ async function main() {
 
   // ---------- 积分商城与规则 ----------
   for (const g of goods) {
-    /* M2-R R2（Q1 决）：category 为 goods_category 字典分类（GC code），履约类型由 fulfillment 承担 */
+    /* 统一券码兑换：category 为 goods_category 字典分类（GC code），下单即签发券码 */
     await prisma.mallGoods.create({
       data: {
         id: g.id,
         name: g.name,
         coverUrl: g.coverUrl ?? null,
         category: g.category,
-        fulfillment: g.fulfillment ?? 'physical',
         points: g.points,
         stock: g.stock,
         status: g.status ?? 'on',
         description: g.description,
         redeemedCount: g.redeemedCount ?? 0,
         validDays: g.validDays ?? null,
-        shippingMethods: g.shippingMethods ?? [],
-        pickupAddress: g.pickupAddress ?? null,
-        shippingFee: g.shippingFee ?? null,
         visibilityIdentities: g.visibilityIdentities ?? [],
         visibilityLevels: g.visibilityLevels ?? [],
         orderIdentities: g.orderIdentities ?? [],
@@ -740,18 +735,11 @@ async function main() {
         goodsId: o.goodsId,
         goodsName: o.goodsName,
         points: o.points,
-        fulfillment: o.fulfillment ?? 'physical',
         status: o.status,
         createdAt: o.createdAt,
-        shippedAt: o.shippedAt ?? null,
         finishedAt: o.finishedAt ?? null,
-        recipientName: o.recipientName ?? null,
-        recipientPhone: o.recipientPhone ?? null,
-        address: o.address ?? null,
-        addressId: o.addressId ?? null,
-        trackingNo: o.trackingNo ?? null,
-        voucherCode: o.voucherCode ?? null,
-        voucherExpiresAt: o.voucherExpiresAt ?? null,
+        voucherCode: o.voucherCode,
+        voucherExpiresAt: o.voucherExpiresAt,
         usedAt: o.usedAt ?? null,
         cancelledAt: o.cancelledAt ?? null,
         rating: o.rating ?? null,

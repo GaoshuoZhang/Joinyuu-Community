@@ -6,7 +6,6 @@ import { QueryGoodsDto } from './dto/query-goods.dto'
 import { GoodsPayloadDto } from './dto/goods-payload.dto'
 import { QueryRedemptionOrdersDto } from './dto/query-redemption-orders.dto'
 import { UpdatePointsRuleDto } from './dto/update-points-rule.dto'
-import { ShipOrderDto } from './dto/ship-order.dto'
 
 @Controller('api/admin/mall')
 export class MallController {
@@ -60,16 +59,9 @@ export class MallController {
 
   @RequirePermission('/mall/orders')
   @HttpCode(200)
-  @Post('redemption-orders/:id/ship')
-  shipOrder(@Param('id') id: string, @Body() dto: ShipOrderDto, @Req() req: AuthenticatedRequest) {
-    return this.mall.shipOrder(id, dto.trackingNo, req.user?.name ?? '社区管理员')
-  }
-
-  @RequirePermission('/mall/orders')
-  @HttpCode(200)
-  @Post('redemption-orders/:id/finish')
-  finishOrder(@Param('id') id: string) {
-    return this.mall.finishOrder(id)
+  @Post('redemption-orders/:id/verify')
+  verifyOrder(@Param('id') id: string, @Req() req: AuthenticatedRequest) {
+    return this.mall.verifyOrder(id, req.user?.name ?? '社区管理员')
   }
 
   @RequirePermission('/mall/orders')
@@ -82,8 +74,8 @@ export class MallController {
   @RequirePermission('/mall/orders')
   @HttpCode(200)
   @Post('redemption-orders/:id/cancel')
-  cancelOrder(@Param('id') id: string) {
-    return this.mall.cancelOrder(id)
+  cancelOrder(@Param('id') id: string, @Req() req: AuthenticatedRequest) {
+    return this.mall.cancelOrder(id, req.user?.name ?? '社区管理员')
   }
 
   /* ---------- 积分规则 ---------- */

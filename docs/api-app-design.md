@@ -108,7 +108,7 @@
 | POST | /api/app/me/projects/:id/milestones/:milestoneId/accept | 发起方验收里程碑；全部验收通过自动结项并按 wiki-backend §8.6 发放 `project_completed` 经验 |
 | GET | /api/app/mall/goods | 商品列表：`on` 且有库存优先（`restock` 库存为 0 不展示）；`mallOpen` 关闭 → 400 |
 | GET | /api/app/mall/goods/:id | 商品详情 |
-| POST | /api/app/mall/orders | 兑换下单：积分充足 + 库存充足（事务：扣积分+写流水+扣库存+建订单 `pending_shipment`） |
+| POST | /api/app/mall/orders | 兑换下单（统一券码）：积分充足 + 库存充足（事务：扣积分+写流水+扣库存+建订单 `pending_use` 并签发 `voucherCode`/`voucherExpiresAt`） |
 | GET | /api/app/me/orders | 我的兑换订单 |
 | GET | /api/app/me/orders/:id | 我的兑换订单详情（仅订单本人；非本人/不存在 404，条目形状与列表项一致） |
 | GET | /api/app/spaces | 可预约空间列表（`needApproval`/时段/设备） |
@@ -138,19 +138,17 @@
 | POST | /api/app/me/demands/:id/withdraw · /resubmit · /appeal | 需求撤回（pending→withdrawn）、驳回/撤回后重提（保留编号）、驳回后一次性申诉 |
 | POST | /api/app/me/articles/:id/withdraw · /resubmit · /appeal；GET /api/app/me/articles/:id/payload | 投稿撤回 / 重提（回填原始内容）/ 申诉 |
 | POST | /api/app/me/applications/:id/withdraw · /resubmit；GET /api/app/me/applications/:id/payload | 申请撤回 / 修改重提（可补充材料；附件需重新上传） |
-| POST | /api/app/mall/orders/:id/use | 权益券核销（`pending_use → completed`）；`Goods` 增 `fulfillment=physical\|voucher`，券码订单返回 `voucherCode` |
+| POST | /api/app/mall/orders/:id/cancel | 券码退款（仅 `pending_use` 且未过期）：退积分 + 回补库存 → `cancelled`；核销由后台工作人员现场执行（`/api/admin/mall/redemption-orders/:id/verify`），用户侧不提供核销端点；过期未使用券由定时任务自动退款 |
 | POST | /api/app/mall/goods/:id/restock-subscribe | 缺货商品到货提醒订阅（补货通知依赖后台补货动作） |
 | POST | /api/app/reports | 举报（需求 / 文章 / 企业名片；管理端举报处理与内容处置为后台缺口） |
 | GET | /api/app/me/favorites · POST /api/app/me/favorites/toggle | 收藏需求 / 文章 / 活动与切换 |
 | POST | /api/app/me/enterprises/invitations/:id/revoke | 撤销待接受的企业成员邀请（邀请 7 天有效期） |
 | GET | /api/app/me/transfer-requests · POST /:id/respond · /:id/cancel | 负责人转移请求列表 / 目标成员接受或拒绝 / 发起方撤销（接受后变更负责人） |
 | POST | /api/app/analytics/events | 行为埋点旁路上报（登录/注册/发布/响应/报名/签到/下单/投稿/预约/收藏/举报/搜索）；失败不影响业务交互 |
-| GET/POST/PUT/DELETE | /api/app/me/addresses(/:id) | v38 收货地址簿（默认地址唯一）；实物订单创建必带 `addressId` 并写入收货快照 |
 | POST | /api/app/auth/reset-password · /auth/change-phone · /me/change-password | v38 找回密码（短信码+限频）/ 换绑手机号（新号验证码+占用 409）/ 登录态改密（原密码校验，成功后其他会话失效） |
 | POST | /api/app/me/deletion-request · /me/data-export | v38 注销申请（运营复核）与个人数据导出（异步打包 + 站内信） |
 | GET/POST | /api/app/events/:id/feedback | v38 活动反馈（结束后 + 参与过，一人一条） |
 | GET/PUT | /api/app/me/notices/prefs | v38 通知偏好（启用的类型集合，至少一种；同时约束推送） |
-| POST | /api/app/mall/orders/:id/cancel | v38 用户取消实物待发货订单（退积分 + 回补库存）；券码订单签发 `voucherExpiresAt`（30 天） |
 | POST | /api/app/me/projects/:id/milestones/:mid/return | v38 发起方退回里程碑（记录原因，承接方可重新提交；提交支持 `attachments[]`） |
 | GET | /api/app/me/reports | v38 我的举报（状态 pending/resolved/rejected 由 admin 处置回写） |
 | GET/POST | /api/app/me/blocklist(/:uid/remove) | v38 屏蔽名单（评论与内容列表过滤被屏蔽用户） |

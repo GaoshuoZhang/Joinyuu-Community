@@ -31,9 +31,16 @@ export async function submitRealName(payload: RealNamePayload): Promise<void> {
   await httpPut('/me/realname', payload)
 }
 
-/** GET /api/app/me/realname-rights — 实名分级权益（按身份/等级分组的每日额度，active 标注当前层级） */
-export async function fetchRealnameRights(): Promise<RealnameRightsGroup[]> {
-  return httpGet<RealnameRightsGroup[]>('/me/realname-rights')
+/** GET /api/app/me/realname-rights — 实名分级权益（按身份/等级分组的每日额度，active 标注当前层级）。
+ * identityType：过滤分组（等级轮播只看社区个体/社区企业）；enterpriseId：社区企业 active 按该企业等级判定 */
+export async function fetchRealnameRights(
+  query: { identityType?: string; enterpriseId?: string } = {},
+): Promise<RealnameRightsGroup[]> {
+  const qs = new URLSearchParams()
+  if (query.identityType) qs.set('identityType', query.identityType)
+  if (query.enterpriseId) qs.set('enterpriseId', query.enterpriseId)
+  const suffix = qs.toString() ? `?${qs}` : ''
+  return httpGet<RealnameRightsGroup[]>(`/me/realname-rights${suffix}`)
 }
 
 /** GET /api/app/me/points-records — 我的积分流水（分页，含 balance） */

@@ -10,17 +10,13 @@ import BulkArchiveDialog from '@/components/BulkArchiveDialog.vue'
 import ColumnController from '@/components/ColumnController.vue'
 import ExportButton from '@/components/ExportButton.vue'
 import ListEmptyState from '@/components/ListEmptyState.vue'
-import {
-  archiveOrder,
-  cancelRedemptionOrder,
-  fetchRedemptionOrders,
-  finishRedemptionOrder,
-  shipRedemptionOrder,
-} from '@/api/mall'
+import { archiveOrder, cancelRedemptionOrder, fetchRedemptionOrders, verifyRedemptionOrder } from '@/api/mall'
 import { statusLabel } from '@/utils/exportCsv'
 import type { RedemptionOrder } from '@/types'
 
-/* 兑换订单面板：发货 / 标记完成 / 取消（退积分回库存）/ 归档 + 收件信息详情抽屉 */
+/* 兑换订单面板（统一券码兑换三态）：
+ * 待使用 → 核销 / 退款 / 详情；已取消、已完成 → 归档 / 详情。
+ * 搜索栏支持券码精确锁定订单（keyword 同时匹配用户名/商品名/订单号/券码）。 */
 const loading = ref(false)
 const loadError = ref('')
 const list = ref<RedemptionOrder[]>([])
@@ -36,9 +32,7 @@ const query = reactive({
 
 const statusOptions = [
   { label: '全部', value: '' },
-  { label: '待发货', value: 'pending_shipment' },
   { label: '待使用', value: 'pending_use' },
-  { label: '已发货', value: 'shipped' },
   { label: '已完成', value: 'finished' },
   { label: '已取消', value: 'cancelled' },
 ]
@@ -46,12 +40,13 @@ const statusOptions = [
 const dataColumns = [
   { colKey: 'id', title: '订单编号', width: 110 , ellipsis: true},
   { colKey: 'user', title: '兑换用户', cell: 'user', width: 130 , ellipsis: true},
-  { colKey: 'goodsName', title: '商品', width: 200, resizable: true, ellipsis: true },
-  { colKey: 'points', title: '兑换积分', width: 100, resizable: true , ellipsis: true},
-  { colKey: 'status', title: '状态', cell: 'status', width: 100, resizable: true , ellipsis: true},
+  { colKey: 'goodsName', title: '商品', width: 180, resizable: true, ellipsis: true },
+  { colKey: 'points', title: '兑换积分', width: 90, resizable: true , ellipsis: true},
+  { colKey: 'voucherCode', title: '券码', cell: 'voucherCode', width: 130 , ellipsis: true},
+  { colKey: 'status', title: '状态', cell: 'status', width: 90, resizable: true , ellipsis: true},
   { colKey: 'createdAt', title: '下单时间', width: 150, resizable: true , ellipsis: true},
-  /* 操作列最宽场景为「发货 / 取消订单 / 详情」三按钮并排，需留足宽度避免换行溢出 */
-  { colKey: 'op', title: '操作', cell: 'op', width: 220 },
+  /* 操作列最宽场景为「核销 / 退款 / 详情」三按钮并排，需留足宽度避免换行溢出 */
+  { colKey: 'op', title: '操作', cell: 'op', width: 200 },
 ]
 
 /* 列配置：本地持久化显隐/顺序 */
@@ -107,25 +102,12 @@ function onPageChange(p: { current: number; pageSize: number }) {
   load()
 }
 
-/* 待发货 → 已发货 */
-const shipVisible = ref(false)
-const shipOrder = ref<RedemptionOrder | null>(null)
-const trackingNo = ref('')
-
-function openShip(row: RedemptionOrder) {
-  shipOrder.value = row
-  trackingNo.value = row.trackingNo ?? ''
-  shipVisible.value = true
-}
-
-async function onShip() {
-  const row = shipOrder.value
-  if (!row) return
-  acting.value = `${row.id}:ship`
+/* 待使用 → 已完成（现场核销） */
+async function onVerify(row: RedemptionOrder) {
+  acting.value = `${row.id}:verify`
   try {
-    await shipRedemptionOrder(row.id, trackingNo.value.trim() || undefined)
-    MessagePlugin.success('订单已发货')
-    shipVisible.value = false
+    await verifyRedemptionOrder(row.id)
+    MessagePlugin.success('券码已核销，订单已完成')
     await load()
   } catch (e) {
     MessagePlugin.error(e instanceof Error ? e.message : '操作失败')
@@ -134,26 +116,12 @@ async function onShip() {
   }
 }
 
-/* 已发货 → 已完成 */
-async function onFinish(row: RedemptionOrder) {
-  acting.value = `${row.id}:finish`
-  try {
-    await finishRedemptionOrder(row.id)
-    MessagePlugin.success('订单已标记完成')
-    await load()
-  } catch (e) {
-    MessagePlugin.error(e instanceof Error ? e.message : '操作失败')
-  } finally {
-    acting.value = ''
-  }
-}
-
-/* 待发货 → 已取消（退回积分 + 回补库存） */
+/* 待使用 → 已取消（退回积分 + 回补库存） */
 async function onCancel(row: RedemptionOrder) {
   acting.value = `${row.id}:cancel`
   try {
     await cancelRedemptionOrder(row.id)
-    MessagePlugin.success(`订单已取消，${row.points} 积分已退回用户账户`)
+    MessagePlugin.success(`订单已退款，${row.points} 积分已退回用户账户`)
     await load()
   } catch (e) {
     MessagePlugin.error(e instanceof Error ? e.message : '操作失败')
@@ -162,7 +130,7 @@ async function onCancel(row: RedemptionOrder) {
   }
 }
 
-/* 已完成 → 归档 */
+/* 已完成 / 已取消 → 归档 */
 async function onArchive(row: RedemptionOrder) {
   acting.value = `${row.id}:archive`
   try {
@@ -176,12 +144,15 @@ async function onArchive(row: RedemptionOrder) {
   }
 }
 
-/* 一键归档：按当前筛选全量拉取，归档所选状态的已完成订单 */
+/* 一键归档：按当前筛选全量拉取，归档所选状态的订单（已完成 / 已取消） */
 const archivingAll = ref(false)
 const bulkVisible = ref(false)
 const bulkProgress = ref<{ done: number; total: number; failed: number } | null>(null)
 let bulkCancelled = false
-const bulkStatuses = [{ label: '已完成', value: 'finished' }]
+const bulkStatuses = [
+  { label: '已完成', value: 'finished' },
+  { label: '已取消', value: 'cancelled' },
+]
 
 function onBulkCancel() {
   bulkCancelled = true
@@ -258,15 +229,8 @@ function isActing(row: RedemptionOrder, action: string) {
   return acting.value === `${row.id}:${action}`
 }
 
-/* 履约信息可能全为空（如待发货订单）：为空时整组不渲染，避免只出现一个空标题 */
-const hasFulfillment = computed(() => {
-  const o = current.value
-  if (!o) return false
-  return !!(o.shippedAt || o.trackingNo || o.recipientName || o.address || o.voucherCode || o.voucherExpiresAt || o.usedAt)
-})
-
 /* 导出配置 */
-const exportHeaders = ['编号', '用户', '商品', '积分', '状态', '创建时间', '发货时间']
+const exportHeaders = ['编号', '用户', '商品', '积分', '券码', '状态', '创建时间', '核销时间']
 
 function mapRow(o: RedemptionOrder): (string | number)[] {
   return [
@@ -274,9 +238,10 @@ function mapRow(o: RedemptionOrder): (string | number)[] {
     `${o.userName} [${o.userId}]`,
     o.goodsName,
     o.points,
+    o.voucherCode,
     statusLabel('redemption', o.status),
     o.createdAt,
-    o.shippedAt ?? '—',
+    o.usedAt ?? '—',
   ]
 }
 
@@ -294,7 +259,7 @@ onMounted(load)
 <template>
   <div class="orders-panel page-fade-in">
     <ListErrorState v-if="loadError" :message="loadError" :loading="loading" @retry="load" />
-    <PageHeader title="订单管理" description="积分兑换订单的发货、完成与取消处理">
+    <PageHeader title="订单管理" description="积分兑换订单的券码核销、退款与归档处理">
       <template #actions>
         <ColumnController
           v-model="visibleColKeys"
@@ -317,7 +282,7 @@ onMounted(load)
     <div class="page-filter-bar">
       <t-input class="ctl-w-xl"
         v-model="query.keyword"
-        placeholder="搜索订单编号/用户/商品…"
+        placeholder="搜索订单编号/用户/商品/券码…"
         clearable
         @enter="onSearch"
       />
@@ -358,33 +323,33 @@ onMounted(load)
         <template #points="{ row }">
           <span class="delta-sub">{{ -row.points }}</span>
         </template>
+        <template #voucherCode="{ row }">
+          <span class="voucher-code">{{ row.voucherCode }}</span>
+        </template>
         <template #status="{ row }">
           <StatusTag entity="redemption" :value="row.status" />
         </template>
         <template #op="{ row }">
           <div class="op-cell" @click.stop>
-            <!-- 待发货：发货 / 取消 -->
-            <template v-if="row.status === 'pending_shipment'">
-              <t-button variant="text" size="small" theme="primary" :loading="isActing(row, 'ship')" @click="openShip(row)">发货</t-button>
-              <t-popconfirm content="确认取消该订单？消耗积分将退回用户账户，库存回补" @confirm="onCancel(row)">
+            <!-- 待使用：核销 / 退款 -->
+            <template v-if="row.status === 'pending_use'">
+              <t-popconfirm
+                :content="`确认核销券码 ${row.voucherCode}？核销后订单完成，不可撤销`"
+                @confirm="onVerify(row)"
+              >
+                <t-button variant="text" size="small" theme="primary" :loading="isActing(row, 'verify')">
+                  核销
+                </t-button>
+              </t-popconfirm>
+              <t-popconfirm content="确认退款该订单？消耗积分将退回用户账户，库存回补" @confirm="onCancel(row)">
                 <t-button variant="text" size="small" theme="danger" :loading="isActing(row, 'cancel')">
-                  取消订单
+                  退款
                 </t-button>
               </t-popconfirm>
             </template>
-            <!-- 已发货：标记完成 -->
+            <!-- 已完成 / 已取消：归档 -->
             <t-popconfirm
-              v-if="row.status === 'shipped'"
-              content="确认该订单已完成？"
-              @confirm="onFinish(row)"
-            >
-              <t-button variant="text" size="small" theme="primary" :loading="isActing(row, 'finish')">
-                标记完成
-              </t-button>
-            </t-popconfirm>
-            <!-- 已完成：归档 -->
-            <t-popconfirm
-              v-if="row.status === 'finished'"
+              v-if="row.status === 'finished' || row.status === 'cancelled'"
               content="确认归档该订单？归档后可在归档管理中恢复"
               @confirm="onArchive(row)"
             >
@@ -409,7 +374,6 @@ onMounted(load)
           <span class="drawer-id">{{ current.id }}</span>
           <StatusTag entity="redemption" :value="current.status" size="small" />
         </div>
-        <!-- 按「订单 → 履约」分组并去掉描边：原单列 bordered 边框密度过高、两类信息混排 -->
         <t-descriptions :column="1" title="订单信息">
           <t-descriptions-item label="兑换用户">{{ current.userName }}<t-tag class="id-tag" size="small" variant="light">{{ current.userId }}</t-tag></t-descriptions-item>
           <t-descriptions-item label="兑换商品">{{ current.goodsName }}</t-descriptions-item>
@@ -418,44 +382,19 @@ onMounted(load)
           <t-descriptions-item v-if="current.finishedAt" label="完成时间">{{ current.finishedAt }}</t-descriptions-item>
           <t-descriptions-item v-if="current.note" label="备注">{{ current.note }}</t-descriptions-item>
         </t-descriptions>
-        <t-descriptions v-if="hasFulfillment" :column="1" title="履约与收货" class="drawer-desc">
-          <t-descriptions-item v-if="current.shippedAt" label="发货时间">{{ current.shippedAt }}</t-descriptions-item>
-          <t-descriptions-item v-if="current.trackingNo" label="运单号">{{ current.trackingNo }}</t-descriptions-item>
-          <t-descriptions-item v-if="current.recipientName" label="收件人">
-            {{ current.recipientName }}<template v-if="current.recipientPhone">（{{ current.recipientPhone }}）</template>
-          </t-descriptions-item>
-          <t-descriptions-item v-if="current.address" label="收件地址">{{ current.address }}</t-descriptions-item>
-          <t-descriptions-item v-if="current.voucherCode" label="券码">
-            {{ current.voucherCode }}
+        <t-descriptions :column="1" title="券码信息" class="drawer-desc">
+          <t-descriptions-item label="券码">
+            <span class="voucher-code">{{ current.voucherCode }}</span>
             <StatusTag v-if="current.usedAt" entity="redeem" value="redeemed" class="id-tag" size="small" />
           </t-descriptions-item>
-          <t-descriptions-item v-if="current.voucherExpiresAt" label="券码有效期至">{{ current.voucherExpiresAt }}</t-descriptions-item>
+          <t-descriptions-item label="券码有效期至">{{ current.voucherExpiresAt }}</t-descriptions-item>
           <t-descriptions-item v-if="current.usedAt" label="核销时间">{{ current.usedAt }}</t-descriptions-item>
         </t-descriptions>
         <p v-if="current.status === 'cancelled'" class="drawer-tip">
-          该订单已取消，积分已退回（见积分流水中「订单取消退回积分」记录）。
+          该订单已取消，积分已退回（见积分流水中「订单退款退回积分」记录）。
         </p>
       </template>
     </t-drawer>
-
-    <t-dialog v-model:visible="shipVisible" header="订单发货" :confirm-btn="null" :cancel-btn="null" width="520px">
-      <template v-if="shipOrder">
-        <t-descriptions :column="1" bordered>
-          <t-descriptions-item label="商品">{{ shipOrder.goodsName }}</t-descriptions-item>
-          <t-descriptions-item label="收件人">{{ shipOrder.recipientName }}（{{ shipOrder.recipientPhone }}）</t-descriptions-item>
-          <t-descriptions-item label="收件地址">{{ shipOrder.address }}</t-descriptions-item>
-        </t-descriptions>
-        <t-form label-align="top" class="ship-form">
-          <t-form-item label="运单号">
-            <t-input v-model="trackingNo" clearable placeholder="自提订单可留空…" />
-          </t-form-item>
-        </t-form>
-      </template>
-      <template #footer>
-        <t-button variant="text" theme="default" @click="shipVisible = false">取消</t-button>
-        <t-button theme="primary" :loading="!!shipOrder && isActing(shipOrder, 'ship')" @click="onShip">确认发货</t-button>
-      </template>
-    </t-dialog>
 
     <!-- 一键归档：状态选择二次确认对话框 -->
     <BulkArchiveDialog
@@ -477,8 +416,10 @@ onMounted(load)
   font-weight: 600;
 }
 
-.ship-form {
-  margin-top: 16px;
+/* 券码等宽展示：现场核销时便于肉眼比对 */
+.voucher-code {
+  font-family: var(--td-font-family-mono, Consolas, monospace);
+  letter-spacing: 0.5px;
 }
 
 .drawer-head {

@@ -6,14 +6,14 @@ export const PUBLISHING_ACTIONS = ['demand_publish', 'article_publish', 'event_e
 export type PublishingAction = typeof PUBLISHING_ACTIONS[number]
 export type PublishingIdentity = 'personal_unverified' | 'personal_verified' | 'community_individual' | 'community_enterprise'
 
-interface PublishingSubject {
+export interface PublishingSubject {
   identityType: PublishingIdentity
   level: number
   subjectType: 'user' | 'enterprise'
   subjectId: string
 }
 
-async function resolveSubject(
+export async function resolveSubject(
   tx: Prisma.TransactionClient,
   uid: string,
   requested?: { identityType?: string; enterpriseId?: string },

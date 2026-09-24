@@ -11,8 +11,6 @@
 //   5. 半结构数据用 Json（审核时间线/身份快照/活跃记录）；标签与身份筛选数组用 String[]
 //   6. 枚举用 String + 应用层校验（保持与前端字符串契约一致）
 //   7. 手写迁移中存在 Prisma 无法声明的「部分唯一索引」（并发保护），**不进 schema 且不可被自动生成的迁移删除**：
-//      - Address_one_default_per_user_key              每用户至多一个默认地址（WHERE isDefault = true）
-//        → prisma/migrations/20260916093000_app_r1_review_fixes/migration.sql
 //      - EnterpriseInvitation_pending_enterprise_invitee_key  每企业每被邀请人至多一条待处理邀请
 //      - TransferRequest_pending_enterprise_key               每企业至多一条待处理负责人转移请求
 //        → prisma/migrations/20260916120634_app_r3_trust/migration.sql
@@ -28,7 +26,7 @@
 //   8. User 子表外键删除策略（显式声明，避免 Prisma 默认值造成的隐式 drift）：
 //      - 留痕类（EventEnrollment / PointsRecord / RedemptionOrder / SpaceReservation）= Restrict
 //        → 禁止物理删除用户（账号注销为软删除 status='deleted'），保护账本与业务记录不被级联清除
-//      - 从属数据（UserIdentity / UserNotification / UserNotificationPreference / Address /
+//      - 从属数据（UserIdentity / UserNotification / UserNotificationPreference /
 //        AgreementConsent / ArticleComment / IndividualCard / AccountDeletionRequest）= Cascade
 //      - 可选关联（DemandRespondent.userId）= SetNull（响应记录保留，归属置空）
 
@@ -238,7 +236,6 @@ model User {
   reservations           SpaceReservation[]
   orders                 RedemptionOrder[]
   notifications          UserNotification[]
-  addresses              Address[]
   agreementConsents      AgreementConsent[]
   deletionRequests       AccountDeletionRequest[]
   articleComments        ArticleComment[]
@@ -651,19 +648,15 @@ model MallGoods {
   id                   String   @id @db.VarChar(16)
   name                 String   @db.VarChar(128)
   coverUrl             String?  @db.VarChar(512)
-  // M2-R R2（Q1 决）：category 改造为 goods_category 字典分类；履约类型由 fulfillment 承担
+  // M2-R R2（Q1 决）：category 改造为 goods_category 字典分类
   // 取值口径：存 goods_category 字典的**code**（如 GC001、GC003），非中文 label
   category             String   @db.VarChar(16)
-  fulfillment          String   @default("physical") @db.VarChar(16) // physical | voucher
   points               Int
   stock                Int
   status               String   @default("off") @db.VarChar(8) // on | off
   description          String   @db.Text
   redeemedCount        Int      @default(0)
-  shippingMethods      String[] // physical 商品的发货方式：pickup | delivery
-  pickupAddress        String?  @db.VarChar(255)
-  shippingFee          Int? // 邮寄运费（元，0=包邮）
-  /** 权益券有效期（天）：下单时据此计算券码到期时间；仅 fulfillment=voucher 使用，空值按 30 天 */
+  /** 券码有效期（天）：下单时据此计算券码到期时间；空值按 30 天兜底 */
   validDays            Int?
   visibilityIdentities String[] // 自定义可见范围：身份类型
   visibilityLevels     String[] // 自定义可见范围：等级
@@ -679,6 +672,8 @@ model MallGoods {
   @@index([deletedAt])
 }
 
+// 统一券码兑换：下单即发券（pending_use），后台核销 → finished，核销前可退款 → cancelled；
+// 过期未使用的券由定时任务自动退款（cancelled + 退积分 + 回库存）。
 model RedemptionOrder {
   id               String  @id @db.VarChar(16)
   userId           String  @db.VarChar(16)
@@ -686,23 +681,11 @@ model RedemptionOrder {
   goodsId          String  @db.VarChar(16)
   goodsName        String  @db.VarChar(128)
   points           Int
-  // M2-R R2：履约类型快照
-  fulfillment      String  @default("physical") @db.VarChar(16)
-  // 实物商品所选发货方式快照：pickup 自提 | delivery 邮寄（历史邮寄订单为空）
-  shippingMethod   String? @db.VarChar(16)
-  // 自提订单的自提地址快照（下单时从商品 pickupAddress 复制）
-  pickupAddress    String? @db.VarChar(255)
-  status           String  @db.VarChar(24) // pending_shipment | shipped | finished | cancelled + pending_use（权益券，R2）
+  status           String  @db.VarChar(24) // pending_use | finished | cancelled
   createdAt        String  @db.VarChar(16)
-  shippedAt        String? @db.VarChar(16)
   finishedAt       String? @db.VarChar(16)
-  recipientName    String? @db.VarChar(64)
-  recipientPhone   String? @db.VarChar(32)
-  address          String? @db.VarChar(255)
-  addressId        String? @db.VarChar(16)
-  trackingNo       String? @db.VarChar(64)
-  voucherCode      String? @db.VarChar(64)
-  voucherExpiresAt String? @db.VarChar(16)
+  voucherCode      String  @db.VarChar(64)
+  voucherExpiresAt String  @db.VarChar(16)
   usedAt           String? @db.VarChar(16)
   cancelledAt      String? @db.VarChar(16)
   rating           Int?
@@ -716,6 +699,7 @@ model RedemptionOrder {
 
   @@index([status])
   @@index([userId])
+  @@index([voucherCode])
   @@index([archivableAt])
   @@index([deletedAt])
 }
@@ -925,7 +909,7 @@ model Article {
   @@index([deletedAt])
 }
 
-// 文章下架记录：后台主动下架与举报处置各留一条；恢复时回填 restored*（保留历史）
+// 文章下架记录：后台主动下架留痕；恢复时回填 restored*（保留历史）
 model ArticleTakedown {
   id          Int      @id @default(autoincrement())
   articleId   String   @db.VarChar(16)
@@ -940,7 +924,7 @@ model ArticleTakedown {
   @@index([articleId, takenDownAt])
 }
 
-// M2-R R2：文章评论；R3 屏蔽名单落地后在查询层追加过滤。
+// M2-R R2：文章评论。
 model ArticleComment {
   id        Int     @id @default(autoincrement())
   articleId String  @db.VarChar(16)
@@ -1169,21 +1153,7 @@ model UserNotification {
   @@index([userId, type])
 }
 
-// 收货地址簿（默认地址唯一由服务层保证）
-model Address {
-  id        String  @id @db.VarChar(16) // AD 前缀
-  userId    String  @db.VarChar(16)
-  name      String  @db.VarChar(64)
-  phone     String  @db.VarChar(32)
-  region    String  @db.VarChar(128)
-  detail    String  @db.VarChar(255)
-  isDefault Boolean @default(false)
-  createdAt String  @db.VarChar(16)
-  updatedAt String  @db.VarChar(16)
-  user      User    @relation(fields: [userId], references: [uid], onDelete: Cascade)
-
-  @@index([userId])
-}
+// 收货地址簿已随「商城统一券码兑换」改造移除（不再支持邮寄）
 
 // 协议同意留痕（注册/政策版本）
 model AgreementConsent {

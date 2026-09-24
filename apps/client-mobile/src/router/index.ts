@@ -90,7 +90,6 @@ export const router = createRouter({
         { path: 'me/articles/:id', name: 'my-article-detail', component: () => import('@/views/mobile/MyArticleDetailView.vue'), meta: { requiresAuth: true } },
         { path: 'me/favorites', name: 'me-favorites', component: () => import('@/views/mobile/MyFavoritesView.vue'), meta: { requiresAuth: true } },
         { path: 'me/history', name: 'me-history', component: () => import('@/views/mobile/HistoryView.vue'), meta: { requiresAuth: true } },
-        { path: 'me/addresses', name: 'me-addresses', component: () => import('@/views/mobile/AddressesView.vue'), meta: { requiresAuth: true } },
         { path: 'me/security', name: 'me-security', component: () => import('@/views/mobile/SecurityView.vue'), meta: { requiresAuth: true } },
         { path: 'me/records', name: 'me-records', component: () => import('@/views/mobile/MeRecordsView.vue'), meta: { requiresAuth: true } },
         { path: 'me/settings', name: 'me-settings', component: () => import('@/views/mobile/MeSettingsView.vue'), meta: { requiresAuth: true } },

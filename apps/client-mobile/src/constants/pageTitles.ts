@@ -60,7 +60,6 @@ const ROUTE_TITLES: Record<string, string> = {
   'my-article-detail': '投稿详情',
   'me-favorites': '我的收藏',
   'me-history': '浏览历史',
-  'me-addresses': '收货地址',
   'me-security': '账号与安全',
   'me-records': '我的记录',
   'me-settings': '设置',

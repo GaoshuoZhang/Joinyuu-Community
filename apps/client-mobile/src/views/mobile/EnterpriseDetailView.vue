@@ -10,15 +10,18 @@ import {
   revokeEnterpriseInvitation,
   transferEnterpriseContact,
 } from '@/api/enterprises'
+import { fetchExperience } from '@/api/experience'
+import { fetchRealnameRights } from '@/api/me'
 import { useAsyncList } from '@/composables/useAsyncList'
 import { ApiError } from '@/api/http'
 import { useBusinessNow } from '@/composables/useBusinessNow'
 import { formatLocalDateTime, parseLocalDateTime } from '@/utils/format'
 import EmptyBlock from '@/components/shared/EmptyBlock.vue'
 import ListSkeleton from '@/components/ListSkeleton.vue'
+import LevelCardCarousel from '@/components/level/LevelCardCarousel.vue'
 import EnterpriseInviteSheet from '@/components/enterprise/EnterpriseInviteSheet.vue'
 import EnterpriseMemberSection from '@/components/enterprise/EnterpriseMemberSection.vue'
-import type { EnterpriseInvitation, EnterpriseMemberInfo, EnterpriseMemberPermission } from '@/types'
+import type { EnterpriseInvitation, EnterpriseMemberInfo, EnterpriseMemberPermission, ExperienceProfile, RealnameRightsGroup } from '@/types'
 
 /* 企业详情 / 管理：企业名片入口 + 负责人 / 成员 / 退驻注销；
  * 负责人或持对应权限的成员可管理；成员管理与企业名片编辑均为独立页
@@ -29,7 +32,32 @@ const enterpriseId = String(route.params.id)
 const businessNowMs = useBusinessNow()
 
 const { data, loading, error, run } = useAsyncList(() => fetchEnterpriseDetail(enterpriseId))
-onMounted(run)
+
+/* ---- 企业等级（社区企业维度）：等级卡轮播 + 分级权益，全体成员可见 ---- */
+const levelProfile = ref<ExperienceProfile | null>(null)
+const levelRights = ref<RealnameRightsGroup[]>([])
+const levelLoading = ref(false)
+const levelError = ref('')
+async function loadLevel() {
+  levelLoading.value = true
+  levelError.value = ''
+  try {
+    const [profile, rights] = await Promise.all([
+      fetchExperience('community_enterprise', enterpriseId),
+      fetchRealnameRights({ identityType: 'community_enterprise', enterpriseId }),
+    ])
+    levelProfile.value = profile
+    levelRights.value = rights.slice().sort((a, b) => a.level - b.level)
+  } catch (e) {
+    levelError.value = e instanceof ApiError ? e.message : '企业等级信息加载失败'
+  } finally {
+    levelLoading.value = false
+  }
+}
+onMounted(() => {
+  run()
+  void loadLevel()
+})
 
 const isContact = computed(() => data.value?.isContact === true)
 const myPermissions = computed<EnterpriseMemberPermission[]>(() => data.value?.myPermissions ?? [])
@@ -226,6 +254,22 @@ async function doExit() {
         />
       </section>
 
+      <!-- 企业等级：社区企业维度的等级与分级权益轮播（全体成员可见） -->
+      <section class="m-card level-section">
+        <h2 class="sec-title">企业等级</h2>
+        <ListSkeleton v-if="levelLoading" :rows="2" />
+        <p v-else-if="levelError" class="level-error">{{ levelError }}</p>
+        <LevelCardCarousel
+          v-else-if="levelRights.length"
+          :groups="levelRights"
+          :current-level="levelProfile?.level ?? null"
+          :current-experience="levelProfile?.currentExperience ?? 0"
+          :progress-percent="null"
+          identity-label="社区企业"
+        />
+        <p v-else class="level-error">暂无企业等级权益配置</p>
+      </section>
+
       <section class="m-card">
         <h2 class="sec-title">企业负责人</h2>
         <div class="contact-row">
@@ -349,6 +393,16 @@ async function doExit() {
 .sec-title {
   margin:0 0 var(--app-space-6);
   font-size: var(--app-font-subtitle);
+}
+
+.level-section {
+  margin-bottom: 0;
+}
+
+.level-error {
+  margin:0;
+  font-size: var(--app-font-caption);
+  color: var(--td-text-color-secondary);
 }
 
 .contact-row {

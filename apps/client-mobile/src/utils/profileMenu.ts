@@ -1,71 +1,69 @@
 export interface ProfileMenuEntry {
   path: string
   label: string
-  note?: string
-  emphasis?: boolean
+  /** TDesign 图标名（宫格 icon 展示） */
+  icon: string
+  /** 角标数值（如站内信未读数）；>0 时渲染 */
+  badge?: number
+  /** 特殊动作（不发路由）：如等级加载失败后点击重试 */
   action?: 'retry-level'
 }
 
-export interface ProfileMenuSection {
-  title: string
-  entries: ProfileMenuEntry[]
+/** 顶部账户数据卡的两格（积分 / 等级） */
+export interface ProfileStat {
+  key: 'points' | 'level'
+  path: string
+  label: string
+  value: string
+  /** 等级格失败态：value 置空、点击重试 */
+  failed?: boolean
+}
+
+export interface ProfileMenuLayout {
+  stats: ProfileStat[]
+  /** 服务宫格（压缩原「身份与名片 / 我的服务 / 消息与设置」三组列表为图标直达） */
+  grid: ProfileMenuEntry[]
 }
 
 interface ProfileMenuContext {
   hasCommunityIndividual: boolean
-  identityCount: number
-  pointsLabel: string
+  points: number
   levelLabel: string
   levelFailed: boolean
   unread: number
 }
 
-/** 「我的」页入口按用户任务归类；身份相关入口随社区个体身份变化。 */
-export function buildProfileMenuSections(context: ProfileMenuContext): ProfileMenuSection[] {
-  const identityEntries: ProfileMenuEntry[] = [
-    {
-      path: '/me/identities',
-      label: '关联身份',
-      note: context.identityCount > 0 ? `${context.identityCount} 个` : undefined,
-    },
-  ]
-
-  if (context.hasCommunityIndividual) {
-    identityEntries.push({ path: '/me/cards/individual', label: '我的名片', note: '维护对外展示资料' })
-  } else {
-    identityEntries.push({ path: '/intros/talent', label: '人才登记', note: '申请加入社区人才库' })
-  }
-
-  const accountEntries: ProfileMenuEntry[] = [
-    { path: '/me/points', label: '我的积分', note: context.pointsLabel, emphasis: true },
+/** 「我的」页布局（参考支付宝）：账户数据卡 + 服务图标宫格，压缩一个层级。
+ * 身份相关入口随社区个体身份变化；详细业务记录继续由二级页收纳。 */
+export function buildProfileMenuLayout(context: ProfileMenuContext): ProfileMenuLayout {
+  const stats: ProfileStat[] = [
+    { key: 'points', path: '/me/points', label: '我的积分', value: `${context.points}` },
   ]
   if (context.hasCommunityIndividual) {
-    accountEntries.push({
+    stats.push({
+      key: 'level',
       path: '/me/experience',
       label: '我的等级',
-      note: context.levelFailed ? '加载失败，点击重试' : context.levelLabel || '未绑定',
-      emphasis: Boolean(context.levelLabel),
-      action: context.levelFailed ? 'retry-level' : undefined,
+      value: context.levelFailed ? '' : context.levelLabel || '未绑定',
+      failed: context.levelFailed,
     })
   }
 
-  return [
-    { title: '身份与名片', entries: identityEntries },
-    {
-      title: '我的服务',
-      entries: [
-        { path: '/me/records', label: '我的记录', note: '项目 / 需求 / 报名 / 场地' },
-        { path: '/me/orders', label: '我的订单', note: '券码 / 物流 / 评价' },
-      ],
-    },
-    { title: '账户与权益', entries: accountEntries },
-    {
-      title: '消息与设置',
-      entries: [
-        { path: '/notices', label: '站内信', note: context.unread > 0 ? `${context.unread} 条未读` : undefined },
-        { path: '/me/messages', label: '我的留言', note: '向社区留言 / 查看回复' },
-        { path: '/me/settings', label: '设置', note: '资料 / 地址 / 安全 / 通知' },
-      ],
-    },
+  const grid: ProfileMenuEntry[] = [
+    { path: '/me/identities', label: '关联身份', icon: 'usergroup' },
   ]
+  if (context.hasCommunityIndividual) {
+    grid.push({ path: '/me/cards/individual', label: '我的名片', icon: 'user' })
+  } else {
+    grid.push({ path: '/intros/talent', label: '人才登记', icon: 'user' })
+  }
+  grid.push(
+    { path: '/me/records', label: '我的记录', icon: 'file' },
+    { path: '/me/orders', label: '我的订单', icon: 'order' },
+    { path: '/notices', label: '站内信', icon: 'notification', badge: context.unread },
+    { path: '/me/messages', label: '我的留言', icon: 'chat' },
+    { path: '/me/settings', label: '设置', icon: 'setting' },
+  )
+
+  return { stats, grid }
 }

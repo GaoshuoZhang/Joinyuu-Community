@@ -1,5 +1,5 @@
 import { DEFAULT_LIST_PAGE_SIZE, httpGet, httpPost } from './http'
-import type { Goods, GoodsShippingMethod, MyOrder, PageResult } from '@/types'
+import type { Goods, MyOrder, PageResult } from '@/types'
 
 /** GET /api/app/mall/goods — 商品列表（on/restock 均可见，库存 0 展示售罄；mallOpen 关闭 → 400） */
 export async function fetchGoods(query: { category?: string; page?: number; pageSize?: number } = {}): Promise<PageResult<Goods>> {
@@ -15,13 +15,8 @@ export async function fetchGoodsDetail(id: string): Promise<Goods> {
   return httpGet<Goods>(`/mall/goods/${id}`)
 }
 
-/** POST /api/app/mall/orders — 兑换下单（事务：扣积分 + 流水 + 扣库存 + 建单）。
- * 实物商品：shippingMethod 必传（商品仅支持单一方式时服务端自动兜底）；邮寄需带 addressId。 */
-export async function createOrder(payload: {
-  goodsId: string
-  shippingMethod?: GoodsShippingMethod
-  addressId?: string
-}): Promise<{ id: string; remainingPoints: number }> {
+/** POST /api/app/mall/orders — 兑换下单（统一券码：事务扣积分 + 流水 + 扣库存 + 建单并签发券码） */
+export async function createOrder(payload: { goodsId: string; remark?: string }): Promise<{ id: string; remainingPoints: number }> {
   return httpPost<{ id: string; remainingPoints: number }>('/mall/orders', payload)
 }
 
@@ -38,22 +33,13 @@ export async function fetchMyOrder(id: string): Promise<MyOrder> {
   return httpGet<MyOrder>(`/me/orders/${id}`)
 }
 
-/** POST /api/app/mall/orders/:id/confirm — 确认收货（实物 shipped → completed）。 */
 /** POST /api/app/mall/orders/:id/review — 完成订单评价（1~5 星 + 可选文字） */
 export async function reviewOrder(id: string, rating: number, review?: string): Promise<void> {
   await httpPost(`/mall/orders/${id}/review`, { rating, comment: review })
 }
 
-export async function confirmOrder(id: string): Promise<void> {
-  await httpPost(`/mall/orders/${id}/confirm`)
-}
-
-/** 权益券核销（voucher pending_use → completed）。 */
-export async function useOrder(id: string): Promise<void> {
-  await httpPost(`/mall/orders/${id}/use`)
-}
-
-/** 取消待发货订单（退积分 + 回补库存）。 */
+/** POST /api/app/mall/orders/:id/cancel — 退款（仅待使用券可退：退积分 + 回补库存）。
+ * 核销由后台工作人员现场执行，用户侧不提供核销入口。 */
 export async function cancelOrder(id: string): Promise<void> {
   await httpPost(`/mall/orders/${id}/cancel`)
 }

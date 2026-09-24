@@ -1,17 +1,15 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
-import { Avatar, Cell, CellGroup, PullDownRefresh } from 'tdesign-mobile-vue'
+import { Avatar, Badge, Icon, PullDownRefresh } from 'tdesign-mobile-vue'
 import { useAuthStore } from '@/stores/auth'
 import { useNoticesStore } from '@/stores/notices'
 import { fetchExperience } from '@/api/experience'
-import { fetchMyIdentities } from '@/api/enterprises'
 import IdentityTag from '@/components/shared/IdentityTag.vue'
-import type { MyIdentitySummary } from '@/types'
 import { useAnimSuppress } from '@/composables/useAnimSuppress'
 import { useRefreshOnActivate } from '@/composables/useRefreshOnActivate'
 import { formatZhNumber } from '@/utils/format'
-import { buildProfileMenuSections, type ProfileMenuEntry } from '@/utils/profileMenu'
+import { buildProfileMenuLayout, type ProfileMenuEntry, type ProfileStat } from '@/utils/profileMenu'
 
 useAnimSuppress()
 
@@ -22,7 +20,6 @@ const auth = useAuthStore()
 const notices = useNoticesStore()
 
 const levelName = ref('')
-const myIdentities = ref<MyIdentitySummary[]>([])
 /* 等级请求失败与「未绑定」是两回事：失败时给出可重试的说明，而不是静默显示「未绑定」 */
 const levelFailed = ref(false)
 
@@ -34,16 +31,23 @@ function onAvatarError() {
   failedAvatar.value = auth.avatar
 }
 
-const menuSections = computed(() =>
-  buildProfileMenuSections({
+const menu = computed(() =>
+  buildProfileMenuLayout({
     hasCommunityIndividual: auth.hasCommunityIndividual,
-    identityCount: myIdentities.value.length,
-    pointsLabel: `${formatZhNumber(auth.points)} 分`,
+    points: auth.points,
     levelLabel: levelName.value,
     levelFailed: levelFailed.value,
     unread: notices.unread,
   }),
 )
+
+function onStatTap(stat: ProfileStat) {
+  if (stat.key === 'level' && stat.failed) {
+    void loadLevel()
+    return
+  }
+  void router.push(stat.path)
+}
 
 function onMenuTap(entry: ProfileMenuEntry) {
   if (entry.action === 'retry-level') {
@@ -51,18 +55,6 @@ function onMenuTap(entry: ProfileMenuEntry) {
     return
   }
   void router.push(entry.path)
-}
-
-async function loadIdentities() {
-  if (!auth.isLogged) {
-    myIdentities.value = []
-    return
-  }
-  try {
-    myIdentities.value = await fetchMyIdentities()
-  } catch {
-    /* 无关联身份时忽略 */
-  }
 }
 
 async function loadLevel() {
@@ -81,14 +73,14 @@ async function loadLevel() {
   }
 }
 
-/* 下拉刷新：同步资料与多身份，保证响应需求等入口拿到最新企业身份 */
+/* 下拉刷新：同步资料与等级/未读 */
 const refreshing = ref(false)
 let refreshTimer: ReturnType<typeof setTimeout> | null = null
 async function onRefresh() {
   refreshing.value = true
   try {
     await auth.refreshProfile()
-    await Promise.all([loadIdentities(), loadLevel()])
+    await loadLevel()
     if (auth.isLogged) await notices.refreshUnread()
   } finally {
     if (refreshTimer) clearTimeout(refreshTimer)
@@ -106,7 +98,7 @@ onBeforeUnmount(() => {
 
 async function refreshMe() {
   await auth.refreshProfile()
-  await Promise.all([loadLevel(), loadIdentities(), notices.refreshUnread()])
+  await Promise.all([loadLevel(), notices.refreshUnread()])
 }
 
 onMounted(() => void refreshMe())
@@ -135,16 +127,40 @@ useRefreshOnActivate(() => void refreshMe())
         </div>
       </div>
 
-      <section v-for="section in menuSections" :key="section.title" class="menu-section" :aria-labelledby="`me-${section.title}`">
-        <h2 :id="`me-${section.title}`" class="group-title">{{ section.title }}</h2>
-        <CellGroup theme="card">
-          <Cell v-for="entry in section.entries" :key="entry.path" :title="entry.label" arrow @click="onMenuTap(entry)">
-            <template v-if="entry.emphasis && entry.note" #note>
-              <span class="note-strong tabular-nums">{{ entry.note }}</span>
-            </template>
-            <template v-else-if="entry.note" #note>{{ entry.note }}</template>
-          </Cell>
-        </CellGroup>
+      <!-- 账户数据卡：积分 / 等级两列大数字（参考支付宝「我的」页顶部资产区） -->
+      <section class="m-card stats-card" aria-label="账户概览">
+        <div
+          v-for="stat in menu.stats"
+          :key="stat.key"
+          class="stat-item"
+          v-pressable
+          :aria-label="`${stat.label}，${stat.failed ? '加载失败，点击重试' : stat.value}`"
+          @click="onStatTap(stat)"
+        >
+          <p class="stat-value tabular-nums">
+            <template v-if="stat.failed">—</template>
+            <template v-else-if="stat.key === 'points'">{{ formatZhNumber(auth.points) }}</template>
+            <template v-else>{{ stat.value }}</template>
+          </p>
+          <p class="stat-label">{{ stat.label }}<Icon aria-hidden="true" name="chevron-right" size="12px" /></p>
+        </div>
+      </section>
+
+      <!-- 服务宫格：图标直达二级页，压缩分组列表层级 -->
+      <section class="m-card grid-card" aria-label="常用服务">
+        <div
+          v-for="entry in menu.grid"
+          :key="entry.path"
+          class="grid-item"
+          v-pressable
+          :aria-label="entry.badge ? `${entry.label}，${entry.badge} 条未读` : entry.label"
+          @click="onMenuTap(entry)"
+        >
+          <Badge :count="entry.badge ?? 0" :max-count="99" :offset="[-4, 4]">
+            <span class="grid-icon"><Icon aria-hidden="true" :name="entry.icon" size="24px" /></span>
+          </Badge>
+          <p class="grid-label">{{ entry.label }}</p>
+        </div>
       </section>
     </div>
   </PullDownRefresh>
@@ -184,10 +200,77 @@ useRefreshOnActivate(() => void refreshMe())
   cursor: pointer;
 }
 
-.menu-section {
+/* 账户数据卡：两列大数字 + 标签（点击进积分/等级页；等级失败态点击重试） */
+.stats-card {
+  display: flex;
+  align-items: stretch;
+  padding: var(--app-space-7) var(--app-space-5);
+  gap: var(--app-space-4);
+}
+
+.stat-item {
+  flex: 1;
   display: flex;
   flex-direction: column;
-  gap: var(--app-space-3);
+  align-items: center;
+  gap: var(--app-space-2);
+  padding: var(--app-space-2) 0;
+  cursor: pointer;
+}
+
+.stat-item + .stat-item {
+  border-left: 1px solid var(--td-component-border);
+}
+
+.stat-value {
+  margin: 0;
+  font-size: var(--app-font-title);
+  font-weight: 700;
+  color: var(--td-brand-color);
+  line-height: 1.3;
+}
+
+.stat-label {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  margin: 0;
+  font-size: var(--app-font-caption);
+  color: var(--td-text-color-secondary);
+}
+
+/* 服务宫格：4 列图标直达（参考支付宝「我的」页功能宫格） */
+.grid-card {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: var(--app-space-2) 0;
+  padding: var(--app-space-6) var(--app-space-3);
+}
+
+.grid-item {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--app-space-2);
+  min-height: 76px;
+  padding: var(--app-space-2) 0;
+  cursor: pointer;
+}
+
+.grid-icon {
+  display: grid;
+  place-items: center;
+  width: 44px;
+  height: 44px;
+  border-radius: var(--td-radius-large);
+  background: var(--td-brand-color-1);
+  color: var(--td-brand-color);
+}
+
+.grid-label {
+  margin: 0;
+  font-size: var(--app-font-caption);
+  color: var(--td-text-color-primary);
 }
 
 .avatar {
@@ -222,24 +305,5 @@ useRefreshOnActivate(() => void refreshMe())
   display: flex;
   flex-wrap: wrap;
   gap: var(--app-space-3);
-}
-
-/* 卡片宽度与 .m-card 对齐：CellGroup 自带外边距与页面容器 padding 叠加导致偏窄，置零并补边框 */
-.me :deep(.t-cell-group--card) {
-  margin: 0;
-  border: 1px solid var(--td-component-border);
-}
-
-.group-title {
-  margin: 0 var(--app-space-1);
-  font-size: var(--app-font-caption);
-  font-weight: 500;
-  color: var(--td-text-color-secondary);
-}
-
-/* 资产数值（积分/等级）强调：反「标签比数值重」的层级倒置 */
-.note-strong {
-  color: var(--td-brand-color);
-  font-weight: 600;
 }
 </style>

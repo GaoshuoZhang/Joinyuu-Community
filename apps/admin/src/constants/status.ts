@@ -88,9 +88,7 @@ export const statusMap = {
     restock: { label: '待补货', theme: 'warning' },
   },
   redemption: {
-    pending_shipment: { label: '待发货', theme: 'warning' },
     pending_use: { label: '待使用', theme: 'primary' },
-    shipped: { label: '已发货', theme: 'primary' },
     finished: { label: '已完成', theme: 'success' },
     cancelled: { label: '已取消', theme: 'default' },
   },

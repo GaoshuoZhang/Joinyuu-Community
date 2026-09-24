@@ -220,8 +220,8 @@ TZ=Asia/Shanghai
 | 活动 | EventEnrollment | 自增 | 复合唯一 (eventId, userId)；userId/name/enterprise/phone/appliedAt/status(pending/approved/rejected)/checkedIn/checkInAt? |
 | 账本 | ExperienceRecord | EX | targetType(enterprise/individual)/targetId/delta/balance/reason/at/operator/source(rule/manual) |
 | 账本 | PointsRecord | PT | userId FK/delta/balance/reason/at/operator/source(rule/manual/redemption)/dedupeKey? 唯一（积分发放幂等） |
-| 商城 | MallGoods | G | name/category(GC001 实物商品 / GC003 权益券；字典 goods_category)/points/stock/**status(on/off/restock 三态，库存为 0 记 restock)**/description/redeemedCount/createdAt/**shippingMethods[]/pickupAddress?/shippingFee?（实物发货）**/**visibilityIdentities[]/visibilityLevels[]/orderIdentities[]/orderLevels[]（可见/可下单范围）**/**deletedAt?/deletedBy?/archivableAt?** |
-| 商城 | RedemptionOrder | RO | userId/userName(快照)/goodsId/goodsName(快照)/points/status(pending_shipment/shipped/finished/cancelled)/createdAt/shippedAt?/finishedAt?/recipientName?/recipientPhone?/address?/note?/cancelReason?/**deletedAt?/deletedBy?/archivableAt?** |
+| 商城 | MallGoods | G | name/category(GC001 实物商品 / GC003 权益券；字典 goods_category)/points/stock/**status(on/off/restock 三态，库存为 0 记 restock)**/description/redeemedCount/validDays?（券码有效期天，空按 30 天兜底）/createdAt/**visibilityIdentities[]/visibilityLevels[]/orderIdentities[]/orderLevels[]（可见/可下单范围）**/**deletedAt?/deletedBy?/archivableAt?** |
+| 商城 | RedemptionOrder | RO | userId/userName(快照)/goodsId/goodsName(快照)/points/status(pending_use/finished/cancelled 三态，统一券码)/createdAt/finishedAt?/note?/cancelReason?/**voucherCode(下单即签发)/voucherExpiresAt(按商品 validDays 计算，过期自动退款)/usedAt?**/**deletedAt?/deletedBy?/archivableAt?** |
 | 规则 | PointsRule | code（PK） | 9 条固定触发项（见 8.4）；name/scene/description 写死；points 可编辑；status |
 | 规则 | ExperienceRule | code（PK） | 6 条固定触发项；同上 |
 | 规则 | LevelTier | identityType+level | 社区个体、社区企业分别维护 label/threshold；整组保存、逐级递增校验、1-10 级 |
@@ -421,15 +421,14 @@ TZ=Asia/Shanghai
 | 方法 | 路径 | 说明 |
 |---|---|---|
 | GET | /api/admin/mall/goods | query：page/pageSize/keyword(名称/ID)/category/status/sortBy(id 默认倒序、points、createdAt)/sortOrder；默认过滤已归档；权限 `/mall/goods` |
-| POST | /api/admin/mall/goods | 创建（stock=0 即 restock，否则 off）；商品含发货方式/自提地址/运费/可见与可下单范围；描述 sanitize |
+| POST | /api/admin/mall/goods | 创建（stock=0 即 restock，否则 off）；统一券码兑换，商品含积分/库存/券码有效期（validDays 天）/可见与可下单范围；描述 sanitize |
 | PUT | /api/admin/mall/goods/:id | 编辑（不影响已有订单）；库存归零 → restock，补货后由 restock 回落为 off |
 | POST | /api/admin/mall/goods/:id/toggle-status | 上架↔下架（下架写 archivableAt，重新上架清除） |
 | POST | /api/admin/mall/goods/:id/archive | 仅已下架（off）可归档（软删） |
-| GET | /api/admin/mall/redemption-orders | query：page/pageSize/keyword(用户名/商品名/ID)/status/sortBy(id 默认、createdAt)/sortOrder；默认过滤已归档；权限 `/mall/orders` |
-| POST | /api/admin/mall/redemption-orders/:id/ship | pending_shipment → shipped |
-| POST | /api/admin/mall/redemption-orders/:id/finish | shipped → finished + archivableAt |
-| POST | /api/admin/mall/redemption-orders/:id/archive | 仅 finished 可归档（软删） |
-| POST | /api/admin/mall/redemption-orders/:id/cancel | 仅 pending_shipment；**事务**：退回积分（写 source=redemption 流水）+ 库存回补 + redeemedCount-1 + 记 cancelReason（固定文案） |
+| GET | /api/admin/mall/redemption-orders | query：page/pageSize/keyword(用户名/商品名/订单ID/券码)/status/sortBy(id 默认、createdAt)/sortOrder；默认过滤已归档；权限 `/mall/orders` |
+| POST | /api/admin/mall/redemption-orders/:id/verify | 券码核销：pending_use → finished + archivableAt（现场兑换由工作人员执行，写审计+站内信） |
+| POST | /api/admin/mall/redemption-orders/:id/archive | 仅 finished/cancelled 可归档（软删） |
+| POST | /api/admin/mall/redemption-orders/:id/cancel | 仅 pending_use；**事务**：退回积分（写 source=redemption 流水）+ 库存回补 + redeemedCount-1 + 记 cancelReason（固定文案） |
 | GET | /api/admin/mall/points-rules | 9 条固定项按 code 排序；权限 `/rules/points` |
 | PUT | /api/admin/mall/points-rules/:code | `{ points }` 正整数；name/scene/description 不可改 |
 | POST | /api/admin/mall/points-rules/:code/toggle-status | 启用↔停用 |
@@ -620,20 +619,22 @@ TZ=Asia/Shanghai
 - **项目**：`running ↔ paused`；`paused →(close)→ closed`（写 archivableAt）；closed 只读（可"重新创建"=复制预填，生成新 P 编号）；里程碑全 done → finished（结项，见 8.5，写 archivableAt）；finished 不可编辑。归档：仅 finished/closed。
 - **文章**：`pending(投稿待审核) →(review approved)→ pending_release | (rejected)→ rejected`；`pending_release →(publish | schedule)→ published | scheduled`；`scheduled →(cancel-schedule)→ pending_release`；`rejected →(编辑保存)→ pending`（重新入审核队列）；`published →(staff/举报下架)→ closed`（写 `archivableAt` 并新增 `ArticleTakedown` 记录；`closed →(原举报恢复)→ published`）；成员主动撤回待审核投稿为 `pending → withdrawn`（可重提）。官方文章创建即 pending_release、投稿创建即 pending。归档：pending/rejected/pending_release/closed 可软删；`withdrawn` 为成员可重提状态，不归档。
 - **申请/预约/展示页**：`pending → approved | rejected`；预约另有 `pending/approved → cancelled`。归档：申请仅 approved/rejected；预约为已结束/rejected/cancelled。
-- **商品/订单**：`on ↔ off`（下架写 archivableAt、上架清除；stock=0 置 restock，补货后回落 off）；`pending_shipment → shipped → finished`；`pending_shipment → cancelled`（事务退款）；归档：商品仅 off、订单仅 finished。
+- **商品/订单**：`on ↔ off`（下架写 archivableAt、上架清除；stock=0 置 restock，补货后回落 off）；统一券码兑换订单三态 `pending_use → finished`（后台核销）/`pending_use → cancelled`（退款，事务）；过期未使用券由定时任务自动 `pending_use → cancelled` 退款；归档：商品仅 off、订单仅 finished/cancelled。
 - **办公位/租约**：办公位 idle ↔ maintenance（直接切换）；assigned 仅经租约创建/终止进入/退出；租约 active → terminated（事务释放办公位）；归档：仅 terminated。
 - **实现方式**：每域 Service 内显式状态/前置校验，非法流转抛 409（文案="仅 XX 的 XX 可 XX"，与 M0 一致）；每个归档端点同样校验可归档状态，不做通用状态机框架。
 
-### 8.2 定时任务（@nestjs/schedule，单实例，共 6 个）
-
+### 8.2 定时任务（@nestjs/schedule，单实例，共 9 个）
 | 任务名 | 频率 | 逻辑 |
 |---|---|---|
 | demands-events-scheduled-publish | 每 30 秒 | `demands/events` 中 status=scheduled 且 scheduledAt≤now 且未归档 → published（活动同时 open 报名）+ 写 schedule 通知，事务内完成 |
 | articles-scheduled-publish | 每 30 秒 | `articles` 中 status=scheduled 且 scheduledAt≤now 且未归档 → published + publishedAt + 写 schedule 通知 |
 | events-auto-end | 每 5 分钟 | status=published 且 endTime≤now 且未归档 → ended + archivableAt |
+| user-freeze-expire | 每 5 分钟 | status=frozen 且 frozenUntil≤now → active（临时冻结到期自动解冻，写审计） |
 | lease-expiring-notify | 每日 09:00 | status=active 且非长期租约 endDate 落在临期窗口（SystemConfig.leaseExpireRemindDays，默认 15）→ 写 lease 通知（同一租约同日去重） |
 | archive-auto-archive | 每 5 分钟 | 按 ArchiveSetting：autoArchive 开启且对应状态开启、`archivableAt + archiveDelayDays` 已过 → 写 deletedAt/deletedBy（操作人「系统自动归档」） |
 | archive-auto-purge | 每 5 分钟 | 按 ArchiveSetting：autoPurge 开启且 `deletedAt + purgeDelayDays` 已过 → 物理删除（外键冲突跳过，等待人工处理） |
+| message-outbox-dispatch | 每 30 秒 | 扫描 Outbox 到期消息投递，重试退避与死信由 OutboxService 内部处理 |
+| mall-voucher-expire-refund | 每 5 分钟 | 商城券码过期自动退款：pending_use 且 voucherExpiresAt≤now → cancelled + 退积分（source=redemption 流水）+ 回补库存 + 站内信（逐单事务，条件抢占与人工核销/退款互斥） |
 
 - 每次执行写 `SchedulerLog`（jobName/startedAt/finishedAt/durationMs/status/detail/rowsAffected），监控页读取；`POST /api/admin/monitor/jobs/:name/run` 可手动触发（执行失败透出 500）。
 - 单实例部署无需分布式锁；读取派生（expiring/expired）与定时通知并存：派生保证展示实时性，任务只负责通知。

@@ -7,12 +7,12 @@ import { createGoods, updateGoods } from '@/api/mall'
 import { fetchDictEntries } from '@/api/dicts'
 import { goodsCategoryMap } from '@/constants/status'
 import { userLevelOptions, visibilityIdentityOptions } from '@/constants/identity'
-import type { MallGoods, GoodsCategory, GoodsFulfillment } from '@/types'
+import type { MallGoods, GoodsCategory } from '@/types'
 
 const RichEditor = defineAsyncComponent(() => import('@/components/RichEditor.vue'))
 
-/* 商品新增/编辑弹窗：新增即下架（status=off，由列表操作上架）；编辑不影响已有兑换订单；
- * 实物商品配置发货方式（自提/邮寄），并可自定义可见范围与可下单范围 */
+/* 商品新增/编辑弹窗（统一券码兑换）：新增即下架（status=off，由列表操作上架）；编辑不影响已有兑换订单；
+ * 商品仅配置分类/积分/库存/券码有效期/说明，并可自定义可见范围与可下单范围 */
 const props = defineProps<{
   visible: boolean
   mode: 'create' | 'edit'
@@ -47,15 +47,6 @@ function ensureCategories(): Promise<void> {
   return categoryPromise
 }
 
-const shippingMethodOptions = [
-  { label: '自提', value: 'pickup' },
-  { label: '邮寄', value: 'delivery' },
-]
-const fulfillmentOptions = [
-  { label: '实物配送', value: 'physical' },
-  { label: '券码权益', value: 'voucher' },
-]
-
 const submitting = ref(false)
 const formRef = ref()
 
@@ -67,14 +58,10 @@ const form = reactive({
   name: '',
   coverUrl: '',
   category: 'GC001' as GoodsCategory,
-  fulfillment: 'physical' as GoodsFulfillment,
   points: 100,
   stock: 50,
   validDays: 30,
   description: '',
-  shippingMethods: [] as Array<'pickup' | 'delivery'>,
-  pickupAddress: '',
-  shippingFee: 0,
   visibilityIdentities: [] as string[],
   visibilityLevels: [] as string[],
   orderIdentities: [] as string[],
@@ -90,14 +77,10 @@ watch(
       form.name = props.goods.name
       form.coverUrl = props.goods.coverUrl ?? ''
       form.category = props.goods.category
-      form.fulfillment = props.goods.fulfillment
       form.points = props.goods.points
       form.stock = props.goods.stock
       form.validDays = props.goods.validDays ?? 30
       form.description = props.goods.description
-      form.shippingMethods = [...(props.goods.shippingMethods ?? [])]
-      form.pickupAddress = props.goods.pickupAddress ?? ''
-      form.shippingFee = props.goods.shippingFee ?? 0
       form.visibilityIdentities = [...(props.goods.visibilityIdentities ?? [])]
       form.visibilityLevels = [...(props.goods.visibilityLevels ?? [])]
       form.orderIdentities = [...(props.goods.orderIdentities ?? [])]
@@ -108,14 +91,10 @@ watch(
       form.name = ''
       form.coverUrl = ''
       form.category = 'GC001'
-      form.fulfillment = 'physical'
       form.points = 100
       form.stock = 50
       form.validDays = 30
       form.description = ''
-      form.shippingMethods = []
-      form.pickupAddress = ''
-      form.shippingFee = 0
       form.visibilityIdentities = []
       form.visibilityLevels = []
       form.orderIdentities = []
@@ -138,32 +117,22 @@ function syncOrdering() {
 const rules: FormProps['rules'] = {
   name: [{ required: true, message: '请输入商品名称', trigger: 'submit' }],
   category: [{ required: true, message: '请选择商品类型', trigger: 'submit' }],
-  fulfillment: [{ required: true, message: '请选择履约类型', trigger: 'submit' }],
   description: [{ required: true, message: '请输入商品说明', trigger: 'submit' }],
 }
 
 async function onConfirm() {
   const valid = await formRef.value.validate()
   if (valid !== true) return focusFirstInvalid(formRef.value)
-  const physical = form.fulfillment === 'physical'
-  if (physical && form.shippingMethods.includes('pickup') && !form.pickupAddress.trim()) {
-    MessagePlugin.warning('请填写自提地址')
-    return
-  }
   submitting.value = true
   try {
     const payload = {
       name: form.name,
       coverUrl: form.coverUrl.trim() || undefined,
       category: form.category,
-      fulfillment: form.fulfillment,
       points: form.points,
       stock: form.stock,
-      validDays: form.fulfillment === 'voucher' ? form.validDays : undefined,
+      validDays: form.validDays,
       description: form.description,
-      shippingMethods: physical ? form.shippingMethods : [],
-      pickupAddress: physical && form.shippingMethods.includes('pickup') ? form.pickupAddress : undefined,
-      shippingFee: physical && form.shippingMethods.includes('delivery') ? form.shippingFee : undefined,
       visibilityIdentities: customVisibility.value ? form.visibilityIdentities : [],
       visibilityLevels: customVisibility.value ? form.visibilityLevels : [],
       orderIdentities: customOrdering.value ? form.orderIdentities : [],
@@ -221,49 +190,19 @@ function onClose() {
         <t-form-item label="商品分类" name="category">
           <t-select clearable v-model="form.category" :options="categoryOptions" />
         </t-form-item>
-        <t-form-item label="履约类型" name="fulfillment">
-          <t-select :clearable="false" v-model="form.fulfillment" :options="fulfillmentOptions" />
-        </t-form-item>
         <t-form-item label="兑换积分" name="points">
           <t-input-number v-model="form.points" :min="1" :decimal-places="0" theme="column" class="ctl-w-full" />
         </t-form-item>
       </div>
-      <t-form-item label="库存" name="stock">
-        <t-input-number v-model="form.stock" :min="0" :decimal-places="0" theme="column" class="ctl-w-full" />
-      </t-form-item>
-
-      <!-- 权益券：券码有效期（天下单时写入券码到期时间） -->
-      <t-form-item v-if="form.fulfillment === 'voucher'" label="有效期（天）" name="validDays" help="兑换后券码有效期，到期后不可核销；留空按 30 天处理">
-        <t-input-number v-model="form.validDays" :min="1" :max="3650" :decimal-places="0" theme="column" class="ctl-w-full" />
-      </t-form-item>
-
-      <!-- 实物商品：发货方式（自提/邮寄），按选择显示自提地址或邮费 -->
-      <template v-if="form.fulfillment === 'physical'">
-        <t-form-item label="发货方式" name="shippingMethods">
-          <t-select
-            v-model="form.shippingMethods"
-            multiple
-            clearable
-            :options="shippingMethodOptions"
-            placeholder="请选择发货方式…"
-          />
+      <div class="form-row">
+        <t-form-item label="库存" name="stock">
+          <t-input-number v-model="form.stock" :min="0" :decimal-places="0" theme="column" class="ctl-w-full" />
         </t-form-item>
-        <t-form-item
-          v-if="form.shippingMethods.includes('pickup')"
-          label="自提地址"
-          name="pickupAddress"
-        >
-          <t-input clearable v-model="form.pickupAddress" placeholder="请输入自提地址…" />
+        <!-- 统一券码兑换：券码有效期（天下单时写入券码到期时间），过期未使用自动退款 -->
+        <t-form-item label="有效期（天）" name="validDays" help="兑换后券码有效期，到期未使用将自动退回积分；留空按 30 天处理">
+          <t-input-number v-model="form.validDays" :min="1" :max="3650" :decimal-places="0" theme="column" class="ctl-w-full" />
         </t-form-item>
-        <t-form-item
-          v-if="form.shippingMethods.includes('delivery')"
-          label="邮费"
-          name="shippingFee"
-          help="0 = 包邮"
-        >
-          <t-input-number v-model="form.shippingFee" :min="0" :decimal-places="0" theme="column" class="ctl-w-full" />
-        </t-form-item>
-      </template>
+      </div>
 
       <!-- 自定义范围：关闭 = 不限身份、等级 -->
       <div class="form-row">

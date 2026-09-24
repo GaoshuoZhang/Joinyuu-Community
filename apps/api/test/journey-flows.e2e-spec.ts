@@ -339,27 +339,27 @@ describe('M2-R 三端联调：注册/实名/入驻/需求/项目/活动/商城/�
     expect(manualCheckin.status).toBe(200)
   })
 
-  it('⑫ 商城评价：兑换 → 后台发货 → 客户端确认收货 → 评价回写', async () => {
+  it('⑫ 商城评价：兑换发券 → 后台核销 → 客户端评价回写', async () => {
     const buyer = await appLoginAs(app, '13801210005', 'user123')
-    const addr = await appPost(app, buyer, '/api/app/me/addresses', {
-      name: '顾北辰',
-      phone: '13801210005',
-      address: '上海市杨浦区联调路 1 号',
-      isDefault: true,
-    })
-    expect(addr.status).toBe(200)
 
     const goods = await appGet(app, buyer, '/api/app/mall/goods')
     const goodsRows = asList<{ id: string }>(goods.body.data)
     const target = goodsRows.find((g) => g.id === 'G1003') ?? goodsRows[0]
-    const order = await appPost(app, buyer, '/api/app/mall/orders', { goodsId: target.id, shippingMethod: 'delivery', addressId: addr.body.data.id })
+    const order = await appPost(app, buyer, '/api/app/mall/orders', { goodsId: target.id })
     expect(order.status).toBe(200)
     const orderId = order.body.data.id
 
-    const ship = await adminPost(`/api/admin/mall/redemption-orders/${orderId}/ship`, { trackingNo: 'SF000JOURNEY' })
-    expect(ship.status).toBe(200)
-    const confirm = await appPost(app, buyer, `/api/app/mall/orders/${orderId}/confirm`, {})
-    expect(confirm.status).toBe(200)
+    /* 下单即签发券码 */
+    const created = await prisma.redemptionOrder.findUniqueOrThrow({ where: { id: orderId } })
+    expect(created.status).toBe('pending_use')
+    expect(created.voucherCode).toMatch(/^V[0-9A-Z]{8}$/)
+
+    /* 后台现场核销（券码搜索定位） */
+    const found = await adminGet('/api/admin/mall/redemption-orders?page=1&pageSize=10&keyword=' + created.voucherCode)
+    expect(found.status).toBe(200)
+    expect(asList<{ id: string }>(found.body.data).some((o) => o.id === orderId)).toBe(true)
+    const verify = await adminPost(`/api/admin/mall/redemption-orders/${orderId}/verify`, {})
+    expect(verify.status).toBe(200)
     const review = await appPost(app, buyer, `/api/app/mall/orders/${orderId}/review`, {
       rating: 5,
       comment: '联调好评',

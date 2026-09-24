@@ -40,10 +40,14 @@ export class MeController {
     return this.me.pointsRecords(this.uid(req), query.page, query.pageSize, keyword)
   }
 
-  /** 我的经验与等级（走社区个体个人维度） */
+  /** 我的经验与等级（identity=community_enterprise + enterpriseId 查企业维度；默认社区个体） */
   @Get('experience-records')
-  experienceRecords(@Req() req: AppAuthenticatedRequest, @Query('identity') identity?: string) {
-    return this.me.experienceRecords(this.uid(req), identity)
+  experienceRecords(
+    @Req() req: AppAuthenticatedRequest,
+    @Query('identity') identity?: string,
+    @Query('enterpriseId') enterpriseId?: string,
+  ) {
+    return this.me.experienceRecords(this.uid(req), identity, enterpriseId)
   }
 
   /** 登录态修改密码（成功后强制退出全部会话，需重新登录） */

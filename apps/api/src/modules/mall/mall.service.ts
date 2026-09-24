@@ -28,16 +28,11 @@ export interface RedemptionOrderDto {
   points: number
   status: string
   createdAt: string
-  shippedAt?: string
   finishedAt?: string
-  recipientName?: string
-  recipientPhone?: string
-  address?: string
   note?: string
   cancelReason?: string
-  trackingNo?: string
-  voucherCode?: string
-  voucherExpiresAt?: string
+  voucherCode: string
+  voucherExpiresAt: string
   usedAt?: string
 }
 
@@ -56,11 +51,12 @@ export interface PointsRuleDto {
   updatedAt: string
 }
 
-/* 取消订单无取消原因入参（仅传 id），服务端固定文案落 cancelReason */
-const ORDER_CANCEL_REASON = '管理员取消订单，积分已原路退回'
+/* 取消（退款）订单无取消原因入参（仅传 id），服务端固定文案落 cancelReason */
+const ORDER_CANCEL_REASON = '管理员退款，积分已原路退回'
 
-/* 积分商城（wiki-backend.md §7.10/§8.1/§8.3）：
- * 商品列表/新增/编辑/上下架（上架/下架写审计）、兑换订单发货/完成/取消（取消走事务退积分+回库存）、
+/* 积分商城（统一券码兑换）：
+ * 商品列表/新增/编辑/上下架（上架/下架写审计；有效期 validDays 控制券码到期）、
+ * 兑换订单核销（pending_use → finished，写审计+站内信）/退款（退积分回库存）/归档、
  * 积分规则（9 条固定项仅编辑积分值与启停）、积分发放记录（source=rule） */
 @Injectable()
 export class MallService {
@@ -134,14 +130,12 @@ export class MallService {
         name: dto.name,
         coverUrl: dto.coverUrl?.trim() || null,
         category: this.resolveCategory(dto.category),
-        fulfillment: this.resolveFulfillment(dto),
         points: dto.points,
         stock: dto.stock,
         status: dto.stock === 0 ? 'restock' : 'off',
         description: sanitizeHtml(dto.description),
         redeemedCount: 0,
-        validDays: this.resolveValidDays(dto),
-        ...this.resolveShipping(dto),
+        validDays: dto.validDays && dto.validDays > 0 ? dto.validDays : null,
         visibilityIdentities: dto.visibilityIdentities ?? [],
         visibilityLevels: dto.visibilityLevels ?? [],
         orderIdentities: dto.orderIdentities ?? [],
@@ -173,13 +167,11 @@ export class MallService {
         name: dto.name,
         coverUrl: dto.coverUrl?.trim() || null,
         category: this.resolveCategory(dto.category),
-        fulfillment: this.resolveFulfillment(dto),
         points: dto.points,
         stock: dto.stock,
         status,
         description: sanitizeHtml(dto.description),
-        validDays: this.resolveValidDays(dto),
-        ...this.resolveShipping(dto),
+        validDays: dto.validDays && dto.validDays > 0 ? dto.validDays : null,
         visibilityIdentities: dto.visibilityIdentities ?? [],
         visibilityLevels: dto.visibilityLevels ?? [],
         orderIdentities: dto.orderIdentities ?? [],
@@ -240,28 +232,7 @@ export class MallService {
     return { code: 0 }
   }
 
-  /* 实物发货字段归一化：非实物强制清空；自提必填地址；邮寄运费缺省 0（包邮） */
-  private resolveShipping(dto: GoodsPayloadDto): {
-    shippingMethods: string[]
-    pickupAddress: string | null
-    shippingFee: number | null
-  } {
-    if (this.resolveFulfillment(dto) !== 'physical') {
-      return { shippingMethods: [], pickupAddress: null, shippingFee: null }
-    }
-
-    const shippingMethods = dto.shippingMethods ?? []
-    let pickupAddress: string | null = null
-    if (shippingMethods.includes('pickup')) {
-      const address = dto.pickupAddress?.trim()
-      if (!address) throw new BadRequestException('请填写自提地址')
-      pickupAddress = address
-    }
-    const shippingFee = shippingMethods.includes('delivery') ? dto.shippingFee ?? 0 : null
-    return { shippingMethods, pickupAddress, shippingFee }
-  }
-
-  /** 兼容 R1 旧管理端 category 值；仅保留实物商品（GC001）与权益券（GC003）。 */
+  /** 兼容 R1 旧管理端 category 值。 */
   private resolveCategory(category: string): string {
     const aliases: Record<string, string> = {
       physical: 'GC001',
@@ -285,21 +256,6 @@ export class MallService {
     return goods.map((item) => ({ ...item, categoryLabel: labels.get(item.category) ?? item.category }))
   }
 
-  private resolveFulfillment(dto: GoodsPayloadDto): 'physical' | 'voucher' {
-    if (dto.fulfillment) return dto.fulfillment
-    const category = this.resolveCategory(dto.category)
-    return category === 'GC001' ? 'physical' : 'voucher'
-  }
-
-  /* ---------- 内部工具 ---------- */
-
-  /** 权益券有效期（天）：仅 voucher 有效，空值落库为 null（下单按 30 天兜底） */
-  private resolveValidDays(dto: GoodsPayloadDto): number | null {
-    if (this.resolveFulfillment(dto) !== 'voucher') return null
-    if (dto.validDays == null) return null
-    return dto.validDays > 0 ? dto.validDays : null
-  }
-
   /* ---------- 兑换订单 ---------- */
 
   async listRedemptionOrders(
@@ -312,6 +268,8 @@ export class MallService {
         { userName: { contains: kw, mode: 'insensitive' } },
         { goodsName: { contains: kw, mode: 'insensitive' } },
         { id: { contains: kw, mode: 'insensitive' } },
+        /* 券码现场兑换：支持扫/输券码直接锁定订单 */
+        { voucherCode: { equals: kw, mode: 'insensitive' } },
       ]
     }
     if (query.status) where.status = query.status
@@ -357,57 +315,47 @@ export class MallService {
     return { list: rows.map(toOrderDto), total }
   }
 
-  async shipOrder(id: string, trackingNo: string | undefined, operator: string): Promise<{ code: number }> {
+  /** 券码核销（现场兑换由工作人员执行）：pending_use → finished，写审计并通知用户。 */
+  async verifyOrder(id: string, operator: string): Promise<{ code: number }> {
     const order = await this.prisma.redemptionOrder.findUnique({ where: { id } })
     if (!order) throw new NotFoundException('兑换订单不存在')
-    if (order.status !== 'pending_shipment') throw new ConflictException('仅待发货订单可发货')
-    if (!order.recipientName || !order.recipientPhone || !order.address) {
-      throw new ConflictException('收件信息不完整，无法发货')
+    const now = formatNow()
+    if (order.status !== 'pending_use') throw new ConflictException('仅待使用的订单可核销')
+    if (order.voucherExpiresAt && order.voucherExpiresAt <= now) {
+      throw new ConflictException('券码已过期，无法核销（将由系统自动退款）')
     }
 
-    /* 并发安全：以状态条件抢占，避免重复发货 */
+    /* 并发安全：以状态条件抢占，避免重复核销 */
     const claimed = await this.prisma.redemptionOrder.updateMany({
-      where: { id, status: 'pending_shipment' },
-      data: { status: 'shipped', shippedAt: formatNow(), trackingNo: trackingNo?.trim() || null },
+      where: { id, status: 'pending_use' },
+      data: { status: 'finished', usedAt: now, finishedAt: now, archivableAt: now },
     })
-    if (claimed.count !== 1) throw new ConflictException('仅待发货订单可发货')
+    if (claimed.count !== 1) throw new ConflictException('仅待使用的订单可核销')
 
     await this.audit.record({
       module: '积分商城',
-      action: '订单发货',
+      action: '订单核销',
       target: `${order.id} · ${order.goodsName}`,
+      detail: `券码 ${order.voucherCode} 现场核销`,
       before: { status: order.status },
-      after: { status: 'shipped' },
+      after: { status: 'finished' },
       operator,
     })
     await this.notify.pushNotice(order.userId, {
       type: 'mall',
-      title: '兑换订单已发货',
-      content: `您兑换的「${order.goodsName}」已发货${trackingNo?.trim() ? `，运单号：${trackingNo.trim()}` : ''}。`,
+      title: '兑换订单已核销',
+      content: `您兑换的「${order.goodsName}」已核销完成，感谢您的使用。`,
       link: '/me/orders',
     })
-    return { code: 0 }
-  }
-
-  async finishOrder(id: string): Promise<{ code: number }> {
-    const order = await this.prisma.redemptionOrder.findUnique({ where: { id } })
-    if (!order) throw new NotFoundException('兑换订单不存在')
-    if (order.status !== 'shipped') throw new ConflictException('仅已发货订单可标记完成')
-
-    const now = formatNow()
-    /* 并发安全：以状态条件抢占，避免重复标记完成 */
-    const claimed = await this.prisma.redemptionOrder.updateMany({
-      where: { id, status: 'shipped' },
-      data: { status: 'finished', finishedAt: now, archivableAt: now },
-    })
-    if (claimed.count !== 1) throw new ConflictException('仅已发货订单可标记完成')
     return { code: 0 }
   }
 
   async archiveOrder(id: string, operator: string): Promise<{ code: number }> {
     const order = await this.prisma.redemptionOrder.findFirst({ where: { id, deletedAt: null } })
     if (!order) throw new NotFoundException('订单不存在')
-    if (order.status !== 'finished') throw new ConflictException('仅已完成的订单可归档')
+    if (order.status !== 'finished' && order.status !== 'cancelled') {
+      throw new ConflictException('仅已完成或已取消的订单可归档')
+    }
 
     await this.prisma.redemptionOrder.update({
       where: { id },
@@ -425,7 +373,8 @@ export class MallService {
     return { code: 0 }
   }
 
-  async cancelOrder(id: string): Promise<{ code: number }> {
+  /** 退款（管理员代操作）：pending_use → cancelled，退积分 + 回补库存。 */
+  async cancelOrder(id: string, operator: string): Promise<{ code: number }> {
     const result = await this.prisma.$transaction(async (tx) => {
       const order = await tx.redemptionOrder.findUnique({ where: { id } })
       if (!order) throw new NotFoundException('兑换订单不存在')
@@ -433,10 +382,10 @@ export class MallService {
       /* 并发安全：先以状态条件抢占取消权，只有抢占成功者才进入退款/补库存，
        * 避免并发取消造成重复退积分与重复回补库存 */
       const claimed = await tx.redemptionOrder.updateMany({
-        where: { id, status: 'pending_shipment' },
+        where: { id, status: 'pending_use' },
         data: { status: 'cancelled', cancelledAt: formatNow(), cancelReason: ORDER_CANCEL_REASON },
       })
-      if (claimed.count !== 1) throw new ConflictException('仅待发货订单可取消')
+      if (claimed.count !== 1) throw new ConflictException('仅待使用的订单可退款')
 
       /* 退回积分：原子自增（wiki §7.10 冻结口径：写 source=redemption 流水） */
       const refunded = await tx.user.update({
@@ -451,7 +400,7 @@ export class MallService {
           userId: order.userId,
           delta: order.points,
           balance: newBalance,
-          reason: `订单取消退回积分（${order.id}）`,
+          reason: `订单退款退回积分（${order.id}）`,
           at: formatNow(),
           operator: '系统',
           source: 'redemption',
@@ -470,10 +419,17 @@ export class MallService {
 
       return { code: 0, userId: order.userId, goodsName: order.goodsName, points: order.points }
     })
+    await this.audit.record({
+      module: '积分商城',
+      action: '订单退款',
+      target: `${id}`,
+      detail: `退回 ${result.points} 积分并回补库存`,
+      operator,
+    })
     await this.notify.pushNotice(result.userId, {
       type: 'mall',
-      title: '兑换订单已取消',
-      content: `「${result.goodsName}」订单已取消，${result.points} 积分已退回。`,
+      title: '兑换订单已退款',
+      content: `「${result.goodsName}」订单已退款，${result.points} 积分已退回。`,
       link: '/me/orders',
     })
     return { code: result.code }
@@ -539,18 +495,13 @@ function toOrderDto(order: RedemptionOrder): RedemptionOrderDto {
     points: order.points,
     status: order.status,
     createdAt: order.createdAt,
+    voucherCode: order.voucherCode,
+    voucherExpiresAt: order.voucherExpiresAt,
   }
-  if (order.shippedAt != null) dto.shippedAt = order.shippedAt
   if (order.finishedAt != null) dto.finishedAt = order.finishedAt
-  if (order.voucherCode != null) dto.voucherCode = order.voucherCode
-  if (order.voucherExpiresAt != null) dto.voucherExpiresAt = order.voucherExpiresAt
   if (order.usedAt != null) dto.usedAt = order.usedAt
-  if (order.recipientName != null) dto.recipientName = order.recipientName
-  if (order.recipientPhone != null) dto.recipientPhone = order.recipientPhone
-  if (order.address != null) dto.address = order.address
   if (order.note != null) dto.note = order.note
   if (order.cancelReason != null) dto.cancelReason = order.cancelReason
-  if (order.trackingNo != null) dto.trackingNo = order.trackingNo
   return dto
 }
 

@@ -32,10 +32,10 @@ const { data, loading, error, run } = useAsyncList<PageResult<Goods>>(() => fetc
 const goodsList = computed(() => data.value?.list ?? [])
 const goodsTotal = computed(() => data.value?.total ?? 0)
 
-/* v45：无封面商品的占位字形——按履约类型区分（实物商品 / 权益券），
+/* v45：无封面商品的占位字形——按商品分类区分（权益券 GC003 / 其他），
  * 取代此前 8 件商品共用同一张大块占位的做法；真实封面（coverUrl）仍然优先。 */
 function glyphFor(goods: Goods): string {
-  return goods.fulfillment === 'voucher' ? 'ticket' : 'gift'
+  return goods.category === 'GC003' ? 'ticket' : 'gift'
 }
 
 function syncQuery() {

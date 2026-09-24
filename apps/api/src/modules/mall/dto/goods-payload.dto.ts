@@ -12,8 +12,8 @@ import {
 } from 'class-validator'
 
 /* POST/PUT /api/admin/mall/goods 入参（GoodsPayload，apps/admin/src/api/mall.ts）
- * 兑换积分为正整数、库存为非负整数（与商品表单输入约束一致）；
- * 发货方式仅实物商品可选（pickup 自提 / delivery 邮寄），范围字段为空数组表示不限 */
+ * 统一券码兑换：商品仅保留名称/分类/积分/库存/有效期（天）/描述与可见范围；
+ * 不再支持履约类型、发货方式、自提地址与运费 */
 export class GoodsPayloadDto {
   @IsString()
   @IsNotEmpty()
@@ -28,10 +28,6 @@ export class GoodsPayloadDto {
   @IsNotEmpty({ message: '请选择商品类型' })
   category!: string
 
-  @IsOptional()
-  @IsIn(['physical', 'voucher'])
-  fulfillment?: 'physical' | 'voucher'
-
   @Type(() => Number)
   @IsInt()
   @Min(1)
@@ -42,7 +38,7 @@ export class GoodsPayloadDto {
   @Min(0)
   stock!: number
 
-  /** 权益券有效期（天）：仅 fulfillment=voucher 有效；空值按 30 天兜底 */
+  /** 券码有效期（天）：空值按 30 天兜底 */
   @IsOptional()
   @Type(() => Number)
   @IsInt()
@@ -52,23 +48,6 @@ export class GoodsPayloadDto {
 
   @IsString()
   description!: string
-
-  @IsOptional()
-  @IsArray()
-  @IsIn(['pickup', 'delivery'], { each: true })
-  shippingMethods?: string[]
-
-  @IsOptional()
-  @IsString()
-  @MaxLength(255)
-  pickupAddress?: string
-
-  @IsOptional()
-  @Type(() => Number)
-  @IsInt()
-  @Min(0)
-  @Max(99999)
-  shippingFee?: number
 
   @IsOptional()
   @IsArray()

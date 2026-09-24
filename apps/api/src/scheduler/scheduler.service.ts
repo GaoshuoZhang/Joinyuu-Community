@@ -8,6 +8,7 @@ import { OutboxService } from '../modules/messaging/outbox.service'
 import { formatNow, formatNowSec, formatToday } from '../common/utils/time'
 import { PointsEngineService } from '../common/engine/points-engine/points-engine.service'
 import { AuditService } from '../common/audit/audit.service'
+import { NotificationService } from '../common/notify/notification.service'
 
 /** 任务级互斥锁 TTL（秒）：单实例单任务执行时长上限，超时后锁自动释放 */
 const JOB_LOCK_TTL_SEC = 60 * 15
@@ -38,6 +39,7 @@ export class SchedulerService {
     private readonly outbox: OutboxService,
     private readonly redis: RedisService,
     private readonly audit: AuditService,
+    private readonly notify: NotificationService,
   ) {}
 
   /** 任务注册表（监控页展示 + 手动触发入口） */
@@ -63,6 +65,8 @@ export class SchedulerService {
       { name: 'archive-auto-purge', cron: '每 5 分钟', enabled: true, run: () => this.trash.runAutoPurge() },
       /* P0 消息投递：扫描 Outbox 到期消息，重试退避与死信由 OutboxService 内部处理 */
       { name: 'message-outbox-dispatch', cron: '每 30 秒', enabled: true, run: () => this.outbox.processPending(50) },
+      /* 商城券码过期自动退款：pending_use 且已过有效期 → cancelled + 退积分 + 回库存 */
+      { name: 'mall-voucher-expire-refund', cron: '每 5 分钟', enabled: true, run: () => this.scanVoucherExpiry() },
     ]
   }
 
@@ -172,6 +176,11 @@ export class SchedulerService {
   @Cron(CronExpression.EVERY_30_SECONDS, { name: 'message-outbox-dispatch' })
   async handleOutboxDispatch(): Promise<void> {
     await this.runJob('message-outbox-dispatch')
+  }
+
+  @Cron(CronExpression.EVERY_5_MINUTES, { name: 'mall-voucher-expire-refund' })
+  async handleVoucherExpireRefund(): Promise<void> {
+    await this.runJob('mall-voucher-expire-refund')
   }
 
   /** 到点发布扫描：状态迁移与通知写入置于同一事务，避免"已发布但通知缺失"的部分失败 */
@@ -346,6 +355,73 @@ export class SchedulerService {
       }
     })
     return toCreate.length
+  }
+
+  /** 商城券码过期自动退款（统一券码兑换）：pending_use 且 voucherExpiresAt 已过点
+   * → cancelled + 退积分（source=redemption 流水）+ 回补库存 + 站内信通知。
+   * 逐单独立事务：单单失败不影响其余；状态条件抢占保证与人工核销/退款互斥。 */
+  async scanVoucherExpiry(): Promise<number> {
+    const now = formatNow()
+    const expired = await this.prisma.redemptionOrder.findMany({
+      where: { status: 'pending_use', deletedAt: null, voucherExpiresAt: { lte: now } },
+      select: { id: true, userId: true, userName: true, goodsId: true, goodsName: true, points: true },
+    })
+    if (expired.length === 0) return 0
+
+    let processed = 0
+    for (const order of expired) {
+      try {
+        await this.prisma.$transaction(async (tx) => {
+          /* 条件抢占：并发人工核销/退款先行时本单跳过 */
+          const claimed = await tx.redemptionOrder.updateMany({
+            where: { id: order.id, status: 'pending_use' },
+            data: {
+              status: 'cancelled',
+              cancelledAt: now,
+              cancelReason: '券码过期未使用，系统自动退款',
+            },
+          })
+          if (claimed.count !== 1) throw new Error('订单状态已变更，跳过')
+
+          const refunded = await tx.user.update({
+            where: { uid: order.userId },
+            data: { points: { increment: order.points } },
+            select: { points: true },
+          })
+          await tx.pointsRecord.create({
+            data: {
+              id: await this.ids.next('PT', tx),
+              userId: order.userId,
+              delta: order.points,
+              balance: refunded.points,
+              reason: `券码过期自动退款（${order.id}）`,
+              at: now,
+              operator: '系统',
+              source: 'redemption',
+            },
+          })
+          /* 回补库存；restock 商品回补后恢复上架（与用户退款口径一致） */
+          const goods = await tx.mallGoods.findUnique({ where: { id: order.goodsId }, select: { status: true } })
+          if (goods) {
+            const restoreStatus = goods.status === 'restock' ? { status: 'on' } : {}
+            await tx.mallGoods.update({
+              where: { id: order.goodsId },
+              data: { stock: { increment: 1 }, redeemedCount: { decrement: 1 }, ...restoreStatus },
+            })
+          }
+        })
+        processed += 1
+        await this.notify.pushNotice(order.userId, {
+          type: 'mall',
+          title: '券码已过期自动退款',
+          content: `您兑换的「${order.goodsName}」券码已过期未使用，${order.points} 积分已自动退回。`,
+          link: '/me/orders',
+        })
+      } catch (e) {
+        console.error(`[scheduler] 券码过期退款失败（${order.id}）:`, e instanceof Error ? e.message : e)
+      }
+    }
+    return processed
   }
 
   /** 日期字符串加天数（YYYY-MM-DD），对齐 addDays 语义 */

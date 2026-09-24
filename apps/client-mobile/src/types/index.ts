@@ -111,6 +111,10 @@ export interface RealnameRightsGroup {
   level: number
   /** 如「已实名个人」「社区企业 · 等级 3」 */
   title: string
+  /** 等级头衔（LevelTier.label，如「共创者」；无配置为空串） */
+  label?: string
+  /** 达到该等级所需经验门槛（无配置为 null） */
+  threshold?: number | null
   /** 是否为当前用户所处层级 */
   active: boolean
   items: string[]
@@ -660,7 +664,7 @@ export interface MyEventFeedback {
   at: string
 }
 
-/* ---------- 积分商城 ---------- */
+/* ---------- 积分商城（统一券码兑换） ---------- */
 
 export interface Goods {
   id: string
@@ -669,32 +673,13 @@ export interface Goods {
   pointsCost: number
   stock: number
   description: string
-}
-
-export type OrderStatus = 'pending_shipment' | 'shipped' | 'pending_use' | 'completed' | 'cancelled' | 'expired'
-
-/** 履约类型：实物配送 / 数字券码 */
-export type GoodsFulfillment = 'physical' | 'voucher'
-
-export interface Goods {
-  id: string
-  name: string
-  pointsCost: number
-  stock: number
-  description: string
-  fulfillment: GoodsFulfillment
   /** 商品分类（字典 goods_category） */
   category?: string
-  /** 权益券有效期（天）：仅权益券下发，空值按 30 天兜底 */
+  /** 券码有效期（天）：下单后券码到期时间依据，空值按 30 天兜底 */
   validDays?: number
-  /** 实物商品发货方式：pickup 自提 | delivery 邮寄（权益券为空数组） */
-  shippingMethods?: GoodsShippingMethod[]
-  /** 自提地址：商品支持自提时下发，兑换前需向用户提示 */
-  pickupAddress?: string
 }
 
-/** 实物商品发货方式 */
-export type GoodsShippingMethod = 'pickup' | 'delivery'
+export type OrderStatus = 'pending_use' | 'completed' | 'cancelled' | 'expired'
 
 export interface MyOrder {
   id: string
@@ -702,47 +687,18 @@ export interface MyOrder {
   goodsName: string
   pointsCost: number
   status: OrderStatus
-  fulfillment: GoodsFulfillment
-  /** voucher：兑换后生成的券码 */
-  voucherCode?: string
-  /** voucher：券码有效期（过期不可使用） */
-  voucherExpiresAt?: string
-  /** 物流单号（发货后写入） */
-  trackingNo?: string
+  /** 券码：下单即签发，现场由工作人员核销 */
+  voucherCode: string
+  /** 券码有效期（过期未使用由系统自动退回积分） */
+  voucherExpiresAt: string
   /** v41 订单评价（完成订单可评一次） */
   rating?: number
   review?: string
   reviewedAt?: string
-  /** physical：收货信息快照 */
-  recipientName?: string
-  recipientPhone?: string
-  recipientAddress?: string
-  /** physical：所选发货方式（pickup 自提 | delivery 邮寄；历史邮寄订单可能为空） */
-  shippingMethod?: GoodsShippingMethod
-  /** 自提订单：自提地址快照 */
-  pickupAddress?: string
   createdAt: string
-  shippedAt?: string
   usedAt?: string
   finishedAt?: string
   cancelledAt?: string
-}
-
-/* ---------- 收货地址 ---------- */
-
-export interface AddressItem {
-  id: string
-  name: string
-  phone: string
-  address: string
-  isDefault: boolean
-}
-
-export interface AddressPayload {
-  name: string
-  phone: string
-  address: string
-  isDefault?: boolean
 }
 
 /* ---------- 空间预约 ---------- */

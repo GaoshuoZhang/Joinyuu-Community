@@ -20,11 +20,12 @@ const ORDER_DEDUPE_TTL = 3
 /* 券码默认有效期（天）：商品未配置 validDays 时兜底 */
 const DEFAULT_VOUCHER_VALID_DAYS = 30
 
-/* 积分商城（M2-R R2，/api/app/mall + /api/app/me/orders）：
+/* 积分商城（统一券码兑换，/api/app/mall + /api/app/me/orders）：
  * 商品列表/详情（mallOpen 开关 + on/restock 均可见，库存为 0 时前端展示售罄）、
- * 兑换下单（单事务：校验库存→扣积分+流水→扣库存→建单，physical 必带地址快照 /
- * voucher 签发券码并按商品 validDays 计算有效期）、取消（仅实物待发货，退积分+回补库存）、
- * 券码核销（过期拦截）、确认收货、订单评价。 */
+ * 兑换下单（单事务：校验库存→扣积分+流水→扣库存→建单并签发券码，按商品 validDays 计算有效期）、
+ * 退款（仅待使用券，核销前可退：退积分+回补库存）、订单评价。
+ * 券码由后台工作人员现场核销（pending_use → finished），用户不可自主核销；
+ * 过期未使用的券由定时任务自动退款（见 SchedulerService）。 */
 @Injectable()
 export class AppMallService {
   constructor(
@@ -81,31 +82,6 @@ export class AppMallService {
     if (!user) throw new BadRequestException('用户不存在')
     if (user.points < goods.points) throw new BadRequestException('积分不足')
 
-    let address: { name: string; phone: string; region: string; detail: string } | null = null
-    /* 实物商品发货方式分流：商品支持自提+邮寄时下单必须显式选择；仅支持一种时按唯一方式兜底 */
-    let shippingMethod: 'pickup' | 'delivery' | null = null
-    if (goods.fulfillment === 'physical') {
-      const methods = goods.shippingMethods ?? []
-      const supportsPickup = methods.includes('pickup')
-      const supportsDelivery = methods.includes('delivery') || methods.length === 0
-      if (supportsPickup && supportsDelivery) {
-        if (dto.shippingMethod !== 'pickup' && dto.shippingMethod !== 'delivery') {
-          throw new BadRequestException('请选择自提或邮寄')
-        }
-        shippingMethod = dto.shippingMethod
-      } else {
-        shippingMethod = supportsPickup ? 'pickup' : 'delivery'
-      }
-      if (shippingMethod === 'delivery') {
-        if (!dto.addressId) throw new BadRequestException('请先选择收货地址')
-        const addr = await this.prisma.address.findFirst({
-          where: { id: dto.addressId, userId: uid },
-        })
-        if (!addr) throw new BadRequestException('请先选择收货地址')
-        address = { name: addr.name, phone: addr.phone, region: addr.region, detail: addr.detail }
-      }
-    }
-
     /* 防重复提交（同一用户同一商品短时间窗口） */
     const dedupeKey = `mall:order:dp:${uid}:${dto.goodsId}`
     if (!(await this.redis.acquireFlag(dedupeKey, ORDER_DEDUPE_TTL))) {
@@ -151,7 +127,7 @@ export class AppMallService {
 
         orderId = await this.ids.next('RO', tx)
         await tx.redemptionOrder.create({
-          data: this.buildOrderData(orderId, uid, user.nickname, goods, dto, address, shippingMethod),
+          data: this.buildOrderData(orderId, uid, user.nickname, goods, dto),
         })
       })
     } catch (error) {
@@ -162,7 +138,7 @@ export class AppMallService {
     await this.notify.pushNotice(uid, {
       type: 'mall',
       title: '兑换成功',
-      content: `您已成功兑换「${goods.name}」，消耗 ${goods.points} 积分。`,
+      content: `您已成功兑换「${goods.name}」，消耗 ${goods.points} 积分，请凭券码到现场核销使用。`,
     })
     return { id: orderId, remainingPoints: remaining }
   }
@@ -187,21 +163,21 @@ export class AppMallService {
     return this.toOrderDto(order)
   }
 
-  /* ---------- 订单履约 ---------- */
+  /* ---------- 订单履约（用户侧仅退款；核销由后台工作人员执行） ---------- */
 
+  /** 退款：仅待使用（pending_use）券可退，核销前退积分 + 回补库存。 */
   async cancelOrder(uid: string, id: string): Promise<{ code: number }> {
     const order = await this.prisma.redemptionOrder.findUnique({ where: { id } })
     if (!order) throw new NotFoundException('订单不存在')
     if (order.userId !== uid) throw new ForbiddenException('无权操作该订单')
-    if (order.fulfillment !== 'physical') throw new ConflictException('该订单不可取消')
     const now = formatNow()
     await this.prisma.$transaction(async (tx) => {
       /* 先以状态条件抢占取消权；并发请求只有一个能进入退款逻辑。 */
       const claimed = await tx.redemptionOrder.updateMany({
-        where: { id, userId: uid, fulfillment: 'physical', status: 'pending_shipment' },
-        data: { status: 'cancelled', cancelledAt: now, cancelReason: '用户取消订单，积分已原路退回' },
+        where: { id, userId: uid, status: 'pending_use' },
+        data: { status: 'cancelled', cancelledAt: now, cancelReason: '用户申请退款，积分已原路退回' },
       })
-      if (claimed.count !== 1) throw new ConflictException('仅待发货订单可取消')
+      if (claimed.count !== 1) throw new ConflictException('仅待使用的订单可退款')
 
       /* 退积分（原子自增 + 正流水，source=redemption） */
       const refunded = await tx.user.update({
@@ -216,7 +192,7 @@ export class AppMallService {
           userId: uid,
           delta: order.points,
           balance: newBalance,
-          reason: `订单取消退回积分（${order.id}）`,
+          reason: `订单退款退回积分（${order.id}）`,
           at: now,
           operator: '系统',
           source: 'redemption',
@@ -235,38 +211,9 @@ export class AppMallService {
 
     await this.notify.pushNotice(uid, {
       type: 'mall',
-      title: '订单已取消',
-      content: `您已取消「${order.goodsName}」的兑换订单，${order.points} 积分已原路退回。`,
+      title: '订单已退款',
+      content: `您已退款「${order.goodsName}」的兑换订单，${order.points} 积分已原路退回。`,
     })
-    return { code: 0 }
-  }
-
-  async useOrder(uid: string, id: string): Promise<{ code: number }> {
-    const order = await this.prisma.redemptionOrder.findUnique({ where: { id } })
-    if (!order) throw new NotFoundException('订单不存在')
-    if (order.userId !== uid) throw new ForbiddenException('无权操作该订单')
-    if (order.status !== 'pending_use') throw new ConflictException('该订单不可核销')
-    if (order.fulfillment === 'voucher' && order.voucherExpiresAt && order.voucherExpiresAt <= formatNow()) {
-      throw new ConflictException('券码已过期，无法核销')
-    }
-    const updated = await this.prisma.redemptionOrder.updateMany({
-      where: { id, userId: uid, status: 'pending_use' },
-      data: { status: 'finished', usedAt: formatNow(), finishedAt: formatNow() },
-    })
-    if (updated.count !== 1) throw new ConflictException('该订单不可核销')
-    return { code: 0 }
-  }
-
-  async confirmOrder(uid: string, id: string): Promise<{ code: number }> {
-    const order = await this.prisma.redemptionOrder.findUnique({ where: { id } })
-    if (!order) throw new NotFoundException('订单不存在')
-    if (order.userId !== uid) throw new ForbiddenException('无权操作该订单')
-    if (order.status !== 'shipped') throw new ConflictException('仅已发货订单可确认收货')
-    const updated = await this.prisma.redemptionOrder.updateMany({
-      where: { id, userId: uid, status: 'shipped' },
-      data: { status: 'finished', finishedAt: formatNow() },
-    })
-    if (updated.count !== 1) throw new ConflictException('仅已发货订单可确认收货')
     return { code: 0 }
   }
 
@@ -295,43 +242,24 @@ export class AppMallService {
     id: string,
     userId: string,
     userName: string,
-    goods: { id: string; name: string; points: number; fulfillment: string; validDays: number | null; pickupAddress: string | null },
+    goods: { id: string; name: string; points: number; validDays: number | null },
     dto: CreateOrderDto,
-    address: { name: string; phone: string; region: string; detail: string } | null,
-    shippingMethod: 'pickup' | 'delivery' | null,
   ): Prisma.RedemptionOrderCreateInput {
     const now = formatNow()
-    const fulfillment = goods.fulfillment
-    const physical = fulfillment === 'physical'
-    const data: Prisma.RedemptionOrderCreateInput = {
+    const validDays = goods.validDays && goods.validDays > 0 ? goods.validDays : DEFAULT_VOUCHER_VALID_DAYS
+    return {
       id,
       user: { connect: { uid: userId } },
       userName,
       goodsId: goods.id,
       goodsName: goods.name,
       points: goods.points,
-      fulfillment,
-      status: physical ? 'pending_shipment' : 'pending_use',
+      status: 'pending_use',
       createdAt: now,
       note: dto.remark?.trim() || null,
+      voucherCode: generateVoucherCode(),
+      voucherExpiresAt: this.addDaysTime(now, validDays),
     }
-    if (physical && shippingMethod) {
-      data.shippingMethod = shippingMethod
-      /* 自提：快照商品自提地址（后续商品改址不影响已生成订单）；不写收货地址字段 */
-      if (shippingMethod === 'pickup') data.pickupAddress = goods.pickupAddress
-    }
-    if (physical && shippingMethod === 'delivery' && address) {
-      data.recipientName = address.name
-      data.recipientPhone = address.phone
-      data.address = address.region ? `${address.region} ${address.detail}` : address.detail
-      data.addressId = dto.addressId ?? null
-    }
-    if (fulfillment === 'voucher') {
-      const validDays = goods.validDays && goods.validDays > 0 ? goods.validDays : DEFAULT_VOUCHER_VALID_DAYS
-      data.voucherCode = generateVoucherCode()
-      data.voucherExpiresAt = this.addDaysTime(now, validDays)
-    }
-    return data
   }
 
   private toGoodsDto(g: {
@@ -339,28 +267,21 @@ export class AppMallService {
     name: string
     coverUrl: string | null
     category: string
-    fulfillment: string
     points: number
     stock: number
     validDays: number | null
     description: string
-    shippingMethods: string[]
-    pickupAddress: string | null
   }) {
     return {
       id: g.id,
       name: g.name,
       coverUrl: g.coverUrl ?? undefined,
       category: g.category,
-      fulfillment: g.fulfillment,
       points: g.points,
       pointsCost: g.points,
       stock: g.stock,
-      validDays: g.fulfillment === 'voucher' ? g.validDays ?? DEFAULT_VOUCHER_VALID_DAYS : undefined,
+      validDays: g.validDays ?? DEFAULT_VOUCHER_VALID_DAYS,
       description: g.description,
-      /* 实物商品发货方式（pickup 自提 | delivery 邮寄）与自提地址：客户端据此渲染选择与提示 */
-      shippingMethods: g.fulfillment === 'physical' ? g.shippingMethods : [],
-      pickupAddress: g.fulfillment === 'physical' && g.shippingMethods.includes('pickup') ? g.pickupAddress ?? undefined : undefined,
     }
   }
 
@@ -371,30 +292,23 @@ export class AppMallService {
       goodsName: o.goodsName,
       pointsCost: o.points,
       status: o.status === 'finished' ? 'completed' : o.status,
-      fulfillment: o.fulfillment,
       createdAt: o.createdAt,
+      voucherCode: o.voucherCode,
+      voucherExpiresAt: o.voucherExpiresAt,
     }
-    if (o.voucherCode != null) dto.voucherCode = o.voucherCode
-    if (o.voucherExpiresAt != null) dto.voucherExpiresAt = o.voucherExpiresAt
-    if (o.fulfillment === 'voucher' && o.status === 'pending_use' && o.voucherExpiresAt && o.voucherExpiresAt <= formatNow()) {
+    /* 待使用但已过有效期：客户端展示「已过期」（自动退款由定时任务落库为 cancelled） */
+    if (o.status === 'pending_use' && o.voucherExpiresAt && o.voucherExpiresAt <= formatNow()) {
       dto.status = 'expired'
     }
-    if (o.trackingNo != null) dto.trackingNo = o.trackingNo
-    if (o.shippingMethod != null) dto.shippingMethod = o.shippingMethod
-    if (o.pickupAddress != null) dto.pickupAddress = o.pickupAddress
     if (o.rating != null) dto.rating = o.rating
     if (o.reviewComment != null) dto.review = o.reviewComment
-    if (o.recipientName != null) dto.recipientName = o.recipientName
-    if (o.recipientPhone != null) dto.recipientPhone = o.recipientPhone
-    if (o.address != null) dto.recipientAddress = o.address
-    if (o.shippedAt != null) dto.shippedAt = o.shippedAt
     if (o.usedAt != null) dto.usedAt = o.usedAt
     if (o.finishedAt != null) dto.finishedAt = o.finishedAt
     if (o.cancelledAt != null) dto.cancelledAt = o.cancelledAt
     return dto
   }
 
-  /** 时间字符串加天数 → YYYY-MM-DD HH:mm（voucher 有效期用） */
+  /** 时间字符串加天数 → YYYY-MM-DD HH:mm（券码有效期用） */
   private addDaysTime(timeStr: string, days: number): string {
     const d = new Date(timeStr.replace(' ', 'T'))
     d.setDate(d.getDate() + days)

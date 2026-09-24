@@ -5,13 +5,12 @@ import { ActionSheet, Cell, CellGroup, DialogPlugin } from 'tdesign-mobile-vue'
 import { useAuthStore } from '@/stores/auth'
 import { getThemeMode, setThemeMode, themeModeLabel, type ThemeMode } from '@/utils/theme'
 
-/* 设置（二级收纳页）：资料/地址/账号安全/数据看板/深色模式/退出登录。 */
+/* 设置（二级收纳页）：资料/账号安全/数据看板/深色模式/退出登录。 */
 const router = useRouter()
 const auth = useAuthStore()
 
 const entries: { path: string; label: string }[] = [
   { path: '/me/profile/edit', label: '编辑资料' },
-  { path: '/me/addresses', label: '收货地址' },
   { path: '/me/security', label: '账号与安全' },
   { path: '/me/notification-settings', label: '通知设置' },
   { path: '/me/stats', label: '数据看板' },

@@ -1,6 +1,7 @@
 import {
   BadRequestException,
   ConflictException,
+  ForbiddenException,
   Injectable,
   NotFoundException,
   UnauthorizedException,
@@ -152,12 +153,15 @@ export class MeService {
     }
   }
 
-  /** 我的经验与等级（按个人维度/社区个体身份取数；无社区个体身份返回空） */
-  async experienceRecords(uid: string, requestedIdentity?: string) {
+  /** 我的经验与等级（社区个体维度 / 社区企业维度；企业维度需 enterpriseId 定位具体企业） */
+  async experienceRecords(uid: string, requestedIdentity?: string, enterpriseId?: string) {
+    if (requestedIdentity === 'community_enterprise') {
+      return this.enterpriseExperience(uid, enterpriseId)
+    }
     const identity = await this.prisma.userIdentity.findFirst({
       where: {
         userId: uid,
-        type: requestedIdentity === 'community_enterprise' ? 'community_enterprise' : 'community_individual',
+        type: 'community_individual',
       },
     })
     if (!identity) {
@@ -172,23 +176,49 @@ export class MeService {
       }
     }
 
-    const enterprise = identity.type === 'community_enterprise' && identity.enterpriseId
-      ? await this.prisma.enterprise.findUnique({ where: { id: identity.enterpriseId } })
-      : null
-    const experience = enterprise?.experience ?? identity.experience ?? 0
+    const experience = identity.experience ?? 0
     const tiers = await this.prisma.levelTier.findMany({ where: { identityType: identity.type }, orderBy: { threshold: 'asc' } })
     const tier = [...tiers].reverse().find((item) => item.threshold <= experience) ?? tiers[0]
     const next = tiers.find((t) => t.threshold > experience)
 
-    const targetType = identity.type === 'community_enterprise' ? 'enterprise' : 'individual'
-    const targetId = targetType === 'enterprise' ? identity.enterpriseId ?? '' : uid
     const records = await this.prisma.experienceRecord.findMany({
-      where: { targetType, targetId },
+      where: { targetType: 'individual', targetId: uid },
       orderBy: { at: 'desc' },
     })
     return {
       identityLabel: IDENTITY_LABEL[identity.type] || identity.type,
       level: tier?.level ?? identity.level ?? 1,
+      levelName: tier?.label ?? '',
+      currentExperience: experience,
+      currentLevelThreshold: tier?.threshold ?? 0,
+      nextLevelThreshold: next?.threshold ?? null,
+      records: records.map((r) => ({ id: r.id, delta: r.delta, balance: r.balance, reason: r.reason, at: r.at })),
+    }
+  }
+
+  /** 社区企业经验与等级（企业详情页等级卡）：enterpriseId 必填且当前用户须为该企业成员。 */
+  async enterpriseExperience(uid: string, enterpriseId?: string) {
+    const empty = { identityLabel: '', level: null, levelName: '', currentExperience: 0, currentLevelThreshold: 0, nextLevelThreshold: null, records: [] }
+    if (!enterpriseId) return empty
+    const membership = await this.prisma.userIdentity.findFirst({
+      where: { userId: uid, type: 'community_enterprise', enterpriseId },
+    })
+    if (!membership) throw new ForbiddenException('您不是该企业成员')
+    const enterprise = await this.prisma.enterprise.findFirst({ where: { id: enterpriseId, deletedAt: null } })
+    if (!enterprise) throw new NotFoundException('企业不存在')
+
+    const experience = enterprise.experience
+    const tiers = await this.prisma.levelTier.findMany({ where: { identityType: 'community_enterprise' }, orderBy: { threshold: 'asc' } })
+    const tier = [...tiers].reverse().find((item) => item.threshold <= experience) ?? tiers[0]
+    const next = tiers.find((t) => t.threshold > experience)
+    const records = await this.prisma.experienceRecord.findMany({
+      where: { targetType: 'enterprise', targetId: enterpriseId },
+      orderBy: { at: 'desc' },
+    })
+    return {
+      identityLabel: IDENTITY_LABEL.community_enterprise,
+      enterpriseName: enterprise.name,
+      level: tier?.level ?? membership.level ?? 1,
       levelName: tier?.label ?? '',
       currentExperience: experience,
       currentLevelThreshold: tier?.threshold ?? 0,
@@ -274,12 +304,11 @@ export class MeService {
 
   /** 个人数据导出：生成当前服务持有的用户维度 JSON，并通过受控文件端点提供下载。 */
   async dataExport(uid: string): Promise<{ code: number; url: string }> {
-    const [user, points, experience, notifications, addresses, consents, deletionRequests, demands, articles] = await Promise.all([
+    const [user, points, experience, notifications, consents, deletionRequests, demands, articles] = await Promise.all([
       this.prisma.user.findUnique({ where: { uid }, include: { identities: true, enrollments: true, reservations: true, orders: true } }),
       this.prisma.pointsRecord.findMany({ where: { userId: uid }, orderBy: { at: 'asc' } }),
       this.prisma.experienceRecord.findMany({ where: { targetId: uid }, orderBy: { at: 'asc' } }),
       this.prisma.userNotification.findMany({ where: { userId: uid }, orderBy: { at: 'asc' } }),
-      this.prisma.address.findMany({ where: { userId: uid }, orderBy: { createdAt: 'asc' } }),
       this.prisma.agreementConsent.findMany({ where: { userId: uid }, orderBy: { consentedAt: 'asc' } }),
       this.prisma.accountDeletionRequest.findMany({ where: { userId: uid }, orderBy: { requestedAt: 'asc' } }),
       this.prisma.demand.findMany({ where: { publisherId: uid }, orderBy: { createdAt: 'asc' } }),
@@ -297,7 +326,6 @@ export class MeService {
       points,
       experience,
       notifications,
-      addresses,
       consents,
       deletionRequests,
       demands,

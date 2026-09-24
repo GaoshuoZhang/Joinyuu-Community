@@ -195,42 +195,9 @@ describe('M2-R R1 app 个人中心', () => {
     token = newPass.body.data.token
   })
 
-  it('地址簿：CRUD + 默认地址唯一 + 删除默认转移', async () => {
-    const c1 = await appPost(app, token, '/api/app/me/addresses', {
-      name: '陈屿',
-      phone: '13801210001',
-      region: '浙江省杭州市西湖区',
-      detail: '文三路 90 号',
-      isDefault: true,
-    })
-    expect(c1.status).toBe(200)
-    const id1: string = c1.body.data.id
-
-    const c2 = await appPost(app, token, '/api/app/me/addresses', {
-      name: '陈屿',
-      phone: '13801210001',
-      region: '上海市浦东新区',
-      detail: '张江高科苑 2 号',
-      isDefault: true,
-    })
-    expect(c2.status).toBe(200)
-    const id2: string = c2.body.data.id
-
+  it('地址簿已随统一券码兑换改造移除（/me/addresses 返回 404）', async () => {
     const list = await appGet(app, token, '/api/app/me/addresses')
-    expect(list.body.code).toBe(0)
-    const defaults = list.body.data.list.filter((a: { isDefault: boolean }) => a.isDefault)
-    expect(defaults.length).toBe(1)
-    expect(defaults[0].id).toBe(id2)
-
-    // 删除默认地址 → 默认转移到剩余地址
-    const del = await request(app.getHttpServer())
-      .delete(`/api/app/me/addresses/${id2}`)
-      .set('Authorization', `Bearer ${token}`)
-    expect(del.status).toBe(200)
-    const list2 = await appGet(app, token, '/api/app/me/addresses')
-    const defaults2 = list2.body.data.list.filter((a: { isDefault: boolean }) => a.isDefault)
-    expect(defaults2.length).toBe(1)
-    expect(defaults2[0].id).toBe(id1)
+    expect(list.status).toBe(404)
   })
 
   it('注销：提交进入 7 天冷静期，冷静期内可撤回', async () => {

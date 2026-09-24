@@ -57,8 +57,6 @@ const map: Record<string, Record<string, { label: string; tone: Tone }>> = {
     cancelled: { label: '已取消', tone: 'default' },
   },
   order: {
-    pending_shipment: { label: '待发货', tone: 'warning' },
-    shipped: { label: '已发货', tone: 'primary' },
     pending_use: { label: '待使用', tone: 'primary' },
     completed: { label: '已完成', tone: 'success' },
     cancelled: { label: '已取消', tone: 'default' },

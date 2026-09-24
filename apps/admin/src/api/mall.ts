@@ -5,7 +5,6 @@ import type {
   PointsRule,
   PointsRecord,
   GoodsCategory,
-  GoodsFulfillment,
 } from '@/types'
 import { httpGet, httpPost, httpPut } from './http'
 
@@ -40,18 +39,11 @@ export interface GoodsPayload {
   name: string
   coverUrl?: string
   category: GoodsCategory
-  fulfillment: GoodsFulfillment
   points: number
   stock: number
-  /** 权益券有效期（天）：仅权益券有效，空值按 30 天兜底 */
+  /** 券码有效期（天）：统一券码兑换，空值按 30 天兜底 */
   validDays?: number
   description: string
-  /** 发货方式（仅实物商品）：pickup 自提 / delivery 邮寄 */
-  shippingMethods?: Array<'pickup' | 'delivery'>
-  /** 自提地址（选择自提时必填） */
-  pickupAddress?: string
-  /** 运费（元，0=包邮；选择邮寄时有效） */
-  shippingFee?: number
   /** 自定义可见范围：身份与等级（空数组=不限） */
   visibilityIdentities?: string[]
   visibilityLevels?: string[]
@@ -107,22 +99,17 @@ export async function fetchRedemptionOrders(
   return httpGet<PageResult<RedemptionOrder>>(`/mall/redemption-orders?${qs}`)
 }
 
-/* POST /api/admin/mall/redemption-orders/:id/ship — 待发货 → 已发货 */
-export async function shipRedemptionOrder(id: string, trackingNo?: string): Promise<{ code: number }> {
-  return httpPost<{ code: number }>(`/mall/redemption-orders/${id}/ship`, { trackingNo })
+/* POST /api/admin/mall/redemption-orders/:id/verify — 券码核销：待使用 → 已完成 */
+export async function verifyRedemptionOrder(id: string): Promise<{ code: number }> {
+  return httpPost<{ code: number }>(`/mall/redemption-orders/${id}/verify`)
 }
 
-/* POST /api/admin/mall/redemption-orders/:id/finish — 已发货 → 已完成 */
-export async function finishRedemptionOrder(id: string): Promise<{ code: number }> {
-  return httpPost<{ code: number }>(`/mall/redemption-orders/${id}/finish`)
-}
-
-/* POST /api/admin/mall/redemption-orders/:id/archive — 归档已完成订单（可在归档管理中恢复） */
+/* POST /api/admin/mall/redemption-orders/:id/archive — 归档已完成/已取消订单（可在归档管理中恢复） */
 export async function archiveOrder(id: string): Promise<{ code: number }> {
   return httpPost<{ code: number }>(`/mall/redemption-orders/${id}/archive`)
 }
 
-/* POST /api/admin/mall/redemption-orders/:id/cancel — 取消订单（仅待发货可取消）：
+/* POST /api/admin/mall/redemption-orders/:id/cancel — 退款（仅待使用可退）：
  * 退回积分（source=redemption 流水）+ 库存回补 + redeemedCount-1 + 记 cancelReason；真实实现为服务端事务 */
 export async function cancelRedemptionOrder(id: string): Promise<{ code: number }> {
   return httpPost<{ code: number }>(`/mall/redemption-orders/${id}/cancel`)

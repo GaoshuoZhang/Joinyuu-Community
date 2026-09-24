@@ -199,74 +199,67 @@ describe('M2-R R2 app 活动与商城', () => {
     expect([400, 409]).toContain(again.status)
   })
 
-  it('商城：商品列表（on 且有库存）包含 fulfillment；下单可取消', async () => {
+  it('商城：统一券码下单即签发券码，可退款（退积分+回库存）', async () => {
     const goods = await appGet(app, token, '/api/app/mall/goods')
     expect(goods.status).toBe(200)
     expect(goods.body.data.list.length).toBeGreaterThan(0)
-    expect(['physical', 'voucher']).toContain(goods.body.data.list[0].fulfillment)
+    /* 统一券码兑换：不再下发 fulfillment/shippingMethods */
+    expect(goods.body.data.list[0]).not.toHaveProperty('fulfillment')
 
-    // 实物商品：需先有收货地址
-    const physical = goods.body.data.list.find((g: { fulfillment: string; stock: number }) => g.fulfillment === 'physical' && g.stock > 0)
-    if (physical) {
-      const addr = await appPost(app, token, '/api/app/me/addresses', {
-        name: '陈屿',
-        phone: '13801210001',
-        region: '浙江省杭州市西湖区',
-        detail: '文三路 90 号',
-        isDefault: true,
-      })
-      const addressId: string = addr.body.data.id
-      const order = await appPost(app, token, '/api/app/mall/orders', {
-        goodsId: physical.id,
-        /* 实物商品支持自提+邮寄，下单必须显式选择发货方式 */
-        shippingMethod: 'delivery',
-        addressId,
-      })
-      expect(order.status).toBe(200)
-      const orderId: string = order.body.data.id
+    const inStock = goods.body.data.list.find((g: { stock: number }) => g.stock > 0)
+    expect(inStock).toBeTruthy()
+    const order = await appPost(app, token, '/api/app/mall/orders', { goodsId: inStock.id })
+    expect(order.status).toBe(200)
+    const orderId: string = order.body.data.id
 
-      const mine = await appGet(app, token, '/api/app/me/orders')
-      expect(mine.body.data.list.some((o: { id: string }) => o.id === orderId)).toBe(true)
+    const row = await prisma.redemptionOrder.findUnique({ where: { id: orderId } })
+    expect(row?.status).toBe('pending_use')
+    expect(row?.voucherCode).toMatch(/^V[0-9A-Z]{8}$/)
+    expect(row?.voucherExpiresAt).toBeTruthy()
 
-      const cancel = await appPost(app, token, `/api/app/mall/orders/${orderId}/cancel`, {})
-      expect(cancel.status).toBe(200)
-      const after = await prisma.redemptionOrder.findUnique({ where: { id: orderId } })
-      expect(after?.status).toBe('cancelled')
-    }
+    const mine = await appGet(app, token, '/api/app/me/orders')
+    expect(mine.body.data.list.some((o: { id: string }) => o.id === orderId)).toBe(true)
 
-    // 券码商品：下单即签发券码
-    const voucher = goods.body.data.list.find((g: { fulfillment: string; stock: number }) => g.fulfillment === 'voucher' && g.stock > 0)
-    if (voucher) {
-      const order = await appPost(app, token, '/api/app/mall/orders', { goodsId: voucher.id })
-      expect(order.status).toBe(200)
-      const row = await prisma.redemptionOrder.findUnique({ where: { id: order.body.data.id } })
-      expect(row?.voucherCode).toMatch(/^V[0-9A-Z]{8}$/)
-      expect(row?.voucherExpiresAt).toBeTruthy()
+    /* 用户侧不再提供核销/收货端点 */
+    expect((await appPost(app, token, `/api/app/mall/orders/${orderId}/use`, {})).status).toBe(404)
+    expect((await appPost(app, token, `/api/app/mall/orders/${orderId}/confirm`, {})).status).toBe(404)
 
-      await prisma.redemptionOrder.update({
-        where: { id: order.body.data.id },
-        data: { status: 'finished', finishedAt: '2026-09-19 12:00' },
-      })
-      const mine = await appGet(app, token, '/api/app/me/orders')
-      const completed = mine.body.data.list.find((item: { id: string }) => item.id === order.body.data.id)
-      expect(completed.status).toBe('completed')
-    }
+    /* 核销前可退款：退积分 + 回补库存 */
+    const before = await prisma.user.findUnique({ where: { uid: 'U1001' } })
+    const cancel = await appPost(app, token, `/api/app/mall/orders/${orderId}/cancel`, {})
+    expect(cancel.status).toBe(200)
+    const after = await prisma.redemptionOrder.findUnique({ where: { id: orderId } })
+    expect(after?.status).toBe('cancelled')
+    const afterUser = await prisma.user.findUnique({ where: { uid: 'U1001' } })
+    expect(afterUser?.points).toBe((before?.points ?? 0) + (row?.points ?? 0))
+
+    /* 已完成订单（后台核销后）客户端派生 completed；换一件商品避开同商品 3s 防重复标记 */
+    const second = goods.body.data.list.find(
+      (g: { id: string; stock: number }) => g.stock > 0 && g.id !== inStock.id,
+    )
+    const done = await appPost(app, token, '/api/app/mall/orders', { goodsId: second.id })
+    expect(done.status).toBe(200)
+    await prisma.redemptionOrder.update({
+      where: { id: done.body.data.id },
+      data: { status: 'finished', finishedAt: '2026-09-19 12:00' },
+    })
+    const mine2 = await appGet(app, token, '/api/app/me/orders')
+    const completed = mine2.body.data.list.find((item: { id: string }) => item.id === done.body.data.id)
+    expect(completed.status).toBe('completed')
   })
 
-  it('商城：缺货商品保持可见且下单拦截；权益券按商品有效期签发并过期拦截核销', async () => {
+  it('商城：缺货商品保持可见且下单拦截；券按商品有效期签发并派生 expired 状态', async () => {
     /* 缺货（restock, stock 0）：列表/详情可见，下单报库存不足（O-07 修复） */
     await prisma.mallGoods.create({
       data: {
         id: 'G9002',
         name: '缺货验收券',
         category: 'GC003',
-        fulfillment: 'voucher',
         points: 10,
         stock: 0,
         status: 'restock',
         description: '缺货可见性验收',
         redeemedCount: 0,
-        shippingMethods: [],
         visibilityIdentities: [],
         visibilityLevels: [],
         orderIdentities: [],
@@ -283,21 +276,19 @@ describe('M2-R R2 app 活动与商城', () => {
     expect(orderOOS.status).toBe(400)
     expect(orderOOS.body.message).toBe('库存不足')
 
-    /* 权益券有效期 = 商品 validDays（天） */
+    /* 券有效期 = 商品 validDays（天） */
     const goodsId = 'G9003'
     await prisma.mallGoods.create({
       data: {
         id: goodsId,
         name: '有效期验收券',
         category: 'GC003',
-        fulfillment: 'voucher',
         points: 10,
         stock: 5,
         status: 'on',
         description: '有效期验收',
         redeemedCount: 0,
         validDays: 2,
-        shippingMethods: [],
         visibilityIdentities: [],
         visibilityLevels: [],
         orderIdentities: [],
@@ -313,31 +304,28 @@ describe('M2-R R2 app 活动与商城', () => {
     const expires = new Date(String(row?.voucherExpiresAt).replace(' ', 'T'))
     expect(Math.round((expires.getTime() - created.getTime()) / 86_400_000)).toBe(2)
 
-    /* 过期后核销被拒绝，且我的订单派生 expired 状态 */
+    /* 过期后我的订单派生 expired 状态（自动退款由定时任务落库） */
     await prisma.redemptionOrder.update({
       where: { id: order.body.data.id },
       data: { voucherExpiresAt: '2026-09-01 00:00' },
     })
-    const use = await appPost(app, token, `/api/app/mall/orders/${order.body.data.id}/use`, {})
-    expect(use.status).toBe(409)
-    expect(use.body.message).toContain('过期')
     const mine = await appGet(app, token, '/api/app/me/orders')
     const expired = mine.body.data.list.find((item: { id: string }) => item.id === order.body.data.id)
     expect(expired.status).toBe('expired')
   })
 
   it('商城：订单详情仅本人可见（非本人/不存在 404，形状与列表项一致）', async () => {
-    /* 种子订单 RO2004（U1001 的待使用权益券） */
+    /* 种子订单 RO2004（U1001 的待使用券） */
     const detail = await appGet(app, token, '/api/app/me/orders/RO2004')
     expect(detail.status).toBe(200)
     expect(detail.body.data).toMatchObject({
       id: 'RO2004',
       goodsId: 'G1005',
       goodsName: '精品咖啡月卡',
-      fulfillment: 'voucher',
       voucherCode: 'V20260906B',
     })
     expect(detail.body.data).not.toHaveProperty('userId')
+    expect(detail.body.data).not.toHaveProperty('fulfillment')
 
     /* 与列表项复用同一 DTO，客户端可直接复用 MyOrder 类型 */
     const mine = await appGet(app, token, '/api/app/me/orders')

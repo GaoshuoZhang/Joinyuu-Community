@@ -6,7 +6,8 @@ import { AppMallService } from './mall.service'
 import { CreateOrderDto } from './dto/create-order.dto'
 import { ReviewOrderDto } from './dto/review-order.dto'
 
-/* 积分商城（M2-R R2）：商品浏览/详情、下单、取消/核销/收货/评价。
+/* 积分商城（统一券码兑换）：商品浏览/详情、下单、退款、评价。
+ * 核销由后台工作人员执行，用户侧不提供核销/收货端点。
  * 商品浏览与详情为游客可访问（移动端商城页无登录门槛），其余端点需登录。 */
 @Controller('api/app/mall')
 export class AppMallController {
@@ -39,18 +40,6 @@ export class AppMallController {
   @Post('orders/:id/cancel')
   cancel(@Req() req: AppAuthenticatedRequest, @Param('id') id: string) {
     return this.mall.cancelOrder(this.uid(req), id)
-  }
-
-  @HttpCode(200)
-  @Post('orders/:id/use')
-  use(@Req() req: AppAuthenticatedRequest, @Param('id') id: string) {
-    return this.mall.useOrder(this.uid(req), id)
-  }
-
-  @HttpCode(200)
-  @Post('orders/:id/confirm')
-  confirm(@Req() req: AppAuthenticatedRequest, @Param('id') id: string) {
-    return this.mall.confirmOrder(this.uid(req), id)
   }
 
   @HttpCode(200)

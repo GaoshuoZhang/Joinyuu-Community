@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Put, Req, UnauthorizedException } from '@nestjs/common'
+import { Body, Controller, Get, Put, Query, Req, UnauthorizedException } from '@nestjs/common'
 import type { AppAuthenticatedRequest } from '../../../common/interfaces/app-authenticated-request'
 import { AppRealnameService } from './realname.service'
 import { UpdateRealnameDto } from './dto/update-realname.dto'
@@ -19,10 +19,14 @@ export class AppRealnameController {
     return this.realname.verify(this.uid(req), dto)
   }
 
-  /** 实名分级权益（未实名/已实名两条静态分级） */
+  /** 实名分级权益（identityType 过滤分组；enterpriseId 定位社区企业等级 active） */
   @Get('realname-rights')
-  rights(@Req() req: AppAuthenticatedRequest) {
-    return this.realname.rights(this.uid(req))
+  rights(
+    @Req() req: AppAuthenticatedRequest,
+    @Query('identityType') identityType?: string,
+    @Query('enterpriseId') enterpriseId?: string,
+  ) {
+    return this.realname.rights(this.uid(req), identityType, enterpriseId)
   }
 
   /** 从请求中取当前用户 uid（AppJwtGuard 注入 request.user） */

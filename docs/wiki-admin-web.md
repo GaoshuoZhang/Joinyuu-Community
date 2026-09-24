@@ -163,7 +163,7 @@
   - 活动 event：pending_release=待发布/warning，scheduled=定时发布中/primary（直接显示时间），published=已发布/success（已发布（报名中）/已发布（暂停报名）拼接），ended=已结束/default，cancelled=已取消/danger（已移除 草稿/进行中）
   - 报名 enrollment：pending=待审核/warning，approved=已通过/success，rejected=已驳回/danger
   - 商品 goods：on=已上架/success，off=已下架/default，restock=待补货/warning（新增，库存为 0 场景）
-  - 兑换订单 redemption：pending_shipment=待发货/warning，shipped=已发货/primary，finished=已完成/success，cancelled=已取消/default
+  - 兑换订单 redemption：pending_use=待使用/primary，finished=已完成/success，cancelled=已取消/default（统一券码兑换三态）
   - 积分/经验规则 rule：enabled=已启用/success，disabled=已停用/default
   - 空间预约/展示页申请 reservation：pending=待审核/warning，approved=待使用/success，using=使用中/primary，ended=已结束/default，rejected=已驳回/danger，cancelled=已取消/default（六态，approved/using/ended 由 `utils/reservation.ts` 按日期时段派生，存储仅 pending/approved/rejected/cancelled）
   - 文章 article：pending=待审核/warning，rejected=已驳回/danger，pending_release=待发布/primary，scheduled=定时发布中/primary（直接显示时间），published=已发布/success（原 draft 草稿/withdrawn 状态已移除，下架=转待发布）
@@ -206,8 +206,8 @@
 | 活动列表 | /events | 筛选（类型/状态）+ 活动开始/创建时间排序 + 列设置 + 一键归档/导出/新增活动 | 行点击进详情；待发布→编辑/立即发布/定时发布/取消活动；定时发布中→取消定时；已发布→暂停/开放报名、编辑、取消；已取消→转为待发布；已结束/已取消→归档；报名/签到列下方积分 tag |
 | 活动详情 | /events/:id | 信息（双范围/报名审核/报名截止/定时发布）/ 报名管理 / 签到管理（tabs） | 编辑活动、报名审核、手动签到；已归档显示「已归档」并隐藏写操作 |
 | 活动报名 | /events/enrollments | 状态 tabs（待审核/已通过/已驳回/候补中/已取消/全部）+ 关键词（报名人/企业/电话/活动）+ 列设置 + 导出 | 通过/驳回待审核报名；行点击进活动详情「报名管理」 |
-| 商品管理 | /mall/goods | 商品列表（关键词/类型/状态筛选）+ 列设置 + 导出 + 新增商品 | **新增商品默认「已下架」**；编辑（类型/积分/库存/发货方式（自提/邮寄）/自提地址/邮费/自定义可见与可下单范围/富文本说明）；上架/下架；**归档仅「已下架」**；0 库存红字 |
-| 订单管理 | /mall/orders | 兑换订单列表（关键词/状态筛选）+ 列设置 + 一键归档 + 导出 + 详情抽屉 | 待发货→发货/取消订单（退积分+回补库存）；已发货→标记完成；已完成→归档；行点击开详情抽屉（收件信息） |
+| 商品管理 | /mall/goods | 商品列表（关键词/类型/状态筛选）+ 列设置 + 导出 + 新增商品 | **新增商品默认「已下架」**；编辑（类型/积分/库存/券码有效期（天）/自定义可见与可下单范围/富文本说明）；上架/下架；**归档仅「已下架」**；0 库存红字 |
+| 订单管理 | /mall/orders | 兑换订单列表（关键词（含券码精确锁定）/状态筛选）+ 券码列 + 列设置 + 一键归档 + 导出 + 详情抽屉 | 统一券码三态：待使用→核销/退款（退积分+回补库存）；已完成/已取消→归档；行点击开详情抽屉（券码信息） |
 | 积分规则 | /rules/points | **积分发放制度**：9 条固定发放触发项（code 写死）+ 积分值 + 状态，扣除积分走手动调整不设规则 | **仅可编辑积分值（正整数）或启停规则，不可新增/删除** |
 | 经验值规则 | /rules/experience | **经验值发放制度（新增投稿采纳）**：6 条固定发放触发项（activity_checkin +5 / activity_enroll_approved +2 / article_accepted 投稿采纳 +20 / project_undertaken +30 / project_completed 项目结项 +100 / identity_first_bind +10，code 写死；**project_milestone 项目里程碑达成已移除**）+ 经验值 + 状态；经验仅社区个体/社区企业身份累积 | **仅可编辑经验值（正整数）或启停规则，不可新增/删除**；api/rules.ts |
 | 等级规则 | /rules/levels | 社区个体、社区企业两个选项卡分别维护动态等级梯度（最低 1 级、最多 10 级）；保存后重算对应身份的当前等级 | 添加/删除等级行、编辑标签与门槛、保存当前身份梯度；api/rules.ts |

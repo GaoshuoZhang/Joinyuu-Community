@@ -130,13 +130,23 @@ export class AppRealnameService {
     }
   }
 
-  /** 实名分级权益（两条静态分级，active 标注当前所处层级） */
-  async rights(uid: string) {
-    const { rules, subject } = await currentPublishingLimits(this.prisma, uid)
+  /** 实名分级权益（按 identityType:level 分组，active 标注当前所处层级）。
+   * identityType：可选过滤（如只看社区个体 / 社区企业分组，等级轮播页用）；
+   * enterpriseId：社区企业维度的 active 判定按该企业等级（企业详情页等级卡用）。 */
+  async rights(uid: string, identityType?: string, enterpriseId?: string) {
+    const { rules, subject } = await currentPublishingLimits(this.prisma, uid, {
+      identityType: identityType || enterpriseId ? identityType : undefined,
+      enterpriseId: enterpriseId || undefined,
+    })
     const config = await this.prisma.systemConfig.findUnique({ where: { id: 1 }, select: { realnameRequired: true } })
+    /* 等级头衔（LevelTier.label）：社区个体/企业分组卡片展示「Lv.n 头衔」用 */
+    const tiers = await this.prisma.levelTier.findMany()
+    const tierLabel = new Map(tiers.map((t) => [`${t.identityType}:${t.level}`, t.label]))
+    const thresholdOf = new Map(tiers.map((t) => [`${t.identityType}:${t.level}`, t.threshold]))
     const label = (n: number) => n < 0 ? '不限' : `${n} 次/日`
     const grouped = new Map<string, typeof rules>()
     for (const rule of rules) {
+      if (identityType && rule.identityType !== identityType) continue
       const key = `${rule.identityType}:${rule.level}`
       grouped.set(key, [...(grouped.get(key) ?? []), rule])
     }
@@ -147,6 +157,10 @@ export class AppRealnameService {
       return {
         identityType: first.identityType,
         level: first.level,
+        /** 等级头衔（LevelTier 无该级配置时为空串） */
+        label: tierLabel.get(`${first.identityType}:${first.level}`) ?? '',
+        /** 达到该等级所需经验门槛（无配置为 null） */
+        threshold: thresholdOf.get(`${first.identityType}:${first.level}`) ?? null,
         title: first.identityType === 'personal_unverified' ? '未实名个人'
           : first.identityType === 'personal_verified' ? '已实名个人'
             : `${first.identityType === 'community_individual' ? '社区个体' : '社区企业'} · 等级 ${first.level}`,

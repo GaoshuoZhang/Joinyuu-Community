@@ -1,52 +1,56 @@
 import { describe, expect, it } from 'vitest'
-import { buildProfileMenuSections } from './profileMenu'
+import { buildProfileMenuLayout } from './profileMenu'
 
-describe('profile menu sections', () => {
-  it('groups a regular user menu by task and offers talent registration', () => {
-    const sections = buildProfileMenuSections({
+describe('profile menu layout', () => {
+  it('regular user: points-only stats and talent registration entry', () => {
+    const { stats, grid } = buildProfileMenuLayout({
       hasCommunityIndividual: false,
-      identityCount: 0,
-      pointsLabel: '120 分',
+      points: 120,
       levelLabel: '',
       levelFailed: false,
       unread: 0,
     })
 
-    expect(sections.map((section) => section.title)).toEqual(['身份与名片', '我的服务', '账户与权益', '消息与设置'])
-    expect(sections[0]?.entries.map((entry) => entry.path)).toEqual(['/me/identities', '/intros/talent'])
-    expect(sections[1]?.entries.map((entry) => entry.path)).toEqual(['/me/records', '/me/orders'])
-    expect(sections[2]?.entries.map((entry) => entry.path)).toEqual(['/me/points'])
+    expect(stats.map((s) => s.key)).toEqual(['points'])
+    expect(stats[0]).toMatchObject({ path: '/me/points', value: '120' })
+    expect(grid.map((entry) => entry.path)).toEqual([
+      '/me/identities',
+      '/intros/talent',
+      '/me/records',
+      '/me/orders',
+      '/notices',
+      '/me/messages',
+      '/me/settings',
+    ])
+    expect(grid.every((entry) => Boolean(entry.icon))).toBe(true)
   })
 
-  it('shows card and level entries for community individuals', () => {
-    const sections = buildProfileMenuSections({
+  it('community individual: level stat and card entry with unread badge', () => {
+    const { stats, grid } = buildProfileMenuLayout({
       hasCommunityIndividual: true,
-      identityCount: 2,
-      pointsLabel: '1,200 分',
+      points: 1200,
       levelLabel: 'Lv.3 共创者',
       levelFailed: false,
       unread: 2,
     })
-    const entries = sections.flatMap((section) => section.entries)
 
-    expect(entries.find((entry) => entry.path === '/me/identities')?.note).toBe('2 个')
-    expect(entries.some((entry) => entry.path === '/me/cards/individual')).toBe(true)
-    expect(entries.some((entry) => entry.path === '/intros/talent')).toBe(false)
-    expect(entries.find((entry) => entry.path === '/me/experience')?.note).toBe('Lv.3 共创者')
-    expect(entries.find((entry) => entry.path === '/notices')?.note).toBe('2 条未读')
+    expect(stats.map((s) => s.key)).toEqual(['points', 'level'])
+    expect(stats[1]).toMatchObject({ path: '/me/experience', value: 'Lv.3 共创者', failed: false })
+    expect(grid.some((entry) => entry.path === '/me/cards/individual')).toBe(true)
+    expect(grid.some((entry) => entry.path === '/intros/talent')).toBe(false)
+    expect(grid.find((entry) => entry.path === '/notices')?.badge).toBe(2)
   })
 
-  it('turns a failed level entry into a retry action', () => {
-    const sections = buildProfileMenuSections({
+  it('failed level stat is flagged for retry', () => {
+    const { stats } = buildProfileMenuLayout({
       hasCommunityIndividual: true,
-      identityCount: 1,
-      pointsLabel: '0 分',
+      points: 0,
       levelLabel: '',
       levelFailed: true,
       unread: 0,
     })
-    const level = sections.flatMap((section) => section.entries).find((entry) => entry.path === '/me/experience')
 
-    expect(level).toMatchObject({ action: 'retry-level', note: '加载失败，点击重试' })
+    const level = stats.find((s) => s.key === 'level')
+    expect(level).toMatchObject({ failed: true, value: '' })
   })
 })
