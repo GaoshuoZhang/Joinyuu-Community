@@ -259,10 +259,12 @@ function onPublish() {
   <!-- v47：发布入口改为悬浮 FAB（不再占据筛选区与列表之间的版面）；
        放在页面根节点（不在下拉刷新轨道内），避免被其 transform 容器改变 fixed 定位基准；
        bottom 用 --app-fab-offset（TabBar 高度 + 间距）并叠加底部安全区，避免刘海屏下压住 TabBar。 -->
+  <!-- TDesign Fab 根元素是 div、内部才是 Button；无障碍名称需经 buttonProps 落到按钮上
+       （其类型未声明 aria-*，故断言透传；运行期 mergeProps 原样传给内部 Button） -->
   <Fab
     :icon="() => h(AddIcon, { size: '24px' })"
     style="right: var(--app-space-8); bottom: calc(var(--app-fab-offset) + env(safe-area-inset-bottom));"
-    :button-props="{ 'aria-label': '发布需求' }"
+    :button-props="{ 'aria-label': '发布需求' } as never"
     @click="onPublish"
   />
   </div>

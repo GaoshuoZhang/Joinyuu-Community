@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, reactive, ref, watch } from 'vue'
 import { Button, Form, FormItem, Input, Textarea, Toast } from 'tdesign-mobile-vue'
-import type { FormInstanceFunctions, FormRules } from 'tdesign-mobile-vue'
+import type { FormRules } from 'tdesign-mobile-vue'
 import IdentityPicker from '@/components/forms/IdentityPicker.vue'
 import { actionIdentityOptions } from '@/stores/auth'
 import { useUnsavedGuard } from '@/composables/useUnsavedGuard'
@@ -15,7 +15,6 @@ const props = defineProps<{ identities: UserIdentity[]; userName: string; submit
 const emit = defineEmits<{ respond: [payload: DemandRespondPayload] }>()
 
 const form = reactive({ note: '', quote: '', timeline: '', cases: '', phone: '' })
-const formRef = ref<FormInstanceFunctions>()
 /* 离开保护：任一字段有未提交内容时离开需确认；
  * 提交成功后父级调用 clearNote 清空，isDirty 自然归 false，不会误拦 */
 useUnsavedGuard(() => Object.values(form).some((value) => value.trim().length > 0))

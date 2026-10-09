@@ -6,6 +6,7 @@
   "scripts": {
     "dev": "vite --port 7759",
     "build": "vite build",
+    "typecheck": "vue-tsc --noEmit -p tsconfig.json",
     "lint": "eslint src --max-warnings 0 && node scripts/check-typography.mjs",
     "lint:fix": "eslint src --fix",
     "test": "vitest run",

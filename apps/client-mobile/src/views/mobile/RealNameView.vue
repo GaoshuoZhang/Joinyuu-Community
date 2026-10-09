@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, onMounted, reactive, ref } from 'vue'
 import { Button, Form, FormItem, Input, NoticeBar, Toast } from 'tdesign-mobile-vue'
-import type { FormInstanceFunctions, FormRules } from 'tdesign-mobile-vue'
+import type { FormRules } from 'tdesign-mobile-vue'
 import { fetchRealName, submitRealName } from '@/api/me'
 import { ApiError } from '@/api/http'
 import EmptyBlock from '@/components/shared/EmptyBlock.vue'
@@ -40,7 +40,6 @@ onMounted(load)
 
 const form = reactive({ realName: '', citizenId: '' })
 const submitting = ref(false)
-const formRef = ref<FormInstanceFunctions>()
 const canSubmit = computed(() => !submitting.value)
 useUnsavedGuard(() => !verified.value && Boolean(form.realName.trim() || form.citizenId.trim()))
 

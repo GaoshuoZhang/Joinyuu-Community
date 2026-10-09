@@ -86,6 +86,7 @@
 
 ```bash
 pnpm --filter @joinyuu/client-mobile run lint
+pnpm --filter @joinyuu/client-mobile run typecheck
 pnpm --filter @joinyuu/client-mobile test
 pnpm build:client-mobile
 ```

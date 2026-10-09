@@ -13,7 +13,7 @@ import {
   Textarea,
   Toast,
 } from 'tdesign-mobile-vue'
-import type { FormInstanceFunctions, FormRules } from 'tdesign-mobile-vue'
+import type { FormRules } from 'tdesign-mobile-vue'
 import { fetchMe, fetchRealName, updateMe } from '@/api/me'
 import { ApiError } from '@/api/http'
 import { useAuthStore } from '@/stores/auth'
@@ -42,7 +42,6 @@ const router = useRouter()
 const auth = useAuthStore()
 const form = reactive({ username: '', nickname: '', avatar: '', gender: 'unknown' as 'male' | 'female' | 'unknown', bio: '' })
 const submitting = ref(false)
-const formRef = ref<FormInstanceFunctions>()
 
 const baseline = ref('')
 const formSnapshot = computed(() => JSON.stringify(form))
