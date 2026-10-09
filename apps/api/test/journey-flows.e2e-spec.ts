@@ -217,6 +217,15 @@ describe('M2-R 三端联调：注册/实名/入驻/需求/项目/活动/商城/�
     })
     expect(resp.status).toBe(200)
 
+    /* 默认需审核：响应先落待审核（发布者不可见），管理员审核通过后才回到「待处理」并对发布者可见 */
+    const pendingResp = await prisma.demandRespondent.findFirst({ where: { demandId } })
+    expect(pendingResp).toBeTruthy()
+    const reviewed = await adminPost(
+      `/api/admin/demands/${demandId}/respondents/${pendingResp!.id}/review`,
+      { status: 'approved' },
+    )
+    expect(reviewed.status).toBe(200)
+
     const list = await appGet(app, userToken, `/api/app/me/demands/${demandId}/responses`)
     expect(list.status).toBe(200)
     expect(list.body.data.length).toBe(1)

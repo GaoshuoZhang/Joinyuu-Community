@@ -94,6 +94,7 @@ function onListScroll(bottomDistance: number) {
 
     <Button theme="primary" variant="outline" block class="mall-link" @click="router.push('/mall')">去积分商城兑换</Button>
     <div class="quick-links">
+      <Button size="small" variant="text" @click="router.push('/me/orders')">我的订单</Button>
       <Button size="small" variant="text" @click="router.push('/mall/rules')">积分规则</Button>
     </div>
 

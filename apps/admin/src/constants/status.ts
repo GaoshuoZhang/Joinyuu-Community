@@ -62,6 +62,15 @@ export const statusMap = {
     withdrawn: { label: '已撤回', theme: 'default' },
     closed: { label: '已关闭', theme: 'default' },
   },
+  /* 需求响应状态（响应需审核开启时，成员提交后进入待审核） */
+  demandRespondent: {
+    pending: { label: '待选定', theme: 'warning' },
+    contacted: { label: '已对接', theme: 'success' },
+    accepted: { label: '已接受', theme: 'success' },
+    rejected: { label: '已拒绝', theme: 'default' },
+    closed: { label: '已结束', theme: 'default' },
+    pending_review: { label: '待审核', theme: 'warning' },
+  },
   project: {
     running: { label: '进行中', theme: 'success' },
     paused: { label: '已暂停', theme: 'warning' },

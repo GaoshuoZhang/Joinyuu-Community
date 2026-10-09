@@ -16,7 +16,7 @@ import DemandOwnerResponses from '@/components/demand/DemandOwnerResponses.vue'
 import DemandRespondForm from '@/components/demand/DemandRespondForm.vue'
 import FlowResult from '@/components/FlowResult.vue'
 import StateTag from '@/components/shared/StateTag.vue'
-import type { MyResponseItem, UserIdentity } from '@/types'
+import type { DemandRespondPayload, MyResponseItem, UserIdentity } from '@/types'
 import { formatLocalDateTime } from '@/utils/format'
 
 const route = useRoute()
@@ -78,6 +78,8 @@ const selecting = ref(false)
 const submitting = ref(false)
 const respondForm = ref<InstanceType<typeof DemandRespondForm> | null>(null)
 const flowResult = ref<'responded' | 'selected' | null>(null)
+/* 响应表单展开态：默认只展示提示 + 「响应需求」按钮，点击后在卡片内展开表单 */
+const respondFormOpen = ref(false)
 const canSelect = computed(() => demand.value?.status === 'published')
 const canViewResponses = computed(() => ['published', 'selected', 'projected'].includes(demand.value?.status ?? ''))
 /* v44：响应身份选项（自有全部身份 + 被授权「响应需求」的代企业身份），单选 */
@@ -134,6 +136,13 @@ const viewerNotice = computed(() => {
   return { text: isMine.value ? meta.owner : meta.viewer, done: meta.done === true }
 })
 
+/* 响应提交成功文案：需审核时说明先待审核、通过后才对发布者可见；无需审核保持原文案 */
+const respondedDescription = computed(() =>
+  demand.value?.respondNeedReview
+    ? '待管理员审核通过后将通知你，并对发布者可见；审核结果可在「我的响应」查看。'
+    : '发布者可在响应列表中查看你的说明；后续状态将在我的响应中更新。',
+)
+
 async function loadOwnerResponses() {
   if (!isMine.value || !canViewResponses.value) return
   ownerResponsesLoading.value = true
@@ -159,11 +168,20 @@ async function onSubmitSelection(ids: string[]) {
   }
 }
 
-async function onRespond(note: string, identity: UserIdentity) {
+async function onRespond(payload: DemandRespondPayload) {
   submitting.value = true
   try {
+    const identity = payload.identity
     const enterpriseId = identity.type === 'community_enterprise' ? identity.enterpriseId : undefined
-    await respondDemand(id, note, identity.type, enterpriseId)
+    await respondDemand(id, {
+      note: payload.note,
+      quote: payload.quote,
+      timeline: payload.timeline,
+      cases: payload.cases,
+      phone: payload.phone,
+      asIdentity: identity.type,
+      asEnterpriseId: enterpriseId,
+    })
     respondForm.value?.clearNote()
     flowResult.value = 'responded'
   } catch (e) {
@@ -171,6 +189,11 @@ async function onRespond(note: string, identity: UserIdentity) {
   } finally {
     submitting.value = false
   }
+}
+
+/* 收起表单：回到「提示 + 按钮」初始态（子组件随之卸载，未提交内容不保留） */
+function collapseRespond() {
+  respondFormOpen.value = false
 }
 
 /* v40：分享 */
@@ -186,7 +209,7 @@ async function onShare() {
     <FlowResult
       v-if="flowResult === 'responded'"
       title="响应已提交"
-      description="发布者可在响应列表中查看你的说明；后续状态将在我的响应中更新。"
+      :description="respondedDescription"
       :reference="id"
       primary-text="查看我的响应"
       secondary-text="返回需求广场"
@@ -220,7 +243,12 @@ async function onShare() {
       />
 
       <div class="m-card">
-        <h2 class="sub">{{ cardTitle }}</h2>
+        <div class="card-head">
+          <h2 class="sub">{{ cardTitle }}</h2>
+          <Button v-if="respondFormOpen" variant="text" size="small" theme="primary" @click="collapseRespond">
+            收起
+          </Button>
+        </div>
         <Button v-if="!auth.isLogged" theme="primary" block @click="router.push(`/login?redirect=${route.fullPath}`)">
           登录后响应
         </Button>
@@ -245,14 +273,20 @@ async function onShare() {
           <p class="responded-meta">{{ formatLocalDateTime(demand.myResponse?.at ?? '') }}</p>
         </div>
         <p v-else-if="viewerNotice" class="notice" :class="{ done: viewerNotice.done }">{{ viewerNotice.text }}</p>
-        <DemandRespondForm
-          v-else
-          ref="respondForm"
-          :identities="respondIdentities"
-          :user-name="auth.name"
-          :submitting="submitting"
-          @respond="onRespond"
-        />
+        <!-- 未响应且可响应：默认「提示 + 响应需求按钮」，点击后在同卡片内展开表单 -->
+        <template v-else>
+          <p v-if="!respondFormOpen" class="respond-tip">填写你的方案与报价，供发布者评估</p>
+          <Button v-if="!respondFormOpen" theme="primary" block @click="respondFormOpen = true">响应需求</Button>
+          <!-- 收起仅隐藏不卸载（v-show）：保留未提交草稿，避免收起后丢失已填内容 -->
+          <DemandRespondForm
+            v-show="respondFormOpen"
+            ref="respondForm"
+            :identities="respondIdentities"
+            :user-name="auth.name"
+            :submitting="submitting"
+            @respond="onRespond"
+          />
+        </template>
       </div>
     </template>
   </div>
@@ -266,9 +300,23 @@ async function onShare() {
   gap: var(--app-space-6);
 }
 
+.card-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--app-space-4);
+  margin-bottom: var(--app-space-5);
+}
+
 .sub {
-  margin: 0 0 var(--app-space-5);
+  margin: 0;
   font: var(--app-type-section);
+}
+
+.respond-tip {
+  margin: 0 0 var(--app-space-5);
+  font: var(--app-type-body-sm);
+  color: var(--td-text-color-secondary);
 }
 
 .notice {

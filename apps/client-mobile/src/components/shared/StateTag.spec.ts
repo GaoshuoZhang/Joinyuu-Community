@@ -7,6 +7,9 @@ describe('StateTag', () => {
   it('按状态集映射文案', () => {
     expect(mount(StateTag, { props: { kind: 'demand', value: 'published' } }).text()).toBe('已发布')
     expect(mount(StateTag, { props: { kind: 'response', value: 'accepted' } }).text()).toBe('已选定')
+    /* 响应需审核：待审核（发布者暂不可见）与待选定（已过审等待发布者选定承接方） */
+    expect(mount(StateTag, { props: { kind: 'response', value: 'pending' } }).text()).toBe('待选定')
+    expect(mount(StateTag, { props: { kind: 'response', value: 'pending_review' } }).text()).toBe('待审核')
     expect(mount(StateTag, { props: { kind: 'demand', value: 'projected' } }).text()).toBe('已立项')
     expect(mount(StateTag, { props: { kind: 'enroll', value: 'waitlisted' } }).text()).toBe('候补中')
     expect(mount(StateTag, { props: { kind: 'order', value: 'completed' } }).text()).toBe('已完成')

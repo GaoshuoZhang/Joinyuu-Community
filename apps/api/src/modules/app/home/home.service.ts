@@ -229,7 +229,8 @@ export class AppHomeService {
     if (!ids.length) return map
     const rows = await this.prisma.demandRespondent.groupBy({
       by: ['demandId'],
-      where: { demandId: { in: ids } },
+      /* 与需求列表/详情「N 人响应」口径一致：不含已撤回/已驳回失效记录与待审核响应 */
+      where: { demandId: { in: ids }, withdrawnAt: null, status: { not: 'pending_review' } },
       _count: { _all: true },
     })
     for (const r of rows) map.set(r.demandId, r._count._all)

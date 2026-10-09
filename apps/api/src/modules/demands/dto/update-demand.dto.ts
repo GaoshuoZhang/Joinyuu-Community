@@ -82,6 +82,11 @@ export class UpdateDemandDto {
   @IsBoolean()
   contactPublic?: boolean
 
+  /** 响应需审核：开启后客户端提交的响应先进入待审核，管理员审核通过才对发布者可见；默认开启 */
+  @IsOptional()
+  @IsBoolean()
+  respondNeedReview?: boolean
+
   @IsOptional()
   @Type(() => Number)
   @IsInt()

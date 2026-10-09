@@ -1,5 +1,5 @@
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common'
-import type { ExperienceRecord, ExperienceRule, LevelTier, Prisma } from '@prisma/client'
+import type { ExperienceRecord, ExperienceRule, Prisma } from '@prisma/client'
 import { PrismaService } from '../../common/prisma/prisma.service'
 import { RedisService } from '../../common/redis/redis.service'
 import { CACHE_KEYS, CACHE_TTL } from '../../common/redis/cache-keys'

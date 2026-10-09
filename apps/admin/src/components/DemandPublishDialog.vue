@@ -69,6 +69,7 @@ const form = reactive<DemandPublishPayload>({
   contactEmail: '',
   contactPublic: false,
   respondPoints: 20,
+  respondNeedReview: true,
 })
 
 /* 未保存保护：打开时记录基线，关闭前有改动需确认 */
@@ -150,6 +151,7 @@ watch(
       customVisibility.value = false
       customEnrollment.value = false
       form.respondPoints = rulePoints.respond
+      form.respondNeedReview = true
     } else {
       form.title = props.demand.title
       /* 兼容旧数据直接存标签；再次保存时归一为当前字典 code。 */
@@ -175,6 +177,7 @@ watch(
       customVisibility.value = props.demand.visibilityIdentities.length > 0 || props.demand.visibilityLevels.length > 0
       customEnrollment.value = props.demand.enrollmentIdentities.length > 0 || props.demand.enrollmentLevels.length > 0
       form.respondPoints = props.demand.respondPoints ?? rulePoints.respond
+      form.respondNeedReview = props.demand.respondNeedReview !== false
       /* 提交人由服务端按工作人员派生，编辑不回填也不可改 */
       if (props.demand.contactName != null) form.contactName = props.demand.contactName
       if (props.demand.contactPhone != null) form.contactPhone = props.demand.contactPhone
@@ -281,17 +284,31 @@ function onClose() {
         </t-form-item>
       </div>
 
-      <t-form-item name="contactPublic">
-        <template #label>
-          <t-popup content="开启后客户端（含未登录访客）可见该需求的联系人与联系方式；关闭则客户端一律不可见，后台始终可见" show-arrow>
-            <span class="scope-popup-trigger">公开联系人</span>
-          </t-popup>
-        </template>
-        <div class="contact-public-row">
-          <t-switch v-model="form.contactPublic" />
-          <span class="scope-tip">{{ form.contactPublic ? '客户端可见联系人信息' : '客户端不可见联系人信息（默认）' }}</span>
-        </div>
-      </t-form-item>
+      <!-- 公开联系人 / 响应需审核：两个开关并排（响应需审核紧跟公开联系人） -->
+      <div class="form-row">
+        <t-form-item name="contactPublic">
+          <template #label>
+            <t-popup content="开启后客户端（含未登录访客）可见该需求的联系人与联系方式；关闭则客户端一律不可见，后台始终可见" show-arrow>
+              <span class="scope-popup-trigger">公开联系人</span>
+            </t-popup>
+          </template>
+          <div class="contact-public-row">
+            <t-switch v-model="form.contactPublic" />
+            <span class="scope-tip">{{ form.contactPublic ? '客户端可见联系人信息' : '客户端不可见联系人信息（默认）' }}</span>
+          </div>
+        </t-form-item>
+        <t-form-item name="respondNeedReview">
+          <template #label>
+            <t-popup content="开启后，成员提交的响应需管理员审核通过才会对发布者可见；默认开启" show-arrow>
+              <span class="scope-popup-trigger">响应需审核</span>
+            </t-popup>
+          </template>
+          <div class="contact-public-row">
+            <t-switch v-model="form.respondNeedReview" />
+            <span class="scope-tip">{{ form.respondNeedReview ? '需审核通过才对发布者可见（默认）' : '无需审核，直接对发布者可见' }}</span>
+          </div>
+        </t-form-item>
+      </div>
 
       <t-form-item label="需求标题" name="title">
         <t-input clearable v-model="form.title" placeholder="请输入需求标题…" />

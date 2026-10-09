@@ -76,14 +76,14 @@
 
 | 方法 | 路径 | 说明 |
 |---|---|---|
-| GET | /api/app/demands | 浏览列表：仅 `published`；按可见范围过滤（§9）；分页/类别/关键词；可选 `kind=task\|investment\|cooperation` 按需求类型筛选（分页与 total 统计前执行，省略时不限；历史无 kind 数据按 task）；返回 `kind`（task 找服务 / investment 找投资 / cooperation 找合作）与类型专属字段（task 含 `deliverBy` 预期交付日期）；**联系人 `contactName/contactPhone/contactEmail` 仅在需求 `contactPublic=true` 时下发（含未登录游客），否则一律不下发**；社区自建需求（后台创建）返回 `publisherIdentity='official'` + `publisherIdentityLabel`（创建工作人员角色名） |
-| GET | /api/app/demands/:id | 详情（不可见 → 404，不暴露存在性；发布者可查看本人任意状态需求，其余人仅 `published` 且可见范围命中）；含响应数、`kind` 与类型专属字段（task: deliverable/budget/deliverBy；investment: cooperationNeed/returnOffer；cooperation: bottleneck/partnershipMode/returnOffer）与联系人信息（**同样按 `contactPublic` 下发**）；本人已响应时附 `myResponse: { message, at, status }`（`withdrawnAt` 非空即视为未响应，客户端据此隐藏响应入口并展示响应说明） |
+| GET | /api/app/demands | 浏览列表：仅 `published`；按可见范围过滤（§9）；分页/类别/关键词；可选 `kind=task\|investment\|cooperation` 按需求类型筛选（分页与 total 统计前执行，省略时不限；历史无 kind 数据按 task）；返回 `kind`（task 找服务 / investment 找投资 / cooperation 找合作）与类型专属字段（task 含 `deliverBy` 预期交付日期）；**联系人 `contactName/contactPhone/contactEmail` 仅在需求 `contactPublic=true` 时下发（含未登录游客），否则一律不下发**；社区自建需求（后台创建）返回 `publisherIdentity='official'` + `publisherIdentityLabel`（创建工作人员角色名）；返回只读 `respondNeedReview`（响应需审核开关）；`responseCount`（「N 人响应」）只统计未撤回的已通过/待处理响应，**不含 `pending_review` 待审核** |
+| GET | /api/app/demands/:id | 详情（不可见 → 404，不暴露存在性；发布者可查看本人任意状态需求，其余人仅 `published` 且可见范围命中）；含响应数、`kind` 与类型专属字段（task: deliverable/budget/deliverBy；investment: cooperationNeed/returnOffer；cooperation: bottleneck/partnershipMode/returnOffer）与联系人信息（**同样按 `contactPublic` 下发**）；本人已响应时附 `myResponse: { message, at, status }`（`withdrawnAt` 非空即视为未响应，客户端据此隐藏响应入口并展示响应说明；响应需审核下 `status` 可能为 `pending_review`）；返回只读 `respondNeedReview` |
 | POST | /api/app/demands | 提交需求：`demandOpen` 开关校验；`kind` 必填（task/investment/cooperation）；`categoryDict` 指定类目字典（task/cooperation→demand_category，investment→industry）；task 必填 `deliverable`（可选 `budget`）与 `deliverBy`（预期交付日期，希望在该日期前完成），investment 必填 `cooperationNeed`（可选 `returnOffer`），cooperation 必填 `bottleneck`（可选 `partnershipMode`/`returnOffer`）；`contactName`/`contactPhone` 必填、`contactEmail` 选填（校验格式）；`deadline` 不再收集（历史字段保留展示）；`asIdentity` 四类身份均可发布（含合作企业，类型不限），持有社区个体身份时不再单列个人用户选项；发布方身份快照按 wiki §8.7，`publisherName` 按主体取企业名/组织名（个人取昵称）；成员代企业发布时传 `asEnterpriseId`（服务端校验成员 `publish_demand` 权限，无权限 403）；创建即 `pending` → 管理端审核 |
 | GET | /api/app/me/demands | 我发布的需求（全状态，含 `kind`） |
-| POST | /api/app/demands/:id/respond | 响应需求：`published` 校验、不可响应自己的需求、防重复；通过后触发 `demand_responded` 积分（发放给响应成员，M2 批次） |
-| GET | /api/app/me/responses | 我的需求响应记录 |
-| POST | /api/app/me/responses/:id/withdraw | 响应者撤回待处理响应（撤回后可重新响应）；已处理 409 |
-| GET | /api/app/me/demands/:id/responses | 需求发布者查看响应列表（响应方快照 + `status=pending/accepted/rejected` + 审核时间/驳回原因）；非发布者 403 |
+| POST | /api/app/demands/:id/respond | 响应需求入参 `{ note(必填≤500), quote?≤64, timeline?≤128, cases?≤300, phone?(11 位，留空沿用身份手机号、填写则覆盖), asIdentity?, asEnterpriseId? }`：`published` 校验、不可响应自己的需求、防重复；需求 `respondNeedReview=true` 时提交落 `pending_review`（发布者暂不可见、提交时不发积分不通知），管理员审核通过后才回 `pending` 并发放 `demand_responded` 积分、通知发布者；`respondNeedReview=false` 时提交即 `pending` 并即时发放积分（与现状一致） |
+| GET | /api/app/me/responses | 我的需求响应记录（含 `pending_review` 待审核与 `rejected` 已驳回；含 `quote/timeline/cases/phone` 与驳回理由 `rejectReason`；驳回记录带 `withdrawnAt` 失效时间，可重新响应） |
+| POST | /api/app/me/responses/:id/withdraw | 响应者撤回待处理响应（`pending`/`pending_review` 可撤回，撤回落 `closed` + `withdrawnAt`，可重新响应）；已处理 409 |
+| GET | /api/app/me/demands/:id/responses | 需求发布者查看响应列表（**不含 `pending_review` 待审核响应，也不含已撤回/已驳回（已置失效）记录**；响应方快照 + `phone/quote/timeline/cases` + `status=pending/accepted` + 审核时间/驳回原因）；非发布者 403 |
 | POST | /api/app/me/demands/:id/select | 发布者选择意向承接方（`responseIds[]` 多选，去重且非空，全部须为本人需求下未撤回的待处理响应）；需求转 `selected`（`matchedRespondent` 记录被选人），被选响应转 `accepted` 并通知本人，未选中响应保持待处理（不可驳回）；不生成项目，由管理员在后台完成立项 |
 
 ## 7. 活动中心
@@ -130,9 +130,9 @@
 
 | 方法 | 路径 | 说明 |
 |---|---|---|
-| GET | /api/app/me/demands/:id/responses | 需求发布者查看响应（响应方快照 + `status=pending/accepted/rejected` + 审核时间/驳回原因）；非发布者 403 |
+| GET | /api/app/me/demands/:id/responses | 需求发布者查看响应（**不含 `pending_review` 待审核响应**；响应方快照 + `status=pending/accepted/rejected` + 审核时间/驳回原因）；非发布者 403 |
 | POST | /api/app/me/demands/:id/select | 发布者选择意向承接方（`responseIds[]` 多选）→ 需求转 `selected`、被选响应转 `accepted` 并通知；未选中响应保持待处理，不生成项目，由管理员后台立项 |
-| POST | /api/app/me/responses/:id/withdraw | 响应者撤回待处理响应（撤回后可重新响应） |
+| POST | /api/app/me/responses/:id/withdraw | 响应者撤回待处理响应（`pending`/`pending_review` 可撤回，撤回后可重新响应） |
 | GET | /api/app/me/projects/:id | 项目详情（参与双方、来源需求、进度与里程碑交付验收状态） |
 | POST | /api/app/me/projects/:id/milestones/:milestoneId/submit | 承接方提交里程碑完成（可附说明）→ 待发起方验收；发起方调用 403 |
 | POST | /api/app/me/projects/:id/milestones/:milestoneId/accept | 发起方验收里程碑；全部验收通过自动结项并按 wiki-backend §8.6 发放 `project_completed` 经验 |

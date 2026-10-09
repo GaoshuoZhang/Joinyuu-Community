@@ -67,6 +67,8 @@ export interface DemandPublishPayload {
   contactPublic: boolean
   /** 响应需求奖励积分（历史缺省值按积分规则发放） */
   respondPoints?: number
+  /** 响应是否需管理员审核（默认开启） */
+  respondNeedReview?: boolean
 }
 
 /* POST /api/admin/demands/:id/proxy-respond — 管理员代成员响应需求（记录 operator 信息） */
@@ -82,6 +84,19 @@ export async function proxyRespondDemand(
   },
 ): Promise<{ code: number }> {
   return httpPost<{ code: number }>(`/demands/${id}/proxy-respond`, payload)
+}
+
+/* POST /api/admin/demands/:id/respondents/:respondentId/review，入参 { status: approved | rejected, reason? }（驳回必填原因）
+ * 通过 = 该响应回到待处理（发布者之后可选定承接方）；驳回 = 状态改为已驳回并记录理由 */
+export async function reviewDemandRespondent(
+  id: string,
+  respondentId: number,
+  payload: { status: 'approved' | 'rejected'; reason?: string },
+): Promise<{ code: number }> {
+  return httpPost<{ code: number }>(`/demands/${id}/respondents/${respondentId}/review`, {
+    status: payload.status,
+    ...(payload.status === 'rejected' ? { reason: payload.reason?.trim() ?? '' } : {}),
+  })
 }
 
 /* POST /api/admin/demands/:id/approve — 待审核需求仅读审核通过，转为待发布 */

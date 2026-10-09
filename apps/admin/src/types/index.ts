@@ -155,6 +155,7 @@ export type DemandStatus =
   | 'closed'
 
 export interface DemandRespondent {
+  id: number
   name: string
   enterprise: string
   /** 联系电话（代报名必填；成员自行响应可能缺省） */
@@ -163,9 +164,17 @@ export interface DemandRespondent {
   email?: string
   /** 报价（选填，如 ¥8,000） */
   quote?: string
+  /** 可投入时间/预计工期（选填，≤128） */
+  timeline?: string
+  /** 相关经验与案例（选填，≤300） */
+  cases?: string
   message: string
   at: string
-  status: 'pending' | 'contacted' | 'accepted' | 'rejected' | 'closed'
+  status: 'pending' | 'contacted' | 'accepted' | 'rejected' | 'closed' | 'pending_review'
+  /** 审核时间（管理员通过/驳回后写入） */
+  reviewedAt?: string
+  /** 驳回理由（status = rejected 时存在） */
+  rejectReason?: string
 }
 
 export interface Demand {
@@ -223,6 +232,12 @@ export interface Demand {
   projectId?: string
   /** 响应需求奖励积分（历史缺省值按积分规则 demand_responded 发放） */
   respondPoints?: number
+  /** 响应是否需管理员审核（默认开启；开启后成员响应需审核通过才对发布者可见） */
+  respondNeedReview: boolean
+  /** 未撤回总响应数 */
+  responseCount: number
+  /** 未撤回且待审核响应数 */
+  pendingResponseCount: number
   respondents: DemandRespondent[]
   /** 归档时间（非空表示已归档，详情页写操作隐藏） */
   deletedAt?: string | null

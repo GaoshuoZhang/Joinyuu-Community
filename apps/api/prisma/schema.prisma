@@ -383,6 +383,8 @@ model Demand {
   contactEmail         String?            @db.VarChar(128)
   // 公开联系人开关：true 时客户端（含未登录游客）可见联系人姓名/电话/邮箱；false 时客户端一律不可见（后台始终可见）
   contactPublic        Boolean            @default(false)
+  // 响应需审核：true 时客户端提交的响应先落 pending_review，管理员审核通过后才对发布者可见（默认开启）
+  respondNeedReview    Boolean            @default(true)
   budget               String             @db.VarChar(64)
   period               String             @db.VarChar(32)
   deadline             String             @db.VarChar(16)
@@ -427,9 +429,12 @@ model DemandRespondent {
   phone             String? @db.VarChar(32)
   email             String? @db.VarChar(128)
   quote             String? @db.VarChar(64)
+  // 可投入时间/预计工期（自由文本，如「2 周内可开工」）；相关经验与案例（≤300 字）
+  timeline          String? @db.VarChar(128)
+  cases             String? @db.VarChar(300)
   message           String  @db.Text
   at                String  @db.VarChar(16)
-  // pending | contacted | closed +（R2 撮合扩展）accepted | rejected
+  // pending_review（待管理员审核） | pending | contacted | closed +（R2 撮合扩展）accepted | rejected
   status            String  @default("pending") @db.VarChar(16)
   reviewAt          String? @db.VarChar(16)
   rejectReason      String? @db.VarChar(255)

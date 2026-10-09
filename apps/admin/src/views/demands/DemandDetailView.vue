@@ -1,8 +1,8 @@
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue'
+import { computed, nextTick, onMounted, reactive, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useQueryTab } from '@/utils/navigation'
-import { MessagePlugin } from 'tdesign-vue-next'
+import { MessagePlugin, type FormProps } from 'tdesign-vue-next'
 import { ArrowLeftIcon } from 'tdesign-icons-vue-next'
 import StatusTag from '@/components/StatusTag.vue'
 import DemandPublishDialog from '@/components/DemandPublishDialog.vue'
@@ -11,7 +11,7 @@ import DemandScheduleDialog from '@/components/DemandScheduleDialog.vue'
 import ContentTakedownDialog from '@/components/ContentTakedownDialog.vue'
 import ProjectFormDialog from '@/components/ProjectFormDialog.vue'
 import { identityLabelOf, identityTypeMap, userLevelMap } from '@/constants/identity'
-import { cancelDemandSchedule, closeDemand, fetchDemand, publishDemandNow } from '@/api/demands'
+import { cancelDemandSchedule, closeDemand, fetchDemand, publishDemandNow, reviewDemandRespondent } from '@/api/demands'
 import { isNotFound } from '@/api/http'
 import ListErrorState from '@/components/ListErrorState.vue'
 import type { Demand, DemandRespondent } from '@/types'
@@ -25,26 +25,28 @@ const tab = useQueryTab('info', ['info', 'respondents'] as const)
 /* 已归档条目：隐藏全部写操作，仅保留只读内容与「查看关联项目」跳转 */
 const isArchived = computed(() => !!demand.value?.deletedAt)
 
-const respondentStatusMap: Record<DemandRespondent['status'], { label: string; theme: 'warning' | 'success' | 'default' }> = {
-  pending: { label: '待回应', theme: 'warning' },
-  contacted: { label: '已对接', theme: 'success' },
-  accepted: { label: '已接受', theme: 'success' },
-  rejected: { label: '已拒绝', theme: 'default' },
-  closed: { label: '已结束', theme: 'default' },
-}
-
 const respondentColumns = [
   { colKey: 'name', title: '响应人', width: 120 , ellipsis: true},
   { colKey: 'enterprise', title: '所属', width: 160, ellipsis: true },
-  { colKey: 'message', title: '留言', ellipsis: true },
+  { colKey: 'message', title: '留言' },
   { colKey: 'at', title: '时间', width: 170 , ellipsis: true},
-  { colKey: 'status', title: '状态', cell: 'status', width: 100 , ellipsis: true},
+  { colKey: 'status', title: '状态', cell: 'status', width: 140 },
+  { colKey: 'op', title: '操作', cell: 'op', width: 120 },
 ]
 
-/* 响应记录无唯一字段，按「响应人 + 序号」合成稳定行键，避免同名响应人键冲突 */
+/* 响应记录以 id 作为稳定行键 */
 const respondentRows = computed(() =>
-  (demand.value?.respondents ?? []).map((row, index) => ({ ...row, rowKey: `${row.name}-${index}` })),
+  (demand.value?.respondents ?? []).map((row) => ({ ...row, rowKey: String(row.id) })),
 )
+
+/* 留言列附带的审核参考信息：报价/可投入时间/手机，仅拼接存在的项，全空返回空串 */
+function respondentMeta(row: DemandRespondent): string {
+  const parts: string[] = []
+  if (row.quote) parts.push(`报价 ${row.quote}`)
+  if (row.timeline) parts.push(`工期 ${row.timeline}`)
+  if (row.phone) parts.push(`手机 ${row.phone}`)
+  return parts.join(' · ')
+}
 
 async function load() {
   loading.value = true
@@ -61,6 +63,62 @@ async function load() {
     }
   } finally {
     loading.value = false
+  }
+}
+
+/* 响应审核：仅「待审核」行可操作；通过 = 回待处理，驳回需填理由（必填 ≤200）。
+ * 行级互斥：reviewing 记录 `${row.id}:${status}`，同一行同时只允许一个动作在途 */
+const reviewing = ref('')
+
+function isReviewing(row: DemandRespondent, status: 'approved' | 'rejected') {
+  return reviewing.value === `${row.id}:${status}`
+}
+
+async function onApproveRespondent(row: DemandRespondent) {
+  if (!demand.value) return
+  reviewing.value = `${row.id}:approved`
+  try {
+    await reviewDemandRespondent(demand.value.id, row.id, { status: 'approved' })
+    MessagePlugin.success('已通过该响应')
+    await load()
+  } catch (e) {
+    MessagePlugin.error(e instanceof Error ? e.message : '操作失败')
+  } finally {
+    reviewing.value = ''
+  }
+}
+
+const rejectVisible = ref(false)
+const rejectRow = ref<DemandRespondent | null>(null)
+const rejectFormRef = ref()
+const rejectForm = reactive({ reason: '' })
+const rejectSubmitting = ref(false)
+const rejectRules: FormProps['rules'] = {
+  reason: [{ required: true, message: '请填写驳回理由', trigger: 'submit' }],
+}
+
+function openRejectRespondent(row: DemandRespondent) {
+  rejectRow.value = row
+  rejectForm.reason = ''
+  rejectVisible.value = true
+  nextTick(() => rejectFormRef.value?.clearValidate())
+}
+
+async function onConfirmRejectRespondent() {
+  const row = rejectRow.value
+  if (!row || !demand.value) return
+  const valid = await rejectFormRef.value.validate()
+  if (valid !== true) return
+  rejectSubmitting.value = true
+  try {
+    await reviewDemandRespondent(demand.value.id, row.id, { status: 'rejected', reason: rejectForm.reason })
+    MessagePlugin.success('已驳回该响应')
+    rejectVisible.value = false
+    await load()
+  } catch (e) {
+    MessagePlugin.error(e instanceof Error ? e.message : '操作失败')
+  } finally {
+    rejectSubmitting.value = false
   }
 }
 
@@ -308,7 +366,7 @@ onMounted(load)
           </t-descriptions-item>
           <t-descriptions-item label="创建时间">{{ demand.createdAt }}</t-descriptions-item>
           <t-descriptions-item label="发布时间">{{ demand.publishedAt ?? '—' }}</t-descriptions-item>
-          <t-descriptions-item label="响应数">{{ demand.respondents.length }}</t-descriptions-item>
+          <t-descriptions-item label="响应数">{{ demand.responseCount }}</t-descriptions-item>
           <t-descriptions-item v-if="demand.matchedRespondent" label="匹配响应方">
             {{ demand.matchedRespondent }}
           </t-descriptions-item>
@@ -344,16 +402,44 @@ onMounted(load)
 
           <t-tab-panel value="respondents" label="响应记录">
             <div class="tab-body">
+              <t-alert
+                v-if="demand.pendingResponseCount > 0"
+                class="block-gap"
+                theme="info"
+                message="待审核响应需管理员审核通过后才对发布者可见"
+              />
               <t-table
                 row-key="rowKey"
                 :data="respondentRows"
                 :columns="respondentColumns"
                 empty="暂无响应记录"
               >
+                <template #message="{ row }">
+                  <div class="resp-message-cell">
+                    <div class="resp-message-text" :title="row.message">{{ row.message }}</div>
+                    <div v-if="respondentMeta(row)" class="resp-meta-text">{{ respondentMeta(row) }}</div>
+                    <div v-if="row.cases" class="resp-cases-text" :title="row.cases">案例：{{ row.cases }}</div>
+                  </div>
+                </template>
                 <template #status="{ row }">
-                  <t-tag variant="light" :theme="respondentStatusMap[row.status as DemandRespondent['status']].theme">
-                    {{ respondentStatusMap[row.status as DemandRespondent['status']].label }}
-                  </t-tag>
+                  <div class="resp-status-cell">
+                    <StatusTag entity="demandRespondent" :value="row.status" />
+                    <span
+                      v-if="row.status === 'rejected' && row.rejectReason"
+                      class="resp-reject-reason"
+                      :title="row.rejectReason"
+                    >
+                      {{ row.rejectReason }}
+                    </span>
+                  </div>
+                </template>
+                <template #op="{ row }">
+                  <div v-if="!isArchived && row.status === 'pending_review'" class="op-cell" @click.stop>
+                    <t-popconfirm content="确认通过该响应？通过后发布者可看到并选定该响应" @confirm="onApproveRespondent(row)">
+                      <t-button variant="text" size="small" theme="primary" :loading="isReviewing(row, 'approved')">通过</t-button>
+                    </t-popconfirm>
+                    <t-button variant="text" size="small" theme="danger" :disabled="isReviewing(row, 'approved')" @click="openRejectRespondent(row)">驳回</t-button>
+                  </div>
                 </template>
               </t-table>
             </div>
@@ -374,6 +460,31 @@ onMounted(load)
 
     <!-- 立项弹窗 -->
     <ProjectFormDialog v-model:visible="projectVisible" mode="create" :demand="demand" :project="null" @success="load" />
+
+    <!-- 驳回响应：理由必填（≤200），驳回后该记录失效、响应者可重新响应 -->
+    <t-dialog
+      v-model:visible="rejectVisible"
+      header="驳回响应"
+      width="480px"
+      :close-on-overlay-click="!rejectSubmitting"
+      :confirm-btn="{ content: '确认驳回', theme: 'danger', loading: rejectSubmitting }"
+      cancel-btn="取消"
+      @confirm="onConfirmRejectRespondent"
+    >
+      <p class="reject-tip">
+        {{ rejectRow ? `驳回 ${rejectRow.name} 的响应` : '' }}理由将记录在该响应上，驳回后该记录失效、响应者可重新响应。
+      </p>
+      <t-form ref="rejectFormRef" :data="rejectForm" :rules="rejectRules">
+        <t-form-item name="reason">
+          <t-textarea
+            v-model="rejectForm.reason"
+            :maxlength="200"
+            :autosize="{ minRows: 3, maxRows: 5 }"
+            placeholder="请填写驳回理由（必填，最多 200 字）…"
+          />
+        </t-form-item>
+      </t-form>
+    </t-dialog>
   </div>
 </template>
 
@@ -484,5 +595,54 @@ onMounted(load)
 
 .publisher-link.clickable:hover {
   text-decoration: underline;
+}
+
+/* 响应记录留言单元格：留言 + 审核参考小字（报价/工期/手机/案例），逐行 CSS 截断并可悬停看全文 */
+.resp-message-cell {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.resp-message-text {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.resp-meta-text,
+.resp-cases-text {
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 12px;
+  line-height: 18px;
+  color: var(--td-text-color-secondary);
+}
+
+/* 响应记录状态单元格：标签 + 驳回理由（小字，超长省略，悬停看全文） */
+.resp-status-cell {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+}
+
+.resp-reject-reason {
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 12px;
+  line-height: 18px;
+  color: var(--td-text-color-secondary);
+}
+
+.reject-tip {
+  margin: 0 0 12px;
+  font-size: 12px;
+  line-height: 22px;
+  color: var(--td-text-color-secondary);
 }
 </style>

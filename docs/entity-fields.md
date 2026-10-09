@@ -28,8 +28,8 @@
 
 ## 3. 业务运营域（7）
 
-- **Demand** — 需求（id D；状态机 pending→pending_release→published|scheduled→selected→projected/closed/rejected；publisherId/publisherName/publisherIdentity Json?（提交人主体/名称/身份快照）；contactName?/contactPhone?/contactEmail?；**contactPublic Bool 默认 false（公开联系人开关：开启后客户端含未登录游客可见联系人信息，关闭时客户端一律不可见、后台始终可见）**；budget/period/deadline；scheduledAt?/publishedAt?；可见/可报名范围四数组；description/tags；rejectedReason?/matchedRespondent?/projectId?/respondPoints?；deletedAt?/deletedBy?/archivableAt?）
-- **DemandRespondent** — 需求响应（demandId 级联；name/enterprise/phone?/email?/quote?/message/at；status pending/accepted/rejected/closed（contacted 为历史值））
+- **Demand** — 需求（id D；状态机 pending→pending_release→published|scheduled→selected→projected/closed/rejected；publisherId/publisherName/publisherIdentity Json?（提交人主体/名称/身份快照）；contactName?/contactPhone?/contactEmail?；**contactPublic Bool 默认 false（公开联系人开关：开启后客户端含未登录游客可见联系人信息，关闭时客户端一律不可见、后台始终可见）**；**respondNeedReview Bool 默认 true（响应需审核：开启时成员提交的响应先落 pending_review，管理员审核通过才对发布者可见并发放响应积分；客户端只读下发）**；budget/period/deadline；scheduledAt?/publishedAt?；可见/可报名范围四数组；description/tags；rejectedReason?/matchedRespondent?/projectId?/respondPoints?；deletedAt?/deletedBy?/archivableAt?）
+- **DemandRespondent** — 需求响应（demandId 级联；name/enterprise/phone?/email?/quote?/timeline?/cases?/message/at；quote 报价、timeline 可投入时间/预计工期、cases 相关经验与案例（客户端响应表单选填）、phone 可由响应者填写覆盖身份手机号；status pending_review（待管理员审核，仅响应者与后台可见，发布者响应列表不含）/pending（待选定：审核通过后等待发布者选定承接方）/accepted/rejected/closed（contacted 为历史值）；驳回写 rejectReason 并同时置 withdrawnAt 失效，响应者可重新响应）
 - **Project** — 项目（id P；code JY-YYYY-NN 唯一；status running/paused/closed/finished；progress；startDate/endDate/initiatedAt；description/memberCount；sourceDemandId?/expReward?/closeReason?；**demanderId?/demanderName?/demanderIdentity Json?（需求方主体/名称/身份快照，需求立项照搬需求、自建由表单录入）**；**creatorName?/creatorId?（创建人）**；**contactName?/contactPhone?/contactEmail?（联系方式）**；**contractPrice?（合同价格）**；deletedAt?/deletedBy?/archivableAt?）
 - **ProjectUndertaker** — 承接方（type enterprise/individual/custom；refId/name；share 合计须 100；contactName?/phone?）
 - **Milestone** — 里程碑（status todo/active/done；date；owners[] 负责承接方）
@@ -121,8 +121,8 @@
 | R1 | PointsRecord | dedupeKey? 唯一，用于积分发放幂等 |
 | R2 | CommunityEvent | venueLat/venueLng/checkinRadiusM/checkinOpenMin/checkinCloseMin（签到几何与时间窗）；cancelDeadlineHours（取消时限，默认 24）；rescheduledTo?（postponed 改期目标；状态机增 postponed） |
 | R2 | EventEnrollment | waitlisted Bool + waitlistOrder Int?（候补与递补顺序）；checkinLat/checkinLng/checkinMethod（自助/补签） |
-| R2 | Demand | demandType task/investment/cooperation；task 专属 deliverable?/budget?/deliverBy?（预期交付日期）；investment 专属 cooperationNeed?/returnOffer?；cooperation 专属 bottleneck?/partnershipMode?；三类型通用 contactName/contactPhone/contactEmail？；projectId?（立项回填）；deadline 停用保留展示 |
-| R2 | DemandRespondent | **userId 关联（必加）**；status 扩展 pending/contacted/closed → +accepted/rejected；reviewAt?/rejectReason?/withdrawnAt? |
+| R2 | Demand | demandType task/investment/cooperation；task 专属 deliverable?/budget?/deliverBy?（预期交付日期）；investment 专属 cooperationNeed?/returnOffer?；cooperation 专属 bottleneck?/partnershipMode?；三类型通用 contactName/contactPhone/contactEmail？；projectId?（立项回填）；deadline 停用保留展示；respondNeedReview Bool 默认 true（响应需审核开关） |
+| R2 | DemandRespondent | **userId 关联（必加）**；status 扩展 pending/contacted/closed → +accepted/rejected；reviewAt?/rejectReason?/withdrawnAt?；+pending_review（响应需审核：待管理员审核，审核通过回 pending、驳回转 rejected 并置 withdrawnAt 失效） |
 | R2 | Milestone | 交付状态扩展 todo → +submitted/returned（accept 沿用 done）；attachments[]（证据上传）；returnReason?；submitAt?/acceptAt?/returnedAt? |
 | R2 | MallGoods | **category 语义改造（Q1 决）**：category → goods_category 字典分类（GC code）。**统一券码兑换改造**：移除 fulfillment/shippingMethods/pickupAddress/shippingFee，validDays 承载券码有效期（空按 30 天兜底） |
 | R2 | RedemptionOrder | **统一券码兑换改造**：状态收敛 pending_use/finished/cancelled 三态；voucherCode/voucherExpiresAt 非空（下单即签发，过期自动退款）；usedAt?（后台核销时间）；cancelledAt?；rating?/reviewComment?（每单一次评价）；移除 fulfillment/shippingMethod/pickupAddress/shippedAt/recipientName/recipientPhone/address/addressId/trackingNo |
@@ -134,7 +134,7 @@
 | R3 | UserIdentity | permissions[]（8 项枚举 publish_demand/respond_demand/space_reserve/article_submit/manage_members/invite_member/assign_permission/edit_card；负责人全部、成员由负责人分配） |
 | 扩展 | Project | demanderId?/demanderName?/demanderIdentity Json?（需求方主体/名称/身份快照；需求立项照搬需求、自建由表单录入）；creatorName?/creatorId?（创建人）；contactName?/contactPhone?/contactEmail?（联系方式）；contractPrice?（合同价格） |
 | 扩展 | IndividualCard | `data.visibility` 增 `isPublic`（公开名片开关；false 时退出社区人才库、公开名片页 404；缺省视为公开） |
-| 扩展 | Demand | contactPublic Bool 默认 false（公开联系人开关：开启后客户端含未登录游客可见 contactName/contactPhone/contactEmail，关闭时客户端一律不可见、后台始终可见）；creatorName/creatorId 已删（提交人取 publisherName/publisherId） |
+| 扩展 | Demand | contactPublic Bool 默认 false（公开联系人开关：开启后客户端含未登录游客可见 contactName/contactPhone/contactEmail，关闭时客户端一律不可见、后台始终可见）；**respondNeedReview Bool 默认 true（响应需审核：开启后成员提交的响应先落 pending_review，管理员审核通过才对发布者可见并发放响应积分；客户端需求列表/详情只读下发）**；creatorName/creatorId 已删（提交人取 publisherName/publisherId） |
 | 扩展 | Space | feePerHour Int 默认 0（预约费用：积分/小时，0=免费；后台空间表单维护，客户端空间列表与预约页展示） |
 | 扩展 | SpaceReservation | feePoints Int 默认 0（该单实际消耗积分；审核驳回与用户/后台取消均全额退回，写 source=space 流水） |
 | 扩展 | LevelTier | pointsDiscount Float 默认 10（积分消费折扣：1 = 1 折 … 10 = 原价，支持一位小数如 8.5 = 85 折；商城兑换与空间预约按等级折扣扣分，折扣口径见 wiki-backend §8.8） |

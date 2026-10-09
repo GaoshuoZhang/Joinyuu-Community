@@ -10,6 +10,7 @@ import { RejectDemandDto } from './dto/reject-demand.dto'
 import { ScheduleDemandDto } from './dto/schedule-demand.dto'
 import { CloseDemandDto } from './dto/close-demand.dto'
 import { ProxyRespondDemandDto } from './dto/proxy-respond-demand.dto'
+import { ReviewRespondentDto } from './dto/review-respondent.dto'
 import { InitiateProjectDto } from './dto/initiate-project.dto'
 
 @Controller('api/admin/demands')
@@ -130,6 +131,19 @@ export class DemandsController {
   @Post(':id/proxy-respond')
   proxyRespond(@Param('id') id: string, @Body() dto: ProxyRespondDemandDto): Promise<{ code: number }> {
     return this.demands.proxyRespond(id, dto)
+  }
+
+  /* 响应审核（需求详情「响应记录」tab）：审核页与需求管理页共用，两码任一即可 */
+  @RequirePermission(['/demands', '/demands/review'])
+  @HttpCode(200)
+  @Post(':id/respondents/:respondentId/review')
+  reviewRespondent(
+    @Param('id') id: string,
+    @Param('respondentId') respondentId: string,
+    @Body() dto: ReviewRespondentDto,
+    @Req() req: AuthenticatedRequest,
+  ): Promise<{ code: number }> {
+    return this.demands.reviewRespondent(id, respondentId, dto, req.user?.name ?? '社区管理员')
   }
 
   @RequirePermission('/demands')

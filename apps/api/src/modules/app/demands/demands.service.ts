@@ -217,7 +217,7 @@ export class AppDemandsService {
     if (!this.visibly(identities, demand)) throw new NotFoundException('需求不存在或不可见')
 
     const dup = await this.prisma.demandRespondent.findFirst({
-      where: { demandId: demand.id, userId: uid, status: { in: ['pending', 'accepted'] }, withdrawnAt: null },
+      where: { demandId: demand.id, userId: uid, status: { in: ['pending', 'pending_review', 'accepted'] }, withdrawnAt: null },
       select: { id: true },
     })
     if (dup) throw new ConflictException('您已响应过该需求')
@@ -246,6 +246,8 @@ export class AppDemandsService {
     }
 
     const at = formatNow()
+    /* 响应需审核：先落待审核（发布者不可见），管理员审核通过后才对发布者可见并进入「待处理」 */
+    const needsReview = demand.respondNeedReview
     try {
       await this.prisma.demandRespondent.create({
         data: {
@@ -254,12 +256,14 @@ export class AppDemandsService {
           responderIdentity: responder.identity ?? Prisma.DbNull,
           name: responder.name,
           enterprise: responder.enterprise,
-          phone: responder.phone || null,
+          phone: dto.phone?.trim() || responder.phone || null,
           email: null,
           quote: dto.quote?.trim() || null,
+          timeline: dto.timeline?.trim() || null,
+          cases: dto.cases?.trim() || null,
           message: dto.note?.trim() || '响应需求',
           at,
-          status: 'pending',
+          status: needsReview ? 'pending_review' : 'pending',
         },
       })
     } catch (e) {
@@ -268,6 +272,10 @@ export class AppDemandsService {
       }
       throw e
     }
+
+    /* 需审核：响应积分与发布者通知都延后到管理员审核通过时（见后台 DemandsService.reviewRespondent），
+     * 避免未过审即发分（刷分）与打扰发布者；驳回不发分、不通知发布者。 */
+    if (needsReview) return { code: 0 }
 
     await this.points.issuePoints(uid, 'demand_responded', '响应需求获得积分', `demand_responded:${uid}:${demand.id}:${at}`)
     /* 后台代发需求的发布者可能是企业 ID：解析真实收件人后再发站内信 */
@@ -304,6 +312,11 @@ export class AppDemandsService {
       at: r.at,
       status: r.status,
       ...(r.quote != null ? { quote: r.quote } : {}),
+      ...(r.timeline != null ? { timeline: r.timeline } : {}),
+      ...(r.cases != null ? { cases: r.cases } : {}),
+      ...(r.phone != null ? { phone: r.phone } : {}),
+      /* 审核驳回理由：随「我的响应」下发，供客户端展示驳回原因 */
+      ...(r.rejectReason != null ? { rejectReason: r.rejectReason } : {}),
       ...(r.withdrawnAt != null ? { withdrawnAt: r.withdrawnAt } : {}),
     }))
   }
@@ -319,8 +332,15 @@ export class AppDemandsService {
     const demand = await this.prisma.demand.findUnique({ where: { id: response.demandId } })
     if (!demand) throw new NotFoundException('需求不存在')
     if (demand.status !== 'published') throw new ConflictException('需求已进入立项流程，响应不可撤回')
-    if (response.status !== 'pending') throw new ConflictException('该响应已被处理，不可撤回')
-    await this.prisma.demandRespondent.update({ where: { id }, data: { withdrawnAt: formatNow(), status: 'closed' } })
+    if (response.status !== 'pending' && response.status !== 'pending_review') {
+      throw new ConflictException('该响应已被处理，不可撤回')
+    }
+    /* 状态条件更新抢占：与审核（后台 reviewRespondent）并发时只有一方生效，避免审核后仍被撤回 */
+    const withdrawn = await this.prisma.demandRespondent.updateMany({
+      where: { id, userId: uid, withdrawnAt: null, status: { in: ['pending', 'pending_review'] } },
+      data: { withdrawnAt: formatNow(), status: 'closed' },
+    })
+    if (withdrawn.count !== 1) throw new ConflictException('该响应已被处理，不可撤回')
     return { code: 0 }
   }
 
@@ -328,7 +348,8 @@ export class AppDemandsService {
   async demandResponses(uid: string, demandId: string) {
     const demand = await this.requireOwnDemand(uid, demandId)
     const rows = await this.prisma.demandRespondent.findMany({
-      where: { demandId: demand.id },
+      /* 待审核响应不对发布者可见；已撤回与审核驳回（已置 withdrawnAt 失效）同样不展示 */
+      where: { demandId: demand.id, withdrawnAt: null, status: { not: 'pending_review' } },
       orderBy: { id: 'asc' },
     })
     return rows.map((r) => ({
@@ -339,6 +360,11 @@ export class AppDemandsService {
       at: r.at,
       ...(r.userId != null ? { responderUid: r.userId } : {}),
       responderName: r.name,
+      /* 响应补充信息：联系手机 / 报价 / 可投入时间 / 经验案例（供发布者评估） */
+      ...(r.phone != null ? { phone: r.phone } : {}),
+      ...(r.quote != null ? { quote: r.quote } : {}),
+      ...(r.timeline != null ? { timeline: r.timeline } : {}),
+      ...(r.cases != null ? { cases: r.cases } : {}),
       ...(r.responderIdentity != null ? { responderIdentity: this.identityType(r.responderIdentity) } : {}),
       status: r.status === 'pending' || r.status === 'accepted' || r.status === 'rejected' ? (r.status as 'pending' | 'accepted' | 'rejected') : undefined,
       ...(r.reviewAt != null ? { reviewedAt: r.reviewAt } : {}),
@@ -363,6 +389,9 @@ export class AppDemandsService {
       orderBy: { id: 'asc' },
     })
     if (responses.length !== ids.length) throw new NotFoundException('响应不存在或已撤回')
+    if (responses.some((r) => r.status === 'pending_review')) {
+      throw new ConflictException('该响应待管理员审核，暂不可选择')
+    }
 
     await this.prisma.$transaction(async (tx) => {
       const accepted = await tx.demandRespondent.updateMany({
@@ -708,12 +737,12 @@ export class AppDemandsService {
     )
   }
 
-  /** 分页响应数（排除已撤回 closed） */
+  /** 分页响应数（排除已撤回/已驳回失效记录与待审核响应；与「发布者可见响应」口径一致） */
   private async responseCounts(demandIds: string[]): Promise<Map<string, number>> {
     if (demandIds.length === 0) return new Map()
     const rows = await this.prisma.demandRespondent.groupBy({
       by: ['demandId'],
-      where: { demandId: { in: demandIds }, withdrawnAt: null },
+      where: { demandId: { in: demandIds }, withdrawnAt: null, status: { not: 'pending_review' } },
       _count: { demandId: true },
     })
     return new Map(rows.map((r) => [r.demandId, r._count.demandId]))
@@ -758,6 +787,8 @@ export class AppDemandsService {
       publisherIdentity: this.identityType(demand.publisherIdentity),
       ...(officialLabel ? { publisherIdentityLabel: officialLabel } : {}),
       responseCount,
+      /* 响应需审核：客户端据此提示「提交后待管理员审核」 */
+      respondNeedReview: demand.respondNeedReview,
       ...(demand.contactPublic
         ? {
             contactName: demand.contactName ?? undefined,

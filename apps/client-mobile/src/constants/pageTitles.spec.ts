@@ -19,7 +19,7 @@ describe('pageTitleFor', () => {
     expect(pageTitleFor(route('space-reserve'))).toBe('预约提交')
     expect(pageTitleFor(route('me-reservations'))).toBe('我的预约')
     expect(pageTitleFor(route('my-reservation-detail'))).toBe('预约详情')
-    expect(pageTitleFor(route('me-leases'))).toBe('我的租约')
+    expect(pageTitleFor(route('me-leases'))).toBe('工位租约')
     expect(pageTitleFor(route('my-article-detail'))).toBe('投稿详情')
     expect(pageTitleFor(route('my-application-detail'))).toBe('申请详情')
     expect(pageTitleFor(route('login'))).toBe('登录')

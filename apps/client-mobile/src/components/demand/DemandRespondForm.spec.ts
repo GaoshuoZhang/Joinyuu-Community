@@ -49,7 +49,7 @@ describe('DemandRespondForm', () => {
     expect(wrapper.text()).toContain('请输入响应说明')
   })
 
-  it('填写后派发响应事件（含所选身份）', async () => {
+  it('填写后派发响应事件（含所选身份与完整 payload）', async () => {
     const individual: UserIdentity = { type: 'individual' }
     const company: UserIdentity = { type: 'community_enterprise', enterpriseId: 'E9001', enterpriseName: '芯启半导体' }
     const { wrapper } = await mountForm({ identities: [individual, company], userName: '张三', submitting: false })
@@ -59,7 +59,15 @@ describe('DemandRespondForm', () => {
     await chips[1].trigger('click')
     await wrapper.get('form').trigger('submit')
     await flushPromises()
-    expect(wrapper.emitted('respond')?.at(-1)).toEqual(['我们可以承接这个需求', company])
+    /* 未填写的选填字段不提交（undefined），不产生空字符串键 */
+    expect(wrapper.emitted('respond')?.at(-1)?.[0]).toEqual({
+      note: '我们可以承接这个需求',
+      quote: undefined,
+      timeline: undefined,
+      cases: undefined,
+      phone: undefined,
+      identity: company,
+    })
   })
 
   it('社区个体出现后隐藏个人用户并清理旧选择', async () => {
@@ -77,7 +85,42 @@ describe('DemandRespondForm', () => {
     await wrapper.get('textarea').setValue('可以承接')
     await wrapper.get('form').trigger('submit')
     await flushPromises()
-    expect(wrapper.emitted('respond')?.at(-1)).toEqual(['可以承接', communityIndividual])
+    expect(wrapper.emitted('respond')?.at(-1)?.[0]).toMatchObject({ note: '可以承接', identity: communityIndividual })
+  })
+
+  it('手机选填：填错手机号内联报错，合法手机号随 payload 透传', async () => {
+    const { wrapper } = await mountForm({ identities: [{ type: 'individual' }], userName: '张三', submitting: false })
+    await wrapper.get('textarea').setValue('可以承接')
+    const phoneInput = wrapper.get('input[type="tel"]')
+    await phoneInput.setValue('123')
+    await wrapper.get('form').trigger('submit')
+    await flushPromises()
+    expect(wrapper.emitted('respond')).toBeUndefined()
+    expect(wrapper.text()).toContain('请输入正确的手机号')
+
+    await phoneInput.setValue('13800000000')
+    await wrapper.get('form').trigger('submit')
+    await flushPromises()
+    expect(wrapper.emitted('respond')?.at(-1)?.[0]).toMatchObject({ note: '可以承接', phone: '13800000000' })
+  })
+
+  it('选填字段（报价/工期/案例）填写后随 payload 透传', async () => {
+    const { wrapper } = await mountForm({ identities: [{ type: 'individual' }], userName: '张三', submitting: false })
+    /* 表单顺序：响应说明 → 报价 → 可投入时间/预计工期 → 相关经验与案例（均为 Textarea，手机为 tel input） */
+    const areas = wrapper.findAll('textarea')
+    expect(areas.length).toBe(4)
+    await areas[0].setValue('可以承接')
+    await areas[1].setValue('1.5 万')
+    await areas[2].setValue('2 周内可开工')
+    await areas[3].setValue('曾完成 3 个同类项目')
+    await wrapper.get('form').trigger('submit')
+    await flushPromises()
+    expect(wrapper.emitted('respond')?.at(-1)?.[0]).toMatchObject({
+      note: '可以承接',
+      quote: '1.5 万',
+      timeline: '2 周内可开工',
+      cases: '曾完成 3 个同类项目',
+    })
   })
 
   it('clearNote 清空输入', async () => {

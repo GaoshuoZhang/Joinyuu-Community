@@ -28,12 +28,17 @@ function onListScroll(bottomDistance: number) {
   if (bottomDistance < 60) loadMore()
 }
 
+/* status 优先：rejected 即便记录已带撤回/失效时间仍显示「已驳回」；
+ * 仅当 status 为 closed（撤回写入）或无 status 时才按 withdrawnAt 显示「已撤回」。 */
 function statusOf(item: MyResponseItem): string {
+  if (item.status && item.status !== 'closed') return item.status
   return item.withdrawnAt ? 'withdrawn' : item.status ?? 'pending'
 }
 
+/* 待处理 / 待审核可撤回，其余（已选定/已驳回/已结束等）不可 */
 function canWithdraw(item: MyResponseItem): boolean {
-  return !item.withdrawnAt && (item.status ?? 'pending') === 'pending'
+  const status = item.status ?? 'pending'
+  return !item.withdrawnAt && (status === 'pending' || status === 'pending_review')
 }
 
 function onWithdraw(item: MyResponseItem) {

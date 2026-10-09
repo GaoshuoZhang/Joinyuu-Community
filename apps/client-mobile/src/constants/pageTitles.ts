@@ -55,7 +55,7 @@ const ROUTE_TITLES: Record<string, string> = {
   'my-order-detail': '订单详情',
   'me-reservations': '我的预约',
   'my-reservation-detail': '预约详情',
-  'me-leases': '我的租约',
+  'me-leases': '工位租约',
   'me-articles': '我的投稿',
   'my-article-detail': '投稿详情',
   'me-favorites': '我的收藏',

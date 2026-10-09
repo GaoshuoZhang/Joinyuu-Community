@@ -179,4 +179,112 @@ describe('M1-C demands（状态机 + 立项联动）', () => {
     expect(experience?.delta).toBe(30)
     expect(selected.status).toBe('accepted')
   })
+
+  it('响应双计数：待审核计入 pendingResponseCount，撤回/驳回不计入 responseCount', async () => {
+    const prisma = app.get(PrismaService)
+    const at = '2026-09-18 10:00'
+    /* D4009 种子即 published 且无响应记录，作为计数基线 */
+    const approvedRow = await prisma.demandRespondent.create({
+      data: { demandId: 'D4009', name: '顾北辰', enterprise: '独立设计师', message: '已通过响应', at, status: 'pending' },
+    })
+    const pendingRow = await prisma.demandRespondent.create({
+      data: { demandId: 'D4009', name: '苏晴', enterprise: '芯启半导体', message: '待审核响应', at, status: 'pending_review' },
+    })
+
+    // 基线：1 条已通过 + 1 条待审核 → 2/1
+    const base = await request(app.getHttpServer())
+      .get('/api/admin/demands/D4009')
+      .set('Authorization', `Bearer ${token}`)
+    expect(base.body.data.responseCount).toBe(2)
+    expect(base.body.data.pendingResponseCount).toBe(1)
+    const baseList = await request(app.getHttpServer())
+      .get('/api/admin/demands?keyword=D4009&page=1&pageSize=10')
+      .set('Authorization', `Bearer ${token}`)
+    const baseRow = baseList.body.data.list.find((item: { id: string }) => item.id === 'D4009')
+    expect(baseRow).toMatchObject({ responseCount: 2, pendingResponseCount: 1 })
+
+    // 撤回待审核那条 → 1/0（撤回不计入）
+    await prisma.demandRespondent.update({
+      where: { id: pendingRow.id },
+      data: { withdrawnAt: '2026-09-18 11:00', status: 'closed' },
+    })
+    const afterWithdraw = await request(app.getHttpServer())
+      .get('/api/admin/demands/D4009')
+      .set('Authorization', `Bearer ${token}`)
+    expect(afterWithdraw.body.data.responseCount).toBe(1)
+    expect(afterWithdraw.body.data.pendingResponseCount).toBe(0)
+
+    // 新提交一条待审核 → 2/1；管理员驳回 → 1/0（驳回不计入）
+    const pendingRow2 = await prisma.demandRespondent.create({
+      data: { demandId: 'D4009', name: '程一诺', enterprise: '逐浪出行', message: '再次待审核', at, status: 'pending_review' },
+    })
+    const reviewed = await request(app.getHttpServer())
+      .post(`/api/admin/demands/D4009/respondents/${pendingRow2.id}/review`)
+      .set('Authorization', `Bearer ${token}`)
+      .send({ status: 'rejected', reason: '信息不完整' })
+    expect(reviewed.status).toBe(200)
+    const afterReject = await request(app.getHttpServer())
+      .get('/api/admin/demands/D4009')
+      .set('Authorization', `Bearer ${token}`)
+    expect(afterReject.body.data.responseCount).toBe(1)
+    expect(afterReject.body.data.pendingResponseCount).toBe(0)
+    expect(approvedRow.id).toBeTruthy()
+  })
+
+  it('响应审核边界：非法状态 400 / 缺 reason 400 / 不存在 404 / 非待审核 409 / 正常通过 200', async () => {
+    const prisma = app.get(PrismaService)
+    const at = '2026-09-18 12:00'
+    const pendingRow = await prisma.demandRespondent.create({
+      data: { demandId: 'D4009', name: '秦朗', enterprise: '深空航天科技', message: '待审核', at, status: 'pending_review' },
+    })
+    const approvedRow = await prisma.demandRespondent.create({
+      data: { demandId: 'D4009', name: '白若溪', enterprise: '沧岚新材料', message: '已通过', at, status: 'pending' },
+    })
+
+    // status 非法值 → 400
+    const invalid = await request(app.getHttpServer())
+      .post(`/api/admin/demands/D4009/respondents/${pendingRow.id}/review`)
+      .set('Authorization', `Bearer ${token}`)
+      .send({ status: 'unknown' })
+    expect(invalid.status).toBe(400)
+
+    // 驳回缺 reason → 400
+    const noReason = await request(app.getHttpServer())
+      .post(`/api/admin/demands/D4009/respondents/${pendingRow.id}/review`)
+      .set('Authorization', `Bearer ${token}`)
+      .send({ status: 'rejected' })
+    expect(noReason.status).toBe(400)
+
+    // 响应不存在 → 404
+    const notFound = await request(app.getHttpServer())
+      .post('/api/admin/demands/D4009/respondents/999999/review')
+      .set('Authorization', `Bearer ${token}`)
+      .send({ status: 'approved' })
+    expect(notFound.status).toBe(404)
+
+    // 响应不属于该需求 → 404
+    const mismatch = await request(app.getHttpServer())
+      .post(`/api/admin/demands/D4001/respondents/${pendingRow.id}/review`)
+      .set('Authorization', `Bearer ${token}`)
+      .send({ status: 'approved' })
+    expect(mismatch.status).toBe(404)
+
+    // 非待审核（已通过）→ 409
+    const conflict = await request(app.getHttpServer())
+      .post(`/api/admin/demands/D4009/respondents/${approvedRow.id}/review`)
+      .set('Authorization', `Bearer ${token}`)
+      .send({ status: 'approved' })
+    expect(conflict.status).toBe(409)
+
+    // 正常通过 → 200，回落「待处理」并写 reviewAt
+    const ok = await request(app.getHttpServer())
+      .post(`/api/admin/demands/D4009/respondents/${pendingRow.id}/review`)
+      .set('Authorization', `Bearer ${token}`)
+      .send({ status: 'approved' })
+    expect(ok.status).toBe(200)
+    expect(ok.body.code).toBe(0)
+    const after = await prisma.demandRespondent.findUnique({ where: { id: pendingRow.id } })
+    expect(after?.status).toBe('pending')
+    expect(after?.reviewAt).toBeTruthy()
+  })
 })

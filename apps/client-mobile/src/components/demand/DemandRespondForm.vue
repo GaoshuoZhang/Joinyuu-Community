@@ -1,36 +1,43 @@
 <script setup lang="ts">
 import { computed, reactive, ref, watch } from 'vue'
-import { Button, Form, FormItem, Textarea, Toast } from 'tdesign-mobile-vue'
+import { Button, Form, FormItem, Input, Textarea, Toast } from 'tdesign-mobile-vue'
 import type { FormInstanceFunctions, FormRules } from 'tdesign-mobile-vue'
 import IdentityPicker from '@/components/forms/IdentityPicker.vue'
 import { actionIdentityOptions } from '@/stores/auth'
 import { useUnsavedGuard } from '@/composables/useUnsavedGuard'
-import type { UserIdentity } from '@/types'
+import { isPhone } from '@/utils/validators'
+import type { DemandRespondPayload, UserIdentity } from '@/types'
 
-/* 响应需求表单：响应说明 + 单选响应身份（标签展示，默认第一个可选身份）；提交后由父级刷新并调用 clearNote。
- * v46：校验迁移 t-form/rules——错误内联在字段下方，提交失败自动滚动到首个错误字段。 */
+/* 响应需求表单：响应说明（必填）+ 报价/工期/案例/手机（选填）+ 单选响应身份（标签展示，默认第一个可选身份）；
+ * 提交后由父级刷新并调用 clearNote。 */
 const props = defineProps<{ identities: UserIdentity[]; userName: string; submitting: boolean }>()
 
-const emit = defineEmits<{ respond: [note: string, identity: UserIdentity] }>()
+const emit = defineEmits<{ respond: [payload: DemandRespondPayload] }>()
 
-const form = reactive({ note: '' })
+const form = reactive({ note: '', quote: '', timeline: '', cases: '', phone: '' })
 const formRef = ref<FormInstanceFunctions>()
-/* 离开保护：响应说明最长 500 字，有输入未提交时离开需确认；
+/* 离开保护：任一字段有未提交内容时离开需确认；
  * 提交成功后父级调用 clearNote 清空，isDirty 自然归 false，不会误拦 */
-useUnsavedGuard(() => form.note.trim().length > 0)
+useUnsavedGuard(() => Object.values(form).some((value) => value.trim().length > 0))
 const identityOptions = computed(() => actionIdentityOptions(props.identities))
 const picked = ref<UserIdentity | null>(identityOptions.value[0] ?? null)
 
-/* v48：响应说明长度上限——取需求表单同类多行字段（期望交付 / 业务瓶颈等）的 500 字口径。
+/* 长度上限：取需求表单同类多行字段的 500 字口径；报价/工期/案例同理。
  * rules 不追加 max 规则：TDesign 的 max 按「中文 2 字符」计，与 maxlength 口径不一致，
  * 长度改由 Textarea 的 maxlength + indicator 直接约束（既有 rules 无长度限制，未新增业务限制）。 */
 const NOTE_MAX_LENGTH = 500
+const QUOTE_MAX_LENGTH = 64
+const TIMELINE_MAX_LENGTH = 128
+const CASES_MAX_LENGTH = 300
+const PHONE_MAX_LENGTH = 11
 
 const rules: FormRules<typeof form> = {
   note: [
     { required: true, message: '请输入响应说明' },
     { validator: (val: string) => !!val.trim(), message: '请输入响应说明' },
   ],
+  /* 联系手机选填；填写时须为 11 位手机号（留空由服务端沿用账号手机号） */
+  phone: [{ validator: (val: string) => !val.trim() || isPhone(val.trim()), message: '请输入正确的手机号' }],
 }
 
 watch(
@@ -49,7 +56,15 @@ function respond() {
     Toast('请选择响应身份')
     return
   }
-  emit('respond', form.note.trim(), picked.value)
+  const optional = (value: string) => value.trim() || undefined
+  emit('respond', {
+    note: form.note.trim(),
+    quote: optional(form.quote),
+    timeline: optional(form.timeline),
+    cases: optional(form.cases),
+    phone: optional(form.phone),
+    identity: picked.value,
+  })
 }
 
 function onSubmit({ validateResult }: { validateResult: unknown }) {
@@ -59,6 +74,10 @@ function onSubmit({ validateResult }: { validateResult: unknown }) {
 
 function clearNote() {
   form.note = ''
+  form.quote = ''
+  form.timeline = ''
+  form.cases = ''
+  form.phone = ''
 }
 
 defineExpose({ clearNote })
@@ -83,6 +102,46 @@ defineExpose({ clearNote })
         placeholder="请说明你的方案、经验或可提供的资源…"
       />
     </FormItem>
+    <!-- 短字段两列并排：报价 + 可投入时间；长文本整宽 -->
+    <div class="short-fields">
+      <FormItem label="报价 / 预算" name="quote">
+        <Textarea
+          v-model="form.quote"
+          :autosize="{ minRows: 1, maxRows: 3 }"
+          :maxlength="QUOTE_MAX_LENGTH"
+          indicator
+          placeholder="选填，如 3-5 万元…"
+        />
+      </FormItem>
+      <FormItem label="可投入时间 / 预计工期" name="timeline">
+        <Textarea
+          v-model="form.timeline"
+          :autosize="{ minRows: 1, maxRows: 3 }"
+          :maxlength="TIMELINE_MAX_LENGTH"
+          indicator
+          placeholder="选填，如 2 周内可开工…"
+        />
+      </FormItem>
+    </div>
+    <FormItem label="相关经验与案例" name="cases">
+      <Textarea
+        v-model="form.cases"
+        :autosize="{ minRows: 2, maxRows: 5 }"
+        :maxlength="CASES_MAX_LENGTH"
+        indicator
+        placeholder="选填，可填写同类项目经验、案例或资源…"
+      />
+    </FormItem>
+    <FormItem label="联系手机" name="phone">
+      <Input
+        v-model="form.phone"
+        type="tel"
+        inputmode="tel"
+        :maxlength="PHONE_MAX_LENGTH"
+        clearable
+        placeholder="选填，默认使用账号手机号"
+      />
+    </FormItem>
     <div v-if="identityOptions.length" class="identity-field">
       <span class="identity-label">响应身份</span>
       <IdentityPicker
@@ -103,6 +162,12 @@ defineExpose({ clearNote })
 .respond-form {
   display: flex;
   flex-direction: column;
+  gap: var(--app-space-5);
+}
+
+.short-fields {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: var(--app-space-5);
 }
 

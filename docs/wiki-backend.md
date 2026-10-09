@@ -211,8 +211,8 @@ TZ=Asia/Shanghai
 | 成员 | Enterprise | E | industry/size/foundedAt/settledAt/leaseType/status(active/pending/exited/disabled)/experience?/**contactUserId?（关联个人用户，社区企业必须关联）**/contactTitle/contact*/description/tags/**deletedAt?/deletedBy?**；M1.5 删除=软删归档（存在进行中租约时 409），可在归档管理恢复/彻底删除；不支持自动归档 |
 | 成员 | ExternalEnterpriseProfile | XE | 合作企业档案（name/industry/status(active/disabled)/size/foundedAt/description/registeredAt（登记日期）/**deletedAt?/deletedBy?**）；**ExternalEnterprise 聚合视图 = 档案 + identities(type=external_enterprise 且 enterpriseName 匹配) 派生成员，不建独立表**；删除=软删归档；不支持自动归档 |
 | 审核 | Application | AP | type(**settle/individual/cooperation/exit 四类**)/applicantName/applicantPhone/targetName/submittedAt/status/summary/details Json/records Json/**deletedAt?/deletedBy?/archivableAt?**；通过时授予身份（见 8.6） |
-| 需求 | Demand | D | 状态机字段 + publisherId/publisherName/publisherIdentity(Json)/contactName?/contactPhone?/contactEmail?/budget/period/deadline/scheduledAt?/publishedAt?/visibilityIdentities[]/visibilityLevels[]/enrollmentIdentities[]/enrollmentLevels[]/respondPoints?/rejectedReason?/projectId?/tags[]/**deletedAt?/deletedBy?/archivableAt?** |
-| 需求 | DemandRespondent | 自增 | demandId FK + name/enterprise/phone?/email?/quote?/message/at/status(pending/contacted/closed) |
+| 需求 | Demand | D | 状态机字段 + publisherId/publisherName/publisherIdentity(Json)/contactName?/contactPhone?/contactEmail?/budget/period/deadline/scheduledAt?/publishedAt?/visibilityIdentities[]/visibilityLevels[]/enrollmentIdentities[]/enrollmentLevels[]/respondPoints?/**respondNeedReview Bool 默认 true（响应需审核）**/rejectedReason?/projectId?/tags[]/**deletedAt?/deletedBy?/archivableAt?** |
+| 需求 | DemandRespondent | 自增 | demandId FK + name/enterprise/phone?/email?/quote?/timeline?/cases?/message/at/status(pending_review/pending/contacted/closed + accepted/rejected)/reviewAt?/rejectReason?/withdrawnAt? |
 | 项目 | Project | P | code（JY-YYYY-NN）/status(running/paused/closed/finished)/progress/startDate/endDate/initiatedAt/description/memberCount/sourceDemandId?/expReward?/closeReason?/**demanderId?/demanderName?/demanderIdentity Json?（需求方主体/名称/身份快照）/creatorName?/creatorId?（创建人）/contactName?/contactPhone?/contactEmail?（联系方式）/contractPrice?（合同价格）**/**deletedAt?/deletedBy?/archivableAt?** |
 | 项目 | ProjectUndertaker | 自增 | projectId FK + type(enterprise/individual/custom)/refId(企业或用户 ID)/name(展示快照)/share/contactName?/phone?；合计=100 应用层校验 |
 | 项目 | Milestone | 自增 | projectId FK + name/status(done/active/todo)/date/owners String[]（承接方展示名） |
@@ -358,10 +358,11 @@ TZ=Asia/Shanghai
 |---|---|---|
 | GET | /api/admin/demands | query：page/pageSize/keyword(标题/ID)/category/status/publisherId/enterprise(社区企业按 enterpriseId、合作企业按档案名)/sortBy(createdAt 默认、publishedAt 空值排最后、id)/sortOrder；默认过滤已归档 |
 | GET | /api/admin/demands/:id | 详情含 respondents |
-| POST | /api/admin/demands | DemandCreatePayload（表单字段，含 `contactPublic` 公开联系人开关）；**创建即 pending_release**；**提交人由服务端取当前登录工作人员（publisherId=账号名、publisherName=姓名、publisherIdentity=`{type:'official',title:角色名}`），不接受前端传入**；预算未填自动"面议" |
-| PUT | /api/admin/demands/:id | 编辑（pending_release/published 可用，不改状态）；可改 `contactPublic` |
+| POST | /api/admin/demands | DemandCreatePayload（表单字段，含 `contactPublic` 公开联系人开关、`respondNeedReview` 响应需审核开关默认 true）；**创建即 pending_release**；**提交人由服务端取当前登录工作人员（publisherId=账号名、publisherName=姓名、publisherIdentity=`{type:'official',title:角色名}`），不接受前端传入**；预算未填自动"面议" |
+| PUT | /api/admin/demands/:id | 编辑（pending_release/published 可用，不改状态）；可改 `contactPublic`、`respondNeedReview` |
 | POST | /api/admin/demands/:id/approve | pending → pending_release |
 | POST | /api/admin/demands/:id/reject | `{ reason }` 必填 → rejected + archivableAt |
+| POST | /api/admin/demands/:id/respondents/:respondentId/review | 需求响应审核：body `{ status: 'approved'\|'rejected', reason? }`（驳回必填理由，≤200 字）；条件抢占（仅 status=`pending_review` 且未撤回可审核，重复/并发 409）：通过 → 响应回 `pending`（发布者此后可选定承接方）、发放 `demand_responded` 响应积分并通知发布者；驳回 → 转 `rejected` 并置 `withdrawnAt` 失效、写 `rejectReason`，通知响应者（含理由）且不发积分；均写审计日志 |
 | POST | /api/admin/demands/:id/publish-now | pending_release → published（写 publishedAt） |
 | POST | /api/admin/demands/:id/schedule | `{ scheduledAt }`：pending_release → scheduled |
 | POST | /api/admin/demands/:id/cancel-schedule | scheduled → pending_release |

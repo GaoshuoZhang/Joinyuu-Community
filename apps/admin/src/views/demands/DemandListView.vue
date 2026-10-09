@@ -253,7 +253,7 @@ const columns = [
   { colKey: 'demandType', title: '需求类型', cell: 'demandType', width: 100, resizable: true, ellipsis: true },
   { colKey: 'publisher', title: '提交人', cell: 'publisher', width: 200, resizable: true , ellipsis: true},
   { colKey: 'budget', title: '预算', cell: 'budget', width: 125, resizable: true , ellipsis: true},
-  { colKey: 'respondents', title: '响应', cell: 'respondents', width: 92, resizable: true , ellipsis: true},
+  { colKey: 'respondents', title: '总响应/待审核', cell: 'respondents', width: 130, resizable: true , ellipsis: true},
   {
     colKey: 'createdAt',
     title: '创建时间',
@@ -313,7 +313,7 @@ async function load() {
 }
 
 /* 导出配置：当前页 / 全部结果（沿用列表筛选与排序） */
-const exportHeaders = ['编号', '标题', '类别', '提交人', '预算', '响应数', '状态', '创建时间', '发布时间']
+const exportHeaders = ['编号', '标题', '类别', '提交人', '预算', '总响应', '待审核', '状态', '创建时间', '发布时间']
 
 function mapRow(d: Demand): (string | number)[] {
   return [
@@ -322,7 +322,8 @@ function mapRow(d: Demand): (string | number)[] {
     categoryText(d),
     d.publisherName,
     d.budget || '—',
-    d.respondents.length,
+    d.responseCount,
+    d.respondNeedReview ? d.pendingResponseCount : '-',
     statusLabel('demand', d.status),
     d.createdAt,
     d.publishedAt ?? '—',
@@ -740,7 +741,12 @@ async function loadCategories() {
 
         <template #respondents="{ row }">
           <div class="stack-cell">
-            <span>{{ row.respondents.length }}</span>
+            <!-- 总响应 / 待审核：未开启响应审核的需求以「-」占位（此时待审核概念不存在） -->
+            <span class="respond-count">
+              {{ row.responseCount }} /
+              <span v-if="row.respondNeedReview" :class="{ 'respond-pending': row.pendingResponseCount > 0 }">{{ row.pendingResponseCount }}</span>
+              <span v-else>-</span>
+            </span>
             <!-- 标签色：等于积分规则默认值=绿色；低于=红色；高于=橙色 -->
             <t-tag
               :theme="respondPointsTheme(row)"
@@ -987,6 +993,17 @@ async function loadCategories() {
 
 .pts-tag {
   font-size: 12px;
+}
+
+.respond-count {
+  font-size: 14px;
+  line-height: 22px;
+  color: var(--td-text-color-primary);
+}
+
+.respond-pending {
+  font-weight: 600;
+  color: var(--td-warning-color);
 }
 
 /* 代报名弹窗：两列栅格表单 + 右对齐底部操作区 */

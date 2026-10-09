@@ -61,10 +61,11 @@ describe('M2-R R2 app 需求撮合', () => {
     const dup = await appPost(app, tokenB, `/api/app/demands/${id}/respond`, { note: '再来一次' })
     expect(dup.status).toBe(409)
 
-    /* 详情返回本人响应快照（内容 + 状态），客户端据此隐藏响应入口并展示响应说明 */
+    /* 详情返回本人响应快照（内容 + 状态）；提交需审核 → 待审核（pending_review），
+     * 客户端据此隐藏响应入口并展示响应说明 */
     const detail = await appGet(app, tokenB, `/api/app/demands/${id}`)
     expect(detail.status).toBe(200)
-    expect(detail.body.data.myResponse).toMatchObject({ message: '我可以承接，做过类似项目', status: 'pending' })
+    expect(detail.body.data.myResponse).toMatchObject({ message: '我可以承接，做过类似项目', status: 'pending_review' })
 
     const mine = await appGet(app, tokenB, '/api/app/me/responses')
     expect(mine.status).toBe(200)
@@ -113,6 +114,13 @@ describe('M2-R R2 app 需求撮合', () => {
     const rowsAgain = Array.isArray(mineAgain.body.data) ? mineAgain.body.data : mineAgain.body.data.list
     const newRow = rowsAgain.find((r: { demandId: string; withdrawnAt?: string }) => r.demandId === demandId && !r.withdrawnAt)
     if (target.publisherId === 'U1001') {
+      /* 重新响应后同样落待审核（pending_review），发布者选定前需管理员先审核通过 */
+      const adminToken = await loginAs(app)
+      const reviewed = await request(app.getHttpServer())
+        .post(`/api/admin/demands/${demandId}/respondents/${newRow.id}/review`)
+        .set('Authorization', `Bearer ${adminToken}`)
+        .send({ status: 'approved' })
+      expect(reviewed.status).toBe(200)
       const select = await appPost(app, tokenA, `/api/app/me/demands/${demandId}/select`, { responseIds: [newRow.id] })
       expect(select.status).toBe(200)
       const blocked = await appPost(app, tokenB, `/api/app/me/responses/${newRow.id}/withdraw`, {})
@@ -124,14 +132,15 @@ describe('M2-R R2 app 需求撮合', () => {
   it('发布需求（pending→管理端置 published）→ 应者响应 → 发布者选定承接方 → 管理员立项 → 里程碑验收结项', async () => {
     const adminToken = await loginAs(app)
 
-    // ①发布者新建需求（kind=task），status=pending
+    /* ①发布者新建需求（kind=task），status=pending；
+     * 种子 U1001 仅持有 individual/社区企业/合作企业身份（无 community_individual），故按其个人身份发布 */
     const created = await appPost(app, tokenA, '/api/app/demands', {
       title: 'R2 撮合测试需求-前端改版',
       description: '需要完成一次移动端界面改版',
       categoryCode: 'DC004',
       categoryDict: 'demand_category',
       kind: 'task',
-      asIdentity: 'community_individual',
+      asIdentity: 'individual',
       deliverable: '交付新版 UI 原型与说明文档',
       deliverBy: '2026-10-30',
       budget: '2 万以内',
@@ -156,6 +165,15 @@ describe('M2-R R2 app 需求撮合', () => {
       quote: '1.5 万',
     })
     expect(resp.status).toBe(200)
+
+    // ③′默认需审核：管理员审核通过后，响应才回到「待处理」并对发布者可见
+    const respondent = await prisma.demandRespondent.findFirst({ where: { demandId } })
+    expect(respondent).toBeTruthy()
+    const approvedRes = await request(app.getHttpServer())
+      .post(`/api/admin/demands/${demandId}/respondents/${respondent!.id}/review`)
+      .set('Authorization', `Bearer ${adminToken}`)
+      .send({ status: 'approved' })
+    expect(approvedRes.status).toBe(200)
 
     // ④发布者查看响应列表；非发布者 403
     const list = await appGet(app, tokenA, `/api/app/me/demands/${demandId}/responses`)
@@ -272,5 +290,215 @@ describe('M2-R R2 app 需求撮合', () => {
     const listInitiator = await appGet(app, tokenA, '/api/app/me/projects')
     const row = listInitiator.body.data.find((p: { id: string }) => p.id === projectId)
     expect(row.finishedAt).toBe(after?.finishedAt)
+  })
+
+  it('响应需审核闭环：待审核不可见 → 审核通过后可见/发积分/通知 → 发布者选定', async () => {
+    const adminToken = await loginAs(app)
+    const title = 'R2 响应审核闭环需求-产品图片精修'
+
+    /* 发布者 U1001 建单（默认需审核），后台置 published */
+    const created = await appPost(app, tokenA, '/api/app/demands', {
+      title,
+      description: '需要完成一次产品图片精修',
+      categoryCode: 'DC004',
+      categoryDict: 'demand_category',
+      kind: 'task',
+      asIdentity: 'individual',
+      deliverable: '交付精修后图片与说明',
+      deliverBy: '2026-11-30',
+      budget: '面议',
+      period: '两周',
+      contactName: '陈屿',
+      contactPhone: '13801210001',
+    })
+    expect(created.status).toBe(200)
+    const demandId: string = created.body.data.id
+    await prisma.demand.update({ where: { id: demandId }, data: { status: 'published' } })
+
+    /* 响应者提交（含报价/工期/案例/联系手机）→ 落待审核 */
+    const respond = await appPost(app, tokenB, `/api/app/demands/${demandId}/respond`, {
+      note: '可承接精修',
+      quote: '1.5 万',
+      timeline: '2 周内可开工',
+      cases: '曾完成 3 个同类改版项目',
+      phone: '13801210005',
+    })
+    expect(respond.status).toBe(200)
+    const detail = await appGet(app, tokenB, `/api/app/demands/${demandId}`)
+    expect(detail.body.data.myResponse).toMatchObject({ status: 'pending_review' })
+
+    /* 补充信息落库 */
+    const profileRow = await prisma.demandRespondent.findFirst({ where: { demandId } })
+    expect(profileRow).toMatchObject({
+      quote: '1.5 万',
+      timeline: '2 周内可开工',
+      cases: '曾完成 3 个同类改版项目',
+      phone: '13801210005',
+    })
+
+    /* 响应者「我的响应」下发补充信息 */
+    const mineResp = await appGet(app, tokenB, '/api/app/me/responses')
+    const mineRows = Array.isArray(mineResp.body.data) ? mineResp.body.data : mineResp.body.data.list
+    expect(mineRows.find((r: { demandId: string }) => r.demandId === demandId)).toMatchObject({
+      quote: '1.5 万',
+      timeline: '2 周内可开工',
+      cases: '曾完成 3 个同类改版项目',
+      phone: '13801210005',
+    })
+
+    /* 未过审：不发响应积分 */
+    const beforePoints = await prisma.pointsRecord.findFirst({
+      where: { dedupeKey: { startsWith: `demand_responded:U1005:${demandId}:` } },
+    })
+    expect(beforePoints).toBeNull()
+
+    /* 未过审：发布者响应列表不可见；计数不含待审核 */
+    const hidden = await appGet(app, tokenA, `/api/app/me/demands/${demandId}/responses`)
+    expect(hidden.status).toBe(200)
+    expect(hidden.body.data).toEqual([])
+    const publisherDetail = await appGet(app, tokenA, `/api/app/demands/${demandId}`)
+    expect(publisherDetail.body.data.responseCount).toBe(0)
+    const plaza = await appGet(app, tokenA, '/api/app/demands?pageSize=50')
+    expect(plaza.body.data.list.find((d: { id: string }) => d.id === demandId)?.responseCount).toBe(0)
+
+    /* 管理员审核通过：响应回到待处理，发响应积分并通知发布者 */
+    const respondent = await prisma.demandRespondent.findFirst({ where: { demandId } })
+    expect(respondent).toBeTruthy()
+    const respondentId = respondent!.id
+    const approved = await request(app.getHttpServer())
+      .post(`/api/admin/demands/${demandId}/respondents/${respondentId}/review`)
+      .set('Authorization', `Bearer ${adminToken}`)
+      .send({ status: 'approved' })
+    expect(approved.status).toBe(200)
+    expect(approved.body.code).toBe(0)
+
+    const visible = await appGet(app, tokenA, `/api/app/me/demands/${demandId}/responses`)
+    expect(visible.body.data.length).toBe(1)
+    expect(visible.body.data[0].status).toBe('pending')
+    /* 过审后发布者视角可见报价/工期/案例/联系手机 */
+    expect(visible.body.data[0]).toMatchObject({
+      quote: '1.5 万',
+      timeline: '2 周内可开工',
+      cases: '曾完成 3 个同类改版项目',
+      phone: '13801210005',
+    })
+    const rewarded = await prisma.pointsRecord.findFirst({
+      where: { userId: 'U1005', dedupeKey: `demand_responded:U1005:${demandId}:${respondentId}` },
+    })
+    expect(rewarded?.delta).toBeGreaterThan(0)
+    const notice = await prisma.userNotification.findFirst({
+      where: { userId: 'U1001', title: '收到新的需求响应', content: { contains: title } },
+    })
+    expect(notice).toBeTruthy()
+
+    /* 过审后发布者可选定 */
+    const select = await appPost(app, tokenA, `/api/app/me/demands/${demandId}/select`, { responseIds: [respondentId] })
+    expect(select.status).toBe(200)
+    const accepted = await prisma.demandRespondent.findUnique({ where: { id: respondentId } })
+    expect(accepted?.status).toBe('accepted')
+  })
+
+  it('响应驳回：理由必填 → 驳回后失效可重新响应 → 重复审核 409', async () => {
+    const adminToken = await loginAs(app)
+
+    const created = await appPost(app, tokenA, '/api/app/demands', {
+      title: 'R2 响应驳回需求-样品拍摄',
+      description: '需要完成一次产品样品拍摄',
+      categoryCode: 'DC004',
+      categoryDict: 'demand_category',
+      kind: 'task',
+      asIdentity: 'individual',
+      deliverable: '交付拍摄成片与说明',
+      deliverBy: '2026-11-30',
+      budget: '面议',
+      period: '一周',
+      contactName: '陈屿',
+      contactPhone: '13801210001',
+    })
+    expect(created.status).toBe(200)
+    const demandId: string = created.body.data.id
+    await prisma.demand.update({ where: { id: demandId }, data: { status: 'published' } })
+
+    const respond = await appPost(app, tokenB, `/api/app/demands/${demandId}/respond`, { note: '可承接拍摄' })
+    expect(respond.status).toBe(200)
+    const respondent = await prisma.demandRespondent.findFirst({ where: { demandId, withdrawnAt: null } })
+    expect(respondent).toBeTruthy()
+    const respondentId = respondent!.id
+
+    /* 驳回缺 reason → 400 */
+    const missingReason = await request(app.getHttpServer())
+      .post(`/api/admin/demands/${demandId}/respondents/${respondentId}/review`)
+      .set('Authorization', `Bearer ${adminToken}`)
+      .send({ status: 'rejected' })
+    expect(missingReason.status).toBe(400)
+
+    /* 带 reason 驳回 → 200 */
+    const reason = '资料不完整，请补充作品集'
+    const rejected = await request(app.getHttpServer())
+      .post(`/api/admin/demands/${demandId}/respondents/${respondentId}/review`)
+      .set('Authorization', `Bearer ${adminToken}`)
+      .send({ status: 'rejected', reason })
+    expect(rejected.status).toBe(200)
+    expect(rejected.body.code).toBe(0)
+
+    /* 我的响应：记驳回理由，并置失效（withdrawnAt） */
+    const mine = await appGet(app, tokenB, '/api/app/me/responses')
+    const rows = Array.isArray(mine.body.data) ? mine.body.data : mine.body.data.list
+    const row = rows.find((r: { id: number }) => r.id === respondentId)
+    expect(row).toMatchObject({ status: 'rejected', rejectReason: reason })
+    expect(row.withdrawnAt).toBeTruthy()
+
+    /* 重复审核同一响应 → 409 */
+    const again = await request(app.getHttpServer())
+      .post(`/api/admin/demands/${demandId}/respondents/${respondentId}/review`)
+      .set('Authorization', `Bearer ${adminToken}`)
+      .send({ status: 'approved' })
+    expect(again.status).toBe(409)
+
+    /* 驳回已置失效 → 允许重新响应同一需求 */
+    const reRespond = await appPost(app, tokenB, `/api/app/demands/${demandId}/respond`, { note: '补齐作品集后重新响应' })
+    expect(reRespond.status).toBe(200)
+    const newRow = await prisma.demandRespondent.findFirst({ where: { demandId, withdrawnAt: null } })
+    expect(newRow).toBeTruthy()
+    expect(newRow!.id).not.toBe(respondentId)
+    expect(newRow!.status).toBe('pending_review')
+  })
+
+  it('响应入参边界：手机号格式非法 400 / 响应说明超 500 字 400', async () => {
+    /* 发布者 U1001 建单并置 published，作为边界校验的目标需求 */
+    const created = await appPost(app, tokenA, '/api/app/demands', {
+      title: 'R2 响应入参边界需求-文案润色',
+      description: '需要完成一次文案润色',
+      categoryCode: 'DC004',
+      categoryDict: 'demand_category',
+      kind: 'task',
+      asIdentity: 'individual',
+      deliverable: '交付润色后文案',
+      deliverBy: '2026-11-30',
+      budget: '面议',
+      period: '一周',
+      contactName: '陈屿',
+      contactPhone: '13801210001',
+    })
+    expect(created.status).toBe(200)
+    const demandId: string = created.body.data.id
+    await prisma.demand.update({ where: { id: demandId }, data: { status: 'published' } })
+
+    /* phone 不符合 /^1\d{10}$/ → 400 */
+    const badPhone = await appPost(app, tokenB, `/api/app/demands/${demandId}/respond`, {
+      note: '可承接润色',
+      phone: '123',
+    })
+    expect(badPhone.status).toBe(400)
+
+    /* note 超 500 字 → 400 */
+    const tooLongNote = await appPost(app, tokenB, `/api/app/demands/${demandId}/respond`, {
+      note: '需'.repeat(501),
+    })
+    expect(tooLongNote.status).toBe(400)
+
+    /* 两次非法提交均未落库 */
+    const persisted = await prisma.demandRespondent.findFirst({ where: { demandId } })
+    expect(persisted).toBeNull()
   })
 })

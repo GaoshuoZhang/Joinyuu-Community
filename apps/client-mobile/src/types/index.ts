@@ -505,6 +505,8 @@ export interface Demand {
   contactPhone?: string
   contactEmail?: string
   responseCount: number
+  /** 响应需审核：true 时本人提交的响应先落 pending_review，审核通过后才对发布者可见（只读，服务端下发） */
+  respondNeedReview?: boolean
   /** task：期望交付 / 预算范围 */
   deliverable?: string
   budget?: string
@@ -583,16 +585,35 @@ export interface MyResponseItem {
   demandId: string
   demandTitle: string
   note: string
+  /** 报价 / 预算（响应时选填，发布者视角下发） */
+  quote?: string
+  /** 可投入时间 / 预计工期（响应时选填，自由文本） */
+  timeline?: string
+  /** 相关经验与案例（响应时选填） */
+  cases?: string
+  /** 联系手机（响应时选填；未填时沿用账号手机号） */
+  phone?: string
   at: string
   responderUid?: string
   responderName?: string
   responderIdentity?: IdentityType
   responderEnterpriseId?: string
-  status?: 'pending' | 'contacted' | 'accepted' | 'rejected' | 'closed'
+  status?: 'pending' | 'pending_review' | 'contacted' | 'accepted' | 'rejected' | 'closed'
   reviewedAt?: string
   rejectReason?: string
   /** 已撤回时间（撤回后视为未响应，可重新响应） */
   withdrawnAt?: string
+}
+
+/** 响应需求表单提交载荷（note 必填，其余选填，空值不提交） */
+export interface DemandRespondPayload {
+  note: string
+  quote?: string
+  timeline?: string
+  cases?: string
+  phone?: string
+  /** 响应身份（父级据此换算 asIdentity / asEnterpriseId） */
+  identity: UserIdentity
 }
 
 /* ---------- 活动中心 ---------- */

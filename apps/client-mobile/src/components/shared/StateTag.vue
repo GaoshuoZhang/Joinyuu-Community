@@ -42,7 +42,8 @@ const map: Record<string, Record<string, { label: string; tone: Tone }>> = {
     closed: { label: '已关闭', tone: 'default' },
   },
   response: {
-    pending: { label: '待处理', tone: 'warning' },
+    pending: { label: '待选定', tone: 'warning' },
+    pending_review: { label: '待审核', tone: 'warning' },
     contacted: { label: '已联系', tone: 'primary' },
     accepted: { label: '已选定', tone: 'success' },
     rejected: { label: '已驳回', tone: 'danger' },

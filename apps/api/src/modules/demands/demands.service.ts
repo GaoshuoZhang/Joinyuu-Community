@@ -21,6 +21,7 @@ import type { UpdateDemandDto } from './dto/update-demand.dto'
 import type { RejectDemandDto } from './dto/reject-demand.dto'
 import type { ScheduleDemandDto } from './dto/schedule-demand.dto'
 import type { ProxyRespondDemandDto } from './dto/proxy-respond-demand.dto'
+import type { ReviewRespondentDto } from './dto/review-respondent.dto'
 import type { InitiateProjectDto } from './dto/initiate-project.dto'
 
 type DemandWithRespondents = Demand & { respondents: DemandRespondent[] }
@@ -28,14 +29,24 @@ type DemandWithRespondents = Demand & { respondents: DemandRespondent[] }
 type DemandRow = Omit<DemandWithRespondents, 'respondents'>
 
 export interface RespondentDto {
+  /** 响应记录编号（响应审核定位、列表稳定行键） */
+  id: number
   name: string
   enterprise: string
   phone?: string
   email?: string
   quote?: string
+  /** 可投入时间/预计工期（响应表单新增字段） */
+  timeline?: string
+  /** 相关经验与案例 */
+  cases?: string
   message: string
   at: string
   status: string
+  /** 审核时间（响应审核通过/驳回时写入） */
+  reviewedAt?: string
+  /** 驳回理由（status = rejected 时存在） */
+  rejectReason?: string
 }
 
 /** 后台自建需求的提交人来源：当前登录工作人员（账号名 + 姓名） */
@@ -67,6 +78,8 @@ export interface DemandDto {
   contactEmail?: string
   /** 公开联系人：true 时客户端（含未登录游客）可见联系人信息 */
   contactPublic: boolean
+  /** 响应需审核：true 时客户端提交的响应先进入待审核，管理员审核通过才对发布者可见 */
+  respondNeedReview: boolean
   budget: string
   period: string
   deadline: string
@@ -84,6 +97,10 @@ export interface DemandDto {
   matchedRespondent?: string
   projectId?: string
   respondPoints?: number
+  /** 总响应数（未撤回；已驳回视为失效不计入） */
+  responseCount: number
+  /** 待审核响应数（未撤回且 status = pending_review） */
+  pendingResponseCount: number
   deletedAt?: string
   respondents: RespondentDto[]
 }
@@ -115,6 +132,7 @@ export interface PublisherOptionsDto {
 
 function toRespondentDto(r: DemandRespondent): RespondentDto {
   const dto: RespondentDto = {
+    id: r.id,
     name: r.name,
     enterprise: r.enterprise,
     message: r.message,
@@ -124,11 +142,17 @@ function toRespondentDto(r: DemandRespondent): RespondentDto {
   if (r.phone != null) dto.phone = r.phone
   if (r.email != null) dto.email = r.email
   if (r.quote != null) dto.quote = r.quote
+  if (r.timeline != null) dto.timeline = r.timeline
+  if (r.cases != null) dto.cases = r.cases
+  if (r.reviewAt != null) dto.reviewedAt = r.reviewAt
+  if (r.rejectReason != null) dto.rejectReason = r.rejectReason
   return dto
 }
 
 /* Prisma 行 → Demand 形状：publisherIdentity Json 透传、可选字段缺失时省略（对齐 undefined） */
 function toDemandDto(d: DemandWithRespondents): DemandDto {
+  /* 有效响应 = 未撤回（驳回在响应审核时已置 withdrawnAt 失效，允许响应者重新响应） */
+  const active = d.respondents.filter((r) => r.withdrawnAt == null)
   const dto: DemandDto = {
     id: d.id,
     title: d.title,
@@ -139,6 +163,7 @@ function toDemandDto(d: DemandWithRespondents): DemandDto {
     publisherName: d.publisherName,
     publisherIdentity: d.publisherIdentity,
     contactPublic: d.contactPublic,
+    respondNeedReview: d.respondNeedReview,
     budget: d.budget,
     period: d.period,
     deadline: d.deadline,
@@ -151,6 +176,8 @@ function toDemandDto(d: DemandWithRespondents): DemandDto {
     description: d.description,
     tags: d.tags,
     respondents: d.respondents.map(toRespondentDto),
+    responseCount: active.length,
+    pendingResponseCount: active.filter((r) => r.status === 'pending_review').length,
   }
   if (d.deliverable != null) dto.deliverable = d.deliverable
   if (d.deliverBy != null) dto.deliverBy = d.deliverBy
@@ -553,6 +580,81 @@ export class DemandsService {
     return { code: 0 }
   }
 
+  /* 响应审核：待审核（pending_review）→ 通过回到「待处理」（仍由发布者选定承接方，此时才发响应积分并通知发布者）；
+   * 驳回写理由并置为失效（withdrawnAt），响应者可重新响应。状态条件抢占，防并发/重复审核。 */
+  async reviewRespondent(
+    demandId: string,
+    respondentId: string,
+    dto: ReviewRespondentDto,
+    operator: string,
+  ): Promise<{ code: number }> {
+    const id = Number.parseInt(respondentId, 10)
+    if (!Number.isInteger(id) || id <= 0) throw new NotFoundException('响应不存在')
+    const demand = await this.prisma.demand.findUnique({ where: { id: demandId } })
+    if (!demand) throw new NotFoundException('需求不存在')
+    const respondent = await this.prisma.demandRespondent.findUnique({ where: { id } })
+    if (!respondent || respondent.demandId !== demand.id) throw new NotFoundException('响应不存在')
+
+    const approved = dto.status === 'approved'
+    const reason = (dto.reason ?? '').trim()
+    if (!approved && !reason) throw new BadRequestException('请填写驳回原因')
+
+    const now = formatNow()
+    await this.prisma.$transaction(async (tx) => {
+      const claimed = await tx.demandRespondent.updateMany({
+        where: { id, demandId: demand.id, status: 'pending_review', withdrawnAt: null },
+        data: approved
+          ? { status: 'pending', reviewAt: now }
+          : { status: 'rejected', reviewAt: now, rejectReason: reason, withdrawnAt: now },
+      })
+      if (claimed.count !== 1) throw new ConflictException('该响应已处理，请勿重复审核')
+
+      if (!approved) {
+        /* 驳回：不发积分，仅通知响应者（含驳回理由）；记录已置失效，允许重新响应 */
+        if (respondent.userId) {
+          await this.notify.pushNoticeInTransaction(tx, respondent.userId, {
+            type: 'demand',
+            title: '响应未通过审核',
+            content: `您对需求「${demand.title}」的响应未通过审核：${reason}`,
+            link: '/me/responses',
+          })
+        }
+        return
+      }
+
+      /* 通过：响应积分与发布者通知都延后到此刻（提交时不发分、不通知，防刷分、防打扰） */
+      if (respondent.userId) {
+        await this.points.issuePointsInTransaction(
+          tx,
+          respondent.userId,
+          'demand_responded',
+          '响应需求获得积分',
+          `demand_responded:${respondent.userId}:${demand.id}:${respondent.id}`,
+        )
+      }
+      const publisherUserId = await this.resolveNotifiableUser(tx, demand.publisherId)
+      if (publisherUserId) {
+        await this.notify.pushNoticeInTransaction(tx, publisherUserId, {
+          type: 'demand',
+          title: '收到新的需求响应',
+          content: `您的需求「${demand.title}」有新的响应通过审核，可在详情中查看并选择意向承接方。`,
+          link: `/demands/${demand.id}`,
+        })
+      }
+    })
+
+    await this.audit.record({
+      module: '需求管理',
+      action: approved ? '响应审核通过' : '响应审核驳回',
+      target: `${demand.id} · ${demand.title}`,
+      detail: `响应人：${respondent.name}${approved ? '' : `；理由：${reason}`}`,
+      before: { status: respondent.status },
+      after: approved ? { status: 'pending' } : { status: 'rejected', rejectReason: reason },
+      operator,
+    })
+    return { code: 0 }
+  }
+
   /* 立项：published|selected → projected；项目新增与双向关联（demand.projectId ↔ project.sourceDemandId）置于同一事务；
    * 发布者已选定承接方（selected）时，向被选中的响应者补发立项积分/经验并通知。 */
   async initiateProject(id: string, dto: InitiateProjectDto, operator: string) {
@@ -776,6 +878,7 @@ export class DemandsService {
       contactPhone: dto.contactPhone ?? null,
       contactEmail: dto.contactEmail || null,
       contactPublic: dto.contactPublic ?? false,
+      respondNeedReview: dto.respondNeedReview ?? true,
       respondPoints: dto.respondPoints ?? null,
     }
   }

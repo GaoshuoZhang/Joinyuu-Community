@@ -1,8 +1,9 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
-import { Avatar, Badge, Icon, PullDownRefresh } from 'tdesign-mobile-vue'
+import { Avatar, Icon, PullDownRefresh } from 'tdesign-mobile-vue'
 import { useAuthStore } from '@/stores/auth'
+import { useConfigStore } from '@/stores/config'
 import { useNoticesStore } from '@/stores/notices'
 import { fetchExperience } from '@/api/experience'
 import IdentityTag from '@/components/shared/IdentityTag.vue'
@@ -18,6 +19,7 @@ useAnimSuppress()
  * 身份不做全局切换，发布/提交时在表单内选择归属。 */
 const router = useRouter()
 const auth = useAuthStore()
+const config = useConfigStore()
 const notices = useNoticesStore()
 
 const levelName = ref('')
@@ -38,7 +40,8 @@ const menu = computed(() =>
     points: auth.points,
     levelLabel: levelName.value,
     levelFailed: levelFailed.value,
-    unread: notices.unread,
+    /* 空间预约入口随运营开关隐藏（工位租约无开关，常显） */
+    reservationOpen: config.config.reservationOpen,
   }),
 )
 
@@ -147,22 +150,23 @@ useRefreshOnActivate(() => void refreshMe())
         </div>
       </section>
 
-      <!-- 服务宫格：图标直达二级页，压缩分组列表层级 -->
-      <section class="m-card grid-card" aria-label="常用服务">
-        <div
-          v-for="entry in menu.grid"
-          :key="entry.path"
-          class="grid-item"
-          v-pressable
-          :aria-label="entry.badge ? `${entry.label}，${entry.badge} 条未读` : entry.label"
-          @click="onMenuTap(entry)"
-        >
-          <Badge :count="entry.badge ?? 0" :max-count="99" :offset="[-4, 4]">
+      <!-- 服务分区：次标题 + 4 列宫格直达二级页（分区口径见 utils/profileMenu） -->
+      <div v-for="(section, index) in menu.sections" :key="section.title ?? `zone-${index}`" class="zone">
+        <h2 v-if="section.title" class="zone-title">{{ section.title }}</h2>
+        <section class="m-card grid-card" :aria-label="section.title ?? section.ariaLabel">
+          <div
+            v-for="entry in section.entries"
+            :key="entry.path"
+            class="grid-item"
+            v-pressable
+            :aria-label="entry.label"
+            @click="onMenuTap(entry)"
+          >
             <span class="grid-icon"><Icon aria-hidden="true" :name="entry.icon" size="24px" /></span>
-          </Badge>
-          <p class="grid-label">{{ entry.label }}</p>
-        </div>
-      </section>
+            <p class="grid-label">{{ entry.label }}</p>
+          </div>
+        </section>
+      </div>
     </div>
   </PullDownRefresh>
 </template>
@@ -235,6 +239,20 @@ useRefreshOnActivate(() => void refreshMe())
   gap: 2px;
   margin: 0;
   font: var(--app-type-caption);
+  color: var(--td-text-color-secondary);
+}
+
+/* 服务分区：次标题与其宫格成组（标题贴近本区卡片，分区间距由 .me 的 gap 统一控制） */
+.zone {
+  display: flex;
+  flex-direction: column;
+  gap: var(--app-space-3);
+}
+
+.zone-title {
+  margin: 0;
+  padding: 0 var(--app-space-1);
+  font: var(--app-type-body-sm);
   color: var(--td-text-color-secondary);
 }
 
