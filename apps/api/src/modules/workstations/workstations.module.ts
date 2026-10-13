@@ -5,8 +5,10 @@ import { WorkstationLeasesController } from './workstation-leases.controller'
 import { LeasePrintController } from './lease-print.controller'
 import { RenterOptionsController } from './renter-options.controller'
 import { WorkstationsService } from './workstations.service'
+import { AssetsModule } from '../assets/assets.module'
 
 @Module({
+  imports: [AssetsModule],
   controllers: [
     WorkstationsController,
     WorkstationAreasController,

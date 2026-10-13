@@ -4,6 +4,7 @@ import * as authApi from '@/api/auth'
 import { ApiError } from '@/api/http'
 import { fetchMe } from '@/api/me'
 import { FULL_PRICE_DISCOUNT, normalizeDiscount } from '@/utils/points'
+import { clearAccountLocalData } from '@/utils/accountLocalData'
 import { useNoticesStore } from './notices'
 import type { AuthResult, IdentityType, LoginPayload, RegisterPayload, UserIdentity } from '@/types'
 
@@ -118,8 +119,8 @@ export const useAuthStore = defineStore('auth', () => {
     apply(await authApi.register(payload))
   }
 
-  /** 统一清理会话（登出 / 改密 / 重置密码 / 401 拦截 / 恢复失败）：清 auth 状态 + 站内信缓存 + 本地会话键，
-   * 避免换账号登录时旧站内信列表残留。 */
+  /** 统一清理会话（登出 / 改密 / 重置密码 / 401 拦截 / 恢复失败）：清 auth 状态 + 站内信缓存 + 本地会话键 +
+   * 账号相关本机缓存（阅读历史/最近搜索），避免换账号登录时残留上一账号数据。 */
   function resetSession() {
     token.value = ''
     tokenExp.value = 0
@@ -132,6 +133,7 @@ export const useAuthStore = defineStore('auth', () => {
     pointsDiscount.value = FULL_PRICE_DISCOUNT
     localStorage.removeItem(TOKEN_KEY)
     localStorage.removeItem(IDENTITY_KEY)
+    clearAccountLocalData()
     useNoticesStore().reset()
   }
 

@@ -17,6 +17,7 @@ import BulkArchiveDialog from '@/components/BulkArchiveDialog.vue'
 import {
   cancelArticleSchedule,
   deleteArticle,
+  fetchArticleDetail,
   fetchArticles,
   publishArticleNow,
   restoreArticle,
@@ -127,8 +128,14 @@ function openReview(row: Article) {
 const formVisible = ref(false)
 const currentEdit = ref<Article | null>(null)
 
-function openEdit(row: Article) {
-  currentEdit.value = row
+async function openEdit(row: Article) {
+  try {
+    /* 列表不下发正文：编辑前按 id 拉详情补齐 content */
+    currentEdit.value = await fetchArticleDetail(row.id)
+  } catch (e) {
+    MessagePlugin.error(e instanceof Error ? e.message : '文章详情加载失败')
+    return
+  }
   formVisible.value = true
 }
 

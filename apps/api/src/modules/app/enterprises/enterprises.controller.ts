@@ -186,38 +186,44 @@ export class AppEnterprisesController {
 }
 
 
-@RequirePermission('/card-management')
+/* 名片后台维护（原「名片管理」页已下线，编辑入口并入企业/个体详情页的名片标签页）：
+ * 字段白名单随「系统配置」页维护，名片读写按所在域权限放行。 */
 @Controller('api/admin/cards')
 export class CardsAdminController {
   constructor(private readonly enterprises: AppEnterprisesService) {}
 
   @Get('schema/:type')
+  @RequirePermission('/system/config')
   schema(@Param('type') type: string) { return this.enterprises.cardSchema(type) }
 
   @Put('schema/:type')
+  @RequirePermission('/system/config')
   saveSchema(@Param('type') type: string, @Body() dto: SaveCardSchemaDto, @Req() req: AuthenticatedRequest) {
     return this.enterprises.saveCardSchema(type, dto.editableFields, req.user?.name ?? '社区管理员')
   }
 
   @Get('individual/:uid')
-  @RequirePermission(['/card-management', '/users'])
+  @RequirePermission('/users')
   individualCard(@Param('uid') uid: string) { return this.enterprises.adminCard('individual', uid) }
 
   @Get('enterprise/:id')
-  @RequirePermission(['/card-management', '/enterprises'])
+  @RequirePermission('/enterprises')
   enterpriseCard(@Param('id') id: string) { return this.enterprises.adminCard('enterprise', id) }
 
   @Get(':type')
+  @RequirePermission(['/users', '/enterprises'])
   cards(@Param('type') type: string, @Query('page') page?: string, @Query('pageSize') pageSize?: string, @Query('keyword') keyword?: string) {
     return this.enterprises.adminCards(type, Math.max(1, Number(page) || 1), Math.max(1, Math.min(100, Number(pageSize) || 20)), keyword)
   }
 
   @Put('individual/:uid')
+  @RequirePermission('/users')
   updateIndividual(@Param('uid') uid: string, @Body() dto: UpdateIndividualCardDto, @Req() req: AuthenticatedRequest) {
     return this.enterprises.adminUpdateIndividualCard(uid, dto, req.user?.name ?? '社区管理员')
   }
 
   @Put('enterprise/:id')
+  @RequirePermission('/enterprises')
   updateEnterprise(@Param('id') id: string, @Body() dto: UpdateEnterpriseDto, @Req() req: AuthenticatedRequest) {
     return this.enterprises.adminUpdateEnterpriseCard(id, dto, req.user?.name ?? '社区管理员')
   }

@@ -16,7 +16,8 @@ import { PrismaService } from '../prisma/prisma.service'
 
 /* /api/app/** 全局 JWT Guard（@Public 豁免）：
  * 与 admin JwtAuthGuard 平行——按路径前缀分流：仅校验 /api/app/**，其余路径放行给 admin guard。
- * 校验签名 + Redis 黑名单（登出令牌失效）；黑名单查询失败时 fail-open 放行（降级可用性优先）。
+ * 校验签名 + Redis 黑名单（登出令牌失效）；黑名单查询失败默认 fail-closed（RedisService 抛 503，
+ * 避免已吊销令牌继续可用），仅 AUTH_REVOCATION_FAIL_OPEN=1 时降级放行。
  * 端点代码通过 @Public() 豁免（登录/注册/验证码/找回密码等）。 */
 @Injectable()
 export class AppJwtGuard implements CanActivate {

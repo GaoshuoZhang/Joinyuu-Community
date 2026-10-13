@@ -1,17 +1,20 @@
 /* 项目需求方与访问权限 e2e：
- * 后台代企业（E2001）发需求 → 立项 → 项目照搬需求方/联系人/合同价格；
- * 企业联系人（U1001）可访问项目且出现在「我的项目」，无关用户 403。
+ * 立项后项目照搬需求方/联系人/合同价格；企业需求方的联系人（U1001）可访问项目且出现在「我的项目」，无关用户 403。
+ * 说明：后台自建需求的提交人现由服务端按登录工作人员派生（DTO 不再接受 publisher*），
+ *       本用例关注「需求方为企业」的立项与访问链路，故建单后按企业主体回填需求方快照。
  * 前置：docker compose up + prisma migrate + seed（用户密码 user123，管理员 admin/admin123）。 */
 import { INestApplication } from '@nestjs/common'
 import { Test } from '@nestjs/testing'
 import request from 'supertest'
 import { AppModule } from '../src/app.module'
+import { PrismaService } from '../src/common/prisma/prisma.service'
 import { reseed } from './helpers/reseed'
 import { appGet, appLoginAs } from './helpers/app-login'
 import { loginAs } from './helpers/login'
 
 describe('项目需求方快照与访问权限', () => {
   let app: INestApplication
+  let prisma: PrismaService
   let adminToken: string
   let projectId = ''
 
@@ -20,6 +23,7 @@ describe('项目需求方快照与访问权限', () => {
     const moduleRef = await Test.createTestingModule({ imports: [AppModule] }).compile()
     app = moduleRef.createNestApplication()
     await app.init()
+    prisma = app.get(PrismaService)
     adminToken = await loginAs(app)
   })
 
@@ -30,10 +34,8 @@ describe('项目需求方快照与访问权限', () => {
   const adminPost = (path: string, body?: Record<string, unknown>) =>
     request(app.getHttpServer()).post(path).set('Authorization', `Bearer ${adminToken}`).send(body ?? {})
 
-  it('后台代企业发需求并立项：项目照搬需求方快照', async () => {
+  it('企业需求方立项：项目照搬需求方快照', async () => {
     const created = await adminPost('/api/admin/demands', {
-      publisherId: 'E2001',
-      publisherType: 'enterprise',
       title: 'e2e 企业代发需求-需求方快照',
       category: 'DC001',
       demandType: 'task',
@@ -51,6 +53,15 @@ describe('项目需求方快照与访问权限', () => {
     })
     expect(created.status).toBe(200)
     const demandId = created.body.data.id as string
+    /* 提交人由服务端派生（后台工作人员）；按企业主体回填需求方快照，覆盖“企业为需求方”的立项链路 */
+    await prisma.demand.update({
+      where: { id: demandId },
+      data: {
+        publisherId: 'E2001',
+        publisherName: '星澜智能科技',
+        publisherIdentity: { type: 'community_enterprise', enterpriseId: 'E2001' },
+      },
+    })
 
     expect((await adminPost(`/api/admin/demands/${demandId}/publish-now`)).status).toBe(200)
     const initiated = await adminPost(`/api/admin/demands/${demandId}/initiate-project`, {
@@ -74,7 +85,8 @@ describe('项目需求方快照与访问权限', () => {
       sourceDemandId: demandId,
       demanderId: 'E2001',
       demanderName: '星澜智能科技',
-      creatorName: '社区管理员',
+      /* 立项时 creator 取来源需求的提交人快照 */
+      creatorName: '星澜智能科技',
       contactName: '陈屿',
       contactPhone: '13801210001',
       contactEmail: 'chenyu@example.com',

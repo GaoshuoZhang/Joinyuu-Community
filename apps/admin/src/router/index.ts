@@ -123,7 +123,6 @@ const router = createRouter({
         },
         { path: 'application-form-config', redirect: '/system/application-form-config' },
         { path: 'member-governance', redirect: '/system/deletion-requests' },
-        { path: 'card-management', component: () => import('@/views/users/CardManagementView.vue'), meta: { title: '名片管理', group: '社区成员', perm: '/card-management' } },
         {
           path: 'demands',
           component: () => import('@/views/demands/DemandListView.vue'),

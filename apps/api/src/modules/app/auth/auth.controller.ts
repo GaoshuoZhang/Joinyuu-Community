@@ -100,8 +100,8 @@ export class AuthController {
   @Public()
   @HttpCode(200)
   @Post('login')
-  login(@Body() dto: AppLoginDto): Promise<AppLoginResult> {
-    return this.auth.login(dto)
+  login(@Req() req: AppAuthenticatedRequest, @Body() dto: AppLoginDto): Promise<AppLoginResult> {
+    return this.auth.login(dto, req.ip ?? req.socket.remoteAddress ?? '')
   }
 
   @HttpCode(200)

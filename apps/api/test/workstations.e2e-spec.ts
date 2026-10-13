@@ -100,6 +100,126 @@ describe('M1-D workstations 办公位/区域/租约', () => {
     expect(records[0].operator).toBe('社区管理员')
   })
 
+  it('续期租约 → 到期日延长 + 续期记录追加（新到期日须晚于原到期日；长期租约不可续期）', async () => {
+    /* 新到期日不晚于原到期日 → 400 */
+    const bad = await request(app.getHttpServer())
+      .post(`/api/admin/workstation-leases/${leaseId}/renew`)
+      .set('Authorization', `Bearer ${token}`)
+      .send({ endDate: '2027-08-31', monthlyRent: 1500, reason: '续租一年' })
+    expect(bad.status).toBe(400)
+    expect(bad.body.message).toBe('新到期日须晚于当前到期日（2027-08-31）')
+
+    /* 续期说明缺失 → 400（DTO 必填） */
+    const noReason = await request(app.getHttpServer())
+      .post(`/api/admin/workstation-leases/${leaseId}/renew`)
+      .set('Authorization', `Bearer ${token}`)
+      .send({ endDate: '2028-08-31', monthlyRent: 1500, reason: '' })
+    expect(noReason.status).toBe(400)
+
+    const ok = await request(app.getHttpServer())
+      .post(`/api/admin/workstation-leases/${leaseId}/renew`)
+      .set('Authorization', `Bearer ${token}`)
+      .send({ endDate: '2028-08-31', monthlyRent: 1800, reason: '客户续租一年并上调租金' })
+    expect(ok.status).toBe(200)
+    expect(ok.body.data).toEqual({ code: 0 })
+
+    const detail = await request(app.getHttpServer())
+      .get(`/api/admin/workstation-leases/${leaseId}`)
+      .set('Authorization', `Bearer ${token}`)
+    expect(detail.body.data.endDate).toBe('2028-08-31')
+    expect(detail.body.data.monthlyRent).toBe(1800)
+    const records = detail.body.data.renewRecords as Array<Record<string, unknown>>
+    expect(records.length).toBe(1)
+    expect(records[0]).toMatchObject({
+      fromEndDate: '2027-08-31',
+      toEndDate: '2028-08-31',
+      fromRent: 1500,
+      toRent: 1800,
+      reason: '客户续租一年并上调租金',
+      operator: '社区管理员',
+    })
+    /* 续期与编辑相互独立：编辑记录不因续期新增 */
+    expect((detail.body.data.editRecords as unknown[]).length).toBe(1)
+
+    /* 长期租约无到期日不可续期 → 409 */
+    const longTerm = await request(app.getHttpServer())
+      .post('/api/admin/workstation-leases')
+      .set('Authorization', `Bearer ${token}`)
+      .send({
+        enterpriseId: 'E2001',
+        enterpriseName: '星澜智能科技',
+        renterType: 'enterprise',
+        workstationIds: ['WS1011'],
+        startDate: '2026-10-01',
+        endDate: '',
+        longTerm: true,
+        monthlyRent: 1000,
+        rentPeriod: 'month',
+        contactName: '陈屿',
+        contactPhone: '13801210001',
+      })
+    expect(longTerm.status).toBe(200)
+    const renewLong = await request(app.getHttpServer())
+      .post(`/api/admin/workstation-leases/${longTerm.body.data.id}/renew`)
+      .set('Authorization', `Bearer ${token}`)
+      .send({ endDate: '2028-10-01', monthlyRent: 1000, reason: '尝试续期' })
+    expect(renewLong.status).toBe(409)
+  })
+
+  it('租约合同扫描件 → 上传/列表/删除（仅限本租约名下附件）', async () => {
+    /* 魔数嗅探通过的 PNG（仅校验文件头，内容无需真实可用） */
+    const png = Buffer.concat([
+      Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]),
+      Buffer.from('fake-contract-image'),
+    ])
+    const uploaded = await request(app.getHttpServer())
+      .post(`/api/admin/workstation-leases/${leaseId}/contracts`)
+      .set('Authorization', `Bearer ${token}`)
+      .attach('file', png, '租约合同扫描件.png')
+    expect(uploaded.status).toBe(200)
+    expect(uploaded.body.data.mime).toBe('image/png')
+    expect(uploaded.body.data.sourceType).toBe('lease')
+    expect(uploaded.body.data.sourceId).toBe(leaseId)
+    const assetId = uploaded.body.data.id as string
+
+    /* 列表：仅本租约附件 */
+    const list = await request(app.getHttpServer())
+      .get(`/api/admin/workstation-leases/${leaseId}/contracts`)
+      .set('Authorization', `Bearer ${token}`)
+    expect(list.body.data.length).toBe(1)
+    expect(list.body.data[0].id).toBe(assetId)
+
+    /* 不支持的文件类型（文本）→ 400 */
+    const badType = await request(app.getHttpServer())
+      .post(`/api/admin/workstation-leases/${leaseId}/contracts`)
+      .set('Authorization', `Bearer ${token}`)
+      .attach('file', Buffer.from('not-a-contract'), 'note.txt')
+    expect(badType.status).toBe(400)
+    expect(badType.body.message).toBe('不支持的文件类型')
+
+    /* 跨租约删除 → 404（附件不属于该租约） */
+    const cross = await request(app.getHttpServer())
+      .delete(`/api/admin/workstation-leases/LS2001/contracts/${assetId}`)
+      .set('Authorization', `Bearer ${token}`)
+    expect(cross.status).toBe(404)
+
+    const removed = await request(app.getHttpServer())
+      .delete(`/api/admin/workstation-leases/${leaseId}/contracts/${assetId}`)
+      .set('Authorization', `Bearer ${token}`)
+    expect(removed.status).toBe(200)
+    expect(removed.body.data).toEqual({ code: 0 })
+    const after = await request(app.getHttpServer())
+      .get(`/api/admin/workstation-leases/${leaseId}/contracts`)
+      .set('Authorization', `Bearer ${token}`)
+    expect(after.body.data.length).toBe(0)
+
+    /* 未知租约 → 404 */
+    const unknown = await request(app.getHttpServer())
+      .get('/api/admin/workstation-leases/LS9999/contracts')
+      .set('Authorization', `Bearer ${token}`)
+    expect(unknown.status).toBe(404)
+  })
+
   it('终止租约 → 释放办公位为 idle', async () => {
     const res = await request(app.getHttpServer())
       .post(`/api/admin/workstation-leases/${leaseId}/terminate`)

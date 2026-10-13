@@ -24,7 +24,7 @@
 
 **规模**：68 模型 / 59 迁移 / 385 HTTP 路由装饰器；后端测试文件 46 个（e2e + unit），验证命令与环境准备见 [README](../README.md)。桌面客户端、微信小程序、微信登录、支付、CI/CD、分布式部署不在范围内。
 
-**收口端点**：`/api/admin/member-governance/deletions` 分页列表及 `/:id/review`（POST `{action:'approve'|'reject',note}`），权限 `/member-governance`。注销冷静期届满后人工执行，User 置 deleted、密码与基础实名资料清除、会话失效、保留业务历史；驳回有通知。实名认证通过规则校验后立即生效并记录 `verifiedAt`，不设后台人工复核。`/api/admin/cards/:type` 列表、`/schema/:type` GET/PUT、`/individual/:uid` PUT、`/enterprise/:id` PUT，权限 `/card-management`。对应 app `GET /card-schema/:type` 下发可编辑字段，空白名单合法；名片 PUT 省略保留、空串清空，禁用字段 403。两类管理端路径均归属 members 数据范围。
+**收口端点**：`/api/admin/member-governance/deletions` 分页列表及 `/:id/review`（POST `{action:'approve'|'reject',note}`），权限 `/member-governance`。注销冷静期届满后人工执行，User 置 deleted、密码与基础实名资料清除、会话失效、保留业务历史；驳回有通知。实名认证通过规则校验后立即生效并记录 `verifiedAt`，不设后台人工复核。`/api/admin/cards/individual/:uid`、`/api/admin/cards/enterprise/:id` GET/PUT 分别按 `/users`、`/enterprises` 鉴权，`/api/admin/cards/:type` 列表任一命中即可；字段白名单 `/schema/:type` GET/PUT 改挂 `/system/config`（原 `/card-management` 权限码与「名片管理」页已下线，名片编辑入口并入个体/企业详情页的名片标签页）。对应 app `GET /card-schema/:type` 下发可编辑字段，空白名单合法；名片 PUT 省略保留、空串清空，禁用字段 403。注销治理路径归属 members 数据范围。
 
 **数据一致性约束**：注销提交、撤回、后台执行共用 User 行锁；`AccountDeletionRequest_one_cooling_per_user` 为 SQL 部分唯一索引（Prisma schema 无法表达），每人最多一份 cooling 申请。个人名片 visibility 为嵌套布尔对象，省略键保留当前值，前后台共用事务合并；展示姓名参与人才库、全域人才搜索和后台名片搜索；`isPublic` 为公开名片开关（false 时人才库过滤、公开名片 404，缺省公开）。举报恢复只允许原 `action=hide`、未恢复且目标 `moderationVersion` 与处置快照相同的记录；状态/归档及用户冻结字段写入由 PostgreSQL 触发器递增版本。迁移中的部分索引与触发器必须随库部署，不可只执行 `db push`。
 
@@ -204,7 +204,7 @@ TZ=Asia/Shanghai
 | 认证 | AdminRolePermission | 自增 | 角色-权限点关联，唯一 (roleId, permissionCode)；角色变更即时失效权限缓存 |
 | 认证 | LoginLog | LL | loginAt/username/ip/device/status(success/fail/locked)/failReason?；登录成功/失败/锁定均写 |
 | 认证 | SchedulerLog | SL | jobName/startedAt/finishedAt/durationMs/status(ok/error)/detail?/rowsAffected；监控页与手动触发数据源 |
-| 认证 | MallAsset | AST | 素材库：fileName/mime/size/url/storeKey/bizType?/sourceType?(article/submission)/sourceId?(文章 ID)/createdBy/createdAt；上传魔数嗅探、替换为同键覆盖 |
+| 认证 | MallAsset | AST | 素材库：fileName/mime/size/url/storeKey/bizType?/sourceType?(article/submission/lease)/sourceId?(文章 ID 或租约号)/createdBy/createdAt；上传魔数嗅探、替换为同键覆盖 |
 | 认证 | IdSequence | entityType（PK） | 前缀 ID 发号器（见 5.1） |
 | 成员 | User | U | uid 昵称 nickname、phone 唯一、email/gender/avatar?/status(active/frozen)、realName?/citizenId?（实名派生）、verifiedAt?（认证时间）、wechatOpenid?/wechatUnionid?/wechatVerified?（M3 预留）、frozenUntil?/frozenReason?（解冻清空）、points（挂靠个人身份）、registeredAt/lastActiveAt、bio、activities Json、**activationDismissed Bool 默认 false（新手任务永久隐藏，按账号持久化）**、**usernameChangedAt?（用户名每 90 天限改一次；GET /me 下发 usernameChangeableAt 锁定到期时间）** |
 | 成员 | UserIdentity | 自增 | userId FK + type(individual/community_individual/community_enterprise/external_enterprise) + enterpriseId?/enterpriseName?/role?/title/level?/experience?；唯一约束 (userId, type, enterpriseId)；社区个体每人至多一条（应用层保证） |
@@ -266,9 +266,9 @@ TZ=Asia/Shanghai
 
 ### 6.2 RBAC 权限模型（M1.5 R1/R2）
 
-- **权限码 = 菜单路径或 `perm:xxx` 按钮码**，当前共 **56 码**（种子 `permissionCatalog` 为唯一目录），`*` 为超级管理员全量标记；`@RequirePermission(code | code[])` 支持 any-of 语义；`PermissionGuard` 叠加在 `JwtAuthGuard` 之后，权限集合命中任一所需码或含 `*` 放行，否则 403「无权限执行该操作」；未声明 `@RequirePermission` 的端点仅需登录。
+- **权限码 = 菜单路径或 `perm:xxx` 按钮码**，当前共 **55 码**（种子 `permissionCatalog` 为唯一目录），`*` 为超级管理员全量标记；`@RequirePermission(code | code[])` 支持 any-of 语义；`PermissionGuard` 叠加在 `JwtAuthGuard` 之后，权限集合命中任一所需码或含 `*` 放行，否则 403「无权限执行该操作」；未声明 `@RequirePermission` 的端点仅需登录。
 - **覆盖范围**：36 个 controller 中，34 个属于 admin；其中 33 个挂 `@RequirePermission`，`notifications` 有意仅登录。`health` 与 `files`（公开文件读取）为公开 controller。无声明 controller 内的个别端点（如 `GET /enterprises/options`、`GET /users/options`）仅需登录。
-- **权限目录（按模块）**：工作台 `/dashboard`、`/user-messages`；社区成员 `/users`、`/individuals`、`/enterprises`、`/external-enterprises`、`/approvals` + 企业按钮码 `perm:enterprise:create|update|disable|enable|delete`、`perm:external-enterprise:create|update|disable|enable|delete`；业务运营 `/demands`、`/demands/review`、`/projects`、`/events`；空间管理 `/workstations`、`/workstations/offices`、`/workstations/leases`、`/spaces`、`/spaces/reservations`；内容管理 `/contents/publish`、`/contents/submissions`、`/contents/columns`、`/contents/stats`、`/contents/policies`、`/contents/banners`、`/contents/announcements`；积分商城 `/mall/goods`、`/mall/orders`；规则管理 `/rules/points`、`/rules/experience`、`/rules/levels`、`/rules/publishing-limits`、`/rules/ledger`、`/rules/experience-records`；系统管理 `/system/dicts`、`/system/config`、`/system/policies`、`/logs/audit`、`/system/roles`、`/system/admins`、`/system/sessions`、`/system/assets`、`/system/monitor`、`/logs/login`、`/system/trash`、`/system/export`、`/governance`、`/card-management`、`/member-governance`（服务申请 `/engagement/services` 已随功能下线移除）。
+- **权限目录（按模块）**：工作台 `/dashboard`、`/user-messages`；社区成员 `/users`、`/individuals`、`/enterprises`、`/external-enterprises`、`/approvals` + 企业按钮码 `perm:enterprise:create|update|disable|enable|delete`、`perm:external-enterprise:create|update|disable|enable|delete`；业务运营 `/demands`、`/demands/review`、`/projects`、`/events`；空间管理 `/workstations`、`/workstations/offices`、`/workstations/leases`、`/spaces`、`/spaces/reservations`；内容管理 `/contents/publish`、`/contents/submissions`、`/contents/columns`、`/contents/stats`、`/contents/policies`、`/contents/banners`、`/contents/announcements`；积分商城 `/mall/goods`、`/mall/orders`；规则管理 `/rules/points`、`/rules/experience`、`/rules/levels`、`/rules/publishing-limits`、`/rules/ledger`、`/rules/experience-records`；系统管理 `/system/dicts`、`/system/config`、`/system/policies`、`/logs/audit`、`/system/roles`、`/system/admins`、`/system/sessions`、`/system/assets`、`/system/monitor`、`/logs/login`、`/system/trash`、`/system/export`、`/governance`、`/member-governance`（服务申请 `/engagement/services`、名片管理 `/card-management` 已随功能下线移除）。
 - **内置角色**（`AdminRole` + `AdminRolePermission`）：`super`（`*` 全量）、`operator`（业务运营+内容+商城）、`auditor`（审核类）、`space-ops`（空间域）；角色权限保存即时失效关联管理员的权限缓存（`auth:admin:perms:<username>`，TTL 2h）。
 - **权限点目录接口**：`GET /api/admin/permissions/catalog` 按模块分组返回，供角色勾选矩阵渲染。
 - 数据范围已按 7 个业务域实现：`AdminRole.dataScope` + `DomainScopeGuard` 对 URL 域做允许/拒绝；当前仍无行级、组织级、所有者级或租户级过滤。
@@ -307,7 +307,7 @@ TZ=Asia/Shanghai
 | POST | /api/admin/users/:id/reset-password | 管理员强制重置登录密码；body `{ password }`（≥8 位且含字母数字）；直接覆盖 `passwordHash` 并写 `passwordUpdatedAt`；审计「社区成员 · 重置密码」 |
 | GET | /api/admin/users/:id | 详情；stats 由 demands/projects/events 实时 COUNT（projects=个人承接或其社区企业承接） |
 | GET | /api/admin/users/:id/records | 记录聚合（详情页记录标签）：applications/demands/projects/events/leases/submissions/reservations 七域按用户维度返回；含已归档条目（`deletedAt` 非空） |
-| PUT | /api/admin/users/:id | 编辑资料（昵称/联系电话/邮箱/性别/真实姓名/证件号/简介；空串对必填类字段忽略、实名/证件号/简介允许清空）；审计「社区成员 · 编辑用户信息」 |
+| PUT | /api/admin/users/:id | 编辑资料（昵称/联系电话/邮箱/性别/真实姓名/证件号/简介/**头像**；空串对必填类字段忽略、实名/证件号/简介允许清空，**头像空串 = 清除**且仅接受站内相对路径或 http(s) 地址，由后台素材上传回填）；审计「社区成员 · 编辑用户信息」 |
 | PATCH | /api/admin/users/:id/status | `{ status }`；仅解冻路径（status=active 时清空 frozenUntil/frozenReason）；冻结必须走 freeze |
 | POST | /api/admin/users/:id/freeze | `{ until?, permanent, reason }`；permanent=false 需 until；reason 必填；已 frozen 报错 |
 | GET | /api/admin/users/options | 仅登录：`[{ label: "昵称（uid）", value }]`（跨域表单候选） |
@@ -465,8 +465,12 @@ TZ=Asia/Shanghai
 | GET | /api/admin/workstation-leases | 全量租约最新在前（默认过滤已归档）；expiring/expired 读取派生（15 天窗口，longTerm 不参与）；权限 `/workstations/leases` |
 | GET | /api/admin/workstation-leases/:id | 租约详情（不过滤已归档，供用户记录等入口查看历史） |
 | POST | /api/admin/workstation-leases | LeasePayload；**事务**：校验办公位 idle → 建租约 → 办公位置 assigned + enterprise/lease 回填；renterType=enterprise/individual 校验 ID 存在（企业停用时 400） |
-| PUT | /api/admin/workstation-leases/:id | 续期/租金/联系人；terminated 不可编辑；换办公位不支持（终止重建） |
-| POST | /api/admin/workstation-leases/:id/terminate | **事务**：租约 terminated + terminatedAt/archivableAt + 释放全部关联办公位 |
+| PUT | /api/admin/workstation-leases/:id | 编辑（改租期/租金/联系人）；terminated 不可编辑；换办公位不支持（终止重建） |
+| POST | /api/admin/workstation-leases/:id/renew | **续期**：新到期日须晚于原到期日（400）、长期租约无到期日（409）、terminated/已归档（409/404）；更新 endDate + monthlyRent（默认沿用）+ 追加 `renewRecords` 并审计「续期租约」；不改存储状态（续期后已到期条目自动回到生效中/即将到期派生态） |
+| GET | /api/admin/workstation-leases/:id/contracts | 线下纸质合同扫描件列表（素材库 `sourceType=lease` + `sourceId=租约号`，最新在前；已归档租约仍可查看） |
+| POST | /api/admin/workstation-leases/:id/contracts | 上传合同（multipart `file`）：图片 PNG/JPEG/GIF/WebP 或 PDF，魔数嗅探 + 系统配置 `uploadMaxSizeMb` 限制；落 `MallAsset` 并写审计（来源：lease 租约号） |
+| DELETE | /api/admin/workstation-leases/:id/contracts/:assetId | 删除合同（校验归属本租约，跨租约 404；存储对象同步删除） |
+| POST | /api/admin/workstation-leases/:id/terminate | **事务**：租约 terminated + terminatedAt/archivableAt + 释放全部关联办公位（已到期租约同样适用，过期不自动释放） |
 | POST | /api/admin/workstation-leases/:id/archive | 仅 terminated 可归档（软删） |
 | GET | /api/admin/renter-options | `{ users: [...], enterprises: [...] }` 含联系电话（自动填充） |
 | GET | /api/admin/leases/:id/print | 租约打印单（标题/生成时间/租约详情/条款），复用租约数据无新表 |
@@ -627,7 +631,7 @@ TZ=Asia/Shanghai
 - **文章**：`pending(投稿待审核) →(review approved)→ pending_release | (rejected)→ rejected`；`pending_release →(publish | schedule)→ published | scheduled`；`scheduled →(cancel-schedule)→ pending_release`；`rejected →(编辑保存)→ pending`（重新入审核队列）；`published →(staff/举报下架)→ closed`（写 `archivableAt` 并新增 `ArticleTakedown` 记录；`closed →(原举报恢复)→ published`）；成员主动撤回待审核投稿为 `pending → withdrawn`（可重提）。官方文章创建即 pending_release、投稿创建即 pending。归档：pending/rejected/pending_release/closed 可软删；`withdrawn` 为成员可重提状态，不归档。
 - **申请/预约/展示页**：`pending → approved | rejected`；预约另有 `pending/approved → cancelled`。归档：申请仅 approved/rejected；预约为已结束/rejected/cancelled。
 - **商品/订单**：`on ↔ off`（下架写 archivableAt、上架清除；stock=0 置 restock，补货后回落 off）；统一券码兑换订单三态 `pending_use → finished`（后台核销）/`pending_use → cancelled`（退款，事务）；过期未使用券由定时任务自动 `pending_use → cancelled` 退款；归档：商品仅 off、订单仅 finished/cancelled。
-- **办公位/租约**：办公位 idle ↔ maintenance（直接切换）；assigned 仅经租约创建/终止进入/退出；租约 active → terminated（事务释放办公位）；归档：仅 terminated。
+- **办公位/租约**：办公位 idle ↔ maintenance（直接切换）；assigned 仅经租约创建/终止进入/退出；租约 active → terminated（事务释放办公位）；**续期（renew）不改存储状态**，仅延长 `endDate`/调整租金并追加 `renewRecords`（已到期为读取派生，续期后自然回到生效中/即将到期）；已到期（派生）条目**不会自动终止**，需人工续期或终止释放办公位；归档：仅 terminated。
 - **实现方式**：每域 Service 内显式状态/前置校验，非法流转抛 409（文案="仅 XX 的 XX 可 XX"，与 M0 一致）；每个归档端点同样校验可归档状态，不做通用状态机框架。
 
 ### 8.2 定时任务（@nestjs/schedule，单实例，共 9 个）

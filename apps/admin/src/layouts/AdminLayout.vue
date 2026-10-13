@@ -325,7 +325,7 @@ async function handleDropdown(item: { value?: string | number }) {
             用户留言
           </t-menu-item>
 
-          <t-submenu v-if="canSee(['/users', '/individuals', '/enterprises', '/external-enterprises', '/approvals', '/card-management'], '社区成员')" value="group-members" title="社区成员">
+          <t-submenu v-if="canSee(['/users', '/individuals', '/enterprises', '/external-enterprises', '/approvals'], '社区成员')" value="group-members" title="社区成员">
             <template #icon><UserCircleIcon /></template>
             <t-menu-item value="/users" v-permission="'/users'">
               <template #icon><UserListIcon /></template>
@@ -347,7 +347,6 @@ async function handleDropdown(item: { value?: string | number }) {
               <template #icon><CheckCircleIcon /></template>
               申请审核
             </t-menu-item>
-            <t-menu-item value="/card-management" v-permission="'/card-management'"><template #icon><UserListIcon /></template>名片管理</t-menu-item>
           </t-submenu>
 
           <t-submenu v-if="canSee(['/demands', '/demands/review', '/projects', '/events', '/events/enrollments'], '业务运营')" value="group-biz" title="业务运营">

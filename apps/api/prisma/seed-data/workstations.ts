@@ -58,6 +58,18 @@ export const leases: Lease[] = [
     monthlyRent: 18000,
     contactName: '周慕深',
     contactPhone: '13801210004',
+    /* 续期记录示例（租赁详情「续期记录」选项卡）：原到期日 → 新到期日 + 续期说明 */
+    renewRecords: [
+      {
+        at: '2026-03-02 10:20',
+        operator: '社区管理员',
+        reason: '客户续租一年，租金维持不变',
+        fromEndDate: '2026-03-19',
+        toEndDate: '2027-03-19',
+        fromRent: 18000,
+        toRent: 18000,
+      },
+    ],
   },
   {
     id: 'LS2002',

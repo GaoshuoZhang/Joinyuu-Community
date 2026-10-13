@@ -7,6 +7,7 @@ import { ArrowLeftIcon, EditIcon } from 'tdesign-icons-vue-next'
 import StatusTag from '@/components/StatusTag.vue'
 import AdjustValueDialog from '@/components/AdjustValueDialog.vue'
 import EnterpriseFormDialog from '@/components/EnterpriseFormDialog.vue'
+import EnterpriseCardDialog from '@/components/EnterpriseCardDialog.vue'
 import ListErrorState from '@/components/ListErrorState.vue'
 import { roleLabelMap } from '@/constants/identity'
 import {
@@ -43,6 +44,8 @@ watch(tab, (value) => { if (value === 'card') void loadCard() })
 
 /* 编辑弹窗 */
 const editVisible = ref(false)
+/* 编辑名片弹窗（名片标签页） */
+const cardEditVisible = ref(false)
 const acting = ref('')
 
 /* 数据概览 */
@@ -245,7 +248,8 @@ onMounted(() => {
       <!-- 企业头部 -->
       <div class="page-card head-card">
         <div class="head-main">
-          <t-avatar size="48px" class="head-avatar">{{ enterprise.name.slice(0, 1) }}</t-avatar>
+          <!-- 已上传 Logo 即展示图片，未上传或加载失败回退企业首字 -->
+          <t-avatar size="48px" class="head-avatar" :image="enterprise.logo || undefined" hide-on-load-failed>{{ enterprise.name.slice(0, 1) }}</t-avatar>
           <div class="head-info">
             <div class="head-title">
               <span class="head-name">{{ enterprise.name }}</span>
@@ -331,15 +335,19 @@ onMounted(() => {
           <t-tab-panel value="card" label="名片">
             <div class="tab-body">
               <t-loading :loading="cardLoading">
+                <!-- 补齐企业名片全部展示字段（Logo 已移除）：短字段两列并排，长字段各占整行 -->
                 <t-descriptions v-if="card" :column="2" bordered>
-                  <t-descriptions-item label="Logo">{{ card.logo || '—' }}</t-descriptions-item>
+                  <t-descriptions-item label="所属行业">{{ card.industry || '—' }}</t-descriptions-item>
+                  <t-descriptions-item label="企业规模">{{ card.size || '—' }}</t-descriptions-item>
+                  <t-descriptions-item label="成立时间">{{ card.foundedAt || '—' }}</t-descriptions-item>
                   <t-descriptions-item label="企业官网">{{ card.website || '—' }}</t-descriptions-item>
                   <t-descriptions-item label="办公地点" :span="2">{{ card.address || '—' }}</t-descriptions-item>
+                  <t-descriptions-item label="企业简介" :span="2">{{ card.description || '—' }}</t-descriptions-item>
                   <t-descriptions-item label="主营业务" :span="2">{{ card.services?.join('、') || '—' }}</t-descriptions-item>
                   <t-descriptions-item label="核心优势" :span="2">{{ card.advantages?.join('、') || '—' }}</t-descriptions-item>
                 </t-descriptions>
               </t-loading>
-              <t-button class="card-edit" v-permission="'/card-management'" @click="router.push('/card-management?type=enterprise&keyword=' + enterprise.id)">前往名片管理编辑</t-button>
+              <t-button class="card-edit" v-permission="'/enterprises'" :disabled="!card" @click="cardEditVisible = true">编辑名片</t-button>
             </div>
           </t-tab-panel>
 
@@ -475,6 +483,14 @@ onMounted(() => {
 
     <!-- 编辑企业 -->
     <EnterpriseFormDialog v-model:visible="editVisible" mode="edit" :enterprise="enterprise" @success="load" />
+
+    <!-- 编辑企业名片（名片标签页） -->
+    <EnterpriseCardDialog
+      v-model:visible="cardEditVisible"
+      :enterprise-id="enterprise?.id ?? ''"
+      :card="card"
+      @success="loadCard"
+    />
   </div>
 </template>
 

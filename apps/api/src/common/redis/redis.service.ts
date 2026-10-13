@@ -182,6 +182,25 @@ export class RedisService implements OnModuleDestroy {
     }
   }
 
+  /** 原子「读取-删除-比对」（一次性凭据消费，无论是否匹配都删除）：
+   * 图形验证码需要「错误也消费」以防止同一 captchaId 被反复爆破，同时避免并发下
+   * 同一验证码被两个请求同时校验通过；GET/DEL/比较在同一 Lua 脚本内完成。
+   * Redis 异常返回 false（fail-closed，视为校验失败）。 */
+  async consumeAndCompare(key: string, expected: string): Promise<boolean> {
+    try {
+      const result = (await this.client.eval(
+        "local v = redis.call('GET', KEYS[1]); if not v then return '0' end; redis.call('DEL', KEYS[1]); if v == ARGV[1] then return '1' end; return '0'",
+        1,
+        key,
+        JSON.stringify(expected),
+      )) as string
+      return result === '1'
+    } catch (e) {
+      console.error('[redis] 验证码消费失败（按校验不通过处理）:', e instanceof Error ? e.message : e)
+      return false
+    }
+  }
+
   /** 读取 Hash 全部字段；Redis 异常返回空对象（调用方降级） */
   async hgetall(key: string): Promise<Record<string, string>> {
     try {

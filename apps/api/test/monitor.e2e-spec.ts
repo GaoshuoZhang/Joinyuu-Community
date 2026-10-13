@@ -38,13 +38,13 @@ describe('M1.5 R6 系统监控', () => {
     expect(data.service.db.status).toBe('up')
     expect(data.service.redis.status).toBe('up')
     expect(Array.isArray(data.jobs)).toBe(true)
-    /* 8 个任务：到点发布 ×2、活动自动结束、冻结到期自动解冻、租约临期通知、自动归档/自动删除、消息投递 */
-    expect(data.jobs.length).toBe(8)
+    /* 9 个任务：到点发布 ×2、活动自动结束、冻结到期自动解冻、租约临期通知、自动归档/自动删除、消息投递、商城券码过期退款 */
+    expect(data.jobs.length).toBe(9)
     const names = data.jobs.map((j: { name: string }) => j.name)
     expect(names).toContain('articles-scheduled-publish')
     expect(names).toContain('user-freeze-expire')
     expect(names).toEqual(
-      expect.arrayContaining(['archive-auto-archive', 'archive-auto-purge', 'message-outbox-dispatch']),
+      expect.arrayContaining(['archive-auto-archive', 'archive-auto-purge', 'message-outbox-dispatch', 'mall-voucher-expire-refund']),
     )
   })
 

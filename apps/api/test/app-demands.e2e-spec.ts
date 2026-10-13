@@ -501,4 +501,90 @@ describe('M2-R R2 app 需求撮合', () => {
     const persisted = await prisma.demandRespondent.findFirst({ where: { demandId } })
     expect(persisted).toBeNull()
   })
+
+  it('多承接方结项：里程碑积分与结项经验覆盖全部承接方（经验按承接占比分配）', async () => {
+    const adminToken = await loginAs(app)
+    const tokenC = await appLoginAs(app, '13801210006', 'user123') // U1006 沈嘉禾（持社区个体身份）
+
+    /* ① 发布者 U1001 建单并置 published */
+    const created = await appPost(app, tokenA, '/api/app/demands', {
+      title: 'R2 多承接方结项经验测试',
+      description: '验证多承接方结项经验按占比分配、里程碑积分覆盖全部承接方',
+      categoryCode: 'DC004',
+      categoryDict: 'demand_category',
+      kind: 'task',
+      asIdentity: 'individual',
+      deliverable: '交付说明文档',
+      deliverBy: '2026-11-30',
+      budget: '面议',
+      period: '一个月',
+      contactName: '陈屿',
+      contactPhone: '13801210001',
+    })
+    expect(created.status).toBe(200)
+    const demandId: string = created.body.data.id
+    await prisma.demand.update({ where: { id: demandId }, data: { status: 'published' } })
+
+    /* ② 两位承接方响应并通过审核（U1005/U1006，不同主体、均持社区个体身份） */
+    for (const t of [tokenB, tokenC]) {
+      const r = await appPost(app, t, `/api/app/demands/${demandId}/respond`, { note: '可承接' })
+      expect(r.status).toBe(200)
+    }
+    const rows = await prisma.demandRespondent.findMany({ where: { demandId }, orderBy: { id: 'asc' } })
+    expect(rows).toHaveLength(2)
+    for (const row of rows) {
+      const reviewed = await request(app.getHttpServer())
+        .post(`/api/admin/demands/${demandId}/respondents/${row.id}/review`)
+        .set('Authorization', `Bearer ${adminToken}`)
+        .send({ status: 'approved' })
+      expect(reviewed.status).toBe(200)
+    }
+
+    /* ③ 发布者多选两位承接方 → 管理员立项（expReward=100，占比 50/50） */
+    const selected = await appPost(app, tokenA, `/api/app/me/demands/${demandId}/select`, {
+      responseIds: rows.map((r) => r.id),
+    })
+    expect(selected.status).toBe(200)
+    const initiated = await request(app.getHttpServer())
+      .post(`/api/admin/demands/${demandId}/initiate-project`)
+      .set('Authorization', `Bearer ${adminToken}`)
+      .send({
+        projectName: 'R2 多承接方结项经验测试专项',
+        undertakers: [
+          { type: 'individual', id: 'U1005', share: 50 },
+          { type: 'individual', id: 'U1006', share: 50 },
+        ],
+        description: '多承接方分配验证',
+        milestones: [{ name: '交付验收', date: '2026-11-30', owners: [] }],
+        expReward: 100,
+      })
+    expect(initiated.status).toBe(200)
+    const projectId: string = initiated.body.data.id
+
+    /* ④ 里程碑提交+验收 → 结项 */
+    const detail = await appGet(app, tokenB, `/api/app/me/projects/${projectId}`)
+    const msId: number = detail.body.data.milestones[0].id
+    const sub = await appPost(app, tokenB, `/api/app/me/projects/${projectId}/milestones/${msId}/submit`, { note: '完成' })
+    expect(sub.status).toBe(200)
+    const acc = await appPost(app, tokenA, `/api/app/me/projects/${projectId}/milestones/${msId}/accept`, {})
+    expect(acc.status).toBe(200)
+    const finished = await prisma.project.findUnique({ where: { id: projectId } })
+    expect(finished?.status).toBe('finished')
+
+    /* ⑤ 回归：两位承接方都应获得里程碑积分与结项经验（总额 100 按 50/50 分配，各 50） */
+    for (const uid of ['U1005', 'U1006']) {
+      const milestonePoints = await prisma.pointsRecord.findFirst({
+        where: { userId: uid, dedupeKey: `project_milestone:${msId}:${uid}` },
+      })
+      expect(milestonePoints).toBeTruthy()
+      const finishExp = await prisma.experienceRecord.findFirst({
+        where: {
+          targetType: 'individual',
+          targetId: uid,
+          reason: '「R2 多承接方结项经验测试专项」结项经验值',
+        },
+      })
+      expect(finishExp?.delta).toBe(50)
+    }
+  })
 })

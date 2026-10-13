@@ -95,7 +95,8 @@ describe('M2-R 收尾复查回归', () => {
       put('/api/admin/cards/individual/U1005', { visibility: { politicalStatus: false } }),
     ])
     expect(results.map(r => r.status)).toEqual([200, 200])
-    expect((await db.individualCard.findUniqueOrThrow({ where: { userId: 'U1005' } })).visibility).toEqual({ age: false, politicalStatus: false })
+    /* isPublic 由服务端事务合并时兜底写入（省略即保留或默认公开） */
+    expect((await db.individualCard.findUniqueOrThrow({ where: { userId: 'U1005' } })).visibility).toEqual({ age: false, politicalStatus: false, isPublic: true })
   })
 
   it('展示姓名可从人才库、全域搜索与后台名片管理检索', async () => {

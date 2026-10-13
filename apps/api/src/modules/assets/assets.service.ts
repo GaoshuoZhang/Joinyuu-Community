@@ -26,6 +26,12 @@ export interface MallAssetDto {
   createdAt: string
 }
 
+/** 业务来源（关联业务实体的附件，如租约合同）：落 sourceType/sourceId，素材库按来源筛选可见 */
+export interface AssetSource {
+  type: string
+  id: string
+}
+
 /** 允许的 MIME（图片与常用文档；SVG 可携带脚本已禁用） */
 const ALLOWED_MIME = new Set([
   'image/png',
@@ -112,7 +118,12 @@ export class AssetsService {
     return rows.map(toAssetDto)
   }
 
-  async upload(file: UploadedFileLike | undefined, bizType: string | undefined, operator: string): Promise<MallAssetDto> {
+  async upload(
+    file: UploadedFileLike | undefined,
+    bizType: string | undefined,
+    operator: string,
+    source?: AssetSource,
+  ): Promise<MallAssetDto> {
     if (!file || !file.buffer || file.size === 0) throw new BadRequestException('请选择要上传的文件')
     const limitMb = await this.uploadLimitMb()
     if (file.size > limitMb * 1024 * 1024) throw new BadRequestException(`文件大小不能超过 ${limitMb} MB`)
@@ -134,6 +145,8 @@ export class AssetsService {
           url: this.storage.url(storeKey),
           storeKey,
           bizType: bizType || null,
+          sourceType: source?.type ?? null,
+          sourceId: source?.id ?? null,
           createdBy: operator,
           createdAt,
         },
@@ -147,9 +160,28 @@ export class AssetsService {
       module: '素材库',
       action: '上传素材',
       target: `${asset.id} · ${asset.fileName}`,
+      ...(source ? { detail: `来源：${source.type} ${source.id}` } : {}),
       operator,
     })
     return toAssetDto(asset)
+  }
+
+  /** 按业务来源列附件（如某租约的全部合同扫描件，最新在前） */
+  async listBySource(source: AssetSource): Promise<MallAssetDto[]> {
+    const rows = await this.prisma.mallAsset.findMany({
+      where: { sourceType: source.type, sourceId: source.id },
+      orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+    })
+    return rows.map(toAssetDto)
+  }
+
+  /** 删除业务来源附件：校验归属（仅允许删除属于该来源的文件），存储与元数据删除沿用 remove */
+  async removeBySource(id: string, source: AssetSource, operator: string): Promise<{ code: number }> {
+    const asset = await this.prisma.mallAsset.findUnique({ where: { id } })
+    if (!asset || asset.sourceType !== source.type || asset.sourceId !== source.id) {
+      throw new NotFoundException('附件不存在')
+    }
+    return this.remove(id, operator)
   }
 
   /** 替换素材：覆盖同一存储键（URL 不变），引用该素材的文章/页面即时生效 */

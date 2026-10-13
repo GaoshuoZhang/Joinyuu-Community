@@ -40,6 +40,11 @@ const CAPTCHA_TTL = 5 * 60
 /** 验证码限流：同一 IP 60 秒内最多 30 次（防接口滥用） */
 const CAPTCHA_RATE_MAX = 30
 const CAPTCHA_RATE_WINDOW_SEC = 60
+/** 登录失败锁定（与 admin 口径一致）：同一 ip+账号 连续失败 5 次锁定 15 分钟（Redis 键，多实例/重启生效） */
+const LOGIN_FAIL_PREFIX = 'auth:app:login:fail:'
+const LOGIN_LOCK_PREFIX = 'auth:app:login:lock:'
+const LOGIN_MAX_FAILURES = 5
+const LOGIN_LOCK_SEC = 15 * 60
 /** 身份类型 → 展示标签（登录快照与登录态摘要用，title 缺省时兜底） */
 const IDENTITY_LABEL: Record<string, string> = {
   individual: '个人用户',
@@ -94,13 +99,10 @@ export class AuthService {
     return { captchaId, image }
   }
 
-  /** 校验并一次性消费验证码（错误也消费，防自动化枚举） */
+  /** 校验并一次性消费验证码（错误也消费，防自动化枚举；原子「读取-删除-比对」防并发复用） */
   private async verifyCaptcha(captchaId?: string, code?: string): Promise<boolean> {
     if (!captchaId) return false
-    const expected = await this.redis.getCache<string>(CAPTCHA_PREFIX + captchaId)
-    await this.redis.delCache(CAPTCHA_PREFIX + captchaId)
-    if (!expected) return false
-    return expected.toUpperCase() === (code ?? '').toUpperCase()
+    return this.redis.consumeAndCompare(CAPTCHA_PREFIX + captchaId, (code ?? '').toUpperCase())
   }
 
   /** 按登录标识（手机号 / 邮箱 / 用户名）定位账号 */
@@ -235,15 +237,36 @@ export class AuthService {
     }
   }
 
-  /** 登录：校验图形验证码 → 按 手机号/邮箱/用户名 定位账号 → 校验密码与状态 → 签发多身份 app JWT */
-  async login(dto: AppLoginDto): Promise<AppLoginResult> {
+  /** 登录：校验图形验证码 → 失败锁定检查 → 按 手机号/邮箱/用户名 定位账号 → 校验密码与状态 → 签发多身份 app JWT */
+  async login(dto: AppLoginDto, ip: string): Promise<AppLoginResult> {
     const captchaOk = await this.verifyCaptcha(dto.captchaId, dto.captchaCode)
     if (!captchaOk) throw new BadRequestException('验证码错误或已过期')
 
+    /* 账号级失败锁定：标识归一化（去空格+小写），防大小写变体绕过失败计数 */
+    const rateKey = `${ip}:${(dto.identifier ?? '').trim().toLowerCase()}`
+    const lock = await this.redis.getCache<{ until: number }>(LOGIN_LOCK_PREFIX + rateKey)
+    if (lock && lock.until > Date.now()) {
+      const minutes = Math.ceil((lock.until - Date.now()) / 60000)
+      throw new HttpException(`登录失败次数过多，请 ${minutes} 分钟后再试`, HttpStatus.TOO_MANY_REQUESTS)
+    }
+
     const user = await this.findByIdentifier(dto.identifier)
     if (!user || !user.passwordHash || !(await compare(dto.password, user.passwordHash))) {
+      const current = (await this.redis.getCache<{ count: number }>(LOGIN_FAIL_PREFIX + rateKey))?.count ?? 0
+      const count = current + 1
+      if (count >= LOGIN_MAX_FAILURES) {
+        await this.redis.setCache(
+          LOGIN_LOCK_PREFIX + rateKey,
+          { until: Date.now() + LOGIN_LOCK_SEC * 1000 },
+          LOGIN_LOCK_SEC,
+        )
+        await this.redis.delCache(LOGIN_FAIL_PREFIX + rateKey)
+      } else {
+        await this.redis.setCache(LOGIN_FAIL_PREFIX + rateKey, { count }, LOGIN_LOCK_SEC)
+      }
       throw new UnauthorizedException('账号或密码错误')
     }
+    await this.redis.delCache(LOGIN_FAIL_PREFIX + rateKey)
     if (user.status === 'frozen') throw new UnauthorizedException('账号已冻结，请联系社区运营')
     if (user.status !== 'active') throw new UnauthorizedException('账号已注销或停用，请联系社区运营')
 

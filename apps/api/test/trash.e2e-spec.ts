@@ -2,7 +2,7 @@
  * 覆盖：删除 → 原列表不可见 → 归档列表可见 → 恢复可见 → 彻底删除（物理）不存在；审计留痕。
  * 覆盖域：announcement / article（官方资讯）/ submission（投稿）/ enterprise / demand（驳回后归档）/
  *        goods（商品，走商城归档端点）/ order（商城订单，走商城归档端点）/ application（申请审核）；
- * 归档设置（13 标签页、企业不支持自动归档、按状态自动归档开关）与 TrashService.runAutoArchive 自动归档。
+ * 归档设置（14 标签页、企业不支持自动归档、按状态自动归档开关）与 TrashService.runAutoArchive 自动归档。
  * 前置：seed（公告 AN1006 / 官方文章 A1010 / 投稿 SU1008 / 企业 E2003 / 待审核需求 D4005、D4008 /
  *       已下架商品 G1009 / 已完成订单 RO2001）。 */
 import { INestApplication } from '@nestjs/common'
@@ -298,7 +298,7 @@ describe('M1.5 R12 归档管理（软删除）', () => {
     expect(conflict.body).toEqual({ code: 409, message: '仅已通过或已驳回的申请可归档' })
   })
 
-  it('归档设置：13 个标签页；企业不支持自动归档 → 400', async () => {
+  it('归档设置：14 个标签页；企业不支持自动归档 → 400', async () => {
     const res = await request(app.getHttpServer())
       .get('/api/admin/trash/settings')
       .set(auth())
@@ -311,7 +311,7 @@ describe('M1.5 R12 归档管理（软删除）', () => {
       purgeDelayDays: number
       archivableStatuses: Array<{ value: string; label: string; enabled: boolean }>
     }>
-    expect(settings.length).toBe(13)
+    expect(settings.length).toBe(14)
     expect(settings.map((s) => s.domain)).toEqual([
       'enterprise',
       'externalEnterprise',
@@ -326,6 +326,7 @@ describe('M1.5 R12 归档管理（软删除）', () => {
       'goods',
       'order',
       'application',
+      'userMessage',
     ])
     expect(settings.map((s) => s.label)).toEqual(
       expect.arrayContaining(['商品', '商城订单', '申请审核']),

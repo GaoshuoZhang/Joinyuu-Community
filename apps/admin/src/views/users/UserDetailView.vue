@@ -9,6 +9,7 @@ import StatusTag from '@/components/StatusTag.vue'
 import IdentityTags from '@/components/IdentityTags.vue'
 import AdjustValueDialog from '@/components/AdjustValueDialog.vue'
 import UserCardTab from '@/components/UserCardTab.vue'
+import ImageUploadField from '@/components/ImageUploadField.vue'
 import ListErrorState from '@/components/ListErrorState.vue'
 import { identityTypeMap, roleLabelMap } from '@/constants/identity'
 import { applicationTypeMap, normalizeUserGender, userGenderLabel, userGenderOptions } from '@/constants/status'
@@ -117,6 +118,8 @@ const editForm = reactive({
   realName: '',
   citizenId: '',
   bio: '',
+  /* 头像地址（素材上传回填）：空串 = 清除头像 */
+  avatar: '',
 })
 /* 编辑弹窗中处于遮罩占位的值：与表单当前值一致时视为「未修改」，提交时回填原值而非写入遮罩文本 */
 const editMaskedPhone = ref('')
@@ -150,6 +153,7 @@ function openEdit() {
     : ''
   editForm.citizenId = editMaskedCitizenId.value || (user.value.citizenId ?? '')
   editForm.bio = user.value.bio
+  editForm.avatar = user.value.avatar ?? ''
   editVisible.value = true
   nextTick(() => editFormRef.value?.clearValidate())
 }
@@ -178,6 +182,7 @@ async function onConfirmEdit() {
       realName: editForm.realName,
       citizenId,
       bio: editForm.bio,
+      avatar: editForm.avatar,
     }
     await updateUser(user.value.uid, payload)
     MessagePlugin.success('用户资料已更新')
@@ -1182,6 +1187,14 @@ onMounted(load)
         </div>
       </template>
       <t-form ref="editFormRef" :data="editForm" :rules="editRules" label-align="top">
+        <!-- 头像：直接上传图片（回填素材 URL），替换头像卡片即完成编辑，删除即回退昵称首字占位 -->
+        <t-form-item label="头像" name="avatar">
+          <ImageUploadField
+            v-model="editForm.avatar"
+            biz-type="avatar"
+            tip="选择本地图片即上传并替换（建议 1:1 方图）；上传后同步展示在客户端「我的」等页面"
+          />
+        </t-form-item>
         <t-form-item label="用户名" name="username">
           <t-input v-model="editForm.username" name="username" autocomplete="off" placeholder="请输入用户名…" />
         </t-form-item>

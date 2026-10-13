@@ -147,9 +147,10 @@ export class AppMallService {
         })
 
         orderId = await this.ids.next('RO', tx)
+        const voucherCode = await this.uniqueVoucherCode(tx)
         await tx.redemptionOrder.create({
           /* 订单 points 存实扣额（退款/展示同一口径） */
-          data: this.buildOrderData(orderId, uid, user.nickname, goods, dto, charged),
+          data: this.buildOrderData(orderId, uid, user.nickname, goods, dto, charged, voucherCode),
         })
       })
     } catch (error) {
@@ -333,6 +334,17 @@ export class AppMallService {
     if (cfg && cfg.mallOpen === false) throw new BadRequestException('积分商城暂未开放')
   }
 
+  /** 券码防碰撞：随机生成后校验库内是否已存在（含归档订单），重复则重试至多 5 次；
+   * 生成空间 32^8 ≈ 1.1e12，正常一次命中。voucherCode 无唯一索引，此处为保证核销定位唯一性的应用层防护 */
+  private async uniqueVoucherCode(tx: Prisma.TransactionClient): Promise<string> {
+    for (let i = 0; i < 5; i += 1) {
+      const code = generateVoucherCode()
+      const exists = await tx.redemptionOrder.findFirst({ where: { voucherCode: code }, select: { id: true } })
+      if (!exists) return code
+    }
+    throw new ConflictException('券码生成冲突，请稍后重试')
+  }
+
   private buildOrderData(
     id: string,
     userId: string,
@@ -341,6 +353,8 @@ export class AppMallService {
     dto: CreateOrderDto,
     /** 实扣积分（等级折扣后；原价时与 goods.points 相同） */
     points: number,
+    /** 已做碰撞校验的券码 */
+    voucherCode: string,
   ): Prisma.RedemptionOrderCreateInput {
     const now = formatNow()
     const validDays = goods.validDays && goods.validDays > 0 ? goods.validDays : DEFAULT_VOUCHER_VALID_DAYS
@@ -354,7 +368,7 @@ export class AppMallService {
       status: 'pending_use',
       createdAt: now,
       note: dto.remark?.trim() || null,
-      voucherCode: generateVoucherCode(),
+      voucherCode,
       voucherExpiresAt: this.addDaysTime(now, validDays),
     }
   }

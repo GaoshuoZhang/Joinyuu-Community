@@ -36,6 +36,38 @@ describe('M1-B 用户与社区个体（users / individuals）', () => {
     expect(res.body.data.total).toBeGreaterThanOrEqual(15)
   })
 
+  it('PUT /api/admin/users/:id 可设置/清除头像（仅接受站内相对路径或 http(s) 地址）', async () => {
+    const set = await request(app.getHttpServer())
+      .put('/api/admin/users/U1001')
+      .set('Authorization', `Bearer ${token}`)
+      .send({ avatar: '/api/public/files/11111111-2222-3333-4444-555555555555.png' })
+    expect(set.status).toBe(200)
+
+    const withAvatar = await request(app.getHttpServer())
+      .get('/api/admin/users/U1001')
+      .set('Authorization', `Bearer ${token}`)
+    expect(withAvatar.body.data.avatar).toBe('/api/public/files/11111111-2222-3333-4444-555555555555.png')
+
+    /* 非法地址（非相对路径/非 http(s)）→ 400 */
+    const bad = await request(app.getHttpServer())
+      .put('/api/admin/users/U1001')
+      .set('Authorization', `Bearer ${token}`)
+      .send({ avatar: 'javascript:alert(1)' })
+    expect(bad.status).toBe(400)
+    expect(bad.body.message).toBe('头像地址不合法')
+
+    /* 空串 = 清除头像（回退昵称首字占位） */
+    const clear = await request(app.getHttpServer())
+      .put('/api/admin/users/U1001')
+      .set('Authorization', `Bearer ${token}`)
+      .send({ avatar: '' })
+    expect(clear.status).toBe(200)
+    const withoutAvatar = await request(app.getHttpServer())
+      .get('/api/admin/users/U1001')
+      .set('Authorization', `Bearer ${token}`)
+    expect(withoutAvatar.body.data.avatar ?? null).toBeNull()
+  })
+
   it('GET /api/admin/users 关键词按昵称筛选', async () => {
     const res = await request(app.getHttpServer())
       .get(`/api/admin/users?page=1&pageSize=10&keyword=${encodeURIComponent('陈屿')}`)

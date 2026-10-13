@@ -789,6 +789,10 @@ model Lease {
   contactPhone String             @db.VarChar(32)
   note         String?            @db.VarChar(255)
   editRecords  Json               @default("[]")
+  /**
+   * 续期记录（独立于编辑记录）：[{ at, operator, reason, fromEndDate, toEndDate, fromRent, toRent }]，最新在后
+   */
+  renewRecords Json               @default("[]")
   terminatedAt String?            @db.VarChar(16)
   deletedAt    String?            @db.VarChar(16)
   deletedBy    String?            @db.VarChar(64)

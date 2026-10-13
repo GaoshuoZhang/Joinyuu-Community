@@ -14,4 +14,6 @@ export class UpdateUserDto {
   @IsOptional() @IsString() @MaxLength(64) realName?: string
   @IsOptional() @IsString() @MaxLength(32) citizenId?: string
   @IsOptional() @IsString() bio?: string
+  /* 头像地址（后台素材上传后的 URL，如 /api/public/files/xxx.png）：空串 = 清除头像（回退昵称首字占位） */
+  @IsOptional() @IsString({ message: '头像地址格式不正确' }) @MaxLength(255, { message: '头像地址过长' }) avatar?: string
 }

@@ -11,6 +11,7 @@ import {
   testRealnameVerification,
 } from '@/api/systemConfig'
 import type { RealnameCatalog, SystemConfigPayload } from '@/api/systemConfig'
+import { cardFields, fetchCardSchema, saveCardSchema, type CardType } from '@/api/cards'
 import type { SystemConfig } from '@/types'
 import { focusFirstInvalid } from '@/utils/form'
 
@@ -53,6 +54,20 @@ const realnameCredentialMasked = ref<Record<string, string>>({})
 const currentRealnameMeta = computed(() =>
   realnameCatalog.value.meta.find((item) => item.provider === form.realnameVerifyProvider),
 )
+
+/* ---------- 名片可编辑字段（原「名片管理」页的字段白名单配置） ----------
+ * 控制客户端用户可自行编辑哪些名片字段；未勾选字段在客户端编辑表单隐藏，后台仍可维护。
+ * 与本页表单共用同一次保存与未保存保护。 */
+const cardEditable = reactive<Record<CardType, string[]>>({ individual: [], enterprise: [] })
+const cardSchemaGroups: { type: CardType; label: string; fields: { key: string; label: string }[] }[] = [
+  { type: 'individual', label: '个人名片', fields: cardFields.individual },
+  { type: 'enterprise', label: '企业名片', fields: cardFields.enterprise },
+]
+
+/** 未保存判定源：系统配置表单 + 名片可编辑字段（两者共用同一次保存） */
+function dirtySource(): string {
+  return JSON.stringify({ form, cardEditable })
+}
 
 const form = reactive<SystemConfigForm>({
   siteName: '',
@@ -175,10 +190,17 @@ const credentialSourceLabel = computed(() => {
 async function loadConfig() {
   loading.value = true
   try {
-    const [conf, catalog] = await Promise.all([fetchSystemConfig(), fetchRealnameCatalog()])
+    const [conf, catalog, individualSchema, enterpriseSchema] = await Promise.all([
+      fetchSystemConfig(),
+      fetchRealnameCatalog(),
+      fetchCardSchema('individual'),
+      fetchCardSchema('enterprise'),
+    ])
     realnameCatalog.value = catalog
     applyConfig(conf)
-    savedSnapshot.value = JSON.stringify(form)
+    cardEditable.individual = [...individualSchema.editableFields]
+    cardEditable.enterprise = [...enterpriseSchema.editableFields]
+    savedSnapshot.value = dirtySource()
     loadError.value = ''
   } catch (e) {
     loadError.value = e instanceof Error ? e.message : '系统配置加载失败'
@@ -201,8 +223,13 @@ async function onSave() {
   try {
     /* 密钥留空时服务端保持原值；仅在有输入时提交新密钥（轮换） */
     await saveSystemConfig({ ...form, minioSecretKey: form.minioSecretKey?.trim() ?? '' })
+    /* 名片可编辑字段随保存一并提交（字段白名单，控制客户端自编辑范围） */
+    await Promise.all([
+      saveCardSchema('individual', cardEditable.individual),
+      saveCardSchema('enterprise', cardEditable.enterprise),
+    ])
     applyConfig(await fetchSystemConfig())
-    savedSnapshot.value = JSON.stringify(form)
+    savedSnapshot.value = dirtySource()
     MessagePlugin.success('系统配置已保存并生效')
   } catch (e) {
     MessagePlugin.error(e instanceof Error ? e.message : '保存失败')
@@ -211,7 +238,7 @@ async function onSave() {
   }
 }
 
-const isDirty = computed(() => !loading.value && !!savedSnapshot.value && JSON.stringify(form) !== savedSnapshot.value)
+const isDirty = computed(() => !loading.value && !!savedSnapshot.value && dirtySource() !== savedSnapshot.value)
 
 function onBeforeUnload(event: BeforeUnloadEvent) {
   if (!isDirty.value) return
@@ -330,6 +357,20 @@ onBeforeRouteLeave(async () => {
               <t-input-number class="ctl-w-full" v-model="form.passwordExpireDays" :min="1" :max="3650" :step="1" theme="column" />
               <template #help>超过该周期未修改密码的后台账号，登录后将被引导强制改密（默认 90 天）</template>
             </t-form-item>
+          </div>
+
+          <div class="section-title">名片可编辑字段</div>
+          <p class="schema-tip">
+            勾选后客户端用户可在「我的名片」自行编辑这些字段；未勾选字段在客户端编辑表单中隐藏，后台仍可维护。
+            修改后随本页「保存配置」一并提交。
+          </p>
+          <div class="schema-groups">
+            <div v-for="group in cardSchemaGroups" :key="group.type" class="schema-group">
+              <div class="schema-group-title">{{ group.label }}</div>
+              <t-checkbox-group v-model="cardEditable[group.type]">
+                <t-checkbox v-for="field in group.fields" :key="field.key" :value="field.key" :label="field.label" />
+              </t-checkbox-group>
+            </div>
           </div>
 
           <div class="section-title">运营参数</div>
@@ -610,6 +651,39 @@ onBeforeRouteLeave(async () => {
   margin-top: 2px;
   font-size: 12px;
   color: var(--td-text-color-secondary);
+}
+
+/* 名片可编辑字段：两组白名单并排，与页面无框栅格语言一致 */
+.schema-tip {
+  margin: 0 0 12px;
+  font-size: 12px;
+  line-height: 1.8;
+  color: var(--td-text-color-secondary);
+}
+
+.schema-groups {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px 24px;
+}
+
+@media (max-width: 900px) {
+  .schema-groups {
+    grid-template-columns: 1fr;
+  }
+}
+
+.schema-group-title {
+  margin-bottom: 8px;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--td-text-color-secondary);
+}
+
+.schema-group {
+  padding: 12px 16px;
+  border: 1px solid var(--td-component-stroke);
+  border-radius: var(--td-radius-medium);
 }
 
 /* 保存栏吸底：表单很长时无需滚到底即可保存（与 LevelTiersPanel 的吸底保存区一致） */

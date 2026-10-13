@@ -82,6 +82,8 @@ export type EnterpriseStatus = 'active' | 'exited' | 'disabled'
 export interface Enterprise {
   id: string
   name: string
+  /** 企业 Logo（素材 URL，列表头像展示；未上传即无此字段） */
+  logo?: string
   industry: string
   size: string
   foundedAt: string
@@ -679,6 +681,14 @@ export interface LeaseEditRecord {
   reason: string
 }
 
+/** 租约续期记录（「续期」动作专用，独立于编辑记录；保留原/新到期日与原/新租金便于追溯） */
+export interface LeaseRenewRecord extends LeaseEditRecord {
+  fromEndDate: string
+  toEndDate: string
+  fromRent: number
+  toRent: number
+}
+
 /** 租赁方类型：enterprise=注册企业 / individual=注册个人用户 / custom=未注册（弹窗内自建条目） */
 export type LeaseRenterType = 'enterprise' | 'individual' | 'custom'
 
@@ -722,8 +732,10 @@ export interface Lease {
   contactPhone: string
   /** 备注（非必填，随新增/编辑维护） */
   note?: string | null
-  /** 编辑记录（续租/改租金等修改留痕，最新在后） */
+  /** 编辑记录（改租金/联系人等修改留痕，最新在后） */
   editRecords?: LeaseEditRecord[]
+  /** 续期记录（「续期」动作专用，最新在后） */
+  renewRecords?: LeaseRenewRecord[]
   /** 终止时间（terminated 时存在） */
   terminatedAt?: string
   /** 归档时间（非空表示已归档，详情页写操作隐藏） */
@@ -816,8 +828,8 @@ export interface Article {
   status: ArticleStatus
   /** 摘要 */
   summary: string
-  /** 正文（富文本 HTML） */
-  content: string
+  /** 正文（富文本 HTML）；列表接口不下发（列表行 content 缺省），编辑/详情按 id 拉详情补齐 */
+  content?: string
   tags: string[]
   commentsEnabled: boolean
   /** 定时发布时间（scheduled 时存在） */

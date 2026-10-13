@@ -78,10 +78,11 @@ export class AuthService {
   }
 
   private async verifyCaptcha(captchaId: string, captchaCode: string): Promise<boolean> {
-    const expected = await this.redis.getCache<string>(CAPTCHA_PREFIX + captchaId)
-    await this.redis.delCache(CAPTCHA_PREFIX + captchaId)
-    if (!expected) return false
-    return expected.toUpperCase() === (captchaCode ?? '').toUpperCase()
+    /* 原子「读取-删除-比对」：并发下同一验证码不会被两个请求同时校验通过；错误也消费，防同 ID 反复爆破 */
+    return this.redis.consumeAndCompare(
+      CAPTCHA_PREFIX + captchaId,
+      (captchaCode ?? '').toUpperCase(),
+    )
   }
 
   async login(username: string, password: string, ctx: LoginContext): Promise<LoginResult> {

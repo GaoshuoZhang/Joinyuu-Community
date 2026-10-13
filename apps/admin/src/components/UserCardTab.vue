@@ -1,13 +1,13 @@
 <script setup lang="ts">
 import { onMounted, ref } from 'vue'
-import { useRouter } from 'vue-router'
 import { MessagePlugin } from 'tdesign-vue-next'
+import IndividualCardDialog from '@/components/IndividualCardDialog.vue'
 import { fetchCard, type CardRow } from '@/api/cards'
 
 const props = defineProps<{ uid: string }>()
-const router = useRouter()
 const loading = ref(false)
 const card = ref<CardRow | null>(null)
+const editVisible = ref(false)
 
 async function load() {
   loading.value = true
@@ -27,8 +27,10 @@ onMounted(load)
         <t-descriptions-item label="个人简介" :span="2">{{ card.intro || '—' }}</t-descriptions-item>
         <t-descriptions-item label="行业经验" :span="2">{{ card.industryExperience || '—' }}</t-descriptions-item>
       </t-descriptions>
-      <t-button class="card-edit" v-permission="'/card-management'" @click="router.push('/card-management?type=individual&keyword=' + uid)">前往名片管理编辑</t-button>
+      <t-button class="card-edit" v-permission="'/users'" :disabled="!card" @click="editVisible = true">编辑名片</t-button>
     </t-loading>
+    <!-- 编辑个体名片（原「名片管理」页的个人名片编辑，已并入本页） -->
+    <IndividualCardDialog v-model:visible="editVisible" :uid="uid" :card="card" @success="load" />
   </div>
 </template>
 

@@ -7,12 +7,12 @@ export const announcements: Announcement[] = [
     id: 'AN1001',
     title: '聚屿社区三周年庆典暨年度路演日报名开启',
     content:
-      '2026 年 9 月 26 日，聚屿社区年度路演日将在聚屿路演厅举行。今年继续设置「AI 落地进行时」主题专场，欢迎各社区企业报名路演席位，社区个体可在活动中心提交分享申请。席位有限，先到先得。',
+      '2026 年 11 月 28 日，聚屿社区年度路演日将在聚屿路演厅举行。今年继续设置「AI 落地进行时」主题专场，欢迎各社区企业报名路演席位，社区个体可在活动中心提交分享申请。席位有限，先到先得。',
     pinned: true,
     status: 'published',
     publishedAt: '2026-09-08 10:00',
     createdAt: '2026-09-08 10:00',
-    expireAt: '2026-09-27 23:59',
+    expireAt: '2026-11-30 23:59',
     link: '/plaza?tab=events',
   },
   {
@@ -24,7 +24,7 @@ export const announcements: Announcement[] = [
     status: 'published',
     publishedAt: '2026-09-05 09:30',
     createdAt: '2026-09-05 09:30',
-    expireAt: '2026-09-30 23:59',
+    expireAt: '2026-11-30 23:59',
     link: '/spaces',
   },
   {

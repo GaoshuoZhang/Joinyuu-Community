@@ -312,7 +312,7 @@ describe('M2-R R1 app 鉴权', () => {
     expect(row.phoneVerifiedAt).toBeTruthy()
   })
 
-  it('用户名/昵称：修改生效、唯一冲突 409、保留名 400', async () => {
+  it('用户名/昵称：修改生效、冷却拦截、唯一冲突 409、保留名 400', async () => {
     const token = await appLoginAs(app, '13801210001', 'user123')
 
     const ok = await request(app.getHttpServer())
@@ -324,22 +324,33 @@ describe('M2-R R1 app 鉴权', () => {
     expect(row.username).toBe('chenyu_boss')
     expect(row.nickname).toBe('陈屿本人')
 
-    const dup = await request(app.getHttpServer())
+    /* 90 天限改：同一账号冷却期内再次改名直接 400（冷却校验先于唯一性校验） */
+    const cooled = await request(app.getHttpServer())
       .put('/api/app/me')
       .set('Authorization', `Bearer ${token}`)
-      .send({ username: 'user_u1002' })
+      .send({ username: 'chenyu_again' })
+    expect(cooled.status).toBe(400)
+    expect(cooled.body.message).toContain('天')
+
+    /* 唯一性/保留名校验改用未改过用户名的 U1002，避免命中自身冷却；
+     * 注意：U1002 的密码已被前面的「找回密码」用例重置为 newpass123 */
+    const token2 = await appLoginAs(app, '13801210002', 'newpass123')
+    const dup = await request(app.getHttpServer())
+      .put('/api/app/me')
+      .set('Authorization', `Bearer ${token2}`)
+      .send({ username: 'chenyu_boss' })
     expect(dup.status).toBe(409)
 
     const reserved = await request(app.getHttpServer())
       .put('/api/app/me')
-      .set('Authorization', `Bearer ${token}`)
+      .set('Authorization', `Bearer ${token2}`)
       .send({ username: 'admin' })
     expect(reserved.status).toBe(400)
     expect(reserved.body.message).toContain('保留')
 
     const reservedNick = await request(app.getHttpServer())
       .put('/api/app/me')
-      .set('Authorization', `Bearer ${token}`)
+      .set('Authorization', `Bearer ${token2}`)
       .send({ nickname: '官方客服' })
     expect(reservedNick.status).toBe(400)
   })
@@ -357,5 +368,17 @@ describe('M2-R R1 app 鉴权', () => {
     await loginPair().catch(() => loginPair())
     const rows = await prisma.pointsRecord.findMany({ where: { dedupeKey: { startsWith: 'daily_login:U1003:' } } })
     expect(rows).toHaveLength(1)
+  })
+
+  it('登录失败锁定：同一账号连续失败 5 次后（含正确密码）一律 429', async () => {
+    /* 用未注册号码，避免锁定任何种子账号（Redis 锁定键不随 reseed 清理，会跨套件残留） */
+    const phone = '13900007777'
+    for (let i = 0; i < 5; i += 1) {
+      const fail = await appLoginRequest(app, phone, 'wrong-password')
+      expect(fail.status).toBe(401)
+    }
+    const locked = await appLoginRequest(app, phone, 'user123')
+    expect(locked.status).toBe(429)
+    expect(locked.body.message).toContain('登录失败次数过多')
   })
 })

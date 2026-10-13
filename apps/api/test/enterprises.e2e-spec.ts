@@ -152,6 +152,24 @@ describe('M1-B 社区企业（enterprises）', () => {
     expect(detail.body.data.enterprise.contactName).toBe('新联系人')
   })
 
+  it('GET /api/admin/enterprises 列表下发企业 Logo（企业列头像展示）', async () => {
+    /* Logo 由企业名片接口写入（素材上传后回填 URL），社区企业列表 DTO 需带出该字段 */
+    const put = await request(app.getHttpServer())
+      .put('/api/admin/cards/enterprise/E2009')
+      .set('Authorization', `Bearer ${token}`)
+      .send({ logo: '/api/public/files/e2e-enterprise-logo.png' })
+    expect(put.status).toBe(200)
+    expect(put.body.code).toBe(0)
+
+    const list = await request(app.getHttpServer())
+      .get('/api/admin/enterprises?page=1&pageSize=10&keyword=E2009')
+      .set('Authorization', `Bearer ${token}`)
+    const row = (list.body.data.list as Array<{ id: string; logo?: string }>).find(
+      (e) => e.id === 'E2009',
+    )
+    expect(row?.logo).toBe('/api/public/files/e2e-enterprise-logo.png')
+  })
+
   it('POST /api/admin/enterprises/:id/disable 停用后列表状态为 disabled', async () => {
     const res = await request(app.getHttpServer())
       .post('/api/admin/enterprises/E2009/disable')

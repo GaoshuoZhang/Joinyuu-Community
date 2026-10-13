@@ -149,8 +149,13 @@ describe('M1.5 contents 内容管理（文章/栏目）', () => {
       status: 'pending_release',
       commentsEnabled: false,
     }))
-    expect(updated?.content).toContain('调整后的正文')
-    expect(updated?.content).not.toContain('script')
+    /* 列表不下发正文（omit content）；正文经详情接口读取并已清洗 */
+    expect(updated?.content).toBeUndefined()
+    const detail = await request(app.getHttpServer())
+      .get('/api/admin/contents/articles/SU1007')
+      .set(auth())
+    expect(detail.body.data.content).toContain('调整后的正文')
+    expect(detail.body.data.content).not.toContain('script')
 
     const generic = await request(app.getHttpServer())
       .put('/api/admin/contents/articles/SU1007')

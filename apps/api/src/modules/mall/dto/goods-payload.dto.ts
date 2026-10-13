@@ -37,6 +37,14 @@ export class GoodsPayloadDto {
   @Min(0)
   stock!: number
 
+  /** 编辑时的库存基线（弹窗打开时库内值）：与 stock 相等表示未调整库存，服务端跳过库存写入，
+   * 避免用表单旧值覆盖期间的下单扣减/退款回补；新增时不传 */
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(0)
+  baseStock?: number
+
   /** 券码有效期（天）：空值按 30 天兜底 */
   @IsOptional()
   @Type(() => Number)

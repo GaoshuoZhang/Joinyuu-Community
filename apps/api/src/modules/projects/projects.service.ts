@@ -6,6 +6,7 @@ import { IdGeneratorService } from '../../common/id-generator/id-generator.servi
 import { AuditService } from '../../common/audit/audit.service'
 import { formatNow, formatToday } from '../../common/utils/time'
 import { sanitizeHtml } from '../../common/utils/sanitize-html'
+import { PointsEngineService } from '../../common/engine/points-engine/points-engine.service'
 import type { QueryProjectsDto } from './dto/query-projects.dto'
 
 /* 承接方输入（ProjectInitPayload.undertakers，锁定签名）：enterprise=社区企业 / individual=用户 / custom=自定义 */
@@ -118,6 +119,7 @@ export class ProjectsService {
     private readonly prisma: PrismaService,
     private readonly ids: IdGeneratorService,
     private readonly audit: AuditService,
+    private readonly points: PointsEngineService,
   ) {}
 
   async findAll(query: QueryProjectsDto): Promise<{ list: ProjectDto[]; total: number }> {
@@ -503,9 +505,8 @@ export class ProjectsService {
   }
 
   /* 项目结项（wiki-backend.md §8.5）——非端点，供后续触发接线：
-   * 里程碑全 accepted → finished；总经验值 = expReward ?? project_completed 规则值（启用时）；
-   * 按承接占比向下取整分配（余数给首个参与方），仅社区企业与持社区个体身份的用户参与，
-   * 合作企业/无社区个体身份个人/自定义承接方份额丢弃；事务写经验值流水 + 等级重算 */
+   * 里程碑全 accepted → finished；结项经验按承接占比分配（总额 = expReward ?? project_completed 规则值，
+   * 仅社区企业与持社区个体身份的用户参与，规则与实现统一见 PointsEngine.issueProjectFinishExperienceInTransaction） */
   async finishProject(id: string, operator: string): Promise<void> {
     const project = await this.prisma.project.findUnique({
       where: { id },
@@ -515,97 +516,12 @@ export class ProjectsService {
     if (project.status === 'finished') return
     if (project.milestones.length === 0 || !project.milestones.every((m) => m.status === 'accepted')) return
 
-    let totalExp = project.expReward
-    if (totalExp == null) {
-      const rule = await this.prisma.experienceRule.findUnique({ where: { code: 'project_completed' } })
-      totalExp = rule && rule.status === 'enabled' ? rule.exp : 0
-    }
-
     await this.prisma.$transaction(async (tx) => {
       await tx.project.update({
         where: { id },
         data: { status: 'finished', progress: 100, archivableAt: formatNow(), finishedAt: formatNow() },
       })
-      if (totalExp == null || totalExp <= 0) return
-
-      const individualRefIds = project.undertakers
-        .filter((u) => u.type === 'individual')
-        .map((u) => u.refId)
-      const eligibleIndividualIds = new Set(
-        (
-          await tx.userIdentity.findMany({
-            where: { type: 'community_individual', userId: { in: individualRefIds } },
-            select: { userId: true },
-          })
-        ).map((i) => i.userId),
-      )
-
-      /* 参与方：enterprise（社区企业）与持社区个体身份的 individual；custom 丢弃 */
-      const participants = project.undertakers.filter(
-        (u) => u.type === 'enterprise' || (u.type === 'individual' && eligibleIndividualIds.has(u.refId)),
-      )
-      if (participants.length === 0) return
-
-      const amounts = participants.map((p) => Math.floor((totalExp! * p.share) / 100))
-      const sum = amounts.reduce((s, a) => s + a, 0)
-      amounts[0] += totalExp! - sum
-
-      const tiers = await tx.levelTier.findMany({ orderBy: { threshold: 'desc' } })
-
-      for (let idx = 0; idx < participants.length; idx++) {
-        const p = participants[idx]
-        const amount = amounts[idx]
-        if (amount <= 0) continue
-
-        if (p.type === 'enterprise') {
-          const enterprise = await tx.enterprise.findUnique({ where: { id: p.refId } })
-          if (!enterprise) continue
-          const balance = enterprise.experience + amount
-          const level = this.resolveLevel(tiers.filter(t => t.identityType === 'community_enterprise'), balance)
-          await tx.enterprise.update({ where: { id: p.refId }, data: { experience: balance } })
-          await tx.userIdentity.updateMany({
-            where: { type: 'community_enterprise', enterpriseId: p.refId },
-            data: { experience: balance, level },
-          })
-          await tx.experienceRecord.create({
-            data: {
-              id: await this.ids.next('EX'),
-              targetType: 'enterprise',
-              targetId: p.refId,
-              delta: amount,
-              balance,
-              reason: `「${project.name}」结项经验值`,
-              at: formatNow(),
-              operator: '系统',
-              source: 'rule',
-            },
-          })
-        } else {
-          const identity = await tx.userIdentity.findFirst({
-            where: { userId: p.refId, type: 'community_individual' },
-          })
-          if (!identity) continue
-          const balance = (identity.experience ?? 0) + amount
-          const level = this.resolveLevel(tiers.filter(t => t.identityType === 'community_individual'), balance)
-          await tx.userIdentity.update({
-            where: { id: identity.id },
-            data: { experience: balance, level },
-          })
-          await tx.experienceRecord.create({
-            data: {
-              id: await this.ids.next('EX'),
-              targetType: 'individual',
-              targetId: p.refId,
-              delta: amount,
-              balance,
-              reason: `「${project.name}」结项经验值`,
-              at: formatNow(),
-              operator: '系统',
-              source: 'rule',
-            },
-          })
-        }
-      }
+      await this.points.issueProjectFinishExperienceInTransaction(tx, project.name, project.expReward, project.undertakers)
     })
     void operator
   }
@@ -661,12 +577,6 @@ export class ProjectsService {
         }
       }),
     )
-  }
-
-  /** 门槛最高的、threshold <= experience 的等级（无匹配则最低 1 级）——复刻 PointsEngineService.resolveLevel */
-  private resolveLevel(tiers: Array<{ level: number; threshold: number }>, experience: number): number {
-    const tier = tiers.find((t) => t.threshold <= experience)
-    return tier ? tier.level : 1
   }
 }
 

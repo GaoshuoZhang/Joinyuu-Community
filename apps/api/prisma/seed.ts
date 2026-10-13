@@ -853,6 +853,7 @@ async function main() {
         rentPeriod: l.rentPeriod ?? 'month',
         contactName: l.contactName,
         contactPhone: l.contactPhone,
+        renewRecords: l.renewRecords ?? [],
         terminatedAt: l.terminatedAt ?? null,
       },
     })

@@ -36,7 +36,6 @@ export const permissionGroups: PermissionGroup[] = [
       { code: 'perm:external-enterprise:delete', name: '删除合作企业' },
       { code: '/approvals', name: '申请审核' },
       { code: '/member-governance', name: '注销治理' },
-      { code: '/card-management', name: '名片管理' },
     ],
   },
   {

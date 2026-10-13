@@ -13,7 +13,7 @@
 - **AdminRolePermission** — 角色-权限点关联（roleId+permissionCode 联合唯一）
 - **LoginLog** — 登录日志（id LL；loginAt 秒级；username/ip/device；status success/fail/locked；failReason?；索引 loginAt/status）
 - **SchedulerLog** — 定时任务执行日志（id SL；jobName/startedAt/finishedAt/durationMs；status ok/error；detail?；rowsAffected）
-- **MallAsset** — 素材库（id AST；fileName/mime/size/url/storeKey；bizType? 业务分类；sourceType? article=资讯发布/submission=投稿内容；sourceId? 来源编号如 A1010/SU1006；createdBy/createdAt）
+- **MallAsset** — 素材库（id AST；fileName/mime/size/url/storeKey；bizType? 业务分类；sourceType? article=资讯发布/submission=投稿内容/lease=租赁合同；sourceId? 来源编号如 A1010/SU1006/租约号 LS1001；createdBy/createdAt）
 - **IdSequence** — 前缀 ID 发号器（entityType PK；nextNumber 原子自增）
 
 ## 2. 社区成员域（7）
@@ -50,7 +50,7 @@
 
 - **WorkstationArea** — 工位区域（id WA；name 唯一；type open/office/semi；description/createdAt）
 - **Workstation** — 工位（id WS；seatNo 唯一；areaId 外键；type/capacity；status idle/assigned/maintenance；占用冗余 enterpriseId?/enterpriseName?/leaseId?（assigned 仅经租约）；defaultMonthlyRent?/areaSqm?/note?）
-- **Lease** — 租约（id LS；renterId/renterName/renterType enterprise/individual/custom；startDate/endDate（长期为空串）/longTerm；status active/terminated，expiring/expired 读取派生；monthlyRent/rentPeriod day|week|month|year；contactName/contactPhone；terminatedAt?；deletedAt?/deletedBy?/archivableAt?）
+- **Lease** — 租约（id LS；renterId/renterName/renterType enterprise/individual/custom；startDate/endDate（长期为空串）/longTerm；status active/terminated，expiring/expired 读取派生；monthlyRent/rentPeriod day|week|month|year；contactName/contactPhone；editRecords Json（编辑留痕）/renewRecords Json（续期留痕：at/operator/reason/fromEndDate/toEndDate/fromRent/toRent）；合同扫描件以 MallAsset sourceType=lease + sourceId=租约号 关联；terminatedAt?；deletedAt?/deletedBy?/archivableAt?）
 - **LeaseWorkstation** — 租约-工位关联（leaseId+workstationId 联合 PK；保留终止后历史归属）
 - **Space** — 公共空间（id S；name/type meeting/roadshow/meeting_room/multi/study；capacity/location/openTime/closeTime/allDay；needReservation/needApproval；feePerHour（预约费用：积分/小时，0=免费）；equipment[]；status；description；deletedAt?/deletedBy?）
 - **SpaceReservation** — 空间预约（id SR；userId/userName/phone；spaceId/spaceName；date/startTime/endTime/purpose/attendees；feePoints（本单实际消耗积分，驳回/取消按此退回）；status pending→approved/rejected/cancelled；submittedAt；records Json 审核时间线；rejectReason?；deletedAt?/deletedBy?/archivableAt?）
@@ -139,4 +139,4 @@
 | 扩展 | SpaceReservation | feePoints Int 默认 0（该单实际消耗积分；审核驳回与用户/后台取消均全额退回，写 source=space 流水） |
 | 扩展 | LevelTier | pointsDiscount Float 默认 10（积分消费折扣：1 = 1 折 … 10 = 原价，支持一位小数如 8.5 = 85 折；商城兑换与空间预约按等级折扣扣分，折扣口径见 wiki-backend §8.8） |
 
-**卡片字段配置**：个人名片（`User`/UserIdentity 派生字段）与社区企业名片（`Enterprise` 字段）均**免审核保存即公开**；admin 后台可**查看/编辑**个人与企业名片，并可配置用户可编辑字段白名单，由 `GET /api/app/card-schema/:type` 下发。个人名片 `visibility.isPublic=false` 时从人才库隐藏（§8.2）。
+**卡片字段配置**：个人名片（`User`/UserIdentity 派生字段）与社区企业名片（`Enterprise` 字段）均**免审核保存即公开**；admin 后台在**用户详情 / 企业详情**的「名片」标签页查看与编辑个人/企业名片（「编辑名片」弹窗），用户可编辑字段白名单在**系统配置 > 名片可编辑字段**维护（原「名片管理」页已下线），由 `GET /api/app/card-schema/:type` 下发。个人名片 `visibility.isPublic=false` 时从人才库隐藏（§8.2）。

@@ -12,6 +12,8 @@ import type { UpdateEnterpriseDto } from './dto/update-enterprise.dto'
 export interface EnterpriseDto {
   id: string
   name: string
+  /** 企业 Logo（素材 URL，列表头像展示；未上传即省略） */
+  logo?: string
   industry: string
   size: string
   foundedAt: string
@@ -52,6 +54,7 @@ export function toEnterpriseDto(e: Enterprise): EnterpriseDto {
   }
   if (e.contactEmail != null) dto.contactEmail = e.contactEmail
   if (e.contactUserId != null) dto.contactUserId = e.contactUserId
+  if (e.logo != null) dto.logo = e.logo
   return dto
 }
 

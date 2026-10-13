@@ -166,6 +166,8 @@ export interface UserProfilePayload {
   realName?: string
   citizenId?: string
   bio?: string
+  /** 头像地址（素材上传回填，如 /api/public/files/xxx.png）：空串 = 清除头像 */
+  avatar?: string
 }
 
 export async function updateUser(id: string, payload: UserProfilePayload): Promise<{ code: number }> {

@@ -210,7 +210,7 @@ export const redemptionOrders: RedemptionOrder[] = [
     status: 'pending_use',
     createdAt: '2026-09-07 15:40',
     voucherCode: 'V20260907C',
-    voucherExpiresAt: '2026-10-07 15:40',
+    voucherExpiresAt: '2026-12-07 15:40',
     note: '请到货后通知',
   },
   {

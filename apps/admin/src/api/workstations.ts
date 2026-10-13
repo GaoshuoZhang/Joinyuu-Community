@@ -1,5 +1,5 @@
 import type { Lease, LeaseRenterType, RentPeriod, Workstation, WorkstationArea, WorkstationType } from '@/types'
-import { httpDelete, httpGet, httpPost, httpPut } from './http'
+import { httpDelete, httpGet, httpPost, httpPut, httpUpload } from './http'
 
 function formatToday(): string {
   const d = new Date()
@@ -182,6 +182,54 @@ export async function updateLease(id: string, payload: LeaseUpdatePayload): Prom
 /* POST /api/admin/workstation-leases/:id/terminate — 终止租约并释放全部关联办公位（服务端事务） */
 export async function terminateLease(id: string): Promise<{ code: number }> {
   return httpPost<{ code: number }>(`/workstation-leases/${id}/terminate`)
+}
+
+/* ---------- 续期 ---------- */
+
+export interface LeaseRenewPayload {
+  /** 新到期日（YYYY-MM-DD，须晚于当前到期日） */
+  endDate: string
+  /** 月租金（元）：默认沿用，可随续期一并调整 */
+  monthlyRent: number
+  /** 续期说明（必填，服务端追加续期记录） */
+  reason: string
+}
+
+/* POST /api/admin/workstation-leases/:id/renew — 续期：延长到期日并追加续期记录；
+ * 已终止 / 已归档租约与长期租约（无到期日）不可续期 */
+export async function renewLease(id: string, payload: LeaseRenewPayload): Promise<{ code: number }> {
+  return httpPost<{ code: number }>(`/workstation-leases/${id}/renew`, payload)
+}
+
+/* ---------- 合同扫描件（线下纸质合同，复用素材库存储） ---------- */
+
+export interface LeaseContract {
+  id: string
+  url: string
+  fileName: string
+  mime: string
+  size: number
+  sourceType?: string
+  sourceId?: string
+  createdAt: string
+}
+
+/* GET /api/admin/workstation-leases/:id/contracts — 该租约的合同附件（最新在前） */
+export async function fetchLeaseContracts(id: string): Promise<LeaseContract[]> {
+  return httpGet<LeaseContract[]>(`/workstation-leases/${id}/contracts`)
+}
+
+/* POST /api/admin/workstation-leases/:id/contracts — 上传合同扫描件（图片/PDF）；
+ * 单文件大小上限取系统配置 uploadMaxSizeMb */
+export async function uploadLeaseContract(id: string, file: File): Promise<LeaseContract> {
+  const form = new FormData()
+  form.append('file', file)
+  return httpUpload<LeaseContract>(`/workstation-leases/${id}/contracts`, form)
+}
+
+/* DELETE /api/admin/workstation-leases/:id/contracts/:assetId — 删除合同扫描件（仅限该租约名下附件） */
+export async function deleteLeaseContract(id: string, assetId: string): Promise<{ code: number }> {
+  return httpDelete<{ code: number }>(`/workstation-leases/${id}/contracts/${assetId}`)
 }
 
 /* POST /api/admin/workstation-leases/:id/archive — 归档已终止租约（可在归档管理中恢复） */

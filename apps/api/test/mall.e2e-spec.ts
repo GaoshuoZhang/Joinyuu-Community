@@ -5,18 +5,21 @@ import { INestApplication } from '@nestjs/common'
 import { Test } from '@nestjs/testing'
 import request from 'supertest'
 import { AppModule } from '../src/app.module'
+import { PrismaService } from '../src/common/prisma/prisma.service'
 import { reseed } from './helpers/reseed'
 import { loginAs } from './helpers/login'
 
 describe('mall 积分商城（统一券码）', () => {
   let app: INestApplication
   let token: string
+  let prisma: PrismaService
 
   beforeAll(async () => {
     reseed()
     const moduleRef = await Test.createTestingModule({ imports: [AppModule] }).compile()
     app = moduleRef.createNestApplication()
     await app.init()
+    prisma = app.get(PrismaService)
 
     token = await loginAs(app)
   })
@@ -162,5 +165,42 @@ describe('mall 积分商城（统一券码）', () => {
       .query({ page: 1, pageSize: 10, keyword: 'G1002' })
     expect(goodsAfter.body.data.list[0].stock).toBe(19)
     expect(goodsAfter.body.data.list[0].redeemedCount).toBe(5)
+  })
+
+  it('编辑商品：未调整库存（baseStock=stock）不覆盖期间的下单扣减；显式调整仍按目标生效', async () => {
+    const before = await prisma.mallGoods.findUniqueOrThrow({ where: { id: 'G1002' } })
+
+    /* 模拟编辑弹窗打开后、保存前用户下单：库存自减 1 */
+    await prisma.mallGoods.update({ where: { id: 'G1002' }, data: { stock: { decrement: 1 } } })
+
+    /* 库存未调整（表单值 = 基线）→ 保存不应写回表单旧值 */
+    const payload = {
+      name: before.name,
+      category: before.category,
+      points: before.points,
+      stock: before.stock,
+      baseStock: before.stock,
+      description: before.description,
+      validDays: 30,
+    }
+    const unchanged = await request(app.getHttpServer())
+      .put('/api/admin/mall/goods/G1002')
+      .set('Authorization', `Bearer ${token}`)
+      .send(payload)
+    expect(unchanged.status).toBe(200)
+    const afterUnchanged = await prisma.mallGoods.findUniqueOrThrow({ where: { id: 'G1002' } })
+    expect(afterUnchanged.stock).toBe(before.stock - 1)
+
+    /* 显式调整（stock≠baseStock）→ 按目标值生效 */
+    const adjusted = await request(app.getHttpServer())
+      .put('/api/admin/mall/goods/G1002')
+      .set('Authorization', `Bearer ${token}`)
+      .send({ ...payload, stock: before.stock + 1 })
+    expect(adjusted.status).toBe(200)
+    const afterAdjusted = await prisma.mallGoods.findUniqueOrThrow({ where: { id: 'G1002' } })
+    expect(afterAdjusted.stock).toBe(before.stock + 1)
+
+    /* 还原库存，避免影响后续用例断言 */
+    await prisma.mallGoods.update({ where: { id: 'G1002' }, data: { stock: before.stock } })
   })
 })

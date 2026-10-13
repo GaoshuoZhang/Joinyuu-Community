@@ -12,13 +12,14 @@ import EmptyBlock from '@/components/shared/EmptyBlock.vue'
 import ListSkeleton from '@/components/ListSkeleton.vue'
 import { useAnimSuppress } from '@/composables/useAnimSuppress'
 import { useRouteQuerySync } from '@/composables/useRouteQuerySync'
+import { RECENT_SEARCHES_KEY } from '@/utils/accountLocalData'
 import { formatLocalDateTime, formatZhNumber, plainTextSummary } from '@/utils/format'
 
 useAnimSuppress()
 
 type SearchResult = { id: string; kind: string; title: string; summary: string; path: string }
 
-const RECENT_KEY = 'joinyuu_recent_searches'
+const RECENT_KEY = RECENT_SEARCHES_KEY
 const route = useRoute()
 const router = useRouter()
 const keyword = ref(String(route.query.q ?? ''))

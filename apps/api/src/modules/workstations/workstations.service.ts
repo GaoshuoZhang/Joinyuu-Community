@@ -14,10 +14,20 @@ import type { WorkstationAreaPayloadDto } from './dto/workstation-area.dto'
 import type { WorkstationPayloadDto } from './dto/workstation-payload.dto'
 import type { LeasePayloadDto } from './dto/lease-payload.dto'
 import type { LeaseUpdateDto } from './dto/lease-update.dto'
+import type { LeaseRenewDto } from './dto/lease-renew.dto'
+import { AssetsService, type MallAssetDto, type UploadedFileLike } from '../assets/assets.service'
 
 /* 办公位与租约模块（wiki-backend.md §7.12/§8.1/§8.3）：
  * 区域外键化（办公位存 areaId，读取 join 出 area 名，改名无需级联）；
- * 租约新增/终止事务锁定/释放办公位；expiring/expired 由前端读取派生（服务端仅存 active/terminated）。 */
+ * 租约新增/终止事务锁定/释放办公位；expiring/expired 由前端读取派生（服务端仅存 active/terminated）；
+ * 续期（renew）独立于编辑：延长到期日并写续期记录；租约合同扫描件复用素材库存储管道（来源标记 lease）。 */
+
+/* 租约合同附件的素材来源标记：sourceType=lease / sourceId=租约号 */
+const LEASE_CONTRACT_SOURCE_TYPE = 'lease'
+const leaseContractSource = (leaseId: string): { type: string; id: string } => ({
+  type: LEASE_CONTRACT_SOURCE_TYPE,
+  id: leaseId,
+})
 
 type WorkstationWithArea = Workstation & { area: WorkstationArea }
 type LeaseWithWorkstations = Lease & {
@@ -45,6 +55,14 @@ export interface LeaseEditRecord {
   reason: string
 }
 
+/** 续期记录（renew 动作专用，独立于编辑记录）：原/新到期日与原/新租金便于追溯 */
+export interface LeaseRenewRecord extends LeaseEditRecord {
+  fromEndDate: string
+  toEndDate: string
+  fromRent: number
+  toRent: number
+}
+
 export interface LeaseDto {
   id: string
   enterpriseId: string
@@ -62,6 +80,7 @@ export interface LeaseDto {
   contactPhone: string
   note?: string
   editRecords?: LeaseEditRecord[]
+  renewRecords?: LeaseRenewRecord[]
   terminatedAt?: string
   deletedAt?: string
 }
@@ -111,6 +130,8 @@ function toLeaseDto(l: LeaseWithWorkstations): LeaseDto {
   if (l.note != null) dto.note = l.note
   const editRecords = Array.isArray(l.editRecords) ? (l.editRecords as unknown as LeaseEditRecord[]) : []
   if (editRecords.length) dto.editRecords = editRecords
+  const renewRecords = Array.isArray(l.renewRecords) ? (l.renewRecords as unknown as LeaseRenewRecord[]) : []
+  if (renewRecords.length) dto.renewRecords = renewRecords
   if (l.terminatedAt != null) dto.terminatedAt = l.terminatedAt
   if (l.deletedAt != null) dto.deletedAt = l.deletedAt
   return dto
@@ -122,6 +143,8 @@ export class WorkstationsService {
     private readonly prisma: PrismaService,
     private readonly ids: IdGeneratorService,
     private readonly audit: AuditService,
+    /* 合同扫描件复用素材库存储管道（魔数嗅探 + 大小上限 + 落库 + 审计） */
+    private readonly assets: AssetsService,
   ) {}
 
   /* ---------- 办公位 ---------- */
@@ -316,7 +339,7 @@ export class WorkstationsService {
     }
   }
 
-  async createLease(payload: LeasePayloadDto): Promise<LeaseDto> {
+  async createLease(payload: LeasePayloadDto, operator: string): Promise<LeaseDto> {
     const renterName = payload.enterpriseName.trim()
     if (!renterName) throw new BadRequestException('请选择或输入租赁方')
 
@@ -395,6 +418,15 @@ export class WorkstationsService {
       }
     })
 
+    await this.audit.record({
+      module: '空间管理',
+      action: '新增租约',
+      target: `${id} · ${renterName}`,
+      detail: `办公位：${targets.map((t) => t.seatNo).join('、')}`,
+      after: { status: 'active' },
+      operator,
+    })
+
     return {
       id,
       enterpriseId: renterId,
@@ -443,6 +475,91 @@ export class WorkstationsService {
     return { code: 0 }
   }
 
+  /** 续期：延长到期日（新到期日必须晚于原到期日）并追加续期记录；
+   * 已终止 / 已归档租约与长期租约（无到期日）不可续期；租金默认沿用，可一并调整并留痕。 */
+  async renewLease(id: string, payload: LeaseRenewDto, operator: string): Promise<{ code: number }> {
+    const lease = await this.prisma.lease.findFirst({ where: { id, deletedAt: null } })
+    if (!lease) throw new NotFoundException('租约不存在')
+    if (lease.status === 'terminated') throw new ConflictException('已终止租约不可续期')
+    if (lease.longTerm) throw new ConflictException('长期租约无到期日不可续期，如需改为固定租期请使用「编辑」')
+
+    const endDate = (payload.endDate ?? '').trim()
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(endDate)) throw new BadRequestException('租赁结束日期格式应为 YYYY-MM-DD')
+    if (endDate <= lease.endDate) {
+      throw new BadRequestException(`新到期日须晚于当前到期日（${lease.endDate}）`)
+    }
+
+    const renewRecords = Array.isArray(lease.renewRecords)
+      ? (lease.renewRecords as unknown as LeaseRenewRecord[])
+      : []
+    const reason = payload.reason.trim()
+    renewRecords.push({
+      at: formatNow(),
+      operator,
+      reason,
+      fromEndDate: lease.endDate,
+      toEndDate: endDate,
+      fromRent: lease.monthlyRent,
+      toRent: payload.monthlyRent,
+    })
+
+    await this.prisma.lease.update({
+      where: { id },
+      data: {
+        endDate,
+        monthlyRent: payload.monthlyRent,
+        renewRecords: renewRecords as unknown as Prisma.InputJsonValue,
+      },
+    })
+
+    await this.audit.record({
+      module: '空间管理',
+      action: '续期租约',
+      target: `${lease.id} · ${lease.renterName}`,
+      detail: `到期日 ${lease.endDate} → ${endDate}${payload.monthlyRent !== lease.monthlyRent ? ` · 租金 ${lease.monthlyRent} → ${payload.monthlyRent}` : ''} · ${reason}`,
+      before: { endDate: lease.endDate, monthlyRent: lease.monthlyRent },
+      after: { endDate, monthlyRent: payload.monthlyRent },
+      operator,
+    })
+    return { code: 0 }
+  }
+
+  /* ---------- 租约合同扫描件（线下纸质合同，复用素材库存储管道） ---------- */
+
+  /** 列表：某租约的全部合同附件（最新在前）；已归档租约仍可查看历史合同 */
+  async leaseContracts(id: string): Promise<MallAssetDto[]> {
+    await this.assertLeaseVisible(id)
+    return this.assets.listBySource(leaseContractSource(id))
+  }
+
+  /** 上传：图片（PNG/JPEG/GIF/WebP）或 PDF，大小上限取系统配置 uploadMaxSizeMb */
+  async uploadLeaseContract(
+    id: string,
+    file: UploadedFileLike | undefined,
+    operator: string,
+  ): Promise<MallAssetDto> {
+    await this.assertLeaseWritable(id)
+    return this.assets.upload(file, undefined, operator, leaseContractSource(id))
+  }
+
+  /** 删除：仅允许删除该租约名下的合同附件 */
+  async removeLeaseContract(id: string, assetId: string, operator: string): Promise<{ code: number }> {
+    await this.assertLeaseWritable(id)
+    return this.assets.removeBySource(assetId, leaseContractSource(id), operator)
+  }
+
+  /** 读取前提：租约存在（已归档租约的合同仍可查看） */
+  private async assertLeaseVisible(id: string): Promise<void> {
+    const lease = await this.prisma.lease.findUnique({ where: { id } })
+    if (!lease) throw new NotFoundException('租约不存在')
+  }
+
+  /** 合同增删写操作前提：租约存在且未归档（已归档条目只读） */
+  private async assertLeaseWritable(id: string): Promise<void> {
+    const lease = await this.prisma.lease.findFirst({ where: { id, deletedAt: null } })
+    if (!lease) throw new NotFoundException('租约不存在')
+  }
+
   /** 租期校验：非长期租约必须给出不早于开始日期的结束日期；返回裁剪后的日期供写入 */
   private assertLeaseRange(startDate: string, endDate: string, longTerm: boolean): { startDate: string; endDate: string } {
     const start = (startDate ?? '').trim()
@@ -454,7 +571,7 @@ export class WorkstationsService {
     return { startDate: start, endDate: end }
   }
 
-  async terminateLease(id: string): Promise<{ code: number }> {
+  async terminateLease(id: string, operator: string): Promise<{ code: number }> {
     const lease = await this.prisma.lease.findFirst({ where: { id, deletedAt: null } })
     if (!lease) throw new NotFoundException('租约不存在')
     if (lease.status === 'terminated') throw new ConflictException('租约已终止')
@@ -469,6 +586,15 @@ export class WorkstationsService {
         where: { leaseId: id },
         data: { status: 'idle', enterpriseId: null, enterpriseName: null, leaseId: null },
       })
+    })
+
+    await this.audit.record({
+      module: '空间管理',
+      action: '终止租约',
+      target: `${lease.id} · ${lease.renterName}`,
+      before: { status: lease.status },
+      after: { status: 'terminated' },
+      operator,
     })
     return { code: 0 }
   }

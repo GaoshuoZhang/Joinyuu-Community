@@ -43,7 +43,7 @@ export interface ArticlePayload {
   commentsEnabled?: boolean
 }
 
-/** GET /api/admin/contents/articles */
+/** GET /api/admin/contents/articles — 列表不下发正文（content 缺省，服务端 omit），编辑/详情用 fetchArticleDetail 补齐 */
 export async function fetchArticles(query: ArticleQuery): Promise<PageResult<Article>> {
   const qs = new URLSearchParams()
   qs.set('page', String(query.page))

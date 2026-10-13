@@ -78,7 +78,6 @@ const onSubmit: FormProps['onSubmit'] = async ({ validateResult, firstError }) =
 }
 
 const highlights = ['企业与需求双向连接', '活动运营与签到管理', '跨企业项目协作', '积分与空间运营']
-const showDemoAccount = import.meta.env.DEV || import.meta.env.VITE_SHOW_DEMO_ACCOUNT === 'true'
 </script>
 
 <template>
@@ -181,10 +180,6 @@ const showDemoAccount = import.meta.env.DEV || import.meta.env.VITE_SHOW_DEMO_AC
             </t-button>
           </t-form-item>
         </t-form>
-
-        <div v-if="showDemoAccount" class="demo-account">
-          演示账号：<code>admin</code> / <code>admin123</code>
-        </div>
       </div>
     </section>
   </div>
@@ -247,22 +242,6 @@ const showDemoAccount = import.meta.env.DEV || import.meta.env.VITE_SHOW_DEMO_AC
   margin: 8px 0 28px;
   font-size: 12px;
   color: var(--td-text-color-secondary);
-}
-
-.demo-account {
-  margin-top: 8px;
-  padding: 10px 12px;
-  font-size: 12px;
-  color: var(--td-text-color-secondary);
-  background: var(--td-bg-color-page);
-  border-radius: var(--td-radius-medium);
-  text-align: center;
-}
-
-.demo-account code {
-  font-family: var(--td-font-family);
-  color: var(--td-brand-color);
-  font-weight: 600;
 }
 
 .captcha-row {

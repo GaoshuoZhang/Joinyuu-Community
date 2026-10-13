@@ -10,6 +10,7 @@ import StatusTag from '@/components/StatusTag.vue'
 import StatCard from '@/components/StatCard.vue'
 import BulkArchiveDialog from '@/components/BulkArchiveDialog.vue'
 import LeaseFormDialog from '@/components/LeaseFormDialog.vue'
+import LeaseRenewDialog from '@/components/LeaseRenewDialog.vue'
 import ColumnController from '@/components/ColumnController.vue'
 import ExportButton from '@/components/ExportButton.vue'
 import ListEmptyState from '@/components/ListEmptyState.vue'
@@ -101,7 +102,7 @@ const columns = [
   { colKey: 'contactName', title: '联系人', cell: 'contact', width: 140, resizable: true , ellipsis: true},
   { colKey: 'note', title: '备注', cell: 'note', width: 140, resizable: true , ellipsis: true},
   { colKey: 'status', title: '状态', cell: 'status', width: 110, resizable: true , ellipsis: true},
-  { colKey: 'op', title: '操作', cell: 'op', width: 190 },
+  { colKey: 'op', title: '操作', cell: 'op', width: 230 },
 ]
 
 /* 列配置：本地持久化显隐/顺序 */
@@ -231,6 +232,17 @@ async function onBulkConfirm(values: string[]) {
 const formVisible = ref(false)
 const formMode = ref<'create' | 'edit'>('create')
 const currentLease = ref<Lease | null>(null)
+/* 续期弹窗（与编辑共用 currentLease：同一次只会打开一个） */
+const renewVisible = ref(false)
+
+/* 可续期/可终止：未终止即生效中/即将到期/已到期（长期租约无到期日不可续期；
+ * 已到期租约仍需「终止」释放办公位——过期不会自动释放） */
+function canOperate(row: Lease): boolean {
+  return ['active', 'expiring', 'expired'].includes(deriveLeaseStatus(row))
+}
+function canRenew(row: Lease): boolean {
+  return canOperate(row) && !row.longTerm
+}
 /* 预选办公位：办公位/办公室卡片「关联租赁」跳转时带入（?create=1&workstationId=xxx） */
 const presetWorkstationIds = ref<string[]>([])
 
@@ -245,6 +257,12 @@ function openEdit(row: Lease) {
   formMode.value = 'edit'
   currentLease.value = row
   formVisible.value = true
+}
+
+/* 续期：延长到期日（含已到期租约，续期后自动恢复为生效中/即将到期） */
+function openRenew(row: Lease) {
+  currentLease.value = row
+  renewVisible.value = true
 }
 
 /* 导出配置：当前页=当前筛选结果；全量结果=接口全部租约（筛选为客户端过滤，接口无分页） */
@@ -405,8 +423,19 @@ onMounted(async () => {
             >
               编辑
             </t-button>
+            <!-- 续期：生效中/即将到期/已到期（长期租约无到期日不可续期） -->
+            <t-button
+              v-if="canRenew(row)"
+              variant="text"
+              size="small"
+              theme="primary"
+              @click="openRenew(row)"
+            >
+              续期
+            </t-button>
+            <!-- 终止：生效中/即将到期/已到期（终止即释放办公位；过期不自动释放） -->
             <t-popconfirm
-              v-if="['active', 'expiring'].includes(deriveLeaseStatus(row))"
+              v-if="canOperate(row)"
               content="确认终止该租约？关联办公位将立即释放"
               @confirm="onTerminate(row)"
             >
@@ -440,6 +469,9 @@ onMounted(async () => {
       :preset-workstation-ids="presetWorkstationIds"
       @success="load"
     />
+
+    <!-- 续期弹窗：延长到期日并追加续期记录 -->
+    <LeaseRenewDialog v-model:visible="renewVisible" :lease="currentLease" @success="load" />
 
     <!-- 一键归档：状态选择二次确认对话框 -->
     <BulkArchiveDialog

@@ -16,6 +16,7 @@ import ArticleCommentsDialog from '@/components/ArticleCommentsDialog.vue'
 import {
   cancelArticleSchedule,
   deleteArticle,
+  fetchArticleDetail,
   fetchArticles,
   publishArticleNow,
   restoreArticle,
@@ -122,9 +123,15 @@ function openCreate() {
   formVisible.value = true
 }
 
-function openEdit(row: Article) {
+async function openEdit(row: Article) {
   formMode.value = 'edit'
-  current.value = row
+  try {
+    /* 列表不下发正文：编辑前按 id 拉详情补齐 content */
+    current.value = await fetchArticleDetail(row.id)
+  } catch (e) {
+    MessagePlugin.error(e instanceof Error ? e.message : '文章详情加载失败')
+    return
+  }
   formVisible.value = true
 }
 

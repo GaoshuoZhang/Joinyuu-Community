@@ -112,7 +112,7 @@ export class PointsEngineService {
     })
   }
 
-  /** 在调用方事务中发放经验值。 */
+  /** 在调用方事务中按规则值发放经验值（规则缺失/停用则 no-op）。 */
   async issueExperienceInTransaction(
     tx: Prisma.TransactionClient,
     targetType: 'enterprise' | 'individual',
@@ -122,15 +122,33 @@ export class PointsEngineService {
   ): Promise<void> {
     const rule = (await this.experienceRules()).find((r) => r.code === code)
     if (!rule || rule.status !== 'enabled') return
+    await this.issueExperienceAmountInTransaction(tx, targetType, targetId, rule.exp, reason)
+  }
+
+  /** 在调用方事务中按指定经验值发放（项目结项按承接占比分配等场景）；
+   * 原子自增（并发不丢失）+ 写流水 + 同步身份等级快照；目标不存在或发放值非正数则 no-op。 */
+  async issueExperienceAmountInTransaction(
+    tx: Prisma.TransactionClient,
+    targetType: 'enterprise' | 'individual',
+    targetId: string,
+    amount: number,
+    reason: string,
+  ): Promise<void> {
+    if (!Number.isInteger(amount) || amount <= 0) return
     const identityType = targetType === 'enterprise' ? 'community_enterprise' : 'community_individual'
     const tiers = await this.levelTiers(identityType)
 
     if (targetType === 'enterprise') {
-      const enterprise = await tx.enterprise.findUnique({ where: { id: targetId } })
+      const enterprise = await tx.enterprise.findUnique({ where: { id: targetId }, select: { id: true } })
       if (!enterprise) return
-      const balance = enterprise.experience + rule.exp
+      /* 原子自增（并发安全）：同一企业被并发发放时不会互相覆盖；行锁持续到事务提交，
+       * 下面的身份快照写入按自增后的新余额重算，且被同一行锁串行化 */
+      const updated = await tx.enterprise.update({
+        where: { id: targetId },
+        data: { experience: { increment: amount } },
+      })
+      const balance = updated.experience
       const level = this.resolveLevel(tiers, balance)
-      await tx.enterprise.update({ where: { id: targetId }, data: { experience: balance } })
       await tx.userIdentity.updateMany({
         where: { type: 'community_enterprise', enterpriseId: targetId },
         data: { experience: balance, level },
@@ -140,7 +158,7 @@ export class PointsEngineService {
           id: await this.ids.next('EX', tx),
           targetType: 'enterprise',
           targetId,
-          delta: rule.exp,
+          delta: amount,
           balance,
           reason,
           at: formatNow(),
@@ -155,18 +173,26 @@ export class PointsEngineService {
       where: { userId: targetId, type: 'community_individual' },
     })
     if (!identity) return
-    const balance = (identity.experience ?? 0) + rule.exp
-    const level = this.resolveLevel(tiers, balance)
-    await tx.userIdentity.update({
+    /* 原子自增（并发安全）：experience 可空，先把 NULL 归一为 0 再自增（避免 NULL + n = NULL）；
+     * 等级按自增后的新余额重算，行锁串行化同一身份的并发发放 */
+    if (identity.experience === null) {
+      await tx.userIdentity.update({ where: { id: identity.id }, data: { experience: 0 } })
+    }
+    const updated = await tx.userIdentity.update({
       where: { id: identity.id },
-      data: { experience: balance, level },
+      data: { experience: { increment: amount } },
     })
+    const balance = updated.experience ?? amount
+    const level = this.resolveLevel(tiers, balance)
+    if (updated.level !== level) {
+      await tx.userIdentity.update({ where: { id: identity.id }, data: { level } })
+    }
     await tx.experienceRecord.create({
       data: {
         id: await this.ids.next('EX', tx),
         targetType: 'individual',
         targetId,
-        delta: rule.exp,
+        delta: amount,
         balance,
         reason,
         at: formatNow(),
@@ -174,6 +200,54 @@ export class PointsEngineService {
         source: 'rule',
       },
     })
+  }
+
+  /** 项目结项经验（wiki-backend.md §8.5）：总额 = 项目 expReward ?? project_completed 规则值（启用时）；
+   * 按承接占比向下取整分配（余数给首个符合条件的参与方）；仅社区企业承接方与持社区个体身份的个人承接方参与，
+   * 合作企业/无社区个体身份个人/自定义承接方份额丢弃。在调用方事务内执行，无可分配参与方则 no-op。 */
+  async issueProjectFinishExperienceInTransaction(
+    tx: Prisma.TransactionClient,
+    projectName: string,
+    expReward: number | null,
+    undertakers: Array<{ type: string; refId: string; share: number }>,
+  ): Promise<void> {
+    let total = expReward
+    if (total == null) {
+      const rule = (await this.experienceRules()).find((r) => r.code === 'project_completed')
+      total = rule && rule.status === 'enabled' ? rule.exp : 0
+    }
+    if (!Number.isInteger(total) || total <= 0) return
+
+    const individualIds = undertakers.filter((u) => u.type === 'individual').map((u) => u.refId)
+    const eligibleIndividuals = new Set(
+      individualIds.length
+        ? (
+            await tx.userIdentity.findMany({
+              where: { type: 'community_individual', userId: { in: individualIds } },
+              select: { userId: true },
+            })
+          ).map((i) => i.userId)
+        : [],
+    )
+    const participants = undertakers.filter(
+      (u) => u.type === 'enterprise' || (u.type === 'individual' && eligibleIndividuals.has(u.refId)),
+    )
+    if (participants.length === 0) return
+
+    const amounts = participants.map((p) => Math.floor((total * p.share) / 100))
+    amounts[0] = (amounts[0] ?? 0) + (total - amounts.reduce((s, a) => s + a, 0))
+
+    for (const [idx, p] of participants.entries()) {
+      const amount = amounts[idx] ?? 0
+      if (amount <= 0) continue
+      await this.issueExperienceAmountInTransaction(
+        tx,
+        p.type === 'enterprise' ? 'enterprise' : 'individual',
+        p.refId,
+        amount,
+        `「${projectName}」结项经验值`,
+      )
+    }
   }
 
   /* ---------- 规则读取（缓存，查询口径与规则管理页一致） ---------- */

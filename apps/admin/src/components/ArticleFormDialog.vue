@@ -54,7 +54,7 @@ function resetForm() {
     /* 栏目单选：取首个栏目（契约仍为 columnIds 数组承载） */
     form.columnId = props.article.columnIds[0] ?? ''
     form.summary = props.article.summary
-    form.content = props.article.content
+    form.content = props.article.content ?? ''
     form.commentsEnabled = props.article.commentsEnabled ?? true
     tagsText.value = props.article.tags.join('，')
     form.authorValue = resolveAuthorValue(props.article.authorId)

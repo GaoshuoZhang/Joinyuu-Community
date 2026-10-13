@@ -41,6 +41,8 @@ export interface GoodsPayload {
   category: GoodsCategory
   points: number
   stock: number
+  /** 编辑时回传弹窗打开时的库存基线：相等 = 未调整库存，服务端跳过库存写入（避免覆盖期间下单扣减） */
+  baseStock?: number
   /** 券码有效期（天）：统一券码兑换，空值按 30 天兜底 */
   validDays?: number
   description: string

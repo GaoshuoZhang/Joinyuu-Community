@@ -26,7 +26,8 @@ const PWD_EXPIRED_WHITELIST = [
 
 /* /api/admin/** 全局 JWT Guard（@Public 豁免）：
  * 校验签名 + 账号存在且启用 + Redis 黑名单（登出令牌失效）+ 密码过期标记（仅放行白名单路径）；
- * 黑名单/过期标记查询失败时 fail-open 放行（降级可用性优先）。
+ * 黑名单/过期标记查询失败默认 fail-closed（RedisService 抛 503，避免已吊销令牌继续可用），
+ * 仅 AUTH_REVOCATION_FAIL_OPEN=1 时降级放行。
  * 账号状态校验为 fail-closed：停用/删除的管理员，其未过期令牌立即失效。 */
 @Injectable()
 export class JwtAuthGuard implements CanActivate {

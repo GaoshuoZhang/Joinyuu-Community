@@ -158,8 +158,13 @@ export class MallService {
     const goods = await this.prisma.mallGoods.findFirst({ where: { id, deletedAt: null } })
     if (!goods) throw new NotFoundException('商品不存在')
 
-    /* 库存归零 → 待补货；补货后由待补货回落为下架，其余状态不变 */
-    const status = dto.stock === 0 ? 'restock' : goods.status === 'restock' ? 'off' : goods.status
+    /* 库存变更感知：客户端回传弹窗打开时的库存基线 baseStock；
+     * 未变更（dto.stock === baseStock）时不写库存，避免用表单旧值覆盖期间的下单扣减/退款回补 */
+    const stockUnchanged = dto.baseStock !== undefined && dto.stock === dto.baseStock
+
+    /* 库存归零 → 待补货；补货后由待补货回落为下架，其余状态不变（未变更时以库内当前库存为准） */
+    const stockForStatus = stockUnchanged ? goods.stock : dto.stock
+    const status = stockForStatus === 0 ? 'restock' : goods.status === 'restock' ? 'off' : goods.status
 
     await this.prisma.mallGoods.update({
       where: { id },
@@ -168,7 +173,7 @@ export class MallService {
         coverUrl: dto.coverUrl?.trim() || null,
         category: this.resolveCategory(dto.category),
         points: dto.points,
-        stock: dto.stock,
+        ...(stockUnchanged ? {} : { stock: dto.stock }),
         status,
         description: sanitizeHtml(dto.description),
         validDays: dto.validDays && dto.validDays > 0 ? dto.validDays : null,

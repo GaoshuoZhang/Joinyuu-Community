@@ -40,8 +40,12 @@ function numericSuffix(id: string): number {
   return m ? parseInt(m[1], 10) : 0
 }
 
-/* Prisma 行 → Article 形状：栏目以数组契约承载单选；可空字段缺失时省略（对齐 undefined） */
-function toArticleDto(a: Article | ArticleWithComments): Record<string, unknown> {
+/** 列表行（omit 正文）与详情行的联合形状：content 仅详情/编辑路径加载 */
+type ArticleRow = Omit<Article, 'content'> & { content?: string }
+
+/* Prisma 行 → Article 形状：栏目以数组契约承载单选；可空字段缺失时省略（对齐 undefined）；
+ * 正文仅在加载时返回（列表查询 omit content，列表不依赖正文） */
+function toArticleDto(a: ArticleRow | ArticleWithComments): Record<string, unknown> {
   const dto: Record<string, unknown> = {
     id: a.id,
     title: a.title,
@@ -56,11 +60,11 @@ function toArticleDto(a: Article | ArticleWithComments): Record<string, unknown>
     status: a.status,
     views: a.views,
     summary: a.summary,
-    content: a.content,
     tags: a.tags,
     commentsEnabled: 'commentsEnabled' in a ? a.commentsEnabled : true,
     createdAt: a.createdAt,
   }
+  if (a.content !== undefined) dto.content = a.content
   if (a.scheduledAt != null) dto.scheduledAt = a.scheduledAt
   if (a.publishedAt != null) dto.publishedAt = a.publishedAt
   if (a.rejectedReason != null) dto.rejectedReason = a.rejectedReason
@@ -99,7 +103,9 @@ export class ContentsService {
     if (query.status) where.status = query.status
     if (query.channel) where.channel = query.channel
 
-    const rows = await this.prisma.article.findMany({ where })
+    /* 列表查询 omit 正文（content 体积大，列表不依赖；编辑/详情按 id 单独拉取），
+     * 显著降低列表请求的库读取、内存占用与响应体大小 */
+    const rows = await this.prisma.article.findMany({ where, omit: { content: true } })
 
     /* 排序：id 按编号数值、views 按数值、createdAt 按字典序 */
     const field = query.sortBy ?? 'id'

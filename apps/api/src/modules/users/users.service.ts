@@ -305,6 +305,13 @@ export class UsersService {
       data.bio = dto.bio.trim()
       changed.push('简介')
     }
+    if (dto.avatar !== undefined) {
+      const avatar = dto.avatar.trim()
+      /* 仅接受站内相对路径或 http(s) 绝对地址（后台由素材上传回填），避免写入任意字符串 */
+      if (avatar && !/^(https?:\/\/|\/)/.test(avatar)) throw new BadRequestException('头像地址不合法')
+      data.avatar = avatar || null
+      changed.push(avatar ? '头像' : '头像（清除）')
+    }
 
     await this.prisma.user.update({ where: { uid: id }, data })
 

@@ -23,20 +23,23 @@ const sourceOptions = [
   { label: '全部来源', value: '' },
   { label: '资讯发布', value: 'article' },
   { label: '投稿内容', value: 'submission' },
+  { label: '租赁合同', value: 'lease' },
   { label: '未关联', value: 'none' },
 ]
 
-/** 来源标签：资讯发布-A1010 / 投稿内容-SU1006 / 未关联 */
+/** 来源标签：资讯发布-A1010 / 投稿内容-SU1006 / 租赁合同-LS1001 / 未关联 */
 function sourceText(a: MallAsset): string {
   if (a.sourceId && a.sourceType === 'article') return `资讯发布-${a.sourceId}`
   if (a.sourceId && a.sourceType === 'submission') return `投稿内容-${a.sourceId}`
+  if (a.sourceId && a.sourceType === 'lease') return `租赁合同-${a.sourceId}`
   return '未关联'
 }
 
 /** 来源标签语义色：未关联用中性色，已关联按业务来源区分 */
-function sourceTheme(a: MallAsset): 'default' | 'primary' | 'success' {
+function sourceTheme(a: MallAsset): 'default' | 'primary' | 'success' | 'warning' {
   if (!a.sourceId) return 'default'
-  return a.sourceType === 'article' ? 'primary' : 'success'
+  if (a.sourceType === 'article') return 'primary'
+  return a.sourceType === 'lease' ? 'warning' : 'success'
 }
 
 /** 字节大小自适应展示（B/KB/MB）：单卡与汇总共用 */

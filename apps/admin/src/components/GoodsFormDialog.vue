@@ -53,6 +53,9 @@ const formRef = ref()
 /* 自定义开关：可见范围/可下单范围（关=不限） */
 const customVisibility = ref(false)
 const customOrdering = ref(false)
+/* 库存基线：编辑时记录弹窗打开时的库内库存，随保存回传；
+ * 未调整库存时服务端跳过库存写入，避免表单旧值覆盖期间的下单扣减（并发保护） */
+const baseStock = ref<number | null>(null)
 
 const form = reactive({
   name: '',
@@ -79,6 +82,7 @@ watch(
       form.category = props.goods.category
       form.points = props.goods.points
       form.stock = props.goods.stock
+      baseStock.value = props.goods.stock
       form.validDays = props.goods.validDays ?? 30
       form.description = props.goods.description
       form.visibilityIdentities = [...(props.goods.visibilityIdentities ?? [])]
@@ -93,6 +97,7 @@ watch(
       form.category = 'GC001'
       form.points = 100
       form.stock = 50
+      baseStock.value = null
       form.validDays = 30
       form.description = ''
       form.visibilityIdentities = []
@@ -131,6 +136,7 @@ async function onConfirm() {
       category: form.category,
       points: form.points,
       stock: form.stock,
+      ...(props.mode === 'edit' && baseStock.value !== null ? { baseStock: baseStock.value } : {}),
       validDays: form.validDays,
       description: form.description,
       visibilityIdentities: customVisibility.value ? form.visibilityIdentities : [],

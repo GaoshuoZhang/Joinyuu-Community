@@ -242,7 +242,8 @@ async function loadIndustries() {
       >
         <template #name="{ row }">
           <div class="ent-cell">
-            <t-avatar class="ent-avatar" size="36px">{{ row.name.slice(0, 1) }}</t-avatar>
+            <!-- 已上传 Logo 即展示图片，未上传或加载失败回退企业首字 -->
+            <t-avatar class="ent-avatar" size="36px" :image="row.logo || undefined" hide-on-load-failed>{{ row.name.slice(0, 1) }}</t-avatar>
             <div class="ent-meta">
               <span class="ent-name">{{ row.name }}</span>
               <t-tag class="id-tag-block" size="small" variant="light">{{ row.id }}</t-tag>

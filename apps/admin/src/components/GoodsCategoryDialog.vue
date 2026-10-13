@@ -165,18 +165,18 @@ watch(
                「同步可见范围」置于可下单组两列之间的窄列，与左右字段标题同行 -->
           <div class="scope-grid">
             <t-form-item label="类别可见范围 · 身份" name="visibilityIdentities">
-              <t-select v-model="form.visibilityIdentities" multiple clearable :options="visibilityIdentityOptions" placeholder="留空 = 不限身份" />
+              <t-select v-model="form.visibilityIdentities" multiple clearable :options="visibilityIdentityOptions" placeholder="留空 = 不限身份…" />
             </t-form-item>
             <span aria-hidden="true"></span>
             <t-form-item label="类别可见范围 · 等级" name="visibilityLevels">
-              <t-select v-model="form.visibilityLevels" multiple clearable :options="userLevelOptions" placeholder="留空 = 不限等级（等级仅社区个体/社区企业身份拥有）" />
+              <t-select v-model="form.visibilityLevels" multiple clearable :options="userLevelOptions" placeholder="留空 = 不限等级（等级仅社区个体/社区企业身份拥有）…" />
             </t-form-item>
             <t-form-item label="类别可下单范围 · 身份" name="orderIdentities">
-              <t-select v-model="form.orderIdentities" multiple clearable :options="visibilityIdentityOptions" placeholder="留空 = 不限身份" />
+              <t-select v-model="form.orderIdentities" multiple clearable :options="visibilityIdentityOptions" placeholder="留空 = 不限身份…" />
             </t-form-item>
             <t-button variant="text" size="small" class="sync-btn" @click="syncOrdering">同步可见范围</t-button>
             <t-form-item label="类别可下单范围 · 等级" name="orderLevels">
-              <t-select v-model="form.orderLevels" multiple clearable :options="userLevelOptions" placeholder="留空 = 不限等级" />
+              <t-select v-model="form.orderLevels" multiple clearable :options="userLevelOptions" placeholder="留空 = 不限等级…" />
             </t-form-item>
           </div>
         </t-form>
