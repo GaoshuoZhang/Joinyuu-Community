@@ -245,6 +245,7 @@ async function doExit() {
           <Tag size="small" variant="light" :theme="isContact ? 'primary' : 'default'">{{ isContact ? '负责人' : '成员' }}</Tag>
         </div>
         <Cell
+          v-pressable
           v-if="can('edit_card')"
           class="edit-cell"
           :bordered="false"
@@ -258,7 +259,10 @@ async function doExit() {
       <section class="m-card level-section">
         <h2 class="sec-title">企业等级</h2>
         <ListSkeleton v-if="levelLoading" :rows="2" />
-        <p v-else-if="levelError" class="level-error">{{ levelError }}</p>
+        <p v-else-if="levelError" class="level-error">
+          {{ levelError }}
+          <Button size="small" variant="text" theme="primary" @click="loadLevel">重试</Button>
+        </p>
         <LevelCardCarousel
           v-else-if="levelRights.length"
           :groups="levelRights"

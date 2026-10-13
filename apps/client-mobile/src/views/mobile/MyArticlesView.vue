@@ -73,17 +73,16 @@ onMounted(run)
         v-for="a in visibleItems"
         :key="a.id"
         class="m-card item record-card"
-        role="link"
-        tabindex="0"
-        @click="router.push(`/me/articles/${a.id}`)"
-        @keydown.enter.self="router.push(`/me/articles/${a.id}`)"
       >
-        <header class="row">
-          <h3 class="title">{{ a.title }}</h3>
-          <StateTag kind="article" :value="a.status" />
-        </header>
-        <p class="meta">{{ a.columnLabel }} · 提交于 {{ formatLocalDateTime(a.submittedAt) }}</p>
-        <p v-if="a.status === 'rejected'" class="reject">驳回原因：{{ a.rejectReason ?? '未填写' }}</p>
+        <!-- v51：卡片主体用 router-link 承载跳转（真链接：支持 Ctrl/中键在新标签打开）；撤回/修改重提留在链接之外 -->
+        <router-link class="article-main" :to="`/me/articles/${a.id}`">
+          <header class="row">
+            <h3 class="title">{{ a.title }}</h3>
+            <StateTag kind="article" :value="a.status" />
+          </header>
+          <p class="meta">{{ a.columnLabel }} · 提交于 {{ formatLocalDateTime(a.submittedAt) }}</p>
+          <p v-if="a.status === 'rejected'" class="reject">驳回原因：{{ a.rejectReason ?? '未填写' }}</p>
+        </router-link>
         <div v-if="a.status === 'pending' || a.status === 'rejected' || a.status === 'withdrawn'" class="ops">
           <Button v-if="a.status === 'pending'" size="small" variant="outline" @click.stop="onWithdraw(a)">撤回</Button>
           <Button
@@ -117,8 +116,8 @@ onMounted(run)
   gap:var(--app-space-5);
 }
 
-.record-card { cursor: pointer; }
-.record-card:focus-visible { outline: 2px solid var(--td-brand-color); outline-offset: 2px; }
+/* 卡片主体是真链接（router-link），焦点环由全局 :focus-visible 提供 */
+.article-main { display: block; }
 
 .row {
   display: flex;

@@ -62,6 +62,7 @@ function onRowClick(item: NoticePreferenceType) {
       <CellGroup theme="card">
         <!-- v46：整行可点切换（行级命中区 ≥44px）；不可关闭项给出行内原因说明且不响应点击 -->
         <Cell
+          v-pressable="item.mutable && !saving"
           v-for="item in types"
           :key="item.type"
           :title="item.label"

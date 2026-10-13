@@ -183,6 +183,86 @@ function patchDecorativeTags(root: ParentNode) {
   }
 }
 
+/* v51：TDesign 可交互内部元素的键盘通路与状态语义。
+ * 1）CheckTag：库渲染 `<span class="t-tag--checkable" role="button" aria-disabled onClick>`，
+ *    无 tabindex、无键盘处理——全站 18 处筛选/选择 chip 纯指针不可达；且切换态只靠
+ *    `--primary`/`--default` 底色表达，无 aria 状态（色觉障碍/读屏用户无法得知已选）。
+ * 2）Navbar 左侧返回区：库渲染 `<div class="t-navbar__left" onClick>`，无 role/tabindex/名称，
+ *    所有二级页的返回既不可键盘操作也无法被读屏识别。
+ * 3）Popup / Dialog 关闭键：库渲染 `<div class="t-popup__close" onClick>` 与
+ *    `<div class="t-dialog__close-btn">`（后者的关闭处理挂在内部 SVG 图标上），
+ *    图标控件既无名称也无键盘通路。
+ * 与上面对表单/弹层的修补同源；升级 TDesign 时复核这些内部类名。 */
+const keyboardPatched = new WeakSet<HTMLElement>()
+
+/** 真实可点节点：Dialog 的关闭处理挂在内部 SVG 上，点外层 div 不会触发子节点的监听；
+ *  其余库内控件把处理挂在外层，点外层（或内部 SVG，会冒泡到外层）均可。 */
+function clickTarget(el: HTMLElement): Element {
+  return el.querySelector('svg') ?? el
+}
+
+/** 补 Enter/Space 激活（派发的 click 会冒泡到库自身的处理） */
+function activateOnKey(el: HTMLElement) {
+  el.addEventListener('keydown', (event) => {
+    if (event.key !== 'Enter' && event.key !== ' ') return
+    event.preventDefault()
+    clickTarget(el).dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }))
+  })
+}
+
+/** CheckTag 的选中态同步到 aria-pressed（库只改 class，无 aria 状态） */
+function syncTagPressed(el: HTMLElement) {
+  el.setAttribute('aria-pressed', el.classList.contains('t-tag--checked') ? 'true' : 'false')
+}
+
+function collect(root: ParentNode, selector: string): HTMLElement[] {
+  return [
+    ...(root instanceof HTMLElement && root.matches(selector) ? [root] : []),
+    ...root.querySelectorAll<HTMLElement>(selector),
+  ]
+}
+
+function patchKeyboardTargets(root: ParentNode) {
+  for (const el of collect(root, '.t-navbar__left')) {
+    if (keyboardPatched.has(el)) continue
+    /* 仅二级页（有返回箭头）；Tab 页左侧为空，不应成为可聚焦控件 */
+    if (!el.querySelector('.t-navbar__left-arrow')) continue
+    keyboardPatched.add(el)
+    el.setAttribute('role', 'button')
+    el.setAttribute('tabindex', '0')
+    el.setAttribute('aria-label', '返回')
+    activateOnKey(el)
+  }
+  for (const el of collect(root, '.t-tag--checkable')) {
+    if (keyboardPatched.has(el)) continue
+    keyboardPatched.add(el)
+    /* 禁用项不可聚焦（库用 aria-disabled，不是原生 disabled） */
+    if (el.getAttribute('aria-disabled') !== 'true') {
+      el.setAttribute('tabindex', '0')
+      activateOnKey(el)
+    }
+    syncTagPressed(el)
+  }
+  for (const el of collect(root, '.t-popup__close, .t-dialog__close-btn')) {
+    if (keyboardPatched.has(el)) continue
+    keyboardPatched.add(el)
+    el.setAttribute('role', 'button')
+    el.setAttribute('tabindex', '0')
+    el.setAttribute('aria-label', '关闭')
+    activateOnKey(el)
+  }
+}
+
+/* CheckTag 切换后库只更新 class，需要把新状态同步到 aria-pressed */
+new MutationObserver((mutations) => {
+  for (const mutation of mutations) {
+    const target = mutation.target
+    if (target instanceof HTMLElement && target.classList.contains('t-tag--checkable')) {
+      syncTagPressed(target)
+    }
+  }
+}).observe(document.body, { attributes: true, attributeFilter: ['class'], subtree: true })
+
 /* 弹层焦点：打开时聚焦首个可聚焦元素、Tab 圈闭、关闭后回焦触发元素。 */
 const FOCUSABLE_SELECTOR =
   'button:not([disabled]), [href], input:not([type="hidden"]):not([disabled]), textarea:not([disabled]), select:not([disabled]), [tabindex]:not([tabindex="-1"])'
@@ -190,7 +270,10 @@ let lastFocused: HTMLElement | null = null
 
 function focusDialog(dialog: HTMLElement) {
   if (dialog.contains(document.activeElement)) return
-  const first = dialog.querySelector<HTMLElement>(FOCUSABLE_SELECTOR)
+  /* v51 起关闭键也可聚焦，但它不参与首次聚焦：弹层打开时应先落到首个表单控件/操作按钮 */
+  const focusables = Array.from(dialog.querySelectorAll<HTMLElement>(FOCUSABLE_SELECTOR))
+  const first =
+    focusables.find((el) => !el.matches('.t-popup__close, .t-dialog__close-btn')) ?? focusables[0]
   if (!first) return
   lastFocused = document.activeElement instanceof HTMLElement ? document.activeElement : null
   window.requestAnimationFrame(() => {
@@ -248,12 +331,14 @@ function handleRemovedDialog(node: HTMLElement) {
 
 patchA11yFields(document)
 patchDecorativeTags(document)
+patchKeyboardTargets(document)
 new MutationObserver((mutations) => {
   for (const mutation of mutations) {
     for (const added of mutation.addedNodes) {
       if (!(added instanceof HTMLElement)) continue
       patchA11yFields(added)
       patchDecorativeTags(added)
+      patchKeyboardTargets(added)
       announceToast(added)
       announceFieldError(added)
       patchLoadingRoles(added)

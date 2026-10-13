@@ -80,6 +80,9 @@ defineEmits<{ toggleFavorite: []; share: [] }>()
   margin:0;
   font: var(--app-type-page-title);
   flex: 1;
+  /* 用户内容（长英文/编号/URL）不可断行时，flex item 的 auto 最小宽会撑破卡片并挤走状态标签 */
+  min-width: 0;
+  overflow-wrap: anywhere;
 }
 
 .meta {

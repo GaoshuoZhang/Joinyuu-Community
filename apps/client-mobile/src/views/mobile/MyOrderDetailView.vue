@@ -204,6 +204,9 @@ async function onReviewSubmit() {
 .name {
   margin: 0;
   font: var(--app-type-page-title);
+  /* 长商品名不可断行时会撑破券码卡头部（flex 项默认 min-width:auto 不收缩） */
+  min-width: 0;
+  overflow-wrap: anywhere;
 }
 
 .cost {

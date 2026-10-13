@@ -190,8 +190,9 @@ async function doRemove() {
         </template>
       </section>
 
+      <!-- v51：主词与其它编辑页统一为「保存」（原「保存修改」中的「修改」冗余） -->
       <Button v-if="canSave" class="mobile-sticky-action" theme="primary" size="large" block :loading="saving" @click="onSave">
-        {{ saving ? '保存中…' : '保存修改' }}
+        {{ saving ? '保存中…' : '保存' }}
       </Button>
       <Button
         v-if="can('manage_members') && !targetIsContact"

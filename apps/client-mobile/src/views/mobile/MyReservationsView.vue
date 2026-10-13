@@ -70,22 +70,22 @@ async function doCancel(r: SpaceReservation) {
         v-for="r in visibleItems"
         :key="r.id"
         class="m-card record-card"
-        role="link"
-        tabindex="0"
-        @click="router.push(`/me/reservations/${r.id}`)"
-        @keydown.enter.self="router.push(`/me/reservations/${r.id}`)"
       >
-        <div class="row">
-          <h2 class="name">{{ r.spaceName }}</h2>
-          <StateTag kind="reservation" :value="r.status" />
-        </div>
-        <p v-if="r.identityType" class="subject">
-          <IdentityTag :type="r.identityType" />
-          <span class="subject-name">{{ r.subjectName }}</span>
-        </p>
-        <p class="meta"><Icon aria-hidden="true" name="calendar" size="14px" />{{ formatLocalDate(r.date) }} · {{ r.start }} - {{ r.end }}</p>
-        <p class="submitted-at">提交于 {{ formatLocalDateTime(r.createdAt) }}</p>
-        <p v-if="r.rejectReason" class="reject-reason">驳回原因：{{ r.rejectReason }}</p>
+        <!-- v51：卡片主体用 router-link 承载跳转（真链接：支持 Ctrl/中键在新标签打开）；
+             操作按钮留在链接之外，避免嵌套可交互元素 -->
+        <router-link class="reserve-main" :to="`/me/reservations/${r.id}`">
+          <div class="row">
+            <h2 class="name">{{ r.spaceName }}</h2>
+            <StateTag kind="reservation" :value="r.status" />
+          </div>
+          <p v-if="r.identityType" class="subject">
+            <IdentityTag :type="r.identityType" />
+            <span class="subject-name">{{ r.subjectName }}</span>
+          </p>
+          <p class="meta"><Icon aria-hidden="true" name="calendar" size="14px" />{{ formatLocalDate(r.date) }} · {{ r.start }} - {{ r.end }}</p>
+          <p class="submitted-at">提交于 {{ formatLocalDateTime(r.createdAt) }}</p>
+          <p v-if="r.rejectReason" class="reject-reason">驳回原因：{{ r.rejectReason }}</p>
+        </router-link>
         <div v-if="canCancel(r)" class="ops">
           <Button theme="danger" variant="outline" size="small" :disabled="actingId === r.id" @click.stop="onCancelTap(r)">
             {{ actingId === r.id ? '处理中…' : '取消预约' }}
@@ -111,8 +111,8 @@ async function doCancel(r: SpaceReservation) {
   gap:var(--app-space-5);
 }
 
-.record-card { cursor: pointer; }
-.record-card:focus-visible { outline: 2px solid var(--td-brand-color); outline-offset: 2px; }
+/* 卡片主体是真链接（router-link），焦点环由全局 :focus-visible 提供 */
+.reserve-main { display: block; }
 
 .row {
   display: flex;

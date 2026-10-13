@@ -367,7 +367,8 @@ function goMine() {
       <div class="head-top">
         <h2 class="page-title">{{ space?.name ?? '空间预约' }}</h2>
         <!-- 费用：0 表示免费（后台「费用」栏维护） -->
-        <Tag size="small" variant="light" :theme="(space?.feePerHour ?? 0) > 0 ? 'warning' : 'success'">
+        <!-- v51：收费是中性信息（此前用 warning 语义色，暗示异常）；改为中性品牌色，「免费」保留正向语义 -->
+        <Tag size="small" variant="light" :theme="(space?.feePerHour ?? 0) > 0 ? 'primary' : 'success'">
           {{ (space?.feePerHour ?? 0) > 0 ? `${space?.feePerHour} 积分/小时` : '免费' }}
         </Tag>
       </div>
@@ -380,7 +381,7 @@ function goMine() {
     </div>
 
     <div class="m-card">
-      <Cell class="date-cell" title="预约日期" :note="date" arrow :bordered="false" @click="openDatePicker" />
+      <Cell v-pressable class="date-cell" title="预约日期" :note="date" arrow :bordered="false" @click="openDatePicker" />
     </div>
 
     <Form
@@ -587,7 +588,9 @@ function goMine() {
 
 .range-summary {
   display: flex;
-  flex-wrap: nowrap;
+  /* 允许换行：320px 下「开始 → 结束 ｜ 时长·计费」单行最小宽约 400px，
+   * nowrap 会把整页撑出横向滚动并裁掉右侧计费文案（WCAG 1.4.10 重排）。 */
+  flex-wrap: wrap;
   align-items: center;
   gap:var(--app-space-3);
   margin-bottom:var(--app-space-4);

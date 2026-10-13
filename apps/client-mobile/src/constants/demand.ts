@@ -19,7 +19,7 @@ export const DEMAND_KINDS: DemandKindMeta[] = [
     kind: 'task',
     title: '找服务',
     searchPlaceholder: '搜索服务需求',
-    tagline: '有想法、有项目，只差一位靠谱的人把它做出来',
+    tagline: '有想法、有需求，只差一位靠谱的人把它做出来',
     process: ['发布需求', '响应接单', '立项协作', '结项交付'],
     bullets: [
       '适合外包承接、专项执行与合伙落地',
@@ -37,7 +37,7 @@ export const DEMAND_KINDS: DemandKindMeta[] = [
     process: ['发布需求', '投资洽谈', '立项协作', '结项交付'],
     bullets: [
       '适合天使轮、战略融资与资源型合作',
-      '展示项目行业与所需支持，精准触达',
+      '展示所属行业与所需支持，精准触达',
       '对接社区内的投资人、企业与机构',
       '审核通过后公开展示，等待洽谈',
     ],

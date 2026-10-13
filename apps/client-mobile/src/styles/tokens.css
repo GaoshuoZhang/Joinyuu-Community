@@ -278,6 +278,9 @@ span[role='button']:not(.t-tag) {
 /* v44 移动端交互基线：消除双击缩放延迟与点击高亮，弹层内部滚动不穿透 */
 html {
   -webkit-tap-highlight-color: transparent;
+  /* v51：固定顶栏（Navbar fixed，--app-mobile-topbar-h + 安全区）会遮住 Tab 回退/锚点
+   * 聚焦到的视口顶部元素（WCAG 2.4.11）；向下滚动后顶栏转为不透明，遮挡更明显。 */
+  scroll-padding-top: calc(var(--app-mobile-topbar-h) + env(safe-area-inset-top));
 }
 
 a,
@@ -584,4 +587,22 @@ html:not(.dark):not([theme-mode='dark']) body {
  * 禁用态按钮上的「为什么不能点」说明文字必须可读。 */
 html:not(.dark):not([theme-mode='dark']) .t-button--primary.t-button--disabled {
   --td-button-primary-disabled-color: var(--td-brand-color-8);
+}
+
+/* 标签 light 变体对比度（v51）：TDesign 用 -5 档文字压 -1 档同色浅底，size=small 的 12px
+ * 文字实测 success 2.86:1 / warning 2.82:1 / danger 3.90:1，均低于 WCAG AA 正文 4.5:1。
+ * 抬到 -7/-7/-8 档文字色：浅色 5.88/6.08/8.38:1，暗色 5.45/5.21/5.53:1（暗色色阶反向，
+ * 高档位更亮，故同一档位在两种模式下都达标）；light-outline 的描边对比度一并提升到 ≥5:1。
+ * 必须 :root:root 提高特异性：库主题色在路由组件里懒加载、晚于本文件注入。 */
+:root:root {
+  --td-tag-success-color: var(--td-success-color-7);
+  --td-tag-warning-color: var(--td-warning-color-7);
+  --td-tag-danger-color: var(--td-error-color-8);
+}
+
+/* 同一根因的另一处：`theme="default" variant="light"` 的文字与底色都取自灰阶
+ * （--td-bg-color-component 上再压同档灰，浅色下约 1.4:1，几乎不可见）。
+ * 只在浅色模式改文字色，不动 --td-tag-default-color——它还兼作 dark 变体的底色。 */
+html:not(.dark):not([theme-mode='dark']) .t-tag--light.t-tag--default {
+  color: var(--td-text-color-secondary);
 }

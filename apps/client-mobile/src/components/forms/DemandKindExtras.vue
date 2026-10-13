@@ -67,6 +67,7 @@ function clearDeliverBy() {
       <span class="field-label">预期交付日期<span class="req"> *</span></span>
       <!-- 未选日期时标题用弱化色（--td-cell-title-color）；已选时在 note 槽给出 44px 命中区的清除入口 -->
       <Cell
+        v-pressable
         class="date-trigger"
         :class="{ 'is-empty': !deliverBy }"
         :title="deliverBy || '请选择预期交付日期'"

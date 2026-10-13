@@ -184,18 +184,21 @@ defineExpose({ scrollToCard })
   font: var(--app-type-caption); /* typography-token-exempt: 紧随其后的 line-height 是徽章胶囊高度约束（零余量行高贴合 3px 内距），角色档行高（1.5）会把徽章撑高约 4px；升级复核角色档是否引入紧凑行高档 */
   line-height: 1;
   padding: 3px var(--app-space-2);
-  border-radius: 4px;
+  border-radius: var(--td-radius-small);
   background: var(--td-text-color-anti);
-  color: var(--td-brand-color);
+  /* 徽章底固定为反色（两种模式下都是白色），而 --td-brand-color 在暗色是「暗底专用」的
+   * 亮蓝（#4582e6，白底上仅 3.76:1）；改用 -7 档（浅 #0052d9 / 暗 #2667d4），白底上 ≥5.1:1。 */
+  color: var(--td-brand-color-7);
 }
 
 .reached-badge {
   font: var(--app-type-caption); /* typography-token-exempt: 同上，徽章胶囊高度约束，角色档行高会撑高徽章；升级复核角色档是否引入紧凑行高档 */
   line-height: 1;
   padding: 3px var(--app-space-2);
-  border-radius: 4px;
+  border-radius: var(--td-radius-small);
   background: var(--td-success-color-light);
-  color: var(--td-success-color);
+  /* -5 档压 -1 档浅底仅 2.86:1（暗色 3.23:1）；-7 档浅色 5.88:1、暗色 5.45:1 */
+  color: var(--td-success-color-7);
 }
 
 .locked-badge {
@@ -205,7 +208,7 @@ defineExpose({ scrollToCard })
   font: var(--app-type-caption); /* typography-token-exempt: 同上，徽章胶囊高度约束，角色档行高会撑高徽章；升级复核角色档是否引入紧凑行高档 */
   line-height: 1;
   padding: 3px var(--app-space-2);
-  border-radius: 4px;
+  border-radius: var(--td-radius-small);
   background: var(--td-bg-color-secondarycontainer);
   color: var(--td-text-color-secondary);
 }

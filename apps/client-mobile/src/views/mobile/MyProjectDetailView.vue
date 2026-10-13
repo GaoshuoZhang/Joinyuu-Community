@@ -257,6 +257,9 @@ async function onAcceptMilestone(m: Milestone) {
   flex: 1;
   margin:0;
   font: var(--app-type-page-title);
+  /* 项目名含长不可断字符串时会撑破卡片并挤走状态标签 */
+  min-width: 0;
+  overflow-wrap: anywhere;
 }
 
 .meta {

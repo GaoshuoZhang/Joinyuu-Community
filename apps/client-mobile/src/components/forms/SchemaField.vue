@@ -69,6 +69,7 @@ function optionLabel(field: ApplicationFormField, value: string): string {
     />
 
     <Cell
+      v-pressable
       v-else-if="field.type === 'select'"
       class="picker-cell"
       :bordered="false"
@@ -79,6 +80,7 @@ function optionLabel(field: ApplicationFormField, value: string): string {
     />
 
     <Cell
+      v-pressable
       v-else-if="field.type === 'date'"
       class="picker-cell"
       :bordered="false"

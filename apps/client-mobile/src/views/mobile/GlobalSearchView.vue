@@ -229,7 +229,8 @@ onMounted(() => {
 .result h2 { overflow: hidden; margin:0; font: var(--app-type-card-title); text-overflow: ellipsis; white-space: nowrap; }
 .result p { display: -webkit-box; overflow: hidden; margin:var(--app-space-4) 0 0; color: var(--td-text-color-secondary); font: var(--app-type-body-sm); -webkit-box-orient: vertical; -webkit-line-clamp: 2; }
 .search-guide { padding:var(--app-space-12) 0; color: var(--td-text-color-placeholder); font: var(--app-type-body); text-align: center; }
-.partial-error { margin:0; padding:var(--app-space-4) var(--app-space-5); border-radius: var(--td-radius-default); background: var(--td-warning-color-1); color: var(--td-text-color-secondary); font: var(--app-type-caption); }
+/* v51：局部失败属错误态，改用错误色底（此前用警告橙，语义漂移） */
+.partial-error { margin:0; padding:var(--app-space-4) var(--app-space-5); border-radius: var(--td-radius-default); background: var(--td-error-color-1); color: var(--td-text-color-secondary); font: var(--app-type-caption); }
 /* 同一关键词重新搜索时的局部加载指示 */
 .search-loading { padding:var(--app-space-4) 0; }
 .count-chips { display: flex; flex-wrap: wrap; gap:var(--app-space-3); }

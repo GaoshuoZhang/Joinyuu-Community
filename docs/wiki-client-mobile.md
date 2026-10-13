@@ -59,6 +59,13 @@
 - **悬浮按钮**：`--app-fab-offset` 以 TabBar 真实占位（`--app-tabbar-occupied-h`，56 + 16px margin）计算，禁止直接用 `--app-mobile-tabbar-h` 造成贴底。
 - **ActionSheet 关闭**：当前 TDesign 版本只发 `update:modelValue`（`cancel`/`close`/`update:visible` 均不触发），弹窗必须用 `v-model` 绑定，取消与点遮罩才能关闭。
 - **表单可访问性**：`main.ts` 统一修补 TDesign 表单（补 input id/name、label for、单选/复选 aria-label）；label 无法关联控件时（空 `for=""`、分组标题、空占位）不得保留为 `<label>`：空占位移除、分组标题转 `<span>` 保留类名与样式。向上关联仅限“单控件且单 label”的最近容器，防止跨字段误挂。
+- **库内可交互元素的键盘通路（v51）**：TDesign 内部有若干“可点但无语义”的节点，由 `main.ts` 的 `patchKeyboardTargets()` 统一补 `role=button` + `tabindex=0` + `aria-label` + Enter/Space 激活（派发 click 冒泡到库自身处理）：
+  - `CheckTag`（`.t-tag--checkable`）：全站筛选/选择 chip，补键盘通路，并把选中态同步到 `aria-pressed`（库只改 class）；
+  - Navbar 左侧返回区（`.t-navbar__left`，仅存在返回箭头时）：`aria-label="返回"`；
+  - Popup / Dialog 关闭键（`.t-popup__close` / `.t-dialog__close-btn`）：`aria-label="关闭"`（Dialog 的关闭处理挂在内部 SVG 上，故激活时派发到 SVG）。
+  关闭键可聚焦后不参与弹层首次聚焦（`focusDialog` 会跳过关闭键）。升级 TDesign 时须复核上述内部类名。
+- **可点整卡的两条口径**：跳转型卡片用 `router-link` 承载主体内容（真链接，支持 Ctrl/中键新标签打开），操作按钮留在链接之外避免嵌套可交互元素（参照 `MyResponsesView`/`MyDemandsView`）；行/列表项类整卡（如 `Cell`、身份卡）用 `v-pressable` 补 role/tabindex/Enter·Space。仅当元素确实不可点时传 `v-pressable="false"`。
+- **标签对比度（v51）**：TDesign 标签 light 变体默认用 -5 档文字压 -1 档同色浅底（success 2.86:1 / warning 2.82:1 / danger 3.90:1，12px 下均不达 AA）；`tokens.css` 已把 `--td-tag-{success,warning,danger}-color` 抬到 -7/-7/-8 档（浅色 5.88/6.08/8.38:1，暗色 5.45/5.21/5.53:1）。`theme="default" variant="light"` 的浅色文字同样不可见，已单独改为 `--td-text-color-secondary`。新增状态标签一律走 `StateTag`，不要自带语义色。
 
 ### 排版规范（Token First）
 

@@ -201,7 +201,7 @@ async function onShare() {
 
 .avatar {
   flex-shrink: 0;
-  font: var(--app-type-page-title);
+  font: var(--app-type-display);
 }
 
 .hero-info {

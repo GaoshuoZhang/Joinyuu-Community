@@ -129,10 +129,6 @@ function goDetail(order: MyOrder) {
   gap: var(--app-space-5);
 }
 
-.list-count {
-  margin: 0 2px;
-}
-
 .order-card {
   cursor: pointer;
 }

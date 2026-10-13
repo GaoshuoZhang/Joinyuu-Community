@@ -88,7 +88,7 @@ h3 { font: var(--app-type-card-title); }
 .timeline { margin: 0; padding: 0; list-style: none; }
 .timeline li { position: relative; padding: 0 0 var(--app-space-5) var(--app-space-7); border-left: 1px solid var(--td-component-border); }
 .timeline li:last-child { padding-bottom: 0; }
-.timeline li::before { content: ''; position: absolute; left: -5px; top: 4px; width: 9px; height: 9px; border-radius: 50%; background: var(--td-brand-color); }
+.timeline li::before { content: ''; position: absolute; left: -5px; top: 4px; width: 9px; height: 9px; border-radius: var(--td-radius-circle); background: var(--td-brand-color); }
 .timeline b, .timeline span { display: block; font: var(--app-type-emphasis-sm); }
 .timeline span, .timeline small { color: var(--td-text-color-placeholder); }
 .timeline p { margin-top: var(--app-space-2); font: var(--app-type-body-sm); color: var(--td-text-color-secondary); }

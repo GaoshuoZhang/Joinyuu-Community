@@ -93,24 +93,24 @@ async function doCancel(item: MyEnrollmentItem) {
         v-for="item in visibleItems"
         :key="item.id"
         class="m-card enrollment-card"
-        role="link"
-        tabindex="0"
-        @click="router.push(`/events/${item.eventId}`)"
-        @keydown.enter.self="router.push(`/events/${item.eventId}`)"
       >
-        <div class="row">
-          <h2 class="title">{{ item.eventTitle }}</h2>
-          <StateTag kind="enroll" :value="item.status" />
-        </div>
-        <p class="meta"><Icon aria-hidden="true" name="time" size="14px" />{{ formatLocalDateTime(item.startTime) }} · <Icon aria-hidden="true" name="location" size="14px" />{{ item.location }}</p>
-        <p v-if="item.status === 'waitlisted'" class="waitlist-note">
-          {{ item.waitlistOrder ? `当前第 ${formatZhNumber(item.waitlistOrder)} 位，` : '' }}有空位将自动递补并通知你
-        </p>
-        <p v-if="item.eventStatus === 'cancelled'" class="cancel-note">活动已取消，报名已同步取消</p>
-        <p v-else-if="item.rescheduledTo" class="waitlist-note">活动改期至 {{ formatLocalDateTime(item.rescheduledTo) }}</p>
-        <p v-if="item.eventStatus !== 'cancelled' && isEventEnded(item)" class="ended-note">活动已结束</p>
-        <p v-else-if="item.status === 'approved' && !canCancel(item) && !item.checkedIn" class="ended-note">已过取消报名截止时间</p>
-        <p v-if="item.rejectReason" class="reject-reason">驳回原因：{{ item.rejectReason }}</p>
+        <!-- v51：卡片主体用 router-link 承载跳转（真链接：支持 Ctrl/中键在新标签打开，
+             语义强于 div + role="link"）；操作按钮留在链接之外，避免嵌套可交互元素 -->
+        <router-link class="enroll-main" :to="`/events/${item.eventId}`">
+          <div class="row">
+            <h2 class="title">{{ item.eventTitle }}</h2>
+            <StateTag kind="enroll" :value="item.status" />
+          </div>
+          <p class="meta"><Icon aria-hidden="true" name="time" size="14px" />{{ formatLocalDateTime(item.startTime) }} · <Icon aria-hidden="true" name="location" size="14px" />{{ item.location }}</p>
+          <p v-if="item.status === 'waitlisted'" class="waitlist-note">
+            {{ item.waitlistOrder ? `当前第 ${formatZhNumber(item.waitlistOrder)} 位，` : '' }}有空位将自动递补并通知你
+          </p>
+          <p v-if="item.eventStatus === 'cancelled'" class="cancel-note">活动已取消，报名已同步取消</p>
+          <p v-else-if="item.rescheduledTo" class="waitlist-note">活动改期至 {{ formatLocalDateTime(item.rescheduledTo) }}</p>
+          <p v-if="item.eventStatus !== 'cancelled' && isEventEnded(item)" class="ended-note">活动已结束</p>
+          <p v-else-if="item.status === 'approved' && !canCancel(item) && !item.checkedIn" class="ended-note">已过取消报名截止时间</p>
+          <p v-if="item.rejectReason" class="reject-reason">驳回原因：{{ item.rejectReason }}</p>
+        </router-link>
         <div class="ops">
           <router-link v-if="item.checkedIn || (item.status === 'approved' && !isEventEnded(item) && item.eventStatus !== 'cancelled')" class="checkin-link" :to="`/events/${item.eventId}/check-in`" @click.stop>
             {{ item.checkedIn ? '查看签到' : '查看签到凭证' }}<Icon aria-hidden="true" name="chevron-right" size="12px" />
@@ -170,8 +170,8 @@ async function doCancel(item: MyEnrollmentItem) {
   margin: 0;
 }
 
-.enrollment-card { cursor: pointer; }
-.enrollment-card:focus-visible { outline: 2px solid var(--td-brand-color); outline-offset: 2px; }
+/* 卡片主体是真链接（router-link），焦点环由全局 :focus-visible 提供 */
+.enroll-main { display: block; }
 
 .meta {
   display: flex;

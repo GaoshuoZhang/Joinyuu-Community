@@ -34,7 +34,7 @@ const labels = computed(() =>
   isTask.value
     ? { title: '需求标题', titlePh: '一句话描述你的需求', desc: '需求描述', descPh: '补充背景、期望的交付形式与合作方式…', cat: '需求类别' }
     : isInvest.value
-      ? { title: '项目名称', titlePh: '一句话描述你的项目', desc: '项目简介', descPh: '介绍项目背景、当前进展与团队情况…', cat: '所属行业' }
+      ? { title: '需求名称', titlePh: '一句话描述你的需求', desc: '需求简介', descPh: '介绍需求背景、当前进展与团队情况…', cat: '所属行业' }
       : { title: '合作需求标题', titlePh: '一句话概括你的合作需求', desc: '业务现状与瓶颈', descPh: '说说当前业务进展、遇到的瓶颈与期望的合作方向…', cat: '合作领域' },
 )
 

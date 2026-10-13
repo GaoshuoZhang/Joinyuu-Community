@@ -199,7 +199,7 @@ function onSubmit({ validateResult }: { validateResult: unknown }) {
     </div>
 
     <CellGroup theme="card" class="security">
-      <Cell :title="configStore.realnameLabel" :note="realNameNote" arrow @click="router.push('/me/realname')" />
+      <Cell v-pressable :title="configStore.realnameLabel" :note="realNameNote" arrow @click="router.push('/me/realname')" />
     </CellGroup>
     </template>
   </div>

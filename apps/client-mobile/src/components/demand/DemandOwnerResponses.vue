@@ -71,11 +71,11 @@ function onSubmit() {
         <StateTag kind="response" :value="r.status ?? 'pending'" />
       </div>
       <p class="owner-response-note">{{ r.note }}</p>
-      <!-- 响应时选填的次要信息：按有无渲染，超长 CSS 截断并以 title 提供完整文本 -->
-      <p v-if="r.quote" class="owner-response-detail" :title="`报价：${r.quote}`">报价：{{ r.quote }}</p>
-      <p v-if="r.timeline" class="owner-response-detail" :title="`可投入时间：${r.timeline}`">可投入时间：{{ r.timeline }}</p>
-      <p v-if="r.cases" class="owner-response-detail" :title="`案例：${r.cases}`">案例：{{ r.cases }}</p>
-      <p v-if="r.phone" class="owner-response-detail" :title="`手机：${r.phone}`">手机：{{ r.phone }}</p>
+      <!-- 响应时选填的次要信息：按有无渲染（v51 起完整换行展示，不再截断） -->
+      <p v-if="r.quote" class="owner-response-detail">报价：{{ r.quote }}</p>
+      <p v-if="r.timeline" class="owner-response-detail">可投入时间：{{ r.timeline }}</p>
+      <p v-if="r.cases" class="owner-response-detail">案例：{{ r.cases }}</p>
+      <p v-if="r.phone" class="owner-response-detail">手机：{{ r.phone }}</p>
       <p class="owner-response-meta">{{ formatLocalDateTime(r.at) }}</p>
       <Button
         v-if="canSelect && (r.status ?? 'pending') === 'pending'"
@@ -154,9 +154,9 @@ function onSubmit() {
   margin: var(--app-space-3) 0 0;
   font: var(--app-type-caption);
   color: var(--td-text-color-secondary);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
+  /* v51：报价/工期/案例/手机号是发布者选定承接方的依据，原先单行省略号在触摸端
+   * 没有任何查看完整值的途径（title 在触摸端不显示）；改为换行完整展示。 */
+  overflow-wrap: anywhere;
 }
 
 .owner-response-meta {

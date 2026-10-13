@@ -85,10 +85,12 @@ function updateFiles(value: UploadFile[]) {
     @validate="onValidate"
   >
     <template #addContent>
-      <span class="avatar-trigger" :class="`shape-${shape}`" :style="{ '--avatar-size': size }" :aria-label="shape === 'round' ? '上传企业 Logo' : '更换头像'">
+      <!-- 原生 button：库的触发区是无语义 <div onClick>，可访问名称需落在可聚焦控件上才生效；
+           点击会冒泡到库的 onClick，无需自建激活逻辑 -->
+      <button type="button" class="avatar-trigger" :class="`shape-${shape}`" :style="{ '--avatar-size': size }" :aria-label="shape === 'round' ? '上传企业 Logo' : '更换头像'">
         <Avatar :size="size" :shape="shape" :image="avatarImage" class="avatar-el" :on-error="onAvatarError">{{ fallback }}</Avatar>
         <span class="mask">{{ uploading ? '上传中…' : '更换' }}</span>
-      </span>
+      </button>
     </template>
   </Upload>
 </template>
@@ -136,6 +138,12 @@ function updateFiles(value: UploadFile[]) {
   overflow: hidden;
   border-radius: var(--td-radius-circle); /* typography-token-exempt: 紧随其后的 line-height 是行盒归一（inline-flex 收拢基线间隙），非文字排版且角色档无行高 0；升级复核角色档是否引入行高 0 档 */
   line-height: 0;
+  /* 原生 button 复位：由 .avatar-trigger 自身形态决定外观 */
+  padding: 0;
+  border: none;
+  background: none;
+  color: inherit;
+  font: inherit; /* typography-token-exempt: 原生 button 需继承 .avatar-trigger 的排版（首字字号由外层 .avatar-el 决定），非角色档可表达；升级时复核是否可改为角色档 */
 }
 
 .avatar-trigger.shape-round {
@@ -145,7 +153,7 @@ function updateFiles(value: UploadFile[]) {
 .avatar-el {
   width: 100%;
   height: 100%;
-  font: var(--app-type-page-title);
+  font: var(--app-type-display);
 }
 
 .mask {

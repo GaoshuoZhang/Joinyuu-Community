@@ -16,9 +16,18 @@ function refresh() {
 }
 
 function onRemove(id: string) {
-  removeReadingHistoryItem(id)
-  refresh()
-  Toast('已移除')
+  /* v51：与同页「清空」口径一致——移除属破坏性操作，补二次确认，避免误触丢失该条记录 */
+  DialogPlugin.confirm({
+    title: '移除该条记录',
+    content: '确认从本机浏览历史中移除这条记录？',
+    cancelBtn: '取消',
+    confirmBtn: '移除',
+    onConfirm: () => {
+      removeReadingHistoryItem(id)
+      refresh()
+      Toast('已移除该条浏览记录')
+    },
+  })
 }
 
 function onClear() {
@@ -30,7 +39,7 @@ function onClear() {
     onConfirm: () => {
       clearReadingHistory()
       refresh()
-      Toast('已清空')
+      Toast('浏览历史已清空')
     },
   })
 }

@@ -125,6 +125,7 @@ function onListScroll(bottomDistance: number) {
       <!-- v46：列表项按约定用 Cell 承载（此前用 Button，读屏会把整条站内信播报成按钮）；
            整行可点进入详情，Cell 自带 16px 上下内边距满足 44px 触控。 -->
       <Cell
+        v-pressable
         v-for="n in notices.list"
         :key="n.id"
         class="notice-item m-card"
@@ -135,6 +136,8 @@ function onListScroll(bottomDistance: number) {
       >
         <template #title>
           <Badge :dot="!n.read" class="n-badge">
+            <!-- 未读此前只由红点（颜色）与标题字重表达，读屏用户无法区分；补一条文本线索 -->
+            <span v-if="!n.read" class="sr-only">未读</span>
             <span class="n-title">{{ n.title }}</span>
           </Badge>
         </template>

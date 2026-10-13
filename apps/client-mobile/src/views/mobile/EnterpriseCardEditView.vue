@@ -180,7 +180,7 @@ async function onSave() {
         </div>
         <div v-if="editable('foundedAt')" class="field">
           <span class="field-label">成立时间</span>
-          <Cell class="date-trigger" :title="form.foundedAt || '请选择成立时间'" arrow @click="openFoundedPicker" />
+          <Cell v-pressable class="date-trigger" :title="form.foundedAt || '请选择成立时间'" arrow @click="openFoundedPicker" />
           <Popup v-model:visible="foundedVisible" placement="bottom">
             <DateTimePicker
               v-model="foundedValue"

@@ -50,7 +50,8 @@ onMounted(run)
           <h2 class="name">{{ p.name }}</h2>
           <!-- v48：结项状态统一走 StateTag（kind=project），与详情页口径一致 -->
           <StateTag v-if="p.finishedAt" kind="project" value="finished" />
-          <Tag v-if="p.role === '需求发起方'" theme="success" variant="light" size="small">需求发起方</Tag>
+          <!-- v51：角色标签属中性信息，不再用表示「通过/成功」的 success 语义色（与「企业承接」同一灰阶family） -->
+          <Tag v-if="p.role === '需求发起方'" theme="default" variant="light" size="small">需求发起方</Tag>
           <Tag v-else-if="p.role === '本人承接'" theme="primary" variant="light" size="small">本人承接</Tag>
           <template v-else>
             <Tag theme="default" variant="light" size="small">企业承接</Tag>

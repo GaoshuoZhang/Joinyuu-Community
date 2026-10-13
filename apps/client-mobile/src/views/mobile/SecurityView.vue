@@ -387,17 +387,18 @@ async function onExport() {
   <div class="page-fade-in m-security">
     <p class="group-title">账号安全</p>
     <CellGroup theme="card">
-      <Cell title="修改登录密码" arrow @click="pwdVisible = true" />
-      <Cell :title="phoneTitle" :note="phoneNote" arrow @click="phoneVisible = true" />
-      <Cell title="绑定邮箱" :note="emailNote" arrow @click="emailVisible = true" />
-      <Cell title="找回密码说明" note="退出登录后可在登录页操作" arrow @click="router.push('/forgot-password')" />
+      <Cell v-pressable title="修改登录密码" arrow @click="pwdVisible = true" />
+      <Cell v-pressable :title="phoneTitle" :note="phoneNote" arrow @click="phoneVisible = true" />
+      <Cell v-pressable title="绑定邮箱" :note="emailNote" arrow @click="emailVisible = true" />
+      <Cell v-pressable title="找回密码说明" note="退出登录后可在登录页操作" arrow @click="router.push('/forgot-password')" />
     </CellGroup>
 
     <p class="group-title">隐私与数据</p>
     <CellGroup theme="card">
-      <Cell title="用户协议与隐私政策" arrow @click="router.push('/privacy')" />
-      <Cell title="导出个人数据" :note="requests.export ? `已生成（${formatLocalDateTime(requests.export.at)}），点击下载` : '生成后站内信通知'" arrow @click="onExport" />
+      <Cell v-pressable title="用户协议与隐私政策" arrow @click="router.push('/privacy')" />
+      <Cell v-pressable title="导出个人数据" :note="requests.export ? `已生成（${formatLocalDateTime(requests.export.at)}），点击下载` : '生成后站内信通知'" arrow @click="onExport" />
       <Cell
+        v-pressable="!requests.deletion"
         title="注销账号"
         :description="requests.deletion ? `申请处理中（${formatLocalDateTime(requests.deletion.at)}）` : ''"
         :arrow="!requests.deletion"

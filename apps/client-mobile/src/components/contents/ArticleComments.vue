@@ -160,9 +160,10 @@ function pick(identity: UserIdentity) {
 }
 
 .comment-author-name {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  /* v51：原先单行省略号且无 title/链接，触摸端读不到完整昵称；改为可换行断行，
+   * 长昵称在昵称自身范围内折行（父行 .comment-head 为 flex，不影响身份标签） */
+  min-width: 0;
+  overflow-wrap: anywhere;
 }
 
 .comment-identity {

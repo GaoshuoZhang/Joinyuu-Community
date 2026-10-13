@@ -72,6 +72,7 @@ function memberNote(m: EnterpriseMemberInfo): string {
     </div>
     <div class="members">
       <Cell
+        v-pressable="canManage && !m.isContact"
         v-for="m in members"
         :key="m.phone ?? m.name"
         :title="m.name"
