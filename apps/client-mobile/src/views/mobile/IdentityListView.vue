@@ -3,6 +3,7 @@ import { computed, onMounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { Button, DialogPlugin, Icon, Tag, Toast } from 'tdesign-mobile-vue'
 import { fetchMyIdentities, fetchMyTransferRequests, respondEnterpriseTransfer } from '@/api/enterprises'
+import { ApiError } from '@/api/http'
 import { useAsyncList } from '@/composables/useAsyncList'
 import EmptyBlock from '@/components/shared/EmptyBlock.vue'
 import IdentityTag from '@/components/shared/IdentityTag.vue'
@@ -61,6 +62,8 @@ function onRespond(item: EnterpriseTransferRequest, action: 'accept' | 'reject')
         await run()
       } catch (e) {
         Toast(e instanceof Error ? e.message : '处理失败，请稍后重试')
+        /* 他人已处理 / 已超期 / 发起方已撤销：以服务端为准刷新，移除该条待确认提示 */
+        if (e instanceof ApiError && (e.code === 404 || e.code === 409)) await loadTransfers()
       }
     },
   })

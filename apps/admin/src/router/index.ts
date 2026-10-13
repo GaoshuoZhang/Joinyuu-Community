@@ -348,8 +348,9 @@ const router = createRouter({
 router.beforeEach((to) => {
   document.documentElement.dataset.routeLoading = 'true'
   const logged = !!localStorage.getItem('joinyuu_admin_token')
+  /* 不带回跳参数：登录成功统一落到「工作台」，避免历史 URL（如 #/system/change-password）把登录落点带离工作台 */
   if (to.path !== '/login' && !logged) {
-    return { path: '/login', query: to.fullPath === '/' ? {} : { redirect: to.fullPath } }
+    return { path: '/login' }
   }
   if (to.path === '/login' && logged) {
     return firstAccessiblePath()

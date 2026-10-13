@@ -228,6 +228,8 @@ describe('M1-E system 系统管理域', () => {
       homeCarouselOpen: true,
       leaseExpireRemindDays: 20,
       uploadMaxSizeMb: 30,
+      /* 密码过期强制改密开关（含周期）+ 存量字段全量提交 */
+      passwordExpireEnabled: true,
       passwordExpireDays: 120,
       minioEnabled: false,
       minioEndpoint: 'minio.local',
@@ -246,6 +248,8 @@ describe('M1-E system 系统管理域', () => {
     expect(after.body.data.homeCarouselOpen).toBe(true)
     expect(after.body.data.leaseExpireRemindDays).toBe(20)
     expect(after.body.data.uploadMaxSizeMb).toBe(30)
+    /* 默认关闭的开关：本次显式开启并保存后回读为 true */
+    expect(after.body.data.passwordExpireEnabled).toBe(true)
     expect(after.body.data.passwordExpireDays).toBe(120)
     expect(after.body.data.minioEnabled).toBe(false)
     expect(after.body.data.minioEndpoint).toBe('minio.local')
@@ -262,7 +266,7 @@ describe('M1-E system 系统管理域', () => {
     /* 保存留痕（系统管理，含 MinIO 状态） */
     const logs = await get('/api/admin/audit-logs').query({ page: 1, pageSize: 50, keyword: '保存系统配置' })
     expect(logs.body.data.total).toBe(1)
-    expect(logs.body.data.list[0].detail).toBe('临期提醒 20 天 · 上传上限 30 MB · MinIO 已停用 · 密码有效期 120 天')
+    expect(logs.body.data.list[0].detail).toBe('临期提醒 20 天 · 上传上限 30 MB · MinIO 已停用 · 密码过期强制改密 已启用（120 天）')
 
     const emptyName = await put('/api/admin/system/config').send({
       siteName: '   ',
@@ -332,6 +336,31 @@ describe('M1-E system 系统管理域', () => {
     })
     expect(badUploadLimit.status).toBe(400)
     expect(badUploadLimit.body).toEqual({ code: 400, message: '上传文件大小限制须为 1-100 的整数' })
+
+    /* 开启「密码过期强制改密」时周期须为 1-3650（旧的 0=不启用语义已由开关取代） */
+    const badExpireDays = await put('/api/admin/system/config').send({
+      siteName: '聚屿社区',
+      siteSlogan: '',
+      registrationOpen: true,
+      mallOpen: true,
+      demandOpen: true,
+      reservationOpen: true,
+      realnameRequired: false,
+      homeCarouselOpen: true,
+      leaseExpireRemindDays: 15,
+      uploadMaxSizeMb: 10,
+      passwordExpireEnabled: true,
+      passwordExpireDays: 0,
+      minioEnabled: false,
+      minioEndpoint: '',
+      minioPort: 9000,
+      minioUseSsl: false,
+      minioAccessKey: '',
+      minioSecretKey: '',
+      minioBucket: 'joinyuu',
+    })
+    expect(badExpireDays.status).toBe(400)
+    expect(badExpireDays.body).toEqual({ code: 400, message: '密码过期周期须为 1-3650 的整数' })
   })
 
   it('系统配置密钥：留空保持原值、非空轮换、审计与出参都不留密钥原文', async () => {

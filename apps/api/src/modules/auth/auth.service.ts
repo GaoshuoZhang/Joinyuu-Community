@@ -186,14 +186,16 @@ export class AuthService {
     return { token, name: admin.name, permissions, dataScope, passwordExpired }
   }
 
-  /** 密码是否已超过 SystemConfig.passwordExpireDays（0/未配置、无时间戳、时间戳不可解析 → 不过期） */
+  /** 密码是否已过期：仅在 SystemConfig.passwordExpireEnabled=true（密码过期强制改密，仅后台账号）时按
+   * passwordExpireDays 计算；开关关闭（默认）、无时间戳、时间戳不可解析 → 不过期 */
   private async isPasswordExpired(admin: { passwordUpdatedAt: string | null }): Promise<boolean> {
     if (!admin.passwordUpdatedAt) return false
     const config = await this.prisma.systemConfig.findUnique({
       where: { id: 1 },
-      select: { passwordExpireDays: true },
+      select: { passwordExpireEnabled: true, passwordExpireDays: true },
     })
-    const days = config?.passwordExpireDays ?? 0
+    if (!config?.passwordExpireEnabled) return false
+    const days = config.passwordExpireDays
     if (days <= 0) return false
     const updated = new Date(admin.passwordUpdatedAt.replace(' ', 'T'))
     if (Number.isNaN(updated.getTime())) return false

@@ -17,7 +17,9 @@ export interface SystemConfigPayload {
   homeCarouselOpen: boolean
   leaseExpireRemindDays: number
   uploadMaxSizeMb: number
-  /** 密码有效期（天）：0=不启用 */
+  /** 密码过期强制改密（仅后台管理员账号）：关闭（默认）= 密码永不过期 */
+  passwordExpireEnabled: boolean
+  /** 密码过期周期（天，1-3650）：仅 passwordExpireEnabled=true 时生效 */
   passwordExpireDays: number
   /** P1 实名核验：是否启用权威二要素核验 */
   realnameVerifyEnabled: boolean
@@ -40,7 +42,7 @@ export interface SystemConfigPayload {
 }
 
 /* PUT /api/admin/system/config — 保存系统配置（保存即生效并留痕）
- * 服务端校验：站点名称非空、租约临期提醒窗口 1-90 整数、上传文件大小限制 1-100 整数、密码有效期 0-3650 整数
+ * 服务端校验：站点名称非空、租约临期提醒窗口 1-90 整数、上传文件大小限制 1-100 整数、密码过期周期 1-3650 整数
  * 密钥安全：minioSecretKey 为只写字段，留空表示保持原值，不回传原文 */
 export async function saveSystemConfig(payload: SystemConfigPayload): Promise<{ code: number }> {
   return httpPut<{ code: number }>('/system/config', payload)

@@ -201,11 +201,23 @@ describe('M1.5 R3 登录安全 / R8 登录日志', () => {
     })
     const adminToken = await loginAs(app, 'admin', 'admin123')
 
-    /* 制造过期：时间戳回拨至 2020-01-01 + 有效期 1 天（用仍有效的 token 保存配置） */
+    /* 制造过期：时间戳回拨至 2020-01-01（用仍有效的 token 保存配置） */
     await prisma.adminUser.update({
       where: { username: 'admin' },
       data: { passwordUpdatedAt: '2020-01-01 10:00' },
     })
+
+    /* 开关默认关闭（密码永不过期）：时间戳极旧也不标记过期、不受限 */
+    const notExpired = await loginRequest(app, 'admin', 'admin123')
+    expect(notExpired.status).toBe(200)
+    expect(notExpired.body.data.passwordExpired).toBe(false)
+    const notExpiredToken = notExpired.body.data.token as string
+    const passThrough = await request(app.getHttpServer())
+      .get('/api/admin/users')
+      .set('Authorization', `Bearer ${notExpiredToken}`)
+    expect(passThrough.status).toBe(200)
+
+    /* 开启「密码过期强制改密」+ 有效期 1 天 → 过期登录被标记并受限 */
     const config = (
       await request(app.getHttpServer())
         .get('/api/admin/system/config')
@@ -214,7 +226,7 @@ describe('M1.5 R3 登录安全 / R8 登录日志', () => {
     const saved = await request(app.getHttpServer())
       .put('/api/admin/system/config')
       .set('Authorization', `Bearer ${adminToken}`)
-      .send({ ...config, passwordExpireDays: 1 })
+      .send({ ...config, passwordExpireEnabled: true, passwordExpireDays: 1 })
     expect(saved.status).toBe(200)
 
     /* 过期登录：仍成功但标记 passwordExpired；受保护接口被 JWT 守卫拦截 403 */
@@ -254,7 +266,10 @@ describe('M1.5 R3 登录安全 / R8 登录日志', () => {
       where: { username: 'admin' },
       data: { passwordUpdatedAt: formatNow() },
     })
-    await prisma.systemConfig.update({ where: { id: 1 }, data: { passwordExpireDays: 0 } })
+    await prisma.systemConfig.update({
+      where: { id: 1 },
+      data: { passwordExpireEnabled: false, passwordExpireDays: 90 },
+    })
   })
 
   /* 必须放在套件最末：该用例会让本机 IP 在 60s 内触发验证码限流（afterAll 清理限流键） */

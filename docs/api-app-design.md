@@ -144,7 +144,7 @@
 | POST | /api/app/reports | 举报（需求 / 文章 / 企业名片；管理端举报处理与内容处置为后台缺口） |
 | GET | /api/app/me/favorites · POST /api/app/me/favorites/toggle | 收藏需求 / 文章 / 活动与切换 |
 | POST | /api/app/me/enterprises/invitations/:id/revoke | 撤销待接受的企业成员邀请（邀请 7 天有效期） |
-| GET | /api/app/me/transfer-requests · POST /:id/respond · /:id/cancel | 负责人转移请求列表 / 目标成员接受或拒绝 / 发起方撤销（接受后变更负责人） |
+| GET | /api/app/me/transfer-requests · POST /:id/respond · /:id/cancel | 待确认负责人转移请求列表（GET 仅返回 `pending`，已处理/已过期不再下发） / 目标成员接受或拒绝 / 发起方撤销（接受后变更负责人） |
 | POST | /api/app/analytics/events | 行为埋点旁路上报（登录/注册/发布/响应/报名/签到/下单/投稿/预约/收藏/举报/搜索）；失败不影响业务交互 |
 | POST | /api/app/auth/reset-password · /auth/change-phone · /me/change-password | v38 找回密码（短信码+限频）/ 换绑手机号（新号验证码+占用 409）/ 登录态改密（原密码校验，成功后其他会话失效） |
 | POST | /api/app/me/deletion-request · /me/data-export | v38 注销申请（运营复核）与个人数据导出（异步打包 + 站内信） |

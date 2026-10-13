@@ -20,9 +20,12 @@ export function dictCacheKey(type: string): string {
   return `dicts:${type}`
 }
 
+/** 密码过期标记键前缀（用于按前缀清理，如关闭「密码过期强制改密」开关后清除残留标记） */
+export const PASSWORD_EXPIRED_KEY_PREFIX = 'auth:admin:pwd-expired:'
+
 /** 密码过期标记键（登录超期时写入，JWT 守卫读取；改密/重置后清除） */
 export function passwordExpiredKey(username: string): string {
-  return `auth:admin:pwd-expired:${username}`
+  return `${PASSWORD_EXPIRED_KEY_PREFIX}${username}`
 }
 
 /** 验证码接口 IP 限流键（60s 窗口） */

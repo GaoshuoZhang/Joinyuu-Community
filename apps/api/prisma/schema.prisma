@@ -1087,7 +1087,12 @@ model SystemConfig {
    */
   uploadMaxSizeMb       Int     @default(10)
   /**
-   * 密码有效期（天）：0=不启用；超期登录后仅允许修改密码
+   * 密码过期强制改密（仅后台管理员账号，不影响客户端用户）：
+   * passwordExpireEnabled=false（默认）= 密码永不过期；true= 超过 passwordExpireDays 未改密的后台账号登录后仅允许修改密码
+   */
+  passwordExpireEnabled  Boolean @default(false)
+  /**
+   * 密码有效期（天）：仅在 passwordExpireEnabled=true 时生效；超期登录后仅允许修改密码
    */
   passwordExpireDays    Int     @default(90)
   /**

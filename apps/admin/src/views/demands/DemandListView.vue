@@ -256,17 +256,8 @@ const columns = [
   { colKey: 'respondents', title: '总响应/待审核', cell: 'respondents', width: 130, resizable: true , ellipsis: true},
   {
     colKey: 'createdAt',
-    title: '创建时间',
-    width: 170,
-    resizable: true,
-    sorter: true,
-    sortType: 'all',
-  ellipsis: true,
-  },
-  {
-    colKey: 'publishedAt',
-    title: '发布时间',
-    cell: 'publishedAt',
+    title: '创建 / 发布时间',
+    cell: 'createdAt',
     width: 170,
     resizable: true,
     sorter: true,
@@ -761,7 +752,11 @@ async function loadCategories() {
 
         <template #budget="{ row }">{{ row.budget || '—' }}</template>
 
-        <template #publishedAt="{ row }">{{ row.publishedAt ?? '—' }}</template>
+        <!-- 创建 / 发布时间合并列：首行创建时间，次行发布时间（未发布显示「—」） -->
+        <template #createdAt="{ row }">
+          <div>{{ row.createdAt }}</div>
+          <div class="cell-sub">{{ row.publishedAt ?? '—' }}</div>
+        </template>
 
         <template #status="{ row }">
           <StatusTag entity="demand" :value="row.status" :scheduled-at="row.scheduledAt" />

@@ -103,23 +103,25 @@ const phoneCountdown = ref(0)
 const emailCountdown = ref(0)
 let phoneTimer: number | undefined
 let emailTimer: number | undefined
-function startCountdown(kind: 'phone' | 'email', seconds = 60) {
-  const timerRef = kind === 'phone' ? phoneCountdown : emailCountdown
-  const clear = () => {
-    if (kind === 'phone') {
-      window.clearInterval(phoneTimer)
-      phoneTimer = undefined
-    } else {
-      window.clearInterval(emailTimer)
-      emailTimer = undefined
-    }
-    timerRef.value = 0
+function stopCountdown(kind: 'phone' | 'email') {
+  if (kind === 'phone') {
+    window.clearInterval(phoneTimer)
+    phoneTimer = undefined
+    phoneCountdown.value = 0
+  } else {
+    window.clearInterval(emailTimer)
+    emailTimer = undefined
+    emailCountdown.value = 0
   }
-  clear()
+}
+
+function startCountdown(kind: 'phone' | 'email', seconds = 60) {
+  stopCountdown(kind)
+  const timerRef = kind === 'phone' ? phoneCountdown : emailCountdown
   timerRef.value = seconds
   const timer = window.setInterval(() => {
     timerRef.value -= 1
-    if (timerRef.value <= 0) clear()
+    if (timerRef.value <= 0) stopCountdown(kind)
   }, 1000)
   if (kind === 'phone') phoneTimer = timer
   else emailTimer = timer
@@ -133,10 +135,36 @@ onBeforeUnmount(() => {
 const phoneVisible = ref(false)
 const phoneForm = reactive({ newPhone: '', smsCode: '' })
 const phoneErrors = reactive({ newPhone: '', smsCode: '' })
-watch(() => phoneForm.newPhone, () => (phoneErrors.newPhone = ''))
-watch(() => phoneForm.smsCode, () => (phoneErrors.smsCode = ''))
 const phoneSaving = ref(false)
 const phoneSending = ref(false)
+
+/* 已绑定时入口/弹窗按「更换」口径呈现，未绑定时按「绑定」口径呈现 */
+const hasPhone = computed(() => Boolean(profile.value?.phone))
+const phoneTitle = computed(() => (hasPhone.value ? '更换手机号' : '绑定手机号'))
+const phoneFieldLabel = computed(() => (hasPhone.value ? '新手机号' : '手机号'))
+const phoneSubmitText = computed(() => (hasPhone.value ? '确认更换' : '确认绑定'))
+
+/* 新号变更后原验证码即失效：清空验证码并解除倒计时，避免提交必然失败的请求 */
+watch(() => phoneForm.newPhone, () => {
+  phoneErrors.newPhone = ''
+  if (phoneForm.smsCode || phoneCountdown.value > 0) {
+    phoneForm.smsCode = ''
+    phoneErrors.smsCode = ''
+    stopCountdown('phone')
+  }
+})
+watch(() => phoneForm.smsCode, () => (phoneErrors.smsCode = ''))
+
+/** 与当前已绑定手机号相同则直接拦截，避免无意义的换绑请求 */
+function isSameAsCurrentPhone(): boolean {
+  const current = profile.value?.phone ?? ''
+  if (current && phoneForm.newPhone.trim() === current) {
+    phoneErrors.newPhone = '新手机号与当前手机号相同，无需更换'
+    Toast(phoneErrors.newPhone)
+    return true
+  }
+  return false
+}
 
 async function onSendPhoneCode() {
   phoneErrors.newPhone = ''
@@ -144,6 +172,7 @@ async function onSendPhoneCode() {
     phoneErrors.newPhone = PHONE_MSG
     return void Toast(phoneErrors.newPhone)
   }
+  if (isSameAsCurrentPhone()) return
   phoneSending.value = true
   try {
     const result = await sendSmsCode({ phone: phoneForm.newPhone.trim(), purpose: 'change_phone' })
@@ -163,6 +192,7 @@ function onPhoneSave() {
     phoneErrors.newPhone = PHONE_MSG
     return void Toast(phoneErrors.newPhone)
   }
+  if (isSameAsCurrentPhone()) return
   if (!isSmsCode(phoneForm.smsCode)) {
     phoneErrors.smsCode = '请输入 6 位验证码'
     return void Toast(phoneErrors.smsCode)
@@ -171,6 +201,7 @@ function onPhoneSave() {
   changePhone({ newPhone: phoneForm.newPhone.trim(), smsCode: phoneForm.smsCode.trim() })
     .then(async () => {
       Toast('手机号已更新')
+      stopCountdown('phone')
       phoneVisible.value = false
       phoneForm.newPhone = ''
       phoneForm.smsCode = ''
@@ -357,7 +388,7 @@ async function onExport() {
     <p class="group-title">账号安全</p>
     <CellGroup theme="card">
       <Cell title="修改登录密码" arrow @click="pwdVisible = true" />
-      <Cell title="绑定手机号" :note="phoneNote" arrow @click="phoneVisible = true" />
+      <Cell :title="phoneTitle" :note="phoneNote" arrow @click="phoneVisible = true" />
       <Cell title="绑定邮箱" :note="emailNote" arrow @click="emailVisible = true" />
       <Cell title="找回密码说明" note="退出登录后可在登录页操作" arrow @click="router.push('/forgot-password')" />
     </CellGroup>
@@ -398,22 +429,26 @@ async function onExport() {
     </Popup>
 
     <Popup :visible="phoneVisible" placement="bottom" :close-btn="true" @update:visible="requestSheetClose('phone', $event)">
-      <div class="sheet">
-        <h2 class="sheet-title">绑定手机号</h2>
-        <p class="sheet-tip">当前：{{ phoneNote }}。更换后新手机号可用于登录与接收通知。</p>
-        <div class="field"><label>新手机号</label><Input v-model="phoneForm.newPhone" type="tel" autocomplete="tel" :maxlength="11" placeholder="请输入新手机号…" clearable /><p v-if="phoneErrors.newPhone" class="field-error">{{ phoneErrors.newPhone }}</p></div>
+      <!-- 置于 form 内：回车即可提交，浏览器/密码管理器也能识别为一次完整表单提交 -->
+      <form class="sheet" @submit.prevent="onPhoneSave">
+        <h2 class="sheet-title">{{ phoneTitle }}</h2>
+        <p class="sheet-tip">
+          <template v-if="hasPhone">当前：{{ phoneNote }}。更换后新手机号可用于登录与接收通知。</template>
+          <template v-else>绑定后手机号可用于登录与接收通知。</template>
+        </p>
+        <div class="field"><label>{{ phoneFieldLabel }}</label><Input v-model="phoneForm.newPhone" type="tel" autocomplete="tel" :maxlength="11" placeholder="请输入手机号…" clearable /><p v-if="phoneErrors.newPhone" class="field-error">{{ phoneErrors.newPhone }}</p></div>
         <div class="field">
           <label>短信验证码</label>
           <div class="code-row">
             <Input v-model="phoneForm.smsCode" class="code-input" :maxlength="6" inputmode="numeric" :spell-check="false" placeholder="请输入 6 位验证码…" clearable />
-            <Button class="code-button" theme="light" :disabled="phoneSending || phoneCountdown > 0" @click="onSendPhoneCode">
+            <Button class="code-button" type="button" theme="light" :disabled="phoneSending || phoneCountdown > 0" @click="onSendPhoneCode">
               {{ phoneCountdown > 0 ? `${phoneCountdown}s` : phoneSending ? '发送中…' : '获取验证码' }}
             </Button>
           </div>
           <p v-if="phoneErrors.smsCode" class="field-error">{{ phoneErrors.smsCode }}</p>
         </div>
-        <Button theme="primary" size="large" block :loading="phoneSaving" @click="onPhoneSave">确认更换</Button>
-      </div>
+        <Button theme="primary" size="large" block type="submit" :loading="phoneSaving">{{ phoneSubmitText }}</Button>
+      </form>
     </Popup>
 
     <Popup :visible="emailVisible" placement="bottom" :close-btn="true" @update:visible="requestSheetClose('email', $event)">

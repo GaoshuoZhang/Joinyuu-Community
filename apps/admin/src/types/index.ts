@@ -924,7 +924,9 @@ export interface SystemConfig {
   leaseExpireRemindDays: number
   /** 上传文件大小限制（MB，素材库/富文本图片上传共用） */
   uploadMaxSizeMb: number
-  /** 密码有效期（天）：0=不启用；超期登录后仅允许修改密码 */
+  /** 密码过期强制改密（仅后台管理员账号，不影响客户端）：关闭（默认）= 密码永不过期 */
+  passwordExpireEnabled: boolean
+  /** 密码过期周期（天，1-3650）：仅 passwordExpireEnabled=true 时生效；超期登录后仅允许修改密码 */
   passwordExpireDays: number
   /** P1 实名核验：是否启用权威二要素核验 */
   realnameVerifyEnabled: boolean

@@ -122,8 +122,10 @@ useRefreshOnActivate(() => void refreshMe())
       >
         <Avatar size="56px" class="avatar" :image="avatarImage" :on-error="onAvatarError">{{ auth.name.slice(0, 1) }}</Avatar>
         <div class="info">
-          <p class="name">{{ auth.name }}</p>
-          <p v-if="auth.username" class="handle">@{{ auth.username }}</p>
+          <div class="name-row">
+            <p class="name">{{ auth.name }}</p>
+            <p v-if="auth.username" class="handle">@{{ auth.username }}</p>
+          </div>
           <p class="uid">UID {{ auth.uid }}</p>
           <div class="tags">
             <IdentityTag v-for="i in auth.profileIdentities" :key="i.type" :type="i.type" />
@@ -299,8 +301,17 @@ useRefreshOnActivate(() => void refreshMe())
   min-width: 0;
 }
 
-.name {
+/* 昵称与 @用户名 并排展示；字重/字号各自沿用 .name / .handle 原口径 */
+.name-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: var(--app-space-2);
   margin: 0 0 var(--app-space-2);
+}
+
+.name {
+  margin: 0;
   font: var(--app-type-page-title);
 }
 
@@ -311,7 +322,7 @@ useRefreshOnActivate(() => void refreshMe())
 }
 
 .handle {
-  margin: 0 0 var(--app-space-2);
+  margin: 0;
   font: var(--app-type-caption);
   color: var(--td-text-color-placeholder);
 }

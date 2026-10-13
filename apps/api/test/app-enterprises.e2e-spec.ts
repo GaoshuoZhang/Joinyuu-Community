@@ -186,6 +186,11 @@ describe('M2-R R3 企业治理', () => {
     })
     expect(accept.status).toBe(200)
 
+    // 已处理的请求不再下发：收件箱仅剩 pending（回归：否则误点会报「该请求已处理或已过期」）
+    const inboxAfter = await appGet(app, member, '/api/app/me/transfer-requests')
+    expect(inboxAfter.body.data.some((r: { id: string }) => r.id === req.id)).toBe(false)
+    expect(inboxAfter.body.data.every((r: { status: string }) => r.status === 'pending')).toBe(true)
+
     const ent = await prisma.enterprise.findUnique({ where: { id: 'E2001' } })
     expect(ent?.contactUserId).toBe('U1002')
 

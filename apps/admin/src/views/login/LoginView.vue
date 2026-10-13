@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { onMounted, reactive, ref } from 'vue'
-import { useRoute, useRouter } from 'vue-router'
+import { useRouter } from 'vue-router'
 import { MessagePlugin } from 'tdesign-vue-next'
 import { CheckCircleIcon } from 'tdesign-icons-vue-next'
 import { useAuthStore } from '@/stores/auth'
@@ -9,7 +9,6 @@ import { fetchCaptcha, type CaptchaResult } from '@/api/auth'
 import type { FormProps } from 'tdesign-vue-next'
 
 const router = useRouter()
-const route = useRoute()
 const auth = useAuthStore()
 
 const form = reactive({
@@ -66,9 +65,9 @@ const onSubmit: FormProps['onSubmit'] = async ({ validateResult, firstError }) =
       return
     }
     MessagePlugin.success('登录成功，欢迎回来')
-    /* 未带 redirect 时落到「首个可访问路由」，避免无 /dashboard 权限的账号登录即 403 */
-    const redirect = (route.query.redirect as string) || firstAccessiblePath()
-    router.push(redirect)
+    /* 登录成功一律进入「工作台」（首个可访问路由，工作台优先）：
+     * 不再回跳登录前被拦截的页面，避免历史 URL（如 #/system/change-password）把登录落点带离工作台 */
+    router.push(firstAccessiblePath())
   } catch (err) {
     MessagePlugin.error(err instanceof Error ? err.message : '登录失败，请稍后重试')
     form.captcha = ''

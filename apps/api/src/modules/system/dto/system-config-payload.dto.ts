@@ -79,10 +79,15 @@ export class SystemConfigPayloadDto {
   @Max(100, { message: '上传文件大小限制须为 1-100 的整数' })
   uploadMaxSizeMb!: number
 
+  /** 密码过期强制改密（仅后台管理员账号）：缺省 false = 密码永不过期（保持存量兼容） */
+  @IsOptional()
+  @IsBoolean()
+  passwordExpireEnabled?: boolean
+
   @Type(() => Number)
-  @IsInt({ message: '密码有效期须为 0-3650 的整数（0 表示不启用）' })
-  @Min(0, { message: '密码有效期须为 0-3650 的整数（0 表示不启用）' })
-  @Max(3650, { message: '密码有效期须为 0-3650 的整数（0 表示不启用）' })
+  @IsInt({ message: '密码过期周期须为 1-3650 的整数' })
+  @Min(1, { message: '密码过期周期须为 1-3650 的整数' })
+  @Max(3650, { message: '密码过期周期须为 1-3650 的整数' })
   passwordExpireDays!: number
 
   @IsBoolean()

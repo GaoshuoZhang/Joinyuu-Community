@@ -240,7 +240,7 @@ TZ=Asia/Shanghai
 | 内容 | Announcement | AN | title/content（富文本 sanitize）/pinned/status(published/withdrawn)/publishedAt/createdAt/updatedAt?/**archivableAt?/deletedAt?/deletedBy?**（删除仅允许已下架，软删） |
 | 系统 | AdminNotification | N | type(approval/demand_review/reservation/showcase/article/lease/schedule)/title/content/at/read/link? |
 | 系统 | AuditLog | AL | operator/module/action/target/detail?/at/ip?/before Json?/after Json?；查询返回 M0 形状（不含 ip/before/after） |
-| 系统 | SystemConfig | 单例(id=1) | siteName/siteSlogan/registrationOpen/mallOpen/demandOpen/reservationOpen/realnameRequired/**homeCarouselOpen(首页轮播总开关)**/leaseExpireRemindDays(1-90)/**uploadMaxSizeMb(1-100，默认 10；上传与富文本图片共用，dailyLoginPoints 已删除)**/passwordExpireDays/MinIO 配置/updatedAt/updatedBy |
+| 系统 | SystemConfig | 单例(id=1) | siteName/siteSlogan/registrationOpen/mallOpen/demandOpen/reservationOpen/realnameRequired/**homeCarouselOpen(首页轮播总开关)**/leaseExpireRemindDays(1-90)/**uploadMaxSizeMb(1-100，默认 10；上传与富文本图片共用，dailyLoginPoints 已删除)**/**passwordExpireEnabled(密码过期强制改密，默认 false=密码永不过期，仅后台账号)**/passwordExpireDays(1-3650，默认 90，仅开关开启时生效)/MinIO 配置/updatedAt/updatedBy |
 | 系统 | DictEntry | 复合 (type, code) | type(**demand_category/industry/event_type/goods_category**)/code(DC/IN/ET/GC 前缀自增)/label 全类型唯一/sort/status(enabled/disabled)；**goods_category 另有类别级 visibilityIdentities/visibilityLevels/orderIdentities/orderLevels**（空数组 = 不限，其余类型恒为空） |
 | 系统 | ArchiveSetting | domain（PK） | 归档设置（13 域）：autoArchive/archiveDelayDays(0-365)/autoPurge/purgeDelayDays(1-3650)/archiveStatuses Json?（按状态开关）；企业/合作企业不支持自动归档 |
 | App | UserNotification | UN | userId FK 级联；type/title/content/at/link?/read；站内信为单一列表（无归档、无分类偏好；`archived`/`UserNotificationPreference` 已移除） |
@@ -259,6 +259,7 @@ TZ=Asia/Shanghai
 - **登录日志**：`LoginLog` 三态 `success/fail/locked` + 失败原因；查询 `GET /api/admin/login-logs`（权限 `/logs/login`，支持状态/关键词/时间范围，返回 name=账号展示名、region 由 IP 派生）。
 - **在线会话**：Redis `auth:admin:sessions` 单键维护全部在线会话（含 jti/username/name/ip/device/loginAt/exp，TTL 2h 且每次写入刷新）；`GET /api/admin/auth/sessions` 与会话列表权限 `/system/sessions` 可见；`POST /api/admin/auth/sessions/:jti/kick` 强制下线（黑名单 + 移出索引，**目标不存在返回 404**）；`POST /api/admin/auth/sessions/kick-all` 一键强制下线其余全部会话（当前操作者会话保留，返回 `{ code, kicked }` 实际下线数）。
 - **修改密码**：`POST /api/admin/auth/change-password`（原密码校验；新密码 ≥8 位且含字母与数字，不得与原密码相同）→ 失效权限缓存 + **踢出该账号全部会话** + 审计「认证 · 修改密码」。
+- **密码过期强制改密（仅后台账号，与客户端无关）**：`SystemConfig.passwordExpireEnabled` 默认 false（密码永不过期）；开启后超过 `passwordExpireDays`（1-3650，默认 90）未改密的管理员登录仍成功，但响应 `passwordExpired=true` 并写 Redis 标记 `auth:admin:pwd-expired:<username>`（TTL 2h），JwtAuthGuard 对非白名单接口抛 403「密码已过期，请先修改密码」（白名单：改密/登出/验证码/登录/health）；改密或关闭开关保存配置即清理标记（保存时 `delByPrefix` 清残留）。
 - **管理员账号联动**：新增管理员未传密码时随机生成 12 位初始密码并一次性返回；编辑角色/停用/重置密码后失效权限缓存并强制下线；系统保留至少一名启用状态的超级管理员，超管角色必须保留 `['*']`，非超管不可分配超出自身权限的权限码。
 - **前端约定**：localStorage key `joinyuu_admin_token` 存 JWT，请求头 `Authorization: Bearer <token>`；401 统一跳登录页。
 - 审计 operator、审核记录 operator、手动调整流水的 operator 一律取 JWT `name`（M0 固定"社区管理员"的服务端替代）。
@@ -529,7 +530,7 @@ TZ=Asia/Shanghai
 | POST | /api/admin/notifications/read-all | 全部已读 |
 | GET | /api/admin/audit-logs | query：page/pageSize/keyword(target/action/detail/operator)/module 精确筛选；权限 `/logs/audit` |
 | GET | /api/admin/system/config | 单例配置（走 `config:system` 缓存 10min）；权限 `/system/config`；MinIO SecretKey 不回传原文，仅 `minioSecretKeyConfigured` + `minioSecretKeyMasked`（`********`）+ `minioCredentialSource`（env 优先、其次 database）；实名核验只回 `realnameVerifyCredentialMasked`（inline 模式）与派生 `realnameMode` |
-| PUT | /api/admin/system/config | 保存即生效；leaseExpireRemindDays 1-90、uploadMaxSizeMb 1-100；记 updatedBy/updatedAt + before/after 审计；`minioSecretKey` 为只写字段（留空=保持原值，非空=更新/轮换），审计快照含 `minioSecretKeyChanged` 但不含密钥原文。**实名核验**：`realnameVerifyEnabled` + `realnameVerifyProvider`（启用时必须单选）、`realnameVerifyConfig`、`realnameVerifyCredentialMode`（inline 直接填写：留空=保持原值/只写；env 登记变量名）、`realnameVerifyCredentialEnv`；启用/供应商/来源/参数/凭据任一变化会把 `realnameVerifyTestOk` 重置为 false（须重新测试联通），审计含 `realnameVerifyChanged` 且 inline 凭据不入快照 |
+| PUT | /api/admin/system/config | 保存即生效；leaseExpireRemindDays 1-90、uploadMaxSizeMb 1-100、passwordExpireDays 1-3650；记 updatedBy/updatedAt + before/after 审计；**密码过期强制改密**：`passwordExpireEnabled`（缺省 false=密码永不过期，仅后台账号）+ 周期 `passwordExpireDays`（默认 90），关闭开关保存时按前缀清理 `auth:admin:pwd-expired:*` 残留标记；`minioSecretKey` 为只写字段（留空=保持原值，非空=更新/轮换），审计快照含 `minioSecretKeyChanged` 但不含密钥原文。**实名核验**：`realnameVerifyEnabled` + `realnameVerifyProvider`（启用时必须单选）、`realnameVerifyConfig`、`realnameVerifyCredentialMode`（inline 直接填写：留空=保持原值/只写；env 登记变量名）、`realnameVerifyCredentialEnv`；启用/供应商/来源/参数/凭据任一变化会把 `realnameVerifyTestOk` 重置为 false（须重新测试联通），审计含 `realnameVerifyChanged` 且 inline 凭据不入快照 |
 | GET | /api/admin/system/config/realname/catalog | 实名核验供应商目录（配置字段 + 凭据变量名，供表单渲染）；权限 `/system/config` |
 | POST | /api/admin/system/config/realname/test | 测试联通：用格式合法的固定样例调用所选供应商，**接口可返回业务结果即算联通**（不要求核验一致）；成功写 `realnameVerifyTestOk=true` + `realnameVerifyTestedAt` 并清 `config:system` 缓存；失败写 false 并返回带阿里云 `Recommend` 的诊断信息 |
 | GET | /api/admin/dicts/:type | 按 sort 升序（管理页返回全量含 disabled）；type 四类 demand_category/industry/event_type/goods_category；权限 `/system/dicts` |

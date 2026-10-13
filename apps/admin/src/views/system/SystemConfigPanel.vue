@@ -65,6 +65,8 @@ const form = reactive<SystemConfigForm>({
   homeCarouselOpen: true,
   leaseExpireRemindDays: 15,
   uploadMaxSizeMb: 10,
+  /* 默认关闭：密码永不过期（与该开关同时开启的过期周期默认 90 天） */
+  passwordExpireEnabled: false,
   passwordExpireDays: 90,
   realnameVerifyEnabled: false,
   realnameVerifyProvider: '',
@@ -310,6 +312,24 @@ onBeforeRouteLeave(async () => {
               </div>
               <t-switch v-model="form.homeCarouselOpen" />
             </div>
+            <div class="switch-row">
+              <div class="switch-text">
+                <div class="switch-label">密码过期强制改密</div>
+                <div class="switch-tip">默认关闭（密码永不过期）；开启后超过有效期的后台账号登录需先修改密码（仅影响后台账号，不影响客户端用户）</div>
+              </div>
+              <t-switch v-model="form.passwordExpireEnabled" />
+            </div>
+          </div>
+          <!-- 密码过期周期：仅开启「密码过期强制改密」后展示 -->
+          <div v-if="form.passwordExpireEnabled" class="form-grid">
+            <t-form-item
+              label="密码过期周期（天）"
+              name="passwordExpireDays"
+              :rules="[{ required: true, message: '请输入 1-3650 的整数', trigger: 'submit' }]"
+            >
+              <t-input-number class="ctl-w-full" v-model="form.passwordExpireDays" :min="1" :max="3650" :step="1" theme="column" />
+              <template #help>超过该周期未修改密码的后台账号，登录后将被引导强制改密（默认 90 天）</template>
+            </t-form-item>
           </div>
 
           <div class="section-title">运营参数</div>
@@ -329,14 +349,6 @@ onBeforeRouteLeave(async () => {
             >
               <t-input-number class="ctl-w-full" v-model="form.uploadMaxSizeMb" :min="1" :max="100" :step="1" theme="column" />
               <template #help>素材库与富文本图片上传的单文件大小上限（1-100 MB）</template>
-            </t-form-item>
-            <t-form-item
-              label="密码有效期（天）"
-              name="passwordExpireDays"
-              :rules="[{ required: true, message: '请输入 0-3650 的整数', trigger: 'submit' }]"
-            >
-              <t-input-number class="ctl-w-full" v-model="form.passwordExpireDays" :min="0" :max="3650" :step="1" theme="column" />
-              <template #help>0 表示不启用；超过有效期后登录将强制修改密码</template>
             </t-form-item>
           </div>
 

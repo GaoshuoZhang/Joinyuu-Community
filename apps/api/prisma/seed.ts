@@ -299,6 +299,7 @@ async function main() {
       homeCarouselOpen: systemConfig.homeCarouselOpen,
       leaseExpireRemindDays: systemConfig.leaseExpireRemindDays,
       uploadMaxSizeMb: systemConfig.uploadMaxSizeMb,
+      passwordExpireEnabled: systemConfig.passwordExpireEnabled,
       passwordExpireDays: systemConfig.passwordExpireDays,
       minioEnabled: systemConfig.minioEnabled,
       minioEndpoint: systemConfig.minioEndpoint,

@@ -4,7 +4,7 @@ import { PrismaService } from '../../common/prisma/prisma.service'
 import { AuditService } from '../../common/audit/audit.service'
 import { RedisService } from '../../common/redis/redis.service'
 import { StorageService } from '../../common/storage/storage.service'
-import { CACHE_KEYS, CACHE_TTL } from '../../common/redis/cache-keys'
+import { CACHE_KEYS, CACHE_TTL, PASSWORD_EXPIRED_KEY_PREFIX } from '../../common/redis/cache-keys'
 import { minioConfigView } from '../../common/storage/minio-config'
 import { realnameVerificationView, realnameCredentialMode } from '../../common/realname/realname-config'
 import { RealnameVerificationService } from '../../common/realname/realname-verification.service'
@@ -32,6 +32,7 @@ type SystemConfigAuditSource = {
   homeCarouselOpen: boolean
   leaseExpireRemindDays: number
   uploadMaxSizeMb: number
+  passwordExpireEnabled: boolean
   passwordExpireDays: number
   minioEnabled: boolean
   minioEndpoint: string
@@ -88,9 +89,12 @@ export class SystemConfigService {
       throw new BadRequestException('上传文件大小限制须为 1-100 的整数')
     }
 
+    /* 密码过期强制改密（仅后台管理员账号，与客户端无关）：缺省关闭 = 密码永不过期；
+     * 开启后按 passwordExpireDays（1-3650）计算有效期，超期登录仅允许修改密码（见 auth.service）。 */
+    const passwordExpireEnabled = payload.passwordExpireEnabled === true
     const passwordExpireDays = payload.passwordExpireDays
-    if (!Number.isInteger(passwordExpireDays) || passwordExpireDays < 0 || passwordExpireDays > 3650) {
-      throw new BadRequestException('密码有效期须为 0-3650 的整数（0 表示不启用）')
+    if (!Number.isInteger(passwordExpireDays) || passwordExpireDays < 1 || passwordExpireDays > 3650) {
+      throw new BadRequestException('密码过期周期须为 1-3650 的整数')
     }
 
     const minioPort = payload.minioPort
@@ -160,6 +164,7 @@ export class SystemConfigService {
       homeCarouselOpen: payload.homeCarouselOpen,
       leaseExpireRemindDays: days,
       uploadMaxSizeMb,
+      passwordExpireEnabled,
       passwordExpireDays,
       minioEnabled: payload.minioEnabled,
       minioEndpoint: (payload.minioEndpoint ?? '').trim(),
@@ -185,11 +190,15 @@ export class SystemConfigService {
     /* 存储驱动立即按新配置切换（无需等待 StorageService 的 60s 判定缓存过期） */
     this.storage.invalidateConfig()
 
+    /* 关闭开关即不再有过期概念：清理残留的密码过期标记（登录时写入、TTL 2h），
+     * 否则已标记的账号在本会话内仍会被守卫拦截（403「密码已过期」）直到重新登录 */
+    if (!passwordExpireEnabled) await this.redis.delByPrefix(PASSWORD_EXPIRED_KEY_PREFIX)
+
     await this.audit.record({
       module: '系统管理',
       action: '保存系统配置',
       target: '系统配置',
-      detail: `临期提醒 ${days} 天 · 上传上限 ${uploadMaxSizeMb} MB · MinIO ${payload.minioEnabled ? '已启用' : '已停用'} · 密码有效期 ${passwordExpireDays} 天`,
+      detail: `临期提醒 ${days} 天 · 上传上限 ${uploadMaxSizeMb} MB · MinIO ${payload.minioEnabled ? '已启用' : '已停用'} · 密码过期强制改密 ${passwordExpireEnabled ? `已启用（${passwordExpireDays} 天）` : '已停用'}`,
       before: previous ? toConfigAuditSnapshot(previous) : undefined,
       after: { ...toConfigAuditSnapshot(next), minioSecretKeyChanged: secretKeyChanged, realnameVerifyChanged: realnameChanged },
       operator,
@@ -232,6 +241,7 @@ function toSystemConfigDto(config: SystemConfig): Record<string, unknown> {
     homeCarouselOpen: config.homeCarouselOpen,
     leaseExpireRemindDays: config.leaseExpireRemindDays,
     uploadMaxSizeMb: config.uploadMaxSizeMb,
+    passwordExpireEnabled: config.passwordExpireEnabled,
     passwordExpireDays: config.passwordExpireDays,
     ...minioConfigView(config),
     ...realnameVerificationView(config),
@@ -253,6 +263,7 @@ function toConfigAuditSnapshot(config: SystemConfigAuditSource): SystemConfigAud
     homeCarouselOpen: config.homeCarouselOpen,
     leaseExpireRemindDays: config.leaseExpireRemindDays,
     uploadMaxSizeMb: config.uploadMaxSizeMb,
+    passwordExpireEnabled: config.passwordExpireEnabled,
     passwordExpireDays: config.passwordExpireDays,
     minioEnabled: config.minioEnabled,
     minioEndpoint: config.minioEndpoint,

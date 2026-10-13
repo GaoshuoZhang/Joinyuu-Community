@@ -147,6 +147,23 @@ export class RedisService implements OnModuleDestroy {
     }
   }
 
+  /** 按前缀批量清理键（SCAN+DEL，如关闭「密码过期强制改密」后清除残留的过期标记）；失败仅告警，返回删除数量。
+   * 仅用于低频写路径（配置保存），不在请求热路径使用。 */
+  async delByPrefix(prefix: string): Promise<number> {
+    let removed = 0
+    try {
+      let cursor = '0'
+      do {
+        const [next, keys] = await this.client.scan(cursor, 'MATCH', `${prefix}*`, 'COUNT', 200)
+        cursor = next
+        if (keys.length) removed += await this.client.del(...keys)
+      } while (cursor !== '0')
+    } catch (e) {
+      console.error('[redis] 前缀清理失败:', e instanceof Error ? e.message : e)
+    }
+    return removed
+  }
+
   /** 原子「比对并删除」：用于一次性凭据（验证码）消费。
    * GET 与 DEL 在同一 Lua 脚本内执行，避免并发下同一验证码被两个请求同时校验通过。
    * 返回 true 仅当键存在且值与 expected 一致；Redis 异常返回 false（fail-closed，视为校验失败）。 */

@@ -117,6 +117,8 @@ function toFullSystemConfig(config: SystemConfig): Record<string, unknown> {
     homeCarouselOpen: config.homeCarouselOpen,
     leaseExpireRemindDays: config.leaseExpireRemindDays,
     uploadMaxSizeMb: config.uploadMaxSizeMb,
+    /* 密码过期强制改密仅作用于后台管理员账号：不进 SiteConfigDto（客户端不下发），此处仅为共享缓存结构对齐 */
+    passwordExpireEnabled: config.passwordExpireEnabled,
     passwordExpireDays: config.passwordExpireDays,
     ...minioConfigView(config),
     ...realnameVerificationView(config),

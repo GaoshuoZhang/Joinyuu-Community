@@ -724,19 +724,17 @@ export class AppEnterprisesService {
     return { code: 0 }
   }
 
-  /** 我收到的负责人转移请求（pending 优先按创建倒序） */
+  /** 我收到的待确认负责人转移请求（仅 pending，按创建倒序；已处理/已过期的不再下发，避免误点报错） */
   async myTransferRequests(uid: string): Promise<EnterpriseTransferRequestDto[]> {
     await this.expirePendingTransfers()
     const rows = await this.prisma.transferRequest.findMany({
-      where: { toUserId: uid },
+      where: { toUserId: uid, status: 'pending' },
       orderBy: { createdAt: 'desc' },
     })
     if (!rows.length) return []
     const entNames = await this.enterpriseNamesOf(rows.map((r) => r.enterpriseId))
     const names = await this.nicknamesOf([...rows.map((r) => r.fromUserId), uid])
-    return [...rows]
-      .sort((a, b) => Number(b.status === 'pending') - Number(a.status === 'pending'))
-      .map((r) => this.transferShape(r, entNames.get(r.enterpriseId) ?? '', names))
+    return rows.map((r) => this.transferShape(r, entNames.get(r.enterpriseId) ?? '', names))
   }
 
   /** 接受/拒绝负责人转移（仅被转移人；accept 单事务变更 contactUserId 与双方身份） */

@@ -13,6 +13,8 @@ export const systemConfig: SystemConfig = {
   homeCarouselOpen: true,
   leaseExpireRemindDays: 15,
   uploadMaxSizeMb: 10,
+  /** 密码过期强制改密：默认关闭（密码永不过期）；开启后按 passwordExpireDays 计算后台账号密码有效期 */
+  passwordExpireEnabled: false,
   passwordExpireDays: 90,
   minioEnabled: false,
   minioEndpoint: '',
