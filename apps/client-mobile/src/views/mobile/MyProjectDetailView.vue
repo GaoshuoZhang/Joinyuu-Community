@@ -186,7 +186,7 @@ async function onAcceptMilestone(m: Milestone) {
             </div>
             <p v-if="m.submitNote" class="m-note">交付说明：{{ m.submitNote }}</p>
             <div v-if="m.attachments?.length" class="m-evidence">
-              <Image v-for="(file, index) in m.attachments" :key="index" :src="file.url" :alt="file.name" fit="cover" lazy @error="onImageError" />
+              <Image v-for="(file, index) in m.attachments" :key="index" class="content-img" :src="file.url" :alt="file.name" fit="cover" lazy @error="onImageError" />
             </div>
             <p v-if="m.returnReason" class="m-return">退回原因：{{ m.returnReason }}</p>
             <p v-if="m.submittedAt" class="m-time">提交于 {{ formatLocalDateTime(m.submittedAt) }}<template v-if="m.acceptedAt"> · 验收于 {{ formatLocalDateTime(m.acceptedAt) }}</template></p>

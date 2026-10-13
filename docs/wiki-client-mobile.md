@@ -66,6 +66,11 @@
   关闭键可聚焦后不参与弹层首次聚焦（`focusDialog` 会跳过关闭键）。升级 TDesign 时须复核上述内部类名。
 - **可点整卡的两条口径**：跳转型卡片用 `router-link` 承载主体内容（真链接，支持 Ctrl/中键新标签打开），操作按钮留在链接之外避免嵌套可交互元素（参照 `MyResponsesView`/`MyDemandsView`）；行/列表项类整卡（如 `Cell`、身份卡）用 `v-pressable` 补 role/tabindex/Enter·Space。仅当元素确实不可点时传 `v-pressable="false"`。
 - **标签对比度（v51）**：TDesign 标签 light 变体默认用 -5 档文字压 -1 档同色浅底（success 2.86:1 / warning 2.82:1 / danger 3.90:1，12px 下均不达 AA）；`tokens.css` 已把 `--td-tag-{success,warning,danger}-color` 抬到 -7/-7/-8 档（浅色 5.88/6.08/8.38:1，暗色 5.45/5.21/5.53:1）。`theme="default" variant="light"` 的浅色文字同样不可见，已单独改为 `--td-text-color-secondary`。新增状态标签一律走 `StateTag`，不要自带语义色。
+- **主题切换冻结过渡（v51）**：`applyTheme()` 切换前给 `html` 加 `.theme-switching`、强制一次样式刷新、下一帧移除（`tokens.css` 内该类禁止全部过渡）。不冻结时全站颜色过渡会在同一帧一起起跑，主题切换出现拖影。给页面新增颜色过渡时无需额外处理。
+- **内容图描边（v51）**：封面、正文配图、附件、商品图等**内容图**加 `.content-img`（`outline: 1px solid var(--image-outline)` + `outline-offset: -1px`，随圆角内收且不改变尺寸）。描边色必须用纯黑/纯白透明度（`--image-outline`，暗色自动切纯白），不得用品色近黑或品牌色。透明装饰图（企业 Logo、图形验证码）与「在已裁剪圆角容器内满铺」的图（首页轮播底图）不加。
+- **图标尺寸与状态（v51）**：行内随文图标尺寸按相邻字号取 1em–1.25em（12px 正文配 12–14px 图标、14px 正文配 14px、16px 正文配 16px），因此**同一含义的图标在不同字号行里尺寸不同是正确的**，不要机械统一。图标唯一档位异常：`.meta` 元信息行统一 12px 正文 + 14px 图标。收藏/点赞这类**低频状态切换**用 `.icon-swap`（两个字形同留 DOM、叠在同一网格单元内交叉淡入 300ms `cubic-bezier(0.2, 0, 0, 1)`）；页签/选择类指示仍即时切换。
+- **按压反馈（v51）**：可点整卡用 `.pressable`（`scale(0.96)` + `150ms ease-out`，按下即生效）。行/列表项用 TDesign `hover` 属性时，库通过 `pointerdown` 后 50ms 才加高亮类、`pointerup` 后 70ms 才移除，快速轻点视觉上无按下态；需要「即时」反馈的行请改用 CSS `:active`（可复用 `.pressable`），不要依赖库的定时器式高亮。
+- **圆角共心（v51）**：嵌套的可见表面（外层带底色/描边且内距均匀）满足 `外圆角 = 内圆角 + 内距 + 描边宽度`；内距超 24px 或刻意不对称时按两个独立表面各用各的 token。参照 `ArticleNewView` 的 `.editor-block`（`calc(var(--td-radius-large) + var(--app-space-5) + 1px)`）。
 
 ### 排版规范（Token First）
 

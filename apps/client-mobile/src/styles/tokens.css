@@ -82,6 +82,11 @@
    * 图片本身不随主题变化，故明暗模式共用同一套。 */
   --app-image-scrim: linear-gradient(180deg, rgba(0, 0, 0, 0.65) 0%, rgba(0, 0, 0, 0.3) 100%);
 
+  /* v51 内容图描边色：内容照片压在卡片白底/页面灰底上时需要 1px 内缩描边来定义边缘。
+   * 必须用纯黑/纯白透明度，不得用品色近黑或品牌色——后者会在图片边缘显出色边。
+   * 暗色模式在下方 :root.dark 块覆盖为纯白。 */
+  --image-outline: oklch(0 0 0 / 0.1);
+
   /* 顶栏滚动渐显底色（AppShell 按透明度合成，需随明暗主题切换） */
   --app-navbar-bg-rgb: 255, 255, 255;
 
@@ -163,6 +168,7 @@
 :root.dark,
 :root[theme-mode='dark'] {
   --app-navbar-bg-rgb: 36, 36, 36;
+  --image-outline: oklch(1 0 0 / 0.1);
   --app-action-bar-shadow: 0 -2px 12px rgba(0, 0, 0, 0.45);
   --td-text-color-secondary: rgba(255, 255, 255, 0.78);
   --td-text-color-placeholder: rgba(255, 255, 255, 0.7);
@@ -171,14 +177,40 @@
   color-scheme: dark;
 }
 
-/* 通用按压反馈（移动端微交互）：可点击的卡片/宫格/列表项添加 .pressable */
+/* 通用按压反馈（移动端微交互）：可点击的卡片/宫格/列表项添加 .pressable。
+ * v51：取值对齐按压反馈基准 0.96 / 150ms / ease-out（此前为 0.97 / 120ms / ease）。 */
 .pressable {
-  transition: transform 120ms ease, opacity 120ms ease;
+  transition: transform 150ms ease-out, opacity 150ms ease-out;
   cursor: pointer;
 }
 
 .pressable:active {
-  transform: scale(0.97);
+  transform: scale(0.96);
+}
+
+/* v51 图标交叉淡入：收藏/点赞这类「低频状态切换」的两个字形同时留在 DOM 中，
+ * 叠在同一网格单元里交叉淡入（scale 0.25→1、opacity 0→1、blur 4px→0，
+ * 300ms cubic-bezier(0.2, 0, 0, 1)）。用 grid 叠放而非绝对定位，
+ * 避免依赖库内部容器的定位上下文。全局 prefers-reduced-motion 兜底时直接落终态，
+ * 实心字形即静态线索，动效不是唯一反馈通道。 */
+.icon-swap {
+  display: grid;
+}
+
+.icon-swap > * {
+  grid-row: 1;
+  grid-column: 1;
+  opacity: 0;
+  scale: 0.25;
+  filter: blur(4px);
+  transition: opacity 300ms cubic-bezier(0.2, 0, 0, 1), scale 300ms cubic-bezier(0.2, 0, 0, 1),
+    filter 300ms cubic-bezier(0.2, 0, 0, 1);
+}
+
+.icon-swap > .is-on {
+  opacity: 1;
+  scale: 1;
+  filter: blur(0);
 }
 
 /* 文字链动作（v-pressable 的 a，无 href）：按压时降低不透明度作为反馈 */
@@ -273,6 +305,15 @@ span[role='button']:not(.t-tag) {
 
 * {
   box-sizing: border-box;
+}
+
+/* v51：主题切换期间冻结全部过渡（applyTheme 会临时加此类）。
+ * 不冻结时全站颜色过渡会在切换帧同时起跑，主题切换出现拖影。 */
+html.theme-switching,
+html.theme-switching *,
+html.theme-switching *::before,
+html.theme-switching *::after {
+  transition: none !important;
 }
 
 /* v44 移动端交互基线：消除双击缩放延迟与点击高亮，弹层内部滚动不穿透 */
@@ -548,6 +589,15 @@ a {
 .t-button--size-extra-small {
   min-width: 44px;
   min-height: 44px;
+}
+
+/* v51 内容图描边：封面/正文配图/附件/商品图压在卡片白底或页面灰底上时，
+ * 用 1px 内缩描边定义边缘。用 outline 而非 border——不改变图片尺寸，
+ * 且 outline-offset: -1px 让描边贴着图片内侧、随其圆角内收。
+ * 透明装饰图（企业 Logo、图形验证码）不使用本类。 */
+.content-img {
+  outline: 1px solid var(--image-outline);
+  outline-offset: -1px;
 }
 
 /* v38 屏幕阅读器专用文本 */

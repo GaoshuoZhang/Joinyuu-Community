@@ -28,7 +28,7 @@ const contentBlocks = computed(() =>
     <div v-if="isRichContent" class="rich-content" v-html="richContent"></div>
     <template v-else>
       <template v-for="(block, i) in contentBlocks" :key="i">
-        <Image v-if="block.type === 'image'" class="content-image" :src="block.url" alt="文章配图" fit="contain" lazy @error="onImageError" />
+        <Image v-if="block.type === 'image'" class="content-image content-img" :src="block.url" alt="文章配图" fit="contain" lazy @error="onImageError" />
         <p v-else class="para">{{ block.text }}</p>
       </template>
     </template>

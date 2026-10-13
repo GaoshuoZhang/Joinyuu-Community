@@ -265,7 +265,7 @@ async function onShare() {
       <p v-else-if="isEnded" class="ended-banner">该活动已结束</p>
 
       <section class="m-card">
-        <Image v-if="event.coverUrl" class="detail-cover" :src="event.coverUrl" :alt="event.title" fit="cover" @error="onImageError" />
+        <Image v-if="event.coverUrl" class="detail-cover content-img" :src="event.coverUrl" :alt="event.title" fit="cover" @error="onImageError" />
         <div class="head">
           <Tag class="type-tag" size="small" variant="light" theme="primary">{{ event.typeLabel }}</Tag>
           <StateTag v-if="myStatus === 'pending'" kind="enroll" value="pending" />
@@ -280,7 +280,7 @@ async function onShare() {
         <p class="meta"><Icon aria-hidden="true" name="usergroup" size="14px" />限 {{ formatZhNumber(event.capacity) }} 人参加</p>
         <div class="fav-row">
           <Button size="small" variant="outline" @click="onToggleFavorite">
-            <template #icon><Icon aria-hidden="true" :name="favorited ? 'star-filled' : 'star'" size="16px" /></template>
+            <template #icon><span class="icon-swap"><Icon aria-hidden="true" name="star-filled" size="16px" :class="{ 'is-on': favorited }" /><Icon aria-hidden="true" name="star" size="16px" :class="{ 'is-on': !favorited }" /></span></template>
             {{ favorited ? '已收藏' : '收藏' }}
           </Button>
           <Button size="small" variant="outline" @click="onAddToCalendar">

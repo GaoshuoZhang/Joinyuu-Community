@@ -129,7 +129,7 @@ function goForm() {
 .kind-card {
   cursor: pointer;
   border: 1px solid var(--td-component-border);
-  transition: border-color 150ms ease, background 150ms ease;
+  transition: border-color 150ms ease, background-color 150ms ease;
 }
 
 .kind-card.active {

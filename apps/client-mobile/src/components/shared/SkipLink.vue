@@ -13,11 +13,13 @@
   background: var(--td-brand-color);
   color: var(--td-text-color-anti);
   font: var(--app-type-body);
-  transition: top 160ms ease;
+  /* v51：改用 transform 位移（合成层）而非 top（布局属性，逐帧重排）；
+     位移量 = 隐藏位 top 的绝对值 + 聚焦位 top，即 32 + 16 + 4 + 安全区 */
+  transition: transform 160ms ease;
 }
 
 .skip-link:focus {
-  top: calc(var(--app-space-3) + env(safe-area-inset-top));
+  transform: translateY(calc(var(--app-space-12) + var(--app-space-8) + var(--app-space-3) + env(safe-area-inset-top)));
 }
 
 :global(#main:focus),

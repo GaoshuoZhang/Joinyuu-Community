@@ -24,14 +24,21 @@ export function isDarkTheme(mode: ThemeMode = getThemeMode()): boolean {
   return mode === 'dark' || (mode === 'system' && prefersDark())
 }
 
-/** 应用主题到 html（TDesign 的 .dark / theme-mode 变量随之生效）并同步浏览器主题色。 */
+/** 应用主题到 html（TDesign 的 .dark / theme-mode 变量随之生效）并同步浏览器主题色。
+ * v51：切换期间冻结全站过渡——否则 5 处颜色过渡（导航栏底色、发布/合作入口卡的描边与底色）
+ * 连同库内组件过渡会在同一帧一起起跑，切换出现拖影。冻类 → 应用主题 → 强制一次样式
+ * 刷新 → 下一帧移除，整个过程不补间。 */
 export function applyTheme(mode: ThemeMode): void {
   const dark = isDarkTheme(mode)
   const root = document.documentElement
+  root.classList.add('theme-switching')
   root.classList.toggle('dark', dark)
   root.setAttribute('theme-mode', dark ? 'dark' : 'light')
   const meta = document.querySelector('meta[name="theme-color"]')
   if (meta) meta.setAttribute('content', dark ? META_DARK : META_LIGHT)
+  /* 读取布局属性强制样式刷新：确保新主题在同一帧内直接生效 */
+  void root.offsetHeight
+  window.requestAnimationFrame(() => root.classList.remove('theme-switching'))
 }
 
 export function setThemeMode(mode: ThemeMode): void {

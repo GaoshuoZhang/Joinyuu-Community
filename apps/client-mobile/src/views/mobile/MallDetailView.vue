@@ -109,7 +109,7 @@ function goOrders() {
     <EmptyBlock v-else-if="error" :text="error" action-text="重试" @action="run" />
     <template v-else-if="goods">
       <section class="m-card main">
-        <Image v-if="goods.coverUrl" class="detail-cover" :src="goods.coverUrl" :alt="goods.name" fit="cover" @error="onImageError" />
+        <Image v-if="goods.coverUrl" class="detail-cover content-img" :src="goods.coverUrl" :alt="goods.name" fit="cover" @error="onImageError" />
         <h2 class="name">{{ goods.name }}</h2>
         <p class="cost">
           <span class="tabular-nums">{{ formatZhNumber(chargedPoints) }}</span> <span>积分</span>

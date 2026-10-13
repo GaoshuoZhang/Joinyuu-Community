@@ -143,7 +143,7 @@ function onConfirm() {
   padding:0;
   border: 1px solid var(--td-component-border);
   overflow: hidden;
-  transition: border-color 150ms ease, background 150ms ease;
+  transition: border-color 150ms ease, background-color 150ms ease;
 }
 
 .option.active {

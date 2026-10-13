@@ -190,15 +190,15 @@ async function onToggleFavorite() {
         <h2 class="title">{{ article.title }}</h2>
         <p class="meta">{{ article.authorName }} · {{ formatLocalDateTime(article.publishedAt) }} · {{ formatZhNumber(article.views) }} 次浏览</p>
       </header>
-      <Image v-if="article.coverUrl" class="cover" :src="article.coverUrl" :alt="article.title" fit="cover" lazy @error="onImageError" />
+      <Image v-if="article.coverUrl" class="cover content-img" :src="article.coverUrl" :alt="article.title" fit="cover" lazy @error="onImageError" />
       <ArticleContent :content="article.content ?? ''" />
       <div class="foot-actions">
         <Button size="small" :theme="liked ? 'primary' : 'default'" variant="outline" @click="onLike">
-          <template #icon><Icon aria-hidden="true" :name="liked ? 'heart-filled' : 'heart'" size="16px" /></template>
+          <template #icon><span class="icon-swap"><Icon aria-hidden="true" name="heart-filled" size="16px" :class="{ 'is-on': liked }" /><Icon aria-hidden="true" name="heart" size="16px" :class="{ 'is-on': !liked }" /></span></template>
           点赞 {{ formatZhNumber(likeCount) }}
         </Button>
         <Button size="small" variant="outline" @click="onToggleFavorite">
-          <template #icon><Icon aria-hidden="true" :name="favorited ? 'star-filled' : 'star'" size="16px" /></template>
+          <template #icon><span class="icon-swap"><Icon aria-hidden="true" name="star-filled" size="16px" :class="{ 'is-on': favorited }" /><Icon aria-hidden="true" name="star" size="16px" :class="{ 'is-on': !favorited }" /></span></template>
           {{ favorited ? '已收藏' : '收藏' }}
         </Button>
         <Button size="small" variant="outline" :loading="sharing" @click="onShare">

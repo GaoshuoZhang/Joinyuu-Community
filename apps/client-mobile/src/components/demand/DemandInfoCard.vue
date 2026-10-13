@@ -58,7 +58,7 @@ defineEmits<{ toggleFavorite: []; share: [] }>()
     </div>
     <div class="fav-row">
       <Button size="small" variant="outline" @click="$emit('toggleFavorite')">
-        <template #icon><Icon aria-hidden="true" :name="favorited ? 'star-filled' : 'star'" size="16px" /></template>
+        <template #icon><span class="icon-swap"><Icon aria-hidden="true" name="star-filled" size="16px" :class="{ 'is-on': favorited }" /><Icon aria-hidden="true" name="star" size="16px" :class="{ 'is-on': !favorited }" /></span></template>
         {{ favorited ? '已收藏' : '收藏' }}
       </Button>
       <Button size="small" variant="outline" @click="$emit('share')">

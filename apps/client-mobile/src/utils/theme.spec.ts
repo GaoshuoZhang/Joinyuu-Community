@@ -78,4 +78,15 @@ describe('theme', () => {
     system.setMatches(true)
     expect(document.documentElement.classList.contains('dark')).toBe(false)
   })
+
+  /* v51：切换期间必须冻结全站过渡，否则所有颜色过渡在同一帧一起起跑会造成拖影 */
+  it('freezes transitions during the theme swap and releases them on the next frame', async () => {
+    stubMatchMedia(false)
+    applyTheme('dark')
+    /* 同步阶段已加上冻结类：切换帧内不会有任何过渡补间 */
+    expect(document.documentElement.classList.contains('theme-switching')).toBe(true)
+    await new Promise((resolve) => window.requestAnimationFrame(() => resolve(null)))
+    expect(document.documentElement.classList.contains('theme-switching')).toBe(false)
+    expect(document.documentElement.classList.contains('dark')).toBe(true)
+  })
 })

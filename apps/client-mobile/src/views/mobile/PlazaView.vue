@@ -228,7 +228,7 @@ function clearArticleFilters() {
             class="item m-card" v-pressable
             @click="router.push(`/events/${ev.id}`)"
           >
-            <Image v-if="ev.coverUrl" class="card-cover" :src="ev.coverUrl" :alt="ev.title" fit="cover" lazy @error="onImageError" />
+            <Image v-if="ev.coverUrl" class="card-cover content-img" :src="ev.coverUrl" :alt="ev.title" fit="cover" lazy @error="onImageError" />
             <div class="row-head">
               <Tag class="type-tag" size="small" variant="light" theme="primary">{{ ev.typeLabel }}</Tag>
               <StateTag v-if="enrolledIds.has(ev.id)" class="enrolled-flag" kind="flag" value="enrolled" />
@@ -291,7 +291,7 @@ function clearArticleFilters() {
             class="item m-card" v-pressable
             @click="router.push(`/articles/${a.id}`)"
           >
-            <Image v-if="a.coverUrl" class="card-cover" :src="a.coverUrl" :alt="a.title" fit="cover" lazy @error="onImageError" />
+            <Image v-if="a.coverUrl" class="card-cover content-img" :src="a.coverUrl" :alt="a.title" fit="cover" lazy @error="onImageError" />
             <!-- v48：分类标签原先与标题贴在一起——改为独立成行并留出与活动卡片一致的间距 -->
             <div class="tag-row">
               <Tag class="col-tag" size="small" variant="light" theme="primary">{{ a.columnLabel }}</Tag>

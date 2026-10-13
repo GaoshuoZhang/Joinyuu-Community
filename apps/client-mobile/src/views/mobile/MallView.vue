@@ -123,7 +123,7 @@ useRefreshOnActivate(() => {
     <div v-else class="goods-list stagger">
       <p class="list-count">共 {{ formatZhNumber(goodsTotal) }} 件商品</p>
       <router-link v-for="g in goodsList" :key="g.id" class="goods-card m-card pressable" :to="`/mall/${g.id}`">
-        <Image v-if="g.coverUrl" class="goods-cover" :src="g.coverUrl" :alt="g.name" fit="cover" lazy @error="onImageError" />
+        <Image v-if="g.coverUrl" class="goods-cover content-img" :src="g.coverUrl" :alt="g.name" fit="cover" lazy @error="onImageError" />
         <!-- v45：无封面时不再伪造与图片等高的占位块（8 件商品会长得一模一样、且像加载失败），
              改为按履约类型给出的小字形，卡片更紧凑、一屏可比较更多商品 -->
         <span v-else class="goods-glyph"><Icon aria-hidden="true" :name="glyphFor(g)" size="20px" /></span>

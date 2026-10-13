@@ -125,8 +125,8 @@ const canCheckIn = () => Boolean(
           <StateTag kind="ticket" :value="ticketState" />
         </div>
         <h2 class="title">{{ ticket.eventTitle }}</h2>
-        <p class="meta"><Icon aria-hidden="true" name="time" size="16px" />{{ formatLocalDateTime(ticket.startTime) }}</p>
-        <p class="meta"><Icon aria-hidden="true" name="location" size="16px" />{{ ticket.location }}</p>
+        <p class="meta"><Icon aria-hidden="true" name="time" size="14px" />{{ formatLocalDateTime(ticket.startTime) }}</p>
+        <p class="meta"><Icon aria-hidden="true" name="location" size="14px" />{{ ticket.location }}</p>
         <div class="qr-wrap"><QRCode :value="ticket.ticketCode" :size="140" level="M" :status="qrStatus" aria-label="活动核销二维码" /></div>
         <p class="code">核销码：<code translate="no">{{ ticket.ticketCode }}</code></p>
         <p class="ticket-hint">
