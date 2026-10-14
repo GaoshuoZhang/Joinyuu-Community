@@ -1,9 +1,9 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { CheckTag, Icon, Image, Tag } from 'tdesign-mobile-vue'
+import { Button, CheckTag, Icon, Image, List, Tag } from 'tdesign-mobile-vue'
 import { fetchGoods } from '@/api/mall'
-import { useAsyncList } from '@/composables/useAsyncList'
+import { usePagedList } from '@/composables/usePagedList'
 import { useRefreshOnActivate } from '@/composables/useRefreshOnActivate'
 import { useAnimSuppress } from '@/composables/useAnimSuppress'
 import { useRouteQuerySync } from '@/composables/useRouteQuerySync'
@@ -12,7 +12,7 @@ import { useAuthStore } from '@/stores/auth'
 import EmptyBlock from '@/components/shared/EmptyBlock.vue'
 import StateTag from '@/components/shared/StateTag.vue'
 import ListSkeleton from '@/components/ListSkeleton.vue'
-import type { Goods, PageResult } from '@/types'
+import type { Goods } from '@/types'
 import { onImageError } from '@/utils/imageFallback'
 import { formatZhNumber, plainTextSummary } from '@/utils/format'
 import { discountedPoints } from '@/utils/points'
@@ -28,10 +28,10 @@ const auth = useAuthStore()
 const { items: categories, refresh: refreshCategories } = useDict('goods_category')
 
 const category = ref(String(route.query.category ?? ''))
-const { data, loading, error, run } = useAsyncList<PageResult<Goods>>(() => fetchGoods({ category: category.value || undefined }))
-/* v46：列表接口返回 { list, total }，总数用于展示真实商品数（不再受默认分页截断） */
-const goodsList = computed(() => data.value?.list ?? [])
-const goodsTotal = computed(() => data.value?.total ?? 0)
+const { items: goodsList, total: goodsTotal, loading, error, moreError, loadingMore, hasMore, refresh, loadMore } = usePagedList<Goods>(
+  (page, pageSize) => fetchGoods({ category: category.value || undefined, page, pageSize }),
+)
+const footerState = computed(() => (loadingMore.value ? 'loading' : hasMore.value ? 'load-more' : ''))
 
 /* 等级折扣：折后价低于原价时列表卡片才展示原价删除线 */
 function isDiscounted(goods: Goods): boolean {
@@ -63,24 +63,24 @@ useRouteQuerySync('/mall', (q) => {
   const next = q.category ?? ''
   if (next === category.value) return
   category.value = next
-  run()
+  void refresh()
 })
 
 function pickCategory(code: string) {
   category.value = category.value === code ? '' : code
   syncQuery()
-  run()
+  void refresh()
 }
 
 onMounted(() => {
   void auth.refreshProfile()
-  run()
+  void refresh()
 })
 
 /* v38：返回时刷新商品列表（积分与库存可能变化）；v48：同时强制回源字典，
  * 后台新增商品类型后无需整页刷新即可出现在筛选 chip 中 */
 useRefreshOnActivate(() => {
-  run()
+  void refresh()
   void refreshCategories()
   void auth.refreshProfile()
 })
@@ -115,14 +115,14 @@ useRefreshOnActivate(() => {
     </div>
 
     <ListSkeleton v-if="loading && !goodsList.length" />
-    <EmptyBlock v-else-if="error" :text="error" action-text="重试" @action="run" />
+    <EmptyBlock v-else-if="error" :text="error" action-text="重试" @action="refresh" />
     <EmptyBlock
       v-else-if="goodsList.length === 0"
       text="暂无可兑换商品"
       :action-text="category ? '清除筛选' : undefined"
       @action="pickCategory('')"
     />
-    <div v-else class="goods-list stagger">
+    <List v-else class="goods-list stagger" :async-loading="footerState" @load-more="loadMore">
       <p class="list-count">共 {{ formatZhNumber(goodsTotal) }} 件商品</p>
       <router-link v-for="g in goodsList" :key="g.id" class="goods-card m-card pressable" :to="`/mall/${g.id}`">
         <Image v-if="g.coverUrl" class="goods-cover content-img" :src="g.coverUrl" :alt="g.name" fit="cover" lazy @error="onImageError" />
@@ -146,7 +146,8 @@ useRefreshOnActivate(() => {
           <StateTag v-else kind="goods" value="sold_out" />
         </p>
       </router-link>
-    </div>
+      <Button v-if="moreError" block variant="outline" @click="loadMore">加载失败，点击重试</Button>
+    </List>
   </div>
 </template>
 

@@ -75,7 +75,7 @@ defineExpose({ open })
   <t-dialog v-model:visible="visible" :header="`评论治理 · ${articleTitle}`" width="720px" :footer="false">
     <div class="comments-toolbar">
       <StatusTag entity="commentState" :value="commentsEnabled ? 'enabled' : 'disabled'" />
-      <t-input v-model="reason" class="reason-input" clearable placeholder="删除原因（选填，填写后通知作者）…" />
+      <t-input v-accessible-field="'删除评论原因'" v-model="reason" class="reason-input" clearable placeholder="删除原因（选填，填写后通知作者）…" />
     </div>
     <t-loading :loading="loading">
       <ListErrorState v-if="loadError" :message="loadError" :loading="loading" @retry="load" />

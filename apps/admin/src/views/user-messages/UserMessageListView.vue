@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
+import { focusFirstInvalid, useDialogFormProtection } from '@/utils/form'
 import { MessagePlugin } from 'tdesign-vue-next'
 import PageHeader from '@/components/PageHeader.vue'
 import BulkArchiveDialog from '@/components/BulkArchiveDialog.vue'
@@ -52,16 +53,16 @@ const allColumns = [
   { colKey: 'reply', title: '回复内容', width: 260 },
   { colKey: 'op', title: '操作', width: 150 },
 ]
-const visibleKeys = ref<string[]>([])
+const visibleKeys = ref<string[]>(allColumns.map(column => column.colKey))
 const columns = computed(() =>
-  allColumns.filter((column) => !visibleKeys.value.length || visibleKeys.value.includes(column.colKey)),
+  visibleKeys.value.map(key => allColumns.find(column => column.colKey === key)!).filter(Boolean),
 )
 const statusOptions = [
   { value: '', label: '全部状态' },
   { value: 'pending', label: '待回复' },
   { value: 'replied', label: '已回复' },
 ]
-const { syncQuery } = useListQueryState({}, load, { refs: { status, page, sortBy, sortOrder } })
+const { syncQuery } = useListQueryState({}, load, { refs: { status, keyword, page, sortBy, sortOrder } })
 let version = 0
 
 /* 远程排序：表头点击 → 更新排序状态 → 重新加载（受控 :sort 保证表头指示器正确） */
@@ -120,10 +121,10 @@ function openReply(row: UserMessageRow) {
 
 async function submitReply() {
   const row = currentRow.value
-  if (!row) return
+  if (!row || row.status !== 'pending' || submitting.value) return
   /* 以表单 validate 为主：失败时错误定位在表单项下方，直接 return */
   const result = replyFormRef.value ? await replyFormRef.value.validate() : true
-  if (result !== true) return
+  if (result !== true) return focusFirstInvalid(replyFormRef.value)
   /* 兜底：ref 不可用时仍拦截空内容提交 */
   if (!replyContent.value.trim()) return void MessagePlugin.warning('请填写回复内容')
   submitting.value = true
@@ -206,6 +207,7 @@ async function onBulkConfirm(values: string[]) {
 }
 
 onMounted(load)
+const { close: closeReplyDialog } = useDialogFormProtection(() => replyContent.value, visible, submitting)
 </script>
 
 <template>
@@ -225,6 +227,7 @@ onMounted(load)
 
     <div class="page-filter-bar">
       <t-input
+        v-accessible-field="'搜索留言'"
         v-model="keyword"
         class="ctl-w-xl"
         clearable
@@ -233,7 +236,7 @@ onMounted(load)
         @enter="page = 1; load()"
         @clear="page = 1; load()"
       />
-      <t-select class="ctl-w-md" v-model="status" :options="statusOptions" label="状态" aria-label="状态筛选" @change="page = 1; load()" />
+      <t-select v-accessible-field="'状态筛选'" class="ctl-w-md" v-model="status" :options="statusOptions" label="状态" aria-label="状态筛选" @change="page = 1; load()" />
       <t-button theme="primary" @click="page = 1; load()">查询</t-button>
     </div>
 
@@ -300,9 +303,9 @@ onMounted(load)
     </div>
 
     <t-dialog
-      v-model:visible="visible"
+      :visible="visible" @close="closeReplyDialog"
       :header="`留言详情 · ${currentRow?.userName ?? ''}`"
-      :confirm-btn="currentRow?.status === 'pending' ? { content: '发送回复', loading: submitting } : undefined"
+      :confirm-btn="currentRow?.status === 'pending' ? { content: '发送回复', loading: submitting } : null"
       :cancel-btn="currentRow?.status === 'pending' ? { content: '取消' } : { content: '关闭' }"
       @confirm="submitReply"
     >
@@ -324,7 +327,7 @@ onMounted(load)
         </t-descriptions>
         <t-form v-if="currentRow.status === 'pending'" ref="replyFormRef" :data="{ replyContent }" label-align="top">
           <t-form-item label="回复内容" name="replyContent" :rules="[{ required: true, message: '请填写回复内容', trigger: 'submit' }]">
-            <t-textarea v-model="replyContent" :maxlength="1000" :autosize="{ minRows: 4, maxRows: 8 }" placeholder="填写回复内容，发送后留言人将收到站内信…" />
+            <t-textarea v-accessible-field v-model="replyContent" :maxlength="1000" :autosize="{ minRows: 4, maxRows: 8 }" placeholder="填写回复内容，发送后留言人将收到站内信…" />
           </t-form-item>
         </t-form>
       </div>

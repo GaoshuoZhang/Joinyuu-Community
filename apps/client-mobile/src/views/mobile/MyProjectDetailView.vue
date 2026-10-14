@@ -82,6 +82,14 @@ function askSubmit(m: Milestone) {
 
 async function onSubmitMilestone(m: Milestone) {
   if (actingOn.value) return
+  if (evidenceFiles.value.some((file) => file.status === 'waiting' || file.status === 'progress')) {
+    Toast('交付证据仍在上传，请等待上传完成')
+    return
+  }
+  if (evidenceFiles.value.some((file) => file.status === 'fail')) {
+    Toast('交付证据上传失败，请重试或移除后再提交')
+    return
+  }
   actingOn.value = `${m.id}:submit`
   try {
     const attachments = evidenceFiles.value

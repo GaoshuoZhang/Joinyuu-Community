@@ -74,7 +74,7 @@ const tabs = [
   { value: '/', label: '首页', icon: 'home' },
   { value: '/projects', label: '需求', icon: 'app' },
   { value: '/community', label: '社区', icon: 'usergroup' },
-  { value: '/plaza', label: '广场', icon: 'calendar' },
+  { value: '/plaza', label: '广场', icon: 'compass' },
   { value: '/me', label: '我的', icon: 'user' },
 ] as const
 

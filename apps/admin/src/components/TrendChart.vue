@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
+import { countAxis } from '@/utils/chartTicks'
 
 /* 轻量折线趋势图：零依赖 SVG 实现，供工作台 30 日趋势使用。
  * 特性：网格 + 渐变面积 + 悬浮十字线与数值提示。如需更复杂图表可替换为 echarts。 */
@@ -30,12 +31,9 @@ const fillId = `trend-fill-${uid}`
 const innerW = computed(() => W - PAD.left - PAD.right)
 const innerH = computed(() => props.height - PAD.top - PAD.bottom)
 
-const max = computed(() => {
-  const m = Math.max(...props.data, 1)
-  return m + m * 0.15
-})
-
-const min = computed(() => Math.min(...props.data, 0))
+const axis = computed(() => countAxis(props.data))
+const max = computed(() => axis.value.max)
+const min = computed(() => axis.value.min)
 
 const xAt = (i: number) => PAD.left + (props.data.length <= 1 ? innerW.value / 2 : (innerW.value * i) / (props.data.length - 1))
 const yAt = (v: number) => PAD.top + innerH.value - ((v - min.value) / (max.value - min.value || 1)) * innerH.value
@@ -50,16 +48,8 @@ const areaPath = computed(() => {
   return `M ${first} ${bottom} L ${points.value.replace(/ /g, ' L ')} L ${last} ${bottom} Z`
 })
 
-/* y 轴刻度（4 档） */
-const ticks = computed(() => {
-  const n = 4
-  const values: { v: number; y: number }[] = []
-  for (let i = 0; i <= n; i++) {
-    const v = min.value + ((max.value - min.value) * i) / n
-    values.push({ v, y: yAt(v) })
-  }
-  return values
-})
+/* 整数计数刻度：标签与网格位置共享同一个值。 */
+const ticks = computed(() => axis.value.ticks.map(v => ({ v, y: yAt(v) })))
 
 /* x 轴显示标签（等距取 6 个） */
 const xLabels = computed(() => {
@@ -144,7 +134,7 @@ const dataPoints = computed(() =>
             stroke-width="1"
           />
           <text :x="PAD.left - 8" :y="t.y + 4" text-anchor="end" class="axis-text">
-            {{ Math.round(t.v).toLocaleString('zh-CN') }}
+            {{ t.v.toLocaleString('zh-CN') }}
           </text>
         </g>
 

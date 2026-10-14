@@ -2,7 +2,7 @@
 import { computed, defineAsyncComponent, nextTick, reactive, ref, watch } from 'vue'
 import { MessagePlugin } from 'tdesign-vue-next'
 import type { FormProps } from 'tdesign-vue-next'
-import { focusFirstInvalid, useDialogDirtyGuard } from '@/utils/form'
+import { focusFirstInvalid, useDialogDirtyGuard, usePageDirtyGuard } from '@/utils/form'
 import { AddIcon, DeleteIcon } from 'tdesign-icons-vue-next'
 import { fetchPublisherOptions, fetchUndertakerOptions, initiateProject, type UndertakerOption } from '@/api/demands'
 import { createProject, updateProject } from '@/api/projects'
@@ -92,7 +92,7 @@ watch(
 )
 
 /* 未保存保护：打开时记录基线，关闭前有改动需确认 */
-const { markBaseline, guardClose } = useDialogDirtyGuard(form)
+const { markBaseline, isDirty, guardClose } = useDialogDirtyGuard(form)
 
 /* 经验值规则默认值：项目结项奖励（关闭自定义时按此分配） */
 const ruleExp = ref(100)
@@ -441,6 +441,7 @@ function onClose() {
   /* 未保存保护：有改动时弹确认（见 useDialogDirtyGuard） */
   guardClose(() => emit('update:visible', false))
 }
+usePageDirtyGuard(computed(() => props.visible && isDirty.value))
 </script>
 
 <template>
@@ -466,7 +467,7 @@ function onClose() {
 
     <t-form ref="formRef" :data="{ ...form, milestones: milestones }" :rules="rules" label-align="top">
       <t-form-item label="项目名称" name="projectName">
-        <t-input clearable v-model="form.projectName" placeholder="需求立项默认取需求标题，可修改…" />
+        <t-input v-accessible-field clearable v-model="form.projectName" placeholder="需求立项默认取需求标题，可修改…" />
       </t-form-item>
 
       <!-- 需求方信息：需求立项由服务端照搬需求快照（只读提示）；社区自建项目在此登记 -->
@@ -478,6 +479,7 @@ function onClose() {
         <div class="form-row">
           <t-form-item label="需求方">
             <t-select
+              v-accessible-field
               v-model="form.demander"
               filterable
               creatable
@@ -487,32 +489,33 @@ function onClose() {
             />
           </t-form-item>
           <t-form-item label="需求方身份">
-            <t-input :value="demanderIdentityLabel" disabled placeholder="选择需求方后自动识别…" />
+            <t-input v-accessible-field :value="demanderIdentityLabel" disabled placeholder="选择需求方后自动识别…" />
           </t-form-item>
         </div>
         <div class="form-row">
           <t-form-item label="创建人">
-            <t-input clearable v-model="form.creatorName" placeholder="创建人…" />
+            <t-input v-accessible-field clearable v-model="form.creatorName" placeholder="创建人…" />
           </t-form-item>
           <t-form-item label="合同价格">
-            <t-input clearable v-model="form.contractPrice" placeholder="如：¥50,000 / 面议…" />
+            <t-input v-accessible-field clearable v-model="form.contractPrice" placeholder="如：¥50,000 / 面议…" />
           </t-form-item>
         </div>
         <div class="form-row">
           <t-form-item label="联系人">
-            <t-input clearable v-model="form.contactName" placeholder="联系人姓名…" />
+            <t-input v-accessible-field clearable v-model="form.contactName" placeholder="联系人姓名…" />
           </t-form-item>
           <t-form-item label="联系电话">
-            <t-input clearable v-model="form.contactPhone" placeholder="联系电话…" />
+            <t-input v-accessible-field clearable v-model="form.contactPhone" placeholder="联系电话…" />
           </t-form-item>
         </div>
         <t-form-item label="联系邮箱">
-          <t-input clearable v-model="form.contactEmail" placeholder="联系邮箱…" />
+          <t-input v-accessible-field clearable v-model="form.contactEmail" placeholder="联系邮箱…" />
         </t-form-item>
       </template>
       <p v-else class="demand-context">需求方信息将照搬需求「{{ demand.publisherName }}」及其联系电话与预算口径</p>
       <t-form-item label="承接方（可多选/自定义）" name="undertakers">
         <t-select
+          v-accessible-field="'搜索或选择承接方（社区企业/合作企业/用户），可输入名称自定义新增'"
           v-model="form.undertakers"
           multiple
           filterable
@@ -531,7 +534,8 @@ function onClose() {
       <div v-for="v in customRows" :key="v" class="form-row">
         <t-form-item :label="v + ' · 联系人'">
           <t-input
-            clearable
+            v-accessible-field
+ clearable
             :value="ensureContact(v).contactName"
             placeholder="联系人姓名…"
             @change="(val: string) => (ensureContact(v).contactName = val)"
@@ -539,7 +543,8 @@ function onClose() {
         </t-form-item>
         <t-form-item :label="v + ' · 联系电话'">
           <t-input
-            clearable
+            v-accessible-field
+ clearable
             :value="ensureContact(v).phone"
             placeholder="联系电话…"
             @change="(val: string) => (ensureContact(v).phone = val)"
@@ -548,7 +553,7 @@ function onClose() {
       </div>
 
       <t-form-item :label="`项目经验值（规则值：${ruleExp}）`" name="expReward">
-        <t-input-number v-model="form.expReward" :min="0" theme="column" class="ctl-w-full" />
+        <t-input-number v-accessible-field v-model="form.expReward" :min="0" theme="column" class="ctl-w-full" />
       </t-form-item>
 
       <!-- 承接占比 -->
@@ -559,7 +564,7 @@ function onClose() {
         </div>
         <div v-for="(v, i) in form.undertakers" :key="v" class="share-row">
           <span class="share-name" :title="undertakerNameOf(v)">{{ undertakerNameOf(v) }}</span>
-          <t-input-number class="ctl-w-sm"
+          <t-input-number v-accessible-field="`${undertakerNameOf(v)}承接占比`" class="ctl-w-sm"
             v-model="shares[i]"
             :min="0"
             :max="100"
@@ -574,7 +579,7 @@ function onClose() {
       </div>
 
       <t-form-item label="项目说明" name="description">
-        <RichEditor v-model="form.description" placeholder="项目说明…" :min-height="320" />
+        <RichEditor v-accessible-field v-model="form.description" placeholder="项目说明…" :min-height="320" />
       </t-form-item>
 
       <t-form-item name="milestones" :rules="[{ validator: validateMilestones, trigger: 'submit' }]">
@@ -588,10 +593,11 @@ function onClose() {
         </div>
         <div v-for="(m, i) in milestones" :key="i" class="milestone-row">
           <template v-if="m.fixed === 'start'">
-            <t-input disabled value="项目立项" />
-            <t-date-picker clearable v-model="m.date" placeholder="日期 *…" />
+            <t-input v-accessible-field="'里程碑类型'" disabled value="项目立项" />
+            <t-date-picker v-accessible-field="`里程碑 ${i + 1} 日期`" clearable v-model="m.date" placeholder="日期 *…" />
             <span class="milestone-ghost"></span>
             <t-select
+              v-accessible-field="`里程碑 ${i + 1} 责任方`"
               v-model="m.owners"
               multiple
               :options="ownerOptions"
@@ -600,10 +606,11 @@ function onClose() {
             />
           </template>
           <template v-else-if="m.fixed === 'end'">
-            <t-input disabled value="预期交付" />
-            <t-date-picker clearable v-model="m.date" placeholder="日期 *…" />
+            <t-input v-accessible-field="'里程碑类型'" disabled value="预期交付" />
+            <t-date-picker v-accessible-field="`里程碑 ${i + 1} 日期`" clearable v-model="m.date" placeholder="日期 *…" />
             <span class="milestone-ghost"></span>
             <t-select
+              v-accessible-field="`里程碑 ${i + 1} 责任方`"
               v-model="m.owners"
               multiple
               clearable
@@ -612,12 +619,13 @@ function onClose() {
             />
           </template>
           <template v-else>
-            <t-input clearable v-model="m.name" placeholder="节点描述 *…" />
-            <t-date-picker clearable v-model="m.date" placeholder="日期 *…" />
+            <t-input v-accessible-field="`里程碑 ${i + 1} 描述`" clearable v-model="m.name" placeholder="节点描述 *…" />
+            <t-date-picker v-accessible-field="`里程碑 ${i + 1} 日期`" clearable v-model="m.date" placeholder="日期 *…" />
             <t-button variant="text" theme="danger" size="small" :aria-label="`删除里程碑节点 ${i + 1}`" @click="removeMilestone(i)">
               <template #icon><DeleteIcon /></template>
             </t-button>
             <t-select
+              v-accessible-field="`里程碑 ${i + 1} 责任方`"
               v-model="m.owners"
               multiple
               clearable

@@ -1,5 +1,6 @@
 <script setup lang="ts">
-import { nextTick, ref, watch } from 'vue'
+import { useDialogFormProtection, focusFirstInvalid } from '@/utils/form'
+import { computed, nextTick, ref, watch } from 'vue'
 import { MessagePlugin } from 'tdesign-vue-next'
 import { scheduleArticle } from '@/api/contents'
 import type { Article } from '@/types'
@@ -32,7 +33,7 @@ watch(
 async function onConfirm() {
   if (!props.article) return
   const valid = await formRef.value?.validate()
-  if (valid !== true) return
+  if (valid !== true) return focusFirstInvalid(formRef.value)
   submitting.value = true
   try {
     await scheduleArticle(props.article.id, scheduledAt.value)
@@ -47,12 +48,17 @@ async function onConfirm() {
 }
 
 function onCancel() {
+  closeProtected()
+}
+function finishClose() {
   emit('update:visible', false)
 }
+const protectedVisible = computed({ get: () => props.visible, set: () => finishClose() })
+const { close: closeProtected } = useDialogFormProtection(() => scheduledAt.value, protectedVisible, computed(() => !!submitting.value))
 </script>
 
 <template>
-  <!-- 无脏数据（每次打开重置），允许 ESC 关闭；遮罩点击策略与同批调度类弹窗一致（不关闭） -->
+  <!-- 已输入的发布时间受到未保存保护，关闭前可选择继续编辑。 -->
   <t-dialog :visible="visible" header="定时发布" width="480px" :close-on-overlay-click="false" :close-on-esc-keydown="true" @close="onCancel">
     <template #footer>
       <div class="dialog-footer">
@@ -70,6 +76,7 @@ function onCancel() {
     >
       <t-form-item label="定时发布时间" name="scheduledAt">
         <t-date-picker
+          v-accessible-field
           v-model="scheduledAt"
           valueType="YYYY-MM-DD HH:mm"
           enable-time-picker

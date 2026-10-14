@@ -1,6 +1,7 @@
 <script setup lang="ts">
-import { computed, onMounted, reactive, ref } from 'vue'
+import { computed, nextTick, onMounted, reactive, ref } from 'vue'
 import { DialogPlugin, MessagePlugin } from 'tdesign-vue-next'
+import { usePageDirtyGuard } from '@/utils/form'
 import PageHeader from '@/components/PageHeader.vue'
 import ListErrorState from '@/components/ListErrorState.vue'
 import {
@@ -26,6 +27,38 @@ const draft = reactive({
   tips: '',
   fields: [] as ApplicationFormField[],
 })
+
+const formRef = ref()
+const validationError = ref('')
+const validationTarget = ref('')
+type DraftSnapshot = { draft: typeof draft; advancedMode: boolean; advancedJson: string }
+const localDrafts = reactive(new Map<string, DraftSnapshot>())
+const baselines = reactive<Record<string, string>>({})
+function snapshot(): DraftSnapshot {
+  return JSON.parse(JSON.stringify({ draft, advancedMode: advancedMode.value, advancedJson: advancedJson.value })) as DraftSnapshot
+}
+function contentSnapshot(value: DraftSnapshot): string {
+  let fields: unknown = value.draft.fields
+  if (value.advancedMode) {
+    try { fields = JSON.parse(value.advancedJson) } catch { fields = value.advancedJson }
+  }
+  return JSON.stringify({ ...value.draft, fields })
+}
+const isDirty = computed(() => {
+  if (baselines[active.value] && contentSnapshot(snapshot()) !== baselines[active.value]) return true
+  return [...localDrafts].some(([type, value]) => type !== active.value && contentSnapshot(value) !== baselines[type])
+})
+usePageDirtyGuard(isDirty)
+async function showValidationError(message: string, target: string) {
+  validationError.value = message
+  validationTarget.value = target
+  await nextTick()
+  const root = formRef.value?.$el as HTMLElement | undefined
+  const section = root?.querySelector<HTMLElement>(`[data-validation-target="${target}"]`)
+  const control = section?.querySelector<HTMLElement>('input:not([disabled]), textarea, [role="combobox"], button') ?? section
+  control?.scrollIntoView({ block: 'center', behavior: 'auto' })
+  control?.focus({ preventScroll: true })
+}
 
 /* 申请类型名称统一取自 constants/status.ts 的 applicationTypeMap（与申请审核列表/打印页单一来源对齐） */
 const labels: Record<ApplicationFormConfig['type'], string> = {
@@ -57,6 +90,7 @@ function fill() {
   draft.fields = cloneFields(item.fields)
   advancedJson.value = JSON.stringify(item.fields, null, 2)
   advancedMode.value = false
+  baselines[active.value] = contentSnapshot(snapshot())
 }
 
 async function load() {
@@ -73,8 +107,16 @@ async function load() {
 }
 
 function select(type: ApplicationFormConfig['type']) {
+  if (saving.value || type === active.value) return
+  localDrafts.set(active.value, snapshot())
   active.value = type
-  fill()
+  const cached = localDrafts.get(type)
+  if (cached) {
+    Object.assign(draft, JSON.parse(JSON.stringify(cached.draft)))
+    advancedMode.value = cached.advancedMode
+    advancedJson.value = cached.advancedJson
+  } else fill()
+  validationError.value = ''
 }
 
 function addField() {
@@ -124,6 +166,11 @@ function removeOption(field: ApplicationFormField, index: number) {
 
 function requestAdvancedMode(value: boolean) {
   if (!value) {
+    const fields = fieldsForSave()
+    if (!fields) return
+    const error = validateFields(fields)
+    if (error) { void showValidationError(error, 'json'); return }
+    draft.fields = cloneFields(fields)
     advancedMode.value = false
     return
   }
@@ -188,30 +235,33 @@ function fieldsForSave(): ApplicationFormField[] | null {
     if (!Array.isArray(parsed)) throw new Error()
     return parsed as ApplicationFormField[]
   } catch {
-    MessagePlugin.error('高级字段定义必须是有效的 JSON 数组')
+    void showValidationError('高级字段定义必须是有效的 JSON 数组', 'json')
     return null
   }
 }
 
 async function save() {
+  if (saving.value) return
+  validationError.value = ''
   const fields = fieldsForSave()
   if (!fields) return
   if (!draft.title.trim() || !draft.submitLabel.trim()) {
-    MessagePlugin.warning('请填写表单标题和提交按钮文案')
+    await showValidationError('请填写表单标题和提交按钮文案', !draft.title.trim() ? 'title' : 'submitLabel')
     return
   }
   if (draft.title.trim().length > 100 || draft.subtitle.trim().length > 200 || draft.submitLabel.trim().length > 50) {
-    MessagePlugin.warning('标题、副标题或按钮文案超过长度限制')
+    await showValidationError('标题、副标题或按钮文案超过长度限制', draft.title.trim().length > 100 ? 'title' : draft.subtitle.trim().length > 200 ? 'subtitle' : 'submitLabel')
     return
   }
   const fieldError = validateFields(fields)
   if (fieldError) {
-    MessagePlugin.error(fieldError)
+    const index = Number(fieldError.match(/第 (\d+) 个字段/)?.[1] ?? 1) - 1
+    await showValidationError(fieldError, advancedMode.value ? 'json' : `field-${index}`)
     return
   }
   const tips = draft.tips.split('\n').map((item) => item.trim()).filter(Boolean)
   if (tips.length > 20 || tips.some((tip) => tip.length > 500)) {
-    MessagePlugin.error('提示语最多 20 条，每条不超过 500 字')
+    await showValidationError('提示语最多 20 条，每条不超过 500 字', 'tips')
     return
   }
   saving.value = true
@@ -224,7 +274,12 @@ async function save() {
       fields,
     })
     MessagePlugin.success('表单配置已保存，客户端将立即使用新 schema')
-    await load()
+    // 仅更新刚保存的类型，其余类型的本地草稿继续保留。
+    const item = current.value
+    if (item) Object.assign(item, { title: draft.title.trim(), subtitle: draft.subtitle.trim(), submitLabel: draft.submitLabel.trim(), tips, fields: cloneFields(fields) })
+    localDrafts.delete(active.value)
+    fill()
+    validationError.value = ''
   } catch (error) {
     MessagePlugin.error(error instanceof Error ? error.message : '保存失败')
   } finally {
@@ -246,13 +301,14 @@ onMounted(load)
           <t-tab-panel v-for="item in configs" :key="item.type" :value="item.type" :label="labels[item.type]" />
         </t-tabs>
 
-        <t-form :data="draft" label-align="top" class="config-form" @submit="save">
+        <t-alert v-if="validationError" theme="error" :title="validationError" class="validation-summary" />
+        <t-form ref="formRef" :data="draft" label-align="top" class="config-form" @submit="save">
           <div class="form-grid">
-            <t-form-item label="表单标题" name="title" required><t-input v-model="draft.title" :maxlength="100" /></t-form-item>
-            <t-form-item label="提交按钮文案" name="submitLabel" required><t-input v-model="draft.submitLabel" :maxlength="50" /></t-form-item>
+            <t-form-item label="表单标题" name="title" data-validation-target="title" required><t-input v-accessible-field v-model="draft.title" :maxlength="100" /></t-form-item>
+            <t-form-item label="提交按钮文案" name="submitLabel" data-validation-target="submitLabel" required><t-input v-accessible-field v-model="draft.submitLabel" :maxlength="50" /></t-form-item>
           </div>
-          <t-form-item label="副标题" name="subtitle"><t-input v-model="draft.subtitle" :maxlength="200" /></t-form-item>
-          <t-form-item label="提示语（每行一条）" name="tips"><t-textarea v-model="draft.tips" :autosize="{ minRows: 2, maxRows: 5 }" /></t-form-item>
+          <t-form-item label="副标题" name="subtitle" data-validation-target="subtitle"><t-input v-accessible-field v-model="draft.subtitle" :maxlength="200" /></t-form-item>
+          <t-form-item label="提示语（每行一条）" name="tips" data-validation-target="tips"><t-textarea v-accessible-field v-model="draft.tips" :autosize="{ minRows: 2, maxRows: 5 }" /></t-form-item>
 
           <section class="fields-section" aria-labelledby="fields-heading">
             <div class="section-head">
@@ -264,7 +320,7 @@ onMounted(load)
             </div>
 
             <div v-if="!advancedMode" class="field-list">
-              <article v-for="(field, index) in draft.fields" :key="index" class="field-card" :aria-labelledby="`field-${index}-title`">
+              <article v-for="(field, index) in draft.fields" :key="index" class="field-card" :data-validation-target="`field-${index}`" :aria-labelledby="`field-${index}-title`">
                 <div class="field-card-head">
                   <h3 :id="`field-${index}-title`">{{ index + 1 }}. {{ field.label || '未命名字段' }}</h3>
                   <div class="field-actions" :aria-label="`${field.label || `第 ${index + 1} 个`}字段操作`">
@@ -276,35 +332,36 @@ onMounted(load)
                   </div>
                 </div>
 
+                <t-alert v-if="validationError && validationTarget === `field-${index}`" theme="error" :title="validationError" />
                 <div class="field-grid">
-                  <t-form-item label="字段标题" required><t-input v-model="field.label" :maxlength="100" /></t-form-item>
-                  <t-form-item label="字段 key" required help="字母开头，仅字母、数字和下划线"><t-input v-model="field.key" :maxlength="64" /></t-form-item>
+                  <t-form-item label="字段标题" required><t-input v-accessible-field v-model="field.label" :maxlength="100" /></t-form-item>
+                  <t-form-item label="字段 key" required help="字母开头，仅字母、数字和下划线"><t-input v-accessible-field v-model="field.key" :maxlength="64" /></t-form-item>
                   <t-form-item label="字段类型" required>
-                    <t-select v-model="field.type" :options="typeOptions" @change="changeType(field)" />
+                    <t-select v-accessible-field v-model="field.type" :options="typeOptions" @change="changeType(field)" />
                   </t-form-item>
-                  <t-form-item label="必填"><t-switch v-model="field.required" /></t-form-item>
+                  <t-form-item label="必填"><t-switch v-accessible-field v-model="field.required" /></t-form-item>
                 </div>
                 <div class="field-grid">
-                  <t-form-item label="占位提示"><t-input v-model="field.placeholder" :maxlength="200" placeholder="可不填…" /></t-form-item>
-                  <t-form-item label="帮助说明"><t-input v-model="field.help" :maxlength="500" placeholder="可不填，显示在字段下方…" /></t-form-item>
+                  <t-form-item label="占位提示"><t-input v-accessible-field v-model="field.placeholder" :maxlength="200" placeholder="可不填…" /></t-form-item>
+                  <t-form-item label="帮助说明"><t-input v-accessible-field v-model="field.help" :maxlength="500" placeholder="可不填，显示在字段下方…" /></t-form-item>
                   <t-form-item v-if="field.type === 'text' || field.type === 'textarea'" label="最大长度">
-                    <t-input-number v-model="field.maxlength" :min="1" :max="10000" :decimal-places="0" placeholder="可不填…" />
+                    <t-input-number v-accessible-field v-model="field.maxlength" :min="1" :max="10000" :decimal-places="0" placeholder="可不填…" />
                   </t-form-item>
                 </div>
 
                 <div v-if="field.type === 'select'" class="sub-editor">
                   <div class="sub-editor-head"><h4>选择项</h4><t-button variant="text" type="button" @click="addOption(field)">添加选项</t-button></div>
                   <div v-for="(option, optionIndex) in field.options" :key="optionIndex" class="option-row">
-                    <t-input v-model="option.label" :aria-label="`选项 ${optionIndex + 1} 名称`" placeholder="显示名称…" :maxlength="100" />
-                    <t-input v-model="option.value" :aria-label="`选项 ${optionIndex + 1} 值`" placeholder="提交值…" :maxlength="100" />
+                    <t-input v-accessible-field="`选项 ${optionIndex + 1} 名称`" v-model="option.label" :aria-label="`选项 ${optionIndex + 1} 名称`" placeholder="显示名称…" :maxlength="100" />
+                    <t-input v-accessible-field="`选项 ${optionIndex + 1} 值`" v-model="option.value" :aria-label="`选项 ${optionIndex + 1} 值`" placeholder="提交值…" :maxlength="100" />
                     <t-button variant="text" theme="danger" type="button" :aria-label="`删除选项 ${optionIndex + 1}`" @click="removeOption(field, optionIndex)">删除</t-button>
                   </div>
                 </div>
 
                 <div v-if="field.type === 'upload'" class="field-grid upload-settings">
-                  <t-form-item label="允许的文件类型" help="MIME 类型或扩展名，逗号分隔"><t-input v-model="field.accept" :maxlength="255" placeholder="如 image/*,application/pdf…" /></t-form-item>
-                  <t-form-item label="允许多文件"><t-switch v-model="field.multiple" @change="field.maxCount = field.multiple ? Math.max(field.maxCount ?? 1, 1) : 1" /></t-form-item>
-                  <t-form-item label="最大文件数"><t-input-number v-model="field.maxCount" :min="1" :max="20" :decimal-places="0" :disabled="!field.multiple" /></t-form-item>
+                  <t-form-item label="允许的文件类型" help="MIME 类型或扩展名，逗号分隔"><t-input v-accessible-field v-model="field.accept" :maxlength="255" placeholder="如 image/*,application/pdf…" /></t-form-item>
+                  <t-form-item label="允许多文件"><t-switch v-accessible-field v-model="field.multiple" @change="field.maxCount = field.multiple ? Math.max(field.maxCount ?? 1, 1) : 1" /></t-form-item>
+                  <t-form-item label="最大文件数"><t-input-number v-accessible-field v-model="field.maxCount" :min="1" :max="20" :decimal-places="0" :disabled="!field.multiple" /></t-form-item>
                 </div>
               </article>
               <div v-if="!draft.fields.length" class="empty-fields" role="status">尚未配置字段，请新增至少一个字段。</div>
@@ -313,17 +370,17 @@ onMounted(load)
             <div class="advanced-panel">
               <div class="advanced-toggle">
                 <div><strong>高级 JSON 编辑</strong><p>仅用于维护可视化编辑器未支持的扩展属性。</p></div>
-                <t-switch :value="advancedMode" aria-label="高级 JSON 编辑" @change="requestAdvancedMode" />
+                <t-switch v-accessible-field="'高级 JSON 编辑'" :value="advancedMode" aria-label="高级 JSON 编辑" @change="requestAdvancedMode" />
               </div>
               <template v-if="advancedMode">
                 <t-alert theme="warning" title="高级模式已启用">直接编辑完整字段数组。格式或属性组合不合法时无法保存。</t-alert>
                 <label class="raw-label" for="application-fields-json">字段定义 JSON</label>
-                <t-textarea id="application-fields-json" v-model="advancedJson" :autosize="{ minRows: 16, maxRows: 30 }" spellcheck="false" />
+                <t-textarea v-accessible-field="'高级字段 JSON 定义'" data-validation-target="json" id="application-fields-json" v-model="advancedJson" :autosize="{ minRows: 16, maxRows: 30 }" spellcheck="false" />
               </template>
             </div>
           </section>
 
-          <div class="save-bar"><t-button theme="primary" type="submit" :loading="saving">保存配置</t-button></div>
+          <div class="save-bar"><span role="status">{{ isDirty ? '有未保存的修改（切换类型会保留草稿）' : '配置已保存' }}</span><t-button theme="primary" type="submit" :loading="saving">保存配置</t-button></div>
         </t-form>
       </t-loading>
     </div>

@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import RowMoreActions from '@/components/RowMoreActions.vue'
 import { computed, onMounted, reactive, ref, watch } from 'vue'
 import ListErrorState from '@/components/ListErrorState.vue'
 import { useListQueryState } from '@/utils/listQuery'
@@ -86,7 +87,7 @@ const columns = [
   { colKey: 'enrolled', title: '报名', cell: 'enrolled', width: 150, resizable: true , ellipsis: true},
   { colKey: 'checked', title: '签到', cell: 'checked', width: 150, resizable: true , ellipsis: true},
   { colKey: 'status', title: '状态', cell: 'status', width: 150, resizable: true , ellipsis: true},
-  { colKey: 'op', title: '操作', cell: 'op', width: 400 },
+  { colKey: 'op', title: '操作', cell: 'op', width: 180 },
 ]
 
 /* 列配置：本地持久化显隐/顺序 */
@@ -492,20 +493,20 @@ function fetchAllForExport(page: number, pageSize: number) {
     <DictEntriesDialog v-model:visible="typeDialogVisible" type="event_type" title="活动类型" @success="loadEventTypes" />
 
     <div class="page-filter-bar">
-      <t-input class="ctl-w-xl"
+      <t-input v-accessible-field="'搜索活动标题/编号'" class="ctl-w-xl"
         v-model="query.keyword"
         placeholder="搜索活动标题/编号…"
         clearable
         @enter="onSearch"
       />
-      <t-select class="ctl-w-md"
+      <t-select v-accessible-field="'类型'" class="ctl-w-md"
         v-model="query.type"
         label="类型"
         :options="typeOptions"
         clearable
         @change="onSearch"
       />
-      <t-select class="ctl-w-md"
+      <t-select v-accessible-field="'状态'" class="ctl-w-md"
         v-model="query.status"
         label="状态"
         :options="statusOptions"
@@ -579,9 +580,11 @@ function fetchAllForExport(page: number, pageSize: number) {
           <div class="op-cell" @click.stop>
             <!-- 详情：形态与行点击一致，为键盘用户提供显式入口 -->
             <t-button variant="text" size="small" @click="goDetail(row)">详情</t-button>
+            <t-button v-if="['pending_release', 'published'].includes(row.status)" variant="text" size="small" @click="openEdit(row)">编辑</t-button>
+            <RowMoreActions v-if="['pending_release', 'cancelled', 'scheduled', 'published', 'ended'].includes(row.status)">
             <!-- 待发布：编辑 / 立即发布 / 定时发布 / 取消活动 -->
             <template v-if="row.status === 'pending_release'">
-              <t-button variant="text" size="small" @click="openEdit(row)">编辑</t-button>
+
               <t-popconfirm content="确认立即发布该活动？发布后成员即可报名" @confirm="onPublishNow(row)">
                 <t-button variant="text" size="small" theme="primary" :loading="isActing(row, 'publish-now')">
                   立即发布
@@ -617,7 +620,7 @@ function fetchAllForExport(page: number, pageSize: number) {
 
             <!-- 已发布：编辑 / 暂停报名 / 开放报名、取消活动 -->
             <template v-if="row.status === 'published'">
-              <t-button variant="text" size="small" @click="openEdit(row)">编辑</t-button>
+
               <!-- 暂停报名影响全部成员报名需确认；开放报名为恢复性操作直接执行 -->
               <t-popconfirm
                 v-if="row.enrollmentOpen"
@@ -649,6 +652,7 @@ function fetchAllForExport(page: number, pageSize: number) {
             >
               <t-button variant="text" size="small" theme="warning" :loading="isActing(row, 'archive')">归档</t-button>
             </t-popconfirm>
+            </RowMoreActions>
           </div>
         </template>
         <template #empty>

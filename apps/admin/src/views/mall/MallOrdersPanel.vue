@@ -280,13 +280,13 @@ onMounted(load)
     </PageHeader>
 
     <div class="page-filter-bar">
-      <t-input class="ctl-w-xl"
+      <t-input v-accessible-field="'搜索订单编号/用户/商品/券码'" class="ctl-w-xl"
         v-model="query.keyword"
         placeholder="搜索订单编号/用户/商品/券码…"
         clearable
         @enter="onSearch"
       />
-      <t-select class="ctl-w-sm"
+      <t-select v-accessible-field="'状态'" class="ctl-w-sm"
         v-model="query.status"
         label="状态"
         :options="statusOptions"
@@ -375,7 +375,7 @@ onMounted(load)
     </div>
 
     <!-- 订单详情抽屉 -->
-    <t-drawer v-model:visible="drawerVisible" header="兑换订单详情" size="480px" :footer="false" :close-btn="true" :close-on-esc-keydown="true">
+    <t-drawer v-model:visible="drawerVisible" header="兑换订单详情" size="min(480px, 100vw)" :footer="false" :close-btn="true" :close-on-esc-keydown="true">
       <template v-if="current">
         <div class="drawer-head">
           <span class="drawer-id">{{ current.id }}</span>

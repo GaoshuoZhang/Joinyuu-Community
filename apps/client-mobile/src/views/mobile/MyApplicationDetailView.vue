@@ -18,6 +18,11 @@ const { data: application, loading, error, run } = useAsyncList<MyApplicationDet
 onMounted(run)
 
 const typeLabel = { settle: '企业入驻', cooperation: '合作伙伴', individual: '人才登记' } as const
+const reviseRoutes = { settle: '/applications/settle', cooperation: '/applications/cooperation', individual: '/applications/individual' } as const
+function reviseApplication() {
+  if (!application.value) return
+  void router.push(`${reviseRoutes[application.value.type]}?revise=${application.value.id}`)
+}
 </script>
 
 <template>
@@ -62,6 +67,12 @@ const typeLabel = { settle: '企业入驻', cooperation: '合作伙伴', individ
           </li>
         </ol>
       </section>
+      <Button
+        v-if="application.status === 'rejected' || application.status === 'withdrawn'"
+        theme="primary"
+        block
+        @click="reviseApplication"
+      >修改并重新提交</Button>
       <Button block variant="text" @click="router.push('/me/applications')">返回我的申请</Button>
     </template>
   </div>

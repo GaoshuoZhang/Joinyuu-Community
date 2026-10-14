@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { backOrFallback } from '@/utils/navigation'
 import { computed, onMounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { MessagePlugin } from 'tdesign-vue-next'
@@ -245,7 +246,7 @@ onMounted(load)
 
 <template>
   <div class="space-detail page-fade-in">
-    <t-button variant="text" theme="default" class="back-btn" @click="router.back()">
+    <t-button variant="text" theme="default" class="back-btn" @click="backOrFallback(router, '/spaces')">
       <template #icon><ArrowLeftIcon /></template>
       返回
     </t-button>

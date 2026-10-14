@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { useDialogFormProtection } from '@/utils/form'
 import { computed, ref, watch } from 'vue'
 import { MessagePlugin } from 'tdesign-vue-next'
 import { AddIcon, DeleteIcon } from 'tdesign-icons-vue-next'
@@ -45,6 +46,7 @@ async function onCreate() {
     await createDictEntry(props.type, { label })
     MessagePlugin.success('新增成功（已启用）')
     newLabel.value = ''
+    markBaseline()
     await load()
     emit('success')
   } catch (e) {
@@ -90,14 +92,17 @@ watch(
     }
   },
 )
+const protectedVisible = computed({ get: () => props.visible, set: (value) => emit('update:visible', value) })
+const { close: closeEditor, markBaseline } = useDialogFormProtection(() => newLabel.value, protectedVisible, submitting)
 </script>
 
 <template>
-  <t-dialog :visible="visible" :header="title" width="640px" :footer="false" @close="emit('update:visible', false)">
+  <t-dialog :visible="visible" :header="title" width="640px" :footer="false" @close="closeEditor">
     <div class="dict-body">
       <p class="panel-tip">站点选项词汇的单一来源：新增即启用，停用后不再作为选项下发；已产生的历史业务数据不受删除影响。</p>
       <div class="dict-form">
         <t-input
+          v-accessible-field="`${noun}名称`"
           v-model="newLabel"
           :maxlength="16"
           clearable
@@ -120,6 +125,7 @@ watch(
             <template #action>
               <div class="dict-actions">
                 <t-switch
+                  v-accessible-field="`${noun}「${entry.label}」启用状态`"
                   :value="entry.status === 'enabled'"
                   :loading="acting === entry.code"
                   :aria-label="`${noun}「${entry.label}」启用状态`"

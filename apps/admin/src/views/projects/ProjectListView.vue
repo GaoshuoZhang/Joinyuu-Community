@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import RowMoreActions from '@/components/RowMoreActions.vue'
+import { focusFirstInvalid, useDialogFormProtection } from '@/utils/form'
 import { computed, nextTick, onMounted, reactive, ref, watch } from 'vue'
 import { useListQueryState } from '@/utils/listQuery'
 import { useRouter } from 'vue-router'
@@ -68,7 +70,7 @@ const columns = [
   { colKey: 'progress', title: '进度', cell: 'progress', width: 120, resizable: true , ellipsis: true},
   { colKey: 'status', title: '状态', cell: 'status', width: 86, resizable: true , ellipsis: true},
   { colKey: 'duration', title: '起止时间', cell: 'duration', width: 220, resizable: true , ellipsis: true},
-  { colKey: 'op', title: '操作', cell: 'op', width: 260 },
+  { colKey: 'op', title: '操作', cell: 'op', width: 180 },
 ]
 
 /* 列配置：本地持久化显隐/顺序 */
@@ -205,7 +207,7 @@ function openCloseDialog(row: Project) {
 async function onConfirmClose() {
   if (!closeTarget.value) return
   const valid = await closeFormRef.value.validate()
-  if (valid !== true) return
+  if (valid !== true) return focusFirstInvalid(closeFormRef.value)
   closeSaving.value = true
   try {
     await closeProject(closeTarget.value.id, closeForm.reason)
@@ -394,6 +396,7 @@ onMounted(() => {
   applyRouteFilter()
   load()
 })
+const { close: closeProjectDialog } = useDialogFormProtection(closeForm, closeVisible, closeSaving)
 </script>
 
 <template>
@@ -425,13 +428,13 @@ onMounted(() => {
     </PageHeader>
 
     <div class="page-filter-bar">
-      <t-input class="ctl-w-xl"
+      <t-input v-accessible-field="'搜索项目名称/编号'" class="ctl-w-xl"
         v-model="query.keyword"
         placeholder="搜索项目名称/编号…"
         clearable
         @enter="onSearch"
       />
-      <t-select class="ctl-w-md"
+      <t-select v-accessible-field="'状态'" class="ctl-w-md"
         v-model="query.status"
         label="状态"
         :options="statusOptions"
@@ -525,6 +528,8 @@ onMounted(() => {
             >
               编辑
             </t-button>
+            <RowMoreActions v-if="['running', 'paused', 'finished', 'closed'].includes(row.status)">
+
             <template v-if="row.status === 'running'">
               <t-popconfirm content="确认暂停该项目？" @confirm="onStatusChange(row, 'pause')">
                 <t-button
@@ -557,6 +562,7 @@ onMounted(() => {
             >
               <t-button variant="text" size="small" theme="warning" :loading="acting === row.id + ':archive'">归档</t-button>
             </t-popconfirm>
+            </RowMoreActions>
           </div>
         </template>
         <template #empty>
@@ -578,17 +584,18 @@ onMounted(() => {
       :visible="closeVisible"
       :header="closeTarget ? `关闭项目 · ${closeTarget.name}` : '关闭项目'"
       width="460px"
-      @close="closeVisible = false"
+      @close="closeProjectDialog"
     >
       <template #footer>
         <div class="dialog-footer">
-          <t-button variant="text" theme="default" @click="closeVisible = false">取消</t-button>
+          <t-button variant="text" theme="default" @click="closeProjectDialog">取消</t-button>
           <t-button theme="danger" :loading="closeSaving" @click="onConfirmClose">确认关闭</t-button>
         </div>
       </template>
       <t-form ref="closeFormRef" :data="closeForm" :rules="closeRules" label-align="top">
         <t-form-item label="关闭原因" name="reason">
           <t-textarea
+            v-accessible-field
             v-model="closeForm.reason"
             :autosize="{ minRows: 3, maxRows: 5 }"
             placeholder="请填写关闭原因（必填），将记录在项目信息中…"

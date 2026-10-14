@@ -1,13 +1,14 @@
 <script setup lang="ts">
 import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref } from 'vue'
-import { useRouter } from 'vue-router'
-import { Button, Checkbox, Form, FormItem, Input, NoticeBar, Radio, RadioGroup, Toast } from 'tdesign-mobile-vue'
+import { useRoute, useRouter } from 'vue-router'
+import { Button, Checkbox, Form, FormItem, Input, NoticeBar, Popup, Radio, RadioGroup, Toast } from 'tdesign-mobile-vue'
 import type { FormInstanceFunctions, FormRules } from 'tdesign-mobile-vue'
 import { fetchEmailAvailable, fetchSmsAvailable, sendEmailCode, sendSmsCode } from '@/api/auth'
 import { useAuthStore } from '@/stores/auth'
 import { useConfigStore } from '@/stores/config'
 import { useNoticesStore } from '@/stores/notices'
 import { useUnsavedGuard } from '@/composables/useUnsavedGuard'
+import PrivacyView from '@/views/mobile/PrivacyView.vue'
 import { ApiError } from '@/api/http'
 import { CODE_MSG, EMAIL_MSG, isEmail, isPasswordStrong, isPhone, isSmsCode, PASSWORD_MSG, PHONE_MSG, REQUIRED } from '@/utils/validators'
 import 'tdesign-mobile-vue/es/style/index.css'
@@ -16,6 +17,7 @@ import 'tdesign-mobile-vue/es/style/index.css'
  * 昵称与用户名由服务端自动分配，注册后可在「我的资料」修改。
  * v46：校验迁移到 t-form/rules——错误内联在字段下方，提交失败自动滚动到首个错误字段。 */
 const router = useRouter()
+const route = useRoute()
 const auth = useAuthStore()
 const config = useConfigStore()
 const notices = useNoticesStore()
@@ -30,6 +32,7 @@ const sending = ref(false)
 const countdown = ref(0)
 const formRef = ref<FormInstanceFunctions>()
 const closed = computed(() => !config.config.registrationOpen)
+const policyVisible = ref(false)
 
 /* 长表单离开保护：任一字段有内容即视为未保存；注册成功后先 markClean 再跳转，避免误拦 */
 const hasUnsavedInput = computed(() => Boolean(
@@ -124,7 +127,8 @@ async function onSubmit() {
     notices.refreshUnread()
     Toast('注册成功，欢迎加入聚屿社区')
     markClean()
-    await router.push('/')
+    const redirect = String(route.query.redirect ?? '/')
+    await router.push(redirect.startsWith('/') && !redirect.startsWith('//') ? redirect : '/')
   } catch (e) {
     Toast(e instanceof ApiError ? e.message : '注册失败，请稍后重试')
     form.code = ''
@@ -223,17 +227,21 @@ function onRegisterSubmit({ validateResult }: { validateResult: unknown }) {
       </FormItem>
       <FormItem name="agreed" class="agreement-item">
         <Checkbox :checked="form.agreed" :borderless="true" @change="(value: unknown) => (form.agreed = Boolean(value))">
-          <template #label>
-            我已阅读并同意
-            <router-link to="/privacy" class="link" @click.stop>《用户协议》与《隐私政策》</router-link>
-          </template>
+          <template #label>我已阅读并同意</template>
         </Checkbox>
+        <Button variant="text" class="agreement-link" @click="policyVisible = true">阅读《用户协议》与《隐私政策》</Button>
       </FormItem>
       <Button theme="primary" size="large" block type="submit" :loading="submitting" :disabled="submitting || closed">
         {{ closed ? '注册暂未开放' : submitting ? '注册中…' : '注 册' }}
       </Button>
-      <p class="swap">已有账号？<router-link to="/login" class="link">直接登录</router-link></p>
+      <p class="swap">已有账号？<router-link :to="{ path: '/login', query: route.query.redirect ? { redirect: route.query.redirect } : {} }" class="link">直接登录</router-link></p>
     </Form>
+    <Popup v-model:visible="policyVisible" placement="bottom" class="policy-popup" aria-label="用户协议与隐私政策">
+      <div class="policy-popup-body">
+        <div class="policy-popup-head"><h2>用户协议与隐私政策</h2><Button variant="text" aria-label="关闭协议" @click="policyVisible = false">关闭</Button></div>
+        <PrivacyView />
+      </div>
+    </Popup>
   </main>
 </template>
 
@@ -305,6 +313,12 @@ function onRegisterSubmit({ validateResult }: { validateResult: unknown }) {
 .form :deep(.agreement-item .t-form__label) {
   display: none;
 }
+
+.agreement-link { min-height: 44px; justify-content: flex-start; padding: 0; }
+.policy-popup { width: 100%; }
+.policy-popup-body { max-height: 90dvh; overflow-y: auto; padding: var(--app-space-6) var(--app-space-7) env(safe-area-inset-bottom); }
+.policy-popup-head { position: sticky; top: 0; z-index: 1; display: flex; align-items: center; justify-content: space-between; gap: var(--app-space-4); background: var(--td-bg-color-container); }
+.policy-popup-head h2 { margin: 0; font: var(--app-type-section); }
 
 .channels {
   display: flex;

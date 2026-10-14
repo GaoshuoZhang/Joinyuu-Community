@@ -236,20 +236,20 @@ async function loadCategories() {
     <GoodsCategoryDialog v-model:visible="categoryDialogVisible" @success="loadCategories" />
 
     <div class="page-filter-bar">
-      <t-input class="ctl-w-xl"
+      <t-input v-accessible-field="'搜索商品名称/编号'" class="ctl-w-xl"
         v-model="query.keyword"
         placeholder="搜索商品名称/编号…"
         clearable
         @enter="onSearch"
       />
-      <t-select class="ctl-w-md"
+      <t-select v-accessible-field="'类型'" class="ctl-w-md"
         v-model="query.category"
         label="类型"
         :options="categoryOptions"
         clearable
         @change="onSearch"
       />
-      <t-select class="ctl-w-sm"
+      <t-select v-accessible-field="'状态'" class="ctl-w-sm"
         v-model="query.status"
         label="状态"
         :options="statusOptions"

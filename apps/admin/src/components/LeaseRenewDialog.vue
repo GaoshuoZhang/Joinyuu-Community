@@ -2,7 +2,7 @@
 import { computed, reactive, ref, watch } from 'vue'
 import { MessagePlugin } from 'tdesign-vue-next'
 import type { FormProps } from 'tdesign-vue-next'
-import { focusFirstInvalid, useDialogDirtyGuard } from '@/utils/form'
+import { focusFirstInvalid, useDialogDirtyGuard, usePageDirtyGuard } from '@/utils/form'
 import { renewLease } from '@/api/workstations'
 import type { Lease, RentPeriod } from '@/types'
 
@@ -29,7 +29,7 @@ const form = reactive({
 })
 
 /* 未保存保护：打开时记录基线，关闭前有改动需确认 */
-const { markBaseline, guardClose } = useDialogDirtyGuard(form)
+const { markBaseline, isDirty, guardClose } = useDialogDirtyGuard(form)
 
 const rules: FormProps['rules'] = {
   endDate: [{ required: true, message: '请选择新到期日', trigger: 'submit' }],
@@ -104,6 +104,7 @@ function onClose() {
   /* 未保存保护：有改动时弹确认（见 useDialogDirtyGuard） */
   guardClose(() => emit('update:visible', false))
 }
+usePageDirtyGuard(computed(() => props.visible && isDirty.value))
 </script>
 
 <template>
@@ -129,16 +130,17 @@ function onClose() {
     <t-form ref="formRef" :data="form" :rules="rules" label-align="top">
       <div class="form-row">
         <t-form-item label="新到期日" name="endDate">
-          <t-date-picker clearable v-model="form.endDate" valueType="YYYY-MM-DD" class="ctl-w-full" placeholder="选择续期后的到期日…" />
+          <t-date-picker v-accessible-field clearable v-model="form.endDate" valueType="YYYY-MM-DD" class="ctl-w-full" placeholder="选择续期后的到期日…" />
           <template #help>须晚于当前到期日；默认按租金周期顺延一期</template>
         </t-form-item>
         <t-form-item :label="`租金（元）/ ${rentUnit}`" name="monthlyRent">
-          <t-input-number class="ctl-w-full" v-model="form.monthlyRent" :min="0" theme="column" placeholder="默认沿用当前租金…" />
+          <t-input-number v-accessible-field class="ctl-w-full" v-model="form.monthlyRent" :min="0" theme="column" placeholder="默认沿用当前租金…" />
           <template #help>默认沿用当前租金，可随续期一并调整</template>
         </t-form-item>
       </div>
       <t-form-item label="续期说明" name="reason">
         <t-textarea
+          v-accessible-field
           v-model="form.reason"
           :autosize="{ minRows: 2, maxRows: 4 }"
           placeholder="如：客户续租一年，租金不变（将记录到续期记录）…"

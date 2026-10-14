@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { focusFirstInvalid, useDialogFormProtection } from '@/utils/form'
 import ListErrorState from '@/components/ListErrorState.vue'
 import ListEmptyState from '@/components/ListEmptyState.vue'
 import { computed, nextTick, onMounted, reactive, ref, watch } from 'vue'
@@ -132,7 +133,7 @@ const rules: FormProps['rules'] = {
 
 async function onConfirm() {
   const valid = await formRef.value.validate()
-  if (valid !== true) return
+  if (valid !== true) return focusFirstInvalid(formRef.value)
   submitting.value = true
   try {
     const payload = { name: form.name, description: form.description, sort: form.sort, submissionOpen: form.submissionOpen }
@@ -165,6 +166,7 @@ function openEdit(row: ArticleColumn) {
 }
 
 onMounted(load)
+const { close: closeForm } = useDialogFormProtection(form, dialogVisible, submitting)
 </script>
 
 <template>
@@ -205,6 +207,7 @@ onMounted(load)
         <template #createdAt="{ row }">{{ row.createdAt || '—' }}</template>
         <template #submissionOpen="{ row }">
           <t-switch
+            v-accessible-field="`投稿开放：${row.name}`"
             :value="row.submissionOpen"
             :disabled="!!row.system"
             :loading="acting === row.id + ':submission'"
@@ -269,11 +272,11 @@ onMounted(load)
       :visible="dialogVisible"
       :header="dialogMode === 'create' ? '新增栏目' : '编辑栏目'"
       width="560px"
-      @close="dialogVisible = false"
+      @close="closeForm"
     >
       <template #footer>
         <div class="dialog-footer">
-          <t-button variant="text" theme="default" @click="dialogVisible = false">取消</t-button>
+          <t-button variant="text" theme="default" @click="closeForm">取消</t-button>
           <t-button theme="primary" :loading="submitting" @click="onConfirm">
             {{ dialogMode === 'create' ? '确认新增' : '保存修改' }}
           </t-button>
@@ -282,14 +285,15 @@ onMounted(load)
       <t-form ref="formRef" :data="form" :rules="rules" label-align="top">
         <div class="form-row">
           <t-form-item label="栏目名称" name="name">
-            <t-input v-model="form.name" placeholder="如 创投观察…" />
+            <t-input v-accessible-field v-model="form.name" placeholder="如 创投观察…" />
           </t-form-item>
           <t-form-item label="排序权重" name="sort">
-            <t-input-number v-model="form.sort" :min="1" theme="column" class="ctl-w-full" />
+            <t-input-number v-accessible-field v-model="form.sort" :min="1" theme="column" class="ctl-w-full" />
           </t-form-item>
         </div>
         <t-form-item label="栏目说明" name="description">
           <t-textarea
+            v-accessible-field
             v-model="form.description"
             :autosize="{ minRows: 3, maxRows: 5 }"
             placeholder="栏目定位与内容方向…"
@@ -297,7 +301,7 @@ onMounted(load)
         </t-form-item>
         <t-form-item label="开放投稿" name="submissionOpen">
           <div class="submission-row">
-            <t-switch v-model="form.submissionOpen" />
+            <t-switch v-accessible-field v-model="form.submissionOpen" />
             <span class="submission-tip">开启后成员端该栏目可接受用户投稿</span>
           </div>
         </t-form-item>

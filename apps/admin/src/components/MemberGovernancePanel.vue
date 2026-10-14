@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { focusFirstInvalid, useDialogFormProtection } from '@/utils/form'
 import { computed, onMounted, reactive, ref } from 'vue'
 import { MessagePlugin } from 'tdesign-vue-next'
 import ColumnController from '@/components/ColumnController.vue'
@@ -19,6 +20,7 @@ const submitting = ref(false)
 const selectedId = ref('')
 const selectedName = ref('')
 const form = reactive({ action: 'reject' as 'approve' | 'reject', note: '' })
+const formRef = ref()
 
 const allColumns = [
   { colKey: 'id', title: '工单编号', width: 115 }, { colKey: 'user', title: '用户', width: 160 },
@@ -26,8 +28,8 @@ const allColumns = [
   { colKey: 'effectiveAt', title: '冷静期届满', width: 180 }, { colKey: 'status', title: '状态', width: 100 },
   { colKey: 'reviewNote', title: '复核说明', width: 200 }, { colKey: 'op', title: '操作', width: 190 },
 ]
-const visibleKeys = ref<string[]>([])
-const columns = computed(() => allColumns.filter((column) => !visibleKeys.value.length || visibleKeys.value.includes(column.colKey)))
+const visibleKeys = ref<string[]>(allColumns.map(column => column.colKey))
+const columns = computed(() => visibleKeys.value.map(key => allColumns.find(column => column.colKey === key)!).filter(Boolean))
 const options = [{ value: '', label: '全部状态' }, { value: 'cooling', label: '待处理' }, { value: 'approved', label: '已注销' }, { value: 'rejected', label: '已驳回' }, { value: 'cancelled', label: '已撤回' }]
 const { syncQuery } = useListQueryState({}, load, { refs: { status, page } })
 let version = 0
@@ -57,7 +59,8 @@ function open(row: DeletionRow, action: 'approve' | 'reject') {
   Object.assign(form, { action, note: '' }); visible.value = true
 }
 async function submit() {
-  if (!form.note.trim()) return void MessagePlugin.warning('请填写复核说明')
+  const valid = await formRef.value?.validate()
+  if (valid !== true) return focusFirstInvalid(formRef.value)
   submitting.value = true
   try {
     await reviewDeletion(selectedId.value, form.action, form.note.trim())
@@ -66,12 +69,13 @@ async function submit() {
   finally { submitting.value = false }
 }
 onMounted(load)
+const { close: closeReviewDialog } = useDialogFormProtection(form, visible, submitting)
 </script>
 
 <template>
   <!-- 筛选栏置于卡片外（契约：筛选栏不进入 .page-card） -->
   <div class="page-filter-bar">
-    <t-select v-model="status" :options="options" label="状态" class="ctl-w-md" @change="page = 1; load()" />
+    <t-select v-accessible-field="'状态'" v-model="status" :options="options" label="状态" class="ctl-w-md" @change="page = 1; load()" />
     <ColumnController v-model="visibleKeys" storage-key="member-governance-deletions" :columns="allColumns.map(column => ({ key: column.colKey, title: column.title }))" />
   </div>
   <div class="page-card">
@@ -88,8 +92,8 @@ onMounted(load)
       </template>
     </t-table>
   </div>
-  <t-dialog v-model:visible="visible" :header="`${form.action === 'approve' ? '确认通过' : '确认驳回'} · ${selectedName}`" :confirm-btn="{ content: '确认执行', loading: submitting, theme: form.action === 'approve' ? 'danger' : 'primary' }" @confirm="submit">
+  <t-dialog :visible="visible" @close="closeReviewDialog" :header="`${form.action === 'approve' ? '确认通过' : '确认驳回'} · ${selectedName}`" :confirm-btn="{ content: '确认执行', loading: submitting, theme: form.action === 'approve' ? 'danger' : 'primary' }" @confirm="submit">
     <p v-if="form.action === 'approve'">执行后账号将注销，登录会话失效，个人资料清除，业务历史保留。</p>
-    <t-form :data="form" label-align="top"><t-form-item label="复核说明" name="note" :rules="[{ required: true, message: '请填写复核说明', trigger: 'submit' }]"><t-textarea v-model="form.note" :maxlength="255" placeholder="填写复核依据或驳回原因…" /></t-form-item></t-form>
+    <t-form ref="formRef" :data="form" label-align="top"><t-form-item label="复核说明" name="note" :rules="[{ required: true, whitespace: true, message: '请填写复核说明', trigger: 'submit' }]"><t-textarea v-accessible-field v-model="form.note" :maxlength="255" placeholder="填写复核依据或驳回原因…" /></t-form-item></t-form>
   </t-dialog>
 </template>

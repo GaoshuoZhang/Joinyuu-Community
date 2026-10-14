@@ -1,6 +1,8 @@
 <script setup lang="ts">
+import { focusFirstInvalid, useDialogFormProtection } from '@/utils/form'
 import { computed, reactive, ref, watch } from 'vue'
 import { MessagePlugin } from 'tdesign-vue-next'
+import type { FormProps } from 'tdesign-vue-next'
 import { DeleteIcon, EditIcon } from 'tdesign-icons-vue-next'
 import {
   createDictEntry,
@@ -21,6 +23,7 @@ const emit = defineEmits<{ 'update:visible': [boolean]; success: [] }>()
 
 const loading = ref(false)
 const saving = ref(false)
+const formRef = ref()
 const acting = ref('')
 const entries = ref<DictEntry[]>([])
 const editingCode = ref('')
@@ -32,6 +35,9 @@ const form = reactive({
   orderIdentities: [] as string[],
   orderLevels: [] as string[],
 })
+const rules: FormProps['rules'] = {
+  label: [{ validator: (value: string) => !!value.trim(), message: '请输入类别名称', trigger: 'submit' }],
+}
 
 const editingEntry = computed(() => entries.value.find((e) => e.code === editingCode.value) ?? null)
 const formTitle = computed(() => (editingCode.value ? `编辑类别「${editingEntry.value?.label ?? ''}」` : '新增类别'))
@@ -51,6 +57,7 @@ function resetForm() {
   form.visibilityLevels = []
   form.orderIdentities = []
   form.orderLevels = []
+  markBaseline()
 }
 
 async function load() {
@@ -65,12 +72,17 @@ async function load() {
 }
 
 function openEdit(entry: DictEntry) {
+  if (saving.value) return
+  guardClose(() => selectEntry(entry), '切换')
+}
+function selectEntry(entry: DictEntry) {
   editingCode.value = entry.code
   form.label = entry.label
   form.visibilityIdentities = [...entry.visibilityIdentities]
   form.visibilityLevels = [...entry.visibilityLevels]
   form.orderIdentities = [...entry.orderIdentities]
   form.orderLevels = [...entry.orderLevels]
+  markBaseline()
 }
 
 /** 可下单范围一键同步为可见范围（与商品/活动表单同一交互） */
@@ -80,8 +92,10 @@ function syncOrdering() {
 }
 
 async function onSubmit() {
+  if (saving.value) return
+  const valid = await formRef.value.validate()
+  if (valid !== true) return focusFirstInvalid(formRef.value)
   const label = form.label.trim()
-  if (!label) return void MessagePlugin.warning('请输入类别名称')
   saving.value = true
   try {
     const payload = {
@@ -141,6 +155,8 @@ watch(
     }
   },
 )
+const protectedVisible = computed({ get: () => props.visible, set: (value) => emit('update:visible', value) })
+const { close: closeEditor, markBaseline, guardClose } = useDialogFormProtection(form, protectedVisible, saving)
 </script>
 
 <template>
@@ -149,7 +165,7 @@ watch(
     header="商品类别"
     width="880px"
     :footer="false"
-    @close="emit('update:visible', false)"
+    @close="closeEditor"
   >
     <div class="cat-body">
       <p class="panel-tip">类别即商品类型（编码 GC 前缀自动分配）；「可见范围 / 可下单范围」为类别级门槛，留空表示不限；商品需同时通过类别范围与自身范围才可见 / 可下单。</p>
@@ -157,32 +173,32 @@ watch(
       <!-- 表单：新增 / 编辑 -->
       <div class="cat-form">
         <h4 class="cat-form__title">{{ formTitle }}</h4>
-        <t-form label-align="top" :data="form">
+        <t-form ref="formRef" label-align="top" :data="form" :rules="rules" @submit="onSubmit">
           <t-form-item label="类别名称" name="label">
-            <t-input v-model="form.label" :maxlength="16" clearable placeholder="如 实物商品、权益券…" />
+            <t-input v-accessible-field v-model="form.label" :maxlength="16" clearable placeholder="如 实物商品、权益券…" />
           </t-form-item>
           <!-- 可见/可下单各自成组：身份与等级并排；两行共用一个网格（列宽一致），
                「同步可见范围」置于可下单组两列之间的窄列，与左右字段标题同行 -->
           <div class="scope-grid">
             <t-form-item label="类别可见范围 · 身份" name="visibilityIdentities">
-              <t-select v-model="form.visibilityIdentities" multiple clearable :options="visibilityIdentityOptions" placeholder="留空 = 不限身份…" />
+              <t-select v-accessible-field v-model="form.visibilityIdentities" multiple clearable :options="visibilityIdentityOptions" placeholder="留空 = 不限身份…" />
             </t-form-item>
             <span aria-hidden="true"></span>
             <t-form-item label="类别可见范围 · 等级" name="visibilityLevels">
-              <t-select v-model="form.visibilityLevels" multiple clearable :options="userLevelOptions" placeholder="留空 = 不限等级（等级仅社区个体/社区企业身份拥有）…" />
+              <t-select v-accessible-field v-model="form.visibilityLevels" multiple clearable :options="userLevelOptions" placeholder="留空 = 不限等级（等级仅社区个体/社区企业身份拥有）…" />
             </t-form-item>
             <t-form-item label="类别可下单范围 · 身份" name="orderIdentities">
-              <t-select v-model="form.orderIdentities" multiple clearable :options="visibilityIdentityOptions" placeholder="留空 = 不限身份…" />
+              <t-select v-accessible-field v-model="form.orderIdentities" multiple clearable :options="visibilityIdentityOptions" placeholder="留空 = 不限身份…" />
             </t-form-item>
             <t-button variant="text" size="small" class="sync-btn" @click="syncOrdering">同步可见范围</t-button>
             <t-form-item label="类别可下单范围 · 等级" name="orderLevels">
-              <t-select v-model="form.orderLevels" multiple clearable :options="userLevelOptions" placeholder="留空 = 不限等级…" />
+              <t-select v-accessible-field v-model="form.orderLevels" multiple clearable :options="userLevelOptions" placeholder="留空 = 不限等级…" />
             </t-form-item>
           </div>
         </t-form>
         <div class="cat-form__actions">
           <t-button theme="primary" :loading="saving" @click="onSubmit">{{ editingCode ? '保存修改' : '新增类别' }}</t-button>
-          <t-button v-if="editingCode" variant="outline" @click="resetForm">取消编辑</t-button>
+          <t-button v-if="editingCode" variant="outline" :disabled="saving" @click="guardClose(resetForm, '取消编辑')">取消编辑</t-button>
         </div>
       </div>
 
@@ -203,12 +219,13 @@ watch(
             <template #action>
               <div class="cat-actions">
                 <t-switch
+                  v-accessible-field="`类别「${entry.label}」启用状态`"
                   :value="entry.status === 'enabled'"
                   :loading="acting === entry.code"
                   :aria-label="`类别「${entry.label}」启用状态`"
                   @change="() => onToggle(entry)"
                 />
-                <t-button variant="text" size="small" :disabled="editingCode === entry.code" @click="openEdit(entry)">
+                <t-button variant="text" size="small" :disabled="saving || editingCode === entry.code" @click="openEdit(entry)">
                   <template #icon><EditIcon /></template>
                   编辑
                 </t-button>

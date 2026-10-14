@@ -2,7 +2,7 @@
 import { computed, nextTick, reactive, ref, watch } from 'vue'
 import { MessagePlugin } from 'tdesign-vue-next'
 import type { FormProps } from 'tdesign-vue-next'
-import { focusFirstInvalid, useDialogDirtyGuard } from '@/utils/form'
+import { focusFirstInvalid, useDialogDirtyGuard, usePageDirtyGuard } from '@/utils/form'
 import { createLease, fetchRenterOptions, updateLease } from '@/api/workstations'
 import { workstationTypeMap } from '@/constants/status'
 import type { Lease, LeaseRenterType, RentPeriod, Workstation } from '@/types'
@@ -64,7 +64,7 @@ const form = reactive({
 })
 
 /* 未保存保护：打开时记录基线，关闭前有改动需确认 */
-const { markBaseline, guardClose } = useDialogDirtyGuard(form)
+const { markBaseline, isDirty, guardClose } = useDialogDirtyGuard(form)
 
 /* 付款周期选项与标签（单位用于"租金（元）/ N"动态标签） */
 const rentPeriodOptions = [
@@ -266,6 +266,7 @@ function onClose() {
   /* 未保存保护：有改动时弹确认（见 useDialogDirtyGuard） */
   guardClose(() => emit('update:visible', false))
 }
+usePageDirtyGuard(computed(() => props.visible && isDirty.value))
 </script>
 
 <template>
@@ -295,12 +296,14 @@ function onClose() {
       <div class="form-row">
         <t-form-item label="租赁方" name="renterValue">
           <t-input
+            v-accessible-field
             v-if="mode === 'edit'"
             :value="form.enterpriseName"
             disabled
             placeholder="租赁方不可变更…"
           />
           <t-select
+            v-accessible-field
             v-else
             v-model="form.renterValue"
             :options="renterOptions"
@@ -314,6 +317,7 @@ function onClose() {
       </div>
       <t-form-item v-if="mode === 'create'" label="选择办公位（仅空闲）" name="workstationIds">
         <t-tree-select
+          v-accessible-field
           v-model="form.workstationIds"
           :data="workstationTree"
           multiple
@@ -326,11 +330,12 @@ function onClose() {
       <div v-else class="edit-tip">换办公位需终止原租约后重新新增（编辑仅支持租期/租金/联系人）</div>
       <div class="form-row">
         <t-form-item label="租赁开始日期" name="startDate">
-          <t-date-picker clearable v-model="form.startDate" valueType="YYYY-MM-DD" class="ctl-w-full" />
+          <t-date-picker v-accessible-field clearable v-model="form.startDate" valueType="YYYY-MM-DD" class="ctl-w-full" />
         </t-form-item>
         <t-form-item label="租赁结束日期" name="endDate">
           <div class="end-date-row">
             <t-date-picker
+              v-accessible-field
               v-model="form.endDate"
               valueType="YYYY-MM-DD"
               clearable
@@ -338,7 +343,7 @@ function onClose() {
               style="flex: 1"
             />
             <div class="long-term-switch">
-              <t-switch v-model="form.longTerm" />
+              <t-switch v-accessible-field v-model="form.longTerm" />
               <span class="long-term-text">长期</span>
             </div>
           </div>
@@ -355,19 +360,20 @@ function onClose() {
           />
         </t-form-item>
         <t-form-item :label="`租金（元）/ ${rentPeriodLabel}`" name="monthlyRent">
-          <t-input-number v-model="form.monthlyRent" :min="0" theme="column" class="ctl-w-full" placeholder="月租周期选办公位后可自动累加…" />
+          <t-input-number v-accessible-field v-model="form.monthlyRent" :min="0" theme="column" class="ctl-w-full" placeholder="月租周期选办公位后可自动累加…" />
         </t-form-item>
       </div>
       <div class="form-row">
         <t-form-item label="联系人" name="contactName">
-          <t-input clearable v-model="form.contactName" />
+          <t-input v-accessible-field clearable v-model="form.contactName" />
         </t-form-item>
         <t-form-item label="联系电话" name="contactPhone">
-          <t-input clearable v-model="form.contactPhone" name="contact-phone" type="tel" inputmode="tel" autocomplete="tel" />
+          <t-input v-accessible-field clearable v-model="form.contactPhone" name="contact-phone" type="tel" inputmode="tel" autocomplete="tel" />
         </t-form-item>
       </div>
       <t-form-item label="备注" name="note">
         <t-textarea
+          v-accessible-field
           v-model="form.note"
           :maxlength="255"
           :autosize="{ minRows: 2, maxRows: 3 }"
@@ -376,6 +382,7 @@ function onClose() {
       </t-form-item>
       <t-form-item v-if="mode === 'edit'" label="编辑原因" name="reason">
         <t-textarea
+          v-accessible-field
           v-model="form.reason"
           :autosize="{ minRows: 2, maxRows: 4 }"
           placeholder="请填写本次修改的原因（必填，将记入编辑记录）…"

@@ -93,6 +93,8 @@ let trendVersion = 0
 async function loadTrend(days: number) {
   const current = ++trendVersion
   trendLoading.value = true
+  trend.value = []
+  trendError.value = ''
   try {
     const points = await fetchTrend(days)
     if (current === trendVersion) {
@@ -330,7 +332,7 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onLayoutKeydown))
                   <div class="layout-controls">
                     <ChevronUpIcon class="layout-move" role="button" tabindex="0" :aria-label="`上移${CARD_TITLES[k]}`" @click="moveCard(k, -1)" @keydown.enter.space.prevent="moveCard(k, -1)" />
                     <ChevronDownIcon class="layout-move" role="button" tabindex="0" :aria-label="`下移${CARD_TITLES[k]}`" @click="moveCard(k, 1)" @keydown.enter.space.prevent="moveCard(k, 1)" />
-                    <t-switch :value="cardOn[k]" size="small" :aria-label="`${CARD_TITLES[k]}显隐开关`" @change="(v: boolean) => toggleCard(k, v)" />
+                    <t-switch v-accessible-field="`${CARD_TITLES[k]}显隐开关`" :value="cardOn[k]" size="small" :aria-label="`${CARD_TITLES[k]}显隐开关`" @change="(v: boolean) => toggleCard(k, v)" />
                   </div>
                 </div>
               </div>
@@ -416,7 +418,7 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onLayoutKeydown))
           <ListErrorState v-if="announcementsError" :message="announcementsError" :loading="announcementsLoading" @retry="loadAnnouncements" />
           <t-empty v-else-if="!announcements.length && !announcementsLoading" description="暂无公告" />
           <div v-else class="notice-list">
-            <t-link theme="default" hover="color" v-for="a in announcements" :key="a.id" class="todo-item dash-item" href="#/contents/announcements">
+            <t-link theme="default" hover="color" v-for="a in announcements" :key="a.id" class="todo-item dash-item" :href="router.resolve({ path: '/contents/announcements', query: { record: a.id } }).href">
               <div class="todo-main">
                 <!-- 置顶仅一种状态：未置顶不渲染标签，不再借用 enabledFlag 状态语义 -->
                 <t-tag v-if="a.pinned" theme="warning" variant="light" size="small">置顶</t-tag>
@@ -443,7 +445,7 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onLayoutKeydown))
               v-for="app in data.pendingApplications"
               :key="app.id"
               class="todo-item"
-              href="#/approvals"
+              :href="router.resolve({ path: '/approvals', query: { record: app.id } }).href"
             >
               <div class="todo-main">
                 <t-tag variant="light" size="small">{{ applicationTypeMap[app.type].label }}</t-tag>
@@ -498,7 +500,7 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onLayoutKeydown))
               <div class="trend-head">
                 <div class="trend-stat">
                   <span class="trend-label">{{ activeTrendLabel }}（近 {{ trendDays }} 天）</span>
-                  <strong>{{ trendTotal.toLocaleString('zh-CN') }}</strong>
+                  <strong>{{ trendLoading || trendError ? '—' : trendTotal.toLocaleString('zh-CN') }}</strong>
                 </div>
               </div>
               <t-loading :loading="trendLoading" size="small" class="trend-body">

@@ -18,10 +18,14 @@ const auth = useAuthStore()
 
 const requests = ref<{ deletion?: { reason?: string; at: string; cancelableUntil?: string }; export?: { at: string; url?: string } }>({})
 const profile = ref<UserProfile | null>(null)
+const profileLoading = ref(true)
+const profileError = ref('')
 const loadError = ref('')
 
 async function loadAll() {
   loadError.value = ''
+  profileLoading.value = true
+  profileError.value = ''
   try {
     requests.value = await fetchAccountRequests()
   } catch (e) {
@@ -29,8 +33,10 @@ async function loadAll() {
   }
   try {
     profile.value = await fetchMe()
-  } catch {
-    /* 绑定信息展示失败不阻断页面其余功能 */
+  } catch (e) {
+    profileError.value = e instanceof ApiError ? e.message : '绑定信息加载失败，请重试'
+  } finally {
+    profileLoading.value = false
   }
 }
 onMounted(loadAll)
@@ -45,11 +51,15 @@ function maskEmail(value: string): string {
   return `${name.slice(0, 1)}***@${domain}`
 }
 const phoneNote = computed(() => {
+  if (profileLoading.value) return '加载中…'
+  if (profileError.value) return '加载失败'
   const phone = profile.value?.phone
   if (!phone) return '未绑定'
   return `${maskPhone(phone)}${profile.value?.phoneVerified ? '' : '（未验证）'}`
 })
 const emailNote = computed(() => {
+  if (profileLoading.value) return '加载中…'
+  if (profileError.value) return '加载失败'
   const email = profile.value?.email
   if (!email) return '未绑定'
   return `${maskEmail(email)}${profile.value?.emailVerified ? '' : '（未验证）'}`
@@ -393,8 +403,9 @@ async function onExport() {
     <p class="group-title">账号安全</p>
     <CellGroup theme="card">
       <Cell v-pressable title="修改登录密码" arrow @click="pwdVisible = true" />
-      <Cell v-pressable :title="phoneTitle" :note="phoneNote" arrow @click="phoneVisible = true" />
-      <Cell v-pressable :title="emailTitle" :note="emailNote" arrow @click="emailVisible = true" />
+      <Cell v-pressable="!profileLoading && !profileError" :title="phoneTitle" :note="phoneNote" :arrow="!profileLoading && !profileError" @click="!profileLoading && !profileError ? (phoneVisible = true) : undefined" />
+      <Cell v-pressable="!profileLoading && !profileError" :title="emailTitle" :note="emailNote" :arrow="!profileLoading && !profileError" @click="!profileLoading && !profileError ? (emailVisible = true) : undefined" />
+      <Button v-if="profileError" size="small" variant="outline" @click="loadAll">重试加载绑定信息</Button>
       <Cell v-pressable title="找回密码说明" note="退出登录后可在登录页操作" arrow @click="router.push('/forgot-password')" />
     </CellGroup>
 

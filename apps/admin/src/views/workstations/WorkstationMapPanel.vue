@@ -213,8 +213,8 @@ function enterpriseHref(w: Workstation): string | undefined {
     </div>
 
     <div class="page-filter-bar">
-      <t-select class="ctl-w-xl" clearable v-model="areaFilter" label="区域" :options="areaOptions" />
-      <t-select class="ctl-w-lg" clearable v-model="statusFilter" label="状态" :options="statusOptions" />
+      <t-select v-accessible-field="'区域'" class="ctl-w-xl" clearable v-model="areaFilter" label="区域" :options="areaOptions" />
+      <t-select v-accessible-field="'状态'" class="ctl-w-lg" clearable v-model="statusFilter" label="状态" :options="statusOptions" />
     </div>
 
     <div class="legend-row">

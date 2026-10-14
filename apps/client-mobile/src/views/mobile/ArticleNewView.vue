@@ -68,6 +68,8 @@ const submitting = ref(false)
 const submittedId = ref('')
 const loaded = ref(false)
 const baseline = ref('')
+const revisionLoading = ref(false)
+const revisionError = ref('')
 
 const columns = computed(() => columnData.value ?? [])
 const contentLength = computed(() => articleVisibleTextLength(blocks.value))
@@ -129,30 +131,7 @@ onMounted(async () => {
     /* 身份接口异常时保留登录会话中的基础身份。 */
   }
   if (reviseId) {
-    try {
-      const payload = await fetchMyArticlePayload(reviseId)
-      form.title = payload.title
-      form.columnCode = payload.columnCode
-      /* 原栏目已关闭投稿/停用后不再出现在开放列表中：清空选择并提示重选，避免提交时才报错 */
-      if (form.columnCode && columnData.value && !columns.value.some((c) => c.code === form.columnCode)) {
-        form.columnCode = ''
-        Toast('原栏目已关闭投稿，请重新选择栏目')
-      }
-      form.asIdentity = payload.asIdentity
-      form.asEnterpriseId = payload.asEnterpriseId ?? ''
-      ensureVisibleIdentitySelection()
-      /* 已有封面回显到 Upload：用户能看到并可替换/移除 */
-      coverFiles.value = payload.coverUrl
-        ? [{ url: payload.coverUrl, name: '已有封面', status: 'success' }]
-        : []
-      existingSummary.value = payload.summary ?? ''
-      blocks.value = parseArticleContent(payload.content, () => nextBlockId.value++)
-      if (!blocks.value.length) insertText(0)
-    } catch (e) {
-      Toast(e instanceof ApiError ? e.message : '加载原投稿失败')
-    }
-    baseline.value = editorSnapshot.value
-    loaded.value = true
+    await loadRevision()
     return
   }
   const first = identityOptions.value[0]
@@ -161,6 +140,35 @@ onMounted(async () => {
   baseline.value = editorSnapshot.value
   loaded.value = true
 })
+
+async function loadRevision() {
+  if (!reviseId || revisionLoading.value) return
+  revisionLoading.value = true
+  revisionError.value = ''
+  loaded.value = false
+  try {
+    const payload = await fetchMyArticlePayload(reviseId)
+    form.title = payload.title
+    form.columnCode = payload.columnCode
+    if (form.columnCode && columnData.value && !columns.value.some((c) => c.code === form.columnCode)) {
+      form.columnCode = ''
+      Toast('原栏目已关闭投稿，请重新选择栏目')
+    }
+    form.asIdentity = payload.asIdentity
+    form.asEnterpriseId = payload.asEnterpriseId ?? ''
+    ensureVisibleIdentitySelection()
+    coverFiles.value = payload.coverUrl ? [{ url: payload.coverUrl, name: '已有封面', status: 'success' }] : []
+    existingSummary.value = payload.summary ?? ''
+    blocks.value = parseArticleContent(payload.content, () => nextBlockId.value++)
+    if (!blocks.value.length) insertText(0)
+    baseline.value = editorSnapshot.value
+    loaded.value = true
+  } catch (e) {
+    revisionError.value = e instanceof ApiError ? e.message : '加载原投稿失败，请重试'
+  } finally {
+    revisionLoading.value = false
+  }
+}
 
 async function requestImage(file: UploadFile | UploadFile[]) {
   const target = Array.isArray(file) ? file[0] : file
@@ -243,6 +251,18 @@ async function onSubmit() {
   errors.column = ''
   errors.identity = ''
   errors.content = ''
+  if (revising.value && !loaded.value) {
+    Toast(revisionError.value || '原投稿尚未加载完成，请重试')
+    return
+  }
+  if (bodyUploadingAt.value !== null || coverFiles.value.some((file) => ['waiting', 'progress'].includes(file.status ?? ''))) {
+    Toast('图片仍在上传，请等待上传完成')
+    return
+  }
+  if (coverFiles.value.some((file) => file.status === 'fail')) {
+    Toast('封面上传失败，请重试或移除后再提交')
+    return
+  }
   if (!form.title.trim()) {
     errors.title = '请输入文章标题'
     return void Toast(errors.title)
@@ -298,6 +318,9 @@ async function onSubmit() {
       @secondary="router.replace('/plaza?tab=articles')"
     />
     <template v-else>
+    <ListSkeleton v-if="revisionLoading" :rows="4" />
+    <EmptyBlock v-else-if="revisionError" :text="revisionError" action-text="重试" @action="loadRevision" />
+    <template v-else>
     <header class="head">
       <p class="page-desc">{{ revising ? '修改后将重新进入审核队列' : '图文内容将随投稿一并进入审核' }}</p>
     </header>
@@ -349,6 +372,7 @@ async function onSubmit() {
            字段帮助文案与计数行已承载引导，按钮不再复述状态；未达标时点击即出行内错误 -->
       <Button class="mobile-sticky-action" theme="primary" size="large" block :loading="submitting" @click="onSubmit">{{ revising ? '重新提交' : '提交投稿' }}</Button>
     </div>
+    </template>
     </template>
   </div>
 </template>

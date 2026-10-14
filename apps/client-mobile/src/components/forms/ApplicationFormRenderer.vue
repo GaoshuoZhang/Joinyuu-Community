@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, reactive, ref } from 'vue'
+import { computed, nextTick, onMounted, reactive, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { Button, DateTimePicker, Picker, Popup, Toast } from 'tdesign-mobile-vue'
 import type { UploadFile } from 'tdesign-mobile-vue'
@@ -32,6 +32,8 @@ const submittedId = ref('')
 
 const values = reactive<Record<string, string>>({})
 const filesMap = reactive<Record<string, UploadFile[]>>({})
+const uploadingFiles = computed(() => Object.values(filesMap).some((files) => files.some((file) => file.status === 'waiting' || file.status === 'progress')))
+const failedFiles = computed(() => Object.values(filesMap).some((files) => files.some((file) => file.status === 'fail')))
 
 const loaded = ref(false)
 const baseline = ref('')
@@ -86,7 +88,7 @@ function openPicker(f: ApplicationFormField) {
 }
 
 function onPickerConfirm(val: (string | number)[]) {
-  if (pickerField.value) values[pickerField.value.key] = String(val[0] ?? '')
+  if (pickerField.value) setFieldValue(pickerField.value.key, String(val[0] ?? ''))
   pickerVisible.value = false
 }
 
@@ -104,7 +106,7 @@ function openDate(f: ApplicationFormField) {
 }
 
 function onDateConfirm(val: unknown) {
-  if (dateField.value) values[dateField.value.key] = String(val)
+  if (dateField.value) setFieldValue(dateField.value.key, String(val))
   dateVisible.value = false
 }
 
@@ -139,8 +141,31 @@ function uploadedOf(f: ApplicationFormField): UploadedFileInfo[] {
 /* v38 行内校验：字段级错误 */
 const fieldErrors = reactive<Record<string, string>>({})
 
+function setFieldValue(key: string, value: string) {
+  values[key] = value
+  delete fieldErrors[key]
+}
+
+function focusFirstError() {
+  const key = Object.keys(fieldErrors)[0]
+  if (!key) return
+  void nextTick(() => {
+    const field = document.querySelector<HTMLElement>(`[data-field-key="${CSS.escape(key)}"]`)
+    field?.scrollIntoView({ block: 'center', behavior: 'smooth' })
+    field?.querySelector<HTMLElement>('input:not([type="hidden"]), textarea, [role="button"]')?.focus({ preventScroll: true })
+  })
+}
+
 async function onSubmit() {
   if (submitting.value) return
+  if (uploadingFiles.value) {
+    Toast('附件仍在上传，请等待上传完成')
+    return
+  }
+  if (failedFiles.value) {
+    Toast('有附件上传失败，请重试或移除后再提交')
+    return
+  }
   const s = schema.value
   if (!s) return
   Object.keys(fieldErrors).forEach((key) => delete fieldErrors[key])
@@ -167,6 +192,7 @@ async function onSubmit() {
   }
   if (messages.length) {
     Toast(messages.length === 1 ? messages[0] : `还有 ${messages.length} 项待完善，请检查表单`)
+    focusFirstError()
     return
   }
   const fields: Record<string, string | number | UploadedFileInfo[]> = {}
@@ -236,11 +262,13 @@ async function onSubmit() {
           :files="filesMap[f.key] ?? []"
           :error="fieldErrors[f.key]"
           :request-upload="requestUpload"
-          @update:model-value="(value: string) => (values[f.key] = value)"
-          @update:files="(value: UploadFile[]) => (filesMap[f.key] = value)"
+          @update:model-value="(value: string) => setFieldValue(f.key, value)"
+          @update:files="(value: UploadFile[]) => { filesMap[f.key] = value; if (value.length) delete fieldErrors[f.key] }"
           @open-picker="openPicker(f)"
           @open-date="openDate(f)"
         />
+
+        <p v-if="uploadingFiles" class="field-help" role="status">附件上传完成后才能提交</p>
 
         <Button theme="primary" size="large" block class="submit mobile-sticky-action" :loading="submitting" @click="onSubmit">
           {{ submitting ? '提交中…' : revising ? '重新提交' : schema.submitLabel }}

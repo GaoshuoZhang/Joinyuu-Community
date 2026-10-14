@@ -230,11 +230,13 @@ watch(
 
 /* 路由变化 → 同步多标签页 */
 watch(
-  () => route.path,
-  async (path) => {
+  () => route.fullPath,
+  async () => {
+    const path = route.path
     if (path !== '/login') {
       tabs.add({
         path,
+        fullPath: route.fullPath,
         title: (route.meta.title as string) || '页面',
         closable: path !== '/dashboard',
       })
@@ -248,12 +250,21 @@ function handleMenuChange(value: string) {
   if (value !== route.path) router.push(value)
 }
 
-function closeTab(path: string) {
-  const next = tabs.remove(path)
-  if (route.path === path && next) router.push(next)
+async function closeTab(path: string) {
+  const item = tabs.tabs.find(tab => tab.path === path)
+  if (!item?.closable) return
+  if (route.path === path) {
+    const remaining = tabs.tabs.filter(tab => tab.path !== path)
+    const index = tabs.tabs.findIndex(tab => tab.path === path)
+    const next = remaining[Math.min(index, remaining.length - 1)]?.fullPath ?? '/dashboard'
+    // 导航保护被用户取消时保留当前标签及其查询条件。
+    const failure = await router.push(next)
+    if (failure) return
+  }
+  tabs.remove(path)
 }
 
-/* 全部关闭：关闭除当前页外的所有标签（工作台始终保留），保持在当前页 */
+/* 关闭其他：关闭除当前页外的所有标签（工作台始终保留），保持在当前页 */
 function closeAllTabs() {
   tabs.closeOthers(route.path)
 }
@@ -538,11 +549,11 @@ async function handleDropdown(item: { value?: string | number }) {
           variant="text"
           size="small"
           class="tab-close-all"
-          :disabled="tabs.tabs.length <= 1"
+          :disabled="!tabs.tabs.some(tab => tab.closable && tab.path !== route.path)"
           @click="closeAllTabs"
         >
           <template #icon><CloseIcon /></template>
-          全部关闭
+          关闭其他
         </t-button>
         <nav
           ref="tabBarRef"
@@ -558,7 +569,7 @@ async function handleDropdown(item: { value?: string | number }) {
               class="tab-item"
               :class="{ active: tab.path === route.path }"
             >
-              <t-link class="tab-title" theme="default" hover="color" :href="router.resolve(tab.path).href" :aria-current="tab.path === route.path ? 'page' : undefined">{{ tab.title }}</t-link>
+              <t-link class="tab-title" theme="default" hover="color" :href="router.resolve(tab.fullPath).href" :aria-current="tab.path === route.path ? 'page' : undefined">{{ tab.title }}</t-link>
               <button
                 v-if="tab.closable"
                 type="button"
@@ -930,7 +941,7 @@ async function handleDropdown(item: { value?: string | number }) {
   color: var(--td-text-color-primary);
 }
 
-/* ---------- 多标签栏（随顶栏布局，内部滚动 + 右侧全部关闭） ---------- */
+/* ---------- 多标签栏（随顶栏布局，内部滚动 + 右侧关闭其他） ---------- */
 .tab-bar {
   display: flex;
   align-items: center;

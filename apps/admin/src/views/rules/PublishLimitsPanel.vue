@@ -5,12 +5,15 @@ import ListErrorState from '@/components/ListErrorState.vue'
 import PageHeader from '@/components/PageHeader.vue'
 import { fetchPublishLimits, savePublishLimits } from '@/api/rules'
 import type { PublishLimitRule, PublishLimitScope } from '@/types'
+import { useDialogDirtyGuard, usePageDirtyGuard } from '@/utils/form'
 
 const loading = ref(false)
 const saving = ref(false)
 const loadError = ref('')
 type EditablePublishLimitRule = PublishLimitRule & { key: string }
 const rows = ref<EditablePublishLimitRule[]>([])
+const { markBaseline, isDirty } = useDialogDirtyGuard(() => rows.value)
+usePageDirtyGuard(isDirty)
 
 /* 个人用户规则页：仅个人用户（未实名/已实名）两个固定身份组；
  * 社区个体/社区企业的按等级额度与积分消费折扣在「等级规则」页维护（PublishingLimitRule 同一张表） */
@@ -46,6 +49,7 @@ async function load() {
       key: `${row.scope}:${row.level ?? 'fixed'}`,
     }))
     loadError.value = ''
+    markBaseline()
   } catch (e) {
     loadError.value = e instanceof Error ? e.message : '数据加载失败'
   } finally {
@@ -59,6 +63,7 @@ async function onSave() {
   saving.value = true
   try {
     await savePublishLimits(rows.value.map(({ key: _key, ...row }) => row))
+    markBaseline()
     MessagePlugin.success('个人用户规则已保存')
     await load()
   } catch (e) {
@@ -94,6 +99,7 @@ onMounted(load)
         <template v-for="key in limitKeys" #[key]="{ row }" :key="key">
           <div class="limit-cell">
             <t-input-number
+              v-accessible-field="`${scopeLabels[row.scope as 'personal_unverified' | 'personal_verified']} · ${columns.find(column => column.colKey === key)?.title}`"
               v-model="row[key]"
               :min="-1"
               :max="10000"

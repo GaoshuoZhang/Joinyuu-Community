@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, nextTick, onMounted, reactive, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { useQueryTab } from '@/utils/navigation'
+import { useQueryTab, backOrFallback } from '@/utils/navigation'
 import { MessagePlugin, type FormProps } from 'tdesign-vue-next'
 import { ArrowLeftIcon } from 'tdesign-icons-vue-next'
 import StatusTag from '@/components/StatusTag.vue'
@@ -25,7 +25,7 @@ import {
 import type { EventTicketRow } from '@/api/events'
 import type { CommunityEvent, EventEnrollment } from '@/types'
 import { exportCsv } from '@/utils/exportCsv'
-import { focusFirstInvalid } from '@/utils/form'
+import { focusFirstInvalid, useDialogFormProtection } from '@/utils/form'
 import { isNotFound } from '@/api/http'
 import ListErrorState from '@/components/ListErrorState.vue'
 
@@ -33,6 +33,10 @@ const route = useRoute()
 const router = useRouter()
 const loading = ref(true)
 const loadError = ref('')
+const refreshing = ref(false)
+const ticketsLoading = ref(false)
+const ticketsError = ref('')
+const canAct = computed(() => !loading.value && !refreshing.value && !loadError.value)
 const event = ref<CommunityEvent | null>(null)
 const tab = useQueryTab('info', ['info', 'enrollments', 'checkin', 'tickets'] as const)
 /* 已归档条目：隐藏全部写操作（含报名审核/签到），仅保留只读内容 */
@@ -60,7 +64,7 @@ const rescheduleRules: FormProps['rules'] = {
 }
 
 function openReschedule() {
-  if (!event.value) return
+  if (!event.value || !canAct.value) return
   rescheduleForm.startTime = event.value.startTime
   rescheduleForm.endTime = event.value.endTime
   rescheduleForm.reason = ''
@@ -69,7 +73,7 @@ function openReschedule() {
 }
 
 async function onReschedule() {
-  if (!event.value) return
+  if (!event.value || !canAct.value) return
   const valid = await rescheduleFormRef.value.validate()
   if (valid !== true) return focusFirstInvalid(rescheduleFormRef.value)
   acting.value = 'reschedule'
@@ -87,7 +91,7 @@ async function onReschedule() {
 
 /* 待发布 → 立即发布（开放报名） */
 async function onPublishNow() {
-  if (!event.value) return
+  if (!event.value || !canAct.value) return
   acting.value = 'publish-now'
   try {
     await publishEventNow(event.value.id)
@@ -102,7 +106,7 @@ async function onPublishNow() {
 
 /* 定时发布中 → 取消定时发布，转回待发布 */
 async function onCancelSchedule() {
-  if (!event.value) return
+  if (!event.value || !canAct.value) return
   acting.value = 'cancel-schedule'
   try {
     await cancelEventSchedule(event.value.id)
@@ -117,7 +121,7 @@ async function onCancelSchedule() {
 
 /* 已发布 → 暂停报名 / 开放报名 */
 async function onToggleEnrollment() {
-  if (!event.value) return
+  if (!event.value || !canAct.value) return
   acting.value = 'enrollment'
   const wasOpen = event.value.enrollmentOpen
   try {
@@ -133,7 +137,7 @@ async function onToggleEnrollment() {
 
 /* 待发布 / 已发布 → 取消活动 */
 async function onCancel() {
-  if (!event.value) return
+  if (!event.value || !canAct.value) return
   acting.value = 'cancel'
   try {
     await cancelEvent(event.value.id)
@@ -155,7 +159,7 @@ function openSchedule() {
 
 /* 已取消 → 转为待发布（同步列表页操作） */
 async function onRestore() {
-  if (!event.value) return
+  if (!event.value || !canAct.value) return
   acting.value = 'restore'
   try {
     await restoreCancelledEvent(event.value.id)
@@ -170,7 +174,7 @@ async function onRestore() {
 
 /* 已结束 / 已取消 → 归档（同步列表页操作） */
 async function onArchive() {
-  if (!event.value) return
+  if (!event.value || !canAct.value) return
   acting.value = 'archive'
   try {
     await archiveEvent(event.value.id)
@@ -202,22 +206,42 @@ const checkInColumns = [
   { colKey: 'op', title: '操作', cell: 'op', width: 120 },
 ]
 
+let ticketsVersion = 0
+async function loadTickets() {
+  const request = ++ticketsVersion
+  ticketsLoading.value = true
+  ticketsError.value = ''
+  try {
+    const result = await fetchEventTickets(route.params.id as string)
+    if (request === ticketsVersion) tickets.value = result
+  } catch (error) {
+    if (request === ticketsVersion) {
+      tickets.value = []
+      ticketsError.value = error instanceof Error ? error.message : '票务数据加载失败'
+    }
+  } finally {
+    if (request === ticketsVersion) ticketsLoading.value = false
+  }
+}
+
 async function load(silent = false) {
+  if (refreshing.value) return
   if (!silent) loading.value = true
+  refreshing.value = true
   try {
     event.value = await fetchEvent(route.params.id as string)
-    tickets.value = await fetchEventTickets(route.params.id as string)
     loadError.value = ''
+    await loadTickets()
   } catch (e) {
-    /* 404 = 活动不存在（走空态）；其余错误保留原因并展示重试入口 */
     if (isNotFound(e)) {
       event.value = null
       loadError.value = ''
     } else {
-      loadError.value = e instanceof Error ? e.message : '活动加载失败'
+      loadError.value = e instanceof Error ? e.message : '活动刷新失败，当前显示上次成功加载的数据'
     }
   } finally {
     loading.value = false
+    refreshing.value = false
   }
 }
 
@@ -230,7 +254,7 @@ function isReviewing(row: EventEnrollment, status: 'approved' | 'rejected') {
 }
 
 async function onReview(row: EventEnrollment, status: 'approved') {
-  if (!event.value) return
+  if (!event.value || !canAct.value) return
   reviewing.value = `${row.userId}:approved`
   try {
     await reviewEventEnrollment(event.value.id, row.userId, status)
@@ -262,9 +286,9 @@ function openReject(row: EventEnrollment) {
 
 async function onConfirmReject() {
   const row = rejectRow.value
-  if (!event.value || !row) return
+  if (!event.value || !canAct.value || !row) return
   const valid = await rejectFormRef.value.validate()
-  if (valid !== true) return
+  if (valid !== true) return focusFirstInvalid(rejectFormRef.value)
   rejectSubmitting.value = true
   try {
     await reviewEventEnrollment(event.value.id, row.userId, 'rejected', rejectForm.reason)
@@ -279,7 +303,7 @@ async function onConfirmReject() {
 }
 
 async function onCheckIn(row: EventEnrollment) {
-  if (!event.value) return
+  if (!event.value || !canAct.value) return
   checkingIn.value = row.userId
   try {
     await checkInEvent(event.value.id, row.userId)
@@ -293,6 +317,7 @@ async function onCheckIn(row: EventEnrollment) {
 }
 
 async function onRedeemTicket() {
+  if (!canAct.value || ticketsLoading.value || ticketsError.value) return
   if (!event.value || !redeemCode.value.trim()) {
     MessagePlugin.warning('请输入核销码')
     return
@@ -331,11 +356,13 @@ function checkInTime(row: EventEnrollment) {
 }
 
 onMounted(() => load())
+const { close: closeRescheduleDialog } = useDialogFormProtection(rescheduleForm, rescheduleVisible, computed(() => !!acting.value))
+const { close: closeRejectDialog } = useDialogFormProtection(rejectForm, rejectVisible, rejectSubmitting)
 </script>
 
 <template>
   <div class="event-detail page-fade-in">
-    <t-button variant="text" theme="default" class="back-btn" @click="router.back()">
+    <t-button variant="text" theme="default" class="back-btn" @click="backOrFallback(router, '/events')">
       <template #icon><ArrowLeftIcon /></template>
       返回
     </t-button>
@@ -347,6 +374,8 @@ onMounted(() => load())
     />
 
     <template v-else-if="event">
+      <ListErrorState v-if="loadError" :message="loadError" :loading="refreshing" @retry="() => load(true)" />
+      <t-alert v-else-if="refreshing" theme="info" title="正在刷新活动数据，完成后可继续操作" />
       <div class="page-card head-card">
         <div class="head-main">
           <div class="head-info">
@@ -397,7 +426,7 @@ onMounted(() => load())
             </div>
           </div>
           <div class="head-actions">
-            <template v-if="!isArchived">
+            <template v-if="!isArchived && canAct">
               <template v-if="event.status === 'pending_release'">
                 <t-button theme="primary" :loading="acting === 'publish-now'" @click="onPublishNow">立即发布</t-button>
                 <t-button variant="outline" @click="editVisible = true">编辑</t-button>
@@ -537,7 +566,7 @@ onMounted(() => load())
                 </template>
                 <template #waitlistOrder="{ row }">{{ row.waitlistOrder ?? '—' }}</template>
                 <template #op="{ row }">
-                  <template v-if="!isArchived && row.status === 'pending'">
+                  <template v-if="!isArchived && canAct && row.status === 'pending'">
                     <t-popconfirm content="确认通过该报名？" @confirm="onReview(row, 'approved')">
                       <t-button variant="text" :loading="isReviewing(row, 'approved')">通过</t-button>
                     </t-popconfirm>
@@ -593,20 +622,21 @@ onMounted(() => load())
 
           <t-tab-panel value="tickets" label="票务核销">
             <div class="tab-body">
+              <ListErrorState v-if="ticketsError" :message="ticketsError" :loading="ticketsLoading" @retry="loadTickets" />
               <div class="ticket-tools">
                 <!-- 核销为一次性不可逆消费：确认统一走「核销」按钮的 popconfirm（输入框回车不再直接核销，防误触） -->
-                <t-input class="ctl-w-xl" v-model="redeemCode" placeholder="输入 8 位核销码…" clearable />
+                <t-input v-accessible-field="'电子票核销码'" class="ctl-w-xl" v-model="redeemCode" placeholder="输入 8 位核销码…" clearable />
                 <t-popconfirm
                   content="确认核销该电子票？核销后票不可再用"
                   confirm-btn="确认核销"
                   @confirm="onRedeemTicket"
                 >
-                  <t-button theme="primary" :loading="redeeming">核销</t-button>
+                  <t-button theme="primary" :loading="redeeming" :disabled="!canAct || ticketsLoading || !!ticketsError || isArchived">核销</t-button>
                 </t-popconfirm>
-                <t-button variant="outline" @click="exportTickets">导出票务名单</t-button>
+                <t-button variant="outline" :disabled="ticketsLoading || !!ticketsError" @click="exportTickets">导出票务名单</t-button>
               </div>
               <t-table
-                v-if="tickets.length"
+                v-if="!ticketsError && tickets.length"
                 row-key="ticketNo"
                 :data="tickets"
                 :columns="[
@@ -646,7 +676,7 @@ onMounted(() => load())
 
     <!-- 改期弹窗含表单输入：禁用点遮罩关闭，防误触丢失输入 -->
     <t-dialog
-      v-model:visible="rescheduleVisible"
+      :visible="rescheduleVisible" @close="closeRescheduleDialog"
       :header="event ? `活动改期 · ${event.title}` : '活动改期'"
       width="560px"
       :close-on-overlay-click="false"
@@ -654,25 +684,25 @@ onMounted(() => load())
       <t-form ref="rescheduleFormRef" :data="rescheduleForm" :rules="rescheduleRules" label-align="top">
         <div class="reschedule-grid">
           <t-form-item label="新开始时间" name="startTime">
-            <t-date-picker v-model="rescheduleForm.startTime" valueType="YYYY-MM-DD HH:mm" enable-time-picker class="ctl-w-full" />
+            <t-date-picker v-accessible-field v-model="rescheduleForm.startTime" valueType="YYYY-MM-DD HH:mm" enable-time-picker class="ctl-w-full" />
           </t-form-item>
           <t-form-item label="新结束时间" name="endTime">
-            <t-date-picker v-model="rescheduleForm.endTime" valueType="YYYY-MM-DD HH:mm" enable-time-picker class="ctl-w-full" />
+            <t-date-picker v-accessible-field v-model="rescheduleForm.endTime" valueType="YYYY-MM-DD HH:mm" enable-time-picker class="ctl-w-full" />
           </t-form-item>
         </div>
         <t-form-item label="改期原因" name="reason">
-          <t-textarea v-model="rescheduleForm.reason" :maxlength="200" placeholder="将随站内信通知报名者…" />
+          <t-textarea v-accessible-field v-model="rescheduleForm.reason" :maxlength="200" placeholder="将随站内信通知报名者…" />
         </t-form-item>
       </t-form>
       <template #footer>
-        <t-button variant="text" theme="default" @click="rescheduleVisible = false">取消</t-button>
+        <t-button variant="text" theme="default" @click="closeRescheduleDialog">取消</t-button>
         <t-button theme="primary" :loading="acting === 'reschedule'" @click="onReschedule">确认改期并通知</t-button>
       </template>
     </t-dialog>
 
     <!-- 驳回原因对话框：必填，原因随站内通知下发申请人并记入审计 -->
     <t-dialog
-      v-model:visible="rejectVisible"
+      :visible="rejectVisible" @close="closeRejectDialog"
       header="驳回报名"
       width="480px"
       :close-on-overlay-click="!rejectSubmitting"
@@ -681,8 +711,9 @@ onMounted(() => load())
         {{ rejectRow ? `驳回 ${rejectRow.name} 的报名` : '' }}原因将通过站内通知告知申请人。
       </p>
       <t-form ref="rejectFormRef" :data="rejectForm" :rules="rejectRules">
-        <t-form-item name="reason">
+        <t-form-item label="驳回原因" name="reason">
           <t-textarea
+            v-accessible-field
             v-model="rejectForm.reason"
             :maxlength="200"
             :autosize="{ minRows: 3, maxRows: 5 }"
@@ -692,7 +723,7 @@ onMounted(() => load())
       </t-form>
       <template #footer>
         <div class="dialog-footer">
-          <t-button variant="text" theme="default" @click="rejectVisible = false">取消</t-button>
+          <t-button variant="text" theme="default" @click="closeRejectDialog">取消</t-button>
           <t-button theme="danger" :loading="rejectSubmitting" @click="onConfirmReject">确认驳回</t-button>
         </div>
       </template>

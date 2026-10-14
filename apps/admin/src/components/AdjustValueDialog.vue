@@ -1,5 +1,6 @@
 <script setup lang="ts">
-import { nextTick, reactive, ref, watch } from 'vue'
+import { focusFirstInvalid, useDialogFormProtection } from '@/utils/form'
+import { computed, nextTick, reactive, ref, watch } from 'vue'
 import type { FormProps } from 'tdesign-vue-next'
 
 /* 数值调整弹窗（经验值/积分共用）：方向 + 数量 + 事由，校验后交由父组件调 API */
@@ -55,13 +56,18 @@ watch(
 
 async function onConfirm() {
   const valid = await formRef.value.validate()
-  if (valid !== true) return
+  if (valid !== true) return focusFirstInvalid(formRef.value)
   emit('submit', form.direction === 'add' ? form.amount : -form.amount, form.reason.trim())
 }
 
 function onClose() {
+  closeProtected()
+}
+function finishClose() {
   emit('update:visible', false)
 }
+const protectedVisible = computed({ get: () => props.visible, set: () => finishClose() })
+const { close: closeProtected } = useDialogFormProtection(form, protectedVisible, computed(() => !!props.loading))
 </script>
 
 <template>
@@ -87,10 +93,11 @@ function onClose() {
         </t-radio-group>
       </t-form-item>
       <t-form-item label="数量" name="amount">
-        <t-input-number v-model="form.amount" :min="1" :step="1" :decimal-places="0" theme="column" class="ctl-w-full" />
+        <t-input-number v-accessible-field v-model="form.amount" :min="1" :step="1" :decimal-places="0" theme="column" class="ctl-w-full" />
       </t-form-item>
       <t-form-item label="调整事由" name="reason">
         <t-textarea
+          v-accessible-field
           v-model="form.reason"
           placeholder="必填，如「承接项目结项奖励」「违规扣减」…"
           :autosize="{ minRows: 2, maxRows: 4 }"

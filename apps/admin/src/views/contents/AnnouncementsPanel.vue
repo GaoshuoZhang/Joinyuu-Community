@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import RowMoreActions from '@/components/RowMoreActions.vue'
 import { computed, onMounted, reactive, ref } from 'vue'
 import { MessagePlugin } from 'tdesign-vue-next'
 import { AddIcon, EditIcon, SearchIcon } from 'tdesign-icons-vue-next'
@@ -9,6 +10,7 @@ import ListErrorState from '@/components/ListErrorState.vue'
 import StatusTag from '@/components/StatusTag.vue'
 import AnnouncementFormDialog from '@/components/AnnouncementFormDialog.vue'
 import { useListQueryState } from '@/utils/listQuery'
+import { useRecordDetail } from '@/utils/recordDetail'
 import {
   deleteAnnouncement,
   fetchAnnouncements,
@@ -46,7 +48,7 @@ const columns = [
   { colKey: 'expireAt', title: '有效期', cell: 'expireAt', width: 190, resizable: true, ellipsis: true },
   { colKey: 'publishedAt', title: '发布时间', cell: 'publishedAt', width: 170, resizable: true, ellipsis: true },
   { colKey: 'link', title: '跳转链接', cell: 'link', width: 180, resizable: true, ellipsis: true },
-  { colKey: 'op', title: '操作', cell: 'op', width: 200 },
+  { colKey: 'op', title: '操作', cell: 'op', width: 180 },
 ]
 
 /* 列配置：本地持久化显隐/顺序 */
@@ -167,6 +169,17 @@ async function onDelete(row: Announcement) {
   }
 }
 
+const { visible: detailVisible, current: detail, loading: detailLoading, error: detailError, open: openRecord, close: closeRecord, reload: reloadRecord } = useRecordDetail<Announcement>(async id => {
+  for (let page = 1; ; page++) {
+    const result = await fetchAnnouncements({ page, pageSize: 100 })
+    const found = result.list.find(row => row.id === id)
+    if (found) return found
+    if (!result.list.length || page * 100 >= result.total) break
+  }
+  throw new Error('该公告不存在或已归档')
+})
+function openDetail(row: Announcement) { openRecord(row.id) }
+
 /* ---------- 新增 / 编辑弹窗（启用开关只在列表操作，避免编辑态与互锁冲突） ---------- */
 const formVisible = ref(false)
 const formMode = ref<'create' | 'edit'>('create')
@@ -211,8 +224,8 @@ onMounted(load)
     </PageHeader>
 
     <div class="page-filter-bar">
-      <t-input class="ctl-w-xl" v-model="query.keyword" clearable placeholder="搜索标题/编号…" @enter="onSearch" />
-      <t-select class="ctl-w-md" v-model="query.status" label="状态" :options="statusOptions" @change="onSearch" />
+      <t-input v-accessible-field="'搜索标题/编号'" class="ctl-w-xl" v-model="query.keyword" clearable placeholder="搜索标题/编号…" @enter="onSearch" />
+      <t-select v-accessible-field="'状态'" class="ctl-w-md" v-model="query.status" label="状态" :options="statusOptions" @change="onSearch" />
       <t-button theme="primary" @click="onSearch">
         <template #icon><SearchIcon /></template>
         查询
@@ -232,7 +245,7 @@ onMounted(load)
         :loading="loading"
         :pagination="pagination"
         @page-change="onPageChange"
-        @row-click="({ row }: { row: Announcement }) => openEdit(row)"
+        @row-click="({ row }: { row: Announcement }) => openDetail(row)"
       >
         <template #title="{ row }">
           <div class="cell-title" :title="row.title">{{ row.title }}</div>
@@ -245,7 +258,7 @@ onMounted(load)
           <div class="enable-cell" @click.stop>
             <!-- 已下架：启用开关禁用（需先重新发布），点空位无副作用 -->
             <t-tooltip v-if="row.status !== 'published'" content="已下架公告需先重新发布才能启用">
-              <t-switch :value="false" disabled :aria-label="`启用公告：${row.title}`" />
+              <t-switch v-accessible-field="`启用公告：${row.title}`" :value="false" disabled :aria-label="`启用公告：${row.title}`" />
             </t-tooltip>
             <!-- 未启用：开启前二次确认（switch 受控于 row.pinned，确认后才切换） -->
             <t-popconfirm
@@ -253,9 +266,10 @@ onMounted(load)
               content="启用后将自动关闭其它公告，客户端首页仅展示本条。确认启用？"
               @confirm="onTogglePin(row, true)"
             >
-              <t-switch :value="false" :loading="acting === row.id" :aria-label="`启用公告：${row.title}`" />
+              <t-switch v-accessible-field="`启用公告：${row.title}`" :value="false" :loading="acting === row.id" :aria-label="`启用公告：${row.title}`" />
             </t-popconfirm>
             <t-switch
+              v-accessible-field="`关闭公告：${row.title}`"
               v-else
               :value="true"
               :loading="acting === row.id"
@@ -277,12 +291,14 @@ onMounted(load)
         </template>
         <template #op="{ row }">
           <div class="op-cell" @click.stop>
-            <!-- 详情：行点击（打开编辑弹窗）的键盘可达替代 -->
-            <t-button theme="primary" variant="text" size="small" @click="openEdit(row)">详情</t-button>
+            <!-- 详情提供只读内容，编辑为独立操作 -->
+            <t-button theme="primary" variant="text" size="small" @click="openDetail(row)">详情</t-button>
             <t-button variant="text" size="small" @click="openEdit(row)">
               <template #icon><EditIcon /></template>
               编辑
             </t-button>
+            <RowMoreActions>
+
             <t-popconfirm
               v-if="row.status === 'published'"
               content="确认下架该公告？下架后客户端首页立即隐藏，且会取消启用。"
@@ -314,6 +330,7 @@ onMounted(load)
                 归档
               </t-button>
             </t-popconfirm>
+            </RowMoreActions>
           </div>
         </template>
         <template #empty>
@@ -321,6 +338,21 @@ onMounted(load)
         </template>
       </t-table>
     </div>
+
+    <t-drawer :visible="detailVisible" @close="closeRecord" header="公告详情" size="min(640px, 100vw)" :footer="false">
+      <ListErrorState v-if="detailError" :message="detailError" :loading="detailLoading" @retry="reloadRecord" />
+      <t-loading v-else-if="detailLoading" text="正在加载公告详情" />
+      <template v-else-if="detail">
+        <h2>{{ detail.title }}</h2>
+        <t-descriptions :column="1" bordered>
+          <t-descriptions-item label="公告编号">{{ detail.id }}</t-descriptions-item>
+          <t-descriptions-item label="状态"><StatusTag entity="announcement" :value="detail.status" /></t-descriptions-item>
+          <t-descriptions-item label="发布时间">{{ detail.publishedAt || '—' }}</t-descriptions-item>
+          <t-descriptions-item label="有效期">{{ detail.expireAt || '长期有效' }}</t-descriptions-item>
+        </t-descriptions>
+        <div class="rich-text announcement-content" v-html="detail.content"></div>
+      </template>
+    </t-drawer>
 
     <AnnouncementFormDialog
       v-model:visible="formVisible"
@@ -332,6 +364,8 @@ onMounted(load)
 </template>
 
 <style scoped>
+.announcement-content { margin-top: 24px; overflow-wrap: anywhere; }
+
 /* 本页标题需要单行省略，其余（字号/字重/主色）由全局 .cell-title 提供 */
 .cell-title {
   overflow: hidden;

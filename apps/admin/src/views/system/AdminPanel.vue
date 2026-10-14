@@ -6,7 +6,7 @@ import StatusTag from '@/components/StatusTag.vue'
 import { computed, nextTick, onMounted, reactive, ref } from 'vue'
 import { MessagePlugin } from 'tdesign-vue-next'
 import type { CustomValidateResolveType, FormProps } from 'tdesign-vue-next'
-import { focusFirstInvalid } from '@/utils/form'
+import { focusFirstInvalid, useDialogFormProtection } from '@/utils/form'
 import { AddIcon, SearchIcon } from 'tdesign-icons-vue-next'
 import { fetchAdmins, saveAdmin, updateAdminStatus, resetAdminPassword, type AdminAccount } from '@/api/admins'
 import { fetchRoles } from '@/api/roles'
@@ -230,6 +230,8 @@ const { syncQuery } = useListQueryState({}, () => { keyword.value = appliedKeywo
 keyword.value = appliedKeyword.value
 
 onMounted(load)
+const { close: closeForm } = useDialogFormProtection(form, formVisible, saving)
+const { close: closeResetDialog } = useDialogFormProtection(resetForm, resetVisible, resetting)
 </script>
 
 <template>
@@ -237,7 +239,7 @@ onMounted(load)
     <ListErrorState v-if="loadError" :message="loadError" :loading="loading" @retry="() => load()" />
 
     <div class="page-filter-bar">
-      <t-input v-model="keyword" class="ctl-w-xl" placeholder="搜索账号/姓名…" clearable @enter="onQuery" />
+      <t-input v-accessible-field="'搜索账号/姓名'" v-model="keyword" class="ctl-w-xl" placeholder="搜索账号/姓名…" clearable @enter="onQuery" />
       <t-button theme="primary" variant="outline" @click="onQuery">
         <template #icon><SearchIcon /></template>
         查询
@@ -302,50 +304,50 @@ onMounted(load)
 
     <!-- 新增 / 编辑弹窗 -->
     <t-dialog
-      v-model:visible="formVisible"
+      :visible="formVisible"
       :header="editingId == null ? '新增管理员' : '编辑管理员'"
       width="520px"
-      @close="formVisible = false"
+      @close="closeForm"
     >
       <template #footer>
         <div class="dialog-footer">
-          <t-button variant="text" theme="default" @click="formVisible = false">取消</t-button>
+          <t-button variant="text" theme="default" @click="closeForm">取消</t-button>
           <t-button theme="primary" :loading="saving" @click="onSave">保存</t-button>
         </div>
       </template>
       <t-form ref="formRef" :data="form" :rules="rules" label-align="top">
         <t-form-item label="账号" name="username">
-          <t-input v-model="form.username" :disabled="editingId != null" name="username" autocomplete="off" :spellcheck="false" placeholder="登录用户名（唯一）…" />
+          <t-input v-accessible-field v-model="form.username" :disabled="editingId != null" name="username" autocomplete="off" :spellcheck="false" placeholder="登录用户名（唯一）…" />
         </t-form-item>
         <t-form-item label="姓名" name="name">
-          <t-input v-model="form.name" name="display-name" autocomplete="off" placeholder="操作日志中的操作人显示名…" />
+          <t-input v-accessible-field v-model="form.name" name="display-name" autocomplete="off" placeholder="操作日志中的操作人显示名…" />
         </t-form-item>
         <t-form-item label="角色" name="roleCodes">
-          <t-select v-model="form.roleCodes" multiple :options="roleOptions" placeholder="选择角色（可多选）…" />
+          <t-select v-accessible-field v-model="form.roleCodes" multiple :options="roleOptions" placeholder="选择角色（可多选）…" />
         </t-form-item>
       </t-form>
     </t-dialog>
 
     <!-- 重置密码 -->
     <t-dialog
-      v-model:visible="resetVisible"
+      :visible="resetVisible"
       header="重置密码"
       width="440px"
-      @close="resetVisible = false"
+      @close="closeResetDialog"
     >
       <template #footer>
         <div class="dialog-footer">
-          <t-button variant="text" theme="default" @click="resetVisible = false">取消</t-button>
+          <t-button variant="text" theme="default" @click="closeResetDialog">取消</t-button>
           <t-button theme="danger" :loading="resetting" @click="onReset">确认重置</t-button>
         </div>
       </template>
       <p class="reset-tip">将重置「{{ resetTarget?.username }}」的登录密码，重置后需使用新密码登录。</p>
       <t-form ref="resetFormRef" :data="resetForm" :rules="resetRules" label-align="top">
         <t-form-item label="新密码" name="password">
-          <t-input v-model="resetForm.password" type="password" name="reset-password" autocomplete="new-password" placeholder="至少 8 位，须含字母和数字…" />
+          <t-input v-accessible-field v-model="resetForm.password" type="password" name="reset-password" autocomplete="new-password" placeholder="至少 8 位，须含字母和数字…" />
         </t-form-item>
         <t-form-item label="确认新密码" name="confirmPassword">
-          <t-input v-model="resetForm.confirmPassword" type="password" name="reset-password-confirm" autocomplete="new-password" placeholder="再次输入新密码…" />
+          <t-input v-accessible-field v-model="resetForm.confirmPassword" type="password" name="reset-password-confirm" autocomplete="new-password" placeholder="再次输入新密码…" />
         </t-form-item>
       </t-form>
     </t-dialog>
@@ -363,7 +365,7 @@ onMounted(load)
         账号「{{ createdAccount.username }}」的初始密码仅显示这一次，请立即复制并转告本人，登录后尽快修改。
       </p>
       <div class="password-row">
-        <t-input :value="createdAccount.password" readonly aria-label="初始密码" />
+        <t-input v-accessible-field="'初始密码'" :value="createdAccount.password" readonly aria-label="初始密码" />
         <t-button theme="primary" variant="outline" @click="copyPassword">复制</t-button>
       </div>
       <template #footer>

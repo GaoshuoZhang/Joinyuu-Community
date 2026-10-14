@@ -71,9 +71,9 @@ onMounted(load)
     <PageHeader title="积分发放记录" description="系统按积分规则自动发放的积分记录（发放自动，扣除为管理员手动调整）" />
 
     <div class="stat-row stat-row--3">
-      <StatCard label="累计发放" :value="totalGranted" />
-      <StatCard label="发放笔数" :value="list.length" />
-      <StatCard label="覆盖用户数" :value="new Set(list.map((r) => r.userId)).size" />
+      <StatCard label="累计发放" :loading="loading" :value="loading || loadError ? '—' : totalGranted" />
+      <StatCard label="发放笔数" :loading="loading" :value="loading || loadError ? '—' : list.length" />
+      <StatCard label="覆盖用户数" :loading="loading" :value="loading || loadError ? '—' : new Set(list.map((r) => r.userId)).size" />
     </div>
 
     <!-- 纯说明文案不是筛选条件：用 info 提示条承载（与 MallRulesPanel 口径一致） -->

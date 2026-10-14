@@ -22,16 +22,18 @@ const enterpriseId = String(route.params.id)
 const editableFields = ref<string[]>([])
 const editable = (key: string) => editableFields.value.includes(key)
 const { data, loading, error, run } = useAsyncList(async () => {
-  /* 卡片 schema 失败不应连带企业详情整页报错：降级为空可编辑字段并禁用保存 */
-  const [detailRes, schemaRes] = await Promise.allSettled([fetchEnterpriseDetail(enterpriseId), fetchCardSchema('enterprise')])
-  if (detailRes.status === 'rejected') throw detailRes.reason
-  editableFields.value = schemaRes.status === 'fulfilled' ? schemaRes.value.editableFields : []
-  return detailRes.value
+  const [detail, schema] = await Promise.all([
+    fetchEnterpriseDetail(enterpriseId),
+    fetchCardSchema('enterprise'),
+  ])
+  editableFields.value = schema.editableFields
+  return detail
 })
-onMounted(async () => {
+async function loadCard() {
   await run()
   fillForm()
-})
+}
+onMounted(loadCard)
 
 const canEdit = computed(
   () => data.value?.isContact === true || (data.value?.myPermissions ?? []).includes('edit_card'),
@@ -142,7 +144,7 @@ async function onSave() {
 <template>
   <div class="page-fade-in m-card-edit">
     <ListSkeleton v-if="loading" />
-    <EmptyBlock v-else-if="error" :text="error" action-text="重试" @action="run" />
+    <EmptyBlock v-else-if="error" :text="error" action-text="重试" @action="loadCard" />
     <EmptyBlock v-else-if="!canEdit" text="仅企业负责人或获授权成员可编辑企业名片" />
     <template v-else-if="data">
       <section class="m-card">

@@ -1,6 +1,7 @@
 <script setup lang="ts">
+import { focusFirstInvalid, useDialogDirtyGuard, usePageDirtyGuard } from '@/utils/form'
 import ListErrorState from '@/components/ListErrorState.vue'
-import { nextTick, onMounted, reactive, ref } from 'vue'
+import { computed, nextTick, onMounted, reactive, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { MessagePlugin } from 'tdesign-vue-next'
 import type { FormProps } from 'tdesign-vue-next'
@@ -72,12 +73,15 @@ function openEdit(row: ExperienceRule) {
   currentRule.value = row
   form.exp = row.exp
   dialogVisible.value = true
-  nextTick(() => formRef.value?.clearValidate())
+  nextTick(() => { formRef.value?.clearValidate(); markBaseline() })
 }
+const { markBaseline, isDirty, guardClose } = useDialogDirtyGuard(form)
+usePageDirtyGuard(computed(() => dialogVisible.value && isDirty.value))
+function closeEdit() { guardClose(() => { dialogVisible.value = false }) }
 
 async function onConfirm() {
   const valid = await formRef.value.validate()
-  if (valid !== true) return
+  if (valid !== true) return focusFirstInvalid(formRef.value)
   if (!currentRule.value) return
   submitting.value = true
   try {
@@ -161,11 +165,11 @@ onMounted(load)
       :visible="dialogVisible"
       :header="currentRule ? `编辑经验值 · ${currentRule.name}` : '编辑经验值'"
       width="460px"
-      @close="dialogVisible = false"
+      @close="closeEdit"
     >
       <template #footer>
         <div class="dialog-footer">
-          <t-button variant="text" theme="default" @click="dialogVisible = false">取消</t-button>
+          <t-button variant="text" theme="default" @click="closeEdit">取消</t-button>
           <t-button theme="primary" :loading="submitting" @click="onConfirm">保存修改</t-button>
         </div>
       </template>
@@ -176,7 +180,7 @@ onMounted(load)
       </t-descriptions>
       <t-form ref="formRef" :data="form" :rules="rules" label-align="top">
         <t-form-item label="发放经验值（N）" name="exp">
-          <t-input-number v-model="form.exp" :min="1" :decimal-places="0" theme="column" class="ctl-w-full" />
+          <t-input-number v-accessible-field v-model="form.exp" :min="1" :decimal-places="0" theme="column" class="ctl-w-full" />
         </t-form-item>
       </t-form>
     </t-dialog>

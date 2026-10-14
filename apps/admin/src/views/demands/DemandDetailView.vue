@@ -1,7 +1,8 @@
 <script setup lang="ts">
+import { focusFirstInvalid, useDialogFormProtection } from '@/utils/form'
 import { computed, nextTick, onMounted, reactive, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { useQueryTab } from '@/utils/navigation'
+import { useQueryTab, backOrFallback } from '@/utils/navigation'
 import { MessagePlugin, type FormProps } from 'tdesign-vue-next'
 import { ArrowLeftIcon } from 'tdesign-icons-vue-next'
 import StatusTag from '@/components/StatusTag.vue'
@@ -108,7 +109,7 @@ async function onConfirmRejectRespondent() {
   const row = rejectRow.value
   if (!row || !demand.value) return
   const valid = await rejectFormRef.value.validate()
-  if (valid !== true) return
+  if (valid !== true) return focusFirstInvalid(rejectFormRef.value)
   rejectSubmitting.value = true
   try {
     await reviewDemandRespondent(demand.value.id, row.id, { status: 'rejected', reason: rejectForm.reason })
@@ -234,11 +235,12 @@ function goProject() {
 }
 
 onMounted(load)
+const { close: closeRejectDialog } = useDialogFormProtection(rejectForm, rejectVisible, rejectSubmitting)
 </script>
 
 <template>
   <div class="demand-detail page-fade-in">
-    <t-button variant="text" theme="default" class="back-btn" @click="router.back()">
+    <t-button variant="text" theme="default" class="back-btn" @click="backOrFallback(router, '/demands')">
       <template #icon><ArrowLeftIcon /></template>
       返回
     </t-button>
@@ -488,7 +490,7 @@ onMounted(load)
 
     <!-- 驳回响应：理由必填（≤200），驳回后该记录失效、响应者可重新响应 -->
     <t-dialog
-      v-model:visible="rejectVisible"
+      :visible="rejectVisible" @close="closeRejectDialog"
       header="驳回响应"
       width="480px"
       :close-on-overlay-click="!rejectSubmitting"
@@ -500,8 +502,9 @@ onMounted(load)
         {{ rejectRow ? `驳回 ${rejectRow.name} 的响应` : '' }}理由将记录在该响应上，驳回后该记录失效、响应者可重新响应。
       </p>
       <t-form ref="rejectFormRef" :data="rejectForm" :rules="rejectRules">
-        <t-form-item name="reason">
+        <t-form-item label="驳回原因" name="reason">
           <t-textarea
+            v-accessible-field
             v-model="rejectForm.reason"
             :maxlength="200"
             :autosize="{ minRows: 3, maxRows: 5 }"

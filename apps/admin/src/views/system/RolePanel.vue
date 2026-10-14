@@ -5,7 +5,7 @@ import { computed, onMounted, reactive, ref } from 'vue'
 import { MessagePlugin } from 'tdesign-vue-next'
 import type { FormProps } from 'tdesign-vue-next'
 import { AddIcon, SearchIcon } from 'tdesign-icons-vue-next'
-import { focusFirstInvalid } from '@/utils/form'
+import { focusFirstInvalid, useDialogFormProtection } from '@/utils/form'
 import {
   createRole,
   fetchPermissionCatalog,
@@ -200,6 +200,8 @@ onMounted(() => {
   void load()
   void loadCatalog()
 })
+const { close: closeCreate } = useDialogFormProtection(createForm, createVisible, creating)
+const { close: closeAssign } = useDialogFormProtection(() => ({ checked: checked.value, scope: scopeDraft.value }), assignVisible, saving)
 </script>
 
 <template>
@@ -207,7 +209,7 @@ onMounted(() => {
     <ListErrorState v-if="loadError" :message="loadError" :loading="loading" @retry="() => load()" />
 
     <div class="page-filter-bar">
-      <t-input v-model="keyword" class="ctl-w-xl" placeholder="搜索角色/编码/说明…" clearable @enter="onQuery" />
+      <t-input v-accessible-field="'搜索角色/编码/说明'" v-model="keyword" class="ctl-w-xl" placeholder="搜索角色/编码/说明…" clearable @enter="onQuery" />
       <t-button theme="primary" variant="outline" @click="onQuery">
         <template #icon><SearchIcon /></template>
         查询
@@ -265,14 +267,14 @@ onMounted(() => {
 
     <!-- 权限分配弹窗 -->
     <t-dialog
-      v-model:visible="assignVisible"
+      :visible="assignVisible"
       :header="`权限配置 · ${current?.name ?? ''}`"
       width="640px"
-      @close="assignVisible = false"
+      @close="closeAssign"
     >
       <template #footer>
         <div class="dialog-footer">
-          <t-button variant="text" theme="default" @click="assignVisible = false">取消</t-button>
+          <t-button variant="text" theme="default" @click="closeAssign">取消</t-button>
           <t-button theme="primary" :loading="saving" :disabled="!dirty" @click="onSave">保存</t-button>
         </div>
       </template>
@@ -324,26 +326,26 @@ onMounted(() => {
 
     <!-- 新增角色弹窗 -->
     <t-dialog
-      v-model:visible="createVisible"
+      :visible="createVisible"
       header="新增角色"
       width="520px"
-      @close="createVisible = false"
+      @close="closeCreate"
     >
       <template #footer>
         <div class="dialog-footer">
-          <t-button variant="text" theme="default" @click="createVisible = false">取消</t-button>
+          <t-button variant="text" theme="default" @click="closeCreate">取消</t-button>
           <t-button theme="primary" :loading="creating" @click="onCreate">保存</t-button>
         </div>
       </template>
       <t-form ref="createFormRef" :data="createForm" :rules="createRules" label-align="top">
         <t-form-item label="角色编码" name="code">
-          <t-input v-model="createForm.code" name="code" autocomplete="off" :spellcheck="false" placeholder="小写字母开头，可含数字/下划线，如 content_editor…" />
+          <t-input v-accessible-field v-model="createForm.code" name="code" autocomplete="off" :spellcheck="false" placeholder="小写字母开头，可含数字/下划线，如 content_editor…" />
         </t-form-item>
         <t-form-item label="角色名称" name="name">
-          <t-input v-model="createForm.name" name="role-name" autocomplete="off" placeholder="如 内容运营…" />
+          <t-input v-accessible-field v-model="createForm.name" name="role-name" autocomplete="off" placeholder="如 内容运营…" />
         </t-form-item>
         <t-form-item label="角色说明" name="description">
-          <t-input v-model="createForm.description" name="role-description" autocomplete="off" placeholder="选填，角色职责说明…" />
+          <t-input v-accessible-field v-model="createForm.description" name="role-description" autocomplete="off" placeholder="选填，角色职责说明…" />
         </t-form-item>
       </t-form>
       <p class="create-tip">角色创建后初始无任何权限点与数据范围限制，可通过列表「权限配置」按需分配。</p>

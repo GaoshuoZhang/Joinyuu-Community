@@ -1,18 +1,19 @@
 <script setup lang="ts">
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { CheckTag, Icon, Image, Search, Tabs, TabPanel, PullDownRefresh, Tag } from 'tdesign-mobile-vue'
+import { Button, CheckTag, Icon, Image, List, Search, Tabs, TabPanel, PullDownRefresh, Tag } from 'tdesign-mobile-vue'
 import { fetchEvents, fetchMyEnrollments } from '@/api/events'
 import { useAuthStore } from '@/stores/auth'
 import { fetchArticles, fetchColumns } from '@/api/contents'
 import { useAsyncList } from '@/composables/useAsyncList'
+import { usePagedList } from '@/composables/usePagedList'
 import { useRefreshOnActivate } from '@/composables/useRefreshOnActivate'
 import { useAnimSuppress } from '@/composables/useAnimSuppress'
 import { useAtTop } from '@/composables/useAtTop'
 import ListSkeleton from '@/components/ListSkeleton.vue'
 import EmptyBlock from '@/components/shared/EmptyBlock.vue'
 import StateTag from '@/components/shared/StateTag.vue'
-import type { CommunityEvent, Article, ArticleColumn, PageResult } from '@/types'
+import type { CommunityEvent, Article, ArticleColumn } from '@/types'
 import { onImageError } from '@/utils/imageFallback'
 import { useRouteQuerySync } from '@/composables/useRouteQuerySync'
 import { useTabSwipe } from '@/composables/useTabSwipe'
@@ -61,12 +62,19 @@ async function loadEnrolled() {
   }
 }
 
-const { data: eventData, loading: eventsLoading, error: eventsError, run: loadEvents } = useAsyncList<PageResult<CommunityEvent>>(
-  () => fetchEvents({ keyword: eventKeywordInput.value.trim() || undefined }),
+const {
+  items: events,
+  total: eventsTotal,
+  loading: eventsLoading,
+  error: eventsError,
+  moreError: eventsMoreError,
+  loadingMore: eventsLoadingMore,
+  hasMore: eventsHasMore,
+  refresh: loadEvents,
+  loadMore: loadMoreEvents,
+} = usePagedList<CommunityEvent>(
+  (page, pageSize) => fetchEvents({ keyword: eventKeywordInput.value.trim() || undefined, page, pageSize }),
 )
-/* v46：列表接口返回 { list, total }，总数用于展示真实活动数（不再受默认分页截断） */
-const events = computed(() => eventData.value?.list ?? [])
-const eventsTotal = computed(() => eventData.value?.total ?? 0)
 const { data: columnData, run: loadColumns } = useAsyncList<ArticleColumn[]>(fetchColumns)
 const activeColumn = ref(String(route.query.column ?? ''))
 const { data: articleData, loading: articlesLoading, error: articlesError, run: loadArticles } = useAsyncList<Article[]>(() =>
@@ -91,6 +99,7 @@ const chipRow = ref<HTMLElement | null>(null)
 const articles = computed(() => articleData.value ?? [])
 const articlesTotal = computed(() => articles.value.length)
 const eventsEmpty = computed(() => !eventsLoading.value && !eventsError.value && events.value.length === 0)
+const eventsFooter = computed(() => eventsLoadingMore.value ? 'loading' : eventsHasMore.value ? 'load-more' : '')
 const articlesEmpty = computed(() => !articlesLoading.value && !articlesError.value && articles.value.length === 0)
 
 /* v39：下拉刷新 */
@@ -220,7 +229,7 @@ function clearArticleFilters() {
           :action-text="eventKeywordInput ? '清除搜索' : undefined"
           @action="clearEventFilters"
         />
-        <div v-else class="stagger list">
+        <List v-else class="stagger list" :async-loading="eventsFooter" @load-more="loadMoreEvents">
           <p class="list-count">共 {{ formatZhNumber(eventsTotal) }} 场活动</p>
           <!-- v52：跳转型整卡按 wiki §5 口径用 router-link 承载主体（支持 Ctrl/中键新标签、读屏播报为链接） -->
           <router-link
@@ -247,7 +256,8 @@ function clearArticleFilters() {
               </span>
             </p>
           </router-link>
-        </div>
+          <Button v-if="eventsMoreError" block variant="outline" @click="loadMoreEvents">加载失败，点击重试</Button>
+        </List>
       </TabPanel>
 
       <TabPanel value="articles" label="资讯">

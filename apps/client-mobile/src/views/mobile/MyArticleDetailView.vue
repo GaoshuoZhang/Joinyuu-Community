@@ -16,6 +16,10 @@ const router = useRouter()
 const id = String(route.params.id)
 const { data: article, loading, error, run } = useAsyncList<MySubmittedArticleDetail>(() => fetchMyArticle(id))
 onMounted(run)
+function reviseArticle() {
+  if (!article.value) return
+  void router.push(`/articles/new?revise=${article.value.id}`)
+}
 </script>
 
 <template>
@@ -34,6 +38,7 @@ onMounted(run)
       </article>
       <section v-if="article.rejectReason" class="m-card review"><h3>审核意见</h3><p>{{ article.rejectReason }}</p></section>
       <section class="m-card content"><h3>投稿正文</h3><RichTextBlock :html="article.content" /></section>
+      <Button v-if="article.status === 'rejected' || article.status === 'withdrawn'" theme="primary" block @click="reviseArticle">修改并重新提交</Button>
       <!-- 返回是二级页唯一出口，用描边按钮形态（非文字链）保持可识别与 44px 命中区 -->
       <Button block variant="outline" @click="router.push('/me/articles')">返回我的投稿</Button>
     </template>

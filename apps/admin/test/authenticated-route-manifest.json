@@ -1,0 +1,326 @@
+[
+  {
+    "path": "/prints/lease/LS2008",
+    "source": "@/views/workstations/LeasePrintView.vue",
+    "title": "租约打印 · 聚屿社区管理后台",
+    "primaryApi": "/api/admin/leases/LS2008/print"
+  },
+  {
+    "path": "/prints/approval/AP3024",
+    "source": "@/views/approvals/ApprovalPrintView.vue",
+    "title": "审核单打印 · 聚屿社区管理后台",
+    "primaryApi": "/api/admin/applications/AP3024/print"
+  },
+  {
+    "path": "/dashboard",
+    "source": "@/views/dashboard/DashboardView.vue",
+    "title": "工作台 · 聚屿社区管理后台",
+    "primaryApi": "/api/admin/dashboard"
+  },
+  {
+    "path": "/user-messages",
+    "source": "@/views/user-messages/UserMessageListView.vue",
+    "title": "用户留言 · 聚屿社区管理后台",
+    "primaryApi": "/api/admin/user-messages"
+  },
+  {
+    "path": "/users",
+    "source": "@/views/users/UserListView.vue",
+    "title": "用户管理 · 聚屿社区管理后台",
+    "primaryApi": "/api/admin/users"
+  },
+  {
+    "path": "/users/U1001",
+    "source": "@/views/users/UserDetailView.vue",
+    "title": "用户详情 · 聚屿社区管理后台",
+    "primaryApi": "/api/admin/users/U1001"
+  },
+  {
+    "path": "/individuals",
+    "source": "@/views/individuals/IndividualListView.vue",
+    "title": "社区个体 · 聚屿社区管理后台",
+    "primaryApi": "/api/admin/individuals"
+  },
+  {
+    "path": "/enterprises",
+    "source": "@/views/enterprises/EnterpriseListView.vue",
+    "title": "社区企业 · 聚屿社区管理后台",
+    "primaryApi": "/api/admin/enterprises"
+  },
+  {
+    "path": "/enterprises/E2001",
+    "source": "@/views/enterprises/EnterpriseDetailView.vue",
+    "title": "企业详情 · 聚屿社区管理后台",
+    "primaryApi": "/api/admin/enterprises/E2001"
+  },
+  {
+    "path": "/external-enterprises",
+    "source": "@/views/external-enterprises/ExternalEnterpriseListView.vue",
+    "title": "合作企业 · 聚屿社区管理后台",
+    "primaryApi": "/api/admin/external-enterprises"
+  },
+  {
+    "path": "/external-enterprises/XE7004",
+    "source": "@/views/external-enterprises/ExternalEnterpriseDetailView.vue",
+    "title": "合作企业详情 · 聚屿社区管理后台",
+    "primaryApi": "/api/admin/external-enterprises/XE7004"
+  },
+  {
+    "path": "/approvals",
+    "source": "@/views/approvals/ApprovalListView.vue",
+    "title": "申请审核 · 聚屿社区管理后台",
+    "primaryApi": "/api/admin/applications"
+  },
+  {
+    "path": "/demands",
+    "source": "@/views/demands/DemandListView.vue",
+    "title": "需求管理 · 聚屿社区管理后台",
+    "primaryApi": "/api/admin/demands"
+  },
+  {
+    "path": "/demands/review",
+    "source": "@/views/demands/DemandReviewView.vue",
+    "title": "需求审核 · 聚屿社区管理后台",
+    "primaryApi": "/api/admin/demands"
+  },
+  {
+    "path": "/demands/D4028",
+    "source": "@/views/demands/DemandDetailView.vue",
+    "title": "需求详情 · 聚屿社区管理后台",
+    "primaryApi": "/api/admin/demands/D4028"
+  },
+  {
+    "path": "/projects",
+    "source": "@/views/projects/ProjectListView.vue",
+    "title": "项目管理 · 聚屿社区管理后台",
+    "primaryApi": "/api/admin/projects"
+  },
+  {
+    "path": "/projects/P5012",
+    "source": "@/views/projects/ProjectDetailView.vue",
+    "title": "项目详情 · 聚屿社区管理后台",
+    "primaryApi": "/api/admin/projects/P5012"
+  },
+  {
+    "path": "/events",
+    "source": "@/views/events/EventListView.vue",
+    "title": "活动管理 · 聚屿社区管理后台",
+    "primaryApi": "/api/admin/events"
+  },
+  {
+    "path": "/events/enrollments",
+    "source": "@/views/events/EventEnrollmentReviewView.vue",
+    "title": "活动报名 · 聚屿社区管理后台",
+    "primaryApi": "/api/admin/events/enrollments"
+  },
+  {
+    "path": "/events/EV6013",
+    "source": "@/views/events/EventDetailView.vue",
+    "title": "活动详情 · 聚屿社区管理后台",
+    "primaryApi": "/api/admin/events/EV6013"
+  },
+  {
+    "path": "/mall/goods",
+    "source": "@/views/mall/MallGoodsPanel.vue",
+    "title": "商品管理 · 聚屿社区管理后台",
+    "primaryApi": "/api/admin/mall/goods"
+  },
+  {
+    "path": "/mall/orders",
+    "source": "@/views/mall/MallOrdersPanel.vue",
+    "title": "订单管理 · 聚屿社区管理后台",
+    "primaryApi": "/api/admin/mall/redemption-orders"
+  },
+  {
+    "path": "/rules/ledger",
+    "source": "@/views/mall/MallLedgerPanel.vue",
+    "title": "积分发放记录 · 聚屿社区管理后台",
+    "primaryApi": "/api/admin/mall/points-issuance"
+  },
+  {
+    "path": "/rules/experience-records",
+    "source": "@/views/rules/ExperienceRecordsPanel.vue",
+    "title": "经验值发放记录 · 聚屿社区管理后台",
+    "primaryApi": "/api/admin/rules/experience-issuance"
+  },
+  {
+    "path": "/rules/points",
+    "source": "@/views/mall/MallRulesPanel.vue",
+    "title": "积分规则 · 聚屿社区管理后台",
+    "primaryApi": "/api/admin/mall/points-rules"
+  },
+  {
+    "path": "/rules/experience",
+    "source": "@/views/rules/ExperienceRulesPanel.vue",
+    "title": "经验值规则 · 聚屿社区管理后台",
+    "primaryApi": "/api/admin/rules/experience"
+  },
+  {
+    "path": "/rules/levels",
+    "source": "@/views/rules/LevelTiersPanel.vue",
+    "title": "等级规则 · 聚屿社区管理后台",
+    "primaryApi": "/api/admin/rules/levels"
+  },
+  {
+    "path": "/rules/publishing-limits",
+    "source": "@/views/rules/PublishLimitsPanel.vue",
+    "title": "个人用户规则 · 聚屿社区管理后台",
+    "primaryApi": "/api/admin/rules/publishing-limits"
+  },
+  {
+    "path": "/workstations",
+    "source": "@/views/workstations/WorkstationMapPanel.vue",
+    "title": "办公位管理 · 聚屿社区管理后台",
+    "primaryApi": "/api/admin/workstations"
+  },
+  {
+    "path": "/workstations/offices",
+    "source": "@/views/workstations/OfficeListPanel.vue",
+    "title": "办公室管理 · 聚屿社区管理后台",
+    "primaryApi": "/api/admin/workstations"
+  },
+  {
+    "path": "/workstations/leases",
+    "source": "@/views/workstations/LeasePanel.vue",
+    "title": "租赁管理 · 聚屿社区管理后台",
+    "primaryApi": "/api/admin/workstation-leases"
+  },
+  {
+    "path": "/workstations/leases/LS2008",
+    "source": "@/views/workstations/LeaseDetailView.vue",
+    "title": "租赁详情 · 聚屿社区管理后台",
+    "primaryApi": "/api/admin/workstation-leases/LS2008"
+  },
+  {
+    "path": "/spaces",
+    "source": "@/views/spaces/SpaceListPanel.vue",
+    "title": "公共空间管理 · 聚屿社区管理后台",
+    "primaryApi": "/api/admin/spaces"
+  },
+  {
+    "path": "/spaces/reservations",
+    "source": "@/views/spaces/ReservationPanel.vue",
+    "title": "公共空间预约 · 聚屿社区管理后台",
+    "primaryApi": "/api/admin/space-reservations"
+  },
+  {
+    "path": "/spaces/S1001",
+    "source": "@/views/spaces/SpaceDetailView.vue",
+    "title": "空间详情 · 聚屿社区管理后台",
+    "primaryApi": "/api/admin/spaces/S1001"
+  },
+  {
+    "path": "/contents/publish",
+    "source": "@/views/contents/ArticlePublishPanel.vue",
+    "title": "资讯发布 · 聚屿社区管理后台",
+    "primaryApi": "/api/admin/contents/articles"
+  },
+  {
+    "path": "/contents/submissions",
+    "source": "@/views/contents/ArticleSubmissionPanel.vue",
+    "title": "投稿内容 · 聚屿社区管理后台",
+    "primaryApi": "/api/admin/contents/articles"
+  },
+  {
+    "path": "/contents/columns",
+    "source": "@/views/contents/ColumnPanel.vue",
+    "title": "栏目管理 · 聚屿社区管理后台",
+    "primaryApi": "/api/admin/contents/columns"
+  },
+  {
+    "path": "/contents/stats",
+    "source": "@/views/contents/ReadStatsPanel.vue",
+    "title": "阅读统计 · 聚屿社区管理后台",
+    "primaryApi": "/api/admin/contents/articles"
+  },
+  {
+    "path": "/contents/policies",
+    "source": "@/views/contents/CommunityPolicyView.vue",
+    "title": "社区政策 · 聚屿社区管理后台",
+    "primaryApi": "/api/admin/contents/policies"
+  },
+  {
+    "path": "/contents/banners",
+    "source": "@/views/contents/BannerPanel.vue",
+    "title": "轮播图管理 · 聚屿社区管理后台",
+    "primaryApi": "/api/admin/contents/banners"
+  },
+  {
+    "path": "/contents/announcements",
+    "source": "@/views/contents/AnnouncementsPanel.vue",
+    "title": "首页公告 · 聚屿社区管理后台",
+    "primaryApi": "/api/admin/announcements"
+  },
+  {
+    "path": "/system/config",
+    "source": "@/views/system/SystemConfigPanel.vue",
+    "title": "系统配置 · 聚屿社区管理后台",
+    "primaryApi": "/api/admin/system/config"
+  },
+  {
+    "path": "/system/application-form-config",
+    "source": "@/views/approvals/ApplicationFormConfigView.vue",
+    "title": "申请表单配置 · 聚屿社区管理后台",
+    "primaryApi": "/api/admin/applications/form-configs/all"
+  },
+  {
+    "path": "/system/deletion-requests",
+    "source": "@/views/system/DeletionRequestsView.vue",
+    "title": "注销工单 · 聚屿社区管理后台",
+    "primaryApi": "/api/admin/member-governance/deletions"
+  },
+  {
+    "path": "/system/logs",
+    "source": "@/views/system/LogAuditView.vue",
+    "title": "日志与审计 · 聚屿社区管理后台",
+    "primaryApi": "/api/admin/audit-logs"
+  },
+  {
+    "path": "/system/account",
+    "source": "@/views/system/AccountRoleView.vue",
+    "title": "角色与账号 · 聚屿社区管理后台",
+    "primaryApi": "/api/admin/admins"
+  },
+  {
+    "path": "/system/change-password",
+    "source": "@/views/system/ChangePasswordView.vue",
+    "title": "修改密码 · 聚屿社区管理后台",
+    "primaryApi": null
+  },
+  {
+    "path": "/assets/library",
+    "source": "@/views/system/AssetLibrary.vue",
+    "title": "素材库 · 聚屿社区管理后台",
+    "primaryApi": "/api/admin/assets"
+  },
+  {
+    "path": "/system/monitor",
+    "source": "@/views/system/MonitorPanel.vue",
+    "title": "系统监控 · 聚屿社区管理后台",
+    "primaryApi": "/api/admin/monitor/overview"
+  },
+  {
+    "path": "/system/trash",
+    "source": "@/views/system/ArchivePanel.vue",
+    "title": "归档管理 · 聚屿社区管理后台",
+    "primaryApi": "/api/admin/trash"
+  },
+  {
+    "path": "/system/policies",
+    "source": "@/views/system/AgreementPolicyView.vue",
+    "title": "协议与政策 · 聚屿社区管理后台",
+    "primaryApi": "/api/admin/system/policies"
+  },
+  {
+    "path": "/system/messages",
+    "source": "@/views/system/MessageCenterView.vue",
+    "title": "消息中心 · 聚屿社区管理后台",
+    "primaryApi": "/api/admin/message-channels"
+  },
+  {
+    "path": "/403",
+    "source": "@/views/system/ForbiddenView.vue",
+    "title": "无权限 · 聚屿社区管理后台",
+    "primaryApi": null
+  }
+]

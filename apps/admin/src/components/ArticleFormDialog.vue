@@ -1,8 +1,8 @@
 <script setup lang="ts">
-import { defineAsyncComponent, nextTick, reactive, ref, watch } from 'vue'
+import { computed, defineAsyncComponent, nextTick, reactive, ref, watch } from 'vue'
 import { MessagePlugin } from 'tdesign-vue-next'
 import type { FormProps } from 'tdesign-vue-next'
-import { focusFirstInvalid, useDialogDirtyGuard } from '@/utils/form'
+import { focusFirstInvalid, useDialogDirtyGuard, usePageDirtyGuard } from '@/utils/form'
 import { createArticle, fetchArticleColumns, updateArticle, updateSubmissionArticle } from '@/api/contents'
 import { fetchPublisherOptions } from '@/api/demands'
 import type { Article, ArticleChannel } from '@/types'
@@ -77,7 +77,7 @@ const form = reactive({
 })
 
 /* 未保存保护：打开时记录基线，关闭前有改动需确认 */
-const { markBaseline, guardClose } = useDialogDirtyGuard(form)
+const { markBaseline, isDirty, guardClose } = useDialogDirtyGuard(form)
 
 function resetForm() {
   if (props.mode === 'edit' && props.article) {
@@ -206,6 +206,7 @@ function onClose() {
   /* 未保存保护：有改动时弹确认（见 useDialogDirtyGuard） */
   guardClose(() => emit('update:visible', false))
 }
+usePageDirtyGuard(computed(() => props.visible && isDirty.value))
 </script>
 
 <template>
@@ -239,14 +240,15 @@ function onClose() {
         </div>
       </t-alert>
       <t-form-item label="文章标题" name="title">
-        <t-input v-model="form.title" clearable placeholder="请输入文章标题…" />
+        <t-input v-accessible-field v-model="form.title" clearable placeholder="请输入文章标题…" />
       </t-form-item>
       <div class="form-row">
         <t-form-item label="所属栏目" name="columnId">
-          <t-select v-model="form.columnId" clearable :options="columnOptions" placeholder="选择栏目…" />
+          <t-select v-accessible-field v-model="form.columnId" clearable :options="columnOptions" placeholder="选择栏目…" />
         </t-form-item>
         <t-form-item v-if="channel === 'official'" label="作者" name="authorValue">
           <t-select
+            v-accessible-field
             v-model="form.authorValue"
             :options="authorOptions"
             filterable
@@ -255,24 +257,25 @@ function onClose() {
           />
         </t-form-item>
         <t-form-item v-else-if="channel === 'submitted' && article" label="作者">
-          <t-input :value="readonlyAuthorLabel(article)" disabled />
+          <t-input v-accessible-field :value="readonlyAuthorLabel(article)" disabled />
         </t-form-item>
       </div>
       <t-form-item label="内容摘要" name="summary">
         <t-textarea
+          v-accessible-field
           v-model="form.summary"
           :autosize="{ minRows: 2, maxRows: 4 }"
           placeholder="文章摘要，列表与客户端卡片展示用…"
         />
       </t-form-item>
       <t-form-item label="正文内容" name="content">
-        <RichEditor v-model="form.content" placeholder="请输入正文内容，支持图文排版…" :min-height="320" />
+        <RichEditor v-accessible-field v-model="form.content" placeholder="请输入正文内容，支持图文排版…" :min-height="320" />
       </t-form-item>
       <t-form-item label="标签" name="tags">
-        <t-input v-model="tagsText" placeholder="多个标签用逗号分隔…" />
+        <t-input v-accessible-field v-model="tagsText" placeholder="多个标签用逗号分隔…" />
       </t-form-item>
       <t-form-item label="评论功能" name="commentsEnabled">
-        <t-switch v-model="form.commentsEnabled" />
+        <t-switch v-accessible-field v-model="form.commentsEnabled" />
         <span class="switch-tip">关闭后成员端不展示评论，也不接受评论读取或发布。</span>
       </t-form-item>
     </t-form>

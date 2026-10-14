@@ -94,7 +94,7 @@ onUnmounted(() => { clearInterval(timer); ++loadVersion })
       </template>
       <div class="license-actions">
         <label for="license-customer">申请授权的客户名称</label>
-        <t-input id="license-customer" v-model="customerName" :maxlength="200" placeholder="填写客户或单位全称…" />
+        <t-input v-accessible-field id="license-customer" v-model="customerName" :maxlength="200" placeholder="填写客户或单位全称…" />
         <t-space break-line>
           <t-button variant="outline" :loading="generating" :disabled="loading || importing || !customerName.trim()" @click="generate">生成授权申请文件</t-button>
           <t-button theme="primary" :loading="importing" :disabled="loading || generating" @click="fileInput?.click()">导入许可证文件</t-button>

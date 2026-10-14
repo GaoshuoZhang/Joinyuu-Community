@@ -168,12 +168,19 @@ export class AppMallService {
 
   /* ---------- 我的订单 ---------- */
 
-  async myOrders(uid: string) {
-    const rows = await this.prisma.redemptionOrder.findMany({
-      where: { userId: uid, deletedAt: null },
-      orderBy: { createdAt: 'desc' },
-    })
-    return { list: rows.map((o) => this.toOrderDto(o)), total: rows.length }
+  async myOrders(uid: string, page = 1, pageSize = 20, status?: string) {
+    const where: Prisma.RedemptionOrderWhereInput = { userId: uid, deletedAt: null }
+    if (status) where.status = status
+    const [rows, total] = await Promise.all([
+      this.prisma.redemptionOrder.findMany({
+        where,
+        orderBy: { createdAt: 'desc' },
+        skip: (page - 1) * pageSize,
+        take: pageSize,
+      }),
+      this.prisma.redemptionOrder.count({ where }),
+    ])
+    return { list: rows.map((o) => this.toOrderDto(o)), total }
   }
 
   /** 订单详情：直接按 userId 收敛查询，非本人/不存在一律 404（不暴露存在性）；

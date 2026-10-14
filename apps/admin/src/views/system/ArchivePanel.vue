@@ -18,6 +18,7 @@ import {
   type ArchiveSetting,
 } from '@/api/trash'
 import { deriveReservationStatus } from '@/utils/reservation'
+import { useDialogFormProtection } from '@/utils/form'
 
 /* 归档管理：各业务域归档对象集中管理（恢复/彻底删除）+ 按标签页独立归档设置 */
 
@@ -431,6 +432,9 @@ const settingsLoading = ref(false)
 const settingsSaving = ref(false)
 const currentSetting = ref<ArchiveSetting | null>(null)
 const originalAutoPurge = ref(false)
+const { close: closeSettings, markBaseline: markSettingsBaseline } = useDialogFormProtection(
+  () => currentSetting.value, settingsVisible, computed(() => settingsLoading.value || settingsSaving.value),
+)
 
 async function openSettings() {
   settingsVisible.value = true
@@ -441,6 +445,7 @@ async function openSettings() {
     const all = await fetchArchiveSettings()
     currentSetting.value = all.find((s) => s.domain === activeDomain.value) ?? null
     originalAutoPurge.value = currentSetting.value?.autoPurge ?? false
+    markSettingsBaseline()
   } catch (e) {
     MessagePlugin.error(e instanceof Error ? e.message : '归档设置加载失败')
     settingsVisible.value = false
@@ -508,6 +513,7 @@ onMounted(load)
 
     <div class="page-filter-bar">
       <t-input
+        v-accessible-field="'搜索名称/编号'"
         v-model="keyword"
         class="ctl-w-xl"
         clearable
@@ -621,25 +627,25 @@ onMounted(load)
     </div>
 
     <t-dialog
-      v-model:visible="settingsVisible"
+      :visible="settingsVisible"
       :header="`归档设置 · ${activeTabLabel}`"
       width="520px"
-      @close="settingsVisible = false"
+      @close="closeSettings"
     >
       <template #footer>
         <div class="dialog-footer">
-          <t-button variant="text" theme="default" @click="settingsVisible = false">取消</t-button>
-          <t-button theme="primary" :loading="settingsSaving" @click="onSaveSettings">保存</t-button>
+          <t-button variant="text" theme="default" @click="closeSettings">取消</t-button>
+          <t-button theme="primary" :loading="settingsSaving" :disabled="settingsLoading || !currentSetting" @click="onSaveSettings">保存</t-button>
         </div>
       </template>
       <t-loading :loading="settingsLoading" size="small">
         <t-form v-if="currentSetting" :data="currentSetting" label-align="top">
           <div v-if="currentSetting.autoArchiveSupported" class="setting-section">
             <t-form-item label="自动归档">
-              <t-switch v-model="currentSetting.autoArchive" aria-label="自动归档" />
+              <t-switch v-accessible-field="'自动归档'" v-model="currentSetting.autoArchive" aria-label="自动归档" />
             </t-form-item>
             <t-form-item label="自动归档延时（天）">
-              <t-input-number class="ctl-w-lg"
+              <t-input-number v-accessible-field class="ctl-w-lg"
                 v-model="currentSetting.archiveDelayDays"
                 :min="0"
                 :max="365"
@@ -661,6 +667,7 @@ onMounted(load)
                 >
                   <span class="status-switch-label">{{ st.label }}</span>
                   <t-switch
+                    v-accessible-field="`自动归档状态：${st.label}`"
                     v-model="st.enabled"
                     size="small"
                     :disabled="!currentSetting.autoArchive"
@@ -674,14 +681,14 @@ onMounted(load)
             <t-form-item label="自动删除">
               <div class="setting-row">
                 <div class="setting-danger-switch">
-                  <t-switch v-model="currentSetting.autoPurge" aria-label="自动删除" />
+                  <t-switch v-accessible-field="'自动删除'" v-model="currentSetting.autoPurge" aria-label="自动删除" />
                 </div>
                 <span class="setting-warning">自动删除后不可恢复，请谨慎开启</span>
               </div>
             </t-form-item>
             <div class="setting-desc">归档后超过延时天数将物理删除</div>
             <t-form-item label="自动删除延时（天）">
-              <t-input-number class="ctl-w-lg"
+              <t-input-number v-accessible-field class="ctl-w-lg"
                 v-model="currentSetting.purgeDelayDays"
                 :min="1"
                 :max="3650"
@@ -705,6 +712,7 @@ onMounted(load)
     >
       <div class="strong-confirm-body">{{ strongConfirmMessage }}</div>
       <t-input
+        v-accessible-field="'永久删除确认文字'"
         v-model="strongConfirmInput"
         class="strong-confirm-input"
         :status="strongConfirmError ? 'error' : 'default'"

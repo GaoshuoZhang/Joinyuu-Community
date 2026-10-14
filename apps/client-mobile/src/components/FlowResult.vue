@@ -6,10 +6,11 @@ withDefaults(
     title: string
     description: string
     reference?: string
+    theme?: 'default' | 'success' | 'warning' | 'error'
     primaryText: string
     secondaryText?: string
   }>(),
-  { reference: '', secondaryText: '' },
+  { reference: '', theme: 'success', secondaryText: '' },
 )
 
 defineEmits<{ primary: []; secondary: [] }>()
@@ -17,7 +18,7 @@ defineEmits<{ primary: []; secondary: [] }>()
 
 <template>
   <section class="flow-result m-card" role="status" aria-live="polite">
-    <Result theme="success" :title="title" :description="description" />
+    <Result :theme="theme" :title="title" :description="description" />
     <p v-if="reference" class="reference tabular-nums">业务编号：{{ reference }}</p>
     <div class="actions">
       <Button theme="primary" size="large" block @click="$emit('primary')">{{ primaryText }}</Button>

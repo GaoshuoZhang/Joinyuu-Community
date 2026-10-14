@@ -1,8 +1,8 @@
 <script setup lang="ts">
-import { defineAsyncComponent, nextTick, reactive, ref, watch } from 'vue'
+import { computed, defineAsyncComponent, nextTick, reactive, ref, watch } from 'vue'
 import { MessagePlugin } from 'tdesign-vue-next'
 import type { FormProps } from 'tdesign-vue-next'
-import { focusFirstInvalid } from '@/utils/form'
+import { focusFirstInvalid, useDialogDirtyGuard, usePageDirtyGuard } from '@/utils/form'
 import { createGoods, updateGoods } from '@/api/mall'
 import { fetchDictEntries } from '@/api/dicts'
 import { goodsCategoryMap } from '@/constants/status'
@@ -71,6 +71,9 @@ const form = reactive({
   orderLevels: [] as string[],
 })
 
+const { markBaseline, isDirty, guardClose } = useDialogDirtyGuard(() => ({ ...form, customVisibility: customVisibility.value, customOrdering: customOrdering.value }))
+usePageDirtyGuard(computed(() => props.visible && isDirty.value))
+
 watch(
   () => props.visible,
   (v) => {
@@ -107,6 +110,7 @@ watch(
       customVisibility.value = false
       customOrdering.value = false
     }
+    markBaseline()
     /* 清除上次会话残留的校验红框（仅清状态，不动表单值） */
     nextTick(() => formRef.value?.clearValidate())
   },
@@ -161,7 +165,8 @@ async function onConfirm() {
 }
 
 function onClose() {
-  emit('update:visible', false)
+  if (submitting.value) return
+  guardClose(() => emit('update:visible', false))
 }
 </script>
 
@@ -186,27 +191,27 @@ function onClose() {
     </template>
     <t-form ref="formRef" :data="form" :rules="rules" label-align="top">
       <t-form-item label="商品名称" name="name">
-        <t-input clearable v-model="form.name" placeholder="请输入商品名称…" />
+        <t-input v-accessible-field clearable v-model="form.name" placeholder="请输入商品名称…" />
       </t-form-item>
       <t-form-item label="商品封面" name="coverUrl" help="可粘贴素材库文件地址或 HTTPS 图片地址；留空时移动端显示品牌占位图">
-        <t-input clearable v-model="form.coverUrl" placeholder="请输入封面图片地址…" />
+        <t-input v-accessible-field clearable v-model="form.coverUrl" placeholder="请输入封面图片地址…" />
         <t-image v-if="form.coverUrl" class="cover-preview" :src="form.coverUrl" fit="cover" />
       </t-form-item>
       <div class="form-row">
         <t-form-item label="商品分类" name="category">
-          <t-select clearable v-model="form.category" :options="categoryOptions" />
+          <t-select v-accessible-field clearable v-model="form.category" :options="categoryOptions" />
         </t-form-item>
         <t-form-item label="兑换积分" name="points">
-          <t-input-number v-model="form.points" :min="1" :decimal-places="0" theme="column" class="ctl-w-full" />
+          <t-input-number v-accessible-field v-model="form.points" :min="1" :decimal-places="0" theme="column" class="ctl-w-full" />
         </t-form-item>
       </div>
       <div class="form-row">
         <t-form-item label="库存" name="stock">
-          <t-input-number v-model="form.stock" :min="0" :decimal-places="0" theme="column" class="ctl-w-full" />
+          <t-input-number v-accessible-field v-model="form.stock" :min="0" :decimal-places="0" theme="column" class="ctl-w-full" />
         </t-form-item>
         <!-- 统一券码兑换：券码有效期（天下单时写入券码到期时间），过期未使用自动退款 -->
         <t-form-item label="有效期（天）" name="validDays" help="兑换后券码有效期，到期未使用将自动退回积分；留空按 30 天处理">
-          <t-input-number v-model="form.validDays" :min="1" :max="3650" :decimal-places="0" theme="column" class="ctl-w-full" />
+          <t-input-number v-accessible-field v-model="form.validDays" :min="1" :max="3650" :decimal-places="0" theme="column" class="ctl-w-full" />
         </t-form-item>
       </div>
 
@@ -215,11 +220,12 @@ function onClose() {
         <div class="scope-col">
           <div class="scope-head">
             <span class="scope-title">自定义可见范围</span>
-            <t-switch v-model="customVisibility" />
+            <t-switch v-accessible-field="'自定义商品可见范围'" v-model="customVisibility" />
           </div>
           <span class="scope-tip-block">默认关闭 = 所有身份、等级均可见；开启后可限定可见的身份与等级</span>
           <t-form-item v-if="customVisibility" label="身份" name="visibilityIdentities">
             <t-select
+              v-accessible-field
               v-model="form.visibilityIdentities"
               multiple
               clearable
@@ -228,14 +234,14 @@ function onClose() {
             />
           </t-form-item>
           <t-form-item v-if="customVisibility" label="等级" name="visibilityLevels">
-            <t-select v-model="form.visibilityLevels" multiple clearable :options="userLevelOptions" placeholder="不限…" />
+            <t-select v-accessible-field v-model="form.visibilityLevels" multiple clearable :options="userLevelOptions" placeholder="不限…" />
           </t-form-item>
         </div>
         <div class="scope-col">
           <div class="scope-head">
             <span class="scope-title">自定义可下单范围</span>
             <div class="scope-right">
-              <t-switch v-model="customOrdering" />
+              <t-switch v-accessible-field="'自定义商品可下单范围'" v-model="customOrdering" />
               <t-button
                 v-if="customOrdering && customVisibility"
                 variant="text"
@@ -249,6 +255,7 @@ function onClose() {
           <span class="scope-tip-block">默认关闭 = 所有身份、等级均可下单；开启后可限定可下单的身份与等级</span>
           <t-form-item v-if="customOrdering" label="身份" name="orderIdentities">
             <t-select
+              v-accessible-field
               v-model="form.orderIdentities"
               multiple
               clearable
@@ -257,13 +264,13 @@ function onClose() {
             />
           </t-form-item>
           <t-form-item v-if="customOrdering" label="等级" name="orderLevels">
-            <t-select v-model="form.orderLevels" multiple clearable :options="userLevelOptions" placeholder="不限…" />
+            <t-select v-accessible-field v-model="form.orderLevels" multiple clearable :options="userLevelOptions" placeholder="不限…" />
           </t-form-item>
         </div>
       </div>
 
       <t-form-item label="商品说明" name="description">
-        <RichEditor v-model="form.description" placeholder="兑换说明、领取方式等…" :min-height="320" />
+        <RichEditor v-accessible-field v-model="form.description" placeholder="兑换说明、领取方式等…" :min-height="320" />
       </t-form-item>
     </t-form>
   </t-dialog>

@@ -1,42 +1,30 @@
 <script setup lang="ts">
-import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
+import { computed, ref } from 'vue'
 import { useRouter } from 'vue-router'
-import { Button, Icon, List, Toast } from 'tdesign-mobile-vue'
+import { Button, DialogPlugin, Icon, List, Toast } from 'tdesign-mobile-vue'
 import { cancelEnrollment, fetchMyEnrollments } from '@/api/events'
-import { useAsyncList } from '@/composables/useAsyncList'
-import { useIncrementalList } from '@/composables/useIncrementalList'
+import { usePagedList } from '@/composables/usePagedList'
 import { useBusinessNow } from '@/composables/useBusinessNow'
 import EmptyBlock from '@/components/shared/EmptyBlock.vue'
 import ListSkeleton from '@/components/ListSkeleton.vue'
 import StateTag from '@/components/shared/StateTag.vue'
-import type { MyEnrollmentItem, PageResult } from '@/types'
+import type { MyEnrollmentItem } from '@/types'
 import { formatLocalDateTime, formatZhNumber, parseLocalDateTime } from '@/utils/format'
 
 /* 移动我的报名：报名卡片 + 签到入口/已签到标识；取消报名二次确认（两段式按钮）+ Toast */
-const { data, loading, error, run } = useAsyncList<PageResult<MyEnrollmentItem>>(() => fetchMyEnrollments())
+const { items: enrollments, total, loading, error, moreError, loadingMore, hasMore, refresh, loadMore } = usePagedList<MyEnrollmentItem>(
+  (page, pageSize) => fetchMyEnrollments({ page, pageSize }),
+)
 const router = useRouter()
 const businessNowMs = useBusinessNow()
-const enrollments = computed(() => data.value?.list ?? [])
-const { visibleItems, hasMore, showMore } = useIncrementalList(enrollments)
-const footerState = computed(() => (hasMore.value ? 'load-more' : ''))
-function loadMore() {
-  if (!hasMore.value) return
-  showMore()
-}
+const visibleItems = enrollments
+const footerState = computed(() => (loadingMore.value ? 'loading' : hasMore.value ? 'load-more' : ''))
 function onListScroll(bottomDistance: number) {
   if (bottomDistance < 60) loadMore()
 }
-onMounted(run)
+void refresh()
 
 const actingId = ref('')
-const confirmingId = ref('')
-let confirmTimer: ReturnType<typeof setTimeout> | null = null
-
-onBeforeUnmount(() => {
-  if (confirmTimer) clearTimeout(confirmTimer)
-  confirmTimer = null
-})
-
 function isEventEnded(item: MyEnrollmentItem) {
   if (item.eventStatus === 'ended') return true
   const end = parseLocalDateTime(item.endTime ?? '')
@@ -56,17 +44,13 @@ function canCancel(item: MyEnrollmentItem) {
 }
 
 function onCancelTap(item: MyEnrollmentItem) {
-  if (confirmingId.value !== item.id) {
-    confirmingId.value = item.id
-    if (confirmTimer) clearTimeout(confirmTimer)
-    confirmTimer = setTimeout(() => {
-      confirmingId.value = ''
-    }, 3000)
-    return
-  }
-  if (confirmTimer) clearTimeout(confirmTimer)
-  confirmingId.value = ''
-  doCancel(item)
+  DialogPlugin.confirm({
+    title: item.status === 'waitlisted' ? '退出候补' : '取消报名',
+    content: `确认取消「${item.eventTitle}」的报名吗？${item.status === 'approved' ? '名额将释放给其他成员。' : ''}`,
+    cancelBtn: '再想想',
+    confirmBtn: { content: item.status === 'waitlisted' ? '确认退出' : '确认取消', theme: 'danger' },
+    onConfirm: () => void doCancel(item),
+  })
 }
 
 async function doCancel(item: MyEnrollmentItem) {
@@ -74,7 +58,7 @@ async function doCancel(item: MyEnrollmentItem) {
   try {
     await cancelEnrollment(item.eventId)
     Toast('已取消报名')
-    await run()
+    await refresh()
   } catch (e) {
     Toast(e instanceof Error ? e.message : '取消失败，请稍后重试')
   } finally {
@@ -86,9 +70,9 @@ async function doCancel(item: MyEnrollmentItem) {
 <template>
   <div class="m-enrollments page-fade-in">
     <ListSkeleton v-if="loading" />
-    <EmptyBlock v-else-if="error" :text="error" action-text="重试" @action="run" />
+    <EmptyBlock v-else-if="error" :text="error" action-text="重试" @action="refresh" />
     <List v-else-if="enrollments.length > 0" class="stagger list" :async-loading="footerState" @load-more="loadMore" @scroll="onListScroll">
-      <p class="list-count">共 {{ formatZhNumber(enrollments.length) }} 条报名</p>
+      <p class="list-count">共 {{ formatZhNumber(total) }} 条报名</p>
       <div
         v-for="item in visibleItems"
         :key="item.id"
@@ -123,10 +107,11 @@ async function doCancel(item: MyEnrollmentItem) {
             :disabled="actingId === item.id"
             @click.stop="onCancelTap(item)"
           >
-            {{ confirmingId === item.id ? '再点一次确认取消' : item.status === 'waitlisted' ? '退出候补' : '取消报名' }}
+            {{ item.status === 'waitlisted' ? '退出候补' : '取消报名' }}
           </Button>
         </div>
       </div>
+      <Button v-if="moreError" block variant="outline" @click="loadMore">加载失败，点击重试</Button>
     </List>
     <template v-else>
       <!-- v45：空状态补出口，避免二级页没有 TabBar 时成为死胡同（单一主入口，不再叠加同义 CTA） -->

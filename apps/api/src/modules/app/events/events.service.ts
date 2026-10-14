@@ -296,12 +296,17 @@ export class AppEventsService {
 
   /* ---------- 我的报名 / 电子票 ---------- */
 
-  async myEnrollments(uid: string) {
-    const rows = await this.prisma.eventEnrollment.findMany({
-      where: { userId: uid },
-      include: { event: true },
-      orderBy: { id: 'desc' },
-    })
+  async myEnrollments(uid: string, page = 1, pageSize = 20) {
+    const [rows, total] = await Promise.all([
+      this.prisma.eventEnrollment.findMany({
+        where: { userId: uid },
+        include: { event: true },
+        orderBy: { id: 'desc' },
+        skip: (page - 1) * pageSize,
+        take: pageSize,
+      }),
+      this.prisma.eventEnrollment.count({ where: { userId: uid } }),
+    ])
     return {
       list: rows.map((r) => ({
         id: r.id,
@@ -317,7 +322,7 @@ export class AppEventsService {
         eventStatus: r.event.status,
         rescheduledTo: r.event.rescheduledTo ?? undefined,
       })),
-      total: rows.length,
+      total,
     }
   }
 

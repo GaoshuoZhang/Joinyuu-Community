@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, nextTick, onMounted, reactive, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { useQueryTab } from '@/utils/navigation'
+import { useQueryTab, backOrFallback } from '@/utils/navigation'
 import { DialogPlugin, MessagePlugin } from 'tdesign-vue-next'
 import type { CustomValidateResolveType, FormProps } from 'tdesign-vue-next'
 import { ArrowLeftIcon, BrowseIcon, BrowseOffIcon } from 'tdesign-icons-vue-next'
@@ -35,7 +35,7 @@ import { fetchExternalEnterprises } from '@/api/external-enterprises'
 import { isNotFound } from '@/api/http'
 import { adjustExperience, adjustPoints, fetchExperienceRecords, fetchPointsRecords } from '@/api/ledgers'
 import { deriveReservationStatus } from '@/utils/reservation'
-import { focusFirstInvalid, useDialogDirtyGuard } from '@/utils/form'
+import { focusFirstInvalid, useDialogDirtyGuard, usePageDirtyGuard } from '@/utils/form'
 import type { ExperienceRecord, PointsRecord, User, UserIdentity, ExternalEnterprise } from '@/types'
 
 const route = useRoute()
@@ -126,7 +126,7 @@ const editForm = reactive({
 const editMaskedPhone = ref('')
 const editMaskedCitizenId = ref('')
 /* 未保存保护：有改动时关闭需确认（见 useDialogDirtyGuard） */
-const { markBaseline: markEditBaseline, guardClose: guardEditClose } = useDialogDirtyGuard(editForm)
+const { markBaseline: markEditBaseline, isDirty: editDirty, guardClose: guardEditClose } = useDialogDirtyGuard(editForm)
 
 const editRules: FormProps['rules'] = {
   username: [
@@ -219,7 +219,7 @@ const freezeRules: FormProps['rules'] = {
 }
 
 /* 未保存保护：有改动时关闭需确认（见 useDialogDirtyGuard） */
-const { markBaseline: markFreezeBaseline, guardClose: guardFreezeClose } = useDialogDirtyGuard(freezeForm)
+const { markBaseline: markFreezeBaseline, isDirty: freezeDirty, guardClose: guardFreezeClose } = useDialogDirtyGuard(freezeForm)
 
 /* 长期开关：开启后清空冻结期限（期限项随之隐藏） */
 watch(
@@ -294,7 +294,7 @@ const resetPwdFormRef = ref()
 const resetPwdForm = reactive({ password: '', confirmPassword: '' })
 
 /* 未保存保护：有改动时关闭需确认（见 useDialogDirtyGuard） */
-const { markBaseline: markResetPwdBaseline, guardClose: guardResetPwdClose } = useDialogDirtyGuard(resetPwdForm)
+const { markBaseline: markResetPwdBaseline, isDirty: resetPwdDirty, guardClose: guardResetPwdClose } = useDialogDirtyGuard(resetPwdForm)
 
 /* 确认密码一致性校验（TDesign 自定义校验器第二参只有 { formData, name }，字段值须从 formData 读取） */
 function validateConfirmPassword(
@@ -610,11 +610,12 @@ async function load() {
 }
 
 onMounted(load)
+usePageDirtyGuard(computed(() => (editVisible.value && editDirty.value) || (freezeVisible.value && freezeDirty.value) || (resetPwdVisible.value && resetPwdDirty.value)))
 </script>
 
 <template>
   <div class="user-detail page-fade-in">
-    <t-button variant="text" theme="default" class="back-btn" @click="router.back()">
+    <t-button variant="text" theme="default" class="back-btn" @click="backOrFallback(router, '/users')">
       <template #icon><ArrowLeftIcon /></template>
       返回
     </t-button>
@@ -628,7 +629,7 @@ onMounted(load)
     <ListErrorState v-else-if="loadError" :message="loadError" :loading="loading" @retry="load" />
 
     <t-empty v-else-if="!user" description="用户不存在或已被删除">
-      <!-- 直达 URL 时 router.back() 可能离开系统，空态提供明确的下一步（L-01） -->
+      <!-- 直达 URL 时 backOrFallback(router, '/users') 可能离开系统，空态提供明确的下一步（L-01） -->
       <template #action>
         <t-button @click="router.push('/users')">返回用户列表</t-button>
       </template>
@@ -1310,28 +1311,28 @@ onMounted(load)
           />
         </t-form-item>
         <t-form-item label="用户名" name="username">
-          <t-input v-model="editForm.username" name="username" autocomplete="off" placeholder="请输入用户名…" />
+          <t-input v-accessible-field v-model="editForm.username" name="username" autocomplete="off" placeholder="请输入用户名…" />
         </t-form-item>
         <t-form-item label="昵称" name="nickname">
-          <t-input v-model="editForm.nickname" name="nickname" autocomplete="off" placeholder="请输入昵称…" />
+          <t-input v-accessible-field v-model="editForm.nickname" name="nickname" autocomplete="off" placeholder="请输入昵称…" />
         </t-form-item>
         <t-form-item label="手机号" name="phone">
-          <t-input v-model="editForm.phone" name="phone" type="tel" inputmode="tel" autocomplete="tel" placeholder="请输入手机号…" />
+          <t-input v-accessible-field v-model="editForm.phone" name="phone" type="tel" inputmode="tel" autocomplete="tel" placeholder="请输入手机号…" />
         </t-form-item>
         <t-form-item label="邮箱" name="email">
-          <t-input v-model="editForm.email" name="email" inputmode="email" autocomplete="email" placeholder="请输入邮箱…" />
+          <t-input v-accessible-field v-model="editForm.email" name="email" inputmode="email" autocomplete="email" placeholder="请输入邮箱…" />
         </t-form-item>
         <t-form-item label="性别" name="gender">
-          <t-select v-model="editForm.gender" :options="userGenderOptions" placeholder="请选择性别…" />
+          <t-select v-accessible-field v-model="editForm.gender" :options="userGenderOptions" placeholder="请选择性别…" />
         </t-form-item>
         <t-form-item label="真实姓名" name="realName">
-          <t-input v-model="editForm.realName" name="real-name" autocomplete="name" placeholder="请输入真实姓名…" />
+          <t-input v-accessible-field v-model="editForm.realName" name="real-name" autocomplete="name" placeholder="请输入真实姓名…" />
         </t-form-item>
         <t-form-item label="身份证号" name="citizenId">
-          <t-input v-model="editForm.citizenId" name="citizen-id" inputmode="text" autocomplete="off" :spellcheck="false" placeholder="请输入身份证号…" />
+          <t-input v-accessible-field v-model="editForm.citizenId" name="citizen-id" inputmode="text" autocomplete="off" :spellcheck="false" placeholder="请输入身份证号…" />
         </t-form-item>
         <t-form-item label="简介" name="bio">
-          <t-textarea v-model="editForm.bio" :autosize="{ minRows: 3, maxRows: 5 }" placeholder="请输入简介…" />
+          <t-textarea v-accessible-field v-model="editForm.bio" :autosize="{ minRows: 3, maxRows: 5 }" placeholder="请输入简介…" />
         </t-form-item>
       </t-form>
     </t-dialog>
@@ -1353,6 +1354,7 @@ onMounted(load)
       <t-form ref="freezeFormRef" :data="freezeForm" :rules="freezeRules" label-align="top">
         <t-form-item label="冻结原因" name="reason">
           <t-textarea
+            v-accessible-field
             v-model="freezeForm.reason"
             :autosize="{ minRows: 3, maxRows: 5 }"
             placeholder="请填写冻结原因（必填），将记录在账号信息中…"
@@ -1360,12 +1362,13 @@ onMounted(load)
         </t-form-item>
         <t-form-item label="长期冻结" name="permanent">
           <div class="freeze-permanent">
-            <t-switch v-model="freezeForm.permanent" />
+            <t-switch v-accessible-field v-model="freezeForm.permanent" />
             <span class="freeze-tip">开启后不设解冻时间，需手动解冻</span>
           </div>
         </t-form-item>
         <t-form-item v-if="!freezeForm.permanent" label="冻结期限" name="until">
           <t-date-picker
+            v-accessible-field
             v-model="freezeForm.until"
             valueType="YYYY-MM-DD HH:mm"
             enable-time-picker
@@ -1394,6 +1397,7 @@ onMounted(load)
       <t-form ref="resetPwdFormRef" :data="resetPwdForm" :rules="resetPwdRules" label-align="top">
         <t-form-item label="新密码" name="password">
           <t-input
+            v-accessible-field
             v-model="resetPwdForm.password"
             type="password"
             clearable
@@ -1401,7 +1405,7 @@ onMounted(load)
           />
         </t-form-item>
         <t-form-item label="确认新密码" name="confirmPassword">
-          <t-input v-model="resetPwdForm.confirmPassword" type="password" clearable placeholder="请再次输入新密码…" />
+          <t-input v-accessible-field v-model="resetPwdForm.confirmPassword" type="password" clearable placeholder="请再次输入新密码…" />
         </t-form-item>
       </t-form>
     </t-dialog>

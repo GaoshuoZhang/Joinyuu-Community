@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { watch } from 'vue'
 import { Button, Popup, Tag } from 'tdesign-mobile-vue'
 import type { CommunityPolicy } from '@/types'
 import RichTextBlock from '@/components/shared/RichTextBlock.vue'
@@ -6,8 +7,19 @@ import { formatLocalDate, formatLocalDateTime } from '@/utils/format'
 import { safeHttpUrl } from '@/utils/validators'
 
 /* 社区政策正文弹层：标题/摘要/正文/版本信息/附件/更新时间。 */
-defineProps<{ visible: boolean; policy: CommunityPolicy | null }>()
+const props = defineProps<{ visible: boolean; policy: CommunityPolicy | null }>()
 defineEmits<{ 'update:visible': [boolean] }>()
+let returnFocus: HTMLElement | null = null
+watch(() => props.visible, (visible) => {
+  if (visible) returnFocus = document.activeElement instanceof HTMLElement ? document.activeElement : null
+})
+function focusContent() {
+  document.querySelector<HTMLElement>('.policy-pop[role="dialog"] .p-title')?.focus()
+}
+function restoreFocus() {
+  returnFocus?.focus()
+  returnFocus = null
+}
 </script>
 
 <template>
@@ -16,11 +28,13 @@ defineEmits<{ 'update:visible': [boolean] }>()
     placement="bottom"
     class="policy-pop"
     :aria-label="policy ? `政策详情：${policy.title}` : '政策详情'"
+    @opened="focusContent"
+    @closed="restoreFocus"
     @update:visible="(value: boolean) => $emit('update:visible', value)"
   >
     <div v-if="policy" class="pop-body">
       <Tag size="small" variant="light" theme="primary">{{ policy.category }}</Tag>
-      <h3 class="p-title">{{ policy.title }}</h3>
+      <h3 class="p-title" tabindex="-1">{{ policy.title }}</h3>
       <p class="p-summary">{{ policy.summary }}</p>
       <RichTextBlock class="p-content" :html="policy.content" />
       <div v-if="policy.version || policy.effectiveAt || policy.publisher" class="p-meta">

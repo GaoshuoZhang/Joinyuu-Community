@@ -1,8 +1,8 @@
 <script setup lang="ts">
-import { nextTick, reactive, ref, watch } from 'vue'
+import { computed, nextTick, reactive, ref, watch } from 'vue'
 import { MessagePlugin } from 'tdesign-vue-next'
 import type { FormProps } from 'tdesign-vue-next'
-import { focusFirstInvalid, useDialogDirtyGuard } from '@/utils/form'
+import { focusFirstInvalid, useDialogDirtyGuard, usePageDirtyGuard } from '@/utils/form'
 import { createSpace, updateSpace } from '@/api/spaces'
 import { spaceTypeMap } from '@/constants/status'
 import type { Space, SpaceType } from '@/types'
@@ -51,7 +51,7 @@ watch(
 )
 
 /* 未保存保护：打开时记录基线，关闭前有改动需确认 */
-const { markBaseline, guardClose } = useDialogDirtyGuard(form)
+const { markBaseline, isDirty, guardClose } = useDialogDirtyGuard(form)
 
 watch(
   () => props.visible,
@@ -142,6 +142,7 @@ function onClose() {
   /* 未保存保护：有改动时弹确认（见 useDialogDirtyGuard） */
   guardClose(() => emit('update:visible', false))
 }
+usePageDirtyGuard(computed(() => props.visible && isDirty.value))
 </script>
 
 <template>
@@ -164,41 +165,41 @@ function onClose() {
     <t-form ref="formRef" :data="form" :rules="rules" label-align="top">
       <div class="form-row">
         <t-form-item label="空间名称" name="name">
-          <t-input clearable v-model="form.name" placeholder="如 共享会议室 C…" />
+          <t-input v-accessible-field clearable v-model="form.name" placeholder="如 共享会议室 C…" />
         </t-form-item>
         <t-form-item label="空间类型" name="type">
-          <t-select clearable v-model="form.type" :options="typeOptions" />
+          <t-select v-accessible-field clearable v-model="form.type" :options="typeOptions" />
         </t-form-item>
       </div>
       <div class="form-row">
         <t-form-item label="容纳人数" name="capacity">
-          <t-input-number v-model="form.capacity" :min="1" theme="column" class="ctl-w-full" />
+          <t-input-number v-accessible-field v-model="form.capacity" :min="1" theme="column" class="ctl-w-full" />
         </t-form-item>
         <t-form-item label="位置" name="location">
-          <t-input clearable v-model="form.location" placeholder="如 岛屿中心 2F…" />
+          <t-input v-accessible-field clearable v-model="form.location" placeholder="如 岛屿中心 2F…" />
         </t-form-item>
       </div>
       <div class="form-row form-row-single">
         <t-form-item label="全天开放" name="allDay">
           <div class="all-day-row">
-            <t-switch v-model="form.allDay" />
+            <t-switch v-accessible-field v-model="form.allDay" />
             <span class="all-day-tip">开启后不设时段限制，空间展示为"全天开放"</span>
           </div>
         </t-form-item>
       </div>
       <div v-if="!form.allDay" class="form-row">
         <t-form-item label="开放时间" name="openTime">
-          <t-time-picker v-model="form.openTime" format="HH:mm" clearable class="ctl-w-full" />
+          <t-time-picker v-accessible-field v-model="form.openTime" format="HH:mm" clearable class="ctl-w-full" />
         </t-form-item>
         <t-form-item label="关闭时间" name="closeTime">
-          <t-time-picker v-model="form.closeTime" format="HH:mm" clearable class="ctl-w-full" />
+          <t-time-picker v-accessible-field v-model="form.closeTime" format="HH:mm" clearable class="ctl-w-full" />
         </t-form-item>
       </div>
       <!-- 需预约 / 需审核各自独占整行：开关互斥隐藏时栅格不塌陷，避免右半列空白与字段跳动 -->
       <div class="form-row form-row-single">
         <t-form-item label="需预约" name="needReservation">
           <div class="all-day-row">
-            <t-switch v-model="form.needReservation" />
+            <t-switch v-accessible-field v-model="form.needReservation" />
             <span class="all-day-tip">开启后成员需先预约方可使用该空间</span>
           </div>
         </t-form-item>
@@ -206,14 +207,14 @@ function onClose() {
       <div v-if="form.needReservation" class="form-row form-row-single">
         <t-form-item label="需审核" name="needApproval">
           <div class="all-day-row">
-            <t-switch v-model="form.needApproval" />
+            <t-switch v-accessible-field v-model="form.needApproval" />
             <span class="all-day-tip">开启后预约需管理员审核通过方可使用</span>
           </div>
         </t-form-item>
       </div>
       <div class="form-row form-row-single">
         <t-form-item label="费用" name="feePerHour" help="0 表示免费使用；按「积分/小时」计费，不足 1 小时按 1 小时计">
-          <t-input-number v-model="form.feePerHour" :min="0" theme="normal" suffix="积分/小时" class="ctl-w-full" />
+          <t-input-number v-accessible-field v-model="form.feePerHour" :min="0" theme="normal" suffix="积分/小时" class="ctl-w-full" />
         </t-form-item>
       </div>
       <t-form-item label="配备设备" name="equipment">
@@ -225,6 +226,7 @@ function onClose() {
       </t-form-item>
       <t-form-item label="空间说明" name="description">
         <t-textarea
+          v-accessible-field
           v-model="form.description"
           :autosize="{ minRows: 3, maxRows: 6 }"
           placeholder="适用场景与使用说明…"

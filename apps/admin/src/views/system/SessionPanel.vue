@@ -94,7 +94,7 @@ onMounted(load)
     <ListErrorState v-if="loadError" :message="loadError" :loading="loading" @retry="() => load()" />
 
     <div class="page-filter-bar">
-      <t-input v-model="keyword" class="ctl-w-xl" placeholder="搜索账号/姓名/IP…" clearable @enter="onQuery" />
+      <t-input v-accessible-field="'搜索账号/姓名/IP'" v-model="keyword" class="ctl-w-xl" placeholder="搜索账号/姓名/IP…" clearable @enter="onQuery" />
       <t-button theme="primary" variant="outline" @click="onQuery">
         <template #icon><SearchIcon /></template>
         查询

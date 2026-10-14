@@ -1,5 +1,6 @@
 <script setup lang="ts">
-import { nextTick, reactive, ref, watch } from 'vue'
+import { focusFirstInvalid, useDialogFormProtection } from '@/utils/form'
+import { computed, nextTick, reactive, ref, watch } from 'vue'
 import { MessagePlugin, type FormProps } from 'tdesign-vue-next'
 import { identityLabelOf } from '@/constants/identity'
 import { approveDemand, rejectDemand } from '@/api/demands'
@@ -45,6 +46,9 @@ function onReject() {
 }
 
 function onCancel() {
+  closeProtected()
+}
+function finishClose() {
   phase.value = 'review'
   emit('update:visible', false)
 }
@@ -67,7 +71,7 @@ async function onApprove() {
 async function onConfirmReject() {
   if (!props.demand) return
   const valid = await formRef.value.validate()
-  if (valid !== true) return
+  if (valid !== true) return focusFirstInvalid(formRef.value)
   submitting.value = true
   try {
     await rejectDemand(props.demand.id, rejectForm.rejectReason.trim())
@@ -85,13 +89,15 @@ async function onConfirmReject() {
 function publisherIdentityLabel(d: Demand): string {
   return identityLabelOf(d.publisherIdentity)
 }
+const protectedVisible = computed({ get: () => props.visible, set: () => finishClose() })
+const { close: closeProtected } = useDialogFormProtection(rejectForm, protectedVisible, computed(() => !!submitting.value))
 </script>
 
 <template>
   <t-drawer
     :visible="visible"
     header="审核需求"
-    size="560px"
+    size="min(560px, 100vw)"
     :footer="false"
     :close-btn="true"
     :close-on-esc-keydown="true"
@@ -128,8 +134,9 @@ function publisherIdentityLabel(d: Demand): string {
       <template v-else>
         <t-form ref="formRef" :data="rejectForm" :rules="rejectRules" label-align="top">
           <p class="reject-tip">驳回后该需求将标记为「已驳回」并通知提交人，请填写驳回原因。</p>
-          <t-form-item name="rejectReason">
+          <t-form-item label="驳回原因" name="rejectReason">
             <t-textarea
+              v-accessible-field
               v-model="rejectForm.rejectReason"
               placeholder="驳回原因（必填，将通知提交人）…"
               :autosize="{ minRows: 3, maxRows: 5 }"

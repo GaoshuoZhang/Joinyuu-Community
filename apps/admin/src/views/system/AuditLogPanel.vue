@@ -130,8 +130,8 @@ onMounted(load)
     <ListErrorState v-if="loadError" :message="loadError" :loading="loading" @retry="load" />
 
     <div class="page-filter-bar">
-      <t-input class="ctl-w-xl" v-model="query.keyword" clearable placeholder="搜索操作对象/动作/详情/操作人…" @enter="onSearch" />
-      <t-select class="ctl-w-md" v-model="query.module" :options="moduleOptions" @change="onSearch" />
+      <t-input v-accessible-field="'搜索操作对象/动作/详情/操作人'" class="ctl-w-xl" v-model="query.keyword" clearable placeholder="搜索操作对象/动作/详情/操作人…" @enter="onSearch" />
+      <t-select v-accessible-field="'审计模块'" class="ctl-w-md" v-model="query.module" :options="moduleOptions" @change="onSearch" />
       <t-button theme="primary" @click="onSearch">查询</t-button>
       <t-button variant="outline" @click="onReset">重置</t-button>
     </div>
@@ -173,7 +173,7 @@ onMounted(load)
     <t-drawer
       v-model:visible="drawerVisible"
       header="操作日志详情"
-      size="560px"
+      size="min(560px, 100vw)"
       :footer="false"
       :close-btn="true"
       :close-on-esc-keydown="true"

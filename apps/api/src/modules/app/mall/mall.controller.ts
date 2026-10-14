@@ -60,8 +60,12 @@ export class AppMeOrdersController {
   constructor(private readonly mall: AppMallService) {}
 
   @Get('orders')
-  myOrders(@Req() req: AppAuthenticatedRequest) {
-    return this.mall.myOrders(this.uid(req))
+  myOrders(
+    @Req() req: AppAuthenticatedRequest,
+    @Query() query: PageQueryDto,
+    @Query('status') status?: string,
+  ) {
+    return this.mall.myOrders(this.uid(req), query.page, query.pageSize, status)
   }
 
   /** 我的订单详情（仅订单本人；非本人/不存在 404） */

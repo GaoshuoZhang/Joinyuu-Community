@@ -1,7 +1,9 @@
 <script setup lang="ts">
+import { focusFirstInvalid, useDialogFormProtection } from '@/utils/form'
 import { computed, nextTick, onMounted, reactive, ref } from 'vue'
 import ListErrorState from '@/components/ListErrorState.vue'
 import { useListQueryState } from '@/utils/listQuery'
+import { useRecordDetail } from '@/utils/recordDetail'
 import { safeHttpUrl } from '@/utils/url'
 import { useRouter } from 'vue-router'
 import { MessagePlugin, type FormProps } from 'tdesign-vue-next'
@@ -11,7 +13,7 @@ import BulkArchiveDialog from '@/components/BulkArchiveDialog.vue'
 import ColumnController from '@/components/ColumnController.vue'
 import ListEmptyState from '@/components/ListEmptyState.vue'
 import { applicationTypeMap } from '@/constants/status'
-import { archiveApplication, approveApplication, fetchApplications, rejectApplication } from '@/api/applications'
+import { fetchApplicationPrint, archiveApplication, approveApplication, fetchApplications, rejectApplication } from '@/api/applications'
 import type { Application } from '@/types'
 
 const router = useRouter()
@@ -120,12 +122,10 @@ function onPageChange(p: { current: number; pageSize: number }) {
 }
 
 /* 详情抽屉 */
-const drawerVisible = ref(false)
-const current = ref<Application | null>(null)
+const { visible: drawerVisible, current, loading: detailLoading, error: detailError, open: openRecord, close: closeRecord, reload: reloadRecord } = useRecordDetail<Application>(async id => (await fetchApplicationPrint(id)).application)
 
 function openDetail(row: Application) {
-  current.value = row
-  drawerVisible.value = true
+  openRecord(row.id)
 }
 
 /* 附件缩略图判定（图片后缀） */
@@ -253,7 +253,7 @@ function openDialog(action: 'approve' | 'reject', row: Application) {
 async function onConfirm() {
   if (!current.value) return
   const valid = await commentFormRef.value.validate()
-  if (valid !== true) return
+  if (valid !== true) return focusFirstInvalid(commentFormRef.value)
   submitting.value = true
   try {
     if (dialogAction.value === 'approve') {
@@ -265,6 +265,7 @@ async function onConfirm() {
     }
     dialogVisible.value = false
     await load()
+    if (drawerVisible.value) await reloadRecord()
   } catch (e) {
     MessagePlugin.error(e instanceof Error ? e.message : '操作失败')
   } finally {
@@ -275,6 +276,7 @@ async function onConfirm() {
 const { syncQuery } = useListQueryState(query, load)
 
 onMounted(load)
+const { close: closeComment } = useDialogFormProtection(commentForm, dialogVisible, submitting)
 </script>
 
 <template>
@@ -304,6 +306,7 @@ onMounted(load)
 
       <div class="filter-row">
         <t-select
+          v-accessible-field="'申请类型'"
           v-model="query.type"
           class="ctl-w-md"
           label="申请类型"
@@ -371,8 +374,10 @@ onMounted(load)
     </div>
 
     <!-- 申请详情抽屉 -->
-    <t-drawer v-model:visible="drawerVisible" header="申请详情" size="560px" :footer="false" :close-btn="true" :close-on-esc-keydown="true">
-      <template v-if="current">
+    <t-drawer :visible="drawerVisible" @close="closeRecord" header="申请详情" size="min(560px, 100vw)" :footer="false" :close-btn="true" :close-on-esc-keydown="true">
+      <ListErrorState v-if="detailError" :message="detailError" :loading="detailLoading" @retry="reloadRecord" />
+      <t-loading v-else-if="detailLoading" text="正在加载申请详情" />
+      <template v-else-if="current">
         <div class="drawer-head">
           <span class="drawer-id">{{ current.id }}</span>
           <t-tag variant="light">{{ applicationTypeMap[current.type]?.label ?? current.type }}</t-tag>
@@ -428,16 +433,18 @@ onMounted(load)
 
     <!-- 审核意见抽屉 -->
     <t-drawer
-      v-model:visible="dialogVisible"
+      :visible="dialogVisible"
+      @close="closeComment"
       :header="dialogAction === 'approve' ? '通过审核' : '驳回审核'"
-      size="520px"
+      size="min(520px, 100vw)"
       :footer="false"
       :close-btn="true"
       :close-on-esc-keydown="true"
     >
       <t-form ref="commentFormRef" :data="commentForm" :rules="commentRules">
-        <t-form-item name="comment">
+        <t-form-item name="comment" label="审核意见">
           <t-textarea
+            v-accessible-field
             v-model="commentForm.comment"
             :placeholder="dialogAction === 'reject' ? '请填写驳回原因（必填，将通知申请人）…' : '审核意见（可选）…'"
             :autosize="{ minRows: 3, maxRows: 5 }"
@@ -445,7 +452,7 @@ onMounted(load)
         </t-form-item>
       </t-form>
       <div class="drawer-footer">
-        <t-button variant="text" theme="default" @click="dialogVisible = false">取消</t-button>
+        <t-button variant="text" theme="default" @click="closeComment">取消</t-button>
         <t-button
           :theme="dialogAction === 'approve' ? 'primary' : 'danger'"
           :loading="submitting"

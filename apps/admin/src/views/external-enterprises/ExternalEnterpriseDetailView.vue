@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { onMounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { useQueryTab } from '@/utils/navigation'
+import { useQueryTab, backOrFallback } from '@/utils/navigation'
 import { MessagePlugin } from 'tdesign-vue-next'
 import { ArrowLeftIcon, EditIcon } from 'tdesign-icons-vue-next'
 import StatusTag from '@/components/StatusTag.vue'
@@ -91,7 +91,7 @@ async function onDelete() {
   try {
     await deleteExternalEnterprise(enterprise.value.id)
     MessagePlugin.success('合作企业已归档')
-    router.back()
+    backOrFallback(router, '/external-enterprises')
   } catch (e) {
     MessagePlugin.error(e instanceof Error ? e.message : '归档失败')
   } finally {
@@ -116,7 +116,7 @@ async function onEnable() {
 
 <template>
   <div class="external-detail page-fade-in">
-    <t-button variant="text" theme="default" class="back-btn" @click="router.back()">
+    <t-button variant="text" theme="default" class="back-btn" @click="backOrFallback(router, '/external-enterprises')">
       <template #icon><ArrowLeftIcon /></template>
       返回
     </t-button>
@@ -130,7 +130,7 @@ async function onEnable() {
     <ListErrorState v-else-if="loadError" :message="loadError" :loading="loading" @retry="load" />
 
     <t-empty v-else-if="!enterprise" description="合作企业不存在">
-      <!-- 直达 URL 时 router.back() 可能离开系统，空态提供明确的下一步（L-01） -->
+      <!-- 直达 URL 时 backOrFallback(router, '/external-enterprises') 可能离开系统，空态提供明确的下一步（L-01） -->
       <template #action>
         <t-button @click="router.push('/external-enterprises')">返回合作企业列表</t-button>
       </template>

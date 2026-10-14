@@ -2,7 +2,7 @@
 import { computed, nextTick, reactive, ref, watch } from 'vue'
 import { MessagePlugin } from 'tdesign-vue-next'
 import type { FormProps } from 'tdesign-vue-next'
-import { focusFirstInvalid, useDialogDirtyGuard } from '@/utils/form'
+import { focusFirstInvalid, useDialogDirtyGuard, usePageDirtyGuard } from '@/utils/form'
 import {
   createWorkstation,
   deleteWorkstation,
@@ -62,7 +62,7 @@ const form = reactive({
 const initialMaintenance = ref(false)
 
 /* 未保存保护：打开时记录基线，关闭前有改动需确认 */
-const { markBaseline, guardClose } = useDialogDirtyGuard(form)
+const { markBaseline, isDirty, guardClose } = useDialogDirtyGuard(form)
 
 const typeOptions = Object.entries(workstationTypeMap).map(([value, label]) => ({ label, value }))
 
@@ -85,8 +85,7 @@ watch(
   () => props.visible,
   async (v) => {
     if (!v) return
-    /* 区域选项每次打开都重新拉取：区域规划新增/改名后立即可见（修复需切换页面才能读到新区域的问题） */
-    await loadAreaOptions()
+    /* 先同步回填，避免区域请求完成时覆盖用户已经输入的内容。 */
     if (props.mode === 'edit' && props.workstation) {
       form.area = props.workstation.area
       form.seatNo = props.workstation.seatNo
@@ -111,6 +110,12 @@ watch(
     /* 记录基线 + 清除上次会话残留的校验红框（仅清状态，不动表单值） */
     markBaseline()
     nextTick(() => formRef.value?.clearValidate())
+    /* 每次打开刷新区域；新增且尚未编辑时才补齐默认区域。 */
+    await loadAreaOptions()
+    if (props.visible && props.mode === 'create' && !form.area && !isDirty.value) {
+      form.area = areaOptions.value[0]?.value ?? ''
+      markBaseline()
+    }
   },
 )
 
@@ -175,6 +180,7 @@ async function onDelete() {
     submitting.value = false
   }
 }
+usePageDirtyGuard(computed(() => props.visible && isDirty.value))
 </script>
 
 <template>
@@ -215,14 +221,14 @@ async function onDelete() {
         </div>
       </t-alert>
       <t-form-item label="所属区域" name="area">
-        <t-select clearable v-model="form.area" :options="areaOptions" placeholder="区域在「区域规划」中维护…" />
+        <t-select v-accessible-field clearable v-model="form.area" :options="areaOptions" placeholder="区域在「区域规划」中维护…" />
       </t-form-item>
       <div class="form-row">
         <t-form-item label="办公位编号" name="seatNo">
-          <t-input clearable v-model="form.seatNo" :placeholder="seatNoTip" />
+          <t-input v-accessible-field clearable v-model="form.seatNo" :placeholder="seatNoTip" />
         </t-form-item>
         <t-form-item label="容纳人数" name="capacity">
-          <t-input-number v-model="form.capacity" :min="1" theme="column" class="ctl-w-full" />
+          <t-input-number v-accessible-field v-model="form.capacity" :min="1" theme="column" class="ctl-w-full" />
         </t-form-item>
       </div>
       <t-form-item label="办公位类型" name="type">
@@ -231,6 +237,7 @@ async function onDelete() {
       <div class="form-row">
         <t-form-item label="默认月租（元）" name="defaultMonthlyRent">
           <t-input-number
+            v-accessible-field
             v-model="form.defaultMonthlyRent"
             :min="0"
             theme="column"
@@ -239,11 +246,12 @@ async function onDelete() {
           />
         </t-form-item>
         <t-form-item v-if="form.type === 'office'" label="面积（㎡）" name="areaSqm">
-          <t-input-number v-model="form.areaSqm" :min="0" theme="column" class="ctl-w-full" placeholder="选填…" />
+          <t-input-number v-accessible-field v-model="form.areaSqm" :min="0" theme="column" class="ctl-w-full" placeholder="选填…" />
         </t-form-item>
       </div>
       <t-form-item label="备注" name="note">
         <t-textarea
+          v-accessible-field
           v-model="form.note"
           :autosize="{ minRows: 2, maxRows: 4 }"
           placeholder="维护原因、使用注意事项等（选填）…"
@@ -251,7 +259,7 @@ async function onDelete() {
       </t-form-item>
       <t-form-item v-if="mode === 'edit'" label="维护状态" name="maintenance">
         <div class="maintenance-row">
-          <t-switch v-model="form.maintenance" :disabled="props.workstation?.status === 'assigned'" />
+          <t-switch v-accessible-field v-model="form.maintenance" :disabled="props.workstation?.status === 'assigned'" />
           <span class="maintenance-tip">{{ maintenanceTip }}</span>
         </div>
       </t-form-item>

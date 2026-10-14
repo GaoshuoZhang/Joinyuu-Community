@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { focusFirstInvalid, useDialogFormProtection } from '@/utils/form'
 import { computed, nextTick, onMounted, reactive, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { MessagePlugin, type FormProps } from 'tdesign-vue-next'
@@ -171,7 +172,7 @@ async function onConfirmReject() {
   const row = rejectRow.value
   if (!row) return
   const valid = await rejectFormRef.value.validate()
-  if (valid !== true) return
+  if (valid !== true) return focusFirstInvalid(rejectFormRef.value)
   rejectSubmitting.value = true
   try {
     await reviewEventEnrollment(row.eventId, row.userId, 'rejected', rejectForm.reason)
@@ -214,6 +215,7 @@ function fetchAllForExport(page: number, pageSize: number) {
 const { syncQuery } = useListQueryState(query, load)
 
 onMounted(load)
+const { close: closeRejectDialog } = useDialogFormProtection(rejectForm, rejectVisible, rejectSubmitting)
 </script>
 
 <template>
@@ -245,7 +247,7 @@ onMounted(load)
     </div>
 
     <div class="page-filter-bar">
-      <t-input class="ctl-w-xl"
+      <t-input v-accessible-field="'搜索报名人/身份/电话/活动'" class="ctl-w-xl"
         v-model="query.keyword"
         placeholder="搜索报名人/身份/电话/活动…"
         clearable
@@ -313,7 +315,7 @@ onMounted(load)
 
     <!-- 驳回原因对话框：必填，原因随站内通知下发申请人并记入审计 -->
     <t-dialog
-      v-model:visible="rejectVisible"
+      :visible="rejectVisible" @close="closeRejectDialog"
       header="驳回报名"
       width="480px"
       :close-on-overlay-click="!rejectSubmitting"
@@ -325,8 +327,9 @@ onMounted(load)
         {{ rejectRow ? `驳回 ${rejectRow.name} 对「${rejectRow.eventTitle}」的报名` : '' }}原因将通过站内通知告知申请人。
       </p>
       <t-form ref="rejectFormRef" :data="rejectForm" :rules="rejectRules">
-        <t-form-item name="reason">
+        <t-form-item label="驳回原因" name="reason">
           <t-textarea
+            v-accessible-field
             v-model="rejectForm.reason"
             :maxlength="200"
             :autosize="{ minRows: 3, maxRows: 5 }"

@@ -16,7 +16,7 @@ import DemandOwnerResponses from '@/components/demand/DemandOwnerResponses.vue'
 import DemandRespondForm from '@/components/demand/DemandRespondForm.vue'
 import FlowResult from '@/components/FlowResult.vue'
 import StateTag from '@/components/shared/StateTag.vue'
-import type { DemandRespondPayload, MyResponseItem, UserIdentity } from '@/types'
+import type { DemandKind, DemandRespondPayload, MyResponseItem, UserIdentity } from '@/types'
 import { formatLocalDateTime } from '@/utils/format'
 
 const route = useRoute()
@@ -71,6 +71,16 @@ const responded = computed(() => !!demand.value?.myResponse)
 const cardTitle = computed(() =>
   isMine.value ? '响应情况' : responded.value ? '我的响应' : '响应需求',
 )
+const reviseRoutes: Record<DemandKind, string> = {
+  task: '/demands/new/task',
+  investment: '/demands/new/invest',
+  cooperation: '/demands/new/cooperation',
+}
+function reviseDemand() {
+  const d = demand.value
+  if (!d) return
+  void router.push(`${reviseRoutes[d.kind ?? 'task']}?revise=${d.id}`)
+}
 const ownerResponses = ref<MyResponseItem[]>([])
 const ownerResponsesLoading = ref(false)
 const ownerResponsesError = ref(false)
@@ -249,6 +259,15 @@ async function onShare() {
             收起
           </Button>
         </div>
+        <Button
+          v-if="isMine && ['rejected', 'withdrawn'].includes(demand.status)"
+          theme="primary"
+          variant="outline"
+          block
+          @click="reviseDemand"
+        >
+          修改并重新提交
+        </Button>
         <!-- v52：对象式查询替代裸模板插值——fullPath 含 ?/&/# 时不会被截断（同文件 onToggleFavorite 口径） -->
         <Button v-if="!auth.isLogged" theme="primary" block @click="router.push({ path: '/login', query: { redirect: route.fullPath } })">
           登录后响应

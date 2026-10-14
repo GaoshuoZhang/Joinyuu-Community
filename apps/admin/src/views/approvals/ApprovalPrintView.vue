@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { backOrFallback } from '@/utils/navigation'
 import { onBeforeUnmount, onMounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import ListErrorState from '@/components/ListErrorState.vue'
@@ -50,6 +51,7 @@ function restoreAppTheme() {
 }
 
 function doPrint() {
+  if (loading.value || loadError.value || !application.value) return
   window.print()
 }
 
@@ -88,18 +90,18 @@ onBeforeUnmount(() => {
 <template>
   <div class="print-page">
     <div class="no-print toolbar">
-      <t-button variant="outline" @click="router.back()">返回</t-button>
-      <t-button theme="primary" @click="doPrint">打印</t-button>
+      <t-button variant="outline" @click="backOrFallback(router, '/approvals')">返回</t-button>
+      <t-button theme="primary" :loading="loading" :disabled="loading || !!loadError || !application" @click="doPrint">打印</t-button>
     </div>
 
     <t-loading :loading="loading" size="small" class="paper">
       <ListErrorState v-if="loadError" :message="loadError" :loading="loading" @retry="load" />
 
-      <template v-else-if="!application">
+      <template v-else-if="!loading && !application">
         <div class="empty-tip">未找到审核记录（{{ route.params.id }}）</div>
       </template>
 
-      <template v-else>
+      <template v-else-if="application">
         <div class="doc-head">
           <h1 class="doc-title">聚屿社区 · 申请审核单</h1>
           <p class="doc-no">申请编号：{{ application.id }}</p>

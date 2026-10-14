@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { useDialogFormProtection } from '@/utils/form'
 import { computed, onMounted, reactive, ref } from 'vue'
 import ListErrorState from '@/components/ListErrorState.vue'
 import ListEmptyState from '@/components/ListEmptyState.vue'
@@ -260,6 +261,7 @@ onMounted(() => {
   loadSpaces()
   load()
 })
+const { close: closeReviewDialog } = useDialogFormProtection(() => comment.value, dialogVisible, submitting)
 </script>
 
 <template>
@@ -293,6 +295,7 @@ onMounted(() => {
     <!-- 筛选条与内容卡片分离，与租赁管理/投稿内容等列表页同结构 -->
     <div class="page-filter-bar">
       <t-select
+        v-accessible-field="'空间'"
         v-model="query.spaceId"
         label="空间"
         :options="spaceOptions"
@@ -301,6 +304,7 @@ onMounted(() => {
         @change="onSpaceChange"
       />
       <t-date-picker
+        v-accessible-field="'日期'"
         v-model="query.date"
         label="日期"
         valueType="YYYY-MM-DD"
@@ -386,7 +390,7 @@ onMounted(() => {
     </div>
 
     <!-- 预约详情抽屉 -->
-    <t-drawer v-model:visible="drawerVisible" header="预约详情" size="560px" :footer="false" :close-btn="true" :close-on-esc-keydown="true">
+    <t-drawer v-model:visible="drawerVisible" header="预约详情" size="min(560px, 100vw)" :footer="false" :close-btn="true" :close-on-esc-keydown="true">
       <template v-if="current">
         <div class="drawer-head">
           <span class="drawer-id">{{ current.id }}</span>
@@ -426,9 +430,9 @@ onMounted(() => {
 
     <!-- 审核意见抽屉 -->
     <t-drawer
-      v-model:visible="dialogVisible"
+      :visible="dialogVisible" @close="closeReviewDialog"
       :header="dialogAction === 'approve' ? '通过预约' : '驳回预约'"
-      size="560px"
+      size="min(560px, 100vw)"
       :footer="false"
       :close-btn="true"
       :close-on-esc-keydown="true"
@@ -437,12 +441,13 @@ onMounted(() => {
         通过前系统将自动校验时段冲突（已通过预约与社区活动占用）。
       </p>
       <t-textarea
+        v-accessible-field="'预约审核意见'"
         v-model="comment"
         placeholder="审核意见（驳回时建议填写原因）…"
         :autosize="{ minRows: 3, maxRows: 5 }"
       />
       <div class="drawer-footer">
-        <t-button variant="text" theme="default" @click="dialogVisible = false">取消</t-button>
+        <t-button variant="text" theme="default" @click="closeReviewDialog">取消</t-button>
         <t-button
           :theme="dialogAction === 'approve' ? 'primary' : 'danger'"
           :loading="submitting"

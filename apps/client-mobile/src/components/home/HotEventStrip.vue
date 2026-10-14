@@ -1,6 +1,5 @@
 <script setup lang="ts">
 import { Icon, Tag } from 'tdesign-mobile-vue'
-import EmptyBlock from '@/components/shared/EmptyBlock.vue'
 import type { HomeEventCard } from '@/types'
 import { formatLocalDateTime, formatZhNumber } from '@/utils/format'
 
@@ -14,7 +13,7 @@ defineProps<{ events: HomeEventCard[] }>()
       <h2>近期活动</h2>
       <router-link class="more" to="/plaza?tab=events">更多<Icon aria-hidden="true" name="chevron-right" size="12px" /></router-link>
     </div>
-    <EmptyBlock v-if="!events.length" text="暂无近期活动" />
+    <p v-if="!events.length" class="empty-note">暂无近期活动</p>
     <div v-else class="hot-scroll">
       <router-link
         v-for="e in events"
@@ -55,6 +54,13 @@ defineProps<{ events: HomeEventCard[] }>()
   color: var(--td-brand-color);
   text-decoration: none;
   cursor: pointer;
+}
+
+.empty-note {
+  margin: 0;
+  padding: var(--app-space-4) 0;
+  font: var(--app-type-body-sm);
+  color: var(--td-text-color-secondary);
 }
 
 .d-cat {

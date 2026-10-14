@@ -3,6 +3,7 @@ import { createPinia } from 'pinia'
 import { MessagePlugin } from 'tdesign-vue-next'
 import App from './App.vue'
 import router from './router'
+import { accessibleField } from './directives/accessibleField'
 import { permission } from './directives/permission'
 import { useThemeStore } from './stores/theme'
 /* 顺序敏感：TDesign 基础样式先加载，本应用样式后加载。
@@ -19,6 +20,7 @@ useThemeStore(pinia).init()
 app.use(router)
 /* RBAC：按钮/元素级权限指令 */
 app.directive('permission', permission)
+app.directive('accessible-field', accessibleField)
 /* 全局错误兜底：组件渲染抛错时记录日志并给出可见提示，
  * 避免整应用白屏不可恢复且用户无从感知出错原因 */
 app.config.errorHandler = (err, instance, info) => {

@@ -85,6 +85,7 @@ const realNameVerified = ref<boolean | null>(null)
 /* v49：已提交过人才登记（存在 individual 申请，或已获社区个体身份）→ CTA 改为「查看申请记录」 */
 const talentSubmitted = ref(false)
 const checkingStatus = ref(false)
+const statusError = ref('')
 const talentNeedsRealName = computed(() => kind.value === 'talent' && auth.isLogged && !talentSubmitted.value && realNameVerified.value === false)
 const talentSubmitBlocked = computed(() => kind.value === 'talent' && auth.isLogged && !talentSubmitted.value && realNameVerified.value !== true)
 const ctaLabel = computed(() => (kind.value === 'talent' && talentSubmitted.value ? '查看申请记录' : meta.value.cta))
@@ -97,6 +98,7 @@ async function loadStatus() {
     return
   }
   checkingStatus.value = true
+  statusError.value = ''
   try {
     if (auth.hasCommunityIndividual) {
       talentSubmitted.value = true
@@ -108,7 +110,8 @@ async function loadStatus() {
     }
   } catch {
     talentSubmitted.value = false
-    realNameVerified.value = false
+    realNameVerified.value = null
+    statusError.value = '实名与申请状态暂时无法确认，请重试。'
   } finally {
     checkingStatus.value = false
   }
@@ -166,6 +169,7 @@ function goRealName() {
       </ul>
     </section>
 
+    <EmptyBlock v-if="statusError" :text="statusError" action-text="重试" @action="loadStatus" />
     <Button v-if="talentNeedsRealName" theme="primary" variant="outline" block size="large" class="verify-btn" @click="goRealName">进行实名认证</Button>
     <Button theme="primary" block size="large" class="apply-btn" :disabled="ctaDisabled" @click="goApply">{{ ctaLabel }}</Button>
     <p class="tip">登录后进入对应申请表单，社区运营将在 3 个工作日内完成审核</p>

@@ -120,6 +120,7 @@ const highlights = ['企业与需求双向连接', '活动运营与签到管理'
         <t-form :data="form" :rules="rules" label-width="0" @submit="onSubmit">
           <t-form-item name="username">
             <t-input
+              v-accessible-field="'用户名'"
               v-model="form.username"
               size="large"
               clearable
@@ -132,6 +133,7 @@ const highlights = ['企业与需求双向连接', '活动运营与签到管理'
           </t-form-item>
           <t-form-item name="password">
             <t-input
+              v-accessible-field="'密码'"
               v-model="form.password"
               size="large"
               type="password"
@@ -145,6 +147,7 @@ const highlights = ['企业与需求双向连接', '活动运营与签到管理'
           <t-form-item name="captcha">
             <div class="captcha-row">
               <t-input
+                v-accessible-field="'图形验证码'"
                 v-model="form.captcha"
                 class="captcha-input"
                 size="large"

@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, onMounted, reactive, ref } from 'vue'
+import { focusFirstInvalid, useDialogFormProtection } from '@/utils/form'
 import { MessagePlugin } from 'tdesign-vue-next'
 import { AddIcon } from 'tdesign-icons-vue-next'
 import ListErrorState from '@/components/ListErrorState.vue'
@@ -271,7 +272,7 @@ const saving = ref(false)
 async function onSave(testAfter = false) {
   if (saving.value) return
   const valid = await formRef.value.validate()
-  if (valid !== true) return
+  if (valid !== true) return focusFirstInvalid(formRef.value)
   saving.value = true
   try {
     const payload = {
@@ -341,7 +342,7 @@ const testing = ref(false)
 async function onTestSend() {
   if (!testTarget.value || testing.value) return
   const valid = await testRef.value.validate()
-  if (valid !== true) return
+  if (valid !== true) return focusFirstInvalid(testRef.value)
   testing.value = true
   try {
     const result = await testSendMessageChannel(testTarget.value.id, {
@@ -381,6 +382,8 @@ function credentialStatus(row: MessageChannel): 'configured' | 'missing' | 'none
   if (row.credentialConfigured) return 'configured'
   return row.missingCredentials.length ? 'missing' : 'none'
 }
+const { close: closeForm } = useDialogFormProtection(form, formVisible, saving)
+const { close: closeTestDialog } = useDialogFormProtection(testForm, testVisible, testing)
 </script>
 
 <template>
@@ -417,6 +420,7 @@ function credentialStatus(row: MessageChannel): 'configured' | 'missing' | 'none
         </template>
         <template #enabled="{ row }">
           <t-switch
+            v-accessible-field="`渠道「${row.name}」启用状态`"
             :value="row.enabled"
             :loading="toggling === row.id"
             :aria-label="`渠道「${row.name}」启用状态`"
@@ -441,14 +445,15 @@ function credentialStatus(row: MessageChannel): 'configured' | 'missing' | 'none
     </section>
 
     <t-dialog
-      v-model:visible="formVisible"
+      :visible="formVisible"
       :header="formMode === 'edit' ? '编辑渠道' : '新增渠道'"
       width="640px"
-    >
+     @close="closeForm">
       <t-form ref="formRef" :data="form" label-align="top">
         <div class="form-grid">
           <t-form-item label="消息类型" name="kind" :rules="[{ required: true, message: '请选择消息类型' }]">
             <t-select
+              v-accessible-field
               :value="form.kind"
               :disabled="formMode === 'edit'"
               :options="KIND_GROUPS.map((g) => ({ label: g.label, value: g.kind }))"
@@ -457,6 +462,7 @@ function credentialStatus(row: MessageChannel): 'configured' | 'missing' | 'none
           </t-form-item>
           <t-form-item label="消息驱动" name="provider" :rules="[{ required: true, message: '请选择消息驱动' }]">
             <t-select
+              v-accessible-field
               v-model="form.provider"
               :disabled="formMode === 'edit'"
               :options="providerOptions"
@@ -464,10 +470,10 @@ function credentialStatus(row: MessageChannel): 'configured' | 'missing' | 'none
             />
           </t-form-item>
           <t-form-item label="渠道名称" name="name" :rules="[{ required: true, message: '请输入渠道名称' }]">
-            <t-input v-model="form.name" clearable placeholder="如 阿里云短信主通道…" />
+            <t-input v-accessible-field v-model="form.name" clearable placeholder="如 阿里云短信主通道…" />
           </t-form-item>
           <t-form-item label="每日发送上限" name="dailyLimit">
-            <t-input-number class="ctl-w-lg" v-model="form.dailyLimit" :min="0" :max="100000" :step="100" theme="column" />
+            <t-input-number v-accessible-field class="ctl-w-lg" v-model="form.dailyLimit" :min="0" :max="100000" :step="100" theme="column" />
             <template #help>0 表示不限制</template>
           </t-form-item>
         </div>
@@ -488,7 +494,7 @@ function credentialStatus(row: MessageChannel): 'configured' | 'missing' | 'none
               :name="`config.${field.key}`"
               :rules="field.required ? [{ required: true, message: `请填写${field.label}` }] : []"
             >
-              <t-input v-model="form.config[field.key]" clearable :placeholder="(field.hint || '') + '…'" />
+              <t-input v-accessible-field v-model="form.config[field.key]" clearable :placeholder="(field.hint || '') + '…'" />
               <template #help>
                 <span v-if="field.key === 'fromAddress' && smtpFromMismatch" class="help-warning">{{ smtpFromMismatch.message }}</span>
                 <span v-else>{{ field.hint || '' }}</span>
@@ -501,6 +507,7 @@ function credentialStatus(row: MessageChannel): 'configured' | 'missing' | 'none
           <div class="section-title">凭据</div>
           <t-form-item label="凭据来源" name="credentialMode">
             <t-select
+              v-accessible-field
               :value="form.credentialMode"
               :options="[
                 { label: '直接填写密钥（推荐）', value: 'inline' },
@@ -518,7 +525,9 @@ function credentialStatus(row: MessageChannel): 'configured' | 'missing' | 'none
               :name="`credentialEnv.${key}`"
             >
               <t-input
+                v-accessible-field
                 v-model="form.credentialEnv[key]"
+                  :type="form.credentialMode === 'inline' && /secret|password|token|appcode/i.test(key) ? 'password' : 'text'"
                 clearable
                 autocomplete="off"
                 :placeholder="credentialPlaceholder(key)"
@@ -529,15 +538,15 @@ function credentialStatus(row: MessageChannel): 'configured' | 'missing' | 'none
         </template>
 
         <t-form-item label="备注" name="remark">
-          <t-input v-model="form.remark" clearable placeholder="选填…" />
+          <t-input v-accessible-field v-model="form.remark" clearable placeholder="选填…" />
         </t-form-item>
         <t-form-item label="启用" name="enabled">
-          <t-switch v-model="form.enabled" />
+          <t-switch v-accessible-field v-model="form.enabled" />
         </t-form-item>
       </t-form>
       <template #footer>
         <div class="dialog-footer">
-          <t-button theme="default" @click="formVisible = false">取消</t-button>
+          <t-button theme="default" @click="closeForm">取消</t-button>
           <t-button theme="primary" variant="outline" :loading="saving" @click="onSave(true)">保存并测试连通</t-button>
           <t-button theme="primary" :loading="saving" @click="onSave()">保存</t-button>
         </div>
@@ -545,7 +554,7 @@ function credentialStatus(row: MessageChannel): 'configured' | 'missing' | 'none
     </t-dialog>
 
     <t-dialog
-      v-model:visible="testVisible"
+      :visible="testVisible" @close="closeTestDialog"
       header="测试发送"
       width="560px"
       :confirm-btn="{ content: '发送', theme: 'primary', loading: testing }"
@@ -553,19 +562,19 @@ function credentialStatus(row: MessageChannel): 'configured' | 'missing' | 'none
     >
       <t-form ref="testRef" :data="testForm" label-align="top">
         <t-form-item label="收件人" name="recipient" :rules="[{ required: true, message: '请输入测试收件人' }]">
-          <t-input v-model="testForm.recipient" clearable :placeholder="testTarget?.kind === 'email' ? '邮箱…' : '手机号…'" />
+          <t-input v-accessible-field v-model="testForm.recipient" clearable :placeholder="testTarget?.kind === 'email' ? '邮箱…' : '手机号…'" />
         </t-form-item>
         <t-form-item label="模板编码" name="templateCode">
-          <t-input v-model="testForm.templateCode" clearable placeholder="如 verify_code（与正文二选一）…" />
+          <t-input v-accessible-field v-model="testForm.templateCode" clearable placeholder="如 verify_code（与正文二选一）…" />
         </t-form-item>
         <t-form-item label="模板变量（JSON）" name="variables">
-          <t-input v-model="testForm.variables" clearable placeholder='如 {"code":"1234"}…' />
+          <t-input v-accessible-field v-model="testForm.variables" clearable placeholder='如 {"code":"1234"}…' />
         </t-form-item>
         <t-form-item label="正文（直接指定时优先）" name="body">
-          <t-textarea v-model="testForm.body" :autosize="{ minRows: 2, maxRows: 4 }" placeholder="留空则按模板编码渲染…" />
+          <t-textarea v-accessible-field v-model="testForm.body" :autosize="{ minRows: 2, maxRows: 4 }" placeholder="留空则按模板编码渲染…" />
         </t-form-item>
         <t-form-item label="邮件主题" name="subject">
-          <t-input v-model="testForm.subject" clearable placeholder="仅邮件渠道使用…" />
+          <t-input v-accessible-field v-model="testForm.subject" clearable placeholder="仅邮件渠道使用…" />
         </t-form-item>
       </t-form>
     </t-dialog>

@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { backOrFallback } from '@/utils/navigation'
 import { onBeforeUnmount, onMounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import ListErrorState from '@/components/ListErrorState.vue'
@@ -62,6 +63,7 @@ function restoreAppTheme() {
 }
 
 function doPrint() {
+  if (loading.value || loadError.value || !lease.value) return
   window.print()
 }
 
@@ -69,6 +71,7 @@ async function load() {
   loading.value = true
   loadError.value = ''
   notFound.value = false
+  lease.value = null
   try {
     const payload = await fetchLeasePrint(String(route.params.id))
     lease.value = payload.lease
@@ -102,8 +105,8 @@ onBeforeUnmount(() => {
   <div class="print-page">
     <!-- 打印工具条（print 时隐藏） -->
     <div class="no-print toolbar">
-      <t-button variant="outline" @click="router.back()">返回</t-button>
-      <t-button theme="primary" @click="doPrint">打印</t-button>
+      <t-button variant="outline" @click="backOrFallback(router, '/workstations/leases')">返回</t-button>
+      <t-button theme="primary" :loading="loading" :disabled="loading || !!loadError || !lease" @click="doPrint">打印</t-button>
     </div>
 
     <t-loading :loading="loading" size="small" class="paper">
@@ -113,7 +116,7 @@ onBeforeUnmount(() => {
         <div class="empty-tip">未找到租约记录（{{ route.params.id }}）</div>
       </template>
 
-      <template v-else-if="lease">
+      <template v-else-if="!loadError && lease">
         <div class="doc-head">
           <h1 class="doc-title">聚屿社区 · 办公位租约确认单</h1>
           <p class="doc-no">租约编号：{{ lease.id }}</p>
@@ -144,7 +147,7 @@ onBeforeUnmount(() => {
             <td>{{ rentPeriodLabel[lease.rentPeriod ?? 'month'] ?? lease.rentPeriod }}</td>
           </tr>
           <tr>
-            <td class="label">月租金</td>
+            <td class="label">{{ ({ day: '日', week: '周', month: '月', year: '年' }[lease.rentPeriod ?? 'month']) }}租金</td>
             <td>¥{{ lease.monthlyRent.toLocaleString('zh-CN') }}</td>
             <td class="label">状态</td>
             <td>{{ statusLabel[deriveLeaseStatus(lease)] ?? lease.status }}</td>

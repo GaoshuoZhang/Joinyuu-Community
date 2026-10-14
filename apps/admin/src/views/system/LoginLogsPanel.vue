@@ -117,14 +117,15 @@ onMounted(load)
     <ListErrorState v-if="loadError" :message="loadError" :loading="loading" @retry="load" />
 
     <div class="page-filter-bar">
-      <t-input class="ctl-w-xl"
+      <t-input v-accessible-field="'搜索账号/姓名/IP'" class="ctl-w-xl"
         v-model="query.keyword"
         clearable
         placeholder="搜索账号/姓名/IP…"
         @enter="onSearch"
       />
-      <t-select class="ctl-w-sm" v-model="query.status" label="状态" :options="statusOptions" @change="onSearch" />
+      <t-select v-accessible-field="'状态'" class="ctl-w-sm" v-model="query.status" label="状态" :options="statusOptions" @change="onSearch" />
       <t-date-range-picker
+        v-accessible-field="'登录日期范围'"
         v-model="query.range"
         :clearable="true"
         class="ctl-w-xl"

@@ -87,12 +87,8 @@ export class PublishTemplateDto {
   version?: number
 }
 
-/** 模板测试发送/预览 */
-export class TestTemplateDto {
-  @IsString({ message: '请输入测试收件人' })
-  @MaxLength(128)
-  recipient!: string
-
+/** 模板预览不发送消息，无需收件人。 */
+export class PreviewTemplateDto {
   @IsOptional()
   @IsInt()
   @Min(1)
@@ -101,4 +97,11 @@ export class TestTemplateDto {
   @IsOptional()
   @IsObject()
   variables?: Record<string, unknown>
+}
+
+/** 测试发送仍需校验收件人。 */
+export class TestTemplateDto extends PreviewTemplateDto {
+  @IsString({ message: '请输入测试收件人' })
+  @MaxLength(128)
+  recipient!: string
 }

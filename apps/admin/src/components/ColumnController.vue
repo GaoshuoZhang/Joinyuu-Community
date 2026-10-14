@@ -1,6 +1,7 @@
 <script setup lang="ts">
-import { onBeforeUnmount, onMounted, ref } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import { ChevronDownIcon, ChevronUpIcon, SettingIcon } from 'tdesign-icons-vue-next'
+import { restoreColumnState, visibleColumnKeys } from '@/utils/columnState'
 
 /* 列显示配置：列显隐 + 顺序调整，localStorage 持久化。
  * v-model 为列 key 顺序数组（含显隐信息：不在数组中的列隐藏）。
@@ -30,46 +31,28 @@ const emit = defineEmits<{
 
 const STORAGE_PREFIX = 'joinyuu_cols_'
 
-function loadSaved(): string[] | null {
-  const raw = localStorage.getItem(`${STORAGE_PREFIX}${props.storageKey}`)
-  if (!raw) return null
-  try {
-    const keys = JSON.parse(raw) as string[]
-    if (!Array.isArray(keys)) return null
-    // 仅保留仍存在的列，防止列结构调整后残留脏 key
-    const valid = props.columns.map((c) => c.key)
-    return keys.filter((k) => valid.includes(k))
-  } catch {
-    return null
-  }
+const requiredKeys = props.columns.filter((c, i) => i === 0 || c.key === 'op').map(c => c.key)
+function readSaved() {
+  try { return localStorage.getItem(`${STORAGE_PREFIX}${props.storageKey}`) } catch { return null }
 }
-
-/* 未保存过 → 默认全显（全部列，保持初始顺序）；保存过但列结构已变（如新增列）→ 新列补到末尾 */
-function initKeys(): string[] {
-  const saved = loadSaved()
-  if (saved) {
-    const current = props.columns.map((c) => c.key)
-    const newOnes = current.filter((k) => !saved.includes(k))
-    return newOnes.length ? [...saved, ...newOnes] : saved
-  }
-  return props.columns.map((c) => c.key)
-}
-
-const orderedKeys = ref<string[]>(initKeys())
+const state = ref(restoreColumnState(readSaved(), props.columns.map(c => c.key), requiredKeys))
+const orderedKeys = computed(() => state.value.order)
+const visibleKeys = computed(() => visibleColumnKeys(state.value))
+const orderedColumns = computed(() => orderedKeys.value.map(key => props.columns.find(c => c.key === key)!))
 
 function persist() {
-  localStorage.setItem(`${STORAGE_PREFIX}${props.storageKey}`, JSON.stringify(orderedKeys.value))
-  emit('update:modelValue', [...orderedKeys.value])
+  try { localStorage.setItem(`${STORAGE_PREFIX}${props.storageKey}`, JSON.stringify(state.value)) } catch { /* 受限浏览器仍允许本次会话调配 */ }
+  emit('update:modelValue', [...visibleKeys.value])
 }
 
 function toggle(key: string, checked: boolean) {
   if (checked) {
-    if (!orderedKeys.value.includes(key)) {
-      // 重新启用时追加到末尾
-      orderedKeys.value = [...orderedKeys.value, key]
+    if (!state.value.visible.includes(key)) {
+      state.value.visible.push(key)
     }
   } else {
-    orderedKeys.value = orderedKeys.value.filter((k) => k !== key)
+    if (requiredKeys.includes(key)) return
+    state.value.visible = state.value.visible.filter((k) => k !== key)
   }
   persist()
 }
@@ -80,12 +63,12 @@ function move(key: string, dir: -1 | 1) {
   if (idx < 0 || target < 0 || target >= orderedKeys.value.length) return
   const next = [...orderedKeys.value]
   ;[next[idx], next[target]] = [next[target], next[idx]]
-  orderedKeys.value = next
+  state.value.order = next
   persist()
 }
 
 function onReset() {
-  orderedKeys.value = props.columns.map((c) => c.key)
+  state.value = restoreColumnState(null, props.columns.map(c => c.key), requiredKeys)
   persist()
 }
 
@@ -98,7 +81,7 @@ function onKeydown(e: KeyboardEvent) {
 
 /* 挂载即上报已保存顺序（恢复持久化列配置） */
 onMounted(() => {
-  emit('update:modelValue', [...orderedKeys.value])
+  emit('update:modelValue', [...visibleKeys.value])
   window.addEventListener('keydown', onKeydown)
 })
 
@@ -126,21 +109,22 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKeydown))
           </t-popconfirm>
         </div>
         <div class="col-list">
-          <div v-for="c in columns" :key="c.key" class="col-row" :class="{ merged: !orderedKeys.includes(c.key) }">
+          <div v-for="(c, index) in orderedColumns" :key="c.key" class="col-row" :class="{ merged: !visibleKeys.includes(c.key) }">
             <t-checkbox
-              :checked="orderedKeys.includes(c.key)"
+              :checked="visibleKeys.includes(c.key)"
+              :disabled="requiredKeys.includes(c.key)"
               class="col-check"
               @change="(v: boolean) => toggle(c.key, v)"
             >
               {{ c.title }}
             </t-checkbox>
             <div class="col-move">
-              <ChevronUpIcon class="col-move-btn" role="button" tabindex="0" :aria-label="`上移${c.title}`" @click="move(c.key, -1)" @keydown.enter.space.prevent="move(c.key, -1)" />
-              <ChevronDownIcon class="col-move-btn" role="button" tabindex="0" :aria-label="`下移${c.title}`" @click="move(c.key, 1)" @keydown.enter.space.prevent="move(c.key, 1)" />
+              <t-button variant="text" size="small" shape="square" :disabled="index === 0" :aria-label="`上移${c.title}`" @click="move(c.key, -1)"><template #icon><ChevronUpIcon /></template></t-button>
+              <t-button variant="text" size="small" shape="square" :disabled="index === orderedColumns.length - 1" :aria-label="`下移${c.title}`" @click="move(c.key, 1)"><template #icon><ChevronDownIcon /></template></t-button>
             </div>
           </div>
         </div>
-        <p class="col-tip">勾选控制显隐，↑↓ 调整顺序；配置保存在本地浏览器。</p>
+        <p class="col-tip">勾选控制显隐，↑↓ 调整顺序；识别列和操作列始终保留。配置保存在本地浏览器。</p>
       </div>
     </template>
   </t-popup>
@@ -200,16 +184,6 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKeydown))
 .col-move {
   display: flex;
   gap: 2px;
-}
-
-.col-move-btn {
-  font-size: 16px;
-  color: var(--td-text-color-placeholder);
-  cursor: pointer;
-}
-
-.col-move-btn:hover {
-  color: var(--td-brand-color);
 }
 
 .col-tip {

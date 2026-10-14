@@ -180,13 +180,14 @@ onMounted(() => {
       </p>
       <Loading v-if="loading" class="search-loading" text="搜索中…" />
       <div v-if="categoryOrder.length" class="count-chips">
+        <p class="count-note">数字为当前已加载数量</p>
         <CheckTag
           size="medium"
           variant="light"
           :checked="activeKind === ''"
           @change="activeKind = ''"
         >
-          全部 {{ formatZhNumber(results.length) }}
+          已加载 {{ formatZhNumber(results.length) }} 条
         </CheckTag>
         <CheckTag
           v-for="c in categoryOrder"
@@ -196,7 +197,7 @@ onMounted(() => {
           :checked="activeKind === c"
           @change="activeKind = activeKind === c ? '' : c"
         >
-          {{ c }} {{ formatZhNumber(counts[c] ?? 0) }}
+          {{ c }} {{ formatZhNumber(counts[c] ?? 0) }} 条
         </CheckTag>
       </div>
       <EmptyBlock v-if="!visibleResults.length" text="没有找到相关内容，换个关键词试试" />
@@ -240,6 +241,7 @@ onMounted(() => {
 /* 同一关键词重新搜索时的局部加载指示 */
 .search-loading { padding:var(--app-space-4) 0; }
 .count-chips { display: flex; flex-wrap: wrap; gap:var(--app-space-3); }
+.count-note { flex-basis:100%; margin:0; color:var(--td-text-color-secondary); font:var(--app-type-caption); }
 .recent { display: flex; flex-direction: column; gap:var(--app-space-4); }
 .recent-head { display: flex; align-items: center; justify-content: space-between; font: var(--app-type-body-sm); color: var(--td-text-color-secondary); }
 .recent-head :deep(.t-button) { color: var(--td-brand-color); }

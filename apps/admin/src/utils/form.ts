@@ -1,4 +1,5 @@
-import { computed, nextTick, ref } from 'vue'
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch, type Ref } from 'vue'
+import { onBeforeRouteLeave } from 'vue-router'
 import { DialogPlugin } from 'tdesign-vue-next'
 
 type FormInstanceLike = { $el?: HTMLElement } | null | undefined
@@ -8,7 +9,7 @@ export async function focusFirstInvalid(form?: FormInstanceLike): Promise<void> 
   await nextTick()
   const root = form?.$el ?? document
   const field = root.querySelector<HTMLElement>(
-    '.t-is-error input:not([disabled]), .t-is-error textarea:not([disabled]), .t-is-error [role="combobox"], .t-is-error button:not([disabled]), .t-form__item--error input:not([disabled]), .t-form__item--error textarea:not([disabled])',
+    '.t-is-error input:not([disabled]), .t-is-error textarea:not([disabled]), .t-is-error [role="combobox"], .t-is-error button:not([disabled]), .t-is-error [contenteditable="true"], .t-form__item--error input:not([disabled]), .t-form__item--error textarea:not([disabled]), [aria-invalid="true"]',
   )
   if (!field) return
   /* 平滑滚动仅在用户未要求减少动效时启用（CSS 的 reduced-motion 兜底不覆盖 scrollIntoView） */
@@ -21,21 +22,22 @@ export async function focusFirstInvalid(form?: FormInstanceLike): Promise<void> 
  * 表单对话框未保存保护：打开时 markBaseline() 记录基线快照，
  * guardClose() 在关闭前检测改动，有改动时弹出确认（TDesign DialogPlugin）。
  */
-export function useDialogDirtyGuard(form: object) {
+export function useDialogDirtyGuard(form: object | (() => unknown)) {
   const baseline = ref('')
+  const snapshot = () => JSON.stringify(typeof form === 'function' ? form() : form)
   function markBaseline() {
-    baseline.value = JSON.stringify(form)
+    baseline.value = snapshot()
   }
-  const isDirty = computed(() => baseline.value !== '' && JSON.stringify(form) !== baseline.value)
-  function guardClose(onClose: () => void) {
+  const isDirty = computed(() => baseline.value !== '' && snapshot() !== baseline.value)
+  function guardClose(onClose: () => void, action = '关闭') {
     if (!isDirty.value) {
       onClose()
       return
     }
     const dialog = DialogPlugin.confirm({
       header: '放弃未保存的修改？',
-      body: '当前内容尚未保存，关闭后将丢失这些修改。',
-      confirmBtn: '放弃修改并关闭',
+      body: `当前内容尚未保存，${action}后将丢失这些修改。`,
+      confirmBtn: `放弃修改并${action}`,
       cancelBtn: '继续编辑',
       theme: 'warning',
       onConfirm: () => {
@@ -43,7 +45,57 @@ export function useDialogDirtyGuard(form: object) {
         onClose()
       },
       onClose: () => dialog.destroy(),
+      onCancel: () => dialog.destroy(),
     })
   }
   return { markBaseline, isDirty, guardClose }
+}
+
+/** 页面导航、刷新及关闭窗口均保护未保存内容。 */
+export function usePageDirtyGuard(isDirty: Readonly<Ref<boolean>>) {
+  const beforeUnload = (event: BeforeUnloadEvent) => {
+    if (!isDirty.value) return
+    event.preventDefault()
+    event.returnValue = ''
+  }
+  onMounted(() => window.addEventListener('beforeunload', beforeUnload))
+  onBeforeUnmount(() => window.removeEventListener('beforeunload', beforeUnload))
+  onBeforeRouteLeave(() => {
+    if (!isDirty.value) return true
+    return new Promise<boolean>((resolve) => {
+      let settled = false
+      const settle = (leave: boolean) => {
+        if (settled) return
+        settled = true
+        dialog.destroy()
+        resolve(leave)
+      }
+      const dialog = DialogPlugin.confirm({
+        header: '放弃未保存的修改？',
+        body: '当前内容尚未保存，离开后将丢失这些修改。',
+        confirmBtn: '放弃修改并离开',
+        cancelBtn: '继续编辑',
+        theme: 'warning',
+        onConfirm: () => settle(true),
+        onCancel: () => settle(false),
+        onClose: () => settle(false),
+      })
+    })
+  })
+}
+
+/** 内嵌表单统一保护：初始化完成后记录基线，保存成功可直接关闭。 */
+export function useDialogFormProtection(form: object | (() => unknown), visible: Ref<boolean>, busy?: Readonly<Ref<boolean>>) {
+  const guard = useDialogDirtyGuard(form)
+  watch(visible, async (open) => {
+    if (!open) return
+    await nextTick()
+    guard.markBaseline()
+  })
+  usePageDirtyGuard(computed(() => visible.value && guard.isDirty.value))
+  const close = () => {
+    if (busy?.value) return
+    guard.guardClose(() => { visible.value = false })
+  }
+  return { ...guard, close }
 }

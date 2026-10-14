@@ -1,8 +1,8 @@
 <script setup lang="ts">
-import { nextTick, reactive, ref, watch } from 'vue'
+import { computed, nextTick, reactive, ref, watch } from 'vue'
 import { MessagePlugin } from 'tdesign-vue-next'
 import type { FormProps } from 'tdesign-vue-next'
-import { focusFirstInvalid } from '@/utils/form'
+import { focusFirstInvalid, useDialogDirtyGuard, usePageDirtyGuard } from '@/utils/form'
 import {
   addExternalMember,
   createExternalEnterprise,
@@ -69,11 +69,15 @@ function resetForm() {
   }
 }
 
+const { markBaseline, isDirty, guardClose } = useDialogDirtyGuard(() => ({ ...form, members: memberUids.value }))
+usePageDirtyGuard(computed(() => props.visible && isDirty.value))
+
 watch(
   () => props.visible,
   async (v) => {
     if (!v) return
     resetForm()
+    markBaseline()
     if (userOptions.value.length === 0) {
       try {
         userOptions.value = await fetchUserOptions()
@@ -158,7 +162,8 @@ async function onConfirm() {
 }
 
 function onClose() {
-  emit('update:visible', false)
+  if (submitting.value) return
+  guardClose(() => emit('update:visible', false))
 }
 </script>
 
@@ -182,23 +187,24 @@ function onClose() {
 
     <t-form ref="formRef" :data="form" :rules="rules" label-align="top">
       <t-form-item label="企业名称" name="name">
-        <t-input v-model="form.name" clearable placeholder="请输入企业名称…" />
+        <t-input v-accessible-field v-model="form.name" clearable placeholder="请输入企业名称…" />
       </t-form-item>
       <div class="form-row">
         <t-form-item label="行业" name="industry">
-          <t-select v-model="form.industry" :options="industryOptions" clearable filterable placeholder="选择行业…" />
+          <t-select v-accessible-field v-model="form.industry" :options="industryOptions" clearable filterable placeholder="选择行业…" />
         </t-form-item>
         <t-form-item label="规模" name="size">
-          <t-select v-model="form.size" :options="sizeOptions" clearable placeholder="选择规模…" />
+          <t-select v-accessible-field v-model="form.size" :options="sizeOptions" clearable placeholder="选择规模…" />
         </t-form-item>
       </div>
       <div class="form-row">
         <t-form-item label="成立时间" name="foundedAt">
-          <t-date-picker v-model="form.foundedAt" valueType="YYYY-MM" clearable class="ctl-w-full" />
+          <t-date-picker v-accessible-field v-model="form.foundedAt" valueType="YYYY-MM" clearable class="ctl-w-full" />
         </t-form-item>
       </div>
       <t-form-item label="企业简介" name="description">
         <t-textarea
+          v-accessible-field
           v-model="form.description"
           :autosize="{ minRows: 3, maxRows: 6 }"
           placeholder="选填…"
@@ -210,6 +216,7 @@ function onClose() {
             关联成员为该企业的 external_enterprise 身份成员，勾选保存后同步成员归属。
           </p>
           <t-select
+            v-accessible-field
             v-model="memberUids"
             :options="userOptions"
             multiple

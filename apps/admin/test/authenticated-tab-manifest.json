@@ -1,0 +1,392 @@
+[
+  {
+    "path": "/dashboard",
+    "label": "新增成员",
+    "url": "/dashboard"
+  },
+  {
+    "path": "/dashboard",
+    "label": "新增需求",
+    "url": "/dashboard"
+  },
+  {
+    "path": "/dashboard",
+    "label": "新增活动",
+    "url": "/dashboard"
+  },
+  {
+    "path": "/dashboard",
+    "label": "发放积分",
+    "url": "/dashboard"
+  },
+  {
+    "path": "/users/:id",
+    "label": "身份信息",
+    "url": "/users/U1001"
+  },
+  {
+    "path": "/users/:id",
+    "label": "申请记录",
+    "url": "/users/U1001?tab=applications"
+  },
+  {
+    "path": "/users/:id",
+    "label": "需求记录",
+    "url": "/users/U1001?tab=demands"
+  },
+  {
+    "path": "/users/:id",
+    "label": "项目记录",
+    "url": "/users/U1001?tab=projects"
+  },
+  {
+    "path": "/users/:id",
+    "label": "活动记录",
+    "url": "/users/U1001?tab=events"
+  },
+  {
+    "path": "/users/:id",
+    "label": "租赁记录",
+    "url": "/users/U1001?tab=leases"
+  },
+  {
+    "path": "/users/:id",
+    "label": "投稿记录",
+    "url": "/users/U1001?tab=submissions"
+  },
+  {
+    "path": "/users/:id",
+    "label": "预约记录",
+    "url": "/users/U1001?tab=reservations"
+  },
+  {
+    "path": "/users/:id",
+    "label": "积分",
+    "url": "/users/U1001?tab=points"
+  },
+  {
+    "path": "/users/:id",
+    "label": "活跃记录",
+    "url": "/users/U1001?tab=activities"
+  },
+  {
+    "path": "/enterprises/:id",
+    "label": "企业信息",
+    "url": "/enterprises/E2001"
+  },
+  {
+    "path": "/enterprises/:id",
+    "label": "名片",
+    "url": "/enterprises/E2001?tab=card"
+  },
+  {
+    "path": "/enterprises/:id",
+    "label": "关联租赁",
+    "url": "/enterprises/E2001?tab=leases"
+  },
+  {
+    "path": "/enterprises/:id",
+    "label": "数据概览",
+    "url": "/enterprises/E2001?tab=stats"
+  },
+  {
+    "path": "/enterprises/:id",
+    "label": "成员管理",
+    "url": "/enterprises/E2001?tab=members"
+  },
+  {
+    "path": "/enterprises/:id",
+    "label": "经验值",
+    "url": "/enterprises/E2001?tab=experience"
+  },
+  {
+    "path": "/external-enterprises/:id",
+    "label": "企业信息",
+    "url": "/external-enterprises/XE7004"
+  },
+  {
+    "path": "/external-enterprises/:id",
+    "label": "数据概览",
+    "url": "/external-enterprises/XE7004?tab=stats"
+  },
+  {
+    "path": "/external-enterprises/:id",
+    "label": "关联成员",
+    "url": "/external-enterprises/XE7004?tab=members"
+  },
+  {
+    "path": "/approvals",
+    "label": "全部",
+    "url": "/approvals?status="
+  },
+  {
+    "path": "/approvals",
+    "label": "待审核",
+    "url": "/approvals"
+  },
+  {
+    "path": "/approvals",
+    "label": "已通过",
+    "url": "/approvals?status=approved"
+  },
+  {
+    "path": "/approvals",
+    "label": "已驳回",
+    "url": "/approvals?status=rejected"
+  },
+  {
+    "path": "/demands/:id",
+    "label": "需求详情",
+    "url": "/demands/D4028"
+  },
+  {
+    "path": "/demands/:id",
+    "label": "响应记录",
+    "url": "/demands/D4028?tab=respondents"
+  },
+  {
+    "path": "/projects/:id",
+    "label": "项目信息",
+    "url": "/projects/P5012"
+  },
+  {
+    "path": "/projects/:id",
+    "label": "进度节点",
+    "url": "/projects/P5012?tab=milestones"
+  },
+  {
+    "path": "/events/enrollments",
+    "label": "待审核",
+    "url": "/events/enrollments"
+  },
+  {
+    "path": "/events/enrollments",
+    "label": "已通过",
+    "url": "/events/enrollments?status=approved"
+  },
+  {
+    "path": "/events/enrollments",
+    "label": "已驳回",
+    "url": "/events/enrollments?status=rejected"
+  },
+  {
+    "path": "/events/enrollments",
+    "label": "候补中",
+    "url": "/events/enrollments?status=waitlisted"
+  },
+  {
+    "path": "/events/enrollments",
+    "label": "已取消",
+    "url": "/events/enrollments?status=cancelled"
+  },
+  {
+    "path": "/events/enrollments",
+    "label": "全部",
+    "url": "/events/enrollments?status="
+  },
+  {
+    "path": "/events/:id",
+    "label": "活动信息",
+    "url": "/events/EV6013"
+  },
+  {
+    "path": "/events/:id",
+    "label": "报名管理",
+    "url": "/events/EV6013?tab=enrollments"
+  },
+  {
+    "path": "/events/:id",
+    "label": "签到管理",
+    "url": "/events/EV6013?tab=checkin"
+  },
+  {
+    "path": "/events/:id",
+    "label": "票务核销",
+    "url": "/events/EV6013?tab=tickets"
+  },
+  {
+    "path": "/rules/levels",
+    "label": "社区个体",
+    "url": "/rules/levels"
+  },
+  {
+    "path": "/rules/levels",
+    "label": "社区企业",
+    "url": "/rules/levels?activeScope=community_enterprise"
+  },
+  {
+    "path": "/workstations/leases/:id",
+    "label": "编辑记录",
+    "url": "/workstations/leases/LS2008"
+  },
+  {
+    "path": "/workstations/leases/:id",
+    "label": "续期记录",
+    "url": "/workstations/leases/LS2008"
+  },
+  {
+    "path": "/workstations/leases/:id",
+    "label": "合同",
+    "url": "/workstations/leases/LS2008"
+  },
+  {
+    "path": "/spaces/reservations",
+    "label": "全部",
+    "url": "/spaces/reservations?status="
+  },
+  {
+    "path": "/spaces/reservations",
+    "label": "待审核",
+    "url": "/spaces/reservations"
+  },
+  {
+    "path": "/spaces/reservations",
+    "label": "待使用",
+    "url": "/spaces/reservations?status=approved"
+  },
+  {
+    "path": "/spaces/reservations",
+    "label": "使用中",
+    "url": "/spaces/reservations?status=using"
+  },
+  {
+    "path": "/spaces/reservations",
+    "label": "已结束",
+    "url": "/spaces/reservations?status=ended"
+  },
+  {
+    "path": "/spaces/reservations",
+    "label": "已驳回",
+    "url": "/spaces/reservations?status=rejected"
+  },
+  {
+    "path": "/spaces/reservations",
+    "label": "已取消",
+    "url": "/spaces/reservations?status=cancelled"
+  },
+  {
+    "path": "/system/application-form-config",
+    "label": "企业入驻",
+    "url": "/system/application-form-config"
+  },
+  {
+    "path": "/system/application-form-config",
+    "label": "企业合作",
+    "url": "/system/application-form-config"
+  },
+  {
+    "path": "/system/application-form-config",
+    "label": "个体入驻",
+    "url": "/system/application-form-config"
+  },
+  {
+    "path": "/system/logs",
+    "label": "操作日志",
+    "url": "/system/logs"
+  },
+  {
+    "path": "/system/logs",
+    "label": "登录日志",
+    "url": "/system/logs?tab=login"
+  },
+  {
+    "path": "/system/account",
+    "label": "管理员账号",
+    "url": "/system/account"
+  },
+  {
+    "path": "/system/account",
+    "label": "角色权限",
+    "url": "/system/account?tab=roles"
+  },
+  {
+    "path": "/system/account",
+    "label": "在线会话",
+    "url": "/system/account?tab=sessions"
+  },
+  {
+    "path": "/system/trash",
+    "label": "社区企业",
+    "url": "/system/trash"
+  },
+  {
+    "path": "/system/trash",
+    "label": "合作企业",
+    "url": "/system/trash?activeDomain=externalEnterprise"
+  },
+  {
+    "path": "/system/trash",
+    "label": "资讯发布",
+    "url": "/system/trash?activeDomain=article"
+  },
+  {
+    "path": "/system/trash",
+    "label": "投稿内容",
+    "url": "/system/trash?activeDomain=submission"
+  },
+  {
+    "path": "/system/trash",
+    "label": "首页公告",
+    "url": "/system/trash?activeDomain=announcement"
+  },
+  {
+    "path": "/system/trash",
+    "label": "需求",
+    "url": "/system/trash?activeDomain=demand"
+  },
+  {
+    "path": "/system/trash",
+    "label": "项目",
+    "url": "/system/trash?activeDomain=project"
+  },
+  {
+    "path": "/system/trash",
+    "label": "活动",
+    "url": "/system/trash?activeDomain=event"
+  },
+  {
+    "path": "/system/trash",
+    "label": "租赁",
+    "url": "/system/trash?activeDomain=lease"
+  },
+  {
+    "path": "/system/trash",
+    "label": "空间预约",
+    "url": "/system/trash?activeDomain=reservation"
+  },
+  {
+    "path": "/system/trash",
+    "label": "商品",
+    "url": "/system/trash?activeDomain=goods"
+  },
+  {
+    "path": "/system/trash",
+    "label": "商城订单",
+    "url": "/system/trash?activeDomain=order"
+  },
+  {
+    "path": "/system/trash",
+    "label": "申请审核",
+    "url": "/system/trash?activeDomain=application"
+  },
+  {
+    "path": "/system/trash",
+    "label": "用户留言",
+    "url": "/system/trash?activeDomain=userMessage"
+  },
+  {
+    "path": "/system/messages",
+    "label": "渠道配置",
+    "url": "/system/messages"
+  },
+  {
+    "path": "/system/messages",
+    "label": "模板配置",
+    "url": "/system/messages?tab=templates"
+  },
+  {
+    "path": "/system/messages",
+    "label": "发送记录",
+    "url": "/system/messages?tab=outbox"
+  }
+]

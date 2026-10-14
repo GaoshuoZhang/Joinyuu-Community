@@ -1,8 +1,8 @@
 <script setup lang="ts">
-import { defineAsyncComponent, nextTick, reactive, ref, watch } from 'vue'
+import { computed, defineAsyncComponent, nextTick, reactive, ref, watch } from 'vue'
 import { MessagePlugin } from 'tdesign-vue-next'
 import type { FormProps } from 'tdesign-vue-next'
-import { focusFirstInvalid, useDialogDirtyGuard } from '@/utils/form'
+import { focusFirstInvalid, useDialogDirtyGuard, usePageDirtyGuard } from '@/utils/form'
 import { createAnnouncement, updateAnnouncement } from '@/api/announcements'
 import type { Announcement } from '@/types'
 
@@ -32,7 +32,7 @@ const form = reactive({
 })
 
 /* 未保存保护：打开时记录基线，关闭前有改动需确认 */
-const { markBaseline, guardClose } = useDialogDirtyGuard(form)
+const { markBaseline, isDirty, guardClose } = useDialogDirtyGuard(form)
 
 function resetForm() {
   if (props.mode === 'edit' && props.announcement) {
@@ -97,6 +97,7 @@ function onClose() {
   /* 未保存保护：有改动时弹确认（见 useDialogDirtyGuard） */
   guardClose(() => emit('update:visible', false))
 }
+usePageDirtyGuard(computed(() => props.visible && isDirty.value))
 </script>
 
 <template>
@@ -119,14 +120,15 @@ function onClose() {
 
     <t-form ref="formRef" :data="form" :rules="rules" label-align="top">
       <t-form-item label="公告标题" name="title">
-        <t-input v-model="form.title" clearable :maxlength="128" placeholder="请输入公告标题…" />
+        <t-input v-accessible-field v-model="form.title" clearable :maxlength="128" placeholder="请输入公告标题…" />
       </t-form-item>
       <t-form-item label="公告内容" name="content">
-        <RichEditor v-model="form.content" placeholder="请输入公告内容，支持图文排版…" :min-height="320" />
+        <RichEditor v-accessible-field v-model="form.content" placeholder="请输入公告内容，支持图文排版…" :min-height="320" />
       </t-form-item>
       <div class="form-row">
         <t-form-item label="有效期" name="expireAt">
           <t-date-picker
+            v-accessible-field
             v-model="form.expireAt"
             value-type="YYYY-MM-DD HH:mm"
             enable-time-picker
@@ -136,7 +138,7 @@ function onClose() {
           />
         </t-form-item>
         <t-form-item label="跳转链接" name="link">
-          <t-input v-model="form.link" clearable :maxlength="128" placeholder="站内路径，如 /plaza?tab=events…" />
+          <t-input v-accessible-field v-model="form.link" clearable :maxlength="128" placeholder="站内路径，如 /plaza?tab=events…" />
         </t-form-item>
       </div>
       <p class="form-tip">启用开关在公告列表中操作：启用后将自动关闭其它公告，客户端首页仅展示启用的一条。</p>

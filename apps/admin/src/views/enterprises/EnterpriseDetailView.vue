@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { useQueryTab } from '@/utils/navigation'
+import { useQueryTab, backOrFallback } from '@/utils/navigation'
 import { MessagePlugin } from 'tdesign-vue-next'
 import { ArrowLeftIcon, EditIcon } from 'tdesign-icons-vue-next'
 import StatusTag from '@/components/StatusTag.vue'
@@ -66,6 +66,7 @@ const adjusting = ref(false)
 /* 关联租赁 */
 const leases = ref<Lease[]>([])
 const leasesLoading = ref(false)
+const leasesError = ref('')
 
 const enterpriseLeases = computed(() =>
   leases.value.filter((l) => l.renterType === 'enterprise' && l.enterpriseId === enterprise.value?.id),
@@ -131,8 +132,11 @@ async function load() {
 /* 关联租赁：全量租约后按 renterType=enterprise + renterId 过滤（与租约管理页口径一致） */
 async function loadLeases() {
   leasesLoading.value = true
+  leasesError.value = ''
   try {
     leases.value = await fetchLeases()
+  } catch (error) {
+    leasesError.value = error instanceof Error ? error.message : '关联租约加载失败'
   } finally {
     leasesLoading.value = false
   }
@@ -191,7 +195,7 @@ async function onDelete() {
   try {
     await deleteEnterprise(enterprise.value.id)
     MessagePlugin.success('企业已归档')
-    router.back()
+    backOrFallback(router, '/enterprises')
   } catch (e) {
     MessagePlugin.error(e instanceof Error ? e.message : '归档失败')
   } finally {
@@ -241,7 +245,7 @@ onMounted(() => {
 
 <template>
   <div class="enterprise-detail page-fade-in">
-    <t-button variant="text" theme="default" class="back-btn" @click="router.back()">
+    <t-button variant="text" theme="default" class="back-btn" @click="backOrFallback(router, '/enterprises')">
       <template #icon><ArrowLeftIcon /></template>
       返回
     </t-button>
@@ -372,7 +376,8 @@ onMounted(() => {
                 <span class="panel-tip">该企业名下的办公位/办公室租约；点击条目跳转租约管理并自动筛选。</span>
                 <t-button variant="text" size="small" @click="goLeaseList">前往租约管理</t-button>
               </div>
-              <t-table
+              <ListErrorState v-if="leasesError" :message="leasesError" :loading="leasesLoading" @retry="loadLeases" />
+              <t-table v-else
                 row-key="id"
                 table-layout="fixed"
                 resizable
@@ -490,7 +495,7 @@ onMounted(() => {
     </template>
 
     <t-empty v-else-if="!enterprise" description="企业不存在或已归档">
-      <!-- 直达 URL 时 router.back() 可能离开系统，空态提供明确的下一步（L-01） -->
+      <!-- 直达 URL 时 backOrFallback(router, '/enterprises') 可能离开系统，空态提供明确的下一步（L-01） -->
       <template #action>
         <t-button @click="router.push('/enterprises')">返回企业列表</t-button>
       </template>

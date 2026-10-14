@@ -1,9 +1,9 @@
 <script setup lang="ts">
-import { reactive, ref, watch } from 'vue'
+import { computed, reactive, ref, watch } from 'vue'
 import { MessagePlugin } from 'tdesign-vue-next'
 import CardSegmentsEditor from '@/components/CardSegmentsEditor.vue'
 import { cardFields, updateCard, type CardRow } from '@/api/cards'
-import { useDialogDirtyGuard } from '@/utils/form'
+import { useDialogDirtyGuard, usePageDirtyGuard } from '@/utils/form'
 
 /* 编辑个体名片弹窗（个体详情 > 名片标签页）：
  * 文本字段 + 分段经历（教育/工作/项目/荣誉/社交/自定义链接）+ 隐私开关，与名片字段定义一致。 */
@@ -31,7 +31,7 @@ const segments = reactive<Record<string, Record<string, string>[]>>({
 })
 const visibility = reactive({ age: true, politicalStatus: true })
 /* 未保存保护：基线覆盖文本字段 + 分段条目 + 隐私开关（嵌套 reactive 一并序列化） */
-const { markBaseline, guardClose } = useDialogDirtyGuard(reactive({ form, segments, visibility }))
+const { markBaseline, isDirty, guardClose } = useDialogDirtyGuard(reactive({ form, segments, visibility }))
 const segmentFields: Record<string, { key: string; label: string }[]> = Object.fromEntries(
   Object.entries({
     education: { school: '学校', major: '专业', degree: '学位', period: '起止时间' },
@@ -88,6 +88,7 @@ async function submit() {
 function onClose() {
   guardClose(() => emit('update:visible', false))
 }
+usePageDirtyGuard(computed(() => props.visible && isDirty.value))
 </script>
 
 <template>
@@ -102,13 +103,14 @@ function onClose() {
     <t-form :data="form" label-align="top">
       <t-form-item v-for="field in textFields" :key="field.key" :label="field.label" :name="field.key">
         <t-textarea
+          v-accessible-field
           v-if="longTextFields.includes(field.key)"
           v-model="form[field.key]"
           :name="field.key"
           :placeholder="`${field.label}…`"
           :maxlength="500"
         />
-        <t-input v-else v-model="form[field.key]" :name="field.key" :placeholder="`${field.label}…`" :maxlength="255" />
+        <t-input v-accessible-field v-else v-model="form[field.key]" :name="field.key" :placeholder="`${field.label}…`" :maxlength="255" />
       </t-form-item>
     </t-form>
     <div class="privacy">

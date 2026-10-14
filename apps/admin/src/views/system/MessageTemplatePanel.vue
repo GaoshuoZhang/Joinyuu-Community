@@ -1,5 +1,6 @@
 <script setup lang="ts">
-import { onMounted, reactive, ref } from 'vue'
+import { computed, onMounted, reactive, ref } from 'vue'
+import { focusFirstInvalid, useDialogFormProtection } from '@/utils/form'
 import { MessagePlugin } from 'tdesign-vue-next'
 import { AddIcon } from 'tdesign-icons-vue-next'
 import ListErrorState from '@/components/ListErrorState.vue'
@@ -92,7 +93,7 @@ const submitting = ref(false)
 async function onCreate() {
   if (submitting.value) return
   const valid = await createRef.value.validate()
-  if (valid !== true) return
+  if (valid !== true) return focusFirstInvalid(createRef.value)
   submitting.value = true
   try {
     await createMessageTemplate({
@@ -117,6 +118,7 @@ async function onCreate() {
 /* ---------- 详情 / 编辑 ---------- */
 const detailVisible = ref(false)
 const detailLoading = ref(false)
+let detailRequest = 0
 const detail = ref<MessageTemplateDetail | null>(null)
 const editRef = ref()
 const edit = reactive({
@@ -128,10 +130,13 @@ const edit = reactive({
 })
 
 async function openDetail(row: MessageTemplate) {
+  const request = ++detailRequest
   detailVisible.value = true
   detailLoading.value = true
+  detail.value = null
   try {
     const data = await fetchMessageTemplateDetail(row.id)
+    if (request !== detailRequest || !detailVisible.value) return
     detail.value = data
     edit.name = data.name
     edit.category = data.category
@@ -139,11 +144,13 @@ async function openDetail(row: MessageTemplate) {
     const latest = data.versions[0]
     edit.subject = latest?.subject ?? ''
     edit.body = latest?.body ?? ''
+    closeDetailBaseline()
   } catch (error) {
+    if (request !== detailRequest) return
     MessagePlugin.error(error instanceof Error ? error.message : '模板详情加载失败')
     detailVisible.value = false
   } finally {
-    detailLoading.value = false
+    if (request === detailRequest) detailLoading.value = false
   }
 }
 
@@ -151,8 +158,12 @@ async function reloadDetail() {
   if (!detail.value) return
   detail.value = await fetchMessageTemplateDetail(detail.value.id)
   const latest = detail.value.versions[0]
+  edit.name = detail.value.name
+  edit.category = detail.value.category
+  edit.variablesText = detail.value.variables.join(', ')
   edit.subject = latest?.subject ?? ''
   edit.body = latest?.body ?? ''
+  closeDetailBaseline()
 }
 
 /* 详情区动作互斥（保存并发布/回滚/下架共用）：避免连点重复发布版本 */
@@ -177,7 +188,7 @@ async function withAction(action: () => Promise<unknown>, successText: string) {
 async function onSavePublish() {
   if (!detail.value) return
   const valid = await editRef.value.validate()
-  if (valid !== true) return
+  if (valid !== true) return focusFirstInvalid(editRef.value)
   await withAction(
     () =>
       saveMessageTemplateDraft(detail.value!.id, {
@@ -216,7 +227,11 @@ async function onPreview() {
 }
 
 /* ---------- 下架 / 回滚历史版本 ---------- */
-async function onPublish(version?: number) {
+function onPublish(version?: number) {
+  guardDetailAction(() => { void publishVersion(version) }, '发布版本')
+}
+
+async function publishVersion(version?: number) {
   if (!detail.value) return
   await withAction(
     () => publishMessageTemplate(detail.value!.id, version),
@@ -224,7 +239,11 @@ async function onPublish(version?: number) {
   )
 }
 
-async function onDisable() {
+function onDisable() {
+  guardDetailAction(() => { void disableTemplate() }, '下架模板')
+}
+
+async function disableTemplate() {
   if (!detail.value) return
   await withAction(() => disableMessageTemplate(detail.value!.id), '模板已下架')
 }
@@ -268,7 +287,7 @@ const testSending = ref(false)
 async function onTestSend() {
   if (!testTemplate.value || testSending.value) return
   const valid = await testRef.value.validate()
-  if (valid !== true) return
+  if (valid !== true) return focusFirstInvalid(testRef.value)
   testSending.value = true
   try {
     const result = await testSendMessageTemplate(testTemplate.value.id, {
@@ -291,6 +310,9 @@ async function onTestSend() {
 function versionActionLabel(version: MessageTemplateVersion): string {
   return version.status === 'published' ? '' : '发布'
 }
+const { close: closeCreate } = useDialogFormProtection(createForm, createVisible, submitting)
+const { close: closeDetail, markBaseline: closeDetailBaseline, guardClose: guardDetailAction } = useDialogFormProtection(edit, detailVisible, computed(() => detailActing.value || detailLoading.value))
+const { close: closeTestDialog } = useDialogFormProtection(testForm, testVisible, testSending)
 </script>
 
 <template>
@@ -336,11 +358,11 @@ function versionActionLabel(version: MessageTemplateVersion): string {
     </div>
 
     <t-dialog
-      v-model:visible="createVisible"
+      :visible="createVisible"
       header="新增模板"
       width="640px"
       :footer="false"
-    >
+     @close="closeCreate">
       <t-form ref="createRef" :data="createForm" label-align="top">
         <div class="form-grid">
           <t-form-item
@@ -348,70 +370,73 @@ function versionActionLabel(version: MessageTemplateVersion): string {
             name="code"
             :rules="[{ required: true, message: '请输入模板编码' }, { pattern: /^[a-z][a-z0-9_]{1,63}$/, message: '小写字母开头，仅含小写字母/数字/下划线' }]"
           >
-            <t-input v-model="createForm.code" clearable placeholder="如 verify_code…" />
+            <t-input v-accessible-field v-model="createForm.code" clearable placeholder="如 verify_code…" />
           </t-form-item>
           <t-form-item label="模板名称" name="name" :rules="[{ required: true, message: '请输入模板名称' }]">
-            <t-input v-model="createForm.name" clearable placeholder="如 短信验证码…" />
+            <t-input v-accessible-field v-model="createForm.name" clearable placeholder="如 短信验证码…" />
           </t-form-item>
           <t-form-item label="消息类型" name="kind" :rules="[{ required: true, message: '请选择消息类型' }]">
             <t-select
+              v-accessible-field
               v-model="createForm.kind"
               :options="[{ label: '短信', value: 'sms' }, { label: '邮件', value: 'email' }, { label: '站内信', value: 'inapp' }]"
             />
           </t-form-item>
           <t-form-item label="分类" name="category" :rules="[{ required: true, message: '请选择分类' }]">
             <t-select
+              v-accessible-field
               v-model="createForm.category"
               :options="[{ label: '安全类（强制送达）', value: 'security' }, { label: '营销类（可退订/受安静时段约束）', value: 'marketing' }]"
             />
           </t-form-item>
         </div>
         <t-form-item label="变量白名单" name="variablesText" help="英文逗号分隔；正文中出现的 {{变量}} 必须在此白名单内">
-          <t-input v-model="createForm.variablesText" clearable placeholder="如 code, minutes…" />
+          <t-input v-accessible-field v-model="createForm.variablesText" clearable placeholder="如 code, minutes…" />
         </t-form-item>
         <t-form-item label="邮件主题（仅邮件）" name="subject">
-          <t-input v-model="createForm.subject" clearable placeholder="留空则用模板编码…" />
+          <t-input v-accessible-field v-model="createForm.subject" clearable placeholder="留空则用模板编码…" />
         </t-form-item>
         <t-form-item label="模板正文" name="body" :rules="[{ required: true, message: '请输入模板正文' }]">
-          <t-textarea v-model="createForm.body" :autosize="{ minRows: 3, maxRows: 6 }" placeholder="使用 {{变量}} 占位，如 验证码 {{code}}…" />
+          <t-textarea v-accessible-field v-model="createForm.body" :autosize="{ minRows: 3, maxRows: 6 }" placeholder="使用 {{变量}} 占位，如 验证码 {{code}}…" />
         </t-form-item>
       </t-form>
       <template #footer>
         <div class="dialog-footer">
-          <t-button theme="default" @click="createVisible = false">取消</t-button>
+          <t-button theme="default" @click="closeCreate">取消</t-button>
           <t-button theme="primary" :loading="submitting" @click="onCreate">创建并发布</t-button>
         </div>
       </template>
     </t-dialog>
 
     <t-dialog
-      v-model:visible="detailVisible"
+      :visible="detailVisible"
       :header="detail ? `编辑模板 · ${detail.name}` : '编辑模板'"
       width="820px"
       :footer="false"
-    >
+     @close="closeDetail">
       <t-loading :loading="detailLoading" size="small">
         <template v-if="detail">
           <t-form ref="editRef" :data="edit" label-align="top">
             <div class="form-grid">
               <t-form-item label="模板名称" name="name" :rules="[{ required: true, message: '请输入模板名称' }]">
-                <t-input v-model="edit.name" clearable />
+                <t-input v-accessible-field v-model="edit.name" clearable />
               </t-form-item>
               <t-form-item label="分类" name="category">
                 <t-select
+                  v-accessible-field
                   v-model="edit.category"
                   :options="[{ label: '安全类', value: 'security' }, { label: '营销类', value: 'marketing' }]"
                 />
               </t-form-item>
             </div>
             <t-form-item label="变量白名单" name="variablesText">
-              <t-input v-model="edit.variablesText" clearable placeholder="如 code, minutes…" />
+              <t-input v-accessible-field v-model="edit.variablesText" clearable placeholder="如 code, minutes…" />
             </t-form-item>
             <t-form-item label="邮件主题（仅邮件）" name="subject">
-              <t-input v-model="edit.subject" clearable />
+              <t-input v-accessible-field v-model="edit.subject" clearable />
             </t-form-item>
             <t-form-item label="模板正文" name="body" :rules="[{ required: true, message: '请输入模板正文' }]">
-              <t-textarea v-model="edit.body" :autosize="{ minRows: 3, maxRows: 8 }" />
+              <t-textarea v-accessible-field v-model="edit.body" :autosize="{ minRows: 3, maxRows: 8 }" />
             </t-form-item>
           </t-form>
 
@@ -472,22 +497,22 @@ function versionActionLabel(version: MessageTemplateVersion): string {
     </t-dialog>
 
     <t-dialog
-      v-model:visible="testVisible"
+      :visible="testVisible" @close="closeTestDialog"
       header="测试发送"
       width="560px"
       :footer="false"
     >
       <t-form ref="testRef" :data="testForm" label-align="top">
         <t-form-item label="收件人" name="recipient" :rules="[{ required: true, message: '请输入测试收件人' }]">
-          <t-input v-model="testForm.recipient" clearable :placeholder="testTemplate?.kind === 'email' ? '邮箱…' : testTemplate?.kind === 'inapp' ? '用户 UID…' : '手机号…'" />
+          <t-input v-accessible-field v-model="testForm.recipient" clearable :placeholder="testTemplate?.kind === 'email' ? '邮箱…' : testTemplate?.kind === 'inapp' ? '用户 UID…' : '手机号…'" />
         </t-form-item>
         <t-form-item label="模板变量（JSON）" name="variables">
-          <t-input v-model="testForm.variables" clearable placeholder='如 {"code":"1234","minutes":"5"}…' />
+          <t-input v-accessible-field v-model="testForm.variables" clearable placeholder='如 {"code":"1234","minutes":"5"}…' />
         </t-form-item>
       </t-form>
       <template #footer>
         <div class="dialog-footer">
-          <t-button theme="default" @click="testVisible = false">取消</t-button>
+          <t-button theme="default" @click="closeTestDialog">取消</t-button>
           <t-button theme="primary" :loading="testSending" @click="onTestSend">发送</t-button>
         </div>
       </template>

@@ -1,8 +1,10 @@
 <script setup lang="ts">
-import { ref, watch } from 'vue'
+import { useDialogFormProtection, focusFirstInvalid } from '@/utils/form'
+import { computed, ref, watch } from 'vue'
 import { MessagePlugin } from 'tdesign-vue-next'
 import { fetchArticleDetail, reviewArticle } from '@/api/contents'
 import type { Article } from '@/types'
+import ListErrorState from '@/components/ListErrorState.vue'
 
 /* 文章审阅抽屉：审核模式（待审核投稿）支持驳回/通过；只读模式（定时发布中查看详情）仅展示 */
 const props = defineProps<{
@@ -24,28 +26,38 @@ const reasonRef = ref()
 const acting = ref('')
 const detail = ref<Article | null>(null)
 const detailLoading = ref(false)
+const detailError = ref('')
+let detailRequest = 0
+
+async function loadDetail() {
+  const request = ++detailRequest
+  const article = props.article
+  detail.value = null
+  detailError.value = ''
+  detailLoading.value = !!article && props.visible
+  if (!article || !props.visible) return
+  try {
+    const result = await fetchArticleDetail(article.id)
+    if (request === detailRequest) detail.value = result
+  } catch (e) {
+    if (request === detailRequest) detailError.value = e instanceof Error ? e.message : '文章详情加载失败'
+  } finally {
+    if (request === detailRequest) detailLoading.value = false
+  }
+}
 
 watch(
-  () => props.visible,
-  async (v) => {
-    if (!v) return
+  () => [props.visible, props.article?.id],
+  () => {
     rejecting.value = false
     reason.value = ''
-    detail.value = props.article
-    if (!props.article) return
-    detailLoading.value = true
-    try {
-      detail.value = await fetchArticleDetail(props.article.id)
-    } catch (e) {
-      MessagePlugin.error(e instanceof Error ? e.message : '文章详情加载失败')
-    } finally {
-      detailLoading.value = false
-    }
+    void loadDetail()
   },
+  { immediate: true },
 )
 
 async function onApprove() {
-  if (!props.article) return
+  if (!props.article || !detail.value || detailLoading.value || detailError.value || acting.value) return
   acting.value = 'approve'
   try {
     await reviewArticle(props.article.id, 'approved')
@@ -60,10 +72,10 @@ async function onApprove() {
 }
 
 async function onReject() {
-  if (!props.article) return
+  if (!props.article || !detail.value || detailLoading.value || detailError.value || acting.value) return
   /* 校验挂表单就地标红（与 AdjustValueDialog/AdminPanel 口径一致），不用 toast */
   const valid = await reasonRef.value?.validate()
-  if (valid !== true) return
+  if (valid !== true) return focusFirstInvalid(reasonRef.value)
   acting.value = 'reject'
   try {
     await reviewArticle(props.article.id, 'rejected', reason.value.trim())
@@ -78,20 +90,26 @@ async function onReject() {
 }
 
 function onCancel() {
+  closeProtected()
+}
+function finishClose() {
   emit('update:visible', false)
 }
+const protectedVisible = computed({ get: () => props.visible, set: () => finishClose() })
+const { close: closeProtected } = useDialogFormProtection(() => reason.value, protectedVisible, computed(() => !!acting.value))
 </script>
 
 <template>
   <t-drawer
     :visible="visible"
     :header="title ?? `审核投稿 · ${article?.title ?? ''}`"
-    size="560px"
+    size="min(560px, 100vw)"
     :footer="false"
     :close-btn="true"
     :close-on-esc-keydown="true"
     @close="onCancel"
   >
+    <ListErrorState v-if="detailError" :message="detailError" :loading="detailLoading" @retry="loadDetail" />
     <t-loading :loading="detailLoading" show-overlay>
     <div v-if="detail" class="review-body">
       <div class="meta-grid">
@@ -143,8 +161,8 @@ function onCancel() {
        </template>
 
       <t-form v-if="rejecting" ref="reasonRef" :data="{ reason }" class="reject-box">
-        <t-form-item name="reason" :rules="[{ required: true, message: '请填写驳回原因', trigger: 'submit' }]">
-          <t-textarea v-model="reason" :autosize="{ minRows: 2, maxRows: 4 }" placeholder="请填写驳回原因（通知投稿人）…" maxlength="200" />
+        <t-form-item label="驳回原因" name="reason" :rules="[{ required: true, message: '请填写驳回原因', trigger: 'submit' }]">
+          <t-textarea v-accessible-field v-model="reason" :autosize="{ minRows: 2, maxRows: 4 }" placeholder="请填写驳回原因（通知投稿人）…" maxlength="200" />
         </t-form-item>
       </t-form>
     </div>
@@ -159,12 +177,13 @@ function onCancel() {
           v-if="rejecting"
           theme="danger"
           :loading="acting === 'reject'"
+          :disabled="!detail || detailLoading || !!detailError || acting === 'approve'"
           @click="onReject"
         >
           确认驳回
         </t-button>
-        <t-button v-else variant="outline" theme="danger" :disabled="detailLoading" @click="rejecting = true">驳回</t-button>
-        <t-button v-if="!rejecting" theme="primary" :loading="acting === 'approve'" :disabled="detailLoading" @click="onApprove">通过</t-button>
+        <t-button v-else variant="outline" theme="danger" :disabled="!detail || detailLoading || !!detailError || !!acting" @click="rejecting = true">驳回</t-button>
+        <t-button v-if="!rejecting" theme="primary" :loading="acting === 'approve'" :disabled="!detail || detailLoading || !!detailError || acting === 'reject'" @click="onApprove">通过</t-button>
       </template>
     </div>
   </t-drawer>

@@ -1,7 +1,8 @@
 <script setup lang="ts">
+import { focusFirstInvalid, useDialogFormProtection } from '@/utils/form'
 import { computed, nextTick, onMounted, reactive, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { useQueryTab } from '@/utils/navigation'
+import { useQueryTab, backOrFallback } from '@/utils/navigation'
 import { MessagePlugin } from 'tdesign-vue-next'
 import type { FormProps } from 'tdesign-vue-next'
 import { ArrowLeftIcon } from 'tdesign-icons-vue-next'
@@ -162,7 +163,7 @@ function openCloseDialog() {
 async function onConfirmClose() {
   if (!project.value) return
   const valid = await closeFormRef.value.validate()
-  if (valid !== true) return
+  if (valid !== true) return focusFirstInvalid(closeFormRef.value)
   closeSaving.value = true
   try {
     await closeProject(project.value.id, closeForm.reason)
@@ -192,11 +193,12 @@ async function onArchive() {
 }
 
 onMounted(load)
+const { close: closeProjectDialog } = useDialogFormProtection(closeForm, closeVisible, closeSaving)
 </script>
 
 <template>
   <div class="project-detail page-fade-in">
-    <t-button variant="text" theme="default" class="back-btn" @click="router.back()">
+    <t-button variant="text" theme="default" class="back-btn" @click="backOrFallback(router, '/projects')">
       <template #icon><ArrowLeftIcon /></template>
       返回
     </t-button>
@@ -377,17 +379,18 @@ onMounted(load)
         :visible="closeVisible"
         :header="project ? `关闭项目 · ${project.name}` : '关闭项目'"
         width="460px"
-        @close="closeVisible = false"
+        @close="closeProjectDialog"
       >
         <template #footer>
           <div class="dialog-footer">
-            <t-button variant="text" theme="default" @click="closeVisible = false">取消</t-button>
+            <t-button variant="text" theme="default" @click="closeProjectDialog">取消</t-button>
             <t-button theme="danger" :loading="closeSaving" @click="onConfirmClose">确认关闭</t-button>
           </div>
         </template>
         <t-form ref="closeFormRef" :data="closeForm" :rules="closeRules" label-align="top">
           <t-form-item label="关闭原因" name="reason">
             <t-textarea
+              v-accessible-field
               v-model="closeForm.reason"
               :autosize="{ minRows: 3, maxRows: 5 }"
               placeholder="请填写关闭原因（必填），将记录在项目信息中…"

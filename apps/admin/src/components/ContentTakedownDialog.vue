@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { useDialogFormProtection } from '@/utils/form'
 import { reactive, ref } from 'vue'
 import { MessagePlugin } from 'tdesign-vue-next'
 import { withdrawArticle } from '@/api/contents'
@@ -35,20 +36,21 @@ async function submit() {
 }
 
 defineExpose({ open })
+const { close: closeTakedownDialog } = useDialogFormProtection(form, visible, submitting)
 </script>
 
 <template>
-  <t-dialog v-model:visible="visible" header="下架内容" width="520px" :close-on-overlay-click="false">
+  <t-dialog :visible="visible" @close="closeTakedownDialog" header="下架内容" width="520px" :close-on-overlay-click="false">
     <template #footer>
       <div class="dialog-footer">
-        <t-button variant="text" theme="default" @click="visible = false">取消</t-button>
+        <t-button variant="text" theme="default" @click="closeTakedownDialog">取消</t-button>
         <t-button theme="danger" :loading="submitting" @click="submit">确认下架</t-button>
       </div>
     </template>
     <p>确认下架「{{ target?.title }}」？{{ target?.type === 'article' ? '下架后状态为已关闭。' : '下架后转为待发布。' }}</p>
     <t-form :data="form" label-align="top">
       <t-form-item label="下架理由（选填）" name="takedownReason">
-        <t-textarea v-model="form.takedownReason" :maxlength="255" placeholder="填写后将通过站内信通知内容所属用户；留空不通知…" />
+        <t-textarea v-accessible-field v-model="form.takedownReason" :maxlength="255" placeholder="填写后将通过站内信通知内容所属用户；留空不通知…" />
       </t-form-item>
     </t-form>
   </t-dialog>

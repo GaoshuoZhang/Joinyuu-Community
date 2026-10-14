@@ -2,7 +2,7 @@
 import { computed, defineAsyncComponent, nextTick, reactive, ref, watch } from 'vue'
 import { MessagePlugin } from 'tdesign-vue-next'
 import type { FormProps } from 'tdesign-vue-next'
-import { focusFirstInvalid, useDialogDirtyGuard } from '@/utils/form'
+import { focusFirstInvalid, useDialogDirtyGuard, usePageDirtyGuard } from '@/utils/form'
 import { createDemand, updateDemand, type DemandPublishPayload } from '@/api/demands'
 import { dictFallback, fetchDictEntries } from '@/api/dicts'
 import { fetchPointsRules } from '@/api/mall'
@@ -73,7 +73,7 @@ const form = reactive<DemandPublishPayload>({
 })
 
 /* 未保存保护：打开时记录基线，关闭前有改动需确认 */
-const { markBaseline, guardClose } = useDialogDirtyGuard(form)
+const { markBaseline, isDirty, guardClose } = useDialogDirtyGuard(form)
 
 /* 自定义开关：可见范围/可报名范围（关=不限） */
 const customVisibility = ref(false)
@@ -250,6 +250,7 @@ function onClose() {
   /* 未保存保护：有改动时弹确认（见 useDialogDirtyGuard） */
   guardClose(() => emit('update:visible', false))
 }
+usePageDirtyGuard(computed(() => props.visible && isDirty.value))
 </script>
 
 <template>
@@ -274,13 +275,13 @@ function onClose() {
     <t-form ref="formRef" :data="form" :rules="rules" label-align="top">
       <div class="form-row form-row--3">
         <t-form-item label="联系人" name="contactName">
-          <t-input clearable v-model="form.contactName" placeholder="请输入联系人姓名…" />
+          <t-input v-accessible-field clearable v-model="form.contactName" placeholder="请输入联系人姓名…" />
         </t-form-item>
         <t-form-item label="联系电话" name="contactPhone">
-          <t-input clearable v-model="form.contactPhone" name="contact-phone" type="tel" inputmode="tel" autocomplete="tel" placeholder="请输入 11 位手机号…" />
+          <t-input v-accessible-field clearable v-model="form.contactPhone" name="contact-phone" type="tel" inputmode="tel" autocomplete="tel" placeholder="请输入 11 位手机号…" />
         </t-form-item>
         <t-form-item label="联系邮箱" name="contactEmail">
-          <t-input clearable v-model="form.contactEmail" name="contact-email" inputmode="email" autocomplete="email" placeholder="选填…" />
+          <t-input v-accessible-field clearable v-model="form.contactEmail" name="contact-email" inputmode="email" autocomplete="email" placeholder="选填…" />
         </t-form-item>
       </div>
 
@@ -293,7 +294,7 @@ function onClose() {
             </t-popup>
           </template>
           <div class="contact-public-row">
-            <t-switch v-model="form.contactPublic" aria-label="公开联系人" />
+            <t-switch v-accessible-field="'公开联系人'" v-model="form.contactPublic" aria-label="公开联系人" />
             <span class="scope-tip">{{ form.contactPublic ? '客户端可见联系人信息' : '客户端不可见联系人信息（默认）' }}</span>
           </div>
         </t-form-item>
@@ -304,57 +305,58 @@ function onClose() {
             </t-popup>
           </template>
           <div class="contact-public-row">
-            <t-switch v-model="form.respondNeedReview" aria-label="响应需审核" />
+            <t-switch v-accessible-field="'响应需审核'" v-model="form.respondNeedReview" aria-label="响应需审核" />
             <span class="scope-tip">{{ form.respondNeedReview ? '需审核通过才对发布者可见（默认）' : '无需审核，直接对发布者可见' }}</span>
           </div>
         </t-form-item>
       </div>
 
       <t-form-item label="需求标题" name="title">
-        <t-input clearable v-model="form.title" placeholder="请输入需求标题…" />
+        <t-input v-accessible-field clearable v-model="form.title" placeholder="请输入需求标题…" />
       </t-form-item>
       <div class="form-row form-row--3">
         <t-form-item label="需求类型" name="demandType">
-          <t-select v-model="form.demandType" clearable :options="[
+          <t-select v-accessible-field v-model="form.demandType" clearable :options="[
             { label: '找服务', value: 'task' },
             { label: '找投资', value: 'investment' },
             { label: '找合作', value: 'cooperation' },
           ]" />
         </t-form-item>
         <t-form-item label="类别" name="category">
-          <t-select v-model="form.category" :options="categoryOptions" clearable />
+          <t-select v-accessible-field v-model="form.category" :options="categoryOptions" clearable />
         </t-form-item>
         <t-form-item label="预算" name="budget">
-          <t-input clearable v-model="form.budget" placeholder="如 ¥10,000 - 30,000 / 面议…" />
+          <t-input v-accessible-field clearable v-model="form.budget" placeholder="如 ¥10,000 - 30,000 / 面议…" />
         </t-form-item>
       </div>
       <div v-if="form.demandType === 'task'" class="form-row">
         <t-form-item label="预期交付内容" name="deliverable">
-          <t-input v-model="form.deliverable" clearable placeholder="说明期望获得的成果…" />
+          <t-input v-accessible-field v-model="form.deliverable" clearable placeholder="说明期望获得的成果…" />
         </t-form-item>
         <t-form-item label="预期交付日期" name="deliverBy">
-          <t-date-picker v-model="form.deliverBy" valueType="YYYY-MM-DD" clearable class="ctl-w-full" />
+          <t-date-picker v-accessible-field v-model="form.deliverBy" valueType="YYYY-MM-DD" clearable class="ctl-w-full" />
         </t-form-item>
       </div>
       <div v-else-if="form.demandType === 'investment'" class="form-row">
         <t-form-item label="合作需求" name="cooperationNeed">
-          <t-input v-model="form.cooperationNeed" clearable placeholder="说明融资或资源合作需求…" />
+          <t-input v-accessible-field v-model="form.cooperationNeed" clearable placeholder="说明融资或资源合作需求…" />
         </t-form-item>
         <t-form-item label="可提供回报" name="returnOffer">
-          <t-input v-model="form.returnOffer" clearable placeholder="说明可提供的合作回报…" />
+          <t-input v-accessible-field v-model="form.returnOffer" clearable placeholder="说明可提供的合作回报…" />
         </t-form-item>
       </div>
       <div v-else class="form-row">
         <t-form-item label="业务瓶颈" name="bottleneck">
-          <t-input v-model="form.bottleneck" clearable placeholder="说明当前需要解决的问题…" />
+          <t-input v-accessible-field v-model="form.bottleneck" clearable placeholder="说明当前需要解决的问题…" />
         </t-form-item>
         <t-form-item label="期望合作方式" name="partnershipMode">
-          <t-input v-model="form.partnershipMode" clearable placeholder="如联合研发、渠道合作…" />
+          <t-input v-accessible-field v-model="form.partnershipMode" clearable placeholder="如联合研发、渠道合作…" />
         </t-form-item>
       </div>
       <div class="form-row">
         <t-form-item label="预期交付截止日" name="period">
           <t-date-picker
+            v-accessible-field
             v-model="form.period"
             valueType="YYYY-MM-DD"
             clearable
@@ -364,6 +366,7 @@ function onClose() {
         </t-form-item>
         <t-form-item label="报名截止时间" name="deadline">
           <t-date-picker
+            v-accessible-field
             v-model="form.deadline"
             valueType="YYYY-MM-DD HH:mm"
             enable-time-picker
@@ -380,11 +383,12 @@ function onClose() {
               <span class="scope-title scope-popup-trigger">自定义可见范围</span>
             </t-popup>
             <t-popup content="关闭 = 所有用户可见" show-arrow>
-              <span class="scope-switch-trigger"><t-switch v-model="customVisibility" aria-label="自定义可见范围" /></span>
+              <span class="scope-switch-trigger"><t-switch v-accessible-field="'自定义可见范围'" v-model="customVisibility" aria-label="自定义可见范围" /></span>
             </t-popup>
           </div>
           <t-form-item v-if="customVisibility" label="身份" name="visibilityIdentities">
             <t-select
+              v-accessible-field
               v-model="form.visibilityIdentities"
               multiple
               clearable
@@ -393,7 +397,7 @@ function onClose() {
             />
           </t-form-item>
           <t-form-item v-if="customVisibility" label="等级" name="visibilityLevels">
-            <t-select v-model="form.visibilityLevels" multiple clearable :options="userLevelOptions" placeholder="不限…" />
+            <t-select v-accessible-field v-model="form.visibilityLevels" multiple clearable :options="userLevelOptions" placeholder="不限…" />
           </t-form-item>
         </div>
         <div class="scope-col">
@@ -404,12 +408,13 @@ function onClose() {
             <div class="scope-right">
               <t-button v-if="customEnrollment && customVisibility" variant="text" size="small" @click="syncEnrollment">同步可见范围</t-button>
               <t-popup content="关闭 = 所有用户可报名" show-arrow>
-                <span class="scope-switch-trigger"><t-switch v-model="customEnrollment" aria-label="自定义可报名范围" /></span>
+                <span class="scope-switch-trigger"><t-switch v-accessible-field="'自定义可报名范围'" v-model="customEnrollment" aria-label="自定义可报名范围" /></span>
               </t-popup>
             </div>
           </div>
           <t-form-item v-if="customEnrollment" label="身份" name="enrollmentIdentities">
             <t-select
+              v-accessible-field
               v-model="form.enrollmentIdentities"
               multiple
               clearable
@@ -418,7 +423,7 @@ function onClose() {
             />
           </t-form-item>
           <t-form-item v-if="customEnrollment" label="等级" name="enrollmentLevels">
-            <t-select v-model="form.enrollmentLevels" multiple clearable :options="userLevelOptions" placeholder="不限…" />
+            <t-select v-accessible-field v-model="form.enrollmentLevels" multiple clearable :options="userLevelOptions" placeholder="不限…" />
           </t-form-item>
         </div>
       </div>
@@ -431,13 +436,13 @@ function onClose() {
         </template>
         <t-popup content="默认使用积分规则值，可直接为本需求调整响应奖励" show-arrow>
           <div class="reward-input-trigger">
-            <t-input-number v-model="form.respondPoints" :min="0" theme="column" class="ctl-w-full" />
+            <t-input-number v-accessible-field="'响应奖励积分'" v-model="form.respondPoints" :min="0" theme="column" class="ctl-w-full" />
           </div>
         </t-popup>
       </t-form-item>
 
       <t-form-item label="需求内容" name="description">
-        <RichEditor v-model="form.description" placeholder="需求详细描述，支持图文排版…" :min-height="320" />
+        <RichEditor v-accessible-field v-model="form.description" placeholder="需求详细描述，支持图文排版…" :min-height="320" />
       </t-form-item>
     </t-form>
   </t-dialog>

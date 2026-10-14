@@ -105,6 +105,7 @@ watch(identityOptions, ensureVisibleIdentitySelection, { deep: true })
 const loaded = ref(false)
 /* 修改重提：原需求数据加载期间渲染骨架，避免用户先填后被回填覆盖（无声吞掉输入） */
 const payloadLoading = ref(false)
+const payloadError = ref('')
 const baseline = ref('')
 const formSnapshot = computed(() => JSON.stringify(form))
 useUnsavedGuard(() => loaded.value && !submittedId.value && formSnapshot.value !== baseline.value)
@@ -122,37 +123,44 @@ onMounted(async () => {
     /* 未登录或接口异常时仅展示自有身份 */
   }
   if (reviseId) {
-    payloadLoading.value = true
-    try {
-      const p = await fetchMyDemandPayload(reviseId)
-      form.title = p.title
-      form.description = p.description
-      form.categoryCode = p.categoryCode
-      form.deliverable = p.deliverable ?? ''
-      form.budget = p.budget ?? ''
-      form.deliverBy = p.deliverBy ?? ''
-      form.cooperationNeed = p.cooperationNeed ?? ''
-      form.returnOffer = p.returnOffer ?? ''
-      form.bottleneck = p.bottleneck ?? ''
-      form.partnershipMode = p.partnershipMode ?? ''
-      form.contactName = p.contactName
-      form.contactPhone = p.contactPhone
-      form.contactEmail = p.contactEmail ?? ''
-      form.asIdentity = p.asIdentity
-      form.asEnterpriseId = p.asEnterpriseId ?? ''
-      ensureVisibleIdentitySelection()
-    } catch (e) {
-      Toast(e instanceof ApiError ? e.message : '加载原需求失败')
-    } finally {
-      payloadLoading.value = false
-    }
-    baseline.value = formSnapshot.value
-    loaded.value = true
+    await loadRevision()
     return
   }
   baseline.value = formSnapshot.value
   loaded.value = true
 })
+
+async function loadRevision() {
+  if (!reviseId || payloadLoading.value) return
+  payloadLoading.value = true
+  payloadError.value = ''
+  loaded.value = false
+  try {
+    const p = await fetchMyDemandPayload(reviseId)
+    form.title = p.title
+    form.description = p.description
+    form.categoryCode = p.categoryCode
+    form.deliverable = p.deliverable ?? ''
+    form.budget = p.budget ?? ''
+    form.deliverBy = p.deliverBy ?? ''
+    form.cooperationNeed = p.cooperationNeed ?? ''
+    form.returnOffer = p.returnOffer ?? ''
+    form.bottleneck = p.bottleneck ?? ''
+    form.partnershipMode = p.partnershipMode ?? ''
+    form.contactName = p.contactName
+    form.contactPhone = p.contactPhone
+    form.contactEmail = p.contactEmail ?? ''
+    form.asIdentity = p.asIdentity
+    form.asEnterpriseId = p.asEnterpriseId ?? ''
+    ensureVisibleIdentitySelection()
+    baseline.value = formSnapshot.value
+    loaded.value = true
+  } catch (e) {
+    payloadError.value = e instanceof ApiError ? e.message : '加载原需求失败，请重试'
+  } finally {
+    payloadLoading.value = false
+  }
+}
 
 /* v38：行内校验（长表单 Toast 消失后用户找不到出错字段）
  * v48：改为一处口径 + 手动定位 + 修正清错（本页保留自造字段容器，未迁移 t-form） */
@@ -275,6 +283,7 @@ async function onSubmit() {
       <!-- 修改重提加载原需求中：骨架占位，加载完成后表单才允许编辑 -->
       <ListSkeleton :rows="4" />
     </template>
+    <EmptyBlock v-else-if="payloadError" :text="payloadError" action-text="重试" @action="loadRevision" />
     <template v-else-if="!submittedId">
       <p v-if="revising" class="revision-label">修改重提</p>
       <p class="subtitle">{{ revising ? '修改后将重新进入审核队列' : '提交后进入审核，通过后展示在需求列表' }}</p>

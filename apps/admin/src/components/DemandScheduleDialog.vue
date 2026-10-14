@@ -1,5 +1,6 @@
 <script setup lang="ts">
-import { nextTick, reactive, ref, watch } from 'vue'
+import { focusFirstInvalid, useDialogFormProtection } from '@/utils/form'
+import { computed, nextTick, reactive, ref, watch } from 'vue'
 import { MessagePlugin, type FormProps } from 'tdesign-vue-next'
 import { scheduleDemand } from '@/api/demands'
 import type { Demand } from '@/types'
@@ -33,7 +34,7 @@ watch(
 async function onConfirm() {
   if (!props.demand) return
   const valid = await formRef.value.validate()
-  if (valid !== true) return
+  if (valid !== true) return focusFirstInvalid(formRef.value)
   submitting.value = true
   try {
     await scheduleDemand(props.demand.id, form.scheduledAt)
@@ -48,6 +49,9 @@ async function onConfirm() {
 }
 
 function onCancel() {
+  closeProtected()
+}
+function finishClose() {
   emit('update:visible', false)
 }
 
@@ -58,6 +62,8 @@ watch(
 )
 
 const formRef = ref()
+const protectedVisible = computed({ get: () => props.visible, set: () => finishClose() })
+const { close: closeProtected } = useDialogFormProtection(form, protectedVisible, computed(() => !!submitting.value))
 </script>
 
 <template>
@@ -82,6 +88,7 @@ const formRef = ref()
     <t-form ref="formRef" :data="form" :rules="rules" label-align="top">
       <t-form-item label="定时发布时间" name="scheduledAt">
         <t-date-picker
+          v-accessible-field
           v-model="form.scheduledAt"
           valueType="YYYY-MM-DD HH:mm"
           enable-time-picker

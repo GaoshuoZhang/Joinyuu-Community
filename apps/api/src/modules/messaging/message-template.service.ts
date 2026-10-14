@@ -15,6 +15,7 @@ import { MessageProviderRegistry } from './providers/provider.registry'
 import type { ChannelKind } from './messaging.types'
 import type {
   CreateTemplateDto,
+  PreviewTemplateDto,
   PublishTemplateDto,
   ReviewTemplateDto,
   SaveTemplateDraftDto,
@@ -376,7 +377,7 @@ export class MessageTemplateService {
   }
 
   /** 预览渲染结果（不发送） */
-  async preview(id: string, dto: Omit<TestTemplateDto, 'recipient'>): Promise<{ subject?: string; body: string }> {
+  async preview(id: string, dto: PreviewTemplateDto): Promise<{ subject?: string; body: string }> {
     const template = await this.require(id)
     const version = await this.resolveVersion(id, dto.version)
     const variables = stringRecord(dto.variables ?? {})

@@ -217,27 +217,28 @@ onMounted(load)
 
     <div class="page-filter-bar">
       <t-input
+        v-accessible-field="'搜索用户名/昵称/UID/联系电话'"
         v-model="query.keyword"
         class="ctl-w-xl"
         placeholder="搜索用户名/昵称/UID/联系电话…"
         clearable
         @enter="onSearch"
       />
-      <t-select class="ctl-w-md"
+      <t-select v-accessible-field="'身份'" class="ctl-w-md"
         v-model="query.category"
         label="身份"
         :options="userCategoryOptions"
         clearable
         @change="onSearch"
       />
-      <t-select class="ctl-w-md"
+      <t-select v-accessible-field="'状态'" class="ctl-w-md"
         v-model="query.status"
         label="状态"
         :options="statusOptions"
         clearable
         @change="onSearch"
       />
-      <t-select class="ctl-w-lg"
+      <t-select v-accessible-field="'实名状态'" class="ctl-w-lg"
         v-model="query.realStatus"
         label="实名状态"
         :options="realStatusOptions"

@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { focusFirstInvalid, useDialogFormProtection } from '@/utils/form'
 import ListErrorState from '@/components/ListErrorState.vue'
 import ListEmptyState from '@/components/ListEmptyState.vue'
 import { computed, nextTick, onMounted, reactive, ref, watch } from 'vue'
@@ -139,7 +140,7 @@ const rules: FormProps['rules'] = {
 
 async function onConfirm() {
   const valid = await formRef.value.validate()
-  if (valid !== true) return
+  if (valid !== true) return focusFirstInvalid(formRef.value)
   submitting.value = true
   try {
     const payload = {
@@ -179,6 +180,7 @@ function openEdit(row: HomeBanner) {
 }
 
 onMounted(load)
+const { close: closeForm } = useDialogFormProtection(form, dialogVisible, submitting)
 </script>
 
 <template>
@@ -193,7 +195,7 @@ onMounted(load)
             :content="carouselOpen ? '确认关闭首页轮播图？关闭后客户端首页不再展示轮播区域。' : '确认开启首页轮播图？开启后客户端首页恢复展示轮播区域。'"
             @confirm="onToggleCarousel(!carouselOpen)"
           >
-            <t-switch :value="carouselOpen" :loading="settingsSaving" aria-label="首页轮播图总开关" />
+            <t-switch v-accessible-field="'首页轮播图总开关'" :value="carouselOpen" :loading="settingsSaving" aria-label="首页轮播图总开关" />
           </t-popconfirm>
         </div>
         <t-button theme="primary" @click="openCreate">
@@ -237,6 +239,7 @@ onMounted(load)
         </template>
         <template #enabled="{ row }">
           <t-switch
+            v-accessible-field="`轮播图展示：${row.title}`"
             :value="row.enabled"
             :loading="acting === row.id"
             :aria-label="`轮播图展示：${row.title}`"
@@ -275,11 +278,11 @@ onMounted(load)
       :visible="dialogVisible"
       :header="dialogMode === 'create' ? '新增轮播图' : '编辑轮播图'"
       width="560px"
-      @close="dialogVisible = false"
+      @close="closeForm"
     >
       <template #footer>
         <div class="dialog-footer">
-          <t-button variant="text" theme="default" @click="dialogVisible = false">取消</t-button>
+          <t-button variant="text" theme="default" @click="closeForm">取消</t-button>
           <t-button theme="primary" :loading="submitting" @click="onConfirm">
             {{ dialogMode === 'create' ? '确认新增' : '保存修改' }}
           </t-button>
@@ -287,24 +290,24 @@ onMounted(load)
       </template>
       <t-form ref="formRef" :data="form" :rules="rules" label-align="top">
         <t-form-item label="轮播标题" name="title">
-          <t-input v-model="form.title" :maxlength="64" placeholder="如 2026 秋季创业路演周…" />
+          <t-input v-accessible-field v-model="form.title" :maxlength="64" placeholder="如 2026 秋季创业路演周…" />
         </t-form-item>
         <t-form-item label="副标题" name="subtitle">
-          <t-input v-model="form.subtitle" :maxlength="128" placeholder="一句话补充说明…" />
+          <t-input v-accessible-field v-model="form.subtitle" :maxlength="128" placeholder="一句话补充说明…" />
         </t-form-item>
         <t-form-item label="图片地址" name="imageUrl">
-          <t-input v-model="form.imageUrl" :maxlength="512" placeholder="素材库图片地址，可留空…" />
+          <t-input v-accessible-field v-model="form.imageUrl" :maxlength="512" placeholder="素材库图片地址，可留空…" />
           <t-image v-if="imagePreviewUrl" class="image-preview content-img" :src="imagePreviewUrl" :alt="form.title" fit="cover" />
         </t-form-item>
         <t-form-item label="跳转路径" name="link">
-          <t-input v-model="form.link" :maxlength="512" placeholder="移动端站内路径，如 /events…" />
+          <t-input v-accessible-field v-model="form.link" :maxlength="512" placeholder="移动端站内路径，如 /events…" />
         </t-form-item>
         <div class="form-row">
           <t-form-item label="排序值" name="sort">
-            <t-input-number v-model="form.sort" :min="0" theme="column" class="ctl-w-full" />
+            <t-input-number v-accessible-field v-model="form.sort" :min="0" theme="column" class="ctl-w-full" />
           </t-form-item>
           <t-form-item label="展示" name="enabled">
-            <t-switch v-model="form.enabled" />
+            <t-switch v-accessible-field v-model="form.enabled" />
           </t-form-item>
         </div>
       </t-form>

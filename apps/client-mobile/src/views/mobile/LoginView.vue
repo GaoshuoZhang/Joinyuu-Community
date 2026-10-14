@@ -108,7 +108,7 @@ function onLoginSubmit({ validateResult }: { validateResult: unknown }) {
       <!-- v48：忘记密码从密码框右侧（与明文切换图标重叠）移到登录按钮下方、暂不登录上方 -->
       <p class="forgot"><router-link to="/forgot-password" class="link">忘记密码？</router-link></p>
       <p class="guest"><router-link to="/" replace class="guest-link">暂不登录</router-link></p>
-      <p class="swap">还没有账号？<router-link to="/register" class="link">立即注册</router-link></p>
+      <p class="swap">还没有账号？<router-link :to="{ path: '/register', query: route.query.redirect ? { redirect: route.query.redirect } : {} }" class="link">立即注册</router-link></p>
     </Form>
   </main>
 </template>

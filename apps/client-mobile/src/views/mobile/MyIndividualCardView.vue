@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, onMounted, reactive, ref } from 'vue'
 import { useRouter } from 'vue-router'
-import { Avatar, Button, Icon, Input, Switch, Tag, Textarea, Toast } from 'tdesign-mobile-vue'
+import { Avatar, Button, DialogPlugin, Icon, Input, Switch, Tag, Textarea, Toast } from 'tdesign-mobile-vue'
 import { fetchCardSchema, fetchMyCards, updateIndividualCard } from '@/api/enterprises'
 import { useAsyncList } from '@/composables/useAsyncList'
 import { useUnsavedGuard } from '@/composables/useUnsavedGuard'
@@ -22,10 +22,11 @@ const { data, loading, error, run } = useAsyncList(async () => {
   editableFields.value = schema.editableFields
   return cards
 })
-onMounted(async () => {
+async function loadCard() {
   await run()
   fillForm()
-})
+}
+onMounted(loadCard)
 
 const card = computed(() => data.value?.individual)
 const submitting = ref(false)
@@ -89,7 +90,14 @@ function addEntry(key: (typeof INDIVIDUAL_LIST_SECTIONS)[number]['key']) {
 }
 
 function removeEntry(key: (typeof INDIVIDUAL_LIST_SECTIONS)[number]['key'], index: number) {
-  form[key].splice(index, 1)
+  const section = INDIVIDUAL_LIST_SECTIONS.find((item) => item.key === key)
+  DialogPlugin.confirm({
+    title: '删除这条经历？',
+    content: `确认删除${section?.title ?? '这条记录'}吗？保存后将从公开名片中移除。`,
+    cancelBtn: '保留',
+    confirmBtn: { content: '确认删除', theme: 'danger' },
+    onConfirm: () => form[key].splice(index, 1),
+  })
 }
 
 async function onSave() {
@@ -134,7 +142,7 @@ async function onSave() {
 <template>
   <div class="page-fade-in m-card-page">
     <ListSkeleton v-if="loading" />
-    <EmptyBlock v-else-if="error" :text="error" action-text="重试" @action="run" />
+    <EmptyBlock v-else-if="error" :text="error" action-text="重试" @action="loadCard" />
     <!-- v52：空态补出口——没有名片的用户可经「查看关联身份」前往身份列表（同 ExperienceView 口径） -->
     <EmptyBlock v-else-if="!card" text="当前账号没有个人名片" action-text="查看关联身份" @action="router.push('/me/identities')" />
     <template v-else>
@@ -221,10 +229,10 @@ async function onSave() {
       <section class="m-card">
         <p v-if="formErrors.links" class="field-error">{{ formErrors.links }}</p>
         <Button class="mobile-sticky-action" theme="primary" size="large" block :disabled="!editableFields.length" :loading="submitting" @click="onSave">
-          {{ submitting ? '保存中…' : '保存并公开到人才库' }}
+          {{ submitting ? '保存中…' : form.showPublic ? '保存并公开到人才库' : '保存为非公开' }}
         </Button>
-        <p class="tip">{{ editableFields.length ? '保存后立即公开，工作人员可维护名片内容。' : '当前名片由工作人员维护，暂未开放自助编辑。' }}</p>
-        <Button variant="text" theme="primary" block @click="router.push('/community')">去社区人才库查看<template #suffix><Icon aria-hidden="true" name="chevron-right" size="14px" /></template></Button>
+        <p class="tip">{{ editableFields.length ? form.showPublic ? '保存后将公开到社区人才库。' : '保存后名片将从社区人才库中隐藏。' : '当前名片由工作人员维护，暂未开放自助编辑。' }}</p>
+        <Button variant="text" theme="primary" block @click="router.push('/community?tab=talent')">去社区人才库查看<template #suffix><Icon aria-hidden="true" name="chevron-right" size="14px" /></template></Button>
       </section>
     </template>
   </div>

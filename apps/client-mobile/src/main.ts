@@ -53,6 +53,21 @@ function findLabelField(label: HTMLLabelElement): HTMLElement | null {
   return null
 }
 
+function patchAutocomplete(input: HTMLInputElement) {
+  const label = input.closest('.t-form__item-wrap')?.querySelector('.t-form__label')?.textContent?.trim()
+    ?? input.parentElement?.closest('.field')?.querySelector('label')?.textContent?.trim()
+    ?? ''
+  const path = window.location.pathname
+  let token = ''
+  if (input.type === 'password') {
+    token = label.includes('原密码') || (path === '/login' && label.includes('密码')) ? 'current-password' : 'new-password'
+  } else if (input.autocomplete === 'username'
+    || (/登录|找回密码/.test(document.querySelector('h1')?.textContent ?? '') && /账号|用户名|邮箱/.test(label))) token = 'username'
+  else if (input.type === 'tel' || label.includes('手机号')) token = 'tel'
+  else if (input.inputMode === 'email' || label.includes('邮箱')) token = 'email'
+  if (token && input.autocomplete !== token) input.setAttribute('autocomplete', token)
+}
+
 function patchA11yFields(root: ParentNode = document) {
   root.querySelectorAll('input, textarea').forEach((el) => {
     if (!el.id) el.id = `fld-${++a11yFieldSeq}-${el.tagName.toLowerCase()}`
@@ -70,6 +85,7 @@ function patchA11yFields(root: ParentNode = document) {
       ?.textContent?.trim()
     if (optionText) el.setAttribute('aria-label', optionText)
   })
+  root.querySelectorAll<HTMLInputElement>('input').forEach(patchAutocomplete)
   /* 空 for（TDesign FormItem 会渲染 <label for="">）与无 for 同样视为未关联，
    * 否则 Chrome 会报「label 的 for 不匹配任何 id」，同时影响自动填充与读屏 */
   const labels: HTMLLabelElement[] = [
@@ -355,6 +371,75 @@ function patchKeyboardTargets(root: ParentNode) {
   }
 }
 
+const checkboxStates = new WeakSet<HTMLElement>()
+function syncCheckbox(el: HTMLElement) {
+  el.setAttribute('role', 'checkbox')
+  const disabled = !!el.querySelector('.t-checkbox__title--disabled, .t-checkbox__icon--disabled')
+  el.setAttribute('aria-checked', String(el.classList.contains('t-checkbox--checked')))
+  el.setAttribute('aria-disabled', String(disabled))
+  el.tabIndex = disabled ? -1 : 0
+  const label = el.querySelector<HTMLElement>('.t-checkbox__title')?.innerText.trim()
+  if (label && !el.hasAttribute('aria-label')) el.setAttribute('aria-label', label)
+}
+
+function patchTabs(root: ParentNode = document) {
+  const roots = [
+    ...(root instanceof HTMLElement && root.matches('.t-tabs') ? [root] : []),
+    ...root.querySelectorAll<HTMLElement>('.t-tabs'),
+  ]
+  for (const tabs of roots) {
+    const nav = tabs.querySelector<HTMLElement>('.t-tabs__nav')
+    if (!nav) continue
+    nav.setAttribute('role', 'tablist')
+    const items = [...nav.querySelectorAll<HTMLElement>('.t-tabs__item')]
+    const panels = [...tabs.querySelectorAll<HTMLElement>('.t-tabs__panel')]
+    items.forEach((item, index) => {
+      const active = item.classList.contains('t-tabs__item--active')
+      const tabId = item.id || `app-tab-${++a11yFieldSeq}`
+      const panelId = panels[index]?.id || `app-tab-panel-${tabId}`
+      item.id = tabId
+      item.setAttribute('role', 'tab')
+      item.setAttribute('aria-selected', String(active))
+      item.setAttribute('aria-controls', panelId)
+      item.tabIndex = active ? 0 : -1
+      if (panels[index]) {
+        panels[index].id = panelId
+        panels[index].setAttribute('role', 'tabpanel')
+        panels[index].setAttribute('aria-labelledby', tabId)
+        panels[index].tabIndex = 0
+      }
+    })
+  }
+  const checkboxes = [
+    ...(root instanceof HTMLElement && root.matches('.t-checkbox') ? [root] : []),
+    ...root.querySelectorAll<HTMLElement>('.t-checkbox'),
+  ]
+  for (const checkbox of checkboxes) {
+    syncCheckbox(checkbox)
+    if (checkboxStates.has(checkbox)) continue
+    checkboxStates.add(checkbox)
+    checkbox.addEventListener('keydown', (event) => {
+      if (event.key !== ' ' || checkbox.getAttribute('aria-disabled') === 'true') return
+      event.preventDefault()
+      checkbox.click()
+    })
+  }
+}
+
+document.addEventListener('keydown', (event) => {
+  const tab = (event.target as HTMLElement | null)?.closest<HTMLElement>('[role="tab"]')
+  if (!tab || !['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(event.key)) return
+  const tabs = [...(tab.closest('[role="tablist"]')?.querySelectorAll<HTMLElement>('[role="tab"]') ?? [])]
+  const enabled = tabs.filter((item) => item.getAttribute('aria-disabled') !== 'true')
+  const current = enabled.indexOf(tab)
+  if (current < 0 || !enabled.length) return
+  event.preventDefault()
+  const next = event.key === 'Home' ? 0 : event.key === 'End' ? enabled.length - 1
+    : (current + (event.key === 'ArrowRight' ? 1 : -1) + enabled.length) % enabled.length
+  enabled[next].focus()
+  enabled[next].click()
+})
+
 /* CheckTag 切换后库只更新 class，需要把新状态同步到 aria-pressed */
 new MutationObserver((mutations) => {
   for (const mutation of mutations) {
@@ -367,6 +452,7 @@ new MutationObserver((mutations) => {
     if (target.classList.contains('t-rate__icon') && keyboardPatched.has(target)) {
       syncRatePressed(target)
     }
+    if (target.matches('.t-checkbox')) syncCheckbox(target)
     if (target.classList.contains('t-switch') && keyboardPatched.has(target)) {
       syncSwitchChecked(target)
       syncLibDisabled(target)
@@ -380,7 +466,12 @@ new MutationObserver((mutations) => {
 /* 弹层焦点：打开时聚焦首个可聚焦元素、Tab 圈闭、关闭后回焦触发元素。 */
 const FOCUSABLE_SELECTOR =
   'button:not([disabled]), [href], input:not([type="hidden"]):not([disabled]), textarea:not([disabled]), select:not([disabled]), [tabindex]:not([tabindex="-1"])'
-let lastFocused: HTMLElement | null = null
+const dialogFocus = new WeakMap<HTMLElement, HTMLElement | null>()
+const openDialogs = new WeakSet<HTMLElement>()
+function isVisible(el: HTMLElement): boolean {
+  const style = window.getComputedStyle(el)
+  return el.getClientRects().length > 0 && style.visibility !== 'hidden' && style.display !== 'none'
+}
 
 function focusDialog(dialog: HTMLElement) {
   if (dialog.contains(document.activeElement)) return
@@ -389,20 +480,21 @@ function focusDialog(dialog: HTMLElement) {
   const first =
     focusables.find((el) => !el.matches('.t-popup__close, .t-dialog__close-btn')) ?? focusables[0]
   if (!first) return
-  lastFocused = document.activeElement instanceof HTMLElement ? document.activeElement : null
+  dialogFocus.set(dialog, document.activeElement instanceof HTMLElement ? document.activeElement : null)
   window.requestAnimationFrame(() => {
     if (!dialog.contains(document.activeElement)) first.focus()
   })
 }
 
 function restoreDialogFocus() {
-  if (lastFocused && document.activeElement === document.body) lastFocused.focus()
-  lastFocused = null
+  const dialogs = [...document.querySelectorAll<HTMLElement>('.t-dialog[role="dialog"], .t-popup[role="dialog"]')].filter(isVisible)
+  const trigger = dialogs.length ? dialogFocus.get(dialogs[dialogs.length - 1]) : undefined
+  if (trigger && (document.activeElement === document.body || !document.activeElement?.isConnected)) trigger.focus()
 }
 
 document.addEventListener('keydown', (event) => {
   if (event.key !== 'Tab') return
-  const dialogs = document.querySelectorAll<HTMLElement>('.t-dialog[role="dialog"], .t-popup[role="dialog"]')
+  const dialogs = [...document.querySelectorAll<HTMLElement>('.t-dialog[role="dialog"], .t-popup[role="dialog"]')].filter(isVisible)
   const dialog = dialogs[dialogs.length - 1]
   if (!dialog) return
   const focusables = Array.from(dialog.querySelectorAll<HTMLElement>(FOCUSABLE_SELECTOR)).filter(
@@ -433,7 +525,17 @@ function patchDialogRoles(node: HTMLElement) {
   for (const el of dialogs) {
     if (!el.hasAttribute('role')) el.setAttribute('role', 'dialog')
     if (!el.hasAttribute('aria-modal')) el.setAttribute('aria-modal', 'true')
-    focusDialog(el)
+    const visible = isVisible(el)
+    const wasOpen = openDialogs.has(el)
+    if (visible && !wasOpen) {
+      openDialogs.add(el)
+      dialogFocus.set(el, document.activeElement instanceof HTMLElement ? document.activeElement : null)
+      focusDialog(el)
+    } else if (!visible && wasOpen) {
+      openDialogs.delete(el)
+      const trigger = dialogFocus.get(el)
+      if (trigger && (document.activeElement === document.body || el.contains(document.activeElement))) trigger.focus()
+    }
   }
 }
 
@@ -446,6 +548,7 @@ function handleRemovedDialog(node: HTMLElement) {
 patchA11yFields(document)
 patchDecorativeTags(document)
 patchKeyboardTargets(document)
+patchTabs(document)
 new MutationObserver((mutations) => {
   for (const mutation of mutations) {
     for (const added of mutation.addedNodes) {
@@ -453,6 +556,7 @@ new MutationObserver((mutations) => {
       patchA11yFields(added)
       patchDecorativeTags(added)
       patchKeyboardTargets(added)
+      patchTabs(added)
       announceToast(added)
       announceFieldError(added)
       patchLoadingRoles(added)
@@ -464,3 +568,15 @@ new MutationObserver((mutations) => {
     }
   }
 }).observe(document.body, { childList: true, subtree: true })
+new MutationObserver((mutations) => {
+  for (const mutation of mutations) {
+    if (!(mutation.target instanceof HTMLElement)) continue
+    const target = mutation.target
+    if (target.matches('.t-tabs__item, .t-tabs__nav, .t-tabs__panel')) patchTabs(target.closest('.t-tabs') ?? target)
+    if (target.matches('.t-checkbox__icon, .t-checkbox__title')) {
+      const checkbox = target.closest<HTMLElement>('.t-checkbox')
+      if (checkbox) syncCheckbox(checkbox)
+    }
+    if (target.matches('.t-popup, .t-dialog')) patchDialogRoles(target)
+  }
+}).observe(document.body, { attributes: true, attributeFilter: ['class', 'style'], subtree: true })

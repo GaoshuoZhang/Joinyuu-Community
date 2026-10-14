@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { backOrFallback } from '@/utils/navigation'
 import { computed, onMounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { MessagePlugin } from 'tdesign-vue-next'
@@ -62,7 +63,7 @@ const canOperate = computed(() => ['active', 'expiring', 'expired'].includes(vie
 const canRenew = computed(() => canOperate.value && !lease.value?.longTerm)
 
 function goBack() {
-  router.back()
+  backOrFallback(router, '/workstations/leases')
 }
 
 /* 租赁方跳转：企业 → 社区企业详情；个人 → 用户详情（自定义不跳） */

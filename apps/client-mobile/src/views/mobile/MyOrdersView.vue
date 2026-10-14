@@ -1,14 +1,13 @@
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue'
+import { computed, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
-import { Icon, List, TabPanel, Tabs } from 'tdesign-mobile-vue'
+import { Button, Icon, List, TabPanel, Tabs } from 'tdesign-mobile-vue'
 import { fetchMyOrders } from '@/api/mall'
-import { useAsyncList } from '@/composables/useAsyncList'
-import { useIncrementalList } from '@/composables/useIncrementalList'
+import { usePagedList } from '@/composables/usePagedList'
 import { useTabSwipe } from '@/composables/useTabSwipe'
 import EmptyBlock from '@/components/shared/EmptyBlock.vue'
 import ListSkeleton from '@/components/ListSkeleton.vue'
-import type { MyOrder, PageResult } from '@/types'
+import type { MyOrder } from '@/types'
 import StateTag from '@/components/shared/StateTag.vue'
 import { formatLocalDateTime, formatZhNumber } from '@/utils/format'
 
@@ -17,10 +16,6 @@ import { formatLocalDateTime, formatZhNumber } from '@/utils/format'
  * 券码过期后进入「已过期」（积分由系统自动退回，可查看券码与有效期）。
  * 点击进入订单详情查看券码与二维码。 */
 const router = useRouter()
-/* v46：列表接口返回 { list, total }，一次取满整页，避免默认分页导致后续订单不可见 */
-const { data, loading, error, run } = useAsyncList<PageResult<MyOrder>>(fetchMyOrders)
-onMounted(run)
-
 type OrderTab = 'all' | 'unfinished' | 'expired' | 'completed'
 const TAB_VALUES = ['all', 'unfinished', 'expired', 'completed'] as const
 const TABS: { value: OrderTab; label: string }[] = [
@@ -32,21 +27,13 @@ const TABS: { value: OrderTab; label: string }[] = [
 /* 默认展示未完成（券码核销主场景） */
 const activeTab = ref<OrderTab>('unfinished')
 
-const UNFINISHED_STATUSES = ['pending_use']
-
-const orders = computed(() => data.value?.list ?? [])
-const filtered = computed(() => {
-  if (activeTab.value === 'all') return orders.value
-  if (activeTab.value === 'completed') return orders.value.filter((order) => String(order.status) === 'completed')
-  if (activeTab.value === 'expired') return orders.value.filter((order) => String(order.status) === 'expired')
-  return orders.value.filter((order) => UNFINISHED_STATUSES.includes(String(order.status)))
-})
-const { visibleItems, hasMore, showMore } = useIncrementalList(filtered)
-const footerState = computed(() => (hasMore.value ? 'load-more' : ''))
-function loadMore() {
-  if (!hasMore.value) return
-  showMore()
-}
+const statusForTab = computed(() => ({ all: '', unfinished: 'pending_use', expired: 'expired', completed: 'completed' })[activeTab.value])
+const { items: orders, total, loading, error, moreError, loadingMore, hasMore, refresh, loadMore } = usePagedList<MyOrder>(
+  (page, pageSize) => fetchMyOrders({ page, pageSize, status: statusForTab.value || undefined }),
+)
+watch(activeTab, () => void refresh(), { immediate: true })
+const visibleItems = orders
+const footerState = computed(() => (loadingMore.value ? 'loading' : hasMore.value ? 'load-more' : ''))
 function onListScroll(bottomDistance: number) {
   if (bottomDistance < 60) loadMore()
 }
@@ -70,11 +57,11 @@ const { startSwipe, moveSwipe, cancelSwipe } = useTabSwipe(
       <TabPanel v-for="tab in TABS" :key="tab.value" :value="tab.value" :label="tab.label">
         <div v-if="activeTab === tab.value" class="tab-panel">
           <ListSkeleton v-if="loading && !orders.length" />
-          <EmptyBlock v-else-if="error" :text="error" action-text="重试" @action="run" />
+          <EmptyBlock v-else-if="error" :text="error" action-text="重试" @action="refresh" />
           <!-- v45：空状态补出口，避免二级页没有 TabBar 时成为死胡同 -->
-          <EmptyBlock v-else-if="!filtered.length" :text="tab.value === 'all' ? '暂无兑换订单' : `暂无${tab.label}订单`" action-text="去积分商城" @action="router.push('/mall')" />
+          <EmptyBlock v-else-if="!orders.length && !loading" :text="tab.value === 'all' ? '暂无兑换订单' : `暂无${tab.label}订单`" action-text="去积分商城" @action="router.push('/mall')" />
           <List v-else class="list stagger" :async-loading="footerState" @load-more="loadMore" @scroll="onListScroll">
-            <p class="list-count">共 {{ formatZhNumber(filtered.length) }} 笔订单</p>
+            <p class="list-count">共 {{ formatZhNumber(total) }} 笔订单</p>
             <!-- v52：跳转型整卡按 wiki §5 口径用 router-link 承载主体（支持 Ctrl/中键新标签、读屏播报为链接）；
                  「查看详情」为卡内视觉提示，不再是嵌套链接 -->
             <router-link
@@ -94,6 +81,7 @@ const { startSwipe, moveSwipe, cancelSwipe } = useTabSwipe(
               <p class="meta tabular-nums">下单时间：{{ formatLocalDateTime(order.createdAt) }}</p>
               <span class="detail-link">查看详情<Icon aria-hidden="true" name="chevron-right" size="14px" /></span>
             </router-link>
+            <Button v-if="moreError" block variant="outline" @click="loadMore">加载失败，点击重试</Button>
           </List>
         </div>
       </TabPanel>

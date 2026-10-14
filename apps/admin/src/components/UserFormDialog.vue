@@ -1,9 +1,9 @@
 <script setup lang="ts">
-import { nextTick, reactive, ref, watch } from 'vue'
+import { computed, nextTick, reactive, ref, watch } from 'vue'
 import { MessagePlugin } from 'tdesign-vue-next'
 import type { FormProps } from 'tdesign-vue-next'
 import { createUser } from '@/api/users'
-import { focusFirstInvalid, useDialogDirtyGuard } from '@/utils/form'
+import { focusFirstInvalid, useDialogDirtyGuard, usePageDirtyGuard } from '@/utils/form'
 import type { User } from '@/types'
 
 const props = defineProps<{ visible: boolean }>()
@@ -26,7 +26,7 @@ const form = reactive({
   bio: '',
 })
 /* 未保存保护：有改动时关闭需确认（见 useDialogDirtyGuard） */
-const { markBaseline, guardClose } = useDialogDirtyGuard(form)
+const { markBaseline, isDirty, guardClose } = useDialogDirtyGuard(form)
 
 const rules: FormProps['rules'] = {
   /* 用户名选填：留空由服务端自动分配，仅填写时校验格式 */
@@ -89,6 +89,7 @@ async function onConfirm() {
     submitting.value = false
   }
 }
+usePageDirtyGuard(computed(() => props.visible && isDirty.value))
 </script>
 
 <template>
@@ -110,6 +111,7 @@ async function onConfirm() {
     <t-form ref="formRef" :data="form" :rules="rules" label-align="top">
       <t-form-item label="用户名" name="username">
         <t-input
+          v-accessible-field
           v-model="form.username"
           clearable
           autocomplete="off"
@@ -118,7 +120,7 @@ async function onConfirm() {
       </t-form-item>
       <div class="form-row">
         <t-form-item label="昵称" name="nickname">
-          <t-input v-model="form.nickname" clearable placeholder="请输入用户昵称…" />
+          <t-input v-accessible-field v-model="form.nickname" clearable placeholder="请输入用户昵称…" />
         </t-form-item>
         <t-form-item label="性别" name="gender">
           <t-radio-group v-model="form.gender" variant="default-filled">
@@ -130,22 +132,22 @@ async function onConfirm() {
       </div>
       <div class="form-row">
         <t-form-item label="联系电话" name="phone">
-          <t-input v-model="form.phone" clearable type="tel" inputmode="tel" autocomplete="tel" placeholder="请输入联系电话…" />
+          <t-input v-accessible-field v-model="form.phone" clearable type="tel" inputmode="tel" autocomplete="tel" placeholder="请输入联系电话…" />
         </t-form-item>
         <t-form-item label="邮箱" name="email">
-          <t-input v-model="form.email" clearable inputmode="email" autocomplete="email" placeholder="选填，如 name@example.com…" />
+          <t-input v-accessible-field v-model="form.email" clearable inputmode="email" autocomplete="email" placeholder="选填，如 name@example.com…" />
         </t-form-item>
       </div>
       <div class="form-row">
         <t-form-item label="真实姓名" name="realName">
-          <t-input v-model="form.realName" clearable placeholder="选填…" />
+          <t-input v-accessible-field v-model="form.realName" clearable placeholder="选填…" />
         </t-form-item>
         <t-form-item label="身份证号" name="citizenId">
-          <t-input v-model="form.citizenId" clearable placeholder="选填…" />
+          <t-input v-accessible-field v-model="form.citizenId" clearable placeholder="选填…" />
         </t-form-item>
       </div>
       <t-form-item label="简介" name="bio">
-        <t-textarea v-model="form.bio" :autosize="{ minRows: 4, maxRows: 8 }" placeholder="选填…" />
+        <t-textarea v-accessible-field v-model="form.bio" :autosize="{ minRows: 4, maxRows: 8 }" placeholder="选填…" />
       </t-form-item>
     </t-form>
   </t-dialog>

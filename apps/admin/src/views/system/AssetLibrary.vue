@@ -190,8 +190,8 @@ onMounted(load)
     <p v-if="filtered.length" class="asset-summary">{{ filtered.length }} 个素材 · 共 {{ totalSize }}</p>
 
     <div class="page-filter-bar">
-      <t-select class="ctl-w-sm" v-model="activeSource" :options="sourceOptions" />
-      <t-input class="ctl-w-xl" v-model="search" clearable placeholder="按文件名搜索…" />
+      <t-select v-accessible-field="'文件来源'" class="ctl-w-sm" v-model="activeSource" :options="sourceOptions" />
+      <t-input v-accessible-field="'文件名搜索'" class="ctl-w-xl" v-model="search" clearable placeholder="按文件名搜索…" />
     </div>
 
     <t-loading :loading="loading" size="small" class="asset-grid">

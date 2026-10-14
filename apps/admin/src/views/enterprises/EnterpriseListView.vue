@@ -197,20 +197,20 @@ async function loadIndustries() {
     <DictEntriesDialog v-model:visible="industryDialogVisible" type="industry" title="行业管理" entry-name="行业" @success="loadIndustries" />
 
     <div class="page-filter-bar">
-      <t-input class="ctl-w-xl"
+      <t-input v-accessible-field="'搜索企业名称/ID'" class="ctl-w-xl"
         v-model="query.keyword"
         placeholder="搜索企业名称/ID…"
         clearable
         @enter="onSearch"
       />
-      <t-select class="ctl-w-md"
+      <t-select v-accessible-field="'行业'" class="ctl-w-md"
         v-model="query.industry"
         label="行业"
         :options="industryOptions"
         clearable
         @change="onSearch"
       />
-      <t-select class="ctl-w-md"
+      <t-select v-accessible-field="'状态'" class="ctl-w-md"
         v-model="query.status"
         label="状态"
         :options="statusOptions"

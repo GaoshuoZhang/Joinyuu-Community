@@ -6,6 +6,7 @@ import type { FormInstanceFunctions, FormRules } from 'tdesign-mobile-vue'
 import { fetchAvailability, fetchSpaceDetail, createReservation } from '@/api/spaces'
 import { fetchMyIdentities } from '@/api/enterprises'
 import { ApiError } from '@/api/http'
+import FlowResult from '@/components/FlowResult.vue'
 import { actionIdentityOptions, useAuthStore, identityOptionLabel } from '@/stores/auth'
 import EmptyBlock from '@/components/shared/EmptyBlock.vue'
 import ListSkeleton from '@/components/ListSkeleton.vue'
@@ -357,6 +358,17 @@ function goMine() {
     <ListSkeleton v-if="spaceLoading" />
     <EmptyBlock v-else-if="spaceError" :text="spaceError" action-text="重试" @action="loadSpace" />
     <template v-else>
+    <FlowResult
+      v-if="resultStatus"
+      :title="resultStatus === 'approved' ? '预约成功' : '预约已提交'"
+      :theme="resultStatus === 'approved' ? 'success' : 'warning'"
+      :description="resultNotice"
+      primary-text="查看我的预约"
+      secondary-text="返回社区"
+      @primary="goMine"
+      @secondary="router.replace('/community')"
+    />
+    <template v-else>
     <NoticeBar
       v-if="space?.status === 'maintenance'"
       visible
@@ -384,6 +396,8 @@ function goMine() {
     <div class="m-card">
       <Cell v-pressable class="date-cell" title="预约日期" :note="date" arrow :bordered="false" @click="openDatePicker" />
     </div>
+
+    <Button theme="primary" variant="text" block class="mine-link" @click="goMine">查看我的预约</Button>
 
     <Form
       ref="formRef"
@@ -480,14 +494,6 @@ function goMine() {
         {{ submitLabel }}
       </Button>
     </Form>
-    <Button theme="primary" variant="text" block class="mine-link" @click="goMine">查看我的预约</Button>
-
-    <NoticeBar
-      v-if="resultStatus"
-      visible
-      :theme="resultStatus === 'approved' ? 'success' : 'warning'"
-      :content="resultNotice"
-    />
 
     <Popup v-model:visible="datePickerVisible" placement="bottom">
       <DateTimePicker
@@ -500,6 +506,7 @@ function goMine() {
         @cancel="datePickerVisible = false"
       />
     </Popup>
+    </template>
     </template>
   </div>
 </template>

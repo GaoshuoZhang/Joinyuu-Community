@@ -4,6 +4,7 @@ import { RequirePermission } from '../../common/decorators/require-permission.de
 import { MessageTemplateService } from './message-template.service'
 import {
   CreateTemplateDto,
+  PreviewTemplateDto,
   PublishTemplateDto,
   ReviewTemplateDto,
   SaveTemplateDraftDto,
@@ -81,7 +82,7 @@ export class MessageTemplateController {
 
   @Post(':id/preview')
   @HttpCode(HttpStatus.OK)
-  preview(@Param('id') id: string, @Body() dto: TestTemplateDto) {
+  preview(@Param('id') id: string, @Body() dto: PreviewTemplateDto) {
     return this.templates.preview(id, dto)
   }
 }

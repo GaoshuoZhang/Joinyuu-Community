@@ -77,8 +77,8 @@ export class AppMeEnrollmentsController {
   constructor(private readonly events: AppEventsService) {}
 
   @Get('enrollments')
-  myEnrollments(@Req() req: AppAuthenticatedRequest) {
-    return this.events.myEnrollments(this.uid(req))
+  myEnrollments(@Req() req: AppAuthenticatedRequest, @Query() query: PageQueryDto) {
+    return this.events.myEnrollments(this.uid(req), query.page, query.pageSize)
   }
 
   private uid(req: AppAuthenticatedRequest): string {

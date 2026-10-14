@@ -198,20 +198,21 @@ onMounted(() => {
 
     <div class="page-filter-bar">
       <t-input
+        v-accessible-field="'搜索企业ID/名称/行业'"
         v-model="query.keyword"
         class="ctl-w-xl"
         placeholder="搜索企业ID/名称/行业…"
         clearable
         @enter="onSearch"
       />
-      <t-select class="ctl-w-md"
+      <t-select v-accessible-field="'行业'" class="ctl-w-md"
         v-model="query.industry"
         label="行业"
         :options="industryOptions"
         clearable
         @change="onSearch"
       />
-      <t-select class="ctl-w-md"
+      <t-select v-accessible-field="'状态'" class="ctl-w-md"
         v-model="query.status"
         label="状态"
         :options="statusOptions"

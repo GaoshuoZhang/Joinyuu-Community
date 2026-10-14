@@ -2,7 +2,7 @@
 import { computed, nextTick, reactive, ref, watch } from 'vue'
 import { MessagePlugin } from 'tdesign-vue-next'
 import type { FormProps } from 'tdesign-vue-next'
-import { focusFirstInvalid, useDialogDirtyGuard } from '@/utils/form'
+import { focusFirstInvalid, useDialogDirtyGuard, usePageDirtyGuard } from '@/utils/form'
 import {
   createWorkstationArea,
   deleteWorkstationArea,
@@ -43,7 +43,7 @@ const form = reactive({
 })
 
 /* 未保存保护：新增/编辑表单记录基线，关闭前有改动需确认 */
-const { markBaseline, guardClose } = useDialogDirtyGuard(form)
+const { markBaseline, isDirty, guardClose } = useDialogDirtyGuard(form)
 
 const typeOptions = Object.entries(workstationTypeMap).map(([value, label]) => ({ label, value }))
 
@@ -141,6 +141,7 @@ function onClose() {
   /* 未保存保护：表单有改动时弹确认（见 useDialogDirtyGuard） */
   guardClose(() => emit('update:visible', false))
 }
+usePageDirtyGuard(computed(() => props.visible && isDirty.value))
 </script>
 
 <template>
@@ -175,14 +176,15 @@ function onClose() {
       </div>
       <div class="form-row">
         <t-form-item label="区域名称" name="name">
-          <t-input v-model="form.name" placeholder="如 D 区 · 创客办公位…" />
+          <t-input v-accessible-field v-model="form.name" placeholder="如 D 区 · 创客办公位…" />
         </t-form-item>
         <t-form-item label="区域主类型" name="type">
-          <t-select clearable v-model="form.type" :options="typeOptions" />
+          <t-select v-accessible-field clearable v-model="form.type" :options="typeOptions" />
         </t-form-item>
       </div>
       <t-form-item label="区域说明" name="description">
         <t-textarea
+          v-accessible-field
           v-model="form.description"
           :autosize="{ minRows: 2, maxRows: 4 }"
           placeholder="区域位置与用途说明（可选）…"

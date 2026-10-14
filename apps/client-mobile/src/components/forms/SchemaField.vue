@@ -43,7 +43,7 @@ function optionLabel(field: ApplicationFormField, value: string): string {
 </script>
 
 <template>
-  <div class="field">
+  <div class="field" :data-field-key="field.key">
     <label v-if="field.type === 'text' || field.type === 'number' || field.type === 'textarea'">
       {{ field.label }}<span v-if="field.required" class="req"> *</span>
     </label>

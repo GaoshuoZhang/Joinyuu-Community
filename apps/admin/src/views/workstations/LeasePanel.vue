@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import RowMoreActions from '@/components/RowMoreActions.vue'
 import { useListQueryState } from '@/utils/listQuery'
 import ListErrorState from '@/components/ListErrorState.vue'
 import { computed, onMounted, ref } from 'vue'
@@ -102,7 +103,7 @@ const columns = [
   { colKey: 'contactName', title: '联系人', cell: 'contact', width: 140, resizable: true , ellipsis: true},
   { colKey: 'note', title: '备注', cell: 'note', width: 140, resizable: true , ellipsis: true},
   { colKey: 'status', title: '状态', cell: 'status', width: 110, resizable: true , ellipsis: true},
-  { colKey: 'op', title: '操作', cell: 'op', width: 300 },
+  { colKey: 'op', title: '操作', cell: 'op', width: 150 },
 ]
 
 /* 列配置：本地持久化显隐/顺序 */
@@ -359,12 +360,12 @@ onMounted(async () => {
     </div>
 
     <div class="page-filter-bar">
-      <t-input class="ctl-w-2xl"
+      <t-input v-accessible-field="'搜索租约编号/办公位编号/租赁方/联系人/联系电话'" class="ctl-w-2xl"
         v-model="keyword"
         placeholder="搜索租约编号/办公位编号/租赁方/联系人/联系电话…"
         clearable
       />
-      <t-select class="ctl-w-lg" v-model="statusFilter" label="状态" :options="statusOptions" clearable />
+      <t-select v-accessible-field="'状态'" class="ctl-w-lg" v-model="statusFilter" label="状态" :options="statusOptions" clearable />
       <template v-if="renterId">
         <t-tag closable variant="light" theme="primary" @close="clearFilter">
           仅显示「{{ renterName }}」的租约
@@ -415,6 +416,7 @@ onMounted(async () => {
         <template #op="{ row }">
           <div class="op-cell" @click.stop>
             <t-button variant="text" size="small" @click="openDetail(row)">详情</t-button>
+            <RowMoreActions>
             <t-button variant="text" size="small" @click="openPrint(row)">打印</t-button>
             <t-button
               v-if="['active', 'expiring'].includes(deriveLeaseStatus(row))"
@@ -455,6 +457,7 @@ onMounted(async () => {
                 归档
               </t-button>
             </t-popconfirm>
+            </RowMoreActions>
           </div>
         </template>
 

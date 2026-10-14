@@ -2,11 +2,12 @@ import { DEFAULT_LIST_PAGE_SIZE, httpGet, httpPost } from './http'
 import type { Goods, MyOrder, PageResult } from '@/types'
 
 /** GET /api/app/mall/goods — 商品列表（on/restock 均可见，库存 0 展示售罄；mallOpen 关闭 → 400） */
-export async function fetchGoods(query: { category?: string; page?: number; pageSize?: number } = {}): Promise<PageResult<Goods>> {
+export async function fetchGoods(query: { category?: string; page?: number; pageSize?: number; keyword?: string } = {}): Promise<PageResult<Goods>> {
   const page = query.page ?? 1
   const pageSize = query.pageSize ?? DEFAULT_LIST_PAGE_SIZE
   const qs = new URLSearchParams({ page: String(page), pageSize: String(pageSize) })
   if (query.category) qs.set('category', query.category)
+  if (query.keyword) qs.set('keyword', query.keyword)
   return httpGet<PageResult<Goods>>(`/mall/goods?${qs}`)
 }
 
@@ -21,10 +22,11 @@ export async function createOrder(payload: { goodsId: string; remark?: string })
 }
 
 /** GET /api/app/me/orders — 我的兑换订单 */
-export async function fetchMyOrders(query: { page?: number; pageSize?: number } = {}): Promise<PageResult<MyOrder>> {
+export async function fetchMyOrders(query: { page?: number; pageSize?: number; status?: string } = {}): Promise<PageResult<MyOrder>> {
   const page = query.page ?? 1
   const pageSize = query.pageSize ?? DEFAULT_LIST_PAGE_SIZE
   const qs = new URLSearchParams({ page: String(page), pageSize: String(pageSize) })
+  if (query.status) qs.set('status', query.status)
   return httpGet<PageResult<MyOrder>>(`/me/orders?${qs}`)
 }
 

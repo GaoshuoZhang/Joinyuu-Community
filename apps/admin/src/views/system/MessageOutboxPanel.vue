@@ -148,20 +148,25 @@ async function onDiscard(row: OutboxMessage) {
 /* ---------- 投递日志 ---------- */
 const logsVisible = ref(false)
 const logsLoading = ref(false)
+const logsError = ref('')
 const logs = ref<OutboxDeliveryLog[]>([])
 const logsTarget = ref<OutboxMessage | null>(null)
 
+let logsVersion = 0
 async function openLogs(row: OutboxMessage) {
+  const request = ++logsVersion
   logsTarget.value = row
   logsVisible.value = true
   logsLoading.value = true
+  logsError.value = ''
+  logs.value = []
   try {
-    logs.value = await fetchOutboxLogs(row.id)
+    const result = await fetchOutboxLogs(row.id)
+    if (request === logsVersion) logs.value = result
   } catch (error) {
-    MessagePlugin.error(error instanceof Error ? error.message : '投递日志加载失败')
-    logs.value = []
+    if (request === logsVersion) logsError.value = error instanceof Error ? error.message : '投递日志加载失败'
   } finally {
-    logsLoading.value = false
+    if (request === logsVersion) logsLoading.value = false
   }
 }
 </script>
@@ -189,13 +194,14 @@ async function openLogs(row: OutboxMessage) {
 
     <div class="page-filter-bar">
       <t-select
+        v-accessible-field="'类型'"
         v-model="query.channelKind"
         label="类型"
         :options="[{ label: '全部类型', value: '' }, { label: '短信', value: 'sms' }, { label: '邮件', value: 'email' }, { label: '站内信', value: 'inapp' }]"
         class="ctl-w-sm"
         clearable
       />
-      <t-input class="ctl-w-xl"
+      <t-input v-accessible-field="'收件人、模板或幂等键搜索'" class="ctl-w-xl"
         v-model="query.keyword"
         clearable
         placeholder="收件人 / 模板 / 幂等键…"
@@ -265,7 +271,8 @@ async function openLogs(row: OutboxMessage) {
         <div class="logs-target" v-if="logsTarget">
           {{ logsTarget.templateCode }} → {{ logsTarget.recipient }}
         </div>
-        <t-table
+        <ListErrorState v-if="logsError" :message="logsError" :loading="logsLoading" @retry="logsTarget && openLogs(logsTarget)" />
+        <t-table v-else
           row-key="id"
           :data="logs"
           :columns="[

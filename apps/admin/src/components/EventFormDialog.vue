@@ -1,8 +1,8 @@
 <script setup lang="ts">
-import { defineAsyncComponent, nextTick, reactive, ref, watch } from 'vue'
+import { computed, defineAsyncComponent, nextTick, reactive, ref, watch } from 'vue'
 import { MessagePlugin } from 'tdesign-vue-next'
 import type { FormProps } from 'tdesign-vue-next'
-import { focusFirstInvalid, useDialogDirtyGuard } from '@/utils/form'
+import { focusFirstInvalid, useDialogDirtyGuard, usePageDirtyGuard } from '@/utils/form'
 import { createEvent, updateEvent, type EventPayload } from '@/api/events'
 import { fetchPointsRules } from '@/api/mall'
 import { fetchSpaces } from '@/api/spaces'
@@ -65,7 +65,7 @@ const form = reactive({
 })
 
 /* 未保存保护：打开时记录基线，关闭前有改动需确认 */
-const { markBaseline, guardClose } = useDialogDirtyGuard(form)
+const { markBaseline, isDirty, guardClose } = useDialogDirtyGuard(form)
 
 /* 积分规则默认分值：报名奖励 / 签到奖励 */
 const rulePoints = reactive({ enroll: 5, checkin: 10 })
@@ -258,6 +258,7 @@ function onClose() {
   /* 未保存保护：有改动时弹确认（见 useDialogDirtyGuard） */
   guardClose(() => emit('update:visible', false))
 }
+usePageDirtyGuard(computed(() => props.visible && isDirty.value))
 </script>
 
 <template>
@@ -281,23 +282,24 @@ function onClose() {
     </template>
     <t-form ref="formRef" :data="form" :rules="rules" label-align="top">
       <t-form-item label="活动标题" name="title">
-        <t-input clearable v-model="form.title" placeholder="请输入活动标题…" />
+        <t-input v-accessible-field clearable v-model="form.title" placeholder="请输入活动标题…" />
       </t-form-item>
       <t-form-item label="活动封面" name="coverUrl" help="可粘贴素材库文件地址或 HTTPS 图片地址；留空时移动端显示品牌占位图">
-        <t-input clearable v-model="form.coverUrl" placeholder="请输入封面图片地址…" />
+        <t-input v-accessible-field clearable v-model="form.coverUrl" placeholder="请输入封面图片地址…" />
         <t-image v-if="form.coverUrl" class="cover-preview" :src="form.coverUrl" fit="cover" />
       </t-form-item>
       <div class="form-row">
         <t-form-item label="活动类型" name="type">
-          <t-select clearable v-model="form.type" :options="typeOptions" />
+          <t-select v-accessible-field clearable v-model="form.type" :options="typeOptions" />
         </t-form-item>
         <t-form-item label="容量" name="capacity">
-          <t-input-number v-model="form.capacity" :min="1" theme="column" class="ctl-w-full" />
+          <t-input-number v-accessible-field v-model="form.capacity" :min="1" theme="column" class="ctl-w-full" />
         </t-form-item>
       </div>
       <div class="form-row">
         <t-form-item label="开始时间" name="startTime">
           <t-date-picker
+            v-accessible-field
             v-model="form.startTime"
             valueType="YYYY-MM-DD HH:mm"
             enable-time-picker
@@ -307,6 +309,7 @@ function onClose() {
         </t-form-item>
         <t-form-item label="结束时间" name="endTime">
           <t-date-picker
+            v-accessible-field
             v-model="form.endTime"
             valueType="YYYY-MM-DD HH:mm"
             enable-time-picker
@@ -318,6 +321,7 @@ function onClose() {
       <div class="form-row">
         <t-form-item label="报名截止时间" name="enrollmentDeadline">
           <t-date-picker
+            v-accessible-field
             v-model="form.enrollmentDeadline"
             valueType="YYYY-MM-DD HH:mm"
             enable-time-picker
@@ -333,13 +337,14 @@ function onClose() {
             </t-popup>
           </template>
           <t-popup content="开启后，用户报名需经管理员审核；关闭后报名自动通过" show-arrow>
-            <span class="scope-switch-trigger"><t-switch v-model="form.requireReview" aria-label="报名需审核" /></span>
+            <span class="scope-switch-trigger"><t-switch v-accessible-field="'报名需审核'" v-model="form.requireReview" aria-label="报名需审核" /></span>
           </t-popup>
         </t-form-item>
       </div>
       <div class="form-row">
         <t-form-item label="地点" name="location" help="选择空间后，该空间的可预约时段会自动避开本活动；其他地点可自行输入">
           <t-select
+            v-accessible-field
             v-model="form.location"
             filterable
             creatable
@@ -349,12 +354,12 @@ function onClose() {
           />
         </t-form-item>
         <t-form-item label="主办方" name="host">
-          <t-input clearable v-model="form.host" placeholder="如 聚屿社区…" />
+          <t-input v-accessible-field clearable v-model="form.host" placeholder="如 聚屿社区…" />
         </t-form-item>
       </div>
       <div class="form-row">
         <t-form-item label="主讲嘉宾" name="speaker">
-          <t-input clearable v-model="form.speaker" placeholder="无则留空…" />
+          <t-input v-accessible-field clearable v-model="form.speaker" placeholder="无则留空…" />
         </t-form-item>
         <t-form-item label="标签" name="tags">
           <t-tag-input v-model="tags" clearable placeholder="输入标签后回车新增…" />
@@ -368,11 +373,12 @@ function onClose() {
               <span class="scope-title scope-popup-trigger">自定义可见范围</span>
             </t-popup>
             <t-popup content="关闭 = 所有用户可见" show-arrow>
-              <span class="scope-switch-trigger"><t-switch v-model="customVisibility" aria-label="自定义可见范围" /></span>
+              <span class="scope-switch-trigger"><t-switch v-accessible-field="'自定义可见范围'" v-model="customVisibility" aria-label="自定义可见范围" /></span>
             </t-popup>
           </div>
           <t-form-item v-if="customVisibility" label="身份" name="visibilityIdentities">
             <t-select
+              v-accessible-field
               v-model="form.visibilityIdentities"
               multiple
               clearable
@@ -381,7 +387,7 @@ function onClose() {
             />
           </t-form-item>
           <t-form-item v-if="customVisibility" label="等级" name="visibilityLevels">
-            <t-select v-model="form.visibilityLevels" multiple clearable :options="userLevelOptions" placeholder="不限…" />
+            <t-select v-accessible-field v-model="form.visibilityLevels" multiple clearable :options="userLevelOptions" placeholder="不限…" />
           </t-form-item>
         </div>
         <div class="scope-col">
@@ -392,12 +398,13 @@ function onClose() {
             <div class="scope-right">
               <t-button v-if="customEnrollment && customVisibility" variant="text" size="small" @click="syncEnrollment">同步可见范围</t-button>
               <t-popup content="关闭 = 所有用户可报名" show-arrow>
-                <span class="scope-switch-trigger"><t-switch v-model="customEnrollment" aria-label="自定义可报名范围" /></span>
+                <span class="scope-switch-trigger"><t-switch v-accessible-field="'自定义可报名范围'" v-model="customEnrollment" aria-label="自定义可报名范围" /></span>
               </t-popup>
             </div>
           </div>
           <t-form-item v-if="customEnrollment" label="身份" name="enrollmentIdentities">
             <t-select
+              v-accessible-field
               v-model="form.enrollmentIdentities"
               multiple
               clearable
@@ -406,7 +413,7 @@ function onClose() {
             />
           </t-form-item>
           <t-form-item v-if="customEnrollment" label="等级" name="enrollmentLevels">
-            <t-select v-model="form.enrollmentLevels" multiple clearable :options="userLevelOptions" placeholder="不限…" />
+            <t-select v-accessible-field v-model="form.enrollmentLevels" multiple clearable :options="userLevelOptions" placeholder="不限…" />
           </t-form-item>
         </div>
       </div>
@@ -421,7 +428,7 @@ function onClose() {
             </template>
             <t-popup content="默认使用积分规则值，可直接为本活动调整报名奖励" show-arrow>
               <div class="reward-input-trigger">
-                <t-input-number v-model="form.enrollPoints" :min="0" theme="column" class="ctl-w-full" />
+                <t-input-number v-accessible-field="'报名奖励积分'" v-model="form.enrollPoints" :min="0" theme="column" class="ctl-w-full" />
               </div>
             </t-popup>
           </t-form-item>
@@ -435,7 +442,7 @@ function onClose() {
             </template>
             <t-popup content="默认使用积分规则值，可直接为本活动调整签到奖励" show-arrow>
               <div class="reward-input-trigger">
-                <t-input-number v-model="form.checkinPoints" :min="0" theme="column" class="ctl-w-full" />
+                <t-input-number v-accessible-field="'签到奖励积分'" v-model="form.checkinPoints" :min="0" theme="column" class="ctl-w-full" />
               </div>
             </t-popup>
           </t-form-item>
@@ -444,31 +451,31 @@ function onClose() {
 
       <div class="form-row">
         <t-form-item label="场地纬度" name="venueLat">
-          <t-input clearable v-model="form.venueLat" placeholder="如 30.2741；留空不校验位置…" />
+          <t-input v-accessible-field clearable v-model="form.venueLat" placeholder="如 30.2741；留空不校验位置…" />
         </t-form-item>
         <t-form-item label="场地经度" name="venueLng">
-          <t-input clearable v-model="form.venueLng" placeholder="如 120.1551；留空不校验位置…" />
+          <t-input v-accessible-field clearable v-model="form.venueLng" placeholder="如 120.1551；留空不校验位置…" />
         </t-form-item>
       </div>
       <div class="form-row">
         <t-form-item label="签到半径（米）" name="checkinRadiusM">
-          <t-input-number v-model="form.checkinRadiusM" :min="1" theme="column" class="ctl-w-full" />
+          <t-input-number v-accessible-field v-model="form.checkinRadiusM" :min="1" theme="column" class="ctl-w-full" />
         </t-form-item>
         <t-form-item label="取消报名时限（开场前小时）" name="cancelDeadlineHours">
-          <t-input-number v-model="form.cancelDeadlineHours" :min="0" theme="column" class="ctl-w-full" />
+          <t-input-number v-accessible-field v-model="form.cancelDeadlineHours" :min="0" theme="column" class="ctl-w-full" />
         </t-form-item>
       </div>
       <div class="form-row">
         <t-form-item label="签到提前开放（分钟）" name="checkinOpenMin">
-          <t-input-number v-model="form.checkinOpenMin" :min="0" theme="column" class="ctl-w-full" />
+          <t-input-number v-accessible-field v-model="form.checkinOpenMin" :min="0" theme="column" class="ctl-w-full" />
         </t-form-item>
         <t-form-item label="签到延后关闭（分钟）" name="checkinCloseMin">
-          <t-input-number v-model="form.checkinCloseMin" :min="0" theme="column" class="ctl-w-full" />
+          <t-input-number v-accessible-field v-model="form.checkinCloseMin" :min="0" theme="column" class="ctl-w-full" />
         </t-form-item>
       </div>
 
       <t-form-item label="活动简介" name="description">
-        <RichEditor v-model="form.description" placeholder="活动详细说明，支持图文排版…" :min-height="320" />
+        <RichEditor v-accessible-field v-model="form.description" placeholder="活动详细说明，支持图文排版…" :min-height="320" />
       </t-form-item>
     </t-form>
   </t-dialog>

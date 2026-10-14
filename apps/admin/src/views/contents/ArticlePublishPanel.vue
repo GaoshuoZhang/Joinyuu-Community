@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import RowMoreActions from '@/components/RowMoreActions.vue'
 import { computed, onMounted, reactive, ref } from 'vue'
 import ListErrorState from '@/components/ListErrorState.vue'
 import ListEmptyState from '@/components/ListEmptyState.vue'
@@ -54,7 +55,7 @@ const columns = [
   { colKey: 'status', title: '状态', cell: 'status', width: 130, resizable: true , ellipsis: true},
   { colKey: 'publishedAt', title: '发布时间', cell: 'publishedAt', width: 170, resizable: true , ellipsis: true},
   { colKey: 'views', title: '阅读量', width: 80 , ellipsis: true},
-  { colKey: 'op', title: '操作', cell: 'op', width: 300 },
+  { colKey: 'op', title: '操作', cell: 'op', width: 180 },
 ]
 
 /* 列配置：本地持久化显隐/顺序 */
@@ -234,8 +235,8 @@ onMounted(load)
     </PageHeader>
 
     <div class="page-filter-bar">
-      <t-input class="ctl-w-xl" v-model="query.keyword" clearable placeholder="搜索标题/编号…" @enter="onSearch" />
-      <t-select class="ctl-w-md" v-model="query.status" label="状态" :options="statusOptions" @change="onSearch" />
+      <t-input v-accessible-field="'搜索标题/编号'" class="ctl-w-xl" v-model="query.keyword" clearable placeholder="搜索标题/编号…" @enter="onSearch" />
+      <t-select v-accessible-field="'状态'" class="ctl-w-md" v-model="query.status" label="状态" :options="statusOptions" @change="onSearch" />
       <t-button theme="primary" @click="onSearch">
         <template #icon><SearchIcon /></template>
         查询
@@ -282,9 +283,11 @@ onMounted(load)
           <div class="op-cell" @click.stop>
             <!-- 详情：行点击的键盘可达替代（H-01） -->
             <t-button theme="primary" variant="text" size="small" @click="openView(row)">详情</t-button>
+            <t-button v-if="row.status === 'pending_release'" variant="text" size="small" @click="openEdit(row)">编辑</t-button>
+            <RowMoreActions v-if="['pending_release', 'scheduled', 'published', 'closed'].includes(row.status)">
             <!-- 待发布：编辑 / 定时发布 / 立即发布 / 归档 -->
             <template v-if="row.status === 'pending_release'">
-              <t-button variant="text" size="small" @click="openEdit(row)">编辑</t-button>
+
               <t-button variant="text" size="small" @click="openSchedule(row)">定时发布</t-button>
               <t-popconfirm content="确认立即发布该文章？" confirm-btn="立即发布" @confirm="onPublishNow(row)">
                 <t-button variant="text" size="small" theme="primary" :loading="acting === row.id + ':publish'">
@@ -342,6 +345,7 @@ onMounted(load)
                 </t-button>
               </t-popconfirm>
             </template>
+            </RowMoreActions>
           </div>
         </template>
 

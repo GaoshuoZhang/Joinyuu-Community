@@ -3,6 +3,7 @@ import { onMounted, reactive, ref, computed } from 'vue'
 import { DialogPlugin, MessagePlugin } from 'tdesign-vue-next'
 import { AddIcon, DeleteIcon } from 'tdesign-icons-vue-next'
 import ListErrorState from '@/components/ListErrorState.vue'
+import { usePageDirtyGuard } from '@/utils/form'
 import PageHeader from '@/components/PageHeader.vue'
 import { useListQueryState } from '@/utils/listQuery'
 import { fetchLevelTiers, saveLevelTiers } from '@/api/rules'
@@ -33,10 +34,11 @@ const savedSnapshots = reactive<Record<LevelTierScope, string>>({
 })
 
 const isDirty = computed(
-  () =>
-    !!savedSnapshots[activeScope.value] &&
-    JSON.stringify(tiers[activeScope.value]) !== savedSnapshots[activeScope.value],
+  () => (Object.keys(scopeLabels) as LevelTierScope[]).some(scope =>
+    !!savedSnapshots[scope] && JSON.stringify(tiers[scope]) !== savedSnapshots[scope]),
 )
+
+usePageDirtyGuard(isDirty)
 
 async function load(scope = activeScope.value) {
   loading.value = true
@@ -76,10 +78,10 @@ function confirmDiscardChanges(): Promise<boolean> {
 async function changeScope(value: string | number) {
   const next = value as LevelTierScope
   if (next === activeScope.value) return
-  if (isDirty.value) {
+  if (savedSnapshots[activeScope.value] && JSON.stringify(tiers[activeScope.value]) !== savedSnapshots[activeScope.value]) {
     if (!(await confirmDiscardChanges())) return
     /* 放弃修改：先按快照回滚当前身份，再切换 */
-    await load(activeScope.value)
+    tiers[activeScope.value] = JSON.parse(savedSnapshots[activeScope.value])
   }
   activeScope.value = next
   if (!tiers[next].length) await load(next)
@@ -123,7 +125,7 @@ function coerceDiscount(value: number | undefined): number {
   return discountTenthsOf(value) / 10
 }
 
-/** 折扣入参校验：1-10 且最多一位小数（8.5 = 85 折；空值不算非法，保存时按 10 归一） */
+/** 折扣入参校验：1-10 且最多一位小数（8.5 = 8.5 折；空值不算非法，保存时按 10 归一） */
 function isDiscountInput(value: number): boolean {
   return Number.isFinite(value) && Math.abs(value * 10 - Math.round(value * 10)) < 1e-6 && value >= 1 && value <= 10
 }
@@ -159,9 +161,15 @@ async function onSave() {
 }
 
 /* 选项卡状态同步 URL（scope=community_enterprise）：刷新/回退不丢失当前身份 */
+const queryScope = computed({
+  get: () => activeScope.value,
+  set: (value: string) => {
+    activeScope.value = value === 'community_enterprise' ? 'community_enterprise' : 'community_individual'
+  },
+})
 const { syncQuery } = useListQueryState({}, () => {
   if (!tiers[activeScope.value].length) void load()
-}, { refs: { activeScope } })
+}, { refs: { activeScope: queryScope } })
 
 onMounted(() => load())
 </script>
@@ -174,7 +182,7 @@ onMounted(() => load())
         <t-tab-panel value="community_individual" label="社区个体" />
         <t-tab-panel value="community_enterprise" label="社区企业" />
       </t-tabs>
-      <p class="panel-tip">门槛为当前身份累计经验值，须逐级递增；发布额度 <strong>-1</strong> 不限、<strong>0</strong> 禁止、正整数为每日次数；积分消费折扣 <strong>1</strong>=1 折、<strong>10</strong>=原价（默认，支持一位小数如 8.5 = 85 折），适用于商城兑换与空间预约扣分。</p>
+      <p class="panel-tip">门槛为当前身份累计经验值，须逐级递增；发布额度 <strong>-1</strong> 不限、<strong>0</strong> 禁止、正整数为每日次数；积分消费折扣 <strong>1</strong>=1 折、<strong>10</strong>=原价（默认，支持一位小数如 8.5 = 8.5 折），适用于商城兑换与空间预约扣分。</p>
       <ListErrorState v-if="loadError" :message="loadError" :loading="loading" @retry="() => load()" />
       <t-loading :loading="loading" size="small">
         <template v-if="tiers[activeScope].length">
@@ -193,22 +201,23 @@ onMounted(() => load())
                 <t-tag theme="primary" variant="light" size="small">{{ index + 1 }} 级</t-tag>
               </span>
               <span class="tier-cell" role="cell" data-label="等级标签">
-                <t-input v-model="tier.label" :maxlength="8" clearable placeholder="如 青铜…" :aria-label="`${index + 1} 级等级标签`" />
+                <t-input v-accessible-field="`${index + 1} 级等级标签`" v-model="tier.label" :maxlength="8" clearable placeholder="如 青铜…" :aria-label="`${index + 1} 级等级标签`" />
               </span>
               <span class="tier-cell" role="cell" data-label="门槛经验值">
-                <t-input-number v-model="tier.threshold" :min="index === 0 ? 0 : tiers[activeScope][index - 1].threshold + 1" :decimal-places="0" theme="column" :aria-label="`${index + 1} 级门槛经验值`" />
+                <t-input-number v-accessible-field="`${index + 1} 级门槛经验值`" v-model="tier.threshold" :min="index === 0 ? 0 : tiers[activeScope][index - 1].threshold + 1" :decimal-places="0" theme="column" :aria-label="`${index + 1} 级门槛经验值`" />
               </span>
               <span class="tier-cell limit-cell" role="cell" data-label="需求发布 / 日">
-                <t-input-number v-model="tier.demandPublishLimit" :min="-1" :max="MAX_LIMIT" :decimal-places="0" theme="normal" align="right" class="limit-input" :aria-label="`${index + 1} 级需求发布每日额度`" />
+                <t-input-number v-accessible-field="`${index + 1} 级需求发布每日额度`" v-model="tier.demandPublishLimit" :min="-1" :max="MAX_LIMIT" :decimal-places="0" theme="normal" align="right" class="limit-input" :aria-label="`${index + 1} 级需求发布每日额度`" />
                 <span class="limit-note" :class="{ 'is-block': tier.demandPublishLimit === 0 }">{{ limitNote(tier.demandPublishLimit) }}</span>
               </span>
               <span class="tier-cell limit-cell" role="cell" data-label="文章投稿 / 日">
-                <t-input-number v-model="tier.articleSubmitLimit" :min="-1" :max="MAX_LIMIT" :decimal-places="0" theme="normal" align="right" class="limit-input" :aria-label="`${index + 1} 级文章投稿每日额度`" />
+                <t-input-number v-accessible-field="`${index + 1} 级文章投稿每日额度`" v-model="tier.articleSubmitLimit" :min="-1" :max="MAX_LIMIT" :decimal-places="0" theme="normal" align="right" class="limit-input" :aria-label="`${index + 1} 级文章投稿每日额度`" />
                 <span class="limit-note" :class="{ 'is-block': tier.articleSubmitLimit === 0 }">{{ limitNote(tier.articleSubmitLimit) }}</span>
               </span>
               <span class="tier-cell limit-cell" role="cell" data-label="积分消费折扣">
-                <!-- 折扣支持一位小数（8.5 = 85 折）；留空失焦后归一为 10（原价），避免保存出空值 -->
+                <!-- 折扣支持一位小数（8.5 = 8.5 折）；留空失焦后归一为 10（原价），避免保存出空值 -->
                 <t-input-number
+                  v-accessible-field="`${index + 1} 级积分消费折扣`"
                   v-model="tier.pointsDiscount"
                   :min="1"
                   :max="10"

@@ -143,7 +143,15 @@ async function onTestRealname() {
   }
   /* 刷新配置与联通状态：失败时保留当前表单值，不覆盖用户正在编辑的内容 */
   try {
-    applyConfig(await fetchSystemConfig())
+    const latest = await fetchSystemConfig()
+    // 联通测试只刷新权威状态，不覆盖用户正在编辑的表单草稿。
+    realnameProviderLabel.value = latest.realnameVerifyProviderLabel
+    realnameCredentialConfigured.value = latest.realnameVerifyCredentialConfigured
+    realnameMissingCredentials.value = latest.realnameVerifyMissingCredentials
+    realnameCredentialMasked.value = latest.realnameVerifyCredentialMasked ?? {}
+    realnameTestOk.value = latest.realnameVerifyTestOk
+    realnameTestedAt.value = latest.realnameVerifyTestedAt
+    realnameMode.value = latest.realnameMode
   } catch {
     /* 保留当前表单值 */
   }
@@ -296,10 +304,10 @@ onBeforeRouteLeave(async () => {
           <div class="section-title">站点信息</div>
           <div class="form-grid">
             <t-form-item label="站点名称" name="siteName" :rules="[{ required: true, message: '请输入站点名称', trigger: 'submit' }]">
-              <t-input v-model="form.siteName" clearable placeholder="如 聚屿社区…" />
+              <t-input v-accessible-field v-model="form.siteName" clearable placeholder="如 聚屿社区…" />
             </t-form-item>
             <t-form-item label="站点标语" name="siteSlogan">
-              <t-input v-model="form.siteSlogan" clearable placeholder="客户端登录页展示…" />
+              <t-input v-accessible-field v-model="form.siteSlogan" clearable placeholder="客户端登录页展示…" />
             </t-form-item>
           </div>
 
@@ -310,49 +318,49 @@ onBeforeRouteLeave(async () => {
                 <div class="switch-label">客户端注册</div>
                 <div class="switch-tip">关闭后客户端暂停新用户注册</div>
               </div>
-              <t-switch v-model="form.registrationOpen" aria-label="客户端注册" />
+              <t-switch v-accessible-field="'客户端注册'" v-model="form.registrationOpen" aria-label="客户端注册" />
             </div>
             <div class="switch-row">
               <div class="switch-text">
                 <div class="switch-label">积分商城</div>
                 <div class="switch-tip">关闭后客户端隐藏商城入口，已下单订单不受影响</div>
               </div>
-              <t-switch v-model="form.mallOpen" aria-label="积分商城" />
+              <t-switch v-accessible-field="'积分商城'" v-model="form.mallOpen" aria-label="积分商城" />
             </div>
             <div class="switch-row">
               <div class="switch-text">
                 <div class="switch-label">需求广场</div>
                 <div class="switch-tip">关闭后客户端暂停需求提交与响应</div>
               </div>
-              <t-switch v-model="form.demandOpen" aria-label="需求广场" />
+              <t-switch v-accessible-field="'需求广场'" v-model="form.demandOpen" aria-label="需求广场" />
             </div>
             <div class="switch-row">
               <div class="switch-text">
                 <div class="switch-label">空间预约</div>
                 <div class="switch-tip">关闭后客户端暂停提交新的空间预约</div>
               </div>
-              <t-switch v-model="form.reservationOpen" aria-label="空间预约" />
+              <t-switch v-accessible-field="'空间预约'" v-model="form.reservationOpen" aria-label="空间预约" />
             </div>
             <div class="switch-row">
               <div class="switch-text">
                 <div class="switch-label">实名认证要求</div>
                 <div class="switch-tip">开启后，未完成实名认证的用户不能发布需求或报名活动</div>
               </div>
-              <t-switch v-model="form.realnameRequired" aria-label="实名认证要求" />
+              <t-switch v-accessible-field="'实名认证要求'" v-model="form.realnameRequired" aria-label="实名认证要求" />
             </div>
             <div class="switch-row">
               <div class="switch-text">
                 <div class="switch-label">首页轮播图</div>
                 <div class="switch-tip">关闭后客户端首页不展示轮播区域（与「轮播图管理」共用开关）</div>
               </div>
-              <t-switch v-model="form.homeCarouselOpen" aria-label="首页轮播图" />
+              <t-switch v-accessible-field="'首页轮播图'" v-model="form.homeCarouselOpen" aria-label="首页轮播图" />
             </div>
             <div class="switch-row">
               <div class="switch-text">
                 <div class="switch-label">密码过期强制改密</div>
                 <div class="switch-tip">默认关闭（密码永不过期）；开启后超过有效期的后台账号登录需先修改密码（仅影响后台账号，不影响客户端用户）</div>
               </div>
-              <t-switch v-model="form.passwordExpireEnabled" aria-label="密码过期强制改密" />
+              <t-switch v-accessible-field="'密码过期强制改密'" v-model="form.passwordExpireEnabled" aria-label="密码过期强制改密" />
             </div>
           </div>
           <!-- 密码过期周期：仅开启「密码过期强制改密」后展示 -->
@@ -362,7 +370,7 @@ onBeforeRouteLeave(async () => {
               name="passwordExpireDays"
               :rules="[{ required: true, message: '请输入 1-3650 的整数', trigger: 'submit' }]"
             >
-              <t-input-number class="ctl-w-full" v-model="form.passwordExpireDays" :min="1" :max="3650" :step="1" theme="column" />
+              <t-input-number v-accessible-field class="ctl-w-full" v-model="form.passwordExpireDays" :min="1" :max="3650" :step="1" theme="column" />
               <template #help>超过该周期未修改密码的后台账号，登录后将被引导强制改密（默认 90 天）</template>
             </t-form-item>
           </div>
@@ -388,7 +396,7 @@ onBeforeRouteLeave(async () => {
               name="leaseExpireRemindDays"
               :rules="[{ required: true, message: '请输入 1-90 的整数', trigger: 'submit' }]"
             >
-              <t-input-number class="ctl-w-full" v-model="form.leaseExpireRemindDays" :min="1" :max="90" :step="1" theme="column" />
+              <t-input-number v-accessible-field class="ctl-w-full" v-model="form.leaseExpireRemindDays" :min="1" :max="90" :step="1" theme="column" />
               <template #help>距到期不足该天数的租约将标记为「即将到期」并推送通知</template>
             </t-form-item>
             <t-form-item
@@ -396,7 +404,7 @@ onBeforeRouteLeave(async () => {
               name="uploadMaxSizeMb"
               :rules="[{ required: true, message: '请输入 1-100 的整数', trigger: 'submit' }]"
             >
-              <t-input-number class="ctl-w-full" v-model="form.uploadMaxSizeMb" :min="1" :max="100" :step="1" theme="column" />
+              <t-input-number v-accessible-field class="ctl-w-full" v-model="form.uploadMaxSizeMb" :min="1" :max="100" :step="1" theme="column" />
               <template #help>素材库与富文本图片上传的单文件大小上限（1-100 MB）</template>
             </t-form-item>
           </div>
@@ -410,7 +418,7 @@ onBeforeRouteLeave(async () => {
                   启用并测试联通后，客户端显示「实名认证」；未启用或未联通时显示「身份信息登记」
                 </div>
               </div>
-              <t-switch v-model="form.realnameVerifyEnabled" aria-label="启用实名核验" />
+              <t-switch v-accessible-field="'启用实名核验'" v-model="form.realnameVerifyEnabled" aria-label="启用实名核验" />
             </div>
           </div>
           <template v-if="form.realnameVerifyEnabled">
@@ -421,6 +429,7 @@ onBeforeRouteLeave(async () => {
                 :rules="[{ required: true, message: '请选择核验供应商', trigger: 'submit' }]"
               >
                 <t-select
+                  v-accessible-field
                   :value="form.realnameVerifyProvider"
                   :options="realnameCatalog.options.map((item) => ({ label: item.label, value: item.provider }))"
                   @change="(value: unknown) => onRealnameProviderChange(String(value))"
@@ -454,7 +463,7 @@ onBeforeRouteLeave(async () => {
                 :label="field.label"
                 :name="`realnameVerifyConfig.${field.key}`"
               >
-                <t-input v-model="form.realnameVerifyConfig[field.key]" clearable :placeholder="(field.hint || '') + '…'" />
+                <t-input v-accessible-field v-model="form.realnameVerifyConfig[field.key]" clearable :placeholder="(field.hint || '') + '…'" />
                 <template #help>{{ field.hint || '' }}</template>
               </t-form-item>
             </div>
@@ -462,6 +471,7 @@ onBeforeRouteLeave(async () => {
             <div class="form-grid">
               <t-form-item label="凭据来源" name="realnameVerifyCredentialMode">
                 <t-select
+                  v-accessible-field
                   :value="form.realnameVerifyCredentialMode"
                   :options="[
                     { label: '直接填写密钥（推荐）', value: 'inline' },
@@ -482,7 +492,9 @@ onBeforeRouteLeave(async () => {
                 :name="`realnameVerifyCredentialEnv.${field.key}`"
               >
                 <t-input
+                  v-accessible-field
                   v-model="form.realnameVerifyCredentialEnv[field.key]"
+                  :type="form.realnameVerifyCredentialMode === 'inline' && /secret|password|token|appcode/i.test(field.key) ? 'password' : 'text'"
                   clearable
                   autocomplete="off"
                   :placeholder="realnameCredentialPlaceholder(field)"
@@ -518,7 +530,7 @@ onBeforeRouteLeave(async () => {
                 <div class="switch-label">启用 MinIO</div>
                 <div class="switch-tip">启用后素材/富文本图片上传写入 MinIO；停用则回退本地磁盘（UPLOAD_DIR）</div>
               </div>
-              <t-switch v-model="form.minioEnabled" aria-label="启用 MinIO" />
+              <t-switch v-accessible-field="'启用 MinIO'" v-model="form.minioEnabled" aria-label="启用 MinIO" />
             </div>
           </div>
           <div v-if="form.minioEnabled" class="form-grid">
@@ -527,7 +539,7 @@ onBeforeRouteLeave(async () => {
               name="minioEndpoint"
               :rules="[{ required: true, message: '请输入 MinIO Endpoint', trigger: 'submit' }]"
             >
-              <t-input v-model="form.minioEndpoint" clearable placeholder="如 127.0.0.1 / minio.example.com…" />
+              <t-input v-accessible-field v-model="form.minioEndpoint" clearable placeholder="如 127.0.0.1 / minio.example.com…" />
               <template #help>服务地址，不含协议与端口</template>
             </t-form-item>
             <t-form-item
@@ -535,20 +547,21 @@ onBeforeRouteLeave(async () => {
               name="minioPort"
               :rules="[{ required: true, message: '请输入 1-65535 的端口', trigger: 'submit' }]"
             >
-              <t-input-number class="ctl-w-lg" v-model="form.minioPort" :min="1" :max="65535" :step="1" theme="column" />
+              <t-input-number v-accessible-field class="ctl-w-lg" v-model="form.minioPort" :min="1" :max="65535" :step="1" theme="column" />
             </t-form-item>
             <t-form-item label="使用 HTTPS" name="minioUseSsl">
-              <t-switch v-model="form.minioUseSsl" aria-label="使用 HTTPS" />
+              <t-switch v-accessible-field="'使用 HTTPS'" v-model="form.minioUseSsl" aria-label="使用 HTTPS" />
             </t-form-item>
             <t-form-item
               label="AccessKey"
               name="minioAccessKey"
               :rules="[{ required: true, message: '请输入 AccessKey', trigger: 'submit' }]"
             >
-              <t-input v-model="form.minioAccessKey" clearable autocomplete="off" placeholder="MinIO 访问密钥…" />
+              <t-input v-accessible-field v-model="form.minioAccessKey" clearable autocomplete="off" placeholder="MinIO 访问密钥…" />
             </t-form-item>
             <t-form-item label="SecretKey" name="minioSecretKey" :rules="secretRules">
               <t-input
+                v-accessible-field
                 v-model="form.minioSecretKey"
                 type="password"
                 clearable
@@ -570,7 +583,7 @@ onBeforeRouteLeave(async () => {
                 { pattern: /^[a-z0-9][a-z0-9.-]{1,62}$/, message: 'Bucket 名称格式不正确', trigger: 'submit' },
               ]"
             >
-              <t-input v-model="form.minioBucket" clearable placeholder="如 joinyuu…" />
+              <t-input v-accessible-field v-model="form.minioBucket" clearable placeholder="如 joinyuu…" />
               <template #help>小写字母/数字/点/连字符，目录不存在时自动创建</template>
             </t-form-item>
           </div>

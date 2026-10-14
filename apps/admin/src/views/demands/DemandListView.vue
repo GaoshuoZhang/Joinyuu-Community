@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import RowMoreActions from '@/components/RowMoreActions.vue'
+import { focusFirstInvalid, useDialogFormProtection } from '@/utils/form'
 import { computed, onMounted, reactive, ref, watch } from 'vue'
 import ListErrorState from '@/components/ListErrorState.vue'
 import { useListQueryState } from '@/utils/listQuery'
@@ -168,7 +170,7 @@ function openProxy(row: Demand) {
 async function onProxyConfirm() {
   if (!proxyTarget.value) return
   const valid = await proxyFormRef.value.validate()
-  if (valid !== true) return
+  if (valid !== true) return focusFirstInvalid(proxyFormRef.value)
   proxySaving.value = true
   try {
     await proxyRespondDemand(proxyTarget.value.id, {
@@ -272,7 +274,7 @@ const columns = [
   ellipsis: true,
   },
   { colKey: 'status', title: '状态', cell: 'status', width: 150, resizable: true , ellipsis: true},
-  { colKey: 'op', title: '操作', cell: 'op', width: 340 },
+  { colKey: 'op', title: '操作', cell: 'op', width: 180 },
 ]
 
 /* 列配置：本地持久化显隐/顺序 */
@@ -617,6 +619,7 @@ async function loadCategories() {
     /* 字典加载失败保留回退词表 */
   }
 }
+const { close: closeProxyDialog } = useDialogFormProtection(proxyForm, proxyVisible, proxySaving)
 </script>
 
 <template>
@@ -654,27 +657,28 @@ async function loadCategories() {
 
     <div class="page-filter-bar">
       <t-input
+        v-accessible-field="'搜索标题/编号'"
         v-model="query.keyword"
         class="ctl-w-xl"
         placeholder="搜索标题/编号…"
         clearable
         @enter="onSearch"
       />
-      <t-select class="ctl-w-md"
+      <t-select v-accessible-field="'类别'" class="ctl-w-md"
         v-model="query.category"
         label="类别"
         :options="categoryOptions"
         clearable
         @change="onSearch"
       />
-      <t-select class="ctl-w-sm"
+      <t-select v-accessible-field="'需求类型'" class="ctl-w-sm"
         v-model="query.demandType"
         label="需求类型"
         :options="demandTypeOptions"
         clearable
         @change="onSearch"
       />
-      <t-select class="ctl-w-md"
+      <t-select v-accessible-field="'状态'" class="ctl-w-md"
         v-model="query.status"
         label="状态"
         :options="statusOptions"
@@ -791,7 +795,7 @@ async function loadCategories() {
           <div class="op-cell" @click.stop>
             <!-- 详情：形态与行点击一致，为键盘用户提供显式入口 -->
             <t-button variant="text" size="small" @click="goDetail(row)">详情</t-button>
-            <!-- 待审核：仅只读审核 -->
+            <t-button v-if="row.status === 'pending_release'" variant="text" size="small" @click="openEdit(row)">编辑</t-button>
             <t-button
               v-if="row.status === 'pending'"
               variant="text"
@@ -801,9 +805,12 @@ async function loadCategories() {
             >
               审核
             </t-button>
+            <RowMoreActions v-if="row.status !== 'pending'">
+            <!-- 待审核：仅只读审核 -->
+
             <!-- 待发布：编辑 / 立即发布 / 定时发布 / 关闭 -->
             <template v-if="row.status === 'pending_release'">
-              <t-button variant="text" size="small" @click="openEdit(row)">编辑</t-button>
+
               <t-popconfirm
                 :content="`确认立即发布「${row.title}」？发布后成员即可响应`"
                 confirm-btn="立即发布"
@@ -895,6 +902,7 @@ async function loadCategories() {
             >
               <t-button variant="text" size="small" theme="warning" :loading="isActing(row, 'archive')">归档</t-button>
             </t-popconfirm>
+            </RowMoreActions>
           </div>
         </template>
 
@@ -922,7 +930,7 @@ async function loadCategories() {
       :header="proxyTarget ? `代报名 · ${proxyTarget.title}` : '代报名'"
       width="480px"
       :close-on-overlay-click="false"
-      @close="proxyVisible = false"
+      @close="closeProxyDialog"
     >
       <t-form
         ref="proxyFormRef"
@@ -932,6 +940,7 @@ async function loadCategories() {
       >
         <t-form-item label="报名方" name="memberValue">
           <t-select
+            v-accessible-field
             v-model="proxyForm.memberValue"
             filterable
             creatable
@@ -942,17 +951,18 @@ async function loadCategories() {
         </t-form-item>
         <div class="form-row">
           <t-form-item label="联系电话" name="phone">
-            <t-input clearable v-model="proxyForm.phone" name="proxy-phone" type="tel" inputmode="tel" autocomplete="tel" placeholder="必填…" />
+            <t-input v-accessible-field clearable v-model="proxyForm.phone" name="proxy-phone" type="tel" inputmode="tel" autocomplete="tel" placeholder="必填…" />
           </t-form-item>
           <t-form-item label="联系邮箱" name="email">
-            <t-input clearable v-model="proxyForm.email" name="proxy-email" inputmode="email" autocomplete="email" placeholder="选填…" />
+            <t-input v-accessible-field clearable v-model="proxyForm.email" name="proxy-email" inputmode="email" autocomplete="email" placeholder="选填…" />
           </t-form-item>
         </div>
         <t-form-item label="报价" name="quote">
-          <t-input clearable v-model="proxyForm.quote" placeholder="如 ¥8,000…" />
+          <t-input v-accessible-field clearable v-model="proxyForm.quote" placeholder="如 ¥8,000…" />
         </t-form-item>
         <t-form-item label="响应留言" name="message">
           <t-textarea
+            v-accessible-field
             v-model="proxyForm.message"
             :autosize="{ minRows: 2, maxRows: 4 }"
             placeholder="代报名备注，留空默认记录「管理员代报名」…"
@@ -961,7 +971,7 @@ async function loadCategories() {
       </t-form>
       <template #footer>
         <div class="dialog-footer">
-          <t-button variant="text" theme="default" @click="proxyVisible = false">取消</t-button>
+          <t-button variant="text" theme="default" @click="closeProxyDialog">取消</t-button>
           <t-button theme="primary" :loading="proxySaving" @click="onProxyConfirm">确认代报名</t-button>
         </div>
       </template>

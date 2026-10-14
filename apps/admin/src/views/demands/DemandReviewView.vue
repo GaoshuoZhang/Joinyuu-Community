@@ -173,13 +173,14 @@ onMounted(() => {
 
     <div class="page-filter-bar">
       <t-input
+        v-accessible-field="'搜索标题/编号'"
         v-model="query.keyword"
         class="ctl-w-xl"
         placeholder="搜索标题/编号…"
         clearable
         @enter="onSearch"
       />
-      <t-select class="ctl-w-md"
+      <t-select v-accessible-field="'类别'" class="ctl-w-md"
         v-model="query.category"
         label="类别"
         :options="categoryOptions"
