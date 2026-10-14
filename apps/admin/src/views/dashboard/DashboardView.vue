@@ -418,11 +418,12 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onLayoutKeydown))
           <div v-else class="notice-list">
             <t-link theme="default" hover="color" v-for="a in announcements" :key="a.id" class="todo-item dash-item" href="#/contents/announcements">
               <div class="todo-main">
-                <StatusTag entity="enabledFlag" :value="a.pinned ? 'enabled' : 'disabled'" size="small" />
-                <span class="todo-title">{{ a.title }}</span>
+                <!-- 置顶仅一种状态：未置顶不渲染标签，不再借用 enabledFlag 状态语义 -->
+                <t-tag v-if="a.pinned" theme="warning" variant="light" size="small">置顶</t-tag>
+                <span class="todo-title" :title="a.title">{{ a.title }}</span>
               </div>
               <div class="todo-meta">
-                <span>公告 · {{ a.publishedAt }}</span>
+                <span>{{ a.publishedAt }}</span>
               </div>
             </t-link>
           </div>
@@ -446,7 +447,7 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onLayoutKeydown))
             >
               <div class="todo-main">
                 <t-tag variant="light" size="small">{{ applicationTypeMap[app.type].label }}</t-tag>
-                <span class="todo-title">{{ app.targetName }}</span>
+                <span class="todo-title" :title="app.targetName">{{ app.targetName }}</span>
               </div>
               <div class="todo-meta">
                 <span>{{ app.applicantName }} 提交于 {{ app.submittedAt }}</span>
@@ -470,7 +471,7 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onLayoutKeydown))
               :href="`#/events/${event.id}`"
             >
               <div class="event-main">
-                <span class="event-title">{{ event.title }}</span>
+                <span class="event-title" :title="event.title">{{ event.title }}</span>
                 <t-tag variant="light" size="small">{{ event.type }}</t-tag>
               </div>
               <div class="event-meta">
@@ -790,6 +791,8 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onLayoutKeydown))
 .layout-list {
   max-height: 300px;
   overflow-y: auto;
+  /* 滚动到边界不冒泡给底层页面，避免误触发整页滚动 */
+  overscroll-behavior: contain;
 }
 
 .layout-row {

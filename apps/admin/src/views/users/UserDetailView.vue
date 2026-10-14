@@ -35,6 +35,7 @@ import { fetchExternalEnterprises } from '@/api/external-enterprises'
 import { isNotFound } from '@/api/http'
 import { adjustExperience, adjustPoints, fetchExperienceRecords, fetchPointsRecords } from '@/api/ledgers'
 import { deriveReservationStatus } from '@/utils/reservation'
+import { focusFirstInvalid, useDialogDirtyGuard } from '@/utils/form'
 import type { ExperienceRecord, PointsRecord, User, UserIdentity, ExternalEnterprise } from '@/types'
 
 const route = useRoute()
@@ -124,6 +125,8 @@ const editForm = reactive({
 /* 编辑弹窗中处于遮罩占位的值：与表单当前值一致时视为「未修改」，提交时回填原值而非写入遮罩文本 */
 const editMaskedPhone = ref('')
 const editMaskedCitizenId = ref('')
+/* 未保存保护：有改动时关闭需确认（见 useDialogDirtyGuard） */
+const { markBaseline: markEditBaseline, guardClose: guardEditClose } = useDialogDirtyGuard(editForm)
 
 const editRules: FormProps['rules'] = {
   username: [
@@ -154,13 +157,19 @@ function openEdit() {
   editForm.citizenId = editMaskedCitizenId.value || (user.value.citizenId ?? '')
   editForm.bio = user.value.bio
   editForm.avatar = user.value.avatar ?? ''
+  markEditBaseline()
   editVisible.value = true
   nextTick(() => editFormRef.value?.clearValidate())
 }
 
+/* 关闭统一入口：footer 取消 / X / Esc 均经 dirty guard 判断 */
+function closeEdit() {
+  guardEditClose(() => (editVisible.value = false))
+}
+
 async function onConfirmEdit() {
   const valid = await editFormRef.value.validate()
-  if (valid !== true) return
+  if (valid !== true) { focusFirstInvalid(editFormRef.value); return }
   if (!user.value) return
   editSaving.value = true
   try {
@@ -209,6 +218,9 @@ const freezeRules: FormProps['rules'] = {
   until: [{ required: true, message: '请选择冻结期限或开启长期冻结', trigger: 'submit' }],
 }
 
+/* 未保存保护：有改动时关闭需确认（见 useDialogDirtyGuard） */
+const { markBaseline: markFreezeBaseline, guardClose: guardFreezeClose } = useDialogDirtyGuard(freezeForm)
+
 /* 长期开关：开启后清空冻结期限（期限项随之隐藏） */
 watch(
   () => freezeForm.permanent,
@@ -221,14 +233,20 @@ function openFreeze() {
   freezeForm.permanent = false
   freezeForm.until = ''
   freezeForm.reason = ''
+  markFreezeBaseline()
   freezeVisible.value = true
   nextTick(() => freezeFormRef.value?.clearValidate())
+}
+
+/* 关闭统一入口：footer 取消 / X / Esc 均经 dirty guard 判断 */
+function closeFreeze() {
+  guardFreezeClose(() => (freezeVisible.value = false))
 }
 
 async function onConfirmFreeze() {
   if (!user.value) return
   const valid = await freezeFormRef.value.validate()
-  if (valid !== true) return
+  if (valid !== true) { focusFirstInvalid(freezeFormRef.value); return }
   freezeSaving.value = true
   try {
     const payload: UserFreezePayload = {
@@ -275,6 +293,9 @@ const resetPwdSaving = ref(false)
 const resetPwdFormRef = ref()
 const resetPwdForm = reactive({ password: '', confirmPassword: '' })
 
+/* 未保存保护：有改动时关闭需确认（见 useDialogDirtyGuard） */
+const { markBaseline: markResetPwdBaseline, guardClose: guardResetPwdClose } = useDialogDirtyGuard(resetPwdForm)
+
 /* 确认密码一致性校验（TDesign 自定义校验器第二参只有 { formData, name }，字段值须从 formData 读取） */
 function validateConfirmPassword(
   _value: unknown,
@@ -301,8 +322,14 @@ const resetPwdRules: FormProps['rules'] = {
 function openResetPwd() {
   resetPwdForm.password = ''
   resetPwdForm.confirmPassword = ''
+  markResetPwdBaseline()
   resetPwdVisible.value = true
   nextTick(() => resetPwdFormRef.value?.clearValidate())
+}
+
+/* 关闭统一入口：footer 取消 / X / Esc 均经 dirty guard 判断 */
+function closeResetPwd() {
+  guardResetPwdClose(() => (resetPwdVisible.value = false))
 }
 
 async function submitResetPassword(uid: string) {
@@ -322,7 +349,7 @@ async function onConfirmResetPwd() {
   const current = user.value
   if (!current) return
   const valid = await resetPwdFormRef.value.validate()
-  if (valid !== true) return
+  if (valid !== true) { focusFirstInvalid(resetPwdFormRef.value); return }
   /* 二次确认：确认后才真正覆盖密码（确认弹窗关闭后由外层弹窗展示提交态） */
   const confirmDialog = DialogPlugin.confirm({
     header: '确认重置密码',
@@ -426,6 +453,8 @@ const demandColumns = [
   { colKey: 'title', title: '需求标题', ellipsis: true },
   { colKey: 'status', title: '状态', width: 100, cell: 'status' },
   { colKey: 'createdAt', title: '创建时间', width: 170, ellipsis: true },
+  /* 行点击仅有鼠标路径，操作列「详情」为键盘/读屏用户提供同等入口（H-01） */
+  { colKey: 'op', title: '操作', width: 80, cell: 'op-demand' },
 ]
 
 const projectColumns = [
@@ -434,6 +463,8 @@ const projectColumns = [
   { colKey: 'code', title: '项目代号', width: 120, ellipsis: true },
   { colKey: 'status', title: '状态', width: 100, cell: 'status' },
   { colKey: 'initiatedAt', title: '立项时间', width: 170, ellipsis: true },
+  /* 行点击仅有鼠标路径，操作列「详情」为键盘/读屏用户提供同等入口（H-01） */
+  { colKey: 'op', title: '操作', width: 80, cell: 'op-project' },
 ]
 
 const eventColumns = [
@@ -441,6 +472,8 @@ const eventColumns = [
   { colKey: 'title', title: '活动标题', ellipsis: true },
   { colKey: 'status', title: '状态', width: 100, cell: 'status' },
   { colKey: 'time', title: '活动时间', width: 320, cell: 'time' },
+  /* 行点击仅有鼠标路径，操作列「详情」为键盘/读屏用户提供同等入口（H-01） */
+  { colKey: 'op', title: '操作', width: 80, cell: 'op-event' },
 ]
 
 const recordLeaseColumns = [
@@ -449,6 +482,8 @@ const recordLeaseColumns = [
   { colKey: 'term', title: '租期', width: 220, cell: 'term' },
   { colKey: 'status', title: '状态', width: 100, cell: 'status' },
   { colKey: 'terminatedAt', title: '终止时间', width: 170, ellipsis: true, cell: 'terminatedAt' },
+  /* 行点击仅有鼠标路径，操作列「详情」为键盘/读屏用户提供同等入口（H-01） */
+  { colKey: 'op', title: '操作', width: 80, cell: 'op-lease' },
 ]
 
 const submissionColumns = [
@@ -462,7 +497,7 @@ const reservationColumns = [
   { colKey: 'id', title: '预约编号', width: 110, ellipsis: true },
   { colKey: 'spaceName', title: '空间名称', ellipsis: true },
   { colKey: 'date', title: '预约日期', width: 170 },
-  { colKey: 'time', title: '使用时段', width: 140, cell: 'time' },
+  { colKey: 'time', title: '使用时段', width: 220, cell: 'time' },
   { colKey: 'status', title: '状态', width: 100, cell: 'status' },
 ]
 
@@ -592,7 +627,12 @@ onMounted(load)
 
     <ListErrorState v-else-if="loadError" :message="loadError" :loading="loading" @retry="load" />
 
-    <t-empty v-else-if="!user" description="用户不存在或已被删除" />
+    <t-empty v-else-if="!user" description="用户不存在或已被删除">
+      <!-- 直达 URL 时 router.back() 可能离开系统，空态提供明确的下一步（L-01） -->
+      <template #action>
+        <t-button @click="router.push('/users')">返回用户列表</t-button>
+      </template>
+    </t-empty>
 
     <template v-else>
       <!-- 用户信息头卡片 -->
@@ -619,6 +659,7 @@ onMounted(load)
               <t-popconfirm
                 v-if="user.status === 'frozen'"
                 content="确认恢复该账号？恢复后冻结信息将被清除"
+                confirm-btn="恢复"
                 @confirm="onRestore"
               >
                 <t-button :loading="restoring">恢复</t-button>
@@ -802,6 +843,9 @@ onMounted(load)
                     :row-attributes="{ style: { cursor: 'pointer' } }"
                     @row-click="({ row }: { row: UserDemandRecord }) => goDemandRecord(row)"
                   >
+                    <template #op-demand="{ row }">
+                      <t-button theme="primary" variant="text" size="small" @click.stop="goDemandRecord(row)">详情</t-button>
+                    </template>
                     <template #status="{ row }">
                       <t-tag v-if="row.deletedAt" theme="default" variant="light">已归档</t-tag>
                       <StatusTag v-else entity="demand" :value="row.status" />
@@ -825,6 +869,9 @@ onMounted(load)
                     :row-attributes="{ style: { cursor: 'pointer' } }"
                     @row-click="({ row }: { row: UserDemandRecord }) => goDemandRecord(row)"
                   >
+                    <template #op-demand="{ row }">
+                      <t-button theme="primary" variant="text" size="small" @click.stop="goDemandRecord(row)">详情</t-button>
+                    </template>
                     <template #status="{ row }">
                       <t-tag v-if="row.deletedAt" theme="default" variant="light">已归档</t-tag>
                       <StatusTag v-else entity="demand" :value="row.status" />
@@ -865,6 +912,9 @@ onMounted(load)
                     :row-attributes="{ style: { cursor: 'pointer' } }"
                     @row-click="({ row }: { row: UserProjectRecord }) => goProjectRecord(row)"
                   >
+                    <template #op-project="{ row }">
+                      <t-button theme="primary" variant="text" size="small" @click.stop="goProjectRecord(row)">详情</t-button>
+                    </template>
                     <template #status="{ row }">
                       <t-tag v-if="row.deletedAt" theme="default" variant="light">已归档</t-tag>
                       <StatusTag v-else entity="project" :value="row.status" />
@@ -888,6 +938,9 @@ onMounted(load)
                     :row-attributes="{ style: { cursor: 'pointer' } }"
                     @row-click="({ row }: { row: UserProjectRecord }) => goProjectRecord(row)"
                   >
+                    <template #op-project="{ row }">
+                      <t-button theme="primary" variant="text" size="small" @click.stop="goProjectRecord(row)">详情</t-button>
+                    </template>
                     <template #status="{ row }">
                       <t-tag v-if="row.deletedAt" theme="default" variant="light">已归档</t-tag>
                       <StatusTag v-else entity="project" :value="row.status" />
@@ -928,6 +981,9 @@ onMounted(load)
                     :row-attributes="{ style: { cursor: 'pointer' } }"
                     @row-click="({ row }: { row: UserEventRecord }) => goEventRecord(row)"
                   >
+                    <template #op-event="{ row }">
+                      <t-button theme="primary" variant="text" size="small" @click.stop="goEventRecord(row)">详情</t-button>
+                    </template>
                     <template #status="{ row }">
                       <t-tag v-if="row.deletedAt" theme="default" variant="light">已归档</t-tag>
                       <StatusTag v-else entity="event" :value="row.status" />
@@ -952,6 +1008,9 @@ onMounted(load)
                     :row-attributes="{ style: { cursor: 'pointer' } }"
                     @row-click="({ row }: { row: UserEventRecord }) => goEventRecord(row)"
                   >
+                    <template #op-event="{ row }">
+                      <t-button theme="primary" variant="text" size="small" @click.stop="goEventRecord(row)">详情</t-button>
+                    </template>
                     <template #status="{ row }">
                       <t-tag v-if="row.deletedAt" theme="default" variant="light">已归档</t-tag>
                       <StatusTag v-else entity="event" :value="row.status" />
@@ -993,6 +1052,9 @@ onMounted(load)
                     :row-attributes="{ style: { cursor: 'pointer' } }"
                     @row-click="({ row }: { row: UserLeaseRecord }) => goLeaseRecord(row)"
                   >
+                    <template #op-lease="{ row }">
+                      <t-button theme="primary" variant="text" size="small" @click.stop="goLeaseRecord(row)">详情</t-button>
+                    </template>
                     <template #term="{ row }">{{ recordLeaseTerm(row) }}</template>
                     <template #status="{ row }">
                       <t-tag v-if="row.deletedAt" theme="default" variant="light">已归档</t-tag>
@@ -1018,6 +1080,9 @@ onMounted(load)
                     :row-attributes="{ style: { cursor: 'pointer' } }"
                     @row-click="({ row }: { row: UserLeaseRecord }) => goLeaseRecord(row)"
                   >
+                    <template #op-lease="{ row }">
+                      <t-button theme="primary" variant="text" size="small" @click.stop="goLeaseRecord(row)">详情</t-button>
+                    </template>
                     <template #term="{ row }">{{ recordLeaseTerm(row) }}</template>
                     <template #status="{ row }">
                       <t-tag v-if="row.deletedAt" theme="default" variant="light">已归档</t-tag>
@@ -1166,6 +1231,7 @@ onMounted(load)
               </div>
               <t-table
                 row-key="id"
+                table-layout="fixed"
                 :data="experienceRecords"
                 :columns="ledgerColumns"
                 empty="暂无经验值流水"
@@ -1191,6 +1257,7 @@ onMounted(load)
               </div>
               <t-table
                 row-key="id"
+                table-layout="fixed"
                 :data="pointsRecords"
                 :columns="ledgerColumns"
                 empty="暂无积分流水"
@@ -1221,14 +1288,15 @@ onMounted(load)
 
     <!-- 编辑用户资料 -->
     <t-dialog
-      v-model:visible="editVisible"
+      :visible="editVisible"
       header="编辑用户资料"
       width="560px"
-      @close="editVisible = false"
+      :close-on-overlay-click="false"
+      @close="closeEdit"
     >
       <template #footer>
         <div class="dialog-footer">
-          <t-button variant="text" theme="default" @click="editVisible = false">取消</t-button>
+          <t-button variant="text" theme="default" @click="closeEdit">取消</t-button>
           <t-button theme="primary" :loading="editSaving" @click="onConfirmEdit">保存</t-button>
         </div>
       </template>
@@ -1270,14 +1338,15 @@ onMounted(load)
 
     <!-- 冻结账号：冻结期限（日期+时间）或长期（开关，默认关）+ 冻结原因（必填） -->
     <t-dialog
-      v-model:visible="freezeVisible"
+      :visible="freezeVisible"
       :header="user ? `冻结账号 · ${user.nickname} [${user.uid}]` : '冻结账号'"
       width="480px"
-      @close="freezeVisible = false"
+      :close-on-overlay-click="false"
+      @close="closeFreeze"
     >
       <template #footer>
         <div class="dialog-footer">
-          <t-button variant="text" theme="default" @click="freezeVisible = false">取消</t-button>
+          <t-button variant="text" theme="default" @click="closeFreeze">取消</t-button>
           <t-button theme="danger" :loading="freezeSaving" @click="onConfirmFreeze">确认冻结</t-button>
         </div>
       </template>
@@ -1310,15 +1379,15 @@ onMounted(load)
 
     <!-- 重置密码：管理员强制覆盖用户登录密码（提交前二次确认） -->
     <t-dialog
-      v-model:visible="resetPwdVisible"
+      :visible="resetPwdVisible"
       :header="user ? `重置密码 · ${user.nickname} [${user.uid}]` : '重置密码'"
       width="480px"
-      :close-on-overlay-click="true"
-      @close="resetPwdVisible = false"
+      :close-on-overlay-click="false"
+      @close="closeResetPwd"
     >
       <template #footer>
         <div class="dialog-footer">
-          <t-button variant="text" theme="default" @click="resetPwdVisible = false">取消</t-button>
+          <t-button variant="text" theme="default" @click="closeResetPwd">取消</t-button>
           <t-button theme="danger" :loading="resetPwdSaving" @click="onConfirmResetPwd">确认重置</t-button>
         </div>
       </template>
@@ -1444,8 +1513,11 @@ onMounted(load)
   transition: border-color 120ms ease;
 }
 
-.identity-card.clickable:hover {
-  border-color: var(--td-brand-color);
+/* 触屏无 hover：仅指针设备启用变色，避免粘滞 hover 被误读为选中态（L-04） */
+@media (hover: hover) {
+  .identity-card.clickable:hover {
+    border-color: var(--td-brand-color);
+  }
 }
 
 .identity-card-head {

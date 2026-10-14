@@ -437,7 +437,8 @@ onMounted(async () => {
             <!-- 终止：生效中/即将到期/已到期（终止即释放办公位；过期不自动释放） -->
             <t-popconfirm
               v-if="canOperate(row)"
-              content="确认终止该租约？关联办公位将立即释放"
+              :content="`确认终止租约 ${row.id}？关联办公位将立即释放`"
+              :confirm-btn="{ content: '终止租约', theme: 'danger' }"
               @confirm="onTerminate(row)"
             >
               <t-button variant="text" size="small" theme="danger" :loading="acting === row.id">
@@ -446,7 +447,8 @@ onMounted(async () => {
             </t-popconfirm>
             <t-popconfirm
               v-if="deriveLeaseStatus(row) === 'terminated'"
-              content="确认归档该租约？归档后可在归档管理中恢复"
+              :content="`确认归档租约 ${row.id}？归档后可在归档管理中恢复`"
+              confirm-btn="归档"
               @confirm="onArchive(row)"
             >
               <t-button variant="text" size="small" theme="danger" :loading="acting === row.id + ':archive'">

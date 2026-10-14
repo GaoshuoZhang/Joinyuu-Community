@@ -558,7 +558,7 @@ function onClose() {
           <span class="share-tip">社区企业与社区个体，将按以下占比进行经验值分成。</span>
         </div>
         <div v-for="(v, i) in form.undertakers" :key="v" class="share-row">
-          <span class="share-name">{{ undertakerNameOf(v) }}</span>
+          <span class="share-name" :title="undertakerNameOf(v)">{{ undertakerNameOf(v) }}</span>
           <t-input-number class="ctl-w-sm"
             v-model="shares[i]"
             :min="0"

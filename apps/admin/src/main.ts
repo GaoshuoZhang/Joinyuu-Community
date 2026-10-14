@@ -1,5 +1,6 @@
 import { createApp } from 'vue'
 import { createPinia } from 'pinia'
+import { MessagePlugin } from 'tdesign-vue-next'
 import App from './App.vue'
 import router from './router'
 import { permission } from './directives/permission'
@@ -18,8 +19,10 @@ useThemeStore(pinia).init()
 app.use(router)
 /* RBAC：按钮/元素级权限指令 */
 app.directive('permission', permission)
-/* 全局错误兜底：组件渲染抛错时记录日志，避免整应用白屏不可恢复 */
+/* 全局错误兜底：组件渲染抛错时记录日志并给出可见提示，
+ * 避免整应用白屏不可恢复且用户无从感知出错原因 */
 app.config.errorHandler = (err, instance, info) => {
   console.error('[App Error]', info, err)
+  MessagePlugin.error('页面渲染出错，请刷新重试')
 }
 app.mount('#app')

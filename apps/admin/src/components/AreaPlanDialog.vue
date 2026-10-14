@@ -2,7 +2,7 @@
 import { computed, nextTick, reactive, ref, watch } from 'vue'
 import { MessagePlugin } from 'tdesign-vue-next'
 import type { FormProps } from 'tdesign-vue-next'
-import { focusFirstInvalid } from '@/utils/form'
+import { focusFirstInvalid, useDialogDirtyGuard } from '@/utils/form'
 import {
   createWorkstationArea,
   deleteWorkstationArea,
@@ -30,6 +30,8 @@ const formRef = ref()
 const areas = ref<WorkstationArea[]>([])
 /* 区域列表为异步拉取：加载中 areas 仍为空，需与"确实没有区域"区分 */
 const areasLoading = ref(false)
+/* 区域数据加载失败：内联提示 + 重试 */
+const optionLoadError = ref('')
 const workstations = ref<Workstation[]>([])
 /* null = 新增模式；否则为编辑中的区域 ID */
 const editingId = ref<string | null>(null)
@@ -39,6 +41,9 @@ const form = reactive({
   type: 'open' as WorkstationType,
   description: '',
 })
+
+/* 未保存保护：新增/编辑表单记录基线，关闭前有改动需确认 */
+const { markBaseline, guardClose } = useDialogDirtyGuard(form)
 
 const typeOptions = Object.entries(workstationTypeMap).map(([value, label]) => ({ label, value }))
 
@@ -64,8 +69,10 @@ async function load() {
     const [areaList, wsList] = await Promise.all([fetchWorkstationAreas(), fetchWorkstations()])
     areas.value = areaList
     workstations.value = wsList
-  } catch {
-    MessagePlugin.error('区域数据加载失败')
+    optionLoadError.value = ''
+  } catch (e) {
+    /* 内联错误 + 重试（替代仅 toast，与 WorkstationFormDialog/LeaseFormDialog 同构） */
+    optionLoadError.value = e instanceof Error ? e.message : '区域数据加载失败'
   } finally {
     areasLoading.value = false
   }
@@ -76,6 +83,7 @@ function resetForm() {
   form.name = ''
   form.type = 'open'
   form.description = ''
+  markBaseline()
   nextTick(() => formRef.value?.clearValidate())
 }
 
@@ -84,6 +92,7 @@ function openEdit(area: WorkstationArea) {
   form.name = area.name
   form.type = area.type
   form.description = area.description
+  markBaseline()
   nextTick(() => formRef.value?.clearValidate())
 }
 
@@ -129,13 +138,14 @@ async function onDelete(area: WorkstationArea) {
 }
 
 function onClose() {
-  emit('update:visible', false)
+  /* 未保存保护：表单有改动时弹确认（见 useDialogDirtyGuard） */
+  guardClose(() => emit('update:visible', false))
 }
 </script>
 
 <template>
   <t-dialog
-    :close-on-overlay-click="true"
+    :close-on-overlay-click="false"
     :visible="visible"
     header="区域规划"
     width="880px"
@@ -150,6 +160,13 @@ function onClose() {
         </t-button>
       </div>
     </template>
+
+    <!-- 区域数据加载失败：内联错误 + 重试（同步 WorkstationFormDialog / LeaseFormDialog 同构） -->
+    <t-alert v-if="optionLoadError" theme="error" style="margin-bottom: 12px">
+      <div class="error-retry-line">{{ optionLoadError }}
+        <t-button size="small" variant="text" theme="primary" @click="load">重新加载</t-button>
+      </div>
+    </t-alert>
 
     <t-form ref="formRef" :data="form" :rules="rules" label-align="top" class="area-form">
       <div class="form-head">
@@ -193,7 +210,8 @@ function onClose() {
             <div class="area-op">
               <t-button variant="text" size="small" @click="openEdit(area)">编辑</t-button>
               <t-popconfirm
-                content="确认删除该区域？区域下仍有办公位时将无法删除"
+                :content="`确认删除区域「${area.name}」？区域下仍有办公位时将无法删除`"
+                :confirm-btn="{ content: '删除', theme: 'danger' }"
                 @confirm="onDelete(area)"
               >
                 <t-button variant="text" size="small" theme="danger">删除</t-button>
@@ -229,6 +247,19 @@ function onClose() {
   display: grid;
   grid-template-columns: 1fr 1fr;
   gap: 0 16px;
+}
+
+/* 选项加载失败行：错误文案与「重新加载」按钮同行 */
+.error-retry-line {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+@media (max-width: 767px) {
+  .form-row {
+    grid-template-columns: 1fr;
+  }
 }
 
 .area-list {

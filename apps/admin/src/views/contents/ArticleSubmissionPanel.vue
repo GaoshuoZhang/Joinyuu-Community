@@ -334,7 +334,7 @@ onMounted(load)
       >
         <template #title="{ row }">
           <div class="cell-title">
-            <span class="title-text">{{ row.title }}</span>
+            <span class="title-text" :title="row.title">{{ row.title }}</span>
             <span class="title-sub">{{ row.id }}</span>
           </div>
         </template>
@@ -358,7 +358,9 @@ onMounted(load)
         </template>
         <template #op="{ row }">
           <div class="op-cell" @click.stop>
-            <!-- 待审核：进入审核（可驳回/通过）；其余状态查看详情靠行点击 -->
+            <!-- 详情：行点击的键盘可达替代（待审核行点击进审核，其余状态进只读详情） -->
+            <t-button theme="primary" variant="text" size="small" @click="openView(row)">详情</t-button>
+            <!-- 待审核：进入审核（可驳回/通过） -->
             <t-button v-if="row.status === 'pending'" variant="text" size="small" @click="openReview(row)">
               审核
             </t-button>
@@ -366,12 +368,16 @@ onMounted(load)
             <template v-if="row.status === 'pending_release'">
               <t-button variant="text" size="small" @click="openEdit(row)">编辑</t-button>
               <t-button variant="text" size="small" @click="openSchedule(row)">定时发布</t-button>
-              <t-popconfirm content="确认立即发布该文章？" @confirm="onPublishNow(row)">
+              <t-popconfirm content="确认立即发布该文章？" confirm-btn="立即发布" @confirm="onPublishNow(row)">
                 <t-button variant="text" size="small" theme="primary" :loading="acting === row.id + ':publish'">
                   立即发布
                 </t-button>
               </t-popconfirm>
-              <t-popconfirm content="确认归档该投稿？归档后可在归档管理中恢复" @confirm="onDelete(row)">
+              <t-popconfirm
+                content="确认归档该投稿？归档后可在归档管理中恢复"
+                confirm-btn="归档"
+                @confirm="onDelete(row)"
+              >
                 <t-button variant="text" size="small" theme="danger" :loading="acting === row.id + ':delete'">
                   <template #icon><DeleteIcon /></template>
                   归档
@@ -381,7 +387,7 @@ onMounted(load)
 
             <!-- 定时发布中：取消定时发布 / 立即发布 -->
             <template v-else-if="row.status === 'scheduled'">
-              <t-popconfirm content="确认取消定时发布？该文章将转为「待发布」" @confirm="onCancelSchedule(row)">
+              <t-popconfirm content="确认取消定时发布？该文章将转为「待发布」" confirm-btn="确认取消" @confirm="onCancelSchedule(row)">
                 <t-button
                   variant="text"
                   size="small"
@@ -391,7 +397,7 @@ onMounted(load)
                   取消定时发布
                 </t-button>
               </t-popconfirm>
-              <t-popconfirm content="确认立即发布该文章？" @confirm="onPublishNow(row)">
+              <t-popconfirm content="确认立即发布该文章？" confirm-btn="立即发布" @confirm="onPublishNow(row)">
                 <t-button variant="text" size="small" theme="primary" :loading="acting === row.id + ':publish'">
                   立即发布
                 </t-button>
@@ -408,7 +414,11 @@ onMounted(load)
 
             <!-- 已驳回：归档（移入归档管理，可恢复） -->
             <template v-else-if="row.status === 'rejected'">
-              <t-popconfirm content="确认归档该投稿？归档后可在归档管理中恢复" @confirm="onDelete(row)">
+              <t-popconfirm
+                content="确认归档该投稿？归档后可在归档管理中恢复"
+                confirm-btn="归档"
+                @confirm="onDelete(row)"
+              >
                 <t-button variant="text" size="small" theme="danger" :loading="acting === row.id + ':delete'">
                   <template #icon><DeleteIcon /></template>
                   归档
@@ -417,7 +427,11 @@ onMounted(load)
             </template>
             <template v-else-if="row.status === 'closed'">
               <t-button variant="text" size="small" theme="primary" :loading="acting === row.id + ':restore'" @click="onRestore(row)">恢复</t-button>
-              <t-popconfirm content="确认归档该已关闭投稿？" @confirm="onDelete(row)">
+              <t-popconfirm
+                content="确认归档该已关闭投稿？"
+                confirm-btn="归档"
+                @confirm="onDelete(row)"
+              >
                 <t-button variant="text" size="small" theme="danger" :loading="acting === row.id + ':delete'">
                   <template #icon><DeleteIcon /></template>
                   归档

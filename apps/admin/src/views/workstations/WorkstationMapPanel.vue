@@ -314,6 +314,7 @@ function enterpriseHref(w: Workstation): string | undefined {
 <style scoped>
 .legend-row {
   display: flex;
+  align-items: center;
   gap: 20px;
   margin-bottom: 16px;
 }

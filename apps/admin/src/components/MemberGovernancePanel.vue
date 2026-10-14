@@ -33,7 +33,12 @@ const { syncQuery } = useListQueryState({}, load, { refs: { status, page } })
 let version = 0
 
 function cooling(row: DeletionRow) { return !!row.effectiveAt && new Date(row.effectiveAt.replace(' ', 'T')).getTime() > Date.now() }
-function remaining(row: DeletionRow) { return cooling(row) ? `剩余 ${Math.ceil((new Date(row.effectiveAt!.replace(' ', 'T')).getTime() - Date.now()) / 3600000)} 小时` : '已届满，可复核' }
+/* 冷静期剩余时长：≥48 小时按天展示，避免「剩余 72 小时」这类长时长难读 */
+function remaining(row: DeletionRow) {
+  if (!cooling(row)) return '已届满，可复核'
+  const h = Math.ceil((new Date(row.effectiveAt!.replace(' ', 'T')).getTime() - Date.now()) / 3600000)
+  return h >= 48 ? `剩余 ${Math.ceil(h / 24)} 天` : `剩余 ${h} 小时`
+}
 async function load() {
   const current = ++version
   syncQuery(); loading.value = true; loadError.value = ''

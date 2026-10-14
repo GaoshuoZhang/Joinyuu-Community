@@ -222,6 +222,8 @@ function onCancel() {
 .block-content {
   max-height: 300px;
   overflow-y: auto;
+  /* 滚到边界时不将滚动透传给抽屉下的页面（M-07） */
+  overscroll-behavior: contain;
   line-height: 1.7;
 }
 

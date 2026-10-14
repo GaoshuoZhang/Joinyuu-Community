@@ -518,15 +518,16 @@ async function handleDropdown(item: { value?: string | number }) {
       </div>
 
       <div class="side-footer">
-        <div class="footer-btn" role="button" tabindex="0" :aria-label="isAllExpanded ? '全部折叠' : '全部展开'" @click="toggleAllGroups" @keydown.enter.space.prevent="toggleAllGroups">
+        <!-- 原生 button 替代 div[role=button]：无需手写 role/tabindex/键盘样板 -->
+        <button type="button" class="footer-btn" :aria-label="isAllExpanded ? '全部折叠' : '全部展开'" @click="toggleAllGroups">
           <ChevronUpIcon v-if="isAllExpanded" />
           <ChevronDownIcon v-else />
           <span v-if="!collapsed">{{ isAllExpanded ? '全部折叠' : '全部展开' }}</span>
-        </div>
-        <div class="footer-btn" role="button" tabindex="0" :aria-label="collapsed ? '展开菜单' : '收起菜单'" @click="collapsed = !collapsed" @keydown.enter.space.prevent="collapsed = !collapsed">
+        </button>
+        <button type="button" class="footer-btn" :aria-label="collapsed ? '展开菜单' : '收起菜单'" @click="collapsed = !collapsed">
           <ChevronLeftIcon :class="{ 'rotate-180': collapsed }" />
           <span v-if="!collapsed">收起菜单</span>
-        </div>
+        </button>
       </div>
     </aside>
 
@@ -558,17 +559,15 @@ async function handleDropdown(item: { value?: string | number }) {
               :class="{ active: tab.path === route.path }"
             >
               <t-link class="tab-title" theme="default" hover="color" :href="router.resolve(tab.path).href" :aria-current="tab.path === route.path ? 'page' : undefined">{{ tab.title }}</t-link>
-              <span
+              <button
                 v-if="tab.closable"
+                type="button"
                 class="tab-close"
-                role="button"
-                tabindex="0"
                 :aria-label="`关闭${tab.title}`"
                 @click.stop="closeTab(tab.path)"
-                @keydown.enter.space.stop.prevent="closeTab(tab.path)"
               >
                 <CloseIcon />
-              </span>
+              </button>
             </div>
           </div>
         </nav>
@@ -750,7 +749,8 @@ async function handleDropdown(item: { value?: string | number }) {
   flex-shrink: 0;
 }
 
-/* 侧栏底部操作按钮：图标靠前、文字跟随；收起态仅显示图标居中 */
+/* 侧栏底部操作按钮：图标靠前、文字跟随；收起态仅显示图标居中。
+ * 原生 button 样式重置：不引入新配色，背景/边框清零，字体与颜色继承容器 */
 .footer-btn {
   display: flex;
   align-items: center;
@@ -758,7 +758,10 @@ async function handleDropdown(item: { value?: string | number }) {
   gap: 5px;
   height: 28px;
   padding: 0 6px;
+  background: none;
+  border: none;
   border-radius: var(--td-radius-default);
+  font-family: inherit;
   color: var(--td-text-color-secondary);
   font-size: 12px;
   white-space: nowrap;
@@ -944,12 +947,12 @@ async function handleDropdown(item: { value?: string | number }) {
   -webkit-mask-image: linear-gradient(to right, #000 calc(100% - 24px), transparent 100%);
 }
 
-/* 轨道随滚轮横向位移（transform，参考 TDesign Tabs 导航滑动） */
+/* 轨道随滚轮横向位移（transform，参考 TDesign Tabs 导航滑动）。
+ * 不声明 will-change：transition 已够平滑，常驻 will-change 徒增图层内存 */
 .tab-track {
   display: flex;
   align-items: center;
   gap: 4px;
-  will-change: transform;
   transition: transform 0.2s cubic-bezier(0.38, 0, 0.24, 1);
 }
 
@@ -1003,6 +1006,11 @@ async function handleDropdown(item: { value?: string | number }) {
   display: inline-flex;
   align-items: center;
   justify-content: center;
+  /* 原生 button 样式重置：不引入新配色，背景/边框/内边距清零，字体继承 */
+  padding: 0;
+  background: none;
+  border: none;
+  font: inherit;
   /* 命中区 24×24（图标仍 12px 视觉尺寸）：16px 目标过小，指针与触摸均易点空。
    * 直接放大元素而非用伪元素外扩——标签栏 overflow:hidden 会裁掉外扩部分 */
   width: 24px;

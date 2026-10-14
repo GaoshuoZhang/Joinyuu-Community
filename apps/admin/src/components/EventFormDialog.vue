@@ -333,7 +333,7 @@ function onClose() {
             </t-popup>
           </template>
           <t-popup content="开启后，用户报名需经管理员审核；关闭后报名自动通过" show-arrow>
-            <span class="scope-switch-trigger"><t-switch v-model="form.requireReview" /></span>
+            <span class="scope-switch-trigger"><t-switch v-model="form.requireReview" aria-label="报名需审核" /></span>
           </t-popup>
         </t-form-item>
       </div>
@@ -368,7 +368,7 @@ function onClose() {
               <span class="scope-title scope-popup-trigger">自定义可见范围</span>
             </t-popup>
             <t-popup content="关闭 = 所有用户可见" show-arrow>
-              <span class="scope-switch-trigger"><t-switch v-model="customVisibility" /></span>
+              <span class="scope-switch-trigger"><t-switch v-model="customVisibility" aria-label="自定义可见范围" /></span>
             </t-popup>
           </div>
           <t-form-item v-if="customVisibility" label="身份" name="visibilityIdentities">
@@ -392,7 +392,7 @@ function onClose() {
             <div class="scope-right">
               <t-button v-if="customEnrollment && customVisibility" variant="text" size="small" @click="syncEnrollment">同步可见范围</t-button>
               <t-popup content="关闭 = 所有用户可报名" show-arrow>
-                <span class="scope-switch-trigger"><t-switch v-model="customEnrollment" /></span>
+                <span class="scope-switch-trigger"><t-switch v-model="customEnrollment" aria-label="自定义可报名范围" /></span>
               </t-popup>
             </div>
           </div>

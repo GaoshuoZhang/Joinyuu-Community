@@ -114,7 +114,8 @@ onMounted(load)
           </div>
         </template>
         <template #exp="{ row }">
-          <span class="exp-add">+{{ row.delta }}</span>
+          <!-- 正数显式带 +，负数原样展示（对齐 MallLedgerPanel 口径） -->
+          <span class="exp-add">{{ row.delta > 0 ? `+${row.delta}` : row.delta }}</span>
         </template>
       </t-table>
     </div>

@@ -48,7 +48,7 @@ const columns = [
   { colKey: 'status', title: '状态', cell: 'status', width: 100, resizable: true, ellipsis: true },
   { colKey: 'waitlistOrder', title: '候补顺序', cell: 'waitlistOrder', width: 100, resizable: true, ellipsis: true },
   { colKey: 'checkedIn', title: '签到', cell: 'checkedIn', width: 90, resizable: true, ellipsis: true },
-  { colKey: 'op', title: '操作', cell: 'op', width: 150 },
+  { colKey: 'op', title: '操作', cell: 'op', width: 170 },
 ]
 
 /* 列配置：本地持久化显隐/顺序 */
@@ -306,7 +306,7 @@ onMounted(load)
           </div>
         </template>
         <template #empty>
-          <ListEmptyState :query="query" :ignore="['status']" description="暂无报名记录" @clear="onReset" />
+          <ListEmptyState :query="query" :ignore="['status']" description="暂无报名记录，成员在各活动报名后将汇总展示在这里" @clear="onReset" />
         </template>
       </t-table>
     </div>

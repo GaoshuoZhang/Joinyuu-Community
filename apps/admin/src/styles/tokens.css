@@ -365,15 +365,15 @@ html[data-route-loading='true']::after {
   }
 }
 
-/* 卡片交错载入 */
+/* 卡片交错载入（卡片 120ms 交错） */
 .stagger > * {
   animation: pageFadeIn 240ms ease-out backwards;
 }
 .stagger > *:nth-child(1) { animation-delay: 0ms; }
-.stagger > *:nth-child(2) { animation-delay: 60ms; }
-.stagger > *:nth-child(3) { animation-delay: 120ms; }
-.stagger > *:nth-child(4) { animation-delay: 180ms; }
-.stagger > *:nth-child(5) { animation-delay: 240ms; }
+.stagger > *:nth-child(2) { animation-delay: 120ms; }
+.stagger > *:nth-child(3) { animation-delay: 240ms; }
+.stagger > *:nth-child(4) { animation-delay: 360ms; }
+.stagger > *:nth-child(5) { animation-delay: 480ms; }
 
 @media (prefers-reduced-motion: reduce) {
   *,
@@ -417,9 +417,12 @@ html[data-route-loading='true']::after {
   transition: box-shadow 160ms ease, transform 160ms ease;
 }
 
-.stat-card:hover {
-  box-shadow: var(--td-shadow-1);
-  transform: translateY(-2px);
+/* 悬浮上浮效果仅对真实指针设备生效：触屏长按不触发无意义位移 */
+@media (hover: hover) {
+  .stat-card:hover {
+    box-shadow: var(--td-shadow-1);
+    transform: translateY(-2px);
+  }
 }
 
 /* 可点击的筛选卡片（调用方传 class="stat-clickable"） */

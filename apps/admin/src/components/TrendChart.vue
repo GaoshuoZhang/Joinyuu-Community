@@ -105,6 +105,12 @@ const hoverInfo = computed(() => {
     value: v,
   }
 })
+
+/* 逐点数据表（视觉隐藏）：role="img" 会把 svg 子树对读屏隐藏，
+ * 故该表放在 svg 之外的根容器内，作为键盘交互外的完整数据替代 */
+const dataPoints = computed(() =>
+  props.data.map((v, i) => ({ label: props.labels[i] ?? `第 ${i + 1} 点`, value: v })),
+)
 </script>
 
 <template>
@@ -193,6 +199,13 @@ const hoverInfo = computed(() => {
         </g>
       </svg>
     </div>
+
+    <!-- 视觉隐藏数据表：svg role="img" 之外的兄弟节点，读屏可完整访问逐点数据 -->
+    <table class="sr-only">
+      <caption>{{ accessibleSummary }}</caption>
+      <thead><tr><th>日期</th><th>数值</th></tr></thead>
+      <tbody><tr v-for="p in dataPoints" :key="p.label"><td>{{ p.label }}</td><td>{{ p.value }}</td></tr></tbody>
+    </table>
   </div>
 </template>
 
@@ -219,5 +232,20 @@ const hoverInfo = computed(() => {
 .tip-value {
   font-size: 14px;
   font-weight: 600;
+  /* 数值变化宽度不抖动 */
+  font-variant-numeric: tabular-nums;
+}
+
+/* 视觉隐藏数据表：仅供读屏/搜索引擎访问，不占布局 */
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
 }
 </style>

@@ -340,6 +340,15 @@ onMounted(() => {
         </template>
         <template #op="{ row }">
           <div class="op-cell" @click.stop>
+            <!-- 非待审核行也提供「详情」入口：键盘/屏幕阅读用户不依赖行点击即可打开详情抽屉 -->
+            <t-button
+              v-if="row.status !== 'pending'"
+              variant="text"
+              size="small"
+              @click="openDetail(row)"
+            >
+              详情
+            </t-button>
             <t-button
               v-if="row.status === 'pending'"
               variant="text"
@@ -351,14 +360,16 @@ onMounted(() => {
             </t-button>
             <t-popconfirm
               v-if="row.status === 'pending' || row.status === 'approved'"
-              content="确认取消该预约？"
+              :content="`确认取消预约 ${row.id}？`"
+              confirm-btn="取消预约"
               @confirm="onCancel(row)"
             >
               <t-button variant="text" size="small" theme="danger" :loading="acting === row.id">取消</t-button>
             </t-popconfirm>
             <t-popconfirm
               v-if="['ended', 'rejected', 'cancelled'].includes(deriveReservationStatus(row))"
-              content="确认归档该预约？归档后可在归档管理中恢复"
+              :content="`确认归档预约 ${row.id}？归档后可在归档管理中恢复`"
+              confirm-btn="归档"
               @confirm="onArchive(row)"
             >
               <t-button variant="text" size="small" theme="danger" :loading="acting === row.id + ':archive'">

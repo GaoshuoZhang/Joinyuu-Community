@@ -25,6 +25,7 @@ import {
 import type { EventTicketRow } from '@/api/events'
 import type { CommunityEvent, EventEnrollment } from '@/types'
 import { exportCsv } from '@/utils/exportCsv'
+import { focusFirstInvalid } from '@/utils/form'
 import { isNotFound } from '@/api/http'
 import ListErrorState from '@/components/ListErrorState.vue'
 
@@ -50,6 +51,13 @@ const redeeming = ref(false)
 const acting = ref('')
 const rescheduleVisible = ref(false)
 const rescheduleForm = reactive({ startTime: '', endTime: '', reason: '' })
+const rescheduleFormRef = ref()
+/* 规则 trigger 一律 submit：确认时 validate 才红框提示（与项目弹窗惯例一致） */
+const rescheduleRules: FormProps['rules'] = {
+  startTime: [{ required: true, message: '请选择新开始时间', trigger: 'submit' }],
+  endTime: [{ required: true, message: '请选择新结束时间', trigger: 'submit' }],
+  reason: [{ required: true, message: '请填写改期原因', trigger: 'submit' }],
+}
 
 function openReschedule() {
   if (!event.value) return
@@ -57,13 +65,13 @@ function openReschedule() {
   rescheduleForm.endTime = event.value.endTime
   rescheduleForm.reason = ''
   rescheduleVisible.value = true
+  nextTick(() => rescheduleFormRef.value?.clearValidate())
 }
 
 async function onReschedule() {
-  if (!event.value || !rescheduleForm.startTime || !rescheduleForm.endTime || !rescheduleForm.reason.trim()) {
-    MessagePlugin.warning('请填写新时间和改期原因')
-    return
-  }
+  if (!event.value) return
+  const valid = await rescheduleFormRef.value.validate()
+  if (valid !== true) return focusFirstInvalid(rescheduleFormRef.value)
   acting.value = 'reschedule'
   try {
     const result = await rescheduleEvent(event.value.id, { ...rescheduleForm, reason: rescheduleForm.reason.trim() })
@@ -394,7 +402,7 @@ onMounted(() => load())
                 <t-button theme="primary" :loading="acting === 'publish-now'" @click="onPublishNow">立即发布</t-button>
                 <t-button variant="outline" @click="editVisible = true">编辑</t-button>
                 <t-button variant="outline" @click="openSchedule">定时发布</t-button>
-                <t-popconfirm content="确认取消该活动？取消后不可恢复" @confirm="onCancel">
+                <t-popconfirm content="确认取消该活动？取消后可转为待发布，已报名成员将收到通知" @confirm="onCancel">
                   <t-button variant="outline" theme="danger" :loading="acting === 'cancel'">取消活动</t-button>
                 </t-popconfirm>
               </template>
@@ -416,10 +424,19 @@ onMounted(() => load())
               <template v-else-if="event.status === 'published'">
                 <t-button variant="outline" @click="editVisible = true">编辑</t-button>
                 <t-button variant="outline" theme="warning" @click="openReschedule">活动改期</t-button>
-                <t-button variant="outline" :loading="acting === 'enrollment'" @click="onToggleEnrollment">
-                  {{ event.enrollmentOpen ? '暂停报名' : '开放报名' }}
+                <!-- 暂停报名影响全部成员报名需确认；开放报名为恢复性操作直接执行 -->
+                <t-popconfirm
+                  v-if="event.enrollmentOpen"
+                  content="确认暂停报名？暂停后成员将无法报名"
+                  confirm-btn="暂停报名"
+                  @confirm="onToggleEnrollment"
+                >
+                  <t-button variant="outline" :loading="acting === 'enrollment'">暂停报名</t-button>
+                </t-popconfirm>
+                <t-button v-else variant="outline" :loading="acting === 'enrollment'" @click="onToggleEnrollment">
+                  开放报名
                 </t-button>
-                <t-popconfirm content="确认取消该活动？取消后不可恢复" @confirm="onCancel">
+                <t-popconfirm content="确认取消该活动？取消后可转为待发布，已报名成员将收到通知" @confirm="onCancel">
                   <t-button
                     variant="outline"
                     theme="danger"
@@ -499,7 +516,7 @@ onMounted(() => load())
                     <template #action>{{ item.at }}</template>
                   </t-list-item>
                 </t-list>
-                <t-empty v-else description="暂无活动反馈" />
+                <t-empty v-else description="暂无活动反馈，成员报名与签到后会展示在这里" />
               </div>
             </div>
           </t-tab-panel>
@@ -529,7 +546,7 @@ onMounted(() => load())
                   <span v-else class="op-none">—</span>
                 </template>
               </t-table>
-              <t-empty v-else description="暂无报名" />
+              <t-empty v-else description="暂无报名，可放宽可报名范围或活动报名开放后成员自行报名" />
             </div>
           </t-tab-panel>
 
@@ -570,15 +587,22 @@ onMounted(() => load())
                   <span v-else class="op-none">—</span>
                 </template>
               </t-table>
-              <t-empty v-else description="暂无已通过报名" />
+              <t-empty v-else description="暂无已通过的报名，先处理待审核报名" />
             </div>
           </t-tab-panel>
 
           <t-tab-panel value="tickets" label="票务核销">
             <div class="tab-body">
               <div class="ticket-tools">
-                <t-input class="ctl-w-xl" v-model="redeemCode" placeholder="输入 8 位核销码…" clearable @enter="onRedeemTicket" />
-                <t-button theme="primary" :loading="redeeming" @click="onRedeemTicket">核销</t-button>
+                <!-- 核销为一次性不可逆消费：确认统一走「核销」按钮的 popconfirm（输入框回车不再直接核销，防误触） -->
+                <t-input class="ctl-w-xl" v-model="redeemCode" placeholder="输入 8 位核销码…" clearable />
+                <t-popconfirm
+                  content="确认核销该电子票？核销后票不可再用"
+                  confirm-btn="确认核销"
+                  @confirm="onRedeemTicket"
+                >
+                  <t-button theme="primary" :loading="redeeming">核销</t-button>
+                </t-popconfirm>
                 <t-button variant="outline" @click="exportTickets">导出票务名单</t-button>
               </div>
               <t-table
@@ -598,7 +622,7 @@ onMounted(() => load())
                   <span v-if="row.redeemedAt" class="field-help">{{ row.redeemedAt }}</span>
                 </template>
               </t-table>
-              <t-empty v-else description="暂无已签发电子票" />
+              <t-empty v-else description="暂无已签发电子票，报名通过后将自动签发电子票" />
             </div>
           </t-tab-panel>
         </t-tabs>
@@ -620,8 +644,14 @@ onMounted(() => load())
     <!-- 待发布：定时发布对话框 -->
     <EventScheduleDialog v-model:visible="scheduleVisible" :event="event" @success="() => load(true)" />
 
-    <t-dialog v-model:visible="rescheduleVisible" header="活动改期" width="560px">
-      <t-form :data="rescheduleForm" label-align="top">
+    <!-- 改期弹窗含表单输入：禁用点遮罩关闭，防误触丢失输入 -->
+    <t-dialog
+      v-model:visible="rescheduleVisible"
+      :header="event ? `活动改期 · ${event.title}` : '活动改期'"
+      width="560px"
+      :close-on-overlay-click="false"
+    >
+      <t-form ref="rescheduleFormRef" :data="rescheduleForm" :rules="rescheduleRules" label-align="top">
         <div class="reschedule-grid">
           <t-form-item label="新开始时间" name="startTime">
             <t-date-picker v-model="rescheduleForm.startTime" valueType="YYYY-MM-DD HH:mm" enable-time-picker class="ctl-w-full" />

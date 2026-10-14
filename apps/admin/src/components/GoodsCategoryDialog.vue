@@ -214,6 +214,7 @@ watch(
                 </t-button>
                 <t-popconfirm
                   :content="`确认删除类别「${entry.label}」？已使用该类别编码的历史商品不受影响，但不再作为选项下发。`"
+                  :confirm-btn="{ content: '删除', theme: 'danger' }"
                   @confirm="onDelete(entry)"
                 >
                   <t-button variant="text" theme="danger" size="small" :loading="acting === entry.code">
@@ -238,6 +239,8 @@ watch(
   gap: 16px;
   max-height: 70vh;
   overflow-y: auto;
+  /* 滚到边界时不将滚动透传给弹窗遮罩下的页面（M-07） */
+  overscroll-behavior: contain;
 }
 
 .cat-form {

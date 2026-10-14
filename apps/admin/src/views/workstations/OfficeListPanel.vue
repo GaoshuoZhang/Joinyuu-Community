@@ -337,6 +337,7 @@ function enterpriseHref(w: Workstation): string | undefined {
 
 /* 办公室卡片：t-card 为内核（边框/圆角/悬浮阴影来自 TDesign），状态底色覆盖容器背景 */
 .office-card {
+  min-height: 96px;
   height: 100%;
   display: flex;
   flex-direction: column;
@@ -409,19 +410,18 @@ function enterpriseHref(w: Workstation): string | undefined {
   white-space: nowrap;
 }
 
+/* 企业名链接：与办公位管理页 .ws-enterprise 同口径（12px + hover 变色） */
 .office-enterprise {
-  font-size: 14px;
-  font-weight: 500;
+  font-size: 12px;
   color: var(--td-text-color-primary);
 }
 
 .office-enterprise.clickable {
   cursor: pointer;
-  color: var(--td-brand-color);
 }
 
 .office-enterprise.clickable:hover {
-  text-decoration: underline;
+  color: var(--td-brand-color);
 }
 
 .office-enterprise-empty {

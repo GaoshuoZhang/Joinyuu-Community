@@ -244,6 +244,7 @@ onMounted(load)
               </t-button>
               <t-popconfirm
                 content="确认删除该栏目？其中文章将自动转移至「未指定」栏目。"
+                :confirm-btn="{ content: '删除', theme: 'danger' }"
                 @confirm="onDelete(row)"
               >
                 <t-button variant="text" size="small" theme="danger" :loading="acting === row.id + ':delete'">
@@ -254,7 +255,11 @@ onMounted(load)
           </div>
         </template>
         <template #empty>
-          <ListEmptyState description="暂无栏目" />
+          <ListEmptyState description="暂无栏目">
+            <template #action>
+              <t-button theme="primary" @click="openCreate">新增栏目</t-button>
+            </template>
+          </ListEmptyState>
         </template>
       </t-table>
     </div>

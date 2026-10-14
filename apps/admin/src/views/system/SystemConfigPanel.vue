@@ -138,7 +138,12 @@ async function onTestRealname() {
     MessagePlugin.error(e instanceof Error ? e.message : '联通测试失败')
   } finally {
     realnameTesting.value = false
+  }
+  /* 刷新配置与联通状态：失败时保留当前表单值，不覆盖用户正在编辑的内容 */
+  try {
     applyConfig(await fetchSystemConfig())
+  } catch {
+    /* 保留当前表单值 */
   }
 }
 
@@ -402,7 +407,7 @@ onBeforeRouteLeave(async () => {
                   启用并测试联通后，客户端显示「实名认证」；未启用或未联通时显示「身份信息登记」
                 </div>
               </div>
-              <t-switch v-model="form.realnameVerifyEnabled" />
+              <t-switch v-model="form.realnameVerifyEnabled" aria-label="启用实名核验" />
             </div>
           </div>
           <template v-if="form.realnameVerifyEnabled">
@@ -510,7 +515,7 @@ onBeforeRouteLeave(async () => {
                 <div class="switch-label">启用 MinIO</div>
                 <div class="switch-tip">启用后素材/富文本图片上传写入 MinIO；停用则回退本地磁盘（UPLOAD_DIR）</div>
               </div>
-              <t-switch v-model="form.minioEnabled" />
+              <t-switch v-model="form.minioEnabled" aria-label="启用 MinIO" />
             </div>
           </div>
           <div v-if="form.minioEnabled" class="form-grid">
@@ -530,7 +535,7 @@ onBeforeRouteLeave(async () => {
               <t-input-number class="ctl-w-lg" v-model="form.minioPort" :min="1" :max="65535" :step="1" theme="column" />
             </t-form-item>
             <t-form-item label="使用 HTTPS" name="minioUseSsl">
-              <t-switch v-model="form.minioUseSsl" />
+              <t-switch v-model="form.minioUseSsl" aria-label="使用 HTTPS" />
             </t-form-item>
             <t-form-item
               label="AccessKey"

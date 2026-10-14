@@ -31,6 +31,19 @@ const formRef = ref()
 /* 租赁方原始数据（用于选项渲染与联系电话自动填充） */
 const renterUsers = ref<{ uid: string; nickname: string; phone: string }[]>([])
 const renterEnterprises = ref<{ id: string; name: string; contactName: string; contactPhone: string }[]>([])
+/* 租赁方选项加载失败：内联提示 + 重试（替代仅 toast，与 WorkstationFormDialog/AreaPlanDialog 同构） */
+const optionLoadError = ref('')
+
+async function loadRenterOptions() {
+  try {
+    const opts = await fetchRenterOptions()
+    renterUsers.value = opts.users
+    renterEnterprises.value = opts.enterprises
+    optionLoadError.value = ''
+  } catch (e) {
+    optionLoadError.value = e instanceof Error ? e.message : '租赁方选项加载失败'
+  }
+}
 
 const form = reactive({
   /* 选择器的值：E:企业ID / U:用户ID / 自定义文本（未注册租赁方名称） */
@@ -140,13 +153,7 @@ watch(
   () => props.visible,
   async (v) => {
     if (!v) return
-    try {
-      const opts = await fetchRenterOptions()
-      renterUsers.value = opts.users
-      renterEnterprises.value = opts.enterprises
-    } catch {
-      MessagePlugin.error('租赁方选项加载失败')
-    }
+    await loadRenterOptions()
     if (props.mode === 'edit' && props.lease) {
       form.renterValue = renterValueOf(props.lease)
       form.enterpriseId = props.lease.enterpriseId
@@ -279,6 +286,12 @@ function onClose() {
       </div>
     </template>
     <t-form ref="formRef" :data="form" :rules="rules" label-align="top">
+      <!-- 租赁方选项加载失败：内联错误 + 重试（同步 WorkstationFormDialog / AreaPlanDialog 同构） -->
+      <t-alert v-if="optionLoadError" theme="error" style="margin-bottom: 12px">
+        <div class="error-retry-line">{{ optionLoadError }}
+          <t-button size="small" variant="text" theme="primary" @click="loadRenterOptions">重新加载</t-button>
+        </div>
+      </t-alert>
       <div class="form-row">
         <t-form-item label="租赁方" name="renterValue">
           <t-input
@@ -377,6 +390,13 @@ function onClose() {
   display: grid;
   grid-template-columns: 1fr 1fr;
   gap: 0 16px;
+}
+
+/* 选项加载失败行：错误文案与「重新加载」按钮同行 */
+.error-retry-line {
+  display: flex;
+  align-items: center;
+  gap: 4px;
 }
 
 .rent-period-group {

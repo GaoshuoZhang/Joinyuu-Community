@@ -10,6 +10,7 @@ import {
   type ApplicationFormField,
   type ApplicationFieldType,
 } from '@/api/applications'
+import { applicationTypeMap } from '@/constants/status'
 
 const configs = ref<ApplicationFormConfig[]>([])
 const active = ref<ApplicationFormConfig['type']>('settle')
@@ -26,8 +27,11 @@ const draft = reactive({
   fields: [] as ApplicationFormField[],
 })
 
+/* 申请类型名称统一取自 constants/status.ts 的 applicationTypeMap（与申请审核列表/打印页单一来源对齐） */
 const labels: Record<ApplicationFormConfig['type'], string> = {
-  settle: '企业入驻', cooperation: '合作伙伴', individual: '人才登记',
+  settle: applicationTypeMap.settle.label,
+  cooperation: applicationTypeMap.cooperation.label,
+  individual: applicationTypeMap.individual.label,
 }
 const typeOptions: { label: string; value: ApplicationFieldType }[] = [
   { label: '单行文本', value: 'text' },

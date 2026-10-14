@@ -321,7 +321,7 @@ function mapRow(d: Demand): (string | number)[] {
     d.publisherName,
     d.budget || '—',
     d.responseCount,
-    d.respondNeedReview ? d.pendingResponseCount : '-',
+    d.respondNeedReview ? d.pendingResponseCount : '—',
     statusLabel('demand', d.status),
     d.createdAt,
     d.publishedAt ?? '—',
@@ -471,11 +471,17 @@ async function onArchiveDemand(row: Demand) {
 /* 一键归档：按当前筛选全量拉取，归档所选状态的已驳回 / 已关闭 / 已立项需求 */
 const archivingAll = ref(false)
 const bulkVisible = ref(false)
+const bulkProgress = ref<{ done: number; total: number; failed: number } | null>(null)
+let bulkCancelled = false
 const bulkStatuses = [
   { label: '已驳回', value: 'rejected' },
   { label: '已关闭', value: 'closed' },
   { label: '已立项', value: 'projected' },
 ]
+
+function onBulkCancel() {
+  bulkCancelled = true
+}
 
 async function doBulkArchive(values: string[]) {
   const targets: Demand[] = []
@@ -489,16 +495,28 @@ async function doBulkArchive(values: string[]) {
     MessagePlugin.info('没有符合所选状态的可归档需求')
     return
   }
+  /* 进度 + 可取消：逐条执行，取消后停止后续条目（对齐 ApprovalListView 同名流程） */
+  bulkCancelled = false
+  bulkProgress.value = { done: 0, total: pending.length, failed: 0 }
+  let done = 0
   let failed = 0
   for (const d of pending) {
+    if (bulkCancelled) break
     try {
       await archiveDemand(d.id)
     } catch {
       failed++
     }
+    done++
+    bulkProgress.value = { done, total: pending.length, failed }
   }
-  if (pending.length - failed > 0) MessagePlugin.success(`已归档 ${pending.length - failed} 条需求`)
-  if (failed > 0) MessagePlugin.warning(`${failed} 条需求归档失败，请重试`)
+  bulkProgress.value = null
+  if (bulkCancelled) {
+    MessagePlugin.warning(`已取消，剩余条目未处理（本次已归档 ${done - failed} 条）`)
+  } else {
+    if (pending.length - failed > 0) MessagePlugin.success(`已归档 ${pending.length - failed} 条需求`)
+    if (failed > 0) MessagePlugin.warning(`${failed} 条需求归档失败，请重试`)
+  }
   await load()
 }
 
@@ -708,7 +726,7 @@ async function loadCategories() {
       >
         <template #title="{ row }">
           <div class="demand-cell">
-            <span class="demand-title">{{ row.title }}</span>
+            <span class="demand-title" :title="row.title">{{ row.title }}</span>
             <span class="demand-id">{{ row.id }}</span>
           </div>
         </template>
@@ -743,7 +761,7 @@ async function loadCategories() {
             <span class="respond-count">
               {{ row.responseCount }} /
               <span v-if="row.respondNeedReview" :class="{ 'respond-pending': row.pendingResponseCount > 0 }">{{ row.pendingResponseCount }}</span>
-              <span v-else>-</span>
+              <span v-else>—</span>
             </span>
             <!-- 标签色：等于积分规则默认值=绿色；低于=红色；高于=橙色；文字线索同步给出比较结果 -->
             <t-tag
@@ -786,7 +804,11 @@ async function loadCategories() {
             <!-- 待发布：编辑 / 立即发布 / 定时发布 / 关闭 -->
             <template v-if="row.status === 'pending_release'">
               <t-button variant="text" size="small" @click="openEdit(row)">编辑</t-button>
-              <t-popconfirm content="确认立即发布该需求？发布后成员即可响应" @confirm="onPublishNow(row)">
+              <t-popconfirm
+                :content="`确认立即发布「${row.title}」？发布后成员即可响应`"
+                confirm-btn="立即发布"
+                @confirm="onPublishNow(row)"
+              >
                 <t-button
                   variant="text"
                   size="small"
@@ -804,13 +826,20 @@ async function loadCategories() {
               variant="text"
               size="small"
               theme="primary"
+              title="将基于该需求创建项目并建立关联，可在项目管理中跟进"
               @click="openProject(row)"
             >
               立项
             </t-button>
             <!-- 已发布：立项 / 撤回发布 / 关闭 / 代报名（关闭后） -->
             <template v-if="row.status === 'published'">
-              <t-button variant="text" size="small" theme="primary" @click="openProject(row)">立项</t-button>
+              <t-button
+                variant="text"
+                size="small"
+                theme="primary"
+                title="将基于该需求创建项目并建立关联，可在项目管理中跟进"
+                @click="openProject(row)"
+              >立项</t-button>
               <t-button
                 variant="text"
                 size="small"
@@ -823,7 +852,8 @@ async function loadCategories() {
             <!-- 定时发布中：取消定时发布（状态标签直接显示定时发布时间） -->
             <t-popconfirm
               v-if="row.status === 'scheduled'"
-              content="确认取消定时发布？该需求将转为「待发布」"
+              :content="`确认取消「${row.title}」的定时发布？该需求将转为「待发布」`"
+              confirm-btn="取消定时发布"
               @confirm="onCancelSchedule(row)"
             >
               <t-button
@@ -841,7 +871,8 @@ async function loadCategories() {
             </t-button>
             <t-popconfirm
               v-if="row.status === 'pending_release'"
-              content="确认关闭该需求？"
+              :content="`确认关闭该需求「${row.title}」？`"
+              :confirm-btn="{ content: '关闭', theme: 'danger' }"
               @confirm="onCloseDemand(row)"
             >
               <t-button variant="text" size="small" theme="danger" :loading="isActing(row, 'close')">关闭</t-button>
@@ -858,7 +889,8 @@ async function loadCategories() {
             <!-- 已驳回 / 已关闭 / 已立项：归档（可在归档管理中恢复） -->
             <t-popconfirm
               v-if="row.status === 'rejected' || row.status === 'closed' || row.status === 'projected'"
-              content="确认归档该需求？归档后可在归档管理中恢复"
+              :content="`确认归档该需求「${row.title}」？归档后可在归档管理中恢复`"
+              confirm-btn="归档"
               @confirm="onArchiveDemand(row)"
             >
               <t-button variant="text" size="small" theme="warning" :loading="isActing(row, 'archive')">归档</t-button>
@@ -884,11 +916,12 @@ async function loadCategories() {
 
     <!-- 立项弹窗 -->
     <ProjectFormDialog v-model:visible="projectVisible" mode="create" :demand="current" :project="null" @success="load" />
-    <!-- 代报名弹窗：代成员响应需求 -->
+    <!-- 代报名弹窗：代成员响应需求（含表单输入，禁用点遮罩关闭防误触丢输入） -->
     <t-dialog
       :visible="proxyVisible"
       :header="proxyTarget ? `代报名 · ${proxyTarget.title}` : '代报名'"
       width="480px"
+      :close-on-overlay-click="false"
       @close="proxyVisible = false"
     >
       <t-form
@@ -940,7 +973,9 @@ async function loadCategories() {
       title="一键归档 · 需求"
       :statuses="bulkStatuses"
       :loading="archivingAll"
+      :progress="bulkProgress"
       @confirm="onBulkConfirm"
+      @cancel="onBulkCancel"
     />
   </div>
 </template>

@@ -306,7 +306,7 @@ onMounted(load)
                     @click.prevent="goPath(undertakerPath(u))"
                   >
                     <div class="ut-info">
-                      <span class="ut-name">{{ u.name }}<t-tag v-if="u.id" class="id-tag" size="small" variant="light">{{ u.id }}</t-tag></span>
+                      <span class="ut-name" :title="u.name">{{ u.name }}<t-tag v-if="u.id" class="id-tag" size="small" variant="light">{{ u.id }}</t-tag></span>
                       <t-tag variant="outline" size="small">{{ undertakerTypeMap[u.type] }}</t-tag>
                     </div>
                     <div class="ut-share">

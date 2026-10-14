@@ -374,4 +374,10 @@ function finishRouteLoading() {
 router.afterEach(finishRouteLoading)
 router.onError(finishRouteLoading)
 
+/* 路由切换后同步浏览器标签页标题：多标签/历史记录/读屏用户借此区分页面（meta.title 已冻结于路由表） */
+router.afterEach((to) => {
+  const title = to.meta.title as string | undefined
+  document.title = title ? `${title} · 聚屿社区管理后台` : '聚屿社区管理后台'
+})
+
 export default router

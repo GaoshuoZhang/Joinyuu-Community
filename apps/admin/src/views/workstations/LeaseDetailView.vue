@@ -237,14 +237,16 @@ onMounted(async () => {
           </t-button>
           <t-popconfirm
             v-if="canOperate"
-            content="确认终止该租约？关联办公位将立即释放"
+            :content="`确认终止租约 ${lease.id}？关联办公位将立即释放`"
+            :confirm-btn="{ content: '终止租约', theme: 'danger' }"
             @confirm="onTerminate"
           >
             <t-button variant="outline" theme="danger" :loading="acting === 'terminate'">终止</t-button>
           </t-popconfirm>
           <t-popconfirm
             v-if="viewStatus === 'terminated'"
-            content="确认归档该租约？归档后可在归档管理中恢复"
+            :content="`确认归档租约 ${lease.id}？归档后可在归档管理中恢复`"
+            confirm-btn="归档"
             @confirm="onArchive"
           >
             <t-button variant="outline" theme="danger" :loading="acting === 'archive'">归档</t-button>
@@ -371,7 +373,8 @@ onMounted(async () => {
                   <t-link theme="primary" hover="color" :href="c.url" target="_blank" rel="noopener">查看</t-link>
                   <t-popconfirm
                     v-if="!isArchived"
-                    content="确认删除该合同附件？删除后不可恢复"
+                    :content="`确认删除合同附件「${c.fileName}」？删除后不可恢复`"
+                    :confirm-btn="{ content: '删除', theme: 'danger' }"
                     @confirm="onRemoveContract(c)"
                   >
                     <t-button variant="text" size="small" theme="danger" :loading="removingId === c.id">删除</t-button>

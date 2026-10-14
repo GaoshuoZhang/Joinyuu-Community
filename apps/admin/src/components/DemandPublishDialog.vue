@@ -272,7 +272,7 @@ function onClose() {
       </div>
     </template>
     <t-form ref="formRef" :data="form" :rules="rules" label-align="top">
-      <div class="form-row">
+      <div class="form-row form-row--3">
         <t-form-item label="联系人" name="contactName">
           <t-input clearable v-model="form.contactName" placeholder="请输入联系人姓名…" />
         </t-form-item>
@@ -293,7 +293,7 @@ function onClose() {
             </t-popup>
           </template>
           <div class="contact-public-row">
-            <t-switch v-model="form.contactPublic" />
+            <t-switch v-model="form.contactPublic" aria-label="公开联系人" />
             <span class="scope-tip">{{ form.contactPublic ? '客户端可见联系人信息' : '客户端不可见联系人信息（默认）' }}</span>
           </div>
         </t-form-item>
@@ -304,7 +304,7 @@ function onClose() {
             </t-popup>
           </template>
           <div class="contact-public-row">
-            <t-switch v-model="form.respondNeedReview" />
+            <t-switch v-model="form.respondNeedReview" aria-label="响应需审核" />
             <span class="scope-tip">{{ form.respondNeedReview ? '需审核通过才对发布者可见（默认）' : '无需审核，直接对发布者可见' }}</span>
           </div>
         </t-form-item>
@@ -313,7 +313,7 @@ function onClose() {
       <t-form-item label="需求标题" name="title">
         <t-input clearable v-model="form.title" placeholder="请输入需求标题…" />
       </t-form-item>
-      <div class="form-row">
+      <div class="form-row form-row--3">
         <t-form-item label="需求类型" name="demandType">
           <t-select v-model="form.demandType" clearable :options="[
             { label: '找服务', value: 'task' },
@@ -380,7 +380,7 @@ function onClose() {
               <span class="scope-title scope-popup-trigger">自定义可见范围</span>
             </t-popup>
             <t-popup content="关闭 = 所有用户可见" show-arrow>
-              <span class="scope-switch-trigger"><t-switch v-model="customVisibility" /></span>
+              <span class="scope-switch-trigger"><t-switch v-model="customVisibility" aria-label="自定义可见范围" /></span>
             </t-popup>
           </div>
           <t-form-item v-if="customVisibility" label="身份" name="visibilityIdentities">
@@ -404,7 +404,7 @@ function onClose() {
             <div class="scope-right">
               <t-button v-if="customEnrollment && customVisibility" variant="text" size="small" @click="syncEnrollment">同步可见范围</t-button>
               <t-popup content="关闭 = 所有用户可报名" show-arrow>
-                <span class="scope-switch-trigger"><t-switch v-model="customEnrollment" /></span>
+                <span class="scope-switch-trigger"><t-switch v-model="customEnrollment" aria-label="自定义可报名范围" /></span>
               </t-popup>
             </div>
           </div>
@@ -450,12 +450,18 @@ function onClose() {
   gap: 0 16px;
 }
 
+/* 三控件行（联系人/电话/邮箱、类型/类别/预算）：独立三列，避免第 3 个控件掉行错位 */
+.form-row--3 {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
 .scope-col {
   min-width: 0;
 }
 
 @media (max-width: 767px) {
-  .form-row {
+  .form-row,
+  .form-row--3 {
     grid-template-columns: 1fr;
   }
 }

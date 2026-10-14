@@ -166,4 +166,10 @@ function onClose() {
   grid-template-columns: 1fr 1fr;
   gap: 0 16px;
 }
+
+@media (max-width: 767px) {
+  .form-row {
+    grid-template-columns: 1fr;
+  }
+}
 </style>

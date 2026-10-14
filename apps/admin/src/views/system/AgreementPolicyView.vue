@@ -3,6 +3,7 @@ import { onMounted, ref } from 'vue'
 import { MessagePlugin } from 'tdesign-vue-next'
 import PageHeader from '@/components/PageHeader.vue'
 import ListErrorState from '@/components/ListErrorState.vue'
+import ListEmptyState from '@/components/ListEmptyState.vue'
 import PolicyEditorDialog from '@/components/PolicyEditorDialog.vue'
 import StatusTag from '@/components/StatusTag.vue'
 import { createAgreementPolicy, fetchAgreementPolicies, updateAgreementPolicy, type AgreementPolicyPayload, type CommunityPolicyPayload, type PolicyRecord } from '@/api/policies'
@@ -65,7 +66,14 @@ onMounted(load)
     <!-- 错误态与表格互斥：否则加载失败时表格空态「暂无协议版本」仍渲染，误导为无数据 -->
     <ListErrorState v-if="loadError" :message="loadError" :loading="loading" @retry="load" />
     <div v-else class="page-card">
-      <t-table row-key="id" table-layout="fixed" hover resizable :data="rows" :columns="columns" :loading="loading" empty="暂无协议版本">
+      <t-table row-key="id" table-layout="fixed" hover resizable :data="rows" :columns="columns" :loading="loading">
+        <template #empty>
+          <ListEmptyState description="暂无协议版本">
+            <template #action>
+              <t-button theme="primary" @click="openEditor()">新增协议</t-button>
+            </template>
+          </ListEmptyState>
+        </template>
         <template #kind="{ row }"><t-tag variant="light">{{ policyKindText(row.kind) }}</t-tag></template>
         <template #status="{ row }"><StatusTag entity="communityPolicy" :value="row.status" /></template>
         <template #op="{ row }"><t-button variant="text" size="small" theme="primary" @click="openEditor(row)">编辑</t-button></template>

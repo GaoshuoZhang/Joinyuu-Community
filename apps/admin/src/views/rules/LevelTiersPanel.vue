@@ -224,7 +224,12 @@ onMounted(() => load())
               </span>
               <span class="tier-cell" role="cell">
                 <!-- 删除中间等级会使其后等级序号整体前移，需在确认文案中说明 -->
-                <t-popconfirm v-if="tiers[activeScope].length > 1" :content="`确认删除等级「${tier.label || index + 1}」？其后等级序号将依次前移。`" @confirm="removeLevel(index)">
+                <t-popconfirm
+                  v-if="tiers[activeScope].length > 1"
+                  :content="`确认删除等级「${tier.label || index + 1}」？其后等级序号将依次前移。`"
+                  :confirm-btn="{ content: '删除', theme: 'danger' }"
+                  @confirm="removeLevel(index)"
+                >
                   <t-button variant="text" size="small" theme="danger" :aria-label="`删除 ${index + 1} 级`"><template #icon><DeleteIcon /></template></t-button>
                 </t-popconfirm>
               </span>

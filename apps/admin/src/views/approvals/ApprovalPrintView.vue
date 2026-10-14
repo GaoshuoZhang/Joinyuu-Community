@@ -18,8 +18,9 @@ const loading = ref(true)
 /* 非 404 的加载失败：展示错误与重试入口（403/500/断网不再伪装成「未找到」） */
 const loadError = ref('')
 
+/* 动作文案与申请审核列表页口径一致：'提交'（不写'提交申请'） */
 const actionTextMap: Record<string, string> = {
-  submit: '提交申请',
+  submit: '提交',
   approve: '通过',
   reject: '驳回',
   withdraw: '撤回',

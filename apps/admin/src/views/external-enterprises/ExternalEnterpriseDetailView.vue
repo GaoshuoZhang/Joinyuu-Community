@@ -37,6 +37,8 @@ const memberColumns = [
   { colKey: 'title', title: '职位' , ellipsis: true},
   { colKey: 'phone', title: '联系电话', width: 140 , ellipsis: true},
   { colKey: 'status', title: '账号状态', cell: 'status', width: 110 , ellipsis: true},
+  /* 行点击仅有鼠标路径，操作列「详情」为键盘/读屏用户提供同等入口（H-01） */
+  { colKey: 'op', title: '操作', width: 80, cell: 'op' },
 ]
 
 async function load() {
@@ -127,7 +129,12 @@ async function onEnable() {
 
     <ListErrorState v-else-if="loadError" :message="loadError" :loading="loading" @retry="load" />
 
-    <t-empty v-else-if="!enterprise" description="合作企业不存在" />
+    <t-empty v-else-if="!enterprise" description="合作企业不存在">
+      <!-- 直达 URL 时 router.back() 可能离开系统，空态提供明确的下一步（L-01） -->
+      <template #action>
+        <t-button @click="router.push('/external-enterprises')">返回合作企业列表</t-button>
+      </template>
+    </t-empty>
 
     <template v-else>
       <!-- 企业头部 -->
@@ -153,6 +160,7 @@ async function onEnable() {
           <t-popconfirm
             v-if="enterprise.status === 'disabled'"
             content="确认启用该合作企业？启用后恢复为正常状态"
+            confirm-btn="启用"
             @confirm="onEnable"
           >
             <t-button
@@ -167,6 +175,7 @@ async function onEnable() {
           <t-popconfirm
             v-else
             content="确认停用该合作企业？"
+            :confirm-btn="{ content: '停用', theme: 'danger' }"
             @confirm="onDisable"
           >
             <t-button
@@ -180,6 +189,7 @@ async function onEnable() {
           <t-popconfirm
             v-if="enterprise.status === 'disabled'"
             content="确认归档该合作企业？归档后可在归档管理中恢复"
+            :confirm-btn="{ content: '归档', theme: 'danger' }"
             @confirm="onDelete"
           >
             <t-button
@@ -246,6 +256,9 @@ async function onEnable() {
                 empty="暂无关联成员"
                 @row-click="({ row }: { row: ExternalEnterpriseMember }) => router.push('/users/' + row.userId)"
               >
+                <template #op="{ row }">
+                  <t-button theme="primary" variant="text" size="small" @click.stop="router.push('/users/' + row.userId)">详情</t-button>
+                </template>
                 <template #member="{ row }">
                   <div class="member-cell">
                     <span class="member-name">{{ row.name }}</span>
@@ -396,8 +409,11 @@ async function onEnable() {
   transition: border-color 120ms ease;
 }
 
-.stat-item.clickable:hover {
-  border-color: var(--td-brand-color);
+/* 触屏无 hover：仅指针设备启用变色，避免粘滞 hover 被误读为选中态（L-04） */
+@media (hover: hover) {
+  .stat-item.clickable:hover {
+    border-color: var(--td-brand-color);
+  }
 }
 
 .stat-num {

@@ -349,7 +349,7 @@ function confirmArchiveStep(header: string, body: string): Promise<boolean> {
       header,
       body,
       /* 前两步同为不可逆删除的前置确认，与第三步（强确认）保持一致用危险色 */
-      confirmBtn: { content: '继续', theme: 'danger' },
+      confirmBtn: { content: '仍要继续', theme: 'danger' },
       cancelBtn: '取消',
       onConfirm: () => settle(true),
       onCancel: () => settle(false),
@@ -577,7 +577,7 @@ onMounted(load)
         <template #createdAt="{ row }">{{ row.data.createdAt || '—' }}</template>
         <template #op="{ row }">
           <div class="op-cell">
-            <t-popconfirm content="确认恢复该对象？" @confirm="onRestore(row)">
+            <t-popconfirm content="确认恢复该对象？" confirm-btn="恢复" @confirm="onRestore(row)">
               <t-button variant="text" size="small" :loading="acting === row.id + ':restore'">
                 <template #icon><RollbackIcon /></template>
                 恢复
@@ -587,6 +587,7 @@ onMounted(load)
               v-if="!activeDomainIsUserHistory"
               theme="danger"
               content="确认彻底删除该对象？删除后不可恢复"
+              :confirm-btn="{ content: '彻底删除', theme: 'danger' }"
               @confirm="onPurge(row)"
             >
               <t-button
@@ -635,7 +636,7 @@ onMounted(load)
         <t-form v-if="currentSetting" :data="currentSetting" label-align="top">
           <div v-if="currentSetting.autoArchiveSupported" class="setting-section">
             <t-form-item label="自动归档">
-              <t-switch v-model="currentSetting.autoArchive" />
+              <t-switch v-model="currentSetting.autoArchive" aria-label="自动归档" />
             </t-form-item>
             <t-form-item label="自动归档延时（天）">
               <t-input-number class="ctl-w-lg"
@@ -673,7 +674,7 @@ onMounted(load)
             <t-form-item label="自动删除">
               <div class="setting-row">
                 <div class="setting-danger-switch">
-                  <t-switch v-model="currentSetting.autoPurge" />
+                  <t-switch v-model="currentSetting.autoPurge" aria-label="自动删除" />
                 </div>
                 <span class="setting-warning">自动删除后不可恢复，请谨慎开启</span>
               </div>

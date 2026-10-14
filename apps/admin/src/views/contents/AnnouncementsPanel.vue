@@ -235,7 +235,7 @@ onMounted(load)
         @row-click="({ row }: { row: Announcement }) => openEdit(row)"
       >
         <template #title="{ row }">
-          <div class="cell-title">{{ row.title }}</div>
+          <div class="cell-title" :title="row.title">{{ row.title }}</div>
           <t-tag class="id-tag-block" size="small" variant="light">{{ row.id }}</t-tag>
         </template>
         <template #status="{ row }">
@@ -277,6 +277,8 @@ onMounted(load)
         </template>
         <template #op="{ row }">
           <div class="op-cell" @click.stop>
+            <!-- 详情：行点击（打开编辑弹窗）的键盘可达替代 -->
+            <t-button theme="primary" variant="text" size="small" @click="openEdit(row)">详情</t-button>
             <t-button variant="text" size="small" @click="openEdit(row)">
               <template #icon><EditIcon /></template>
               编辑
@@ -284,6 +286,7 @@ onMounted(load)
             <t-popconfirm
               v-if="row.status === 'published'"
               content="确认下架该公告？下架后客户端首页立即隐藏，且会取消启用。"
+              confirm-btn="下架"
               @confirm="onWithdraw(row)"
             >
               <t-button variant="text" size="small" theme="warning" :loading="acting === row.id + ':withdraw'">
@@ -304,6 +307,7 @@ onMounted(load)
             <t-popconfirm
               v-if="row.status === 'withdrawn'"
               content="确认归档该公告？归档后可在「归档管理」中恢复。"
+              confirm-btn="归档"
               @confirm="onDelete(row)"
             >
               <t-button variant="text" size="small" theme="warning" :loading="acting === row.id + ':delete'">

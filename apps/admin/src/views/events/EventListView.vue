@@ -86,7 +86,7 @@ const columns = [
   { colKey: 'enrolled', title: '报名', cell: 'enrolled', width: 150, resizable: true , ellipsis: true},
   { colKey: 'checked', title: '签到', cell: 'checked', width: 150, resizable: true , ellipsis: true},
   { colKey: 'status', title: '状态', cell: 'status', width: 150, resizable: true , ellipsis: true},
-  { colKey: 'op', title: '操作', cell: 'op', width: 340 },
+  { colKey: 'op', title: '操作', cell: 'op', width: 400 },
 ]
 
 /* 列配置：本地持久化显隐/顺序 */
@@ -588,7 +588,7 @@ function fetchAllForExport(page: number, pageSize: number) {
                 </t-button>
               </t-popconfirm>
               <t-button variant="text" size="small" @click="openSchedule(row)">定时发布</t-button>
-              <t-popconfirm content="确认取消该活动？取消后不可恢复" @confirm="onCancel(row)">
+              <t-popconfirm content="确认取消该活动？取消后可转为待发布，已报名成员将收到通知" @confirm="onCancel(row)">
                 <t-button variant="text" size="small" theme="danger" :loading="isActing(row, 'cancel')">取消活动</t-button>
               </t-popconfirm>
             </template>
@@ -618,15 +618,25 @@ function fetchAllForExport(page: number, pageSize: number) {
             <!-- 已发布：编辑 / 暂停报名 / 开放报名、取消活动 -->
             <template v-if="row.status === 'published'">
               <t-button variant="text" size="small" @click="openEdit(row)">编辑</t-button>
+              <!-- 暂停报名影响全部成员报名需确认；开放报名为恢复性操作直接执行 -->
+              <t-popconfirm
+                v-if="row.enrollmentOpen"
+                content="确认暂停报名？暂停后成员将无法报名"
+                confirm-btn="暂停报名"
+                @confirm="onToggleEnrollment(row)"
+              >
+                <t-button variant="text" size="small" :loading="isActing(row, 'enrollment')">暂停报名</t-button>
+              </t-popconfirm>
               <t-button
+                v-else
                 variant="text"
                 size="small"
                 :loading="isActing(row, 'enrollment')"
                 @click="onToggleEnrollment(row)"
               >
-                {{ row.enrollmentOpen ? '暂停报名' : '开放报名' }}
+                开放报名
               </t-button>
-              <t-popconfirm content="确认取消该活动？取消后不可恢复" @confirm="onCancel(row)">
+              <t-popconfirm content="确认取消该活动？取消后可转为待发布，已报名成员将收到通知" @confirm="onCancel(row)">
                 <t-button variant="text" size="small" theme="danger" :loading="isActing(row, 'cancel')">取消活动</t-button>
               </t-popconfirm>
             </template>

@@ -165,12 +165,20 @@ onMounted(load)
             <t-button variant="text" size="small" @click="goDetail(row)">详情</t-button>
             <t-button variant="text" size="small" @click="openEdit(row)">编辑</t-button>
             <template v-if="row.status === 'available'">
-              <t-popconfirm content="确认登记维护？维护期间不可预约" @confirm="onSetStatus(row, 'maintenance')">
+              <t-popconfirm
+                content="确认登记维护？维护期间不可预约"
+                confirm-btn="登记维护"
+                @confirm="onSetStatus(row, 'maintenance')"
+              >
                 <t-button variant="text" size="small" theme="warning" :loading="acting === `${row.id}:maintenance`">
                   维护
                 </t-button>
               </t-popconfirm>
-              <t-popconfirm content="确认停用该空间？停用后不再开放预约" @confirm="onSetStatus(row, 'disabled')">
+              <t-popconfirm
+                :content="`确认停用空间「${row.name}」？停用后不再开放预约`"
+                :confirm-btn="{ content: '停用', theme: 'danger' }"
+                @confirm="onSetStatus(row, 'disabled')"
+              >
                 <t-button variant="text" size="small" theme="danger" :loading="acting === `${row.id}:disabled`">
                   停用
                 </t-button>
@@ -190,7 +198,11 @@ onMounted(load)
         </template>
 
         <template #empty>
-          <ListEmptyState description="暂无空间" />
+          <ListEmptyState description="暂无空间">
+            <template #action>
+              <t-button @click="openCreate">新增空间</t-button>
+            </template>
+          </ListEmptyState>
         </template>
       </t-table>
     </div>

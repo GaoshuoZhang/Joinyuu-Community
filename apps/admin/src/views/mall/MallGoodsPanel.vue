@@ -256,7 +256,7 @@ async function loadCategories() {
         clearable
         @change="onSearch"
       />
-      <t-button @click="onSearch">
+      <t-button theme="primary" @click="onSearch">
         <template #icon><SearchIcon /></template>
         查询
       </t-button>
@@ -286,7 +286,9 @@ async function loadCategories() {
           <t-tag variant="light">{{ row.categoryLabel ?? goodsCategoryMap[row.category] ?? row.category }}</t-tag>
         </template>
         <template #stock="{ row }">
-          <span :class="{ 'stock-out': row.stock === 0 }">{{ row.stock }}</span>
+          <!-- 0 库存：语义化「售罄」标签，比纯红字数字更易读（H-03） -->
+          <t-tag v-if="row.stock === 0" theme="danger" variant="light">售罄</t-tag>
+          <span v-else>{{ row.stock }}</span>
         </template>
         <template #status="{ row }">
           <StatusTag entity="goods" :value="row.status" />
@@ -297,6 +299,7 @@ async function loadCategories() {
             <t-popconfirm
               v-if="row.status === 'on'"
               content="确认下架该商品？下架后成员端不可兑换"
+              confirm-btn="下架"
               @confirm="onToggle(row)"
             >
               <t-button variant="text" size="small" theme="warning" :loading="acting === row.id">
@@ -317,6 +320,7 @@ async function loadCategories() {
             <t-popconfirm
               v-if="row.status === 'off'"
               content="确认归档该商品？归档后可在归档管理中恢复"
+              confirm-btn="归档"
               @confirm="onArchive(row)"
             >
               <t-button
@@ -340,10 +344,3 @@ async function loadCategories() {
     <GoodsFormDialog v-model:visible="formVisible" :mode="formMode" :goods="currentGoods" @success="load" />
   </div>
 </template>
-
-<style scoped>
-.stock-out {
-  color: var(--td-error-color);
-  font-weight: 600;
-}
-</style>

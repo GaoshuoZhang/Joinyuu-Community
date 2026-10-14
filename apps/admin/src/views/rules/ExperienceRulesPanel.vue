@@ -134,6 +134,7 @@ onMounted(load)
             <t-popconfirm
               v-if="row.status === 'enabled'"
               content="确认停用该规则？停用后该行为不再累积经验值"
+              confirm-btn="停用"
               @confirm="onToggle(row)"
             >
               <t-button variant="text" size="small" theme="danger" :loading="acting === row.code">

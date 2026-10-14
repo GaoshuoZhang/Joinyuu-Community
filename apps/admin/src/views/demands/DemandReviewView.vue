@@ -123,9 +123,15 @@ function goDetail(row: Demand) {
   router.push(`/demands/${row.id}`)
 }
 
-/* 提交人身份快照 → 纯文本标签（社区官方显示工作人员角色名；企业仅显示 社区企业/合作企业，不追加成员标题） */
+/* 提交人身份快照 → 标签文字（社区官方显示工作人员角色名；企业仅显示 社区企业/合作企业，不追加成员标题） */
 function publisherIdentityLabel(row: Demand): string {
   return identityLabelOf(row.publisherIdentity)
+}
+
+/* 身份标签主题：与需求列表口径一致（社区身份 primary，其余 default） */
+function publisherIdentityTheme(row: Demand): 'default' | 'primary' {
+  const t = row.publisherIdentity?.type
+  return t === 'official' || t === 'community_enterprise' || t === 'community_individual' ? 'primary' : 'default'
 }
 
 /* 只读审核对话框（通过 = 转待发布；驳回需填原因） */
@@ -221,7 +227,7 @@ onMounted(() => {
             <span class="publisher-name">{{ row.publisherName }}</span>
             <div class="tag-row">
               <t-tag v-if="row.publisherId" size="small" variant="light">{{ row.publisherId }}</t-tag>
-              <span class="publisher-identity">{{ publisherIdentityLabel(row) }}</span>
+              <t-tag size="small" :theme="publisherIdentityTheme(row)" variant="light">{{ publisherIdentityLabel(row) }}</t-tag>
             </div>
           </div>
         </template>
@@ -278,12 +284,6 @@ onMounted(() => {
   font-size: 14px;
   line-height: 20px;
   color: var(--td-text-color-primary);
-}
-
-.publisher-identity {
-  font-size: 12px;
-  line-height: 18px;
-  color: var(--td-text-color-secondary);
 }
 
 .tag-row {

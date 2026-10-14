@@ -3,6 +3,7 @@ import { onMounted, ref } from 'vue'
 import { MessagePlugin } from 'tdesign-vue-next'
 import PageHeader from '@/components/PageHeader.vue'
 import ListErrorState from '@/components/ListErrorState.vue'
+import ListEmptyState from '@/components/ListEmptyState.vue'
 import StatusTag from '@/components/StatusTag.vue'
 import PolicyEditorDialog from '@/components/PolicyEditorDialog.vue'
 import { createCommunityPolicy, fetchCommunityPolicies, updateCommunityPolicy, type AgreementPolicyPayload, type CommunityPolicyPayload, type PolicyRecord } from '@/api/policies'
@@ -62,7 +63,14 @@ onMounted(load)
     </PageHeader>
     <ListErrorState v-if="loadError" :message="loadError" :loading="loading" @retry="load" />
     <div v-else class="page-card">
-      <t-table row-key="id" table-layout="fixed" hover resizable :data="rows" :columns="columns" :loading="loading" empty="暂无社区政策">
+      <t-table row-key="id" table-layout="fixed" hover resizable :data="rows" :columns="columns" :loading="loading">
+        <template #empty>
+          <ListEmptyState description="暂无社区政策">
+            <template #action>
+              <t-button theme="primary" @click="openEditor()">新增政策</t-button>
+            </template>
+          </ListEmptyState>
+        </template>
         <template #category="{ row }">{{ row.category || '—' }}</template>
         <template #version="{ row }">{{ row.version || '—' }}</template>
         <template #featured="{ row }"><t-tag v-if="row.featured" theme="primary" variant="light">置顶</t-tag><span v-else class="muted">常规</span></template>

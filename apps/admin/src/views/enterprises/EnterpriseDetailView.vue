@@ -33,11 +33,17 @@ const members = ref<User[]>([])
 const tab = useQueryTab('info', ['info', 'card', 'leases', 'stats', 'members', 'experience'] as const)
 const card = ref<CardRow | null>(null)
 const cardLoading = ref(false)
+/* 名片加载失败就地展示并可重试：一次性 toast 数秒即逝，失败后标签页将不可恢复（H-02） */
+const cardError = ref('')
 async function loadCard() {
   if (!enterprise.value) return
   cardLoading.value = true
+  cardError.value = ''
   try { card.value = await fetchCard('enterprise', enterprise.value.id) }
-  catch (error) { MessagePlugin.error(error instanceof Error ? error.message : '名片加载失败') }
+  catch (error) {
+    card.value = null
+    cardError.value = error instanceof Error ? error.message : '名片加载失败，请重试'
+  }
   finally { cardLoading.value = false }
 }
 watch(tab, (value) => { if (value === 'card') void loadCard() })
@@ -72,6 +78,8 @@ const leaseColumns = [
   { colKey: 'monthlyRent', title: '租金（元）', cell: 'rent', width: 110, resizable: true , ellipsis: true},
   { colKey: 'contactName', title: '联系人', cell: 'contact', width: 140, resizable: true , ellipsis: true},
   { colKey: 'status', title: '状态', cell: 'status', width: 110, resizable: true , ellipsis: true},
+  /* 行点击仅有鼠标路径，操作列「详情」为键盘/读屏用户提供同等入口（H-01） */
+  { colKey: 'op', title: '操作', width: 80, cell: 'op' },
 ]
 
 const experienceColumns = [
@@ -88,6 +96,8 @@ const memberColumns = [
   { colKey: 'role', title: '角色', cell: 'role', width: 110 , ellipsis: true},
   { colKey: 'phone', title: '联系电话', width: 140 , ellipsis: true},
   { colKey: 'status', title: '账号状态', cell: 'status', width: 110 , ellipsis: true},
+  /* 行点击仅有鼠标路径，操作列「详情」为键盘/读屏用户提供同等入口（H-01） */
+  { colKey: 'op', title: '操作', width: 80, cell: 'op' },
 ]
 
 async function load() {
@@ -269,6 +279,7 @@ onMounted(() => {
           <t-popconfirm
             v-if="enterprise.status === 'disabled'"
             content="确认启用该企业？启用后恢复为正常状态"
+            confirm-btn="启用"
             @confirm="onEnable"
           >
             <t-button
@@ -283,6 +294,7 @@ onMounted(() => {
           <t-popconfirm
             v-else
             content="确认停用该企业？停用后不可新增新租约"
+            :confirm-btn="{ content: '停用', theme: 'danger' }"
             @confirm="onDisable"
           >
             <t-button
@@ -296,6 +308,7 @@ onMounted(() => {
           <t-popconfirm
             v-if="enterprise.status === 'disabled'"
             content="确认归档该企业？归档后可在归档管理中恢复"
+            :confirm-btn="{ content: '归档', theme: 'danger' }"
             @confirm="onDelete"
           >
             <t-button
@@ -336,6 +349,7 @@ onMounted(() => {
             <div class="tab-body">
               <t-loading :loading="cardLoading">
                 <!-- 补齐企业名片全部展示字段（Logo 已移除）：短字段两列并排，长字段各占整行 -->
+                <ListErrorState v-if="cardError && !card" :message="cardError" :loading="cardLoading" @retry="loadCard" />
                 <t-descriptions v-if="card" :column="2" bordered>
                   <t-descriptions-item label="所属行业">{{ card.industry || '—' }}</t-descriptions-item>
                   <t-descriptions-item label="企业规模">{{ card.size || '—' }}</t-descriptions-item>
@@ -368,6 +382,9 @@ onMounted(() => {
                 empty="该企业暂无关联租约"
                 @row-click="goLeaseList"
               >
+                <template #op>
+                  <t-button theme="primary" variant="text" size="small" @click.stop="goLeaseList">详情</t-button>
+                </template>
                 <template #workstations="{ row }">
                   <t-tag v-for="label in row.workstationLabels" :key="label" variant="light" class="ws-tag">
                     {{ label }}
@@ -422,6 +439,9 @@ onMounted(() => {
                 empty="暂无企业成员"
                 @row-click="({ row }: { row: User }) => router.push('/users/' + row.uid)"
               >
+                <template #op="{ row }">
+                  <t-button theme="primary" variant="text" size="small" @click.stop="router.push('/users/' + row.uid)">详情</t-button>
+                </template>
                 <template #member="{ row }">
                   <div class="member-cell">
                     <span class="member-name">{{ row.realName || row.nickname }}</span>
@@ -469,7 +489,12 @@ onMounted(() => {
       </div>
     </template>
 
-    <t-empty v-else description="企业不存在或已归档" />
+    <t-empty v-else-if="!enterprise" description="企业不存在或已归档">
+      <!-- 直达 URL 时 router.back() 可能离开系统，空态提供明确的下一步（L-01） -->
+      <template #action>
+        <t-button @click="router.push('/enterprises')">返回企业列表</t-button>
+      </template>
+    </t-empty>
 
     <!-- 经验值调整 -->
     <AdjustValueDialog
@@ -619,8 +644,11 @@ onMounted(() => {
   transition: border-color 120ms ease;
 }
 
-.stat-item.clickable:hover {
-  border-color: var(--td-brand-color);
+/* 触屏无 hover：仅指针设备启用变色，避免粘滞 hover 被误读为选中态（L-04） */
+@media (hover: hover) {
+  .stat-item.clickable:hover {
+    border-color: var(--td-brand-color);
+  }
 }
 
 .stat-num {

@@ -151,6 +151,8 @@ watch(
   gap: 16px;
   max-height: 70vh;
   overflow-y: auto;
+  /* 滚到边界时不将滚动透传给弹窗遮罩下的页面（M-07） */
+  overscroll-behavior: contain;
 }
 
 .dict-form {

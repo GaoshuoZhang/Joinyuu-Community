@@ -293,7 +293,7 @@ onMounted(load)
         clearable
         @change="onSearch"
       />
-      <t-button @click="onSearch">
+      <t-button theme="primary" @click="onSearch">
         <template #icon><SearchIcon /></template>
         查询
       </t-button>
@@ -331,17 +331,24 @@ onMounted(load)
         </template>
         <template #op="{ row }">
           <div class="op-cell" @click.stop>
+            <!-- 详情：行点击的键盘可达替代，统一置于操作列最前 -->
+            <t-button theme="primary" variant="text" size="small" @click="openDetail(row)">详情</t-button>
             <!-- 待使用：核销 / 退款 -->
             <template v-if="row.status === 'pending_use'">
               <t-popconfirm
                 :content="`确认核销券码 ${row.voucherCode}？核销后订单完成，不可撤销`"
+                :confirm-btn="{ content: '确认核销', theme: 'danger' }"
                 @confirm="onVerify(row)"
               >
                 <t-button variant="text" size="small" theme="primary" :loading="isActing(row, 'verify')">
                   核销
                 </t-button>
               </t-popconfirm>
-              <t-popconfirm content="确认退款该订单？消耗积分将退回用户账户，库存回补" @confirm="onCancel(row)">
+              <t-popconfirm
+                content="确认退款该订单？消耗积分将退回用户账户，库存回补"
+                :confirm-btn="{ content: '确认退款', theme: 'danger' }"
+                @confirm="onCancel(row)"
+              >
                 <t-button variant="text" size="small" theme="danger" :loading="isActing(row, 'cancel')">
                   退款
                 </t-button>
@@ -351,13 +358,13 @@ onMounted(load)
             <t-popconfirm
               v-if="row.status === 'finished' || row.status === 'cancelled'"
               content="确认归档该订单？归档后可在归档管理中恢复"
+              confirm-btn="归档"
               @confirm="onArchive(row)"
             >
               <t-button variant="text" size="small" theme="warning" :loading="isActing(row, 'archive')">
                 归档
               </t-button>
             </t-popconfirm>
-            <t-button variant="text" size="small" @click="openDetail(row)">详情</t-button>
           </div>
         </template>
 

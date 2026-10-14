@@ -219,9 +219,15 @@ function goTarget(target: string | null) {
 }
 
 
-/* 提交人身份快照 → 纯文本标签（社区官方显示工作人员角色名；企业仅显示 社区企业/合作企业，不追加成员标题） */
+/* 提交人身份快照 → 标签文字（社区官方显示工作人员角色名；企业仅显示 社区企业/合作企业，不追加成员标题） */
 function publisherIdentityLabel(d: Demand): string {
   return identityLabelOf(d.publisherIdentity)
+}
+
+/* 身份标签主题：与需求列表口径一致（社区身份 primary，其余 default） */
+function publisherIdentityTheme(d: Demand): 'default' | 'primary' {
+  const t = d.publisherIdentity?.type
+  return t === 'official' || t === 'community_enterprise' || t === 'community_individual' ? 'primary' : 'default'
 }
 function goProject() {
   if (demand.value?.projectId) router.push(`/projects/${demand.value.projectId}`)
@@ -299,28 +305,43 @@ onMounted(load)
                 <t-button theme="primary" @click="openReview">审核</t-button>
               </template>
               <template v-else-if="demand.status === 'pending_release'">
-                <t-button theme="primary" :loading="publishing" @click="onPublishNow">立即发布</t-button>
+                <t-popconfirm
+                  :content="`确认立即发布「${demand.title}」？发布后成员即可响应`"
+                  confirm-btn="立即发布"
+                  @confirm="onPublishNow"
+                >
+                  <t-button theme="primary" :loading="publishing">立即发布</t-button>
+                </t-popconfirm>
                 <t-button variant="outline" @click="openSchedule">定时发布</t-button>
                 <t-button variant="outline" @click="openEdit">编辑</t-button>
-                <t-popconfirm content="确认关闭该需求？" @confirm="onCloseDemand">
+                <t-popconfirm
+                  :content="`确认关闭该需求「${demand.title}」？`"
+                  :confirm-btn="{ content: '关闭', theme: 'danger' }"
+                  @confirm="onCloseDemand"
+                >
                   <t-button variant="outline" theme="danger" :loading="closing">关闭</t-button>
                 </t-popconfirm>
               </template>
               <template v-else-if="demand.status === 'scheduled'">
                 <t-popconfirm
-                  content="确认取消定时发布？该需求将转为「待发布」"
+                  :content="`确认取消「${demand.title}」的定时发布？该需求将转为「待发布」`"
+                  confirm-btn="取消定时发布"
                   @confirm="onCancelSchedule"
                 >
                   <t-button variant="outline" theme="warning" :loading="cancelScheduling">取消定时发布</t-button>
                 </t-popconfirm>
               </template>
               <template v-else-if="demand.status === 'selected'">
-                <t-button theme="primary" @click="projectVisible = true">立项</t-button>
+                <t-button theme="primary" title="将基于该需求创建项目并建立关联，可在项目管理中跟进" @click="projectVisible = true">立项</t-button>
               </template>
               <template v-else-if="demand.status === 'published'">
-                <t-button theme="primary" @click="projectVisible = true">立项</t-button>
+                <t-button theme="primary" title="将基于该需求创建项目并建立关联，可在项目管理中跟进" @click="projectVisible = true">立项</t-button>
                 <t-button variant="outline" theme="warning" @click="onRetract">撤回发布</t-button>
-                <t-popconfirm content="确认关闭该需求？" @confirm="onCloseDemand">
+                <t-popconfirm
+                  :content="`确认关闭该需求「${demand.title}」？`"
+                  :confirm-btn="{ content: '关闭', theme: 'danger' }"
+                  @confirm="onCloseDemand"
+                >
                   <t-button variant="outline" theme="danger" :loading="closing">关闭</t-button>
                 </t-popconfirm>
               </template>
@@ -343,7 +364,7 @@ onMounted(load)
             </t-link>
           </t-descriptions-item>
           <t-descriptions-item label="提交人身份">
-            <span>{{ publisherIdentityLabel(demand) }}</span>
+            <t-tag size="small" :theme="publisherIdentityTheme(demand)" variant="light">{{ publisherIdentityLabel(demand) }}</t-tag>
           </t-descriptions-item>
           <t-descriptions-item label="联系人">{{ demand.contactName ?? '—' }}</t-descriptions-item>
           <t-descriptions-item label="联系电话">{{ demand.contactPhone ?? '—' }}</t-descriptions-item>
@@ -412,7 +433,7 @@ onMounted(load)
                 row-key="rowKey"
                 :data="respondentRows"
                 :columns="respondentColumns"
-                empty="暂无响应记录"
+                empty="暂无响应记录，需求发布后成员可在此报名响应"
               >
                 <template #message="{ row }">
                   <div class="resp-message-cell">
@@ -435,7 +456,11 @@ onMounted(load)
                 </template>
                 <template #op="{ row }">
                   <div v-if="!isArchived && row.status === 'pending_review'" class="op-cell" @click.stop>
-                    <t-popconfirm content="确认通过该响应？通过后发布者可看到并选定该响应" @confirm="onApproveRespondent(row)">
+                    <t-popconfirm
+                      :content="`确认通过 ${row.name} 的响应？通过后发布者可看到并选定该响应`"
+                      confirm-btn="通过"
+                      @confirm="onApproveRespondent(row)"
+                    >
                       <t-button variant="text" size="small" theme="primary" :loading="isReviewing(row, 'approved')">通过</t-button>
                     </t-popconfirm>
                     <t-button variant="text" size="small" theme="danger" :disabled="isReviewing(row, 'approved')" @click="openRejectRespondent(row)">驳回</t-button>

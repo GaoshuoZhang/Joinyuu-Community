@@ -2,7 +2,7 @@
 import { nextTick, reactive, ref, watch } from 'vue'
 import { MessagePlugin } from 'tdesign-vue-next'
 import type { FormProps } from 'tdesign-vue-next'
-import { focusFirstInvalid } from '@/utils/form'
+import { focusFirstInvalid, useDialogDirtyGuard } from '@/utils/form'
 import { createSpace, updateSpace } from '@/api/spaces'
 import { spaceTypeMap } from '@/constants/status'
 import type { Space, SpaceType } from '@/types'
@@ -50,6 +50,9 @@ watch(
   },
 )
 
+/* 未保存保护：打开时记录基线，关闭前有改动需确认 */
+const { markBaseline, guardClose } = useDialogDirtyGuard(form)
+
 watch(
   () => props.visible,
   (v) => {
@@ -81,7 +84,8 @@ watch(
       form.description = ''
       equipmentTags.value = []
     }
-    /* 清除上次会话残留的校验红框（仅清状态，不动表单值） */
+    /* 记录基线 + 清除上次会话残留的校验红框（仅清状态，不动表单值） */
+    markBaseline()
     nextTick(() => formRef.value?.clearValidate())
   },
 )
@@ -135,13 +139,14 @@ async function onConfirm() {
 }
 
 function onClose() {
-  emit('update:visible', false)
+  /* 未保存保护：有改动时弹确认（见 useDialogDirtyGuard） */
+  guardClose(() => emit('update:visible', false))
 }
 </script>
 
 <template>
   <t-dialog
-    :close-on-overlay-click="true"
+    :close-on-overlay-click="false"
     :visible="visible"
     :header="mode === 'create' ? '新增公共空间' : '编辑公共空间'"
     width="880px"
@@ -234,6 +239,12 @@ function onClose() {
   display: grid;
   grid-template-columns: 1fr 1fr;
   gap: 0 16px;
+}
+
+@media (max-width: 767px) {
+  .form-row {
+    grid-template-columns: 1fr;
+  }
 }
 
 /* 单字段整行：不与相邻字段共用两列栅格（开关/开关组互斥隐藏时不留空半列） */

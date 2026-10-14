@@ -58,7 +58,7 @@ function onCancel() {
 <template>
   <t-dialog
     :visible="visible"
-    header="定时发布"
+    :header="event ? `定时发布 · ${event.title}` : '定时发布'"
     width="480px"
     :close-on-overlay-click="false"
     :close-on-esc-keydown="false"

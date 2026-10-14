@@ -204,7 +204,8 @@ onMounted(load)
       />
       <div v-for="a in filtered" :key="a.id" class="asset-card">
         <div class="asset-thumb-wrap">
-          <img class="asset-thumb content-img" :src="a.url" :alt="a.fileName" width="320" height="180" loading="lazy" decoding="async" />
+          <!-- t-image：自带 lazy/error 占位，替代原生 img 的静默破图（M-15） -->
+          <t-image class="asset-thumb content-img" :src="a.url" :alt="a.fileName" fit="cover" lazy error="图片加载失败" />
           <t-tag class="asset-badge" size="small" variant="light" :theme="sourceTheme(a)">{{ sourceText(a) }}</t-tag>
         </div>
         <div class="asset-info">
@@ -217,7 +218,11 @@ onMounted(load)
         <div class="asset-op">
           <t-button variant="text" size="small" @click="onCopy(a)">复制 URL</t-button>
           <t-button variant="text" size="small" @click="triggerReplace(a)">替换</t-button>
-          <t-popconfirm content="确认删除该素材？引用它的业务图片将无法显示。" @confirm="onDelete(a)">
+          <t-popconfirm
+            content="确认删除该素材？引用它的业务图片将无法显示。"
+            :confirm-btn="{ content: '删除', theme: 'danger' }"
+            @confirm="onDelete(a)"
+          >
             <t-button variant="text" theme="danger" size="small">
               <template #icon><DeleteIcon /></template>
               删除

@@ -219,7 +219,7 @@ onMounted(load)
           </template>
           <template #op="{ row }">
             <t-button variant="text" size="small" @click="openLogs(row)">执行日志</t-button>
-            <t-popconfirm content="确认立即执行该定时任务？" @confirm="onRunJob(row)">
+            <t-popconfirm content="确认立即执行该定时任务？" confirm-btn="立即执行" @confirm="onRunJob(row)">
               <t-button variant="text" size="small" theme="primary" :loading="runningJob === row.name">手动执行</t-button>
             </t-popconfirm>
           </template>
@@ -231,7 +231,7 @@ onMounted(load)
     <t-drawer
       v-model:visible="logVisible"
       :header="`执行日志 · ${job?.name ?? ''}`"
-      size="560px"
+      size="min(560px, 92vw)"
       :close-btn="true"
       :close-on-esc-keydown="true"
       :footer="false"

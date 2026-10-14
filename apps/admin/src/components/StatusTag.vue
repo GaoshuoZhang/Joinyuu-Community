@@ -37,7 +37,7 @@ const conf = computed(() => {
 
 <template>
   <t-tooltip v-if="isScheduled" :content="`到点自动发布：${scheduledAt}`">
-    <t-tag :theme="conf.theme" variant="light" :size="size">{{ scheduledAt }}</t-tag>
+    <t-tag :theme="conf.theme" variant="light" :size="size">定时发布 {{ scheduledAt }}</t-tag>
   </t-tooltip>
   <t-tag v-else :theme="conf.theme" variant="light" :size="size">{{ conf.label }}</t-tag>
 </template>

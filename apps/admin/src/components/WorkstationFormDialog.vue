@@ -2,7 +2,7 @@
 import { computed, nextTick, reactive, ref, watch } from 'vue'
 import { MessagePlugin } from 'tdesign-vue-next'
 import type { FormProps } from 'tdesign-vue-next'
-import { focusFirstInvalid } from '@/utils/form'
+import { focusFirstInvalid, useDialogDirtyGuard } from '@/utils/form'
 import {
   createWorkstation,
   deleteWorkstation,
@@ -34,6 +34,18 @@ const emit = defineEmits<{
 const submitting = ref(false)
 const formRef = ref()
 const areaOptions = ref<{ label: string; value: string }[]>([])
+/* 区域选项加载失败：内联提示 + 重试（替代仅 toast，用户可感知并自行恢复） */
+const optionLoadError = ref('')
+
+async function loadAreaOptions() {
+  try {
+    const areas = await fetchWorkstationAreas()
+    areaOptions.value = areas.map((a) => ({ label: a.name, value: a.name }))
+    optionLoadError.value = ''
+  } catch (e) {
+    optionLoadError.value = e instanceof Error ? e.message : '区域选项加载失败'
+  }
+}
 
 const form = reactive({
   area: '',
@@ -48,6 +60,9 @@ const form = reactive({
 
 /* 打开弹窗时的维护状态，用于判断保存时是否需要调用状态接口 */
 const initialMaintenance = ref(false)
+
+/* 未保存保护：打开时记录基线，关闭前有改动需确认 */
+const { markBaseline, guardClose } = useDialogDirtyGuard(form)
 
 const typeOptions = Object.entries(workstationTypeMap).map(([value, label]) => ({ label, value }))
 
@@ -71,12 +86,7 @@ watch(
   async (v) => {
     if (!v) return
     /* 区域选项每次打开都重新拉取：区域规划新增/改名后立即可见（修复需切换页面才能读到新区域的问题） */
-    try {
-      const areas = await fetchWorkstationAreas()
-      areaOptions.value = areas.map((a) => ({ label: a.name, value: a.name }))
-    } catch {
-      MessagePlugin.error('区域选项加载失败')
-    }
+    await loadAreaOptions()
     if (props.mode === 'edit' && props.workstation) {
       form.area = props.workstation.area
       form.seatNo = props.workstation.seatNo
@@ -98,7 +108,8 @@ watch(
       form.defaultMonthlyRent = undefined
       form.areaSqm = undefined
     }
-    /* 清除上次会话残留的校验红框（仅清状态，不动表单值） */
+    /* 记录基线 + 清除上次会话残留的校验红框（仅清状态，不动表单值） */
+    markBaseline()
     nextTick(() => formRef.value?.clearValidate())
   },
 )
@@ -145,7 +156,8 @@ async function onConfirm() {
 }
 
 function onClose() {
-  emit('update:visible', false)
+  /* 未保存保护：有改动时弹确认（见 useDialogDirtyGuard） */
+  guardClose(() => emit('update:visible', false))
 }
 
 /* 删除办公位（编辑模式专用）：成功后关闭弹窗并通知父级刷新 */
@@ -167,7 +179,7 @@ async function onDelete() {
 
 <template>
   <t-dialog
-    :close-on-overlay-click="true"
+    :close-on-overlay-click="false"
     :visible="visible"
     :header="mode === 'create' ? '新增办公位' : '编辑办公位信息'"
     width="880px"
@@ -180,7 +192,12 @@ async function onDelete() {
         <t-tooltip v-if="mode === 'edit' && !canDelete" content="已分配的办公位不可删除，请先在「租赁管理」终止租约">
           <t-button theme="danger" variant="outline" disabled>删除办公位</t-button>
         </t-tooltip>
-        <t-popconfirm v-else-if="mode === 'edit'" content="确认删除该办公位？删除后不可恢复" @confirm="onDelete">
+        <t-popconfirm
+          v-else-if="mode === 'edit'"
+          :content="`确认删除办公位「${workstation?.seatNo}」？删除后不可恢复`"
+          :confirm-btn="{ content: '删除', theme: 'danger' }"
+          @confirm="onDelete"
+        >
           <t-button theme="danger" variant="outline" :loading="submitting">删除办公位</t-button>
         </t-popconfirm>
         <span class="footer-spacer" />
@@ -191,6 +208,12 @@ async function onDelete() {
       </div>
     </template>
     <t-form ref="formRef" :data="form" :rules="rules" label-align="top">
+      <!-- 区域选项加载失败：内联错误 + 重试（同步 LeaseFormDialog / AreaPlanDialog 同构） -->
+      <t-alert v-if="optionLoadError" theme="error" style="margin-bottom: 12px">
+        <div class="error-retry-line">{{ optionLoadError }}
+          <t-button size="small" variant="text" theme="primary" @click="loadAreaOptions">重新加载</t-button>
+        </div>
+      </t-alert>
       <t-form-item label="所属区域" name="area">
         <t-select clearable v-model="form.area" :options="areaOptions" placeholder="区域在「区域规划」中维护…" />
       </t-form-item>
@@ -244,6 +267,19 @@ async function onDelete() {
   display: grid;
   grid-template-columns: 1fr 1fr;
   gap: 0 16px;
+}
+
+/* 选项加载失败行：错误文案与「重新加载」按钮同行 */
+.error-retry-line {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+@media (max-width: 767px) {
+  .form-row {
+    grid-template-columns: 1fr;
+  }
 }
 
 /* 页脚左端有 .footer-spacer 占位，需保持按钮与说明文字垂直居中 */

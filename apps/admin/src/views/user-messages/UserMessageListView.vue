@@ -29,6 +29,8 @@ const visible = ref(false)
 const submitting = ref(false)
 const currentRow = ref<UserMessageRow | null>(null)
 const replyContent = ref('')
+/* 回复表单 ref：confirm 时走 validate() 获得字段级错误定位（原 rules 声明此前是死配置） */
+const replyFormRef = ref()
 
 /* 排序：默认不指定（后端按「待回复置顶 + 提交时间倒序」），点击表头后按提交时间正/倒序 */
 const sortBy = ref<'' | 'createdAt'>('')
@@ -119,6 +121,10 @@ function openReply(row: UserMessageRow) {
 async function submitReply() {
   const row = currentRow.value
   if (!row) return
+  /* 以表单 validate 为主：失败时错误定位在表单项下方，直接 return */
+  const result = replyFormRef.value ? await replyFormRef.value.validate() : true
+  if (result !== true) return
+  /* 兜底：ref 不可用时仍拦截空内容提交 */
   if (!replyContent.value.trim()) return void MessagePlugin.warning('请填写回复内容')
   submitting.value = true
   try {
@@ -222,11 +228,12 @@ onMounted(load)
         v-model="keyword"
         class="ctl-w-xl"
         clearable
+        aria-label="搜索留言"
         placeholder="搜索留言主题 / 内容 / 用户 UID…"
         @enter="page = 1; load()"
         @clear="page = 1; load()"
       />
-      <t-select class="ctl-w-md" v-model="status" :options="statusOptions" label="状态" @change="page = 1; load()" />
+      <t-select class="ctl-w-md" v-model="status" :options="statusOptions" label="状态" aria-label="状态筛选" @change="page = 1; load()" />
       <t-button theme="primary" @click="page = 1; load()">查询</t-button>
     </div>
 
@@ -278,6 +285,7 @@ onMounted(load)
             <t-popconfirm
               v-if="row.status === 'replied'"
               content="确认归档该留言？归档后可在「归档管理」中恢复"
+              confirm-btn="归档"
               @confirm="onArchive(row)"
             >
               <t-button variant="text" size="small" theme="warning" :loading="acting === row.id">归档</t-button>
@@ -314,7 +322,7 @@ onMounted(load)
             <p class="field-help">{{ currentRow.repliedBy || '社区管理员' }} · {{ currentRow.repliedAt }}</p>
           </t-descriptions-item>
         </t-descriptions>
-        <t-form v-if="currentRow.status === 'pending'" :data="{ replyContent }" label-align="top">
+        <t-form v-if="currentRow.status === 'pending'" ref="replyFormRef" :data="{ replyContent }" label-align="top">
           <t-form-item label="回复内容" name="replyContent" :rules="[{ required: true, message: '请填写回复内容', trigger: 'submit' }]">
             <t-textarea v-model="replyContent" :maxlength="1000" :autosize="{ minRows: 4, maxRows: 8 }" placeholder="填写回复内容，发送后留言人将收到站内信…" />
           </t-form-item>

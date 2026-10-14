@@ -69,7 +69,7 @@ const onSubmit: FormProps['onSubmit'] = async ({ validateResult, firstError }) =
      * 不再回跳登录前被拦截的页面，避免历史 URL（如 #/system/change-password）把登录落点带离工作台 */
     router.push(firstAccessiblePath())
   } catch (err) {
-    MessagePlugin.error(err instanceof Error ? err.message : '登录失败，请稍后重试')
+    MessagePlugin.error(err instanceof Error ? err.message : '登录失败，请检查用户名、密码与验证码后重试')
     form.captcha = ''
     loadCaptcha()
   } finally {
@@ -153,7 +153,7 @@ const highlights = ['企业与需求双向连接', '活动运营与签到管理'
                 name="captcha"
                 autocomplete="one-time-code"
                 aria-label="图形验证码"
-                placeholder="验证码…"
+                placeholder="请输入验证码…"
               />
               <t-tooltip content="点击图片刷新验证码">
                 <button

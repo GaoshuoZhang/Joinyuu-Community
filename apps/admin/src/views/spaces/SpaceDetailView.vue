@@ -105,6 +105,12 @@ function occupancyTooltip(row: OccupancyRow): string {
   return `${slot} ${row.subject}（${row.title}）· ${statusMap.reservation[row.status].label}`
 }
 
+/* 日历条目状态文字：预约取状态词表中文词，活动占用显示「活动」（仅凭颜色区分不够，见审查 H-03） */
+function calItemState(row: OccupancyRow): string {
+  if (row.source === 'event') return '活动'
+  return statusMap.reservation[row.status].label
+}
+
 const reservationModeText = computed(() =>
   space.value?.needReservation
     ? space.value.needApproval
@@ -253,10 +259,14 @@ onMounted(load)
             编辑
           </t-button>
           <template v-if="space.status === 'available'">
-            <t-popconfirm content="确认登记维护？维护期间不可预约" @confirm="onSetStatus('maintenance')">
+            <t-popconfirm content="确认登记维护？维护期间不可预约" confirm-btn="登记维护" @confirm="onSetStatus('maintenance')">
               <t-button variant="outline" theme="warning" :loading="acting === 'maintenance'">维护</t-button>
             </t-popconfirm>
-            <t-popconfirm content="确认停用该空间？停用后不再开放预约" @confirm="onSetStatus('disabled')">
+            <t-popconfirm
+              :content="`确认停用空间「${space.name}」？停用后不再开放预约`"
+              :confirm-btn="{ content: '停用', theme: 'danger' }"
+              @confirm="onSetStatus('disabled')"
+            >
               <t-button variant="outline" theme="danger" :loading="acting === 'disabled'">停用</t-button>
             </t-popconfirm>
           </template>
@@ -320,8 +330,10 @@ onMounted(load)
                     class="cal-item"
                     :class="row.source === 'event' ? 'is-event' : `is-${row.status}`"
                     :title="occupancyTooltip(row)"
+                    tabindex="0"
+                    :aria-label="occupancyTooltip(row)"
                   >
-                    {{ row.startTime }} {{ row.source === 'event' ? row.title : row.subject }}
+                    <span class="cal-item-state">{{ calItemState(row) }}</span>{{ row.startTime }} {{ row.source === 'event' ? row.title : row.subject }}
                   </div>
                   <div v-if="occupanciesOn(cell.formattedDate).length > 3" class="cal-more">
                     共 {{ occupanciesOn(cell.formattedDate).length }} 条占用
@@ -481,6 +493,12 @@ onMounted(load)
   text-decoration: line-through;
 }
 
+/* 状态文字：不设颜色，继承 .cal-item 各状态色；加粗以区别于时间/主题文本 */
+.space-detail :deep(.cal-item-state) {
+  margin-right: 4px;
+  font-weight: 500;
+}
+
 /* 活动占用（已发布活动）：用 error 色与预约五态区分，表示该时段不可预约 */
 .space-detail :deep(.cal-item.is-event) {
   color: var(--td-error-color);
@@ -553,6 +571,7 @@ onMounted(load)
 
 .cal-legend-item.is-muted {
   color: var(--td-text-color-placeholder);
+  text-decoration: line-through;
 }
 
 .cal-legend-item.is-event {

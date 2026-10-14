@@ -359,7 +359,8 @@ onMounted(load)
             <t-button v-else variant="text" size="small" @click="openDetail(row)">详情</t-button>
             <t-popconfirm
               v-if="row.status === 'approved' || row.status === 'rejected'"
-              content="确认归档该申请？归档后可在归档管理中恢复"
+              :content="`确认归档该申请（${row.id}）？归档后可在归档管理中恢复`"
+              confirm-btn="归档"
               @confirm="onArchive(row)"
             >
               <t-button variant="text" size="small" theme="warning">归档</t-button>

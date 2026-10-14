@@ -249,7 +249,11 @@ onMounted(load)
               <template #icon><EditIcon /></template>
               编辑
             </t-button>
-            <t-popconfirm content="确认删除该轮播图？删除后不可恢复。" @confirm="onDelete(row)">
+            <t-popconfirm
+              content="确认删除该轮播图？删除后不可恢复。"
+              :confirm-btn="{ content: '删除', theme: 'danger' }"
+              @confirm="onDelete(row)"
+            >
               <t-button variant="text" size="small" theme="danger" :loading="acting === row.id + ':delete'">
                 <template #icon><DeleteIcon /></template>
                 删除
@@ -258,7 +262,11 @@ onMounted(load)
           </div>
         </template>
         <template #empty>
-          <ListEmptyState description="暂无轮播图" />
+          <ListEmptyState description="暂无轮播图">
+            <template #action>
+              <t-button theme="primary" @click="openCreate">新增轮播图</t-button>
+            </template>
+          </ListEmptyState>
         </template>
       </t-table>
     </div>

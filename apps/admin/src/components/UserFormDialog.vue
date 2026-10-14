@@ -3,7 +3,7 @@ import { nextTick, reactive, ref, watch } from 'vue'
 import { MessagePlugin } from 'tdesign-vue-next'
 import type { FormProps } from 'tdesign-vue-next'
 import { createUser } from '@/api/users'
-import { focusFirstInvalid } from '@/utils/form'
+import { focusFirstInvalid, useDialogDirtyGuard } from '@/utils/form'
 import type { User } from '@/types'
 
 const props = defineProps<{ visible: boolean }>()
@@ -25,6 +25,8 @@ const form = reactive({
   citizenId: '',
   bio: '',
 })
+/* 未保存保护：有改动时关闭需确认（见 useDialogDirtyGuard） */
+const { markBaseline, guardClose } = useDialogDirtyGuard(form)
 
 const rules: FormProps['rules'] = {
   /* 用户名选填：留空由服务端自动分配，仅填写时校验格式 */
@@ -53,12 +55,14 @@ watch(
     form.realName = ''
     form.citizenId = ''
     form.bio = ''
+    markBaseline()
     nextTick(() => formRef.value?.clearValidate())
   },
 )
 
+/* 未保存保护：footer 取消 / X / Esc 均经 dirty guard 判断（有改动时确认后再关） */
 function onClose() {
-  emit('update:visible', false)
+  guardClose(() => emit('update:visible', false))
 }
 
 async function onConfirm() {
@@ -92,7 +96,7 @@ async function onConfirm() {
     :visible="visible"
     header="新增用户"
     width="880px"
-    :close-on-overlay-click="true"
+    :close-on-overlay-click="false"
     :close-on-esc-keydown="false"
     @close="onClose"
   >

@@ -31,6 +31,7 @@ const tag = computed(() => (props.href ? TLink : attrs.onClick ? 'button' : 'div
     :type="tag === 'button' ? 'button' : undefined"
     class="stat-card"
     :class="{ 'is-active': active }"
+    :aria-pressed="tag === 'button' ? String(!!active) : undefined"
   >
     <div v-if="icon" class="stat-icon">
       <component :is="icon" />

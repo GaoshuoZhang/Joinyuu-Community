@@ -145,7 +145,7 @@ onBeforeUnmount(() => {
           </tr>
           <tr>
             <td class="label">月租金</td>
-            <td>¥{{ lease.monthlyRent.toLocaleString('zh-CN') }} / 月</td>
+            <td>¥{{ lease.monthlyRent.toLocaleString('zh-CN') }}</td>
             <td class="label">状态</td>
             <td>{{ statusLabel[deriveLeaseStatus(lease)] ?? lease.status }}</td>
           </tr>
@@ -238,6 +238,7 @@ onBeforeUnmount(() => {
   width: 100%;
   border-collapse: collapse;
   font-size: 14px;
+  font-variant-numeric: tabular-nums;
 }
 
 .doc-table td {
