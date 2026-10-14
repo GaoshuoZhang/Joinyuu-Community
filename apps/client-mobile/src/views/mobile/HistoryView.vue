@@ -59,9 +59,10 @@ function onClear() {
       @action="router.push('/plaza?tab=articles')"
     />
     <div v-else class="list stagger">
-      <!-- v46：卡片补按压反馈（.pressable）——卡片本身不承载点击语义，跳转仍由内部链接负责 -->
-      <article v-for="item in items" :key="item.id" class="m-card row pressable">
-        <router-link class="main" :to="`/articles/${item.id}`">
+      <!-- v52：按压反馈（.pressable）挂在真链接上——卡片自身不承载点击语义，
+           挂在不可点的 article 上会显示指针光标与按压缩放却无响应（虚假可点暗示，界面审查 LOW） -->
+      <article v-for="item in items" :key="item.id" class="m-card row">
+        <router-link class="main pressable" :to="`/articles/${item.id}`">
           <p class="title">{{ item.title }}</p>
           <p class="at">浏览于 {{ formatLocalDateTime(item.at) }}</p>
         </router-link>

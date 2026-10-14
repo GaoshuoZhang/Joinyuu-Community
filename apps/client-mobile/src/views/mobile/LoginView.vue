@@ -214,13 +214,6 @@ function onLoginSubmit({ validateResult }: { validateResult: unknown }) {
   font: var(--app-type-body);
 }
 
-.demo {
-  margin:var(--app-space-6) 0 0;
-  text-align: center;
-  font: var(--app-type-caption);
-  color: var(--td-text-color-placeholder);
-}
-
 /* v48：官方 suffix 槽自带 padding-left: 12px；此前固定 flex-basis/width 为 24px，会连同内距
  * 把明文切换图标挤出密码框右边缘 12px。宽度交回官方（flex: 0 0 auto），这里只保证垂直居中。 */
 .password-field :deep(.t-input__wrap--suffix-icon) {

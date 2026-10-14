@@ -345,7 +345,9 @@ async function onSubmit() {
         <p class="count" :class="{ ready: contentReady }">正文 {{ formatZhNumber(contentLength) }}/{{ MIN_CONTENT }} 字 · {{ formatZhNumber(imageCount) }} 图</p>
         <p v-if="errors.content" class="field-error">{{ errors.content }}</p>
       </div>
-      <Button class="mobile-sticky-action" theme="primary" size="large" block :loading="submitting" @click="onSubmit">{{ contentReady ? (revising ? '重新提交' : '提交投稿') : `投稿内容需≥${MIN_CONTENT}字` }}</Button>
+      <!-- v52：按钮保持动词开头（界面审查 LOW）——字数不足的行内错误（errors.content）、
+           字段帮助文案与计数行已承载引导，按钮不再复述状态；未达标时点击即出行内错误 -->
+      <Button class="mobile-sticky-action" theme="primary" size="large" block :loading="submitting" @click="onSubmit">{{ revising ? '重新提交' : '提交投稿' }}</Button>
     </div>
     </template>
   </div>

@@ -44,7 +44,8 @@ async function loadFavorite() {
 }
 async function onToggleFavorite() {
   if (!auth.isLogged) {
-    Toast('登录后可收藏')
+    /* v52：游客收藏不再只弹 Toast——跳登录并带回跳，登录后回到本页继续收藏（同 DemandDetailView 口径） */
+    await router.push({ path: '/login', query: { redirect: route.fullPath } })
     return
   }
   const next = !favorited.value

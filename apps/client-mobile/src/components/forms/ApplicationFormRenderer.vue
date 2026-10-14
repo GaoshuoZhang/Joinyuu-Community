@@ -249,10 +249,11 @@ async function onSubmit() {
     </template>
 
     <Popup v-model:visible="pickerVisible" placement="bottom">
+      <!-- v52：弹层标题指名字段，用户可把弹层与具体字段对应（界面审查 LOW：标题命名动作与对象） -->
       <Picker
         v-model="pickerValue"
         :columns="[pickerField?.options ?? []]"
-        title="请选择"
+        :title="`请选择${pickerField?.label ?? ''}`"
         @confirm="onPickerConfirm"
         @cancel="pickerVisible = false"
       />
@@ -264,7 +265,7 @@ async function onSubmit() {
         mode="date"
         format="YYYY-MM-DD"
         :start="todayStr"
-        title="选择日期"
+        :title="`选择${dateField?.label ?? '日期'}`"
         @confirm="onDateConfirm"
         @cancel="dateVisible = false"
       />

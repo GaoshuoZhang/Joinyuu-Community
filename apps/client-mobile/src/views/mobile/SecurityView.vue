@@ -217,6 +217,8 @@ function onPhoneSave() {
 }
 
 /* ---- 绑定 / 更换邮箱 ---- */
+/* v52：与手机号流程同一双口径——已绑定时入口/弹窗按「更换」呈现，未绑定时按「绑定」呈现
+ * （changeEmail 对已绑邮箱执行的是替换操作，硬编码「绑定」会误导已绑邮箱用户，界面审查 LOW） */
 const emailVisible = ref(false)
 const emailForm = reactive({ newEmail: '', code: '' })
 const emailErrors = reactive({ newEmail: '', code: '' })
@@ -224,6 +226,9 @@ watch(() => emailForm.newEmail, () => (emailErrors.newEmail = ''))
 watch(() => emailForm.code, () => (emailErrors.code = ''))
 const emailSaving = ref(false)
 const emailSending = ref(false)
+const hasEmail = computed(() => Boolean(profile.value?.email))
+const emailTitle = computed(() => (hasEmail.value ? '更换邮箱' : '绑定邮箱'))
+const emailSubmitText = computed(() => (hasEmail.value ? '确认更换' : '确认绑定'))
 
 async function onSendEmailCode() {
   emailErrors.newEmail = ''
@@ -389,7 +394,7 @@ async function onExport() {
     <CellGroup theme="card">
       <Cell v-pressable title="修改登录密码" arrow @click="pwdVisible = true" />
       <Cell v-pressable :title="phoneTitle" :note="phoneNote" arrow @click="phoneVisible = true" />
-      <Cell v-pressable title="绑定邮箱" :note="emailNote" arrow @click="emailVisible = true" />
+      <Cell v-pressable :title="emailTitle" :note="emailNote" arrow @click="emailVisible = true" />
       <Cell v-pressable title="找回密码说明" note="退出登录后可在登录页操作" arrow @click="router.push('/forgot-password')" />
     </CellGroup>
 
@@ -454,8 +459,8 @@ async function onExport() {
 
     <Popup :visible="emailVisible" placement="bottom" :close-btn="true" @update:visible="requestSheetClose('email', $event)">
       <div class="sheet">
-        <h2 class="sheet-title">绑定邮箱</h2>
-        <p class="sheet-tip">当前：{{ emailNote }}。绑定后邮箱可用于登录与接收通知。</p>
+        <h2 class="sheet-title">{{ emailTitle }}</h2>
+        <p class="sheet-tip">当前：{{ emailNote }}。{{ hasEmail ? '更换后新邮箱可用于登录与接收通知。' : '绑定后邮箱可用于登录与接收通知。' }}</p>
         <div class="field"><label>新邮箱</label><Input v-model="emailForm.newEmail" type="text" autocomplete="email" placeholder="请输入新邮箱…" clearable /><p v-if="emailErrors.newEmail" class="field-error">{{ emailErrors.newEmail }}</p></div>
         <div class="field">
           <label>邮箱验证码</label>
@@ -467,7 +472,7 @@ async function onExport() {
           </div>
           <p v-if="emailErrors.code" class="field-error">{{ emailErrors.code }}</p>
         </div>
-        <Button theme="primary" size="large" block :loading="emailSaving" @click="onEmailSave">确认绑定</Button>
+        <Button theme="primary" size="large" block :loading="emailSaving" @click="onEmailSave">{{ emailSubmitText }}</Button>
       </div>
     </Popup>
 

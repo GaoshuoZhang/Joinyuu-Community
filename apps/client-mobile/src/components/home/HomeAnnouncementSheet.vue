@@ -58,14 +58,23 @@ function onOpenLink() {
 }
 
 /* v46：公告正文可能很长——内容区独立滚动，超出视口的内容可触达
- * （TDesign 底部弹层已内置 padding-bottom: env(safe-area-inset-bottom)，页面不再叠加） */
+ * （TDesign 底部弹层已内置 padding-bottom: env(safe-area-inset-bottom)，页面不再叠加）
+ * v52：滚动到边缘不发生 scroll chaining（界面审查 LOW：自造滚动容器统一口径） */
 .announce-content {
   flex: 1 1 auto;
   min-height: 0;
   max-height: 72vh;
   overflow-y: auto;
+  overscroll-behavior: contain;
   margin:0;
   font: var(--app-type-body-relaxed);
   color: var(--td-text-color-secondary);
+}
+
+/* v52：vh 不含移动端浏览器工具栏动态显隐，dvh 兜底（界面审查 LOW：限高单位统一口径，
+ * 渐进增强模式同 tokens.css 的 .top-tabs .t-tabs__content；不支持 dvh 时保留 vh 值） */
+@supports (height: 100dvh) {
+  .announce-sheet { max-height: 80dvh; }
+  .announce-content { max-height: 72dvh; }
 }
 </style>

@@ -64,6 +64,11 @@
   - Navbar 左侧返回区（`.t-navbar__left`，仅存在返回箭头时）：`aria-label="返回"`；
   - Popup / Dialog 关闭键（`.t-popup__close` / `.t-dialog__close-btn`）：`aria-label="关闭"`（Dialog 的关闭处理挂在内部 SVG 上，故激活时派发到 SVG）。
   关闭键可聚焦后不参与弹层首次聚焦（`focusDialog` 会跳过关闭键）。升级 TDesign 时须复核上述内部类名。
+- **库内可交互元素的键盘通路（v52，界面审查 HIGH-1 补齐）**：以下库内控件同为 `div+onClick`、无 role/tabindex/aria（tdesign MCP 与库源码确认无相关 props），已并入同一 `patchKeyboardTargets()`：
+  - `Rate` 星星（`.t-rate__icon`）：`role=button` + `aria-label="打 N 分"` + `aria-pressed` 同步；激活时派发带 `pageX`（星星中心）的 click——库的点击处理按 `event.pageX` 计算命中星号，合成事件不带坐标会全部命中第 1 分；根节点 `.t-rate` 补 `role=group` 让调用方 `aria-label`（如“活动评分”）可被分组播报；
+  - `Switch`（`.t-switch`）：`role=switch` + `aria-label`（取同行可见标签文案）+ `aria-checked` 同步；**已有 `role=button` 祖先的行不再补焦点**（如 NotificationSettingsView 行级 `v-pressable` 已承载交互），避免“按钮内嵌开关”双重 Tab 停留；
+  - `Stepper` 加减（`.t-stepper__minus` / `.t-stepper__plus`）：`aria-label="减少/增加"`；`Search` 清除键与操作键（`.t-search__clear` / `.t-search__search-action`）：`aria-label`（操作键有可见文案时取内容）。这两类有原生输入框作键盘替代，补齐后控件本身可达；
+  - 禁用态（类名以 `-disabled` 结尾）同步 `aria-disabled` 并移出 Tab 序列，恢复可用时重新入列（ MutationObserver 监听 class 变化）。升级 TDesign 时须复核上述内部类名。
 - **可点整卡的两条口径**：跳转型卡片用 `router-link` 承载主体内容（真链接，支持 Ctrl/中键新标签打开），操作按钮留在链接之外避免嵌套可交互元素（参照 `MyResponsesView`/`MyDemandsView`）；行/列表项类整卡（如 `Cell`、身份卡）用 `v-pressable` 补 role/tabindex/Enter·Space。仅当元素确实不可点时传 `v-pressable="false"`。
 - **标签对比度（v51）**：TDesign 标签 light 变体默认用 -5 档文字压 -1 档同色浅底（success 2.86:1 / warning 2.82:1 / danger 3.90:1，12px 下均不达 AA）；`tokens.css` 已把 `--td-tag-{success,warning,danger}-color` 抬到 -7/-7/-8 档（浅色 5.88/6.08/8.38:1，暗色 5.45/5.21/5.53:1）。`theme="default" variant="light"` 的浅色文字同样不可见，已单独改为 `--td-text-color-secondary`。新增状态标签一律走 `StateTag`，不要自带语义色。
 - **主题切换冻结过渡（v51）**：`applyTheme()` 切换前给 `html` 加 `.theme-switching`、强制一次样式刷新、下一帧移除（`tokens.css` 内该类禁止全部过渡）。不冻结时全站颜色过渡会在同一帧一起起跑，主题切换出现拖影。给页面新增颜色过渡时无需额外处理。

@@ -202,10 +202,14 @@ function clickTarget(el: HTMLElement): Element {
 }
 
 /** 补 Enter/Space 激活（派发的 click 会冒泡到库自身的处理） */
-function activateOnKey(el: HTMLElement) {
+function activateOnKey(el: HTMLElement, dispatchClick?: (el: HTMLElement) => void) {
   el.addEventListener('keydown', (event) => {
     if (event.key !== 'Enter' && event.key !== ' ') return
     event.preventDefault()
+    if (dispatchClick) {
+      dispatchClick(el)
+      return
+    }
     clickTarget(el).dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }))
   })
 }
@@ -213,6 +217,48 @@ function activateOnKey(el: HTMLElement) {
 /** CheckTag 的选中态同步到 aria-pressed（库只改 class，无 aria 状态） */
 function syncTagPressed(el: HTMLElement) {
   el.setAttribute('aria-pressed', el.classList.contains('t-tag--checked') ? 'true' : 'false')
+}
+
+/* v52：界面审查 HIGH-1——TDesign Mobile Vue 1.16.2 的 Rate 星星 / Stepper 加减 /
+ * Search 清除键与操作键 / Switch 均渲染为 div+onClick，无 role/tabindex/键盘处理/aria
+ * （库源码与 tdesign MCP 确认无相关 props，main.ts 此前的修补清单未覆盖它们）。
+ * Rate 与 Switch 没有任何键盘替代路径（评分不可键盘修改、可见性开关纯指针可点），
+ * Stepper 与 Search 有原生输入框作键盘替代但控件本身不可达、且无可访问名称。
+ * 升级 TDesign 时须复核上述内部类名。 */
+
+/** 库内禁用态类名均以 -disabled 结尾（t-stepper--filled-disabled / t-switch--disabled） */
+function isLibDisabled(el: HTMLElement): boolean {
+  return Array.from(el.classList).some((cls) => cls.endsWith('-disabled'))
+}
+
+/** Switch 可访问名称：优先显式 aria-label，其次取同一行可见标签（.switch-row 的同胞 span） */
+function switchAccessibleName(el: HTMLElement): string {
+  const explicit = el.getAttribute('aria-label')
+  if (explicit) return explicit
+  const sibling = el.previousElementSibling?.textContent?.trim()
+  if (sibling) return sibling
+  return el.parentElement?.textContent?.trim() ?? ''
+}
+
+/** Rate 星星选中态同步到 aria-pressed（库只改 --selected/--unselected class） */
+function syncRatePressed(el: HTMLElement) {
+  el.setAttribute('aria-pressed', el.classList.contains('t-rate__icon--selected') ? 'true' : 'false')
+}
+
+/** Switch 开关态同步到 aria-checked（库只改 t-switch--checked class） */
+function syncSwitchChecked(el: HTMLElement) {
+  el.setAttribute('aria-checked', el.classList.contains('t-switch--checked') ? 'true' : 'false')
+}
+
+/** 禁用态同步：不可用时移出 Tab 序列并标 aria-disabled，可用时恢复（类名随值动态变化） */
+function syncLibDisabled(el: HTMLElement) {
+  if (isLibDisabled(el)) {
+    el.setAttribute('aria-disabled', 'true')
+    el.removeAttribute('tabindex')
+  } else {
+    el.removeAttribute('aria-disabled')
+    if (!el.hasAttribute('tabindex')) el.setAttribute('tabindex', '0')
+  }
 }
 
 function collect(root: ParentNode, selector: string): HTMLElement[] {
@@ -251,14 +297,82 @@ function patchKeyboardTargets(root: ParentNode) {
     el.setAttribute('aria-label', '关闭')
     activateOnKey(el)
   }
+  /* v52：Rate / Stepper / Search / Switch（见上方 sync* 系列注释） */
+  for (const el of collect(root, '.t-rate')) {
+    /* 评分组：调用方的 aria-label（如「活动评分」）经属性透传落在根 div 上，补 group 角色可被读屏分组播报 */
+    if (el.getAttribute('aria-label') && !el.hasAttribute('role')) el.setAttribute('role', 'group')
+  }
+  for (const el of collect(root, '.t-rate__icon')) {
+    if (keyboardPatched.has(el)) continue
+    keyboardPatched.add(el)
+    const index = Array.prototype.indexOf.call(el.parentElement?.children ?? [], el) + 1
+    el.setAttribute('role', 'button')
+    el.setAttribute('tabindex', '0')
+    el.setAttribute('aria-label', `打 ${index} 分`)
+    syncRatePressed(el)
+    /* Rate 的点击处理读取 event.pageX 计算命中星号：合成事件必须带上星星中心的页面坐标，
+     * 否则任何星号都会命中第 1 分（getRect 对 pageX=0 的计算结果）。
+     * pageX 是原型只读 getter 且不在 MouseEventInit 中，构造后以 defineProperty 补值。 */
+    activateOnKey(el, (target) => {
+      const rect = target.getBoundingClientRect()
+      const centerX = rect.left + rect.width / 2
+      const event = new MouseEvent('click', { bubbles: true, cancelable: true, clientX: centerX })
+      Object.defineProperty(event, 'pageX', { value: centerX + (window.scrollX || 0) })
+      target.dispatchEvent(event)
+    })
+  }
+  for (const el of collect(root, '.t-stepper__minus, .t-stepper__plus')) {
+    if (keyboardPatched.has(el)) continue
+    keyboardPatched.add(el)
+    el.setAttribute('role', 'button')
+    el.setAttribute('aria-label', el.classList.contains('t-stepper__minus') ? '减少' : '增加')
+    syncLibDisabled(el)
+    activateOnKey(el)
+  }
+  for (const el of collect(root, '.t-search__clear, .t-search__search-action')) {
+    if (keyboardPatched.has(el)) continue
+    keyboardPatched.add(el)
+    el.setAttribute('role', 'button')
+    el.setAttribute('tabindex', '0')
+    /* 操作键自带可见文案（如「搜索」），可访问名称取内容，无需 aria-label */
+    if (!el.getAttribute('aria-label') && !el.textContent?.trim()) {
+      el.setAttribute('aria-label', el.classList.contains('t-search__clear') ? '清除搜索内容' : '搜索')
+    }
+    activateOnKey(el)
+  }
+  for (const el of collect(root, '.t-switch')) {
+    if (keyboardPatched.has(el)) continue
+    /* 行级已承载交互的（role=button 祖先，如 NotificationSettingsView 的 Cell）不再补焦点，
+     * 避免「按钮内嵌开关」的双重 Tab 停留；名称由行承载 */
+    if (el.closest('[role="button"], [role="switch"], a[href], button')) continue
+    keyboardPatched.add(el)
+    el.setAttribute('role', 'switch')
+    const name = switchAccessibleName(el)
+    if (name) el.setAttribute('aria-label', name)
+    syncSwitchChecked(el)
+    syncLibDisabled(el)
+    activateOnKey(el)
+  }
 }
 
 /* CheckTag 切换后库只更新 class，需要把新状态同步到 aria-pressed */
 new MutationObserver((mutations) => {
   for (const mutation of mutations) {
     const target = mutation.target
-    if (target instanceof HTMLElement && target.classList.contains('t-tag--checkable')) {
+    if (!(target instanceof HTMLElement)) continue
+    if (target.classList.contains('t-tag--checkable')) {
       syncTagPressed(target)
+    }
+    /* v52：Rate 选中态 / Switch 开关态 / Stepper·Switch 禁用态随 class 变化同步到 aria */
+    if (target.classList.contains('t-rate__icon') && keyboardPatched.has(target)) {
+      syncRatePressed(target)
+    }
+    if (target.classList.contains('t-switch') && keyboardPatched.has(target)) {
+      syncSwitchChecked(target)
+      syncLibDisabled(target)
+    }
+    if (target.matches('.t-stepper__minus, .t-stepper__plus') && keyboardPatched.has(target)) {
+      syncLibDisabled(target)
     }
   }
 }).observe(document.body, { attributes: true, attributeFilter: ['class'], subtree: true })

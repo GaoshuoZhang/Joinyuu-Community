@@ -135,7 +135,8 @@ async function onSave() {
   <div class="page-fade-in m-card-page">
     <ListSkeleton v-if="loading" />
     <EmptyBlock v-else-if="error" :text="error" action-text="重试" @action="run" />
-    <EmptyBlock v-else-if="!card" text="当前账号没有个人名片" />
+    <!-- v52：空态补出口——没有名片的用户可经「查看关联身份」前往身份列表（同 ExperienceView 口径） -->
+    <EmptyBlock v-else-if="!card" text="当前账号没有个人名片" action-text="查看关联身份" @action="router.push('/me/identities')" />
     <template v-else>
       <section class="m-card preview">
         <div class="head">

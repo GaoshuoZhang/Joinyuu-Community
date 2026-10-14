@@ -69,8 +69,6 @@ useRefreshOnActivate(run)
 .page { padding:var(--app-space-8); }
 .title { margin:0 0 var(--app-space-6); font: var(--app-type-page-title); }
 .closed-tip { margin-bottom: var(--app-space-5); }
-.tip { padding:var(--app-space-10); color: var(--td-text-color-placeholder); font: var(--app-type-body-sm); background: var(--td-bg-color-container); border-radius: var(--td-radius-large); }
-.tip.danger { color: var(--td-error-color); }
 .list { display: flex; flex-direction: column; gap:var(--app-space-6); }
 .name { margin:0 0 var(--app-space-3); font: var(--app-type-card-title); }
 .meta { display: flex; flex-wrap: wrap; align-items: center; gap:var(--app-space-5); margin:0 0 var(--app-space-4); font: var(--app-type-caption); color: var(--td-text-color-secondary); }

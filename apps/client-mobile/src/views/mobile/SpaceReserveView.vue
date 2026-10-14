@@ -368,7 +368,8 @@ function goMine() {
         <h2 class="page-title">{{ space?.name ?? '空间预约' }}</h2>
         <!-- 费用：0 表示免费（后台「费用」栏维护） -->
         <!-- v51：收费是中性信息（此前用 warning 语义色，暗示异常）；改为中性品牌色，「免费」保留正向语义 -->
-        <Tag size="small" variant="light" :theme="(space?.feePerHour ?? 0) > 0 ? 'primary' : 'success'">
+        <!-- v52：flex:none 防止被长标题一并压缩（界面审查 LOW） -->
+        <Tag class="head-fee" size="small" variant="light" :theme="(space?.feePerHour ?? 0) > 0 ? 'primary' : 'success'">
           {{ (space?.feePerHour ?? 0) > 0 ? `${space?.feePerHour} 积分/小时` : '免费' }}
         </Tag>
       </div>
@@ -511,8 +512,12 @@ function goMine() {
   gap:var(--app-space-6);
 }
 
+/* v52：长不可断空间名（英文/数字串）不得把费用 Tag 挤出卡片——标题可收缩、可断词
+ * （同 MyOrderDetailView 商品名口径，界面审查 LOW：320px/200% 裁切） */
 .head .page-title {
   margin: 0;
+  min-width: 0;
+  overflow-wrap: anywhere;
   font: var(--app-type-page-title);
 }
 
@@ -523,6 +528,11 @@ function goMine() {
   justify-content: space-between;
   gap:var(--app-space-3);
   margin:0 0 var(--app-space-2);
+}
+
+/* v52：费用标签不参与压缩，长标题收缩断词（见 .head .page-title） */
+.head-fee {
+  flex: none;
 }
 
 .head .page-desc {

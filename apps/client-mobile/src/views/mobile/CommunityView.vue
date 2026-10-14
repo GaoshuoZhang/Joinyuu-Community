@@ -263,6 +263,8 @@ watch(policies, () => {
       <TabPanel value="service" label="社区服务">
         <Search v-model="serviceKeyword" class="tab-search" placeholder="搜索政策关键词…" />
 
+        <!-- v52：分类 chip 行可横向滚动，补可见提示（同 PlazaView 资讯栏目口径，界面审查 LOW） -->
+        <div v-if="serviceCategories.length" class="chips-hint"><span>政策分类</span><span>左右滑动查看更多 →</span></div>
         <div v-if="serviceCategories.length" class="service-categories">
           <CheckTag size="medium" variant="light" :checked="!selectedCategory" @change="selectedCategory = ''">全部</CheckTag>
           <CheckTag v-for="category in serviceCategories" :key="category" size="medium" variant="light" :checked="selectedCategory === category" @change="selectedCategory = category">{{ category }}</CheckTag>
@@ -369,6 +371,18 @@ watch(policies, () => {
 .service-categories::-webkit-scrollbar { display: none; }
 
 .service-categories :deep(.t-tag) { flex: 0 0 auto; }
+
+/* v52：chip 行滚动提示（同 PlazaView .column-filter-head 口径） */
+.chips-hint {
+  display: flex;
+  justify-content: space-between;
+  gap: var(--app-space-4);
+  margin: 0 0 var(--app-space-3);
+  color: var(--td-text-color-secondary);
+  font: var(--app-type-body-sm);
+}
+
+.chips-hint span:last-child { color: var(--td-brand-color); }
 
 .categories-error {
   display: flex;

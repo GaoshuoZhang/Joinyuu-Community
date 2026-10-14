@@ -56,10 +56,6 @@ const { startSwipe, moveSwipe, cancelSwipe } = useTabSwipe(
   () => activeTab.value,
   (value) => (activeTab.value = value as OrderTab),
 )
-
-function goDetail(order: MyOrder) {
-  void router.push(`/me/orders/${order.id}`)
-}
 </script>
 
 <template>
@@ -79,12 +75,13 @@ function goDetail(order: MyOrder) {
           <EmptyBlock v-else-if="!filtered.length" :text="tab.value === 'all' ? '暂无兑换订单' : `暂无${tab.label}订单`" action-text="去积分商城" @action="router.push('/mall')" />
           <List v-else class="list stagger" :async-loading="footerState" @load-more="loadMore" @scroll="onListScroll">
             <p class="list-count">共 {{ formatZhNumber(filtered.length) }} 笔订单</p>
-            <article
+            <!-- v52：跳转型整卡按 wiki §5 口径用 router-link 承载主体（支持 Ctrl/中键新标签、读屏播报为链接）；
+                 「查看详情」为卡内视觉提示，不再是嵌套链接 -->
+            <router-link
               v-for="order in visibleItems"
               :key="order.id"
-              class="m-card order-card"
-              v-pressable
-              @click="goDetail(order)"
+              class="m-card order-card pressable"
+              :to="`/me/orders/${order.id}`"
             >
               <div class="row">
                 <h2 class="name">{{ order.goodsName }}</h2>
@@ -96,7 +93,7 @@ function goDetail(order: MyOrder) {
               </p>
               <p class="meta tabular-nums">下单时间：{{ formatLocalDateTime(order.createdAt) }}</p>
               <span class="detail-link">查看详情<Icon aria-hidden="true" name="chevron-right" size="14px" /></span>
-            </article>
+            </router-link>
           </List>
         </div>
       </TabPanel>
@@ -130,7 +127,9 @@ function goDetail(order: MyOrder) {
 }
 
 .order-card {
-  cursor: pointer;
+  display: block;
+  color: inherit;
+  text-decoration: none;
 }
 
 .row {

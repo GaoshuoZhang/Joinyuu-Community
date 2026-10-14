@@ -183,7 +183,9 @@ function fieldErrors(): { key: FieldKey; message: string }[] {
 
 /* 长表单：Toast 一闪而过后仍要能定位到出错字段（等价于 t-form 的 scroll-to-first-error）。
  * 字段容器用 data-field 标记；DemandKindExtras 内部字段不可单独标记，用 data-field-group 指向整块。 */
-function scrollToField(key: FieldKey) {
+/* v52：参数放宽为 string——身份字段（data-field="identity"）不在 errors 键集合内，
+ * 但同样需要定位（无发布身份时的提交拦截） */
+function scrollToField(key: FieldKey | 'identity') {
   document
     .querySelector<HTMLElement>(`[data-field="${key}"], [data-field-group~="${key}"]`)
     ?.scrollIntoView({ behavior: 'smooth', block: 'center' })
@@ -212,6 +214,7 @@ async function onSubmit() {
   }
   if (!form.asIdentity) {
     Toast('请选择发布身份')
+    scrollToField('identity')
     return
   }
   const payload: DemandCreatePayload = {
@@ -371,18 +374,18 @@ async function onSubmit() {
         <p v-if="identityOptions.length" class="field-help">以企业身份发布的需求将归属该企业主体</p>
       </div>
 
+      <!-- v52：受阻原因说明排在吸底提交按钮之前——sticky 元素会盖住其后流内内容（界面审查 MEDIUM-2） -->
+      <p v-if="!form.asIdentity" class="field-help">暂无可用的发布身份，无法提交。请先完成身份信息登记或加入企业</p>
       <Button
         class="submit-btn mobile-sticky-action"
         theme="primary"
         size="large"
         block
         type="submit"
-        :disabled="!form.asIdentity"
         :loading="submitting"
       >
         {{ revising ? '重新提交' : '提交需求' }}
       </Button>
-      <p v-if="!form.asIdentity" class="field-help">暂无可用的发布身份，无法提交。请先完成身份信息登记或加入企业</p>
       </form>
     </template>
   </div>

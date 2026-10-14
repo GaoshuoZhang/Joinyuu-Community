@@ -39,6 +39,10 @@ const discounted = computed(() => chargedPoints.value < (goods.value?.pointsCost
 const validDaysText = computed(() =>
   goods.value?.validDays ? `兑换后 ${goods.value.validDays} 天内有效，过期未使用自动退回积分` : '兑换后 30 天内有效，过期未使用自动退回积分',
 )
+/* v52：商品说明走后端富编辑器（RichTextBlock 输出 HTML），富文本分支不能开 pre-wrap——
+ * 源码缩进/换行会被原样渲染成可见空白；仅纯文本分支保留换行（判定口径与 EventDetailView、
+ * RichTextBlock 的富文本识别一致，界面审查 MEDIUM-4）。 */
+const descIsPlainText = computed(() => !/<\/?[a-z][^>]*>/i.test(goods.value?.description ?? ''))
 
 function onRedeem() {
   if (!auth.isLogged) {
@@ -121,7 +125,9 @@ function goOrders() {
         <p class="valid-days"><Icon aria-hidden="true" name="time" size="14px" />{{ validDaysText }}</p>
         <div class="desc">
           <h3>商品说明</h3>
-          <RichTextBlock :html="goods.description" />
+          <!-- v52：desc-plain 挂在 RichTextBlock 根元素上经继承生效（口径同 EventDetailView）；
+               富文本 HTML 分支不挂，避免源码缩进被渲染成可见空白 -->
+          <RichTextBlock :class="{ 'desc-plain': descIsPlainText }" :html="goods.description" />
         </div>
       </section>
 
@@ -236,12 +242,14 @@ function goOrders() {
   text-decoration: line-through;
 }
 
+/* v52：折扣标签文字色收敛到 tokens.css 已抬级的标签色档（--td-tag-warning-color = warning-7），
+ * 不再直接用 warning 基础档（浅色下 12px 约 2.8:1，界面审查 LOW：配色不另行评估，仅收敛口径） */
 .cost-tag {
   margin-left: var(--app-space-3);
   padding: 0 var(--app-space-2);
   border-radius: var(--td-radius-small);
   font: var(--app-type-caption);
-  color: var(--td-warning-color);
+  color: var(--td-tag-warning-color);
   background: var(--td-warning-color-1);
 }
 
@@ -261,10 +269,12 @@ function goOrders() {
   font: var(--app-type-card-title);
 }
 
-.desc p {
-  margin:0;
-  font: var(--app-type-body-relaxed);
-  color: var(--td-text-color-secondary);
+/* v52：商品说明的字体/颜色由 RichTextBlock 根（.rich-text）承担并继承；此处只补纯文本分支的
+ * 换行保留——.desc-plain 挂在 RichTextBlock 根元素上（子组件根携带父级 scope id），
+ * 经继承进入 v-html 内容；富文本 HTML 分支不挂，避免源码缩进被渲染成可见空白。
+ * 原 `.desc p { white-space: pre-wrap }` 为后代选择器，编译后不到达 v-html 内容（p 无 scope id），
+ * 纯文本换行一直未被保留，一并修正（口径同 EventDetailView，界面审查 MEDIUM-4） */
+.desc-plain {
   white-space: pre-wrap;
 }
 

@@ -222,6 +222,8 @@ function pick(identity: UserIdentity) {
   gap: var(--app-space-2);
   min-width: 0;
   overflow-x: auto;
+  /* v52：横滑到边缘不发生 scroll chaining（界面审查 LOW：自造滚动容器统一口径） */
+  overscroll-behavior: contain;
   scrollbar-width: none;
 }
 

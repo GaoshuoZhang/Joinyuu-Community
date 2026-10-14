@@ -92,9 +92,10 @@ const contentBlocks = computed(() =>
 .rich-content :deep(a) { color: var(--td-brand-color); text-decoration: underline; }
 .rich-content :deep(img),
 .rich-content :deep(video) { display: block; width: auto; max-width: 100%; height: auto; margin:0 auto var(--app-space-6); border-radius: var(--td-radius-large); }
-.rich-content :deep(table) { display: block; max-width: 100%; overflow-x: auto; border-collapse: collapse; }
+/* v52：表格/代码块横向滚动到边缘不发生 scroll chaining（界面审查 LOW：自造滚动容器统一口径） */
+.rich-content :deep(table) { display: block; max-width: 100%; overflow-x: auto; overscroll-behavior: contain; border-collapse: collapse; }
 .rich-content :deep(th),
 .rich-content :deep(td) { padding:var(--app-space-3) var(--app-space-4); border: 1px solid var(--td-component-border); }
-.rich-content :deep(pre) { max-width: 100%; overflow-x: auto; padding:var(--app-space-6); background: var(--td-bg-color-secondarycontainer); }
+.rich-content :deep(pre) { max-width: 100%; overflow-x: auto; overscroll-behavior: contain; padding:var(--app-space-6); background: var(--td-bg-color-secondarycontainer); }
 .rich-content :deep(:last-child) { margin-bottom:0; }
 </style>

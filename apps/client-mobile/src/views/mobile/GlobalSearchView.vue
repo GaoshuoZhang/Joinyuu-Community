@@ -173,7 +173,11 @@ onMounted(() => {
     <ListSkeleton v-if="loading && !results.length" :rows="2" />
     <EmptyBlock v-else-if="error" :text="error" action-text="重试" @action="onSearchNow" />
     <template v-else-if="hasKeyword">
-      <p v-if="partialError" class="partial-error">{{ partialError }}</p>
+      <!-- v52：局部失败属错误态，除说明外必须给出可恢复行动（重试），不能只告知「什么失败了」 -->
+      <p v-if="partialError" class="partial-error">
+        <span>{{ partialError }}</span>
+        <Button size="small" variant="text" theme="primary" @click="onSearchNow">重试</Button>
+      </p>
       <Loading v-if="loading" class="search-loading" text="搜索中…" />
       <div v-if="categoryOrder.length" class="count-chips">
         <CheckTag
@@ -229,8 +233,10 @@ onMounted(() => {
 .result h2 { overflow: hidden; margin:0; font: var(--app-type-card-title); text-overflow: ellipsis; white-space: nowrap; }
 .result p { display: -webkit-box; overflow: hidden; margin:var(--app-space-4) 0 0; color: var(--td-text-color-secondary); font: var(--app-type-body-sm); -webkit-box-orient: vertical; -webkit-line-clamp: 2; }
 .search-guide { padding:var(--app-space-12) 0; color: var(--td-text-color-placeholder); font: var(--app-type-body); text-align: center; }
-/* v51：局部失败属错误态，改用错误色底（此前用警告橙，语义漂移） */
-.partial-error { margin:0; padding:var(--app-space-4) var(--app-space-5); border-radius: var(--td-radius-default); background: var(--td-error-color-1); color: var(--td-text-color-secondary); font: var(--app-type-caption); }
+/* v51：局部失败属错误态，改用错误色底（此前用警告橙，语义漂移）
+ * v52：改为 flex 行内布局，为重试按钮留位（界面审查 HIGH-2：错误必须给出恢复行动） */
+.partial-error { display:flex; align-items:center; gap:var(--app-space-3); margin:0; padding:var(--app-space-4) var(--app-space-5); border-radius: var(--td-radius-default); background: var(--td-error-color-1); color: var(--td-text-color-secondary); font: var(--app-type-caption); }
+.partial-error :deep(.t-button) { flex-shrink: 0; margin-right: calc(-1 * var(--app-space-2)); }
 /* 同一关键词重新搜索时的局部加载指示 */
 .search-loading { padding:var(--app-space-4) 0; }
 .count-chips { display: flex; flex-wrap: wrap; gap:var(--app-space-3); }

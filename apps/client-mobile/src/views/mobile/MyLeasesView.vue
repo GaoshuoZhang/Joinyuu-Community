@@ -24,7 +24,8 @@ onMounted(run)
   <div class="page-fade-in my-leases">
     <ListSkeleton v-if="loading" />
     <EmptyBlock v-else-if="error" :text="error" action-text="重试" @action="run" />
-    <EmptyBlock v-else-if="!leases.length" text="暂无与你相关的租约记录" />
+    <!-- v52：租约为被动开通（无自助申请路由），空态补来源说明，避免用户不知道从何而来、该做什么 -->
+    <EmptyBlock v-else-if="!leases.length" text="暂无与你相关的租约记录，租约由社区或企业开通，请联系社区咨询" />
     <div v-else class="stagger lease-list">
       <p class="list-count">共 {{ formatZhNumber(leases.length) }} 条</p>
       <article v-for="lease in leases" :key="lease.id" class="m-card lease-card">

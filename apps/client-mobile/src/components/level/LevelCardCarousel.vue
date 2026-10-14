@@ -28,13 +28,17 @@ const track = ref<HTMLElement | null>(null)
 const activeIndex = ref(0)
 
 const cards = computed(() =>
-  props.groups.map((g) => {
+  props.groups.map((g, i) => {
     const isCurrent = g.level === props.currentLevel
+    const next = props.groups[i + 1]
     return {
       ...g,
       isCurrent,
       /** 经验达到该级门槛即「已获得」（当前级天然已获得） */
       reached: isCurrent || (g.threshold !== null && g.threshold !== undefined && props.currentExperience >= g.threshold),
+      /** v52：下一级门槛——当前卡据此展示「距下一级还差 N 经验」（末级为 null）；
+       *  进度条本身无 role/aria，进度含义必须同时有文本等价物（界面审查 LOW） */
+      nextThreshold: next?.threshold ?? null,
     }
   }),
 )
@@ -116,7 +120,10 @@ defineExpose({ scrollToCard })
           color="var(--td-text-color-anti)"
           track-color="color-mix(in srgb, var(--td-text-color-anti) 25%, transparent)"
         />
-        <p class="meta">当前 {{ formatZhNumber(currentExperience) }} 经验</p>
+        <!-- v52：进度含义同时以文本承载（Progress 无 role/aria，:label="false" 又隐去百分比） -->
+        <p class="meta">
+          当前 {{ formatZhNumber(currentExperience) }} 经验<span v-if="card.nextThreshold !== null && card.nextThreshold !== undefined"> · 距下一级还差 {{ formatZhNumber(Math.max(card.nextThreshold - currentExperience, 0)) }} 经验</span>
+        </p>
       </template>
       <p v-else-if="card.threshold !== null && card.threshold !== undefined" class="meta">
         {{ card.isCurrent ? `当前 ${formatZhNumber(currentExperience)} 经验` : `需 ${formatZhNumber(card.threshold)} 经验达成` }}

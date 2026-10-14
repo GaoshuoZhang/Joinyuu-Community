@@ -4,7 +4,10 @@ import { Icon, Swiper, SwiperItem } from 'tdesign-mobile-vue'
 import type { HomeBanner } from '@/types'
 
 /* 首页轮播：图片优先，无图时使用品牌渐变文字卡；高度由唯一常量固定（KeepAlive 返回时不受测量影响）。
- * 尊重 prefers-reduced-motion。 */
+ * 尊重 prefers-reduced-motion。
+ * v52：自动播放提供可见的暂停/播放控件（WCAG 2.2.2，界面审查 MEDIUM-3）。
+ * 注意：TDesign Swiper 不监听 autoplay 属性的变化（swiper.mjs 仅在挂载、手势与 current 变化时起停定时器），
+ * 因此切换播放态时以 key 重挂载，并用 current 保留当前帧，避免跳回第一条。 */
 const props = withDefaults(defineProps<{ banners: HomeBanner[]; reduceMotion?: boolean }>(), {
   reduceMotion: false,
 })
@@ -14,6 +17,23 @@ defineEmits<{ select: [index: number] }>()
 const BANNER_HEIGHT = 130
 const failedImages = ref(new Set<string>())
 const firstImageIndex = computed(() => props.banners.findIndex((banner) => !!banner.imageUrl))
+
+/* 当前帧与播放态：current 由 change 事件回写，重挂载时作为初始帧传入 */
+const currentIndex = ref(0)
+const swiperKey = ref(0)
+const playing = ref(!props.reduceMotion)
+const autoplayOn = computed(() => playing.value && !props.reduceMotion)
+/* reduced-motion 下本就不自动播放（无运动需要暂停）；单条横幅也无播放意义 */
+const showPlayToggle = computed(() => !props.reduceMotion && props.banners.length > 1)
+
+function onChange(current: number) {
+  currentIndex.value = current
+}
+
+function togglePlay() {
+  playing.value = !playing.value
+  swiperKey.value += 1
+}
 
 function imageKey(banner: HomeBanner) {
   return `${banner.id}:${banner.imageUrl ?? ''}`
@@ -25,15 +45,18 @@ function markImageFailed(banner: HomeBanner) {
 </script>
 
 <template>
-  <Swiper
-    v-if="banners.length"
-    class="banner"
-    :height="BANNER_HEIGHT"
-    :style="{ '--home-banner-height': `${BANNER_HEIGHT}px` }"
-    :loop="true"
-    :autoplay="!reduceMotion"
-    :interval="4500"
-  >
+  <div v-if="banners.length" class="banner-wrap">
+    <Swiper
+      :key="swiperKey"
+      class="banner"
+      :height="BANNER_HEIGHT"
+      :style="{ '--home-banner-height': `${BANNER_HEIGHT}px` }"
+      :loop="true"
+      :autoplay="autoplayOn"
+      :interval="4500"
+      :current="currentIndex"
+      @change="onChange"
+    >
     <SwiperItem v-for="(b, index) in banners" :key="b.id">
       <button
         type="button"
@@ -68,14 +91,54 @@ function markImageFailed(banner: HomeBanner) {
         </div>
       </button>
     </SwiperItem>
-  </Swiper>
+    </Swiper>
+    <!-- v52：自动轮播的可见暂停/播放控件（WCAG 2.2.2）；44px 命中区，图标 16px，按压反馈走 .pressable -->
+    <button
+      v-if="showPlayToggle"
+      type="button"
+      class="banner-play-toggle pressable"
+      :aria-label="playing ? '暂停轮播播放' : '开始轮播播放'"
+      @click="togglePlay"
+    >
+      <Icon aria-hidden="true" :name="playing ? 'pause' : 'play'" size="16px" />
+    </button>
+  </div>
 </template>
 
 <style scoped>
+/* v52：轮播与暂停控件的外层定位容器（控件叠在轮播右下角，不进入 Swiper 的子节点序列） */
+.banner-wrap {
+  position: relative;
+  border-radius: var(--td-radius-large);
+  overflow: hidden;
+}
+
 .banner {
   height: var(--home-banner-height);
   border-radius: var(--td-radius-large);
   overflow: hidden;
+}
+
+/* v52：暂停/播放控件：右下角、44px 命中区、半透明深底保证白图标在浅色横幅图上可辨 */
+.banner-play-toggle {
+  position: absolute;
+  right: var(--app-space-3);
+  bottom: var(--app-space-3);
+  display: grid;
+  place-items: center;
+  width: 44px;
+  height: 44px;
+  padding: 0;
+  border: 0;
+  border-radius: var(--td-radius-circle);
+  color: var(--td-text-color-anti);
+  background: oklch(0 0 0 / 0.45);
+  cursor: pointer;
+}
+
+.banner-play-toggle:focus-visible {
+  outline: 2px solid var(--td-text-color-anti);
+  outline-offset: 2px;
 }
 
 .banner :deep(.t-swiper__container) {

@@ -212,13 +212,15 @@ function onListScroll(bottomDistance: number) {
   text-align: right;
 }
 
+/* v52：积分增减文字色抬到 -7 档（基础档 success/error 在 emphasis 14-16px/600 下不达 AA），
+ * 与 tokens.css 标签色档同一抬级口径（界面审查 LOW：配色不另行评估，仅收敛档位） */
 .delta {
-  color: var(--td-success-color);
+  color: var(--td-success-color-7);
   font: var(--app-type-emphasis);
 }
 
 .delta.neg {
-  color: var(--td-error-color);
+  color: var(--td-error-color-7);
 }
 
 .balance {

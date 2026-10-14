@@ -47,11 +47,12 @@ function memberNote(m: EnterpriseMemberInfo): string {
     </div>
     <div v-if="visibleInvitations.length" class="invites">
       <p class="members-hint">待接受邀请（{{ formatZhNumber(visibleInvitations.length) }}）</p>
+      <!-- v52：手机号脱敏口径与成员列表一致（memberNote），无管理权限者同样看不到明文（界面审查 LOW） -->
       <Cell
         v-for="inv in visibleInvitations"
         :key="inv.id"
         :title="inv.memberName"
-        :note="[inv.role, inv.phone].filter(Boolean).join(' · ')"
+        :note="[inv.role, inv.phone ? (props.canManage ? inv.phone : maskPhone(inv.phone)) : ''].filter(Boolean).join(' · ')"
         :bordered="false"
       >
         <template #right-icon>

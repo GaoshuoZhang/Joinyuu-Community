@@ -20,14 +20,15 @@ const rules = ref([
     </section>
 
     <section class="m-card">
-      <h3 class="section-title">积分来源</h3>
+      <!-- v52：navbar h1 之下的首个内容标题用 h2，避免大纲跳级（界面审查 LOW） -->
+      <h2 class="section-title">积分来源</h2>
       <div class="chips">
         <Tag v-for="s in pointsSources" :key="s" class="chip" size="small" variant="light" theme="primary">{{ s }}</Tag>
       </div>
     </section>
 
     <section v-for="r in rules" :key="r.title" class="m-card">
-      <h3 class="section-title">{{ r.title }}</h3>
+      <h2 class="section-title">{{ r.title }}</h2>
       <ul class="rule-list">
         <li v-for="(item, i) in r.items" :key="i">{{ item }}</li>
       </ul>

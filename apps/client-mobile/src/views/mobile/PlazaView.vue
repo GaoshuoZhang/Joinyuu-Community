@@ -222,11 +222,12 @@ function clearArticleFilters() {
         />
         <div v-else class="stagger list">
           <p class="list-count">共 {{ formatZhNumber(eventsTotal) }} 场活动</p>
-          <article
+          <!-- v52：跳转型整卡按 wiki §5 口径用 router-link 承载主体（支持 Ctrl/中键新标签、读屏播报为链接） -->
+          <router-link
             v-for="ev in events"
             :key="ev.id"
-            class="item m-card" v-pressable
-            @click="router.push(`/events/${ev.id}`)"
+            :to="`/events/${ev.id}`"
+            class="item m-card pressable"
           >
             <Image v-if="ev.coverUrl" class="card-cover content-img" :src="ev.coverUrl" :alt="ev.title" fit="cover" lazy @error="onImageError" />
             <div class="row-head">
@@ -245,7 +246,7 @@ function clearArticleFilters() {
                 <span>{{ ev.location }}</span>
               </span>
             </p>
-          </article>
+          </router-link>
         </div>
       </TabPanel>
 
@@ -285,11 +286,12 @@ function clearArticleFilters() {
         />
         <div v-else class="stagger list">
           <p class="list-count">共 {{ formatZhNumber(articlesTotal) }} 篇文章</p>
-          <article
+          <!-- v52：跳转型整卡按 wiki §5 口径用 router-link 承载主体（支持 Ctrl/中键新标签、读屏播报为链接） -->
+          <router-link
             v-for="a in articles"
             :key="a.id"
-            class="item m-card" v-pressable
-            @click="router.push(`/articles/${a.id}`)"
+            :to="`/articles/${a.id}`"
+            class="item m-card pressable"
           >
             <Image v-if="a.coverUrl" class="card-cover content-img" :src="a.coverUrl" :alt="a.title" fit="cover" lazy @error="onImageError" />
             <!-- v48：分类标签原先与标题贴在一起——改为独立成行并留出与活动卡片一致的间距 -->
@@ -299,7 +301,7 @@ function clearArticleFilters() {
             <h2 class="title">{{ a.title }}</h2>
             <p class="summary">{{ a.summary }}</p>
             <p class="meta">{{ a.authorName }} · {{ formatLocalDate(a.publishedAt) }} · {{ formatZhNumber(a.views) }} 次浏览</p>
-          </article>
+          </router-link>
         </div>
       </TabPanel>
     </Tabs>
@@ -363,6 +365,9 @@ function clearArticleFilters() {
 }
 
 .item {
+  display: block;
+  color: inherit;
+  text-decoration: none;
   cursor: pointer;
   overflow: hidden;
 }

@@ -45,7 +45,9 @@ onMounted(run)
     <EmptyBlock v-else-if="empty" text="暂无承接中的项目" action-text="浏览需求" @action="router.push('/projects')" />
     <List v-else class="stagger list" :async-loading="footerState" @load-more="loadMore" @scroll="onListScroll">
       <p class="list-count">共 {{ formatZhNumber(projects.length) }} 个</p>
-      <section v-for="p in visibleItems" :key="p.id" class="m-card project-card" v-pressable @click="router.push(`/me/projects/${p.id}`)">
+      <!-- v52：跳转型整卡按 wiki §5 口径用 router-link 承载主体（支持 Ctrl/中键新标签、读屏播报为链接）；
+           卡内无并列操作按钮，全部内容移入链接内，按压反馈用 .pressable -->
+      <router-link v-for="p in visibleItems" :key="p.id" class="m-card project-card pressable" :to="`/me/projects/${p.id}`">
         <header class="row">
           <h2 class="name">{{ p.name }}</h2>
           <!-- v48：结项状态统一走 StateTag（kind=project），与详情页口径一致 -->
@@ -70,7 +72,7 @@ onMounted(run)
           </li>
         </ul>
         <p v-else class="milestones-empty">暂无里程碑</p>
-      </section>
+      </router-link>
     </List>
   </div>
 </template>
@@ -91,7 +93,9 @@ onMounted(run)
 }
 
 .project-card {
-  cursor: pointer;
+  display: block;
+  color: inherit;
+  text-decoration: none;
 }
 
 .row {

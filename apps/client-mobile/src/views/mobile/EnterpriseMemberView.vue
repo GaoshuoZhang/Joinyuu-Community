@@ -190,10 +190,8 @@ async function doRemove() {
         </template>
       </section>
 
-      <!-- v51：主词与其它编辑页统一为「保存」（原「保存修改」中的「修改」冗余） -->
-      <Button v-if="canSave" class="mobile-sticky-action" theme="primary" size="large" block :loading="saving" @click="onSave">
-        {{ saving ? '保存中…' : '保存' }}
-      </Button>
+      <!-- v52：次要操作与提示必须排在吸底主按钮之前——.mobile-sticky-action 为 position:sticky bottom，
+           其后流内元素会在滚动中段被完全盖住（破坏性的「移除成员」曾因此不可达且误触落点是「保存」） -->
       <Button
         v-if="can('manage_members') && !targetIsContact"
         class="remove-btn"
@@ -206,6 +204,11 @@ async function doRemove() {
         移除成员
       </Button>
       <p v-if="targetIsContact" class="page-tip">负责人本人需先转移负责人后才能退出。</p>
+
+      <!-- v51：主词与其它编辑页统一为「保存」（原「保存修改」中的「修改」冗余） -->
+      <Button v-if="canSave" class="mobile-sticky-action" theme="primary" size="large" block :loading="saving" @click="onSave">
+        {{ saving ? '保存中…' : '保存' }}
+      </Button>
     </template>
   </div>
 </template>

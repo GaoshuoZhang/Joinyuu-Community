@@ -249,7 +249,8 @@ async function onShare() {
             收起
           </Button>
         </div>
-        <Button v-if="!auth.isLogged" theme="primary" block @click="router.push(`/login?redirect=${route.fullPath}`)">
+        <!-- v52：对象式查询替代裸模板插值——fullPath 含 ?/&/# 时不会被截断（同文件 onToggleFavorite 口径） -->
+        <Button v-if="!auth.isLogged" theme="primary" block @click="router.push({ path: '/login', query: { redirect: route.fullPath } })">
           登录后响应
         </Button>
         <DemandOwnerResponses

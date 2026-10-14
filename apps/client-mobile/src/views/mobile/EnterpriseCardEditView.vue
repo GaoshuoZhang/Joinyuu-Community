@@ -103,6 +103,12 @@ function fillForm() {
 }
 
 async function onSave() {
+  /* v52：不再以 :disabled 禁用主按钮（键盘/读屏用户无法触达也无法感知原因）——
+     无自助编辑权限时点击给出说明，与其它编辑页「保持可点、提交时校验」口径一致 */
+  if (!editableFields.value.length) {
+    Toast('当前名片由工作人员维护，暂未开放自助编辑')
+    return
+  }
   const firstError = validate()
   if (firstError) {
     Toast(firstError)
@@ -216,10 +222,11 @@ async function onSave() {
           <Textarea v-model="form.advantages" :autosize="{ minRows: 3, maxRows: 8 }" :maxlength="300" placeholder="团队、技术、资源等优势…" />
         </div>
 
-        <Button class="mobile-sticky-action" theme="primary" size="large" block :disabled="!editableFields.length" :loading="submitting" @click="onSave">
+        <!-- v52：提示文案排在吸底主按钮之前——sticky 元素会盖住其后流内内容（界面审查 MEDIUM-2） -->
+        <p class="tip">{{ editableFields.length ? '保存后立即生效，工作人员可维护名片内容。' : '当前名片由工作人员维护，暂未开放自助编辑。' }}</p>
+        <Button class="mobile-sticky-action" theme="primary" size="large" block :loading="submitting" @click="onSave">
           {{ submitting ? '保存中…' : '保存企业名片' }}
         </Button>
-        <p class="tip">{{ editableFields.length ? '保存后立即生效，工作人员可维护名片内容。' : '当前名片由工作人员维护，暂未开放自助编辑。' }}</p>
       </section>
     </template>
   </div>

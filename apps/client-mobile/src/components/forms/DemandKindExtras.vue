@@ -65,7 +65,8 @@ function clearDeliverBy() {
     </div>
     <div class="field">
       <span class="field-label">预期交付日期<span class="req"> *</span></span>
-      <!-- 未选日期时标题用弱化色（--td-cell-title-color）；已选时在 note 槽给出 44px 命中区的清除入口 -->
+      <!-- v52：清除入口移出可点 Cell——Cell 带 v-pressable（role=button），内嵌按钮会形成
+           「按钮内嵌按钮」的双重焦点与读屏语义混乱（界面审查 LOW）；Cell 只承担打开选择器 -->
       <Cell
         v-pressable
         class="date-trigger"
@@ -73,11 +74,8 @@ function clearDeliverBy() {
         :title="deliverBy || '请选择预期交付日期'"
         arrow
         @click="openDeliverBy"
-      >
-        <template v-if="deliverBy" #note>
-          <Button size="small" variant="text" class="date-clear" @click.stop="clearDeliverBy">清除</Button>
-        </template>
-      </Cell>
+      />
+      <Button v-if="deliverBy" size="small" variant="text" class="date-clear" @click="clearDeliverBy">清除</Button>
       <Popup :visible="showDeliverBy" placement="bottom" @update:visible="(value: boolean) => emit('update:showDeliverBy', value)">
         <DateTimePicker
           v-model="draftDeliverBy"
@@ -178,7 +176,10 @@ function clearDeliverBy() {
   --td-cell-title-color: var(--td-text-color-placeholder);
 }
 
+/* v52：清除按钮独立成行（原在 Cell 的 note 槽内，与可点 Cell 形成嵌套交互）；
+ * 负左外距让按钮文字与 Cell 标题文字左对齐（按钮自带内距，44px 命中区由全局 token 保证） */
 .date-clear {
-  margin-left: var(--app-space-3);
+  margin-top: var(--app-space-2);
+  margin-left: calc(-1 * var(--app-space-3));
 }
 </style>
