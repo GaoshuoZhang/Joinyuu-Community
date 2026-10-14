@@ -10,6 +10,7 @@ import { createHmac } from 'node:crypto'
 import { JwtService } from '@nestjs/jwt'
 import { Prisma, type CommunityEvent, type EventEnrollment, type UserIdentity } from '@prisma/client'
 import { PrismaService } from '../../../common/prisma/prisma.service'
+import { LicenseService } from '../../../common/license/license.service'
 import { IdGeneratorService } from '../../../common/id-generator/id-generator.service'
 import { PointsEngineService } from '../../../common/engine/points-engine/points-engine.service'
 import { NotificationService } from '../../../common/notify/notification.service'
@@ -36,6 +37,7 @@ const TICKET_SECRET = process.env.JWT_SECRET ?? 'dev-only-change-me'
 @Injectable()
 export class AppEventsService {
   constructor(
+    private readonly license: LicenseService,
     private readonly prisma: PrismaService,
     private readonly ids: IdGeneratorService,
     private readonly engine: PointsEngineService,
@@ -331,6 +333,8 @@ export class AppEventsService {
       where: { enrollmentId: enrollment.id },
     })
     if (!ticket) {
+      // Reading an existing ticket stays available; lazy issuance is a business write.
+      await this.license.assertWritable()
       const ticketNo = `ET${enrollment.eventId.replace(/^EV/, '')}${enrollment.id}`
       const redeemCode = await this.generateRedeemCode(enrollment.eventId, enrollment.id)
       try {

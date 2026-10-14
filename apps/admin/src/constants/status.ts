@@ -6,6 +6,11 @@ export interface StatusConf {
 }
 
 export const statusMap = {
+  license: {
+    valid: { label: '正常', theme: 'success' },
+    expired: { label: '已到期', theme: 'warning' },
+    invalid: { label: '许可证无效', theme: 'danger' },
+  },
   accountDeletion: {
     cooling: { label: '待处理', theme: 'warning' }, approved: { label: '已注销', theme: 'default' },
     rejected: { label: '已驳回', theme: 'danger' }, cancelled: { label: '已撤回', theme: 'default' },

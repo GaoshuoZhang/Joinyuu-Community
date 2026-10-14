@@ -1,5 +1,7 @@
 # 聚屿社区 · 后端服务 — 开发 Wiki
 
+> 离线许可证：新增 `DeploymentLicense` 与全局 `LicenseGuard`，未授权/到期时业务只读。接口、维护例外、签发和部署要求见 [许可证管理](./license-management.md)。`GET /api/admin/system/license` 查询；`POST /request` 生成申请；`POST /import` 导入（后二者均以该路径为前缀），沿用 `/system/config` 权限。供应商公钥已内置；迁移并启动后导入许可证即可业务写入，无需公钥环境配置。
+
 > 本文档沉淀 M1 后端服务（NestJS + PostgreSQL + Redis）的架构契约、数据模型、API 清单与业务规则，是所有后端模块开发的唯一依据。
 > 契约来源：M0 冻结的 `apps/admin/src/types/index.ts` 实体模型 + `apps/admin/src/api/` 全部 stub 的 TODO 注释（API Stub 即接口契约）。
 > **M1.5 后台治理增强（R1~R12）落地后，本文档已按当前代码（`schema.prisma` / 全部 controller / `src/common` / `prisma/seed*` / `test`）全面修订；文档与代码冲突时以代码为准并回写本文档。**

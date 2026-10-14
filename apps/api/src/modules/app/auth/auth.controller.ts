@@ -1,3 +1,4 @@
+import { LicenseMaintenance } from '../../../common/license/license.guard'
 import { Body, Controller, Get, HttpCode, Post, Query, Req, UnauthorizedException } from '@nestjs/common'
 import { Public } from '../../../common/decorators/public.decorator'
 import type { AppAuthenticatedRequest } from '../../../common/interfaces/app-authenticated-request'
@@ -80,6 +81,7 @@ export class AuthController {
   @Public()
   @HttpCode(200)
   @Post('reset-code/send')
+  @LicenseMaintenance()
   sendResetCode(
     @Req() req: AppAuthenticatedRequest,
     @Body() dto: SendResetCodeDto,
@@ -100,12 +102,14 @@ export class AuthController {
   @Public()
   @HttpCode(200)
   @Post('login')
+  @LicenseMaintenance()
   login(@Req() req: AppAuthenticatedRequest, @Body() dto: AppLoginDto): Promise<AppLoginResult> {
     return this.auth.login(dto, req.ip ?? req.socket.remoteAddress ?? '')
   }
 
   @HttpCode(200)
   @Post('logout')
+  @LicenseMaintenance()
   logout(@Req() req: AppAuthenticatedRequest): Promise<{ code: number }> {
     const payload = req.user
     if (!payload) throw new UnauthorizedException('未登录或登录已过期')
@@ -115,6 +119,7 @@ export class AuthController {
   @Public()
   @HttpCode(200)
   @Post('reset-password')
+  @LicenseMaintenance()
   resetPassword(@Body() dto: ResetPasswordDto): Promise<{ code: number }> {
     return this.auth.resetPassword(dto)
   }

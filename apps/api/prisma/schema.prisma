@@ -1,4 +1,12 @@
 // 聚屿社区 M1 数据模型 — 契约来源：apps/admin/src/types/index.ts（M0 冻结）+ docs/wiki-backend.md §5
+
+// 部署实例授权；不随业务数据清理重建，备份/恢复时必须保留。
+model DeploymentLicense {
+  id           String    @id @default("default")
+  deploymentId String    @unique
+  document     Json?
+  importedAt   DateTime?
+}
 // 建模总则：
 //   1. 主键 = 前缀字符串（U1001/E2001/D4001/...），由 IdGeneratorService 经 IdSequence 表原子发号
 //   2. 展示快照字段保留为列（publisherName/spaceName/goodsName/columnName 等），不外键化

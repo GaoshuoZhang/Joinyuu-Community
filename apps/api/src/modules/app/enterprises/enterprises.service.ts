@@ -1,3 +1,4 @@
+import { LicenseService } from '../../../common/license/license.service'
 import {
   BadRequestException,
   ConflictException,
@@ -190,6 +191,7 @@ export interface EnterpriseShowcaseDto {
 @Injectable()
 export class AppEnterprisesService {
   constructor(
+    private readonly license: LicenseService,
     private readonly prisma: PrismaService,
     private readonly ids: IdGeneratorService,
     private readonly notify: NotificationService,
@@ -1022,6 +1024,7 @@ export class AppEnterprisesService {
 
   /** 惰性过期：pending 且 expiresAt < now 的企业邀请批量置 expired（时间字符串字典序即时间序） */
   private async expirePendingInvitations(): Promise<void> {
+    if (!await this.license.canWrite()) return
     await this.prisma.enterpriseInvitation.updateMany({
       where: { status: 'pending', expiresAt: { lt: formatNow() } },
       data: { status: 'expired' },
@@ -1030,6 +1033,7 @@ export class AppEnterprisesService {
 
   /** 惰性过期：pending 且 expiresAt < now 的转移请求批量置 expired */
   private async expirePendingTransfers(): Promise<void> {
+    if (!await this.license.canWrite()) return
     await this.prisma.transferRequest.updateMany({
       where: { status: 'pending', expiresAt: { lt: formatNow() } },
       data: { status: 'expired' },

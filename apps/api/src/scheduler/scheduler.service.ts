@@ -1,3 +1,4 @@
+import { LicenseService } from '../common/license/license.service'
 import { Injectable, InternalServerErrorException, NotFoundException } from '@nestjs/common'
 import { Cron, CronExpression } from '@nestjs/schedule'
 import { PrismaService } from '../common/prisma/prisma.service'
@@ -40,6 +41,7 @@ export class SchedulerService {
     private readonly redis: RedisService,
     private readonly audit: AuditService,
     private readonly notify: NotificationService,
+    private readonly license: LicenseService,
   ) {}
 
   /** 任务注册表（监控页展示 + 手动触发入口） */
@@ -78,6 +80,7 @@ export class SchedulerService {
    * BE-M3 修复：执行前用 Redis 抢占任务级互斥锁。多实例/手动触发与 @Cron 并发时，
    * 只有持有锁的实例执行，其余跳过（写入跳过日志），避免重复通知/重复积分。 */
   async runJob(name: string): Promise<{ code: number }> {
+    if (!await this.license.canWrite()) return { code: 0 }
     const job = this.jobs.find((j) => j.name === name)
     if (!job) throw new NotFoundException('任务不存在')
 

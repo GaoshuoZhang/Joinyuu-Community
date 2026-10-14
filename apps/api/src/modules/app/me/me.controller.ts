@@ -1,4 +1,5 @@
 import { Body, Controller, Get, HttpCode, NotFoundException, Param, Post, Put, Query, Req, Res, UnauthorizedException } from '@nestjs/common'
+import { LicenseMaintenance } from '../../../common/license/license.guard'
 import type { Response } from 'express'
 import type { AppAuthenticatedRequest } from '../../../common/interfaces/app-authenticated-request'
 import { PageQueryDto } from '../../../common/dto/page-query.dto'
@@ -53,6 +54,7 @@ export class MeController {
   /** 登录态修改密码（成功后强制退出全部会话，需重新登录） */
   @HttpCode(200)
   @Post('change-password')
+  @LicenseMaintenance()
   changePassword(@Req() req: AppAuthenticatedRequest, @Body() dto: ChangePasswordDto) {
     return this.me.changePassword(this.uid(req), dto)
   }
@@ -74,6 +76,7 @@ export class MeController {
   /** 生成个人数据导出，并通过站内信返回受保护的下载地址。 */
   @HttpCode(200)
   @Post('data-export')
+  @LicenseMaintenance()
   dataExport(@Req() req: AppAuthenticatedRequest) {
     return this.me.dataExport(this.uid(req))
   }

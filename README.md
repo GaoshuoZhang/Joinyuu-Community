@@ -36,6 +36,8 @@ pnpm install
 
 ## 🚀 快速开始
 
+> 授权：系统已启用离线许可证校验。供应商公钥已内置，无需配置公钥文件；在「系统管理 → 系统配置 → 许可证管理」生成申请、导入许可证。未授权或到期时仅保留查询、导出及维护操作，业务不可写入。供应商使用独立工具双击签发，输入天数即可。签发、续期和部署步骤见 [许可证管理](./docs/license-management.md)。现有部署升级先运行 `pnpm db:migrate`。
+
 ```bash
 pnpm db:up                # 启动 PostgreSQL 17 + Redis 7.4 + MinIO（Docker Compose）
 pnpm db:reset             # 重建数据库：迁移 + 全量种子数据

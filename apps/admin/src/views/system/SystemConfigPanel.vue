@@ -3,6 +3,7 @@ import { computed, onBeforeUnmount, onMounted, reactive, ref } from 'vue'
 import { onBeforeRouteLeave } from 'vue-router'
 import { DialogPlugin, MessagePlugin } from 'tdesign-vue-next'
 import PageHeader from '@/components/PageHeader.vue'
+import LicensePanel from './LicensePanel.vue'
 import ListErrorState from '@/components/ListErrorState.vue'
 import {
   fetchRealnameCatalog,
@@ -26,6 +27,7 @@ type SystemConfigForm = SystemConfigPayload &
   }
 
 const loading = ref(true)
+const licenseWritable = ref(false)
 const saving = ref(false)
 /* 加载失败：保留错误展示与重试入口，并禁用保存，避免用默认值覆盖线上配置 */
 const loadError = ref('')
@@ -285,11 +287,12 @@ onBeforeRouteLeave(async () => {
       </template>
     </PageHeader>
 
+    <LicensePanel @writable="licenseWritable = $event" />
     <ListErrorState v-if="loadError" :message="loadError" :loading="loading" @retry="loadConfig" />
 
     <t-loading :loading="loading" size="small">
       <t-card :bordered="true" class="config-card">
-        <t-form ref="formRef" :data="form" label-align="top">
+        <t-form ref="formRef" :data="form" label-align="top" :disabled="!licenseWritable">
           <div class="section-title">站点信息</div>
           <div class="form-grid">
             <t-form-item label="站点名称" name="siteName" :rules="[{ required: true, message: '请输入站点名称', trigger: 'submit' }]">
@@ -575,7 +578,7 @@ onBeforeRouteLeave(async () => {
         <div class="config-footer">
           <!-- 长表单底部才可触达保存：吸底并显式提示未保存状态，避免误以为已生效 -->
           <span class="config-dirty-tip">{{ isDirty ? '有未保存的修改' : '暂无未保存修改' }}</span>
-          <t-button theme="primary" :loading="saving" :disabled="!!loadError || !isDirty" @click="onSave">保存配置</t-button>
+          <t-button theme="primary" :loading="saving" :disabled="!licenseWritable || !!loadError || !isDirty" @click="onSave">保存配置</t-button>
         </div>
       </t-card>
     </t-loading>

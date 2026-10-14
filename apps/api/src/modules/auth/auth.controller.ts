@@ -1,3 +1,4 @@
+import { LicenseMaintenance } from '../../common/license/license.guard'
 import { Body, Controller, Get, HttpCode, Param, Post, Req, UnauthorizedException } from '@nestjs/common'
 import { Public } from '../../common/decorators/public.decorator'
 import { RequirePermission } from '../../common/decorators/require-permission.decorator'
@@ -25,6 +26,7 @@ export class AuthController {
   @Public()
   @HttpCode(200)
   @Post('login')
+  @LicenseMaintenance()
   login(@Body() dto: LoginDto, @Req() req: AuthenticatedRequest): Promise<LoginResult> {
     return this.auth.login(dto.username, dto.password, {
       ip: req.ip ?? '',
@@ -36,6 +38,7 @@ export class AuthController {
 
   @HttpCode(200)
   @Post('logout')
+  @LicenseMaintenance()
   logout(@Req() req: AuthenticatedRequest): Promise<{ code: number }> {
     const payload = req.user
     if (!payload) throw new UnauthorizedException('未登录或登录已过期')
@@ -45,6 +48,7 @@ export class AuthController {
   /** 修改密码：成功后当前账号全部会话强制下线 */
   @HttpCode(200)
   @Post('change-password')
+  @LicenseMaintenance()
   changePassword(@Body() dto: ChangePasswordDto, @Req() req: AuthenticatedRequest): Promise<{ code: number }> {
     const payload = req.user
     if (!payload) throw new UnauthorizedException('未登录或登录已过期')
@@ -62,6 +66,7 @@ export class AuthController {
   @RequirePermission('/system/sessions')
   @HttpCode(200)
   @Post('sessions/:jti/kick')
+  @LicenseMaintenance()
   kickSession(@Param('jti') jti: string): Promise<{ code: number }> {
     return this.sessions.kick(jti)
   }
@@ -70,6 +75,7 @@ export class AuthController {
   @RequirePermission('/system/sessions')
   @HttpCode(200)
   @Post('sessions/kick-all')
+  @LicenseMaintenance()
   kickAllSessions(@Req() req: AuthenticatedRequest): Promise<{ code: number; kicked: number }> {
     const payload = req.user
     if (!payload) throw new UnauthorizedException('未登录或登录已过期')

@@ -62,6 +62,8 @@ import { UserMessagesModule } from './modules/user-messages/user-messages.module
 import { MessagingModule } from './modules/messaging/messaging.module'
 import { SchedulerModule } from './scheduler/scheduler.module'
 import { HealthController } from './health/health.controller'
+import { LicenseModule } from './common/license/license.module'
+import { LicenseGuard } from './common/license/license.guard'
 import { JwtAuthGuard } from './common/guards/jwt-auth.guard'
 import { AppJwtGuard } from './common/guards/app-jwt.guard'
 import { PermissionGuard } from './common/guards/permission.guard'
@@ -75,6 +77,7 @@ import { HttpExceptionFilter } from './common/filters/http-exception.filter'
     // Tests invoke scheduler methods explicitly; wall-clock jobs race suite teardown/reseeding.
     ScheduleModule.forRoot({ cronJobs: process.env.NODE_ENV !== 'test' }),
     PrismaModule,
+    LicenseModule,
     RedisModule,
     IdGeneratorModule,
     AuditModule,
@@ -143,6 +146,7 @@ import { HttpExceptionFilter } from './common/filters/http-exception.filter'
     { provide: APP_GUARD, useClass: AppJwtGuard },
     { provide: APP_GUARD, useClass: PermissionGuard },
     { provide: APP_GUARD, useClass: DomainScopeGuard },
+    { provide: APP_GUARD, useClass: LicenseGuard },
     { provide: APP_INTERCEPTOR, useClass: EnvelopeInterceptor },
     { provide: APP_INTERCEPTOR, useClass: AppAnalyticsInterceptor },
     { provide: APP_FILTER, useClass: HttpExceptionFilter },

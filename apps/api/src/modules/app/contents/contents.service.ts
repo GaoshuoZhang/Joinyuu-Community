@@ -1,3 +1,4 @@
+import { LicenseService } from '../../../common/license/license.service'
 import {
   BadRequestException,
   ConflictException,
@@ -90,6 +91,7 @@ interface Snapshot {
 @Injectable()
 export class AppContentsService {
   constructor(
+    private readonly license: LicenseService,
     private readonly prisma: PrismaService,
     private readonly ids: IdGeneratorService,
     private readonly jwt: JwtService,
@@ -131,9 +133,9 @@ export class AppContentsService {
     if (!article) throw new NotFoundException('文章不存在')
     /* 登录用户按「人 + 自然日」去重（Redis 抢占，TTL 24h），避免脚本重复刷新刷高阅读量；
      * 游客无可信身份维度，保持每次累加（与既有口径一致）。 */
-    const counted = uid
+    const counted = await this.license.canWrite() && (uid
       ? await this.redis.acquireFlag(`article:view:${id}:${uid}:${formatToday()}`, 24 * 60 * 60)
-      : true
+      : true)
     if (counted) {
       await this.prisma.article.updateMany({ where: { id, status: 'published' }, data: { views: { increment: 1 } } })
     }
