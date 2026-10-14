@@ -253,10 +253,12 @@ onMounted(async () => {
       </template>
     </PageHeader>
 
-    <div class="page-card">
+    <!-- 持久错误提示置于卡片外（与列表页统一：卡内只放详情内容） -->
+    <ListErrorState v-if="loadError" :message="loadError" :loading="loading" @retry="load" />
+
+    <div v-else class="page-card">
       <t-loading :loading="loading">
-        <ListErrorState v-if="loadError" :message="loadError" :loading="loading" @retry="load" />
-        <t-empty v-else-if="!loading && !lease" description="租约不存在或已删除" />
+        <t-empty v-if="!loading && !lease" description="租约不存在或已删除" />
         <template v-else-if="lease">
         <div class="head-row">
           <StatusTag entity="lease" :value="viewStatus" />
@@ -352,7 +354,7 @@ onMounted(async () => {
           <t-loading :loading="contractsLoading">
             <div v-if="contractsError" class="contract-error">
               <span>{{ contractsError }}</span>
-              <t-link theme="primary" hover="color" @click="loadContracts">重试</t-link>
+              <t-button variant="text" size="small" @click="loadContracts">重试</t-button>
             </div>
             <t-empty v-else-if="!contracts.length" description="暂无合同附件" />
             <div v-else class="contract-grid">
@@ -432,7 +434,7 @@ onMounted(async () => {
 /* 续期记录的租期变化（原到期日 → 新到期日 + 租金变化，如有） */
 .record-term {
   margin-top: 2px;
-  font-size: 13px;
+  font-size: 12px;
   line-height: 20px;
   color: var(--td-text-color-primary);
 }
@@ -468,7 +470,7 @@ onMounted(async () => {
   display: flex;
   align-items: center;
   gap: 8px;
-  font-size: 13px;
+  font-size: 12px;
   color: var(--td-error-color);
 }
 
@@ -522,7 +524,7 @@ onMounted(async () => {
 }
 
 .contract-name {
-  font-size: 13px;
+  font-size: 12px;
   line-height: 20px;
   color: var(--td-text-color-primary);
   overflow: hidden;

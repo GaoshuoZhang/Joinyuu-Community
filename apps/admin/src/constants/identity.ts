@@ -7,8 +7,8 @@ export const identityTypeMap: Record<IdentityType, string> = {
   community_individual: '社区个体',
   community_enterprise: '社区企业',
   external_enterprise: '合作企业',
-  external_individual: '外部个人',
-  external_company: '外部企业',
+  external_individual: '个人用户',
+  external_company: '合作企业',
   official: '社区官方',
 }
 

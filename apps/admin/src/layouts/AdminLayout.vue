@@ -543,7 +543,13 @@ async function handleDropdown(item: { value?: string | number }) {
           <template #icon><CloseIcon /></template>
           全部关闭
         </t-button>
-        <nav ref="tabBarRef" class="tab-bar" aria-label="已打开页面" @wheel="handleTabBarWheel">
+        <nav
+          ref="tabBarRef"
+          class="tab-bar"
+          :class="{ 'is-overflowing': tabMaxScroll > 0 }"
+          aria-label="已打开页面"
+          @wheel="handleTabBarWheel"
+        >
           <div ref="tabTrackRef" class="tab-track" :style="tabTrackStyle">
             <div
               v-for="tab in tabs.tabs"
@@ -622,7 +628,8 @@ async function handleDropdown(item: { value?: string | number }) {
                         <span class="notice-dot" v-if="!n.read"></span>
                         <span class="notice-item-title">{{ n.title }}</span>
                       </div>
-                      <div class="notice-item-content">{{ n.content }}</div>
+                      <!-- 正文限 2 行截断，补原生 title 以便悬停查看完整内容 -->
+                      <div class="notice-item-content" :title="n.content">{{ n.content }}</div>
                       <div class="notice-item-time">{{ n.at }}</div>
                     </t-link>
                     <t-empty v-if="!noticeError && !noticeLoading && !noticeList.length" description="暂无通知" size="small" />
@@ -931,6 +938,12 @@ async function handleDropdown(item: { value?: string | number }) {
   overflow: hidden;
 }
 
+/* 轨道溢出时右缘渐隐：给出「还有更多标签、可横向滚动」的视觉提示（仅溢出时启用，避免固定遮暗最后一个标签） */
+.tab-bar.is-overflowing {
+  mask-image: linear-gradient(to right, #000 calc(100% - 24px), transparent 100%);
+  -webkit-mask-image: linear-gradient(to right, #000 calc(100% - 24px), transparent 100%);
+}
+
 /* 轨道随滚轮横向位移（transform，参考 TDesign Tabs 导航滑动） */
 .tab-track {
   display: flex;
@@ -990,8 +1003,10 @@ async function handleDropdown(item: { value?: string | number }) {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 16px;
-  height: 16px;
+  /* 命中区 24×24（图标仍 12px 视觉尺寸）：16px 目标过小，指针与触摸均易点空。
+   * 直接放大元素而非用伪元素外扩——标签栏 overflow:hidden 会裁掉外扩部分 */
+  width: 24px;
+  height: 24px;
   border-radius: var(--td-radius-default);
   color: var(--td-text-color-secondary);
   cursor: pointer;

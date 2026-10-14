@@ -196,7 +196,7 @@ onMounted(load)
 
     <t-loading :loading="loading" size="small" class="asset-grid">
       <ListEmptyState
-        v-if="!filtered.length"
+        v-if="!loading && !filtered.length"
         class="asset-empty"
         :query="filterState"
         description="暂无素材，点击右上角「上传图片」新增"
@@ -204,7 +204,7 @@ onMounted(load)
       />
       <div v-for="a in filtered" :key="a.id" class="asset-card">
         <div class="asset-thumb-wrap">
-          <img class="asset-thumb" :src="a.url" :alt="a.fileName" width="320" height="180" loading="lazy" decoding="async" />
+          <img class="asset-thumb content-img" :src="a.url" :alt="a.fileName" width="320" height="180" loading="lazy" decoding="async" />
           <t-tag class="asset-badge" size="small" variant="light" :theme="sourceTheme(a)">{{ sourceText(a) }}</t-tag>
         </div>
         <div class="asset-info">

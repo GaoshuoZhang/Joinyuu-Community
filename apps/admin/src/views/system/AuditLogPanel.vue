@@ -267,7 +267,7 @@ onMounted(load)
 }
 
 .snapshot-empty {
-  font-size: 13px;
+  font-size: 12px;
   color: var(--td-text-color-placeholder);
 }
 

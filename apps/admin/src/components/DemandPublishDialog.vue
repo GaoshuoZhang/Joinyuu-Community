@@ -288,7 +288,7 @@ function onClose() {
       <div class="form-row">
         <t-form-item name="contactPublic">
           <template #label>
-            <t-popup content="开启后客户端（含未登录访客）可见该需求的联系人与联系方式；关闭则客户端一律不可见，后台始终可见" show-arrow>
+            <t-popup content="开启后客户端（含未登录访客）可见该需求的联系人与联系电话；关闭则客户端一律不可见，后台始终可见" show-arrow>
               <span class="scope-popup-trigger">公开联系人</span>
             </t-popup>
           </template>

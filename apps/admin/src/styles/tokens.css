@@ -256,6 +256,14 @@ html[data-route-loading='true']::after {
 /* 表单内撑满（取代散落的行内 style="width:100%"） */
 .ctl-w-full { width: 100% !important; }
 
+/* 内容图 1px 内缩描边：封面/缩略图/附件预览压在卡片白底上时需要描边定义边缘。
+ * 用 outline 而非 border——不改变图片尺寸；outline-offset:-1px 让描边贴内侧并随圆角内收。
+ * 颜色取 TDesign 边框 token（随明暗主题自动切换），不另造颜色。 */
+.content-img {
+  outline: 1px solid var(--td-component-border);
+  outline-offset: -1px;
+}
+
 /* 内容卡片 */
 .page-card {
   background: var(--td-bg-color-container);

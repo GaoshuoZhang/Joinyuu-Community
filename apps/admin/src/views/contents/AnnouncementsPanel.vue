@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, onMounted, reactive, ref } from 'vue'
 import { MessagePlugin } from 'tdesign-vue-next'
-import { AddIcon, DeleteIcon, EditIcon, SearchIcon } from 'tdesign-icons-vue-next'
+import { AddIcon, EditIcon, SearchIcon } from 'tdesign-icons-vue-next'
 import PageHeader from '@/components/PageHeader.vue'
 import ColumnController from '@/components/ColumnController.vue'
 import ListEmptyState from '@/components/ListEmptyState.vue'
@@ -125,7 +125,7 @@ function isExpired(expireAt?: string): boolean {
   return expireAt <= now
 }
 
-/* ---------- 下架 / 重新发布 / 删除 ---------- */
+/* ---------- 下架 / 重新发布 / 归档 ---------- */
 async function onWithdraw(row: Announcement) {
   acting.value = row.id + ':withdraw'
   try {
@@ -156,12 +156,12 @@ async function onDelete(row: Announcement) {
   acting.value = row.id + ':delete'
   try {
     await deleteAnnouncement(row.id)
-    MessagePlugin.success(`公告「${row.title}」已删除`)
+    MessagePlugin.success(`公告「${row.title}」已归档，可在归档管理中恢复`)
     /* 归档后当前页可能已空：页码越界时回退一页再加载 */
     if (list.value.length <= 1 && query.page > 1) query.page -= 1
     await load()
   } catch (e) {
-    MessagePlugin.error(e instanceof Error ? e.message : '删除失败')
+    MessagePlugin.error(e instanceof Error ? e.message : '归档失败')
   } finally {
     acting.value = ''
   }
@@ -245,7 +245,7 @@ onMounted(load)
           <div class="enable-cell" @click.stop>
             <!-- 已下架：启用开关禁用（需先重新发布），点空位无副作用 -->
             <t-tooltip v-if="row.status !== 'published'" content="已下架公告需先重新发布才能启用">
-              <t-switch :value="false" disabled />
+              <t-switch :value="false" disabled :aria-label="`启用公告：${row.title}`" />
             </t-tooltip>
             <!-- 未启用：开启前二次确认（switch 受控于 row.pinned，确认后才切换） -->
             <t-popconfirm
@@ -253,12 +253,13 @@ onMounted(load)
               content="启用后将自动关闭其它公告，客户端首页仅展示本条。确认启用？"
               @confirm="onTogglePin(row, true)"
             >
-              <t-switch :value="false" :loading="acting === row.id" />
+              <t-switch :value="false" :loading="acting === row.id" :aria-label="`启用公告：${row.title}`" />
             </t-popconfirm>
             <t-switch
               v-else
               :value="true"
               :loading="acting === row.id"
+              :aria-label="`关闭公告：${row.title}`"
               @change="() => onTogglePin(row, false)"
             />
           </div>
@@ -299,15 +300,14 @@ onMounted(load)
             >
               重新发布
             </t-button>
-            <!-- 仅已下架公告可删除（后端归档规则同口径） -->
+            <!-- 仅已下架公告可归档（后端为软删除，归档对象可在「归档管理」恢复） -->
             <t-popconfirm
               v-if="row.status === 'withdrawn'"
-              content="确认删除该公告？删除后不可恢复。"
+              content="确认归档该公告？归档后可在「归档管理」中恢复。"
               @confirm="onDelete(row)"
             >
-              <t-button variant="text" size="small" theme="danger" :loading="acting === row.id + ':delete'">
-                <template #icon><DeleteIcon /></template>
-                删除
+              <t-button variant="text" size="small" theme="warning" :loading="acting === row.id + ':delete'">
+                归档
               </t-button>
             </t-popconfirm>
           </div>

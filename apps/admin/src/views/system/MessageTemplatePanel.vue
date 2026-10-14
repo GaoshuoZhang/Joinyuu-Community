@@ -324,8 +324,8 @@ function versionActionLabel(version: MessageTemplateVersion): string {
         </template>
         <template #op="{ row }">
           <t-space size="small">
-            <t-link theme="primary" hover="color" @click="openDetail(row)">编辑</t-link>
-            <t-link theme="primary" hover="color" @click="openTest(row)">测试发送</t-link>
+            <t-button variant="text" size="small" @click="openDetail(row)">编辑</t-button>
+            <t-button variant="text" size="small" @click="openTest(row)">测试发送</t-button>
           </t-space>
         </template>
 
@@ -448,7 +448,7 @@ function versionActionLabel(version: MessageTemplateVersion): string {
             resizable
           >
             <template #version="{ row }">v{{ row.version }}</template>
-            <template #body="{ row }"><span class="muted body-preview">{{ row.body }}</span></template>
+            <template #body="{ row }"><span class="muted body-preview" :title="row.body">{{ row.body }}</span></template>
             <template #status="{ row }">
               <StatusTag entity="messageTemplateVersion" :value="row.status" />
             </template>
@@ -459,7 +459,7 @@ function versionActionLabel(version: MessageTemplateVersion): string {
                 content="确认发布该历史版本？将回滚并覆盖当前发布版本"
                 @confirm="onPublish(row.version)"
               >
-                <t-link theme="primary" hover="color">发布</t-link>
+                <t-button variant="text" size="small">发布</t-button>
               </t-popconfirm>
             </template>
 

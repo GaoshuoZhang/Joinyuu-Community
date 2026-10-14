@@ -397,7 +397,7 @@ onMounted(load)
           <t-descriptions-item v-for="d in current.details" :key="d.label" :label="d.label">
             <div v-if="d.files?.length" class="detail-files">
               <div v-for="(f, i) in d.files" :key="i" class="detail-file">
-                <t-image v-if="safeHttpUrl(f.url) && isImageFile(f.name)" :src="safeHttpUrl(f.url)" fit="cover" class="detail-thumb" />
+                <t-image v-if="safeHttpUrl(f.url) && isImageFile(f.name)" :src="safeHttpUrl(f.url)" fit="cover" class="detail-thumb content-img" />
                 <a v-if="safeHttpUrl(f.url)" :href="safeHttpUrl(f.url)" target="_blank" rel="noopener noreferrer">{{ f.name }}</a>
                 <span v-else>{{ f.name }}</span>
               </div>

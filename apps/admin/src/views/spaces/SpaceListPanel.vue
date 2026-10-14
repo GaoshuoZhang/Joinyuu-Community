@@ -31,7 +31,7 @@ const columns = [
   { colKey: 'time', title: '开放时段', cell: 'time', width: 140, resizable: true , ellipsis: true},
   { colKey: 'equipment', title: '设备', cell: 'equipment', width: 200, resizable: true , ellipsis: true},
   { colKey: 'status', title: '状态', cell: 'status', width: 100, resizable: true , ellipsis: true},
-  { colKey: 'op', title: '操作', cell: 'op', width: 210 },
+  { colKey: 'op', title: '操作', cell: 'op', width: 250 },
 ]
 
 /* 列配置：本地持久化显隐/顺序 */
@@ -162,6 +162,7 @@ onMounted(load)
         </template>
         <template #op="{ row }">
           <div class="op-cell" @click.stop>
+            <t-button variant="text" size="small" @click="goDetail(row)">详情</t-button>
             <t-button variant="text" size="small" @click="openEdit(row)">编辑</t-button>
             <template v-if="row.status === 'available'">
               <t-popconfirm content="确认登记维护？维护期间不可预约" @confirm="onSetStatus(row, 'maintenance')">

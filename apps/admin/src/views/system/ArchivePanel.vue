@@ -659,7 +659,12 @@ onMounted(load)
                   class="status-switch-item"
                 >
                   <span class="status-switch-label">{{ st.label }}</span>
-                  <t-switch v-model="st.enabled" size="small" :disabled="!currentSetting.autoArchive" />
+                  <t-switch
+                    v-model="st.enabled"
+                    size="small"
+                    :disabled="!currentSetting.autoArchive"
+                    :aria-label="`自动归档状态：${st.label}`"
+                  />
                 </div>
               </div>
             </t-form-item>

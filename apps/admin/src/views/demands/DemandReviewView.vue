@@ -54,7 +54,7 @@ const columns = [
     sortType: 'all',
   ellipsis: true,
   },
-  { colKey: 'op', title: '操作', cell: 'op', width: 160 },
+  { colKey: 'op', title: '操作', cell: 'op', width: 200 },
 ]
 
 /* 列配置：本地持久化显隐/顺序 */
@@ -228,6 +228,7 @@ onMounted(() => {
 
         <template #op="{ row }">
           <div class="op-cell" @click.stop>
+            <t-button variant="text" size="small" @click="goDetail(row)">详情</t-button>
             <t-button variant="text" size="small" theme="primary" @click="openReview(row)">审核</t-button>
           </div>
         </template>

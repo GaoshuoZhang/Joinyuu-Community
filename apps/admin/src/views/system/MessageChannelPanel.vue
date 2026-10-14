@@ -433,8 +433,8 @@ function credentialStatus(row: MessageChannel): 'configured' | 'missing' | 'none
         </template>
         <template #op="{ row }">
           <t-space size="small">
-            <t-link theme="primary" hover="color" @click="openEdit(row)">编辑</t-link>
-            <t-link theme="primary" hover="color" @click="openTest(row)">测试发送</t-link>
+            <t-button variant="text" size="small" @click="openEdit(row)">编辑</t-button>
+            <t-button variant="text" size="small" @click="openTest(row)">测试发送</t-button>
           </t-space>
         </template>
       </t-table>

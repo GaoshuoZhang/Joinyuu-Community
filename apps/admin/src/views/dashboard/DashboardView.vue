@@ -735,7 +735,7 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onLayoutKeydown))
   font-size: 14px;
   color: var(--td-text-color-secondary);
   cursor: pointer;
-  transition: color 120ms ease, background-color 120ms ease, transform 120ms ease;
+  transition: color 120ms ease, background-color 120ms ease;
 }
 
 .quick-item:hover {
@@ -813,11 +813,16 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onLayoutKeydown))
   cursor: pointer;
 }
 
-.layout-move:hover,
+.layout-move:hover {
+  color: var(--td-brand-color);
+  background: var(--td-brand-color-1);
+}
+
+/* 键盘焦点环：用与 .stat-clickable 同口径的 2px 品牌色环，替代被抹掉的平台焦点指示 */
 .layout-move:focus-visible {
   color: var(--td-brand-color);
   background: var(--td-brand-color-1);
-  outline: none;
+  box-shadow: 0 0 0 2px var(--td-brand-color-focus);
 }
 
 .layout-name {

@@ -68,7 +68,7 @@ const columns = [
   { colKey: 'progress', title: '进度', cell: 'progress', width: 120, resizable: true , ellipsis: true},
   { colKey: 'status', title: '状态', cell: 'status', width: 86, resizable: true , ellipsis: true},
   { colKey: 'duration', title: '起止时间', cell: 'duration', width: 220, resizable: true , ellipsis: true},
-  { colKey: 'op', title: '操作', cell: 'op', width: 220 },
+  { colKey: 'op', title: '操作', cell: 'op', width: 260 },
 ]
 
 /* 列配置：本地持久化显隐/顺序 */
@@ -515,6 +515,8 @@ onMounted(() => {
         <template #duration="{ row }">{{ durationOf(row) }}</template>
         <template #op="{ row }">
           <div class="op-cell" @click.stop>
+            <!-- 详情：形态与行点击一致，为键盘用户提供显式入口 -->
+            <t-button variant="text" size="small" @click="goDetail(row)">详情</t-button>
             <t-button
               v-if="row.status !== 'finished' && row.status !== 'closed'"
               variant="text"

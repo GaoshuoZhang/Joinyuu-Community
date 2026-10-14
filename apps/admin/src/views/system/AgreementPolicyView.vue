@@ -62,10 +62,10 @@ onMounted(load)
     <PageHeader title="协议管理" description="独立维护用户协议与隐私政策版本，供注册及隐私设置场景读取">
       <template #actions><t-button theme="primary" @click="openEditor()">新增协议</t-button></template>
     </PageHeader>
-    <div class="page-card">
-      <ListErrorState v-if="loadError" :message="loadError" :loading="loading" @retry="load" />
-      <!-- 错误态与表格互斥：否则加载失败时表格空态「暂无协议版本」仍渲染，误导为无数据 -->
-      <t-table v-else row-key="id" table-layout="fixed" hover resizable :data="rows" :columns="columns" :loading="loading" empty="暂无协议版本">
+    <!-- 错误态与表格互斥：否则加载失败时表格空态「暂无协议版本」仍渲染，误导为无数据 -->
+    <ListErrorState v-if="loadError" :message="loadError" :loading="loading" @retry="load" />
+    <div v-else class="page-card">
+      <t-table row-key="id" table-layout="fixed" hover resizable :data="rows" :columns="columns" :loading="loading" empty="暂无协议版本">
         <template #kind="{ row }"><t-tag variant="light">{{ policyKindText(row.kind) }}</t-tag></template>
         <template #status="{ row }"><StatusTag entity="communityPolicy" :value="row.status" /></template>
         <template #op="{ row }"><t-button variant="text" size="small" theme="primary" @click="openEditor(row)">编辑</t-button></template>

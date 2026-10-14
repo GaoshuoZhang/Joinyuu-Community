@@ -1,9 +1,9 @@
 <script setup lang="ts">
 import type { Component } from 'vue'
-import { useSlots } from 'vue'
+import { computed, useAttrs, useSlots } from 'vue'
 import { Link as TLink } from 'tdesign-vue-next'
 
-defineProps<{
+const props = defineProps<{
   label: string
   value: number | string
   icon?: Component
@@ -17,10 +17,21 @@ defineProps<{
 }>()
 
 const slots = useSlots()
+const attrs = useAttrs()
+
+/* 根元素按用途选择：有 href 走链接；只有点击行为（筛选卡片）走原生 button，
+ * 保证键盘可聚焦、可用 Enter/Space 触发；纯展示卡片保持 div，不进入 Tab 序列。 */
+const tag = computed(() => (props.href ? TLink : attrs.onClick ? 'button' : 'div'))
 </script>
 
 <template>
-  <component :is="href ? TLink : 'div'" :href="href" class="stat-card" :class="{ 'is-active': active }">
+  <component
+    :is="tag"
+    :href="href"
+    :type="tag === 'button' ? 'button' : undefined"
+    class="stat-card"
+    :class="{ 'is-active': active }"
+  >
     <div v-if="icon" class="stat-icon">
       <component :is="icon" />
     </div>
@@ -39,6 +50,15 @@ const slots = useSlots()
   justify-content: flex-start;
   text-align: left;
   white-space: normal;
+}
+
+/* 筛选卡片根元素是原生 button：清除 UA 默认字体/居中/外观，观感与展示型卡片一致 */
+.stat-card:is(button) {
+  font: inherit;
+  color: inherit;
+  text-align: left;
+  white-space: normal;
+  appearance: none;
 }
 
 .stat-main {

@@ -122,7 +122,7 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKeydown))
         <div class="col-panel-head">
           <span class="col-panel-title">列设置</span>
           <t-popconfirm content="确认重置列配置？当前列显隐与顺序将恢复为默认。" @confirm="onReset">
-            <t-link theme="primary" hover="color" size="small">重置</t-link>
+            <t-button variant="text" size="small">重置</t-button>
           </t-popconfirm>
         </div>
         <div class="col-list">

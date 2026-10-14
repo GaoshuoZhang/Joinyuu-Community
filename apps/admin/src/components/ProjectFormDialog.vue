@@ -35,7 +35,7 @@ const auth = useAuthStore()
 const initializing = ref(false)
 const undertakerOptions = ref<UndertakerOption[]>([])
 
-/* 需求方选项（用户 + 企业，含联系方式用于自动填充） */
+/* 需求方选项（用户 + 企业，含联系电话与邮箱用于自动填充） */
 type PublisherUserOption = { uid: string; nickname: string; realName: string; phone: string; email: string; tag: '社区个体' | '个人用户' }
 type PublisherEnterpriseOption = { id: string; name: string; contactName: string; contactPhone: string; contactEmail?: string; tag: '社区企业' | '合作企业' }
 const publisherUsers = ref<PublisherUserOption[]>([])
@@ -70,7 +70,7 @@ const demanderIdentityLabel = computed(() => {
   return form.demander ? '自定义' : ''
 })
 
-/* 选择需求方后自动填充联系方式（自定义名称不覆盖已填内容） */
+/* 选择需求方后自动填充联系电话与邮箱（自定义名称不覆盖已填内容） */
 watch(
   () => form.demander,
   (v) => {
@@ -473,7 +473,7 @@ function onClose() {
       <template v-if="!demand">
         <div class="scope-head">
           <span class="scope-title">需求方信息</span>
-          <span class="scope-tip">社区自建项目需登记需求方与联系方式，便于后续对接与追溯</span>
+          <span class="scope-tip">社区自建项目需登记需求方与联系电话，便于后续对接与追溯</span>
         </div>
         <div class="form-row">
           <t-form-item label="需求方">
@@ -510,7 +510,7 @@ function onClose() {
           <t-input clearable v-model="form.contactEmail" placeholder="联系邮箱…" />
         </t-form-item>
       </template>
-      <p v-else class="demand-context">需求方信息将照搬需求「{{ demand.publisherName }}」及其联系方式与预算口径</p>
+      <p v-else class="demand-context">需求方信息将照搬需求「{{ demand.publisherName }}」及其联系电话与预算口径</p>
       <t-form-item label="承接方（可多选/自定义）" name="undertakers">
         <t-select
           v-model="form.undertakers"

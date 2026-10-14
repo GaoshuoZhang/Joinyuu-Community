@@ -83,10 +83,10 @@ const columns = [
   ellipsis: true,
   },
   { colKey: 'location', title: '地点', ellipsis: true, width: 130, resizable: true },
-  { colKey: 'enrolled', title: '报名', cell: 'enrolled', width: 108, resizable: true , ellipsis: true},
-  { colKey: 'checked', title: '签到', cell: 'checked', width: 108, resizable: true , ellipsis: true},
+  { colKey: 'enrolled', title: '报名', cell: 'enrolled', width: 150, resizable: true , ellipsis: true},
+  { colKey: 'checked', title: '签到', cell: 'checked', width: 150, resizable: true , ellipsis: true},
   { colKey: 'status', title: '状态', cell: 'status', width: 150, resizable: true , ellipsis: true},
-  { colKey: 'op', title: '操作', cell: 'op', width: 300 },
+  { colKey: 'op', title: '操作', cell: 'op', width: 340 },
 ]
 
 /* 列配置：本地持久化显隐/顺序 */
@@ -182,6 +182,11 @@ function enrollPointsTheme(row: CommunityEvent): 'success' | 'warning' {
 }
 function checkinPointsTheme(row: CommunityEvent): 'success' | 'warning' {
   return (row.checkinPoints ?? rulePoints.value.checkin) === rulePoints.value.checkin ? 'success' : 'warning'
+}
+
+/* 积分文字线索：颜色不构成唯一语义，标签内补充来源（沿用积分规则默认值 / 活动自定义） */
+function pointsNote(value: number | undefined, ruleValue: number): string {
+  return (value ?? ruleValue) === ruleValue ? '规则值' : '自定义'
 }
 
 function approvedCount(row: CommunityEvent) {
@@ -553,9 +558,9 @@ function fetchAllForExport(page: number, pageSize: number) {
         <template #enrolled="{ row }">
           <div class="stack-cell">
             <span>{{ approvedCount(row) }}/{{ row.capacity }}</span>
-            <!-- 只标数值：标签色区分来源（绿色=沿用积分规则值，黄色=活动自定义值） -->
+            <!-- 标签色区分来源（绿色=沿用积分规则值，黄色=活动自定义值），文字线索同步给出 -->
             <t-tag :theme="enrollPointsTheme(row)" variant="light" size="small">
-              {{ row.enrollPoints ?? rulePoints.enroll }}积分
+              {{ row.enrollPoints ?? rulePoints.enroll }}积分 · {{ pointsNote(row.enrollPoints, rulePoints.enroll) }}
             </t-tag>
           </div>
         </template>
@@ -563,7 +568,7 @@ function fetchAllForExport(page: number, pageSize: number) {
           <div class="stack-cell">
             <span>{{ checkedCount(row) }}/{{ approvedCount(row) }}</span>
             <t-tag :theme="checkinPointsTheme(row)" variant="light" size="small">
-              {{ row.checkinPoints ?? rulePoints.checkin }}积分
+              {{ row.checkinPoints ?? rulePoints.checkin }}积分 · {{ pointsNote(row.checkinPoints, rulePoints.checkin) }}
             </t-tag>
           </div>
         </template>
@@ -572,6 +577,8 @@ function fetchAllForExport(page: number, pageSize: number) {
         </template>
         <template #op="{ row }">
           <div class="op-cell" @click.stop>
+            <!-- 详情：形态与行点击一致，为键盘用户提供显式入口 -->
+            <t-button variant="text" size="small" @click="goDetail(row)">详情</t-button>
             <!-- 待发布：编辑 / 立即发布 / 定时发布 / 取消活动 -->
             <template v-if="row.status === 'pending_release'">
               <t-button variant="text" size="small" @click="openEdit(row)">编辑</t-button>

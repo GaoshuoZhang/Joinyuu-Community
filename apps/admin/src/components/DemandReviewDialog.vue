@@ -193,7 +193,6 @@ function publisherIdentityLabel(d: Demand): string {
 /* 联系邮箱等无空格长文本在描述表格中强制换行，避免溢出撑破抽屉。
  * 依赖 TDesign descriptions 内部类 .t-descriptions__content，组件无样式 API 可替代 */
 .review-desc :deep(.t-descriptions__content) {
-  word-break: break-all;
   overflow-wrap: anywhere;
 }
 

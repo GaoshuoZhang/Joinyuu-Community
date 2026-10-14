@@ -102,7 +102,7 @@ const columns = [
   { colKey: 'contactName', title: '联系人', cell: 'contact', width: 140, resizable: true , ellipsis: true},
   { colKey: 'note', title: '备注', cell: 'note', width: 140, resizable: true , ellipsis: true},
   { colKey: 'status', title: '状态', cell: 'status', width: 110, resizable: true , ellipsis: true},
-  { colKey: 'op', title: '操作', cell: 'op', width: 230 },
+  { colKey: 'op', title: '操作', cell: 'op', width: 300 },
 ]
 
 /* 列配置：本地持久化显隐/顺序 */
@@ -414,6 +414,7 @@ onMounted(async () => {
         </template>
         <template #op="{ row }">
           <div class="op-cell" @click.stop>
+            <t-button variant="text" size="small" @click="openDetail(row)">详情</t-button>
             <t-button variant="text" size="small" @click="openPrint(row)">打印</t-button>
             <t-button
               v-if="['active', 'expiring'].includes(deriveLeaseStatus(row))"

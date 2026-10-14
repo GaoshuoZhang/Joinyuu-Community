@@ -3,7 +3,7 @@
 export type UserStatus = 'active' | 'frozen' | 'deleted'
 
 /* 身份类型：individual 个人用户为注册默认身份，人手一份，关联其他身份时保留（积分挂靠）
- * external_individual / external_company 仅用于社区代录需求的「需求方身份」快照（外部个人/外部企业） */
+ * external_individual / external_company 仅用于社区代录需求的「需求方身份」快照（个人用户/合作企业） */
 export type IdentityType =
   | 'individual'
   | 'community_individual'
@@ -306,7 +306,7 @@ export interface Project {
   /** 创建人 */
   creatorName?: string
   creatorId?: string
-  /** 联系方式 */
+  /** 联系人 / 联系电话 / 邮箱 */
   contactName?: string
   contactPhone?: string
   contactEmail?: string
@@ -436,7 +436,7 @@ export interface ProjectInitPayload {
   milestones: MilestoneInput[]
   /** 自定义项目经验值（缺省 = 按经验值规则 project_completed 发放；结项时按承接占比分配） */
   expReward?: number
-  /* 需求方 / 创建人 / 联系方式 / 合同价格（社区自建项目录入；需求立项由服务端照搬需求） */
+  /* 需求方 / 创建人 / 联系电话 / 合同价格（社区自建项目录入；需求立项由服务端照搬需求） */
   demanderId?: string
   demanderName?: string
   demanderIdentity?: { type: string; enterpriseId?: string; enterpriseName?: string; title?: string } | null

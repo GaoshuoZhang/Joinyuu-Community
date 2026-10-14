@@ -358,6 +358,8 @@ const ledgerColumns = [
 
 const records = ref<UserRecords | null>(null)
 const recordsLoading = ref(false)
+/* 记录加载失败：与空态区分展示，提供重试入口（避免失败被静默伪装成「暂无记录」） */
+const recordsError = ref('')
 
 /* 历史（终态）状态集合：条目落入终态或已归档（deletedAt 非空）即归入「历史记录」段，其余为进行中的当前记录 */
 const APPLICATION_HISTORY = new Set(['approved', 'rejected'])
@@ -499,10 +501,12 @@ function goLeaseRecord(row: UserLeaseRecord) {
 
 async function loadRecords() {
   recordsLoading.value = true
+  recordsError.value = ''
   try {
     records.value = await fetchUserRecords(route.params.id as string)
-  } catch {
-    MessagePlugin.error('记录加载失败')
+  } catch (e) {
+    records.value = null
+    recordsError.value = e instanceof Error ? e.message : '记录加载失败'
   } finally {
     recordsLoading.value = false
   }
@@ -713,6 +717,12 @@ onMounted(load)
               >
                 <t-loading size="small" />
               </div>
+              <ListErrorState
+                v-else-if="recordsError"
+                :message="recordsError"
+                :loading="recordsLoading"
+                @retry="loadRecords"
+              />
               <template v-else-if="currentApplications.length || historyApplications.length">
                 <template v-if="currentApplications.length">
                   <div class="record-section-title">进行中（{{ currentApplications.length }}）</div>
@@ -772,6 +782,12 @@ onMounted(load)
               >
                 <t-loading size="small" />
               </div>
+              <ListErrorState
+                v-else-if="recordsError"
+                :message="recordsError"
+                :loading="recordsLoading"
+                @retry="loadRecords"
+              />
               <template v-else-if="currentDemands.length || historyDemands.length">
                 <template v-if="currentDemands.length">
                   <div class="record-section-title">进行中（{{ currentDemands.length }}）</div>
@@ -829,6 +845,12 @@ onMounted(load)
               >
                 <t-loading size="small" />
               </div>
+              <ListErrorState
+                v-else-if="recordsError"
+                :message="recordsError"
+                :loading="recordsLoading"
+                @retry="loadRecords"
+              />
               <template v-else-if="currentProjects.length || historyProjects.length">
                 <template v-if="currentProjects.length">
                   <div class="record-section-title">进行中（{{ currentProjects.length }}）</div>
@@ -886,6 +908,12 @@ onMounted(load)
               >
                 <t-loading size="small" />
               </div>
+              <ListErrorState
+                v-else-if="recordsError"
+                :message="recordsError"
+                :loading="recordsLoading"
+                @retry="loadRecords"
+              />
               <template v-else-if="currentEvents.length || historyEvents.length">
                 <template v-if="currentEvents.length">
                   <div class="record-section-title">进行中（{{ currentEvents.length }}）</div>
@@ -945,6 +973,12 @@ onMounted(load)
               >
                 <t-loading size="small" />
               </div>
+              <ListErrorState
+                v-else-if="recordsError"
+                :message="recordsError"
+                :loading="recordsLoading"
+                @retry="loadRecords"
+              />
               <template v-else-if="currentLeases.length || historyLeases.length">
                 <template v-if="currentLeases.length">
                   <div class="record-section-title">进行中（{{ currentLeases.length }}）</div>
@@ -1006,6 +1040,12 @@ onMounted(load)
               >
                 <t-loading size="small" />
               </div>
+              <ListErrorState
+                v-else-if="recordsError"
+                :message="recordsError"
+                :loading="recordsLoading"
+                @retry="loadRecords"
+              />
               <template v-else-if="currentSubmissions.length || historySubmissions.length">
                 <template v-if="currentSubmissions.length">
                   <div class="record-section-title">进行中（{{ currentSubmissions.length }}）</div>
@@ -1059,6 +1099,12 @@ onMounted(load)
               >
                 <t-loading size="small" />
               </div>
+              <ListErrorState
+                v-else-if="recordsError"
+                :message="recordsError"
+                :loading="recordsLoading"
+                @retry="loadRecords"
+              />
               <template v-else-if="currentReservations.length || historyReservations.length">
                 <template v-if="currentReservations.length">
                   <div class="record-section-title">进行中（{{ currentReservations.length }}）</div>

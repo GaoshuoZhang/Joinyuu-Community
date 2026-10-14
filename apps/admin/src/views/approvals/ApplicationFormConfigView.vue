@@ -349,7 +349,7 @@ onMounted(load)
 .empty-fields { padding: 32px; text-align: center; color: var(--td-text-color-secondary); border: 1px dashed var(--td-component-border); }
 .advanced-panel { margin-top: 20px; padding: 16px; border: 1px solid var(--td-component-border); border-radius: var(--td-radius-medium); }
 .raw-label { display: block; margin: 16px 0 8px; font-weight: 500; color: var(--td-text-color-primary); }
-.save-bar { justify-content: flex-end; position: sticky; bottom: 0; z-index: 2; margin-top: 16px; padding: 12px 0; background: var(--td-bg-color-container); }
+.save-bar { justify-content: flex-end; position: sticky; bottom: 0; z-index: 2; margin-top: 16px; padding: 12px 0; background: var(--td-bg-color-container); border-top: 1px solid var(--td-component-border); }
 @media (max-width: 900px) {
   .form-grid, .field-grid { grid-template-columns: 1fr 1fr; }
 }

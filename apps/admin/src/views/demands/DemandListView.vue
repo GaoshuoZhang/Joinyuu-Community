@@ -85,6 +85,13 @@ function respondPointsTheme(row: Demand): 'success' | 'danger' | 'warning' {
   return value < rulePoints.value.respond ? 'danger' : 'warning'
 }
 
+/* 响应积分文字线索：颜色不构成唯一语义，标签内补充来源说明（沿用规则值 / 低于规则 / 高于规则） */
+function respondPointsNote(row: Demand): string {
+  const value = row.respondPoints ?? rulePoints.value.respond
+  if (value === rulePoints.value.respond) return '规则值'
+  return value < rulePoints.value.respond ? '低于规则' : '高于规则'
+}
+
 /* 代报名弹窗：管理员代成员响应需求（published / projected 可用）。
  * 报名方选择器 = 注册个人用户/企业 + 未注册自建（creatable），选中已注册自动填充联系电话 */
 const proxyVisible = ref(false)
@@ -253,7 +260,7 @@ const columns = [
   { colKey: 'demandType', title: '需求类型', cell: 'demandType', width: 100, resizable: true, ellipsis: true },
   { colKey: 'publisher', title: '提交人', cell: 'publisher', width: 200, resizable: true , ellipsis: true},
   { colKey: 'budget', title: '预算', cell: 'budget', width: 125, resizable: true , ellipsis: true},
-  { colKey: 'respondents', title: '总响应/待审核', cell: 'respondents', width: 130, resizable: true , ellipsis: true},
+  { colKey: 'respondents', title: '总响应/待审核', cell: 'respondents', width: 170, resizable: true , ellipsis: true},
   {
     colKey: 'createdAt',
     title: '创建 / 发布时间',
@@ -265,7 +272,7 @@ const columns = [
   ellipsis: true,
   },
   { colKey: 'status', title: '状态', cell: 'status', width: 150, resizable: true , ellipsis: true},
-  { colKey: 'op', title: '操作', cell: 'op', width: 300 },
+  { colKey: 'op', title: '操作', cell: 'op', width: 340 },
 ]
 
 /* 列配置：本地持久化显隐/顺序 */
@@ -738,14 +745,14 @@ async function loadCategories() {
               <span v-if="row.respondNeedReview" :class="{ 'respond-pending': row.pendingResponseCount > 0 }">{{ row.pendingResponseCount }}</span>
               <span v-else>-</span>
             </span>
-            <!-- 标签色：等于积分规则默认值=绿色；低于=红色；高于=橙色 -->
+            <!-- 标签色：等于积分规则默认值=绿色；低于=红色；高于=橙色；文字线索同步给出比较结果 -->
             <t-tag
               :theme="respondPointsTheme(row)"
               variant="light"
               size="small"
               class="pts-tag"
             >
-              {{ row.respondPoints ?? rulePoints.respond }}积分
+              {{ row.respondPoints ?? rulePoints.respond }}积分 · {{ respondPointsNote(row) }}
             </t-tag>
           </div>
         </template>
@@ -764,6 +771,8 @@ async function loadCategories() {
 
         <template #op="{ row }">
           <div class="op-cell" @click.stop>
+            <!-- 详情：形态与行点击一致，为键盘用户提供显式入口 -->
+            <t-button variant="text" size="small" @click="goDetail(row)">详情</t-button>
             <!-- 待审核：仅只读审核 -->
             <t-button
               v-if="row.status === 'pending'"

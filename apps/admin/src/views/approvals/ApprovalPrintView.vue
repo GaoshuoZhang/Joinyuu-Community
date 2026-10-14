@@ -211,7 +211,7 @@ onBeforeUnmount(() => {
 
 .doc-no {
   margin: 8px 0 0;
-  font-size: 13px;
+  font-size: 12px;
   color: var(--td-text-color-secondary);
 }
 
@@ -219,7 +219,7 @@ onBeforeUnmount(() => {
  * 把 :root 回落到浅色取值，故此处不再为打印稿单独固定灰阶 */
 .doc-section {
   margin: 24px 0 10px;
-  font-size: 15px;
+  font-size: 16px;
   border-left: 4px solid var(--td-brand-color);
   padding-left: 8px;
 }

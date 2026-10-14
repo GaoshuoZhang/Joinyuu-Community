@@ -208,6 +208,7 @@ onMounted(load)
             :value="row.submissionOpen"
             :disabled="!!row.system"
             :loading="acting === row.id + ':submission'"
+            :aria-label="`投稿开放：${row.name}`"
             @change="() => onToggleSubmission(row)"
           />
         </template>

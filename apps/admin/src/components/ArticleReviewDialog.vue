@@ -86,7 +86,7 @@ function onCancel() {
   <t-drawer
     :visible="visible"
     :header="title ?? `审核投稿 · ${article?.title ?? ''}`"
-    size="720px"
+    size="560px"
     :footer="false"
     :close-btn="true"
     :close-on-esc-keydown="true"
@@ -97,11 +97,11 @@ function onCancel() {
       <div class="meta-grid">
         <div class="meta-item">
           <span class="meta-label">作者</span>
-           <span class="meta-value">{{ detail.authorName }}<t-tag v-if="detail.authorId" class="id-tag" size="small" variant="light">{{ detail.authorId }}</t-tag></span>
+           <span class="meta-value" :title="detail.authorId ? `${detail.authorName} · ${detail.authorId}` : detail.authorName">{{ detail.authorName }}<t-tag v-if="detail.authorId" class="id-tag" size="small" variant="light">{{ detail.authorId }}</t-tag></span>
         </div>
         <div class="meta-item">
           <span class="meta-label">栏目</span>
-           <span class="meta-value">{{ detail.columnNames.join('、') || '—' }}</span>
+           <span class="meta-value" :title="detail.columnNames.join('、')">{{ detail.columnNames.join('、') || '—' }}</span>
         </div>
         <div class="meta-item">
           <span class="meta-label">提交时间</span>

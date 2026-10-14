@@ -230,8 +230,10 @@ onMounted(load)
       <t-button theme="primary" @click="page = 1; load()">查询</t-button>
     </div>
 
-    <div class="page-card">
-      <ListErrorState v-if="loadError" :message="loadError" :loading="loading" @retry="load" />
+    <!-- 持久错误提示置于卡片外（与列表页统一：卡内只放筛选后的表格） -->
+    <ListErrorState v-if="loadError" :message="loadError" :loading="loading" @retry="load" />
+
+    <div v-else class="page-card">
       <t-table
         row-key="id"
         :data="rows"

@@ -153,7 +153,7 @@ function onClose() {
 .renew-summary {
   margin-bottom: 12px;
   padding: 8px 12px;
-  font-size: 13px;
+  font-size: 12px;
   line-height: 20px;
   color: var(--td-text-color-secondary);
   background: var(--td-bg-color-secondarycontainer);

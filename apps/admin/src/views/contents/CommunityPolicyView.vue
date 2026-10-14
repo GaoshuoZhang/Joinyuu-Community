@@ -60,9 +60,9 @@ onMounted(load)
     <PageHeader title="社区政策" description="维护移动端社区服务展示的政策、办事指引与附件">
       <template #actions><t-button theme="primary" @click="openEditor()">新增政策</t-button></template>
     </PageHeader>
-    <div class="page-card">
-      <ListErrorState v-if="loadError" :message="loadError" :loading="loading" @retry="load" />
-      <t-table v-else row-key="id" table-layout="fixed" hover resizable :data="rows" :columns="columns" :loading="loading" empty="暂无社区政策">
+    <ListErrorState v-if="loadError" :message="loadError" :loading="loading" @retry="load" />
+    <div v-else class="page-card">
+      <t-table row-key="id" table-layout="fixed" hover resizable :data="rows" :columns="columns" :loading="loading" empty="暂无社区政策">
         <template #category="{ row }">{{ row.category || '—' }}</template>
         <template #version="{ row }">{{ row.version || '—' }}</template>
         <template #featured="{ row }"><t-tag v-if="row.featured" theme="primary" variant="light">置顶</t-tag><span v-else class="muted">常规</span></template>

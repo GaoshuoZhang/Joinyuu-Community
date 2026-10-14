@@ -193,7 +193,7 @@ onMounted(load)
             :content="carouselOpen ? '确认关闭首页轮播图？关闭后客户端首页不再展示轮播区域。' : '确认开启首页轮播图？开启后客户端首页恢复展示轮播区域。'"
             @confirm="onToggleCarousel(!carouselOpen)"
           >
-            <t-switch :value="carouselOpen" :loading="settingsSaving" />
+            <t-switch :value="carouselOpen" :loading="settingsSaving" aria-label="首页轮播图总开关" />
           </t-popconfirm>
         </div>
         <t-button theme="primary" @click="openCreate">
@@ -223,7 +223,7 @@ onMounted(load)
         <template #imageUrl="{ row }">
           <t-image
             v-if="resolveImageUrl(row.imageUrl)"
-            class="banner-thumb"
+            class="banner-thumb content-img"
             :src="resolveImageUrl(row.imageUrl)"
             :alt="row.title"
             lazy
@@ -236,7 +236,12 @@ onMounted(load)
           <span v-else class="cell-muted">—</span>
         </template>
         <template #enabled="{ row }">
-          <t-switch :value="row.enabled" :loading="acting === row.id" @change="() => onToggle(row)" />
+          <t-switch
+            :value="row.enabled"
+            :loading="acting === row.id"
+            :aria-label="`轮播图展示：${row.title}`"
+            @change="() => onToggle(row)"
+          />
         </template>
         <template #op="{ row }">
           <div class="op-cell">
@@ -281,7 +286,7 @@ onMounted(load)
         </t-form-item>
         <t-form-item label="图片地址" name="imageUrl">
           <t-input v-model="form.imageUrl" :maxlength="512" placeholder="素材库图片地址，可留空…" />
-          <t-image v-if="imagePreviewUrl" class="image-preview" :src="imagePreviewUrl" :alt="form.title" fit="cover" />
+          <t-image v-if="imagePreviewUrl" class="image-preview content-img" :src="imagePreviewUrl" :alt="form.title" fit="cover" />
         </t-form-item>
         <t-form-item label="跳转路径" name="link">
           <t-input v-model="form.link" :maxlength="512" placeholder="移动端站内路径，如 /events…" />

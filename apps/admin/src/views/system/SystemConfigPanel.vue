@@ -302,49 +302,49 @@ onBeforeRouteLeave(async () => {
                 <div class="switch-label">客户端注册</div>
                 <div class="switch-tip">关闭后客户端暂停新用户注册</div>
               </div>
-              <t-switch v-model="form.registrationOpen" />
+              <t-switch v-model="form.registrationOpen" aria-label="客户端注册" />
             </div>
             <div class="switch-row">
               <div class="switch-text">
                 <div class="switch-label">积分商城</div>
                 <div class="switch-tip">关闭后客户端隐藏商城入口，已下单订单不受影响</div>
               </div>
-              <t-switch v-model="form.mallOpen" />
+              <t-switch v-model="form.mallOpen" aria-label="积分商城" />
             </div>
             <div class="switch-row">
               <div class="switch-text">
                 <div class="switch-label">需求广场</div>
                 <div class="switch-tip">关闭后客户端暂停需求提交与响应</div>
               </div>
-              <t-switch v-model="form.demandOpen" />
+              <t-switch v-model="form.demandOpen" aria-label="需求广场" />
             </div>
             <div class="switch-row">
               <div class="switch-text">
                 <div class="switch-label">空间预约</div>
                 <div class="switch-tip">关闭后客户端暂停提交新的空间预约</div>
               </div>
-              <t-switch v-model="form.reservationOpen" />
+              <t-switch v-model="form.reservationOpen" aria-label="空间预约" />
             </div>
             <div class="switch-row">
               <div class="switch-text">
                 <div class="switch-label">实名认证要求</div>
                 <div class="switch-tip">开启后，未完成实名认证的用户不能发布需求或报名活动</div>
               </div>
-              <t-switch v-model="form.realnameRequired" />
+              <t-switch v-model="form.realnameRequired" aria-label="实名认证要求" />
             </div>
             <div class="switch-row">
               <div class="switch-text">
                 <div class="switch-label">首页轮播图</div>
                 <div class="switch-tip">关闭后客户端首页不展示轮播区域（与「轮播图管理」共用开关）</div>
               </div>
-              <t-switch v-model="form.homeCarouselOpen" />
+              <t-switch v-model="form.homeCarouselOpen" aria-label="首页轮播图" />
             </div>
             <div class="switch-row">
               <div class="switch-text">
                 <div class="switch-label">密码过期强制改密</div>
                 <div class="switch-tip">默认关闭（密码永不过期）；开启后超过有效期的后台账号登录需先修改密码（仅影响后台账号，不影响客户端用户）</div>
               </div>
-              <t-switch v-model="form.passwordExpireEnabled" />
+              <t-switch v-model="form.passwordExpireEnabled" aria-label="密码过期强制改密" />
             </div>
           </div>
           <!-- 密码过期周期：仅开启「密码过期强制改密」后展示 -->

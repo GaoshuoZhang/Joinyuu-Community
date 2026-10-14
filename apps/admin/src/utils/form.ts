@@ -11,7 +11,9 @@ export async function focusFirstInvalid(form?: FormInstanceLike): Promise<void> 
     '.t-is-error input:not([disabled]), .t-is-error textarea:not([disabled]), .t-is-error [role="combobox"], .t-is-error button:not([disabled]), .t-form__item--error input:not([disabled]), .t-form__item--error textarea:not([disabled])',
   )
   if (!field) return
-  field.scrollIntoView({ block: 'center', behavior: 'smooth' })
+  /* 平滑滚动仅在用户未要求减少动效时启用（CSS 的 reduced-motion 兜底不覆盖 scrollIntoView） */
+  const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches
+  field.scrollIntoView({ block: 'center', behavior: reduceMotion ? 'auto' : 'smooth' })
   field.focus({ preventScroll: true })
 }
 

@@ -228,20 +228,20 @@ async function openLogs(row: OutboxMessage) {
           <span>{{ row.attempts }} / {{ row.maxAttempts }}</span>
         </template>
         <template #lastError="{ row }">
-          <span class="muted error-text">{{ row.lastError || '—' }}</span>
+          <span class="muted error-text" :title="row.lastError">{{ row.lastError || '—' }}</span>
         </template>
         <template #op="{ row }">
           <t-space size="small">
-            <t-link theme="primary" hover="color" @click="openLogs(row)">日志</t-link>
-            <t-link
+            <t-button variant="text" size="small" @click="openLogs(row)">日志</t-button>
+            <t-button
               v-if="row.status === 'failed' || row.status === 'dead' || row.status === 'skipped'"
-              theme="primary"
-              hover="color"
+              variant="text"
+              size="small"
               :disabled="actingId === row.id"
               @click="onRetry(row)"
             >
               {{ actingId === row.id ? '重试中…' : '重试' }}
-            </t-link>
+            </t-button>
             <!-- 终止投递不可逆（不再重试），补二次确认 -->
             <t-popconfirm
               v-if="row.status === 'pending' || row.status === 'failed'"
@@ -249,7 +249,7 @@ async function openLogs(row: OutboxMessage) {
               content="确认终止该投递？终止后不再重试且不可恢复"
               @confirm="onDiscard(row)"
             >
-              <t-link theme="danger" hover="color">终止</t-link>
+              <t-button variant="text" size="small" theme="danger">终止</t-button>
             </t-popconfirm>
           </t-space>
         </template>

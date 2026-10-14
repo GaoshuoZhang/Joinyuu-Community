@@ -64,7 +64,7 @@ const realStatusOptions = [
 const columns = [
   { colKey: 'user', title: '用户', cell: 'user', width: 190 , ellipsis: true},
   { colKey: 'username', title: '用户名', cell: 'username', width: 150 , ellipsis: true},
-  /* 联系方式为手机号 + 邮箱双行，宽度需容纳完整邮箱（约 12px 字号 24 字符） */
+  /* 联系电话与邮箱为手机号 + 邮箱双行，宽度需容纳完整邮箱（约 12px 字号 24 字符） */
   { colKey: 'phone', title: 'phone-title', cell: 'phone', width: 200, ellipsis: true},
   { colKey: 'identities', title: '关联身份', cell: 'identities', width: 240 , ellipsis: true},
   { colKey: 'realStatus', title: '实名状态', cell: 'realStatus', width: 95 , ellipsis: true},
@@ -123,10 +123,10 @@ function onReset() {
   load()
 }
 
-/* 导出配置：与列表「联系方式」同口径——手机号 + 邮箱，未点「显示联系方式」时导出遮罩值 */
-const exportHeaders = ['编号', '用户名', '昵称', '联系方式', '关联身份', '实名状态', '积分', '状态', '注册时间']
+/* 导出配置：与列表「联系电话与邮箱」同口径——手机号 + 邮箱，未点「显示联系电话与邮箱」时导出遮罩值 */
+const exportHeaders = ['编号', '用户名', '昵称', '联系电话与邮箱', '关联身份', '实名状态', '积分', '状态', '注册时间']
 
-/* 联系方式列：手机号与邮箱以 “ / ” 合并为一格（CSV 单列无法承载双行），任一为空只导出另一项 */
+/* 联系电话与邮箱列：手机号与邮箱以 “ / ” 合并为一格（CSV 单列无法承载双行），任一为空只导出另一项 */
 function contactText(u: User): string {
   const phone = phoneVisible.value ? u.phone : maskPhone(u.phone)
   const email = phoneVisible.value ? u.email : maskEmail(u.email)
@@ -199,7 +199,7 @@ onMounted(load)
         <ColumnController
           v-model="visibleColKeys"
           storage-key="users"
-          :columns="columns.map((c) => ({ key: c.colKey, title: c.colKey === 'phone' ? '联系方式' : c.title }))"
+          :columns="columns.map((c) => ({ key: c.colKey, title: c.colKey === 'phone' ? '联系电话与邮箱' : c.title }))"
         />
         <ExportButton
           filename="用户列表"
@@ -269,13 +269,13 @@ onMounted(load)
       >
         <template #phone-title>
           <span class="phone-title">
-            联系方式
+            联系电话与邮箱
             <t-button
               variant="text"
               size="small"
               shape="square"
-              :title="phoneVisible ? '隐藏联系方式' : '显示联系方式'"
-              :aria-label="phoneVisible ? '隐藏联系方式' : '显示联系方式'"
+              :title="phoneVisible ? '隐藏联系电话与邮箱' : '显示联系电话与邮箱'"
+              :aria-label="phoneVisible ? '隐藏联系电话与邮箱' : '显示联系电话与邮箱'"
               @click.stop="phoneVisible = !phoneVisible"
             >
               <template #icon><BrowseOffIcon v-if="phoneVisible" /><BrowseIcon v-else /></template>
@@ -348,7 +348,7 @@ onMounted(load)
   gap: 4px;
 }
 
-/* 联系方式双行：裁剪交给 TDesign 的省略号容器（nowrap + overflow:hidden），
+/* 联系电话与邮箱双行：裁剪交给 TDesign 的省略号容器（nowrap + overflow:hidden），
  * 双行内容不逐行裁剪，超长时仍由该容器判定溢出并悬浮展示完整值（与申请审核页双行单元格同一写法） */
 .contact-cell {
   display: flex;
@@ -361,7 +361,7 @@ onMounted(load)
   color: var(--td-text-color-primary);
 }
 
-/* 邮箱为次要联系方式：降一级字号与字色，两行仍属同一字段 */
+/* 邮箱为次要联系电话项：降一级字号与字色，两行仍属同一字段 */
 .contact-mail {
   font-size: 12px;
   line-height: 18px;

@@ -206,7 +206,7 @@ export const statusMap = {
     redeemed: { label: '已核销', theme: 'success' },
     unredeemed: { label: '待核销', theme: 'warning' },
   },
-  /* 手机/邮箱联系方式验证态 */
+  /* 手机/邮箱验证态 */
   contactVerified: {
     verified: { label: '已验证', theme: 'success' },
     unverified: { label: '未验证', theme: 'default' },

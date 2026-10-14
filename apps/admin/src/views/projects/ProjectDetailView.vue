@@ -483,7 +483,6 @@ onMounted(load)
 
 .undertaker-row.clickable:hover {
   background: var(--td-bg-color-container-hover);
-  border-radius: 6px;
 }
 
 .undertaker-row {
