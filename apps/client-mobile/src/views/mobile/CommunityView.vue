@@ -16,6 +16,7 @@ import TalentCardItem from '@/components/community/TalentCardItem.vue'
 import EnterpriseCardItem from '@/components/community/EnterpriseCardItem.vue'
 import { useRouteQuerySync } from '@/composables/useRouteQuerySync'
 import { formatZhNumber } from '@/utils/format'
+import { categoryColorStyle } from '@/utils/categoryColor'
 import { REFRESH_LOADING_PROPS } from '@/constants/refresh'
 
 useAnimSuppress()
@@ -265,7 +266,15 @@ watch(policies, () => {
 
         <div v-if="serviceCategories.length" class="service-categories">
           <CheckTag size="medium" variant="light" :checked="!selectedCategory" @change="selectedCategory = ''">全部</CheckTag>
-          <CheckTag v-for="category in serviceCategories" :key="category" size="medium" variant="light" :checked="selectedCategory === category" @change="selectedCategory = category">{{ category }}</CheckTag>
+          <CheckTag
+            v-for="category in serviceCategories"
+            :key="category"
+            size="medium"
+            variant="light"
+            :checked="selectedCategory === category"
+            :style="selectedCategory === category ? categoryColorStyle(category) : undefined"
+            @change="selectedCategory = category"
+          >{{ category }}</CheckTag>
         </div>
         <!-- 分类字典加载失败不再静默：给出可重试提示（列表仍可浏览，仅缺分类筛选） -->
         <p v-else-if="allPoliciesError" class="categories-error">

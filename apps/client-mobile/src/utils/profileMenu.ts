@@ -1,8 +1,15 @@
+import type { THEME_ENTRY_KEYS } from '@/utils/customerTheme'
+
+/** 首页入口色键：宫格图标底色/图标色取自主题的 entryCards（与首页快捷卡片同源） */
+export type ProfileMenuColorKey = typeof THEME_ENTRY_KEYS[number]
+
 export interface ProfileMenuEntry {
   path: string
   label: string
   /** TDesign 图标名（宫格 icon 展示） */
   icon: string
+  /** 宫格配色键（缺省 = 沿用页面默认强调色，仅用于无对应入口色系的入口） */
+  themeKey?: ProfileMenuColorKey
   /** 特殊动作（不发路由）：如等级加载失败后点击重试 */
   action?: 'retry-level'
 }
@@ -57,52 +64,46 @@ export function buildProfileMenuLayout(context: ProfileMenuContext): ProfileMenu
   }
 
   const sections: ProfileMenuSection[] = [
+    /* 订单与租约紧随名片（同为「我的资产」语义），不再单设「资产与租约」分区。
+     * 每项挂 themeKey：宫格图标沿用首页快捷卡片的色系（同一行内不重复），
+     * 使各入口颜色不同、与首页视觉语言一致。 */
     {
       ariaLabel: '身份与名片',
       entries: [
-        { path: '/me/identities', label: '关联身份', icon: 'usergroup' },
+        { path: '/me/identities', label: '关联身份', icon: 'usergroup', themeKey: 'enterprise' },
         context.hasCommunityIndividual
-          ? { path: '/me/cards/individual', label: '我的名片', icon: 'user' }
-          : { path: '/intros/talent', label: '人才登记', icon: 'user' },
+          ? { path: '/me/cards/individual', label: '我的名片', icon: 'user', themeKey: 'talent' }
+          : { path: '/intros/talent', label: '人才登记', icon: 'user', themeKey: 'talent' },
+        { path: '/me/orders', label: '我的订单', icon: 'order', themeKey: 'mall' },
+        { path: '/me/leases', label: '工位租约', icon: 'building', themeKey: 'spaces' },
       ],
     },
     {
       title: '项目与需求',
       entries: [
-        { path: '/me/projects', label: '我的项目', icon: 'app' },
-        { path: '/me/demands', label: '我的需求', icon: 'file' },
-        { path: '/me/responses', label: '我的响应', icon: 'chat' },
-      ],
-    },
-    {
-      title: '资产与租约',
-      entries: [
-        { path: '/me/orders', label: '我的订单', icon: 'order' },
-        { path: '/me/leases', label: '工位租约', icon: 'building' },
+        { path: '/me/projects', label: '我的项目', icon: 'app', themeKey: 'events' },
+        { path: '/me/demands', label: '我的需求', icon: 'file', themeKey: 'articles' },
+        { path: '/me/responses', label: '我的响应', icon: 'chat', themeKey: 'mall' },
       ],
     },
     {
       title: '申请与预约',
       entries: [
-        { path: '/me/applications', label: '申请记录', icon: 'file-add' },
-        { path: '/me/enrollments', label: '活动报名', icon: 'calendar' },
+        { path: '/me/applications', label: '申请记录', icon: 'file-add', themeKey: 'enterprise' },
+        { path: '/me/enrollments', label: '活动报名', icon: 'calendar', themeKey: 'events' },
         ...(context.reservationOpen
-          ? [{ path: '/me/reservations', label: '空间预约', icon: 'location' }]
+          ? [{ path: '/me/reservations', label: '空间预约', icon: 'location', themeKey: 'spaces' as const }]
           : []),
       ],
     },
     {
       title: '内容与足迹',
       entries: [
-        { path: '/me/messages', label: '提交留言', icon: 'mail' },
-        { path: '/me/articles', label: '投稿记录', icon: 'article' },
-        { path: '/me/favorites', label: '收藏内容', icon: 'star' },
-        { path: '/me/history', label: '浏览历史', icon: 'history' },
+        { path: '/me/messages', label: '提交留言', icon: 'mail', themeKey: 'talent' },
+        { path: '/me/articles', label: '投稿记录', icon: 'article', themeKey: 'articles' },
+        { path: '/me/favorites', label: '收藏内容', icon: 'star', themeKey: 'mall' },
+        { path: '/me/history', label: '浏览历史', icon: 'history', themeKey: 'spaces' },
       ],
-    },
-    {
-      ariaLabel: '设置',
-      entries: [{ path: '/me/settings', label: '设置', icon: 'setting' }],
     },
   ]
 

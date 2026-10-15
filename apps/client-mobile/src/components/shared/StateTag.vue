@@ -66,6 +66,8 @@ const map: Record<string, Record<string, { label: string; tone: Tone }>> = {
   reservation: {
     pending: { label: '待审核', tone: 'warning' },
     approved: { label: '已通过', tone: 'success' },
+    /* 服务端派生：已通过且已过预约结束时间 */
+    ended: { label: '已完成', tone: 'success' },
     rejected: { label: '已驳回', tone: 'danger' },
     cancelled: { label: '已取消', tone: 'default' },
   },

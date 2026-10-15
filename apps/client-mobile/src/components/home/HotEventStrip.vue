@@ -1,5 +1,6 @@
 <script setup lang="ts">
-import { Icon, Tag } from 'tdesign-mobile-vue'
+import { Icon } from 'tdesign-mobile-vue'
+import CategoryTag from '@/components/shared/CategoryTag.vue'
 import type { HomeEventCard } from '@/types'
 import { formatLocalDateTime, formatZhNumber } from '@/utils/format'
 
@@ -20,7 +21,7 @@ defineProps<{ events: HomeEventCard[] }>()
         :to="`/events/${e.id}`"
         class="m-card hot-card pressable"
       >
-        <Tag class="d-cat" size="small" variant="light" theme="primary">{{ e.type }}</Tag>
+        <CategoryTag class="d-cat" :label="e.type" />
         <h3 class="hot-title">{{ e.title }}</h3>
         <p class="hot-meta"><Icon aria-hidden="true" name="time" size="13px" />{{ formatLocalDateTime(e.startTime) }}</p>
         <p class="hot-meta"><Icon aria-hidden="true" name="location" size="13px" />{{ e.location }}</p>

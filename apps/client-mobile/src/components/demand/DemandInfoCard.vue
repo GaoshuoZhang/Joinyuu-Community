@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { Button, Icon, Tag } from 'tdesign-mobile-vue'
 import IdentityTag from '@/components/shared/IdentityTag.vue'
+import CategoryTag from '@/components/shared/CategoryTag.vue'
 import StateTag from '@/components/shared/StateTag.vue'
 import { DEMAND_KIND_LABELS, demandDateText } from '@/constants/demand'
 import type { Demand } from '@/types'
@@ -20,7 +21,7 @@ defineEmits<{ toggleFavorite: []; share: [] }>()
       <StateTag kind="demand" :value="demand.status" />
     </div>
     <div class="meta">
-      <Tag class="cat" size="small" variant="light" theme="primary">{{ demand.categoryLabel }}</Tag>
+      <CategoryTag class="cat" :label="demand.categoryLabel" />
       <Tag v-if="demand.kind" class="kind" size="small" variant="light" theme="default">{{ DEMAND_KIND_LABELS[demand.kind] }}</Tag>
       <span class="pub">
         <IdentityTag :type="demand.publisherIdentity" :label="demand.publisherIdentityLabel" />

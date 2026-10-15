@@ -275,6 +275,9 @@ export interface TalentMember {
   avatar?: string
   intro: string
   skills: string[]
+  /** 个体等级（社区个体等级梯度，按经验值推导；人才库列表下发） */
+  level?: number
+  levelName?: string
 }
 
 /* ---------- 个人名片（简历式）分段字段 ---------- */
@@ -768,7 +771,8 @@ export interface SpaceReservation {
   date: string
   start: string
   end: string
-  status: 'pending' | 'approved' | 'rejected' | 'cancelled'
+  /** `ended` 为服务端按预约结束时间派生的「已完成」（存储态仍为 approved），不可再取消 */
+  status: 'pending' | 'approved' | 'ended' | 'rejected' | 'cancelled'
   createdAt: string
   /** 预约主体身份（快照；企业/组织预约时记录负责人或成员以何身份提交） */
   identityType?: IdentityType

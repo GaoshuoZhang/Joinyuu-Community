@@ -67,6 +67,8 @@
   --app-type-body-sm: var(--app-fw-regular) var(--app-fs-caption) / var(--app-leading-body) var(--app-font-family);
   --app-type-emphasis: var(--app-fw-strong) var(--app-fs-body) / var(--app-leading-body) var(--app-font-family);
   --app-type-emphasis-sm: var(--app-fw-strong) var(--app-fs-caption) / var(--app-leading-body) var(--app-font-family);
+  /* 需求卡片「N 人响应」等最小号强调数字（卡片正文 + 层级弱于标题） */
+  --app-type-emphasis-xs: var(--app-fw-strong) var(--app-fs-caption-xs) / var(--app-leading-body) var(--app-font-family);
   --app-type-caption: var(--app-fw-regular) var(--app-fs-caption-xs) / var(--app-leading-body) var(--app-font-family);
   --app-type-numeric-lg: var(--app-fw-numeric) var(--app-fs-title) / var(--app-leading-tight) var(--app-font-family);
   --app-type-numeric: var(--app-fw-strong) var(--app-fs-subtitle) / var(--app-leading-tight) var(--app-font-family);
@@ -107,6 +109,12 @@
 
   /* 顶栏滚动渐显底色（AppShell 按透明度合成，需随明暗主题切换） */
   --app-navbar-bg-rgb: 255, 255, 255;
+
+  /* 未上传头像时的兜底底色与首字颜色（v53）：品牌浅蓝底 + 品牌深蓝字。
+   * 初版用深蓝底 + 金黄字，实测过重、与整体浅色卡片不搭；改为浅底深字后与入口卡、标签同族。
+   * 明暗两态共用同一组固定值：文字色是固定的深蓝，底色必须保持浅色，不能跟随深色模式变暗。 */
+  --app-avatar-fallback-bg: #e8eef9;
+  --app-avatar-fallback-text: #0d1b3d;
 
   /* 底部固定操作栏投影（随主题加深） */
   --app-action-bar-shadow: 0 -2px 12px rgba(0, 0, 0, 0.06);
@@ -272,18 +280,17 @@ span[role='button']:not(.t-tag) {
   min-width: 0;
 }
 
-/* ---------- 可选筛选 chip（CheckTag）命中区 ---------- */
-/* 官方尺寸档 small/medium/large 实测仅约 22–26px 高（--td-tag-*-padding 为 1–2px），
- * 低于本项目「交互目标 ≥44px」基线；官方无 height 类属性可达成，故只对可点击态抬升高度，
- * 纯展示的状态 Tag 不受影响。三连类名提高特异性：库样式在 AppShell 中懒加载，
+/* ---------- 可选筛选 chip（CheckTag）高度 ----------
+ * 官方尺寸档 small/medium/large 实测仅约 22–26px 高（--td-tag-*-padding 为 1–2px）。
+ * 用户反馈 44px 命中区过高（2026-10-15）：筛选 chip 收敛为 32px 紧凑档（对齐 Material chip 常规高度），
+ * 触控基线让位于信息密度；纯展示的状态 Tag 不受影响。三连类名提高特异性：库样式在 AppShell 中懒加载，
  * 与官方单档位规则（.t-tag.t-tag--medium）同权重时会因加载顺序失效。
  * 内部类名 t-tag--checkable（main.ts 亦用它识别可交互标签）；升级 TDesign 时需复核。
  * flex:none 必须保留：筛选行（如 .chips）为不换行的横向滚动容器，chip 一旦可压缩，
  * 会被压到 min-width 并让标签文字变成省略号。 */
 .t-tag.t-tag--checkable.t-tag--checkable {
   flex: none;
-  min-height: 44px;
-  min-width: 44px;
+  min-height: 32px;
   justify-content: center;
   padding-top: 0;
   padding-bottom: 0;

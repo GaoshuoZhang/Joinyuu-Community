@@ -183,6 +183,16 @@
               "type": "string",
               "pattern": "^#[0-9a-fA-F]{6}$"
             },
+            "levelColors": {
+              "type": "array",
+              "minItems": 10,
+              "maxItems": 10,
+              "items": {
+                "type": "string",
+                "pattern": "^#[0-9a-fA-F]{6}$"
+              },
+              "description": "1–10 级等级配色，按级号升序；个体与企业等级共用"
+            },
             "entryCards": {
               "type": "object",
               "additionalProperties": false,
@@ -454,6 +464,16 @@
             "link": {
               "type": "string",
               "pattern": "^#[0-9a-fA-F]{6}$"
+            },
+            "levelColors": {
+              "type": "array",
+              "minItems": 10,
+              "maxItems": 10,
+              "items": {
+                "type": "string",
+                "pattern": "^#[0-9a-fA-F]{6}$"
+              },
+              "description": "1–10 级等级配色，按级号升序；个体与企业等级共用"
             },
             "entryCards": {
               "type": "object",

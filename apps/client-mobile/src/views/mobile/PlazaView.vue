@@ -1,9 +1,11 @@
 <script setup lang="ts">
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { Button, CheckTag, Icon, Image, List, Search, Tabs, TabPanel, PullDownRefresh, Tag } from 'tdesign-mobile-vue'
+import { Button, CheckTag, Icon, Image, List, Search, Tabs, TabPanel, PullDownRefresh } from 'tdesign-mobile-vue'
 import { fetchEvents, fetchMyEnrollments } from '@/api/events'
 import { useAuthStore } from '@/stores/auth'
+import CategoryTag from '@/components/shared/CategoryTag.vue'
+import { categoryColorStyle } from '@/utils/categoryColor'
 import { fetchArticles, fetchColumns } from '@/api/contents'
 import { useAsyncList } from '@/composables/useAsyncList'
 import { usePagedList } from '@/composables/usePagedList'
@@ -240,7 +242,7 @@ function clearArticleFilters() {
           >
             <Image v-if="ev.coverUrl" class="card-cover content-img" :src="ev.coverUrl" :alt="ev.title" fit="cover" lazy @error="onImageError" />
             <div class="row-head">
-              <Tag class="type-tag" size="small" variant="light" theme="primary">{{ ev.typeLabel }}</Tag>
+              <CategoryTag class="type-tag" :label="ev.typeLabel" />
               <StateTag v-if="enrolledIds.has(ev.id)" class="enrolled-flag" kind="flag" value="enrolled" />
               <span class="capacity">限 {{ formatZhNumber(ev.capacity) }} 人参加</span>
             </div>
@@ -279,6 +281,7 @@ function clearArticleFilters() {
             size="medium"
             variant="light"
             :checked="activeColumn === c.code"
+            :style="activeColumn === c.code ? categoryColorStyle(c.label) : undefined"
             @change="pickColumn(c.code)"
           >
             {{ c.label }}
@@ -305,7 +308,7 @@ function clearArticleFilters() {
             <Image v-if="a.coverUrl" class="card-cover content-img" :src="a.coverUrl" :alt="a.title" fit="cover" lazy @error="onImageError" />
             <!-- v48：分类标签原先与标题贴在一起——改为独立成行并留出与活动卡片一致的间距 -->
             <div class="tag-row">
-              <Tag class="col-tag" size="small" variant="light" theme="primary">{{ a.columnLabel }}</Tag>
+              <CategoryTag class="col-tag" :label="a.columnLabel" />
             </div>
             <h2 class="title">{{ a.title }}</h2>
             <p class="summary">{{ a.summary }}</p>
@@ -419,9 +422,10 @@ function clearArticleFilters() {
   font: var(--app-type-card-title);
 }
 
+/* v53：摘要字号下调一档（原先与卡片标题视觉同级，资讯列表主次不分） */
 .summary {
   margin:0 0 var(--app-space-4);
-  font: var(--app-type-body-sm);
+  font: var(--app-type-caption);
   color: var(--td-text-color-secondary);
   display: -webkit-box;
   -webkit-line-clamp: 2;

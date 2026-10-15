@@ -1,8 +1,9 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { Button, CheckTag, Loading, Search, Tag } from 'tdesign-mobile-vue'
+import { Button, CheckTag, Loading, Search } from 'tdesign-mobile-vue'
 import { fetchArticles } from '@/api/contents'
+import CategoryTag from '@/components/shared/CategoryTag.vue'
 import { fetchEnterpriseList, fetchPolicies, fetchTalents } from '@/api/community'
 import { fetchDemands } from '@/api/demands'
 import { fetchEvents } from '@/api/events'
@@ -215,7 +216,7 @@ onMounted(() => {
       <EmptyBlock v-if="!visibleResults.length" text="没有找到相关内容，换个关键词试试" />
       <div v-else class="result-list stagger">
         <router-link v-for="item in visibleResults" :key="`${item.kind}-${item.id}`" class="m-card result pressable" :to="item.path">
-          <div class="result-head"><Tag size="small" variant="light">{{ item.kind }}</Tag><h2>{{ item.title }}</h2></div>
+          <div class="result-head"><CategoryTag :label="item.kind" /><h2>{{ item.title }}</h2></div>
           <p>{{ item.summary }}</p>
         </router-link>
       </div>

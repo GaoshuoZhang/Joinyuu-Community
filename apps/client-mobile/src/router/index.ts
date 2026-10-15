@@ -92,7 +92,6 @@ export const router = createRouter({
         { path: 'me/history', name: 'me-history', component: () => import('@/views/mobile/HistoryView.vue'), meta: { requiresAuth: true } },
         { path: 'me/security', name: 'me-security', component: () => import('@/views/mobile/SecurityView.vue'), meta: { requiresAuth: true } },
         { path: 'me/records', name: 'me-records', component: () => import('@/views/mobile/MeRecordsView.vue'), meta: { requiresAuth: true } },
-        { path: 'me/settings', name: 'me-settings', component: () => import('@/views/mobile/MeSettingsView.vue'), meta: { requiresAuth: true } },
         { path: 'me/notification-settings', name: 'me-notification-settings', component: () => import('@/views/mobile/NotificationSettingsView.vue'), meta: { requiresAuth: true } },
         { path: 'privacy', name: 'privacy', component: () => import('@/views/mobile/PrivacyView.vue') },
         { path: 'me/applications', name: 'me-applications', component: () => import('@/views/mobile/MyApplicationsView.vue'), meta: { requiresAuth: true } },

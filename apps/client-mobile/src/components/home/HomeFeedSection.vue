@@ -1,5 +1,6 @@
 <script setup lang="ts">
-import { Icon, Tag } from 'tdesign-mobile-vue'
+import { Icon } from 'tdesign-mobile-vue'
+import CategoryTag from '@/components/shared/CategoryTag.vue'
 
 export interface FeedMeta {
   text: string
@@ -37,7 +38,7 @@ defineProps<{ title: string; items: FeedItem[]; morePath?: string }>()
         class="m-card demand-item pressable"
       >
         <div class="d-head">
-          <Tag class="d-cat" size="small" variant="light" theme="primary">{{ item.tag }}</Tag>
+          <CategoryTag class="d-cat" :label="item.tag" />
           <span v-if="item.tagMeta" class="d-tag-meta" :class="{ 'd-resp': item.tagMeta.accent }">{{ item.tagMeta.text }}</span>
         </div>
         <h3 class="d-title">{{ item.title }}</h3>
@@ -111,15 +112,15 @@ defineProps<{ title: string; items: FeedItem[]; morePath?: string }>()
   align-self: flex-start;
 }
 
+/* v53：与需求列表卡片同口径——响应数字号下调一档（低于标题层级） */
 .d-tag-meta {
   min-width: 0;
   color: var(--td-text-color-secondary);
-  font: var(--app-type-caption);
+  font: var(--app-type-emphasis-xs);
 }
 
 .d-tag-meta.d-resp {
   color: var(--app-theme-link, var(--td-brand-color));
-  font: var(--app-type-emphasis-sm);
   font-variant-numeric: tabular-nums;
 }
 

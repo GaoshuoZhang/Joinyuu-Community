@@ -6,7 +6,8 @@ import { formatZhNumber } from '@/utils/format'
 
 /* 等级权益卡片轮播（社区个体 / 社区企业共用）：
  * 横向 scroll-snap 卡片流，进入时自动定位到当前等级卡；左邻=上一级、右邻=下一级。
- * 当前卡为品牌渐变实底 + 「当前」角标 + 进度条；其余卡浅底，按经验门槛标「已获得 / 未解锁」。
+ * 等级配色（v53）：主题提供 levelColors 时，未达成卡以该级颜色作描边、已达成卡（含当前级）以该级颜色作实底；
+ * 主题未提供时用 var() 内层回退保持原有观感（未达成=通用边框、当前级=品牌渐变、其它已达成=白卡）。
  * 支持键盘左右方向键切换（容器可聚焦），尊重 prefers-reduced-motion。 */
 const props = withDefaults(
   defineProps<{
@@ -27,6 +28,17 @@ const props = withDefaults(
 const track = ref<HTMLElement | null>(null)
 const activeIndex = ref(0)
 
+/** 等级色变量：主题注入 --app-level-N / --app-level-N-text；内层 fallback 保证无主题/旧主题不受影响 */
+function levelVars(level: number, isCurrent: boolean) {
+  const fillFallback = isCurrent ? 'var(--client-brand-gradient)' : 'var(--td-bg-color-container)'
+  const textFallback = isCurrent ? 'var(--td-text-color-anti)' : 'var(--td-text-color-primary)'
+  return {
+    '--level-outline': `var(--app-level-${level}, var(--td-component-border))`,
+    '--level-fill': `var(--app-level-${level}, ${fillFallback})`,
+    '--level-text': `var(--app-level-${level}-text, ${textFallback})`,
+  }
+}
+
 const cards = computed(() =>
   props.groups.map((g, i) => {
     const isCurrent = g.level === props.currentLevel
@@ -39,6 +51,7 @@ const cards = computed(() =>
       /** v52：下一级门槛——当前卡据此展示「距下一级还差 N 经验」（末级为 null）；
        *  进度条本身无 role/aria，进度含义必须同时有文本等价物（界面审查 LOW） */
       nextThreshold: next?.threshold ?? null,
+      levelVars: levelVars(g.level, isCurrent),
     }
   }),
 )
@@ -102,7 +115,8 @@ defineExpose({ scrollToCard })
       v-for="card in cards"
       :key="`${card.identityType}-${card.level}`"
       class="level-card"
-      :class="{ current: card.isCurrent, locked: !card.reached && !card.isCurrent }"
+      :class="{ current: card.isCurrent, reached: card.reached, locked: !card.reached && !card.isCurrent }"
+      :style="card.levelVars"
       :aria-current="card.isCurrent ? 'step' : undefined"
     >
       <header class="card-head">
@@ -117,8 +131,8 @@ defineExpose({ scrollToCard })
           theme="line"
           :percentage="progressPercent"
           :label="false"
-          color="var(--td-text-color-anti)"
-          track-color="color-mix(in srgb, var(--td-text-color-anti) 25%, transparent)"
+          color="currentColor"
+          track-color="color-mix(in srgb, currentColor 25%, transparent)"
         />
         <!-- v52：进度含义同时以文本承载（Progress 无 role/aria，:label="false" 又隐去百分比） -->
         <p class="meta">
@@ -148,6 +162,9 @@ defineExpose({ scrollToCard })
 
 .level-track::-webkit-scrollbar { display: none; }
 
+/* 卡片底色/文字色与描边由内联等级色变量决定（主题未提供时回退原有观感）：
+ * - 未达成：等级色描边（无等级色 → 通用边框）
+ * - 已达成（含当前级）：等级色实底 + 按亮度选定的文字色（无等级色 → 当前级品牌渐变/其它白卡） */
 .level-card {
   --app-card-width: 82%;
 
@@ -158,16 +175,16 @@ defineExpose({ scrollToCard })
   gap: var(--app-space-3);
   padding: var(--app-space-7);
   border-radius: var(--td-radius-large);
-  border: 1px solid var(--td-component-border);
+  border: 1px solid var(--level-outline);
   background: var(--td-bg-color-container);
   color: var(--td-text-color-primary);
 }
 
-/* 当前等级卡：品牌渐变实底（与原 level-card 视觉一致） */
-.level-card.current {
+/* 已达成的等级卡：等级色实底（含当前级），描边让位于底色 */
+.level-card.reached {
   border-color: transparent;
-  background: var(--client-brand-gradient);
-  color: var(--td-text-color-anti);
+  background: var(--level-fill);
+  color: var(--level-text);
 }
 
 /* 未解锁卡：整体弱化 */

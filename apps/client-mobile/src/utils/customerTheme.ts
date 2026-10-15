@@ -1,12 +1,16 @@
 export const HOME_MODULES = ['banner', 'entries', 'publish', 'activation', 'announcement', 'events', 'demands', 'articles'] as const
 export type HomeModule = typeof HOME_MODULES[number]
 export const THEME_ENTRY_KEYS = ['enterprise', 'talent', 'articles', 'mall', 'spaces', 'events'] as const
+/** 等级配色数组长度：1–10 级各一色（个体与企业等级共用） */
+export const LEVEL_COLOR_COUNT = 10
 export interface EntryColors { background?: string; icon?: string; iconBackground?: string; text?: string; secondaryText?: string; border?: string }
 export interface ThemeColors {
   primary?: string; accent?: string; primaryLight?: string; background?: string; surface?: string; text?: string; secondaryText?: string; heroStart?: string; heroEnd?: string
   border?: string; buttonBackground?: string; buttonText?: string; navigationBackground?: string; navigationText?: string; navigationActive?: string
   searchBackground?: string; searchText?: string; searchPlaceholder?: string; sectionTitle?: string; link?: string
   entryCards?: Partial<Record<typeof THEME_ENTRY_KEYS[number], EntryColors>>
+  /** 1–10 级等级配色（按级号升序的 10 个颜色；等级标签实底 + 等级卡描边/实底） */
+  levelColors?: string[]
 }
 export interface CustomerTheme {
   packageId: string
@@ -42,6 +46,14 @@ function luminance(color: string) {
     return v <= 0.04045 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4
   })
   return channels[0] * 0.2126 + channels[1] * 0.7152 + channels[2] * 0.0722
+}
+const isHex = (color: unknown): color is string => typeof color === 'string' && /^#[a-f0-9]{6}$/i.test(color)
+function isLevelColors(value: unknown): value is string[] {
+  return Array.isArray(value) && value.length === LEVEL_COLOR_COUNT && value.every(isHex)
+}
+/** 主题是否提供了完整 10 级等级配色（决定等级标签与等级卡是否使用等级色，否则沿用公版样式） */
+export function hasThemeLevelColors(theme: CustomerTheme | null): boolean {
+  return isLevelColors(theme?.tokens?.light?.levelColors) || isLevelColors(theme?.tokens?.dark?.levelColors)
 }
 function colorVariables(colors: ThemeColors = {}, dark = false) {
   const values: Record<string, string> = {}
@@ -84,6 +96,23 @@ function colorVariables(colors: ThemeColors = {}, dark = false) {
     values['--td-button-primary-color'] = luminance(background) > 0.179 ? '#000000' : '#ffffff'
   }
   if (colors.buttonText && /^#[a-f0-9]{6}$/i.test(colors.buttonText)) values['--td-button-primary-color'] = colors.buttonText
+  /* 等级配色：--app-level-N 为该级实色（等级标签实底、等级卡描边与已达成实底），
+   * --app-level-N-text 为实底上的文字色（按亮度自动选黑/白，与主按钮同一口径） */
+  if (isLevelColors(colors.levelColors)) {
+    colors.levelColors.forEach((color, index) => {
+      const level = index + 1
+      values[`--app-level-${level}`] = color
+      values[`--app-level-${level}-text`] = luminance(color) > 0.179 ? '#000000' : '#ffffff'
+    })
+  }
+  if (colors.accent && /^#[a-f0-9]{6}$/i.test(colors.accent)) {
+    const accent = colors.accent
+    /* 标签品牌槽（Tag light 变体 primary 主题 + CheckTag 选中态）：主题提供强调色时全站标签改用强调色，
+     * 呈现比主色更活泼的色彩；成功/警告/错误等语义状态色不受影响。
+     * 浅色文字压暗一档（多数强调色直接作正文对比不足，如 #dc590d 仅 3.8:1），底色与 brand-color-light 同口径混色。 */
+    values['--td-tag-primary-color'] = dark ? accent : mix(accent, 0, 0.15)
+    values['--td-tag-primary-light-color'] = mix(accent, dark ? 0 : 255, dark ? 0.82 : 0.94)
+  }
   for (const key of THEME_ENTRY_KEYS) {
     const card = colors.entryCards?.[key]
     if (!card) continue

@@ -60,7 +60,10 @@ function goForm() {
         @click="selected = item.kind"
       >
         <div class="card-head">
-          <h2 class="kind-title">{{ item.title }}</h2>
+          <h2 class="kind-title">
+            <Icon aria-hidden="true" class="kind-title-icon" :name="item.icon" size="20px" />
+            {{ item.title }}
+          </h2>
           <Icon
             aria-hidden="true"
             class="kind-mark"
@@ -145,8 +148,17 @@ function goForm() {
 }
 
 .kind-title {
+  display: flex;
+  align-items: center;
+  gap:var(--app-space-3);
   margin:0;
   font: var(--app-type-card-title);
+}
+
+/* 标题行内图标：品牌色描边图标，与企业合作选择卡同款语言 */
+.kind-title-icon {
+  flex-shrink: 0;
+  color: var(--td-brand-color);
 }
 
 /* v48：选中指示器（非交互元素，选择行为由整卡点击承担） */

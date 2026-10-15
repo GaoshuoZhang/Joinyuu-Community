@@ -1,8 +1,9 @@
 <script setup lang="ts">
 import { computed, h, onMounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { Button, DialogPlugin, Icon, Image, Tag, Toast } from 'tdesign-mobile-vue'
+import { Button, DialogPlugin, Icon, Image, Toast } from 'tdesign-mobile-vue'
 import { cancelEnrollment, enrollEvent, fetchEvent, fetchMyEventFeedback, submitEventFeedback } from '@/api/events'
+import CategoryTag from '@/components/shared/CategoryTag.vue'
 import { canCancelEnrollment } from '@/utils/enrollment'
 import { listFavorites, toggleFavorite } from '@/api/favorites'
 import { useAsyncList } from '@/composables/useAsyncList'
@@ -267,7 +268,7 @@ async function onShare() {
       <section class="m-card">
         <Image v-if="event.coverUrl" class="detail-cover content-img" :src="event.coverUrl" :alt="event.title" fit="cover" @error="onImageError" />
         <div class="head">
-          <Tag class="type-tag" size="small" variant="light" theme="primary">{{ event.typeLabel }}</Tag>
+          <CategoryTag class="type-tag" :label="event.typeLabel" />
           <StateTag v-if="myStatus === 'pending'" kind="enroll" value="pending" />
           <StateTag v-else-if="myStatus === 'approved'" kind="enroll" value="approved" />
           <StateTag v-else-if="myStatus === 'waitlisted'" kind="enroll" value="waitlisted" />

@@ -3,8 +3,6 @@ import { computed, onMounted, reactive, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import {
   Button,
-  Cell,
-  CellGroup,
   Form,
   FormItem,
   Input,
@@ -14,10 +12,9 @@ import {
   Toast,
 } from 'tdesign-mobile-vue'
 import type { FormRules } from 'tdesign-mobile-vue'
-import { fetchMe, fetchRealName, updateMe } from '@/api/me'
+import { fetchMe, updateMe } from '@/api/me'
 import { ApiError } from '@/api/http'
 import { useAuthStore } from '@/stores/auth'
-import { useConfigStore } from '@/stores/config'
 import { useUnsavedGuard } from '@/composables/useUnsavedGuard'
 import AvatarUploader from '@/components/shared/AvatarUploader.vue'
 import EmptyBlock from '@/components/shared/EmptyBlock.vue'
@@ -35,9 +32,10 @@ import {
   USERNAME_RESERVED_MSG,
 } from '@/utils/validators'
 
-/* 资料编辑：头像（点头像直接上传替换）/ 用户名 / 昵称 / 性别 / 简介 + 实名认证入口。
- * 邮箱与手机号变更在「账号与安全」通过验证码完成，此处不提供编辑。
- * v46：校验迁移到 t-form/rules——错误内联在字段下方，提交失败自动滚动到首个错误字段。 */
+/* 资料编辑：头像（点头像直接上传替换）/ 用户名 / 昵称 / 性别 / 简介。
+ * 邮箱与手机号变更在「账号与安全」通过验证码完成；实名/身份信息登记入口亦在「账号与安全」。
+ * v46：校验迁移到 t-form/rules——错误内联在字段下方，提交失败自动滚动到首个错误字段。
+ * v53：实名/身份信息登记入口迁至「账号与安全」（与手机号/邮箱等核验类操作归同组）。 */
 const router = useRouter()
 const auth = useAuthStore()
 const form = reactive({ username: '', nickname: '', avatar: '', gender: 'unknown' as 'male' | 'female' | 'unknown', bio: '' })
@@ -47,9 +45,6 @@ const baseline = ref('')
 const formSnapshot = computed(() => JSON.stringify(form))
 const { markClean } = useUnsavedGuard(() => loaded.value && formSnapshot.value !== baseline.value)
 
-/* 实名入口（P1）：后端启用并测试联通权威核验时称「实名认证」，否则称「身份信息登记」 */
-const configStore = useConfigStore()
-const realNameVerified = ref<boolean | null>(null)
 /* 用户名 90 天限改：服务端下发下次可修改时间；锁定期间禁用输入并说明原因 */
 const usernameChangeableAt = ref<string | null>(null)
 const usernameLocked = computed(() => Boolean(usernameChangeableAt.value))
@@ -58,12 +53,6 @@ const usernameHelp = computed(() => {
   return usernameLocked.value
     ? `用户名是账号的唯一凭证，可用于登录，90 天可修改一次，${changeableDate} 后可修改。`
     : '用户名是账号的唯一凭证，可用于登录，90 天可修改一次，当前可修改。'
-})
-const realNameNote = computed(() => {
-  if (realNameVerified.value === null) return ''
-  const verifiedWord = configStore.realnameMode === 'verified' ? '已认证' : '已登记'
-  const unverifiedWord = configStore.realnameMode === 'verified' ? '未认证' : '未登记'
-  return realNameVerified.value ? verifiedWord : unverifiedWord
 })
 
 const rules: FormRules<typeof form> = {
@@ -98,12 +87,6 @@ async function load() {
     }
     loaded.value = true
     usernameChangeableAt.value = me.usernameChangeableAt ?? null
-    try {
-      const rn = await fetchRealName()
-      realNameVerified.value = rn.verified
-    } catch {
-      realNameVerified.value = null
-    }
   } catch (e) {
     loadError.value = e instanceof Error ? e.message : '加载失败，请稍后重试'
   } finally {
@@ -197,10 +180,6 @@ function onSubmit({ validateResult }: { validateResult: unknown }) {
         </Button>
       </Form>
     </div>
-
-    <CellGroup theme="card" class="security">
-      <Cell v-pressable :title="configStore.realnameLabel" :note="realNameNote" arrow @click="router.push('/me/realname')" />
-    </CellGroup>
     </template>
   </div>
 </template>
@@ -255,15 +234,5 @@ function onSubmit({ validateResult }: { validateResult: unknown }) {
 .genders :deep(.t-radio) {
   min-height: 44px;
   white-space: nowrap;
-}
-
-.security {
-  margin-top:var(--app-space-6);
-}
-
-/* 卡片宽度与 .m-card 对齐（与 MeView 同口径） */
-.profile-edit :deep(.t-cell-group--card) {
-  margin:0;
-  border: 1px solid var(--td-component-border);
 }
 </style>

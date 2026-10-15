@@ -18,13 +18,41 @@ describe('customer theme rendering', () => {
     expect(document.getElementById('customer-theme')).toBeNull()
   })
   it('uses separate dark values and refuses CSS payloads', () => {
-    const css = customerThemeCss({ ...base, tokens: { light: { primary: '#0052d9', text: 'red;}body{display:none' }, dark: { primary: '#60a5fa' } } })
-    expect(css).toContain(':root:root:root.dark{--td-brand-color-1:')
+    const css = customerThemeCss({ ...base, tokens: { light: { primary: '#0052d9', text: 'red;}body{display:none', accent: '#dc590d' }, dark: { primary: '#60a5fa', accent: '#f08c4a' } } })
+    expect(css).toContain(':root:root:root.dark{')
     expect(css).toContain('--td-brand-color:#60a5fa')
     expect(css).not.toContain('display:none')
     const darkCss = css.split(':root:root:root.dark{')[1]
     expect(darkCss).toContain('--td-brand-color-1:#0e1824')
     expect(darkCss).toContain('--td-button-primary-color:#000000')
+    /* 标签品牌槽跟随强调色：浅色压暗一档保证对比度，深色用原值 + 深底 */
+    expect(css).toContain('--td-tag-primary-color:#bb4c0b')
+    expect(css).toContain('--td-tag-primary-light-color:#fdf5f0')
+    expect(darkCss).toContain('--td-tag-primary-color:#f08c4a')
+    expect(darkCss).toContain('--td-tag-primary-light-color:#2b190d')
+  })
+  it('generates 10 level colors with auto black/white text per lightness', () => {
+    const light = ['#167696', '#127a73', '#137d53', '#137e31', '#187e13', '#397c13', '#587712', '#727111', '#906516', '#b54e1b']
+    const dark = ['#ffffff', '#000000', '#21a0cb', '#1ba69c', '#1ba970', '#1cab44', '#23ac1c', '#4fa81b', '#79a11a', '#9b9819']
+    const css = customerThemeCss({ ...base, tokens: { light: { levelColors: light }, dark: { levelColors: dark } } })
+
+    expect(css).toContain('--app-level-1:#167696')
+    expect(css).toContain('--app-level-10:#b54e1b')
+    /* 浅色 10 色亮度一致（约 0.15）→ 实底一律配白字 */
+    expect(css).toContain('--app-level-1-text:#ffffff')
+    expect(css).toContain('--app-level-10-text:#ffffff')
+
+    const darkCss = css.split(':root:root:root.dark{')[1]
+    expect(darkCss).toContain('--app-level-1:#ffffff')
+    expect(darkCss).toContain('--app-level-1-text:#000000')
+    expect(darkCss).toContain('--app-level-2:#000000')
+    expect(darkCss).toContain('--app-level-2-text:#ffffff')
+  })
+  it('ignores incomplete level color arrays so old themes keep the public look', () => {
+    const short = customerThemeCss({ ...base, tokens: { light: { levelColors: ['#167696', '#127a73'] } } })
+    expect(short).not.toContain('--app-level-')
+    const invalid = customerThemeCss({ ...base, tokens: { light: { levelColors: ['red', 'red', 'red', 'red', 'red', 'red', 'red', 'red', 'red', 'red'] } } })
+    expect(invalid).not.toContain('--app-level-')
   })
   it('preserves control/card hierarchy and optional accent and soft surfaces', () => {
     const css = customerThemeCss({ ...base, tokens: { radius: 'large', light: { primary: '#0d1b3d', accent: '#dc590d', primaryLight: '#edf4f8', heroStart: '#f4f8fb', heroEnd: '#fff8e8' } } })

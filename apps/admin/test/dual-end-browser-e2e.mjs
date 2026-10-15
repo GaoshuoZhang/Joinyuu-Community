@@ -24,7 +24,7 @@ const mobileRoutes = [
   '/me/enterprises/E2001/members/U1001', '/me/profile/edit', '/me/realname', '/me/points', '/me/experience',
   '/me/demands', '/me/responses', '/me/enrollments', '/me/orders', '/me/orders/RO2012', '/me/reservations',
   '/me/reservations/SR2001', '/me/leases', '/me/articles', '/me/articles/A1010', '/me/favorites', '/me/history',
-  '/me/security', '/me/records', '/me/settings', '/me/notification-settings', '/privacy', '/me/applications',
+  '/me/security', '/me/records', '/me/notification-settings', '/privacy', '/me/applications',
   '/me/applications/AP3018', '/me/projects', '/me/projects/P5011', '/applications/settle',
   '/applications/cooperation', '/applications/individual',
 ]

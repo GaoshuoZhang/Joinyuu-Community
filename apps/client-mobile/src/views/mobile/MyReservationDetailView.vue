@@ -18,7 +18,7 @@ const { data: reservation, loading, error, run } = useAsyncList<SpaceReservation
 onMounted(run)
 
 const acting = ref(false)
-/* 与「我的预约」列表口径一致：待审核/已通过可取消 */
+/* 与「我的预约」列表口径一致：待审核/已通过可取消；已结束（服务端派生的 ended=已完成）不可取消 */
 const canCancel = computed(() => reservation.value?.status === 'pending' || reservation.value?.status === 'approved')
 /* 费用：本单实际消耗的积分（0 = 免费空间）；驳回/取消已全额退回，此处标注退回结果 */
 const feeText = computed(() => {
@@ -32,7 +32,8 @@ const timeline = computed(() => {
   const item = reservation.value
   if (!item) return []
   const records = [...item.records]
-  if (item.status === 'approved' && !records.some((record) => record.action === 'approve')) {
+  /* 已结束（ended）由 approved 派生，同样保留「已通过」兜底记录 */
+  if ((item.status === 'approved' || item.status === 'ended') && !records.some((record) => record.action === 'approve')) {
     records.push({ at: '', action: 'approve', title: '预约已通过', text: '当前状态已通过，处理时间暂无记录' })
   }
   return records

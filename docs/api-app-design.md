@@ -114,8 +114,8 @@
 | GET | /api/app/spaces | 可预约空间列表（`needApproval`/时段/设备/`feePerHour` 费用：积分每小时，0=免费） |
 | GET | /api/app/spaces/:id/availability?date= | 某日可约时段：按空间「开放时间-关闭时间」逐小时切片（后台无预约规则配置入口，不设单次时长/提前天数限制；未开放预约、维护中或不存在一律 404）；待审核/已通过预约与命中空间的已发布活动标为 `occupied`，并返回 `type`（`reservation`/`event`）标注占用来源 |
 | POST | /api/app/spaces/reservations | 提交预约：canonical payload 为 `spaceId/date/start/end/topic?/attendees?/asIdentity?/asEnterpriseId?`；`reservationOpen` 开关校验 + 开放时段校验（须落在空间「开放时间-关闭时间」内，当天时段不得早于当前时刻）+ 提交前冲突预检（pending/approved 预约与命中空间的已发布活动，活动命中与按天裁剪口径见 wiki-backend §8.8，409）+ **费用扣分**（费用 = 计费小时 × `feePerHour` 再按等级折扣折算：代企业预约取企业等级折扣、其余取本人社区个体等级折扣，实扣 = round(原价 × 折扣 ÷ 10)；计费小时不足 1 小时按 1 小时计；事务内条件扣减，余额不足 400「积分不足」并写 `source=space` 流水）→ 返回 `{ status, pointsSpent }`；管理端审核驳回或预约取消时全额退回（见 wiki-backend §8.8）。四类身份均可预约，企业身份以企业名/组织名生成服务端主体快照；成员代企业预约时服务端校验 `space_reserve` 权限（无权限 403） |
-| GET | /api/app/me/reservations | 我的预约（可取消 pending/approved，取消全额退回已扣积分）；返回 `identityType`/`subjectName` 主体快照 |
-| GET | /api/app/me/reservations/:id | 我的预约详情（仅本人，非本人/不存在 404）；含 `purpose`/`attendees`/`records` 时间线与 `feePoints`（本单实际消耗积分，0=免费） |
+| GET | /api/app/me/reservations | 我的预约（可取消 pending 与未过结束时间的 approved，取消全额退回已扣积分）；`status` 新增派生值 `ended`「已完成」——已通过且已过预约结束时间时下发（存储态仍为 approved，与后台归档口径一致），该状态不可再取消；返回 `identityType`/`subjectName` 主体快照 |
+| GET | /api/app/me/reservations/:id | 我的预约详情（仅本人，非本人/不存在 404）；含 `purpose`/`attendees`/`records` 时间线与 `feePoints`（本单实际消耗积分，0=免费）；状态口径同列表（`approved` 已过结束时间派生为 `ended`） |
 | GET | /api/app/articles | 文章列表（`published`，栏目筛选/关键词；浏览量详情时 +1） |
 | GET | /api/app/articles/:id | 文章详情 |
 | GET | /api/app/article-columns | 栏目列表（enabled）；`?submission=1` 仅返回开放投稿栏目（投稿页使用，广场浏览筛选不受开关影响） |

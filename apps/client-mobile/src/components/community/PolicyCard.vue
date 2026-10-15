@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { Tag } from 'tdesign-mobile-vue'
+import CategoryTag from '@/components/shared/CategoryTag.vue'
 import type { CommunityPolicy } from '@/types'
 
 /* 社区政策列表卡：分类、标题与摘要。 */
@@ -10,7 +10,7 @@ defineEmits<{ open: [] }>()
 <template>
   <article class="policy-card m-card pressable" v-pressable @click="$emit('open')">
     <div class="row-head">
-      <Tag class="cat-tag" size="small" variant="light" theme="primary">{{ policy.category }}</Tag>
+      <CategoryTag class="cat-tag" :label="policy.category" />
     </div>
     <h3 class="title">{{ policy.title }}</h3>
     <p class="summary">{{ policy.summary }}</p>

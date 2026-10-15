@@ -9,22 +9,24 @@ const base = {
 }
 
 describe('profile menu layout', () => {
-  it('regular user: points-only stats, identity zone with talent registration', () => {
+  it('regular user: points-only stats, identity zone with talent registration and assets', () => {
     const { stats, sections } = buildProfileMenuLayout({ ...base, hasCommunityIndividual: false })
 
     expect(stats.map((s) => s.key)).toEqual(['points'])
     expect(stats[0]).toMatchObject({ path: '/me/points', value: '120' })
 
-    /* 首区（身份与名片，无标题）与末区（设置，无标题）不显示次标题 */
+    /* 首区（身份与名片，无标题）不显示次标题；订单与租约并入该区，不再单设「资产与租约」 */
     expect(sections[0]).toMatchObject({ ariaLabel: '身份与名片' })
-    expect(sections.at(-1)).toMatchObject({ ariaLabel: '设置' })
-    expect(sections[0].entries.map((entry) => entry.path)).toEqual(['/me/identities', '/intros/talent'])
-    expect(sections.at(-1)?.entries.map((entry) => entry.path)).toEqual(['/me/settings'])
+    expect(sections[0].entries.map((entry) => entry.path)).toEqual([
+      '/me/identities',
+      '/intros/talent',
+      '/me/orders',
+      '/me/leases',
+    ])
 
-    /* 分区标题与顺序 */
+    /* 分区标题与顺序（页尾「设置」菜单由 MeView 承载，不在宫格布局内） */
     expect(sections.filter((section) => section.title).map((section) => section.title)).toEqual([
       '项目与需求',
-      '资产与租约',
       '申请与预约',
       '内容与足迹',
     ])
@@ -43,22 +45,22 @@ describe('profile menu layout', () => {
     expect(stats[1]).toMatchObject({ path: '/me/experience', value: 'Lv.3 共创者', failed: false })
 
     const identity = sections[0].entries.map((entry) => entry.path)
-    expect(identity).toEqual(['/me/identities', '/me/cards/individual'])
+    expect(identity).toEqual(['/me/identities', '/me/cards/individual', '/me/orders', '/me/leases'])
   })
 
-  it('entry inventory: 项目与需求 / 资产与租约 / 申请与预约 / 内容与足迹', () => {
+  it('entry inventory: 项目与需求 / 申请与预约 / 内容与足迹', () => {
     const { sections } = buildProfileMenuLayout({ ...base, hasCommunityIndividual: true })
     const zone = (title: string) => sections.find((section) => section.title === title)?.entries.map((entry) => entry.path)
 
     expect(zone('项目与需求')).toEqual(['/me/projects', '/me/demands', '/me/responses'])
-    expect(zone('资产与租约')).toEqual(['/me/orders', '/me/leases'])
     expect(zone('申请与预约')).toEqual(['/me/applications', '/me/enrollments', '/me/reservations'])
     expect(zone('内容与足迹')).toEqual(['/me/messages', '/me/articles', '/me/favorites', '/me/history'])
 
     const all = sections.flatMap((section) => section.entries).map((entry) => entry.path)
-    /* 站内信由页头铃铛承载、我的记录已被各分区覆盖，均不再占宫格入口 */
+    /* 站内信由页头铃铛承载、我的记录已被各分区覆盖；设置菜单已迁到 MeView 页尾 */
     expect(all).not.toContain('/notices')
     expect(all).not.toContain('/me/records')
+    expect(all).not.toContain('/me/settings')
   })
 
   it('reservation switch off: hides 空间预约 but keeps 工位租约（租约无开关）', () => {
@@ -68,7 +70,9 @@ describe('profile menu layout', () => {
       '/me/applications',
       '/me/enrollments',
     ])
-    expect(sections.find((section) => section.title === '资产与租约')?.entries.map((entry) => entry.path)).toEqual([
+    expect(sections[0].entries.map((entry) => entry.path)).toEqual([
+      '/me/identities',
+      '/me/cards/individual',
       '/me/orders',
       '/me/leases',
     ])

@@ -2,6 +2,7 @@
 import { computed, onMounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { Avatar, Button, Icon, Tag, Toast } from 'tdesign-mobile-vue'
+import LevelTag from '@/components/shared/LevelTag.vue'
 import { useAsyncList } from '@/composables/useAsyncList'
 import { fetchTalentCard } from '@/api/community'
 import { listFavorites, toggleFavorite } from '@/api/favorites'
@@ -78,7 +79,7 @@ async function onShare() {
         <div class="hero-info">
           <h2 class="name">{{ card.name }}</h2>
           <div class="meta">
-            <Tag v-if="card.levelName" size="small" variant="light" theme="primary">Lv.{{ card.level }} {{ card.levelName }}</Tag>
+            <LevelTag v-if="card.level != null" :level="card.level" :name="card.levelName" />
             <span v-if="card.age" class="meta-item">{{ card.age }} 岁</span>
             <span v-if="card.politicalStatus" class="meta-item">{{ card.politicalStatus }}</span>
           </div>

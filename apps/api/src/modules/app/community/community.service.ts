@@ -41,32 +41,38 @@ export class AppCommunityService {
     }))
   }
 
-  /** 人才库：有社区个体身份且存在 IndividualCard 的用户（keyword 模糊匹配昵称/简介/技能） */
+  /** 人才库：有社区个体身份且存在 IndividualCard 的用户（keyword 模糊匹配昵称/简介/技能）
+   *  2026-10-16：列表补下发个体等级（identity.level + LevelTier.label），与个人名片口径一致，
+   *  人才库列表据此展示等级标签（与企业库列表的 Lv 标签同源）。 */
   async talents(keyword?: string) {
     const kw = keyword?.trim()
-    const users = await this.prisma.user.findMany({
-      where: {
-        identities: { some: { type: 'community_individual' } },
-        individualCard: { isNot: null },
-        status: 'active',
-        ...(kw
-          ? {
-              OR: [
-                { nickname: { contains: kw } },
-                { individualCard: { displayName: { contains: kw } } },
-                { individualCard: { intro: { contains: kw } } },
-                { individualCard: { skills: { has: kw } } },
-              ],
-            }
-          : {}),
-      },
-      include: {
-        identities: { where: { type: 'community_individual' }, orderBy: { id: 'asc' } },
-        individualCard: true,
-      },
-      orderBy: { uid: 'asc' },
-    })
-    const list: { uid: string; name: string; role: string; avatar?: string; intro: string; skills: string[] }[] = []
+    const [users, tiers] = await Promise.all([
+      this.prisma.user.findMany({
+        where: {
+          identities: { some: { type: 'community_individual' } },
+          individualCard: { isNot: null },
+          status: 'active',
+          ...(kw
+            ? {
+                OR: [
+                  { nickname: { contains: kw } },
+                  { individualCard: { displayName: { contains: kw } } },
+                  { individualCard: { intro: { contains: kw } } },
+                  { individualCard: { skills: { has: kw } } },
+                ],
+              }
+            : {}),
+        },
+        include: {
+          identities: { where: { type: 'community_individual' }, orderBy: { id: 'asc' } },
+          individualCard: true,
+        },
+        orderBy: { uid: 'asc' },
+      }),
+      this.prisma.levelTier.findMany({ where: { identityType: 'community_individual' } }),
+    ])
+    const tierLabelByLevel = new Map(tiers.map((t) => [t.level, t.label]))
+    const list: { uid: string; name: string; role: string; avatar?: string; intro: string; skills: string[]; level?: number; levelName?: string }[] = []
     for (const u of users) {
       const card = u.individualCard
       if (!card) continue
@@ -74,6 +80,7 @@ export class AppCommunityService {
       if ((card.visibility as { isPublic?: boolean } | null)?.isPublic === false) continue
       /* Prisma 列表 has 仅精确匹配，技能子串命中在内存复核（与客户端 Mock 行为一致） */
       if (kw && !(card.displayName?.includes(kw) || u.nickname.includes(kw) || card.intro.includes(kw) || card.skills.some((s) => s.includes(kw)))) continue
+      const level = u.identities[0]?.level ?? undefined
       list.push({
         uid: u.uid,
         name: card.displayName || u.nickname,
@@ -81,6 +88,7 @@ export class AppCommunityService {
         avatar: u.avatar ?? undefined,
         intro: card.intro,
         skills: card.skills,
+        ...(level != null ? { level, levelName: tierLabelByLevel.get(level) } : {}),
       })
     }
     return list

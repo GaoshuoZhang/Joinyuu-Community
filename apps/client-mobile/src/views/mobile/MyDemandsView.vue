@@ -3,6 +3,7 @@ import { computed, onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { Button, DialogPlugin, Icon, List, TabPanel, Tabs, Tag, Toast } from 'tdesign-mobile-vue'
 import { fetchMyDemands, withdrawDemand } from '@/api/demands'
+import CategoryTag from '@/components/shared/CategoryTag.vue'
 import { useAsyncList } from '@/composables/useAsyncList'
 import { useIncrementalList } from '@/composables/useIncrementalList'
 import { useTabSwipe } from '@/composables/useTabSwipe'
@@ -119,7 +120,7 @@ function onWithdrawDemand(d: MyDemandItem) {
                 </div>
                 <div class="row-meta">
                   <Tag v-if="d.kind" class="kind" size="small" variant="light" theme="default">{{ DEMAND_KIND_LABELS[d.kind] }}</Tag>
-                  <Tag class="cat" size="small" variant="light" theme="primary">{{ d.categoryLabel }}</Tag>
+                  <CategoryTag class="cat" :label="d.categoryLabel" />
                   <span>{{ formatZhNumber(d.responseCount) }} 人响应</span>
                   <span class="row-more">查看详情<Icon aria-hidden="true" name="chevron-right" size="12px" /></span>
                 </div>

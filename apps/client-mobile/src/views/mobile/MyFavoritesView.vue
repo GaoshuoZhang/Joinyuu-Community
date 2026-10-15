@@ -2,7 +2,8 @@
 import { computed, onMounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useRouteQuerySync } from '@/composables/useRouteQuerySync'
-import { CheckTag, List, Tag } from 'tdesign-mobile-vue'
+import { CheckTag, List } from 'tdesign-mobile-vue'
+import CategoryTag from '@/components/shared/CategoryTag.vue'
 import { listFavorites } from '@/api/favorites'
 import { useAsyncList } from '@/composables/useAsyncList'
 import { useIncrementalList } from '@/composables/useIncrementalList'
@@ -80,7 +81,7 @@ useRouteQuerySync('/me/favorites', (query) => {
         <p class="list-count">共 {{ formatZhNumber(items.length) }} 条</p>
         <router-link v-for="item in visibleItems" :key="item.id" class="m-card fav-card pressable" :to="`${TYPE_PATH[item.type]}${item.targetId}`">
           <div class="fav-head">
-            <Tag size="small" variant="light" theme="primary">{{ TYPE_LABEL[item.type] }}</Tag>
+            <CategoryTag :label="TYPE_LABEL[item.type]" />
             <h2 class="fav-title">{{ item.title }}</h2>
           </div>
           <p v-if="item.subtitle" class="fav-sub">{{ item.subtitle }}</p>

@@ -1,30 +1,28 @@
 <script setup lang="ts">
-import { Tag } from 'tdesign-mobile-vue'
-import IdentityTag from '@/components/shared/IdentityTag.vue'
+import CategoryTag from '@/components/shared/CategoryTag.vue'
 import StateTag from '@/components/shared/StateTag.vue'
 import { demandDateText } from '@/constants/demand'
 import type { Demand } from '@/types'
 import { formatZhNumber } from '@/utils/format'
 
-/* 需求列表卡片：分类/标题/发布方/日期/响应数 + 已响应标记。 */
+/* 需求列表卡片：与首页「最新需求」卡片（HomeFeedSection）同款三行结构——
+ * 分类标签 + 响应数 / 标题（两行截断）/ 发布方 · 日期；额外保留「已响应」标记。
+ * v53：发布方身份改以纯文本「发布者 xxx」呈现，不再用身份标签（身份标签留给名片/成员等场景）。 */
 defineProps<{ demand: Demand; responded: boolean; to: string }>()
 </script>
 
 <template>
   <router-link class="demand-item m-card pressable" :to="to">
     <div class="d-head">
-      <Tag class="d-cat" size="small" variant="light" theme="primary">{{ demand.categoryLabel }}</Tag>
-      <h3 class="d-title">{{ demand.title }}</h3>
+      <CategoryTag class="d-cat" :label="demand.categoryLabel" />
+      <span v-if="demand.responseCount > 0" class="d-tag-meta d-resp">{{ formatZhNumber(demand.responseCount) }} 人响应</span>
       <StateTag v-if="responded" class="d-flag" kind="flag" value="responded" />
     </div>
+    <h3 class="d-title">{{ demand.title }}</h3>
     <div class="d-meta">
-      <span class="d-pub">
-        <IdentityTag :type="demand.publisherIdentity" :label="demand.publisherIdentityLabel" />
-        <span class="d-name">{{ demand.publisherName }}</span>
-      </span>
+      <span class="d-pub">发布者 {{ demand.publisherName }}</span>
       <span v-if="demandDateText(demand)">{{ demandDateText(demand) }}</span>
     </div>
-    <p class="d-resp" :class="{ 'is-zero': !demand.responseCount }">{{ formatZhNumber(demand.responseCount) }} 人响应</p>
   </router-link>
 </template>
 
@@ -36,10 +34,13 @@ defineProps<{ demand: Demand; responded: boolean; to: string }>()
   cursor: pointer;
 }
 
+/* 首行：分类标签 + 响应数 + 已响应标记（与 HomeFeedSection 的 d-head 同款） */
 .d-head {
   display: flex;
-  align-items: flex-start;
+  align-items: center;
+  flex-wrap: wrap;
   gap: var(--app-space-4);
+  margin-bottom: var(--app-space-4);
 }
 
 .d-cat {
@@ -48,9 +49,6 @@ defineProps<{ demand: Demand; responded: boolean; to: string }>()
 
 .d-title {
   margin:0;
-  flex: 1;
-  min-width: 0;
-  /* v48：与 MyDemandsView / MyResponsesView 的「同一层级列表卡片标题」口径一致（card-title 角色档） */
   font: var(--app-type-card-title);
   display: -webkit-box;
   -webkit-line-clamp: 2;
@@ -58,47 +56,39 @@ defineProps<{ demand: Demand; responded: boolean; to: string }>()
   overflow: hidden;
 }
 
-.d-meta {
-  display: flex;
-  align-items: center;
-  /* v48：长发布者名 + 日期不再横向溢出，超出时换行 */
-  flex-wrap: wrap;
-  gap: var(--app-space-6);
-  margin-top: var(--app-space-4);
-  font: var(--app-type-caption);
-  color: var(--td-text-color-secondary);
+/* v53：响应数字号下调一档（网页>标题层级），仍保留强调色与等宽数字 */
+.d-tag-meta {
+  min-width: 0;
+  font: var(--app-type-emphasis-xs);
+  font-variant-numeric: tabular-nums;
 }
 
-.d-pub {
-  display: inline-flex;
-  align-items: center;
-  gap:var(--app-space-3);
-  min-width: 0;
-}
-
-/* 发布者名单行超长时省略，保留身份图标与日期（flex-wrap 下仍可读） */
-.d-name {
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+.d-tag-meta.d-resp {
+  color: var(--app-theme-link, var(--td-brand-color));
 }
 
 .d-flag {
   flex-shrink: 0;
 }
 
-.d-resp {
-  margin: var(--app-space-3) 0 0;
-  font: var(--app-type-emphasis-sm);
-  font-variant-numeric: tabular-nums;
-  color: var(--td-brand-color);
-}
-
-/* v45：0 响应不再是有效信号，撤掉品牌色强调，把强调色留给真的有人响应的需求 */
-.d-resp.is-zero {
-  font: var(--app-type-body-sm);
-  font-variant-numeric: tabular-nums;
+.d-meta {
+  display: flex;
+  align-items: center;
+  /* 长发布者名 + 日期不再横向溢出，超出时换行 */
+  flex-wrap: wrap;
+  column-gap: var(--app-space-6);
+  row-gap: var(--app-space-3);
+  margin-top: var(--app-space-4);
+  font: var(--app-type-caption);
   color: var(--td-text-color-secondary);
 }
+
+/* 发布方为纯文本（身份标签已移除）：超长名单行省略，保留与日期的分隔 */
+.d-pub {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
 </style>
+

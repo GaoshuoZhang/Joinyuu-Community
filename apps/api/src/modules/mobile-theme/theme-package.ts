@@ -13,12 +13,16 @@ export interface ThemeManifest {
   layout?: { template?: 'default' | 'brand'; homeModules?: string[] }
 }
 export const THEME_ENTRY_KEYS = ['enterprise', 'talent', 'articles', 'mall', 'spaces', 'events'] as const
+/** 等级配色数组长度：1–10 级各一色（个体与企业等级共用同一套） */
+export const LEVEL_COLOR_COUNT = 10
 export interface EntryColors { background?: string; icon?: string; iconBackground?: string; text?: string; secondaryText?: string; border?: string }
 export interface ThemeColors {
   primary?: string; accent?: string; primaryLight?: string; background?: string; surface?: string; text?: string; secondaryText?: string; heroStart?: string; heroEnd?: string
   border?: string; buttonBackground?: string; buttonText?: string; navigationBackground?: string; navigationText?: string; navigationActive?: string
   searchBackground?: string; searchText?: string; searchPlaceholder?: string; sectionTitle?: string; link?: string
   entryCards?: Partial<Record<typeof THEME_ENTRY_KEYS[number], EntryColors>>
+  /** 1–10 级等级配色（按级号升序的 10 个颜色；个体与企业等级共用） */
+  levelColors?: string[]
 }
 const fail = (message: string): never => { throw new BadRequestException(message) }
 const record = (v: unknown): v is Record<string, unknown> => !!v && typeof v === 'object' && !Array.isArray(v)
@@ -26,6 +30,10 @@ function keys(v: Record<string, unknown>, allowed: string[]) {
   if (Object.keys(v).some((key) => !allowed.includes(key))) fail('主题包含不支持的配置字段')
 }
 function text(v: unknown, max: number): v is string { return typeof v === 'string' && v.trim().length > 0 && v.length <= max }
+/** 等级配色：必须恰好 LEVEL_COLOR_COUNT 个六位十六进制颜色（按级号升序） */
+function levelColorsValid(v: unknown): v is string[] {
+  return Array.isArray(v) && v.length === LEVEL_COLOR_COUNT && v.every((color) => typeof color === 'string' && /^#[0-9a-fA-F]{6}$/.test(color))
+}
 export function safeAssetPath(path: string): boolean {
   return /^assets\/[a-zA-Z0-9_/-]+\.(png|jpg|jpeg|webp)$/.test(path) && !path.split('/').some((part) => !part || part === '.' || part === '..')
 }
@@ -55,7 +63,7 @@ export function validateManifest(value: unknown): ThemeManifest {
       const colors = value.tokens[mode]
       if (colors === undefined) continue
       if (!record(colors)) return fail('配色必须是对象')
-      keys(colors, ['primary', 'accent', 'primaryLight', 'background', 'surface', 'text', 'secondaryText', 'heroStart', 'heroEnd', 'border', 'buttonBackground', 'buttonText', 'navigationBackground', 'navigationText', 'navigationActive', 'searchBackground', 'searchText', 'searchPlaceholder', 'sectionTitle', 'link', 'entryCards'])
+      keys(colors, ['primary', 'accent', 'primaryLight', 'background', 'surface', 'text', 'secondaryText', 'heroStart', 'heroEnd', 'border', 'buttonBackground', 'buttonText', 'navigationBackground', 'navigationText', 'navigationActive', 'searchBackground', 'searchText', 'searchPlaceholder', 'sectionTitle', 'link', 'entryCards', 'levelColors'])
       if (colors.entryCards !== undefined) {
         if (!record(colors.entryCards)) return fail('entryCards 必须是对象')
         keys(colors.entryCards, [...THEME_ENTRY_KEYS])
@@ -65,7 +73,9 @@ export function validateManifest(value: unknown): ThemeManifest {
           if (Object.values(card).some((color) => typeof color !== 'string' || !/^#[0-9a-fA-F]{6}$/.test(color))) fail('入口卡片颜色必须是六位十六进制值')
         }
       }
-      if (Object.entries(colors).filter(([key]) => key !== 'entryCards').some(([, color]) => typeof color !== 'string' || !/^#[0-9a-fA-F]{6}$/.test(color))) fail('颜色必须是六位十六进制值，例如 #0052d9')
+      const levelColors = colors.levelColors
+      if (levelColors !== undefined && !levelColorsValid(levelColors)) fail(`等级配色必须是按级号升序的 ${LEVEL_COLOR_COUNT} 个六位十六进制值`)
+      if (Object.entries(colors).filter(([key]) => key !== 'entryCards' && key !== 'levelColors').some(([, color]) => typeof color !== 'string' || !/^#[0-9a-fA-F]{6}$/.test(color))) fail('颜色必须是六位十六进制值，例如 #0052d9')
     }
   }
   if (value.layout !== undefined) {

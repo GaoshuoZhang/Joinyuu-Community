@@ -91,7 +91,8 @@ function onLoginSubmit({ validateResult }: { validateResult: unknown }) {
     <div class="hero">
       <CustomerBrandLogo v-if="customerTheme.theme?.brand?.logo" :brand="customerTheme.theme.brand" />
       <span v-else class="logo">聚</span>
-      <h1 class="title">登录</h1>
+      <!-- 可见标题已移除（用户要求）：仅保留 h1 供读屏与文档结构，视觉上 Logo 下紧接口号 -->
+      <h1 class="sr-only">登录</h1>
       <p class="slogan">{{ customerTheme.theme?.brand?.slogan || '让每一座创业孤岛，在这里连成群岛。' }}</p>
     </div>
 
@@ -153,9 +154,9 @@ function onLoginSubmit({ validateResult }: { validateResult: unknown }) {
   margin-bottom:var(--app-space-7);
 }
 
-.title {
-  margin:0 0 var(--app-space-3);
-  font: var(--app-type-page-title);
+/* 客户 Logo 与公版 logo 保持同一下间距（标题移除后 Logo 与口号直接相邻） */
+.hero :deep(.customer-brand-logo) {
+  margin-bottom: var(--app-space-7);
 }
 
 .slogan {

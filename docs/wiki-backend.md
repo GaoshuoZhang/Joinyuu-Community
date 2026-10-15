@@ -718,7 +718,7 @@ TZ=Asia/Shanghai
 - `Space.feePerHour`：预约费用（积分/小时），0 = 免费使用；后台空间表单「费用」栏维护，客户端空间列表与预约页展示。
 - 计费小时 = 向上取整到整小时（不足 1 小时按 1 小时计）：全天开放空间结束时间为 23:59，故 `N 小时 59 分` 按 `N+1` 小时计费；费用 = 计费小时 × `feePerHour`。
 - 扣费时机：客户端提交预约（`POST /api/app/spaces/reservations`）时，在预约事务内条件扣减积分（余额不足整体回滚 → 400「积分不足，无法预约该空间」）并写负向流水（`source=space`）；实扣金额写入 `SpaceReservation.feePoints`，响应回传 `pointsSpent`。
-- 退回口径（全额）：审核驳回（`/api/admin/space-reservations/:id/review` 驳回分支）、用户取消（`POST /api/app/spaces/reservations/:id/cancel`）、后台取消（`POST /api/admin/space-reservations/:id/cancel`）均退回 `feePoints` 并写正向流水（`source=space`）；取消类接口以「状态条件更新」抢占，避免并发重复退分。
+- 退回口径（全额）：审核驳回（`/api/admin/space-reservations/:id/review` 驳回分支）、用户取消（`POST /api/app/spaces/reservations/:id/cancel`）、后台取消（`POST /api/admin/space-reservations/:id/cancel`）均退回 `feePoints` 并写正向流水（`source=space`）；取消类接口以「状态条件更新」抢占，避免并发重复退分。用户侧取消额外拒绝「已通过且已过预约结束时间」的预约（409「预约已结束，无法取消」），该状态在 `GET /api/app/me/reservations` 中派生为 `ended`「已完成」。
 
 **积分消费折扣（跨场景统一下沉于 `apps/api/src/common/points/points-discount.ts`）**
 

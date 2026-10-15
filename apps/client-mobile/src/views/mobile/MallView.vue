@@ -1,8 +1,9 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { Button, CheckTag, Icon, Image, List, Tag } from 'tdesign-mobile-vue'
+import { Button, CheckTag, Icon, Image, List } from 'tdesign-mobile-vue'
 import { fetchGoods } from '@/api/mall'
+import CategoryTag from '@/components/shared/CategoryTag.vue'
 import { usePagedList } from '@/composables/usePagedList'
 import { useRefreshOnActivate } from '@/composables/useRefreshOnActivate'
 import { useAnimSuppress } from '@/composables/useAnimSuppress'
@@ -129,7 +130,7 @@ useRefreshOnActivate(() => {
         <span v-else class="goods-glyph"><Icon aria-hidden="true" :name="glyphFor(g)" size="20px" /></span>
         <div class="row">
           <!-- 类别标签：中文名取字典 goods_category（任意类别都展示，含自定义新增类别） -->
-          <Tag v-if="categoryLabel(g)" size="small" variant="light" theme="primary">{{ categoryLabel(g) }}</Tag>
+          <CategoryTag v-if="categoryLabel(g)" :label="categoryLabel(g)" />
           <h2 class="name">{{ g.name }}</h2>
           <span class="cost">
             <!-- v49：等级折扣价 = round(原价 × 折扣 ÷ 10)；有折扣时折后价在前、原价删除线在后 -->

@@ -5,6 +5,8 @@ import { formatLocalDate } from '@/utils/format'
 export interface DemandKindMeta {
   kind: DemandKind
   title: string
+  /** 发布 hub 卡片标题图标（TDesign 图标名） */
+  icon: string
   /** 需求页该分类的搜索框占位文案 */
   searchPlaceholder: string
   tagline: string
@@ -18,6 +20,7 @@ export const DEMAND_KINDS: DemandKindMeta[] = [
   {
     kind: 'task',
     title: '找服务',
+    icon: 'service',
     searchPlaceholder: '搜索服务需求',
     tagline: '有想法、有需求，只差一位靠谱的人把它做出来',
     process: ['发布需求', '响应接单', '立项协作', '结项交付'],
@@ -32,6 +35,7 @@ export const DEMAND_KINDS: DemandKindMeta[] = [
   {
     kind: 'investment',
     title: '找投资',
+    icon: 'money',
     searchPlaceholder: '搜索投资需求',
     tagline: '有方向、有规划，正在寻找同频的投资人与资源伙伴',
     process: ['发布需求', '投资洽谈', '立项协作', '结项交付'],
@@ -46,6 +50,7 @@ export const DEMAND_KINDS: DemandKindMeta[] = [
   {
     kind: 'cooperation',
     title: '找合作',
+    icon: 'link',
     searchPlaceholder: '搜索合作需求',
     tagline: '业务遇到瓶颈，希望找到互补的团队一起破局',
     process: ['发布需求', '建立联系', '达成合作'],

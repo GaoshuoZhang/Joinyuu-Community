@@ -11,13 +11,9 @@ import { useRefreshOnActivate } from '@/composables/useRefreshOnActivate'
 import { useAnimSuppress } from '@/composables/useAnimSuppress'
 import { useAtTop } from '@/composables/useAtTop'
 import { fetchHomeFeed } from '@/api/home'
-import { fetchMyDemands, fetchMyResponses } from '@/api/demands'
-import { fetchMyEnrollments } from '@/api/events'
-import { fetchMe, dismissActivation as dismissActivationApi } from '@/api/me'
 import EmptyBlock from '@/components/shared/EmptyBlock.vue'
 import ListSkeleton from '@/components/ListSkeleton.vue'
 import HomeBanner from '@/components/home/HomeBanner.vue'
-import ActivationChecklist from '@/components/home/ActivationChecklist.vue'
 import HomeEntryGrids, { type HomeEntry } from '@/components/home/HomeEntryGrids.vue'
 import HotEventStrip from '@/components/home/HotEventStrip.vue'
 import HomeFeedSection from '@/components/home/HomeFeedSection.vue'
@@ -83,71 +79,13 @@ watch(error, (message) => {
   if (message && feed.value) Toast('刷新失败，请稍后重试')
 })
 
-/* KeepAlive 返回首页时刷新新手任务完成状态，并同步未读角标。 */
+/* KeepAlive 返回首页时同步未读角标。 */
 useRefreshOnActivate(() => {
-  void loadActivation()
   if (auth.isLogged) void notices.refreshUnread()
 })
 
-/* v37 新手任务清单：目标选择与激活引导（完成即自动隐藏，可手动不再提示） */
-const ACTIVATION_KEY_PREFIX = 'joinyuu_activation_dismissed:'
-interface ActivationStep { key: string; label: string; done: boolean; path: string }
-const activationDismissed = ref(false)
-const activationSteps = ref<ActivationStep[]>([])
-/* v41：新手任务清单完成态判断基于可见步骤 */
-const visibleActivationSteps = computed(() =>
-  config.config.demandOpen
-    ? activationSteps.value
-    : activationSteps.value.filter((step) => step.key !== 'publish' && step.key !== 'respond'),
-)
-const activationDone = computed(
-  () => visibleActivationSteps.value.length > 0 && visibleActivationSteps.value.every((step) => step.done),
-)
-const showActivation = computed(
-  () => visibleActivationSteps.value.length > 0 && !activationDone.value && !activationDismissed.value,
-)
-
-watch(
-  () => auth.uid,
-  (uid) => {
-    activationDismissed.value = uid
-      ? localStorage.getItem(`${ACTIVATION_KEY_PREFIX}${uid}`) === '1'
-      : false
-    activationSteps.value = []
-    if (uid && !activationDismissed.value) void loadActivation()
-  },
-  { immediate: true },
-)
-
-async function loadActivation() {
-  if (!auth.isLogged || !auth.uid || activationDismissed.value) return
-  const uid = auth.uid
-  try {
-    const [me, demands, responses, enrollments] = await Promise.all([
-      fetchMe(),
-      fetchMyDemands(),
-      fetchMyResponses(),
-      fetchMyEnrollments(),
-    ])
-    if (auth.uid !== uid || activationDismissed.value) return
-    /* 服务端已记录永久隐藏（换浏览器/设备也一致）：同步本地缓存并跳过引导 */
-    if (me.activationDismissed) {
-      activationDismissed.value = true
-      localStorage.setItem(`${ACTIVATION_KEY_PREFIX}${uid}`, '1')
-      return
-    }
-    activationSteps.value = [
-      { key: 'identity', label: '绑定社区身份', done: me.identities.some((item) => item.type !== 'individual'), path: '/intros/talent' },
-      { key: 'realname', label: '完成实名认证', done: !!me.realNameVerified, path: '/me/realname' },
-      { key: 'publish', label: '发布一条需求', done: demands.length > 0, path: '/demands/new' },
-      { key: 'respond', label: '响应一次需求', done: responses.length > 0, path: '/projects' },
-      { key: 'enroll', label: '报名一场活动', done: enrollments.list.length > 0, path: '/plaza?tab=events' },
-    ]
-  } catch {
-    /* 加载失败保留上次步骤（下拉刷新会重试），避免任务卡「凭空蒸发」；
-     * 跨账号切换时 watch(auth.uid) 已先行清空，不存在旧数据残留 */
-  }
-}
+/* v53：新手任务功能已移除（用户要求）——首页不再展示引导清单，
+ * 服务端 /me/activation-dismissed 与 User.activationDismissed 保留兼容，但客户端不再调用。 */
 
 /* v39：下拉刷新 */
 const refreshing = ref(false)
@@ -159,7 +97,6 @@ async function onRefresh() {
   refreshing.value = true
   try {
     await run()
-    await loadActivation()
     if (auth.isLogged) await notices.refreshUnread()
   } finally {
     if (refreshTimer) clearTimeout(refreshTimer)
@@ -174,15 +111,6 @@ onBeforeUnmount(() => {
   if (refreshTimer) clearTimeout(refreshTimer)
   refreshTimer = null
 })
-
-function dismissActivation() {
-  if (!auth.uid) return
-  const uid = auth.uid
-  activationDismissed.value = true
-  localStorage.setItem(`${ACTIVATION_KEY_PREFIX}${uid}`, '1')
-  /* 服务端持久化失败不影响本地隐藏（同浏览器仍生效），下次进入会重试同步 */
-  void dismissActivationApi().catch(() => undefined)
-}
 
 /* 铃铛未读角标：登录态以首页聚合未读数初始化（AppShell 冷启动另有轻量兜底刷新） */
 watch(feed, (f) => {
@@ -333,13 +261,6 @@ const quickEntries = computed(() => {
         {{ auth.isLogged ? '发布需求 · 让社区一起帮你完成' : '登录后发布需求' }}
         <template #suffix><Icon aria-hidden="true" name="chevron-right" size="16px" /></template>
       </Button>
-
-      <!-- v49：新手任务紧随发布入口（默认折叠，展开后再看任务），不再收在页面底部 -->
-      <ActivationChecklist
-        v-if="module === 'activation' && showActivation"
-        :steps="visibleActivationSteps"
-        @dismiss="dismissActivation"
-      />
 
       <!-- 运营公告：后台启用互锁保证至多一条，首页仅展示该条。
            v-pressable 补 role=button/tabindex/键盘激活；suffixIcon 提供「可点开」的视觉暗示。 -->

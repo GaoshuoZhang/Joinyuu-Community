@@ -1,7 +1,8 @@
 <script setup lang="ts">
 import { watch } from 'vue'
-import { Button, Popup, Tag } from 'tdesign-mobile-vue'
+import { Button, Popup } from 'tdesign-mobile-vue'
 import type { CommunityPolicy } from '@/types'
+import CategoryTag from '@/components/shared/CategoryTag.vue'
 import RichTextBlock from '@/components/shared/RichTextBlock.vue'
 import { formatLocalDate, formatLocalDateTime } from '@/utils/format'
 import { safeHttpUrl } from '@/utils/validators'
@@ -33,7 +34,7 @@ function restoreFocus() {
     @update:visible="(value: boolean) => $emit('update:visible', value)"
   >
     <div v-if="policy" class="pop-body">
-      <Tag class="p-category" size="small" variant="light" theme="primary">{{ policy.category }}</Tag>
+      <CategoryTag class="p-category" :label="policy.category" />
       <h3 class="p-title" tabindex="-1">{{ policy.title }}</h3>
       <div v-if="policy.version || policy.effectiveAt" class="p-meta">
         <span v-if="policy.version">版本：{{ policy.version }}</span>

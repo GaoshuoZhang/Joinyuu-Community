@@ -1,8 +1,10 @@
 <script setup lang="ts">
-import { Avatar, Tag } from 'tdesign-mobile-vue'
+import { Avatar } from 'tdesign-mobile-vue'
+import LevelTag from '@/components/shared/LevelTag.vue'
 import type { EnterpriseRecord } from '@/types'
 
-/* 企业库卡片：Logo + 名称 + 等级 + 行业规模 + 简介；有公开名片时整卡可跳转，否则点击提示未发布。 */
+/* 企业库卡片：Logo + 名称 + 等级 + 行业规模 + 简介；有公开名片时整卡可跳转，否则点击提示未发布。
+ * v53：等级标签改用 LevelTag（主题等级配色，与人才库列表同源）。 */
 defineProps<{ enterprise: EnterpriseRecord; to?: string }>()
 defineEmits<{ unavailable: [] }>()
 </script>
@@ -22,9 +24,7 @@ defineEmits<{ unavailable: [] }>()
         </Avatar>
         <h3 class="title name">{{ enterprise.name }}</h3>
       </div>
-      <Tag v-if="enterprise.level" size="small" variant="light" theme="primary">
-        Lv.{{ enterprise.level }}<template v-if="enterprise.levelName"> {{ enterprise.levelName }}</template>
-      </Tag>
+      <LevelTag v-if="enterprise.level" class="level-tag" :level="enterprise.level" :name="enterprise.levelName" />
     </div>
     <p class="meta">{{ enterprise.industry }} · {{ enterprise.size }}</p>
     <p class="intro">{{ enterprise.description }}</p>
@@ -58,6 +58,14 @@ defineEmits<{ unavailable: [] }>()
 .enterprise-logo {
   flex-shrink: 0;
   font: var(--app-type-display);
+  /* 未上传 Logo 时用浅品牌底 + 深蓝首字（v53）；有 Logo 时图片铺满，该底色不可见 */
+  --td-avatar-bg-color: var(--app-avatar-fallback-bg);
+  --td-avatar-content-color: var(--app-avatar-fallback-text);
+}
+
+/* 等级标签不被长企业名压缩（名称侧已有 min-width:0 + 省略号） */
+.level-tag {
+  flex-shrink: 0;
 }
 
 .title {

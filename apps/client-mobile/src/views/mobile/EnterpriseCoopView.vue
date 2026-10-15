@@ -64,13 +64,11 @@ function onConfirm() {
     <article v-for="opt in options" :key="opt.key" class="m-card option" :class="{ active: selected === opt.key }">
       <Radio :value="opt.key" class="option-select" :borderless="true">
         <template #label>
-        <div class="opt-head">
-          <span class="opt-icon"><Icon aria-hidden="true" :name="opt.icon" size="20px" /></span>
-          <div class="opt-title-wrap">
-            <h2 class="opt-title">{{ opt.title }}</h2>
-            <p class="opt-tagline">{{ opt.tagline }}</p>
-          </div>
-        </div>
+        <h2 class="opt-title">
+          <Icon aria-hidden="true" class="opt-title-icon" :name="opt.icon" size="20px" />
+          {{ opt.title }}
+        </h2>
+        <p class="opt-tagline">{{ opt.tagline }}</p>
         </template>
         <template #content>
         <ul class="points">
@@ -142,9 +140,11 @@ function onConfirm() {
   transition: border-color 150ms ease, background-color 150ms ease;
 }
 
+/* v53：选中底色与首页「企业合作」入口卡一致（--app-entry-enterprise-background 由主题注入，
+ * 无主题时回退品牌浅底），让「首页入口 → 合作方式选择」的配色连成一条线 */
 .option.active {
   border-color: var(--td-brand-color);
-  background: var(--td-brand-color-1);
+  background: var(--app-entry-enterprise-background, var(--td-brand-color-1));
 }
 
 .option-select {
@@ -163,33 +163,18 @@ function onConfirm() {
   outline-offset: -2px;
 }
 
-.opt-head {
+.opt-title {
   display: flex;
   align-items: center;
-  gap:var(--app-space-5);
-}
-
-.opt-icon {
-  /* 图标底板尺寸：集中为局部变量（36px 介于间距 token 32/40 之间，直接写数字会与刻度混淆） */
-  --opt-icon-size: 36px;
-  display: grid;
-  place-items: center;
-  width: var(--opt-icon-size);
-  height: var(--opt-icon-size);
-  flex-shrink: 0;
-  border-radius: var(--td-radius-circle);
-  color: var(--td-brand-color);
-  background: var(--td-brand-color-light);
-}
-
-.opt-title-wrap {
-  flex: 1;
-  min-width: 0;
-}
-
-.opt-title {
+  gap:var(--app-space-3);
   margin:0 0 var(--app-space-1);
   font: var(--app-type-card-title);
+}
+
+/* 标题行内图标：品牌色描边图标，随标题文字排布（无底板） */
+.opt-title-icon {
+  flex-shrink: 0;
+  color: var(--td-brand-color);
 }
 
 .opt-tagline {

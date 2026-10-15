@@ -12,7 +12,8 @@ import type { SpaceReservation } from '@/types'
 import { useIncrementalList } from '@/composables/useIncrementalList'
 import { formatLocalDate, formatLocalDateTime, formatZhNumber } from '@/utils/format'
 
-/* 移动我的预约：预约卡片；pending/approved 可取消（Dialog 二次确认）+ Toast + 列表刷新 */
+/* 移动我的预约：预约卡片；pending/approved 可取消（Dialog 二次确认）+ Toast + 列表刷新。
+ * 已过结束时间的 approved 由服务端派生为 ended（已完成），因此不会出现在可取消分支里。 */
 const { data, loading, error, run } = useAsyncList(fetchMyReservations)
 const router = useRouter()
 const reservations = computed(() => data.value ?? [])

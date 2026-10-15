@@ -13,6 +13,9 @@ describe('StateTag', () => {
     expect(mount(StateTag, { props: { kind: 'demand', value: 'projected' } }).text()).toBe('已立项')
     expect(mount(StateTag, { props: { kind: 'enroll', value: 'waitlisted' } }).text()).toBe('候补中')
     expect(mount(StateTag, { props: { kind: 'order', value: 'completed' } }).text()).toBe('已完成')
+    /* 空间预约：已通过且已过结束时间由服务端派生为 ended → 已完成 */
+    expect(mount(StateTag, { props: { kind: 'reservation', value: 'approved' } }).text()).toBe('已通过')
+    expect(mount(StateTag, { props: { kind: 'reservation', value: 'ended' } }).text()).toBe('已完成')
     expect(mount(StateTag, { props: { kind: 'lease', value: 'active' } }).text()).toBe('生效中')
     expect(mount(StateTag, { props: { kind: 'lease', value: 'expiring' } }).text()).toBe('即将到期')
     expect(mount(StateTag, { props: { kind: 'lease', value: 'expired' } }).text()).toBe('已到期')

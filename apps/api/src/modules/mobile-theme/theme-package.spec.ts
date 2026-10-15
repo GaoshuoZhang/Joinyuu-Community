@@ -29,6 +29,10 @@ describe('mobile theme package boundary', () => {
     { ...manifest, brand: { logoDark: 'assets/dark.png' } },
     { ...manifest, brand: { logoShape: 'arbitrary-css' } },
     { ...manifest, tokens: { light: { accent: 'url(https://example.com/)' } } },
+    { ...manifest, tokens: { light: { levelColors: ['#167696'] } } },
+    { ...manifest, tokens: { light: { levelColors: ['#167696', '#167696', '#167696', '#167696', '#167696', '#167696', '#167696', '#167696', '#167696', '#167696', '#167696'] } } },
+    { ...manifest, tokens: { light: { levelColors: ['red', 'red', 'red', 'red', 'red', 'red', 'red', 'red', 'red', 'red'] } } },
+    { ...manifest, tokens: { light: { levelColors: { 1: '#167696' } } } },
   ])('rejects unsupported or executable configuration %#', (value) => expect(() => validateManifest(value)).toThrow())
   it.each(['../outside.png', 'assets/../../outside.png', 'assets/code.js', 'assets/logo.svg', 'wrapper/manifest.json'])('rejects unwanted ZIP paths: %s', async (path) => {
     await expect(readThemeZip(zip([entry(), [path, Buffer.from('payload')]]))).rejects.toThrow()
@@ -47,6 +51,13 @@ describe('mobile theme package boundary', () => {
   it('accepts independent component and semantic entry colors', async () => {
     const value = { ...manifest, tokens: { light: { buttonBackground: '#e2630d', buttonText: '#101d3e', entryCards: { mall: { background: '#fff7dc', icon: '#795600' } } }, dark: { entryCards: { mall: { background: '#3c3423' } } } } }
     expect((await readThemeZip(zip([entry(value)]))).manifest).toEqual(value)
+  })
+  it('accepts exactly ten level colors and keeps older themes working', async () => {
+    const levelColors = ['#167696', '#127a73', '#137d53', '#137e31', '#187e13', '#397c13', '#587712', '#727111', '#906516', '#b54e1b']
+    const value = { ...manifest, tokens: { light: { levelColors }, dark: { levelColors } } }
+    expect((await readThemeZip(zip([entry(value)]))).manifest).toEqual(value)
+    /* 未提供 levelColors 的旧主题继续有效（沿用公版样式） */
+    expect(validateManifest({ ...manifest, tokens: { light: { primary: '#0d1b3d' } } }).schemaVersion).toBe(1)
   })
   it('rejects excessive entry size and entry counts', async () => {
     await expect(readThemeZip(zip([entry(), ['assets/huge.png', Buffer.alloc(2 * 1024 * 1024 + 1)]]))).rejects.toThrow('超限')

@@ -1,7 +1,8 @@
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { Button, DialogPlugin, Icon, Image, Tag, Toast } from 'tdesign-mobile-vue'
+import { Button, DialogPlugin, Icon, Image, Toast } from 'tdesign-mobile-vue'
+import CategoryTag from '@/components/shared/CategoryTag.vue'
 import { useAsyncList } from '@/composables/useAsyncList'
 import { createArticleComment, deleteArticleComment, fetchArticle, fetchArticleComments, toggleArticleLike } from '@/api/contents'
 import { listFavorites, toggleFavorite } from '@/api/favorites'
@@ -186,7 +187,7 @@ async function onToggleFavorite() {
     </template>
     <template v-else-if="article">
       <header class="head">
-        <Tag class="col-tag" size="small" variant="light" theme="primary">{{ article.columnLabel }}</Tag>
+        <CategoryTag class="col-tag" :label="article.columnLabel" />
         <h2 class="title">{{ article.title }}</h2>
         <p class="meta">{{ article.authorName }} · {{ formatLocalDateTime(article.publishedAt) }} · {{ formatZhNumber(article.views) }} 次浏览</p>
       </header>

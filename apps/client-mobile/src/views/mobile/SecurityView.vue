@@ -4,24 +4,38 @@ import { computed, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { Button, Cell, CellGroup, DialogPlugin, Input, Popup, Textarea, Toast } from 'tdesign-mobile-vue'
 import { changeEmail, changePhone, sendEmailCode, sendSmsCode } from '@/api/auth'
-import { cancelAccountDeletion, changePassword, downloadPersonalData, fetchAccountRequests, fetchMe, requestAccountDeletion, requestDataExport } from '@/api/me'
+import { cancelAccountDeletion, changePassword, downloadPersonalData, fetchAccountRequests, fetchMe, fetchRealName, requestAccountDeletion, requestDataExport } from '@/api/me'
 import { ApiError } from '@/api/http'
 import { useAuthStore } from '@/stores/auth'
+import { useConfigStore } from '@/stores/config'
 import EmptyBlock from '@/components/shared/EmptyBlock.vue'
 import { useUnsavedGuard } from '@/composables/useUnsavedGuard'
 import { formatLocalDateTime } from '@/utils/format'
 import { EMAIL_MSG, isEmail, isPhone, isSmsCode, PHONE_MSG } from '@/utils/validators'
 import type { UserProfile } from '@/types'
 
-/* 账号与安全：修改密码 / 绑定手机号 / 绑定邮箱 / 注销申请 / 数据导出。 */
+/* 账号与安全：修改密码 / 绑定手机号 / 绑定邮箱 / 实名与身份信息登记 / 注销申请 / 数据导出。
+ * v53：实名/身份信息登记入口自「编辑资料」迁入（与手机号、邮箱等核验类操作归同组）。 */
 const router = useRouter()
 const auth = useAuthStore()
+const configStore = useConfigStore()
 
 const requests = ref<{ deletion?: { reason?: string; at: string; cancelableUntil?: string }; export?: { at: string; url?: string } }>({})
 const profile = ref<UserProfile | null>(null)
 const profileLoading = ref(true)
 const profileError = ref('')
 const loadError = ref('')
+
+/* 实名入口（P1）：后端启用并测试联通权威核验时称「实名认证」，否则称「身份信息登记」 */
+const realNameVerified = ref<boolean | null>(null)
+const realNameLoaded = ref(false)
+const realNameNote = computed(() => {
+  if (!realNameLoaded.value) return ''
+  if (realNameVerified.value === null) return '状态加载失败'
+  const verifiedWord = configStore.realnameMode === 'verified' ? '已认证' : '已登记'
+  const unverifiedWord = configStore.realnameMode === 'verified' ? '未认证' : '未登记'
+  return realNameVerified.value ? verifiedWord : unverifiedWord
+})
 
 async function loadAll() {
   loadError.value = ''
@@ -38,6 +52,14 @@ async function loadAll() {
     profileError.value = e instanceof ApiError ? e.message : '绑定信息加载失败，请重试'
   } finally {
     profileLoading.value = false
+  }
+  try {
+    const rn = await fetchRealName()
+    realNameVerified.value = rn.verified
+  } catch {
+    realNameVerified.value = null
+  } finally {
+    realNameLoaded.value = true
   }
 }
 onMounted(loadAll)
@@ -406,6 +428,7 @@ async function onExport() {
       <Cell v-pressable title="修改登录密码" arrow @click="pwdVisible = true" />
       <Cell v-pressable="!profileLoading && !profileError" :title="phoneTitle" :note="phoneNote" :arrow="!profileLoading && !profileError" @click="!profileLoading && !profileError ? (phoneVisible = true) : undefined" />
       <Cell v-pressable="!profileLoading && !profileError" :title="emailTitle" :note="emailNote" :arrow="!profileLoading && !profileError" @click="!profileLoading && !profileError ? (emailVisible = true) : undefined" />
+      <Cell v-pressable :title="configStore.realnameLabel" :note="realNameNote" arrow @click="router.push('/me/realname')" />
       <Button v-if="profileError" size="small" variant="outline" @click="loadAll">重试加载绑定信息</Button>
       <Cell v-pressable title="找回密码说明" note="退出登录后可在登录页操作" arrow @click="router.push('/forgot-password')" />
     </CellGroup>

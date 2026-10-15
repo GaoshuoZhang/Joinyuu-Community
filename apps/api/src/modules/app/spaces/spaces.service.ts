@@ -34,7 +34,8 @@ export interface SpaceDto {
   description: string
 }
 
-/** 我的预约 DTO（对齐客户端 SpaceReservation：start/end/createdAt/identityType/subjectName） */
+/** 我的预约 DTO（对齐客户端 SpaceReservation：start/end/createdAt/identityType/subjectName）
+ * status：pending 待审核 / approved 已通过 / ended 已完成（派生）/ rejected 已驳回 / cancelled 已取消 */
 export interface MyReservationDto {
   id: string
   spaceId: string
@@ -291,7 +292,8 @@ export class AppSpacesService {
       where: { userId: uid, deletedAt: null },
       orderBy: { submittedAt: 'desc' },
     })
-    return rows.map(toMyReservationDto)
+    const now = formatNow()
+    return rows.map((row) => toMyReservationDto(row, now))
   }
 
   /** 预约详情：直接按 userId 收敛查询，非本人同样返回不存在。 */
@@ -301,7 +303,7 @@ export class AppSpacesService {
     })
     if (!reservation) throw new NotFoundException('预约不存在')
     return {
-      ...toMyReservationDto(reservation),
+      ...toMyReservationDto(reservation, formatNow()),
       purpose: reservation.purpose,
       attendees: reservation.attendees,
       feePoints: reservation.feePoints,
@@ -309,16 +311,18 @@ export class AppSpacesService {
     }
   }
 
-  /** 取消预约：本人 + pending/approved 可取消（approved 释放占用；已扣费用全额退回） */
+  /** 取消预约：本人 + pending/approved 可取消（approved 释放占用；已扣费用全额退回）；
+   *  已过预约结束时间的 approved 已派生为「已完成」，不再允许取消。 */
   async cancel(uid: string, id: string): Promise<{ code: number }> {
     const reservation = await this.prisma.spaceReservation.findUnique({ where: { id } })
     if (!reservation || reservation.deletedAt) throw new NotFoundException('预约不存在')
     if (reservation.userId !== uid) throw new ForbiddenException('无权操作该预约')
+    const now = formatNow()
+    if (isReservationEnded(reservation, now)) throw new ConflictException('预约已结束，无法取消')
     if (reservation.status !== 'pending' && reservation.status !== 'approved') {
       throw new ConflictException('当前状态不可取消')
     }
     const records = (reservation.records as Prisma.JsonArray) ?? []
-    const now = formatNow()
     await this.prisma.$transaction(async (tx) => {
       /* 状态条件抢占取消权：并发请求只有一个进入退费逻辑，避免重复退分 */
       const claimed = await tx.spaceReservation.updateMany({
@@ -407,7 +411,14 @@ function toSpaceDto(s: Space): SpaceDto {
   }
 }
 
-function toMyReservationDto(r: SpaceReservation): MyReservationDto {
+/** 预约是否已结束：已通过且已过预约结束时间。
+ * 存储状态保持 approved（不回写数据库）：归档管理按 approved + 日期判定「已结束」自动归档，
+ * 改库内状态会让该归档条件失效；因此在 DTO 层派生「已完成」，并同步收紧取消入口。 */
+function isReservationEnded(r: Pick<SpaceReservation, 'status' | 'date' | 'endTime'>, now: string): boolean {
+  return r.status === 'approved' && `${r.date} ${r.endTime}` <= now
+}
+
+function toMyReservationDto(r: SpaceReservation, now: string): MyReservationDto {
   const dto: MyReservationDto = {
     id: r.id,
     spaceId: r.spaceId,
@@ -415,7 +426,7 @@ function toMyReservationDto(r: SpaceReservation): MyReservationDto {
     date: r.date,
     start: r.startTime,
     end: r.endTime,
-    status: r.status,
+    status: isReservationEnded(r, now) ? 'ended' : r.status,
     createdAt: r.submittedAt,
   }
   if (r.identityType) dto.identityType = r.identityType

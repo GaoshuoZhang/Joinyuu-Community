@@ -8,6 +8,7 @@ import { useConfigStore } from '@/stores/config'
 import { useCustomerThemeStore } from '@/stores/customerTheme'
 import { useNoticesStore } from '@/stores/notices'
 import { pageTitleFor } from '@/constants/pageTitles'
+import CustomerBrandLogo from '@/components/CustomerBrandLogo.vue'
 import 'tdesign-mobile-vue/es/style/index.css'
 
 /* 移动应用壳：Navbar（居中：Tab 页=社区名 / 二级页=页面标题；左：仅二级页返回箭头；
@@ -130,6 +131,11 @@ const pageTitle = computed(() => {
   return pageTitleFor(route)
 })
 
+/* Tab 页品牌展示：主题带 Logo 时顶栏左侧显示 Logo、中间社区名仅保留给读屏（sr-only）；
+ * 无 Logo 主题保持居中社区名。二级页始终为返回箭头 + 页面标题，不参与品牌切换。 */
+const tabBrand = computed(() => (isTab.value ? customerTheme.theme?.brand : undefined))
+const showTabLogo = computed(() => !!tabBrand.value?.logo)
+
 /* v41/v43：削减动画——Tab 间切换不播放页面过渡；缓存页再次激活的入场动画抑制由
  * useAnimSuppress 在页面根元素上处理（避免 shell 类切换让离场页重放动画）。
  * v50：二级页入场不再用 Transition mode="out-in"——「旧页淡出→空窗→新页淡入」两段动画
@@ -193,9 +199,10 @@ function onNotices() {
     >
       <template #left>
         <Button v-if="!isTab" class="nav-back" variant="text" shape="square" aria-label="返回" @click="goBack"><Icon aria-hidden="true" name="chevron-left" size="24px" /></Button>
+        <CustomerBrandLogo v-else-if="showTabLogo" class="nav-logo" :brand="tabBrand" decorative />
       </template>
       <template #title>
-        <h1 class="navbar-title">{{ pageTitle || customerTheme.theme?.brand?.name || config.config.siteName || '聚屿社区' }}</h1>
+        <h1 class="navbar-title" :class="{ 'sr-only': showTabLogo }">{{ pageTitle || customerTheme.theme?.brand?.name || config.config.siteName || '聚屿社区' }}</h1>
       </template>
       <template #right>
         <Button v-if="auth.isLogged && !isMe" class="nav-me" variant="text" shape="square" size="large" aria-label="我的" @click="router.push('/me')">
@@ -243,6 +250,10 @@ function onNotices() {
 
 <style scoped>
 .nav-back { width: 44px; min-width: 44px; height: 44px; padding: 0; }
+
+/* Tab 页主题 Logo：按高度 28px 等比缩放（字标/方形通用），随明暗模式切换明暗版本 */
+.nav-logo { display: inline-flex; align-items: center; height: 28px; }
+.nav-logo :deep(.customer-logo) { width: auto; height: 28px; }
 .theme-preview :deep(.t-navbar--fixed .t-navbar__content) {
   top: var(--app-theme-preview-height, 0px);
 }

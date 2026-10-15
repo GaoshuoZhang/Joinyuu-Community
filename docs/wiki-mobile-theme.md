@@ -114,7 +114,7 @@ Joinyuu-Mobile-Theme/
 | brand.eyebrow | 可选，最多 60 字；为兼容旧包保留，当前首页不显示 |
 | brand.headline / highlight | 可选，标题最多 100 字，强调词最多 40 字且必须是标题中的子串。为兼容旧包保留，当前首页不显示 |
 | tokens.light / dark | 可选，各颜色必须是 `#RRGGBB`，未填写的字段保留公版变量 |
-| tokens.light.accent / dark.accent | 可选，独立强调色，不替代主操作色或业务状态色 |
+| tokens.light.accent / dark.accent | 可选，独立强调色；提供时同时作为标签（Tag primary 主题与 CheckTag 选中态）的品牌配色，浅色文字自动压暗一档保证对比度；不替代主操作色或成功/警告/错误等业务状态色 |
 | tokens.light.primaryLight / dark.primaryLight | 可选，图标气泡等品牌浅底色，覆盖自动生成的浅底，避免深主色混白后发灰 |
 | tokens.light.heroStart / heroEnd（dark 同名） | 可选，为兼容旧包保留，当前首页不显示渐变品牌区 |
 | tokens.radius | 可选，`small` / `medium` / `large`，分别映射 4 / 8 / 16px 的主要卡片圆角；large 的控件圆角为 12px，保持卡片和控件层级 |
@@ -156,6 +156,7 @@ JSON Schema 检查字段类型、枚举、格式及已声明的静态约束；�
 | navigationBackground / navigationText / navigationActive | 底部导航底色、未选中文字与图标、选中文字与图标 |
 | searchBackground / searchText / searchPlaceholder | 搜索框底色、输入文字、占位文字及搜索图标 |
 | sectionTitle / link | 首页内容分区标题与“更多”等链接 |
+| levelColors | 1–10 级等级配色（按级号升序的 10 个颜色）。等级标签用该色实底；「我的等级」与企业等级卡中，未达成级用该色描边、已达成级（含当前级）用该色实底。个体与企业等级共用同一套色 |
 | entryCards | 六类首页服务入口的独立颜色，见下表 |
 
 `entryCards` 的键固定为 `enterprise`（企业合作/管理）、`talent`（人才登记/个人名片）、`articles`（文章投稿）、`mall`（积分商城）、`spaces`（空间预约）、`events`（活动计划）。颜色绑定功能，不按第几个卡片分配；功能开关隐藏入口时，其它入口保持原配色。
@@ -179,6 +180,8 @@ JSON Schema 检查字段类型、枚举、格式及已声明的静态约束；�
 ```
 
 以上片段放入 `tokens.light`，深色模式在 `tokens.dark` 单独提供。浅色底搭配深色文字、深色底搭配浅色文字；不要将 Logo 中的亮黄、浅青直接作为白底上的正文颜色。检查正文和按钮文字至少 4.5:1、功能图标至少 3:1 的对比度。主题配置的维护位置是独立主题目录 `Joinyuu-Mobile-Theme/customers/<客户>/manifest.json`，运行时上传数据不提交到公版仓库。
+
+`levelColors` 必须恰好是 10 个颜色（1–10 级依次对应），少于或多于 10 个会被服务端拒绝；未提供时等级标签与等级卡沿用公版样式（品牌色标签、品牌渐变当前卡）。该色会同时用作实底与描边：作实底时客户端按颜色亮度自动选用黑色或白色文字，因此每个颜色都要满足「与自动选定的黑/白文字 ≥4.5:1」，并在卡片背景（浅色模式为白卡、深色模式为深色卡）上作描边时保持可辨识（≥3:1）。深色模式建议整体提亮，保证深色卡上描边可见。
 
 ## 4. 首页模块与升级规则
 
