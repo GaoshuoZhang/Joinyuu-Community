@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { collectAllPages, executeBulk } from '@/utils/bulkOperation'
 import RowMoreActions from '@/components/RowMoreActions.vue'
 import { focusFirstInvalid, useDialogFormProtection } from '@/utils/form'
 import { computed, nextTick, onMounted, reactive, ref, watch } from 'vue'
@@ -56,7 +57,7 @@ const statusOptions = [
 ]
 
 const columns = [
-  { colKey: 'name', title: '项目', cell: 'name', width: 140, ellipsis: true, resizable: true },
+  { colKey: 'name', fixed: 'left' as const, title: '项目', cell: 'name', width: 140, ellipsis: true, resizable: true },
   { colKey: 'undertakers', title: '承接方', cell: 'undertakers', width: 140, ellipsis: true, resizable: true },
   {
     colKey: 'initiatedAt',
@@ -70,7 +71,7 @@ const columns = [
   { colKey: 'progress', title: '进度', cell: 'progress', width: 120, resizable: true , ellipsis: true},
   { colKey: 'status', title: '状态', cell: 'status', width: 86, resizable: true , ellipsis: true},
   { colKey: 'duration', title: '起止时间', cell: 'duration', width: 220, resizable: true , ellipsis: true},
-  { colKey: 'op', title: '操作', cell: 'op', width: 180 },
+  { colKey: 'op', fixed: 'right' as const, title: '操作', cell: 'op', width: 180 },
 ]
 
 /* 列配置：本地持久化显隐/顺序 */
@@ -238,6 +239,7 @@ async function onArchive(row: Project) {
 /* 一键归档：按当前筛选全量拉取，归档所选状态的已结项 / 已关闭项目 */
 const archivingAll = ref(false)
 const bulkVisible = ref(false)
+let bulkScope = { ...query }
 const bulkProgress = ref<{ done: number; total: number; failed: number } | null>(null)
 let bulkCancelled = false
 const bulkStatuses = [
@@ -250,48 +252,36 @@ function onBulkCancel() {
 }
 
 async function doBulkArchive(values: string[]) {
-  const targets: Project[] = []
-  for (let page = 1; page <= 20; page++) {
-    const res = await fetchProjects({ ...query, page, pageSize: 100 })
-    targets.push(...res.list)
-    if (targets.length >= res.total || res.list.length < 100) break
-  }
-  const pending = targets.filter((p) => values.includes(p.status))
-  if (!pending.length) {
-    MessagePlugin.info('没有符合所选状态的可归档项目')
-    return
-  }
-  /* 进度 + 可取消：逐条执行，取消后停止后续条目（见 BulkArchiveDialog 进度态） */
   bulkCancelled = false
-  bulkProgress.value = { done: 0, total: pending.length, failed: 0 }
-  let done = 0
-  let failed = 0
-  for (const p of pending) {
-    if (bulkCancelled) break
-    try {
-      await archiveProject(p.id)
-    } catch {
-      failed++
+  bulkProgress.value = { done: 0, total: 0, failed: 0 }
+  try {
+    const targets = await collectAllPages<Project>(
+      (page, pageSize) => fetchProjects({ ...bulkScope, page, pageSize }), () => bulkCancelled,
+    )
+    const pending = targets.filter((row) => values.includes(row.status))
+    if (!pending.length) {
+      MessagePlugin.info(bulkCancelled ? '已取消，未执行归档' : '当前筛选范围内没有符合所选状态的记录')
+      return
     }
-    done++
-    bulkProgress.value = { done, total: pending.length, failed }
+    const result = await executeBulk(pending, (row) => archiveProject(row.id), () => bulkCancelled,
+      (progress) => { bulkProgress.value = progress })
+    if (bulkCancelled) MessagePlugin.warning(`已取消，本次已归档 ${result.done - result.failed} 条项目`)
+    else if (result.done > result.failed) MessagePlugin.success(`已归档 ${result.done - result.failed} 条项目`)
+    if (result.failed) MessagePlugin.warning(`${result.failed} 条归档失败，请刷新后重试`)
+    await load()
+  } finally {
+    bulkProgress.value = null
   }
-  bulkProgress.value = null
-  if (bulkCancelled) {
-    MessagePlugin.warning(`已取消执行：本次已归档 ${done - failed} 条`)
-  } else {
-    if (done - failed > 0) MessagePlugin.success(`已归档 ${done - failed} 条项目`)
-    if (failed > 0) MessagePlugin.warning(`${failed} 条项目归档失败，请重试`)
-  }
-  await load()
 }
 
 /* 确认前预估影响条数：按所选状态取 total 求和（pageSize=1 仅取 total） */
 function countByStatus(status: string) {
-  return fetchProjects({ ...query, status, page: 1, pageSize: 1 }).then((r) => r.total)
+  if (bulkScope.status && bulkScope.status !== status) return Promise.resolve(0)
+  return fetchProjects({ ...bulkScope, status, page: 1, pageSize: 1 }).then((result) => result.total)
 }
 
 function onBulkArchive() {
+  bulkScope = { ...query }
   bulkVisible.value = true
 }
 
@@ -441,7 +431,7 @@ const { close: closeProjectDialog } = useDialogFormProtection(closeForm, closeVi
         clearable
         @change="onSearch"
       />
-      <t-button @click="onSearch">
+      <t-button theme="primary" @click="onSearch">
         <template #icon><SearchIcon /></template>
         查询
       </t-button>
@@ -469,7 +459,7 @@ const { close: closeProjectDialog } = useDialogFormProtection(closeForm, closeVi
     </div>
 
     <div class="page-card">
-      <t-table
+      <t-table :horizontal-scroll-affixed-bottom="{ container: '.page-scroll', offsetBottom: 0 }"
         row-key="id"
         table-layout="fixed"
         hover
@@ -614,6 +604,7 @@ const { close: closeProjectDialog } = useDialogFormProtection(closeForm, closeVi
       :count-for-status="countByStatus"
       @confirm="onBulkConfirm"
       @cancel="onBulkCancel"
+
     />
   </div>
 </template>

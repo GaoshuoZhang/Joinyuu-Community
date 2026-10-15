@@ -1,7 +1,7 @@
 /* ============================================================
    聚屿社区 · 管理后台 — 全局补充样式（Design Contract 冻结）
-   色彩/组件形态一律使用 TDesign 默认 token，此处只补充：
-   布局骨架尺寸、页面通用类、动效、登录页品牌区
+   色彩/组件形态一律使用 TDesign 默认 token；补充布局骨架、页面通用类、
+   动效、登录页品牌区及 Dialog 整体滚动适配。
    ============================================================ */
 
 :root {
@@ -236,7 +236,7 @@ html[data-route-loading='true']::after {
 
 .field-help {
   margin-top: 4px;
-  color: var(--td-text-color-placeholder);
+  color: var(--td-text-color-secondary);
   font-size: 12px;
   line-height: 20px;
 }
@@ -590,4 +590,20 @@ html[data-route-loading='true']::after {
 /* Tab 面板空态：上下留白，避免占位图贴住选项卡内容区边缘（身份信息/活跃记录等直接放 t-empty 的面板） */
 .t-tabs__content .t-empty {
   padding: 24px 0;
+}
+
+/* 窄屏取消表格两侧固定列，避免名称列与操作列叠在一起；全部字段仍可横向滚动查看。 */
+@media (max-width: 767px) {
+  .t-table .t-table__cell--fixed-left,
+  .t-table .t-table__cell--fixed-right {
+    position: relative !important;
+    left: auto !important;
+    right: auto !important;
+    z-index: auto !important;
+  }
+
+  .t-table .t-table__cell--fixed-left-last::after,
+  .t-table .t-table__cell--fixed-right-first::after {
+    display: none;
+  }
 }

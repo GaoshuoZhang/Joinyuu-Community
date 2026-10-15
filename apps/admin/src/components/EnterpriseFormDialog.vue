@@ -26,7 +26,25 @@ const submitting = ref(false)
 const formRef = ref()
 
 /* 行业选项来自数据字典，加载失败回退默认词表 */
+const industryLoaded = ref(false)
+const industryLoadError = ref('')
+const industryLoading = ref(false)
 const industryOptions = ref(dictFallback.industry.map((label) => ({ label, value: label })))
+
+async function loadIndustryOptions() {
+  if (industryLoading.value) return
+  industryLoading.value = true
+  try {
+    const entries = await fetchDictEntries('industry')
+    industryOptions.value = entries.filter((entry) => entry.status === 'enabled').map((entry) => ({ label: entry.label, value: entry.label }))
+    industryLoaded.value = true
+    industryLoadError.value = ''
+  } catch {
+    industryLoadError.value = '行业字典加载失败，当前显示默认选项。'
+  } finally {
+    industryLoading.value = false
+  }
+}
 
 /* 规模选项（与企业规模枚举一致） */
 const sizeOptions = [
@@ -47,6 +65,8 @@ const leaseTypeOptions = [
 /* 关联用户选项（仅个人用户；选项与「新增需求」需求方的用户部分一致） */
 const contactUsers = ref<{ uid: string; nickname: string; realName: string; phone: string; email: string; tag: string }[]>([])
 const contactOptions = ref<{ label: string; value: string }[]>([])
+const contactLoadError = ref('')
+const contactLoading = ref(false)
 
 const form = reactive({
   name: '',
@@ -75,12 +95,17 @@ function applyContactUser(uid: string) {
 }
 
 async function loadContactOptions() {
+  if (contactLoading.value) return
+  contactLoading.value = true
   try {
     const opts = await fetchPublisherOptions()
     contactUsers.value = opts.users
     contactOptions.value = opts.users.map((u) => ({ label: `${u.nickname}（${u.tag} · ${u.uid}）`, value: u.uid }))
+    contactLoadError.value = ''
   } catch {
-    MessagePlugin.error('关联用户选项加载失败')
+    contactLoadError.value = '关联用户选项加载失败，请重试后选择联系人。'
+  } finally {
+    contactLoading.value = false
   }
 }
 
@@ -122,16 +147,7 @@ watch(
     resetForm()
     markBaseline()
     if (contactOptions.value.length === 0) loadContactOptions()
-    if (industryOptions.value.length === 0) {
-      fetchDictEntries('industry')
-        .then((entries) => {
-          const labels = entries.filter((e) => e.status === 'enabled').map((e) => ({ label: e.label, value: e.label }))
-          if (labels.length) industryOptions.value = labels
-        })
-        .catch(() => {
-          /* 字典加载失败保留回退词表 */
-        })
-    }
+    if (!industryLoaded.value) void loadIndustryOptions()
     nextTick(() => formRef.value?.clearValidate())
   },
 )
@@ -206,6 +222,12 @@ function onClose() {
       </div>
     </template>
 
+    <t-alert v-if="industryLoadError" theme="warning" :message="industryLoadError" style="margin-bottom: 16px">
+      <template #operation><t-button variant="text" :loading="industryLoading" @click="loadIndustryOptions">重新加载行业</t-button></template>
+    </t-alert>
+    <t-alert v-if="contactLoadError" theme="warning" :message="contactLoadError" style="margin-bottom: 16px">
+      <template #operation><t-button variant="text" :loading="contactLoading" @click="loadContactOptions">重新加载用户</t-button></template>
+    </t-alert>
     <t-form ref="formRef" :data="form" :rules="rules" label-align="top">
       <t-form-item label="企业名称" name="name">
         <t-input v-accessible-field v-model="form.name" clearable placeholder="请输入企业名称…" />

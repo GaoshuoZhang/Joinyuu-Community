@@ -1,4 +1,4 @@
-import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common'
+import { BadRequestException, ConflictException, Injectable, NotFoundException } from '@nestjs/common'
 import { Prisma, type MessageChannel } from '@prisma/client'
 import { PrismaService } from '../../common/prisma/prisma.service'
 import { IdGeneratorService } from '../../common/id-generator/id-generator.service'
@@ -67,7 +67,30 @@ export class MessageChannelService {
     return this.toRuntime(await this.require(id))
   }
 
-  async upsert(dto: MessageChannelPayloadDto, operator: string): Promise<{ id: string }> {
+  async upsert(dto: MessageChannelPayloadDto, operator: string, editingId?: string): Promise<{ id: string }> {
+    return this.persist(dto, operator, editingId)
+  }
+
+  async saveFixed(kind: string, dto: MessageChannelPayloadDto, operator: string): Promise<{ id: string }> {
+    if (!['sms', 'email', 'inapp'].includes(kind) || dto.kind !== kind) {
+      throw new BadRequestException('通知类型不合法或与配置不一致')
+    }
+    if (!(kind === 'sms' ? ['aliyun_sms', 'tencent_sms'] : kind === 'email' ? ['smtp'] : ['inapp']).includes(dto.provider)) {
+      throw new BadRequestException('请选择该通知类型支持的供应商')
+    }
+    return this.prisma.$transaction(async (tx) => {
+      // 同一类型串行保存；供应商切换、首次配置和历史配置停用必须一起成功或回滚。
+      await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${`notification-channel:${kind}`}))`
+      const rows = await tx.messageChannel.findMany({ where: { kind }, orderBy: { createdAt: 'asc' } })
+      const target = rows.find(row => row.provider === dto.provider) ?? rows.find(row => row.enabled) ?? rows[0]
+      const result = await this.persist(dto, operator, target?.id, tx, true)
+      await tx.messageChannel.updateMany({ where: { kind, id: { not: result.id } }, data: { enabled: false } })
+      return result
+    })
+  }
+
+  private async persist(dto: MessageChannelPayloadDto, operator: string, editingId?: string,
+    db: PrismaService | Prisma.TransactionClient = this.prisma, fixed = false): Promise<{ id: string }> {
     const meta = providerMeta(dto.provider)
     if (!meta) throw new BadRequestException(`未知消息驱动：${dto.provider}`)
     if (!meta.supports.includes(dto.kind as ChannelKind)) {
@@ -87,12 +110,25 @@ export class MessageChannelService {
     const name = dto.name.trim()
     if (!name) throw new BadRequestException('渠道名称不能为空')
 
-    const existing = await this.prisma.messageChannel.findUnique({
+    let existing = await db.messageChannel.findUnique({
       where: { kind_provider: { kind: dto.kind, provider: dto.provider } },
     })
+    if (!editingId && existing) throw new ConflictException('该消息驱动已配置，请在已有渠道中编辑')
+    if (!editingId && !fixed && await db.messageChannel.findFirst({ where: { kind: dto.kind } })) {
+      throw new ConflictException('该通知类型已有固定配置，请编辑已有配置')
+    }
+    if (editingId) {
+      const original = await db.messageChannel.findUnique({ where: { id: editingId } })
+      if (!original) throw new NotFoundException('通知配置不存在')
+      if (original.kind !== dto.kind || (!fixed && original.provider !== dto.provider)) {
+        throw new BadRequestException('编辑渠道不能变更消息类型或驱动')
+      }
+      if (existing && existing.id !== editingId) throw new ConflictException('渠道已变更，请刷新后重试')
+      existing = original
+    }
     /* 仅当来源模式未变时才沿用旧值（避免把环境变量名当密钥、或反之） */
     const previousSameMode =
-      existing && normalizeCredentialMode(existing.credentialMode, 'env') === credentialMode
+      existing && existing.provider === dto.provider && normalizeCredentialMode(existing.credentialMode, 'env') === credentialMode
         ? asStringRecord(existing.credentialEnv)
         : {}
     const credentialEnv = mergeCredentialInput(credentialMode, credentialInput, previousSameMode)
@@ -111,7 +147,7 @@ export class MessageChannelService {
     }
 
     if (existing) {
-      await this.prisma.messageChannel.update({ where: { id: existing.id }, data })
+      await db.messageChannel.update({ where: { id: existing.id }, data })
       await this.audit.record({
         module: '消息中心',
         action: '保存消息渠道',
@@ -122,8 +158,8 @@ export class MessageChannelService {
       return { id: existing.id }
     }
 
-    const id = await this.ids.next('MC')
-    await this.prisma.messageChannel.create({
+    const id = await this.ids.next('MC', db)
+    await db.messageChannel.create({
       data: { ...data, id, createdAt: now, updatedBy: '社区管理员' },
     })
     await this.audit.record({

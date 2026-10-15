@@ -48,10 +48,12 @@ const demandItems = computed<FeedItem[]>(() =>
       title: d.title,
       tag: d.categoryLabel,
       path: `/demands/${d.id}`,
+      tagMeta: d.responseCount > 0
+        ? { text: `${formatZhNumber(d.responseCount)} 人响应`, accent: true }
+        : undefined,
       metas: [
         { text: d.publisherName },
         ...(demandDateText(d) ? [{ text: demandDateText(d) as string }] : []),
-        { text: `${formatZhNumber(d.responseCount)} 人响应`, accent: true },
       ],
     }))
     .slice(0, HOME_FEED_LIMIT),
@@ -364,7 +366,6 @@ const quickEntries = computed(() => {
           v-if="module === 'demands' && config.config.demandOpen"
           title="最新需求"
           :items="demandItems"
-          empty-text="暂无最新需求"
           more-path="/projects"
         />
 
@@ -372,7 +373,6 @@ const quickEntries = computed(() => {
           v-if="module === 'articles'"
           title="最新资讯"
           :items="articleItems"
-          empty-text="暂无最新资讯"
           more-path="/plaza?tab=articles"
         />
       </template>

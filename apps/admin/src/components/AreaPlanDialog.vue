@@ -55,26 +55,31 @@ function countByArea(areaName: string): number {
 
 watch(
   () => props.visible,
-  async (v) => {
+  (v) => {
+    ++loadVersion
     if (!v) return
-    await load()
     resetForm()
+    void load()
     nextTick(() => formRef.value?.clearValidate())
   },
 )
 
+let loadVersion = 0
 async function load() {
+  const version = ++loadVersion
   areasLoading.value = true
   try {
     const [areaList, wsList] = await Promise.all([fetchWorkstationAreas(), fetchWorkstations()])
+    if (version !== loadVersion || !props.visible) return
     areas.value = areaList
     workstations.value = wsList
     optionLoadError.value = ''
   } catch (e) {
+    if (version !== loadVersion || !props.visible) return
     /* 内联错误 + 重试（替代仅 toast，与 WorkstationFormDialog/LeaseFormDialog 同构） */
     optionLoadError.value = e instanceof Error ? e.message : '区域数据加载失败'
   } finally {
-    areasLoading.value = false
+    if (version === loadVersion) areasLoading.value = false
   }
 }
 
@@ -88,6 +93,11 @@ function resetForm() {
 }
 
 function openEdit(area: WorkstationArea) {
+  if (submitting.value) return
+  guardClose(() => applyEdit(area), '切换')
+}
+
+function applyEdit(area: WorkstationArea) {
   editingId.value = area.id
   form.name = area.name
   form.type = area.type
@@ -172,7 +182,7 @@ usePageDirtyGuard(computed(() => props.visible && isDirty.value))
     <t-form ref="formRef" :data="form" :rules="rules" label-align="top" class="area-form">
       <div class="form-head">
         <span class="form-title">{{ editingId ? `编辑区域：${editingArea?.name ?? ''}` : '新增区域' }}</span>
-        <t-button v-if="editingId" variant="text" size="small" @click="resetForm">取消编辑</t-button>
+        <t-button v-if="editingId" variant="text" size="small" :disabled="submitting" @click="guardClose(resetForm, '取消编辑')">取消编辑</t-button>
       </div>
       <div class="form-row">
         <t-form-item label="区域名称" name="name">

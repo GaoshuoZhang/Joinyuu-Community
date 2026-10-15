@@ -209,10 +209,14 @@ export class AppEventsService {
         throw new ConflictException('该状态不可取消报名')
       }
       if (enrollment.checkedIn) throw new ConflictException('已签到的活动不可取消报名')
+      if (enrollment.event.status === 'cancelled') throw new ConflictException('活动已取消')
+      if (enrollment.event.status === 'ended' || Date.now() >= this.parseTime(enrollment.event.endTime).getTime()) {
+        throw new ConflictException('活动已结束，不可取消报名')
+      }
 
       const cancelHours = enrollment.event.cancelDeadlineHours ?? 24
       if (enrollment.status === 'approved') {
-        const cutoff = this.parseTime(enrollment.event.startTime).getTime() - cancelHours * 3600_000
+        const cutoff = this.parseTime(enrollment.event.rescheduledTo || enrollment.event.startTime).getTime() - cancelHours * 3600_000
         if (Date.now() >= cutoff) throw new ConflictException(`活动开场前 ${cancelHours} 小时不可取消`)
       }
       await tx.eventEnrollment.update({
@@ -527,6 +531,7 @@ export class AppEventsService {
       checkinRadiusM: e.checkinRadiusM ?? 200,
       checkinOpenMin: e.checkinOpenMin ?? 30,
       checkinCloseMin: e.checkinCloseMin ?? 30,
+      cancelDeadlineHours: e.cancelDeadlineHours ?? 24,
       rescheduledTo: e.rescheduledTo ?? undefined,
       myEnrollmentStatus: mine?.status,
       myCheckedIn: mine?.checkedIn ?? false,

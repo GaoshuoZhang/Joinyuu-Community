@@ -156,7 +156,9 @@ function changeType(field: ApplicationFormField) {
 
 function addOption(field: ApplicationFormField) {
   const options = (field.options ??= [])
-  const number = options.length + 1
+  const used = new Set(options.map((option) => option.value))
+  let number = options.length + 1
+  while (used.has(`option${number}`)) number++
   options.push({ label: `选项 ${number}`, value: `option${number}` })
 }
 

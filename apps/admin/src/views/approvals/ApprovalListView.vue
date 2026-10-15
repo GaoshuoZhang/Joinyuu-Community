@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { collectAllPages, executeBulk } from '@/utils/bulkOperation'
 import { focusFirstInvalid, useDialogFormProtection } from '@/utils/form'
 import { computed, nextTick, onMounted, reactive, ref } from 'vue'
 import ListErrorState from '@/components/ListErrorState.vue'
@@ -152,6 +153,7 @@ async function onArchive(row: Application) {
 /* 一键归档：全量拉取申请，归档所选状态的已通过 / 已驳回申请 */
 const archivingAll = ref(false)
 const bulkVisible = ref(false)
+let bulkScope = { ...query }
 const bulkProgress = ref<{ done: number; total: number; failed: number } | null>(null)
 let bulkCancelled = false
 const bulkStatuses = [
@@ -160,57 +162,36 @@ const bulkStatuses = [
 ]
 
 async function doBulkArchive(values: string[]) {
-  const targets: Application[] = []
-  /* 沿用当前筛选（含申请类型）；最多 20 页（2000 条），超出时提示剩余需再次执行 */
-  let truncated = false
-  for (let page = 1; page <= 20; page++) {
-    const res = await fetchApplications({ ...query, page, pageSize: 100, status: '' })
-    targets.push(...res.list)
-    if (targets.length >= res.total || res.list.length < 100) break
-    if (page === 20) truncated = true
-  }
-  const pending = targets.filter((a) => values.includes(a.status))
-  if (!pending.length) {
-    MessagePlugin.info('没有符合所选状态的可归档申请')
-    return
-  }
-  /* 进度 + 可取消：逐条执行，取消后停止后续条目（见 BulkArchiveDialog 进度态） */
   bulkCancelled = false
-  bulkProgress.value = { done: 0, total: pending.length, failed: 0 }
-  let done = 0
-  let failed = 0
-  for (const a of pending) {
-    if (bulkCancelled) break
-    try {
-      await archiveApplication(a.id)
-    } catch {
-      failed++
+  bulkProgress.value = { done: 0, total: 0, failed: 0 }
+  try {
+    const targets = await collectAllPages<Application>(
+      (page, pageSize) => fetchApplications({ ...bulkScope, page, pageSize }), () => bulkCancelled,
+    )
+    const pending = targets.filter((row) => values.includes(row.status))
+    if (!pending.length) {
+      MessagePlugin.info(bulkCancelled ? '已取消，未执行归档' : '当前筛选范围内没有符合所选状态的记录')
+      return
     }
-    done++
-    bulkProgress.value = { done, total: pending.length, failed }
+    const result = await executeBulk(pending, (row) => archiveApplication(row.id), () => bulkCancelled,
+      (progress) => { bulkProgress.value = progress })
+    if (bulkCancelled) MessagePlugin.warning(`已取消，本次已归档 ${result.done - result.failed} 条申请`)
+    else if (result.done > result.failed) MessagePlugin.success(`已归档 ${result.done - result.failed} 条申请`)
+    if (result.failed) MessagePlugin.warning(`${result.failed} 条归档失败，请刷新后重试`)
+    await load()
+  } finally {
+    bulkProgress.value = null
   }
-  bulkProgress.value = null
-  if (bulkCancelled) {
-    MessagePlugin.warning(`已取消执行：本次已归档 ${done - failed} 条`)
-  } else {
-    if (done - failed > 0) {
-      MessagePlugin.success(
-        truncated
-          ? `已归档 ${done - failed} 条申请，剩余请再次执行`
-          : `已归档 ${done - failed} 条申请`,
-      )
-    }
-    if (failed > 0) MessagePlugin.warning(`${failed} 条申请归档失败，请重试`)
-  }
-  await load()
 }
 
 /* 确认前预估影响条数：按所选状态取 total 求和（pageSize=1 仅取 total；类型沿用当前筛选） */
 function countByStatus(status: string) {
-  return fetchApplications({ ...query, status, page: 1, pageSize: 1 }).then((r) => r.total)
+  if (bulkScope.status && bulkScope.status !== status) return Promise.resolve(0)
+  return fetchApplications({ ...bulkScope, status, page: 1, pageSize: 1 }).then((result) => result.total)
 }
 
 function onBulkArchive() {
+  bulkScope = { ...query }
   bulkVisible.value = true
 }
 
@@ -473,6 +454,7 @@ const { close: closeComment } = useDialogFormProtection(commentForm, dialogVisib
       :count-for-status="countByStatus"
       @confirm="onBulkConfirm"
       @cancel="onBulkCancel"
+
     />
   </div>
 </template>

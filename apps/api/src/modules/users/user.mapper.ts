@@ -136,7 +136,22 @@ export async function buildUserDto(prisma: PrismaService, user: UserWithIdentiti
     .filter((i) => i.type === 'community_enterprise' && i.enterpriseId != null)
     .map((i) => i.enterpriseId as string)
   const stats = await computeUserStats(prisma, user.uid, enterpriseIds)
-  return toUserDto(user, stats)
+  const dto = toUserDto(user, stats)
+  const names = user.identities.filter((row) => row.type === 'external_enterprise' && row.enterpriseName)
+    .map((row) => row.enterpriseName as string)
+  if (names.length) {
+    const profiles = await prisma.externalEnterpriseProfile.findMany({
+      where: { name: { in: names }, deletedAt: null }, select: { id: true, name: true },
+    })
+    dto.identities.forEach((identity) => {
+      if (identity.type === 'external_enterprise') {
+        const matches = profiles.filter((profile) => profile.name === identity.enterpriseName)
+        // 历史同名档案无法可靠区分，避免把用户引向任意一个档案。
+        identity.enterpriseId = matches.length === 1 ? matches[0].id : undefined
+      }
+    })
+  }
+  return dto
 }
 
 /* 批量组装（BE-M7 N+1 修复）：取代逐行 buildUserDto/3 次 count 的逐行查询。

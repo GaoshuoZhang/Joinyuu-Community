@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { collectAllPages, executeBulk } from '@/utils/bulkOperation'
 import { computed, onMounted, reactive, ref } from 'vue'
 import ListErrorState from '@/components/ListErrorState.vue'
 import { useListQueryState } from '@/utils/listQuery'
@@ -46,7 +47,7 @@ const dataColumns = [
   { colKey: 'status', title: '状态', cell: 'status', width: 90, resizable: true , ellipsis: true},
   { colKey: 'createdAt', title: '下单时间', width: 170, resizable: true , ellipsis: true},
   /* 操作列最宽场景为「核销 / 退款 / 详情」三按钮并排，需留足宽度避免换行溢出 */
-  { colKey: 'op', title: '操作', cell: 'op', width: 200 },
+  { colKey: 'op', fixed: 'right' as const, title: '操作', cell: 'op', width: 200 },
 ]
 
 /* 列配置：本地持久化显隐/顺序 */
@@ -147,6 +148,7 @@ async function onArchive(row: RedemptionOrder) {
 /* 一键归档：按当前筛选全量拉取，归档所选状态的订单（已完成 / 已取消） */
 const archivingAll = ref(false)
 const bulkVisible = ref(false)
+let bulkScope = { ...query }
 const bulkProgress = ref<{ done: number; total: number; failed: number } | null>(null)
 let bulkCancelled = false
 const bulkStatuses = [
@@ -159,48 +161,36 @@ function onBulkCancel() {
 }
 
 async function doBulkArchive(values: string[]) {
-  const targets: RedemptionOrder[] = []
-  for (let page = 1; page <= 20; page++) {
-    const res = await fetchRedemptionOrders({ ...query, page, pageSize: 100 })
-    targets.push(...res.list)
-    if (targets.length >= res.total || res.list.length < 100) break
-  }
-  const pending = targets.filter((o) => values.includes(o.status))
-  if (!pending.length) {
-    MessagePlugin.info('没有符合所选状态的可归档订单')
-    return
-  }
-  /* 进度 + 可取消：逐条执行，取消后停止后续条目（与项目/活动等一键归档口径一致） */
   bulkCancelled = false
-  bulkProgress.value = { done: 0, total: pending.length, failed: 0 }
-  let done = 0
-  let failed = 0
-  for (const o of pending) {
-    if (bulkCancelled) break
-    try {
-      await archiveOrder(o.id)
-    } catch {
-      failed++
+  bulkProgress.value = { done: 0, total: 0, failed: 0 }
+  try {
+    const targets = await collectAllPages<RedemptionOrder>(
+      (page, pageSize) => fetchRedemptionOrders({ ...bulkScope, page, pageSize }), () => bulkCancelled,
+    )
+    const pending = targets.filter((row) => values.includes(row.status))
+    if (!pending.length) {
+      MessagePlugin.info(bulkCancelled ? '已取消，未执行归档' : '当前筛选范围内没有符合所选状态的记录')
+      return
     }
-    done++
-    bulkProgress.value = { done, total: pending.length, failed }
+    const result = await executeBulk(pending, (row) => archiveOrder(row.id), () => bulkCancelled,
+      (progress) => { bulkProgress.value = progress })
+    if (bulkCancelled) MessagePlugin.warning(`已取消，本次已归档 ${result.done - result.failed} 条订单`)
+    else if (result.done > result.failed) MessagePlugin.success(`已归档 ${result.done - result.failed} 条订单`)
+    if (result.failed) MessagePlugin.warning(`${result.failed} 条归档失败，请刷新后重试`)
+    await load()
+  } finally {
+    bulkProgress.value = null
   }
-  bulkProgress.value = null
-  if (bulkCancelled) {
-    MessagePlugin.warning(`已取消执行：本次已归档 ${done - failed} 条`)
-  } else {
-    if (done - failed > 0) MessagePlugin.success(`已归档 ${done - failed} 条订单`)
-    if (failed > 0) MessagePlugin.warning(`${failed} 条订单归档失败，请重试`)
-  }
-  await load()
 }
 
 /* 确认前预估影响条数：按所选状态取 total（pageSize=1 仅取 total） */
 function countByStatus(status: string) {
-  return fetchRedemptionOrders({ ...query, status, page: 1, pageSize: 1 }).then((r) => r.total)
+  if (bulkScope.status && bulkScope.status !== status) return Promise.resolve(0)
+  return fetchRedemptionOrders({ ...bulkScope, status, page: 1, pageSize: 1 }).then((result) => result.total)
 }
 
 function onBulkArchive() {
+  bulkScope = { ...query }
   bulkVisible.value = true
 }
 
@@ -303,7 +293,7 @@ onMounted(load)
     </div>
 
     <div class="page-card">
-      <t-table
+      <t-table :horizontal-scroll-affixed-bottom="{ container: '.page-scroll', offsetBottom: 0 }"
   row-key="id"
   table-layout="fixed"
   hover
@@ -413,6 +403,7 @@ onMounted(load)
       :count-for-status="countByStatus"
       @confirm="onBulkConfirm"
       @cancel="onBulkCancel"
+
     />
   </div>
 </template>

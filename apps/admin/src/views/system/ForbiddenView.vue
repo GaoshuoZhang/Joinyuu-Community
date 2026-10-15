@@ -14,7 +14,7 @@ const canGoHome = computed(() => homePath.value !== route.path)
 
 <template>
   <div class="forbidden page-fade-in">
-    <t-empty description="无权限访问该页面，请联系管理员开通权限">
+    <t-empty title="无权限访问" description="请联系管理员开通该页面权限">
       <template #image>
         <div class="code">403</div>
       </template>

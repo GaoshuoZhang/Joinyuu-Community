@@ -60,7 +60,7 @@ watch(
   },
 )
 
-/* 未保存保护：footer 取消 / X / Esc 均经 dirty guard 判断（有改动时确认后再关） */
+/* 未保存保护：footer 取消与 X 经 dirty guard 判断；此弹窗禁用 Esc 关闭。 */
 function onClose() {
   guardClose(() => emit('update:visible', false))
 }

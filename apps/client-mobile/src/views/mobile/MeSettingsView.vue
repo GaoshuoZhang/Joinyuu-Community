@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
 import { useRouter } from 'vue-router'
-import { ActionSheet, Cell, CellGroup, DialogPlugin } from 'tdesign-mobile-vue'
+import { ActionSheet, Button, Cell, CellGroup, DialogPlugin } from 'tdesign-mobile-vue'
 import { useAuthStore } from '@/stores/auth'
 import { getThemeMode, setThemeMode, themeModeLabel, type ThemeMode } from '@/utils/theme'
 
@@ -71,10 +71,10 @@ async function doLogout() {
       </router-link>
     </CellGroup>
     <CellGroup theme="card">
-      <button class="cell-action" type="button" :aria-label="`深色模式，当前${themeLabel}`" @click="themeSheetVisible = true"><Cell title="深色模式" :note="themeLabel" arrow /></button>
+      <Button class="cell-action" variant="text" block :aria-label="`深色模式，当前${themeLabel}`" @click="themeSheetVisible = true"><Cell title="深色模式" :note="themeLabel" arrow /></Button>
     </CellGroup>
     <CellGroup theme="card">
-      <button class="cell-action" type="button" @click="onLogout"><Cell class="logout" title="退出登录" :bordered="false" /></button>
+      <Button class="cell-action" variant="text" block @click="onLogout"><Cell class="logout" title="退出登录" :bordered="false" /></Button>
     </CellGroup>
 
     <!-- TDesign 该版本 ActionSheet 只发 update:modelValue（cancel/close 事件不触发），
@@ -110,7 +110,8 @@ async function doLogout() {
   color: var(--td-error-color);
 }
 
+.cell-action :deep(.t-button__content) { display: block; width: 100%; }
 .cell-link { display: block; color: inherit; text-decoration: none; }
-.cell-action { display: block; width: 100%; padding: 0; border: 0; background: transparent; text-align: left; cursor: pointer; }
+.cell-action { display: block; width: 100%; height: auto; min-height: 48px; padding: 0; border: 0; background: transparent; text-align: left; cursor: pointer; }
 .cell-link:focus-visible, .cell-action:focus-visible { outline: 2px solid var(--td-brand-color); outline-offset: -2px; }
 </style>

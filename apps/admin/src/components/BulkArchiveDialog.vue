@@ -28,6 +28,7 @@ const checked = ref<string[]>([])
 const estimated = ref<number | null>(null)
 const estimating = ref(false)
 const estimateFailed = ref(false)
+let estimateVersion = 0
 
 const running = computed(() => props.progress != null)
 const percent = computed(() => {
@@ -47,6 +48,8 @@ watch(
 )
 
 watch([checked, () => props.visible], async ([values, visible]) => {
+  const version = ++estimateVersion
+  estimating.value = false
   if (!visible || !props.countForStatus) return
   if (!values.length) {
     estimated.value = 0
@@ -57,11 +60,13 @@ watch([checked, () => props.visible], async ([values, visible]) => {
   estimateFailed.value = false
   try {
     const totals = await Promise.all(values.map((s) => props.countForStatus!(s)))
+    if (version !== estimateVersion) return
     estimated.value = totals.reduce((sum, n) => sum + n, 0)
   } catch {
+    if (version !== estimateVersion) return
     estimateFailed.value = true
   } finally {
-    estimating.value = false
+    if (version === estimateVersion) estimating.value = false
   }
 })
 
@@ -71,7 +76,7 @@ function onClose() {
 }
 
 function onConfirm() {
-  if (!checked.value.length || props.loading) return
+  if (!checked.value.length || props.loading || running.value || estimating.value || estimateFailed.value) return
   emit('confirm', [...checked.value])
 }
 </script>
@@ -92,13 +97,13 @@ function onConfirm() {
       </p>
     </template>
     <template v-else>
-      <p class="archive-tip">选择需要归档的状态（默认全选）：</p>
+      <p class="archive-tip">仅归档打开弹窗时当前筛选范围内、符合以下状态的记录：</p>
       <t-checkbox-group v-model="checked" :disabled="loading">
         <t-checkbox v-for="s in statuses" :key="s.value" :value="s.value">{{ s.label }}</t-checkbox>
       </t-checkbox-group>
       <p v-if="props.countForStatus" class="archive-estimate" :class="{ 'is-error': estimateFailed }">
         <template v-if="estimating">正在统计影响范围…</template>
-        <template v-else-if="estimateFailed">影响条数统计失败，可继续执行</template>
+        <template v-else-if="estimateFailed">影响条数统计失败，请关闭后重试</template>
         <template v-else>预计影响 {{ estimated ?? '—' }} 条记录</template>
       </p>
     </template>
@@ -108,7 +113,7 @@ function onConfirm() {
         <t-button v-else variant="text" theme="default" :disabled="loading" @click="onClose">取消</t-button>
         <t-button
           theme="warning"
-          :disabled="!running && checked.length === 0"
+          :disabled="!running && (checked.length === 0 || estimating || estimateFailed || estimated === 0)"
           :loading="running || loading"
           @click="onConfirm"
         >

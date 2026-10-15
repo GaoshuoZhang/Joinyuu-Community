@@ -394,8 +394,8 @@ export interface HomeArticleCard {
 export interface LoginPayload {
   identifier: string
   password: string
-  captchaCode: string
-  captchaId: string
+  captchaCode?: string
+  captchaId?: string
 }
 
 export interface RegisterPayload {
@@ -623,6 +623,8 @@ export interface DemandRespondPayload {
 export type EventStatus = 'pending_release' | 'scheduled' | 'published' | 'ended' | 'cancelled'
 
 export interface CommunityEvent {
+  cancelDeadlineHours?: number
+  rescheduledTo?: string
   id: string
   title: string
   coverUrl?: string
@@ -1189,6 +1191,9 @@ export interface Milestone {
 }
 
 export interface MyProject {
+  demanderName?: string
+  canSubmit?: boolean
+  canAccept?: boolean
   id: string
   name: string
   role: '需求发起方' | '本人承接' | '企业承接'

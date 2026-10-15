@@ -49,7 +49,7 @@ const columns = [
   { colKey: 'status', title: '状态', cell: 'status', width: 100, resizable: true, ellipsis: true },
   { colKey: 'waitlistOrder', title: '候补顺序', cell: 'waitlistOrder', width: 100, resizable: true, ellipsis: true },
   { colKey: 'checkedIn', title: '签到', cell: 'checkedIn', width: 90, resizable: true, ellipsis: true },
-  { colKey: 'op', title: '操作', cell: 'op', width: 170 },
+  { colKey: 'op', fixed: 'right' as const, title: '操作', cell: 'op', width: 170 },
 ]
 
 /* 列配置：本地持久化显隐/顺序 */
@@ -263,7 +263,7 @@ const { close: closeRejectDialog } = useDialogFormProtection(rejectForm, rejectV
     </div>
 
     <div class="page-card">
-      <t-table
+      <t-table :horizontal-scroll-affixed-bottom="{ container: '.page-scroll', offsetBottom: 0 }"
         :row-key="(row: EventEnrollmentRecord) => `${row.eventId}:${row.userId}`"
         table-layout="fixed"
         hover

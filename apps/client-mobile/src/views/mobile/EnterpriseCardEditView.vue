@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, onMounted, reactive, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { Button, Cell, CheckTag, DateTimePicker, Input, Popup, Textarea, Toast } from 'tdesign-mobile-vue'
+import { Button, Cell, RadioGroup, DateTimePicker, Input, Popup, Textarea, Toast } from 'tdesign-mobile-vue'
 import { fetchCardSchema, fetchEnterpriseDetail, updateMyEnterprise } from '@/api/enterprises'
 import { useAsyncList } from '@/composables/useAsyncList'
 import { useBusinessNow } from '@/composables/useBusinessNow'
@@ -39,7 +39,12 @@ const canEdit = computed(
   () => data.value?.isContact === true || (data.value?.myPermissions ?? []).includes('edit_card'),
 )
 
-const SIZE_OPTIONS = ['1-9 人', '10-49 人', '50-99 人', '100 人以上']
+// 与后台规模选项一致；历史分段不强行换算人数，保留原值供用户确认。
+const SIZE_OPTIONS = ['10人以下', '10-50人', '50-100人', '100人以上']
+const sizeOptions = computed(() => {
+  const legacy = data.value?.size
+  return legacy && !SIZE_OPTIONS.includes(legacy) ? [...SIZE_OPTIONS, legacy] : SIZE_OPTIONS
+})
 const form = reactive({
   logo: '',
   industry: '',
@@ -63,7 +68,7 @@ const websiteError = computed(() => {
 const formErrors = reactive({ industry: '', size: '', description: '' })
 function validate(): string {
   formErrors.industry = editable('industry') && !form.industry.trim() ? '请输入所属行业' : ''
-  formErrors.size = editable('size') && !form.size ? '请选择企业规模' : ''
+  formErrors.size = editable('size') && !sizeOptions.value.includes(form.size) ? '请选择企业规模' : ''
   formErrors.description = editable('description') && form.description.trim().length < 10 ? '企业简介至少 10 个字' : ''
   return formErrors.industry || formErrors.size || formErrors.description || websiteError.value
 }
@@ -171,19 +176,7 @@ async function onSave() {
         </div>
         <div v-if="editable('size')" class="field">
           <span class="field-label">企业规模</span>
-          <div class="chips">
-            <CheckTag
-              v-for="s in SIZE_OPTIONS"
-              :key="s"
-              class="chip"
-              size="medium"
-              variant="light"
-              :checked="form.size === s"
-              @click="form.size = s"
-            >
-              {{ s }}
-            </CheckTag>
-          </div>
+          <RadioGroup role="radiogroup" name="enterprise-size" v-model="form.size" :options="sizeOptions" aria-label="企业规模" />
           <p v-if="formErrors.size" class="field-error">{{ formErrors.size }}</p>
         </div>
         <div v-if="editable('foundedAt')" class="field">
@@ -191,9 +184,10 @@ async function onSave() {
           <Cell v-pressable class="date-trigger" :title="form.foundedAt || '请选择成立时间'" arrow @click="openFoundedPicker" />
           <Popup v-model:visible="foundedVisible" placement="bottom">
             <DateTimePicker
-              v-model="foundedValue"
+              v-model:value="foundedValue"
               mode="month"
               format="YYYY-MM"
+              start="1800-01"
               :end="nowMonth"
               title="选择成立时间"
               @confirm="onFoundedConfirm"

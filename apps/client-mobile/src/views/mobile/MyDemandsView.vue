@@ -97,8 +97,8 @@ function onWithdrawDemand(d: MyDemandItem) {
   >
     <Button theme="primary" block class="publish" @click="router.push('/demands/new')">发布需求</Button>
 
-    <Tabs v-model="activeTab" class="top-tabs" :swipeable="false">
-      <TabPanel v-for="tab in TABS" :key="tab.value" :value="tab.value" :label="tab.label">
+    <Tabs :data-tab-values="JSON.stringify(TABS.map((tab) => tab.value))" v-model="activeTab" class="top-tabs" :swipeable="false">
+      <TabPanel v-for="tab in TABS" :key="tab.value" :data-tab-value="tab.value" :value="tab.value" :label="tab.label">
         <div v-if="activeTab === tab.value" class="tab-panel">
           <ListSkeleton v-if="loading && !items.length" />
           <EmptyBlock v-else-if="error" :text="error" action-text="重试" @action="run" />

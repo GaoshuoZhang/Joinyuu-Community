@@ -78,7 +78,7 @@ function clearDeliverBy() {
       <Button v-if="deliverBy" size="small" variant="text" class="date-clear" @click="clearDeliverBy">清除</Button>
       <Popup :visible="showDeliverBy" placement="bottom" @update:visible="(value: boolean) => emit('update:showDeliverBy', value)">
         <DateTimePicker
-          v-model="draftDeliverBy"
+          v-model:value="draftDeliverBy"
           mode="date"
           format="YYYY-MM-DD"
           :start="todayStr"

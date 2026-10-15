@@ -194,7 +194,7 @@ const enrollmentColumns = [
   { colKey: 'appliedAt', title: '报名时间', width: 170 , ellipsis: true},
   { colKey: 'status', title: '状态', cell: 'status', width: 96 , ellipsis: true},
   { colKey: 'waitlistOrder', title: '候补顺序', cell: 'waitlistOrder', width: 96, ellipsis: true },
-  { colKey: 'op', title: '操作', cell: 'op', width: 120 },
+  { colKey: 'op', fixed: 'right' as const, title: '操作', cell: 'op', width: 120 },
 ]
 
 const checkInColumns = [
@@ -203,7 +203,7 @@ const checkInColumns = [
   { colKey: 'checkedIn', title: '签到状态', cell: 'checkState', width: 140 , ellipsis: true},
   { colKey: 'checkinMethod', title: '签到方式', cell: 'checkinMethod', width: 110, ellipsis: true },
   { colKey: 'checkinLocation', title: '签到坐标', cell: 'checkinLocation', width: 180, ellipsis: true },
-  { colKey: 'op', title: '操作', cell: 'op', width: 120 },
+  { colKey: 'op', fixed: 'right' as const, title: '操作', cell: 'op', width: 120 },
 ]
 
 let ticketsVersion = 0

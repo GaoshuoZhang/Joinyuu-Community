@@ -72,18 +72,22 @@ const pagination = computed(() => ({
   showJumper: true,
 }))
 
+let loadRequest = 0
 async function load() {
+  const requestId = ++loadRequest
   syncQuery()
   loading.value = true
   loadError.value = ''
   try {
     const res = await fetchDemands({ ...query, sortBy: sortBy.value, sortOrder: sortOrder.value })
+    if (requestId !== loadRequest) return
     list.value = res.list
     total.value = res.total
   } catch (e) {
+    if (requestId !== loadRequest) return
     loadError.value = e instanceof Error ? e.message : '数据加载失败'
   } finally {
-    loading.value = false
+    if (requestId === loadRequest) loading.value = false
   }
 }
 

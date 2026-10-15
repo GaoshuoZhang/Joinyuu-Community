@@ -49,7 +49,7 @@ const statusOptions = [
 ]
 
 const columns = [
-  { colKey: 'title', title: '资讯', cell: 'title', width: 160, ellipsis: true, resizable: true },
+  { colKey: 'title', fixed: 'left' as const, title: '资讯', cell: 'title', width: 160, ellipsis: true, resizable: true },
   { colKey: 'author', title: '作者', cell: 'author', width: 150, resizable: true , ellipsis: true},
   { colKey: 'columns', title: '栏目', cell: 'columns', width: 110, resizable: true , ellipsis: true},
   { colKey: 'status', title: '状态', cell: 'status', width: 130, resizable: true , ellipsis: true},
@@ -73,19 +73,22 @@ const pagination = computed(() => ({
   showJumper: true,
 }))
 
+let loadRequest = 0
 async function load() {
+  const requestId = ++loadRequest
   syncQuery()
   loading.value = true
   loadError.value = ''
   try {
     const res = await fetchArticles({ ...query, channel: 'official', status: query.status || undefined })
+    if (requestId !== loadRequest) return
     list.value = res.list
     total.value = res.total
   } catch (e) {
+    if (requestId !== loadRequest) return
     loadError.value = e instanceof Error ? e.message : '数据加载失败'
-    MessagePlugin.error(e instanceof Error ? e.message : '数据加载失败')
   } finally {
-    loading.value = false
+    if (requestId === loadRequest) loading.value = false
   }
 }
 

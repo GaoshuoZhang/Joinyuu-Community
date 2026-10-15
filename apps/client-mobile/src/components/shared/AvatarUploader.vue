@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
-import { Avatar, Toast, Upload } from 'tdesign-mobile-vue'
+import { Avatar, Button, Toast, Upload } from 'tdesign-mobile-vue'
 import type { UploadFile } from 'tdesign-mobile-vue'
 import { uploadFile } from '@/api/uploads'
 import { ApiError } from '@/api/http'
@@ -85,17 +85,17 @@ function updateFiles(value: UploadFile[]) {
     @validate="onValidate"
   >
     <template #addContent>
-      <!-- 原生 button：库的触发区是无语义 <div onClick>，可访问名称需落在可聚焦控件上才生效；
-           点击会冒泡到库的 onClick，无需自建激活逻辑 -->
-      <button type="button" class="avatar-trigger" :class="`shape-${shape}`" :style="{ '--avatar-size': size }" :aria-label="shape === 'round' ? '上传企业 Logo' : '更换头像'">
+      <!-- 具名按钮的点击冒泡至 Upload 触发文件选择。 -->
+      <Button variant="text" class="avatar-trigger" :disabled="uploading" :class="`shape-${shape}`" :style="{ '--avatar-size': size }" :aria-label="shape === 'round' ? '上传企业 Logo' : '更换头像'">
         <Avatar :size="size" :shape="shape" :image="avatarImage" class="avatar-el" :on-error="onAvatarError">{{ fallback }}</Avatar>
         <span class="mask">{{ uploading ? '上传中…' : '更换' }}</span>
-      </button>
+      </Button>
     </template>
   </Upload>
 </template>
 
 <style scoped>
+.avatar-trigger :deep(.t-button__content) { display: block; }
 .avatar-uploader {
   display: inline-block;
   width: auto;

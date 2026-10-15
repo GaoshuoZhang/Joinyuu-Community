@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { Button } from 'tdesign-mobile-vue'
 import { onBeforeUnmount, onMounted, ref, watch, watchEffect } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import SkipLink from '@/components/shared/SkipLink.vue'
@@ -45,7 +46,7 @@ watchEffect(() => {
   <SkipLink />
   <aside v-if="customerTheme.preview" ref="previewBanner" class="theme-preview-banner" aria-label="主题预览">
     <span role="status">{{ customerTheme.error || `正在预览：${customerTheme.theme?.name || '加载中'}（仅当前窗口生效）` }}</span>
-    <button type="button" @click="customerTheme.exitPreview">退出预览</button>
+    <Button variant="text" type="button" @click="customerTheme.exitPreview">退出预览</Button>
   </aside>
   <router-view />
 </template>

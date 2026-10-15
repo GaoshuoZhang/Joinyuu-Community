@@ -48,6 +48,21 @@ export function actionIdentityOptions(identities: readonly UserIdentity[]): User
   return identities.filter((identity) => !hasCommunityIndividual || identity.type !== 'individual')
 }
 
+/** 企业行为身份只能采用权限接口确认的企业，不能由登录会话快照补回。 */
+export function authorizedActionIdentities(base: readonly UserIdentity[], permitted: readonly UserIdentity[]): UserIdentity[] {
+  const companies = new Map(permitted.filter((identity) => identity.type === 'community_enterprise' && identity.enterpriseId)
+    .map((identity) => [identity.enterpriseId, identity]))
+  const seen = new Set<string>()
+  return actionIdentityOptions([...base, ...permitted].flatMap((identity) => {
+    const current = identity.type === 'community_enterprise' ? companies.get(identity.enterpriseId) : identity
+    if (!current) return []
+    const key = `${current.type}:${current.enterpriseId ?? current.organizationName ?? ''}`
+    if (seen.has(key)) return []
+    seen.add(key)
+    return [current]
+  }))
+}
+
 export const useAuthStore = defineStore('auth', () => {
   const persistedToken = localStorage.getItem(TOKEN_KEY) ?? ''
   const token = ref(persistedToken)

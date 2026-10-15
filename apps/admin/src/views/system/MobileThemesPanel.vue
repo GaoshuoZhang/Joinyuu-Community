@@ -1,9 +1,11 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
 import { DialogPlugin, MessagePlugin } from 'tdesign-vue-next'
+import type { UploadFile } from 'tdesign-vue-next'
 import PageHeader from '@/components/PageHeader.vue'
 import ListErrorState from '@/components/ListErrorState.vue'
 import { fetchSystemConfig } from '@/api/systemConfig'
+import { parseMobileUrl } from '@/utils/mobileUrl'
 import { fetchLicense } from '@/api/license'
 import { activateMobileTheme, fetchMobileThemes, previewMobileTheme, resetMobileTheme, deleteMobileTheme, uploadMobileTheme, type MobileThemeList } from '@/api/mobileThemes'
 
@@ -14,8 +16,8 @@ const loadError = ref('')
 const actionError = ref('')
 // Unknown until both requests succeed; a failed list request is not a license verdict.
 const writable = ref<boolean | null>(null)
-const file = ref<File | null>(null)
-const fileInput = ref<HTMLInputElement>()
+const themeFiles = ref<UploadFile[]>([])
+const file = computed(() => themeFiles.value[0]?.raw ?? null)
 const previewUrl = ref('')
 const previewExpires = ref('')
 const mobileUrl = ref('localhost:7759')
@@ -35,24 +37,17 @@ async function load() {
   finally { loading.value = false }
 }
 onMounted(load)
-function selectFile(event: Event) {
-  const selected = (event.target as HTMLInputElement).files?.[0] ?? null
-  if (selected && (!selected.name.toLowerCase().endsWith('.zip') || selected.size > 10 * 1024 * 1024)) {
-    MessagePlugin.error('请选择不超过 10 MB 的 ZIP 文件')
-    if (fileInput.value) fileInput.value.value = ''
-    file.value = null
-    return
-  }
-  file.value = selected
-}
 async function upload() {
   if (!file.value) return
+  if (!file.value.name.toLowerCase().endsWith('.zip') || file.value.size > 10 * 1024 * 1024) {
+    MessagePlugin.error('请选择不超过 10 MB 的 ZIP 文件')
+    return
+  }
   actionError.value = ''
   busy.value = true
   try {
     await uploadMobileTheme(file.value)
-    file.value = null
-    if (fileInput.value) fileInput.value.value = ''
+    themeFiles.value = []
     MessagePlugin.success('主题包已上传，预览确认后即可启用')
     await load()
   } catch (e) { actionError.value = message(e); MessagePlugin.error(actionError.value) }
@@ -75,8 +70,11 @@ async function preview(id: string) {
   try {
     const config = await fetchSystemConfig()
     mobileUrl.value = config.mobileUrl
-    const target = new URL(mobileUrl.value.includes('://') ? mobileUrl.value : `http://${mobileUrl.value}`)
-    if (!['http:', 'https:'].includes(target.protocol) || target.username || target.password || target.hash || target.search) throw new Error('请先在系统配置中填写有效的移动端访问地址')
+    const target = parseMobileUrl(mobileUrl.value)
+    if (!target) throw new Error('请先在系统配置中填写有效的移动端访问地址')
+    if (['localhost', '127.0.0.1', '[::1]'].includes(target.hostname) && !['localhost', '127.0.0.1', '[::1]'].includes(location.hostname)) {
+      throw new Error('移动端地址指向本机，请先在系统配置中填写用户可访问的部署地址')
+    }
     const grant = await previewMobileTheme(id)
     previewPackageId.value = id
     target.searchParams.set('themePreview', grant.token)
@@ -119,8 +117,7 @@ function confirmDelete(id: string, name: string, version: string) {
         <t-card title="上传主题包" :bordered="false">
           <p id="theme-file-help" class="theme-note">支持主题协议 v1，ZIP 最大 10 MB。包内包含 manifest.json 和 PNG、JPEG、WebP 图片；上传后不会自动启用。</p>
           <div class="theme-upload">
-            <label for="theme-file">主题包文件</label>
-            <input id="theme-file" ref="fileInput" type="file" accept=".zip,application/zip" aria-describedby="theme-file-help" :disabled="busy || loading || !writable" @change="selectFile" />
+            <t-upload v-model="themeFiles" accept=".zip,application/zip" :auto-upload="false" :max="1" :size-limit="{ size: 10, unit: 'MB' }" aria-label="选择主题包文件" aria-describedby="theme-file-help" :disabled="busy || loading || !writable" />
             <t-button :loading="busy" :disabled="!file || loading || !writable" @click="upload">上传主题包</t-button>
           </div>
         </t-card>

@@ -1,17 +1,15 @@
 <script setup lang="ts">
-import { computed, onMounted, reactive, ref } from 'vue'
+import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref } from 'vue'
 import { focusFirstInvalid, useDialogFormProtection } from '@/utils/form'
 import { MessagePlugin } from 'tdesign-vue-next'
-import { AddIcon } from 'tdesign-icons-vue-next'
+import { buildSmsTemplateMapping, fixedChannelOfKind } from '@/utils/notificationSettings'
 import ListErrorState from '@/components/ListErrorState.vue'
-import ListEmptyState from '@/components/ListEmptyState.vue'
 import StatusTag from '@/components/StatusTag.vue'
 import {
   fetchMessageChannelCatalog,
   fetchMessageChannels,
-  saveMessageChannel,
+  saveFixedMessageChannel,
   testSendMessageChannel,
-  toggleMessageChannel,
 } from '@/api/messageChannels'
 import type {
   MessageChannel,
@@ -19,10 +17,17 @@ import type {
   MessageProviderMeta,
 } from '@/types'
 
-/* 消息中心 · 渠道配置（P0）：按 短信 / 邮箱 / 站内信 分块维护；
+/* 通知渠道配置：短信、邮箱、站内信各一个固定设置；
  * 非机密配置在后台直接维护，凭据支持「直接填写密钥」与「登记环境变量名」。
- * 配置后可在编辑弹窗内「保存并测试连通」，也可在列表行直接测试发送。 */
+ * 短信模板以字段行维护；地区、端点等可选参数集中在高级设置。 */
 const loading = ref(true)
+const narrowViewport = window.matchMedia('(max-width: 767px)')
+const detailsColumns = ref(narrowViewport.matches ? 1 : 2)
+function syncDetailsColumns() {
+  detailsColumns.value = narrowViewport.matches ? 1 : 2
+}
+onMounted(() => narrowViewport.addEventListener('change', syncDetailsColumns))
+onBeforeUnmount(() => narrowViewport.removeEventListener('change', syncDetailsColumns))
 const loadError = ref('')
 const channels = ref<MessageChannel[]>([])
 const catalog = ref<{ kinds: MessageChannelKind[]; providers: MessageProviderMeta[] }>({
@@ -31,7 +36,7 @@ const catalog = ref<{ kinds: MessageChannelKind[]; providers: MessageProviderMet
 })
 
 const KIND_GROUPS: { kind: MessageChannelKind; label: string; desc: string }[] = [
-  { kind: 'sms', label: '短信', desc: '阿里云 / 腾讯云短信签名与模板映射' },
+  { kind: 'sms', label: '短信', desc: '选择一家供应商，填写签名、凭据和模板编号' },
   { kind: 'email', label: '邮箱', desc: 'SMTP 主机、端口与授权码' },
   { kind: 'inapp', label: '站内信', desc: '站内通知，无需外部凭据' },
 ]
@@ -52,47 +57,31 @@ async function load() {
 
 onMounted(load)
 
-const columns = [
-  { colKey: 'name', title: '渠道名称', width: 200 },
-  { colKey: 'provider', title: '驱动', width: 180 },
-  { colKey: 'enabled', title: '启用', width: 90 },
-  { colKey: 'credential', title: '凭据', width: 180 },
-  { colKey: 'dailyLimit', title: '每日上限', width: 110 },
-  { colKey: 'updatedAt', title: '最近保存', width: 170 },
-  { colKey: 'op', title: '操作', width: 170, fixed: 'right' as const },
-]
-
-/** 分组卡片内的表格列（去类型列，由卡片标题体现） */
-const groupedColumns = columns.filter((col) => col.colKey !== 'kind')
-
-function channelsOfKind(kind: MessageChannelKind): MessageChannel[] {
-  return channels.value.filter((c) => c.kind === kind)
+/** 与服务端投递选择顺序一致，兼容已有多供应商记录；保存后只保留一个生效配置。 */
+function channelOfKind(kind: MessageChannelKind): MessageChannel | undefined {
+  return fixedChannelOfKind(channels.value, kind)
+}
+function openConfigure(kind: MessageChannelKind) {
+  const row = channelOfKind(kind)
+  if (row) openEdit(row)
+  else openCreate(kind)
+}
+const mappings = ref<{ code: string; templateId: string }[]>([])
+const advanced = ref<(string | number)[]>([])
+const isSms = computed(() => form.kind === 'sms')
+const basicFields = computed(() => (currentMeta.value?.configFields ?? []).filter(field =>
+  isSms.value ? ['signName', 'sdkAppId'].includes(field.key) : !['domainVerified'].includes(field.key)))
+const advancedFields = computed(() => (currentMeta.value?.configFields ?? []).filter(field =>
+  isSms.value ? !['signName', 'sdkAppId', 'templateMapping'].includes(field.key) : field.key === 'domainVerified'))
+function readMappings() {
+  const raw = form.config.templateMapping
+  const parsed = raw ? JSON.parse(raw) as Record<string, string> : {}
+  mappings.value = Object.entries(parsed).map(([code, templateId]) => ({ code, templateId: String(templateId) }))
+  if (!mappings.value.length) mappings.value = [{ code: 'verify_code', templateId: '' }]
 }
 
-/* 启停切换互斥：请求期间该行开关保持 loading，避免并发切换 */
-const toggling = ref('')
-
-async function onToggle(row: MessageChannel, value: boolean) {
-  if (toggling.value) return
-  const previous = row.enabled
-  row.enabled = value
-  toggling.value = row.id
-  try {
-    await toggleMessageChannel(row.id, value)
-    MessagePlugin.success(value ? '渠道已启用' : '渠道已停用')
-  } catch (error) {
-    row.enabled = previous
-    MessagePlugin.error(error instanceof Error ? error.message : '操作失败')
-  } finally {
-    toggling.value = ''
-  }
-}
-
-/* ---------- 新增 / 编辑 ---------- */
 const formVisible = ref(false)
-const formMode = ref<'create' | 'edit'>('create')
 const formRef = ref()
-const editingId = ref('')
 const form = reactive({
   kind: 'sms' as MessageChannelKind,
   provider: 'aliyun_sms',
@@ -105,11 +94,9 @@ const form = reactive({
   credentialEnv: {} as Record<string, string>,
 })
 
-const providerOptions = computed(() =>
-  catalog.value.providers
-    .filter((p) => p.supports.includes(form.kind))
-    .map((p) => ({ label: p.label, value: p.provider })),
-)
+const providerOptions = computed(() => catalog.value.providers
+  .filter(provider => provider.supports.includes(form.kind) && provider.provider !== 'dry_run')
+  .map(provider => ({ label: provider.label, value: provider.provider })))
 
 const currentMeta = computed(() => catalog.value.providers.find((p) => p.provider === form.provider))
 
@@ -135,19 +122,15 @@ function credentialFieldMeta(key: string): { label?: string; hint?: string } | u
   return currentMeta.value?.credentialConfigFields?.find((field) => field.key === key)
 }
 
-function onKindChange(kind: MessageChannelKind) {
-  form.kind = kind
-  const first = catalog.value.providers.find((p) => p.supports.includes(kind))
-  form.provider = first?.provider ?? ''
-  resetProviderFields()
-}
-
 function resetProviderFields() {
   form.config = {}
+  credentialMasked.value = {}
+  mappings.value = [{ code: 'verify_code', templateId: '' }]
   form.credentialEnv = {}
   for (const key of currentMeta.value?.credentialKeys ?? []) {
     form.credentialEnv[key] = ''
   }
+  void nextTick(() => formRef.value?.clearValidate?.())
 }
 
 /* ---------- 凭据来源（inline 直接填写 / env 环境变量名） ---------- */
@@ -163,12 +146,13 @@ function onCredentialModeChange(mode: 'inline' | 'env') {
 
 function credentialModeHint(): string {
   return form.credentialMode === 'inline'
-    ? '密钥写入数据库仅供服务端调用：接口不回传、审计不记录；留空表示保持原值'
+    ? '凭据仅供服务端调用，填写后不再回显；同一供应商留空保持原值，切换供应商需重新填写'
     : '仅登记环境变量名，值由部署侧注入（大写字母开头，仅含大写字母/数字/下划线）'
 }
 
 function credentialLabel(key: string): string {
-  return credentialFieldMeta(key)?.label ?? (form.credentialMode === 'env' ? `${key}（环境变量名）` : key)
+  const label = credentialFieldMeta(key)?.label ?? ({ accessKeyId: 'AccessKey ID', accessKeySecret: 'AccessKey Secret', secretId: 'SecretId', secretKey: 'SecretKey' } as Record<string, string>)[key] ?? key
+  return form.credentialMode === 'env' ? `${label}（环境变量名）` : label
 }
 
 function credentialHint(key: string): string {
@@ -187,24 +171,26 @@ function credentialPlaceholder(key: string): string {
 }
 
 function openCreate(kind: MessageChannelKind = 'sms') {
-  formMode.value = 'create'
-  editingId.value = ''
   form.kind = kind
-  form.provider = catalog.value.providers.find((p) => p.supports.includes(kind))?.provider ?? ''
-  form.name = ''
+  form.provider = providerOptions.value[0]?.value ?? ''
+  if (!form.provider) {
+    MessagePlugin.info('通知供应商目录尚未加载，请重试')
+    return
+  }
+  form.name = `${KIND_GROUPS.find(group => group.kind === kind)?.label ?? ''}通知`
   form.enabled = false
   form.dailyLimit = 0
   form.remark = ''
   form.credentialMode = 'inline'
   credentialMasked.value = {}
   resetProviderFields()
+  advanced.value = []
+  readMappings()
   formVisible.value = true
-  void formRef.value?.clearValidate?.()
+  void nextTick(() => formRef.value?.clearValidate?.())
 }
 
 function openEdit(row: MessageChannel) {
-  formMode.value = 'edit'
-  editingId.value = row.id
   form.kind = row.kind
   form.provider = row.provider
   form.name = row.name
@@ -229,14 +215,16 @@ function openEdit(row: MessageChannel) {
   for (const key of currentMeta.value?.credentialKeys ?? []) {
     form.credentialEnv[key] = row.credentialEnv?.[key] ?? ''
   }
+  advanced.value = []
+  readMappings()
   formVisible.value = true
-  void formRef.value?.clearValidate?.()
+  void nextTick(() => formRef.value?.clearValidate?.())
 }
 
 /** 组装非机密配置：templateMapping 必须是对象，其余为字符串 */
 function buildConfig(): Record<string, unknown> {
   const out: Record<string, unknown> = {}
-  for (const field of currentMeta.value?.configFields ?? []) {
+  for (const field of Object.keys(form.config).filter(key => key !== 'templateMapping').map(key => ({ key, label: key }))) {
     const raw = String(form.config[field.key] ?? '').trim()
     if (!raw) continue
     if (field.key === 'templateMapping' || field.key === 'templateParamOrder') {
@@ -254,7 +242,15 @@ function buildConfig(): Record<string, unknown> {
     }
     out[field.key] = raw
   }
+  if (isSms.value) {
+    out.templateMapping = buildSmsTemplateMapping(mappings.value)
+  }
   return out
+}
+
+function validateSmsMappings() {
+  try { buildSmsTemplateMapping(mappings.value); return true }
+  catch (error) { return { result: false, message: error instanceof Error ? error.message : '请核对短信模板' } }
 }
 
 function buildCredentialEnv(): Record<string, string> {
@@ -269,7 +265,7 @@ function buildCredentialEnv(): Record<string, string> {
 /* 提交互斥：避免重复点击产生并发保存/测试请求 */
 const saving = ref(false)
 
-async function onSave(testAfter = false) {
+async function onSave() {
   if (saving.value) return
   const valid = await formRef.value.validate()
   if (valid !== true) return focusFirstInvalid(formRef.value)
@@ -286,14 +282,10 @@ async function onSave(testAfter = false) {
       dailyLimit: form.dailyLimit,
       remark: form.remark.trim(),
     }
-    const { id } = await saveMessageChannel(payload)
+    await saveFixedMessageChannel(payload)
     formVisible.value = false
-    MessagePlugin.success(formMode.value === 'edit' ? '渠道已保存' : '渠道已新增')
+    MessagePlugin.success('通知配置已保存')
     await load()
-    if (testAfter) {
-      const target = channels.value.find((row) => row.id === id)
-      if (target) openTest(target)
-    }
   } catch (error) {
     MessagePlugin.error(error instanceof Error ? error.message : '保存失败')
   } finally {
@@ -382,7 +374,7 @@ function credentialStatus(row: MessageChannel): 'configured' | 'missing' | 'none
   if (row.credentialConfigured) return 'configured'
   return row.missingCredentials.length ? 'missing' : 'none'
 }
-const { close: closeForm } = useDialogFormProtection(form, formVisible, saving)
+const { close: closeForm } = useDialogFormProtection(() => ({ form, mappings: mappings.value }), formVisible, saving)
 const { close: closeTestDialog } = useDialogFormProtection(testForm, testVisible, testing)
 </script>
 
@@ -390,91 +382,40 @@ const { close: closeTestDialog } = useDialogFormProtection(testForm, testVisible
   <div class="channel-panel">
     <ListErrorState v-if="loadError" :message="loadError" :loading="loading" @retry="load" />
 
-    <!-- 新增入口只保留在分组标题上（按类型定向新增），避免与顶部通用入口重复；
-         分组卡片由面板自带（聚合壳不再包 page-card） -->
-    <section v-for="(group, index) in KIND_GROUPS" :key="group.kind" class="kind-section page-card" :class="{ 'is-first': index === 0 }">
-      <div class="kind-head">
-        <div class="kind-title-row">
-          <span class="kind-title">{{ group.label }}配置</span>
-          <span class="muted kind-desc">{{ group.desc }}</span>
-        </div>
-        <t-button theme="primary" variant="outline" size="small" @click="openCreate(group.kind)">
-          <template #icon><AddIcon /></template>
-          新增{{ group.label }}渠道
-        </t-button>
-      </div>
-      <t-table
-        row-key="id"
-        :data="channelsOfKind(group.kind)"
-        :columns="groupedColumns"
-        :loading="loading"
-        table-layout="fixed"
-        hover
-        resizable
-      >
-        <template #empty>
-          <ListEmptyState :description="`暂无${group.label}渠道`" />
+    <t-loading :loading="loading">
+      <t-card v-for="group in KIND_GROUPS" :key="group.kind" :title="`${group.label}配置`" class="kind-section">
+        <template #actions>
+          <t-button theme="primary" variant="outline" :disabled="loading || !!loadError" @click="openConfigure(group.kind)">配置{{ group.label }}</t-button>
         </template>
-        <template #provider="{ row }">
-          <span>{{ row.providerLabel }}</span>
-        </template>
-        <template #enabled="{ row }">
-          <t-switch
-            v-accessible-field="`渠道「${row.name}」启用状态`"
-            :value="row.enabled"
-            :loading="toggling === row.id"
-            :aria-label="`渠道「${row.name}」启用状态`"
-            @change="(value: boolean) => onToggle(row, value)"
-          />
-        </template>
-        <template #credential="{ row }">
-          <t-tooltip :content="row.missingCredentials.join('、') || '凭据已就绪'">
-            <StatusTag entity="messageCredential" :value="credentialStatus(row)" size="small" />
-          </t-tooltip>
-        </template>
-        <template #dailyLimit="{ row }">
-          <span>{{ row.dailyLimit > 0 ? row.dailyLimit : '不限' }}</span>
-        </template>
-        <template #op="{ row }">
-          <t-space size="small">
-            <t-button variant="text" size="small" @click="openEdit(row)">编辑</t-button>
-            <t-button variant="text" size="small" @click="openTest(row)">测试发送</t-button>
-          </t-space>
-        </template>
-      </t-table>
-    </section>
+        <p class="muted">{{ group.desc }}</p>
+      <t-descriptions v-if="channelOfKind(group.kind)" class="channel-details" bordered :column="detailsColumns" size="small">
+          <t-descriptions-item label="供应商">{{ channelOfKind(group.kind)!.providerLabel }}</t-descriptions-item>
+          <t-descriptions-item label="状态"><t-tag :theme="channelOfKind(group.kind)!.enabled ? 'success' : 'default'">{{ channelOfKind(group.kind)!.enabled ? '已启用' : '未启用' }}</t-tag></t-descriptions-item>
+          <t-descriptions-item label="凭据"><StatusTag entity="messageCredential" :value="credentialStatus(channelOfKind(group.kind)!)" /></t-descriptions-item>
+          <t-descriptions-item label="最近保存">{{ channelOfKind(group.kind)!.updatedAt || '—' }}</t-descriptions-item>
+        </t-descriptions>
+        <t-alert v-else theme="info" :message="`尚未配置${group.label}通知，请点击「配置${group.label}」完成设置。`" />
+        <t-button v-if="channelOfKind(group.kind)" variant="text" :disabled="loading || !!loadError" @click="openTest(channelOfKind(group.kind)!)">测试{{ group.label }}发送</t-button>
+      </t-card>
+    </t-loading>
 
     <t-dialog
       :visible="formVisible"
-      :header="formMode === 'edit' ? '编辑渠道' : '新增渠道'"
+      :header="`${KIND_GROUPS.find(group => group.kind === form.kind)?.label}配置`"
       width="640px"
      @close="closeForm">
-      <t-form ref="formRef" :data="form" label-align="top">
+      <t-form ref="formRef" :data="form" label-align="top" :disabled="saving">
         <div class="form-grid">
-          <t-form-item label="消息类型" name="kind" :rules="[{ required: true, message: '请选择消息类型' }]">
-            <t-select
-              v-accessible-field
-              :value="form.kind"
-              :disabled="formMode === 'edit'"
-              :options="KIND_GROUPS.map((g) => ({ label: g.label, value: g.kind }))"
-              @change="(value: unknown) => onKindChange(value as MessageChannelKind)"
-            />
-          </t-form-item>
-          <t-form-item label="消息驱动" name="provider" :rules="[{ required: true, message: '请选择消息驱动' }]">
+          <t-form-item label="通知供应商" name="provider" :rules="[{ required: true, message: '请选择通知供应商', trigger: 'submit' }]">
             <t-select
               v-accessible-field
               v-model="form.provider"
-              :disabled="formMode === 'edit'"
               :options="providerOptions"
               @change="resetProviderFields"
             />
           </t-form-item>
-          <t-form-item label="渠道名称" name="name" :rules="[{ required: true, message: '请输入渠道名称' }]">
-            <t-input v-accessible-field v-model="form.name" clearable placeholder="如 阿里云短信主通道…" />
-          </t-form-item>
-          <t-form-item label="每日发送上限" name="dailyLimit">
-            <t-input-number v-accessible-field class="ctl-w-lg" v-model="form.dailyLimit" :min="0" :max="100000" :step="100" theme="column" />
-            <template #help>0 表示不限制</template>
+          <t-form-item label="启用通知" name="enabled">
+            <t-switch v-model="form.enabled" v-accessible-field="'启用通知'" aria-label="启用通知" />
           </t-form-item>
         </div>
 
@@ -488,13 +429,14 @@ const { close: closeTestDialog } = useDialogFormProtection(testForm, testVisible
           />
           <div class="form-grid">
             <t-form-item
-              v-for="field in currentMeta.configFields"
+              v-for="field in basicFields"
               :key="field.key"
               :label="field.label"
               :name="`config.${field.key}`"
-              :rules="field.required ? [{ required: true, message: `请填写${field.label}` }] : []"
+              :rules="field.required ? [{ required: true, message: `请填写${field.label}`, trigger: 'submit' }] : []"
             >
-              <t-input v-accessible-field v-model="form.config[field.key]" clearable :placeholder="(field.hint || '') + '…'" />
+              <t-switch v-if="field.key === 'secure'" v-accessible-field="field.label" :value="form.config[field.key] === 'true'" :aria-label="field.label" @change="(value: boolean) => form.config[field.key] = String(value)" />
+              <t-input v-else v-accessible-field v-model="form.config[field.key]" clearable :placeholder="(field.hint || '') + '…'" />
               <template #help>
                 <span v-if="field.key === 'fromAddress' && smtpFromMismatch" class="help-warning">{{ smtpFromMismatch.message }}</span>
                 <span v-else>{{ field.hint || '' }}</span>
@@ -505,18 +447,7 @@ const { close: closeTestDialog } = useDialogFormProtection(testForm, testVisible
 
         <template v-if="currentMeta?.credentialKeys?.length">
           <div class="section-title">凭据</div>
-          <t-form-item label="凭据来源" name="credentialMode">
-            <t-select
-              v-accessible-field
-              :value="form.credentialMode"
-              :options="[
-                { label: '直接填写密钥（推荐）', value: 'inline' },
-                { label: '登记环境变量名', value: 'env' },
-              ]"
-              @change="(value: unknown) => onCredentialModeChange(String(value) as 'inline' | 'env')"
-            />
-            <template #help>{{ credentialModeHint() }}</template>
-          </t-form-item>
+          <p class="muted">{{ credentialModeHint() }}</p>
           <div class="form-grid">
             <t-form-item
               v-for="key in currentMeta.credentialKeys"
@@ -537,18 +468,46 @@ const { close: closeTestDialog } = useDialogFormProtection(testForm, testVisible
           </div>
         </template>
 
-        <t-form-item label="备注" name="remark">
-          <t-input v-accessible-field v-model="form.remark" clearable placeholder="选填…" />
+        <t-form-item v-if="isSms" label="短信模板" name="config.templateMapping" :rules="[{ validator: validateSmsMappings, trigger: 'submit' }]">
+          <div class="mapping-fields">
+            <p class="muted">填写供应商审核通过的模板编号。验证码的通知编码为 verify_code。</p>
+            <div v-for="(mapping, index) in mappings" :key="index" class="mapping-row">
+              <t-input v-model="mapping.code" @change="formRef?.clearValidate(['config.templateMapping'])" v-accessible-field="`短信模板 ${index + 1} 通知编码`" :aria-label="`短信模板 ${index + 1} 通知编码`" placeholder="通知编码，如 verify_code…" />
+              <t-input v-model="mapping.templateId" @change="formRef?.clearValidate(['config.templateMapping'])" v-accessible-field="`短信模板 ${index + 1} 供应商编号`" :aria-label="`短信模板 ${index + 1} 供应商编号`" placeholder="供应商模板编号…" />
+              <t-button variant="text" theme="danger" :aria-label="`移除短信模板 ${index + 1}`" @click="mappings.splice(index, 1)">移除</t-button>
+            </div>
+            <t-button variant="outline" @click="mappings.push({ code: '', templateId: '' })">添加模板对应关系</t-button>
+          </div>
         </t-form-item>
-        <t-form-item label="启用" name="enabled">
-          <t-switch v-accessible-field v-model="form.enabled" />
-        </t-form-item>
+        <t-collapse v-model="advanced" class="advanced-settings">
+          <t-collapse-panel value="advanced" header="高级设置（选填）" :destroy-on-collapse="false">
+          <t-form-item v-if="currentMeta?.credentialKeys?.length" label="凭据来源" name="credentialMode">
+            <t-select
+              v-accessible-field
+              :value="form.credentialMode"
+              :options="[
+                { label: '直接填写密钥（推荐）', value: 'inline' },
+                { label: '登记环境变量名', value: 'env' },
+              ]"
+              @change="(value: unknown) => onCredentialModeChange(String(value) as 'inline' | 'env')"
+            />
+            <template #help>{{ credentialModeHint() }}</template>
+          </t-form-item>
+
+            <t-form-item v-for="field in advancedFields" :key="field.key" :label="field.label" :name="`config.${field.key}`" :help="field.hint">
+              <t-input v-accessible-field v-model="form.config[field.key]" clearable :placeholder="field.hint || '使用默认值'" />
+            </t-form-item>
+            <t-form-item label="每日发送上限" name="dailyLimit" help="0 表示不限制">
+              <t-input-number v-accessible-field v-model="form.dailyLimit" :min="0" :max="100000" :decimal-places="0" />
+            </t-form-item>
+            <t-form-item label="备注" name="remark"><t-input v-accessible-field v-model="form.remark" :maxlength="255" /></t-form-item>
+          </t-collapse-panel>
+        </t-collapse>
       </t-form>
       <template #footer>
         <div class="dialog-footer">
           <t-button theme="default" @click="closeForm">取消</t-button>
-          <t-button theme="primary" variant="outline" :loading="saving" @click="onSave(true)">保存并测试连通</t-button>
-          <t-button theme="primary" :loading="saving" @click="onSave()">保存</t-button>
+          <t-button theme="primary" :loading="saving" @click="onSave()">保存配置</t-button>
         </div>
       </template>
     </t-dialog>
@@ -573,7 +532,7 @@ const { close: closeTestDialog } = useDialogFormProtection(testForm, testVisible
         <t-form-item label="正文（直接指定时优先）" name="body">
           <t-textarea v-accessible-field v-model="testForm.body" :autosize="{ minRows: 2, maxRows: 4 }" placeholder="留空则按模板编码渲染…" />
         </t-form-item>
-        <t-form-item label="邮件主题" name="subject">
+        <t-form-item v-if="testTarget?.kind === 'email'" label="邮件主题" name="subject">
           <t-input v-accessible-field v-model="testForm.subject" clearable placeholder="仅邮件渠道使用…" />
         </t-form-item>
       </t-form>
@@ -582,6 +541,11 @@ const { close: closeTestDialog } = useDialogFormProtection(testForm, testVisible
 </template>
 
 <style scoped>
+.mapping-fields { width: 100%; }
+.mapping-row { display: grid; grid-template-columns: 1fr 1fr auto; gap: 8px; margin-bottom: 12px; }
+.advanced-settings { margin-top: 24px; }
+@media (max-width: 640px) { .mapping-row { grid-template-columns: 1fr; } }
+
 .section-title {
   margin: 8px 0 16px;
   font-size: 14px;
@@ -615,33 +579,6 @@ const { close: closeTestDialog } = useDialogFormProtection(testForm, testVisible
   white-space: pre-line;
 }
 
-/* 分组改为独立卡片（page-card）：去掉原分隔线，卡片间距统一 16px */
-.kind-section {
-  margin-bottom: 16px;
-}
-
-.kind-head {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 16px;
-  margin-bottom: 12px;
-}
-
-.kind-title-row {
-  display: flex;
-  align-items: baseline;
-  gap: 12px;
-  min-width: 0;
-}
-
-.kind-title {
-  font-size: 16px;
-  font-weight: 600;
-  color: var(--td-text-color-primary);
-}
-
-.kind-desc {
-  font-size: 12px;
-}
+.kind-section { margin-bottom: 16px; }
+.channel-details { margin: 16px 0 8px; }
 </style>

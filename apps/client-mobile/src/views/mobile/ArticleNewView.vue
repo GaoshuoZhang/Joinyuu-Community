@@ -10,7 +10,10 @@ import { fetchMyIdentities } from '@/api/enterprises'
 import { uploadFile } from '@/api/uploads'
 import { ApiError } from '@/api/http'
 import FlowResult from '@/components/FlowResult.vue'
-import { actionIdentityOptions, identityOptionLabel, useAuthStore } from '@/stores/auth'
+import ListSkeleton from '@/components/ListSkeleton.vue'
+import EmptyBlock from '@/components/shared/EmptyBlock.vue'
+import IdentityPicker from '@/components/forms/IdentityPicker.vue'
+import { authorizedActionIdentities, useAuthStore } from '@/stores/auth'
 import type { ArticleColumn, IdentityType, UserIdentity } from '@/types'
 import {
   articleInsertionAnchor,
@@ -35,15 +38,9 @@ const { data: columnData, loading: columnsLoading, error: columnsError, run: loa
   () => fetchColumns({ submission: true }),
 )
 const delegatedIdentities = ref<UserIdentity[]>([])
-const identityOptions = computed(() => {
-  const base = auth.identities
-  const extra = delegatedIdentities.value.filter(
-    (delegated) => !base.some((identity) => identity.type === 'community_enterprise' && identity.enterpriseId === delegated.enterpriseId),
-  )
-  return actionIdentityOptions([...base, ...extra])
-})
+const identityOptions = computed(() => authorizedActionIdentities(auth.identities, delegatedIdentities.value))
 const form = reactive({ title: '', columnCode: '', asIdentity: '' as IdentityType | '', asEnterpriseId: '' })
-/* v40：投稿校验行内错误（与 Toast 并存，错误可随修改清除） */
+/* Inline validation remains visible until the related field changes. */
 const errors = reactive({ title: '', column: '', identity: '', content: '' })
 watch(() => form.title, () => (errors.title = ''))
 watch(() => form.columnCode, () => (errors.column = ''))
@@ -128,7 +125,7 @@ onMounted(async () => {
       .filter((identity) => identity.type === 'community_enterprise' && identity.enterpriseId && (identity.isContact || (identity.permissions ?? []).includes('article_submit')))
       .map((identity): UserIdentity => ({ type: 'community_enterprise', enterpriseId: identity.enterpriseId, enterpriseName: identity.name }))
   } catch {
-    /* 身份接口异常时保留登录会话中的基础身份。 */
+    /* 企业权限未能确认时只保留个人及合作企业身份。 */
   }
   if (reviseId) {
     await loadRevision()
@@ -269,7 +266,7 @@ async function onSubmit() {
   }
   if (!form.columnCode) {
     errors.column = '请选择栏目'
-    return void Toast(errors.column)
+    return
   }
   if (!form.asIdentity) {
     errors.identity = '请选择投稿身份'
@@ -327,8 +324,8 @@ async function onSubmit() {
 
     <div class="m-card form">
       <div class="field"><label class="field-label">标题<span class="req"> *</span></label><Input v-model="form.title" :maxlength="50" placeholder="请输入文章标题…" clearable /><p v-if="errors.title" class="field-error">{{ errors.title }}</p></div>
-      <div class="field"><label class="field-label">栏目<span class="req"> *</span></label><div class="chips"><CheckTag v-for="c in columns" :key="c.code" class="chip" size="medium" variant="light" :checked="form.columnCode === c.code" @change="form.columnCode = c.code">{{ c.label }}</CheckTag></div><p v-if="!columnsLoading && !columnsError && columnData && !columns.length" class="field-help">暂无可投稿栏目，请稍后再试</p><p v-if="errors.column" class="field-error">{{ errors.column }}</p></div>
-      <div class="field"><label class="field-label">投稿身份<span class="req"> *</span></label><div class="chips"><CheckTag v-for="identity in identityOptions" :key="`${identity.type}:${identity.enterpriseId ?? ''}`" size="medium" variant="light" :checked="isIdentityPicked(identity)" @change="pickIdentity(identity)">{{ identityOptionLabel(identity, auth.name) }}</CheckTag></div><p v-if="errors.identity" class="field-error">{{ errors.identity }}</p></div>
+      <div class="field"><label class="field-label">栏目<span class="req"> *</span></label><EmptyBlock v-if="columnsError" :text="columnsError" action-text="重试加载栏目" @action="loadColumns" /><p v-else-if="columnsLoading" class="field-help" role="status">正在加载栏目…</p><div v-else class="chips"><CheckTag v-for="c in columns" :key="c.code" class="chip" size="medium" variant="light" :checked="form.columnCode === c.code" @change="form.columnCode = c.code">{{ c.label }}</CheckTag></div><p v-if="!columnsLoading && !columnsError && columnData && !columns.length" class="field-help">暂无可投稿栏目，请稍后再试</p><p v-if="errors.column" class="field-error">{{ errors.column }}</p></div>
+      <div class="field"><label class="field-label">投稿身份<span class="req"> *</span></label><IdentityPicker :identities="identityOptions" :selected="form.asIdentity" :selected-enterprise-id="form.asEnterpriseId" :user-name="auth.name" @select="pickIdentity" /><p v-if="errors.identity" class="field-error">{{ errors.identity }}</p></div>
       <div class="field"><label class="field-label">文章封面（选填）</label><p class="field-help">建议使用清晰的横版图片，将展示在文章列表中。</p><Upload v-model:files="coverFiles" class="cover-upload" theme="grid" accept="image/*" :max="1" :size-limit="{ size: 10, unit: 'MB' }" :request-method="requestImage" /></div>
       <div class="field"><label class="field-label">正文</label><p class="field-help">直接输入正文；需要图文混排时，可在段落间插入图片或新段落。至少 {{ MIN_CONTENT }} 字。</p>
         <div class="editor-blocks">

@@ -20,7 +20,7 @@ import { REFRESH_LOADING_PROPS } from '@/constants/refresh'
 
 useAnimSuppress()
 
-/* 社区页（社区管理者视角）：顶部选项卡「社区服务 / 人才库 / 企业库」，
+/* 社区页（社区成员视角）：顶部选项卡「社区服务 / 人才库 / 企业库」，
  * 每个 tab 自带搜索；切换 tab 时重置搜索并重新拉取。数据均经 @/api/community。
  * 企业库：已发布名片点入名片；未发布名片保持不可访问。 */
 const router = useRouter()
@@ -258,13 +258,11 @@ watch(policies, () => {
     @touchend="cancelSwipe"
     @touchcancel="cancelSwipe"
   >
-    <Tabs v-model="activeTab" class="top-tabs" :swipeable="false">
+    <Tabs :data-tab-values="JSON.stringify(['service', 'talent', 'enterprise'])" v-model="activeTab" class="top-tabs" :swipeable="false">
       <!-- 社区服务：政策/指引列表 -->
-      <TabPanel value="service" label="社区服务">
+      <TabPanel data-tab-value="service" value="service" label="社区服务">
         <Search v-model="serviceKeyword" class="tab-search" placeholder="搜索政策关键词…" />
 
-        <!-- v52：分类 chip 行可横向滚动，补可见提示（同 PlazaView 资讯栏目口径，界面审查 LOW） -->
-        <div v-if="serviceCategories.length" class="chips-hint"><span>政策分类</span><span>左右滑动查看更多 →</span></div>
         <div v-if="serviceCategories.length" class="service-categories">
           <CheckTag size="medium" variant="light" :checked="!selectedCategory" @change="selectedCategory = ''">全部</CheckTag>
           <CheckTag v-for="category in serviceCategories" :key="category" size="medium" variant="light" :checked="selectedCategory === category" @change="selectedCategory = category">{{ category }}</CheckTag>
@@ -294,7 +292,7 @@ watch(policies, () => {
       </TabPanel>
 
       <!-- 人才库：社区个体卡片 -->
-      <TabPanel value="talent" label="人才库">
+      <TabPanel data-tab-value="talent" value="talent" label="人才库">
         <Search v-model="talentKeyword" class="tab-search" placeholder="搜索人才关键词…" />
 
         <ListSkeleton v-if="talentsLoading && !(talents ?? []).length" />
@@ -312,7 +310,7 @@ watch(policies, () => {
       </TabPanel>
 
       <!-- 企业库：企业卡片 -->
-      <TabPanel value="enterprise" label="企业库">
+      <TabPanel data-tab-value="enterprise" value="enterprise" label="企业库">
         <Search v-model="enterpriseKeyword" class="tab-search" placeholder="搜索企业关键词…" />
 
         <ListSkeleton v-if="enterprisesLoading && !(enterprises ?? []).length" />
@@ -365,24 +363,14 @@ watch(policies, () => {
   gap:var(--app-space-4);
   margin:0 0 var(--app-space-6);
   overflow-x: auto;
+  overscroll-behavior-x: contain;
   scrollbar-width: none;
+  touch-action: pan-x;
 }
 
 .service-categories::-webkit-scrollbar { display: none; }
 
 .service-categories :deep(.t-tag) { flex: 0 0 auto; }
-
-/* v52：chip 行滚动提示（同 PlazaView .column-filter-head 口径） */
-.chips-hint {
-  display: flex;
-  justify-content: space-between;
-  gap: var(--app-space-4);
-  margin: 0 0 var(--app-space-3);
-  color: var(--td-text-color-secondary);
-  font: var(--app-type-body-sm);
-}
-
-.chips-hint span:last-child { color: var(--td-brand-color); }
 
 .categories-error {
   display: flex;

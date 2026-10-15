@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import PasswordInput from '@/components/shared/PasswordInput.vue'
 import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { Button, Checkbox, Form, FormItem, Input, NoticeBar, Popup, Radio, RadioGroup, Toast } from 'tdesign-mobile-vue'
@@ -206,20 +207,20 @@ function onRegisterSubmit({ validateResult }: { validateResult: unknown }) {
         </div>
       </FormItem>
       <FormItem label="密码" name="password">
-        <Input
+        <PasswordInput
           class="password-field"
           v-model="form.password"
-          type="password"
+
           autocomplete="new-password"
           placeholder="密码（至少 8 位，含字母与数字）…"
           :disabled="closed"
         />
       </FormItem>
       <FormItem label="确认密码" name="confirmPassword">
-        <Input
+        <PasswordInput
           class="password-field"
           v-model="form.confirmPassword"
-          type="password"
+
           autocomplete="new-password"
           placeholder="请再次输入密码…"
           :disabled="closed"
@@ -356,23 +357,4 @@ function onRegisterSubmit({ validateResult }: { validateResult: unknown }) {
   color: var(--td-brand-color);
 }
 
-/* 密码显隐图标：内部类名 t-input__wrap--suffix-icon（官方无命中区/尺寸类 API，点击处理器挂在图标 SVG 上）。
- * 视觉保持 24px，用 padding 把 SVG 命中区抬到 44px 触控基线；升级 TDesign 时需复核类名与 DOM 结构。 */
-.password-field :deep(.t-input__wrap--suffix-icon) {
-  display: grid;
-  flex: 0 0 44px;
-  width: 44px;
-  place-items: center;
-}
-
-.password-field :deep(.t-input__wrap--suffix-icon svg) {
-  width: 24px;
-  height: 24px;
-  padding: 10px;
-  box-sizing: content-box;
-}
-
-.password-field :deep(.t-input--password) {
-  letter-spacing: 0;
-}
 </style>

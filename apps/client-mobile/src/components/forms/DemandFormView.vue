@@ -5,7 +5,7 @@ import { Button, CheckTag, Icon, Input, Loading, Tag, Textarea, Toast } from 'td
 import { createDemand, fetchMyDemandPayload, resubmitDemand } from '@/api/demands'
 import { fetchMyIdentities } from '@/api/enterprises'
 import { ApiError } from '@/api/http'
-import { actionIdentityOptions, useAuthStore } from '@/stores/auth'
+import { authorizedActionIdentities, useAuthStore } from '@/stores/auth'
 import { useConfigStore } from '@/stores/config'
 import { useDict } from '@/composables/useDict'
 import { useUnsavedGuard } from '@/composables/useUnsavedGuard'
@@ -49,13 +49,7 @@ const { items: dictItems, loading: dictLoading, error: dictError, reload: reload
 
 /** 发布身份选项：持「社区个体」时不再单列「个人用户」；含成员被授权「发布需求」的企业（代企业发布） */
 const delegatedIdentities = ref<UserIdentity[]>([])
-const identityOptions = computed(() => {
-  const base = auth.identities
-  const extra = delegatedIdentities.value.filter(
-    (d) => !base.some((b) => b.type === 'community_enterprise' && b.enterpriseId === d.enterpriseId),
-  )
-  return actionIdentityOptions([...base, ...extra])
-})
+const identityOptions = computed(() => authorizedActionIdentities(auth.identities, delegatedIdentities.value))
 
 function pickIdentity(i: UserIdentity) {
   form.asIdentity = i.type

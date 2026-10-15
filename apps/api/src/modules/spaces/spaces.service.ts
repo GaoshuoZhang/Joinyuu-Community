@@ -189,7 +189,18 @@ export class SpacesService {
       ]
     }
     if (query.spaceId) where.spaceId = query.spaceId
-    if (query.status) where.status = query.status
+    if (query.status && ['approved', 'using', 'ended'].includes(query.status)) {
+      where.status = 'approved'
+      const now = formatNow()
+      const date = now.slice(0, 10)
+      const time = now.slice(11, 16)
+      const period: Prisma.SpaceReservationWhereInput = query.status === 'approved'
+        ? { OR: [{ date: { gt: date } }, { date, startTime: { gt: time } }] }
+        : query.status === 'using'
+          ? { date, startTime: { lte: time }, endTime: { gte: time } }
+          : { OR: [{ date: { lt: date } }, { date, endTime: { lt: time } }] }
+      where.AND = [period]
+    } else if (query.status) where.status = query.status
     if (query.date) where.date = query.date
 
     const [rows, total] = await Promise.all([

@@ -68,7 +68,7 @@ const columns = [
   { colKey: 'action', title: '动作', width: 130 , ellipsis: true},
   { colKey: 'target', title: '操作对象', cell: 'target', width: 220, resizable: true , ellipsis: true},
   { colKey: 'detail', title: '详情', cell: 'detail', width: 180, resizable: true , ellipsis: true},
-  { colKey: 'op', title: '操作', cell: 'op', width: 90 },
+  { colKey: 'op', fixed: 'right' as const, title: '操作', cell: 'op', width: 90 },
 ]
 
 const pagination = computed(() => ({
@@ -137,7 +137,7 @@ onMounted(load)
     </div>
 
     <div class="page-card">
-      <t-table
+      <t-table :horizontal-scroll-affixed-bottom="{ container: '.page-scroll', offsetBottom: 0 }"
         row-key="id"
         table-layout="fixed"
         hover

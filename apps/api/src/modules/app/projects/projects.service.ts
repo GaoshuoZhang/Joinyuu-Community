@@ -18,6 +18,8 @@ import { StorageService } from '../../../common/storage/storage.service'
 interface LoadedProject {
   project: Project & { undertakers: ProjectUndertaker[]; milestones: Milestone[] }
   isInit: boolean
+  isDemander: boolean
+  canSubmit: boolean
   initiatorUid: string | null
 }
 
@@ -36,10 +38,10 @@ export class AppProjectsService {
 
   /** 我发起或参与的承接项目列表 */
   async myProjects(uid: string) {
-    const [myDemandIds, myEntIds] = await Promise.all([
-      this.prisma.demand.findMany({ where: { publisherId: uid }, select: { id: true } }),
-      this.myEnterpriseIds(uid),
-    ])
+    const myEntIds = await this.myEnterpriseIds(uid)
+    const myDemandIds = await this.prisma.demand.findMany({
+      where: { publisherId: { in: [uid, ...myEntIds] } }, select: { id: true },
+    })
     /* 需求方主体：本人 + 我关联的社区企业（企业代发的需求立项后，企业成员同样可见） */
     const demanderSubjects = [uid, ...myEntIds]
     const matched = {
@@ -68,7 +70,7 @@ export class AppProjectsService {
         this.toMyProject(
           uid,
           p,
-          p.demanderId != null ? subjectSet.has(p.demanderId) : demandIds.has(p.sourceDemandId ?? ''),
+          subjectSet.has(p.demanderId ?? '') || demandIds.has(p.sourceDemandId ?? ''),
           myEntIds,
         ),
       ),
@@ -77,12 +79,12 @@ export class AppProjectsService {
 
   /** 项目详情（参与双方可看；含来源需求、参与人快照与里程碑） */
   async projectDetail(uid: string, id: string) {
-    const { project, isInit } = await this.loadProject(uid, id)
+    const { project, isInit, isDemander, canSubmit } = await this.loadProject(uid, id)
     const sourceDemand = project.sourceDemandId
       ? await this.prisma.demand.findUnique({ where: { id: project.sourceDemandId } })
       : null
     const myEntIds = await this.myEnterpriseIds(uid)
-    const { role, enterpriseName, enterpriseId } = isInit
+    const { role, enterpriseName, enterpriseId } = isDemander
       ? { role: '需求发起方' as const, enterpriseName: undefined, enterpriseId: undefined }
       : this.roleOf(uid, project, myEntIds)
 
@@ -97,14 +99,17 @@ export class AppProjectsService {
       description: project.description,
       memberCount: project.memberCount,
       role,
+      demanderName: project.demanderName ?? sourceDemand?.publisherName ?? undefined,
+      canSubmit,
+      canAccept: isInit,
       ...(enterpriseName ? { enterpriseName } : {}),
       ...(enterpriseId ? { enterpriseId } : {}),
       ...(project.sourceDemandId ? { sourceDemandId: project.sourceDemandId } : {}),
       ...(project.finishedAt ? { finishedAt: project.finishedAt } : {}),
       /* 对端展示名（D-108）：发起方看承接方，承接方看需求发布者（历史项目无来源需求时为 undefined） */
-      ...(isInit
+      ...(isDemander
         ? { partnerName: project.undertakers.map((u) => u.name).join('、') || undefined }
-        : { partnerName: sourceDemand?.publisherName ?? undefined }),
+        : { partnerName: project.demanderName ?? sourceDemand?.publisherName ?? undefined }),
       sourceDemand: sourceDemand
         ? {
             id: sourceDemand.id,
@@ -128,8 +133,8 @@ export class AppProjectsService {
 
   /** 承接方提交里程碑（发起方 403；todo / returned → submitted） */
   async submitMilestone(uid: string, projectId: string, milestoneId: string, dto: SubmitMilestoneDto) {
-    const { project, isInit, initiatorUid } = await this.loadProject(uid, projectId)
-    if (isInit) throw new ForbiddenException('发起方不能提交里程碑')
+    const { project, canSubmit, initiatorUid } = await this.loadProject(uid, projectId)
+    if (!canSubmit) throw new ForbiddenException('仅承接方可以提交里程碑')
     const mil = project.milestones.find((m) => String(m.id) === milestoneId)
     if (!mil) throw new NotFoundException('里程碑不存在')
     if (mil.status !== 'todo' && mil.status !== 'returned') throw new ConflictException('该里程碑当前不可提交')
@@ -280,13 +285,14 @@ export class AppProjectsService {
     initiatorUid = await this.subjectUserId(demanderSubject)
     isInit = (!!initiatorUid && initiatorUid === uid) || demand?.publisherId === uid
     const myEntIds = await this.myEnterpriseIds(uid)
+    const isDemander = isInit || demanderSubject === uid || myEntIds.includes(demanderSubject ?? '')
     const isUnd = project.undertakers.some((u) =>
       (u.type === 'individual' && u.refId === uid) ||
       (u.type === 'custom' && u.refId === uid) ||
       (u.type === 'enterprise' && myEntIds.includes(u.refId)),
     )
-    if (!isInit && !isUnd) throw new ForbiddenException('您无权访问该项目')
-    return { project, isInit, initiatorUid }
+    if (!isDemander && !isUnd) throw new ForbiddenException('您无权访问该项目')
+    return { project, isInit, isDemander, canSubmit: isUnd && !isDemander, initiatorUid }
   }
 
   private async myEnterpriseIds(uid: string): Promise<string[]> {

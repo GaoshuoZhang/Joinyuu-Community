@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import {
   AppIcon,
@@ -62,12 +62,9 @@ function syncCompactSidebar(event: MediaQueryList | MediaQueryListEvent = compac
 onMounted(() => {
   syncCompactSidebar()
   compactViewport.addEventListener('change', syncCompactSidebar)
-  measureTabScroll()
-  window.addEventListener('resize', measureTabScroll)
 })
 onBeforeUnmount(() => {
   compactViewport.removeEventListener('change', syncCompactSidebar)
-  window.removeEventListener('resize', measureTabScroll)
 })
 
 /* ---------- 菜单分组展开/折叠（受控）：低频组（积分管理/规则管理/系统管理）默认折叠 ---------- */
@@ -172,62 +169,6 @@ async function onReadAll() {
 
 onMounted(loadNotifications)
 
-const tabBarRef = ref<HTMLElement | null>(null)
-const tabTrackRef = ref<HTMLElement | null>(null)
-/* 标签栏采用 transform 位移动画（参考 TDesign Tabs 的导航滑动实现）：
- * 容器 overflow:hidden + 轨道 translate3d，滚轮始终把纵向增量转成横向位移 */
-const tabScrollLeft = ref(0)
-const tabMaxScroll = ref(0)
-
-const tabTrackStyle = computed(() => ({ transform: `translate3d(${-tabScrollLeft.value}px, 0, 0)` }))
-
-function clampTabOffset(value: number) {
-  return Math.max(0, Math.min(value, tabMaxScroll.value))
-}
-
-function setTabOffset(value: number) {
-  tabScrollLeft.value = clampTabOffset(value)
-}
-
-function measureTabScroll() {
-  const bar = tabBarRef.value
-  const track = tabTrackRef.value
-  if (!bar || !track) return
-  const style = getComputedStyle(bar)
-  const padding = parseFloat(style.paddingLeft) + parseFloat(style.paddingRight)
-  tabMaxScroll.value = Math.max(0, track.scrollWidth - (bar.clientWidth - padding))
-  setTabOffset(tabScrollLeft.value)
-}
-
-function handleTabBarWheel(event: WheelEvent) {
-  if (tabMaxScroll.value <= 0) return
-  event.preventDefault()
-  const { deltaX, deltaY } = event
-  setTabOffset(tabScrollLeft.value + (Math.abs(deltaX) > Math.abs(deltaY) ? deltaX : deltaY))
-}
-
-async function revealActiveTab() {
-  await nextTick()
-  measureTabScroll()
-  const bar = tabBarRef.value
-  const track = tabTrackRef.value
-  if (!bar || !track) return
-  const active = track.querySelector<HTMLElement>('.tab-item.active')
-  if (!active) return
-  const left = active.offsetLeft
-  const right = left + active.offsetWidth
-  const viewLeft = tabScrollLeft.value
-  const viewRight = viewLeft + bar.clientWidth
-  if (left < viewLeft) setTabOffset(left)
-  else if (right > viewRight) setTabOffset(right - bar.clientWidth)
-}
-
-/* 标签数量变化（新增/关闭）后重新测量可滚动范围 */
-watch(
-  () => tabs.tabs.length,
-  () => nextTick(measureTabScroll),
-)
-
 /* 路由变化 → 同步多标签页 */
 watch(
   () => route.fullPath,
@@ -241,13 +182,17 @@ watch(
         closable: path !== '/dashboard',
       })
     }
-    await revealActiveTab()
   },
   { immediate: true },
 )
 
-function handleMenuChange(value: string) {
-  if (value !== route.path) router.push(value)
+function changePageTab(value: string | number) {
+  const tab = tabs.tabs.find((item) => item.path === value)
+  if (tab && tab.path !== route.path) void router.push(tab.fullPath)
+}
+
+function removePageTab(options: { value: string | number }) {
+  void closeTab(String(options.value))
 }
 
 async function closeTab(path: string) {
@@ -267,10 +212,6 @@ async function closeTab(path: string) {
 /* 关闭其他：关闭除当前页外的所有标签（工作台始终保留），保持在当前页 */
 function closeAllTabs() {
   tabs.closeOthers(route.path)
-}
-
-function clickCurrentTarget(event: KeyboardEvent) {
-  ;(event.currentTarget as HTMLElement | null)?.click()
 }
 
 const dropdownOptions = [
@@ -317,44 +258,44 @@ async function handleDropdown(item: { value?: string | number }) {
         <span v-if="!collapsed" class="logo-text">聚屿社区</span>
       </t-link>
 
+      <!-- 菜单项在渲染前按权限过滤；折叠时根节点变为 Tooltip，不能依赖根节点权限指令。 -->
       <div class="side-menu">
         <t-menu
           :value="activePath"
           :collapsed="collapsed"
           v-model:expanded="expandedMenus"
           :theme="theme.mode"
-          @change="handleMenuChange"
         >
-          <t-menu-item value="/dashboard">
+          <t-menu-item value="/dashboard" to="/dashboard" router-link>
             <template #icon><DashboardIcon /></template>
             工作台
           </t-menu-item>
 
           <!-- 一级菜单：用户留言（客户端留言的查看与回复），置于工作台之下 -->
-          <t-menu-item value="/user-messages" v-permission="'/user-messages'">
+          <t-menu-item v-if="auth.hasPerm('/user-messages')" value="/user-messages" to="/user-messages" router-link>
             <template #icon><ChatIcon /></template>
             用户留言
           </t-menu-item>
 
           <t-submenu v-if="canSee(['/users', '/individuals', '/enterprises', '/external-enterprises', '/approvals'], '社区成员')" value="group-members" title="社区成员">
             <template #icon><UserCircleIcon /></template>
-            <t-menu-item value="/users" v-permission="'/users'">
+            <t-menu-item v-if="auth.hasPerm('/users')" value="/users" to="/users" router-link>
               <template #icon><UserListIcon /></template>
               用户管理
             </t-menu-item>
-            <t-menu-item value="/individuals" v-permission="'/individuals'">
+            <t-menu-item v-if="auth.hasPerm('/individuals')" value="/individuals" to="/individuals" router-link>
               <template #icon><UserIcon /></template>
               社区个体
             </t-menu-item>
-            <t-menu-item value="/enterprises" v-permission="'/enterprises'">
+            <t-menu-item v-if="auth.hasPerm('/enterprises')" value="/enterprises" to="/enterprises" router-link>
               <template #icon><BuildingIcon /></template>
               社区企业
             </t-menu-item>
-            <t-menu-item value="/external-enterprises" v-permission="'/external-enterprises'">
+            <t-menu-item v-if="auth.hasPerm('/external-enterprises')" value="/external-enterprises" to="/external-enterprises" router-link>
               <template #icon><Building1Icon /></template>
               合作企业
             </t-menu-item>
-            <t-menu-item value="/approvals" v-permission="'/approvals'">
+            <t-menu-item v-if="auth.hasPerm('/approvals')" value="/approvals" to="/approvals" router-link>
               <template #icon><CheckCircleIcon /></template>
               申请审核
             </t-menu-item>
@@ -362,23 +303,23 @@ async function handleDropdown(item: { value?: string | number }) {
 
           <t-submenu v-if="canSee(['/demands', '/demands/review', '/projects', '/events', '/events/enrollments'], '业务运营')" value="group-biz" title="业务运营">
             <template #icon><ViewListIcon /></template>
-            <t-menu-item value="/demands" v-permission="'/demands'">
+            <t-menu-item v-if="auth.hasPerm('/demands')" value="/demands" to="/demands" router-link>
               <template #icon><ViewListIcon /></template>
               需求管理
             </t-menu-item>
-            <t-menu-item value="/demands/review" v-permission="'/demands/review'">
+            <t-menu-item v-if="auth.hasPerm('/demands/review')" value="/demands/review" to="/demands/review" router-link>
               <template #icon><CheckCircleIcon /></template>
               需求审核
             </t-menu-item>
-            <t-menu-item value="/projects" v-permission="'/projects'">
+            <t-menu-item v-if="auth.hasPerm('/projects')" value="/projects" to="/projects" router-link>
               <template #icon><AppIcon /></template>
               项目管理
             </t-menu-item>
-            <t-menu-item value="/events" v-permission="'/events'">
+            <t-menu-item v-if="auth.hasPerm('/events')" value="/events" to="/events" router-link>
               <template #icon><CalendarIcon /></template>
               活动管理
             </t-menu-item>
-            <t-menu-item value="/events/enrollments" v-permission="'/events'">
+            <t-menu-item v-if="auth.hasPerm('/events')" value="/events/enrollments" to="/events/enrollments" router-link>
               <template #icon><CheckCircleIcon /></template>
               活动报名
             </t-menu-item>
@@ -390,23 +331,23 @@ async function handleDropdown(item: { value?: string | number }) {
             title="空间管理"
           >
             <template #icon><MapIcon /></template>
-            <t-menu-item value="/workstations" v-permission="'/workstations'">
+            <t-menu-item v-if="auth.hasPerm('/workstations')" value="/workstations" to="/workstations" router-link>
               <template #icon><ViewModuleIcon /></template>
               办公位管理
             </t-menu-item>
-            <t-menu-item value="/workstations/offices" v-permission="'/workstations/offices'">
+            <t-menu-item v-if="auth.hasPerm('/workstations/offices')" value="/workstations/offices" to="/workstations/offices" router-link>
               <template #icon><BuildingIcon /></template>
               办公室管理
             </t-menu-item>
-            <t-menu-item value="/workstations/leases" v-permission="'/workstations/leases'">
+            <t-menu-item v-if="auth.hasPerm('/workstations/leases')" value="/workstations/leases" to="/workstations/leases" router-link>
               <template #icon><ViewListIcon /></template>
               租赁管理
             </t-menu-item>
-            <t-menu-item value="/spaces" v-permission="'/spaces'">
+            <t-menu-item v-if="auth.hasPerm('/spaces')" value="/spaces" to="/spaces" router-link>
               <template #icon><MapIcon /></template>
               公共空间管理
             </t-menu-item>
-            <t-menu-item value="/spaces/reservations" v-permission="'/spaces/reservations'">
+            <t-menu-item v-if="auth.hasPerm('/spaces/reservations')" value="/spaces/reservations" to="/spaces/reservations" router-link>
               <template #icon><CalendarIcon /></template>
               公共空间预约
             </t-menu-item>
@@ -418,31 +359,31 @@ async function handleDropdown(item: { value?: string | number }) {
             title="内容管理"
           >
             <template #icon><Edit2Icon /></template>
-            <t-menu-item value="/contents/publish" v-permission="'/contents/publish'">
+            <t-menu-item v-if="auth.hasPerm('/contents/publish')" value="/contents/publish" to="/contents/publish" router-link>
               <template #icon><Edit2Icon /></template>
               资讯发布
             </t-menu-item>
-            <t-menu-item value="/contents/submissions" v-permission="'/contents/submissions'">
+            <t-menu-item v-if="auth.hasPerm('/contents/submissions')" value="/contents/submissions" to="/contents/submissions" router-link>
               <template #icon><ViewListIcon /></template>
               投稿内容
             </t-menu-item>
-            <t-menu-item value="/contents/columns" v-permission="'/contents/columns'">
+            <t-menu-item v-if="auth.hasPerm('/contents/columns')" value="/contents/columns" to="/contents/columns" router-link>
               <template #icon><ViewModuleIcon /></template>
               栏目管理
             </t-menu-item>
-            <t-menu-item value="/contents/stats" v-permission="'/contents/stats'">
+            <t-menu-item v-if="auth.hasPerm('/contents/stats')" value="/contents/stats" to="/contents/stats" router-link>
               <template #icon><AppIcon /></template>
               阅读统计
             </t-menu-item>
-            <t-menu-item value="/contents/policies" v-permission="'/contents/policies'">
+            <t-menu-item v-if="auth.hasPerm('/contents/policies')" value="/contents/policies" to="/contents/policies" router-link>
               <template #icon><ViewListIcon /></template>
               社区政策
             </t-menu-item>
-            <t-menu-item value="/contents/banners" v-permission="'/contents/banners'">
+            <t-menu-item v-if="auth.hasPerm('/contents/banners')" value="/contents/banners" to="/contents/banners" router-link>
               <template #icon><ViewModuleIcon /></template>
               轮播图管理
             </t-menu-item>
-            <t-menu-item value="/contents/announcements" v-permission="'/contents/announcements'">
+            <t-menu-item v-if="auth.hasPerm('/contents/announcements')" value="/contents/announcements" to="/contents/announcements" router-link>
               <template #icon><NotificationIcon /></template>
               首页公告
             </t-menu-item>
@@ -450,11 +391,11 @@ async function handleDropdown(item: { value?: string | number }) {
 
           <t-submenu v-if="canSee(['/mall/goods', '/mall/orders'], '积分管理')" value="group-points" title="积分商城">
             <template #icon><CartIcon /></template>
-            <t-menu-item value="/mall/goods" v-permission="'/mall/goods'">
+            <t-menu-item v-if="auth.hasPerm('/mall/goods')" value="/mall/goods" to="/mall/goods" router-link>
               <template #icon><CartIcon /></template>
               商品管理
             </t-menu-item>
-            <t-menu-item value="/mall/orders" v-permission="'/mall/orders'">
+            <t-menu-item v-if="auth.hasPerm('/mall/orders')" value="/mall/orders" to="/mall/orders" router-link>
               <template #icon><ViewListIcon /></template>
               订单管理
             </t-menu-item>
@@ -466,19 +407,19 @@ async function handleDropdown(item: { value?: string | number }) {
             title="规则管理"
           >
             <template #icon><SettingIcon /></template>
-            <t-menu-item value="/rules/points" v-permission="'/rules/points'">
+            <t-menu-item v-if="auth.hasPerm('/rules/points')" value="/rules/points" to="/rules/points" router-link>
               <template #icon><Edit2Icon /></template>
               积分规则
             </t-menu-item>
-            <t-menu-item value="/rules/experience" v-permission="'/rules/experience'">
+            <t-menu-item v-if="auth.hasPerm('/rules/experience')" value="/rules/experience" to="/rules/experience" router-link>
               <template #icon><ViewListIcon /></template>
               经验值规则
             </t-menu-item>
-            <t-menu-item value="/rules/levels" v-permission="'/rules/levels'">
+            <t-menu-item v-if="auth.hasPerm('/rules/levels')" value="/rules/levels" to="/rules/levels" router-link>
               <template #icon><ViewModuleIcon /></template>
               等级规则
             </t-menu-item>
-            <t-menu-item value="/rules/publishing-limits" v-permission="'/rules/publishing-limits'">
+            <t-menu-item v-if="auth.hasPerm('/rules/publishing-limits')" value="/rules/publishing-limits" to="/rules/publishing-limits" router-link>
               <template #icon><SettingIcon /></template>
               个人用户规则
             </t-menu-item>
@@ -490,59 +431,47 @@ async function handleDropdown(item: { value?: string | number }) {
             title="系统管理"
           >
             <template #icon><LayersIcon /></template>
-            <t-menu-item value="/system/config" v-permission="'/system/config'">
+            <t-menu-item v-if="auth.hasPerm(['/system/config', '/system/messages', '/system/trash'])" value="/system/config" to="/system/config" router-link>
               <template #icon><SettingIcon /></template>
               系统配置
             </t-menu-item>
-            <t-menu-item value="/system/mobile-themes" v-permission="'/system/config'">
-              <template #icon><SettingIcon /></template>
-              移动端主题
-            </t-menu-item>
-            <t-menu-item v-if="canSee(['/approvals'], '系统管理', 'members')" value="/system/application-form-config" v-permission="'/approvals'">
+            <t-menu-item v-if="(canSee(['/approvals'], '系统管理', 'members')) && auth.hasPerm('/approvals')" value="/system/application-form-config" to="/system/application-form-config" router-link>
               <template #icon><CheckCircleIcon /></template>
               申请表单配置
             </t-menu-item>
-            <t-menu-item v-if="canSee(['/member-governance'], '系统管理', 'members')" value="/system/deletion-requests" v-permission="'/member-governance'"><template #icon><CheckCircleIcon /></template>注销工单</t-menu-item>
-            <t-menu-item value="/system/logs" v-permission="['/logs/audit', '/logs/login']">
+            <t-menu-item v-if="(canSee(['/member-governance'], '系统管理', 'members')) && auth.hasPerm('/member-governance')" value="/system/deletion-requests" to="/system/deletion-requests" router-link><template #icon><CheckCircleIcon /></template>注销工单</t-menu-item>
+            <t-menu-item v-if="auth.hasPerm(['/logs/audit', '/logs/login'])" value="/system/logs" to="/system/logs" router-link>
               <template #icon><ViewListIcon /></template>
               日志与审计
             </t-menu-item>
-            <t-menu-item value="/system/account" v-permission="['/system/admins', '/system/roles', '/system/sessions']">
+            <t-menu-item v-if="auth.hasPerm(['/system/admins', '/system/roles', '/system/sessions'])" value="/system/account" to="/system/account" router-link>
               <template #icon><UserListIcon /></template>
               角色与账号
             </t-menu-item>
-            <t-menu-item value="/assets/library" v-permission="'/system/assets'">
+            <t-menu-item v-if="auth.hasPerm('/system/assets')" value="/assets/library" to="/assets/library" router-link>
               <template #icon><ViewModuleIcon /></template>
               素材库
             </t-menu-item>
-            <t-menu-item value="/system/monitor" v-permission="'/system/monitor'">
+            <t-menu-item v-if="auth.hasPerm('/system/monitor')" value="/system/monitor" to="/system/monitor" router-link>
               <template #icon><DashboardIcon /></template>
               系统监控
             </t-menu-item>
-            <t-menu-item value="/system/trash" v-permission="'/system/trash'">
-              <template #icon><Edit2Icon /></template>
-              归档管理
-            </t-menu-item>
-            <t-menu-item value="/system/policies" v-permission="'/system/policies'"><template #icon><Edit2Icon /></template>协议与政策</t-menu-item>
-            <t-menu-item value="/system/messages" v-permission="'/system/messages'">
-              <template #icon><NotificationIcon /></template>
-              消息中心
-            </t-menu-item>
+            <t-menu-item v-if="auth.hasPerm('/system/policies')" value="/system/policies" to="/system/policies" router-link><template #icon><Edit2Icon /></template>协议与政策</t-menu-item>
           </t-submenu>
         </t-menu>
       </div>
 
       <div class="side-footer">
-        <!-- 原生 button 替代 div[role=button]：无需手写 role/tabindex/键盘样板 -->
-        <button type="button" class="footer-btn" :aria-label="isAllExpanded ? '全部折叠' : '全部展开'" @click="toggleAllGroups">
+        <!-- 使用 TDesign Button 保持键盘行为和交互尺寸一致。 -->
+        <t-button variant="text" theme="default" class="footer-btn" :aria-label="isAllExpanded ? '全部折叠' : '全部展开'" @click="toggleAllGroups">
           <ChevronUpIcon v-if="isAllExpanded" />
           <ChevronDownIcon v-else />
           <span v-if="!collapsed">{{ isAllExpanded ? '全部折叠' : '全部展开' }}</span>
-        </button>
-        <button type="button" class="footer-btn" :aria-label="collapsed ? '展开菜单' : '收起菜单'" @click="collapsed = !collapsed">
+        </t-button>
+        <t-button variant="text" theme="default" class="footer-btn" :aria-label="collapsed ? '展开菜单' : '收起菜单'" @click="collapsed = !collapsed">
           <ChevronLeftIcon :class="{ 'rotate-180': collapsed }" />
           <span v-if="!collapsed">收起菜单</span>
-        </button>
+        </t-button>
       </div>
     </aside>
 
@@ -559,33 +488,17 @@ async function handleDropdown(item: { value?: string | number }) {
           <template #icon><CloseIcon /></template>
           关闭其他
         </t-button>
-        <nav
-          ref="tabBarRef"
-          class="tab-bar"
-          :class="{ 'is-overflowing': tabMaxScroll > 0 }"
+        <t-tabs
+          class="page-tabs"
+          :value="route.path"
+          theme="card"
+          scroll-position="auto"
           aria-label="已打开页面"
-          @wheel="handleTabBarWheel"
+          @change="changePageTab"
+          @remove="removePageTab"
         >
-          <div ref="tabTrackRef" class="tab-track" :style="tabTrackStyle">
-            <div
-              v-for="tab in tabs.tabs"
-              :key="tab.path"
-              class="tab-item"
-              :class="{ active: tab.path === route.path }"
-            >
-              <t-link class="tab-title" theme="default" hover="color" :href="router.resolve(tab.fullPath).href" :aria-current="tab.path === route.path ? 'page' : undefined">{{ tab.title }}</t-link>
-              <button
-                v-if="tab.closable"
-                type="button"
-                class="tab-close"
-                :aria-label="`关闭${tab.title}`"
-                @click.stop="closeTab(tab.path)"
-              >
-                <CloseIcon />
-              </button>
-            </div>
-          </div>
-        </nav>
+          <t-tab-panel v-for="tab in tabs.tabs" :key="tab.path" :value="tab.path" :label="tab.title" :removable="tab.closable" />
+        </t-tabs>
         <div class="top-right">
           <t-button
             variant="text"
@@ -653,16 +566,10 @@ async function handleDropdown(item: { value?: string | number }) {
             </template>
           </t-popup>
           <t-dropdown :options="dropdownOptions" trigger="click" @click="handleDropdown">
-            <div
-              class="admin-chip"
-              role="button"
-              tabindex="0"
-              aria-label="管理员菜单"
-              @keydown.enter.space.prevent="clickCurrentTarget"
-            >
+            <t-button variant="text" theme="default" class="admin-chip" aria-label="管理员菜单">
               <t-avatar size="28px">{{ auth.name.slice(0, 1) }}</t-avatar>
               <span class="admin-name">{{ auth.name || '管理员' }}</span>
-            </div>
+            </t-button>
           </t-dropdown>
         </div>
       </header>
@@ -765,7 +672,7 @@ async function handleDropdown(item: { value?: string | number }) {
 }
 
 /* 侧栏底部操作按钮：图标靠前、文字跟随；收起态仅显示图标居中。
- * 原生 button 样式重置：不引入新配色，背景/边框清零，字体与颜色继承容器 */
+ * 使用 TDesign 文字按钮，保持紧凑尺寸与主题语义色。 */
 .footer-btn {
   display: flex;
   align-items: center;
@@ -791,6 +698,13 @@ async function handleDropdown(item: { value?: string | number }) {
 .footer-btn:hover {
   color: var(--td-brand-color);
   background: var(--td-bg-color-container-hover);
+}
+
+.footer-btn :deep(.t-button__text),
+.admin-chip :deep(.t-button__text) {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
 }
 
 .side-col.collapsed .side-footer {
@@ -945,31 +859,10 @@ async function handleDropdown(item: { value?: string | number }) {
   color: var(--td-text-color-primary);
 }
 
-/* ---------- 多标签栏（随顶栏布局，内部滚动 + 右侧关闭其他） ---------- */
-.tab-bar {
-  display: flex;
-  align-items: center;
-  flex: 1;
-  min-width: 0;
-  height: 100%;
-  padding: 0 8px;
-  overflow: hidden;
-}
-
-/* 轨道溢出时右缘渐隐：给出「还有更多标签、可横向滚动」的视觉提示（仅溢出时启用，避免固定遮暗最后一个标签） */
-.tab-bar.is-overflowing {
-  mask-image: linear-gradient(to right, #000 calc(100% - 24px), transparent 100%);
-  -webkit-mask-image: linear-gradient(to right, #000 calc(100% - 24px), transparent 100%);
-}
-
-/* 轨道随滚轮横向位移（transform，参考 TDesign Tabs 导航滑动）。
- * 不声明 will-change：transition 已够平滑，常驻 will-change 徒增图层内存 */
-.tab-track {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-  transition: transform 0.2s cubic-bezier(0.38, 0, 0.24, 1);
-}
+/* ---------- TDesign 页面页签 ---------- */
+.page-tabs { flex: 1; min-width: 0; }
+.page-tabs :deep(.t-tabs__content) { display: none; }
+.page-tabs :deep(.t-tabs__nav-container) { background: var(--td-bg-color-container); }
 
 .tab-close-all {
   flex-shrink: 0;
@@ -981,64 +874,7 @@ async function handleDropdown(item: { value?: string | number }) {
   color: var(--td-text-color-primary);
 }
 
-.tab-item {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-  flex-shrink: 0;
-  height: 28px;
-  /* 左侧内边距交给 .tab-title 承担：整块可点区域与指针反馈一致 */
-  padding: 0 10px 0 0;
-  border: 1px solid var(--td-component-border);
-  border-radius: var(--td-radius-default);
-  font-size: 12px;
-  color: var(--td-text-color-secondary);
-  cursor: pointer;
-  white-space: nowrap;
-  background: var(--td-bg-color-page);
-  transition: color 120ms ease, border-color 120ms ease, background-color 120ms ease;
-}
 
-.tab-item:hover {
-  color: var(--td-brand-color);
-}
-
-.tab-item.active {
-  color: var(--td-brand-color);
-  border-color: var(--td-brand-color);
-  background: var(--td-brand-color-1);
-}
-
-.tab-title {
-  display: flex;
-  align-items: center;
-  align-self: stretch;
-  padding-left: 10px;
-  white-space: nowrap;
-}
-
-.tab-close {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  /* 原生 button 样式重置：不引入新配色，背景/边框/内边距清零，字体继承 */
-  padding: 0;
-  background: none;
-  border: none;
-  font: inherit;
-  /* 命中区 24×24（图标仍 12px 视觉尺寸）：16px 目标过小，指针与触摸均易点空。
-   * 直接放大元素而非用伪元素外扩——标签栏 overflow:hidden 会裁掉外扩部分 */
-  width: 24px;
-  height: 24px;
-  border-radius: var(--td-radius-default);
-  color: var(--td-text-color-secondary);
-  cursor: pointer;
-}
-
-.tab-close:hover {
-  color: var(--td-error-color);
-  background: var(--td-error-color-1);
-}
 
 /* ---------- 内容区 ---------- */
 .page-scroll {

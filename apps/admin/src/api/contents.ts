@@ -7,6 +7,15 @@ import type {
 } from '@/types'
 import { httpDelete, httpGet, httpPost, httpPut } from './http'
 
+export interface ArticleReadStats {
+  list: Article[]
+  total: number
+  summary: { totalViews: number; articleCount: number; averageViews: number; topViews: number }
+}
+export function fetchArticleReadStats(page: number, pageSize: number): Promise<ArticleReadStats> {
+  return httpGet(`/contents/read-stats?page=${page}&pageSize=${pageSize}`)
+}
+
 /* ---------- 文章管理（/api/admin/contents/articles）
  * 要点：
  * - 文章分来源：channel=official 社区自行发布（资讯发布）/ submitted 用户投稿（投稿内容）

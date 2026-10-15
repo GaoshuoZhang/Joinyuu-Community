@@ -124,6 +124,12 @@ const rules: FormProps['rules'] = {
   area: [{ required: true, message: '请选择所属区域', trigger: 'submit' }],
   seatNo: [{ required: true, message: '请输入办公位编号', trigger: 'submit' }],
   type: [{ required: true, message: '请选择办公位类型', trigger: 'submit' }],
+  capacity: [{ validator: (value: number) => Number.isInteger(value) && value > 0,
+    message: '容纳人数须为大于 0 的整数', trigger: 'submit' }],
+  defaultMonthlyRent: [{ validator: (value: number | undefined) => value == null || (Number.isFinite(value) && value >= 0),
+    message: '租金须为不小于 0 的金额', trigger: 'submit' }],
+  areaSqm: [{ validator: (value: number | undefined) => value == null || (Number.isFinite(value) && value >= 0),
+    message: '面积须为不小于 0 的数值', trigger: 'submit' }],
 }
 
 async function onConfirm() {
@@ -147,7 +153,12 @@ async function onConfirm() {
       await updateWorkstation(props.workstation.id, payload)
       /* 维护状态开关与打开时不一致时同步状态（已分配办公位开关已禁用，不会走到被拦分支） */
       if (form.maintenance !== initialMaintenance.value) {
-        await setWorkstationStatus(props.workstation.id, form.maintenance ? 'maintenance' : 'idle')
+        try {
+          await setWorkstationStatus(props.workstation.id, form.maintenance ? 'maintenance' : 'idle')
+        } catch (e) {
+          emit('success')
+          throw new Error(`办公位资料已保存，维护状态未更新：${e instanceof Error ? e.message : '请重试'}`)
+        }
       }
       MessagePlugin.success('办公位资料已保存')
     }
@@ -228,7 +239,7 @@ usePageDirtyGuard(computed(() => props.visible && isDirty.value))
           <t-input v-accessible-field clearable v-model="form.seatNo" :placeholder="seatNoTip" />
         </t-form-item>
         <t-form-item label="容纳人数" name="capacity">
-          <t-input-number v-accessible-field v-model="form.capacity" :min="1" theme="column" class="ctl-w-full" />
+          <t-input-number v-accessible-field v-model="form.capacity" :min="1" theme="column" class="ctl-w-full" :decimal-places="0" :step="1" />
         </t-form-item>
       </div>
       <t-form-item label="办公位类型" name="type">
@@ -243,10 +254,10 @@ usePageDirtyGuard(computed(() => props.visible && isDirty.value))
             theme="column"
             class="ctl-w-full"
             placeholder="选填；月租租约自动累加用…"
-          />
+          :decimal-places="2" />
         </t-form-item>
         <t-form-item v-if="form.type === 'office'" label="面积（㎡）" name="areaSqm">
-          <t-input-number v-accessible-field v-model="form.areaSqm" :min="0" theme="column" class="ctl-w-full" placeholder="选填…" />
+          <t-input-number v-accessible-field v-model="form.areaSqm" :min="0" theme="column" class="ctl-w-full" placeholder="选填…" :decimal-places="2" />
         </t-form-item>
       </div>
       <t-form-item label="备注" name="note">

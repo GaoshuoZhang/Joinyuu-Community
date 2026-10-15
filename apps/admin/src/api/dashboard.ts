@@ -10,7 +10,7 @@ export interface DashboardData {
     runningProjects: number
     upcomingEvents: number
   }
-  /** 五域待办聚合（工作台顶部卡片） */
+  /** 六域待办聚合（工作台顶部卡片） */
   todos: TodoSummary[]
   pendingApplications: Application[]
   upcomingEvents: CommunityEvent[]

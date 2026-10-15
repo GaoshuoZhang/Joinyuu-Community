@@ -1,5 +1,6 @@
 <script setup lang="ts">
-import { CheckTag } from 'tdesign-mobile-vue'
+import { computed } from 'vue'
+import { Radio, RadioGroup } from 'tdesign-mobile-vue'
 import { identityOptionLabel } from '@/stores/auth'
 import type { UserIdentity } from '@/types'
 
@@ -13,30 +14,25 @@ const props = defineProps<{
 
 const emit = defineEmits<{ select: [identity: UserIdentity] }>()
 
-function isPicked(identity: UserIdentity): boolean {
-  return props.selected === identity.type && (identity.type !== 'community_enterprise' || props.selectedEnterpriseId === (identity.enterpriseId ?? ''))
+const keyOf = (identity: UserIdentity) => `${identity.type}:${identity.enterpriseId ?? ''}`
+const selectedKey = computed(() => `${props.selected}:${props.selectedEnterpriseId ?? ''}`)
+function select(value: string | number | boolean) {
+  const identity = props.identities.find((item) => keyOf(item) === value)
+  if (identity) emit('select', identity)
 }
 </script>
 
 <template>
-  <div class="chips">
-    <CheckTag
-      v-for="identity in identities"
-      :key="`${identity.type}:${identity.enterpriseId ?? ''}`"
-      variant="light"
-      size="medium"
-      :checked="isPicked(identity)"
-      @change="emit('select', identity)"
-    >
-      {{ identityOptionLabel(identity, userName) }}
-    </CheckTag>
-  </div>
+  <RadioGroup role="radiogroup" name="action-identity" class="identity-options" :value="selectedKey" aria-label="选择操作身份" @change="select">
+    <Radio v-for="identity in identities" :key="keyOf(identity)" :value="keyOf(identity)" :label="identityOptionLabel(identity, userName)" :borderless="true" />
+  </RadioGroup>
 </template>
 
 <style scoped>
-.chips {
+.identity-options {
   display: flex;
-  flex-wrap: wrap;
-  gap: var(--app-space-4);
+  flex-direction: column;
+  width: 100%;
+  --td-radio-vertical-padding: 10px;
 }
 </style>

@@ -1,0 +1,4 @@
+# Local authenticated E2E evidence and copied fixture attachments.
+# Keep manifests, runner and report in the parent test directory.
+*
+!.gitignore

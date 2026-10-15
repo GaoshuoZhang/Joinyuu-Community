@@ -186,12 +186,14 @@ function onNotices() {
     <Navbar
       fixed
       placeholder
-      :left-arrow="!isTab"
+      :left-arrow="false"
       :z-index="100"
       :safe-area-inset-top="true"
       :style="navbarStyle"
-      @left-click="goBack"
     >
+      <template #left>
+        <Button v-if="!isTab" class="nav-back" variant="text" shape="square" aria-label="返回" @click="goBack"><Icon aria-hidden="true" name="chevron-left" size="24px" /></Button>
+      </template>
       <template #title>
         <h1 class="navbar-title">{{ pageTitle || customerTheme.theme?.brand?.name || config.config.siteName || '聚屿社区' }}</h1>
       </template>
@@ -240,6 +242,7 @@ function onNotices() {
 </template>
 
 <style scoped>
+.nav-back { width: 44px; min-width: 44px; height: 44px; padding: 0; }
 .theme-preview :deep(.t-navbar--fixed .t-navbar__content) {
   top: var(--app-theme-preview-height, 0px);
 }

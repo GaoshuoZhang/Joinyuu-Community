@@ -4,10 +4,11 @@ import { useRoute, useRouter } from 'vue-router'
 import { Loading, Button, Cell, CheckTag, DateTimePicker, DialogPlugin, Form, FormItem, Input, NoticeBar, Popup, Stepper, Tag, Toast } from 'tdesign-mobile-vue'
 import type { FormInstanceFunctions, FormRules } from 'tdesign-mobile-vue'
 import { fetchAvailability, fetchSpaceDetail, createReservation } from '@/api/spaces'
+import IdentityPicker from '@/components/forms/IdentityPicker.vue'
 import { fetchMyIdentities } from '@/api/enterprises'
 import { ApiError } from '@/api/http'
 import FlowResult from '@/components/FlowResult.vue'
-import { actionIdentityOptions, useAuthStore, identityOptionLabel } from '@/stores/auth'
+import { authorizedActionIdentities, useAuthStore, identityOptionLabel } from '@/stores/auth'
 import EmptyBlock from '@/components/shared/EmptyBlock.vue'
 import ListSkeleton from '@/components/ListSkeleton.vue'
 import type { IdentityType, Space, SpaceSlot, UserIdentity } from '@/types'
@@ -39,13 +40,7 @@ let slotsRequestId = 0
 const delegatedIdentities = ref<UserIdentity[]>([])
 /* 各社区企业的积分消费折扣（企业 id → 折扣；代企业预约时按企业等级折算费用） */
 const enterpriseDiscounts = ref<Record<string, number>>({})
-const identityOptions = computed(() => {
-  const base = auth.identities
-  const extra = delegatedIdentities.value.filter(
-    (d) => !base.some((b) => b.type === 'community_enterprise' && b.enterpriseId === d.enterpriseId),
-  )
-  return actionIdentityOptions([...base, ...extra])
-})
+const identityOptions = computed(() => authorizedActionIdentities(auth.identities, delegatedIdentities.value))
 const form = reactive({
   start: '',
   end: '',
@@ -467,18 +462,7 @@ function goMine() {
 
       <div class="m-card form-card">
         <FormItem label="预约身份" name="asIdentity">
-          <div class="chips">
-            <CheckTag
-              v-for="i in identityOptions"
-              :key="`${i.type}:${i.enterpriseId ?? ''}`"
-              variant="light"
-              size="medium"
-              :checked="isIdentityPicked(i)"
-              @change="pickIdentity(i)"
-            >
-              {{ identityOptionLabel(i, auth.name) }}
-            </CheckTag>
-          </div>
+          <IdentityPicker :identities="identityOptions" :selected="form.asIdentity" :selected-enterprise-id="form.asEnterpriseId" :user-name="auth.name" @select="pickIdentity" />
         </FormItem>
       </div>
 
@@ -497,7 +481,7 @@ function goMine() {
 
     <Popup v-model:visible="datePickerVisible" placement="bottom">
       <DateTimePicker
-        v-model="draftDate"
+        v-model:value="draftDate"
         mode="date"
         format="YYYY-MM-DD"
         :start="today"

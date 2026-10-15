@@ -12,6 +12,11 @@ import { ResetPasswordDto } from './dto/reset-password.dto'
 export class AdminsController {
   constructor(private readonly admins: AdminsService) {}
 
+  @Get('role-options')
+  roleOptions() {
+    return this.admins.roleOptions()
+  }
+
   @Get()
   list(@Query('keyword') keyword?: string): Promise<{ list: AdminAccountDto[]; total: number }> {
     return this.admins.list(keyword)

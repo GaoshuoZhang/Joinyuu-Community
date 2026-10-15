@@ -2,7 +2,7 @@
 import { computed, reactive, ref, watch } from 'vue'
 import { MessagePlugin } from 'tdesign-vue-next'
 import CardSegmentsEditor from '@/components/CardSegmentsEditor.vue'
-import { cardFields, updateCard, type CardRow } from '@/api/cards'
+import { cardFields, cardSegmentFields, updateCard, type CardRow } from '@/api/cards'
 import { useDialogDirtyGuard, usePageDirtyGuard } from '@/utils/form'
 
 /* 编辑个体名片弹窗（个体详情 > 名片标签页）：
@@ -32,16 +32,7 @@ const segments = reactive<Record<string, Record<string, string>[]>>({
 const visibility = reactive({ age: true, politicalStatus: true })
 /* 未保存保护：基线覆盖文本字段 + 分段条目 + 隐私开关（嵌套 reactive 一并序列化） */
 const { markBaseline, isDirty, guardClose } = useDialogDirtyGuard(reactive({ form, segments, visibility }))
-const segmentFields: Record<string, { key: string; label: string }[]> = Object.fromEntries(
-  Object.entries({
-    education: { school: '学校', major: '专业', degree: '学位', period: '起止时间' },
-    work: { company: '公司', title: '职位', period: '起止时间', description: '工作内容' },
-    projects: { name: '项目名称', role: '角色', period: '起止时间', description: '项目简介' },
-    honors: { name: '荣誉名称', date: '获得时间' },
-    socials: { label: '名称', url: '链接' },
-    customLinks: { label: '名称', url: '链接' },
-  }).map(([key, fields]) => [key, Object.entries(fields).map(([k, label]) => ({ key: k, label }))]),
-)
+const segmentFields = cardSegmentFields
 const textFields = cardFields.individual.filter((field) => !segmentFields[field.key] && field.key !== 'visibility')
 const longTextFields = ['intro', 'description', 'industryExperience', 'services', 'advantages']
 

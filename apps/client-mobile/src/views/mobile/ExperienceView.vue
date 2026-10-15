@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
-import { List } from 'tdesign-mobile-vue'
+import { Button, List } from 'tdesign-mobile-vue'
 import { useAsyncList } from '@/composables/useAsyncList'
 import { fetchExperience } from '@/api/experience'
 import { fetchRealnameRights } from '@/api/me'
@@ -65,7 +65,7 @@ onMounted(() => {
         identity-label="社区个体"
         class="level-carousel"
       />
-      <p v-if="rightsError" class="rights-error">{{ rightsError }}，<button type="button" class="retry-link" @click="loadRights">重试</button></p>
+      <p v-if="rightsError" class="rights-error">{{ rightsError }}，<Button variant="text" size="small" theme="primary" @click="loadRights">重试</Button></p>
       <p v-if="progress && !progress.isHighestLevel" class="next-hint">
         距下一级还需 {{ formatZhNumber(progress.remaining ?? 0) }} 经验
       </p>

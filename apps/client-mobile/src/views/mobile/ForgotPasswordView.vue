@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import PasswordInput from '@/components/shared/PasswordInput.vue'
 import { computed, nextTick, onBeforeUnmount, reactive, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { Button, Form, FormItem, Input, Radio, RadioGroup, Toast } from 'tdesign-mobile-vue'
@@ -207,10 +208,10 @@ function backToStep1() {
         </div>
       </FormItem>
       <FormItem label="新密码" name="password">
-        <Input class="password-field" v-model="form.password" type="password" autocomplete="new-password" placeholder="至少 8 位，含字母与数字…" clearable />
+        <PasswordInput class="password-field" v-model="form.password" autocomplete="new-password" placeholder="至少 8 位，含字母与数字…" clearable />
       </FormItem>
       <FormItem label="确认新密码" name="confirm">
-        <Input class="password-field" v-model="form.confirm" type="password" autocomplete="new-password" placeholder="再次输入新密码…" clearable />
+        <PasswordInput class="password-field" v-model="form.confirm" autocomplete="new-password" placeholder="再次输入新密码…" clearable />
       </FormItem>
 
       <Button theme="primary" size="large" block type="submit" :loading="submitting">重置密码</Button>
@@ -310,23 +311,4 @@ function backToStep1() {
   cursor: pointer;
 }
 
-/* 密码显隐图标：内部类名 t-input__wrap--suffix-icon（官方无命中区/尺寸类 API，点击处理器挂在图标 SVG 上）。
- * 视觉保持 24px，用 padding 把 SVG 命中区抬到 44px 触控基线；升级 TDesign 时需复核类名与 DOM 结构。 */
-.password-field :deep(.t-input__wrap--suffix-icon) {
-  display: grid;
-  flex: 0 0 44px;
-  width: 44px;
-  place-items: center;
-}
-
-.password-field :deep(.t-input__wrap--suffix-icon svg) {
-  width: 24px;
-  height: 24px;
-  padding: 10px;
-  box-sizing: content-box;
-}
-
-.password-field :deep(.t-input--password) {
-  letter-spacing: 0;
-}
 </style>

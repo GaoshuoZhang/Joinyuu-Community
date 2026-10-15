@@ -27,6 +27,7 @@ const loading = ref(false)
 const error = ref('')
 const partialError = ref('')
 const results = ref<SearchResult[]>([])
+const moreResults = ref<{ kind: string; total: number; path: string }[]>([])
 
 const hasKeyword = computed(() => Boolean(keyword.value.trim()))
 const counts = computed(() => {
@@ -87,7 +88,7 @@ async function search() {
     const failed: string[] = []
     const [demandRes, events, articles, policies, talents, enterprises, spaces] = await Promise.all([
       fetchDemands({ keyword: q, page: 1, pageSize: 10 }).catch(() => { failed.push('需求'); return null }),
-      fetchEvents({ keyword: q }).catch(() => { failed.push('活动'); return null }),
+      fetchEvents({ keyword: q, page: 1, pageSize: 10 }).catch(() => { failed.push('活动'); return null }),
       fetchArticles({ keyword: q }).catch(() => { failed.push('文章'); return [] }),
       fetchPolicies({ keyword: q }).catch(() => { failed.push('社区服务'); return [] }),
       fetchTalents({ keyword: q }).catch(() => { failed.push('人才'); return [] }),
@@ -97,6 +98,10 @@ async function search() {
     /* v38：旧请求不覆盖新关键词结果 */
     if (id !== searchId) return
     activeKind.value = ''
+    moreResults.value = [
+      ...(demandRes && demandRes.total > demandRes.list.length ? [{ kind: '需求', total: demandRes.total, path: `/projects?q=${encodeURIComponent(q)}` }] : []),
+      ...(events && events.total > events.list.length ? [{ kind: '活动', total: events.total, path: `/plaza?tab=events&q=${encodeURIComponent(q)}` }] : []),
+    ]
     results.value = [
       ...(demandRes?.list ?? []).map((item) => ({ id: item.id, kind: '需求', title: item.title, summary: plainTextSummary(item.description), path: `/demands/${item.id}` })),
       ...(events?.list ?? []).map((item) => ({ id: item.id, kind: '活动', title: item.title, summary: `${formatLocalDateTime(item.startTime)} · ${item.location}`, path: `/events/${item.id}` })),
@@ -129,8 +134,12 @@ watch(keyword, () => {
   results.value = []
   activeKind.value = ''
   partialError.value = ''
-  /* 清空仅重置本地结果，不更新路由 */
+  moreResults.value = []
+  /* 清除同时移除路由关键词，刷新和历史导航保持一致。 */
   if (!keyword.value.trim()) {
+    const query = { ...route.query }
+    delete query.q
+    if (route.query.q !== undefined) void router.replace({ query })
     searchId += 1
     loading.value = false
     error.value = ''
@@ -200,6 +209,9 @@ onMounted(() => {
           {{ c }} {{ formatZhNumber(counts[c] ?? 0) }} 条
         </CheckTag>
       </div>
+      <div v-if="moreResults.length" class="more-results">
+        <router-link v-for="item in moreResults.filter((item) => !activeKind || item.kind === activeKind)" :key="item.kind" :to="item.path">查看更多{{ item.kind }}（共 {{ formatZhNumber(item.total) }} 条）</router-link>
+      </div>
       <EmptyBlock v-if="!visibleResults.length" text="没有找到相关内容，换个关键词试试" />
       <div v-else class="result-list stagger">
         <router-link v-for="item in visibleResults" :key="`${item.kind}-${item.id}`" class="m-card result pressable" :to="item.path">
@@ -224,6 +236,8 @@ onMounted(() => {
 </template>
 
 <style scoped>
+.more-results { display: flex; flex-wrap: wrap; gap: var(--app-space-4); }
+.more-results a { display: inline-flex; align-items: center; min-height: 44px; color: var(--td-brand-color); }
 .global-search { display: flex; flex-direction: column; gap:var(--app-space-6); padding:var(--app-space-8); }
 .head { padding:0 var(--app-space-1); }
 .head .page-desc { margin:0; font: var(--app-type-body-sm); color: var(--td-text-color-secondary); }

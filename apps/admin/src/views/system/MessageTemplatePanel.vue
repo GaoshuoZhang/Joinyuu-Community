@@ -212,9 +212,13 @@ async function onPreview() {
   if (!detail.value || previewLoading.value) return
   previewLoading.value = true
   previewVisible.value = true
+  previewSubject.value = ''
+  previewBody.value = ''
   try {
+    const allowed = parseVariables(edit.variablesText)
     const result = await previewMessageTemplate(detail.value.id, {
-      variables: Object.fromEntries(detail.value.variables.map((v) => [v, `「${v}」`])),
+      variables: Object.fromEntries(allowed.map((v) => [v, `「${v}」`])),
+      draft: { subject: edit.subject, body: edit.body, variables: allowed },
     })
     previewSubject.value = result.subject ?? ''
     previewBody.value = result.body
@@ -328,7 +332,7 @@ const { close: closeTestDialog } = useDialogFormProtection(testForm, testVisible
     </div>
 
     <div class="page-card">
-      <t-table row-key="id" :data="templates" :columns="columns" :loading="loading" table-layout="fixed" hover resizable>
+      <t-table :horizontal-scroll-affixed-bottom="{ container: '.page-scroll', offsetBottom: 0 }" row-key="id" :data="templates" :columns="columns" :loading="loading" table-layout="fixed" hover resizable>
         <template #kind="{ row }">
           <t-tag variant="light-outline" size="small">{{ KIND_LABEL[row.kind] || row.kind }}</t-tag>
         </template>
@@ -502,6 +506,7 @@ const { close: closeTestDialog } = useDialogFormProtection(testForm, testVisible
       width="560px"
       :footer="false"
     >
+      <t-alert theme="info" message="测试发送使用已保存的发布版本；编辑中的内容请先预览，保存并发布后再发送。" style="margin-bottom: 16px" />
       <t-form ref="testRef" :data="testForm" label-align="top">
         <t-form-item label="收件人" name="recipient" :rules="[{ required: true, message: '请输入测试收件人' }]">
           <t-input v-accessible-field v-model="testForm.recipient" clearable :placeholder="testTemplate?.kind === 'email' ? '邮箱…' : testTemplate?.kind === 'inapp' ? '用户 UID…' : '手机号…'" />

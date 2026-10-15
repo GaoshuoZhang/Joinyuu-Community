@@ -30,7 +30,25 @@ const emit = defineEmits<{
 const submitting = ref(false)
 const formRef = ref()
 
+const industryLoaded = ref(false)
+const industryLoadError = ref('')
+const industryLoading = ref(false)
 const industryOptions = ref(dictFallback.industry.map((label) => ({ label, value: label })))
+
+async function loadIndustryOptions() {
+  if (industryLoading.value) return
+  industryLoading.value = true
+  try {
+    const entries = await fetchDictEntries('industry')
+    industryOptions.value = entries.filter((entry) => entry.status === 'enabled').map((entry) => ({ label: entry.label, value: entry.label }))
+    industryLoaded.value = true
+    industryLoadError.value = ''
+  } catch {
+    industryLoadError.value = '行业字典加载失败，当前显示默认选项。'
+  } finally {
+    industryLoading.value = false
+  }
+}
 
 const sizeOptions = [
   { label: '10人以下', value: '10人以下' },
@@ -42,6 +60,21 @@ const sizeOptions = [
 /* 关联成员：value=用户 UID，label=昵称 */
 const userOptions = ref<{ label: string; value: string }[]>([])
 const memberUids = ref<string[]>([])
+const memberLoadError = ref('')
+const memberLoading = ref(false)
+
+async function loadMemberOptions() {
+  if (memberLoading.value) return
+  memberLoading.value = true
+  try {
+    userOptions.value = await fetchUserOptions()
+    memberLoadError.value = ''
+  } catch {
+    memberLoadError.value = '成员选项加载失败，已选成员仍会保留。'
+  } finally {
+    memberLoading.value = false
+  }
+}
 
 const form = reactive({
   name: '',
@@ -74,27 +107,12 @@ usePageDirtyGuard(computed(() => props.visible && isDirty.value))
 
 watch(
   () => props.visible,
-  async (v) => {
+  (v) => {
     if (!v) return
     resetForm()
     markBaseline()
-    if (userOptions.value.length === 0) {
-      try {
-        userOptions.value = await fetchUserOptions()
-      } catch {
-        /* 用户选项加载失败：成员选择留空 */
-      }
-    }
-    if (industryOptions.value.length === 0) {
-      fetchDictEntries('industry')
-        .then((entries) => {
-          const labels = entries.filter((e) => e.status === 'enabled').map((e) => ({ label: e.label, value: e.label }))
-          if (labels.length) industryOptions.value = labels
-        })
-        .catch(() => {
-          /* 字典加载失败保留回退词表 */
-        })
-    }
+    if (userOptions.value.length === 0) void loadMemberOptions()
+    if (!industryLoaded.value) void loadIndustryOptions()
     nextTick(() => formRef.value?.clearValidate())
   },
 )
@@ -146,9 +164,13 @@ async function onConfirm() {
         }
       } catch (e) {
         /* 成员同步部分失败：补偿回滚已执行操作，避免半更新 */
-        for (const uid of added) await removeExternalMember(enterpriseId, uid).catch(() => undefined)
-        for (const uid of removed) await addExternalMember(enterpriseId, { userId: uid }).catch(() => undefined)
-        throw e
+        const rollback = await Promise.allSettled([
+          ...added.map((uid) => removeExternalMember(enterpriseId, uid)),
+          ...removed.map((uid) => addExternalMember(enterpriseId, { userId: uid })),
+        ])
+        emit('success')
+        const incomplete = rollback.some((result) => result.status === 'rejected')
+        throw new Error(`企业档案已保存；成员同步失败${incomplete ? '且部分回滚失败，请关闭后重新加载核对成员' : '，成员变更已撤回，可重试'}：${e instanceof Error ? e.message : '请求失败'}`)
       }
       MessagePlugin.success('合作企业信息已保存')
     }
@@ -185,6 +207,12 @@ function onClose() {
       </div>
     </template>
 
+    <t-alert v-if="industryLoadError" theme="warning" :message="industryLoadError" style="margin-bottom: 16px">
+      <template #operation><t-button variant="text" :loading="industryLoading" @click="loadIndustryOptions">重新加载行业</t-button></template>
+    </t-alert>
+    <t-alert v-if="memberLoadError" theme="warning" :message="memberLoadError" style="margin-bottom: 16px">
+      <template #operation><t-button variant="text" :loading="memberLoading" @click="loadMemberOptions">重新加载成员</t-button></template>
+    </t-alert>
     <t-form ref="formRef" :data="form" :rules="rules" label-align="top">
       <t-form-item label="企业名称" name="name">
         <t-input v-accessible-field v-model="form.name" clearable placeholder="请输入企业名称…" />

@@ -5,6 +5,7 @@ import { IdGeneratorService } from '../../common/id-generator/id-generator.servi
 import { AuditService } from '../../common/audit/audit.service'
 import { PointsEngineService } from '../../common/engine/points-engine/points-engine.service'
 import { formatNow } from '../../common/utils/time'
+import { validateEventTimes } from './event-time'
 import { normalizeScheduledAt } from '../../common/utils/schedule-time'
 import { sanitizeHtml } from '../../common/utils/sanitize-html'
 import type { EventPayloadDto } from './dto/event-payload.dto'
@@ -178,6 +179,7 @@ export class EventsService {
   }
 
   async create(payload: EventPayloadDto, operator: string): Promise<unknown> {
+    validateEventTimes(payload)
     const event = await this.prisma.communityEvent.create({
       data: {
         id: await this.ids.next('EV'),
@@ -225,6 +227,7 @@ export class EventsService {
   }
 
   async update(id: string, payload: EventPayloadDto, operator: string): Promise<{ code: number }> {
+    validateEventTimes(payload)
     const event = await this.prisma.communityEvent.findUnique({ where: { id } })
     if (!event) throw new NotFoundException('活动不存在')
     if (event.status === 'scheduled' || event.status === 'ended' || event.status === 'cancelled') {
@@ -434,7 +437,7 @@ export class EventsService {
     const event = await this.prisma.communityEvent.findUnique({ where: { id } })
     if (!event) throw new NotFoundException('活动不存在')
     if (event.status !== 'published') throw new ConflictException('仅已发布活动可改期')
-    if (dto.startTime >= dto.endTime) throw new ConflictException('结束时间需晚于开始时间')
+    validateEventTimes({ ...dto, enrollmentDeadline: event.enrollmentDeadline ?? undefined })
 
     const active = await this.prisma.eventEnrollment.findMany({
       where: { eventId: id, status: { in: ['pending', 'approved', 'waitlisted'] } },

@@ -55,7 +55,7 @@ function finishClose() {
   emit('update:visible', false)
 }
 
-/* 打开后聚焦时间选择，确保点选面板不触发外层红框 */
+/* 打开后清除上次校验状态；焦点由统一 Dialog 适配管理。 */
 watch(
   () => props.visible,
   () => nextTick(() => formRef.value?.clearValidate()),

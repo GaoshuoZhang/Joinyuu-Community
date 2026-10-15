@@ -1,5 +1,6 @@
 <script setup lang="ts">
-import { nextTick, reactive, ref, watch } from 'vue'
+import PasswordInput from '@/components/shared/PasswordInput.vue'
+import { computed, nextTick, reactive, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { Button, Form, FormItem, Input, Toast } from 'tdesign-mobile-vue'
 import type { FormInstanceFunctions, FormRules } from 'tdesign-mobile-vue'
@@ -21,6 +22,7 @@ const auth = useAuthStore()
 const customerTheme = useCustomerThemeStore()
 const notices = useNoticesStore()
 const { captchaId, captchaImage, captchaLoading, refreshCaptcha } = useCaptcha()
+const captchaRequired = ref(false)
 
 async function onRefreshCaptcha() {
   const result = await refreshCaptcha()
@@ -31,37 +33,46 @@ async function onRefreshCaptcha() {
  * captchaId 为空即视为加载失败——按加载结束的时刻判断，避免依赖刷新返回值 */
 let captchaFailureNotified = false
 watch(captchaLoading, (loading) => {
-  if (loading || captchaFailureNotified || captchaId.value) return
+  if (!captchaRequired.value || loading || captchaFailureNotified || captchaId.value) return
   captchaFailureNotified = true
   Toast('验证码加载失败，请点击图片重试')
 })
 
 const form = reactive({ identifier: '', password: '', captchaCode: '' })
+watch(() => form.identifier, () => {
+  captchaRequired.value = false
+  form.captchaCode = ''
+})
 const submitting = ref(false)
 const formRef = ref<FormInstanceFunctions>()
 
-const rules: FormRules<typeof form> = {
+const rules = computed<FormRules<typeof form>>(() => ({
   identifier: [{ required: true, message: REQUIRED('手机号/邮箱/用户名') }],
   password: [{ required: true, message: REQUIRED('密码') }],
-  captchaCode: [{ required: true, message: REQUIRED('验证码') }],
-}
+  ...(captchaRequired.value ? { captchaCode: [{ required: true, message: REQUIRED('验证码') }] } : {}),
+}))
 
 async function onSubmit() {
-  /* 验证码加载失败时 captchaId 为空，提交只会得到误导性错误：按钮保持可点，点击时说明原因 */
-  if (!captchaId.value) {
+  /* 仅在服务端要求验证码后才检查验证码资源是否加载完成。 */
+  if (captchaRequired.value && !captchaId.value) {
     Toast('验证码加载失败，请点击图片重试')
     return
   }
   submitting.value = true
   try {
-    await auth.login({ ...form, captchaId: captchaId.value })
+    await auth.login({
+      identifier: form.identifier,
+      password: form.password,
+      ...(captchaRequired.value ? { captchaId: captchaId.value, captchaCode: form.captchaCode } : {}),
+    })
     notices.refreshUnread()
     Toast(`欢迎回来，${auth.name}`)
     await router.push(String(route.query.redirect ?? '/'))
   } catch (e) {
     Toast(e instanceof ApiError ? e.message : '登录失败，请稍后重试')
     form.captchaCode = ''
-    await refreshCaptcha()
+    if (e instanceof ApiError && e.code === 428) captchaRequired.value = true
+    if (captchaRequired.value) await refreshCaptcha()
     /* API 失败清空验证码输入后不残留字段级错误提示 */
     void nextTick(() => formRef.value?.clearValidate(['captchaCode']))
   } finally {
@@ -97,9 +108,9 @@ function onLoginSubmit({ validateResult }: { validateResult: unknown }) {
         <Input v-model="form.identifier" type="text" autocomplete="username" placeholder="请输入手机号/邮箱/用户名…" clearable />
       </FormItem>
       <FormItem label="密码" name="password">
-        <Input class="password-field" v-model="form.password" type="password" autocomplete="current-password" placeholder="请输入密码…" clearable />
+        <PasswordInput class="password-field" v-model="form.password" autocomplete="current-password" placeholder="请输入密码…" clearable />
       </FormItem>
-      <FormItem name="captchaCode" class="captcha-item">
+      <FormItem v-if="captchaRequired" name="captchaCode" class="captcha-item">
         <CaptchaField
           v-model="form.captchaCode"
           :image="captchaImage"
@@ -218,13 +229,6 @@ function onLoginSubmit({ validateResult }: { validateResult: unknown }) {
   margin:var(--app-space-6) 0 0;
   text-align: center;
   font: var(--app-type-body);
-}
-
-/* v48：官方 suffix 槽自带 padding-left: 12px；此前固定 flex-basis/width 为 24px，会连同内距
- * 把明文切换图标挤出密码框右边缘 12px。宽度交回官方（flex: 0 0 auto），这里只保证垂直居中。 */
-.password-field :deep(.t-input__wrap--suffix-icon) {
-  display: flex;
-  align-items: center;
 }
 
 .password-field :deep(.t-input--password) {

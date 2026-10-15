@@ -97,6 +97,7 @@ function onPageChange(p: { current: number; pageSize: number }) {
 
 function onRangeChange(v: TdDateRangePickerProps['value']) {
   query.range = Array.isArray(v) ? (v as string[]) : ['', '']
+  onSearch()
 }
 
 /* 空态筛选判定：range 为空串占位（['', '']）时视为未筛选（组件按数组长度判断） */

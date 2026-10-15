@@ -1,4 +1,4 @@
-import { IsNotEmpty, IsString } from 'class-validator'
+import { IsNotEmpty, IsOptional, IsString } from 'class-validator'
 
 export class LoginDto {
   @IsNotEmpty({ message: '请输入用户名' })
@@ -7,12 +7,12 @@ export class LoginDto {
   @IsNotEmpty({ message: '请输入密码' })
   password!: string
 
-  /* 图形验证码（必填：服务端强制校验，一次性消费，5 分钟有效） */
-  @IsNotEmpty({ message: '请先获取验证码' })
+  /* 第三次连续密码错误后由服务端要求图形验证码 */
+  @IsOptional()
   @IsString()
-  captchaId!: string
+  captchaId?: string
 
-  @IsNotEmpty({ message: '请输入验证码' })
+  @IsOptional()
   @IsString()
-  captchaCode!: string
+  captchaCode?: string
 }

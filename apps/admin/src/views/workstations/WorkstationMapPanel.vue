@@ -72,7 +72,7 @@ const statusOptions = [
 
 /* 状态卡片筛选：点击对应状态卡片筛选，点击「办公位总数」卡片取消（与状态下拉双向同步） */
 function setStatFilter(status: WorkstationStatus | '') {
-  statusFilter.value = status
+  statusFilter.value = statusFilter.value === status ? '' : status
 }
 
 /* 空态筛选判定：状态/区域任一非空即视为筛选无结果 */

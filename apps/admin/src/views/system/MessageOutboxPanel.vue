@@ -56,7 +56,9 @@ function onStatusChip(key: OutboxStatus, checked: boolean) {
   onSearch()
 }
 
+let loadRequest = 0
 async function load() {
+  const requestId = ++loadRequest
   loading.value = true
   try {
     const result = await fetchOutboxMessages({
@@ -66,20 +68,22 @@ async function load() {
       channelKind: query.channelKind || undefined,
       keyword: query.keyword.trim() || undefined,
     })
+    if (requestId !== loadRequest) return
     list.value = result.list
     total.value = result.total
     stats.value = result.stats
     loadError.value = ''
     syncQuery()
   } catch (error) {
+    if (requestId !== loadRequest) return
     loadError.value = error instanceof Error ? error.message : '发送记录加载失败'
   } finally {
-    loading.value = false
+    if (requestId === loadRequest) loading.value = false
   }
 }
 
 /* 列表筛选/分页写入 URL（刷新与前进后退可恢复），与其他列表页口径一致 */
-const { syncQuery } = useListQueryState(query, load)
+const { syncQuery } = useListQueryState(query, load, { prefix: 'outbox' })
 
 onMounted(load)
 
@@ -252,7 +256,7 @@ async function openLogs(row: OutboxMessage) {
             <t-popconfirm
               v-if="row.status === 'pending' || row.status === 'failed'"
               theme="danger"
-              content="确认终止该投递？终止后不再重试且不可恢复"
+              content="确认停止该消息的自动投递？停止后仍可人工重试。"
               @confirm="onDiscard(row)"
             >
               <t-button variant="text" size="small" theme="danger">终止</t-button>

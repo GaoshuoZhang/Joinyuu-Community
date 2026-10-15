@@ -47,14 +47,14 @@ const statusOptions = [
 ]
 
 const columns = [
-  { colKey: 'name', title: '企业', cell: 'name', width: 230 , ellipsis: true},
+  { colKey: 'name', fixed: 'left' as const, title: '企业', cell: 'name', width: 230 , ellipsis: true},
   { colKey: 'industry', title: '行业', width: 130 , ellipsis: true},
   { colKey: 'size', title: '规模', width: 110 , ellipsis: true},
   { colKey: 'leaseType', title: '入驻类型', width: 120 , ellipsis: true},
   { colKey: 'level', title: '企业等级', width: 130, cell: 'level' , ellipsis: true},
   { colKey: 'settledAt', title: '入驻时间', width: 170, cell: 'settledAt' , ellipsis: true},
   { colKey: 'status', title: '状态', width: 100, cell: 'status' , ellipsis: true},
-  { colKey: 'op', title: '操作', width: 90, cell: 'op' },
+  { colKey: 'op', fixed: 'right' as const, title: '操作', width: 90, cell: 'op' },
 ]
 
 /* 列配置：本地持久化显隐/顺序 */
@@ -227,7 +227,7 @@ async function loadIndustries() {
     </div>
 
     <div class="page-card">
-      <t-table
+      <t-table :horizontal-scroll-affixed-bottom="{ container: '.page-scroll', offsetBottom: 0 }"
         row-key="id"
         table-layout="fixed"
         hover

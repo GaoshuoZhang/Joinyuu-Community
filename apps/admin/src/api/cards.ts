@@ -1,5 +1,15 @@
 import { httpGet, httpPut } from './http'
 export type CardType = 'individual' | 'enterprise'
+export const cardSegmentFields: Record<string, { key: string; label: string }[]> = Object.fromEntries(
+  Object.entries({
+    education: { school: '学校', major: '专业', degree: '学位', period: '起止时间' },
+    work: { company: '公司', title: '职位', period: '起止时间', description: '工作内容' },
+    projects: { name: '项目名称', role: '角色', period: '起止时间', description: '项目简介' },
+    honors: { name: '荣誉名称', date: '获得时间' },
+    socials: { label: '名称', url: '链接' },
+    customLinks: { label: '名称', url: '链接' },
+  }).map(([key, fields]) => [key, Object.entries(fields).map(([key, label]) => ({ key, label }))]),
+)
 export interface CardRow {
   id?: string; userId?: string; name?: string; displayName?: string; intro?: string; description?: string
   age?: number | null; politicalStatus?: string | null; industryExperience?: string | null; skills?: string[]

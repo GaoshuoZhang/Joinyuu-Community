@@ -5,6 +5,7 @@ import App from './App.vue'
 import router from './router'
 import { accessibleField } from './directives/accessibleField'
 import { permission } from './directives/permission'
+import { installTDesignAccessibility } from './utils/tdesignAccessibility'
 import { useThemeStore } from './stores/theme'
 /* 顺序敏感：TDesign 基础样式先加载，本应用样式后加载。
  * 两者存在同特异性的同名规则（如 .t-select__wrap 与工具类 .ctl-w-* 都只声明 width），
@@ -28,3 +29,5 @@ app.config.errorHandler = (err, instance, info) => {
   MessagePlugin.error('页面渲染出错，请刷新重试')
 }
 app.mount('#app')
+const disposeAccessibility = installTDesignAccessibility()
+if (import.meta.hot) import.meta.hot.dispose(disposeAccessibility)

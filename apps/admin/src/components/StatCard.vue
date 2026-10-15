@@ -71,7 +71,7 @@ const tag = computed(() => (props.href ? TLink : attrs.onClick ? 'button' : 'div
 .stat-sub {
   margin-top: 4px;
   font-size: 12px;
-  color: var(--td-text-color-placeholder);
+  color: var(--td-text-color-secondary);
   overflow-wrap: anywhere;
 }
 </style>

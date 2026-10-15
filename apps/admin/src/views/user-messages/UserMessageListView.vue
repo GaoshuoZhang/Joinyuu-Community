@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { collectAllPages, executeBulk } from '@/utils/bulkOperation'
 import { computed, onMounted, ref } from 'vue'
 import { focusFirstInvalid, useDialogFormProtection } from '@/utils/form'
 import { MessagePlugin } from 'tdesign-vue-next'
@@ -51,7 +52,7 @@ const allColumns = [
   },
   { colKey: 'status', title: '状态', width: 100 },
   { colKey: 'reply', title: '回复内容', width: 260 },
-  { colKey: 'op', title: '操作', width: 150 },
+  { colKey: 'op', fixed: 'right' as const, title: '操作', width: 150 },
 ]
 const visibleKeys = ref<string[]>(allColumns.map(column => column.colKey))
 const columns = computed(() =>
@@ -158,39 +159,42 @@ async function onArchive(row: UserMessageRow) {
 /* 一键归档：按当前筛选全量拉取，归档所选状态的留言 */
 const archivingAll = ref(false)
 const bulkVisible = ref(false)
+let bulkScope = { status: status.value, keyword: keyword.value.trim() }
+const bulkProgress = ref<{ done: number; total: number; failed: number } | null>(null)
+let bulkCancelled = false
+function onBulkCancel() { bulkCancelled = true }
 const bulkStatuses = [{ label: '已回复', value: 'replied' }]
 
 async function doBulkArchive(values: string[]) {
-  const targets: UserMessageRow[] = []
-  for (let p = 1; p <= 20; p++) {
-    const res = await fetchUserMessages({
-      page: p,
-      pageSize: 100,
-      status: status.value,
-      keyword: keyword.value.trim(),
-    })
-    targets.push(...res.list)
-    if (targets.length >= res.total || res.list.length < 100) break
-  }
-  const pending = targets.filter((row) => values.includes(row.status))
-  if (!pending.length) {
-    MessagePlugin.info('没有符合所选状态的可归档留言')
-    return
-  }
-  let failed = 0
-  for (const row of pending) {
-    try {
-      await archiveUserMessage(row.id)
-    } catch {
-      failed++
+  bulkCancelled = false
+  bulkProgress.value = { done: 0, total: 0, failed: 0 }
+  try {
+    const targets = await collectAllPages<UserMessageRow>(
+      (page, pageSize) => fetchUserMessages({ ...bulkScope, page, pageSize }), () => bulkCancelled,
+    )
+    const pending = targets.filter((row) => values.includes(row.status))
+    if (!pending.length) {
+      MessagePlugin.info(bulkCancelled ? '已取消，未执行归档' : '当前筛选范围内没有符合所选状态的记录')
+      return
     }
+    const result = await executeBulk(pending, (row) => archiveUserMessage(row.id), () => bulkCancelled,
+      (progress) => { bulkProgress.value = progress })
+    if (bulkCancelled) MessagePlugin.warning(`已取消，本次已归档 ${result.done - result.failed} 条留言`)
+    else if (result.done > result.failed) MessagePlugin.success(`已归档 ${result.done - result.failed} 条留言`)
+    if (result.failed) MessagePlugin.warning(`${result.failed} 条归档失败，请刷新后重试`)
+    await load()
+  } finally {
+    bulkProgress.value = null
   }
-  if (pending.length - failed > 0) MessagePlugin.success(`已归档 ${pending.length - failed} 条留言`)
-  if (failed > 0) MessagePlugin.warning(`${failed} 条留言归档失败，请重试`)
-  await load()
+}
+
+function countByStatus(status: string) {
+  if (bulkScope.status && bulkScope.status !== status) return Promise.resolve(0)
+  return fetchUserMessages({ ...bulkScope, status, page: 1, pageSize: 1 }).then((result) => result.total)
 }
 
 function onBulkArchive() {
+  bulkScope = { status: status.value, keyword: keyword.value.trim() }
   bulkVisible.value = true
 }
 
@@ -244,7 +248,7 @@ const { close: closeReplyDialog } = useDialogFormProtection(() => replyContent.v
     <ListErrorState v-if="loadError" :message="loadError" :loading="loading" @retry="load" />
 
     <div v-else class="page-card">
-      <t-table
+      <t-table :horizontal-scroll-affixed-bottom="{ container: '.page-scroll', offsetBottom: 0 }"
         row-key="id"
         :data="rows"
         :columns="columns"
@@ -340,6 +344,10 @@ const { close: closeReplyDialog } = useDialogFormProtection(() => replyContent.v
       :statuses="bulkStatuses"
       :loading="archivingAll"
       @confirm="onBulkConfirm"
+
+      :progress="bulkProgress"
+      :count-for-status="countByStatus"
+      @cancel="onBulkCancel"
     />
   </div>
 </template>

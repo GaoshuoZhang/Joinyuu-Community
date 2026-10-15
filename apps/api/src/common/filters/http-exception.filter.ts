@@ -2,9 +2,11 @@ import { ArgumentsHost, Catch, ExceptionFilter, HttpException, HttpStatus } from
 import type { Response } from 'express'
 import { appendFile, mkdir } from 'node:fs/promises'
 import { join } from 'node:path'
+import { prismaConflictMessage } from '../utils/prisma-conflict'
 
 /* 统一错误输出：HTTP 状态码 + { code, message }，message 直接可展示（admin 视图层 catch 展示 e.message）
  * HttpException → 提取 message（BadRequestException 的校验数组以"；"拼接）
+ * Prisma P2002 唯一字段冲突 → 可读的 409（系统主键冲突仍保留为故障）
  * 未捕获异常 → 500 服务器内部错误（原始错误仅打日志）
  * 5xx 统一追加落盘 .logs/api-error.log（.logs/ 已 gitignore），便于事后排查偶发故障 */
 @Catch()
@@ -14,8 +16,13 @@ export class HttpExceptionFilter implements ExceptionFilter {
 
     let status = HttpStatus.INTERNAL_SERVER_ERROR
     let message = '服务器内部错误'
+    const conflict = prismaConflictMessage(exception)
 
-    if (exception instanceof HttpException) {
+    if (conflict) {
+      // 唯一约束是可恢复的请求冲突，不记录为“未捕获异常”或 5xx 故障。
+      status = HttpStatus.CONFLICT
+      message = conflict
+    } else if (exception instanceof HttpException) {
       status = exception.getStatus()
       const payload = exception.getResponse()
       if (typeof payload === 'string') {

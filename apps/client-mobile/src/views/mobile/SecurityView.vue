@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import PasswordInput from '@/components/shared/PasswordInput.vue'
 import { computed, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { Button, Cell, CellGroup, DialogPlugin, Input, Popup, Textarea, Toast } from 'tdesign-mobile-vue'
@@ -437,9 +438,9 @@ async function onExport() {
            且密码管理器无法识别该表单；回车提交也由此获得 -->
       <form class="sheet" @submit.prevent="onPwdSave">
         <h2 class="sheet-title">修改登录密码</h2>
-        <div class="field"><label>原密码</label><Input v-model="pwdForm.oldPassword" type="password" autocomplete="current-password" placeholder="请输入原密码…" clearable /><p v-if="pwdErrors.oldPassword" class="field-error">{{ pwdErrors.oldPassword }}</p></div>
-        <div class="field"><label>新密码</label><Input v-model="pwdForm.password" type="password" autocomplete="new-password" placeholder="至少 8 位，含字母与数字…" clearable /><p v-if="pwdErrors.password" class="field-error">{{ pwdErrors.password }}</p></div>
-        <div class="field"><label>确认新密码</label><Input v-model="pwdForm.confirm" type="password" autocomplete="new-password" placeholder="再次输入新密码…" clearable /><p v-if="pwdErrors.confirm" class="field-error">{{ pwdErrors.confirm }}</p></div>
+        <div class="field"><label>原密码</label><PasswordInput v-model="pwdForm.oldPassword" autocomplete="current-password" placeholder="请输入原密码…" clearable /><p v-if="pwdErrors.oldPassword" class="field-error">{{ pwdErrors.oldPassword }}</p></div>
+        <div class="field"><label>新密码</label><PasswordInput v-model="pwdForm.password" autocomplete="new-password" placeholder="至少 8 位，含字母与数字…" clearable /><p v-if="pwdErrors.password" class="field-error">{{ pwdErrors.password }}</p></div>
+        <div class="field"><label>确认新密码</label><PasswordInput v-model="pwdForm.confirm" autocomplete="new-password" placeholder="再次输入新密码…" clearable /><p v-if="pwdErrors.confirm" class="field-error">{{ pwdErrors.confirm }}</p></div>
         <p class="sheet-tip">修改成功后需使用新密码重新登录。</p>
         <Button theme="primary" size="large" block type="submit" :loading="pwdSaving">保存</Button>
       </form>

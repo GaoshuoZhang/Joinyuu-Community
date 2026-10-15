@@ -58,7 +58,7 @@ const dataColumns = [
   { colKey: 'redeemedCount', title: '累计兑换', width: 100, resizable: true , ellipsis: true},
   { colKey: 'status', title: '状态', cell: 'status', width: 100, resizable: true , ellipsis: true},
   { colKey: 'createdAt', title: '创建时间', width: 170, resizable: true , ellipsis: true},
-  { colKey: 'op', title: '操作', cell: 'op', width: 170 },
+  { colKey: 'op', fixed: 'right' as const, title: '操作', cell: 'op', width: 170 },
 ]
 
 /* 列配置：本地持久化显隐/顺序 */
@@ -266,7 +266,7 @@ async function loadCategories() {
     </div>
 
     <div class="page-card">
-      <t-table
+      <t-table :horizontal-scroll-affixed-bottom="{ container: '.page-scroll', offsetBottom: 0 }"
   row-key="id"
   table-layout="fixed"
   hover

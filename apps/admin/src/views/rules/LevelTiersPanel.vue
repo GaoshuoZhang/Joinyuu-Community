@@ -11,6 +11,21 @@ import type { LevelTier, LevelTierScope } from '@/types'
 
 /* 等级规则页：等级梯度 + 该等级每日需求发布/文章投稿额度 + 积分消费折扣
  * （发布额度存 PublishingLimitRule，折扣存 LevelTier.pointsDiscount；随等级梯度同事务保存） */
+const tierColumns = [
+  { colKey: 'level', title: '等级', width: 80 },
+  { colKey: 'label', title: '等级标签', width: 160 },
+  { colKey: 'threshold', title: '门槛经验值', width: 180 },
+  { colKey: 'demandPublishLimit', title: '需求发布 / 日', width: 250 },
+  { colKey: 'articleSubmitLimit', title: '文章投稿 / 日', width: 250 },
+  { colKey: 'pointsDiscount', title: '积分消费折扣', width: 190 },
+  { colKey: 'op', title: '操作', width: 64, fixed: 'right' as const },
+]
+const limitModes = [{ label: '不限', value: 'unlimited' }, { label: '禁止', value: 'blocked' }, { label: '指定次数', value: 'limited' }]
+function limitMode(value: number) { return value < 0 ? 'unlimited' : value === 0 ? 'blocked' : 'limited' }
+function setLimit(row: LevelTier, key: 'demandPublishLimit' | 'articleSubmitLimit', mode: string | number) {
+  row[key] = mode === 'unlimited' ? -1 : mode === 'blocked' ? 0 : Math.max(1, row[key])
+}
+
 const MAX_LEVELS = 10
 const MAX_LIMIT = 10000
 const activeScope = ref<LevelTierScope>('community_individual')
@@ -101,11 +116,6 @@ function removeLevel(index: number) {
 }
 
 /* 额度 -1/0 不是普通数值：就地给出中文语义，避免与正整数次数混淆 */
-function limitNote(value: number): string {
-  if (value === -1) return '不限'
-  if (value === 0) return '禁止'
-  return ''
-}
 
 /* 折扣文案：10 = 原价；支持一位小数（8.5 → 8.5 折）；空值/非法值一律按原价，避免出现「undefined 折」 */
 function discountNote(value: number | undefined): string {
@@ -182,68 +192,43 @@ onMounted(() => load())
         <t-tab-panel value="community_individual" label="社区个体" />
         <t-tab-panel value="community_enterprise" label="社区企业" />
       </t-tabs>
-      <p class="panel-tip">门槛为当前身份累计经验值，须逐级递增；发布额度 <strong>-1</strong> 不限、<strong>0</strong> 禁止、正整数为每日次数；积分消费折扣 <strong>1</strong>=1 折、<strong>10</strong>=原价（默认，支持一位小数如 8.5 = 8.5 折），适用于商城兑换与空间预约扣分。</p>
+      <p class="panel-tip">门槛为当前身份累计经验值，须逐级递增；发布额度可选择不限、禁止或指定每日次数；积分消费折扣 <strong>1</strong>=1 折、<strong>10</strong>=原价（默认，支持一位小数如 8.5 = 8.5 折），适用于商城兑换与空间预约扣分。</p>
       <ListErrorState v-if="loadError" :message="loadError" :loading="loading" @retry="() => load()" />
       <t-loading :loading="loading" size="small">
         <template v-if="tiers[activeScope].length">
-          <div class="tier-table" role="table" :aria-label="`${scopeLabels[activeScope]}等级梯度`">
-            <div class="tier-head" role="row">
-              <span role="columnheader">等级</span>
-              <span role="columnheader">等级标签</span>
-              <span role="columnheader">门槛经验值</span>
-              <span role="columnheader">需求发布 / 日</span>
-              <span role="columnheader">文章投稿 / 日</span>
-              <span role="columnheader">积分消费折扣</span>
-              <span aria-hidden="true"></span>
-            </div>
-            <div v-for="(tier, index) in tiers[activeScope]" :key="index" class="tier-row" role="row">
-              <span class="tier-cell" role="cell">
-                <t-tag theme="primary" variant="light" size="small">{{ index + 1 }} 级</t-tag>
-              </span>
-              <span class="tier-cell" role="cell" data-label="等级标签">
-                <t-input v-accessible-field="`${index + 1} 级等级标签`" v-model="tier.label" :maxlength="8" clearable placeholder="如 青铜…" :aria-label="`${index + 1} 级等级标签`" />
-              </span>
-              <span class="tier-cell" role="cell" data-label="门槛经验值">
-                <t-input-number v-accessible-field="`${index + 1} 级门槛经验值`" v-model="tier.threshold" :min="index === 0 ? 0 : tiers[activeScope][index - 1].threshold + 1" :decimal-places="0" theme="column" :aria-label="`${index + 1} 级门槛经验值`" />
-              </span>
-              <span class="tier-cell limit-cell" role="cell" data-label="需求发布 / 日">
-                <t-input-number v-accessible-field="`${index + 1} 级需求发布每日额度`" v-model="tier.demandPublishLimit" :min="-1" :max="MAX_LIMIT" :decimal-places="0" theme="normal" align="right" class="limit-input" :aria-label="`${index + 1} 级需求发布每日额度`" />
-                <span class="limit-note" :class="{ 'is-block': tier.demandPublishLimit === 0 }">{{ limitNote(tier.demandPublishLimit) }}</span>
-              </span>
-              <span class="tier-cell limit-cell" role="cell" data-label="文章投稿 / 日">
-                <t-input-number v-accessible-field="`${index + 1} 级文章投稿每日额度`" v-model="tier.articleSubmitLimit" :min="-1" :max="MAX_LIMIT" :decimal-places="0" theme="normal" align="right" class="limit-input" :aria-label="`${index + 1} 级文章投稿每日额度`" />
-                <span class="limit-note" :class="{ 'is-block': tier.articleSubmitLimit === 0 }">{{ limitNote(tier.articleSubmitLimit) }}</span>
-              </span>
-              <span class="tier-cell limit-cell" role="cell" data-label="积分消费折扣">
-                <!-- 折扣支持一位小数（8.5 = 8.5 折）；留空失焦后归一为 10（原价），避免保存出空值 -->
-                <t-input-number
-                  v-accessible-field="`${index + 1} 级积分消费折扣`"
-                  v-model="tier.pointsDiscount"
-                  :min="1"
-                  :max="10"
-                  :step="0.1"
-                  :decimal-places="1"
-                  theme="normal"
-                  align="right"
-                  class="limit-input"
-                  :aria-label="`${index + 1} 级积分消费折扣`"
-                  @blur="tier.pointsDiscount = coerceDiscount(tier.pointsDiscount)"
-                />
-                <span class="limit-note discount-note">{{ discountNote(tier.pointsDiscount) }}</span>
-              </span>
-              <span class="tier-cell" role="cell">
-                <!-- 删除中间等级会使其后等级序号整体前移，需在确认文案中说明 -->
-                <t-popconfirm
-                  v-if="tiers[activeScope].length > 1"
-                  :content="`确认删除等级「${tier.label || index + 1}」？其后等级序号将依次前移。`"
-                  :confirm-btn="{ content: '删除', theme: 'danger' }"
-                  @confirm="removeLevel(index)"
-                >
-                  <t-button variant="text" size="small" theme="danger" :aria-label="`删除 ${index + 1} 级`"><template #icon><DeleteIcon /></template></t-button>
-                </t-popconfirm>
-              </span>
-            </div>
-          </div>
+          <t-table class="tier-table" row-key="level" :data="tiers[activeScope]" :columns="tierColumns" table-layout="fixed"
+            :horizontal-scroll-affixed-bottom="{ container: '.page-scroll', offsetBottom: 0 }" :aria-label="`${scopeLabels[activeScope]}等级梯度`">
+            <template #level="{ rowIndex }"><t-tag theme="primary" variant="light" size="small">{{ rowIndex + 1 }} 级</t-tag></template>
+            <template #label="{ row, rowIndex }">
+              <t-input v-accessible-field="`${rowIndex + 1} 级等级标签`" v-model="row.label" :maxlength="8" clearable placeholder="如 青铜…" />
+            </template>
+            <template #threshold="{ row, rowIndex }">
+              <t-input-number v-accessible-field="`${rowIndex + 1} 级门槛经验值`" v-model="row.threshold" :min="rowIndex === 0 ? 0 : tiers[activeScope][rowIndex - 1].threshold + 1" :decimal-places="0" theme="column" class="ctl-w-full" />
+            </template>
+            <template #demandPublishLimit="{ row, rowIndex }">
+              <div class="limit-cell">
+                <t-select v-accessible-field="`${rowIndex + 1} 级需求发布模式`" :value="limitMode(row.demandPublishLimit)" :options="limitModes" @change="(value: string | number) => setLimit(row, 'demandPublishLimit', value)" />
+                <t-input-number v-if="row.demandPublishLimit > 0" v-accessible-field="`${rowIndex + 1} 级需求每日次数`" v-model="row.demandPublishLimit" :min="1" :max="MAX_LIMIT" :decimal-places="0" theme="column" class="limit-input" />
+              </div>
+            </template>
+            <template #articleSubmitLimit="{ row, rowIndex }">
+              <div class="limit-cell">
+                <t-select v-accessible-field="`${rowIndex + 1} 级文章投稿模式`" :value="limitMode(row.articleSubmitLimit)" :options="limitModes" @change="(value: string | number) => setLimit(row, 'articleSubmitLimit', value)" />
+                <t-input-number v-if="row.articleSubmitLimit > 0" v-accessible-field="`${rowIndex + 1} 级投稿每日次数`" v-model="row.articleSubmitLimit" :min="1" :max="MAX_LIMIT" :decimal-places="0" theme="column" class="limit-input" />
+              </div>
+            </template>
+            <template #pointsDiscount="{ row, rowIndex }">
+              <div class="limit-cell">
+                <t-input-number v-accessible-field="`${rowIndex + 1} 级积分消费折扣`" v-model="row.pointsDiscount" :min="1" :max="10" :step="0.1" :decimal-places="1" theme="column" class="limit-input" @blur="row.pointsDiscount = coerceDiscount(row.pointsDiscount)" />
+                <span class="limit-note">{{ discountNote(row.pointsDiscount) }}</span>
+              </div>
+            </template>
+            <template #op="{ row, rowIndex }">
+              <t-popconfirm v-if="tiers[activeScope].length > 1" :content="`确认删除等级「${row.label || rowIndex + 1}」？其后等级序号将依次前移。`" :confirm-btn="{ content: '删除', theme: 'danger' }" @confirm="removeLevel(rowIndex)">
+                <t-button variant="text" size="small" theme="danger" :aria-label="`删除 ${rowIndex + 1} 级`"><template #icon><DeleteIcon /></template></t-button>
+              </t-popconfirm>
+            </template>
+          </t-table>
         </template>
         <t-empty v-else description="暂无等级，点击下方新增" />
         <div class="tier-actions">
@@ -262,17 +247,9 @@ onMounted(() => load())
 
 <style scoped>
 .panel-tip { margin: 16px 0; font-size: 12px; color: var(--td-text-color-secondary); }
-/* 无表格组件可用时补 ARIA 表格语义（role=table/row/cell），屏幕阅读器可建立列关联 */
 .tier-table { width: 100%; }
-.tier-head, .tier-row { display: grid; grid-template-columns: 84px minmax(140px, 1fr) minmax(150px, 200px) 132px 132px 124px 48px; gap: 16px; align-items: center; }
-.tier-head { padding-bottom: 10px; border-bottom: 1px solid var(--td-component-border); font-size: 12px; font-weight: 500; }
-.tier-row { padding: 10px 0; border-bottom: 1px dashed var(--td-component-border); }
-/* 依赖 TDesign 内部类 .t-input / .t-input-number：单元格包裹元素下让内部输入控件撑满（控件默认固定宽），无对应公开 API；升级 TDesign 时复核类名 */
-.tier-cell { min-width: 0; }
-.tier-cell :deep(.t-input), .tier-cell :deep(.t-input-number) { width: 100%; }
-/* 额度/折扣单元格：输入框占满可用宽度，尾部留固定宽度的语义列（不限 / 禁止 / N 折），保证各行数字右对齐。
- * 宽度按最长文案取（折扣档「9.5 折」12px 约 42px）：32px 会让折扣档折成两行。 */
-.tier-row .limit-cell { display: flex; align-items: center; gap: 8px; }
+.limit-cell { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.limit-cell :deep(.t-select__wrap) { flex: 1; min-width: 100px; }
 .limit-input { flex: 1; min-width: 0; }
 .limit-note { flex: none; width: 44px; white-space: nowrap; font-size: 12px; color: var(--td-text-color-secondary); }
 .limit-note.is-block { color: var(--td-warning-color); }
@@ -289,11 +266,7 @@ onMounted(() => load())
   gap: 16px;
 }
 .save-card .panel-tip { margin: 0; }
-@media (max-width: 1100px) {
-  /* 窄屏表头隐藏，字段自带标签（data-label）替代表头 */
-  .tier-head { display: none; }
-  .tier-row { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px 16px; align-items: end; }
-  .tier-row > .tier-cell[data-label]::before { display: block; margin-bottom: 4px; font-size: 12px; color: var(--td-text-color-secondary); content: attr(data-label); }
-  .tier-row > .tier-cell:first-child { grid-column: 1 / -1; }
+@media (max-width: 640px) {
+  .save-card { flex-direction: column; align-items: stretch; }
 }
 </style>

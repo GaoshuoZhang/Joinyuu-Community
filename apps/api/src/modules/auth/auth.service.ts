@@ -24,9 +24,10 @@ const TOKEN_TTL_SEC = 2 * 60 * 60
 const CAPTCHA_PREFIX = 'captcha:'
 const CAPTCHA_TTL = 5 * 60
 /** 登录失败限速：同一 ip+username 连续失败 5 次锁定 15 分钟（Redis 键，多实例/重启生效） */
-const FAIL_PREFIX = 'auth:login:fail:'
+const FAIL_PREFIX = 'auth:login:attempts:v2:'
 const LOCK_PREFIX = 'auth:login:lock:'
 const LOGIN_MAX_FAILURES = 5
+const CAPTCHA_AFTER_FAILURES = 3
 const LOGIN_LOCK_SEC = 15 * 60
 /** 验证码限流：同一 IP 60 秒内最多 30 次（防接口滥用） */
 const CAPTCHA_RATE_MAX = 30
@@ -77,18 +78,24 @@ export class AuthService {
     return { captchaId, image }
   }
 
-  private async verifyCaptcha(captchaId: string, captchaCode: string): Promise<boolean> {
+  private async verifyCaptcha(captchaId?: string, captchaCode?: string): Promise<boolean> {
     /* 原子「读取-删除-比对」：并发下同一验证码不会被两个请求同时校验通过；错误也消费，防同 ID 反复爆破 */
     return this.redis.consumeAndCompare(
-      CAPTCHA_PREFIX + captchaId,
+      CAPTCHA_PREFIX + (captchaId ?? ''),
       (captchaCode ?? '').toUpperCase(),
     )
   }
 
   async login(username: string, password: string, ctx: LoginContext): Promise<LoginResult> {
-    /* 图形验证码：服务端强制校验（加固：防自动化撞库；一次性消费，错误也消费） */
-    const captchaOk = await this.verifyCaptcha(ctx.captchaId ?? '', ctx.captchaCode ?? '')
-    if (!captchaOk) {
+    const rateKey = `${ctx.ip}:${username.trim().toLowerCase()}`
+    const failedAttempts = await this.redis.getCache<number>(FAIL_PREFIX + rateKey) ?? 0
+    const captchaRequired = failedAttempts >= CAPTCHA_AFTER_FAILURES
+
+    /* 首三次密码尝试不打断登录；之后每次尝试都必须通过一次性图形验证码。 */
+    if (captchaRequired && (!ctx.captchaId || !(await this.verifyCaptcha(ctx.captchaId, ctx.captchaCode)))) {
+      if (!ctx.captchaId) {
+        throw new HttpException('密码连续错误 3 次，请输入验证码后继续', HttpStatus.PRECONDITION_REQUIRED)
+      }
       await this.loginLogs.record({
         username,
         ip: ctx.ip,
@@ -99,7 +106,6 @@ export class AuthService {
       throw new BadRequestException('验证码错误或已过期')
     }
 
-    const rateKey = `${ctx.ip}:${username}`
     const lock = await this.redis.getCache<{ until: number }>(LOCK_PREFIX + rateKey)
     if (lock && lock.until > Date.now()) {
       const minutes = Math.ceil((lock.until - Date.now()) / 60000)
@@ -116,8 +122,7 @@ export class AuthService {
     const admin = await this.prisma.adminUser.findUnique({ where: { username } })
     const passwordOk = await compare(password, admin?.passwordHash ?? DUMMY_PASSWORD_HASH)
     if (!admin || !passwordOk) {
-      const current = (await this.redis.getCache<{ count: number }>(FAIL_PREFIX + rateKey))?.count ?? 0
-      const count = current + 1
+      const count = await this.redis.incrWithTtlStrict(FAIL_PREFIX + rateKey, LOGIN_LOCK_SEC)
       if (count >= LOGIN_MAX_FAILURES) {
         await this.redis.setCache(
           LOCK_PREFIX + rateKey,
@@ -125,8 +130,6 @@ export class AuthService {
           LOGIN_LOCK_SEC,
         )
         await this.redis.delCache(FAIL_PREFIX + rateKey)
-      } else {
-        await this.redis.setCache(FAIL_PREFIX + rateKey, { count }, LOGIN_LOCK_SEC)
       }
       await this.loginLogs.record({
         username,
@@ -135,6 +138,12 @@ export class AuthService {
         status: 'fail',
         failReason: '账号或密码错误',
       })
+      if (count >= LOGIN_MAX_FAILURES) {
+        throw new HttpException('登录失败次数过多，请 15 分钟后再试', HttpStatus.TOO_MANY_REQUESTS)
+      }
+      if (count >= CAPTCHA_AFTER_FAILURES) {
+        throw new HttpException('密码连续错误 3 次，请输入验证码后继续', HttpStatus.PRECONDITION_REQUIRED)
+      }
       throw new UnauthorizedException('账号或密码错误，请重新输入')
     }
 

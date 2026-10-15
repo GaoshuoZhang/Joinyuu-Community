@@ -1,6 +1,7 @@
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch, type Ref } from 'vue'
 import { onBeforeRouteLeave } from 'vue-router'
 import { DialogPlugin } from 'tdesign-vue-next'
+import { formSnapshot } from './formSnapshot'
 
 type FormInstanceLike = { $el?: HTMLElement } | null | undefined
 
@@ -24,7 +25,7 @@ export async function focusFirstInvalid(form?: FormInstanceLike): Promise<void> 
  */
 export function useDialogDirtyGuard(form: object | (() => unknown)) {
   const baseline = ref('')
-  const snapshot = () => JSON.stringify(typeof form === 'function' ? form() : form)
+  const snapshot = () => formSnapshot(typeof form === 'function' ? form() : form)
   function markBaseline() {
     baseline.value = snapshot()
   }

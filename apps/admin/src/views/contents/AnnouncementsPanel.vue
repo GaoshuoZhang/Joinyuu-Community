@@ -48,7 +48,7 @@ const columns = [
   { colKey: 'expireAt', title: '有效期', cell: 'expireAt', width: 190, resizable: true, ellipsis: true },
   { colKey: 'publishedAt', title: '发布时间', cell: 'publishedAt', width: 170, resizable: true, ellipsis: true },
   { colKey: 'link', title: '跳转链接', cell: 'link', width: 180, resizable: true, ellipsis: true },
-  { colKey: 'op', title: '操作', cell: 'op', width: 180 },
+  { colKey: 'op', fixed: 'right' as const, title: '操作', cell: 'op', width: 180 },
 ]
 
 /* 列配置：本地持久化显隐/顺序 */
@@ -66,7 +66,9 @@ const pagination = computed(() => ({
   showJumper: true,
 }))
 
+let loadRequest = 0
 async function load() {
+  const requestId = ++loadRequest
   syncQuery()
   loading.value = true
   loadError.value = ''
@@ -77,12 +79,14 @@ async function load() {
       keyword: query.keyword.trim() || undefined,
       status: query.status || undefined,
     })
+    if (requestId !== loadRequest) return
     list.value = res.list
     total.value = res.total
   } catch (e) {
+    if (requestId !== loadRequest) return
     loadError.value = e instanceof Error ? e.message : '数据加载失败'
   } finally {
-    loading.value = false
+    if (requestId === loadRequest) loading.value = false
   }
 }
 
@@ -234,7 +238,7 @@ onMounted(load)
     </div>
 
     <div class="page-card">
-      <t-table
+      <t-table :horizontal-scroll-affixed-bottom="{ container: '.page-scroll', offsetBottom: 0 }"
         row-key="id"
         table-layout="fixed"
         hover

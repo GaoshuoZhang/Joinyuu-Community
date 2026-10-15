@@ -1,9 +1,8 @@
 <script setup lang="ts">
 import { Tag } from 'tdesign-mobile-vue'
 import type { CommunityPolicy } from '@/types'
-import { formatLocalDate, formatLocalDateTime } from '@/utils/format'
 
-/* 社区政策列表卡：分类 + 更新时间 + 标题 + 摘要。 */
+/* 社区政策列表卡：分类、标题与摘要。 */
 defineProps<{ policy: CommunityPolicy }>()
 defineEmits<{ open: [] }>()
 </script>
@@ -12,7 +11,6 @@ defineEmits<{ open: [] }>()
   <article class="policy-card m-card pressable" v-pressable @click="$emit('open')">
     <div class="row-head">
       <Tag class="cat-tag" size="small" variant="light" theme="primary">{{ policy.category }}</Tag>
-      <span class="updated">更新 {{ policy.updatedAt.length === 10 ? formatLocalDate(policy.updatedAt) : formatLocalDateTime(policy.updatedAt) }}</span>
     </div>
     <h3 class="title">{{ policy.title }}</h3>
     <p class="summary">{{ policy.summary }}</p>
@@ -34,11 +32,6 @@ defineEmits<{ open: [] }>()
 
 .cat-tag {
   flex-shrink: 0;
-}
-
-.updated {
-  font: var(--app-type-caption);
-  color: var(--td-text-color-secondary);
 }
 
 .title {

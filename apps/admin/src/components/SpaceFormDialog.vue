@@ -51,7 +51,7 @@ watch(
 )
 
 /* 未保存保护：打开时记录基线，关闭前有改动需确认 */
-const { markBaseline, isDirty, guardClose } = useDialogDirtyGuard(form)
+const { markBaseline, isDirty, guardClose } = useDialogDirtyGuard(() => ({ ...form, equipment: equipmentTags.value }))
 
 watch(
   () => props.visible,

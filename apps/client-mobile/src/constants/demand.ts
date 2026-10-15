@@ -65,9 +65,9 @@ export const DEMAND_KIND_LABELS: Record<DemandKind, string> = {
   cooperation: '找合作',
 }
 
-/** 需求日期文案：task 优先「预期交付」，回退历史「截止日期」（旧数据） */
+/** Keep response cutoff and expected delivery dates labeled by their source fields. */
 export function demandDateText(d: { deliverBy?: string; deadline?: string }): string {
+  if (d.deadline) return `响应截止 ${formatLocalDate(d.deadline)}`
   if (d.deliverBy) return `预期交付 ${formatLocalDate(d.deliverBy)}`
-  if (d.deadline) return `截止 ${formatLocalDate(d.deadline)}`
   return ''
 }

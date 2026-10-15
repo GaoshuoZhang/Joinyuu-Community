@@ -53,8 +53,8 @@ const { startSwipe, moveSwipe, cancelSwipe } = useTabSwipe(
     @touchend="cancelSwipe"
     @touchcancel="cancelSwipe"
   >
-    <Tabs v-model="activeTab" class="top-tabs" :swipeable="false">
-      <TabPanel v-for="tab in TABS" :key="tab.value" :value="tab.value" :label="tab.label">
+    <Tabs :data-tab-values="JSON.stringify(TABS.map((tab) => tab.value))" v-model="activeTab" class="top-tabs" :swipeable="false">
+      <TabPanel v-for="tab in TABS" :key="tab.value" :data-tab-value="tab.value" :value="tab.value" :label="tab.label">
         <div v-if="activeTab === tab.value" class="tab-panel">
           <ListSkeleton v-if="loading && !orders.length" />
           <EmptyBlock v-else-if="error" :text="error" action-text="重试" @action="refresh" />

@@ -15,6 +15,7 @@ defineProps<{ demand: Demand; responded: boolean; to: string }>()
     <div class="d-head">
       <Tag class="d-cat" size="small" variant="light" theme="primary">{{ demand.categoryLabel }}</Tag>
       <h3 class="d-title">{{ demand.title }}</h3>
+      <StateTag v-if="responded" class="d-flag" kind="flag" value="responded" />
     </div>
     <div class="d-meta">
       <span class="d-pub">
@@ -23,9 +24,6 @@ defineProps<{ demand: Demand; responded: boolean; to: string }>()
       </span>
       <span v-if="demandDateText(demand)">{{ demandDateText(demand) }}</span>
     </div>
-    <!-- v48：「已响应」是本人参与标记，不是业务生命周期状态，统一走 StateTag（品牌色中间态），
-         避免与「已发布/已立项」等 success 状态同色误读 -->
-    <StateTag v-if="responded" class="d-flag" kind="flag" value="responded" />
     <p class="d-resp" :class="{ 'is-zero': !demand.responseCount }">{{ formatZhNumber(demand.responseCount) }} 人响应</p>
   </router-link>
 </template>
@@ -87,8 +85,7 @@ defineProps<{ demand: Demand; responded: boolean; to: string }>()
 }
 
 .d-flag {
-  align-self: flex-start;
-  margin-top: var(--app-space-3);
+  flex-shrink: 0;
 }
 
 .d-resp {

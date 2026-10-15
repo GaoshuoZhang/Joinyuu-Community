@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { collectAllPages, executeBulk } from '@/utils/bulkOperation'
 import { useDialogFormProtection } from '@/utils/form'
 import { computed, onMounted, reactive, ref } from 'vue'
 import ListErrorState from '@/components/ListErrorState.vue'
@@ -68,9 +69,7 @@ const pagination = computed(() => ({
   showJumper: true,
 }))
 
-/* 六态筛选：待使用/使用中/已结束共用 API status=approved，返回后按派生状态客户端过滤；
- * 分页保持服务端口径（客户端过滤仅作用于当前页，为既定取舍） */
-const DERIVED_STATUSES = ['approved', 'using', 'ended']
+/* 派生状态由服务端先过滤再分页，列表与 total 保持同一口径。 */
 
 /* 请求序号守卫：仅最后一次请求可写回状态，避免快速切页/改筛选时的竞态覆盖 */
 let version = 0
@@ -80,12 +79,9 @@ async function load() {
   loading.value = true
   loadError.value = ''
   try {
-    const apiStatus = DERIVED_STATUSES.includes(query.status) ? 'approved' : query.status
-    const res = await fetchReservations({ ...query, status: apiStatus })
+    const res = await fetchReservations({ ...query })
     if (current === version) {
-      list.value = DERIVED_STATUSES.includes(query.status)
-        ? res.list.filter((r) => deriveReservationStatus(r) === query.status)
-        : res.list
+      list.value = res.list
       total.value = res.total
     }
   } catch (e) {
@@ -208,6 +204,10 @@ async function onArchive(row: SpaceReservation) {
 /* 一键归档：按当前空间/日期筛选全量拉取，归档所选派生状态的已结束 / 已驳回 / 已取消预约 */
 const archivingAll = ref(false)
 const bulkVisible = ref(false)
+let bulkScope = { ...query }
+const bulkProgress = ref<{ done: number; total: number; failed: number } | null>(null)
+let bulkCancelled = false
+function onBulkCancel() { bulkCancelled = true }
 const bulkStatuses = [
   { label: '已结束', value: 'ended' },
   { label: '已驳回', value: 'rejected' },
@@ -215,31 +215,35 @@ const bulkStatuses = [
 ]
 
 async function doBulkArchive(values: string[]) {
-  const targets: SpaceReservation[] = []
-  for (let page = 1; page <= 20; page++) {
-    const res = await fetchReservations({ page, pageSize: 100, spaceId: query.spaceId, date: query.date })
-    targets.push(...res.list)
-    if (targets.length >= res.total || res.list.length < 100) break
-  }
-  const pending = targets.filter((r) => values.includes(deriveReservationStatus(r)))
-  if (!pending.length) {
-    MessagePlugin.info('没有符合所选状态的可归档预约')
-    return
-  }
-  let failed = 0
-  for (const r of pending) {
-    try {
-      await archiveReservation(r.id)
-    } catch {
-      failed++
+  bulkCancelled = false
+  bulkProgress.value = { done: 0, total: 0, failed: 0 }
+  try {
+    const targets = await collectAllPages<SpaceReservation>(
+      (page, pageSize) => fetchReservations({ ...bulkScope, page, pageSize }), () => bulkCancelled,
+    )
+    const pending = targets.filter((row) => values.includes(deriveReservationStatus(row)))
+    if (!pending.length) {
+      MessagePlugin.info(bulkCancelled ? '已取消，未执行归档' : '当前筛选范围内没有符合所选状态的记录')
+      return
     }
+    const result = await executeBulk(pending, (row) => archiveReservation(row.id), () => bulkCancelled,
+      (progress) => { bulkProgress.value = progress })
+    if (bulkCancelled) MessagePlugin.warning(`已取消，本次已归档 ${result.done - result.failed} 条预约`)
+    else if (result.done > result.failed) MessagePlugin.success(`已归档 ${result.done - result.failed} 条预约`)
+    if (result.failed) MessagePlugin.warning(`${result.failed} 条归档失败，请刷新后重试`)
+    await load()
+  } finally {
+    bulkProgress.value = null
   }
-  if (pending.length - failed > 0) MessagePlugin.success(`已归档 ${pending.length - failed} 条预约`)
-  if (failed > 0) MessagePlugin.warning(`${failed} 条预约归档失败，请重试`)
-  await load()
+}
+
+function countByStatus(status: string) {
+  if (bulkScope.status && bulkScope.status !== status) return Promise.resolve(0)
+  return fetchReservations({ ...bulkScope, status, page: 1, pageSize: 1 }).then((result) => result.total)
 }
 
 function onBulkArchive() {
+  bulkScope = { ...query }
   bulkVisible.value = true
 }
 
@@ -465,6 +469,10 @@ const { close: closeReviewDialog } = useDialogFormProtection(() => comment.value
       :statuses="bulkStatuses"
       :loading="archivingAll"
       @confirm="onBulkConfirm"
+
+      :progress="bulkProgress"
+      :count-for-status="countByStatus"
+      @cancel="onBulkCancel"
     />
   </div>
 </template>

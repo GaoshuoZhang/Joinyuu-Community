@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { collectAllPages, executeBulk } from '@/utils/bulkOperation'
 import RowMoreActions from '@/components/RowMoreActions.vue'
 import { computed, onMounted, reactive, ref } from 'vue'
 import ListErrorState from '@/components/ListErrorState.vue'
@@ -52,7 +53,7 @@ const statusOptions = [
 ]
 
 const columns = [
-  { colKey: 'title', title: '投稿', cell: 'title', width: 160, ellipsis: true, resizable: true },
+  { colKey: 'title', fixed: 'left' as const, title: '投稿', cell: 'title', width: 160, ellipsis: true, resizable: true },
   { colKey: 'author', title: '投稿方', cell: 'author', width: 150, resizable: true , ellipsis: true},
   { colKey: 'columns', title: '栏目', cell: 'columns', width: 110, resizable: true , ellipsis: true},
   { colKey: 'status', title: '状态', cell: 'status', width: 130, resizable: true , ellipsis: true},
@@ -75,19 +76,22 @@ const pagination = computed(() => ({
   showJumper: true,
 }))
 
+let loadRequest = 0
 async function load() {
+  const requestId = ++loadRequest
   syncQuery()
   loading.value = true
   loadError.value = ''
   try {
     const res = await fetchArticles({ ...query, channel: 'submitted', status: query.status || undefined })
+    if (requestId !== loadRequest) return
     list.value = res.list
     total.value = res.total
   } catch (e) {
+    if (requestId !== loadRequest) return
     loadError.value = e instanceof Error ? e.message : '数据加载失败'
-    MessagePlugin.error(e instanceof Error ? e.message : '数据加载失败')
   } finally {
-    loading.value = false
+    if (requestId === loadRequest) loading.value = false
   }
 }
 
@@ -157,6 +161,7 @@ async function onDelete(row: Article) {
 /* 一键归档：按当前筛选全量拉取，归档所选状态的已驳回 / 待发布投稿 */
 const archivingAll = ref(false)
 const bulkVisible = ref(false)
+let bulkScope = { ...query, channel: 'submitted' as const }
 const bulkProgress = ref<{ done: number; total: number; failed: number } | null>(null)
 let bulkCancelled = false
 const bulkStatuses = [
@@ -170,43 +175,35 @@ function onBulkCancel() {
 }
 
 async function doBulkArchive(values: string[]) {
-  const targets: Article[] = []
-  for (let page = 1; page <= 20; page++) {
-    const res = await fetchArticles({ ...query, channel: 'submitted', page, pageSize: 100, status: query.status || undefined })
-    targets.push(...res.list)
-    if (targets.length >= res.total || res.list.length < 100) break
-  }
-  const pending = targets.filter((a) => values.includes(a.status))
-  if (!pending.length) {
-    MessagePlugin.info('没有符合所选状态的可归档投稿')
-    return
-  }
-  /* 进度 + 可取消：逐条执行，取消后停止后续条目（见 BulkArchiveDialog 进度态） */
   bulkCancelled = false
-  bulkProgress.value = { done: 0, total: pending.length, failed: 0 }
-  let done = 0
-  let failed = 0
-  for (const a of pending) {
-    if (bulkCancelled) break
-    try {
-      await deleteArticle(a.id)
-    } catch {
-      failed++
+  bulkProgress.value = { done: 0, total: 0, failed: 0 }
+  try {
+    const targets = await collectAllPages<Article>(
+      (page, pageSize) => fetchArticles({ ...bulkScope, status: bulkScope.status || undefined, page, pageSize }), () => bulkCancelled,
+    )
+    const pending = targets.filter((row) => values.includes(row.status))
+    if (!pending.length) {
+      MessagePlugin.info(bulkCancelled ? '已取消，未执行归档' : '当前筛选范围内没有符合所选状态的记录')
+      return
     }
-    done++
-    bulkProgress.value = { done, total: pending.length, failed }
+    const result = await executeBulk(pending, (row) => deleteArticle(row.id), () => bulkCancelled,
+      (progress) => { bulkProgress.value = progress })
+    if (bulkCancelled) MessagePlugin.warning(`已取消，本次已归档 ${result.done - result.failed} 条投稿`)
+    else if (result.done > result.failed) MessagePlugin.success(`已归档 ${result.done - result.failed} 条投稿`)
+    if (result.failed) MessagePlugin.warning(`${result.failed} 条归档失败，请刷新后重试`)
+    await load()
+  } finally {
+    bulkProgress.value = null
   }
-  bulkProgress.value = null
-  if (bulkCancelled) {
-    MessagePlugin.warning(`已取消执行：本次已归档 ${done - failed} 条`)
-  } else {
-    if (done - failed > 0) MessagePlugin.success(`已归档 ${done - failed} 条投稿`)
-    if (failed > 0) MessagePlugin.warning(`${failed} 条投稿归档失败，请重试`)
-  }
-  await load()
+}
+
+function countByStatus(status: string) {
+  if (bulkScope.status && bulkScope.status !== status) return Promise.resolve(0)
+  return fetchArticles({ ...bulkScope, status: status as Article['status'], page: 1, pageSize: 1 }).then((result) => result.total)
 }
 
 function onBulkArchive() {
+  bulkScope = { ...query, channel: 'submitted' as const }
   bulkVisible.value = true
 }
 
@@ -468,6 +465,8 @@ onMounted(load)
       :progress="bulkProgress"
       @confirm="onBulkConfirm"
       @cancel="onBulkCancel"
+
+      :count-for-status="countByStatus"
     />
   </div>
 </template>

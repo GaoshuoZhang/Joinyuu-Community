@@ -65,7 +65,9 @@ const form = reactive({
 })
 
 /* 未保存保护：打开时记录基线，关闭前有改动需确认 */
-const { markBaseline, isDirty, guardClose } = useDialogDirtyGuard(form)
+const { markBaseline, isDirty, guardClose } = useDialogDirtyGuard(() => ({
+  ...form, tags: tags.value, customVisibility: customVisibility.value, customEnrollment: customEnrollment.value,
+}))
 
 /* 积分规则默认分值：报名奖励 / 签到奖励 */
 const rulePoints = reactive({ enroll: 5, checkin: 10 })
@@ -75,29 +77,29 @@ const customVisibility = ref(false)
 const customEnrollment = ref(false)
 
 /* 字典与积分规则默认值改为首次打开弹窗时按需加载：避免登录页/未打开时携带旧令牌请求（D-101） */
+const optionLoadError = ref('')
+const optionLoading = ref(false)
 const optionsLoaded = ref(false)
 let optionsPromise: Promise<void> | null = null
 function ensureOptions(): Promise<void> {
   if (optionsLoaded.value) return Promise.resolve()
   if (!optionsPromise) {
-    optionsPromise = Promise.all([
+    optionLoading.value = true
+    optionsPromise = Promise.allSettled([
       fetchPointsRules()
         .then((rules) => {
           rulePoints.enroll = rules.find((r) => r.code === 'activity_enroll_approved')?.points ?? 5
           rulePoints.checkin = rules.find((r) => r.code === 'activity_checkin')?.points ?? 10
-          if (props.visible && props.mode === 'create') {
+          if (props.visible && props.mode === 'create' && !isDirty.value) {
             form.enrollPoints = rulePoints.enroll
             form.checkinPoints = rulePoints.checkin
+            markBaseline()
           }
-        })
-        .catch(() => undefined),
+        }),
       fetchDictEntries('event_type')
         .then((entries) => {
           const labels = entries.filter((e) => e.status === 'enabled').map((e) => ({ label: e.label, value: e.label }))
-          if (labels.length) typeOptions.value = labels
-        })
-        .catch(() => {
-          /* 字典加载失败保留回退词表 */
+          typeOptions.value = labels
         }),
       fetchSpaces()
         .then((spaces) => {
@@ -106,16 +108,16 @@ function ensureOptions(): Promise<void> {
             value: s.name,
             title: s.location ? `${s.name}（${s.location}）` : s.name,
           }))
-        })
-        .catch(() => {
-          /* 空间加载失败仍可自行输入地点 */
         }),
     ])
-      .then(() => {
-        optionsLoaded.value = true
+      .then((results) => {
+        const failures = results.filter((result) => result.status === 'rejected')
+        optionsLoaded.value = failures.length === 0
+        optionLoadError.value = failures.length ? '部分选项或奖励规则加载失败，请重试后核对。' : ''
       })
       .finally(() => {
         optionsPromise = null
+        optionLoading.value = false
       })
   }
   return optionsPromise
@@ -202,7 +204,16 @@ const rules: FormProps['rules'] = {
   title: [{ required: true, message: '请输入活动标题', trigger: 'submit' }],
   type: [{ required: true, message: '请选择活动类型', trigger: 'submit' }],
   startTime: [{ required: true, message: '请选择开始时间', trigger: 'submit' }],
-  endTime: [{ required: true, message: '请选择结束时间', trigger: 'submit' }],
+  endTime: [
+    { required: true, message: '请选择结束时间', trigger: 'submit' },
+    { validator: (value: string) => !form.startTime || value > form.startTime,
+      message: '结束时间须晚于开始时间', trigger: 'submit' },
+  ],
+  enrollmentDeadline: [{ validator: (value: string) => !value || !form.startTime || value <= form.startTime,
+    message: '报名截止时间不能晚于活动开始时间', trigger: 'submit' }],
+  ...Object.fromEntries(['capacity', 'enrollPoints', 'checkinPoints', 'checkinRadiusM', 'checkinOpenMin', 'checkinCloseMin', 'cancelDeadlineHours']
+    .map((key) => [key, [{ validator: (value: number) => Number.isInteger(value) && value >= (['capacity', 'checkinRadiusM'].includes(key) ? 1 : 0),
+      message: ['capacity', 'checkinRadiusM'].includes(key) ? '请输入大于 0 的整数' : '请输入不小于 0 的整数', trigger: 'submit' as const }]])),
   location: [{ required: true, message: '请输入地点', trigger: 'submit' }],
 }
 
@@ -280,6 +291,10 @@ usePageDirtyGuard(computed(() => props.visible && isDirty.value))
         </t-button>
       </div>
     </template>
+    <t-alert v-if="optionLoadError" theme="warning" style="margin-bottom: 16px">
+      {{ optionLoadError }}
+      <t-button variant="text" theme="primary" size="small" :loading="optionLoading" @click="ensureOptions">重新加载</t-button>
+    </t-alert>
     <t-form ref="formRef" :data="form" :rules="rules" label-align="top">
       <t-form-item label="活动标题" name="title">
         <t-input v-accessible-field clearable v-model="form.title" placeholder="请输入活动标题…" />
@@ -293,7 +308,7 @@ usePageDirtyGuard(computed(() => props.visible && isDirty.value))
           <t-select v-accessible-field clearable v-model="form.type" :options="typeOptions" />
         </t-form-item>
         <t-form-item label="容量" name="capacity">
-          <t-input-number v-accessible-field v-model="form.capacity" :min="1" theme="column" class="ctl-w-full" />
+          <t-input-number v-accessible-field v-model="form.capacity" :min="1" theme="column" class="ctl-w-full" :decimal-places="0" :step="1" />
         </t-form-item>
       </div>
       <div class="form-row">
@@ -301,6 +316,7 @@ usePageDirtyGuard(computed(() => props.visible && isDirty.value))
           <t-date-picker
             v-accessible-field
             v-model="form.startTime"
+            :disabled="mode === 'edit' && event?.status === 'published'"
             valueType="YYYY-MM-DD HH:mm"
             enable-time-picker
             clearable
@@ -311,6 +327,7 @@ usePageDirtyGuard(computed(() => props.visible && isDirty.value))
           <t-date-picker
             v-accessible-field
             v-model="form.endTime"
+            :disabled="mode === 'edit' && event?.status === 'published'"
             valueType="YYYY-MM-DD HH:mm"
             enable-time-picker
             clearable
@@ -318,6 +335,7 @@ usePageDirtyGuard(computed(() => props.visible && isDirty.value))
           />
         </t-form-item>
       </div>
+      <t-alert v-if="mode === 'edit' && event?.status === 'published'" theme="info" message="已发布活动的起止时间请通过列表中的「改期」调整，系统会通知报名者。" style="margin-bottom: 16px" />
       <div class="form-row">
         <t-form-item label="报名截止时间" name="enrollmentDeadline">
           <t-date-picker
@@ -428,7 +446,7 @@ usePageDirtyGuard(computed(() => props.visible && isDirty.value))
             </template>
             <t-popup content="默认使用积分规则值，可直接为本活动调整报名奖励" show-arrow>
               <div class="reward-input-trigger">
-                <t-input-number v-accessible-field="'报名奖励积分'" v-model="form.enrollPoints" :min="0" theme="column" class="ctl-w-full" />
+                <t-input-number v-accessible-field="'报名奖励积分'" v-model="form.enrollPoints" :min="0" theme="column" class="ctl-w-full" :decimal-places="0" :step="1" />
               </div>
             </t-popup>
           </t-form-item>
@@ -442,7 +460,7 @@ usePageDirtyGuard(computed(() => props.visible && isDirty.value))
             </template>
             <t-popup content="默认使用积分规则值，可直接为本活动调整签到奖励" show-arrow>
               <div class="reward-input-trigger">
-                <t-input-number v-accessible-field="'签到奖励积分'" v-model="form.checkinPoints" :min="0" theme="column" class="ctl-w-full" />
+                <t-input-number v-accessible-field="'签到奖励积分'" v-model="form.checkinPoints" :min="0" theme="column" class="ctl-w-full" :decimal-places="0" :step="1" />
               </div>
             </t-popup>
           </t-form-item>
@@ -459,18 +477,18 @@ usePageDirtyGuard(computed(() => props.visible && isDirty.value))
       </div>
       <div class="form-row">
         <t-form-item label="签到半径（米）" name="checkinRadiusM">
-          <t-input-number v-accessible-field v-model="form.checkinRadiusM" :min="1" theme="column" class="ctl-w-full" />
+          <t-input-number v-accessible-field v-model="form.checkinRadiusM" :min="1" theme="column" class="ctl-w-full" :decimal-places="0" :step="1" />
         </t-form-item>
         <t-form-item label="取消报名时限（开场前小时）" name="cancelDeadlineHours">
-          <t-input-number v-accessible-field v-model="form.cancelDeadlineHours" :min="0" theme="column" class="ctl-w-full" />
+          <t-input-number v-accessible-field v-model="form.cancelDeadlineHours" :min="0" theme="column" class="ctl-w-full" :decimal-places="0" :step="1" />
         </t-form-item>
       </div>
       <div class="form-row">
         <t-form-item label="签到提前开放（分钟）" name="checkinOpenMin">
-          <t-input-number v-accessible-field v-model="form.checkinOpenMin" :min="0" theme="column" class="ctl-w-full" />
+          <t-input-number v-accessible-field v-model="form.checkinOpenMin" :min="0" theme="column" class="ctl-w-full" :decimal-places="0" :step="1" />
         </t-form-item>
         <t-form-item label="签到延后关闭（分钟）" name="checkinCloseMin">
-          <t-input-number v-accessible-field v-model="form.checkinCloseMin" :min="0" theme="column" class="ctl-w-full" />
+          <t-input-number v-accessible-field v-model="form.checkinCloseMin" :min="0" theme="column" class="ctl-w-full" :decimal-places="0" :step="1" />
         </t-form-item>
       </div>
 

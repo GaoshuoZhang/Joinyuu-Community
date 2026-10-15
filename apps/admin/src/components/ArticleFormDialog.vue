@@ -12,7 +12,7 @@ const RichEditor = defineAsyncComponent(() => import('@/components/RichEditor.vu
 /* 文章新增/编辑弹窗（资讯发布与投稿编辑共用）：
  * - channel=official（资讯发布）：新增即「待发布」；作者可选，选项同「新增需求」的需求方（注册个人用户/企业）
  * - channel=submitted（投稿内容）：仅「待发布」态可编辑，作者只读展示
- * 操作项仅「取消」「保存」；校验必填：标题 / 栏目（可多选至少一项）/ 摘要 / 正文 */
+ * 操作项仅「取消」「保存」；校验必填：标题 / 栏目（单选）/ 摘要 / 正文 */
 const props = defineProps<{
   visible: boolean
   mode: 'create' | 'edit'
@@ -58,8 +58,6 @@ async function loadAuthorOptions() {
       ...opts.enterprises.map((e) => ({ label: `${e.name}（${e.tag} · ${e.id}）`, value: `E:${e.id}` })),
       ...opts.users.map((u) => ({ label: `${u.nickname}（${u.tag} · ${u.uid}）`, value: `U:${u.uid}` })),
     ]
-    /* 选项就绪后重放编辑回显 */
-    form.authorValue = resolveAuthorValue(props.article?.authorId)
     publisherLoadError.value = ''
   } catch (e) {
     publisherLoadError.value = e instanceof Error ? e.message : '作者选项加载失败'
@@ -77,7 +75,9 @@ const form = reactive({
 })
 
 /* 未保存保护：打开时记录基线，关闭前有改动需确认 */
-const { markBaseline, isDirty, guardClose } = useDialogDirtyGuard(form)
+const { markBaseline, isDirty, guardClose } = useDialogDirtyGuard(() => ({
+  ...form, tags: tagsText.value.split(/[，,]/).map((tag) => tag.trim()).filter(Boolean),
+}))
 
 function resetForm() {
   if (props.mode === 'edit' && props.article) {
@@ -105,7 +105,7 @@ function resolveAuthorValue(authorId?: string): string {
   if (!authorId) return ''
   if (publisherUsers.value.some((u) => u.uid === authorId)) return `U:${authorId}`
   if (publisherEnterprises.value.some((e) => e.id === authorId)) return `E:${authorId}`
-  return ''
+  return authorId.startsWith('U') ? `U:${authorId}` : `E:${authorId}`
 }
 
 /* 投稿只读作者展示：名称-ID（投稿人 UID / 企业 ID，保证唯一性） */

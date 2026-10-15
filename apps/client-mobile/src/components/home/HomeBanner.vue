@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
-import { Icon, Swiper, SwiperItem } from 'tdesign-mobile-vue'
+import { Button, Icon, Swiper, SwiperItem } from 'tdesign-mobile-vue'
 import type { HomeBanner } from '@/types'
 
 /* 首页轮播：图片优先，无图时使用品牌渐变文字卡；高度由唯一常量固定（KeepAlive 返回时不受测量影响）。
@@ -58,10 +58,9 @@ function markImageFailed(banner: HomeBanner) {
       @change="onChange"
     >
     <SwiperItem v-for="(b, index) in banners" :key="b.id">
-      <button
+      <Button variant="text"
         type="button"
         class="banner-card"
-        v-pressable
         :aria-label="b.subtitle ? `${b.title}，${b.subtitle}` : b.title"
         @click="$emit('select', index)"
       >
@@ -89,11 +88,11 @@ function markImageFailed(banner: HomeBanner) {
           <p class="banner-title">{{ b.title }}</p>
           <p class="banner-sub">{{ b.subtitle }}</p>
         </div>
-      </button>
+      </Button>
     </SwiperItem>
     </Swiper>
     <!-- v52：自动轮播的可见暂停/播放控件（WCAG 2.2.2）；44px 命中区，图标 16px，按压反馈走 .pressable -->
-    <button
+    <Button variant="text"
       v-if="showPlayToggle"
       type="button"
       class="banner-play-toggle pressable"
@@ -101,11 +100,12 @@ function markImageFailed(banner: HomeBanner) {
       @click="togglePlay"
     >
       <Icon aria-hidden="true" :name="playing ? 'pause' : 'play'" size="16px" />
-    </button>
+    </Button>
   </div>
 </template>
 
 <style scoped>
+.banner-card :deep(.t-button__content) { display: block; width: 100%; height: 100%; white-space: normal; }
 /* v52：轮播与暂停控件的外层定位容器（控件叠在轮播右下角，不进入 Swiper 的子节点序列） */
 .banner-wrap {
   position: relative;

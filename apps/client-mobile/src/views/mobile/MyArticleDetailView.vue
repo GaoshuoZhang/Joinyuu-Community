@@ -6,7 +6,7 @@ import { fetchMyArticle } from '@/api/contents'
 import { useAsyncList } from '@/composables/useAsyncList'
 import EmptyBlock from '@/components/shared/EmptyBlock.vue'
 import ListSkeleton from '@/components/ListSkeleton.vue'
-import RichTextBlock from '@/components/shared/RichTextBlock.vue'
+import ArticleContent from '@/components/contents/ArticleContent.vue'
 import StateTag from '@/components/shared/StateTag.vue'
 import type { MySubmittedArticleDetail } from '@/types'
 import { formatLocalDateTime } from '@/utils/format'
@@ -37,7 +37,7 @@ function reviseArticle() {
         <p v-if="article.identityName">投稿主体：{{ article.identityName }}</p>
       </article>
       <section v-if="article.rejectReason" class="m-card review"><h3>审核意见</h3><p>{{ article.rejectReason }}</p></section>
-      <section class="m-card content"><h3>投稿正文</h3><RichTextBlock :html="article.content" /></section>
+      <ArticleContent :content="article.content" />
       <Button v-if="article.status === 'rejected' || article.status === 'withdrawn'" theme="primary" block @click="reviseArticle">修改并重新提交</Button>
       <!-- 返回是二级页唯一出口，用描边按钮形态（非文字链）保持可识别与 44px 命中区 -->
       <Button block variant="outline" @click="router.push('/me/articles')">返回我的投稿</Button>

@@ -3,6 +3,7 @@ import { computed, h, onMounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { Button, DialogPlugin, Icon, Image, Tag, Toast } from 'tdesign-mobile-vue'
 import { cancelEnrollment, enrollEvent, fetchEvent, fetchMyEventFeedback, submitEventFeedback } from '@/api/events'
+import { canCancelEnrollment } from '@/utils/enrollment'
 import { listFavorites, toggleFavorite } from '@/api/favorites'
 import { useAsyncList } from '@/composables/useAsyncList'
 import { useAuthStore } from '@/stores/auth'
@@ -215,13 +216,12 @@ function goCheckIn() {
   router.push(`/events/${eventId}/check-in`)
 }
 
-/* v38：取消防止时间（活动开始前 24 小时） */
+/* 与我的报名、服务端保持相同的取消时限及边界。 */
 const cancelBlocked = computed(() => {
   const ev = event.value
-  if (!ev) return false
-  if (myStatus.value === 'waitlisted') return false
-  const start = parseLocalDateTime(ev.startTime)
-  return start ? start.getTime() - businessNowMs.value < 24 * 60 * 60 * 1000 : false
+  return !ev || !canCancelEnrollment({
+    ...ev, status: myStatus.value, checkedIn: ev.myCheckedIn, eventStatus: ev.status,
+  }, businessNowMs.value)
 })
 
 /* v39：添加到日历（.ics 下载） */function onAddToCalendar() {

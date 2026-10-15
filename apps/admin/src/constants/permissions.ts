@@ -102,7 +102,7 @@ export const permissionGroups: PermissionGroup[] = [
       { code: '/system/trash', name: '归档管理' },
       { code: '/system/export', name: '数据导出' },
       { code: '/system/policies', name: '协议与政策' },
-      { code: '/system/messages', name: '消息中心' },
+      { code: '/system/messages', name: '通知渠道配置' },
     ],
   },
 ]

@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { collectAllPages, executeBulk } from '@/utils/bulkOperation'
 import RowMoreActions from '@/components/RowMoreActions.vue'
 import { computed, onMounted, reactive, ref, watch } from 'vue'
 import ListErrorState from '@/components/ListErrorState.vue'
@@ -61,7 +62,7 @@ const sortBy = ref<'id' | 'startTime' | 'createdAt'>('id')
 const sortOrder = ref<'ascend' | 'descend'>('descend')
 
 const columns = [
-  { colKey: 'title', title: '活动', cell: 'title', width: 220, resizable: true , ellipsis: true},
+  { colKey: 'title', fixed: 'left' as const, title: '活动', cell: 'title', width: 220, resizable: true , ellipsis: true},
   { colKey: 'type', title: '类型', cell: 'type', width: 84, resizable: true , ellipsis: true},
   {
     colKey: 'startTime',
@@ -87,7 +88,7 @@ const columns = [
   { colKey: 'enrolled', title: '报名', cell: 'enrolled', width: 150, resizable: true , ellipsis: true},
   { colKey: 'checked', title: '签到', cell: 'checked', width: 150, resizable: true , ellipsis: true},
   { colKey: 'status', title: '状态', cell: 'status', width: 150, resizable: true , ellipsis: true},
-  { colKey: 'op', title: '操作', cell: 'op', width: 180 },
+  { colKey: 'op', fixed: 'right' as const, title: '操作', cell: 'op', width: 180 },
 ]
 
 /* 列配置：本地持久化显隐/顺序 */
@@ -219,6 +220,7 @@ async function onArchive(row: CommunityEvent) {
 /* 一键归档：按当前筛选全量拉取，归档所选状态的已结束 / 已取消活动 */
 const archivingAll = ref(false)
 const bulkVisible = ref(false)
+let bulkScope = { ...query }
 const bulkProgress = ref<{ done: number; total: number; failed: number } | null>(null)
 let bulkCancelled = false
 const bulkStatuses = [
@@ -231,48 +233,36 @@ function onBulkCancel() {
 }
 
 async function doBulkArchive(values: string[]) {
-  const targets: CommunityEvent[] = []
-  for (let page = 1; page <= 20; page++) {
-    const res = await fetchEvents({ ...query, page, pageSize: 100 })
-    targets.push(...res.list)
-    if (targets.length >= res.total || res.list.length < 100) break
-  }
-  const pending = targets.filter((e) => values.includes(e.status))
-  if (!pending.length) {
-    MessagePlugin.info('没有符合所选状态的可归档活动')
-    return
-  }
-  /* 进度 + 可取消：逐条执行，取消后停止后续条目（见 BulkArchiveDialog 进度态） */
   bulkCancelled = false
-  bulkProgress.value = { done: 0, total: pending.length, failed: 0 }
-  let done = 0
-  let failed = 0
-  for (const e of pending) {
-    if (bulkCancelled) break
-    try {
-      await archiveEvent(e.id)
-    } catch {
-      failed++
+  bulkProgress.value = { done: 0, total: 0, failed: 0 }
+  try {
+    const targets = await collectAllPages<CommunityEvent>(
+      (page, pageSize) => fetchEvents({ ...bulkScope, page, pageSize }), () => bulkCancelled,
+    )
+    const pending = targets.filter((row) => values.includes(row.status))
+    if (!pending.length) {
+      MessagePlugin.info(bulkCancelled ? '已取消，未执行归档' : '当前筛选范围内没有符合所选状态的记录')
+      return
     }
-    done++
-    bulkProgress.value = { done, total: pending.length, failed }
+    const result = await executeBulk(pending, (row) => archiveEvent(row.id), () => bulkCancelled,
+      (progress) => { bulkProgress.value = progress })
+    if (bulkCancelled) MessagePlugin.warning(`已取消，本次已归档 ${result.done - result.failed} 条活动`)
+    else if (result.done > result.failed) MessagePlugin.success(`已归档 ${result.done - result.failed} 条活动`)
+    if (result.failed) MessagePlugin.warning(`${result.failed} 条归档失败，请刷新后重试`)
+    await load()
+  } finally {
+    bulkProgress.value = null
   }
-  bulkProgress.value = null
-  if (bulkCancelled) {
-    MessagePlugin.warning(`已取消执行：本次已归档 ${done - failed} 条`)
-  } else {
-    if (done - failed > 0) MessagePlugin.success(`已归档 ${done - failed} 条活动`)
-    if (failed > 0) MessagePlugin.warning(`${failed} 条活动归档失败，请重试`)
-  }
-  await load()
 }
 
 /* 确认前预估影响条数：按所选状态取 total 求和（pageSize=1 仅取 total） */
 function countByStatus(status: string) {
-  return fetchEvents({ ...query, status, page: 1, pageSize: 1 }).then((r) => r.total)
+  if (bulkScope.status && bulkScope.status !== status) return Promise.resolve(0)
+  return fetchEvents({ ...bulkScope, status, page: 1, pageSize: 1 }).then((result) => result.total)
 }
 
 function onBulkArchive() {
+  bulkScope = { ...query }
   bulkVisible.value = true
 }
 
@@ -532,7 +522,7 @@ function fetchAllForExport(page: number, pageSize: number) {
     </div>
 
     <div class="page-card">
-      <t-table
+      <t-table :horizontal-scroll-affixed-bottom="{ container: '.page-scroll', offsetBottom: 0 }"
         row-key="id"
         table-layout="fixed"
         hover
@@ -677,6 +667,7 @@ function fetchAllForExport(page: number, pageSize: number) {
       :count-for-status="countByStatus"
       @confirm="onBulkConfirm"
       @cancel="onBulkCancel"
+
     />
   </div>
 </template>

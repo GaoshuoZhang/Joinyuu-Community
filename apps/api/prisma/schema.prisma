@@ -53,7 +53,7 @@ model DeploymentLicense {
 //      - UserIdentity_one_individual_per_user_key             每用户至多一个 individual 身份（WHERE type = 'individual'）
 //      - UserIdentity_one_community_individual_per_user_key   每用户至多一个 community_individual 身份（WHERE type = 'community_individual'）
 //        （可空列 enterpriseId 使 @@unique([userId, type, enterpriseId]) 对二者失效，故另建部分唯一索引兜底）
-//      - Policy_published_kind_version_key                    已发布政策同 kind+version 唯一（WHERE status = 'published'）
+//      - Policy_published_agreement_kind_version_key          已发布平台协议同 kind+version 唯一（社区政策不限制）
 //        → prisma/migrations/20260921120000_data_layer_hardening/migration.sql
 //      约束：改动这些表时须用 `prisma migrate deploy`（勿用 `migrate dev`/`db push` 自动生成迁移，否则会 DROP 掉上述索引）；
 //      回归保护见 apps/api/test/regression-fixes.e2e-spec.ts「手写部分唯一索引仍然存在」。
@@ -1434,8 +1434,8 @@ model TransferRequest {
 }
 
 // 政策/协议内容（kind：agreement_user | agreement_privacy | community；社区政策带 category/version/有效期）
-// 唯一性：同 kind + version 在「已发布（status = 'published'）」范围内唯一，由手写迁移的部分唯一索引
-// Policy_published_kind_version_key 保证（Prisma 无法声明部分唯一索引；历史草稿/归档不受约束）。
+// 唯一性：只有平台协议（agreement_user / agreement_privacy）的已发布同 kind + version 唯一。
+// Policy_published_agreement_kind_version_key 保证该约束；独立社区政策可使用相同版本号。
 // 曾用 @@unique([kind, version]) 全量约束，因阻断历史草稿与归档版本共存而在 20260916165500 显式回滚。
 model Policy {
   id          String  @id @db.VarChar(16) // PL 前缀

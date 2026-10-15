@@ -289,7 +289,7 @@ async function onSubmit() {
 
     <Popup v-model:visible="dateVisible" placement="bottom">
       <DateTimePicker
-        v-model="dateValue"
+        v-model:value="dateValue"
         mode="date"
         format="YYYY-MM-DD"
         :start="todayStr"

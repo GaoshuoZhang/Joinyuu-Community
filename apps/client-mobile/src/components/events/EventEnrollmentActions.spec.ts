@@ -47,7 +47,7 @@ function mountActions(overrides: Partial<InstanceType<typeof EventEnrollmentActi
       ...overrides,
     },
     global: {
-      stubs: { Button: ButtonStub, Icon: true, teleport: true },
+      stubs: { Button: ButtonStub, Icon: true, teleport: true, RouterLink: { template: '<a><slot /></a>' } },
     },
   })
 }

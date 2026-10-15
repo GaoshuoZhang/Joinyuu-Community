@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import EmptyBlock from '@/components/shared/EmptyBlock.vue'
 import { computed, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { Button, StepItem, Steps, Tag } from 'tdesign-mobile-vue'

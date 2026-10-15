@@ -80,7 +80,7 @@ const leaseColumns = [
   { colKey: 'contactName', title: '联系人', cell: 'contact', width: 140, resizable: true , ellipsis: true},
   { colKey: 'status', title: '状态', cell: 'status', width: 110, resizable: true , ellipsis: true},
   /* 行点击仅有鼠标路径，操作列「详情」为键盘/读屏用户提供同等入口（H-01） */
-  { colKey: 'op', title: '操作', width: 80, cell: 'op' },
+  { colKey: 'op', fixed: 'right' as const, title: '操作', width: 80, cell: 'op' },
 ]
 
 const experienceColumns = [
@@ -98,7 +98,7 @@ const memberColumns = [
   { colKey: 'phone', title: '联系电话', width: 140 , ellipsis: true},
   { colKey: 'status', title: '账号状态', cell: 'status', width: 110 , ellipsis: true},
   /* 行点击仅有鼠标路径，操作列「详情」为键盘/读屏用户提供同等入口（H-01） */
-  { colKey: 'op', title: '操作', width: 80, cell: 'op' },
+  { colKey: 'op', fixed: 'right' as const, title: '操作', width: 80, cell: 'op' },
 ]
 
 async function load() {

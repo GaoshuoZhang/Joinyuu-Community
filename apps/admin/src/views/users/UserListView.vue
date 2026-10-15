@@ -62,7 +62,7 @@ const realStatusOptions = [
 ]
 
 const columns = [
-  { colKey: 'user', title: '用户', cell: 'user', width: 190 , ellipsis: true},
+  { colKey: 'user', fixed: 'left' as const, title: '用户', cell: 'user', width: 190 , ellipsis: true},
   { colKey: 'username', title: '用户名', cell: 'username', width: 150 , ellipsis: true},
   /* 联系电话与邮箱为手机号 + 邮箱双行，宽度需容纳完整邮箱（约 12px 字号 24 字符） */
   { colKey: 'phone', title: 'phone-title', cell: 'phone', width: 200, ellipsis: true},
@@ -71,7 +71,7 @@ const columns = [
   { colKey: 'points', title: '积分', width: 80 , ellipsis: true},
   { colKey: 'status', title: '状态', cell: 'status', width: 95 , ellipsis: true},
   { colKey: 'registeredAt', title: '注册时间', width: 170 , ellipsis: true},
-  { colKey: 'op', title: '操作', cell: 'op', width: 90 },
+  { colKey: 'op', fixed: 'right' as const, title: '操作', cell: 'op', width: 90 },
 ]
 
 /* 列配置：本地持久化显隐/顺序 */
@@ -255,7 +255,7 @@ onMounted(load)
     </div>
 
     <div class="page-card">
-      <t-table
+      <t-table :horizontal-scroll-affixed-bottom="{ container: '.page-scroll', offsetBottom: 0 }"
         row-key="uid"
         table-layout="fixed"
         hover

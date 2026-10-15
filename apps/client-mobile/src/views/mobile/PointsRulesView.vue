@@ -35,7 +35,7 @@ const rules = ref([
     </section>
 
     <Button variant="outline" block @click="$router.push('/me/points')">查看我的积分明细</Button>
-    <Button variant="text" block @click="$router.push('/me/messages')">前往我的消息反馈</Button>
+    <Button variant="text" block @click="$router.push('/me/messages')">前往我的留言</Button>
   </div>
 </template>
 

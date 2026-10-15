@@ -1,11 +1,11 @@
 <script setup lang="ts">
-import { onMounted, reactive, ref } from 'vue'
+import { computed, reactive, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { MessagePlugin } from 'tdesign-vue-next'
 import { CheckCircleIcon } from 'tdesign-icons-vue-next'
 import { useAuthStore } from '@/stores/auth'
 import { firstAccessiblePath } from '@/router'
-import { fetchCaptcha, type CaptchaResult } from '@/api/auth'
+import { fetchCaptcha, HttpError, type CaptchaResult } from '@/api/auth'
 import type { FormProps } from 'tdesign-vue-next'
 
 const router = useRouter()
@@ -16,12 +16,18 @@ const form = reactive({
   password: '',
   captcha: '',
 })
+const captchaRequired = ref(false)
+watch(() => form.username, () => {
+  captchaRequired.value = false
+  captcha.value = null
+  form.captcha = ''
+})
 
-const rules: FormProps['rules'] = {
+const rules = computed<FormProps['rules']>(() => ({
   username: [{ required: true, message: '请输入用户名', trigger: 'submit' }],
   password: [{ required: true, message: '请输入密码', trigger: 'submit' }],
-  captcha: [{ required: true, message: '请输入验证码', trigger: 'submit' }],
-}
+  ...(captchaRequired.value ? { captcha: [{ required: true, message: '请输入验证码', trigger: 'submit' }] } : {}),
+}))
 
 const submitting = ref(false)
 
@@ -41,24 +47,22 @@ async function loadCaptcha() {
   }
 }
 
-onMounted(loadCaptcha)
-
 const onSubmit: FormProps['onSubmit'] = async ({ validateResult, firstError }) => {
   if (validateResult !== true) {
     MessagePlugin.warning(firstError as string)
     return
   }
-  if (!captcha.value) {
+  if (captchaRequired.value && !captcha.value) {
     MessagePlugin.warning('验证码未加载，请点击刷新后重试')
     loadCaptcha()
     return
   }
   submitting.value = true
   try {
-    await auth.login(form.username, form.password, {
+    await auth.login(form.username, form.password, captchaRequired.value ? {
       captchaId: captcha.value?.captchaId ?? '',
       captchaCode: form.captcha,
-    })
+    } : undefined)
     if (auth.passwordExpired) {
       MessagePlugin.warning('密码已过期，请先修改密码')
       router.push('/system/change-password')
@@ -71,7 +75,8 @@ const onSubmit: FormProps['onSubmit'] = async ({ validateResult, firstError }) =
   } catch (err) {
     MessagePlugin.error(err instanceof Error ? err.message : '登录失败，请检查用户名、密码与验证码后重试')
     form.captcha = ''
-    loadCaptcha()
+    if (err instanceof HttpError && err.status === 428) captchaRequired.value = true
+    if (captchaRequired.value) void loadCaptcha()
   } finally {
     submitting.value = false
   }
@@ -144,7 +149,7 @@ const highlights = ['企业与需求双向连接', '活动运营与签到管理'
               placeholder="请输入密码…"
             />
           </t-form-item>
-          <t-form-item name="captcha">
+          <t-form-item v-if="captchaRequired" name="captcha">
             <div class="captcha-row">
               <t-input
                 v-accessible-field="'图形验证码'"

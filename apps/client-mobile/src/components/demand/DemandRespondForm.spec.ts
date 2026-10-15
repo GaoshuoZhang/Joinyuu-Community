@@ -57,7 +57,7 @@ describe('DemandRespondForm', () => {
     const company: UserIdentity = { type: 'community_enterprise', enterpriseId: 'E9001', enterpriseName: '芯启半导体' }
     const { wrapper } = await mountForm({ identities: [individual, company], userName: '张三', submitting: false })
     await wrapper.get('textarea').setValue('  我们可以承接这个需求  ')
-    const chips = wrapper.findAll('.t-tag--checkable')
+    const chips = wrapper.findAll('.t-radio')
     expect(chips.length).toBe(2)
     await chips[1].trigger('click')
     await wrapper.get('form').trigger('submit')

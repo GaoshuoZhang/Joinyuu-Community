@@ -1,4 +1,5 @@
 import { httpGet, httpPost } from './http'
+export { HttpError } from './http'
 
 /* 认证接口
  * POST /api/admin/auth/login
@@ -49,6 +50,7 @@ export async function changePassword(oldPassword: string, newPassword: string): 
 }
 
 export interface AdminSession {
+  current?: boolean
   jti: string
   username: string
   name: string

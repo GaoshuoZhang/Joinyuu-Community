@@ -41,9 +41,10 @@ const CAPTCHA_TTL = 5 * 60
 const CAPTCHA_RATE_MAX = 30
 const CAPTCHA_RATE_WINDOW_SEC = 60
 /** 登录失败锁定（与 admin 口径一致）：同一 ip+账号 连续失败 5 次锁定 15 分钟（Redis 键，多实例/重启生效） */
-const LOGIN_FAIL_PREFIX = 'auth:app:login:fail:'
+const LOGIN_FAIL_PREFIX = 'auth:app:login:attempts:v2:'
 const LOGIN_LOCK_PREFIX = 'auth:app:login:lock:'
 const LOGIN_MAX_FAILURES = 5
+const CAPTCHA_AFTER_FAILURES = 3
 const LOGIN_LOCK_SEC = 15 * 60
 /** 身份类型 → 展示标签（登录快照与登录态摘要用，title 缺省时兜底） */
 const IDENTITY_LABEL: Record<string, string> = {
@@ -237,13 +238,19 @@ export class AuthService {
     }
   }
 
-  /** 登录：校验图形验证码 → 失败锁定检查 → 按 手机号/邮箱/用户名 定位账号 → 校验密码与状态 → 签发多身份 app JWT */
+  /** 登录：连续三次密码失败后要求图形验证码，再校验账号密码并签发多身份 app JWT */
   async login(dto: AppLoginDto, ip: string): Promise<AppLoginResult> {
-    const captchaOk = await this.verifyCaptcha(dto.captchaId, dto.captchaCode)
-    if (!captchaOk) throw new BadRequestException('验证码错误或已过期')
-
     /* 账号级失败锁定：标识归一化（去空格+小写），防大小写变体绕过失败计数 */
     const rateKey = `${ip}:${(dto.identifier ?? '').trim().toLowerCase()}`
+    const failedAttempts = await this.redis.getCache<number>(LOGIN_FAIL_PREFIX + rateKey) ?? 0
+    const captchaRequired = failedAttempts >= CAPTCHA_AFTER_FAILURES
+    if (captchaRequired && !(await this.verifyCaptcha(dto.captchaId, dto.captchaCode))) {
+      if (!dto.captchaId) {
+        throw new HttpException('密码连续错误 3 次，请输入验证码后继续', HttpStatus.PRECONDITION_REQUIRED)
+      }
+      throw new BadRequestException('验证码错误或已过期')
+    }
+
     const lock = await this.redis.getCache<{ until: number }>(LOGIN_LOCK_PREFIX + rateKey)
     if (lock && lock.until > Date.now()) {
       const minutes = Math.ceil((lock.until - Date.now()) / 60000)
@@ -252,8 +259,7 @@ export class AuthService {
 
     const user = await this.findByIdentifier(dto.identifier)
     if (!user || !user.passwordHash || !(await compare(dto.password, user.passwordHash))) {
-      const current = (await this.redis.getCache<{ count: number }>(LOGIN_FAIL_PREFIX + rateKey))?.count ?? 0
-      const count = current + 1
+      const count = await this.redis.incrWithTtlStrict(LOGIN_FAIL_PREFIX + rateKey, LOGIN_LOCK_SEC)
       if (count >= LOGIN_MAX_FAILURES) {
         await this.redis.setCache(
           LOGIN_LOCK_PREFIX + rateKey,
@@ -261,8 +267,10 @@ export class AuthService {
           LOGIN_LOCK_SEC,
         )
         await this.redis.delCache(LOGIN_FAIL_PREFIX + rateKey)
-      } else {
-        await this.redis.setCache(LOGIN_FAIL_PREFIX + rateKey, { count }, LOGIN_LOCK_SEC)
+        throw new HttpException('登录失败次数过多，请 15 分钟后再试', HttpStatus.TOO_MANY_REQUESTS)
+      }
+      if (count >= CAPTCHA_AFTER_FAILURES) {
+        throw new HttpException('密码连续错误 3 次，请输入验证码后继续', HttpStatus.PRECONDITION_REQUIRED)
       }
       throw new UnauthorizedException('账号或密码错误')
     }

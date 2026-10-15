@@ -9,6 +9,8 @@ import { createProject, updateProject } from '@/api/projects'
 import { fetchExperienceRules } from '@/api/rules'
 import { useAuthStore } from '@/stores/auth'
 import type { Demand, Milestone, MilestoneInput, Project } from '@/types'
+import { undertakerValue, customUndertakerName } from '@/utils/projectUndertakers'
+import { existingProjectDemander, projectDemanderValue } from '@/utils/projectDemander'
 
 const RichEditor = defineAsyncComponent(() => import('@/components/RichEditor.vue'))
 
@@ -56,10 +58,17 @@ const form = reactive({
 })
 
 /* 需求方下拉选项：企业在前、用户在后（与新增需求表单一致） */
-const demanderOptions = computed(() => [
-  ...publisherEnterprises.value.map((e) => ({ label: `${e.name}（${e.tag} · ${e.id}）`, value: `enterprise:${e.id}` })),
-  ...publisherUsers.value.map((u) => ({ label: `${u.realName || u.nickname}（${u.tag} · ${u.uid}）`, value: `user:${u.uid}` })),
-])
+const demanderOptions = computed(() => {
+  const options = [
+    ...publisherEnterprises.value.map((e) => ({ label: `${e.name}（${e.tag} · ${e.id}）`, value: `enterprise:${e.id}` })),
+    ...publisherUsers.value.map((u) => ({ label: `${u.realName || u.nickname}（${u.tag} · ${u.uid}）`, value: `user:${u.uid}` })),
+  ]
+  const project = props.project
+  if (project?.demanderId && !options.some((option) => option.value === projectDemanderValue(project))) {
+    options.push({ label: project.demanderName || project.demanderId, value: projectDemanderValue(project) })
+  }
+  return options
+})
 
 /* 需求方身份：由所选主体自动识别（自定义需求方标记为自定义） */
 const demanderIdentityLabel = computed(() => {
@@ -67,6 +76,9 @@ const demanderIdentityLabel = computed(() => {
   if (u) return u.tag
   const e = publisherEnterprises.value.find((x) => `enterprise:${x.id}` === form.demander)
   if (e) return e.tag
+  const existing = existingProjectDemander(form.demander, props.project)
+  const identityLabels: Record<string, string> = { community_enterprise: '社区企业', external_enterprise: '合作企业', community_individual: '社区个体', individual: '个人用户' }
+  if (existing) return existing.demanderIdentity?.title || identityLabels[existing.demanderIdentity?.type ?? ''] || '已关联主体'
   return form.demander ? '自定义' : ''
 })
 
@@ -92,21 +104,32 @@ watch(
 )
 
 /* 未保存保护：打开时记录基线，关闭前有改动需确认 */
-const { markBaseline, isDirty, guardClose } = useDialogDirtyGuard(form)
+const { markBaseline, isDirty, guardClose } = useDialogDirtyGuard(() => ({
+  ...form, contacts: form.undertakers.map((key) => customContacts[key] ?? null),
+  shares: shares.value, milestones: milestones.value,
+}))
 
 /* 经验值规则默认值：项目结项奖励（关闭自定义时按此分配） */
 const ruleExp = ref(100)
 
 /* 自定义新增承接方的联系人信息（key = 表单值） */
 const customContacts = reactive<Record<string, { contactName: string; phone: string }>>({})
+const selectionOptions = computed(() => [
+  ...undertakerOptions.value,
+  ...(props.project?.undertakers ?? [])
+    .filter((row) => !undertakerOptions.value.some((option) => option.value === undertakerValue(row)))
+    .map((row) => ({ group: '当前项目', label: row.name, value: undertakerValue(row) })),
+])
 
 /* 自定义新增的承接方（不在预设选项内的值） */
 const customRows = computed(() =>
-  form.undertakers.filter((v) => !undertakerOptions.value.some((o) => o.value === v)),
+  form.undertakers.filter((v) => !selectionOptions.value.some((o) => o.value === v && !v.startsWith('custom:'))),
 )
 
 function undertakerNameOf(v: string): string {
-  return undertakerOptions.value.find((o) => o.value === v)?.label ?? v
+  return undertakerOptions.value.find((o) => o.value === v)?.label
+    ?? props.project?.undertakers.find((row) => undertakerValue(row) === v)?.name
+    ?? customUndertakerName(v)
 }
 
 function customContactsClear() {
@@ -115,8 +138,7 @@ function customContactsClear() {
 
 /** 编辑/重新新增回填需求方：主体 ID 前缀 U=用户，其余（E/XE）=企业；无 ID 时回落到名称（自定义） */
 function applyProjectDemander(p: Project) {
-  const id = p.demanderId ?? ''
-  form.demander = id ? (id.startsWith('U') ? `user:${id}` : `enterprise:${id}`) : (p.demanderName ?? '')
+  form.demander = projectDemanderValue(p)
 }
 
 function ensureContact(key: string) {
@@ -186,7 +208,7 @@ watch(
       /* 编辑：回填项目现有数据（承接方 value = type:id 与选项格式对齐） */
       initializing.value = true
       form.projectName = props.project.name
-      form.undertakers = props.project.undertakers.map((t) => t.type + ':' + t.id)
+      form.undertakers = props.project.undertakers.map(undertakerValue)
       form.description = props.project.description
       shares.value = props.project.undertakers.map((t) => t.share)
       milestones.value = normalizeMilestones(props.project.milestones)
@@ -201,7 +223,7 @@ watch(
       props.project.undertakers
         .filter((t) => t.type === 'custom')
         .forEach((t) => {
-          customContacts[t.name] = { contactName: t.contactName ?? '', phone: t.phone ?? '' }
+          customContacts[undertakerValue(t)] = { contactName: t.contactName ?? '', phone: t.phone ?? '' }
         })
       markBaseline()
       nextTick(() => {
@@ -214,7 +236,7 @@ watch(
       /* 重新新增：以已关闭项目为模板预填（保存时生成新项目编号与状态） */
       initializing.value = true
       form.projectName = props.project.name
-      form.undertakers = props.project.undertakers.map((t) => t.type + ':' + t.id)
+      form.undertakers = props.project.undertakers.map(undertakerValue)
       form.description = props.project.description
       shares.value = props.project.undertakers.map((t) => t.share)
       milestones.value = props.project.milestones.length
@@ -231,7 +253,7 @@ watch(
       props.project.undertakers
         .filter((t) => t.type === 'custom')
         .forEach((t) => {
-          customContacts[t.name] = { contactName: t.contactName ?? '', phone: t.phone ?? '' }
+          customContacts[undertakerValue(t)] = { contactName: t.contactName ?? '', phone: t.phone ?? '' }
         })
       markBaseline()
       nextTick(() => {
@@ -241,6 +263,7 @@ watch(
       return
     }
     if (v) {
+      initializing.value = true
       form.projectName = props.demand?.title ?? ''
       form.undertakers = []
       form.description = props.demand?.description ?? ''
@@ -257,7 +280,11 @@ watch(
       customContactsClear()
       markBaseline()
       /* 清除上次会话残留的校验红框（仅清状态，不动表单值） */
-      nextTick(() => formRef.value?.clearValidate())
+      nextTick(() => {
+        formRef.value?.clearValidate()
+        initializing.value = false
+        markBaseline()
+      })
     }
   },
 )
@@ -305,34 +332,41 @@ const rules: FormProps['rules'] = {
 }
 
 /* 选项与规则值改为「首次打开弹窗时」按需加载：避免登录页/未打开时携带旧令牌请求（D-101） */
+const optionLoadError = ref('')
+const optionLoading = ref(false)
 const optionsLoaded = ref(false)
 let optionsPromise: Promise<void> | null = null
 function ensureOptions(): Promise<void> {
   if (optionsLoaded.value) return Promise.resolve()
   if (!optionsPromise) {
-    optionsPromise = Promise.all([
+    optionLoading.value = true
+    optionsPromise = Promise.allSettled([
       fetchUndertakerOptions()
         .then((rows) => {
           undertakerOptions.value = rows
-        })
-        .catch(() => undefined),
+        }),
       fetchPublisherOptions()
         .then((rows) => {
           publisherUsers.value = rows.users
           publisherEnterprises.value = rows.enterprises
-        })
-        .catch(() => undefined),
+        }),
       fetchExperienceRules()
         .then((rules) => {
           ruleExp.value = rules.find((r) => r.code === 'project_completed')?.exp ?? 100
-        })
-        .catch(() => undefined),
+          if (props.visible && props.mode === 'create' && !props.project && !isDirty.value) {
+            form.expReward = ruleExp.value
+            markBaseline()
+          }
+        }),
     ])
-      .then(() => {
-        optionsLoaded.value = true
+      .then((results) => {
+        const failures = results.filter((result) => result.status === 'rejected')
+        optionsLoaded.value = failures.length === 0
+        optionLoadError.value = failures.length ? '部分选项或奖励规则加载失败，请重试后核对。' : ''
       })
       .finally(() => {
         optionsPromise = null
+        optionLoading.value = false
       })
   }
   return optionsPromise
@@ -374,16 +408,21 @@ async function onConfirm() {
     const isDemandInitiation = props.mode === 'create' && !!props.demand
     const demanderUser = publisherUsers.value.find((x) => `user:${x.uid}` === form.demander)
     const demanderEnterprise = publisherEnterprises.value.find((x) => `enterprise:${x.id}` === form.demander)
+    const existingDemander = existingProjectDemander(form.demander, props.project)
+    if (!isDemandInitiation && /^(user|enterprise):/.test(form.demander) && !demanderUser && !demanderEnterprise && !existingDemander) {
+      MessagePlugin.warning('需求方选项尚未加载，请重试后再保存')
+      return
+    }
     /* 需求立项：需求方信息由服务端照搬需求快照，不提交表单值 */
     const demanderSnapshot = isDemandInitiation
       ? {}
       : {
-          demanderId: demanderUser?.uid ?? demanderEnterprise?.id ?? '',
+          demanderId: demanderUser?.uid ?? demanderEnterprise?.id ?? existingDemander?.demanderId ?? '',
           demanderName: demanderUser
             ? demanderUser.realName || demanderUser.nickname
             : demanderEnterprise
               ? demanderEnterprise.name
-              : form.demander.trim(),
+              : existingDemander?.demanderName ?? form.demander.trim(),
           demanderIdentity: demanderUser
             ? { type: demanderUser.tag === '社区个体' ? 'community_individual' : 'individual', title: demanderUser.tag }
             : demanderEnterprise
@@ -392,9 +431,9 @@ async function onConfirm() {
                   enterpriseId: demanderEnterprise.id,
                   enterpriseName: demanderEnterprise.name,
                 }
-              : form.demander.trim()
+              : existingDemander?.demanderIdentity ?? (form.demander.trim()
                 ? { type: 'custom', title: '自定义' }
-                : null,
+                : null),
           creatorName: form.creatorName.trim(),
           contactName: form.contactName.trim(),
           contactPhone: form.contactPhone.trim(),
@@ -403,10 +442,10 @@ async function onConfirm() {
         }
     const payload = {
       undertakers: form.undertakers.map((v, i) => {
-        const known = undertakerOptions.value.find((o) => o.value === v)
+        const known = selectionOptions.value.find((o) => o.value === v && !v.startsWith('custom:'))
         if (!known) {
           const c = customContacts[v] ?? { contactName: '', phone: '' }
-          return { type: 'custom' as const, id: '', name: v, share: shares.value[i], contactName: c.contactName, phone: c.phone }
+          return { type: 'custom' as const, id: '', name: undertakerNameOf(v), share: shares.value[i], contactName: c.contactName, phone: c.phone }
         }
         const [type, id] = v.split(':')
         return { type: type as 'enterprise' | 'individual', id, share: shares.value[i] }
@@ -438,6 +477,7 @@ async function onConfirm() {
 }
 
 function onClose() {
+  if (submitting.value) return
   /* 未保存保护：有改动时弹确认（见 useDialogDirtyGuard） */
   guardClose(() => emit('update:visible', false))
 }
@@ -465,6 +505,10 @@ usePageDirtyGuard(computed(() => props.visible && isDirty.value))
     </template>
     <p v-if="demand" class="demand-context">立项需求：{{ demand.title }}（{{ demand.id }}）</p>
 
+    <t-alert v-if="optionLoadError" theme="warning" style="margin-bottom: 16px">
+      {{ optionLoadError }}
+      <t-button variant="text" theme="primary" size="small" :loading="optionLoading" @click="ensureOptions">重新加载</t-button>
+    </t-alert>
     <t-form ref="formRef" :data="{ ...form, milestones: milestones }" :rules="rules" label-align="top">
       <t-form-item label="项目名称" name="projectName">
         <t-input v-accessible-field clearable v-model="form.projectName" placeholder="需求立项默认取需求标题，可修改…" />
@@ -521,7 +565,7 @@ usePageDirtyGuard(computed(() => props.visible && isDirty.value))
           filterable
           creatable
           clearable
-          :options="undertakerOptions"
+          :options="selectionOptions"
           placeholder="搜索或选择承接方（社区企业/合作企业/用户），可输入名称自定义新增…"
         />
       </t-form-item>
@@ -532,7 +576,7 @@ usePageDirtyGuard(computed(() => props.visible && isDirty.value))
         <span class="scope-tip">自定义新增的主体需补充联系人与联系电话（不参与经验值分配）</span>
       </div>
       <div v-for="v in customRows" :key="v" class="form-row">
-        <t-form-item :label="v + ' · 联系人'">
+        <t-form-item :label="undertakerNameOf(v) + ' · 联系人'">
           <t-input
             v-accessible-field
  clearable
@@ -541,7 +585,7 @@ usePageDirtyGuard(computed(() => props.visible && isDirty.value))
             @change="(val: string) => (ensureContact(v).contactName = val)"
           />
         </t-form-item>
-        <t-form-item :label="v + ' · 联系电话'">
+        <t-form-item :label="undertakerNameOf(v) + ' · 联系电话'">
           <t-input
             v-accessible-field
  clearable
@@ -754,5 +798,10 @@ usePageDirtyGuard(computed(() => props.visible && isDirty.value))
   .form-row {
     grid-template-columns: 1fr;
   }
+  .milestone-row {
+    grid-template-columns: minmax(0, 1fr) 36px;
+  }
+  .milestone-row > :first-child,
+  .milestone-row > :last-child { grid-column: 1 / -1; }
 }
 </style>

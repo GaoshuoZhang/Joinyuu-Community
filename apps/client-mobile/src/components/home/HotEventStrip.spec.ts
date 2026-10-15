@@ -9,14 +9,12 @@ const stubs = {
 }
 
 describe('HotEventStrip', () => {
-  it('使用近期活动标题和匹配的空状态文案', () => {
+  it('没有活动时隐藏整个栏目', () => {
     const wrapper = mount(HotEventStrip, {
       props: { events: [] },
       global: { stubs },
     })
 
-    expect(wrapper.get('h2').text()).toBe('近期活动')
-    expect(wrapper.get('.empty-note').text()).toBe('暂无近期活动')
-    expect(wrapper.text()).not.toContain('进行中活动')
+    expect(wrapper.find('section').exists()).toBe(false)
   })
 })

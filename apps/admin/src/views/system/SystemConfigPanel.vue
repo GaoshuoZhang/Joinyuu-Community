@@ -1,6 +1,6 @@
 <script setup lang="ts">
-import { computed, onBeforeUnmount, onMounted, reactive, ref } from 'vue'
-import { onBeforeRouteLeave } from 'vue-router'
+import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref } from 'vue'
+import { onBeforeRouteLeave, useRoute, useRouter } from 'vue-router'
 import { DialogPlugin, MessagePlugin } from 'tdesign-vue-next'
 import PageHeader from '@/components/PageHeader.vue'
 import LicensePanel from './LicensePanel.vue'
@@ -15,6 +15,7 @@ import type { RealnameCatalog, SystemConfigPayload } from '@/api/systemConfig'
 import { cardFields, fetchCardSchema, saveCardSchema, type CardType } from '@/api/cards'
 import type { SystemConfig } from '@/types'
 import { focusFirstInvalid } from '@/utils/form'
+import { parseMobileUrl } from '@/utils/mobileUrl'
 
 /* 系统配置：站点信息与运行时开关（保存即生效；按端下发）
  * 密钥安全（P0）：MinIO SecretKey 为只写字段——服务端不回传原文，仅返回「是否已配置」与脱敏值；
@@ -25,6 +26,14 @@ type SystemConfigForm = SystemConfigPayload &
     realnameVerifyConfig: Record<string, string>
     realnameVerifyCredentialEnv: Record<string, string>
   }
+
+const route = useRoute()
+const router = useRouter()
+const SECTIONS = ['site', 'features', 'cards', 'operations', 'realname', 'storage', 'license']
+const activeSection = computed({
+  get: () => SECTIONS.includes(String(route.query.section)) ? String(route.query.section) : 'site',
+  set: (section: string) => { void router.replace({ query: { ...route.query, section } }) },
+})
 
 const loading = ref(true)
 const licenseWritable = ref(false)
@@ -234,21 +243,35 @@ async function onSave() {
     return
   }
   const valid = await formRef.value.validate()
-  if (valid !== true) return focusFirstInvalid(formRef.value)
+  if (valid !== true) {
+    // 先展示错误所在栏目，再滚动聚焦，避免错误藏在其他选项卡。
+    const field = Object.keys(valid)[0] ?? ''
+    const section = field.startsWith('minio') ? 'storage' : field.startsWith('realnameVerify') ? 'realname'
+      : field.startsWith('password') ? 'features' : ['leaseExpireRemindDays', 'uploadMaxSizeMb'].includes(field) ? 'operations' : 'site'
+    await router.replace({ query: { ...route.query, section } })
+    await nextTick()
+    return focusFirstInvalid(formRef.value)
+  }
   saving.value = true
+  const completed: string[] = []
   try {
     /* 密钥留空时服务端保持原值；仅在有输入时提交新密钥（轮换） */
     await saveSystemConfig({ ...form, minioSecretKey: form.minioSecretKey?.trim() ?? '' })
+    completed.push('系统设置')
     /* 名片可编辑字段随保存一并提交（字段白名单，控制客户端自编辑范围） */
-    await Promise.all([
-      saveCardSchema('individual', cardEditable.individual),
-      saveCardSchema('enterprise', cardEditable.enterprise),
+    const results = await Promise.allSettled([
+      saveCardSchema('individual', cardEditable.individual).then(() => completed.push('个人名片字段')),
+      saveCardSchema('enterprise', cardEditable.enterprise).then(() => completed.push('企业名片字段')),
     ])
+    if (results.some((result) => result.status === 'rejected')) {
+      throw new Error('部分名片字段未保存，请重试；已生效的配置不会回滚')
+    }
     applyConfig(await fetchSystemConfig())
     savedSnapshot.value = dirtySource()
     MessagePlugin.success('系统配置已保存并生效')
   } catch (e) {
-    MessagePlugin.error(e instanceof Error ? e.message : '保存失败')
+    const reason = e instanceof Error ? e.message : '保存失败'
+    MessagePlugin.error(completed.length ? `${completed.join('、')}已生效；${reason}` : reason)
   } finally {
     saving.value = false
   }
@@ -296,26 +319,31 @@ onBeforeRouteLeave(async () => {
       </template>
     </PageHeader>
 
-    <LicensePanel @writable="licenseWritable = $event" />
     <ListErrorState v-if="loadError" :message="loadError" :loading="loading" @retry="loadConfig" />
 
     <t-loading :loading="loading" size="small">
-      <t-card :bordered="true" class="config-card">
-        <t-form ref="formRef" :data="form" label-align="top" :disabled="!licenseWritable">
-          <div class="section-title">站点信息</div>
+      <t-form ref="formRef" :data="form" class="config-form" label-align="top" :disabled="!licenseWritable || saving">
+        <t-tabs v-model="activeSection" aria-label="基础设置栏目">
+        <t-tab-panel value="site" label="站点信息" :destroy-on-hide="false">
+        <t-card :bordered="true" class="config-card">
+          <template #title><h2 class="section-title">站点信息</h2></template>
           <div class="form-grid">
             <t-form-item label="站点名称" name="siteName" :rules="[{ required: true, message: '请输入站点名称', trigger: 'submit' }]">
               <t-input v-accessible-field v-model="form.siteName" clearable placeholder="如 聚屿社区…" />
             </t-form-item>
-            <t-form-item label="移动端访问地址" name="mobileUrl" :rules="[{ required: true, message: '请输入移动端访问地址', trigger: 'submit' }]" help="全局移动端入口，供主题预览等功能使用。支持 localhost:7759 或完整 HTTP/HTTPS 地址；客户部署时填写实际域名。">
-              <t-input v-accessible-field v-model="form.mobileUrl" placeholder="localhost:7759" :maxlength="2048" />
+            <t-form-item label="移动端访问地址" name="mobileUrl" :rules="[{ required: true, message: '请输入移动端访问地址', trigger: 'submit' }, { validator: (value: string) => !!parseMobileUrl(value), message: '请输入 HTTP/HTTPS 地址或主机:端口，不包含查询参数、# 或账号密码', trigger: 'submit' }]" help="全局移动端入口，供主题预览等功能使用。支持 localhost:7759 或完整 HTTP/HTTPS 地址；客户部署时填写实际域名。">
+              <t-input v-accessible-field v-model="form.mobileUrl" placeholder="请输入移动端部署地址…" :maxlength="2048" @change="formRef?.clearValidate(['mobileUrl'])" />
             </t-form-item>
             <t-form-item label="站点标语" name="siteSlogan">
               <t-input v-accessible-field v-model="form.siteSlogan" clearable placeholder="客户端登录页展示…" />
             </t-form-item>
           </div>
 
-          <div class="section-title">功能开关</div>
+        </t-card>
+        </t-tab-panel>
+        <t-tab-panel value="features" label="功能开关" :destroy-on-hide="false">
+        <t-card :bordered="true" class="config-card">
+          <template #title><h2 class="section-title">功能开关</h2></template>
           <div class="switch-grid">
             <div class="switch-row">
               <div class="switch-text">
@@ -374,12 +402,16 @@ onBeforeRouteLeave(async () => {
               name="passwordExpireDays"
               :rules="[{ required: true, message: '请输入 1-3650 的整数', trigger: 'submit' }]"
             >
-              <t-input-number v-accessible-field class="ctl-w-full" v-model="form.passwordExpireDays" :min="1" :max="3650" :step="1" theme="column" />
+              <t-input-number v-accessible-field class="ctl-w-full" v-model="form.passwordExpireDays" :min="1" :max="3650" :step="1" :decimal-places="0" theme="column" />
               <template #help>超过该周期未修改密码的后台账号，登录后将被引导强制改密（默认 90 天）</template>
             </t-form-item>
           </div>
 
-          <div class="section-title">名片可编辑字段</div>
+        </t-card>
+        </t-tab-panel>
+        <t-tab-panel value="cards" label="名片字段" :destroy-on-hide="false">
+        <t-card :bordered="true" class="config-card">
+          <template #title><h2 class="section-title">名片可编辑字段</h2></template>
           <p class="schema-tip">
             勾选后客户端用户可在「我的名片」自行编辑这些字段；未勾选字段在客户端编辑表单中隐藏，后台仍可维护。
             修改后随本页「保存配置」一并提交。
@@ -393,14 +425,18 @@ onBeforeRouteLeave(async () => {
             </div>
           </div>
 
-          <div class="section-title">运营参数</div>
+        </t-card>
+        </t-tab-panel>
+        <t-tab-panel value="operations" label="运营参数" :destroy-on-hide="false">
+        <t-card :bordered="true" class="config-card">
+          <template #title><h2 class="section-title">运营参数</h2></template>
           <div class="form-grid">
             <t-form-item
               label="租约临期提醒窗口（天）"
               name="leaseExpireRemindDays"
               :rules="[{ required: true, message: '请输入 1-90 的整数', trigger: 'submit' }]"
             >
-              <t-input-number v-accessible-field class="ctl-w-full" v-model="form.leaseExpireRemindDays" :min="1" :max="90" :step="1" theme="column" />
+              <t-input-number v-accessible-field class="ctl-w-full" v-model="form.leaseExpireRemindDays" :min="1" :max="90" :step="1" :decimal-places="0" theme="column" />
               <template #help>距到期不足该天数的租约将标记为「即将到期」并推送通知</template>
             </t-form-item>
             <t-form-item
@@ -408,12 +444,16 @@ onBeforeRouteLeave(async () => {
               name="uploadMaxSizeMb"
               :rules="[{ required: true, message: '请输入 1-100 的整数', trigger: 'submit' }]"
             >
-              <t-input-number v-accessible-field class="ctl-w-full" v-model="form.uploadMaxSizeMb" :min="1" :max="100" :step="1" theme="column" />
+              <t-input-number v-accessible-field class="ctl-w-full" v-model="form.uploadMaxSizeMb" :min="1" :max="100" :step="1" :decimal-places="0" theme="column" />
               <template #help>素材库与富文本图片上传的单文件大小上限（1-100 MB）</template>
             </t-form-item>
           </div>
 
-          <div class="section-title">实名核验（权威二要素）</div>
+        </t-card>
+        </t-tab-panel>
+        <t-tab-panel value="realname" label="实名核验" :destroy-on-hide="false">
+        <t-card :bordered="true" class="config-card">
+          <template #title><h2 class="section-title">实名核验（权威二要素）</h2></template>
           <div class="switch-grid">
             <div class="switch-row">
               <div class="switch-text">
@@ -527,7 +567,11 @@ onBeforeRouteLeave(async () => {
             </div>
           </template>
 
-          <div class="section-title">MinIO 对象存储</div>
+        </t-card>
+        </t-tab-panel>
+        <t-tab-panel value="storage" label="对象存储" :destroy-on-hide="false">
+        <t-card :bordered="true" class="config-card">
+          <template #title><h2 class="section-title">MinIO 对象存储</h2></template>
           <div class="switch-grid">
             <div class="switch-row">
               <div class="switch-text">
@@ -551,7 +595,7 @@ onBeforeRouteLeave(async () => {
               name="minioPort"
               :rules="[{ required: true, message: '请输入 1-65535 的端口', trigger: 'submit' }]"
             >
-              <t-input-number v-accessible-field class="ctl-w-lg" v-model="form.minioPort" :min="1" :max="65535" :step="1" theme="column" />
+              <t-input-number v-accessible-field class="ctl-w-lg" v-model="form.minioPort" :min="1" :max="65535" :step="1" :decimal-places="0" theme="column" />
             </t-form-item>
             <t-form-item label="使用 HTTPS" name="minioUseSsl">
               <t-switch v-accessible-field="'使用 HTTPS'" v-model="form.minioUseSsl" aria-label="使用 HTTPS" />
@@ -591,13 +635,20 @@ onBeforeRouteLeave(async () => {
               <template #help>小写字母/数字/点/连字符，目录不存在时自动创建</template>
             </t-form-item>
           </div>
-        </t-form>
-        <div class="config-footer">
-          <!-- 长表单底部才可触达保存：吸底并显式提示未保存状态，避免误以为已生效 -->
+        </t-card>
+        </t-tab-panel>
+        <t-tab-panel value="license" label="许可证" :destroy-on-hide="false">
+        </t-tab-panel>
+        </t-tabs>
+      </t-form>
+      <div v-show="activeSection === 'license'">
+        <LicensePanel @writable="licenseWritable = $event" />
+      </div>
+      <div v-if="activeSection !== 'license'" class="config-footer">
+          <!-- 保存栏吸底，并明确区分待保存与已生效的配置。 -->
           <span class="config-dirty-tip">{{ isDirty ? '有未保存的修改' : '暂无未保存修改' }}</span>
           <t-button theme="primary" :loading="saving" :disabled="!licenseWritable || !!loadError || !isDirty" @click="onSave">保存配置</t-button>
-        </div>
-      </t-card>
+      </div>
     </t-loading>
   </div>
 </template>
@@ -608,14 +659,13 @@ onBeforeRouteLeave(async () => {
   color: var(--td-text-color-secondary);
 }
 
-.config-card {
-  width: 100%;
-}
+.config-form { display: grid; gap: 16px; }
+.config-card { width: 100%; min-width: 0; }
+.config-form :deep(.t-tabs__content) { padding-top: 16px; background: var(--td-bg-color-page); }
 
 .section-title {
-  margin: 8px 0 16px;
-  font-size: 14px;
-  font-weight: 600;
+  margin: 0;
+  font: inherit;
   color: var(--td-text-color-primary);
 }
 
@@ -625,12 +675,6 @@ onBeforeRouteLeave(async () => {
   font-size: 12px;
   font-weight: 500;
   color: var(--td-text-color-secondary);
-}
-
-/* 分区之间用细分隔线过渡（参考 ArchivePanel .setting-section 写法） */
-.section-title:not(:first-child) {
-  padding-top: 16px;
-  border-top: 1px solid var(--td-component-stroke);
 }
 
 .form-grid {

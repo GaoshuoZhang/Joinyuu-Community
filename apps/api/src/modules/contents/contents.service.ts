@@ -16,6 +16,7 @@ import type { ScheduleArticleDto } from './dto/schedule-article.dto'
 import type { ColumnPayloadDto } from './dto/column-payload.dto'
 import type { QueryArticlesDto } from './dto/query-articles.dto'
 import { articleTakedowns, type ArticleWithComments } from './article-integration'
+import type { PageQueryDto } from '../../common/dto/page-query.dto'
 
 /* 栏目列表 DTO（含文章数聚合） */
 interface ColumnDto {
@@ -79,6 +80,20 @@ function toArticleDto(a: ArticleRow | ArticleWithComments): Record<string, unkno
  * 栏目改名 → 级联刷新文章 columnName 快照。 */
 @Injectable()
 export class ContentsService {
+  /** 已经发布过、尚未归档的文章：包含已下架文章；汇总在数据库完成，无数量截断。 */
+  async readStats(query: PageQueryDto) {
+    const where: Prisma.ArticleWhereInput = { deletedAt: null, publishedAt: { not: null } }
+    const [aggregate, rows] = await Promise.all([
+      this.prisma.article.aggregate({ where, _count: { _all: true }, _sum: { views: true }, _max: { views: true } }),
+      this.prisma.article.findMany({ where, omit: { content: true }, orderBy: [{ views: 'desc' }, { id: 'asc' }],
+        skip: (query.page - 1) * query.pageSize, take: query.pageSize }),
+    ])
+    const total = aggregate._count._all
+    const views = aggregate._sum.views ?? 0
+    return { list: rows.map(toArticleDto), total,
+      summary: { totalViews: views, articleCount: total, averageViews: total ? Math.round(views / total) : 0, topViews: aggregate._max.views ?? 0 } }
+  }
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly ids: IdGeneratorService,

@@ -32,7 +32,7 @@ const columns = [
   { colKey: 'time', title: '开放时段', cell: 'time', width: 140, resizable: true , ellipsis: true},
   { colKey: 'equipment', title: '设备', cell: 'equipment', width: 200, resizable: true , ellipsis: true},
   { colKey: 'status', title: '状态', cell: 'status', width: 100, resizable: true , ellipsis: true},
-  { colKey: 'op', title: '操作', cell: 'op', width: 180 },
+  { colKey: 'op', fixed: 'right' as const, title: '操作', cell: 'op', width: 180 },
 ]
 
 /* 列配置：本地持久化显隐/顺序 */
@@ -121,7 +121,7 @@ onMounted(load)
     <p class="panel-tip">空间名被社区活动引用，重命名会要求同步活动数据。</p>
 
     <div class="page-card">
-      <t-table
+      <t-table :horizontal-scroll-affixed-bottom="{ container: '.page-scroll', offsetBottom: 0 }"
         row-key="id"
         table-layout="fixed"
         hover

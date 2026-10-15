@@ -1,12 +1,13 @@
 <script setup lang="ts">
-import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { computed, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
 import { useRoute } from 'vue-router'
-import { Button, DialogPlugin, Icon, Image, Progress, Tag, Textarea, Toast, Upload } from 'tdesign-mobile-vue'
+import { Button, DialogPlugin, Icon, Image, ImageViewer, Progress, Tag, Textarea, Toast, Upload } from 'tdesign-mobile-vue'
 import type { UploadFile } from 'tdesign-mobile-vue'
 import { acceptMilestone, fetchMyProject, returnMilestone, revokeProjectAttachmentUrls, submitMilestone } from '@/api/projects'
 import { uploadFile } from '@/api/uploads'
 import { ApiError } from '@/api/http'
 import { onImageError } from '@/utils/imageFallback'
+import { useUnsavedGuard } from '@/composables/useUnsavedGuard'
 import { useAsyncList } from '@/composables/useAsyncList'
 import { useAuthStore } from '@/stores/auth'
 import EmptyBlock from '@/components/shared/EmptyBlock.vue'
@@ -25,12 +26,35 @@ onMounted(run)
 /* 离开页面回收附件 blob URL（避免详情页反复进出累积内存） */
 onBeforeUnmount(revokeProjectAttachmentUrls)
 
-const note = ref('')
 const noteFor = ref('')
-/* v38：交付证据附件（图片，最多 1 张）与退回原因 */
-const evidenceFiles = ref<UploadFile[]>([])
 const returnFor = ref('')
-const returnReason = ref('')
+const drafts = reactive<Record<string, { note: string; files: UploadFile[] }>>({})
+const returnDrafts = reactive<Record<string, string>>({})
+function draft(id: string) {
+  return drafts[id] ?? (drafts[id] = { note: '', files: [] })
+}
+const note = computed({
+  get: () => drafts[noteFor.value]?.note ?? '',
+  set: (value: string) => { if (noteFor.value) draft(noteFor.value).note = value },
+})
+const evidenceFiles = computed({
+  get: () => drafts[noteFor.value]?.files ?? [],
+  set: (files: UploadFile[]) => { if (noteFor.value) draft(noteFor.value).files = files },
+})
+const returnReason = computed({
+  get: () => returnDrafts[returnFor.value] ?? '',
+  set: (value: string) => { if (returnFor.value) returnDrafts[returnFor.value] = value },
+})
+useUnsavedGuard(() => Object.values(drafts).some((item) => item.note.trim() || item.files.length)
+  || Object.values(returnDrafts).some((value) => value.trim()))
+const viewerVisible = ref(false)
+const viewerIndex = ref(0)
+const viewerFiles = ref<{ name: string; url: string }[]>([])
+function previewEvidence(m: Milestone, index: number) {
+  viewerFiles.value = m.attachments ?? []
+  viewerIndex.value = index
+  viewerVisible.value = true
+}
 /* v40：退回原因行内错误 */
 const returnError = ref('')
 watch(returnReason, () => (returnError.value = ''))
@@ -48,8 +72,14 @@ async function requestEvidence(file: UploadFile | UploadFile[]) {
 }
 
 const isInitiator = computed(() => project.value?.role === '需求发起方')
+const canSubmit = computed(() => project.value?.canSubmit === true)
+const canAccept = computed(() => project.value?.canAccept === true)
 const isFinished = computed(() => !!project.value?.finishedAt)
-const initiatorName = computed(() => (isInitiator.value ? auth.name : project.value?.partnerName ?? '—'))
+const initiatorName = computed(() => {
+  if (project.value?.demanderName) return project.value.demanderName
+  if (!isInitiator.value) return project.value?.partnerName ?? '—'
+  return canAccept.value ? auth.name : '—'
+})
 const undertakingName = computed(() => {
   if (!project.value) return '—'
   if (!isInitiator.value) return project.value.enterpriseName ?? auth.name
@@ -75,12 +105,11 @@ function isActing(m: Milestone, action: 'submit' | 'return' | 'accept'): boolean
 
 function askSubmit(m: Milestone) {
   noteFor.value = m.id
-  note.value = ''
-  evidenceFiles.value = []
   returnFor.value = ''
 }
 
 async function onSubmitMilestone(m: Milestone) {
+  if (!canSubmit.value) return
   if (actingOn.value) return
   if (evidenceFiles.value.some((file) => file.status === 'waiting' || file.status === 'progress')) {
     Toast('交付证据仍在上传，请等待上传完成')
@@ -98,8 +127,8 @@ async function onSubmitMilestone(m: Milestone) {
       .filter((item) => item.url)
     await submitMilestone(projectId, m.id, note.value.trim(), attachments)
     Toast('已提交，等待发起方验收')
+    delete drafts[m.id]
     noteFor.value = ''
-    evidenceFiles.value = []
     await run()
   } catch (e) {
     Toast(e instanceof Error ? e.message : '提交失败，请稍后重试')
@@ -111,10 +140,10 @@ async function onSubmitMilestone(m: Milestone) {
 /* v38：发起方退回里程碑 */
 function askReturn(m: Milestone) {
   returnFor.value = m.id
-  returnReason.value = ''
 }
 
 async function onReturnMilestone(m: Milestone) {
+  if (!canAccept.value) return
   if (!returnReason.value.trim()) {
     returnError.value = '请填写退回原因'
     Toast(returnError.value)
@@ -125,6 +154,7 @@ async function onReturnMilestone(m: Milestone) {
   try {
     await returnMilestone(projectId, m.id, returnReason.value.trim())
     Toast('已退回，等待承接方重新提交')
+    delete returnDrafts[m.id]
     returnFor.value = ''
     await run()
   } catch (e) {
@@ -145,6 +175,7 @@ function askAccept(m: Milestone) {
 }
 
 async function onAcceptMilestone(m: Milestone) {
+  if (!canAccept.value) return
   if (actingOn.value) return
   actingOn.value = `${m.id}:accept`
   try {
@@ -161,6 +192,9 @@ async function onAcceptMilestone(m: Milestone) {
 
 <template>
   <div class="page-fade-in m-project-detail">
+    <ImageViewer v-model:visible="viewerVisible" v-model:index="viewerIndex" :images="viewerFiles.map((file) => file.url)" :show-index="true" @close="viewerVisible = false">
+      <template #cover><p class="evidence-name">{{ viewerFiles[viewerIndex]?.name }}</p></template>
+    </ImageViewer>
     <ListSkeleton v-if="loading" />
     <EmptyBlock v-else-if="error" :text="error" action-text="重试" @action="run" />
     <template v-else-if="project">
@@ -194,13 +228,13 @@ async function onAcceptMilestone(m: Milestone) {
             </div>
             <p v-if="m.submitNote" class="m-note">交付说明：{{ m.submitNote }}</p>
             <div v-if="m.attachments?.length" class="m-evidence">
-              <Image v-for="(file, index) in m.attachments" :key="index" class="content-img" :src="file.url" :alt="file.name" fit="cover" lazy @error="onImageError" />
+              <Button v-for="(file, index) in m.attachments" :key="index" class="evidence-preview" variant="text" :aria-label="`查看交付证据：${file.name}`" @click="previewEvidence(m, index)"><Image class="content-img" :src="file.url" :alt="file.name" fit="cover" lazy @error="onImageError" /></Button>
             </div>
             <p v-if="m.returnReason" class="m-return">退回原因：{{ m.returnReason }}</p>
             <p v-if="m.submittedAt" class="m-time">提交于 {{ formatLocalDateTime(m.submittedAt) }}<template v-if="m.acceptedAt"> · 验收于 {{ formatLocalDateTime(m.acceptedAt) }}</template></p>
 
             <template v-if="!isFinished">
-              <template v-if="!isInitiator && statusOf(m) === 'todo'">
+              <template v-if="canSubmit && statusOf(m) === 'todo'">
                 <label v-if="noteFor === m.id" class="m-field-label">交付说明（选填）</label>
                 <Textarea v-if="noteFor === m.id" v-model="note" :autosize="{ minRows: 2, maxRows: 4 }" :maxlength="120" placeholder="交付说明（选填）…" />
                 <div v-if="noteFor === m.id" class="m-upload">
@@ -223,7 +257,7 @@ async function onAcceptMilestone(m: Milestone) {
                   <Button v-else size="small" theme="primary" @click="askSubmit(m)">提交完成</Button>
                 </div>
               </template>
-              <template v-else-if="isInitiator && statusOf(m) === 'submitted'">
+              <template v-else-if="canAccept && statusOf(m) === 'submitted'">
                 <label v-if="returnFor === m.id" class="m-field-label">退回原因（必填）</label>
                 <Textarea v-if="returnFor === m.id" v-model="returnReason" :autosize="{ minRows: 2, maxRows: 4 }" :maxlength="120" placeholder="退回原因（必填）…" />
                 <p v-if="returnFor === m.id && returnError" class="field-error">{{ returnError }}</p>
@@ -247,6 +281,8 @@ async function onAcceptMilestone(m: Milestone) {
 </template>
 
 <style scoped>
+.evidence-preview { width: 72px; height: 72px; min-width: 72px; padding: 0; }
+.evidence-name { position: fixed; bottom: 60px; inset-inline: 16px; color: var(--td-text-color-anti); text-align: center; overflow-wrap: anywhere; }
 .m-project-detail {
   padding:var(--app-space-8);
   display: flex;

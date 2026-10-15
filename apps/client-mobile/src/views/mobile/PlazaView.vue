@@ -218,8 +218,8 @@ function clearArticleFilters() {
     @touchend="cancelSwipe"
     @touchcancel="cancelSwipe"
   >
-    <Tabs v-model="activeTab" class="top-tabs" :swipeable="false">
-      <TabPanel value="events" label="活动">
+    <Tabs :data-tab-values="JSON.stringify(['events', 'articles'])" v-model="activeTab" class="top-tabs" :swipeable="false">
+      <TabPanel data-tab-value="events" value="events" label="活动">
         <Search v-model="eventKeywordInput" class="tab-search" placeholder="搜索活动关键词…" />
         <ListSkeleton v-if="eventsLoading && !(events ?? []).length" />
         <EmptyBlock v-else-if="eventsError" :text="eventsError" action-text="重试" @action="loadEvents" />
@@ -260,10 +260,9 @@ function clearArticleFilters() {
         </List>
       </TabPanel>
 
-      <TabPanel value="articles" label="资讯">
+      <TabPanel data-tab-value="articles" value="articles" label="资讯">
         <Search v-model="articleKeywordInput" class="tab-search" placeholder="搜索资讯关键词…" />
-        <div class="column-filter-head"><span>栏目筛选</span><span>左右滑动查看更多 →</span></div>
-        <div ref="chipRow" class="chips" aria-label="资讯栏目，可左右滑动查看更多">
+        <div ref="chipRow" class="chips" aria-label="资讯栏目筛选">
           <CheckTag
             class="chip"
             size="medium"
@@ -349,16 +348,6 @@ function clearArticleFilters() {
   scroll-padding-inline: var(--app-space-8);
   touch-action: pan-x;
 }
-
-.column-filter-head {
-  display: flex;
-  justify-content: space-between;
-  gap: var(--app-space-4);
-  margin-bottom: var(--app-space-3);
-  color: var(--td-text-color-secondary);
-  font: var(--app-type-body-sm);
-}
-.column-filter-head span:last-child { color: var(--td-brand-color); }
 
 .chips::-webkit-scrollbar {
   display: none;

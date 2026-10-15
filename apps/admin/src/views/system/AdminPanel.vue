@@ -8,8 +8,7 @@ import { MessagePlugin } from 'tdesign-vue-next'
 import type { CustomValidateResolveType, FormProps } from 'tdesign-vue-next'
 import { focusFirstInvalid, useDialogFormProtection } from '@/utils/form'
 import { AddIcon, SearchIcon } from 'tdesign-icons-vue-next'
-import { fetchAdmins, saveAdmin, updateAdminStatus, resetAdminPassword, type AdminAccount } from '@/api/admins'
-import { fetchRoles } from '@/api/roles'
+import { fetchAdmins, fetchAdminRoleOptions, saveAdmin, updateAdminStatus, resetAdminPassword, type AdminAccount } from '@/api/admins'
 
 /* 管理员账号：多运营人员 + 角色分配 + 启停 + 重置密码 */
 
@@ -17,6 +16,19 @@ const loading = ref(true)
 const loadError = ref('')
 const list = ref<AdminAccount[]>([])
 const roleOptions = ref<{ label: string; value: string }[]>([])
+const roleLoadError = ref('')
+const rolesLoading = ref(false)
+async function loadRoleOptions() {
+  if (rolesLoading.value) return
+  rolesLoading.value = true
+  try {
+    const roles = await fetchAdminRoleOptions()
+    roleOptions.value = roles.map((r) => ({ label: r.name, value: r.code }))
+    roleLoadError.value = ''
+  } catch (e) {
+    roleLoadError.value = e instanceof Error ? e.message : '角色选项加载失败'
+  } finally { rolesLoading.value = false }
+}
 
 const keyword = ref('')
 const appliedKeyword = ref('')
@@ -33,9 +45,9 @@ const columns = [
 async function load() {
   loading.value = true
   try {
-    const [accounts, roles] = await Promise.all([fetchAdmins(), fetchRoles()])
+    void loadRoleOptions()
+    const accounts = await fetchAdmins()
     list.value = accounts
-    roleOptions.value = roles.map((r) => ({ label: r.name, value: r.code }))
     loadError.value = ''
   } catch (e) {
     loadError.value = e instanceof Error ? e.message : '数据加载失败'
@@ -315,6 +327,7 @@ const { close: closeResetDialog } = useDialogFormProtection(resetForm, resetVisi
           <t-button theme="primary" :loading="saving" @click="onSave">保存</t-button>
         </div>
       </template>
+      <ListErrorState v-if="roleLoadError" :message="roleLoadError" :loading="rolesLoading" @retry="loadRoleOptions" />
       <t-form ref="formRef" :data="form" :rules="rules" label-align="top">
         <t-form-item label="账号" name="username">
           <t-input v-accessible-field v-model="form.username" :disabled="editingId != null" name="username" autocomplete="off" :spellcheck="false" placeholder="登录用户名（唯一）…" />

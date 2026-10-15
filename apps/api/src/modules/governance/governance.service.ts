@@ -1,4 +1,5 @@
-import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common'
+import { BadRequestException, ConflictException, Injectable, NotFoundException } from '@nestjs/common'
+import { Prisma } from '@prisma/client'
 import { AuditService } from '../../common/audit/audit.service'
 import { IdGeneratorService } from '../../common/id-generator/id-generator.service'
 import { PrismaService } from '../../common/prisma/prisma.service'
@@ -35,9 +36,11 @@ export class GovernanceService {
   private async createPolicy(kind: 'community' | AgreementKind, dto: SavePolicyDto | SaveCommunityPolicyDto, operator: string) {
     const data = this.policyData(kind, dto)
     const now = formatNow()
-    const policy = await this.prisma.policy.create({
-      data: { id: await this.ids.next('PL'), ...data, publishedAt: now, updatedAt: now, publisher: operator },
-    })
+    await this.assertAgreementVersionAvailable(data)
+    const id = await this.ids.next('PL')
+    const policy = await this.writePolicy(kind, () => this.prisma.policy.create({
+      data: { id, ...data, publishedAt: now, updatedAt: now, publisher: operator },
+    }))
     const community = kind === 'community'
     await this.audit.record({ module: community ? '内容管理' : '系统管理', action: community ? '新增社区政策' : '新增平台协议', target: `${policy.id} · ${policy.title}`, operator })
     return policy
@@ -58,13 +61,42 @@ export class GovernanceService {
     if (!current) throw new NotFoundException('政策不存在')
     const kind = scope === 'community' ? 'community' : (dto as SaveAgreementPolicyDto).kind
     const data = this.policyData(kind, dto)
-    await this.prisma.policy.update({
+    await this.assertAgreementVersionAvailable(data, id)
+    await this.writePolicy(kind, () => this.prisma.policy.update({
       where: { id },
       data: { ...data, updatedAt: formatNow(), publisher: operator },
-    })
+    }))
     const community = scope === 'community'
     await this.audit.record({ module: community ? '内容管理' : '系统管理', action: community ? '更新社区政策' : '更新平台协议', target: `${id} · ${dto.title.trim()}`, operator })
     return { code: 0 }
+  }
+
+  /** 独立社区政策可同版本；已归档协议也可与发布版共存，编辑时排除当前记录。 */
+  private async assertAgreementVersionAvailable(data: { kind: string; version: string; status: string }, id?: string) {
+    if (data.kind === 'community' || data.status !== 'published') return
+    const duplicate = await this.prisma.policy.findFirst({
+      where: { kind: data.kind, version: data.version, status: 'published', ...(id ? { id: { not: id } } : {}) },
+      select: { id: true },
+    })
+    if (duplicate) throw new ConflictException('该类型的协议版本已发布，请修改版本号或编辑已有协议')
+  }
+
+  /** 预查不能覆盖并发请求，仍由数据库约束兜底并转为业务冲突。 */
+  private async writePolicy<T>(kind: string, write: () => Promise<T>): Promise<T> {
+    try { return await write() }
+    catch (error) {
+      if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002') {
+        const target = error.meta?.target
+        const versionConflict = Array.isArray(target) ? target.includes('kind') && target.includes('version')
+          : typeof target === 'string' && ['Policy_kind_version_key', 'Policy_published_kind_version_key', 'Policy_published_agreement_kind_version_key'].includes(target)
+        if (versionConflict) {
+          throw new ConflictException(kind === 'community'
+            ? '社区政策版本约束尚未更新，请联系管理员完成数据库迁移'
+            : '该类型的协议版本已发布，请修改版本号或编辑已有协议')
+        }
+      }
+      throw error
+    }
   }
 
   private policyData(kind: 'community' | AgreementKind, dto: SavePolicyDto | SaveCommunityPolicyDto) {

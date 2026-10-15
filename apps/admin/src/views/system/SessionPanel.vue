@@ -5,6 +5,9 @@ import { computed, onMounted, ref } from 'vue'
 import { MessagePlugin } from 'tdesign-vue-next'
 import { SearchIcon } from 'tdesign-icons-vue-next'
 import { fetchSessions, kickAllSessions, kickSession, type AdminSession } from '@/api/auth'
+import { resetAuth } from '@/stores/auth'
+import { useRouter } from 'vue-router'
+const router = useRouter()
 
 /* 在线会话管理：查看在线管理员会话，单会话/一键强制下线（黑名单实时生效，一键下线保留当前会话） */
 
@@ -64,6 +67,11 @@ async function onKick(row: AdminSession) {
   kicking.value = row.jti
   try {
     await kickSession(row.jti)
+    if (row.current) {
+      resetAuth()
+      await router.replace('/login')
+      return
+    }
     MessagePlugin.success(`已强制下线「${row.username}」的该会话`)
     await load()
   } catch (e) {
@@ -121,13 +129,13 @@ onMounted(load)
       >
         <template #username="{ row }">
           <div class="user-cell">
-            <span class="user-name">{{ row.username }}</span>
+            <span class="user-name">{{ row.username }} <t-tag v-if="row.current" size="small" theme="primary">当前会话</t-tag></span>
             <span class="user-sub">{{ row.name }}</span>
           </div>
         </template>
         <template #op="{ row }">
           <div class="op-cell" @click.stop>
-            <t-popconfirm content="确认强制下线该会话？" @confirm="onKick(row)">
+            <t-popconfirm :content="row.current ? '确认退出当前会话？操作后将立即返回登录页。' : '确认强制下线该会话？'" @confirm="onKick(row)">
               <t-button variant="text" size="small" theme="danger" :loading="kicking === row.jti">
                 强制下线
               </t-button>

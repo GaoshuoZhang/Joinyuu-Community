@@ -58,8 +58,9 @@ export class AuthController {
   /** 在线会话列表：会话含 IP/设备等敏感信息，仅会话管理权限可见 */
   @RequirePermission('/system/sessions')
   @Get('sessions')
-  listSessions(): Promise<AdminSessionDto[]> {
-    return this.sessions.list()
+  async listSessions(@Req() req: AuthenticatedRequest): Promise<AdminSessionDto[]> {
+    const rows = await this.sessions.list()
+    return rows.map((row) => ({ ...row, current: row.jti === req.user?.jti }))
   }
 
   /** 强制下线：黑名单 jti + 移出会话索引 */

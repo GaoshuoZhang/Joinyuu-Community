@@ -282,14 +282,18 @@ useRefreshOnActivate(() => void refreshMe())
   width: 44px;
   height: 44px;
   border-radius: var(--td-radius-large);
-  background: var(--td-brand-color-1);
+  background: var(--app-theme-accent, var(--td-brand-color));
   color: var(--td-text-color-brand);
+}
+
+.grid-item:active .grid-icon {
+  filter: brightness(0.92);
 }
 
 .grid-label {
   margin: 0;
   font: var(--app-type-caption);
-  color: var(--td-text-color-primary);
+  color: var(--td-text-color-brand);
 }
 
 .avatar {

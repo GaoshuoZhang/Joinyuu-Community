@@ -4,6 +4,7 @@ import ListErrorState from '@/components/ListErrorState.vue'
 import ListEmptyState from '@/components/ListEmptyState.vue'
 import { computed, onMounted, ref } from 'vue'
 import { MessagePlugin } from 'tdesign-vue-next'
+import type { UploadFile } from 'tdesign-vue-next'
 import { DeleteIcon, UploadIcon } from 'tdesign-icons-vue-next'
 import PageHeader from '@/components/PageHeader.vue'
 import { deleteAsset, fetchAssets, replaceAsset, uploadAsset, type MallAsset } from '@/api/assets'
@@ -16,8 +17,9 @@ const assets = ref<MallAsset[]>([])
 const activeSource = ref('')
 const search = ref('')
 const fileInput = ref<HTMLInputElement | null>(null)
-const replaceInput = ref<HTMLInputElement | null>(null)
-const replacingId = ref('')
+const replaceVisible = ref(false)
+const replaceTarget = ref<MallAsset | null>(null)
+const replaceFiles = ref<UploadFile[]>([])
 
 const sourceOptions = [
   { label: '全部来源', value: '' },
@@ -127,25 +129,25 @@ async function onCopy(row: MallAsset) {
 
 /** 替换素材：覆盖原存储内容（URL 不变），引用它的文章/页面即时生效 */
 function triggerReplace(row: MallAsset) {
-  replacingId.value = row.id
-  replaceInput.value?.click()
+  replaceTarget.value = row
+  replaceFiles.value = []
+  replaceVisible.value = true
 }
 
-async function onReplaceFileChange(e: Event) {
-  const input = e.target as HTMLInputElement
-  const file = input.files?.[0]
-  input.value = ''
-  if (!file || !replacingId.value) return
+async function confirmReplace() {
+  const file = replaceFiles.value[0]?.raw
+  const target = replaceTarget.value
+  if (!file || !target || uploading.value) return
   uploading.value = true
   try {
-    await replaceAsset(replacingId.value, file)
+    await replaceAsset(target.id, file)
+    replaceVisible.value = false
     MessagePlugin.success(`已替换「${file.name}」，引用该素材的页面即时生效`)
     await load(true)
   } catch (err) {
     MessagePlugin.error(err instanceof Error ? err.message : '替换失败')
   } finally {
     uploading.value = false
-    replacingId.value = ''
   }
 }
 
@@ -178,7 +180,6 @@ onMounted(load)
     <PageHeader title="素材库" description="集中管理上传的图片素材，供商品、活动、文章等业务场景引用">
       <template #actions>
         <input ref="fileInput" type="file" accept="image/*" class="hidden-file" @change="onFileChange" />
-        <input ref="replaceInput" type="file" accept="image/*" class="hidden-file" @change="onReplaceFileChange" />
         <t-button theme="primary" :loading="uploading" @click="triggerUpload">
           <template #icon><UploadIcon /></template>
           上传图片
@@ -231,6 +232,14 @@ onMounted(load)
         </div>
       </div>
     </t-loading>
+    <t-dialog :visible="replaceVisible" header="确认替换素材" :close-on-overlay-click="false" :close-on-esc-keydown="!uploading" @close="!uploading && (replaceVisible = false)">
+      <t-alert theme="warning" :message="`替换「${replaceTarget?.fileName ?? ''}」会覆盖原文件，URL 保持不变，所有引用此地址的文章和页面都会更新。确认前请核对新图片。`" />
+      <t-upload v-model="replaceFiles" theme="image" accept="image/*" :auto-upload="false" :max="1" :disabled="uploading" style="margin-top: 16px" />
+      <template #footer>
+        <t-button variant="text" :disabled="uploading" @click="replaceVisible = false">取消</t-button>
+        <t-button theme="warning" :loading="uploading" :disabled="!replaceFiles.length" @click="confirmReplace">确认替换并更新引用</t-button>
+      </template>
+    </t-dialog>
   </div>
 </template>
 

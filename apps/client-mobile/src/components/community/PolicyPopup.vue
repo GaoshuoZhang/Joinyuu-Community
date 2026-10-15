@@ -6,7 +6,7 @@ import RichTextBlock from '@/components/shared/RichTextBlock.vue'
 import { formatLocalDate, formatLocalDateTime } from '@/utils/format'
 import { safeHttpUrl } from '@/utils/validators'
 
-/* 社区政策正文弹层：标题/摘要/正文/版本信息/附件/更新时间。 */
+/* 社区政策正文弹层：标题/版本信息/摘要/正文/附件/更新时间。 */
 const props = defineProps<{ visible: boolean; policy: CommunityPolicy | null }>()
 defineEmits<{ 'update:visible': [boolean] }>()
 let returnFocus: HTMLElement | null = null
@@ -33,15 +33,14 @@ function restoreFocus() {
     @update:visible="(value: boolean) => $emit('update:visible', value)"
   >
     <div v-if="policy" class="pop-body">
-      <Tag size="small" variant="light" theme="primary">{{ policy.category }}</Tag>
+      <Tag class="p-category" size="small" variant="light" theme="primary">{{ policy.category }}</Tag>
       <h3 class="p-title" tabindex="-1">{{ policy.title }}</h3>
-      <p class="p-summary">{{ policy.summary }}</p>
-      <RichTextBlock class="p-content" :html="policy.content" />
-      <div v-if="policy.version || policy.effectiveAt || policy.publisher" class="p-meta">
+      <div v-if="policy.version || policy.effectiveAt" class="p-meta">
         <span v-if="policy.version">版本：{{ policy.version }}</span>
         <span v-if="policy.effectiveAt">生效日期：{{ formatLocalDate(policy.effectiveAt) }}</span>
-        <span v-if="policy.publisher">发布主体：{{ policy.publisher }}</span>
       </div>
+      <p class="p-summary">{{ policy.summary }}</p>
+      <RichTextBlock class="p-content" :html="policy.content" />
       <div v-if="policy.attachments?.length" class="p-files">
         <a v-for="file in policy.attachments" :key="file.url" :href="safeHttpUrl(file.url)" target="_blank" rel="noopener">{{ file.name }}</a>
       </div>
@@ -68,6 +67,14 @@ function restoreFocus() {
   gap: var(--app-space-5);
   background: var(--td-bg-color-container);
   border-radius: var(--td-radius-large) var(--td-radius-large) 0 0;
+}
+
+.pop-body .p-category {
+  align-self: flex-start;
+  max-width: 100%;
+  height: auto;
+  white-space: normal;
+  overflow-wrap: anywhere;
 }
 
 .pop-body .p-title {
@@ -99,7 +106,7 @@ function restoreFocus() {
   display: flex;
   flex-wrap: wrap;
   gap: var(--app-space-5);
-  margin: var(--app-space-5) 0 var(--app-space-1);
+  margin: 0;
   font: var(--app-type-caption);
   color: var(--td-text-color-secondary);
 }

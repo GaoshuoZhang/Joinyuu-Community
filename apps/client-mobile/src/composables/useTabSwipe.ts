@@ -11,7 +11,7 @@ export function useTabSwipe(getValues: () => readonly string[], getActive: () =>
     cancelSwipe()
     const target = event.target
     if (event.touches.length !== 1 || !(target instanceof Element)) return
-    if (!target.closest('.t-tabs__content') || target.closest('.chips, input, textarea')) return
+    if (!target.closest('.t-tabs__content') || target.closest('.chips, .service-categories, input, textarea')) return
     const touch = event.touches[0]
     swipe = {
       identifier: touch.identifier,

@@ -8,13 +8,12 @@ defineProps<{ events: HomeEventCard[] }>()
 </script>
 
 <template>
-  <section class="block">
+  <section v-if="events.length" class="block">
     <div class="block-head">
       <h2>近期活动</h2>
       <router-link class="more" to="/plaza?tab=events">更多<Icon aria-hidden="true" name="chevron-right" size="12px" /></router-link>
     </div>
-    <p v-if="!events.length" class="empty-note">暂无近期活动</p>
-    <div v-else class="hot-scroll">
+    <div class="hot-scroll">
       <router-link
         v-for="e in events"
         :key="e.id"
@@ -55,13 +54,6 @@ defineProps<{ events: HomeEventCard[] }>()
   color: var(--app-theme-link, var(--td-brand-color));
   text-decoration: none;
   cursor: pointer;
-}
-
-.empty-note {
-  margin: 0;
-  padding: var(--app-space-4) 0;
-  font: var(--app-type-body-sm);
-  color: var(--td-text-color-secondary);
 }
 
 .d-cat {

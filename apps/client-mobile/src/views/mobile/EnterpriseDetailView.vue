@@ -206,6 +206,7 @@ function goMemberManage(m: EnterpriseMemberInfo) {
 
 /* ---- 申请退驻 / 注销（负责人） ---- */
 function onExitApply() {
+  if (!isContact.value) return
   DialogPlugin.confirm({
     title: '申请退驻 / 注销',
     content: '提交后社区运营将在 3 个工作日内与你联系确认。确认提交申请吗？',
@@ -218,6 +219,7 @@ function onExitApply() {
 }
 
 async function doExit() {
+  if (!isContact.value) return
   try {
     await applyEnterpriseExit(enterpriseId, {})
     Toast('退驻/注销申请已提交')
@@ -329,7 +331,7 @@ async function doExit() {
             :content="`退驻/注销申请已被驳回（${formatLocalDateTime(data.exitApplication.at)}）${data.exitApplication.reason ? `：${data.exitApplication.reason}` : ''}`"
           />
           <p class="exit-desc">退驻后企业将失去社区企业身份与相关权益；注销后企业档案将被归档。提交后由社区运营审核确认。</p>
-          <Button theme="danger" variant="outline" block @click="onExitApply">申请退驻 / 注销</Button>
+          <Button v-if="isContact" theme="danger" variant="outline" block @click="onExitApply">申请退驻 / 注销</Button>
         </template>
       </section>
     </template>

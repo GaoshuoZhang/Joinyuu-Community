@@ -3,6 +3,7 @@ import { createPinia } from 'pinia'
 import App from './App.vue'
 import { router } from './router'
 import { useAuthStore } from './stores/auth'
+import { patchTabRelationships } from './utils/tabAccessibility'
 import { pressable } from './directives/pressable'
 import { announce } from './utils/a11y'
 import { initTheme } from './utils/theme'
@@ -72,18 +73,12 @@ function patchA11yFields(root: ParentNode = document) {
   root.querySelectorAll('input, textarea').forEach((el) => {
     if (!el.id) el.id = `fld-${++a11yFieldSeq}-${el.tagName.toLowerCase()}`
     if (!el.getAttribute('name')) el.setAttribute('name', el.id)
-    if (el.getAttribute('aria-label')) return
-    const placeholder = el.getAttribute('placeholder')
-    if (placeholder) {
-      el.setAttribute('aria-label', placeholder)
-      return
-    }
     /* 单选/复选的可访问名称来自 TDesign 兄弟节点的可视文案（原生 input 为空壳） */
     const optionText = el
       .closest('.t-radio, .t-checkbox')
       ?.querySelector('.t-radio__title, .t-checkbox__title')
       ?.textContent?.trim()
-    if (optionText) el.setAttribute('aria-label', optionText)
+    if (optionText && !el.getAttribute('aria-label')) el.setAttribute('aria-label', optionText)
   })
   root.querySelectorAll<HTMLInputElement>('input').forEach(patchAutocomplete)
   /* 空 for（TDesign FormItem 会渲染 <label for="">）与无 for 同样视为未关联，
@@ -97,7 +92,12 @@ function patchA11yFields(root: ParentNode = document) {
     if (forAttr && document.getElementById(forAttr)) continue
     const field = findLabelField(label)
     if (field) {
+      if (!field.id) field.id = `fld-${++a11yFieldSeq}`
       label.setAttribute('for', field.id)
+      if (field.dataset.placeholderLabel) {
+        field.removeAttribute('aria-label')
+        delete field.dataset.placeholderLabel
+      }
       continue
     }
     /* 无法关联表单控件的标签：<label> 语义要求必须关联控件（否则 Chrome 报
@@ -114,6 +114,14 @@ function patchA11yFields(root: ParentNode = document) {
     while (label.firstChild) span.appendChild(label.firstChild)
     label.replaceWith(span)
   }
+  root.querySelectorAll<HTMLInputElement | HTMLTextAreaElement>('input, textarea').forEach((field) => {
+    if (field.getAttribute('aria-label') || field.getAttribute('aria-labelledby') || field.labels?.length) return
+    const placeholder = field.getAttribute('placeholder')
+    if (placeholder) {
+      field.setAttribute('aria-label', placeholder)
+      field.dataset.placeholderLabel = 'true'
+    }
+  })
 }
 
 let lastAnnounced = { text: '', at: 0 }
@@ -388,27 +396,7 @@ function patchTabs(root: ParentNode = document) {
     ...root.querySelectorAll<HTMLElement>('.t-tabs'),
   ]
   for (const tabs of roots) {
-    const nav = tabs.querySelector<HTMLElement>('.t-tabs__nav')
-    if (!nav) continue
-    nav.setAttribute('role', 'tablist')
-    const items = [...nav.querySelectorAll<HTMLElement>('.t-tabs__item')]
-    const panels = [...tabs.querySelectorAll<HTMLElement>('.t-tabs__panel')]
-    items.forEach((item, index) => {
-      const active = item.classList.contains('t-tabs__item--active')
-      const tabId = item.id || `app-tab-${++a11yFieldSeq}`
-      const panelId = panels[index]?.id || `app-tab-panel-${tabId}`
-      item.id = tabId
-      item.setAttribute('role', 'tab')
-      item.setAttribute('aria-selected', String(active))
-      item.setAttribute('aria-controls', panelId)
-      item.tabIndex = active ? 0 : -1
-      if (panels[index]) {
-        panels[index].id = panelId
-        panels[index].setAttribute('role', 'tabpanel')
-        panels[index].setAttribute('aria-labelledby', tabId)
-        panels[index].tabIndex = 0
-      }
-    })
+    patchTabRelationships(tabs)
   }
   const checkboxes = [
     ...(root instanceof HTMLElement && root.matches('.t-checkbox') ? [root] : []),
@@ -561,6 +549,12 @@ new MutationObserver((mutations) => {
       announceFieldError(added)
       patchLoadingRoles(added)
       patchDialogRoles(added)
+    }
+    if (mutation.target instanceof HTMLElement) {
+      const tabs = mutation.target.closest<HTMLElement>('.t-tabs')
+      if (tabs) patchTabs(tabs)
+      const field = mutation.target.closest<HTMLElement>('.field, .t-form__item-wrap')
+      if (field) patchA11yFields(field)
     }
     for (const removed of mutation.removedNodes) {
       if (!(removed instanceof HTMLElement)) continue

@@ -5,6 +5,7 @@ import type { FormProps } from 'tdesign-vue-next'
 import { focusFirstInvalid, useDialogDirtyGuard, usePageDirtyGuard } from '@/utils/form'
 import { renewLease } from '@/api/workstations'
 import type { Lease, RentPeriod } from '@/types'
+import { addRentPeriod } from '@/utils/calendar'
 
 /* 租约续期弹窗：延长到期日（必须晚于当前到期日）+ 租金（默认沿用，可一并调整）+ 续期说明（必填留痕）。
  * 续期独立于「编辑」：成功后服务端追加续期记录（租赁详情「续期记录」选项卡）。
@@ -32,7 +33,11 @@ const form = reactive({
 const { markBaseline, isDirty, guardClose } = useDialogDirtyGuard(form)
 
 const rules: FormProps['rules'] = {
-  endDate: [{ required: true, message: '请选择新到期日', trigger: 'submit' }],
+  endDate: [
+    { required: true, message: '请选择新到期日', trigger: 'submit' },
+    { validator: (value: string) => !props.lease || value > props.lease.endDate,
+      message: '新到期日须晚于当前到期日', trigger: 'submit' },
+  ],
   monthlyRent: [{ required: true, message: '请输入租金', trigger: 'submit' }],
   reason: [{ required: true, message: '请填写续期说明', trigger: 'submit' }],
 }
@@ -53,12 +58,7 @@ function defaultEndDate(lease: Lease): string {
   const period = (lease.rentPeriod ?? 'month') as RentPeriod
   const today = fmtDate(new Date())
   const base = lease.endDate && lease.endDate > today ? lease.endDate : today
-  const d = new Date(`${base}T00:00:00`)
-  if (period === 'day') d.setDate(d.getDate() + 1)
-  else if (period === 'week') d.setDate(d.getDate() + 7)
-  else if (period === 'year') d.setFullYear(d.getFullYear() + 1)
-  else d.setMonth(d.getMonth() + 1)
-  return fmtDate(d)
+  return addRentPeriod(base, period)
 }
 
 watch(

@@ -33,14 +33,18 @@ const renterUsers = ref<{ uid: string; nickname: string; phone: string }[]>([])
 const renterEnterprises = ref<{ id: string; name: string; contactName: string; contactPhone: string }[]>([])
 /* 租赁方选项加载失败：内联提示 + 重试（替代仅 toast，与 WorkstationFormDialog/AreaPlanDialog 同构） */
 const optionLoadError = ref('')
+let optionRequest = 0
 
 async function loadRenterOptions() {
+  const version = ++optionRequest
   try {
     const opts = await fetchRenterOptions()
+    if (version !== optionRequest || !props.visible) return
     renterUsers.value = opts.users
     renterEnterprises.value = opts.enterprises
     optionLoadError.value = ''
   } catch (e) {
+    if (version !== optionRequest || !props.visible) return
     optionLoadError.value = e instanceof Error ? e.message : '租赁方选项加载失败'
   }
 }
@@ -151,9 +155,9 @@ function renterValueOf(lease: Lease): string {
 
 watch(
   () => props.visible,
-  async (v) => {
+  (v) => {
+    ++optionRequest
     if (!v) return
-    await loadRenterOptions()
     if (props.mode === 'edit' && props.lease) {
       form.renterValue = renterValueOf(props.lease)
       form.enterpriseId = props.lease.enterpriseId
@@ -186,8 +190,11 @@ watch(
       form.reason = ''
     }
     /* 清除上次会话残留的校验红框（仅清状态，不动表单值） */
-    markBaseline()
-    nextTick(() => formRef.value?.clearValidate())
+    nextTick(() => {
+      markBaseline()
+      formRef.value?.clearValidate()
+    })
+    void loadRenterOptions()
   },
 )
 
@@ -263,6 +270,7 @@ async function onConfirm() {
 }
 
 function onClose() {
+  if (submitting.value) return
   /* 未保存保护：有改动时弹确认（见 useDialogDirtyGuard） */
   guardClose(() => emit('update:visible', false))
 }
@@ -343,7 +351,7 @@ usePageDirtyGuard(computed(() => props.visible && isDirty.value))
               style="flex: 1"
             />
             <div class="long-term-switch">
-              <t-switch v-accessible-field v-model="form.longTerm" />
+              <t-switch v-accessible-field="'长期租赁'" v-model="form.longTerm" aria-label="长期租赁" />
               <span class="long-term-text">长期</span>
             </div>
           </div>

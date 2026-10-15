@@ -31,21 +31,21 @@ import {
   type UserRecords,
   type UserSubmissionRecord,
 } from '@/api/users'
-import { fetchExternalEnterprises } from '@/api/external-enterprises'
 import { isNotFound } from '@/api/http'
 import { adjustExperience, adjustPoints, fetchExperienceRecords, fetchPointsRecords } from '@/api/ledgers'
 import { deriveReservationStatus } from '@/utils/reservation'
 import { focusFirstInvalid, useDialogDirtyGuard, usePageDirtyGuard } from '@/utils/form'
-import type { ExperienceRecord, PointsRecord, User, UserIdentity, ExternalEnterprise } from '@/types'
+import { useAuthStore } from '@/stores/auth'
+import type { ExperienceRecord, PointsRecord, User, UserIdentity } from '@/types'
 
 const route = useRoute()
 const router = useRouter()
 const loading = ref(true)
+const auth = useAuthStore()
+const ledgerLoadError = ref('')
 const loadError = ref('')
 const user = ref<User | null>(null)
 const sensitiveVisible = ref(false)
-/** 合作企业档案缓存：external_enterprise 身份经"档案名 + 成员 uid"反查档案 ID */
-const externalArchives = ref<ExternalEnterprise[]>([])
 const activeTab = useQueryTab('identities', ['identities', 'card', 'applications', 'demands', 'projects', 'events', 'leases', 'submissions', 'reservations', 'experience', 'points', 'activities'] as const)
 
 function maskCitizenId(value?: string | null): string {
@@ -90,13 +90,10 @@ const communityIndividualIdentity = computed(() =>
   user.value?.identities.find((i) => i.type === 'community_individual'),
 )
 
-/* 社区企业身份卡可跳社区企业详情；合作企业身份卡可跳合作企业详情（档案名 + 成员 uid 反查） */
+/* 企业身份使用详情接口返回的档案 ID 跳转，不额外请求企业列表权限。 */
 function externalArchiveId(identity: UserIdentity): string | undefined {
   if (identity.type !== 'external_enterprise') return undefined
-  const uid = user.value?.uid
-  return externalArchives.value.find(
-    (a) => a.name === identity.enterpriseName && a.members.some((m) => m.userId === uid),
-  )?.id
+  return identity.enterpriseId
 }
 
 function canGoEnterprise(identity: UserIdentity): boolean {
@@ -454,7 +451,7 @@ const demandColumns = [
   { colKey: 'status', title: '状态', width: 100, cell: 'status' },
   { colKey: 'createdAt', title: '创建时间', width: 170, ellipsis: true },
   /* 行点击仅有鼠标路径，操作列「详情」为键盘/读屏用户提供同等入口（H-01） */
-  { colKey: 'op', title: '操作', width: 80, cell: 'op-demand' },
+  { colKey: 'op', fixed: 'right' as const, title: '操作', width: 80, cell: 'op-demand' },
 ]
 
 const projectColumns = [
@@ -464,7 +461,7 @@ const projectColumns = [
   { colKey: 'status', title: '状态', width: 100, cell: 'status' },
   { colKey: 'initiatedAt', title: '立项时间', width: 170, ellipsis: true },
   /* 行点击仅有鼠标路径，操作列「详情」为键盘/读屏用户提供同等入口（H-01） */
-  { colKey: 'op', title: '操作', width: 80, cell: 'op-project' },
+  { colKey: 'op', fixed: 'right' as const, title: '操作', width: 80, cell: 'op-project' },
 ]
 
 const eventColumns = [
@@ -473,7 +470,7 @@ const eventColumns = [
   { colKey: 'status', title: '状态', width: 100, cell: 'status' },
   { colKey: 'time', title: '活动时间', width: 320, cell: 'time' },
   /* 行点击仅有鼠标路径，操作列「详情」为键盘/读屏用户提供同等入口（H-01） */
-  { colKey: 'op', title: '操作', width: 80, cell: 'op-event' },
+  { colKey: 'op', fixed: 'right' as const, title: '操作', width: 80, cell: 'op-event' },
 ]
 
 const recordLeaseColumns = [
@@ -483,7 +480,7 @@ const recordLeaseColumns = [
   { colKey: 'status', title: '状态', width: 100, cell: 'status' },
   { colKey: 'terminatedAt', title: '终止时间', width: 170, ellipsis: true, cell: 'terminatedAt' },
   /* 行点击仅有鼠标路径，操作列「详情」为键盘/读屏用户提供同等入口（H-01） */
-  { colKey: 'op', title: '操作', width: 80, cell: 'op-lease' },
+  { colKey: 'op', fixed: 'right' as const, title: '操作', width: 80, cell: 'op-lease' },
 ]
 
 const submissionColumns = [
@@ -579,16 +576,21 @@ async function onAdjustPoints(delta: number, reason: string) {
 
 async function loadDetail() {
   const id = route.params.id as string
-  const [u, archives] = await Promise.all([
-    fetchUser(id),
-    fetchExternalEnterprises({ page: 1, pageSize: 100 }),
-  ])
+  const u = await fetchUser(id)
   user.value = u
-  externalArchives.value = archives.list
-  if (user.value.identities.some((i) => i.type === 'community_individual')) {
-    experienceRecords.value = await fetchExperienceRecords('individual', id)
-  }
-  pointsRecords.value = await fetchPointsRecords(id)
+  void loadLedgers()
+}
+
+async function loadLedgers() {
+  const id = route.params.id as string
+  ledgerLoadError.value = ''
+  const results = await Promise.allSettled([
+    auth.hasPerm('/rules/experience-records') && communityIndividualIdentity.value
+      ? fetchExperienceRecords('individual', id).then((rows) => { experienceRecords.value = rows }) : Promise.resolve(),
+    auth.hasPerm('/rules/ledger')
+      ? fetchPointsRecords(id).then((rows) => { pointsRecords.value = rows }) : Promise.resolve(),
+  ])
+  if (results.some((result) => result.status === 'rejected')) ledgerLoadError.value = '部分流水加载失败，请重试'
 }
 
 /* 详情加载：404 走「不存在」空态，其余错误保留原因并展示重试入口 */
@@ -1228,8 +1230,10 @@ usePageDirtyGuard(computed(() => (editVisible.value && editDirty.value) || (free
                     {{ communityIndividualIdentity.level }} 级
                   </t-tag>
                 </div>
-                <t-button theme="primary" @click="expAdjustVisible = true">调整经验值</t-button>
+                <t-button v-permission="'/rules/experience-records'" theme="primary" @click="expAdjustVisible = true">调整经验值</t-button>
               </div>
+              <ListErrorState v-if="ledgerLoadError" :message="ledgerLoadError" @retry="loadLedgers" />
+              <t-alert v-if="!auth.hasPerm('/rules/experience-records')" theme="info" message="当前账号没有查看经验值流水的权限" />
               <t-table
                 row-key="id"
                 table-layout="fixed"
@@ -1254,8 +1258,10 @@ usePageDirtyGuard(computed(() => (editVisible.value && editDirty.value) || (free
                   <span class="exp-label">当前积分（个人用户）</span>
                   <span class="exp-num">{{ user.points }}</span>
                 </div>
-                <t-button theme="primary" @click="pointsAdjustVisible = true">调整积分</t-button>
+                <t-button v-permission="'/rules/ledger'" theme="primary" @click="pointsAdjustVisible = true">调整积分</t-button>
               </div>
+              <ListErrorState v-if="ledgerLoadError" :message="ledgerLoadError" @retry="loadLedgers" />
+              <t-alert v-if="!auth.hasPerm('/rules/ledger')" theme="info" message="当前账号没有查看积分流水的权限" />
               <t-table
                 row-key="id"
                 table-layout="fixed"

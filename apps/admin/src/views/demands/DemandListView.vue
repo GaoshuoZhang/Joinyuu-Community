@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { collectAllPages, executeBulk } from '@/utils/bulkOperation'
 import RowMoreActions from '@/components/RowMoreActions.vue'
 import { focusFirstInvalid, useDialogFormProtection } from '@/utils/form'
 import { computed, onMounted, reactive, ref, watch } from 'vue'
@@ -257,7 +258,7 @@ const demandTypeOptions = [
 const demandTypeLabel: Record<string, string> = { task: '找服务', investment: '找投资', cooperation: '找合作' }
 
 const columns = [
-  { colKey: 'title', title: '需求', cell: 'title', width: 210, resizable: true , ellipsis: true},
+  { colKey: 'title', fixed: 'left' as const, title: '需求', cell: 'title', width: 210, resizable: true , ellipsis: true},
   { colKey: 'category', title: '类别', cell: 'category', width: 95, resizable: true , ellipsis: true},
   { colKey: 'demandType', title: '需求类型', cell: 'demandType', width: 100, resizable: true, ellipsis: true },
   { colKey: 'publisher', title: '提交人', cell: 'publisher', width: 200, resizable: true , ellipsis: true},
@@ -274,7 +275,7 @@ const columns = [
   ellipsis: true,
   },
   { colKey: 'status', title: '状态', cell: 'status', width: 150, resizable: true , ellipsis: true},
-  { colKey: 'op', title: '操作', cell: 'op', width: 180 },
+  { colKey: 'op', fixed: 'right' as const, title: '操作', cell: 'op', width: 180 },
 ]
 
 /* 列配置：本地持久化显隐/顺序 */
@@ -473,6 +474,7 @@ async function onArchiveDemand(row: Demand) {
 /* 一键归档：按当前筛选全量拉取，归档所选状态的已驳回 / 已关闭 / 已立项需求 */
 const archivingAll = ref(false)
 const bulkVisible = ref(false)
+let bulkScope = { ...query }
 const bulkProgress = ref<{ done: number; total: number; failed: number } | null>(null)
 let bulkCancelled = false
 const bulkStatuses = [
@@ -486,43 +488,35 @@ function onBulkCancel() {
 }
 
 async function doBulkArchive(values: string[]) {
-  const targets: Demand[] = []
-  for (let page = 1; page <= 20; page++) {
-    const res = await fetchDemands({ ...query, page, pageSize: 100 })
-    targets.push(...res.list)
-    if (targets.length >= res.total || res.list.length < 100) break
-  }
-  const pending = targets.filter((d) => values.includes(d.status))
-  if (!pending.length) {
-    MessagePlugin.info('没有符合所选状态的可归档需求')
-    return
-  }
-  /* 进度 + 可取消：逐条执行，取消后停止后续条目（对齐 ApprovalListView 同名流程） */
   bulkCancelled = false
-  bulkProgress.value = { done: 0, total: pending.length, failed: 0 }
-  let done = 0
-  let failed = 0
-  for (const d of pending) {
-    if (bulkCancelled) break
-    try {
-      await archiveDemand(d.id)
-    } catch {
-      failed++
+  bulkProgress.value = { done: 0, total: 0, failed: 0 }
+  try {
+    const targets = await collectAllPages<Demand>(
+      (page, pageSize) => fetchDemands({ ...bulkScope, page, pageSize }), () => bulkCancelled,
+    )
+    const pending = targets.filter((row) => values.includes(row.status))
+    if (!pending.length) {
+      MessagePlugin.info(bulkCancelled ? '已取消，未执行归档' : '当前筛选范围内没有符合所选状态的记录')
+      return
     }
-    done++
-    bulkProgress.value = { done, total: pending.length, failed }
+    const result = await executeBulk(pending, (row) => archiveDemand(row.id), () => bulkCancelled,
+      (progress) => { bulkProgress.value = progress })
+    if (bulkCancelled) MessagePlugin.warning(`已取消，本次已归档 ${result.done - result.failed} 条需求`)
+    else if (result.done > result.failed) MessagePlugin.success(`已归档 ${result.done - result.failed} 条需求`)
+    if (result.failed) MessagePlugin.warning(`${result.failed} 条归档失败，请刷新后重试`)
+    await load()
+  } finally {
+    bulkProgress.value = null
   }
-  bulkProgress.value = null
-  if (bulkCancelled) {
-    MessagePlugin.warning(`已取消，剩余条目未处理（本次已归档 ${done - failed} 条）`)
-  } else {
-    if (pending.length - failed > 0) MessagePlugin.success(`已归档 ${pending.length - failed} 条需求`)
-    if (failed > 0) MessagePlugin.warning(`${failed} 条需求归档失败，请重试`)
-  }
-  await load()
+}
+
+function countByStatus(status: string) {
+  if (bulkScope.status && bulkScope.status !== status) return Promise.resolve(0)
+  return fetchDemands({ ...bulkScope, status, page: 1, pageSize: 1 }).then((result) => result.total)
 }
 
 function onBulkArchive() {
+  bulkScope = { ...query }
   bulkVisible.value = true
 }
 
@@ -713,7 +707,7 @@ const { close: closeProxyDialog } = useDialogFormProtection(proxyForm, proxyVisi
     </div>
 
     <div class="page-card">
-      <t-table
+      <t-table :horizontal-scroll-affixed-bottom="{ container: '.page-scroll', offsetBottom: 0 }"
         row-key="id"
         table-layout="fixed"
         hover
@@ -986,6 +980,8 @@ const { close: closeProxyDialog } = useDialogFormProtection(proxyForm, proxyVisi
       :progress="bulkProgress"
       @confirm="onBulkConfirm"
       @cancel="onBulkCancel"
+
+      :count-for-status="countByStatus"
     />
   </div>
 </template>

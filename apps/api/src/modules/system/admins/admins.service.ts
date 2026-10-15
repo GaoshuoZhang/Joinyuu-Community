@@ -41,6 +41,11 @@ export interface AdminAccountDto {
  * 账号变更后失效权限缓存并强制下线，保证角色与登录态即时一致。 */
 @Injectable()
 export class AdminsService {
+  /** 账号编辑仅需角色名称和编码，避免读取角色权限配置的额外授权。 */
+  roleOptions(): Promise<{ code: string; name: string }[]> {
+    return this.prisma.adminRole.findMany({ select: { code: true, name: true }, orderBy: { sort: 'asc' } })
+  }
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly redis: RedisService,

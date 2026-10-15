@@ -121,7 +121,8 @@ function onTap(item: MyIdentitySummary) {
           <p v-if="item.subtitle" class="id-sub">{{ item.subtitle }}</p>
           <p class="id-foot">
             <span v-if="item.type === 'community_individual'" class="entry">查看 / 编辑个人名片</span>
-            <span v-else class="entry">查看企业名片</span>
+            <span v-else-if="canOpen(item)" class="entry">查看企业名片</span>
+            <span v-else class="entry">暂未关联企业名片</span>
             <Icon aria-hidden="true" v-if="canOpen(item)" name="chevron-right" size="14px" class="arrow" />
           </p>
         </article>

@@ -1,7 +1,7 @@
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, ref } from 'vue'
 import DOMPurify from 'dompurify'
-import { Image } from 'tdesign-mobile-vue'
+import { Button, Image, ImageViewer } from 'tdesign-mobile-vue'
 import { onImageError } from '@/utils/imageFallback'
 
 /* 文章正文：富文本 HTML（已净化）或纯文本/Markdown 图片行块渲染。 */
@@ -10,7 +10,32 @@ const props = defineProps<{ content: string }>()
 const isRichContent = computed(() => /<\/?[a-z][^>]*>/i.test(props.content))
 /* 禁用内联 style：后端内容里的内联前景/背景色会绕过主题 token 写死浅色，暗色模式下正文不可读；
  * class 保留（代码块的 language-* 等既有用法依赖它），图片仍受 .rich-content img 的 max-width:100% 约束。 */
-const richContent = computed(() => DOMPurify.sanitize(props.content, { FORBID_ATTR: ['style'] }))
+const richContent = computed(() => {
+  const clean = DOMPurify.sanitize(props.content, { FORBID_ATTR: ['style'] })
+  const document = new DOMParser().parseFromString(clean, 'text/html')
+  document.querySelectorAll('img').forEach((image) => {
+    if (image.closest('a')) return
+    image.tabIndex = 0
+    image.setAttribute('role', 'button')
+    image.setAttribute('aria-label', `查看图片：${image.alt || '文章配图'}`)
+  })
+  return document.body.innerHTML
+})
+const viewerVisible = ref(false)
+const viewerIndex = ref(0)
+const viewerImages = ref<string[]>([])
+function preview(images: string[], index: number) {
+  viewerImages.value = images
+  viewerIndex.value = index
+  viewerVisible.value = true
+}
+function previewRichImage(event: MouseEvent | KeyboardEvent) {
+  if (!(event.target instanceof HTMLImageElement) || event.target.closest('a')) return
+  if (event instanceof KeyboardEvent && !['Enter', ' '].includes(event.key)) return
+  event.preventDefault()
+  const images = [...(event.currentTarget as HTMLElement).querySelectorAll('img')]
+  preview(images.map((image) => image.src), images.indexOf(event.target))
+}
 const contentBlocks = computed(() =>
   props.content
     .split('\n')
@@ -25,10 +50,11 @@ const contentBlocks = computed(() =>
 
 <template>
   <article class="m-card body">
-    <div v-if="isRichContent" class="rich-content" v-html="richContent"></div>
+    <ImageViewer v-model:visible="viewerVisible" v-model:index="viewerIndex" :images="viewerImages" :show-index="true" @close="viewerVisible = false" />
+    <div v-if="isRichContent" class="rich-content" @click="previewRichImage" @keydown="previewRichImage" v-html="richContent"></div>
     <template v-else>
       <template v-for="(block, i) in contentBlocks" :key="i">
-        <Image v-if="block.type === 'image'" class="content-image content-img" :src="block.url" alt="文章配图" fit="contain" lazy @error="onImageError" />
+        <Button v-if="block.type === 'image'" class="image-preview" variant="text" aria-label="查看文章配图" @click="preview([block.url], 0)"><Image class="content-image content-img" :src="block.url" alt="文章配图" fit="contain" lazy @error="onImageError" /></Button>
         <p v-else class="para">{{ block.text }}</p>
       </template>
     </template>
@@ -36,6 +62,10 @@ const contentBlocks = computed(() =>
 </template>
 
 <style scoped>
+.image-preview { display: block; width: 100%; height: auto; padding: 0; }
+.image-preview :deep(.t-button__content) { display: block; width: 100%; }
+.rich-content :deep(img[role="button"]) { cursor: zoom-in; }
+.rich-content :deep(img:focus-visible) { outline: 2px solid var(--td-brand-color); outline-offset: 2px; }
 .body {
   padding:var(--app-space-8);
 }

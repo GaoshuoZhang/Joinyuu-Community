@@ -12,8 +12,7 @@ import {
 } from 'class-validator'
 import { CHANNEL_KINDS } from '../messaging.types'
 
-/* PUT /api/admin/message-channels 载荷（新增/编辑渠道）。
- * 凭据不在此提交：credentialEnv 只登记环境变量名，值由部署侧注入。 */
+/* 通知固定配置载荷：按类型保存；凭据可直接填写（只写）或登记环境变量名。 */
 export class MessageChannelPayloadDto {
   @IsIn(CHANNEL_KINDS, { message: '消息类型不合法' })
   kind!: string

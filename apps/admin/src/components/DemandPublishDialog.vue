@@ -73,7 +73,9 @@ const form = reactive<DemandPublishPayload>({
 })
 
 /* 未保存保护：打开时记录基线，关闭前有改动需确认 */
-const { markBaseline, isDirty, guardClose } = useDialogDirtyGuard(form)
+const { markBaseline, isDirty, guardClose } = useDialogDirtyGuard(() => ({
+  ...form, customVisibility: customVisibility.value, customEnrollment: customEnrollment.value,
+}))
 
 /* 自定义开关：可见范围/可报名范围（关=不限） */
 const customVisibility = ref(false)
@@ -84,38 +86,41 @@ const customEnrollment = ref(false)
 /* 积分规则默认分值：响应需求奖励 */
 const rulePoints = reactive({ respond: 20 })
 
+const optionLoadError = ref('')
+const optionLoading = ref(false)
 const optionsLoaded = ref(false)
 let optionsPromise: Promise<void> | null = null
 function ensureOptions(): Promise<void> {
   if (optionsLoaded.value) return Promise.resolve()
   if (!optionsPromise) {
-    optionsPromise = Promise.all([
+    optionLoading.value = true
+    optionsPromise = Promise.allSettled([
       fetchPointsRules()
         .then((rules) => {
           rulePoints.respond = rules.find((r) => r.code === 'demand_responded')?.points ?? 20
-          if (props.visible && props.mode === 'create') form.respondPoints = rulePoints.respond
-        })
-        .catch(() => undefined),
+          if (props.visible && props.mode === 'create' && !isDirty.value) { form.respondPoints = rulePoints.respond; markBaseline() }
+        }),
       fetchDictEntries('demand_category')
         .then((entries) => {
           const enabled = entries.filter((e) => e.status === 'enabled')
           categoryCodeByLabel.value = Object.fromEntries(entries.map((entry) => [entry.label, entry.code]))
           const options = enabled.map((entry) => ({ label: entry.label, value: entry.code }))
-          if (options.length) categoryOptions.value = options
+          categoryOptions.value = options
           /* 字典晚于编辑抽屉加载时，也将历史标签值归一为 code。 */
-          if (props.visible && props.demand && form.category === props.demand.category) {
+          if (props.visible && props.demand && !isDirty.value && form.category === props.demand.category) {
             form.category = categoryCodeByLabel.value[props.demand.category] ?? props.demand.category
+            markBaseline()
           }
-        })
-        .catch(() => {
-          /* 字典加载失败保留回退词表 */
         }),
     ])
-      .then(() => {
-        optionsLoaded.value = true
+      .then((results) => {
+        const failures = results.filter((result) => result.status === 'rejected')
+        optionsLoaded.value = failures.length === 0
+        optionLoadError.value = failures.length ? '部分选项或奖励规则加载失败，请重试后核对。' : ''
       })
       .finally(() => {
         optionsPromise = null
+        optionLoading.value = false
       })
   }
   return optionsPromise
@@ -272,6 +277,10 @@ usePageDirtyGuard(computed(() => props.visible && isDirty.value))
         </t-button>
       </div>
     </template>
+    <t-alert v-if="optionLoadError" theme="warning" style="margin-bottom: 16px">
+      {{ optionLoadError }}
+      <t-button variant="text" theme="primary" size="small" :loading="optionLoading" @click="ensureOptions">重新加载</t-button>
+    </t-alert>
     <t-form ref="formRef" :data="form" :rules="rules" label-align="top">
       <div class="form-row form-row--3">
         <t-form-item label="联系人" name="contactName">

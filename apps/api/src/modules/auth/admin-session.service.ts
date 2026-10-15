@@ -6,6 +6,7 @@ const SESSIONS_KEY = 'auth:admin:sessions'
 const SESSIONS_TTL = 2 * 60 * 60
 
 export interface AdminSessionDto {
+  current?: boolean
   jti: string
   username: string
   name: string

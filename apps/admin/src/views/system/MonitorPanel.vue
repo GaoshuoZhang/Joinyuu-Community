@@ -19,12 +19,14 @@ import {
 const loading = ref(false)
 const loadError = ref('')
 const overview = ref<MonitorOverview | null>(null)
+const sampledAt = ref('')
 const job = ref<CronJobStatus | null>(null)
 
 async function load(silent = false) {
   if (!silent) loading.value = true
   try {
     overview.value = await fetchMonitorOverview()
+    sampledAt.value = new Date().toLocaleString('zh-CN', { hour12: false })
     loadError.value = ''
   } catch (e) {
     loadError.value = e instanceof Error ? e.message : '数据加载失败'
@@ -95,7 +97,7 @@ const jobColumns = [
   { colKey: 'lastRunAt', title: '上次执行', width: 170, resizable: true , ellipsis: true},
   { colKey: 'lastRunDurationMs', title: '耗时', cell: 'duration', width: 90 , ellipsis: true},
   { colKey: 'lastResult', title: '结果', cell: 'result', width: 90 , ellipsis: true},
-  { colKey: 'op', title: '操作', cell: 'op', width: 170 },
+  { colKey: 'op', fixed: 'right' as const, title: '操作', cell: 'op', width: 170 },
 ]
 
 /* ---------- 手动执行（运维调试）：失败透出 500，执行结果写入 SchedulerLog ---------- */
@@ -151,6 +153,10 @@ onMounted(load)
   <div class="monitor-panel page-fade-in">
     <ListErrorState v-if="loadError" :message="loadError" :loading="loading" @retry="() => load()" />
     <PageHeader title="系统监控" description="服务健康、Redis 缓存与定时任务执行情况一览">
+      <template #actions>
+        <span class="muted">上次采样：{{ sampledAt || '尚未加载' }}</span>
+        <t-button :loading="loading" variant="outline" @click="() => load()">刷新数据</t-button>
+      </template>
     </PageHeader>
 
     <t-loading :loading="loading" size="small">
@@ -202,7 +208,7 @@ onMounted(load)
 
       <!-- 定时任务 -->
       <t-card title="定时任务" class="cron-card" :bordered="false">
-        <t-table
+        <t-table :horizontal-scroll-affixed-bottom="{ container: '.page-scroll', offsetBottom: 0 }"
           row-key="name"
           hover
           table-layout="fixed"
@@ -269,20 +275,6 @@ onMounted(load)
   font-size: 12px;
 }
 
-@media (max-width: 1199px) {
-  .monitor-stat-row,
-  .redis-grid {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
-}
-
-@media (max-width: 640px) {
-  .monitor-stat-row,
-  .redis-grid {
-    grid-template-columns: 1fr;
-  }
-}
-
 .redis-card {
   margin-bottom: 16px;
 }
@@ -312,12 +304,12 @@ onMounted(load)
 .redis-muted {
   font-size: 14px;
   font-weight: 400;
-  color: var(--td-text-color-placeholder);
+  color: var(--td-text-color-secondary);
 }
 
 .redis-sub {
   font-size: 12px;
-  color: var(--td-text-color-placeholder);
+  color: var(--td-text-color-secondary);
 }
 
 .log-tip {
@@ -325,4 +317,18 @@ onMounted(load)
   font-size: 12px;
   color: var(--td-text-color-secondary);
 }
+@media (max-width: 1199px) {
+  .monitor-stat-row,
+  .redis-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 640px) {
+  .monitor-stat-row,
+  .redis-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
 </style>

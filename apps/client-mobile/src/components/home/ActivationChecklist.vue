@@ -32,9 +32,9 @@ function confirmDismiss() {
 <template>
   <section class="m-card activation" aria-label="新手任务">
     <Collapse v-model:value="expandedPanels" class="activation-collapse">
-      <CollapsePanel :value="PANEL_VALUE">
+      <CollapsePanel :destroy-on-collapse="true" :value="PANEL_VALUE">
         <template #header>
-          <button
+          <Button variant="text"
             type="button"
             class="activation-toggle"
             :aria-expanded="isExpanded()"
@@ -43,7 +43,7 @@ function confirmDismiss() {
             @click.stop="togglePanel"
           >
             新手任务
-          </button>
+          </Button>
         </template>
         <template #header-right-content>
           <Button

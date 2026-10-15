@@ -1,3 +1,4 @@
+import { legacySettingsRedirect } from '@/utils/settingsNavigation'
 import { createRouter, createWebHashHistory, type RouteRecordNormalized } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
 import { getAllPermissionCodes } from '@/constants/permissions'
@@ -271,14 +272,10 @@ const router = createRouter({
         },
         {
           path: 'system/config',
-          component: () => import('@/views/system/SystemConfigPanel.vue'),
-          meta: { title: '系统配置', group: '系统管理' },
+          component: () => import('@/views/system/SystemConfigView.vue'),
+          meta: { title: '系统配置', group: '系统管理', perm: ['/system/config', '/system/messages', '/system/trash'] },
         },
-        {
-          path: 'system/mobile-themes',
-          component: () => import('@/views/system/MobileThemesPanel.vue'),
-          meta: { title: '移动端主题', group: '系统管理', perm: '/system/config' },
-        },
+        { path: 'system/mobile-themes', redirect: (to) => legacySettingsRedirect('mobile-themes', to.query) },
         {
           path: 'system/application-form-config',
           component: () => import('@/views/approvals/ApplicationFormConfigView.vue'),
@@ -320,21 +317,13 @@ const router = createRouter({
           component: () => import('@/views/system/MonitorPanel.vue'),
           meta: { title: '系统监控', group: '系统管理', perm: '/system/monitor' },
         },
-        {
-          path: 'system/trash',
-          component: () => import('@/views/system/ArchivePanel.vue'),
-          meta: { title: '归档管理', group: '系统管理', perm: '/system/trash' },
-        },
+        { path: 'system/trash', redirect: (to) => legacySettingsRedirect('trash', to.query) },
         {
           path: 'system/policies',
           component: () => import('@/views/system/AgreementPolicyView.vue'),
           meta: { title: '协议与政策', group: '系统管理', perm: '/system/policies' },
         },
-        {
-          path: 'system/messages',
-          component: () => import('@/views/system/MessageCenterView.vue'),
-          meta: { title: '消息中心', group: '系统管理', perm: '/system/messages' },
-        },
+        { path: 'system/messages', redirect: (to) => legacySettingsRedirect('messages', to.query) },
         {
           path: '403',
           component: () => import('@/views/system/ForbiddenView.vue'),

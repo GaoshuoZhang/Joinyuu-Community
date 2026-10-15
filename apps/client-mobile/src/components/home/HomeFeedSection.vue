@@ -1,6 +1,5 @@
 <script setup lang="ts">
 import { Icon, Tag } from 'tdesign-mobile-vue'
-import EmptyBlock from '@/components/shared/EmptyBlock.vue'
 
 export interface FeedMeta {
   text: string
@@ -12,25 +11,25 @@ export interface FeedItem {
   key: string
   title: string
   tag: string
+  tagMeta?: FeedMeta
   path: string
   metas: FeedMeta[]
 }
 
 /* 首页信息流区块：标题 + 可选「更多」+ 卡片列表（最新需求/最新资讯共用）。 */
-defineProps<{ title: string; items: FeedItem[]; emptyText: string; morePath?: string }>()
+defineProps<{ title: string; items: FeedItem[]; morePath?: string }>()
 </script>
 
 <template>
-  <section class="block">
+  <section v-if="items.length" class="block">
     <div class="block-head">
       <h2>{{ title }}</h2>
       <router-link v-if="morePath" class="more" :to="morePath">
         更多<Icon aria-hidden="true" name="chevron-right" size="12px" />
       </router-link>
     </div>
-    <EmptyBlock v-if="!items.length" :text="emptyText" />
     <!-- v46：与首页其它区块、其它列表页一致，使用约定的 .stagger 交错载入 -->
-    <div v-else class="list stagger">
+    <div class="list stagger">
       <router-link
         v-for="item in items"
         :key="item.key"
@@ -39,8 +38,9 @@ defineProps<{ title: string; items: FeedItem[]; emptyText: string; morePath?: st
       >
         <div class="d-head">
           <Tag class="d-cat" size="small" variant="light" theme="primary">{{ item.tag }}</Tag>
-          <h3 class="d-title">{{ item.title }}</h3>
+          <span v-if="item.tagMeta" class="d-tag-meta" :class="{ 'd-resp': item.tagMeta.accent }">{{ item.tagMeta.text }}</span>
         </div>
+        <h3 class="d-title">{{ item.title }}</h3>
         <div class="d-meta">
           <span v-for="(meta, index) in item.metas" :key="index" :class="{ 'd-resp': meta.accent }">{{ meta.text }}</span>
         </div>
@@ -90,7 +90,9 @@ defineProps<{ title: string; items: FeedItem[]; emptyText: string; morePath?: st
 .d-head {
   display: flex;
   align-items: center;
+  flex-wrap: wrap;
   gap: var(--app-space-4);
+  margin-bottom: var(--app-space-4);
 }
 
 .d-title {
@@ -107,6 +109,18 @@ defineProps<{ title: string; items: FeedItem[]; emptyText: string; morePath?: st
 .d-cat {
   flex-shrink: 0;
   align-self: flex-start;
+}
+
+.d-tag-meta {
+  min-width: 0;
+  color: var(--td-text-color-secondary);
+  font: var(--app-type-caption);
+}
+
+.d-tag-meta.d-resp {
+  color: var(--app-theme-link, var(--td-brand-color));
+  font: var(--app-type-emphasis-sm);
+  font-variant-numeric: tabular-nums;
 }
 
 .d-meta {
@@ -131,12 +145,8 @@ defineProps<{ title: string; items: FeedItem[]; emptyText: string; morePath?: st
   flex-shrink: 0;
 }
 
-/* v45：与需求列表卡片对齐——强调值单独占一行，不再右浮动 */
+/* Emphasized metadata stays distinct from secondary publisher and date details. */
 .d-resp {
-  flex-basis: 100%;
-  margin-left:0;
-  font: var(--app-type-emphasis-sm);
-  font-variant-numeric: tabular-nums;
   color: var(--app-theme-link, var(--td-brand-color));
 }
 </style>

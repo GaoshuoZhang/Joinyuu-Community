@@ -83,6 +83,7 @@ const statusEntityMap: Record<string, StatusEntity> = {
 }
 
 interface ArchiveColumn {
+  fixed?: 'left' | 'right'
   colKey: string
   title: string
   width?: number
@@ -129,7 +130,7 @@ const columns = computed<ArchiveColumn[]>(() => {
     resizable: true,
     ellipsis: true,
   }
-  const op: ArchiveColumn = { colKey: 'op', title: '操作', width: 170, cell: 'op' }
+  const op: ArchiveColumn = { colKey: 'op', fixed: 'right' as const, title: '操作', width: 170, cell: 'op' }
 
   switch (activeDomain.value) {
     case 'enterprise':
@@ -267,24 +268,32 @@ const columns = computed<ArchiveColumn[]>(() => {
   }
 })
 
+let loadRequest = 0
+const listDomain = ref('')
 async function load() {
+  const requestId = ++loadRequest
+  const domain = activeDomain.value
+  list.value = []
   syncQuery()
   loading.value = true
   loadError.value = ''
   try {
     const res = await fetchArchiveList({
-      domain: activeDomain.value,
+      domain,
       page: query.page,
       pageSize: query.pageSize,
       keyword: keyword.value.trim() || undefined,
     })
+    if (requestId !== loadRequest) return
+    listDomain.value = domain
     list.value = res.list
     total.value = res.total
   } catch (e) {
+    if (requestId !== loadRequest) return
     /* 错误经 ListErrorState 组件呈现，不再重复弹 toast */
     loadError.value = e instanceof Error ? e.message : '数据加载失败'
   } finally {
-    loading.value = false
+    if (requestId === loadRequest) loading.value = false
   }
 }
 
@@ -324,9 +333,11 @@ const pagination = computed(() => ({
 }))
 
 async function onRestore(row: ArchiveItem) {
+  const domain = listDomain.value
+  if (loading.value || domain !== activeDomain.value) return
   acting.value = row.id + ':restore'
   try {
-    await restoreArchived(activeDomain.value, row.id)
+    await restoreArchived(domain, row.id)
     MessagePlugin.success('已恢复')
     await load()
   } catch (e) {
@@ -407,7 +418,9 @@ function onStrongConfirmSubmit() {
 }
 
 async function onPurge(row: ArchiveItem) {
-  if (isUserHistoryDomain(activeDomain.value)) {
+  const domain = listDomain.value
+  if (loading.value || domain !== activeDomain.value) return
+  if (isUserHistoryDomain(domain)) {
     const confirmed = await confirmArchiveTriple({
       first: '该操作涉及用户个人历史信息，彻底删除后不可恢复，是否继续？',
       second: '请再次确认：该条目将从系统中永久移除。',
@@ -417,7 +430,7 @@ async function onPurge(row: ArchiveItem) {
   }
   acting.value = row.id + ':purge'
   try {
-    await purgeArchived(activeDomain.value, row.id)
+    await purgeArchived(domain, row.id)
     MessagePlugin.success('已彻底删除')
     await load()
   } catch (e) {
@@ -437,13 +450,15 @@ const { close: closeSettings, markBaseline: markSettingsBaseline } = useDialogFo
 )
 
 async function openSettings() {
+  const domain = activeDomain.value
   settingsVisible.value = true
   settingsLoading.value = true
   currentSetting.value = null
   originalAutoPurge.value = false
   try {
     const all = await fetchArchiveSettings()
-    currentSetting.value = all.find((s) => s.domain === activeDomain.value) ?? null
+    if (!settingsVisible.value || domain !== activeDomain.value) return
+    currentSetting.value = all.find((s) => s.domain === domain) ?? null
     originalAutoPurge.value = currentSetting.value?.autoPurge ?? false
     markSettingsBaseline()
   } catch (e) {
@@ -494,7 +509,7 @@ async function onSaveSettings() {
   }
 }
 
-const { syncQuery } = useListQueryState(query, load, { refs: { activeDomain, keyword } })
+const { syncQuery } = useListQueryState(query, load, { prefix: 'archive', refs: { activeDomain, keyword } })
 
 onMounted(load)
 </script>
@@ -534,7 +549,7 @@ onMounted(load)
     </div>
 
     <div class="page-card">
-      <t-table
+      <t-table :horizontal-scroll-affixed-bottom="{ container: '.page-scroll', offsetBottom: 0 }"
         row-key="id"
         table-layout="fixed"
         hover

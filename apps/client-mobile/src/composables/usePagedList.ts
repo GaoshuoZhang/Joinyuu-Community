@@ -43,7 +43,7 @@ export function usePagedList<T extends { id: string }>(fetchPage: (page: number,
       const result = await fetchPage(nextPage, pageSize)
       if (id !== requestId) return
       const known = new Set(items.value.map((item) => item.id))
-      items.value.push(...result.list.filter((item) => !known.has(item.id)))
+      items.value = [...items.value, ...result.list.filter((item) => !known.has(item.id))]
       total.value = result.total
       page.value = nextPage
     } catch (cause) {

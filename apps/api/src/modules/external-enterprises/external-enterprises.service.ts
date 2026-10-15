@@ -81,6 +81,8 @@ export class ExternalEnterprisesService {
   }
 
   async create(dto: CreateExternalEnterpriseDto): Promise<{ id: string }> {
+    const existing = await this.prisma.externalEnterpriseProfile.findFirst({ where: { name: dto.name.trim(), deletedAt: null } })
+    if (existing) throw new ConflictException('已存在同名合作企业档案，请编辑已有档案')
     const id = await this.ids.next('XE')
     await this.prisma.externalEnterpriseProfile.create({
       data: {

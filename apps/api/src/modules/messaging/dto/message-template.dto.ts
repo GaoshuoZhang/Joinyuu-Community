@@ -9,7 +9,9 @@ import {
   MaxLength,
   Min,
   MinLength,
+  ValidateNested,
 } from 'class-validator'
+import { Type } from 'class-transformer'
 import { CHANNEL_KINDS, TEMPLATE_CATEGORIES } from '../messaging.types'
 
 /* 模板中心载荷（P0）：变量白名单 + 版本化 + 审批。 */
@@ -87,8 +89,23 @@ export class PublishTemplateDto {
   version?: number
 }
 
-/** 模板预览不发送消息，无需收件人。 */
-export class PreviewTemplateDto {
+export class PreviewTemplateDraftDto {
+  @IsOptional()
+  @IsString()
+  @MaxLength(128)
+  subject?: string
+
+  @IsString()
+  @MinLength(1)
+  @MaxLength(4000)
+  body!: string
+
+  @IsArray()
+  @IsString({ each: true })
+  variables!: string[]
+}
+
+export class TemplateRenderInputDto {
   @IsOptional()
   @IsInt()
   @Min(1)
@@ -99,8 +116,16 @@ export class PreviewTemplateDto {
   variables?: Record<string, unknown>
 }
 
-/** 测试发送仍需校验收件人。 */
-export class TestTemplateDto extends PreviewTemplateDto {
+/** 模板预览不发送、不落库；允许预览尚未保存的编辑内容。 */
+export class PreviewTemplateDto extends TemplateRenderInputDto {
+  @IsOptional()
+  @ValidateNested()
+  @Type(() => PreviewTemplateDraftDto)
+  draft?: PreviewTemplateDraftDto
+}
+
+/** 测试发送使用已保存版本，仍需校验收件人。 */
+export class TestTemplateDto extends TemplateRenderInputDto {
   @IsString({ message: '请输入测试收件人' })
   @MaxLength(128)
   recipient!: string

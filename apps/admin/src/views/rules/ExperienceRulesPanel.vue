@@ -24,7 +24,7 @@ const columns = [
   { colKey: 'description', title: '说明', ellipsis: true, width: 260, resizable: true },
   { colKey: 'status', title: '状态', cell: 'status', width: 95 , ellipsis: true},
   { colKey: 'updatedAt', title: '更新时间', width: 170, resizable: true , ellipsis: true},
-  { colKey: 'op', title: '操作', cell: 'op', width: 160 },
+  { colKey: 'op', fixed: 'right' as const, title: '操作', cell: 'op', width: 160 },
 ]
 
 async function load() {
@@ -112,7 +112,7 @@ onMounted(load)
     </t-alert>
 
     <div class="page-card">
-      <t-table
+      <t-table :horizontal-scroll-affixed-bottom="{ container: '.page-scroll', offsetBottom: 0 }"
         row-key="code"
         table-layout="fixed"
         hover

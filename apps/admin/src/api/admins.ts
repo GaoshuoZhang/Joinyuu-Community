@@ -19,6 +19,10 @@ export interface AdminAccountPayload {
   roleCodes: string[]
 }
 
+export function fetchAdminRoleOptions(): Promise<{ code: string; name: string }[]> {
+  return httpGet('/admins/role-options')
+}
+
 /** GET /api/admin/admins?keyword */
 export async function fetchAdmins(keyword?: string): Promise<AdminAccount[]> {
   const qs = keyword ? `?keyword=${encodeURIComponent(keyword)}` : ''

@@ -288,8 +288,8 @@ async function loadPlatformStats() {
     { label: '社区个体', icon: markRaw(UserCircleIcon), route: '/individuals', perm: '/individuals', fetch: () => fetchIndividuals({ page: 1, pageSize: 1 }) },
     { label: '社区企业', icon: markRaw(BuildingIcon), route: '/enterprises', perm: '/enterprises', fetch: () => fetchEnterprises({ page: 1, pageSize: 1 }) },
     { label: '合作企业', icon: markRaw(Building1Icon), route: '/external-enterprises', perm: '/external-enterprises', fetch: () => fetchExternalEnterprises({ page: 1, pageSize: 1 }) },
-    { label: '进行中的项目', icon: markRaw(AppIcon), route: '/projects', perm: '/projects', fetch: () => fetchProjects({ page: 1, pageSize: 1 }) },
-    { label: '资讯内容', icon: markRaw(Edit2Icon), route: '/contents/publish', perm: '/contents/publish', fetch: () => fetchArticles({ page: 1, pageSize: 1 }) },
+    { label: '进行中的项目', icon: markRaw(AppIcon), route: '/projects?status=running', perm: '/projects', fetch: () => fetchProjects({ page: 1, pageSize: 1, status: 'running' }) },
+    { label: '资讯内容', icon: markRaw(Edit2Icon), route: '/contents/publish', perm: '/contents/publish', fetch: () => fetchArticles({ page: 1, pageSize: 1, channel: 'official' }) },
   ].filter((d) => auth.hasPerm(d.perm))
   const totals = await Promise.all(defs.map((d) => count(d.fetch())))
   platformStats.value = defs.map((d, i) => ({ label: d.label, value: totals[i], icon: d.icon as PlatformStat['icon'], route: d.route, perm: d.perm }))
@@ -330,8 +330,8 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onLayoutKeydown))
                 <div v-for="k in cardOrder" :key="k" class="layout-row">
                   <span class="layout-name">{{ CARD_TITLES[k] }}</span>
                   <div class="layout-controls">
-                    <ChevronUpIcon class="layout-move" role="button" tabindex="0" :aria-label="`上移${CARD_TITLES[k]}`" @click="moveCard(k, -1)" @keydown.enter.space.prevent="moveCard(k, -1)" />
-                    <ChevronDownIcon class="layout-move" role="button" tabindex="0" :aria-label="`下移${CARD_TITLES[k]}`" @click="moveCard(k, 1)" @keydown.enter.space.prevent="moveCard(k, 1)" />
+                    <t-button variant="text" size="small" shape="square" :disabled="cardOrder.indexOf(k) === 0" :aria-label="`上移${CARD_TITLES[k]}`" @click="moveCard(k, -1)"><template #icon><ChevronUpIcon /></template></t-button>
+                    <t-button variant="text" size="small" shape="square" :disabled="cardOrder.indexOf(k) === cardOrder.length - 1" :aria-label="`下移${CARD_TITLES[k]}`" @click="moveCard(k, 1)"><template #icon><ChevronDownIcon /></template></t-button>
                     <t-switch v-accessible-field="`${CARD_TITLES[k]}显隐开关`" :value="cardOn[k]" size="small" :aria-label="`${CARD_TITLES[k]}显隐开关`" @change="(v: boolean) => toggleCard(k, v)" />
                   </div>
                 </div>

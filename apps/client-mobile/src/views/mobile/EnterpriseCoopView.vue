@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
 import { useRouter } from 'vue-router'
-import { Button, Icon, Toast } from 'tdesign-mobile-vue'
+import { Button, Icon, Radio, RadioGroup, Toast } from 'tdesign-mobile-vue'
 
 /* 企业合作 hub（/intros/enterprise）：两种合作方式对比与选择，CTA 进入对应申请表单。
  * 企业入驻 → 需办公空间，对应后台「社区企业」；合作伙伴 → 无需入驻，对应「合作企业」。 */
@@ -60,35 +60,27 @@ function onConfirm() {
       <p class="subtitle">两种合作方式，选择适合你的路径</p>
     </header>
 
-    <!-- v49：整卡可选（参考发布需求页）——卡片主体为原生 button，指示器用非交互 Icon，
-         「了解详细流程」链接作为 button 的兄弟节点，避免可交互元素嵌套；选中态切换背景与描边 -->
+    <RadioGroup v-model="selected" class="cooperation-options" role="radiogroup" name="cooperation-mode" aria-label="企业合作方式">
     <article v-for="opt in options" :key="opt.key" class="m-card option" :class="{ active: selected === opt.key }">
-      <button
-        type="button"
-        class="option-select"
-        :aria-pressed="selected === opt.key"
-        :aria-label="`选择${opt.title}`"
-        @click="selected = opt.key"
-      >
+      <Radio :value="opt.key" class="option-select" :borderless="true">
+        <template #label>
         <div class="opt-head">
           <span class="opt-icon"><Icon aria-hidden="true" :name="opt.icon" size="20px" /></span>
           <div class="opt-title-wrap">
             <h2 class="opt-title">{{ opt.title }}</h2>
             <p class="opt-tagline">{{ opt.tagline }}</p>
           </div>
-          <Icon
-            aria-hidden="true"
-            class="opt-mark"
-            :name="selected === opt.key ? 'check-circle-filled' : 'circle'"
-            size="24px"
-          />
         </div>
+        </template>
+        <template #content>
         <ul class="points">
           <li v-for="(p, i) in opt.points" :key="i">{{ p }}</li>
         </ul>
-      </button>
+        </template>
+      </Radio>
       <router-link class="intro-link" :to="opt.intro">了解详细流程 <Icon aria-hidden="true" name="chevron-right" size="14px" /></router-link>
     </article>
+    </RadioGroup>
 
     <Button theme="primary" variant="text" block @click="router.push('/me/applications')">
       查看申请记录
@@ -105,6 +97,10 @@ function onConfirm() {
 </template>
 
 <style scoped>
+.cooperation-options { display: flex; flex-direction: column; gap: var(--app-space-6); }
+/* 合作方式的完整权益清单需可见，不使用 Radio 默认的描述行数截断。 */
+.option-select :deep(.t-radio__title),
+.option-select :deep(.t-radio__description) { display: block; overflow: visible; }
 .coop-hub {
   padding:var(--app-space-8);
   display: flex;
@@ -152,12 +148,12 @@ function onConfirm() {
 }
 
 .option-select {
-  display: block;
+  display: flex;
   width: 100%;
   padding: var(--app-space-8);
   border: 0;
   color: inherit;
-  background: transparent; font: inherit; /* typography-token-exempt: 原生 button 需继承卡片父级排版，非角色档可表达；升级时复核是否可改为角色档 */
+  background: transparent;
   text-align: left;
   cursor: pointer;
 }

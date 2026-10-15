@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { executeBulk } from '@/utils/bulkOperation'
 import RowMoreActions from '@/components/RowMoreActions.vue'
 import { useListQueryState } from '@/utils/listQuery'
 import ListErrorState from '@/components/ListErrorState.vue'
@@ -103,7 +104,7 @@ const columns = [
   { colKey: 'contactName', title: '联系人', cell: 'contact', width: 140, resizable: true , ellipsis: true},
   { colKey: 'note', title: '备注', cell: 'note', width: 140, resizable: true , ellipsis: true},
   { colKey: 'status', title: '状态', cell: 'status', width: 110, resizable: true , ellipsis: true},
-  { colKey: 'op', title: '操作', cell: 'op', width: 150 },
+  { colKey: 'op', fixed: 'right' as const, title: '操作', cell: 'op', width: 150 },
 ]
 
 /* 列配置：本地持久化显隐/顺序 */
@@ -188,32 +189,37 @@ async function onArchive(row: Lease) {
   }
 }
 
-/* 一键归档：全量租约中归档所选派生状态的已终止租约 */
+/* 一键归档：冻结当前筛选内的租约 ID，与确认前预估使用同一范围。 */
 const archivingAll = ref(false)
 const bulkVisible = ref(false)
+let bulkTargets: Lease[] = []
+let bulkCancelled = false
+const bulkProgress = ref<{ done: number; total: number; failed: number } | null>(null)
+function onBulkCancel() { bulkCancelled = true }
+function countByStatus(status: string) {
+  return Promise.resolve(bulkTargets.filter((row) => deriveLeaseStatus(row) === status).length)
+}
 const bulkStatuses = [{ label: '已终止', value: 'terminated' }]
 
 async function doBulkArchive(values: string[]) {
-  const all = await fetchLeases()
-  const pending = all.filter((l) => values.includes(deriveLeaseStatus(l)))
+  const pending = bulkTargets.filter((l) => values.includes(deriveLeaseStatus(l)))
   if (!pending.length) {
     MessagePlugin.info('没有符合所选状态的可归档租约')
     return
   }
-  let failed = 0
-  for (const l of pending) {
-    try {
-      await archiveLease(l.id)
-    } catch {
-      failed++
-    }
-  }
-  if (pending.length - failed > 0) MessagePlugin.success(`已归档 ${pending.length - failed} 条租约`)
-  if (failed > 0) MessagePlugin.warning(`${failed} 条租约归档失败，请重试`)
-  await load()
+  bulkCancelled = false
+  try {
+    const result = await executeBulk(pending, (row) => archiveLease(row.id), () => bulkCancelled,
+      (progress) => { bulkProgress.value = progress })
+    if (bulkCancelled) MessagePlugin.warning(`已取消，本次已归档 ${result.done - result.failed} 条租约`)
+    else if (result.done > result.failed) MessagePlugin.success(`已归档 ${result.done - result.failed} 条租约`)
+    if (result.failed) MessagePlugin.warning(`${result.failed} 条租约归档失败，请重试`)
+    await load()
+  } finally { bulkProgress.value = null }
 }
 
 function onBulkArchive() {
+  bulkTargets = [...filteredLeases.value]
   bulkVisible.value = true
 }
 
@@ -266,7 +272,7 @@ function openRenew(row: Lease) {
   renewVisible.value = true
 }
 
-/* 导出配置：当前页=当前筛选结果；全量结果=接口全部租约（筛选为客户端过滤，接口无分页） */
+/* 接口无分页；当前页与全部结果均取当前筛选内的完整租约。 */
 const exportHeaders = ['租约编号', '租赁方', '办公位', '租期', '租金', '联系人', '联系电话', '备注', '状态']
 
 function mapRow(l: Lease): (string | number)[] {
@@ -286,7 +292,7 @@ function mapRow(l: Lease): (string | number)[] {
 const pageExportRows = computed(() => filteredLeases.value.map(mapRow))
 
 async function fetchAllForExport(page: number, pageSize: number) {
-  const ls = await fetchLeases()
+  const ls = filteredLeases.value
   return { list: ls.slice((page - 1) * pageSize, page * pageSize), total: ls.length }
 }
 
@@ -374,7 +380,7 @@ onMounted(async () => {
     </div>
 
     <div class="page-card">
-      <t-table
+      <t-table :horizontal-scroll-affixed-bottom="{ container: '.page-scroll', offsetBottom: 0 }"
         row-key="id"
         table-layout="fixed"
         hover
@@ -481,6 +487,9 @@ onMounted(async () => {
 
     <!-- 一键归档：状态选择二次确认对话框 -->
     <BulkArchiveDialog
+      :progress="bulkProgress"
+      :count-for-status="countByStatus"
+      @cancel="onBulkCancel"
       v-model:visible="bulkVisible"
       title="一键归档 · 租赁"
       :statuses="bulkStatuses"

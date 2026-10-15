@@ -4,33 +4,29 @@ import { computed, onMounted, ref } from 'vue'
 import StatCard from '@/components/StatCard.vue'
 import PageHeader from '@/components/PageHeader.vue'
 import ColumnController from '@/components/ColumnController.vue'
-import { fetchArticles } from '@/api/contents'
+import { fetchArticleReadStats } from '@/api/contents'
 import type { Article } from '@/types'
 
-/* 阅读统计面板：已发布（含已下架）文章的阅读数据汇总与排行；数据与文章列表同源 */
+/* 阅读统计：服务端聚合全部已发布过且未归档的文章，含已下架文章；排行服务端分页。 */
 const loading = ref(false)
 const loadError = ref('')
 const list = ref<Article[]>([])
 
-const published = computed(() => list.value.filter((a) => a.publishedAt))
-const totalViews = computed(() => published.value.reduce((s, a) => s + a.views, 0))
-const avgViews = computed(() => (published.value.length === 0 ? 0 : Math.round(totalViews.value / published.value.length)))
-const topViews = computed(() => (published.value.length === 0 ? 0 : Math.max(...published.value.map((a) => a.views))))
+const summary = ref({ totalViews: 0, articleCount: 0, averageViews: 0, topViews: 0 })
+const total = ref(0)
+const ranked = computed(() => list.value)
 
-/* 按阅读量倒序排行 */
-const ranked = computed(() => [...list.value].sort((a, b) => b.views - a.views))
-
-/* 前端分页：全量数据交由 t-table 内置分页本地切片（每页 20） */
 const page = ref(1)
 const pagination = computed(() => ({
   current: page.value,
   pageSize: 20,
-  total: ranked.value.length,
+  total: total.value,
   showPageSize: false,
 }))
 
 function onPageChange(p: { current: number }) {
   page.value = p.current
+  void load()
 }
 
 const columns = [
@@ -50,34 +46,21 @@ const visibleColumns = computed(() => {
   return visibleColKeys.value.map((k) => byKey.get(k)).filter(Boolean)
 })
 
-/* 仅统计已发布文章（后端 pageSize 上限 100），逐页拉取后本地聚合；
- * 上限 50 页（5000 条）防止异常大的总量拖垮页面 */
-const PAGE_SIZE = 100
-const MAX_PAGES = 50
-
+let version = 0
 async function load() {
+  const current = ++version
   loading.value = true
   try {
-    const query = (page: number) => ({
-      page,
-      pageSize: PAGE_SIZE,
-      status: 'published' as const,
-      sortBy: 'views' as const,
-      sortOrder: 'descend' as const,
-    })
-    const first = await fetchArticles(query(1))
-    const all = [...first.list]
-    const pages = Math.min(Math.ceil(first.total / PAGE_SIZE), MAX_PAGES)
-    for (let p = 2; p <= pages; p++) {
-      const res = await fetchArticles(query(p))
-      all.push(...res.list)
-    }
-    list.value = all
+    const result = await fetchArticleReadStats(page.value, 20)
+    if (current !== version) return
+    list.value = result.list
+    total.value = result.total
+    summary.value = result.summary
     loadError.value = ''
   } catch (e) {
-    loadError.value = e instanceof Error ? e.message : '数据加载失败'
+    if (current === version) loadError.value = e instanceof Error ? e.message : '数据加载失败'
   } finally {
-    loading.value = false
+    if (current === version) loading.value = false
   }
 }
 
@@ -87,7 +70,7 @@ onMounted(load)
 <template>
   <div class="read-stats-panel page-fade-in">
     <ListErrorState v-if="loadError" :message="loadError" :loading="loading" @retry="() => load()" />
-    <PageHeader title="阅读统计" description="文章阅读量汇总与排行">
+    <PageHeader title="阅读统计" description="全部已发布过且未归档的文章阅读汇总（含已下架文章）">
       <template #actions>
         <ColumnController
           v-model="visibleColKeys"
@@ -97,10 +80,10 @@ onMounted(load)
       </template>
     </PageHeader>
     <div v-if="!loadError" class="stat-row stat-row--4">
-      <StatCard label="总阅读量" :value="totalViews" :loading="loading" />
-      <StatCard label="已发布文章" :value="published.length" :loading="loading" />
-      <StatCard label="篇均阅读" :value="avgViews" :loading="loading" />
-      <StatCard label="单篇最高" :value="topViews" :loading="loading" />
+      <StatCard label="总阅读量" :value="summary.totalViews" :loading="loading" />
+      <StatCard label="已发布文章" :value="summary.articleCount" :loading="loading" />
+      <StatCard label="篇均阅读" :value="summary.averageViews" :loading="loading" />
+      <StatCard label="单篇最高" :value="summary.topViews" :loading="loading" />
     </div>
 
     <div class="page-card">
@@ -109,6 +92,7 @@ onMounted(load)
         table-layout="fixed"
         hover
         resizable
+        :disable-data-page="true"
         :data="ranked"
         :columns="visibleColumns"
         :loading="loading"
@@ -117,8 +101,8 @@ onMounted(load)
         @page-change="onPageChange"
       >
         <template #rank="{ row }">
-          <span :class="['rank-badge', { 'is-top': ranked.indexOf(row) < 3 }]">
-            {{ ranked.indexOf(row) + 1 }}
+          <span :class="['rank-badge', { 'is-top': (page - 1) * 20 + ranked.indexOf(row) < 3 }]">
+            {{ (page - 1) * 20 + ranked.indexOf(row) + 1 }}
           </span>
         </template>
         <template #title="{ row }">

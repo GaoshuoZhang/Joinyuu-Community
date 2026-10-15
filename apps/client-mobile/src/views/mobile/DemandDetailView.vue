@@ -7,7 +7,7 @@ import { fetchMyIdentities } from '@/api/enterprises'
 import { listFavorites, toggleFavorite } from '@/api/favorites'
 import { shareContent } from '@/utils/share'
 import { ApiError } from '@/api/http'
-import { actionIdentityOptions, useAuthStore } from '@/stores/auth'
+import { authorizedActionIdentities, useAuthStore } from '@/stores/auth'
 import { useAsyncList } from '@/composables/useAsyncList'
 import EmptyBlock from '@/components/shared/EmptyBlock.vue'
 import ListSkeleton from '@/components/ListSkeleton.vue'
@@ -94,23 +94,7 @@ const canSelect = computed(() => demand.value?.status === 'published')
 const canViewResponses = computed(() => ['published', 'selected', 'projected'].includes(demand.value?.status ?? ''))
 /* v44：响应身份选项（自有全部身份 + 被授权「响应需求」的代企业身份），单选 */
 const delegatedRespondIdentities = ref<UserIdentity[]>([])
-const respondIdentities = computed<UserIdentity[]>(() => {
-  const own = auth.identities
-  const communityEnterprises = own.filter((i) => i.type === 'community_enterprise')
-  const delegated = delegatedRespondIdentities.value.filter(
-    (d) => !communityEnterprises.some((c) => c.enterpriseId === d.enterpriseId),
-  )
-  const communityIndividuals = own.filter((i) => i.type === 'community_individual')
-  const externalEnterprises = own.filter((i) => i.type === 'external_enterprise')
-  const individuals = own.filter((i) => i.type === 'individual')
-  return actionIdentityOptions([
-    ...communityEnterprises,
-    ...delegated,
-    ...communityIndividuals,
-    ...externalEnterprises,
-    ...(individuals.length ? individuals : [{ type: 'individual' as const }]),
-  ])
-})
+const respondIdentities = computed<UserIdentity[]>(() => authorizedActionIdentities(auth.identities, delegatedRespondIdentities.value))
 
 async function loadRespondIdentities() {
   if (!auth.isLogged) return
@@ -120,7 +104,7 @@ async function loadRespondIdentities() {
       .filter((i) => i.type === 'community_enterprise' && i.enterpriseId && (i.isContact || (i.permissions ?? []).includes('respond_demand')))
       .map((i): UserIdentity => ({ type: 'community_enterprise', enterpriseId: i.enterpriseId, enterpriseName: i.name }))
   } catch {
-    /* 接口异常时仅展示自有身份 */
+    /* 企业权限未能确认时不提供代企业响应。 */
   }
 }
 
@@ -201,7 +185,7 @@ async function onRespond(payload: DemandRespondPayload) {
   }
 }
 
-/* 收起表单：回到「提示 + 按钮」初始态（子组件随之卸载，未提交内容不保留） */
+/* 收起仅隐藏表单，子组件保留未提交内容。 */
 function collapseRespond() {
   respondFormOpen.value = false
 }

@@ -150,6 +150,7 @@ export class MessageTemplateService {
 
     /* 版本写入与模板状态更新同事务，避免中途失败导致版本与模板状态不一致 */
     const version = await this.prisma.$transaction(async (tx) => {
+      await this.lockTemplate(tx, id)
       const latestPublished = await tx.messageTemplateVersion.findFirst({
         where: { templateId: id, status: 'published' },
         orderBy: { version: 'desc' },
@@ -259,23 +260,24 @@ export class MessageTemplateService {
   /** 发布：approved 版本可发布；历史 archived 版本可发布（即回滚）；旧发布版本转 archived */
   async publish(id: string, dto: PublishTemplateDto, operator: string): Promise<{ version: number }> {
     const template = await this.require(id)
-    const target = await this.resolvePublishable(id, dto.version)
-
     const now = formatNow()
-    await this.prisma.$transaction([
-      this.prisma.messageTemplateVersion.updateMany({
+    const target = await this.prisma.$transaction(async (tx) => {
+      await this.lockTemplate(tx, id)
+      const target = await this.resolvePublishable(id, dto.version, tx)
+      await tx.messageTemplateVersion.updateMany({
         where: { templateId: id, status: 'published' },
         data: { status: 'archived' },
-      }),
-      this.prisma.messageTemplateVersion.update({
+      })
+      await tx.messageTemplateVersion.update({
         where: { id: target.id },
         data: { status: 'published' },
-      }),
-      this.prisma.messageTemplate.update({
+      })
+      await tx.messageTemplate.update({
         where: { id },
         data: { status: 'published', currentVersion: target.version, updatedAt: now, updatedBy: operator },
-      }),
-    ])
+      })
+      return target
+    })
     await this.audit.record({
       module: '消息中心',
       action: target.version === template.currentVersion ? '重新发布消息模板' : '发布消息模板',
@@ -290,16 +292,17 @@ export class MessageTemplateService {
   async disable(id: string, operator: string): Promise<{ code: number }> {
     const template = await this.require(id)
     if (template.currentVersion === 0) throw new BadRequestException('模板尚未发布')
-    await this.prisma.$transaction([
-      this.prisma.messageTemplateVersion.updateMany({
+    await this.prisma.$transaction(async (tx) => {
+      await this.lockTemplate(tx, id)
+      await tx.messageTemplateVersion.updateMany({
         where: { templateId: id, status: 'published' },
         data: { status: 'archived' },
-      }),
-      this.prisma.messageTemplate.update({
+      })
+      await tx.messageTemplate.update({
         where: { id },
         data: { status: 'draft', updatedAt: formatNow(), updatedBy: operator },
-      }),
-    ])
+      })
+    })
     await this.audit.record({
       module: '消息中心',
       action: '下架消息模板',
@@ -379,10 +382,12 @@ export class MessageTemplateService {
   /** 预览渲染结果（不发送） */
   async preview(id: string, dto: PreviewTemplateDto): Promise<{ subject?: string; body: string }> {
     const template = await this.require(id)
-    const version = await this.resolveVersion(id, dto.version)
+    const version = dto.draft ?? await this.resolveVersion(id, dto.version)
     const variables = stringRecord(dto.variables ?? {})
+    const allowed = dto.draft?.variables ?? variableList(template.variables)
+    this.render.assertTemplate(allowed, version.subject ?? undefined, version.body)
     this.render.assertRenderable(
-      variableList(template.variables),
+      allowed,
       version.subject ?? undefined,
       version.body,
       variables,
@@ -413,10 +418,16 @@ export class MessageTemplateService {
   }
 
   /** 可发布版本：指定版本须为 approved/archived；缺省取最新 approved */
-  private async resolvePublishable(id: string, version?: number): Promise<MessageTemplateVersion> {
+  /** 保存、发布、下架共用同一父记录锁，避免同时分配相同版本或产生两个发布版本。 */
+  private async lockTemplate(tx: Prisma.TransactionClient, id: string): Promise<void> {
+    const rows = await tx.$queryRaw<{ id: string }[]>`SELECT "id" FROM "MessageTemplate" WHERE "id" = ${id} FOR UPDATE`
+    if (!rows.length) throw new NotFoundException('模板不存在')
+  }
+
+  private async resolvePublishable(id: string, version?: number, db: Prisma.TransactionClient | PrismaService = this.prisma): Promise<MessageTemplateVersion> {
     const row = version
-      ? await this.prisma.messageTemplateVersion.findFirst({ where: { templateId: id, version } })
-      : await this.prisma.messageTemplateVersion.findFirst({
+      ? await db.messageTemplateVersion.findFirst({ where: { templateId: id, version } })
+      : await db.messageTemplateVersion.findFirst({
           where: { templateId: id, status: 'approved' },
           orderBy: { version: 'desc' },
         })

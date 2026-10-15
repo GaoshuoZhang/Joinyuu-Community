@@ -8,10 +8,17 @@ import { ReviewArticleDto } from './dto/review-article.dto'
 import { ScheduleArticleDto } from './dto/schedule-article.dto'
 import { ColumnPayloadDto } from './dto/column-payload.dto'
 import { TakedownDto } from '../../common/dto/takedown.dto'
+import { PageQueryDto } from '../../common/dto/page-query.dto'
 
 @Controller('api/admin/contents')
 export class ContentsController {
   constructor(private readonly contents: ContentsService) {}
+
+  @RequirePermission('/contents/stats')
+  @Get('read-stats')
+  readStats(@Query() query: PageQueryDto) {
+    return this.contents.readStats(query)
+  }
 
   /* ---------- 文章管理 ---------- */
 

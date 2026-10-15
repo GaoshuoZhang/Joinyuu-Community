@@ -1,4 +1,4 @@
-import { onMounted, ref } from 'vue'
+import { ref } from 'vue'
 import { getCaptcha } from '@/api/auth'
 
 export function useCaptcha() {
@@ -21,6 +21,5 @@ export function useCaptcha() {
     }
   }
 
-  onMounted(() => void refreshCaptcha())
   return { captchaId, captchaImage, captchaLoading, refreshCaptcha }
 }

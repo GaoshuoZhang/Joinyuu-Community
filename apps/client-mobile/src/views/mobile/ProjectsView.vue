@@ -15,6 +15,7 @@ import EmptyBlock from '@/components/shared/EmptyBlock.vue'
 import DemandFilterBar from '@/components/projects/DemandFilterBar.vue'
 import DemandListCard from '@/components/projects/DemandListCard.vue'
 import { DEMAND_KINDS } from '@/constants/demand'
+import { activeRespondedDemandIds } from '@/utils/demandResponses'
 import { REFRESH_LOADING_PROPS } from '@/constants/refresh'
 import type { Demand, DemandKind } from '@/types'
 import { formatZhNumber } from '@/utils/format'
@@ -59,9 +60,12 @@ const items = ref<Demand[]>([])
 /* v43：当前用户已响应的需求标记 */
 const respondedIds = ref<Set<string>>(new Set())
 async function loadResponded() {
-  if (!auth.isLogged) return
+  if (!auth.isLogged) {
+    respondedIds.value = new Set()
+    return
+  }
   try {
-    respondedIds.value = new Set((await fetchMyResponses()).map((r) => r.demandId))
+    respondedIds.value = activeRespondedDemandIds(await fetchMyResponses())
   } catch {
     /* 标记失败不影响列表 */
   }
@@ -226,8 +230,8 @@ function onPublish() {
     @touchend="cancelSwipe"
     @touchcancel="cancelSwipe"
   >
-    <Tabs v-model="activeTab" class="top-tabs" :swipeable="false">
-      <TabPanel v-for="kind in TABS" :key="kind.kind" :value="kind.kind" :label="kind.title">
+    <Tabs :data-tab-values="JSON.stringify(TABS.map((tab) => tab.kind))" v-model="activeTab" class="top-tabs" :swipeable="false">
+      <TabPanel v-for="kind in TABS" :key="kind.kind" :data-tab-value="kind.kind" :value="kind.kind" :label="kind.title">
         <div v-if="activeTab === kind.kind" class="tab-content">
           <!-- 筛选条随页面滚动（不做吸顶）；下拉刷新覆盖整页 -->
           <DemandFilterBar

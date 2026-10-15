@@ -3,6 +3,7 @@ import { computed, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { Button, DialogPlugin, Icon, List, Toast } from 'tdesign-mobile-vue'
 import { cancelEnrollment, fetchMyEnrollments } from '@/api/events'
+import { canCancelEnrollment } from '@/utils/enrollment'
 import { usePagedList } from '@/composables/usePagedList'
 import { useBusinessNow } from '@/composables/useBusinessNow'
 import EmptyBlock from '@/components/shared/EmptyBlock.vue'
@@ -34,13 +35,7 @@ function isEventEnded(item: MyEnrollmentItem) {
 }
 
 function canCancel(item: MyEnrollmentItem) {
-  if (item.checkedIn || item.eventStatus === 'cancelled' || isEventEnded(item)) return false
-  if (item.status === 'approved') {
-    const start = parseLocalDateTime(item.rescheduledTo ?? item.startTime)
-    const hours = item.cancelDeadlineHours ?? 24
-    return start !== null && start.getTime() - businessNowMs.value > hours * 60 * 60 * 1000
-  }
-  return item.status === 'pending' || item.status === 'waitlisted'
+  return canCancelEnrollment(item, businessNowMs.value)
 }
 
 function onCancelTap(item: MyEnrollmentItem) {

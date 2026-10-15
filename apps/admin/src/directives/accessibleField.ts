@@ -4,7 +4,7 @@ let sequence = 0
 const observers = new WeakMap<HTMLElement, MutationObserver>()
 const names = new WeakMap<HTMLElement, string | undefined>()
 const managedDescriptions = new WeakMap<HTMLElement, string[]>()
-const controlSelector = 'input:not([type="hidden"]):not([type="checkbox"]):not([type="radio"]), textarea, [role="combobox"], [role="spinbutton"], [role="switch"], [contenteditable="true"]'
+const controlSelector = 'input:not([type="hidden"]):not([type="checkbox"]):not([type="radio"]), textarea, [role="combobox"], [role="spinbutton"], [role="switch"], .t-switch, [contenteditable="true"]'
 function ensureId(element: HTMLElement, prefix: string) {
   if (!element.id) element.id = `admin-${prefix}-${++sequence}`
   return element.id
