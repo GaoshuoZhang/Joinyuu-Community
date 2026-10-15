@@ -148,6 +148,8 @@ function onLoginSubmit({ validateResult }: { validateResult: unknown }) {
 }
 
 .slogan {
+  white-space: pre-line;
+  overflow-wrap: anywhere;
   margin:0;
   font: var(--app-type-body-sm);
   color: var(--td-text-color-secondary);

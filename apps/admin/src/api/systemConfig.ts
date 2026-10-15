@@ -9,6 +9,7 @@ export async function fetchSystemConfig(): Promise<SystemConfig> {
 export interface SystemConfigPayload {
   siteName: string
   siteSlogan: string
+  mobileUrl: string
   registrationOpen: boolean
   mallOpen: boolean
   demandOpen: boolean

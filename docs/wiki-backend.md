@@ -1,5 +1,7 @@
 # 聚屿社区 · 后端服务 — 开发 Wiki
 
+> 系统配置新增全局 `mobileUrl`（默认 `localhost:7759`，迁移 `20261015133000_global_mobile_url`），供主题预览及后续入口链接复用。主题新增 DELETE 管理接口，事务锁保护当前启用主题，删除时撤销预览并清理资源。
+>
 > 新增 MobileThemeModule、MobileThemePackage / MobileThemeState / MobileThemePreview 三表与增量迁移。主题 ZIP 受控解析，资源沿用 StorageService，管理接口沿用系统配置权限，公开接口仅下发当前主题或临时授权的预览主题。详见 [移动端主题开发规范](./wiki-mobile-theme.md)。
 
 > 离线许可证：新增 `DeploymentLicense` 与全局 `LicenseGuard`，未授权/到期时业务只读。接口、维护例外、签发和部署要求见 [许可证管理](./license-management.md)。`GET /api/admin/system/license` 查询；`POST /request` 生成申请；`POST /import` 导入（后二者均以该路径为前缀），沿用 `/system/config` 权限。供应商公钥已内置；迁移并启动后导入许可证即可业务写入，无需公钥环境配置。

@@ -920,6 +920,7 @@ export interface AuditLog {
 export interface SystemConfig {
   siteName: string
   siteSlogan: string
+  mobileUrl: string
   /** 客户端注册开关 */
   registrationOpen: boolean
   /** 积分商城开放开关 */

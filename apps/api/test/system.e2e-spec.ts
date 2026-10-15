@@ -204,6 +204,7 @@ describe('M1-E system 系统管理域', () => {
     const current = await get('/api/admin/system/config')
     expect(current.status).toBe(200)
     expect(current.body.data.siteName).toBe('聚屿社区')
+    expect(current.body.data.mobileUrl).toBe('localhost:7759')
     expect(current.body.data.leaseExpireRemindDays).toBe(15)
     /* P0 密钥安全：仍返回 MinIO 配置，但 SecretKey 只给「是否已配置 + 脱敏值」，不回传原文 */
     expect(current.body.data.minioEnabled).toBe(false)
@@ -529,4 +530,21 @@ describe('M1-E system 系统管理域', () => {
       await prisma.$disconnect()
     }
   })
+  it('系统配置：全局移动端地址保存、读取、校验与旧载荷兼容', async () => {
+    const before = (await get('/api/admin/system/config')).body.data
+    const payload = { ...before, mobileUrl: 'https://mobile.example.com/community/' }
+    expect((await put('/api/admin/system/config').send(payload)).status).toBe(200)
+    expect((await get('/api/admin/system/config')).body.data.mobileUrl).toBe(payload.mobileUrl)
+    expect((await request(app.getHttpServer()).get('/api/app/config')).body.data.mobileUrl).toBe(payload.mobileUrl)
+    const { mobileUrl: _mobileUrl, ...legacy } = before
+    expect((await put('/api/admin/system/config').send(legacy)).status).toBe(200)
+    expect((await get('/api/admin/system/config')).body.data.mobileUrl).toBe(payload.mobileUrl)
+    for (const invalid of [null, 'javascript:alert(1)', 'https://u:p@example.com', 'https://mobile.example.com/#home', '']) {
+      expect((await put('/api/admin/system/config').send({ ...payload, mobileUrl: invalid })).status).toBe(400)
+      expect((await get('/api/admin/system/config')).body.data.mobileUrl).toBe(payload.mobileUrl)
+    }
+    expect((await put('/api/admin/system/config').send({ ...before, mobileUrl: 'localhost:7759' })).status).toBe(200)
+  })
+
+
 })

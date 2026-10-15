@@ -1,0 +1,1 @@
+ALTER TABLE "SystemConfig" ADD COLUMN "mobileUrl" VARCHAR(2048) NOT NULL DEFAULT 'localhost:7759';

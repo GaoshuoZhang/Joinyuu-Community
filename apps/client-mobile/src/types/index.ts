@@ -19,6 +19,7 @@ export interface PageQuery {
 export interface AppConfig {
   siteName: string
   siteSlogan: string
+  mobileUrl?: string
   registrationOpen: boolean
   mallOpen: boolean
   demandOpen: boolean
@@ -212,6 +213,7 @@ export interface NoticePreferences {
 export interface HomeFeed {
   siteName: string
   siteSlogan: string
+  mobileUrl?: string
   noticesUnread: number
   /** 后台「轮播图管理」总开关；false 时首页不展示轮播区域 */
   carouselEnabled: boolean

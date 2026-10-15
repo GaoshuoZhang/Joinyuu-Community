@@ -8,6 +8,7 @@ export const useConfigStore = defineStore('config', () => {
   const config = ref<AppConfig>({
     siteName: '聚屿社区',
     siteSlogan: '',
+    mobileUrl: 'localhost:7759',
     registrationOpen: true,
     mallOpen: true,
     demandOpen: true,

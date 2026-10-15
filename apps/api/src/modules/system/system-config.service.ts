@@ -14,6 +14,7 @@ import {
   normalizeCredentialMode,
   validateCredentialInput,
 } from '../../common/credentials/credential-store'
+import { normalizeMobileUrl } from '../../common/utils/mobile-url'
 import { formatNow } from '../../common/utils/time'
 import type { SystemConfigPayloadDto } from './dto/system-config-payload.dto'
 
@@ -24,6 +25,7 @@ const BUCKET_PATTERN = /^[a-z0-9][a-z0-9.-]{1,62}$/
 type SystemConfigAuditSource = {
   siteName: string
   siteSlogan: string
+  mobileUrl: string
   registrationOpen: boolean
   mallOpen: boolean
   demandOpen: boolean
@@ -68,11 +70,12 @@ export class SystemConfigService {
   ) {}
 
   async get(): Promise<Record<string, unknown>> {
-    return this.redis.remember(CACHE_KEYS.systemConfig, CACHE_TTL.stable, async () => {
+    const config = await this.redis.remember(CACHE_KEYS.systemConfig, CACHE_TTL.stable, async () => {
       const config = await this.prisma.systemConfig.findUnique({ where: { id: 1 } })
       if (!config) throw new NotFoundException('系统配置不存在')
       return toSystemConfigDto(config)
     })
+    return { ...config, mobileUrl: config.mobileUrl ?? 'localhost:7759' }
   }
 
   async save(payload: SystemConfigPayloadDto, operator: string): Promise<{ code: number }> {
@@ -155,6 +158,7 @@ export class SystemConfigService {
 
     const next = {
       siteName,
+      mobileUrl: payload.mobileUrl === undefined ? previous?.mobileUrl ?? 'localhost:7759' : normalizeMobileUrl(payload.mobileUrl),
       siteSlogan: (payload.siteSlogan ?? '').trim(),
       registrationOpen: payload.registrationOpen,
       mallOpen: payload.mallOpen,
@@ -233,6 +237,7 @@ function toSystemConfigDto(config: SystemConfig): Record<string, unknown> {
   return {
     siteName: config.siteName,
     siteSlogan: config.siteSlogan,
+    mobileUrl: config.mobileUrl,
     registrationOpen: config.registrationOpen,
     mallOpen: config.mallOpen,
     demandOpen: config.demandOpen,
@@ -255,6 +260,7 @@ function toConfigAuditSnapshot(config: SystemConfigAuditSource): SystemConfigAud
   return {
     siteName: config.siteName,
     siteSlogan: config.siteSlogan,
+    mobileUrl: config.mobileUrl,
     registrationOpen: config.registrationOpen,
     mallOpen: config.mallOpen,
     demandOpen: config.demandOpen,

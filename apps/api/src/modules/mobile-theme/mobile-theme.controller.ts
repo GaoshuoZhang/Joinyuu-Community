@@ -1,4 +1,4 @@
-import { Controller, Get, HttpCode, Param, Post, Query, Req, Res, UploadedFile, UseInterceptors } from '@nestjs/common'
+import { Controller, Delete, Get, HttpCode, Param, Post, Query, Req, Res, UploadedFile, UseInterceptors } from '@nestjs/common'
 import { FileInterceptor } from '@nestjs/platform-express'
 import type { Response } from 'express'
 import { RequirePermission } from '../../common/decorators/require-permission.decorator'
@@ -14,6 +14,8 @@ export class MobileThemeAdminController {
   @Post('upload') @HttpCode(200)
   @UseInterceptors(FileInterceptor('file', { limits: { fileSize: 10 * 1024 * 1024, files: 1, fields: 0 } }))
   upload(@UploadedFile() file: { buffer: Buffer } | undefined, @Req() req: AuthenticatedRequest) { return this.themes.upload(file, req.user?.name ?? '社区管理员') }
+  @Delete(':id') @HttpCode(200)
+  remove(@Param('id') id: string, @Req() req: AuthenticatedRequest) { return this.themes.remove(id, req.user?.name ?? '社区管理员') }
   @Post('reset') @HttpCode(200)
   reset(@Req() req: AuthenticatedRequest) { return this.themes.change('reset', undefined, req.user?.name ?? '社区管理员') }
   @Post('rollback') @HttpCode(200)

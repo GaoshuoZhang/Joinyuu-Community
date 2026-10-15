@@ -22,6 +22,11 @@ export class SystemConfigPayloadDto {
   @IsString()
   siteSlogan!: string
 
+  @IsOptional()
+  @IsString()
+  @MaxLength(2048)
+  mobileUrl?: string
+
   @IsBoolean()
   registrationOpen!: boolean
 

@@ -18,6 +18,7 @@ const APP_DICT_TYPES: readonly string[] = [
 export interface SiteConfigDto {
   siteName: string
   siteSlogan: string
+  mobileUrl: string
   registrationOpen: boolean
   mallOpen: boolean
   demandOpen: boolean
@@ -57,6 +58,7 @@ export class ConfigService {
     return {
       siteName: String(full.siteName ?? ''),
       siteSlogan: String(full.siteSlogan ?? ''),
+      mobileUrl: String(full.mobileUrl ?? 'localhost:7759'),
       registrationOpen: Boolean(full.registrationOpen),
       mallOpen: Boolean(full.mallOpen),
       demandOpen: Boolean(full.demandOpen),
@@ -109,6 +111,7 @@ function toFullSystemConfig(config: SystemConfig): Record<string, unknown> {
   return {
     siteName: config.siteName,
     siteSlogan: config.siteSlogan,
+    mobileUrl: config.mobileUrl,
     registrationOpen: config.registrationOpen,
     mallOpen: config.mallOpen,
     demandOpen: config.demandOpen,

@@ -1,4 +1,4 @@
-import { BadRequestException, ConflictException, Injectable, NotFoundException } from '@nestjs/common'
+import { BadRequestException, ConflictException, Injectable, Logger, NotFoundException } from '@nestjs/common'
 import { createHash, randomBytes, randomUUID } from 'node:crypto'
 import { Prisma } from '@prisma/client'
 import { PrismaService } from '../../common/prisma/prisma.service'
@@ -8,6 +8,7 @@ import { imageMime, readThemeZip, safeAssetPath, validateManifest } from './them
 
 @Injectable()
 export class MobileThemeService {
+  private readonly logger = new Logger(MobileThemeService.name)
   constructor(private readonly prisma: PrismaService, private readonly storage: StorageService, private readonly audit: AuditService) {}
 
   async list() {
@@ -44,26 +45,47 @@ export class MobileThemeService {
   }
 
   async change(action: 'activate' | 'reset' | 'rollback', id: string | undefined, operator: string) {
-    if (action === 'activate') await this.load(id ?? '')
-    // CAS protects the previous-version pointer when two administrators switch concurrently.
-    const state = await this.prisma.mobileThemeState.upsert({ where: { id: 1 }, create: { id: 1 }, update: {} })
-    const activeId = action === 'reset' ? null : action === 'rollback' ? state.previousId : id!
-    if (activeId) await this.load(activeId)
-    if (activeId === state.activeId) return { activeId }
-    const result = await this.prisma.mobileThemeState.updateMany({ where: { id: 1, revision: state.revision },
-      data: { activeId, previousId: state.activeId, revision: { increment: 1 } } })
-    if (!result.count) throw new ConflictException('主题状态已变化，请重新加载后操作')
-    await this.audit.record({ module: '系统管理', action: action === 'activate' ? '启用移动端主题' : action === 'reset' ? '恢复公版主题' : '回退移动端主题',
-      target: activeId ?? '公版', operator, before: { activeId: state.activeId }, after: { activeId } })
-    return { activeId }
+    const result = await this.prisma.$transaction(async (tx) => {
+      // All switches, deletions and preview grants lock the same singleton row.
+      // Validating the target while holding this lock prevents activate/delete races.
+      const state = await this.lockState(tx)
+      const activeId = action === 'reset' ? null : action === 'rollback' ? state.previousId : id!
+      if (activeId) await this.load(activeId, tx)
+      if (activeId === state.activeId) return { activeId, before: state.activeId, changed: false }
+      await tx.mobileThemeState.update({ where: { id: 1 }, data: { activeId, previousId: state.activeId, revision: { increment: 1 } } })
+      return { activeId, before: state.activeId, changed: true }
+    })
+    if (result.changed) await this.audit.record({ module: '系统管理', action: action === 'activate' ? '启用移动端主题' : action === 'reset' ? '恢复默认主题' : '回退移动端主题',
+      target: result.activeId ?? '默认主题', operator, before: { activeId: result.before }, after: { activeId: result.activeId } })
+    return { activeId: result.activeId }
+  }
+
+  async remove(id: string, operator: string) {
+    const row = await this.prisma.$transaction(async (tx) => {
+      const state = await this.lockState(tx)
+      const row = await this.load(id, tx)
+      if (state.activeId === id) throw new ConflictException('当前使用的主题不能删除，请先切换主题或恢复默认')
+      await tx.mobileThemeState.update({ where: { id: 1 }, data: { previousId: state.previousId === id ? null : state.previousId, revision: { increment: 1 } } })
+      await tx.mobileThemePreview.deleteMany({ where: { packageId: id } })
+      await tx.mobileThemePackage.delete({ where: { id } })
+      return row
+    })
+    const manifest = validateManifest(row.manifest)
+    await this.audit.record({ module: '系统管理', action: '删除移动端主题', target: `${manifest.name} ${manifest.version}`, operator, before: { packageId: id } })
+    const cleanup = await Promise.allSettled(Object.values(row.assets as Record<string, string>).map((key) => this.storage.remove(key)))
+    if (cleanup.some((result) => result.status === 'rejected')) this.logger.warn(`主题 ${id} 已删除，部分存储资源清理失败，需重试清理`)
+    return { id }
   }
 
   async preview(id: string) {
-    await this.load(id)
     const token = randomBytes(32).toString('hex')
     const expiresAt = new Date(Date.now() + 15 * 60 * 1000)
-    await this.prisma.mobileThemePreview.deleteMany({ where: { expiresAt: { lt: new Date() } } })
-    await this.prisma.mobileThemePreview.create({ data: { tokenHash: this.hash(token), packageId: id, expiresAt } })
+    await this.prisma.$transaction(async (tx) => {
+      await this.lockState(tx)
+      await this.load(id, tx)
+      await tx.mobileThemePreview.deleteMany({ where: { expiresAt: { lt: new Date() } } })
+      await tx.mobileThemePreview.create({ data: { tokenHash: this.hash(token), packageId: id, expiresAt } })
+    })
     return { token, expiresAt: expiresAt.toISOString() }
   }
 
@@ -96,8 +118,11 @@ export class MobileThemeService {
   }
 
   private hash(token: string) { return createHash('sha256').update(token).digest('hex') }
-  private async load(id: string) {
-    const row = await this.prisma.mobileThemePackage.findUnique({ where: { id } })
+  private lockState(tx: Prisma.TransactionClient) {
+    return tx.mobileThemeState.upsert({ where: { id: 1 }, create: { id: 1 }, update: { revision: { increment: 0 } } })
+  }
+  private async load(id: string, db: Pick<PrismaService, 'mobileThemePackage'> = this.prisma) {
+    const row = await db.mobileThemePackage.findUnique({ where: { id } })
     if (!row) throw new NotFoundException('主题包不存在')
     validateManifest(row.manifest)
     return row

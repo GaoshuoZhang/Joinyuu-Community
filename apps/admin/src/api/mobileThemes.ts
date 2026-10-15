@@ -1,4 +1,4 @@
-import { httpGet, httpPost, httpUpload } from './http'
+import { httpDelete, httpGet, httpPost, httpUpload } from './http'
 
 export interface MobileThemePackage {
   id: string
@@ -17,5 +17,5 @@ export function uploadMobileTheme(file: File) {
 }
 export const activateMobileTheme = (id: string) => httpPost(`${base}/${encodeURIComponent(id)}/activate`)
 export const resetMobileTheme = () => httpPost(`${base}/reset`)
-export const rollbackMobileTheme = () => httpPost(`${base}/rollback`)
+export const deleteMobileTheme = (id: string) => httpDelete(`${base}/${encodeURIComponent(id)}`)
 export const previewMobileTheme = (id: string) => httpPost<{ token: string; expiresAt: string }>(`${base}/${encodeURIComponent(id)}/preview`)

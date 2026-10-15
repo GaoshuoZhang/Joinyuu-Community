@@ -74,6 +74,7 @@ function dirtySource(): string {
 const form = reactive<SystemConfigForm>({
   siteName: '',
   siteSlogan: '',
+  mobileUrl: 'localhost:7759',
   registrationOpen: true,
   mallOpen: true,
   demandOpen: true,
@@ -305,6 +306,9 @@ onBeforeRouteLeave(async () => {
           <div class="form-grid">
             <t-form-item label="站点名称" name="siteName" :rules="[{ required: true, message: '请输入站点名称', trigger: 'submit' }]">
               <t-input v-accessible-field v-model="form.siteName" clearable placeholder="如 聚屿社区…" />
+            </t-form-item>
+            <t-form-item label="移动端访问地址" name="mobileUrl" :rules="[{ required: true, message: '请输入移动端访问地址', trigger: 'submit' }]" help="全局移动端入口，供主题预览等功能使用。支持 localhost:7759 或完整 HTTP/HTTPS 地址；客户部署时填写实际域名。">
+              <t-input v-accessible-field v-model="form.mobileUrl" placeholder="localhost:7759" :maxlength="2048" />
             </t-form-item>
             <t-form-item label="站点标语" name="siteSlogan">
               <t-input v-accessible-field v-model="form.siteSlogan" clearable placeholder="客户端登录页展示…" />

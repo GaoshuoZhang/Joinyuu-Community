@@ -1115,6 +1115,7 @@ model SystemConfig {
   id                    Int     @id @default(1)
   siteName              String  @db.VarChar(64)
   siteSlogan            String  @db.VarChar(128)
+  mobileUrl             String  @default("localhost:7759") @db.VarChar(2048)
   registrationOpen      Boolean @default(true)
   mallOpen              Boolean @default(true)
   demandOpen            Boolean @default(true)

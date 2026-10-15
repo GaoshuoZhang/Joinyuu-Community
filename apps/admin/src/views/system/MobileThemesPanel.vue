@@ -3,8 +3,9 @@ import { computed, onMounted, ref } from 'vue'
 import { DialogPlugin, MessagePlugin } from 'tdesign-vue-next'
 import PageHeader from '@/components/PageHeader.vue'
 import ListErrorState from '@/components/ListErrorState.vue'
+import { fetchSystemConfig } from '@/api/systemConfig'
 import { fetchLicense } from '@/api/license'
-import { activateMobileTheme, fetchMobileThemes, previewMobileTheme, resetMobileTheme, rollbackMobileTheme, uploadMobileTheme, type MobileThemeList } from '@/api/mobileThemes'
+import { activateMobileTheme, fetchMobileThemes, previewMobileTheme, resetMobileTheme, deleteMobileTheme, uploadMobileTheme, type MobileThemeList } from '@/api/mobileThemes'
 
 const data = ref<MobileThemeList>({ activeId: null, previousId: null, schemaVersion: 1, packages: [] })
 const loading = ref(true)
@@ -17,17 +18,18 @@ const file = ref<File | null>(null)
 const fileInput = ref<HTMLInputElement>()
 const previewUrl = ref('')
 const previewExpires = ref('')
-const mobileUrl = ref(import.meta.env.DEV ? `${window.location.protocol}//${window.location.hostname}:7759/` : `${window.location.origin}/`)
+const mobileUrl = ref('localhost:7759')
+const previewPackageId = ref('')
 const active = computed(() => data.value.packages.find((item) => item.id === data.value.activeId))
-const previous = computed(() => data.value.packages.find((item) => item.id === data.value.previousId))
 function message(e: unknown) { return e instanceof Error ? e.message : '操作失败，请稍后重试' }
 async function load() {
   loading.value = true
   loadError.value = ''
   writable.value = null
   try {
-    const [themes, license] = await Promise.all([fetchMobileThemes(), fetchLicense()])
+    const [themes, license, config] = await Promise.all([fetchMobileThemes(), fetchLicense(), fetchSystemConfig()])
     data.value = themes
+    mobileUrl.value = config.mobileUrl
     writable.value = license.status === 'valid'
   } catch (e) { loadError.value = message(e) }
   finally { loading.value = false }
@@ -67,21 +69,35 @@ function confirmChange(title: string, action: () => Promise<unknown>) {
   } })
 }
 async function preview(id: string) {
-  let target: URL
-  try {
-    target = new URL(mobileUrl.value)
-    if (!['http:', 'https:'].includes(target.protocol) || target.username || target.password || target.hash) throw new Error()
-  } catch { MessagePlugin.error('请输入有效的移动端 HTTP/HTTPS 地址，不包含 # 或账号密码'); return }
   actionError.value = ''
   busy.value = true
   previewUrl.value = ''
   try {
+    const config = await fetchSystemConfig()
+    mobileUrl.value = config.mobileUrl
+    const target = new URL(mobileUrl.value.includes('://') ? mobileUrl.value : `http://${mobileUrl.value}`)
+    if (!['http:', 'https:'].includes(target.protocol) || target.username || target.password || target.hash || target.search) throw new Error('请先在系统配置中填写有效的移动端访问地址')
     const grant = await previewMobileTheme(id)
+    previewPackageId.value = id
     target.searchParams.set('themePreview', grant.token)
     previewUrl.value = target.href
     previewExpires.value = new Date(grant.expiresAt).toLocaleString('zh-CN')
   } catch (e) { actionError.value = message(e); MessagePlugin.error(actionError.value) }
   finally { busy.value = false }
+}
+function confirmDelete(id: string, name: string, version: string) {
+  const dialog = DialogPlugin.confirm({ header: `删除「${name} · ${version}」`, body: '主题包及其预览链接将被删除。需要再次使用时可重新上传原 ZIP。', theme: 'danger', confirmBtn: '删除主题', onConfirm: async () => {
+    dialog.hide()
+    actionError.value = ''
+    busy.value = true
+    try {
+      await deleteMobileTheme(id)
+      if (previewPackageId.value === id) { previewUrl.value = ''; previewPackageId.value = '' }
+      MessagePlugin.success('主题已删除')
+      await load()
+    } catch (e) { actionError.value = message(e); MessagePlugin.error(actionError.value) }
+    finally { busy.value = false }
+  } })
 }
 </script>
 
@@ -97,8 +113,7 @@ async function preview(id: string) {
           <p class="current-name">{{ active ? `${active.manifest.name} · ${active.manifest.version}` : '公版主题' }}</p>
           <p class="theme-note">{{ active?.manifest.description || '使用公版业务功能和页面，主题只调整移动端外观与首页布局。' }}</p>
           <t-space break-line>
-            <t-button variant="outline" :disabled="busy || loading || !writable || !data.activeId" @click="confirmChange('恢复公版主题', resetMobileTheme)">恢复公版</t-button>
-            <t-button variant="outline" :disabled="busy || loading || !writable || data.activeId === data.previousId" @click="confirmChange(`回退至${previous?.manifest.name || '公版主题'}`, rollbackMobileTheme)">回退上一主题</t-button>
+            <t-button variant="outline" :disabled="busy || loading || !writable || !data.activeId" @click="confirmChange('恢复默认主题', resetMobileTheme)">恢复默认</t-button>
           </t-space>
         </t-card>
         <t-card title="上传主题包" :bordered="false">
@@ -110,9 +125,7 @@ async function preview(id: string) {
           </div>
         </t-card>
         <t-card title="已上传主题" :bordered="false">
-          <label for="theme-mobile-url">移动端访问地址</label>
-          <t-input id="theme-mobile-url" v-accessible-field v-model="mobileUrl" type="url" placeholder="请输入移动端完整访问地址…" :disabled="busy" />
-          <p class="theme-note">填写实际移动端入口，用于生成有效期 15 分钟的预览链接。预览只影响打开链接的浏览器窗口。</p>
+          <p class="theme-note">预览使用系统配置中的移动端访问地址：{{ mobileUrl }}。<router-link to="/system/config">前往系统配置</router-link></p>
           <div v-if="previewUrl" class="theme-preview" role="status">
             <a :href="previewUrl" target="_blank" rel="noopener noreferrer">打开移动端预览</a>
             <span class="theme-note">有效期至 {{ previewExpires }}，请勿转发预览链接。</span>
@@ -130,6 +143,7 @@ async function preview(id: string) {
               <t-space>
                 <t-button variant="outline" :disabled="busy || !writable" @click="preview(item.id)">预览</t-button>
                 <t-button :disabled="busy || !writable || item.id === data.activeId" @click="confirmChange(`启用「${item.manifest.name}」`, () => activateMobileTheme(item.id))">启用</t-button>
+                <t-button theme="danger" variant="outline" :disabled="busy || !writable || item.id === data.activeId" :title="item.id === data.activeId ? '请先切换主题或恢复默认后再删除' : undefined" @click="confirmDelete(item.id, item.manifest.name, item.manifest.version)">删除</t-button>
               </t-space>
             </li>
           </ul>

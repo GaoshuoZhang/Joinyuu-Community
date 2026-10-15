@@ -83,7 +83,7 @@ customer-a-1.0.0.zip
 | name | 必填，非空，最多 60 字 |
 | version | 必填，`主版本.次版本.修订号`，各段 1–5 位数字，例如 `1.2.0` |
 | description | 可选，非空，最多 500 字 |
-| brand.name / slogan | 可选，非空，分别最多 60 / 160 字 |
+| brand.name / slogan | 可选，非空，分别最多 60 / 160 字；登录页口号支持 JSON `\n` 换行，按纯文本显示 |
 | brand.logo / homeBackground | 可选，引用 ZIP 内 `assets/` 下图片；Logo 用于登录页；homeBackground 为兼容旧包保留，当前首页不显示 |
 | brand.logoDark | 可选，深色模式 Logo，与 logo 一同提供。随应用实际明暗模式切换，不只判断操作系统偏好 |
 | brand.logoShape | 可选，`square`（默认，64×64px）或 `wordmark`（132×44px）；横版字标请使用约 3:1 且透明留白较少的原图 |
@@ -205,21 +205,22 @@ Joinyuu-Mobile-Theme/
 1. 部署公版前后端，执行 `pnpm db:migrate`；保留数据库和上传存储的持久化。
 2. 使用具备「系统配置」权限和系统管理数据范围的账号登录。主题写操作遵守系统许可证只读限制。
 3. 在「系统管理 → 移动端主题」上传 ZIP；上传成功只加入列表，不自动启用。
-4. 填写真实移动端访问地址（开发默认 7759；生产若移动端独立域名或子路径，需手动填写）。移动端与此后台必须连接同一后端实例。
+4. 在「系统管理 → 系统配置 → 站点信息」保存全局移动端访问地址（字段 `mobileUrl`，默认 `localhost:7759`）。支持主机:端口或完整 HTTP/HTTPS 地址与子路径；预览时自动补全缺省的 `http://`。移动端与后台必须连接同一后端实例。主题页只读取这一配置，不再单独编辑地址。
 5. 点击「预览」，再打开生成链接；链接有效 15 分钟。链接只授予主题预览，不授予管理员或业务数据权限。不要转发。
 6. 预览窗口顶部会提示预览状态；令牌会从地址栏移除，并在当前标签页会话内保留，切换路由和刷新后仍可预览；过期会提示错误，可退出预览或重新生成链接。
 7. 验收后点击「启用」。普通用户重新加载页面会获取新主题；页面切回前台时也会检查，检查间隔至少 60 秒。无实时广播，后台切换不会立即重绘所有已打开的客户端。
-8. 「恢复公版」取消当前主题；「回退上一主题」交换当前和上一主题，上一主题也可以是公版。
+8. 「恢复默认」取消当前主题并恢复公版样式。页面不提供「回退上一主题」按钮，历史主题可在列表中重新启用。
+9. 未启用的主题可点击「删除」并确认；会撤销预览授权、删除主题记录及资源、清理历史引用并记录审计。当前使用的主题必须先切换或恢复默认。需要再次使用已删除主题时，重新上传原 ZIP。
 
 正常用户不会下载其他主题包；只取得当前主题配置及页面引用的资源。预览不修改全局配置。主题请求失败时，首次访问使用公版，已有页面保留最近一次成功加载的主题，后续刷新或回到前台可重试。
 
 ## 8. 存储、缓存与接口
 
 - `MobileThemePackage` 保存校验后的 manifest、资源映射、SHA-256 和上传信息。
-- `MobileThemeState` 单例保存当前和上一主题；版本号并发保护防止管理员同时操作覆盖回退状态。
+- `MobileThemeState` 单例保存当前主题及兼容旧接口的历史引用；启用、删除及生成预览均在事务内锁定同一状态行，防止并发删除造成悬空的当前主题或预览。
 - `MobileThemePreview` 保存预览令牌的 SHA-256 和过期时间，不保存令牌原文；生成新预览时清理已过期记录。
 - 资源使用既有 StorageService，支持本地上传目录或 MinIO。主题资源 URL 含不可复用的包 UUID，使用 immutable 缓存；配置响应 no-store。
-- 当前无主题包删除功能，历史包和资源保留以支持回退。备份同时覆盖数据库和上传存储；更换存储驱动前须迁移资源，不能只移动数据库。
+- 删除仅允许未启用主题。记录与预览授权在数据库事务中删除，资源随后由 StorageService 清理；存储清理失败会记录警告，残留文件不再能通过主题接口访问。备份同时覆盖数据库和上传存储；更换存储驱动前须迁移资源，不能只移动数据库。
 - 已加载主题的 manifest 存在数据库中，不写入客户端源码；上传目录已由 `uploads/` 忽略。额外排除根目录/API/客户端 public 下的运行时 `mobile-themes/` 和 `mobile-theme.local*.json` 本地导出文件。协议、示例及组件源码仍正常跟踪，客户主题源码在独立主题目录维护。
 - 主题属于部署配置，常规业务种子数据不应清除它。
 
@@ -229,16 +230,19 @@ Joinyuu-Mobile-Theme/
 | POST /api/admin/system/mobile-themes/upload | multipart 字段 file，上传 ZIP |
 | POST /api/admin/system/mobile-themes/:id/preview | 创建临时预览令牌 |
 | POST /api/admin/system/mobile-themes/:id/activate | 启用指定主题 |
-| POST /api/admin/system/mobile-themes/reset | 恢复公版 |
-| POST /api/admin/system/mobile-themes/rollback | 回退上一主题 |
+| POST /api/admin/system/mobile-themes/reset | 恢复默认 |
+| DELETE /api/admin/system/mobile-themes/:id | 删除未启用主题；当前使用的主题返回 409 |
+| POST /api/admin/system/mobile-themes/rollback | 兼容旧调用的回退接口；管理页面已移除按钮 |
 | GET /api/app/mobile-theme | 公开，只返回当前主题；公版返回 null |
 | GET /api/app/mobile-theme?preview=TOKEN | 公开，通过有效临时令牌读取待预览主题 |
 | GET /api/public/mobile-themes/:packageId/assets/... | 公开，读取已验证图片 |
 
-JSON 接口沿用 `{ code: 0, data }` 包络。上传、启用、回退、恢复公版均记录审计。预览 URL 参数为 `themePreview`，不是后台 Bearer token。
+JSON 接口沿用 `{ code: 0, data }` 包络。上传、启用、删除、恢复默认及旧回退接口均记录审计。预览 URL 参数为 `themePreview`，不是后台 Bearer token。
 
 ## 9. 交付验收
 
-至少检查：320px 与常用手机宽度、浅色与深色、登录页、首页、二级业务页面、文字对比度、键盘访问、Logo 加载、首页模块顺序、已有功能开关、新主题启用、恢复公版和回退。主题中不得通过隐藏入口替代后端权限控制。
+至少检查：320px 与常用手机宽度、浅色与深色、登录页、首页、二级业务页面、文字对比度、键盘访问、Logo 加载、首页模块顺序、已有功能开关、新主题启用、恢复默认、删除未启用主题及全局入口地址生成预览。主题中不得通过隐藏入口替代后端权限控制。
 
 修改协议时同步主项目和主题仓库的本 Wiki、JSON Schema 和示例。主项目 `docs/wiki-mobile-theme.md` 为协议事实来源；独立主题目录中的副本用于客户主题开发。
+
+全局入口地址由 `GET/PUT /api/admin/system/config` 读写，并作为非敏感配置通过 `GET /api/app/config` 的 `mobileUrl` 下发，可供后续功能共用。包含新字段的部署须执行 `20261015133000_global_mobile_url` 增量迁移。旧保存载荷省略此字段时保留已存地址；不接受账号密码、查询参数、锚点、非 HTTP 协议。
