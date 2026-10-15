@@ -11,7 +11,8 @@ const loading = ref(true)
 const busy = ref(false)
 const loadError = ref('')
 const actionError = ref('')
-const writable = ref(false)
+// Unknown until both requests succeed; a failed list request is not a license verdict.
+const writable = ref<boolean | null>(null)
 const file = ref<File | null>(null)
 const fileInput = ref<HTMLInputElement>()
 const previewUrl = ref('')
@@ -23,6 +24,7 @@ function message(e: unknown) { return e instanceof Error ? e.message : '操作�
 async function load() {
   loading.value = true
   loadError.value = ''
+  writable.value = null
   try {
     const [themes, license] = await Promise.all([fetchMobileThemes(), fetchLicense()])
     data.value = themes
@@ -89,8 +91,8 @@ async function preview(id: string) {
     <ListErrorState v-if="loadError" :message="loadError" :loading="loading" @retry="load" />
     <t-alert v-if="actionError" theme="error" title="操作未完成" :message="actionError" close @close="actionError = ''" />
     <t-loading :loading="loading">
-      <div class="theme-sections">
-        <t-alert v-if="!loading && !writable" theme="warning" message="当前许可证不可写，请先在系统配置中完成授权，再上传或切换主题。" />
+      <div v-if="!loadError" class="theme-sections">
+        <t-alert v-if="!loading && writable === false" theme="warning" message="当前许可证不可写，请先在系统配置中完成授权，再上传或切换主题。" />
         <t-card title="当前主题" :bordered="false">
           <p class="current-name">{{ active ? `${active.manifest.name} · ${active.manifest.version}` : '公版主题' }}</p>
           <p class="theme-note">{{ active?.manifest.description || '使用公版业务功能和页面，主题只调整移动端外观与首页布局。' }}</p>
