@@ -388,11 +388,11 @@ function goMine() {
       </div>
     </div>
 
+    <Button theme="primary" variant="text" block class="mine-link" @click="goMine">查看我的预约</Button>
+
     <div class="m-card">
       <Cell v-pressable class="date-cell" title="预约日期" :note="date" arrow :bordered="false" @click="openDatePicker" />
     </div>
-
-    <Button theme="primary" variant="text" block class="mine-link" @click="goMine">查看我的预约</Button>
 
     <Form
       ref="formRef"

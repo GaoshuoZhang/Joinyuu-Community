@@ -98,8 +98,6 @@ useRefreshOnActivate(() => {
       </router-link>
     </section>
 
-    <!-- v52：分类 chip 行可横向滚动，补可见提示（同 PlazaView 资讯栏目口径，界面审查 LOW） -->
-    <div v-if="categories.length" class="chips-hint"><span>商品分类</span><span>左右滑动查看更多 →</span></div>
     <div class="chips">
       <CheckTag variant="light" size="medium" :checked="category === ''" @change="pickCategory('')">全部</CheckTag>
       <CheckTag
@@ -165,18 +163,6 @@ useRefreshOnActivate(() => {
   overflow-x: auto;
   padding-bottom:var(--app-space-1);
 }
-
-/* v52：chip 行滚动提示（同 PlazaView .column-filter-head 口径） */
-.chips-hint {
-  display: flex;
-  justify-content: space-between;
-  gap: var(--app-space-4);
-  margin: 0 0 var(--app-space-3);
-  color: var(--td-text-color-secondary);
-  font: var(--app-type-body-sm);
-}
-
-.chips-hint span:last-child { color: var(--td-brand-color); }
 
 /* 积分横幅：品牌渐变通栏卡片（复用 --client-brand-gradient，与首页入口卡同源），
  * 左侧「当前积分 + 大数字」为主视觉，右侧「积分规则」文字链；取代此前右上角孤立小胶囊 */

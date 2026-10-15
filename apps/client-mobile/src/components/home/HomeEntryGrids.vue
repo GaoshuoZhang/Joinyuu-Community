@@ -19,7 +19,7 @@ defineEmits<{ open: [path: string] }>()
 // Stable semantic keys keep colors attached to a service when permissions hide or reorder entries.
 function entryStyle(entry: HomeEntry) {
   if (!entry.themeKey) return {}
-  return Object.fromEntries(['background', 'icon', 'iconBackground', 'text', 'secondaryText', 'border'].map((role) => [
+  return Object.fromEntries(['background', 'icon', 'text', 'secondaryText', 'border'].map((role) => [
     `--entry-${role}`, `var(--app-entry-${entry.themeKey}-${role})`,
   ]))
 }
@@ -42,7 +42,7 @@ function entryStyle(entry: HomeEntry) {
       @click="$emit('open', f.path)"
     >
       <template #image>
-        <span class="entry-icon"><Icon aria-hidden="true" :name="f.icon" size="22px" /></span>
+        <span class="entry-icon"><Icon aria-hidden="true" :name="f.icon" size="26px" /></span>
       </template>
       <template #text><span class="feature-label">{{ f.label }}</span></template>
       <template v-if="f.desc" #description><span class="feature-desc">{{ f.desc }}</span></template>
@@ -59,7 +59,7 @@ function entryStyle(entry: HomeEntry) {
       @click="$emit('open', q.path)"
     >
       <template #image>
-        <span class="entry-icon entry-icon--sm"><Icon aria-hidden="true" :name="q.icon" size="20px" /></span>
+        <span class="entry-icon entry-icon--sm"><Icon aria-hidden="true" :name="q.icon" size="24px" /></span>
       </template>
       <template #text><span class="quick-label">{{ q.label }}</span></template>
     </GridItem>
@@ -83,7 +83,7 @@ function entryStyle(entry: HomeEntry) {
 }
 
 /* 宽 2 单位卡：官方横向布局默认左右内距为 0（16px 0），卡片有边框需补内距；
- * 图标槽默认 48px（--td-grid-item-image-width），而气泡只有 36px —— 收窄到 36px，
+ * 图标槽默认 48px（--td-grid-item-image-width），而图标占位只有 36px —— 收窄到 36px，
  * 把省下的 12px 让给文案（375px 下文字区 82px → 94px，六字副标题才能单行不折行）。 */
 .feature-item {
   --td-grid-item-horizontal-padding: var(--app-space-6);
@@ -96,7 +96,7 @@ function entryStyle(entry: HomeEntry) {
 /* 1 单位方形卡：宽高都按下限「1 单位」约束（不用 aspect-ratio 硬锁方形——
  * 窄屏上四字标签 + 图标略超方形高度时，硬比例会把文字裁掉；同排各项由网格行统一等高）。
  * 图标槽按 column=4 命中 --middle 档（基础档 --td-grid-item-image-width 不生效），
- * 收到 28px 与气泡同宽；左右内距归零、文案上边距与上下内距收紧，
+ * 收到 28px 与图标占位同宽；左右内距归零、文案上边距与上下内距收紧，
  * 让「图标 + 四字标签」在 320px 宽设备上也能完整落在卡片内。 */
 .quick-item {
   --td-grid-item-image-middle-width: 28px;
@@ -104,15 +104,13 @@ function entryStyle(entry: HomeEntry) {
   --td-grid-item-vertical-padding: var(--app-space-3) 0;
 }
 
-/* 品牌色图标气泡：两种卡片共用 */
+/* 两种卡片共用固定图标槽，保留占位尺寸以维持卡片对齐 */
 .entry-icon {
   display: grid;
   place-items: center;
   width: 36px;
   height: 36px;
-  border-radius: var(--td-radius-circle);
   color: var(--entry-icon, var(--td-brand-color));
-  background: var(--entry-iconBackground, var(--td-brand-color-light));
 }
 
 .entry-icon--sm {

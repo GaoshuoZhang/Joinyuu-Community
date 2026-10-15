@@ -283,7 +283,7 @@ useRefreshOnActivate(() => void refreshMe())
   height: 44px;
   border-radius: var(--td-radius-large);
   background: var(--app-theme-accent, var(--td-brand-color));
-  color: var(--td-text-color-brand);
+  color: var(--td-text-color-anti);
 }
 
 .grid-item:active .grid-icon {
