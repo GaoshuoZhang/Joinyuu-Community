@@ -105,6 +105,41 @@ customer-a-1.0.0.zip
 
 主色会生成 TDesign 品牌色阶及按压、焦点、禁用等变量，深色模式使用深色的低阶底色。主按钮会按主色亮度选择黑字或白字，品牌渐变会压暗以适配反色文字。业务状态色、字号体系、权限和路由不由主题改变。主色与按钮文字、正文与卡片背景均应检查对比度，不能只验证首页效果。
 
+### 3.1 独立区域配色（2026-10-15 扩展）
+
+以下可选字段分别配置在 `tokens.light` 和 `tokens.dark`，颜色仍只接受 `#RRGGBB`。未填写时沿用主色、公版或已有颜色，不要求旧主题补齐。先更新公版后端及客户端，再上传使用扩展字段的 ZIP；旧后端会拒绝未知字段。
+
+| 字段 | 作用范围 |
+|---|---|
+| border | 卡片与通用组件边框 |
+| buttonBackground / buttonText | 实心主按钮底色与文字色；不改变链接、描边按钮、成功/警告/错误等业务状态色。按压和禁用底色由按钮底色生成；省略文字色时自动选择黑/白 |
+| navigationBackground / navigationText / navigationActive | 底部导航底色、未选中文字与图标、选中文字与图标 |
+| searchBackground / searchText / searchPlaceholder | 搜索框底色、输入文字、占位文字及搜索图标 |
+| sectionTitle / link | 首页内容分区标题与“更多”等链接 |
+| entryCards | 六类首页服务入口的独立颜色，见下表 |
+
+`entryCards` 的键固定为 `enterprise`（企业合作/管理）、`talent`（人才登记/个人名片）、`articles`（文章投稿）、`mall`（积分商城）、`spaces`（空间预约）、`events`（活动计划）。颜色绑定功能，不按第几个卡片分配；功能开关隐藏入口时，其它入口保持原配色。
+
+每个入口支持 `background`、`icon`、`iconBackground`、`text`、`secondaryText`、`border` 六个可选颜色。例如：
+
+```json
+{
+  "buttonBackground": "#e2630d",
+  "buttonText": "#101d3e",
+  "entryCards": {
+    "mall": {
+      "background": "#fff7dc",
+      "icon": "#795600",
+      "iconBackground": "#ffe69a",
+      "text": "#101d3e",
+      "border": "#eedfab"
+    }
+  }
+}
+```
+
+以上片段放入 `tokens.light`，深色模式在 `tokens.dark` 单独提供。浅色底搭配深色文字、深色底搭配浅色文字；不要将 Logo 中的亮黄、浅青直接作为白底上的正文颜色。检查正文和按钮文字至少 4.5:1、功能图标至少 3:1 的对比度。主题配置的维护位置是独立主题目录 `Joinyuu-Mobile-Theme/customers/<客户>/manifest.json`，运行时上传数据不提交到公版仓库。
+
 ## 4. 首页模块与升级规则
 
 默认顺序为：

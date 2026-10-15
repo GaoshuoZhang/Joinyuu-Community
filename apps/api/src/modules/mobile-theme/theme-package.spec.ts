@@ -12,6 +12,11 @@ describe('mobile theme package boundary', () => {
   })
   it.each([
     { ...manifest, schemaVersion: 2 },
+    { ...manifest, tokens: { light: { entryCards: { unknown: { background: '#ffffff' } } } } },
+    { ...manifest, tokens: { light: { entryCards: { mall: { icon: 'red;}body{display:none' } } } } },
+    { ...manifest, tokens: { light: { entryCards: { mall: { css: '#ffffff' } } } } },
+    { ...manifest, tokens: { light: { entryCards: { mall: null } } } },
+    { ...manifest, tokens: { light: { buttonBackground: 'url(x)' } } },
     { ...manifest, tokens: { light: { primary: 'red;display:none' } } },
     { ...manifest, layout: { homeModules: ['entries', 'entries'] } },
     { ...manifest, layout: { homeModules: ['unknown-feature'] } },
@@ -38,6 +43,10 @@ describe('mobile theme package boundary', () => {
   })
   it('accepts optional visual roles without breaking v1 manifests', () => {
     expect(validateManifest({ ...manifest, brand: { headline: 'AI创业者的伟大航路', highlight: '伟大航路', logo: 'assets/logo.png', logoDark: 'assets/dark.png', logoShape: 'wordmark' }, tokens: { light: { primary: '#0d1b3d', accent: '#dc590d', primaryLight: '#edf4f8', heroStart: '#f4f8fb', heroEnd: '#fff8e8' } } }).schemaVersion).toBe(1)
+  })
+  it('accepts independent component and semantic entry colors', async () => {
+    const value = { ...manifest, tokens: { light: { buttonBackground: '#e2630d', buttonText: '#101d3e', entryCards: { mall: { background: '#fff7dc', icon: '#795600' } } }, dark: { entryCards: { mall: { background: '#3c3423' } } } } }
+    expect((await readThemeZip(zip([entry(value)]))).manifest).toEqual(value)
   })
   it('rejects excessive entry size and entry counts', async () => {
     await expect(readThemeZip(zip([entry(), ['assets/huge.png', Buffer.alloc(2 * 1024 * 1024 + 1)]]))).rejects.toThrow('超限')

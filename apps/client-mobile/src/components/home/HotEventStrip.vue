@@ -40,6 +40,7 @@ defineProps<{ events: HomeEventCard[] }>()
 }
 
 .block-head h2 {
+  color: var(--app-section-title, var(--td-text-color-primary));
   margin:0;
   font: var(--app-type-section);
 }
@@ -51,7 +52,7 @@ defineProps<{ events: HomeEventCard[] }>()
   min-width: 44px;
   min-height: 44px;
   font: var(--app-type-body-sm);
-  color: var(--td-brand-color);
+  color: var(--app-theme-link, var(--td-brand-color));
   text-decoration: none;
   cursor: pointer;
 }

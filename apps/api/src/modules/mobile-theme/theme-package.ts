@@ -12,7 +12,14 @@ export interface ThemeManifest {
   tokens?: { light?: ThemeColors; dark?: ThemeColors; radius?: 'small' | 'medium' | 'large' }
   layout?: { template?: 'default' | 'brand'; homeModules?: string[] }
 }
-export interface ThemeColors { primary?: string; accent?: string; primaryLight?: string; background?: string; surface?: string; text?: string; secondaryText?: string; heroStart?: string; heroEnd?: string }
+export const THEME_ENTRY_KEYS = ['enterprise', 'talent', 'articles', 'mall', 'spaces', 'events'] as const
+export interface EntryColors { background?: string; icon?: string; iconBackground?: string; text?: string; secondaryText?: string; border?: string }
+export interface ThemeColors {
+  primary?: string; accent?: string; primaryLight?: string; background?: string; surface?: string; text?: string; secondaryText?: string; heroStart?: string; heroEnd?: string
+  border?: string; buttonBackground?: string; buttonText?: string; navigationBackground?: string; navigationText?: string; navigationActive?: string
+  searchBackground?: string; searchText?: string; searchPlaceholder?: string; sectionTitle?: string; link?: string
+  entryCards?: Partial<Record<typeof THEME_ENTRY_KEYS[number], EntryColors>>
+}
 const fail = (message: string): never => { throw new BadRequestException(message) }
 const record = (v: unknown): v is Record<string, unknown> => !!v && typeof v === 'object' && !Array.isArray(v)
 function keys(v: Record<string, unknown>, allowed: string[]) {
@@ -48,8 +55,17 @@ export function validateManifest(value: unknown): ThemeManifest {
       const colors = value.tokens[mode]
       if (colors === undefined) continue
       if (!record(colors)) return fail('配色必须是对象')
-      keys(colors, ['primary', 'accent', 'primaryLight', 'background', 'surface', 'text', 'secondaryText', 'heroStart', 'heroEnd'])
-      if (Object.values(colors).some((color) => typeof color !== 'string' || !/^#[0-9a-fA-F]{6}$/.test(color))) fail('颜色必须是六位十六进制值，例如 #0052d9')
+      keys(colors, ['primary', 'accent', 'primaryLight', 'background', 'surface', 'text', 'secondaryText', 'heroStart', 'heroEnd', 'border', 'buttonBackground', 'buttonText', 'navigationBackground', 'navigationText', 'navigationActive', 'searchBackground', 'searchText', 'searchPlaceholder', 'sectionTitle', 'link', 'entryCards'])
+      if (colors.entryCards !== undefined) {
+        if (!record(colors.entryCards)) return fail('entryCards 必须是对象')
+        keys(colors.entryCards, [...THEME_ENTRY_KEYS])
+        for (const card of Object.values(colors.entryCards)) {
+          if (!record(card)) return fail('入口卡片配色必须是对象')
+          keys(card, ['background', 'icon', 'iconBackground', 'text', 'secondaryText', 'border'])
+          if (Object.values(card).some((color) => typeof color !== 'string' || !/^#[0-9a-fA-F]{6}$/.test(color))) fail('入口卡片颜色必须是六位十六进制值')
+        }
+      }
+      if (Object.entries(colors).filter(([key]) => key !== 'entryCards').some(([, color]) => typeof color !== 'string' || !/^#[0-9a-fA-F]{6}$/.test(color))) fail('颜色必须是六位十六进制值，例如 #0052d9')
     }
   }
   if (value.layout !== undefined) {

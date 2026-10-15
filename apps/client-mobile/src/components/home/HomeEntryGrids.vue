@@ -1,7 +1,9 @@
 <script setup lang="ts">
 import { Grid, GridItem, Icon } from 'tdesign-mobile-vue'
+import type { THEME_ENTRY_KEYS } from '@/utils/customerTheme'
 
 export interface HomeEntry {
+  themeKey?: typeof THEME_ENTRY_KEYS[number]
   path: string
   icon: string
   label: string
@@ -13,6 +15,15 @@ export interface HomeEntry {
  * quick：宽 1 单位 × 高 1 单位（四列方形，图标上 / 文案下）。 */
 defineProps<{ features: HomeEntry[]; quick: HomeEntry[] }>()
 defineEmits<{ open: [path: string] }>()
+
+// Stable semantic keys keep colors attached to a service when permissions hide or reorder entries.
+function entryStyle(entry: HomeEntry) {
+  if (!entry.themeKey) return {}
+  return Object.fromEntries(['background', 'icon', 'iconBackground', 'text', 'secondaryText', 'border'].map((role) => [
+    `--entry-${role}`, `var(--app-entry-${entry.themeKey}-${role})`,
+  ]))
+}
+
 </script>
 
 <template>
@@ -25,6 +36,7 @@ defineEmits<{ open: [path: string] }>()
       v-for="f in features"
       :key="f.path"
       class="feature-item"
+      :style="entryStyle(f)"
       layout="horizontal"
       v-pressable
       @click="$emit('open', f.path)"
@@ -42,6 +54,7 @@ defineEmits<{ open: [path: string] }>()
       v-for="q in quick"
       :key="q.path"
       class="quick-item"
+      :style="entryStyle(q)"
       v-pressable
       @click="$emit('open', q.path)"
     >
@@ -59,13 +72,13 @@ defineEmits<{ open: [path: string] }>()
  * 固定高度下内容会贴顶（方形卡尤其明显）；卡片内容整体垂直居中。 */
 .feature-item,
 .quick-item {
-  --td-grid-item-bg-color: var(--td-bg-color-container);
+  --td-grid-item-bg-color: var(--entry-background, var(--td-bg-color-container));
   --td-grid-item-image-bg-color: transparent;
 
   min-height: var(--app-entry-unit);
   justify-content: center;
   border-radius: var(--td-radius-large);
-  border: 1px solid var(--td-component-border);
+  border: 1px solid var(--entry-border, var(--td-component-border));
   overflow: hidden;
 }
 
@@ -98,8 +111,8 @@ defineEmits<{ open: [path: string] }>()
   width: 36px;
   height: 36px;
   border-radius: var(--td-radius-circle);
-  color: var(--td-brand-color);
-  background: var(--td-brand-color-light);
+  color: var(--entry-icon, var(--td-brand-color));
+  background: var(--entry-iconBackground, var(--td-brand-color-light));
 }
 
 .entry-icon--sm {
@@ -110,13 +123,13 @@ defineEmits<{ open: [path: string] }>()
 .feature-label {
   display: block;
   font: var(--app-type-card-title);
-  color: var(--td-text-color-primary);
+  color: var(--entry-text, var(--td-text-color-primary));
 }
 
 .feature-desc {
   display: block;
   font: var(--app-type-body-sm);
-  color: var(--td-text-color-secondary);
+  color: var(--entry-secondaryText, var(--td-text-color-secondary));
   white-space: normal;
 }
 
@@ -124,6 +137,6 @@ defineEmits<{ open: [path: string] }>()
   display: block;
   /* 单行四字标签：收紧行高（默认 1.5），让方形卡内的图标 + 文案纵向排布不超卡片下限高度 */
   font: var(--app-type-card-title);
-  color: var(--td-text-color-primary);
+  color: var(--entry-text, var(--td-text-color-primary));
 }
 </style>

@@ -34,6 +34,19 @@ describe('customer theme rendering', () => {
     expect(css).toContain('--td-brand-color-light:#edf4f8')
     expect(css).toContain('--app-theme-hero-start:#f4f8fb')
   })
+  it('separates button and service colors from the global brand and clears them on theme switch', () => {
+    applyCustomerTheme({ ...base, tokens: { light: { primary: '#101d3e', buttonBackground: '#e2630d', buttonText: '#101d3e', entryCards: { mall: { background: '#fff7dc', icon: '#795600' } } }, dark: { entryCards: { mall: { background: '#3c3423' } } } } })
+    const css = document.getElementById('customer-theme')!.textContent!
+    expect(css).toContain('--td-brand-color:#101d3e;')
+    expect(css).toContain('--td-button-primary-bg-color:#e2630d;')
+    expect(css).toContain('--td-button-primary-color:#101d3e;')
+    expect(css).toContain('--app-entry-mall-background:#fff7dc;')
+    expect(css.split(':root:root:root.dark{')[1]).toContain('--app-entry-mall-background:#3c3423;')
+    expect(customerThemeCss({ ...base, tokens: { light: { entryCards: { mall: { icon: 'red;}body{display:none' } } } } })).not.toContain('display:none')
+    applyCustomerTheme(base)
+    expect(document.getElementById('customer-theme')!.textContent).not.toContain('--app-entry-')
+    applyCustomerTheme(null)
+  })
   it('splits a single literal highlight and falls back for older themes', () => {
     expect(brandHeadline({ name: '旧主题' })).toEqual({ before: '旧主题', highlight: '', after: '' })
     expect(brandHeadline({ headline: 'AI创业者的伟大航路\n从OPiece启航', highlight: '伟大航路' })).toEqual({ before: 'AI创业者的', highlight: '伟大航路', after: '\n从OPiece启航' })

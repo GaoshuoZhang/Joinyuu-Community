@@ -58,6 +58,7 @@ defineProps<{ title: string; items: FeedItem[]; emptyText: string; morePath?: st
 }
 
 .block-head h2 {
+  color: var(--app-section-title, var(--td-text-color-primary));
   margin:0;
   font: var(--app-type-section);
 }
@@ -69,7 +70,7 @@ defineProps<{ title: string; items: FeedItem[]; emptyText: string; morePath?: st
   min-width: 44px;
   min-height: 44px;
   font: var(--app-type-body-sm);
-  color: var(--td-brand-color);
+  color: var(--app-theme-link, var(--td-brand-color));
   text-decoration: none;
   cursor: pointer;
 }
@@ -136,6 +137,6 @@ defineProps<{ title: string; items: FeedItem[]; emptyText: string; morePath?: st
   margin-left:0;
   font: var(--app-type-emphasis-sm);
   font-variant-numeric: tabular-nums;
-  color: var(--td-brand-color);
+  color: var(--app-theme-link, var(--td-brand-color));
 }
 </style>

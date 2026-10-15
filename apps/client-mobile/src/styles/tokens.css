@@ -253,7 +253,7 @@ span[role='button']:not(.t-tag) {
  * 组件根元素不带背景（避免二次容器色差）；
  * v45：官方默认高度 40px 低于本项目 44px 触控基线，统一抬到 44px。 */
 .t-search {
-  --td-search-bg-color: var(--td-bg-color-container);
+  --td-search-bg-color: var(--app-search-background, var(--td-bg-color-container));
   --td-search-square-radius: var(--td-radius-large);
   --td-search-height: 44px;
 }

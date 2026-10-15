@@ -18,7 +18,7 @@ import EmptyBlock from '@/components/shared/EmptyBlock.vue'
 import ListSkeleton from '@/components/ListSkeleton.vue'
 import HomeBanner from '@/components/home/HomeBanner.vue'
 import ActivationChecklist from '@/components/home/ActivationChecklist.vue'
-import HomeEntryGrids from '@/components/home/HomeEntryGrids.vue'
+import HomeEntryGrids, { type HomeEntry } from '@/components/home/HomeEntryGrids.vue'
 import HotEventStrip from '@/components/home/HotEventStrip.vue'
 import HomeFeedSection from '@/components/home/HomeFeedSection.vue'
 import HomeAnnouncementSheet from '@/components/home/HomeAnnouncementSheet.vue'
@@ -270,26 +270,26 @@ const featureEntries = computed(() => {
   const hasEnterpriseIdentity = auth.identities.some(
     (item) => item.type === 'community_enterprise' || item.type === 'external_enterprise',
   )
-  const list: { path: string; icon: string; label: string; desc: string }[] = [
+  const list: HomeEntry[] = [
     hasEnterpriseIdentity
-      ? { path: '/me/identities?filter=enterprise', icon: 'usergroup', label: '企业管理', desc: '管理关联企业' }
-      : { path: '/intros/enterprise', icon: 'usergroup', label: '企业合作', desc: '成为合作伙伴' },
+      ? { themeKey: 'enterprise', path: '/me/identities?filter=enterprise', icon: 'usergroup', label: '企业管理', desc: '管理关联企业' }
+      : { themeKey: 'enterprise', path: '/intros/enterprise', icon: 'usergroup', label: '企业合作', desc: '成为合作伙伴' },
   ]
   if (auth.hasCommunityIndividual) {
-    list.push({ path: '/me/cards/individual', icon: 'app', label: '个人名片', desc: '完善个人展示' })
+    list.push({ themeKey: 'talent', path: '/me/cards/individual', icon: 'app', label: '个人名片', desc: '完善个人展示' })
   } else {
-    list.push({ path: '/intros/talent', icon: 'app', label: '人才登记', desc: '让企业找到你' })
+    list.push({ themeKey: 'talent', path: '/intros/talent', icon: 'app', label: '人才登记', desc: '让企业找到你' })
   }
   return list
 })
 
 const quickEntries = computed(() => {
-  const list: { path: string; icon: string; label: string }[] = [
-    { path: '/articles/new', icon: 'edit-1', label: '文章投稿' },
+  const list: HomeEntry[] = [
+    { themeKey: 'articles', path: '/articles/new', icon: 'edit-1', label: '文章投稿' },
   ]
-  if (config.config.mallOpen) list.push({ path: '/mall', icon: 'shop', label: '积分商城' })
-  if (config.config.reservationOpen) list.push({ path: '/spaces', icon: 'building', label: '空间预约' })
-  list.push({ path: '/plaza?tab=events', icon: 'calendar', label: '活动计划' })
+  if (config.config.mallOpen) list.push({ themeKey: 'mall', path: '/mall', icon: 'shop', label: '积分商城' })
+  if (config.config.reservationOpen) list.push({ themeKey: 'spaces', path: '/spaces', icon: 'building', label: '空间预约' })
+  list.push({ themeKey: 'events', path: '/plaza?tab=events', icon: 'calendar', label: '活动计划' })
   return list
 })
 </script>

@@ -1,6 +1,13 @@
 export const HOME_MODULES = ['banner', 'entries', 'publish', 'activation', 'announcement', 'events', 'demands', 'articles'] as const
 export type HomeModule = typeof HOME_MODULES[number]
-export interface ThemeColors { primary?: string; accent?: string; primaryLight?: string; background?: string; surface?: string; text?: string; secondaryText?: string; heroStart?: string; heroEnd?: string }
+export const THEME_ENTRY_KEYS = ['enterprise', 'talent', 'articles', 'mall', 'spaces', 'events'] as const
+export interface EntryColors { background?: string; icon?: string; iconBackground?: string; text?: string; secondaryText?: string; border?: string }
+export interface ThemeColors {
+  primary?: string; accent?: string; primaryLight?: string; background?: string; surface?: string; text?: string; secondaryText?: string; heroStart?: string; heroEnd?: string
+  border?: string; buttonBackground?: string; buttonText?: string; navigationBackground?: string; navigationText?: string; navigationActive?: string
+  searchBackground?: string; searchText?: string; searchPlaceholder?: string; sectionTitle?: string; link?: string
+  entryCards?: Partial<Record<typeof THEME_ENTRY_KEYS[number], EntryColors>>
+}
 export interface CustomerTheme {
   packageId: string
   schemaVersion: 1
@@ -41,11 +48,15 @@ function colorVariables(colors: ThemeColors = {}, dark = false) {
   const mapping: Record<string, string[]> = {
     background: ['--td-bg-color-page'], surface: ['--td-bg-color-container', '--td-bg-color-container-active'],
     text: ['--td-text-color-primary'], secondaryText: ['--td-text-color-secondary'],
+    border: ['--td-component-border', '--td-border-color'],
+    navigationBackground: ['--td-tab-bar-bg-color'], navigationText: ['--td-tab-bar-color'], navigationActive: ['--td-tab-bar-active-color'],
+    searchBackground: ['--app-search-background'], searchText: ['--td-search-text-color'], searchPlaceholder: ['--td-search-placeholder-color', '--td-search-icon-color'],
+    sectionTitle: ['--app-section-title'], link: ['--app-theme-link'],
     accent: ['--app-theme-accent'], heroStart: ['--app-theme-hero-start'], heroEnd: ['--app-theme-hero-end'],
   }
   for (const [key, variables] of Object.entries(mapping)) {
     const color = colors[key as keyof ThemeColors]
-    if (color && /^#[a-f0-9]{6}$/i.test(color)) for (const variable of variables) values[variable] = color
+    if (typeof color === 'string' && /^#[a-f0-9]{6}$/i.test(color)) for (const variable of variables) values[variable] = color
   }
   const primary = colors.primary
   if (primary && /^#[a-f0-9]{6}$/i.test(primary)) {
@@ -60,6 +71,26 @@ function colorVariables(colors: ThemeColors = {}, dark = false) {
     let banner = primary
     while (luminance(banner) > 0.1) banner = mix(banner, 0, 0.1)
     values['--client-brand-gradient'] = `linear-gradient(135deg, ${mix(banner, 0, 0.2)} 0%, ${banner} 100%)`
+  }
+  if (colors.buttonBackground && /^#[a-f0-9]{6}$/i.test(colors.buttonBackground)) {
+    const background = colors.buttonBackground
+    values['--td-button-primary-bg-color'] = background
+    values['--td-button-primary-border-color'] = background
+    const foreground = colors.buttonText && /^#[a-f0-9]{6}$/i.test(colors.buttonText) ? colors.buttonText : luminance(background) > 0.179 ? '#000000' : '#ffffff'
+    values['--td-button-primary-active-bg-color'] = mix(background, luminance(foreground) < 0.179 ? 255 : 0, 0.12)
+    values['--td-button-primary-active-border-color'] = values['--td-button-primary-active-bg-color']
+    values['--td-button-primary-disabled-bg'] = mix(background, dark ? 0 : 255, 0.6)
+    values['--td-button-primary-disabled-border-color'] = values['--td-button-primary-disabled-bg']
+    values['--td-button-primary-color'] = luminance(background) > 0.179 ? '#000000' : '#ffffff'
+  }
+  if (colors.buttonText && /^#[a-f0-9]{6}$/i.test(colors.buttonText)) values['--td-button-primary-color'] = colors.buttonText
+  for (const key of THEME_ENTRY_KEYS) {
+    const card = colors.entryCards?.[key]
+    if (!card) continue
+    for (const role of ['background', 'icon', 'iconBackground', 'text', 'secondaryText', 'border'] as const) {
+      const color = card[role]
+      if (color && /^#[a-f0-9]{6}$/i.test(color)) values[`--app-entry-${key}-${role}`] = color
+    }
   }
   if (colors.primaryLight && /^#[a-f0-9]{6}$/i.test(colors.primaryLight)) values['--td-brand-color-light'] = colors.primaryLight
   if (colors.surface && /^#[a-f0-9]{6}$/i.test(colors.surface)) values['--app-navbar-bg-rgb'] = [1, 3, 5].map((offset) => parseInt(colors.surface!.slice(offset, offset + 2), 16)).join(', ')
