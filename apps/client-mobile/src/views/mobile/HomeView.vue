@@ -17,7 +17,6 @@ import { fetchMe, dismissActivation as dismissActivationApi } from '@/api/me'
 import EmptyBlock from '@/components/shared/EmptyBlock.vue'
 import ListSkeleton from '@/components/ListSkeleton.vue'
 import HomeBanner from '@/components/home/HomeBanner.vue'
-import BrandHero from '@/components/home/BrandHero.vue'
 import ActivationChecklist from '@/components/home/ActivationChecklist.vue'
 import HomeEntryGrids from '@/components/home/HomeEntryGrids.vue'
 import HotEventStrip from '@/components/home/HotEventStrip.vue'
@@ -298,7 +297,6 @@ const quickEntries = computed(() => {
 <template>
   <PullDownRefresh :value="refreshing" :disabled="!atTop" :loading-props="REFRESH_LOADING_PROPS" @refresh="onRefresh">
     <div class="home page-fade-in">
-      <BrandHero v-if="customerTheme.theme?.layout?.template === 'brand'" :brand="customerTheme.theme.brand" :site-name="config.config.siteName" />
       <Search
         v-model="searchKeyword"
         class="home-search"

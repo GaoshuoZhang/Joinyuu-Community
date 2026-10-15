@@ -2,7 +2,7 @@
 
 > 客户主题由独立 customer-theme store 加载，支持主题变量、品牌首页模板及模块实际 DOM 排序；公版无主题时沿用原样式。主题不携带脚本，不改变业务权限和路由。开发约束与兼容要求见 [移动端主题开发规范](./wiki-mobile-theme.md)。
 
-> 品牌区使用 BrandHero 和 CustomerBrandLogo，支持纯文本标题重点词、独立强调色、渐变起止色及明暗横版 Logo；不叠加第二层卡片。入口最小高度按 88–104px 限幅，壳内内容和固定导航最大宽度 640px。品牌大标题使用 `--app-type-brand-headline`，不在页面中声明字号。已安装主题配置不进入客户端源码或 Git。
+> 首页从搜索框开始，主题色用于卡片、文字、按钮等现有元素，不添加品牌宣传区。登录页使用 CustomerBrandLogo 展示明暗横版 Logo 和品牌口号。入口最小高度按 88–104px 限幅，壳内内容和固定导航最大宽度 640px。已安装主题配置不进入客户端源码或 Git。
 
 > `apps/client-mobile` 是纯移动端应用，dev 端口 7759（`/api` 代理到 7757）；桌面端 `apps/client-web` 尚未创建。
 > 关联文档：[README](../README.md)、[后端契约](./wiki-backend.md)、[App API 契约](./api-app-design.md)、[实体字段](./entity-fields.md)。
