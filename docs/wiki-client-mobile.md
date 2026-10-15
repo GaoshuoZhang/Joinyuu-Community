@@ -1,5 +1,7 @@
 # 聚屿社区 · 移动端开发 Wiki
 
+> 客户主题由独立 customer-theme store 加载，支持主题变量、品牌首页模板及模块实际 DOM 排序；公版无主题时沿用原样式。主题不携带脚本，不改变业务权限和路由。开发约束与兼容要求见 [移动端主题开发规范](./wiki-mobile-theme.md)。
+
 > `apps/client-mobile` 是纯移动端应用，dev 端口 7759（`/api` 代理到 7757）；桌面端 `apps/client-web` 尚未创建。
 > 关联文档：[README](../README.md)、[后端契约](./wiki-backend.md)、[App API 契约](./api-app-design.md)、[实体字段](./entity-fields.md)。
 

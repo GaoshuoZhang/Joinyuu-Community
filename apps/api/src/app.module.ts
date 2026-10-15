@@ -25,6 +25,7 @@ import { WorkstationsModule } from './modules/workstations/workstations.module'
 import { SpacesModule } from './modules/spaces/spaces.module'
 import { ContentsModule } from './modules/contents/contents.module'
 import { SystemModule } from './modules/system/system.module'
+import { MobileThemeModule } from './modules/mobile-theme/mobile-theme.module'
 import { RolesModule } from './modules/system/roles/roles.module'
 import { AdminsModule } from './modules/system/admins/admins.module'
 import { LoginLogsModule } from './modules/system/login-logs/login-logs.module'
@@ -99,6 +100,7 @@ import { HttpExceptionFilter } from './common/filters/http-exception.filter'
     SpacesModule,
     ContentsModule,
     SystemModule,
+    MobileThemeModule,
     RolesModule,
     AdminsModule,
     LoginLogsModule,

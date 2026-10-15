@@ -5,6 +5,12 @@
    布局骨架尺寸、页面通用类、动效、客户端专属（品牌渐变/移动安全区）
    ============================================================ */
 
+.customer-logo { width: 64px; height: 64px; object-fit: contain; }
+.brand-hero { position: relative; background-size: cover; background-position: center; overflow: hidden; }
+.brand-hero-copy { display: grid; gap: var(--app-space-4); padding: var(--app-space-8); border-radius: var(--td-radius-large); background: var(--td-bg-color-container); color: var(--td-text-color-primary); width: fit-content; max-width: 100%; }
+.brand-hero-copy h2 { margin: 0; font: var(--app-type-page-title); overflow-wrap: anywhere; }
+.brand-hero-copy p { margin: 0; font: var(--app-type-body); overflow-wrap: anywhere; }
+
 :root {
   /* 布局骨架尺寸 */
   --app-topbar-h: 60px;

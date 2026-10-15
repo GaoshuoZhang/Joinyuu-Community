@@ -8,6 +8,7 @@ import { useNoticesStore } from '@/stores/notices'
 import { ApiError } from '@/api/http'
 import { REQUIRED } from '@/utils/validators'
 import CaptchaField from '@/components/CaptchaField.vue'
+import { useCustomerThemeStore } from '@/stores/customerTheme'
 import { useCaptcha } from '@/composables/useCaptcha'
 import 'tdesign-mobile-vue/es/style/index.css'
 
@@ -16,6 +17,7 @@ import 'tdesign-mobile-vue/es/style/index.css'
 const router = useRouter()
 const route = useRoute()
 const auth = useAuthStore()
+const customerTheme = useCustomerThemeStore()
 const notices = useNoticesStore()
 const { captchaId, captchaImage, captchaLoading, refreshCaptcha } = useCaptcha()
 
@@ -75,9 +77,10 @@ function onLoginSubmit({ validateResult }: { validateResult: unknown }) {
 <template>
   <main id="main" class="page-fade-in m-login" tabindex="-1">
     <div class="hero">
-      <span class="logo">聚</span>
+      <img v-if="customerTheme.theme?.brand?.logo" class="customer-logo" :src="customerTheme.theme.brand.logo" :alt="customerTheme.theme.brand.name || '社区标志'" />
+      <span v-else class="logo">聚</span>
       <h1 class="title">登录</h1>
-      <p class="slogan">让每一座创业孤岛，在这里连成群岛。</p>
+      <p class="slogan">{{ customerTheme.theme?.brand?.slogan || '让每一座创业孤岛，在这里连成群岛。' }}</p>
     </div>
 
     <Form

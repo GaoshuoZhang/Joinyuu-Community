@@ -1,6 +1,32 @@
 // 聚屿社区 M1 数据模型 — 契约来源：apps/admin/src/types/index.ts（M0 冻结）+ docs/wiki-backend.md §5
 
 // 部署实例授权；不随业务数据清理重建，备份/恢复时必须保留。
+model MobileThemePackage {
+  id        String   @id
+  themeId   String
+  version   String
+  manifest  Json
+  assets    Json
+  checksum  String   @unique
+  createdAt DateTime @default(now())
+  createdBy String
+}
+
+model MobileThemeState {
+  id         Int     @id @default(1)
+  activeId   String?
+  previousId String?
+  revision   Int     @default(0)
+}
+
+model MobileThemePreview {
+  tokenHash String   @id
+  packageId String
+  expiresAt DateTime
+
+  @@index([expiresAt])
+}
+
 model DeploymentLicense {
   id           String    @id @default("default")
   deploymentId String    @unique

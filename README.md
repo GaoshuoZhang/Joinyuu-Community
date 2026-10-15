@@ -128,6 +128,8 @@ pnpm test:e2e:it          # 仅允许隔离数据库与非 0 Redis DB 的全量 
 
 ## 📚 文档索引（AI agent 必读）
 
+移动端客户主题包开发、上传、预览、启用和回退见 [移动端主题开发规范](./docs/wiki-mobile-theme.md)。示例位于 `examples/mobile-theme`，打包工具为 `scripts/pack-mobile-theme.ps1`。升级部署前运行 `pnpm db:migrate`。
+
 | 文档 | 用途 |
 |---|---|
 | [docs/wiki-admin-web.md](./docs/wiki-admin-web.md) | 管理后台开发 Wiki：设计 tokens、布局骨架、组件规范、状态机、API 约定——**改 admin 代码前必读** |

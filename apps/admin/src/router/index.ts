@@ -275,6 +275,11 @@ const router = createRouter({
           meta: { title: '系统配置', group: '系统管理' },
         },
         {
+          path: 'system/mobile-themes',
+          component: () => import('@/views/system/MobileThemesPanel.vue'),
+          meta: { title: '移动端主题', group: '系统管理', perm: '/system/config' },
+        },
+        {
           path: 'system/application-form-config',
           component: () => import('@/views/approvals/ApplicationFormConfigView.vue'),
           meta: { title: '申请表单配置', group: '系统管理', perm: '/approvals', scopeDomain: 'members' },

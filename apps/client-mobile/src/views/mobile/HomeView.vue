@@ -4,6 +4,7 @@ import { useRouter } from 'vue-router'
 import { Button, Icon, NoticeBar, PullDownRefresh, Search, Toast } from 'tdesign-mobile-vue'
 import { useAuthStore } from '@/stores/auth'
 import { useConfigStore } from '@/stores/config'
+import { useCustomerThemeStore } from '@/stores/customerTheme'
 import { useNoticesStore } from '@/stores/notices'
 import { useAsyncList } from '@/composables/useAsyncList'
 import { useRefreshOnActivate } from '@/composables/useRefreshOnActivate'
@@ -32,6 +33,7 @@ useAnimSuppress()
 /* 首页（社区运营入口导向）：搜索 → 公告 → 轮播 → 发布 → 入口宫格 → 近期活动 → 最新需求/资讯。 */
 const router = useRouter()
 const config = useConfigStore()
+const customerTheme = useCustomerThemeStore()
 const auth = useAuthStore()
 const notices = useNoticesStore()
 const { data: feed, loading, error, run } = useAsyncList(fetchHomeFeed)
@@ -295,6 +297,13 @@ const quickEntries = computed(() => {
 <template>
   <PullDownRefresh :value="refreshing" :disabled="!atTop" :loading-props="REFRESH_LOADING_PROPS" @refresh="onRefresh">
     <div class="home page-fade-in">
+      <section v-if="customerTheme.theme?.layout?.template === 'brand'" class="brand-hero m-card" :style="customerTheme.theme.brand?.homeBackground ? { backgroundImage: `url(${customerTheme.theme.brand.homeBackground})` } : undefined">
+        <div class="brand-hero-copy">
+          <img v-if="customerTheme.theme.brand?.logo" class="customer-logo" :src="customerTheme.theme.brand.logo" alt="" />
+          <h2>{{ customerTheme.theme.brand?.name || config.config.siteName }}</h2>
+          <p v-if="customerTheme.theme.brand?.slogan">{{ customerTheme.theme.brand.slogan }}</p>
+        </div>
+      </section>
       <Search
         v-model="searchKeyword"
         class="home-search"
@@ -306,9 +315,10 @@ const quickEntries = computed(() => {
         @submit="onSearchSubmit"
       />
 
-      <!-- 唯一运营位：轮播（v50 移动到搜索栏下方，作为首屏运营位） -->
+      <!-- Render in configured DOM order, keeping keyboard and visual order aligned. -->
+      <template v-for="module in customerTheme.homeModules" :key="module">
       <HomeBanner
-        v-if="feed?.carouselEnabled !== false && feed?.banners?.length"
+        v-if="module === 'banner' && feed?.carouselEnabled !== false && feed?.banners?.length"
         :banners="feed.banners"
         :reduce-motion="reduceMotion"
         @select="onBannerClick"
@@ -316,13 +326,14 @@ const quickEntries = computed(() => {
 
       <!-- v48：核心功能入口前置到搜索栏下方（2 单位宽卡 ×2 + 1 单位方形卡 ×4） -->
       <HomeEntryGrids
+        v-if="module === 'entries'"
         :features="featureEntries"
         :quick="quickEntries"
         @open="(path: string) => router.push(path)"
       />
 
       <!-- v48：发布入口紧跟在四个方形入口之下（发布是最常用的核心动作），并保持描边次级形态 -->
-      <Button v-if="config.config.demandOpen" theme="primary" variant="outline" block size="large" class="publish-entry pressable" @click="goPublish">
+      <Button v-if="module === 'publish' && config.config.demandOpen" theme="primary" variant="outline" block size="large" class="publish-entry pressable" @click="goPublish">
         <template #icon><Icon aria-hidden="true" name="flag" size="20px" /></template>
         {{ auth.isLogged ? '发布需求 · 让社区一起帮你完成' : '登录后发布需求' }}
         <template #suffix><Icon aria-hidden="true" name="chevron-right" size="16px" /></template>
@@ -330,7 +341,7 @@ const quickEntries = computed(() => {
 
       <!-- v49：新手任务紧随发布入口（默认折叠，展开后再看任务），不再收在页面底部 -->
       <ActivationChecklist
-        v-if="showActivation"
+        v-if="module === 'activation' && showActivation"
         :steps="visibleActivationSteps"
         @dismiss="dismissActivation"
       />
@@ -338,7 +349,7 @@ const quickEntries = computed(() => {
       <!-- 运营公告：后台启用互锁保证至多一条，首页仅展示该条。
            v-pressable 补 role=button/tabindex/键盘激活；suffixIcon 提供「可点开」的视觉暗示。 -->
       <NoticeBar
-        v-if="announcementItems.length"
+        v-if="module === 'announcement' && announcementItems.length"
         v-pressable
         visible
         theme="info"
@@ -349,14 +360,15 @@ const quickEntries = computed(() => {
         <template #suffixIcon><Icon aria-hidden="true" name="chevron-right" size="16px" /></template>
       </NoticeBar>
 
-      <ListSkeleton v-if="loading && !feed" :rows="4" />
-      <EmptyBlock v-else-if="error && !feed" :text="error" action-text="重试" @action="run" />
+      <ListSkeleton v-if="module === 'events' && loading && !feed" :rows="4" />
+      <EmptyBlock v-else-if="module === 'events' && error && !feed" :text="error" action-text="重试" @action="run" />
 
-      <template v-else>
+      <template v-if="feed">
         <!-- v45 内容优先：先让用户看到社区里有什么，再出现引导与入口 -->
-        <HotEventStrip :events="feed?.hotEvents ?? []" />
+        <HotEventStrip v-if="module === 'events'" :events="feed.hotEvents ?? []" />
 
         <HomeFeedSection
+          v-if="module === 'demands' && config.config.demandOpen"
           title="最新需求"
           :items="demandItems"
           empty-text="暂无最新需求"
@@ -364,11 +376,13 @@ const quickEntries = computed(() => {
         />
 
         <HomeFeedSection
+          v-if="module === 'articles'"
           title="最新资讯"
           :items="articleItems"
           empty-text="暂无最新资讯"
           more-path="/plaza?tab=articles"
         />
+      </template>
       </template>
     </div>
 

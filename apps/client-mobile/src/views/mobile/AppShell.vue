@@ -5,6 +5,7 @@ import { Avatar, Badge, Button, Icon, Navbar, NoticeBar, TabBar, TabBarItem } fr
 import { NotificationIcon } from 'tdesign-icons-vue-next'
 import { useAuthStore } from '@/stores/auth'
 import { useConfigStore } from '@/stores/config'
+import { useCustomerThemeStore } from '@/stores/customerTheme'
 import { useNoticesStore } from '@/stores/notices'
 import { pageTitleFor } from '@/constants/pageTitles'
 import 'tdesign-mobile-vue/es/style/index.css'
@@ -16,6 +17,7 @@ const route = useRoute()
 const router = useRouter()
 const auth = useAuthStore()
 const config = useConfigStore()
+const customerTheme = useCustomerThemeStore()
 const notices = useNoticesStore()
 
 onMounted(() => {
@@ -180,7 +182,7 @@ function onNotices() {
 </script>
 
 <template>
-  <div class="m-shell">
+  <div class="m-shell" :class="{ 'theme-preview': customerTheme.preview }">
     <Navbar
       fixed
       placeholder
@@ -191,7 +193,7 @@ function onNotices() {
       @left-click="goBack"
     >
       <template #title>
-        <h1 class="navbar-title">{{ pageTitle || config.config.siteName || '聚屿社区' }}</h1>
+        <h1 class="navbar-title">{{ pageTitle || customerTheme.theme?.brand?.name || config.config.siteName || '聚屿社区' }}</h1>
       </template>
       <template #right>
         <Button v-if="auth.isLogged && !isMe" class="nav-me" variant="text" shape="square" size="large" aria-label="我的" @click="router.push('/me')">
@@ -238,6 +240,9 @@ function onNotices() {
 </template>
 
 <style scoped>
+.theme-preview :deep(.t-navbar--fixed .t-navbar__content) {
+  top: var(--app-theme-preview-height, 0px);
+}
 /* v43：顶栏背景渐变过渡（透明度由内联 CSS 变量控制） */
 .m-shell :deep(.t-navbar__content) {
   transition: background-color 160ms linear;

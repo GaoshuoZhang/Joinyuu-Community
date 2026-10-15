@@ -494,6 +494,10 @@ async function handleDropdown(item: { value?: string | number }) {
               <template #icon><SettingIcon /></template>
               系统配置
             </t-menu-item>
+            <t-menu-item value="/system/mobile-themes" v-permission="'/system/config'">
+              <template #icon><SettingIcon /></template>
+              移动端主题
+            </t-menu-item>
             <t-menu-item v-if="canSee(['/approvals'], '系统管理', 'members')" value="/system/application-form-config" v-permission="'/approvals'">
               <template #icon><CheckCircleIcon /></template>
               申请表单配置
