@@ -16,6 +16,12 @@ start-client-mobile.bat
 .trae/
 .logs/
 uploads/
+# Installed customer themes are deployment data. Keep the public app customer-neutral.
+/mobile-themes/
+/apps/api/mobile-themes/
+/apps/client-mobile/public/mobile-themes/
+mobile-theme.local.json
+mobile-theme.local.*.json
 .tmp/
 apps/api/.tmp/
 !apps/api/src/modules/app/uploads/
