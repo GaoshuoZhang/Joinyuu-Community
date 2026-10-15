@@ -17,6 +17,7 @@ import { fetchMe, dismissActivation as dismissActivationApi } from '@/api/me'
 import EmptyBlock from '@/components/shared/EmptyBlock.vue'
 import ListSkeleton from '@/components/ListSkeleton.vue'
 import HomeBanner from '@/components/home/HomeBanner.vue'
+import BrandHero from '@/components/home/BrandHero.vue'
 import ActivationChecklist from '@/components/home/ActivationChecklist.vue'
 import HomeEntryGrids from '@/components/home/HomeEntryGrids.vue'
 import HotEventStrip from '@/components/home/HotEventStrip.vue'
@@ -297,13 +298,7 @@ const quickEntries = computed(() => {
 <template>
   <PullDownRefresh :value="refreshing" :disabled="!atTop" :loading-props="REFRESH_LOADING_PROPS" @refresh="onRefresh">
     <div class="home page-fade-in">
-      <section v-if="customerTheme.theme?.layout?.template === 'brand'" class="brand-hero m-card" :style="customerTheme.theme.brand?.homeBackground ? { backgroundImage: `url(${customerTheme.theme.brand.homeBackground})` } : undefined">
-        <div class="brand-hero-copy">
-          <img v-if="customerTheme.theme.brand?.logo" class="customer-logo" :src="customerTheme.theme.brand.logo" alt="" />
-          <h2>{{ customerTheme.theme.brand?.name || config.config.siteName }}</h2>
-          <p v-if="customerTheme.theme.brand?.slogan">{{ customerTheme.theme.brand.slogan }}</p>
-        </div>
-      </section>
+      <BrandHero v-if="customerTheme.theme?.layout?.template === 'brand'" :brand="customerTheme.theme.brand" :site-name="config.config.siteName" />
       <Search
         v-model="searchKeyword"
         class="home-search"
@@ -333,7 +328,7 @@ const quickEntries = computed(() => {
       />
 
       <!-- v48：发布入口紧跟在四个方形入口之下（发布是最常用的核心动作），并保持描边次级形态 -->
-      <Button v-if="module === 'publish' && config.config.demandOpen" theme="primary" variant="outline" block size="large" class="publish-entry pressable" @click="goPublish">
+      <Button v-if="module === 'publish' && config.config.demandOpen" theme="primary" :variant="customerTheme.theme?.layout?.template === 'brand' ? 'base' : 'outline'" block size="large" class="publish-entry pressable" @click="goPublish">
         <template #icon><Icon aria-hidden="true" name="flag" size="20px" /></template>
         {{ auth.isLogged ? '发布需求 · 让社区一起帮你完成' : '登录后发布需求' }}
         <template #suffix><Icon aria-hidden="true" name="chevron-right" size="16px" /></template>

@@ -5,11 +5,19 @@
    布局骨架尺寸、页面通用类、动效、客户端专属（品牌渐变/移动安全区）
    ============================================================ */
 
-.customer-logo { width: 64px; height: 64px; object-fit: contain; }
-.brand-hero { position: relative; background-size: cover; background-position: center; overflow: hidden; }
-.brand-hero-copy { display: grid; gap: var(--app-space-4); padding: var(--app-space-8); border-radius: var(--td-radius-large); background: var(--td-bg-color-container); color: var(--td-text-color-primary); width: fit-content; max-width: 100%; }
-.brand-hero-copy h2 { margin: 0; font: var(--app-type-page-title); overflow-wrap: anywhere; }
-.brand-hero-copy p { margin: 0; font: var(--app-type-body); overflow-wrap: anywhere; }
+.customer-brand-logo { display: inline-flex; align-items: center; justify-content: center; vertical-align: middle; }
+.customer-logo { display: block; width: 64px; height: 64px; object-fit: contain; }
+.customer-brand-logo--wordmark .customer-logo { width: 132px; height: 44px; }
+.customer-logo--dark { display: none; }
+:root.dark .customer-logo--has-dark { display: none; }
+:root.dark .customer-logo--dark { display: block; }
+.brand-hero { position: relative; isolation: isolate; display: flex; flex-direction: column; align-items: center; gap: var(--app-space-6); padding: var(--app-space-9) var(--app-space-8); border-radius: var(--td-radius-large); overflow: hidden; text-align: center; color: var(--td-text-color-primary); background: linear-gradient(155deg, var(--app-theme-hero-start, var(--td-bg-color-page)), var(--app-theme-hero-end, var(--td-bg-color-container))); }
+.brand-hero-art { position: absolute; inset: 0; z-index: -1; background-size: cover; background-position: center; opacity: 0.06; pointer-events: none; }
+.brand-hero-title { max-inline-size: 18ch; margin: 0; font: var(--app-type-page-title); white-space: pre-line; text-wrap: balance; overflow-wrap: anywhere; }
+.brand-hero--headline .brand-hero-title { font: var(--app-type-brand-headline); }
+.brand-hero-highlight { color: var(--app-theme-accent, var(--td-brand-color)); }
+.brand-hero-eyebrow { max-width: 100%; margin: 0; padding: var(--app-space-1) var(--app-space-6); border: 1px solid var(--td-component-border); border-radius: var(--td-radius-round); background: var(--td-bg-color-container); font: var(--app-type-caption); overflow-wrap: anywhere; }
+.brand-hero-description { max-inline-size: 30ch; margin: 0; color: var(--td-text-color-secondary); font: var(--app-type-body-relaxed); white-space: pre-line; text-wrap: pretty; overflow-wrap: anywhere; }
 
 :root {
   /* 布局骨架尺寸 */
@@ -17,6 +25,7 @@
   --app-mobile-topbar-h: 52px;
   --app-mobile-tabbar-h: 56px;
   --app-content-max: 1120px;
+  --app-content-mobile-max: 640px;
 
   /* ============ 排版（Token First）============
    * 原则：字号 / 字重 / 行高 / 字体栈的字面量只允许出现在本文件；
@@ -34,11 +43,13 @@
   --app-fs-body: clamp(14px, 4.267vw, 16px);
   --app-fs-subtitle: clamp(16px, 4.8vw, 18px);
   --app-fs-title: clamp(19px, 5.867vw, 22px);
+  --app-fs-brand-headline: clamp(28px, 8vw, 36px);
 
   /* L1 字重档：仅三档 —— 400 正文/辅助、600 标题与强调、700 大数字展示 */
   --app-fw-regular: 400;
   --app-fw-strong: 600;
   --app-fw-numeric: 700;
+  --app-fw-brand: 800;
 
   /* L1 行高档：无单位比例，随流体字号等比缩放（中文正文基线 1.5） */
   --app-leading-tight: 1.35;
@@ -48,6 +59,7 @@
 
   /* L2 角色档：复合 font 简写，一次锁定 字号+行高+字重+字体栈 */
   --app-type-page-title: var(--app-fw-strong) var(--app-fs-title) / var(--app-leading-title) var(--app-font-family);
+  --app-type-brand-headline: var(--app-fw-brand) var(--app-fs-brand-headline) / var(--app-leading-tight) var(--app-font-family);
   --app-type-section: var(--app-fw-strong) var(--app-fs-subtitle) / var(--app-leading-title) var(--app-font-family);
   --app-type-card-title: var(--app-fw-strong) var(--app-fs-body) / var(--app-leading-title) var(--app-font-family);
   --app-type-body: var(--app-fw-regular) var(--app-fs-body) / var(--app-leading-body) var(--app-font-family);
@@ -119,7 +131,7 @@
 
   /* 首页入口宫格的「1 个单位」= 屏幕宽 4 单位中的 1 份：内容区宽扣掉 4 列布局的 3 个 gutter
    * 后除以 4。宫格卡片高度统一按此约束：2 单位宽的卡高 1 单位、1 单位宽的卡为 1 单位方形。 */
-  --app-entry-unit: calc((100vw - var(--app-space-8) * 2 - var(--app-space-3) * 3) / 4);
+  --app-entry-unit: clamp(88px, calc((min(100vw, var(--app-content-mobile-max)) - var(--app-space-8) * 2 - var(--app-space-3) * 3) / 4), 104px);
 }
 
 /* ---------- L3：TDesign 字体变量全量映射 ----------

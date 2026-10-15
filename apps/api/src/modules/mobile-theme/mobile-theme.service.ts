@@ -79,7 +79,7 @@ export class MobileThemeService {
     const row = await this.load(id)
     const manifest = validateManifest(row.manifest)
     const brand = { ...manifest.brand }
-    for (const field of ['logo', 'homeBackground'] as const) if (brand[field]) brand[field] = `/api/public/mobile-themes/${id}/${brand[field]}`
+    for (const field of ['logo', 'logoDark', 'homeBackground'] as const) if (brand[field]) brand[field] = `/api/public/mobile-themes/${id}/${brand[field]}`
     return { packageId: id, ...manifest, brand }
   }
 

@@ -56,7 +56,43 @@
         "homeBackground": {
           "type": "string",
           "pattern": "^assets/(?:[a-zA-Z0-9_-]+/)*[a-zA-Z0-9_-]+\\.(png|jpg|jpeg|webp)$"
+        },
+        "eyebrow": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 60,
+          "pattern": "\\S"
+        },
+        "headline": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 100,
+          "pattern": "\\S"
+        },
+        "highlight": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 40,
+          "pattern": "\\S"
+        },
+        "logoDark": {
+          "type": "string",
+          "pattern": "^assets/(?:[a-zA-Z0-9_-]+/)*[a-zA-Z0-9_-]+\\.(png|jpg|jpeg|webp)$"
+        },
+        "logoShape": {
+          "enum": [
+            "square",
+            "wordmark"
+          ]
         }
+      },
+      "dependentRequired": {
+        "logoDark": [
+          "logo"
+        ],
+        "highlight": [
+          "headline"
+        ]
       }
     },
     "tokens": {
@@ -86,6 +122,22 @@
             "secondaryText": {
               "type": "string",
               "pattern": "^#[0-9a-fA-F]{6}$"
+            },
+            "accent": {
+              "type": "string",
+              "pattern": "^#[0-9a-fA-F]{6}$"
+            },
+            "primaryLight": {
+              "type": "string",
+              "pattern": "^#[0-9a-fA-F]{6}$"
+            },
+            "heroStart": {
+              "type": "string",
+              "pattern": "^#[0-9a-fA-F]{6}$"
+            },
+            "heroEnd": {
+              "type": "string",
+              "pattern": "^#[0-9a-fA-F]{6}$"
             }
           }
         },
@@ -110,6 +162,22 @@
               "pattern": "^#[0-9a-fA-F]{6}$"
             },
             "secondaryText": {
+              "type": "string",
+              "pattern": "^#[0-9a-fA-F]{6}$"
+            },
+            "accent": {
+              "type": "string",
+              "pattern": "^#[0-9a-fA-F]{6}$"
+            },
+            "primaryLight": {
+              "type": "string",
+              "pattern": "^#[0-9a-fA-F]{6}$"
+            },
+            "heroStart": {
+              "type": "string",
+              "pattern": "^#[0-9a-fA-F]{6}$"
+            },
+            "heroEnd": {
               "type": "string",
               "pattern": "^#[0-9a-fA-F]{6}$"
             }

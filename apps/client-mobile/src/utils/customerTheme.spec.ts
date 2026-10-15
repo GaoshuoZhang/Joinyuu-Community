@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { applyCustomerTheme, customerThemeCss, HOME_MODULES, orderedHomeModules, type CustomerTheme } from './customerTheme'
+import { applyCustomerTheme, brandHeadline, customerThemeCss, HOME_MODULES, orderedHomeModules, type CustomerTheme } from './customerTheme'
 
 const base: CustomerTheme = { packageId: 'package-a', id: 'customer-a', name: '客户 A', version: '1.0.0', schemaVersion: 1 }
 describe('customer theme rendering', () => {
@@ -25,5 +25,18 @@ describe('customer theme rendering', () => {
     const darkCss = css.split(':root:root:root.dark{')[1]
     expect(darkCss).toContain('--td-brand-color-1:#0e1824')
     expect(darkCss).toContain('--td-button-primary-color:#000000')
+  })
+  it('preserves control/card hierarchy and optional accent and soft surfaces', () => {
+    const css = customerThemeCss({ ...base, tokens: { radius: 'large', light: { primary: '#0d1b3d', accent: '#dc590d', primaryLight: '#edf4f8', heroStart: '#f4f8fb', heroEnd: '#fff8e8' } } })
+    expect(css).toContain('--td-radius-default:12px')
+    expect(css).toContain('--td-radius-large:16px')
+    expect(css).toContain('--app-theme-accent:#dc590d')
+    expect(css).toContain('--td-brand-color-light:#edf4f8')
+    expect(css).toContain('--app-theme-hero-start:#f4f8fb')
+  })
+  it('splits a single literal highlight and falls back for older themes', () => {
+    expect(brandHeadline({ name: '旧主题' })).toEqual({ before: '旧主题', highlight: '', after: '' })
+    expect(brandHeadline({ headline: 'AI创业者的伟大航路\n从OPiece启航', highlight: '伟大航路' })).toEqual({ before: 'AI创业者的', highlight: '伟大航路', after: '\n从OPiece启航' })
+    expect(brandHeadline({ headline: 'Hello', highlight: 'missing' }).before).toBe('Hello')
   })
 })

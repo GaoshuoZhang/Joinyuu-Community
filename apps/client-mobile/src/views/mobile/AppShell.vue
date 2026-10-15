@@ -264,7 +264,16 @@ function onNotices() {
 
 .m-content {
   flex: 1;
+  width: 100%;
+  max-width: var(--app-content-mobile-max);
+  margin-inline: auto;
   padding-bottom: calc(var(--app-space-8) + env(safe-area-inset-bottom));
+}
+
+.m-shell :deep(.t-navbar--fixed .t-navbar__content),
+.m-shell :deep(.t-tab-bar) {
+  max-width: var(--app-content-mobile-max);
+  margin-inline: auto;
 }
 
 /* 一级 Tab 才为固定底栏留位；详情/表单页隐藏底栏，保持清晰的任务层级。 */

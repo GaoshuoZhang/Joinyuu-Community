@@ -33,6 +33,11 @@ describe('mobile theme lifecycle', () => {
     expect(db.mobileThemePreview.create.mock.calls[0][0].data.tokenHash).not.toBe(grant.token)
     expect(db.mobileThemeState.updateMany).not.toHaveBeenCalled()
   })
+  it('rewrites dark logo assets to public versioned URLs', async () => {
+    db.mobileThemeState.findUnique.mockResolvedValue({ activeId: row.id })
+    db.mobileThemePackage.findUnique.mockResolvedValue({ ...row, manifest: { ...row.manifest, brand: { logo: 'assets/logo.png', logoDark: 'assets/dark.png' } } })
+    expect(await service.current()).toMatchObject({ brand: { logoDark: `/api/public/mobile-themes/${row.id}/assets/dark.png` } })
+  })
   it('rejects expired preview grants', async () => {
     db.mobileThemePreview.findUnique.mockResolvedValue({ packageId: row.id, expiresAt: new Date(0) })
     await expect(service.current('a'.repeat(64))).rejects.toThrow('过期')

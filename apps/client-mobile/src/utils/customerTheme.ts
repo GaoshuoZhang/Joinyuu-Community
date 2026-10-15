@@ -1,15 +1,24 @@
 export const HOME_MODULES = ['banner', 'entries', 'publish', 'activation', 'announcement', 'events', 'demands', 'articles'] as const
 export type HomeModule = typeof HOME_MODULES[number]
-export interface ThemeColors { primary?: string; background?: string; surface?: string; text?: string; secondaryText?: string }
+export interface ThemeColors { primary?: string; accent?: string; primaryLight?: string; background?: string; surface?: string; text?: string; secondaryText?: string; heroStart?: string; heroEnd?: string }
 export interface CustomerTheme {
   packageId: string
   schemaVersion: 1
   id: string
   name: string
   version: string
-  brand?: { name?: string; slogan?: string; logo?: string; homeBackground?: string }
+  brand?: { name?: string; slogan?: string; logo?: string; logoDark?: string; logoShape?: 'square' | 'wordmark'; homeBackground?: string; eyebrow?: string; headline?: string; highlight?: string }
   tokens?: { light?: ThemeColors; dark?: ThemeColors; radius?: 'small' | 'medium' | 'large' }
   layout?: { template?: 'default' | 'brand'; homeModules?: HomeModule[] }
+}
+
+/** Plain-text segments only: highlighting never introduces HTML from a theme package. */
+export function brandHeadline(brand: CustomerTheme['brand']) {
+  const title = brand?.headline || brand?.name || ''
+  const highlight = brand?.highlight || ''
+  const index = highlight ? title.indexOf(highlight) : -1
+  return index < 0 ? { before: title, highlight: '', after: '' }
+    : { before: title.slice(0, index), highlight, after: title.slice(index + highlight.length) }
 }
 
 /** Configured modules go first; omitted and future modules keep their default order. */
@@ -32,6 +41,7 @@ function colorVariables(colors: ThemeColors = {}, dark = false) {
   const mapping: Record<string, string[]> = {
     background: ['--td-bg-color-page'], surface: ['--td-bg-color-container', '--td-bg-color-container-active'],
     text: ['--td-text-color-primary'], secondaryText: ['--td-text-color-secondary'],
+    accent: ['--app-theme-accent'], heroStart: ['--app-theme-hero-start'], heroEnd: ['--app-theme-hero-end'],
   }
   for (const [key, variables] of Object.entries(mapping)) {
     const color = colors[key as keyof ThemeColors]
@@ -44,20 +54,22 @@ function colorVariables(colors: ThemeColors = {}, dark = false) {
     values['--td-brand-color-active'] = values['--td-brand-color-8']
     values['--td-brand-color-focus'] = values['--td-brand-color-2']
     values['--td-brand-color-disabled'] = values['--td-brand-color-3']
-    values['--td-brand-color-light'] = values['--td-brand-color-1']
+    values['--td-brand-color-light'] = mix(primary, dark ? 0 : 255, dark ? 0.82 : 0.94)
     values['--td-button-primary-color'] = luminance(primary) > 0.179 ? '#000000' : '#ffffff'
     // Banner text uses the fixed inverse text color; keep its gradient dark enough.
     let banner = primary
     while (luminance(banner) > 0.1) banner = mix(banner, 0, 0.1)
     values['--client-brand-gradient'] = `linear-gradient(135deg, ${mix(banner, 0, 0.2)} 0%, ${banner} 100%)`
   }
+  if (colors.primaryLight && /^#[a-f0-9]{6}$/i.test(colors.primaryLight)) values['--td-brand-color-light'] = colors.primaryLight
   if (colors.surface && /^#[a-f0-9]{6}$/i.test(colors.surface)) values['--app-navbar-bg-rgb'] = [1, 3, 5].map((offset) => parseInt(colors.surface!.slice(offset, offset + 2), 16)).join(', ')
   return values
 }
 export function customerThemeCss(theme: CustomerTheme | null): string {
   if (!theme) return ''
   const radius = { small: '4px', medium: '8px', large: '16px' }[theme.tokens?.radius ?? 'medium']
-  const base = theme.tokens?.radius ? `--td-radius-default:${radius};--td-radius-medium:${radius};--td-radius-large:${radius};--td-radius-extraLarge:${radius};` : ''
+  const control = { small: '4px', medium: '8px', large: '12px' }[theme.tokens?.radius ?? 'medium']
+  const base = theme.tokens?.radius ? `--td-radius-default:${control};--td-radius-medium:${control};--td-radius-large:${radius};--td-radius-extraLarge:${radius};` : ''
   const rule = (colors?: ThemeColors, dark = false) => Object.entries(colorVariables(colors, dark)).map(([key, value]) => `${key}:${value};`).join('')
   return `:root:root:root{${base}${rule(theme.tokens?.light)}}:root:root:root.dark{${rule(theme.tokens?.dark ?? theme.tokens?.light, true)}}`
 }

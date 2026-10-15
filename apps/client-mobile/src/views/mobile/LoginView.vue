@@ -8,6 +8,7 @@ import { useNoticesStore } from '@/stores/notices'
 import { ApiError } from '@/api/http'
 import { REQUIRED } from '@/utils/validators'
 import CaptchaField from '@/components/CaptchaField.vue'
+import CustomerBrandLogo from '@/components/CustomerBrandLogo.vue'
 import { useCustomerThemeStore } from '@/stores/customerTheme'
 import { useCaptcha } from '@/composables/useCaptcha'
 import 'tdesign-mobile-vue/es/style/index.css'
@@ -77,7 +78,7 @@ function onLoginSubmit({ validateResult }: { validateResult: unknown }) {
 <template>
   <main id="main" class="page-fade-in m-login" tabindex="-1">
     <div class="hero">
-      <img v-if="customerTheme.theme?.brand?.logo" class="customer-logo" :src="customerTheme.theme.brand.logo" :alt="customerTheme.theme.brand.name || '社区标志'" />
+      <CustomerBrandLogo v-if="customerTheme.theme?.brand?.logo" :brand="customerTheme.theme.brand" />
       <span v-else class="logo">聚</span>
       <h1 class="title">登录</h1>
       <p class="slogan">{{ customerTheme.theme?.brand?.slogan || '让每一座创业孤岛，在这里连成群岛。' }}</p>

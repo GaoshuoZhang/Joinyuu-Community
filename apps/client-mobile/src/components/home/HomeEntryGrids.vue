@@ -77,6 +77,9 @@ defineEmits<{ open: [path: string] }>()
   --td-grid-item-image-width: 36px;
 }
 
+.feature-item :deep(.t-grid-item__content) { min-width: 0; }
+.feature-item :deep(.t-grid-item__text) { min-width: 0; }
+
 /* 1 单位方形卡：宽高都按下限「1 单位」约束（不用 aspect-ratio 硬锁方形——
  * 窄屏上四字标签 + 图标略超方形高度时，硬比例会把文字裁掉；同排各项由网格行统一等高）。
  * 图标槽按 column=4 命中 --middle 档（基础档 --td-grid-item-image-width 不生效），
@@ -114,6 +117,7 @@ defineEmits<{ open: [path: string] }>()
   display: block;
   font: var(--app-type-body-sm);
   color: var(--td-text-color-secondary);
+  white-space: normal;
 }
 
 .quick-label {

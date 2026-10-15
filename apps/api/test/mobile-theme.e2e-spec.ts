@@ -39,8 +39,12 @@ describe('移动端主题完整生命周期', () => {
     expect((await post(`${base}/upload`).attach('file', Buffer.from('bad zip'), 'bad.zip')).status).toBe(400)
     const manifest = JSON.parse(readFileSync(resolve(__dirname, '../../../examples/mobile-theme/manifest.json'), 'utf8'))
     manifest.brand.logo = 'assets/logo.png'
+    manifest.brand.logoDark = 'assets/logo-dark.png'
+    manifest.brand.logoShape = 'wordmark'
+    manifest.brand.headline = 'AI创业者的伟大航路'
+    manifest.brand.highlight = '伟大航路'
     const image = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=', 'base64')
-    const bytes = buildThemeZip([['manifest.json', Buffer.from(JSON.stringify(manifest))], ['assets/logo.png', image]])
+    const bytes = buildThemeZip([['manifest.json', Buffer.from(JSON.stringify(manifest))], ['assets/logo.png', image], ['assets/logo-dark.png', image]])
     const uploaded = await post(`${base}/upload`).attach('file', bytes, 'demo-theme.zip')
     expect(uploaded.status).toBe(200)
     packageId = uploaded.body.data.id
@@ -54,6 +58,8 @@ describe('移动端主题完整生命周期', () => {
     const preview = await request(app.getHttpServer()).get('/api/app/mobile-theme').query({ preview: grant.body.data.token })
     expect(preview.status).toBe(200)
     expect(preview.body.data.id).toBe('example-community')
+    expect(preview.body.data.brand.logoDark).toBe(`/api/public/mobile-themes/${packageId}/assets/logo-dark.png`)
+    expect(preview.body.data.brand.highlight).toBe('伟大航路')
     expect(preview.headers['cache-control']).toBe('no-store')
     expect((await current()).body.data).toBeNull()
     await prisma.mobileThemePreview.updateMany({ data: { expiresAt: new Date(0) } })

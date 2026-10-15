@@ -4,8 +4,8 @@
 
 ## 1. 能力与边界
 
-- 可定制：浅色/深色品牌配色、页面与卡片背景、主要/次要文字色、圆角、品牌名称与标语、登录页 Logo、品牌首页背景、首页模块顺序。
-- 内置模板：`default` 保持公版首页；`brand` 在首页搜索框上方增加品牌展示区。两者均复用同一套业务组件和接口。
+- 可定制：浅色/深色品牌配色与独立强调色、浅底色、页面与卡片背景、主要/次要文字色、圆角、品牌名称、标题与重点词、明暗 Logo、品牌首页渐变与装饰背景、首页模块顺序。
+- 内置模板：`default` 保持公版首页；`brand` 在首页搜索框上方增加居中品牌展示区，并将发布需求按钮呈现为实心主操作。两者均复用同一套业务组件和接口。
 - 未上传、未启用或恢复公版时，不注入客户样式，保持公版。
 - 主题包不包含 JavaScript、Vue、HTML、任意 CSS、字体、SVG、远程图片或业务权限配置。新组件、模板和交互应先在公版实现，再通过主题协议开放。
 - 修改品牌名称只影响移动端标题、导航和品牌展示，不修改后台系统配置、法律协议及业务主体名称。
@@ -36,12 +36,21 @@ customer-a-1.0.0.zip
   "brand": {
     "name": "客户 A 社区",
     "slogan": "在这里，连接新的可能",
+    "eyebrow": "OPC Community",
+    "headline": "AI创业者的伟大航路\n从这里启航",
+    "highlight": "伟大航路",
     "logo": "assets/logo.png",
+    "logoDark": "assets/logo-dark.png",
+    "logoShape": "wordmark",
     "homeBackground": "assets/home-background.webp"
   },
   "tokens": {
     "light": {
       "primary": "#0052d9",
+      "accent": "#c45112",
+      "primaryLight": "#edf4f8",
+      "heroStart": "#f4f8fb",
+      "heroEnd": "#fff8e8",
       "background": "#f3f5f8",
       "surface": "#ffffff",
       "text": "#181818",
@@ -49,6 +58,10 @@ customer-a-1.0.0.zip
     },
     "dark": {
       "primary": "#6b9eff",
+      "accent": "#ffb164",
+      "primaryLight": "#203451",
+      "heroStart": "#10213b",
+      "heroEnd": "#172642",
       "background": "#181818",
       "surface": "#242424",
       "text": "#eeeeee",
@@ -72,12 +85,23 @@ customer-a-1.0.0.zip
 | description | 可选，非空，最多 500 字 |
 | brand.name / slogan | 可选，非空，分别最多 60 / 160 字 |
 | brand.logo / homeBackground | 可选，引用 ZIP 内 `assets/` 下图片；Logo 用于登录页和品牌首页；背景仅用于品牌首页 |
+| brand.logoDark | 可选，深色模式 Logo，与 logo 一同提供。随应用实际明暗模式切换，不只判断操作系统偏好 |
+| brand.logoShape | 可选，`square`（默认，64×64px）或 `wordmark`（132×44px）；横版字标请使用约 3:1 且透明留白较少的原图 |
+| brand.eyebrow | 可选，品牌区上方小标签，最多 60 字 |
+| brand.headline / highlight | 可选，标题最多 100 字，强调词最多 40 字且必须是标题中的子串。支持标题中的换行，内容始终作为纯文本渲染 |
 | tokens.light / dark | 可选，各颜色必须是 `#RRGGBB`，未填写的字段保留公版变量 |
-| tokens.radius | 可选，`small` / `medium` / `large`，分别映射 4 / 8 / 16px 的主要卡片圆角 |
+| tokens.light.accent / dark.accent | 可选，标题重点词颜色，不替代主操作色或业务状态色 |
+| tokens.light.primaryLight / dark.primaryLight | 可选，图标气泡等品牌浅底色，覆盖自动生成的浅底，避免深主色混白后发灰 |
+| tokens.light.heroStart / heroEnd（dark 同名） | 可选，品牌区渐变起止色；未提供时使用页面和卡片背景色。homeBackground 作为低透明度装饰层，不再形成深色相框 |
+| tokens.radius | 可选，`small` / `medium` / `large`，分别映射 4 / 8 / 16px 的主要卡片圆角；large 的控件圆角为 12px，保持卡片和控件层级 |
 | layout.template | 可选，`default` / `brand`，缺省 `default` |
 | layout.homeModules | 可选，已知模块的不重复数组，定义优先排列顺序，不用于禁用功能 |
 
 未知字段会拒绝上传，避免拼写错误造成静默不生效。浅色和深色独立配置；未指定 dark 时，主题 light 配色也用于深色模式，因此建议每个主题提供完整的 light 和 dark 配色。
+
+2026-10-15 增加的增强字段均为可选，新公版继续兼容原 v1 主题；含新字段的主题应在部署支持这些字段的公版后上传。旧公版会按严格校验拒绝未知字段。标题不接受 HTML，不提供任意 CSS 或脚本注入能力。
+
+品牌模板使用单层渐变展示区，headline 引用独立大标题角色；不要把品牌口号塞进社区名称。入口卡片高度限制在 88–104px，内容及固定导航最大宽度为 640px，窄屏说明文字可以自然换行。
 
 主色会生成 TDesign 品牌色阶及按压、焦点、禁用等变量，深色模式使用深色的低阶底色。主按钮会按主色亮度选择黑字或白字，品牌渐变会压暗以适配反色文字。业务状态色、字号体系、权限和路由不由主题改变。主色与按钮文字、正文与卡片背景均应检查对比度，不能只验证首页效果。
 
@@ -161,6 +185,7 @@ Joinyuu-Mobile-Theme/
 - `MobileThemePreview` 保存预览令牌的 SHA-256 和过期时间，不保存令牌原文；生成新预览时清理已过期记录。
 - 资源使用既有 StorageService，支持本地上传目录或 MinIO。主题资源 URL 含不可复用的包 UUID，使用 immutable 缓存；配置响应 no-store。
 - 当前无主题包删除功能，历史包和资源保留以支持回退。备份同时覆盖数据库和上传存储；更换存储驱动前须迁移资源，不能只移动数据库。
+- 已加载主题的 manifest 存在数据库中，不写入客户端源码；上传目录已由 `uploads/` 忽略。额外排除根目录/API/客户端 public 下的运行时 `mobile-themes/` 和 `mobile-theme.local*.json` 本地导出文件。协议、示例及组件源码仍正常跟踪，客户主题源码在独立主题目录维护。
 - 主题属于部署配置，常规业务种子数据不应清除它。
 
 | 接口 | 权限 / 作用 |

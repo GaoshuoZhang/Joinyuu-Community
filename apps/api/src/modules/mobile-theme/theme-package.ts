@@ -8,11 +8,11 @@ export interface ThemeManifest {
   name: string
   version: string
   description?: string
-  brand?: { name?: string; slogan?: string; logo?: string; homeBackground?: string }
+  brand?: { name?: string; slogan?: string; logo?: string; logoDark?: string; logoShape?: 'square' | 'wordmark'; homeBackground?: string; eyebrow?: string; headline?: string; highlight?: string }
   tokens?: { light?: ThemeColors; dark?: ThemeColors; radius?: 'small' | 'medium' | 'large' }
   layout?: { template?: 'default' | 'brand'; homeModules?: string[] }
 }
-export interface ThemeColors { primary?: string; background?: string; surface?: string; text?: string; secondaryText?: string }
+export interface ThemeColors { primary?: string; accent?: string; primaryLight?: string; background?: string; surface?: string; text?: string; secondaryText?: string; heroStart?: string; heroEnd?: string }
 const fail = (message: string): never => { throw new BadRequestException(message) }
 const record = (v: unknown): v is Record<string, unknown> => !!v && typeof v === 'object' && !Array.isArray(v)
 function keys(v: Record<string, unknown>, allowed: string[]) {
@@ -31,9 +31,14 @@ export function validateManifest(value: unknown): ThemeManifest {
   if (value.description !== undefined && !text(value.description, 500)) fail('主题说明最多 500 字')
   if (value.brand !== undefined) {
     if (!record(value.brand)) return fail('brand 必须是对象')
-    keys(value.brand, ['name', 'slogan', 'logo', 'homeBackground'])
-    for (const key of ['name', 'slogan']) if (value.brand[key] !== undefined && !text(value.brand[key], key === 'name' ? 60 : 160)) fail('品牌名称或标语格式错误')
-    for (const key of ['logo', 'homeBackground']) if (value.brand[key] !== undefined && (typeof value.brand[key] !== 'string' || !safeAssetPath(value.brand[key] as string))) fail('品牌图片必须引用 assets/ 内的 PNG、JPEG 或 WebP')
+    keys(value.brand, ['name', 'slogan', 'logo', 'logoDark', 'logoShape', 'homeBackground', 'eyebrow', 'headline', 'highlight'])
+    for (const [key, max] of Object.entries({ name: 60, slogan: 160, eyebrow: 60, headline: 100, highlight: 40 })) {
+      if (value.brand[key] !== undefined && !text(value.brand[key], max)) fail(`品牌字段 ${key} 必须为非空文本且最多 ${max} 字`)
+    }
+    if (value.brand.logoShape !== undefined && (typeof value.brand.logoShape !== 'string' || !['square', 'wordmark'].includes(value.brand.logoShape))) fail('Logo 形态必须为 square 或 wordmark')
+    if (value.brand.highlight !== undefined && (typeof value.brand.headline !== 'string' || !value.brand.headline.includes(value.brand.highlight as string))) fail('标题强调词必须包含在 headline 中')
+    for (const key of ['logo', 'logoDark', 'homeBackground']) if (value.brand[key] !== undefined && (typeof value.brand[key] !== 'string' || !safeAssetPath(value.brand[key] as string))) fail('品牌图片必须引用 assets/ 内的 PNG、JPEG 或 WebP')
+    if (value.brand.logoDark !== undefined && value.brand.logo === undefined) fail('配置深色 Logo 时必须同时提供 logo')
   }
   if (value.tokens !== undefined) {
     if (!record(value.tokens)) return fail('tokens 必须是对象')
@@ -43,7 +48,7 @@ export function validateManifest(value: unknown): ThemeManifest {
       const colors = value.tokens[mode]
       if (colors === undefined) continue
       if (!record(colors)) return fail('配色必须是对象')
-      keys(colors, ['primary', 'background', 'surface', 'text', 'secondaryText'])
+      keys(colors, ['primary', 'accent', 'primaryLight', 'background', 'surface', 'text', 'secondaryText', 'heroStart', 'heroEnd'])
       if (Object.values(colors).some((color) => typeof color !== 'string' || !/^#[0-9a-fA-F]{6}$/.test(color))) fail('颜色必须是六位十六进制值，例如 #0052d9')
     }
   }
@@ -109,7 +114,7 @@ export async function readThemeZip(buffer: Buffer): Promise<{ manifest: ThemeMan
   for (const [path, data] of files) {
     if (!imageMime(path, data)) fail(`图片格式与内容不匹配：${path}`)
   }
-  for (const path of [manifest.brand?.logo, manifest.brand?.homeBackground]) if (path && !files.has(path)) fail(`缺少主题资源：${path}`)
+  for (const path of [manifest.brand?.logo, manifest.brand?.logoDark, manifest.brand?.homeBackground]) if (path && !files.has(path)) fail(`缺少主题资源：${path}`)
   return { manifest, assets: files }
 }
 export function imageMime(path: string, data: Buffer): string | null {
