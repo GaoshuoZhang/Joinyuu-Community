@@ -247,6 +247,9 @@ async function doLogout() {
           <Button class="cell-action" variant="text" block :aria-label="`深色模式，当前${themeLabel}`" @click="themeSheetVisible = true"><Cell title="深色模式" :note="themeLabel" arrow /></Button>
         </CellGroup>
         <CellGroup theme="card">
+          <router-link class="cell-link" to="/me/about" aria-label="关于"><Cell title="关于" arrow /></router-link>
+        </CellGroup>
+        <CellGroup theme="card">
           <Button class="cell-action" variant="text" block @click="onLogout"><Cell class="logout" title="退出登录" :bordered="false" /></Button>
         </CellGroup>
       </div>

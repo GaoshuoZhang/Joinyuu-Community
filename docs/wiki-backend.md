@@ -81,7 +81,7 @@ apps/api/
       contents/          # 资讯/投稿/栏目/展示页申请/公告
       assets/            # 素材库（上传/替换/删除 + 公开读取 files.controller）
       system/            # 配置/字典/审计查询/通知/工作台 + roles/admins/login-logs/monitor/trash/export
-    scheduler/           # 6 个定时任务（发布/活动结束/租约临期/自动归档/自动删除）
+    scheduler/           # 10 个定时任务（发布/活动结束/冻结到期/租约临期/自动归档/自动删除/消息投递/券码过期退款/日志保留期清理）
 ```
 
 **Monorepo 命令**（根 `package.json` 定义）：
@@ -272,9 +272,9 @@ TZ=Asia/Shanghai
 
 ### 6.2 RBAC 权限模型（M1.5 R1/R2）
 
-- **权限码 = 菜单路径或 `perm:xxx` 按钮码**，当前共 **55 码**（种子 `permissionCatalog` 为唯一目录），`*` 为超级管理员全量标记；`@RequirePermission(code | code[])` 支持 any-of 语义；`PermissionGuard` 叠加在 `JwtAuthGuard` 之后，权限集合命中任一所需码或含 `*` 放行，否则 403「无权限执行该操作」；未声明 `@RequirePermission` 的端点仅需登录。
+- **权限码 = 菜单路径或 `perm:xxx` 按钮码**，当前共 **56 码**（种子 `permissionCatalog` 为唯一目录），`*` 为超级管理员全量标记；`@RequirePermission(code | code[])` 支持 any-of 语义；`PermissionGuard` 叠加在 `JwtAuthGuard` 之后，权限集合命中任一所需码或含 `*` 放行，否则 403「无权限执行该操作」；未声明 `@RequirePermission` 的端点仅需登录。
 - **覆盖范围**：36 个 controller 中，34 个属于 admin；其中 33 个挂 `@RequirePermission`，`notifications` 有意仅登录。`health` 与 `files`（公开文件读取）为公开 controller。无声明 controller 内的个别端点（如 `GET /enterprises/options`、`GET /users/options`）仅需登录。
-- **权限目录（按模块）**：工作台 `/dashboard`、`/user-messages`；社区成员 `/users`、`/individuals`、`/enterprises`、`/external-enterprises`、`/approvals` + 企业按钮码 `perm:enterprise:create|update|disable|enable|delete`、`perm:external-enterprise:create|update|disable|enable|delete`；业务运营 `/demands`、`/demands/review`、`/projects`、`/events`；空间管理 `/workstations`、`/workstations/offices`、`/workstations/leases`、`/spaces`、`/spaces/reservations`；内容管理 `/contents/publish`、`/contents/submissions`、`/contents/columns`、`/contents/stats`、`/contents/policies`、`/contents/banners`、`/contents/announcements`；积分商城 `/mall/goods`、`/mall/orders`；规则管理 `/rules/points`、`/rules/experience`、`/rules/levels`、`/rules/publishing-limits`、`/rules/ledger`、`/rules/experience-records`；系统管理 `/system/dicts`、`/system/config`、`/system/policies`、`/logs/audit`、`/system/roles`、`/system/admins`、`/system/sessions`、`/system/assets`、`/system/monitor`、`/logs/login`、`/system/trash`、`/system/export`、`/governance`、`/member-governance`（服务申请 `/engagement/services`、名片管理 `/card-management` 已随功能下线移除）。
+- **权限目录（按模块）**：工作台 `/dashboard`、`/user-messages`；社区成员 `/users`、`/individuals`、`/enterprises`、`/external-enterprises`、`/approvals` + 企业按钮码 `perm:enterprise:create|update|disable|enable|delete`、`perm:external-enterprise:create|update|disable|enable|delete`；业务运营 `/demands`、`/demands/review`、`/demands/responses`、`/projects`、`/events`；空间管理 `/workstations`、`/workstations/offices`、`/workstations/leases`、`/spaces`、`/spaces/reservations`；内容管理 `/contents/publish`、`/contents/submissions`、`/contents/columns`、`/contents/stats`、`/contents/policies`、`/contents/banners`、`/contents/announcements`；积分商城 `/mall/goods`、`/mall/orders`；规则管理 `/rules/points`、`/rules/experience`、`/rules/levels`、`/rules/publishing-limits`、`/rules/ledger`、`/rules/experience-records`；系统管理 `/system/dicts`、`/system/config`、`/system/policies`、`/logs/audit`、`/system/roles`、`/system/admins`、`/system/sessions`、`/system/assets`、`/system/monitor`、`/logs/login`、`/system/trash`、`/system/export`、`/governance`、`/member-governance`（服务申请 `/engagement/services`、名片管理 `/card-management` 已随功能下线移除）。
 - **内置角色**（`AdminRole` + `AdminRolePermission`）：`super`（`*` 全量）、`operator`（业务运营+内容+商城）、`auditor`（审核类）、`space-ops`（空间域）；角色权限保存即时失效关联管理员的权限缓存（`auth:admin:perms:<username>`，TTL 2h）。
 - **权限点目录接口**：`GET /api/admin/permissions/catalog` 按模块分组返回，供角色勾选矩阵渲染。
 - 数据范围已按 7 个业务域实现：`AdminRole.dataScope` + `DomainScopeGuard` 对 URL 域做允许/拒绝；当前仍无行级、组织级、所有者级或租户级过滤。
@@ -369,7 +369,7 @@ TZ=Asia/Shanghai
 | PUT | /api/admin/demands/:id | 编辑（pending_release/published 可用，不改状态）；可改 `contactPublic`、`respondNeedReview` |
 | POST | /api/admin/demands/:id/approve | pending → pending_release |
 | POST | /api/admin/demands/:id/reject | `{ reason }` 必填 → rejected + archivableAt |
-| POST | /api/admin/demands/:id/respondents/:respondentId/review | 需求响应审核：body `{ status: 'approved'\|'rejected', reason? }`（驳回必填理由，≤200 字）；条件抢占（仅 status=`pending_review` 且未撤回可审核，重复/并发 409）：通过 → 响应回 `pending`（发布者此后可选定承接方）、发放 `demand_responded` 响应积分并通知发布者；驳回 → 转 `rejected` 并置 `withdrawnAt` 失效、写 `rejectReason`，通知响应者（含理由）且不发积分；均写审计日志 |
+| POST | /api/admin/demands/:id/respondents/:respondentId/review | 需求响应审核：body `{ status: 'approved'\|'rejected', reason? }`（驳回必填理由，≤200 字）；条件抢占（仅 status=`pending_review` 且未撤回可审核，重复/并发 409）：通过 → 响应回 `pending`（发布者此后可选定承接方）、发放 `demand_responded` 响应积分并通知发布者；驳回 → 转 `rejected` 并置 `withdrawnAt` 失效、写 `rejectReason`，通知响应者（含理由）且不发积分；均写审计日志。权限 `/demands`、`/demands/review`、`/demands/responses` 任一（响应审核页复用同一端点） |
 | POST | /api/admin/demands/:id/publish-now | pending_release → published（写 publishedAt） |
 | POST | /api/admin/demands/:id/schedule | `{ scheduledAt }`：pending_release → scheduled |
 | POST | /api/admin/demands/:id/cancel-schedule | scheduled → pending_release |
@@ -379,6 +379,7 @@ TZ=Asia/Shanghai
 | POST | /api/admin/demands/:id/proxy-respond | `{ userName, enterprise, phone, email?, quote?, message? }`（仅 published/projected；message 空记"管理员代报名"；联系电话必填） |
 | POST | /api/admin/demands/:id/initiate-project | ProjectInitPayload；published/selected 可立项；创建项目 + 双向关联（demand.projectId ↔ project.sourceDemandId）→ projected + archivableAt；**项目需求方/创建人/联系方式/合同价格由服务端照搬需求快照（客户端传值不生效）**；发布者与被选中承接方补发 `demand_undertaken` 积分、承接方按身份补发 `project_undertaken` 经验并通知双方（发布者为后台代发的企业 ID 时站内信落到企业联系人） |
 | GET | /api/admin/demands/undertaker-options | 承接方候选（社区企业/合作企业/社区个体/个人用户，value=`enterprise:E*`/`enterprise:XE*`/`individual:U*`） |
+| GET | /api/admin/demand-responses | 独立 controller：跨需求查询**待审核响应**（`status=pending_review` 且 `withdrawnAt=null`），query page/pageSize/keyword（响应者/企业/留言/需求编号，均 insensitive 模糊）+ `at` 倒序；返回 `{ list, total }`，每行含需求快照（id/title/status/publisherName）与响应内容（identity/quote/timeline/cases/message/phone/email）；权限 `/demands/responses`、`/demands/review`、`/demands` 任一 |
 | GET | /api/admin/publisher-options | 独立 controller：`{ users: [...], enterprises: [...] }` 含联系电话（自动填充用）；权限（`/demands`、`/enterprises`、`/contents/publish` 任一） |
 
 ### 7.7 项目 projects（8）
@@ -539,8 +540,10 @@ TZ=Asia/Shanghai
 | POST | /api/admin/notifications/:id/read | 单条已读（幂等） |
 | POST | /api/admin/notifications/read-all | 全部已读 |
 | GET | /api/admin/audit-logs | query：page/pageSize/keyword(target/action/detail/operator)/module 精确筛选；权限 `/logs/audit` |
+| GET | /api/admin/audit-logs/retention | 日志保留期：返回 `{ auditLogRetentionDays, loginLogRetentionDays }`（默认 180，0 = 永久保存）；权限 `/logs/audit` 或 `/logs/login`（方法级 any-of） |
+| PUT | /api/admin/audit-logs/retention | `{ auditLogRetentionDays, loginLogRetentionDays }`，各须为 0-3650 的整数（越界/非整数 400）；保存即生效 + before/after 审计（module=系统管理、action=保存日志设置）+ 失效 `config:system` 缓存；权限 `/logs/audit` 或 `/logs/login` |
 | GET | /api/admin/system/config | 单例配置（走 `config:system` 缓存 10min）；权限 `/system/config`；MinIO SecretKey 不回传原文，仅 `minioSecretKeyConfigured` + `minioSecretKeyMasked`（`********`）+ `minioCredentialSource`（env 优先、其次 database）；实名核验只回 `realnameVerifyCredentialMasked`（inline 模式）与派生 `realnameMode` |
-| PUT | /api/admin/system/config | 保存即生效；leaseExpireRemindDays 1-90、uploadMaxSizeMb 1-100、passwordExpireDays 1-3650；记 updatedBy/updatedAt + before/after 审计；**密码过期强制改密**：`passwordExpireEnabled`（缺省 false=密码永不过期，仅后台账号）+ 周期 `passwordExpireDays`（默认 90），关闭开关保存时按前缀清理 `auth:admin:pwd-expired:*` 残留标记；`minioSecretKey` 为只写字段（留空=保持原值，非空=更新/轮换），审计快照含 `minioSecretKeyChanged` 但不含密钥原文。**实名核验**：`realnameVerifyEnabled` + `realnameVerifyProvider`（启用时必须单选）、`realnameVerifyConfig`、`realnameVerifyCredentialMode`（inline 直接填写：留空=保持原值/只写；env 登记变量名）、`realnameVerifyCredentialEnv`；启用/供应商/来源/参数/凭据任一变化会把 `realnameVerifyTestOk` 重置为 false（须重新测试联通），审计含 `realnameVerifyChanged` 且 inline 凭据不入快照 |
+| PUT | /api/admin/system/config | 保存即生效；leaseExpireRemindDays 1-90、uploadMaxSizeMb 1-100、passwordExpireDays 1-3650；记 updatedBy/updatedAt + before/after 审计；**密码过期强制改密**：`passwordExpireEnabled`（缺省 false=密码永不过期，仅后台账号）+ 周期 `passwordExpireDays`（默认 90），关闭开关保存时按前缀清理 `auth:admin:pwd-expired:*` 残留标记；`minioSecretKey` 为只写字段（留空=保持原值，非空=更新/轮换），审计快照含 `minioSecretKeyChanged` 但不含密钥原文。**实名核验**：`realnameVerifyEnabled` + `realnameVerifyProvider`（启用时必须单选）、`realnameVerifyConfig`、`realnameVerifyCredentialMode`（inline 直接填写：留空=保持原值/只写；env 登记变量名）、`realnameVerifyCredentialEnv`；启用/供应商/来源/参数/凭据任一变化会把 `realnameVerifyTestOk` 重置为 false（须重新测试联通），审计含 `realnameVerifyChanged` 且 inline 凭据不入快照。**日志保留期** `auditLogRetentionDays` / `loginLogRetentionDays` 为可选字段（0-3650，0 = 永久保存），缺省保持原值（旧前端表单不传该字段时不得被重置为 180；日常维护走 `PUT /api/admin/audit-logs/retention`） |
 | GET | /api/admin/system/config/realname/catalog | 实名核验供应商目录（配置字段 + 凭据变量名，供表单渲染）；权限 `/system/config` |
 | POST | /api/admin/system/config/realname/test | 测试联通：用格式合法的固定样例调用所选供应商，**接口可返回业务结果即算联通**（不要求核验一致）；成功写 `realnameVerifyTestOk=true` + `realnameVerifyTestedAt` 并清 `config:system` 缓存；失败写 false 并返回带阿里云 `Recommend` 的诊断信息 |
 | GET | /api/admin/dicts/:type | 按 sort 升序（管理页返回全量含 disabled）；type 四类 demand_category/industry/event_type/goods_category；权限 `/system/dicts` |
@@ -640,7 +643,7 @@ TZ=Asia/Shanghai
 - **办公位/租约**：办公位 idle ↔ maintenance（直接切换）；assigned 仅经租约创建/终止进入/退出；租约 active → terminated（事务释放办公位）；**续期（renew）不改存储状态**，仅延长 `endDate`/调整租金并追加 `renewRecords`（已到期为读取派生，续期后自然回到生效中/即将到期）；已到期（派生）条目**不会自动终止**，需人工续期或终止释放办公位；归档：仅 terminated。
 - **实现方式**：每域 Service 内显式状态/前置校验，非法流转抛 409（文案="仅 XX 的 XX 可 XX"，与 M0 一致）；每个归档端点同样校验可归档状态，不做通用状态机框架。
 
-### 8.2 定时任务（@nestjs/schedule，单实例，共 9 个）
+### 8.2 定时任务（@nestjs/schedule，单实例，共 10 个）
 | 任务名 | 频率 | 逻辑 |
 |---|---|---|
 | demands-events-scheduled-publish | 每 30 秒 | `demands/events` 中 status=scheduled 且 scheduledAt≤now 且未归档 → published（活动同时 open 报名）+ 写 schedule 通知，事务内完成 |
@@ -652,6 +655,7 @@ TZ=Asia/Shanghai
 | archive-auto-purge | 每 5 分钟 | 按 ArchiveSetting：autoPurge 开启且 `deletedAt + purgeDelayDays` 已过 → 物理删除（外键冲突跳过，等待人工处理） |
 | message-outbox-dispatch | 每 30 秒 | 扫描 Outbox 到期消息投递，重试退避与死信由 OutboxService 内部处理 |
 | mall-voucher-expire-refund | 每 5 分钟 | 商城券码过期自动退款：pending_use 且 voucherExpiresAt≤now → cancelled + 退积分（source=redemption 流水）+ 回补库存 + 站内信（逐单事务，条件抢占与人工核销/退款互斥） |
+| log-retention-purge | 每日 03:00 | 日志保留期清理（`SystemConfig.auditLogRetentionDays` / `loginLogRetentionDays`，默认 180、0 = 永久保存）：按天 cutoff 删除超期 `AuditLog`（`at`）与 `LoginLog`（`loginAt`），保留期 0 则跳过该表；每次运行仅写 1 条汇总审计（module=系统管理、action=日志自动清理、operator=系统），避免逐行写入污染审计表 |
 
 - 每次执行写 `SchedulerLog`（jobName/startedAt/finishedAt/durationMs/status/detail/rowsAffected），监控页读取；`POST /api/admin/monitor/jobs/:name/run` 可手动触发（执行失败透出 500）。
 - 单实例部署无需分布式锁；读取派生（expiring/expired）与定时通知并存：派生保证展示实时性，任务只负责通知。

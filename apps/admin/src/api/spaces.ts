@@ -36,6 +36,14 @@ export interface SpacePayload {
   feePerHour: number
   equipment: string[]
   description: string
+  /** 自定义可见范围：身份（空数组 = 不限）；关闭「需预约」时后端统一清空 */
+  visibilityIdentities: string[]
+  /** 自定义可见范围：等级（空数组 = 不限等级） */
+  visibilityLevels: string[]
+  /** 自定义可预约范围：身份（空数组 = 不限）；提交预约时校验 */
+  reservationIdentities: string[]
+  /** 自定义可预约范围：等级（空数组 = 不限等级） */
+  reservationLevels: string[]
 }
 
 /* POST /api/admin/spaces — 新增空间（新增即可用 status=available） */

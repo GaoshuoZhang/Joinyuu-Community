@@ -125,4 +125,20 @@ export class SystemConfigPayloadDto {
   @MaxLength(64)
   @Matches(/^[a-z0-9][a-z0-9.-]{1,62}$/, { message: 'Bucket 名称格式不正确' })
   minioBucket!: string
+
+  /** 操作日志保留期（天）：0 = 永久保存；缺省保持原值（旧前端表单不传该字段时不得被重置） */
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt({ message: '操作日志保留期须为 0-3650 的整数' })
+  @Min(0, { message: '操作日志保留期须为 0-3650 的整数' })
+  @Max(3650, { message: '操作日志保留期须为 0-3650 的整数' })
+  auditLogRetentionDays?: number
+
+  /** 登录日志保留期（天）：0 = 永久保存；缺省保持原值 */
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt({ message: '登录日志保留期须为 0-3650 的整数' })
+  @Min(0, { message: '登录日志保留期须为 0-3650 的整数' })
+  @Max(3650, { message: '登录日志保留期须为 0-3650 的整数' })
+  loginLogRetentionDays?: number
 }

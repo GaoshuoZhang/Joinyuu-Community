@@ -99,6 +99,37 @@ export async function reviewDemandRespondent(
   })
 }
 
+/** 响应审核列表项（「业务运营 → 响应审核」）：待审核响应 + 所属需求摘要 */
+export interface PendingRespondent {
+  id: number
+  demandId: string
+  demandTitle: string
+  demandStatus: string
+  publisherName: string
+  name: string
+  enterprise: string
+  responderIdentity?: { type?: string; title?: string | null; enterpriseName?: string } | null
+  quote?: string
+  timeline?: string
+  cases?: string
+  message: string
+  phone?: string
+  email?: string
+  at: string
+  status: string
+}
+
+/* GET /api/admin/demand-responses?page&pageSize&keyword — 待审核响应（pending_review 且未撤回，提交时间倒序） */
+export async function fetchDemandResponses(
+  query: { page: number; pageSize: number; keyword?: string },
+): Promise<PageResult<PendingRespondent>> {
+  const qs = new URLSearchParams()
+  qs.set('page', String(query.page))
+  qs.set('pageSize', String(query.pageSize))
+  if (query.keyword) qs.set('keyword', query.keyword)
+  return httpGet<PageResult<PendingRespondent>>(`/demand-responses?${qs}`)
+}
+
 /* POST /api/admin/demands/:id/approve — 待审核需求仅读审核通过，转为待发布 */
 export async function approveDemand(id: string): Promise<{ code: number }> {
   return httpPost<{ code: number }>(`/demands/${id}/approve`)

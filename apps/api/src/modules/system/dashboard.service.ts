@@ -44,6 +44,7 @@ export class DashboardService {
     return [
       { key: 'settle', title: '入驻/合作/退驻审核', description: '企业入驻、个体入驻、企业合作与企业退驻待审核', count: c.settle, route: '/approvals' },
       { key: 'demand', title: '需求审核', description: '待审核需求，通过后转待发布', count: c.demand, route: '/demands/review' },
+      { key: 'demandResponse', title: '响应审核', description: '待审核的需求响应，通过后交由发布者选定承接方', count: c.demandResponse, route: '/demands/responses' },
       { key: 'reservation', title: '空间预约审核', description: '待审核的空间预约申请', count: c.reservation, route: '/spaces/reservations' },
       { key: 'article', title: '文章审核', description: '待审核的资讯文章', count: c.article, route: '/contents/submissions' },
       { key: 'eventEnrollment', title: '活动报名审核', description: '待审核的活动报名申请', count: c.eventEnrollment, route: '/events/enrollments' },
@@ -154,11 +155,13 @@ export class DashboardService {
     const today = formatToday()
     const windowEnd = addDays(today, days)
 
-    const [settle, demand, reservation, article, eventEnrollment, lease] = await Promise.all([
+    const [settle, demand, demandResponse, reservation, article, eventEnrollment, lease] = await Promise.all([
       this.prisma.application.count({
         where: { status: 'pending', type: { in: ['settle', 'individual', 'cooperation', 'identity'] } },
       }),
       this.prisma.demand.count({ where: { status: 'pending', deletedAt: null } }),
+      /* 待审核响应（未撤回）：响应需审核开启时提交的响应 */
+      this.prisma.demandRespondent.count({ where: { status: 'pending_review', withdrawnAt: null } }),
       this.prisma.spaceReservation.count({ where: { status: 'pending' } }),
       this.prisma.article.count({ where: { status: 'pending', deletedAt: null } }),
       this.prisma.eventEnrollment.count({ where: { status: 'pending' } }),
@@ -167,7 +170,7 @@ export class DashboardService {
         where: { status: 'active', longTerm: false, endDate: { gte: today, lte: windowEnd } },
       }),
     ])
-    return { settle, demand, reservation, article, eventEnrollment, lease }
+    return { settle, demand, demandResponse, reservation, article, eventEnrollment, lease }
   }
 }
 

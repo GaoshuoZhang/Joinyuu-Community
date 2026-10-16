@@ -135,6 +135,11 @@ const router = createRouter({
           meta: { title: '需求审核', group: '业务运营' },
         },
         {
+          path: 'demands/responses',
+          component: () => import('@/views/demands/DemandResponsesView.vue'),
+          meta: { title: '响应审核', group: '业务运营' },
+        },
+        {
           path: 'demands/:id',
           component: () => import('@/views/demands/DemandDetailView.vue'),
           meta: { title: '需求详情', group: '业务运营' },

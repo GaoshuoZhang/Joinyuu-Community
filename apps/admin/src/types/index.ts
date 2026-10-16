@@ -768,6 +768,12 @@ export interface Space {
   equipment: string[]
   status: SpaceStatus
   description: string
+  /** 自定义可见范围：身份 + 等级（空数组 = 不限）；关闭「需预约」时后端统一清空 */
+  visibilityIdentities: string[]
+  visibilityLevels: string[]
+  /** 自定义可预约范围：身份 + 等级（空数组 = 不限）；提交预约时校验 */
+  reservationIdentities: string[]
+  reservationLevels: string[]
   /** 归档时间（非空表示已归档，详情页写操作隐藏） */
   deletedAt?: string | null
 }

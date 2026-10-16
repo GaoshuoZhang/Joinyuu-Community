@@ -6,7 +6,11 @@ import {
   NotFoundException,
 } from '@nestjs/common'
 import type { CommunityEvent, Prisma, Space, SpaceReservation } from '@prisma/client'
+import type { Request } from 'express'
+import { JwtService } from '@nestjs/jwt'
 import { PrismaService } from '../../../common/prisma/prisma.service'
+import { RedisService } from '../../../common/redis/redis.service'
+import { resolveOptionalAppUid, type OptionalAppAuthDeps } from '../../../common/auth/optional-app-uid'
 import { IdGeneratorService } from '../../../common/id-generator/id-generator.service'
 import { NotificationService } from '../../../common/notify/notification.service'
 import { formatNow, formatToday } from '../../../common/utils/time'
@@ -16,6 +20,12 @@ import { eventBlocksWindow, eventCoversDate, eventOccupiesSpace, eventWindowOn }
 import { billableHours, chargeSpaceFee, refundSpaceFee, reservationFeePoints } from '../../../common/spaces/booking-fee'
 import { discountLabel, discountedPoints, resolveEnterprisePointsDiscount, resolveUserPointsDiscount } from '../../../common/points/points-discount'
 import type { CreateReservationDto } from './dto/create-reservation.dto'
+
+/** 可见范围判定用的身份摘要（type + 经验值等级；等级仅社区个体/社区企业持有） */
+interface IdentitySummary {
+  type: string
+  level?: number
+}
 
 /** 空间列表项/详情 DTO（对齐客户端 Space：status=open|maintenance） */
 export interface SpaceDto {
@@ -86,26 +96,43 @@ export class AppSpacesService {
     private readonly prisma: PrismaService,
     private readonly ids: IdGeneratorService,
     private readonly notify: NotificationService,
+    private readonly jwt: JwtService,
+    private readonly redis: RedisService,
   ) {}
 
-  /** 可预约空间列表：needReservation 且未删除；维护中空间剔除 */
-  async list(): Promise<SpaceDto[]> {
+  /** 可选登录态解析依赖（与 AppJwtGuard 同口径） */
+  private get auth(): OptionalAppAuthDeps {
+    return { jwt: this.jwt, redis: this.redis, prisma: this.prisma }
+  }
+
+  /** 可预约空间列表：needReservation 且未删除；维护中空间剔除；按可见范围过滤（游客仅见「不限」空间） */
+  async list(req: Request): Promise<SpaceDto[]> {
+    const identities = await this.identitySet(await this.optionalUid(req))
     const rows = await this.prisma.space.findMany({
-      where: { needReservation: true, deletedAt: null, status: 'available' },
+      where: {
+        needReservation: true,
+        deletedAt: null,
+        status: 'available',
+        AND: [this.visibilityCond(identities)],
+      },
       orderBy: { id: 'asc' },
     })
     return rows.map(toSpaceDto)
   }
 
-  /** 空间详情：不可约（未开启预约 / 维护中 / 不存在）一律 404，不暴露存在性 */
-  async detail(id: string): Promise<SpaceDto> {
+  /** 空间详情：不可约（未开启预约 / 维护中 / 不存在）一律 404，不暴露存在性；不在可见范围同样 404 */
+  async detail(id: string, req: Request): Promise<SpaceDto> {
     const space = await this.findReservable(id)
+    const identities = await this.identitySet(await this.optionalUid(req))
+    if (!this.visibly(identities, space)) throw new NotFoundException('空间不存在')
     return toSpaceDto(space)
   }
 
   /** 某日可用时段：按空间「开放时间-关闭时间」逐小时切片；待审核/已通过预约 + 已发布活动占用（口径见 event-occupancy）。 */
-  async availability(id: string, date: string): Promise<SpaceSlotDto[]> {
+  async availability(id: string, date: string, req: Request): Promise<SpaceSlotDto[]> {
     const space = await this.findReservable(id)
+    const identities = await this.identitySet(await this.optionalUid(req))
+    if (!this.visibly(identities, space)) throw new NotFoundException('空间不存在')
     const [reserved, events] = await Promise.all([
       this.prisma.spaceReservation.findMany({
         where: { spaceId: space.id, date, status: { in: ['pending', 'approved'] }, deletedAt: null },
@@ -222,6 +249,9 @@ export class AppSpacesService {
       if (!held) throw new BadRequestException('您暂未关联该身份')
     }
     if (!subjectName) subjectName = await this.resolveSubjectName(user, identityType, dto.asEnterpriseId)
+
+    /* 可预约范围校验：按本次实际身份（类型 + 等级）判定，范围外 403 */
+    await this.assertReservable(space, user.uid, identityType)
 
     const status: 'pending' | 'approved' = space.needApproval ? 'pending' : 'approved'
     const now = formatNow()
@@ -351,6 +381,66 @@ export class AppSpacesService {
   }
 
   /* ---------- 私有辅助 ---------- */
+
+  /** @Public 浏览端点：读可选登录态（与 AppJwtGuard 同口径，失败按游客处理） */
+  private async optionalUid(req: Request): Promise<string | null> {
+    return (await resolveOptionalAppUid(this.auth, req.headers.authorization ?? undefined)) ?? null
+  }
+
+  /** 当前登录用户身份集合（可见范围判定；游客返回空 = 仅「不限」空间可见） */
+  private async identitySet(uid: string | null): Promise<IdentitySummary[]> {
+    if (!uid) return []
+    const rows = await this.prisma.userIdentity.findMany({ where: { userId: uid } })
+    if (rows.length === 0) return [{ type: 'individual' }]
+    return rows.map((i) => ({ type: i.type, level: i.level ?? undefined }))
+  }
+
+  /** 可见范围 SQL 条件（口径对齐需求列表）：按「单个身份」联合判定（类型命中且等级命中），多身份取并集；两组都空 = 不限 */
+  private visibilityCond(identities: IdentitySummary[]): Prisma.SpaceWhereInput {
+    if (identities.length === 0) {
+      return { visibilityIdentities: { isEmpty: true }, visibilityLevels: { isEmpty: true } }
+    }
+    const branches: Prisma.SpaceWhereInput[] = identities.map((i) => {
+      const typeCond: Prisma.SpaceWhereInput = {
+        OR: [{ visibilityIdentities: { isEmpty: true } }, { visibilityIdentities: { has: i.type } }],
+      }
+      const levelCond: Prisma.SpaceWhereInput =
+        i.level != null
+          ? { OR: [{ visibilityLevels: { isEmpty: true } }, { visibilityLevels: { has: String(i.level) } }] }
+          : { visibilityLevels: { isEmpty: true } }
+      return { AND: [typeCond, levelCond] }
+    })
+    return { OR: branches }
+  }
+
+  /** 单条空间可见性校验：与列表口径一致（两组都空 = 不限） */
+  private visibly(identities: IdentitySummary[], space: Space): boolean {
+    if (space.visibilityIdentities.length === 0 && space.visibilityLevels.length === 0) return true
+    return identities.some(
+      (i) =>
+        (space.visibilityIdentities.length === 0 || space.visibilityIdentities.includes(i.type)) &&
+        (space.visibilityLevels.length === 0 || (i.level != null && space.visibilityLevels.includes(String(i.level)))),
+    )
+  }
+
+  /** 可预约范围校验：按「本次实际身份 + 该身份经验值等级」判定，两数组都空 = 不限，不命中 403 */
+  private async assertReservable(space: Space, uid: string, identityType: string): Promise<void> {
+    const types = space.reservationIdentities
+    const levels = space.reservationLevels
+    if (types.length === 0 && levels.length === 0) return
+    let level: number | undefined
+    if (identityType !== 'individual') {
+      const held = await this.prisma.userIdentity.findFirst({
+        where: { userId: uid, type: identityType },
+        select: { level: true },
+      })
+      level = held?.level ?? undefined
+    }
+    /* 无等级的身份（个人用户/合作企业）在不限等级时可预约，一旦设了等级范围即不命中 */
+    const typeHit = types.length === 0 || types.includes(identityType)
+    const levelHit = levels.length === 0 || (level != null && levels.includes(String(level)))
+    if (!typeHit || !levelHit) throw new ForbiddenException('该空间不在你的可预约范围内')
+  }
 
   private findReservable(id: string): Promise<Space> {
     return this.prisma.space.findFirst({

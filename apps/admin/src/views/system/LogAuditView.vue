@@ -1,9 +1,11 @@
 <script setup lang="ts">
 import { computed, markRaw, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
+import { SettingIcon } from 'tdesign-icons-vue-next'
 import { useAuthStore } from '@/stores/auth'
 import PageHeader from '@/components/PageHeader.vue'
 import EmbeddedScope from '@/components/EmbeddedScope.vue'
+import LogRetentionDialog from '@/components/LogRetentionDialog.vue'
 import AuditLogPanel from './AuditLogPanel.vue'
 import LoginLogsPanel from './LoginLogsPanel.vue'
 
@@ -48,11 +50,22 @@ function onTabChange(v: string | number) {
   activeTab.value = value
   if (route.query.tab !== value) router.replace({ query: { ...route.query, tab: value } })
 }
+
+/* 日志设置（操作日志/登录日志保留期）：两个日志页任一权限即可读写，与后端 @RequirePermission 口径一致 */
+const canSettings = computed(() => auth.hasPerm(['/logs/audit', '/logs/login']))
+const settingsVisible = ref(false)
 </script>
 
 <template>
   <div class="log-audit-view page-fade-in">
-    <PageHeader title="日志与审计" description="操作日志与登录日志的统一查询" />
+    <PageHeader title="日志与审计" description="操作日志与登录日志的统一查询">
+      <template #actions>
+        <t-button v-if="canSettings" variant="outline" @click="settingsVisible = true">
+          <template #icon><SettingIcon /></template>
+          日志设置
+        </t-button>
+      </template>
+    </PageHeader>
     <!-- 选项卡不再包 page-card：面板自带「筛选栏在卡外 + 表格在卡内」结构（契约：筛选栏不进入 .page-card，对齐 ArchivePanel/独立列表页）；
          关闭 destroyOnHide 避免切 tab 重播入场动画与布局跳动 -->
     <!-- 嵌入标记只能包住选项卡子树，否则本页页头也会一并隐藏 -->
@@ -63,6 +76,8 @@ function onTabChange(v: string | number) {
         </t-tab-panel>
       </t-tabs>
     </EmbeddedScope>
+
+    <LogRetentionDialog v-model:visible="settingsVisible" />
   </div>
 </template>
 

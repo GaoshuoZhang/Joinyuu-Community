@@ -42,6 +42,12 @@ export interface SpaceDto {
   equipment: string[]
   status: string
   description: string
+  /** 自定义可见范围（空数组 = 不限）：身份 + 等级；仅需预约空间有意义 */
+  visibilityIdentities: string[]
+  visibilityLevels: string[]
+  /** 自定义可预约范围（空数组 = 不限）：身份 + 等级 */
+  reservationIdentities: string[]
+  reservationLevels: string[]
   deletedAt?: string
 }
 
@@ -99,6 +105,10 @@ function toSpaceDto(s: Space): SpaceDto {
     equipment: s.equipment,
     status: s.status,
     description: s.description,
+    visibilityIdentities: s.visibilityIdentities,
+    visibilityLevels: s.visibilityLevels,
+    reservationIdentities: s.reservationIdentities,
+    reservationLevels: s.reservationLevels,
     deletedAt: s.deletedAt ?? undefined,
   }
 }
@@ -426,9 +436,11 @@ export class SpacesService {
     if (eventClash) throw new ConflictException('该时段被社区活动占用，无法通过')
   }
 
-  /* 新增/编辑共用字段（allDay 存 00:00/23:59；needApproval 联动 needReservation；feePerHour 0=免费） */
+  /* 新增/编辑共用字段（allDay 存 00:00/23:59；needApproval 联动 needReservation；feePerHour 0=免费）
+   * 可见/可预约范围：关闭「需预约」时统一清空（客户端过滤与预约校验只作用于需预约空间） */
   private spaceData(payload: SpacePayloadDto) {
     const allDay = payload.allDay
+    const reservable = payload.needReservation
     return {
       name: payload.name,
       type: payload.type,
@@ -442,6 +454,10 @@ export class SpacesService {
       feePerHour: payload.feePerHour ?? 0,
       equipment: payload.equipment,
       description: payload.description,
+      visibilityIdentities: reservable ? payload.visibilityIdentities ?? [] : [],
+      visibilityLevels: reservable ? payload.visibilityLevels ?? [] : [],
+      reservationIdentities: reservable ? payload.reservationIdentities ?? [] : [],
+      reservationLevels: reservable ? payload.reservationLevels ?? [] : [],
     }
   }
 }

@@ -133,8 +133,8 @@ export class DemandsController {
     return this.demands.proxyRespond(id, dto)
   }
 
-  /* 响应审核（需求详情「响应记录」tab）：审核页与需求管理页共用，两码任一即可 */
-  @RequirePermission(['/demands', '/demands/review'])
+  /* 响应审核（需求详情「响应记录」tab / 响应审核页）：三码任一即可 */
+  @RequirePermission(['/demands', '/demands/review', '/demands/responses'])
   @HttpCode(200)
   @Post(':id/respondents/:respondentId/review')
   reviewRespondent(

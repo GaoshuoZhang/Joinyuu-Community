@@ -43,6 +43,7 @@ export const permissionGroups: PermissionGroup[] = [
     perms: [
       { code: '/demands', name: '需求管理' },
       { code: '/demands/review', name: '需求审核' },
+      { code: '/demands/responses', name: '响应审核' },
       { code: '/projects', name: '项目管理' },
       { code: '/events', name: '活动管理' },
     ],

@@ -52,8 +52,9 @@ export const permissionCatalog: SeedPermission[] = [
 
   { code: '/demands', name: '需求管理', module: '业务运营', authType: 'menu', sort: 30 },
   { code: '/demands/review', name: '需求审核', module: '业务运营', authType: 'menu', sort: 31 },
-  { code: '/projects', name: '项目管理', module: '业务运营', authType: 'menu', sort: 32 },
-  { code: '/events', name: '活动管理', module: '业务运营', authType: 'menu', sort: 33 },
+  { code: '/demands/responses', name: '响应审核', module: '业务运营', authType: 'menu', sort: 32 },
+  { code: '/projects', name: '项目管理', module: '业务运营', authType: 'menu', sort: 33 },
+  { code: '/events', name: '活动管理', module: '业务运营', authType: 'menu', sort: 34 },
 
   { code: '/workstations', name: '办公位管理', module: '空间管理', authType: 'menu', sort: 40 },
   { code: '/workstations/offices', name: '办公室管理', module: '空间管理', authType: 'menu', sort: 41 },
@@ -115,6 +116,7 @@ export const adminRoles: SeedRole[] = [
       '/user-messages',
       '/demands',
       '/demands/review',
+      '/demands/responses',
       '/projects',
       '/events',
       '/contents/publish',
@@ -136,7 +138,7 @@ export const adminRoles: SeedRole[] = [
     name: '审核',
     description: '审核与审核类操作',
     sort: 3,
-    permCodes: ['/dashboard', '/approvals', '/member-governance', '/demands/review', '/spaces/reservations', '/logs/audit'],
+    permCodes: ['/dashboard', '/approvals', '/member-governance', '/demands/review', '/demands/responses', '/spaces/reservations', '/logs/audit'],
   },
   {
     id: 'R4',

@@ -5,6 +5,7 @@ import type { FormProps } from 'tdesign-vue-next'
 import { focusFirstInvalid, useDialogDirtyGuard, usePageDirtyGuard } from '@/utils/form'
 import { createSpace, updateSpace } from '@/api/spaces'
 import { spaceTypeMap } from '@/constants/status'
+import { userLevelOptions, visibilityIdentityOptions } from '@/constants/identity'
 import type { Space, SpaceType } from '@/types'
 
 /* 空间新增/编辑弹窗：基础信息编辑（状态走列表上的独立操作）；
@@ -40,18 +41,45 @@ const form = reactive({
   /** 预约费用（积分/小时）；0 = 免费 */
   feePerHour: 0,
   description: '',
+  /** 自定义可见范围 / 可预约范围：空数组 = 不限（口径对齐需求表单） */
+  visibilityIdentities: [] as string[],
+  visibilityLevels: [] as string[],
+  reservationIdentities: [] as string[],
+  reservationLevels: [] as string[],
 })
 
-/* 关闭"需预约"时联动关闭"需审核" */
+/* 范围开关：关闭 = 不限（不提交任何范围值）；关闭「需预约」时两者一并复位并清空 */
+const customVisibility = ref(false)
+const customReservation = ref(false)
+
+/* 可预约范围默认与可见范围一致，可单独调整 */
+function syncReservation() {
+  form.reservationIdentities = [...form.visibilityIdentities]
+  form.reservationLevels = [...form.visibilityLevels]
+}
+
+/* 关闭"需预约"时联动关闭"需审核"，并复位/清空两组范围（客户端范围过滤只作用于需预约空间） */
 watch(
   () => form.needReservation,
   (v) => {
-    if (!v) form.needApproval = false
+    if (v) return
+    form.needApproval = false
+    customVisibility.value = false
+    customReservation.value = false
+    form.visibilityIdentities = []
+    form.visibilityLevels = []
+    form.reservationIdentities = []
+    form.reservationLevels = []
   },
 )
 
 /* 未保存保护：打开时记录基线，关闭前有改动需确认 */
-const { markBaseline, isDirty, guardClose } = useDialogDirtyGuard(() => ({ ...form, equipment: equipmentTags.value }))
+const { markBaseline, isDirty, guardClose } = useDialogDirtyGuard(() => ({
+  ...form,
+  equipment: equipmentTags.value,
+  customVisibility: customVisibility.value,
+  customReservation: customReservation.value,
+}))
 
 watch(
   () => props.visible,
@@ -70,6 +98,13 @@ watch(
       form.feePerHour = props.space.feePerHour ?? 0
       form.description = props.space.description
       equipmentTags.value = [...props.space.equipment]
+      /* 范围回填：数组非空即视为开启了「自定义…」，开关与内容同源避免出现开关关着但范围有值 */
+      form.visibilityIdentities = [...(props.space.visibilityIdentities ?? [])]
+      form.visibilityLevels = [...(props.space.visibilityLevels ?? [])]
+      form.reservationIdentities = [...(props.space.reservationIdentities ?? [])]
+      form.reservationLevels = [...(props.space.reservationLevels ?? [])]
+      customVisibility.value = form.visibilityIdentities.length > 0 || form.visibilityLevels.length > 0
+      customReservation.value = form.reservationIdentities.length > 0 || form.reservationLevels.length > 0
     } else {
       form.name = ''
       form.type = 'meeting'
@@ -83,6 +118,12 @@ watch(
       form.feePerHour = 0
       form.description = ''
       equipmentTags.value = []
+      form.visibilityIdentities = []
+      form.visibilityLevels = []
+      form.reservationIdentities = []
+      form.reservationLevels = []
+      customVisibility.value = false
+      customReservation.value = false
     }
     /* 记录基线 + 清除上次会话残留的校验红框（仅清状态，不动表单值） */
     markBaseline()
@@ -121,6 +162,11 @@ async function onConfirm() {
       feePerHour: form.feePerHour,
       equipment: [...equipmentTags.value],
       description: form.description,
+      /* 开关关闭 = 不限：不提交任何范围值（后端对未开启预约的空间也会统一清空） */
+      visibilityIdentities: customVisibility.value ? [...form.visibilityIdentities] : [],
+      visibilityLevels: customVisibility.value ? [...form.visibilityLevels] : [],
+      reservationIdentities: customReservation.value ? [...form.reservationIdentities] : [],
+      reservationLevels: customReservation.value ? [...form.reservationLevels] : [],
     }
     if (props.mode === 'create') {
       const space = await createSpace(payload)
@@ -217,6 +263,44 @@ usePageDirtyGuard(computed(() => props.visible && isDirty.value))
           <t-input-number v-accessible-field v-model="form.feePerHour" :min="0" theme="normal" suffix="积分/小时" class="ctl-w-full" />
         </t-form-item>
       </div>
+      <!-- 可见 / 可预约范围（口径与「新增/编辑需求」表单一致）：仅在需预约时生效 -->
+      <div v-if="form.needReservation" class="form-row">
+        <div class="scope-col">
+          <div class="scope-head">
+            <t-popup content="关闭 = 所有用户可见" show-arrow>
+              <span class="scope-title scope-popup-trigger">自定义可见范围</span>
+            </t-popup>
+            <t-popup content="关闭 = 所有用户可见" show-arrow>
+              <span class="scope-switch-trigger"><t-switch v-accessible-field="'自定义可见范围'" v-model="customVisibility" aria-label="自定义可见范围" /></span>
+            </t-popup>
+          </div>
+          <t-form-item v-if="customVisibility" label="身份" name="visibilityIdentities">
+            <t-select v-accessible-field v-model="form.visibilityIdentities" multiple clearable :options="visibilityIdentityOptions" placeholder="不限…" />
+          </t-form-item>
+          <t-form-item v-if="customVisibility" label="等级" name="visibilityLevels">
+            <t-select v-accessible-field v-model="form.visibilityLevels" multiple clearable :options="userLevelOptions" placeholder="不限…" />
+          </t-form-item>
+        </div>
+        <div class="scope-col">
+          <div class="scope-head">
+            <t-popup content="关闭 = 所有用户可预约" show-arrow>
+              <span class="scope-title scope-popup-trigger">自定义可预约范围</span>
+            </t-popup>
+            <div class="scope-right">
+              <t-button v-if="customReservation && customVisibility" variant="text" size="small" @click="syncReservation">同步可见范围</t-button>
+              <t-popup content="关闭 = 所有用户可预约" show-arrow>
+                <span class="scope-switch-trigger"><t-switch v-accessible-field="'自定义可预约范围'" v-model="customReservation" aria-label="自定义可预约范围" /></span>
+              </t-popup>
+            </div>
+          </div>
+          <t-form-item v-if="customReservation" label="身份" name="reservationIdentities">
+            <t-select v-accessible-field v-model="form.reservationIdentities" multiple clearable :options="visibilityIdentityOptions" placeholder="不限…" />
+          </t-form-item>
+          <t-form-item v-if="customReservation" label="等级" name="reservationLevels">
+            <t-select v-accessible-field v-model="form.reservationLevels" multiple clearable :options="userLevelOptions" placeholder="不限…" />
+          </t-form-item>
+        </div>
+      </div>
       <t-form-item label="配备设备" name="equipment">
         <t-tag-input
           v-model="equipmentTags"
@@ -263,5 +347,39 @@ usePageDirtyGuard(computed(() => props.visible && isDirty.value))
 .all-day-tip {
   font-size: 12px;
   color: var(--td-text-color-secondary);
+}
+
+/* 可见 / 可预约范围（与需求表单同款结构） */
+.scope-col {
+  min-width: 0;
+}
+
+.scope-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 4px 8px;
+  margin-bottom: 8px;
+}
+
+.scope-right {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.scope-title {
+  font-size: 14px;
+  font-weight: 400;
+  color: var(--td-text-color-primary);
+}
+
+.scope-popup-trigger {
+  cursor: help;
+}
+
+.scope-switch-trigger {
+  display: inline-flex;
 }
 </style>

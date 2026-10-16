@@ -435,7 +435,6 @@ async function onExport() {
 
     <p class="group-title">隐私与数据</p>
     <CellGroup theme="card">
-      <Cell v-pressable title="用户协议与隐私政策" arrow @click="router.push('/privacy')" />
       <Cell v-pressable title="导出个人数据" :note="requests.export ? `已生成（${formatLocalDateTime(requests.export.at)}），点击下载` : '生成后站内信通知'" arrow @click="onExport" />
       <Cell
         v-pressable="!requests.deletion"

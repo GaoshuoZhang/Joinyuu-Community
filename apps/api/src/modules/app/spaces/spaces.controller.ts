@@ -1,4 +1,5 @@
 import { Body, Controller, Get, HttpCode, Param, Post, Query, Req, UnauthorizedException } from '@nestjs/common'
+import type { Request } from 'express'
 import { Public } from '../../../common/decorators/public.decorator'
 import type { AppAuthenticatedRequest } from '../../../common/interfaces/app-authenticated-request'
 import { AppSpacesService, type MyReservationDetailDto, type MyReservationDto, type SpaceDto, type SpaceSlotDto } from './spaces.service'
@@ -9,25 +10,25 @@ import { CreateReservationDto } from './dto/create-reservation.dto'
 export class AppSpacesController {
   constructor(private readonly spaces: AppSpacesService) {}
 
-  /** 可预约空间列表（维护中剔除） */
+  /** 可预约空间列表（维护中剔除；按可见范围过滤，游客仅见「不限」空间） */
   @Public()
   @Get('spaces')
-  list(): Promise<SpaceDto[]> {
-    return this.spaces.list()
+  list(@Req() req: Request): Promise<SpaceDto[]> {
+    return this.spaces.list(req)
   }
 
-  /** 空间详情（不可约/不存在 404） */
+  /** 空间详情（不可约/不存在/不在可见范围一律 404） */
   @Public()
   @Get('spaces/:id')
-  detail(@Param('id') id: string): Promise<SpaceDto> {
-    return this.spaces.detail(id)
+  detail(@Param('id') id: string, @Req() req: Request): Promise<SpaceDto> {
+    return this.spaces.detail(id, req)
   }
 
   /** 某日可用时段（待审核/已通过预约 + 已发布活动占用） */
   @Public()
   @Get('spaces/:id/availability')
-  availability(@Param('id') id: string, @Query('date') date?: string): Promise<SpaceSlotDto[]> {
-    return this.spaces.availability(id, date ?? '')
+  availability(@Param('id') id: string, @Req() req: Request, @Query('date') date?: string): Promise<SpaceSlotDto[]> {
+    return this.spaces.availability(id, date ?? '', req)
   }
 
   /** 提交预约（开放时段校验 + 冲突预检 409 + 费用扣分；needApproval 进 pending） */

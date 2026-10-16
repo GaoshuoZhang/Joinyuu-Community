@@ -5,6 +5,7 @@ import { PrismaService } from '../common/prisma/prisma.service'
 import { IdGeneratorService } from '../common/id-generator/id-generator.service'
 import { RedisService } from '../common/redis/redis.service'
 import { TrashService } from '../modules/system/trash/trash.service'
+import { LogRetentionService } from '../modules/system/log-retention.service'
 import { OutboxService } from '../modules/messaging/outbox.service'
 import { formatNow, formatNowSec, formatToday } from '../common/utils/time'
 import { PointsEngineService } from '../common/engine/points-engine/points-engine.service'
@@ -36,6 +37,7 @@ export class SchedulerService {
     private readonly prisma: PrismaService,
     private readonly ids: IdGeneratorService,
     private readonly trash: TrashService,
+    private readonly logRetention: LogRetentionService,
     private readonly points: PointsEngineService,
     private readonly outbox: OutboxService,
     private readonly redis: RedisService,
@@ -69,6 +71,8 @@ export class SchedulerService {
       { name: 'message-outbox-dispatch', cron: '每 30 秒', enabled: true, run: () => this.outbox.processPending(50) },
       /* 商城券码过期自动退款：pending_use 且已过有效期 → cancelled + 退积分 + 回库存 */
       { name: 'mall-voucher-expire-refund', cron: '每 5 分钟', enabled: true, run: () => this.scanVoucherExpiry() },
+      /* 日志保留期清理：操作日志/登录日志按 SystemConfig 保留天数清理（0 = 永久保存） */
+      { name: 'log-retention-purge', cron: '每天 03:00', enabled: true, run: () => this.logRetention.run() },
     ]
   }
 
@@ -184,6 +188,11 @@ export class SchedulerService {
   @Cron(CronExpression.EVERY_5_MINUTES, { name: 'mall-voucher-expire-refund' })
   async handleVoucherExpireRefund(): Promise<void> {
     await this.runJob('mall-voucher-expire-refund')
+  }
+
+  @Cron('0 3 * * *', { name: 'log-retention-purge' })
+  async handleLogRetentionPurge(): Promise<void> {
+    await this.runJob('log-retention-purge')
   }
 
   /** 到点发布扫描：状态迁移与通知写入置于同一事务，避免"已发布但通知缺失"的部分失败 */

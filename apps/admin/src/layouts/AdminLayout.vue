@@ -301,7 +301,7 @@ async function handleDropdown(item: { value?: string | number }) {
             </t-menu-item>
           </t-submenu>
 
-          <t-submenu v-if="canSee(['/demands', '/demands/review', '/projects', '/events', '/events/enrollments'], '业务运营')" value="group-biz" title="业务运营">
+          <t-submenu v-if="canSee(['/demands', '/demands/review', '/demands/responses', '/projects', '/events', '/events/enrollments'], '业务运营')" value="group-biz" title="业务运营">
             <template #icon><ViewListIcon /></template>
             <t-menu-item v-if="auth.hasPerm('/demands')" value="/demands" to="/demands" router-link>
               <template #icon><ViewListIcon /></template>
@@ -310,6 +310,10 @@ async function handleDropdown(item: { value?: string | number }) {
             <t-menu-item v-if="auth.hasPerm('/demands/review')" value="/demands/review" to="/demands/review" router-link>
               <template #icon><CheckCircleIcon /></template>
               需求审核
+            </t-menu-item>
+            <t-menu-item v-if="auth.hasPerm('/demands/responses')" value="/demands/responses" to="/demands/responses" router-link>
+              <template #icon><CheckCircleIcon /></template>
+              响应审核
             </t-menu-item>
             <t-menu-item v-if="auth.hasPerm('/projects')" value="/projects" to="/projects" router-link>
               <template #icon><AppIcon /></template>

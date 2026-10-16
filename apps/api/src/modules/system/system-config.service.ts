@@ -17,8 +17,12 @@ import {
 import { normalizeMobileUrl } from '../../common/utils/mobile-url'
 import { formatNow } from '../../common/utils/time'
 import type { SystemConfigPayloadDto } from './dto/system-config-payload.dto'
+import type { LogRetentionDto } from './dto/log-retention.dto'
 
 const BUCKET_PATTERN = /^[a-z0-9][a-z0-9.-]{1,62}$/
+
+/** 日志保留期默认天数（0 = 永久保存）；与 migration 的列默认值、后台「日志设置」一致 */
+const LOG_RETENTION_DEFAULT_DAYS = 180
 
 /** 审计快照入参（P0 密钥安全：不含 minioSecretKey 原文）。
  * 用 type 而非 interface，以便直接作为 Prisma InputJsonValue 写入审计。 */
@@ -42,6 +46,9 @@ type SystemConfigAuditSource = {
   minioUseSsl: boolean
   minioAccessKey: string
   minioBucket: string
+  /** 日志保留期（天，0 = 永久保存） */
+  auditLogRetentionDays: number
+  loginLogRetentionDays: number
   realnameVerifyEnabled: boolean
   realnameVerifyProvider: string
   /** 凭据来源（inline/env）：审计中 inline 模式不回写凭据内容 */
@@ -133,6 +140,17 @@ export class SystemConfigService {
     }
 
     const previous = await this.prisma.systemConfig.findUnique({ where: { id: 1 } })
+
+    /* 日志保留期（天）：0-3650，0 = 永久保存；缺省保持原值（旧前端表单不传该字段时不得被重置为 180） */
+    const auditLogRetentionDays = payload.auditLogRetentionDays ?? previous?.auditLogRetentionDays ?? LOG_RETENTION_DEFAULT_DAYS
+    if (!Number.isInteger(auditLogRetentionDays) || auditLogRetentionDays < 0 || auditLogRetentionDays > 3650) {
+      throw new BadRequestException('操作日志保留期须为 0-3650 的整数')
+    }
+    const loginLogRetentionDays = payload.loginLogRetentionDays ?? previous?.loginLogRetentionDays ?? LOG_RETENTION_DEFAULT_DAYS
+    if (!Number.isInteger(loginLogRetentionDays) || loginLogRetentionDays < 0 || loginLogRetentionDays > 3650) {
+      throw new BadRequestException('登录日志保留期须为 0-3650 的整数')
+    }
+
     const previousCredentials = asStringRecord(previous?.realnameVerifyCredentialEnv)
     const realnameVerifyCredentialEnv = mergeCredentialInput(
       realnameVerifyCredentialMode,
@@ -177,6 +195,8 @@ export class SystemConfigService {
       minioAccessKey: (payload.minioAccessKey ?? '').trim(),
       minioSecretKey: nextSecretKey,
       minioBucket,
+      auditLogRetentionDays,
+      loginLogRetentionDays,
       realnameVerifyEnabled,
       realnameVerifyProvider,
       realnameVerifyConfig: realnameVerifyConfig as Prisma.InputJsonValue,
@@ -210,6 +230,47 @@ export class SystemConfigService {
 
     await this.redis.delCache(CACHE_KEYS.systemConfig)
     return { code: 0 }
+  }
+
+  /** 日志保留期（「日志与审计」页右上角「日志设置」）：独立读写，避免依赖全量系统配置载荷 */
+  async logRetention(): Promise<{ auditLogRetentionDays: number; loginLogRetentionDays: number }> {
+    const config = await this.prisma.systemConfig.findUnique({ where: { id: 1 } })
+    if (!config) throw new NotFoundException('系统配置不存在')
+    return {
+      auditLogRetentionDays: config.auditLogRetentionDays,
+      loginLogRetentionDays: config.loginLogRetentionDays,
+    }
+  }
+
+  /** 保存日志保留期（0 = 永久保存）：与归档设置同口径——保存即生效、留审计（before/after）、失效配置缓存 */
+  async saveLogRetention(
+    dto: LogRetentionDto,
+    operator: string,
+  ): Promise<{ auditLogRetentionDays: number; loginLogRetentionDays: number }> {
+    const previous = await this.prisma.systemConfig.findUnique({ where: { id: 1 } })
+    if (!previous) throw new NotFoundException('系统配置不存在')
+    const next = {
+      auditLogRetentionDays: dto.auditLogRetentionDays,
+      loginLogRetentionDays: dto.loginLogRetentionDays,
+    }
+    await this.prisma.systemConfig.update({
+      where: { id: 1 },
+      data: { ...next, updatedAt: formatNow(), updatedBy: operator },
+    })
+    await this.audit.record({
+      module: '系统管理',
+      action: '保存日志设置',
+      target: '日志与审计',
+      detail: `操作日志保留 ${describeRetention(next.auditLogRetentionDays)} · 登录日志保留 ${describeRetention(next.loginLogRetentionDays)}`,
+      before: {
+        auditLogRetentionDays: previous.auditLogRetentionDays,
+        loginLogRetentionDays: previous.loginLogRetentionDays,
+      },
+      after: next,
+      operator,
+    })
+    await this.redis.delCache(CACHE_KEYS.systemConfig)
+    return next
   }
 
   /** 实名核验供应商目录（管理端表单渲染与校验共用） */
@@ -248,6 +309,8 @@ function toSystemConfigDto(config: SystemConfig): Record<string, unknown> {
     uploadMaxSizeMb: config.uploadMaxSizeMb,
     passwordExpireEnabled: config.passwordExpireEnabled,
     passwordExpireDays: config.passwordExpireDays,
+    auditLogRetentionDays: config.auditLogRetentionDays,
+    loginLogRetentionDays: config.loginLogRetentionDays,
     ...minioConfigView(config),
     ...realnameVerificationView(config),
     updatedAt: config.updatedAt,
@@ -277,6 +340,8 @@ function toConfigAuditSnapshot(config: SystemConfigAuditSource): SystemConfigAud
     minioUseSsl: config.minioUseSsl,
     minioAccessKey: config.minioAccessKey,
     minioBucket: config.minioBucket,
+    auditLogRetentionDays: config.auditLogRetentionDays,
+    loginLogRetentionDays: config.loginLogRetentionDays,
     realnameVerifyEnabled: config.realnameVerifyEnabled,
     realnameVerifyProvider: config.realnameVerifyProvider,
     realnameVerifyCredentialMode: config.realnameVerifyCredentialMode,
@@ -284,6 +349,11 @@ function toConfigAuditSnapshot(config: SystemConfigAuditSource): SystemConfigAud
     realnameVerifyCredentialEnv:
       config.realnameVerifyCredentialMode === 'env' ? asStringRecord(config.realnameVerifyCredentialEnv) : {},
   }
+}
+
+/** 保留期文案：0（或负）视为永久保存 */
+function describeRetention(days: number): string {
+  return days > 0 ? `${days} 天` : '永久'
 }
 
 function asObject(value: unknown): Record<string, unknown> {

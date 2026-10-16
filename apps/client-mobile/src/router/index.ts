@@ -93,6 +93,8 @@ export const router = createRouter({
         { path: 'me/security', name: 'me-security', component: () => import('@/views/mobile/SecurityView.vue'), meta: { requiresAuth: true } },
         { path: 'me/records', name: 'me-records', component: () => import('@/views/mobile/MeRecordsView.vue'), meta: { requiresAuth: true } },
         { path: 'me/notification-settings', name: 'me-notification-settings', component: () => import('@/views/mobile/NotificationSettingsView.vue'), meta: { requiresAuth: true } },
+        /* 关于：客户品牌信息 + 客户端版本 + 开发者联系方式（信息页，无鉴权需求） */
+        { path: 'me/about', name: 'me-about', component: () => import('@/views/mobile/AboutView.vue') },
         { path: 'privacy', name: 'privacy', component: () => import('@/views/mobile/PrivacyView.vue') },
         { path: 'me/applications', name: 'me-applications', component: () => import('@/views/mobile/MyApplicationsView.vue'), meta: { requiresAuth: true } },
         { path: 'me/applications/:id', name: 'my-application-detail', component: () => import('@/views/mobile/MyApplicationDetailView.vue'), meta: { requiresAuth: true } },

@@ -111,9 +111,9 @@
 | POST | /api/app/mall/orders | 兑换下单（统一券码）：**范围门槛**（商品 + 类别的可见/可下单范围都需通过，可见外 404、可下单外 403「当前身份暂不可兑换该商品」）+ **等级折扣实扣**（实扣 = round(商品积分 × 折扣 ÷ 10)，折扣取本人社区个体等级，无等级按原价；订单 `points` 存实扣额，退款按实扣退）+ 积分充足 + 库存充足（事务：扣积分+写流水+扣库存+建订单 `pending_use` 并签发 `voucherCode`/`voucherExpiresAt`） |
 | GET | /api/app/me/orders | 我的兑换订单 |
 | GET | /api/app/me/orders/:id | 我的兑换订单详情（仅订单本人；非本人/不存在 404，条目形状与列表项一致） |
-| GET | /api/app/spaces | 可预约空间列表（`needApproval`/时段/设备/`feePerHour` 费用：积分每小时，0=免费） |
-| GET | /api/app/spaces/:id/availability?date= | 某日可约时段：按空间「开放时间-关闭时间」逐小时切片（后台无预约规则配置入口，不设单次时长/提前天数限制；未开放预约、维护中或不存在一律 404）；待审核/已通过预约与命中空间的已发布活动标为 `occupied`，并返回 `type`（`reservation`/`event`）标注占用来源 |
-| POST | /api/app/spaces/reservations | 提交预约：canonical payload 为 `spaceId/date/start/end/topic?/attendees?/asIdentity?/asEnterpriseId?`；`reservationOpen` 开关校验 + 开放时段校验（须落在空间「开放时间-关闭时间」内，当天时段不得早于当前时刻）+ 提交前冲突预检（pending/approved 预约与命中空间的已发布活动，活动命中与按天裁剪口径见 wiki-backend §8.8，409）+ **费用扣分**（费用 = 计费小时 × `feePerHour` 再按等级折扣折算：代企业预约取企业等级折扣、其余取本人社区个体等级折扣，实扣 = round(原价 × 折扣 ÷ 10)；计费小时不足 1 小时按 1 小时计；事务内条件扣减，余额不足 400「积分不足」并写 `source=space` 流水）→ 返回 `{ status, pointsSpent }`；管理端审核驳回或预约取消时全额退回（见 wiki-backend §8.8）。四类身份均可预约，企业身份以企业名/组织名生成服务端主体快照；成员代企业预约时服务端校验 `space_reserve` 权限（无权限 403） |
+| GET | /api/app/spaces | 可预约空间列表（`needApproval`/时段/设备/`feePerHour` 费用：积分每小时，0=免费）；**按空间的可见范围过滤**（`visibilityIdentities`/`visibilityLevels`，口径见 §9；游客与无等级身份仅见「不限」空间，详情/可用时段同样 404 且不暴露存在性） |
+| GET | /api/app/spaces/:id/availability?date= | 某日可约时段：按空间「开放时间-关闭时间」逐小时切片（后台无预约规则配置入口，不设单次时长/提前天数限制；未开放预约、维护中、不在可见范围或不存在一律 404）；待审核/已通过预约与命中空间的已发布活动标为 `occupied`，并返回 `type`（`reservation`/`event`）标注占用来源 |
+| POST | /api/app/spaces/reservations | 提交预约：canonical payload 为 `spaceId/date/start/end/topic?/attendees?/asIdentity?/asEnterpriseId?`；`reservationOpen` 开关校验 + 开放时段校验（须落在空间「开放时间-关闭时间」内，当天时段不得早于当前时刻）+ **可预约范围校验**（按本次实际身份 + 该身份经验值等级判定 `reservationIdentities`/`reservationLevels`，两数组都空 = 不限，不命中 403「该空间不在你的可预约范围内」；无等级身份在不限等级时可预约）+ 提交前冲突预检（pending/approved 预约与命中空间的已发布活动，活动命中与按天裁剪口径见 wiki-backend §8.8，409）+ **费用扣分**（费用 = 计费小时 × `feePerHour` 再按等级折扣折算：代企业预约取企业等级折扣、其余取本人社区个体等级折扣，实扣 = round(原价 × 折扣 ÷ 10)；计费小时不足 1 小时按 1 小时计；事务内条件扣减，余额不足 400「积分不足」并写 `source=space` 流水）→ 返回 `{ status, pointsSpent }`；管理端审核驳回或预约取消时全额退回（见 wiki-backend §8.8）。四类身份均可预约，企业身份以企业名/组织名生成服务端主体快照；成员代企业预约时服务端校验 `space_reserve` 权限（无权限 403） |
 | GET | /api/app/me/reservations | 我的预约（可取消 pending 与未过结束时间的 approved，取消全额退回已扣积分）；`status` 新增派生值 `ended`「已完成」——已通过且已过预约结束时间时下发（存储态仍为 approved，与后台归档口径一致），该状态不可再取消；返回 `identityType`/`subjectName` 主体快照 |
 | GET | /api/app/me/reservations/:id | 我的预约详情（仅本人，非本人/不存在 404）；含 `purpose`/`attendees`/`records` 时间线与 `feePoints`（本单实际消耗积分，0=免费）；状态口径同列表（`approved` 已过结束时间派生为 `ended`） |
 | GET | /api/app/articles | 文章列表（`published`，栏目筛选/关键词；浏览量详情时 +1） |
@@ -177,11 +177,12 @@
 
 **§8.1/§8.2 转正注记**：响应撤回、项目里程碑、申请与投稿重提、商城履约、收藏、埋点、地址、账号治理、举报、屏蔽、评论、候补等端点均已实现。
 
-## 9. 可见范围与可报名范围过滤（需求/活动通用）
+## 9. 可见范围与可预约/可报名范围过滤（需求/活动/空间通用）
 
 - 用户身份集合 I（individual/community_individual/community_enterprise/external_enterprise）与等级集合 L（各身份 level）。
 - 需求：`visibilityIdentities` 含 I 中任一身份类型 **且** `visibilityLevels` 与该身份等级有交集；空数组语义 = 不限（沿用 M0）。
 - 活动：浏览按 `visibilityIdentities/Levels`；报名另校验 `enrollmentIdentities/enrollmentLevels`。
+- 空间：浏览按 `visibilityIdentities/Levels`（`/api/app/spaces` 列表条件 + 详情/可用时段 404）；提交预约另按「本次实际身份 + 该身份等级」校验 `reservationIdentities/reservationLevels`（不命中 403）。
 - 过滤在服务端实现（列表 SQL 条件 + 详情 404），不依赖前端隐藏。
 
 ## 10. 积分引擎触发点（M2 批次，wiki-backend §8.4）

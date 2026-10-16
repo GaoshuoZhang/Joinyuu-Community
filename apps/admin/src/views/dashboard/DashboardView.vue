@@ -46,6 +46,7 @@ const data = ref<DashboardData | null>(null)
 const TODO_PERMS: Record<string, string> = {
   settle: '/approvals',
   demand: '/demands/review',
+  demandResponse: '/demands/responses',
   reservation: '/spaces/reservations',
   article: '/contents/submissions',
   eventEnrollment: '/events',
@@ -243,6 +244,7 @@ const layoutVisible = ref(false)
 const todoCardIcons: Record<string, Component> = {
   settle: CheckCircleIcon,
   demand: ViewListIcon,
+  demandResponse: CheckCircleIcon,
   reservation: MapIcon,
   article: Edit2Icon,
   eventEnrollment: CalendarIcon,

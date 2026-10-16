@@ -868,6 +868,12 @@ model Space {
   advanceDays     Int? // R2：最早可提前预约天数
   openHours       Json? // R2：可预约开放时段 [{start,end}]
   description     String   @db.Text
+  // 可见范围 / 可预约范围（空数组 = 不限）：口径与 Demand 的 visibility*/enrollment* 一致，
+  // 「可预约」在客户端提交预约时校验；等级仅对持有经验值的社区个体/社区企业身份生效
+  visibilityIdentities    String[] @default([])
+  visibilityLevels        String[] @default([])
+  reservationIdentities   String[] @default([])
+  reservationLevels       String[] @default([])
   deletedAt       String?  @db.VarChar(16)
   deletedBy       String?  @db.VarChar(64)
 
@@ -1164,6 +1170,12 @@ model SystemConfig {
   minioAccessKey        String  @default("") @db.VarChar(128)
   minioSecretKey        String  @default("") @db.VarChar(128)
   minioBucket           String  @default("joinyuu") @db.VarChar(64)
+  /**
+   * 日志保留期（天）：操作日志 / 登录日志超过该天数由定时任务 log-retention-purge 清理；
+   * 0 = 永久保存。默认 180 天，对应「日志与审计」页右上角「日志设置」。
+   */
+  auditLogRetentionDays Int     @default(180)
+  loginLogRetentionDays Int     @default(180)
   updatedAt             String  @db.VarChar(16)
   updatedBy             String  @db.VarChar(64)
 }

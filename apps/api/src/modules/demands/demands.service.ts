@@ -16,6 +16,7 @@ import { sanitizeHtml } from '../../common/utils/sanitize-html'
 import { ProjectsService } from '../projects/projects.service'
 import { PointsEngineService } from '../../common/engine/points-engine/points-engine.service'
 import type { QueryDemandsDto } from './dto/query-demands.dto'
+import type { QueryDemandResponsesDto } from './dto/query-demand-responses.dto'
 import type { CreateDemandDto } from './dto/create-demand.dto'
 import type { UpdateDemandDto } from './dto/update-demand.dto'
 import type { RejectDemandDto } from './dto/reject-demand.dto'
@@ -103,6 +104,27 @@ export interface DemandDto {
   pendingResponseCount: number
   deletedAt?: string
   respondents: RespondentDto[]
+}
+
+/** 响应审核列表项（「业务运营 → 响应审核」）：待审核响应 + 所属需求摘要 */
+export interface PendingRespondentDto {
+  id: number
+  demandId: string
+  demandTitle: string
+  demandStatus: string
+  publisherName: string
+  name: string
+  enterprise: string
+  /** 响应者身份快照（type/enterpriseName 等），列表用于身份标签 */
+  responderIdentity?: Prisma.JsonValue
+  quote?: string
+  timeline?: string
+  cases?: string
+  message: string
+  phone?: string
+  email?: string
+  at: string
+  status: string
 }
 
 export interface UndertakerOptionDto {
@@ -578,6 +600,56 @@ export class DemandsService {
       },
     })
     return { code: 0 }
+  }
+
+  /** 响应审核列表项（「业务运营 → 响应审核」）：待审核响应 + 所属需求摘要，供运营集中审核 */
+  async findPendingRespondents(
+    query: QueryDemandResponsesDto,
+  ): Promise<{ list: PendingRespondentDto[]; total: number }> {
+    const where: Prisma.DemandRespondentWhereInput = { status: 'pending_review', withdrawnAt: null }
+    if (query.keyword) {
+      const kw = query.keyword.trim()
+      where.OR = [
+        { name: { contains: kw, mode: 'insensitive' } },
+        { enterprise: { contains: kw, mode: 'insensitive' } },
+        { message: { contains: kw, mode: 'insensitive' } },
+        { demandId: { contains: kw, mode: 'insensitive' } },
+      ]
+    }
+    const [rows, total] = await Promise.all([
+      this.prisma.demandRespondent.findMany({
+        where,
+        orderBy: { at: 'desc' },
+        skip: (query.page - 1) * query.pageSize,
+        take: query.pageSize,
+        include: { demand: { select: { id: true, title: true, status: true, publisherName: true } } },
+      }),
+      this.prisma.demandRespondent.count({ where }),
+    ])
+    return {
+      list: rows.map((r) => {
+        const dto: PendingRespondentDto = {
+          id: r.id,
+          demandId: r.demandId,
+          demandTitle: r.demand.title,
+          demandStatus: r.demand.status,
+          publisherName: r.demand.publisherName,
+          name: r.name,
+          enterprise: r.enterprise,
+          message: r.message,
+          at: r.at,
+          status: r.status,
+        }
+        if (r.responderIdentity != null) dto.responderIdentity = r.responderIdentity
+        if (r.quote != null) dto.quote = r.quote
+        if (r.timeline != null) dto.timeline = r.timeline
+        if (r.cases != null) dto.cases = r.cases
+        if (r.phone != null) dto.phone = r.phone
+        if (r.email != null) dto.email = r.email
+        return dto
+      }),
+      total,
+    }
   }
 
   /* 响应审核：待审核（pending_review）→ 通过回到「待处理」（仍由发布者选定承接方，此时才发响应积分并通知发布者）；

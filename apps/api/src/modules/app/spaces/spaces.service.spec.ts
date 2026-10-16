@@ -1,7 +1,13 @@
+import type { Request } from 'express'
+import type { JwtService } from '@nestjs/jwt'
 import type { PrismaService } from '../../../common/prisma/prisma.service'
+import type { RedisService } from '../../../common/redis/redis.service'
 import type { IdGeneratorService } from '../../../common/id-generator/id-generator.service'
 import type { NotificationService } from '../../../common/notify/notification.service'
 import { AppSpacesService } from './spaces.service'
+
+/** 游客请求（无 Authorization）：可见范围判定按空身份集处理 */
+const guestReq = { headers: {} } as unknown as Request
 
 describe('AppSpacesService availability', () => {
   it('marks pending and approved reservations unavailable', async () => {
@@ -13,6 +19,9 @@ describe('AppSpacesService availability', () => {
           location: '1F',
           openTime: '09:00',
           closeTime: '12:00',
+          /* 可见范围两数组（空 = 不限）：游客也可访问 */
+          visibilityIdentities: [],
+          visibilityLevels: [],
         }),
       },
       spaceReservation: {
@@ -27,9 +36,11 @@ describe('AppSpacesService availability', () => {
       prisma as unknown as PrismaService,
       {} as IdGeneratorService,
       {} as NotificationService,
+      {} as JwtService,
+      {} as RedisService,
     )
 
-    await expect(service.availability('S1001', '2026-10-10')).resolves.toEqual([
+    await expect(service.availability('S1001', '2026-10-10', guestReq)).resolves.toEqual([
       { start: '09:00', end: '10:00', occupied: true, type: 'reservation' },
       { start: '10:00', end: '11:00', occupied: true, type: 'reservation' },
       { start: '11:00', end: '12:00', occupied: false },
@@ -64,7 +75,13 @@ describe('AppSpacesService reservation status derivation', () => {
 
   function serviceFor(rows: unknown[]): AppSpacesService {
     const prisma = { spaceReservation: { findMany: jest.fn().mockResolvedValue(rows) } }
-    return new AppSpacesService(prisma as unknown as PrismaService, {} as IdGeneratorService, {} as NotificationService)
+    return new AppSpacesService(
+      prisma as unknown as PrismaService,
+      {} as IdGeneratorService,
+      {} as NotificationService,
+      {} as JwtService,
+      {} as RedisService,
+    )
   }
 
   it('derives ended only for approved reservations past their end time', async () => {
@@ -93,7 +110,13 @@ describe('AppSpacesService reservation status derivation', () => {
 /** 已结束的预约不可再取消（服务端兜底，避免仅靠客户端隐藏按钮） */
 describe('AppSpacesService reservation cancel guard', () => {
   function serviceWith(prisma: Record<string, unknown>): AppSpacesService {
-    return new AppSpacesService(prisma as unknown as PrismaService, {} as IdGeneratorService, {} as NotificationService)
+    return new AppSpacesService(
+      prisma as unknown as PrismaService,
+      {} as IdGeneratorService,
+      {} as NotificationService,
+      {} as JwtService,
+      {} as RedisService,
+    )
   }
 
   it('rejects cancelling an approved reservation that already ended', async () => {
