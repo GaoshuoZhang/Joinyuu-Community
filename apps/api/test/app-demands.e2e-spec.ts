@@ -587,4 +587,74 @@ describe('M2-R R2 app 需求撮合', () => {
       expect(finishExp?.delta).toBe(50)
     }
   })
+
+  it('响应字段级可见性：联系邮箱随响应提交并下发给发布者；审核勾选隐藏的字段不下发（后台保留真实值）', async () => {
+    const adminToken = await loginAs(app)
+
+    /* ① 发布者 U1001 建单并置 published */
+    const created = await appPost(app, tokenA, '/api/app/demands', {
+      title: 'R2 响应字段可见性需求-包装设计',
+      description: '需要完成一次产品包装设计',
+      categoryCode: 'DC004',
+      categoryDict: 'demand_category',
+      kind: 'task',
+      asIdentity: 'individual',
+      deliverable: '交付包装设计稿',
+      deliverBy: '2026-11-30',
+      budget: '面议',
+      period: '两周',
+      contactName: '陈屿',
+      contactPhone: '13801210001',
+    })
+    expect(created.status).toBe(200)
+    const demandId: string = created.body.data.id
+    await prisma.demand.update({ where: { id: demandId }, data: { status: 'published' } })
+
+    /* ② 响应者提交（含联系邮箱）→ 邮箱落库（此前该字段恒为 null，发布者看不到联系方式） */
+    const respond = await appPost(app, tokenB, `/api/app/demands/${demandId}/respond`, {
+      note: '可承接包装设计',
+      quote: '2 万',
+      timeline: '3 周内可开工',
+      cases: '完成过 5 个包装项目',
+      phone: '13801210005',
+      email: 'gubeichen@example.com',
+    })
+    expect(respond.status).toBe(200)
+    const row = await prisma.demandRespondent.findFirst({ where: { demandId } })
+    expect(row).toBeTruthy()
+    expect(row?.email).toBe('gubeichen@example.com')
+
+    /* ③ 审核通过且勾选隐藏联系手机/联系邮箱：发布者侧不下发这两项，其余字段仍可见 */
+    const approved = await request(app.getHttpServer())
+      .post(`/api/admin/demands/${demandId}/respondents/${row!.id}/review`)
+      .set('Authorization', `Bearer ${adminToken}`)
+      .send({ status: 'approved', hiddenFields: ['phone', 'email'] })
+    expect(approved.status).toBe(200)
+
+    const publisherView = await appGet(app, tokenA, `/api/app/me/demands/${demandId}/responses`)
+    expect(publisherView.status).toBe(200)
+    const visibleRow = publisherView.body.data[0]
+    expect(visibleRow.note).toBe('可承接包装设计')
+    expect(visibleRow.quote).toBe('2 万')
+    expect(visibleRow.timeline).toBe('3 周内可开工')
+    expect(visibleRow.cases).toBe('完成过 5 个包装项目')
+    /* 被隐藏字段整体不下发（键不存在，而不是空串） */
+    expect('phone' in visibleRow).toBe(false)
+    expect('email' in visibleRow).toBe(false)
+
+    /* ④ 后台与响应者本人仍可见真实值（隐藏只作用于发布者侧） */
+    const adminDetail = await request(app.getHttpServer())
+      .get(`/api/admin/demands/${demandId}`)
+      .set('Authorization', `Bearer ${adminToken}`)
+    const adminRow = (adminDetail.body.data.respondents as Array<{ id: number; phone?: string; email?: string; hiddenFields?: string[] }>)
+      .find((item) => item.id === row!.id)
+    expect(adminRow?.phone).toBe('13801210005')
+    expect(adminRow?.email).toBe('gubeichen@example.com')
+    expect(adminRow?.hiddenFields).toEqual(['phone', 'email'])
+
+    const mine = await appGet(app, tokenB, '/api/app/me/responses')
+    const mineRows = Array.isArray(mine.body.data) ? mine.body.data : mine.body.data.list
+    const mineRow = mineRows.find((item: { id: number }) => item.id === row!.id)
+    expect(mineRow?.phone).toBe('13801210005')
+  })
 })

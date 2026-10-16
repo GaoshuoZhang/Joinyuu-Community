@@ -30,6 +30,11 @@ export class RespondDemandDto {
   @Matches(/^1\d{10}$/, { message: '手机号格式不正确' })
   phone?: string
 
+  /** 联系邮箱（选填）：留空沿用账号邮箱，填写则覆盖并记录在该条响应上 */
+  @IsOptional()
+  @Matches(/^[^\s@]+@[^\s@]+\.[^\s@]+$/, { message: '邮箱格式不正确' })
+  email?: string
+
   /** 以社区企业身份响应时的企业 id（成员需持 respond_demand 权限） */
   @IsOptional()
   @IsString()

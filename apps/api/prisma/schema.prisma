@@ -467,6 +467,8 @@ model DemandRespondent {
   timeline          String? @db.VarChar(128)
   cases             String? @db.VarChar(300)
   message           String  @db.Text
+  // 响应审核通过时由管理员勾选：对需求方隐藏的响应字段（message/quote/timeline/cases/phone/email），空 = 全部显示
+  hiddenFields      String[] @default([])
   at                String  @db.VarChar(16)
   // pending_review（待管理员审核） | pending | contacted | closed +（R2 撮合扩展）accepted | rejected
   status            String  @default("pending") @db.VarChar(16)
@@ -1121,6 +1123,8 @@ model SystemConfig {
   id                    Int     @id @default(1)
   siteName              String  @db.VarChar(64)
   siteSlogan            String  @db.VarChar(128)
+  /** 站点 logo（素材 URL）：后台左上角图标与浏览器标签页图标；空 = 使用内置默认字标。客户端不读取（跟随主题） */
+  siteLogo              String  @default("") @db.VarChar(512)
   mobileUrl             String  @default("localhost:7759") @db.VarChar(2048)
   registrationOpen      Boolean @default(true)
   mallOpen              Boolean @default(true)

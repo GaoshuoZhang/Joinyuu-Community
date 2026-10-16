@@ -13,6 +13,7 @@ import { NotificationService } from '../../common/notify/notification.service'
 import { formatNow } from '../../common/utils/time'
 import { normalizeScheduledAt } from '../../common/utils/schedule-time'
 import { sanitizeHtml } from '../../common/utils/sanitize-html'
+import { normalizeHiddenFields } from '../../common/demands/respondent-fields'
 import { ProjectsService } from '../projects/projects.service'
 import { PointsEngineService } from '../../common/engine/points-engine/points-engine.service'
 import type { QueryDemandsDto } from './dto/query-demands.dto'
@@ -23,6 +24,7 @@ import type { RejectDemandDto } from './dto/reject-demand.dto'
 import type { ScheduleDemandDto } from './dto/schedule-demand.dto'
 import type { ProxyRespondDemandDto } from './dto/proxy-respond-demand.dto'
 import type { ReviewRespondentDto } from './dto/review-respondent.dto'
+import type { UpdateRespondentDto } from './dto/update-respondent.dto'
 import type { InitiateProjectDto } from './dto/initiate-project.dto'
 
 type DemandWithRespondents = Demand & { respondents: DemandRespondent[] }
@@ -48,6 +50,8 @@ export interface RespondentDto {
   reviewedAt?: string
   /** 驳回理由（status = rejected 时存在） */
   rejectReason?: string
+  /** 对需求方隐藏的响应字段（响应审核通过时勾选；后台始终可见真实值） */
+  hiddenFields?: string[]
 }
 
 /** 后台自建需求的提交人来源：当前登录工作人员（账号名 + 姓名） */
@@ -125,6 +129,8 @@ export interface PendingRespondentDto {
   email?: string
   at: string
   status: string
+  /** 对需求方隐藏的响应字段（响应审核通过时勾选；后台始终可见真实值） */
+  hiddenFields?: string[]
 }
 
 export interface UndertakerOptionDto {
@@ -168,6 +174,7 @@ function toRespondentDto(r: DemandRespondent): RespondentDto {
   if (r.cases != null) dto.cases = r.cases
   if (r.reviewAt != null) dto.reviewedAt = r.reviewAt
   if (r.rejectReason != null) dto.rejectReason = r.rejectReason
+  if (r.hiddenFields.length > 0) dto.hiddenFields = r.hiddenFields
   return dto
 }
 
@@ -607,6 +614,8 @@ export class DemandsService {
     query: QueryDemandResponsesDto,
   ): Promise<{ list: PendingRespondentDto[]; total: number }> {
     const where: Prisma.DemandRespondentWhereInput = { status: 'pending_review', withdrawnAt: null }
+    /* 需求详情「响应记录」待审核条目跳转：仅看该需求的待审核响应 */
+    if (query.demandId) where.demandId = query.demandId
     if (query.keyword) {
       const kw = query.keyword.trim()
       where.OR = [
@@ -646,6 +655,7 @@ export class DemandsService {
         if (r.cases != null) dto.cases = r.cases
         if (r.phone != null) dto.phone = r.phone
         if (r.email != null) dto.email = r.email
+        if (r.hiddenFields.length > 0) dto.hiddenFields = r.hiddenFields
         return dto
       }),
       total,
@@ -672,11 +682,13 @@ export class DemandsService {
     if (!approved && !reason) throw new BadRequestException('请填写驳回原因')
 
     const now = formatNow()
+    /* 通过时可由管理员勾选「向需求方显示」的字段：未勾选的字段写入 hiddenFields，发布者侧逐项省略 */
+    const hiddenFields = approved ? normalizeHiddenFields(dto.hiddenFields) : []
     await this.prisma.$transaction(async (tx) => {
       const claimed = await tx.demandRespondent.updateMany({
         where: { id, demandId: demand.id, status: 'pending_review', withdrawnAt: null },
         data: approved
-          ? { status: 'pending', reviewAt: now }
+          ? { status: 'pending', reviewAt: now, hiddenFields }
           : { status: 'rejected', reviewAt: now, rejectReason: reason, withdrawnAt: now },
       })
       if (claimed.count !== 1) throw new ConflictException('该响应已处理，请勿重复审核')
@@ -721,7 +733,68 @@ export class DemandsService {
       target: `${demand.id} · ${demand.title}`,
       detail: `响应人：${respondent.name}${approved ? '' : `；理由：${reason}`}`,
       before: { status: respondent.status },
-      after: approved ? { status: 'pending' } : { status: 'rejected', rejectReason: reason },
+      after: approved ? { status: 'pending', hiddenFields } : { status: 'rejected', rejectReason: reason },
+      operator,
+    })
+    return { code: 0 }
+  }
+
+  /* 编辑响应内容（响应审核页「编辑」）：仅待审核响应可改，响应方基本信息（姓名/所属/身份）不可改。
+   * 通过后该响应已对发布者生效，改动会影响发布者已看到的内容，故一律 409。 */
+  async updateRespondent(
+    demandId: string,
+    respondentId: string,
+    dto: UpdateRespondentDto,
+    operator: string,
+  ): Promise<{ code: number }> {
+    const id = Number.parseInt(respondentId, 10)
+    if (!Number.isInteger(id) || id <= 0) throw new NotFoundException('响应不存在')
+    const demand = await this.prisma.demand.findUnique({ where: { id: demandId } })
+    if (!demand) throw new NotFoundException('需求不存在')
+    const respondent = await this.prisma.demandRespondent.findUnique({ where: { id } })
+    if (!respondent || respondent.demandId !== demand.id) throw new NotFoundException('响应不存在')
+    if (respondent.status !== 'pending_review' || respondent.withdrawnAt != null) {
+      throw new ConflictException('仅待审核的响应可编辑')
+    }
+
+    const message = dto.message.trim()
+    if (!message) throw new BadRequestException('响应说明不能为空')
+    /* 空串表示清空原值（手机号/邮箱）；未传字段保持原值 */
+    const text = (value?: string) => value?.trim() || null
+    const email = text(dto.email)
+
+    await this.prisma.demandRespondent.update({
+      where: { id },
+      data: {
+        message,
+        quote: text(dto.quote),
+        timeline: text(dto.timeline),
+        cases: text(dto.cases),
+        phone: text(dto.phone),
+        email,
+      },
+    })
+    await this.audit.record({
+      module: '需求管理',
+      action: '编辑响应',
+      target: `${demand.id} · ${demand.title}`,
+      detail: `响应人：${respondent.name}（响应内容更新）`,
+      before: {
+        message: respondent.message,
+        quote: respondent.quote,
+        timeline: respondent.timeline,
+        cases: respondent.cases,
+        phone: respondent.phone,
+        email: respondent.email,
+      },
+      after: {
+        message,
+        quote: text(dto.quote),
+        timeline: text(dto.timeline),
+        cases: text(dto.cases),
+        phone: text(dto.phone),
+        email,
+      },
       operator,
     })
     return { code: 0 }

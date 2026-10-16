@@ -3,6 +3,7 @@ import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref } from 'v
 import { onBeforeRouteLeave, useRoute, useRouter } from 'vue-router'
 import { DialogPlugin, MessagePlugin } from 'tdesign-vue-next'
 import PageHeader from '@/components/PageHeader.vue'
+import ImageUploadField from '@/components/ImageUploadField.vue'
 import LicensePanel from './LicensePanel.vue'
 import ListErrorState from '@/components/ListErrorState.vue'
 import {
@@ -14,6 +15,7 @@ import {
 import type { RealnameCatalog, SystemConfigPayload } from '@/api/systemConfig'
 import { cardFields, fetchCardSchema, saveCardSchema, type CardType } from '@/api/cards'
 import type { SystemConfig } from '@/types'
+import { useBrandingStore } from '@/stores/branding'
 import { focusFirstInvalid } from '@/utils/form'
 import { parseMobileUrl } from '@/utils/mobileUrl'
 
@@ -29,6 +31,7 @@ type SystemConfigForm = SystemConfigPayload &
 
 const route = useRoute()
 const router = useRouter()
+const branding = useBrandingStore()
 const SECTIONS = ['site', 'features', 'cards', 'operations', 'realname', 'storage', 'license']
 const activeSection = computed({
   get: () => SECTIONS.includes(String(route.query.section)) ? String(route.query.section) : 'site',
@@ -83,6 +86,7 @@ function dirtySource(): string {
 const form = reactive<SystemConfigForm>({
   siteName: '',
   siteSlogan: '',
+  siteLogo: '',
   mobileUrl: 'localhost:7759',
   registrationOpen: true,
   mallOpen: true,
@@ -258,6 +262,8 @@ async function onSave() {
     /* 密钥留空时服务端保持原值；仅在有输入时提交新密钥（轮换） */
     await saveSystemConfig({ ...form, minioSecretKey: form.minioSecretKey?.trim() ?? '' })
     completed.push('系统设置')
+    /* 站点品牌（左上角图标/名称 + 标签页图标）保存后即时刷新，无需重进后台 */
+    void branding.load(true)
     /* 名片可编辑字段随保存一并提交（字段白名单，控制客户端自编辑范围） */
     const results = await Promise.allSettled([
       saveCardSchema('individual', cardEditable.individual).then(() => completed.push('个人名片字段')),
@@ -336,6 +342,10 @@ onBeforeRouteLeave(async () => {
             </t-form-item>
             <t-form-item label="站点标语" name="siteSlogan">
               <t-input v-accessible-field v-model="form.siteSlogan" clearable placeholder="客户端登录页展示…" />
+            </t-form-item>
+            <!-- 站点 logo：后台左上角图标 + 浏览器标签页图标（客户端不读取，客户端仍跟随移动端主题） -->
+            <t-form-item label="站点 logo" name="siteLogo" help="用于后台左上角图标与浏览器标签页图标；建议方形图，未上传时使用内置默认字标。客户端不受影响（跟随定制主题）。">
+              <ImageUploadField v-model="form.siteLogo" biz-type="site-logo" tip="支持 PNG/JPG/WebP，上传后立即作为后台图标与标签页图标" />
             </t-form-item>
           </div>
 

@@ -287,4 +287,98 @@ describe('M1-C demands（状态机 + 立项联动）', () => {
     expect(after?.status).toBe('pending')
     expect(after?.reviewAt).toBeTruthy()
   })
+
+  it('响应审核增强：通过时勾选「向需求方显示」的字段、编辑响应内容、按需求筛选待审核响应', async () => {
+    const prisma = app.get(PrismaService)
+    const at = '2026-09-19 10:00'
+    const row = await prisma.demandRespondent.create({
+      data: {
+        demandId: 'D4009',
+        name: '林晚舟',
+        enterprise: '星澜智能科技',
+        message: '响应说明原文',
+        quote: '5 万',
+        timeline: '3 周内可开工',
+        cases: '同类项目交付经验',
+        phone: '13801210002',
+        email: 'linwanzhou@starlan.ai',
+        at,
+        status: 'pending_review',
+      },
+    })
+
+    /* 非法隐藏字段键 → 400（仅允许 message/quote/timeline/cases/phone/email） */
+    const badField = await request(app.getHttpServer())
+      .post(`/api/admin/demands/D4009/respondents/${row.id}/review`)
+      .set('Authorization', `Bearer ${token}`)
+      .send({ status: 'approved', hiddenFields: ['bogus'] })
+    expect(badField.status).toBe(400)
+
+    /* 编辑响应内容：仅待审核可改（响应方基本信息 name/enterprise 不在载荷内，改不了） */
+    const edited = await request(app.getHttpServer())
+      .put(`/api/admin/demands/D4009/respondents/${row.id}`)
+      .set('Authorization', `Bearer ${token}`)
+      .send({ message: '响应说明已编辑', quote: '6 万', timeline: '4 周内可开工', cases: '补充案例', phone: '13801210003', email: '' })
+    expect(edited.status).toBe(200)
+    const afterEdit = await prisma.demandRespondent.findUnique({ where: { id: row.id } })
+    expect(afterEdit?.message).toBe('响应说明已编辑')
+    expect(afterEdit?.quote).toBe('6 万')
+    expect(afterEdit?.cases).toBe('补充案例')
+    expect(afterEdit?.phone).toBe('13801210003')
+    /* 空串 = 清空邮箱；响应方基本信息保持不变 */
+    expect(afterEdit?.email).toBeNull()
+    expect(afterEdit?.name).toBe('林晚舟')
+    expect(afterEdit?.enterprise).toBe('星澜智能科技')
+
+    /* message 为空 → 400 */
+    const emptyMessage = await request(app.getHttpServer())
+      .put(`/api/admin/demands/D4009/respondents/${row.id}`)
+      .set('Authorization', `Bearer ${token}`)
+      .send({ message: '   ' })
+    expect(emptyMessage.status).toBe(400)
+    expect(emptyMessage.body.message).toBe('响应说明不能为空')
+
+    /* 待审核响应可被「响应审核」列表按 demandId 精确筛选 */
+    const filtered = await request(app.getHttpServer())
+      .get('/api/admin/demand-responses')
+      .query({ page: 1, pageSize: 20, demandId: 'D4009' })
+      .set('Authorization', `Bearer ${token}`)
+    expect(filtered.status).toBe(200)
+    expect(filtered.body.data.total).toBeGreaterThan(0)
+    expect(filtered.body.data.list.every((r: { demandId: string }) => r.demandId === 'D4009')).toBe(true)
+
+    const noneMatched = await request(app.getHttpServer())
+      .get('/api/admin/demand-responses')
+      .query({ page: 1, pageSize: 20, demandId: 'D0000' })
+      .set('Authorization', `Bearer ${token}`)
+    expect(noneMatched.body.data.total).toBe(0)
+
+    /* 通过并勾选「不显示」的联系手机与报价：hiddenFields 持久化，后台仍可见真实值 */
+    const approved = await request(app.getHttpServer())
+      .post(`/api/admin/demands/D4009/respondents/${row.id}/review`)
+      .set('Authorization', `Bearer ${token}`)
+      .send({ status: 'approved', hiddenFields: ['phone', 'quote'] })
+    expect(approved.status).toBe(200)
+    const afterApprove = await prisma.demandRespondent.findUnique({ where: { id: row.id } })
+    expect(afterApprove?.status).toBe('pending')
+    expect(afterApprove?.hiddenFields).toEqual(['phone', 'quote'])
+
+    const adminDetail = await request(app.getHttpServer())
+      .get('/api/admin/demands/D4009')
+      .set('Authorization', `Bearer ${token}`)
+    const adminRow = (adminDetail.body.data.respondents as Array<{ id: number; hiddenFields?: string[]; phone?: string; quote?: string }>)
+      .find((item) => item.id === row.id)
+    expect(adminRow?.hiddenFields).toEqual(['phone', 'quote'])
+    /* 后台始终保留真实值（隐藏只作用于发布者侧下发） */
+    expect(adminRow?.phone).toBe('13801210003')
+    expect(adminRow?.quote).toBe('6 万')
+
+    /* 已通过（不再是待审核）→ 再编辑 409 */
+    const editAfterApprove = await request(app.getHttpServer())
+      .put(`/api/admin/demands/D4009/respondents/${row.id}`)
+      .set('Authorization', `Bearer ${token}`)
+      .send({ message: '编辑已通过的响应' })
+    expect(editAfterApprove.status).toBe(409)
+    expect(editAfterApprove.body.message).toBe('仅待审核的响应可编辑')
+  })
 })

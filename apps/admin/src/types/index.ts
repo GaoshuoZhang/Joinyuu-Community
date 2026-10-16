@@ -177,6 +177,8 @@ export interface DemandRespondent {
   reviewedAt?: string
   /** 驳回理由（status = rejected 时存在） */
   rejectReason?: string
+  /** 对需求方隐藏的响应字段（响应审核通过时勾选；后台始终保留真实值） */
+  hiddenFields?: string[]
 }
 
 export interface Demand {
@@ -926,6 +928,8 @@ export interface AuditLog {
 export interface SystemConfig {
   siteName: string
   siteSlogan: string
+  /** 站点 logo（素材 URL）：后台左上角图标与浏览器标签页图标；空 = 使用内置默认字标（客户端不读取） */
+  siteLogo: string
   mobileUrl: string
   /** 客户端注册开关 */
   registrationOpen: boolean

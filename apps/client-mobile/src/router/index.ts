@@ -69,6 +69,8 @@ export const router = createRouter({
         /* ---- 个人中心 ---- */
         { path: 'me/cards/individual', name: 'my-card-individual', component: () => import('@/views/mobile/MyIndividualCardView.vue'), meta: { requiresAuth: true } },
         { path: 'me/identities', name: 'my-identities', component: () => import('@/views/mobile/IdentityListView.vue'), meta: { requiresAuth: true } },
+        /* 身份说明：四种身份的获取方式与权益对照（信息页，入口在「关联身份」页底部，无鉴权需求） */
+        { path: 'me/identity-guide', name: 'identity-guide', component: () => import('@/views/mobile/IdentityGuideView.vue') },
         /* 企业邀请详情（站内信跳转入，确认加入 / 拒绝） */
         { path: 'me/invitations/:id', name: 'invitation-detail', component: () => import('@/views/mobile/InvitationView.vue'), meta: { requiresAuth: true } },
         { path: 'me/enterprises/:id/edit', name: 'my-enterprise-card-edit', component: () => import('@/views/mobile/EnterpriseCardEditView.vue'), meta: { requiresAuth: true } },

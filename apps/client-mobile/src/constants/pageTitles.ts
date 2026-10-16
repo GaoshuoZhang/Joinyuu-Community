@@ -40,6 +40,7 @@ const ROUTE_TITLES: Record<string, string> = {
   notices: '站内信',
   'my-card-individual': '个人名片',
   'my-identities': '关联身份',
+  'identity-guide': '身份说明',
   'invitation-detail': '企业邀请',
   'my-enterprise-card-edit': '编辑企业名片',
   'my-enterprise-member': '成员管理',

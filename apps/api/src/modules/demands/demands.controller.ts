@@ -11,6 +11,7 @@ import { ScheduleDemandDto } from './dto/schedule-demand.dto'
 import { CloseDemandDto } from './dto/close-demand.dto'
 import { ProxyRespondDemandDto } from './dto/proxy-respond-demand.dto'
 import { ReviewRespondentDto } from './dto/review-respondent.dto'
+import { UpdateRespondentDto } from './dto/update-respondent.dto'
 import { InitiateProjectDto } from './dto/initiate-project.dto'
 
 @Controller('api/admin/demands')
@@ -133,7 +134,7 @@ export class DemandsController {
     return this.demands.proxyRespond(id, dto)
   }
 
-  /* 响应审核（需求详情「响应记录」tab / 响应审核页）：三码任一即可 */
+  /* 响应审核（响应审核页）：三码任一即可 */
   @RequirePermission(['/demands', '/demands/review', '/demands/responses'])
   @HttpCode(200)
   @Post(':id/respondents/:respondentId/review')
@@ -144,6 +145,19 @@ export class DemandsController {
     @Req() req: AuthenticatedRequest,
   ): Promise<{ code: number }> {
     return this.demands.reviewRespondent(id, respondentId, dto, req.user?.name ?? '社区管理员')
+  }
+
+  /* 编辑响应内容（响应审核页「编辑」）：仅待审核响应可改，响应方基本信息不可改 */
+  @RequirePermission(['/demands', '/demands/review', '/demands/responses'])
+  @HttpCode(200)
+  @Put(':id/respondents/:respondentId')
+  updateRespondent(
+    @Param('id') id: string,
+    @Param('respondentId') respondentId: string,
+    @Body() dto: UpdateRespondentDto,
+    @Req() req: AuthenticatedRequest,
+  ): Promise<{ code: number }> {
+    return this.demands.updateRespondent(id, respondentId, dto, req.user?.name ?? '社区管理员')
   }
 
   @RequirePermission('/demands')

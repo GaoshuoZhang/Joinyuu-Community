@@ -598,6 +598,8 @@ export interface MyResponseItem {
   cases?: string
   /** 联系手机（响应时选填；未填时沿用账号手机号） */
   phone?: string
+  /** 联系邮箱（响应时选填；未填时沿用账号邮箱） */
+  email?: string
   at: string
   responderUid?: string
   responderName?: string
@@ -617,6 +619,8 @@ export interface DemandRespondPayload {
   timeline?: string
   cases?: string
   phone?: string
+  /** 联系邮箱（选填；留空时服务端沿用账号邮箱） */
+  email?: string
   /** 响应身份（父级据此换算 asIdentity / asEnterpriseId） */
   identity: UserIdentity
 }

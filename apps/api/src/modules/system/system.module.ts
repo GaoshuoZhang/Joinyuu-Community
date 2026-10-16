@@ -9,10 +9,11 @@ import { DictsController } from './dicts.controller'
 import { DictsService } from './dicts.service'
 import { DashboardController } from './dashboard.controller'
 import { DashboardService } from './dashboard.service'
+import { BrandingController } from './branding.controller'
 import { RealnameModule } from '../../common/realname/realname.module'
 
 /* 系统管理域（wiki-backend.md §7.15/§7.16/§7.17）：
- * 通知中心 / 操作日志查询 / 系统配置（含实名核验配置与联通测试）/ 数据字典 / 工作台聚合。 */
+ * 通知中心 / 操作日志查询 / 系统配置（含实名核验配置与联通测试）/ 数据字典 / 工作台聚合 / 后台壳品牌。 */
 @Module({
   imports: [RealnameModule],
   controllers: [
@@ -21,6 +22,7 @@ import { RealnameModule } from '../../common/realname/realname.module'
     SystemConfigController,
     DictsController,
     DashboardController,
+    BrandingController,
   ],
   providers: [NotificationsService, AuditLogsService, SystemConfigService, DictsService, DashboardService],
 })

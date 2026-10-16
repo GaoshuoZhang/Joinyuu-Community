@@ -26,10 +26,10 @@ export async function fetchMyDemands(): Promise<MyDemandItem[]> {
 }
 
 /** POST /api/app/demands/:id/respond — 响应需求（须选择响应身份；触发 demand_responded 积分）。
- * 除 note 外的字段均选填：报价 / 可投入时间 / 案例 / 手机（手机留空时服务端沿用账号手机号）。 */
+ * 除 note 外的字段均选填：报价 / 可投入时间 / 案例 / 手机 / 邮箱（手机与邮箱留空时服务端沿用账号信息）。 */
 export async function respondDemand(
   id: string,
-  payload: { note: string; quote?: string; timeline?: string; cases?: string; phone?: string; asIdentity: IdentityType; asEnterpriseId?: string },
+  payload: { note: string; quote?: string; timeline?: string; cases?: string; phone?: string; email?: string; asIdentity: IdentityType; asEnterpriseId?: string },
 ): Promise<void> {
   await httpPost(`/demands/${id}/respond`, payload)
 }

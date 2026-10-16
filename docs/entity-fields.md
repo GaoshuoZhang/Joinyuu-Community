@@ -71,6 +71,7 @@
   - 密钥安全（P0）：`minioSecretKey` 只写不读——管理端 GET 只回 `minioSecretKeyConfigured`/`minioSecretKeyMasked`/`minioCredentialSource`，审计快照不含密钥原文；凭据可经 `MINIO_SECRET_KEY`/`MINIO_ACCESS_KEY` 环境变量优先注入。
   - 实名核验（P1）：`realnameVerifyCredentialMode=inline` 时凭据为**后台直接填写的密钥**（只写、GET 只回掩码 `realnameVerifyCredentialMasked`、审计快照凭据字段恒为空）；`env` 时仅登记环境变量名。启用 + `realnameVerifyTestOk=true` 时客户端 `realnameMode=verified`（「实名认证」），否则 `registration`（「身份信息登记」）；任一核验配置变更会把 `realnameVerifyTestOk` 重置为 false 并要求重新测试联通。
   - 日志保留期：`auditLogRetentionDays` / `loginLogRetentionDays` Int 默认 180（0 = 永久保存，取值 0-3650）；由「日志与审计 > 日志设置」维护（`PUT /api/admin/audit-logs/retention`），超期日志由定时任务 `log-retention-purge` 每日 03:00 清理。
+  - 站点 logo：`siteLogo` String 默认 ''（素材 URL，≤512）；后台左上角图标与浏览器标签页图标（`GET /api/admin/branding` 下发），空串回退内置字标；**客户端不读取**，客户端品牌跟随定制主题。
 - **DictEntry** — 数据字典（type+code 联合 PK；type demand_category/industry/event_type/goods_category；label 全类型唯一；sort/status；**商品类别另有类别级 visibilityIdentities/visibilityLevels/orderIdentities/orderLevels**，空数组 = 不限，其余类型恒为空）
 - **ArchiveSetting** — 归档设置（domain PK；autoArchive/archiveDelayDays 自动归档延时；autoPurge/purgeDelayDays 自动删除延时；archiveStatuses Json? 按状态开关）
 
@@ -138,6 +139,7 @@
 | 扩展 | Demand | contactPublic Bool 默认 false（公开联系人开关：开启后客户端含未登录游客可见 contactName/contactPhone/contactEmail，关闭时客户端一律不可见、后台始终可见）；**respondNeedReview Bool 默认 true（响应需审核：开启后成员提交的响应先落 pending_review，管理员审核通过才对发布者可见并发放响应积分；客户端需求列表/详情只读下发）**；creatorName/creatorId 已删（提交人取 publisherName/publisherId） |
 | 扩展 | Space | feePerHour Int 默认 0（预约费用：积分/小时，0=免费；后台空间表单维护，客户端空间列表与预约页展示）；**visibilityIdentities/visibilityLevels String[] 默认 []（自定义可见范围：身份/等级，空数组 = 不限；需求可见范围同口径，等级仅对持有经验值的社区个体/社区企业生效）**；**reservationIdentities/reservationLevels String[] 默认 []（自定义可预约范围：身份/等级，空数组 = 不限；客户端提交预约时按本次实际身份 + 该身份等级校验，不命中 403）**；四数组仅在 `needReservation=true` 时有意义，关闭「需预约」时后台服务端统一清空 |
 | 扩展 | SpaceReservation | feePoints Int 默认 0（该单实际消耗积分；审核驳回与用户/后台取消均全额退回，写 source=space 流水） |
+| 扩展 | DemandRespondent | **hiddenFields String[] 默认 []**（响应审核通过时勾选「向需求方隐藏」的响应字段键：message/quote/timeline/cases/phone/email；空 = 全部向需求方显示；客户端发布者视图逐项省略，后台与响应者本人仍见真实值）；email 随响应提交落库（客户端响应表单新增「联系邮箱」选填，留空沿用账号邮箱） |
 | 扩展 | LevelTier | pointsDiscount Float 默认 10（积分消费折扣：1 = 1 折 … 10 = 原价，支持一位小数如 8.5 = 85 折；商城兑换与空间预约按等级折扣扣分，折扣口径见 wiki-backend §8.8） |
 
 **卡片字段配置**：个人名片（`User`/UserIdentity 派生字段）与社区企业名片（`Enterprise` 字段）均**免审核保存即公开**；admin 后台在**用户详情 / 企业详情**的「名片」标签页查看与编辑个人/企业名片（「编辑名片」弹窗），用户可编辑字段白名单在**系统配置 > 名片可编辑字段**维护（原「名片管理」页已下线），由 `GET /api/app/card-schema/:type` 下发。个人名片 `visibility.isPublic=false` 时从人才库隐藏（§8.2）。

@@ -70,12 +70,14 @@ function onSubmit() {
         <strong>{{ r.responderName ?? '响应方' }}</strong>
         <StateTag kind="response" :value="r.status ?? 'pending'" />
       </div>
-      <p class="owner-response-note">{{ r.note }}</p>
-      <!-- 响应时选填的次要信息：按有无渲染（v51 起完整换行展示，不再截断） -->
+      <p v-if="r.note" class="owner-response-note">{{ r.note }}</p>
+      <!-- 响应时选填的次要信息：按有无渲染（v51 起完整换行展示，不再截断）；
+           响应审核通过时管理员可勾选「向需求方显示」的字段，未勾选的字段服务端不下发 -->
       <p v-if="r.quote" class="owner-response-detail">报价：{{ r.quote }}</p>
       <p v-if="r.timeline" class="owner-response-detail">可投入时间：{{ r.timeline }}</p>
       <p v-if="r.cases" class="owner-response-detail">案例：{{ r.cases }}</p>
       <p v-if="r.phone" class="owner-response-detail">手机：{{ r.phone }}</p>
+      <p v-if="r.email" class="owner-response-detail">邮箱：{{ r.email }}</p>
       <p class="owner-response-meta">{{ formatLocalDateTime(r.at) }}</p>
       <Button
         v-if="canSelect && (r.status ?? 'pending') === 'pending'"

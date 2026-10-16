@@ -134,6 +134,11 @@ function onTap(item: MyIdentitySummary) {
           企业合作
           <template #suffix><Icon aria-hidden="true" name="chevron-right" size="14px" /></template>
         </Button>
+        <!-- 身份说明：四种身份的获取方式与权益对照（信息页） -->
+        <Button theme="default" variant="outline" block @click="router.push('/me/identity-guide')">
+          身份说明
+          <template #suffix><Icon aria-hidden="true" name="chevron-right" size="14px" /></template>
+        </Button>
       </div>
     </template>
   </div>
@@ -236,5 +241,8 @@ function onTap(item: MyIdentitySummary) {
 
 .coop-block {
   margin-top: var(--app-space-2);
+  display: flex;
+  flex-direction: column;
+  gap: var(--app-space-4);
 }
 </style>

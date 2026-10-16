@@ -8,13 +8,13 @@ import { useUnsavedGuard } from '@/composables/useUnsavedGuard'
 import { isPhone } from '@/utils/validators'
 import type { DemandRespondPayload, UserIdentity } from '@/types'
 
-/* 响应需求表单：响应说明（必填）+ 报价/工期/案例/手机（选填）+ 单选响应身份（标签展示，默认第一个可选身份）；
+/* 响应需求表单：响应说明（必填）+ 报价/工期/案例/手机/邮箱（选填）+ 单选响应身份（标签展示，默认第一个可选身份）；
  * 提交后由父级刷新并调用 clearNote。 */
 const props = defineProps<{ identities: UserIdentity[]; userName: string; submitting: boolean }>()
 
 const emit = defineEmits<{ respond: [payload: DemandRespondPayload] }>()
 
-const form = reactive({ note: '', quote: '', timeline: '', cases: '', phone: '' })
+const form = reactive({ note: '', quote: '', timeline: '', cases: '', phone: '', email: '' })
 /* 离开保护：任一字段有未提交内容时离开需确认；
  * 提交成功后父级调用 clearNote 清空，isDirty 自然归 false，不会误拦 */
 useUnsavedGuard(() => Object.values(form).some((value) => value.trim().length > 0))
@@ -29,6 +29,10 @@ const QUOTE_MAX_LENGTH = 64
 const TIMELINE_MAX_LENGTH = 128
 const CASES_MAX_LENGTH = 300
 const PHONE_MAX_LENGTH = 11
+const EMAIL_MAX_LENGTH = 128
+
+/* 邮箱格式：与需求表单 / 服务端同口径（非空时校验） */
+const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
 
 const rules: FormRules<typeof form> = {
   note: [
@@ -37,6 +41,8 @@ const rules: FormRules<typeof form> = {
   ],
   /* 联系手机选填；填写时须为 11 位手机号（留空由服务端沿用账号手机号） */
   phone: [{ validator: (val: string) => !val.trim() || isPhone(val.trim()), message: '请输入正确的手机号' }],
+  /* 联系邮箱选填；填写时须为合法邮箱（留空由服务端沿用账号邮箱） */
+  email: [{ validator: (val: string) => !val.trim() || EMAIL_PATTERN.test(val.trim()), message: '请输入正确的邮箱' }],
 }
 
 watch(
@@ -62,6 +68,7 @@ function respond() {
     timeline: optional(form.timeline),
     cases: optional(form.cases),
     phone: optional(form.phone),
+    email: optional(form.email),
     identity: picked.value,
   })
 }
@@ -77,6 +84,7 @@ function clearNote() {
   form.timeline = ''
   form.cases = ''
   form.phone = ''
+  form.email = ''
 }
 
 defineExpose({ clearNote })
@@ -139,6 +147,16 @@ defineExpose({ clearNote })
         :maxlength="PHONE_MAX_LENGTH"
         clearable
         placeholder="选填，默认使用账号手机号"
+      />
+    </FormItem>
+    <FormItem label="联系邮箱" name="email">
+      <Input
+        v-model="form.email"
+        type="text"
+        inputmode="email"
+        :maxlength="EMAIL_MAX_LENGTH"
+        clearable
+        placeholder="选填，默认使用账号邮箱"
       />
     </FormItem>
     <div v-if="identityOptions.length" class="identity-field">

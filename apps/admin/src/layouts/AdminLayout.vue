@@ -15,6 +15,7 @@ import {
   CloseIcon,
   DashboardIcon,
   Edit2Icon,
+  InfoCircleIcon,
   LayersIcon,
   MapIcon,
   MoonIcon,
@@ -32,6 +33,7 @@ import ListErrorState from '@/components/ListErrorState.vue'
 import { useAuthStore } from '@/stores/auth'
 import { useTabsStore } from '@/stores/tabs'
 import { useThemeStore } from '@/stores/theme'
+import { useBrandingStore } from '@/stores/branding'
 import { scopeAllowsGroup } from '@/constants/scopes'
 import {
   fetchNotifications,
@@ -45,6 +47,7 @@ const router = useRouter()
 const auth = useAuthStore()
 const tabs = useTabsStore()
 const theme = useThemeStore()
+const branding = useBrandingStore()
 
 /* RBAC：分组至少含一个可见菜单项、且数据范围放行该域时才渲染（避免空分组标题） */
 function canSee(codes: string[], group: string, scopeDomain?: string): boolean {
@@ -62,6 +65,8 @@ function syncCompactSidebar(event: MediaQueryList | MediaQueryListEvent = compac
 onMounted(() => {
   syncCompactSidebar()
   compactViewport.addEventListener('change', syncCompactSidebar)
+  /* 站点品牌（左上角图标/名称 + 标签页图标）：已登录才拉取，避免登录页多一次无效请求 */
+  if (auth.token) void branding.load()
 })
 onBeforeUnmount(() => {
   compactViewport.removeEventListener('change', syncCompactSidebar)
@@ -108,6 +113,7 @@ const activePath = computed(() => {
   if (p.startsWith('/enterprises')) return '/enterprises'
   if (p.startsWith('/external-enterprises')) return '/external-enterprises'
   if (p === '/demands/review') return '/demands/review'
+  if (p === '/demands/responses') return '/demands/responses'
   if (p.startsWith('/demands')) return '/demands'
   if (p === '/spaces/reservations') return '/spaces/reservations'
   if (p.startsWith('/spaces/')) return '/spaces'
@@ -248,14 +254,15 @@ async function handleDropdown(item: { value?: string | number }) {
         aria-label="返回工作台"
         href="#/dashboard"
       >
-        <!-- 品牌标识：色值为品牌资产，刻意不随主题切换 -->
-        <svg class="logo-mark" viewBox="0 0 32 32" aria-hidden="true">
+        <!-- 品牌标识：站点 logo（系统配置 > 站点信息）优先，未配置时回退内置字标（色值为品牌资产，刻意不随主题切换） -->
+        <img v-if="branding.siteLogo" class="logo-mark logo-img" :src="branding.siteLogo" alt="" aria-hidden="true" />
+        <svg v-else class="logo-mark" viewBox="0 0 32 32" aria-hidden="true">
           <rect width="32" height="32" rx="7" fill="#0052D9" />
           <circle cx="12.5" cy="14" r="5" fill="#7BD8F5" />
           <circle cx="20.5" cy="10.5" r="3.2" fill="#FFFFFF" />
           <path d="M5 23c2.5-2.4 5-2.4 7.5 0s5 2.4 7.5 0 5-2.4 7.5 0" stroke="#FFFFFF" stroke-width="2" fill="none" stroke-linecap="round" />
         </svg>
-        <span v-if="!collapsed" class="logo-text">聚屿社区</span>
+        <span v-if="!collapsed" class="logo-text">{{ branding.siteName }}</span>
       </t-link>
 
       <!-- 菜单项在渲染前按权限过滤；折叠时根节点变为 Tooltip，不能依赖根节点权限指令。 -->
@@ -461,6 +468,11 @@ async function handleDropdown(item: { value?: string | number }) {
               系统监控
             </t-menu-item>
             <t-menu-item v-if="auth.hasPerm('/system/policies')" value="/system/policies" to="/system/policies" router-link><template #icon><Edit2Icon /></template>协议与政策</t-menu-item>
+            <!-- 关于：站点信息 + 开发者联系方式（信息页，无需权限码，口径同「工作台」） -->
+            <t-menu-item value="/system/about" to="/system/about" router-link>
+              <template #icon><InfoCircleIcon /></template>
+              关于
+            </t-menu-item>
           </t-submenu>
         </t-menu>
       </div>
@@ -651,6 +663,12 @@ async function handleDropdown(item: { value?: string | number }) {
   font-weight: 600;
   color: var(--td-text-color-primary);
   white-space: nowrap;
+}
+
+/* 站点 logo（系统配置 > 站点信息上传）：与内置字标同尺寸，按方形等比裁切避免拉伸变形 */
+.logo-img {
+  object-fit: contain;
+  border-radius: var(--td-radius-small);
 }
 
 .side-col.collapsed .side-logo {

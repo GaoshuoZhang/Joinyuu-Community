@@ -29,6 +29,8 @@ const LOG_RETENTION_DEFAULT_DAYS = 180
 type SystemConfigAuditSource = {
   siteName: string
   siteSlogan: string
+  /** 站点 logo（素材 URL）：后台图标与浏览器标签页图标（客户端不读取） */
+  siteLogo: string
   mobileUrl: string
   registrationOpen: boolean
   mallOpen: boolean
@@ -83,6 +85,17 @@ export class SystemConfigService {
       return toSystemConfigDto(config)
     })
     return { ...config, mobileUrl: config.mobileUrl ?? 'localhost:7759' }
+  }
+
+  /** 后台壳品牌（仅需登录，不挂权限码）：站点名称 + 站点标语 + 站点 logo（左上角图标与浏览器标签页图标）。
+   * 独立于 /system/config——所有后台角色都需要正确的站点品牌，与具体业务权限无关。 */
+  async branding(): Promise<{ siteName: string; siteSlogan: string; siteLogo: string }> {
+    const config = await this.get()
+    return {
+      siteName: String(config.siteName ?? '').trim(),
+      siteSlogan: String(config.siteSlogan ?? '').trim(),
+      siteLogo: String(config.siteLogo ?? ''),
+    }
   }
 
   async save(payload: SystemConfigPayloadDto, operator: string): Promise<{ code: number }> {
@@ -178,6 +191,8 @@ export class SystemConfigService {
       siteName,
       mobileUrl: payload.mobileUrl === undefined ? previous?.mobileUrl ?? 'localhost:7759' : normalizeMobileUrl(payload.mobileUrl),
       siteSlogan: (payload.siteSlogan ?? '').trim(),
+      /* 站点 logo：缺省保持原值（旧前端表单不传该字段时不重置），空串 = 清除并回退默认字标 */
+      siteLogo: payload.siteLogo === undefined ? previous?.siteLogo ?? '' : payload.siteLogo.trim(),
       registrationOpen: payload.registrationOpen,
       mallOpen: payload.mallOpen,
       demandOpen: payload.demandOpen,
@@ -298,6 +313,7 @@ function toSystemConfigDto(config: SystemConfig): Record<string, unknown> {
   return {
     siteName: config.siteName,
     siteSlogan: config.siteSlogan,
+    siteLogo: config.siteLogo,
     mobileUrl: config.mobileUrl,
     registrationOpen: config.registrationOpen,
     mallOpen: config.mallOpen,
@@ -323,6 +339,7 @@ function toConfigAuditSnapshot(config: SystemConfigAuditSource): SystemConfigAud
   return {
     siteName: config.siteName,
     siteSlogan: config.siteSlogan,
+    siteLogo: config.siteLogo,
     mobileUrl: config.mobileUrl,
     registrationOpen: config.registrationOpen,
     mallOpen: config.mallOpen,

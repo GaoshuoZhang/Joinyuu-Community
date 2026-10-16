@@ -173,6 +173,7 @@ async function onRespond(payload: DemandRespondPayload) {
       timeline: payload.timeline,
       cases: payload.cases,
       phone: payload.phone,
+      email: payload.email,
       asIdentity: identity.type,
       asEnterpriseId: enterpriseId,
     })

@@ -86,17 +86,43 @@ export async function proxyRespondDemand(
   return httpPost<{ code: number }>(`/demands/${id}/proxy-respond`, payload)
 }
 
-/* POST /api/admin/demands/:id/respondents/:respondentId/review，入参 { status: approved | rejected, reason? }（驳回必填原因）
- * 通过 = 该响应回到待处理（发布者之后可选定承接方）；驳回 = 状态改为已驳回并记录理由 */
+/* POST /api/admin/demands/:id/respondents/:respondentId/review，入参 { status, reason?, hiddenFields? }
+ * 通过 = 该响应回到待处理（发布者之后可选定承接方），hiddenFields 为「不向需求方显示」的字段；
+ * 驳回 = 状态改为已驳回并记录理由 */
 export async function reviewDemandRespondent(
   id: string,
   respondentId: number,
-  payload: { status: 'approved' | 'rejected'; reason?: string },
+  payload: { status: 'approved' | 'rejected'; reason?: string; hiddenFields?: string[] },
 ): Promise<{ code: number }> {
+  if (payload.status === 'approved') {
+    return httpPost<{ code: number }>(`/demands/${id}/respondents/${respondentId}/review`, {
+      status: 'approved',
+      hiddenFields: payload.hiddenFields ?? [],
+    })
+  }
   return httpPost<{ code: number }>(`/demands/${id}/respondents/${respondentId}/review`, {
-    status: payload.status,
-    ...(payload.status === 'rejected' ? { reason: payload.reason?.trim() ?? '' } : {}),
+    status: 'rejected',
+    reason: payload.reason?.trim() ?? '',
   })
+}
+
+/* PUT /api/admin/demands/:id/respondents/:respondentId，入参为响应内容字段（响应方基本信息不可改）
+ * 仅待审核响应可编辑（通过/驳回后返回 409）；手机号与邮箱传空串表示清空 */
+export interface UpdateRespondentPayload {
+  message: string
+  quote?: string
+  timeline?: string
+  cases?: string
+  phone?: string
+  email?: string
+}
+
+export async function updateDemandRespondent(
+  id: string,
+  respondentId: number,
+  payload: UpdateRespondentPayload,
+): Promise<{ code: number }> {
+  return httpPut<{ code: number }>(`/demands/${id}/respondents/${respondentId}`, payload)
 }
 
 /** 响应审核列表项（「业务运营 → 响应审核」）：待审核响应 + 所属需求摘要 */
@@ -117,16 +143,19 @@ export interface PendingRespondent {
   email?: string
   at: string
   status: string
+  /** 对需求方隐藏的响应字段（通过时勾选；后台始终可见真实值） */
+  hiddenFields?: string[]
 }
 
-/* GET /api/admin/demand-responses?page&pageSize&keyword — 待审核响应（pending_review 且未撤回，提交时间倒序） */
+/* GET /api/admin/demand-responses?page&pageSize&keyword&demandId — 待审核响应（pending_review 且未撤回，提交时间倒序） */
 export async function fetchDemandResponses(
-  query: { page: number; pageSize: number; keyword?: string },
+  query: { page: number; pageSize: number; keyword?: string; demandId?: string },
 ): Promise<PageResult<PendingRespondent>> {
   const qs = new URLSearchParams()
   qs.set('page', String(query.page))
   qs.set('pageSize', String(query.pageSize))
   if (query.keyword) qs.set('keyword', query.keyword)
+  if (query.demandId) qs.set('demandId', query.demandId)
   return httpGet<PageResult<PendingRespondent>>(`/demand-responses?${qs}`)
 }
 

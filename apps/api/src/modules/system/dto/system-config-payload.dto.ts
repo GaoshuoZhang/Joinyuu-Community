@@ -22,6 +22,12 @@ export class SystemConfigPayloadDto {
   @IsString()
   siteSlogan!: string
 
+  /** 站点 logo（素材 URL）：后台左上角图标与浏览器标签页图标；缺省/空串 = 使用内置默认字标 */
+  @IsOptional()
+  @IsString()
+  @MaxLength(512)
+  siteLogo?: string
+
   @IsOptional()
   @IsString()
   @MaxLength(2048)

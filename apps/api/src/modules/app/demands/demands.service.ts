@@ -19,6 +19,7 @@ import { sanitizeHtml } from '../../../common/utils/sanitize-html'
 import { assertRealnameAllowed } from '../realname/realname.service'
 import { consumePublishingLimit } from '../../../common/enterprise/publishing-limits'
 import { assertEnterprisePermission } from '../../../common/enterprise/enterprise-permission'
+import { respondentFieldVisible } from '../../../common/demands/respondent-fields'
 import type { CreateDemandDto } from './dto/create-demand.dto'
 import type { RespondDemandDto } from './dto/respond-demand.dto'
 import type { SelectRespondersDto } from './dto/select-responders.dto'
@@ -257,7 +258,7 @@ export class AppDemandsService {
           name: responder.name,
           enterprise: responder.enterprise,
           phone: dto.phone?.trim() || responder.phone || null,
-          email: null,
+          email: dto.email?.trim() || responder.email || null,
           quote: dto.quote?.trim() || null,
           timeline: dto.timeline?.trim() || null,
           cases: dto.cases?.trim() || null,
@@ -356,15 +357,17 @@ export class AppDemandsService {
       id: r.id,
       demandId: demand.id,
       demandTitle: demand.title,
-      note: r.message,
       at: r.at,
       ...(r.userId != null ? { responderUid: r.userId } : {}),
       responderName: r.name,
-      /* 响应补充信息：联系手机 / 报价 / 可投入时间 / 经验案例（供发布者评估） */
-      ...(r.phone != null ? { phone: r.phone } : {}),
-      ...(r.quote != null ? { quote: r.quote } : {}),
-      ...(r.timeline != null ? { timeline: r.timeline } : {}),
-      ...(r.cases != null ? { cases: r.cases } : {}),
+      /* 响应补充信息：响应说明 / 联系手机 / 联系邮箱 / 报价 / 可投入时间 / 经验案例（供发布者评估）。
+       * 响应审核通过时管理员可勾选「向需求方显示」：未勾选的字段（hiddenFields）在此逐项省略，发布者不可见。 */
+      ...(respondentFieldVisible(r.hiddenFields, 'message') ? { note: r.message } : {}),
+      ...(r.phone != null && respondentFieldVisible(r.hiddenFields, 'phone') ? { phone: r.phone } : {}),
+      ...(r.email != null && respondentFieldVisible(r.hiddenFields, 'email') ? { email: r.email } : {}),
+      ...(r.quote != null && respondentFieldVisible(r.hiddenFields, 'quote') ? { quote: r.quote } : {}),
+      ...(r.timeline != null && respondentFieldVisible(r.hiddenFields, 'timeline') ? { timeline: r.timeline } : {}),
+      ...(r.cases != null && respondentFieldVisible(r.hiddenFields, 'cases') ? { cases: r.cases } : {}),
       ...(r.responderIdentity != null ? { responderIdentity: this.identityType(r.responderIdentity) } : {}),
       status: r.status === 'pending' || r.status === 'accepted' || r.status === 'rejected' ? (r.status as 'pending' | 'accepted' | 'rejected') : undefined,
       ...(r.reviewAt != null ? { reviewedAt: r.reviewAt } : {}),
@@ -653,7 +656,7 @@ export class AppDemandsService {
     uid: string,
     user: User,
     dto: RespondDemandDto,
-  ): Promise<{ name: string; enterprise: string; phone: string | null; identity: Prisma.InputJsonValue | null }> {
+  ): Promise<{ name: string; enterprise: string; phone: string | null; email: string | null; identity: Prisma.InputJsonValue | null }> {
     const requested = dto.asIdentity ?? (dto.asEnterpriseId ? 'community_enterprise' : 'individual')
 
     if (requested === 'community_enterprise') {
@@ -665,6 +668,7 @@ export class AppDemandsService {
         name: user.realName || user.nickname,
         enterprise: ent.name,
         phone: ent.contactPhone || user.phone,
+        email: ent.contactEmail || user.email || null,
         identity: { type: 'community_enterprise', enterpriseId: ent.id, enterpriseName: ent.name, role: 'member' },
       }
     }
@@ -676,6 +680,7 @@ export class AppDemandsService {
         name: user.realName || user.nickname,
         enterprise: '',
         phone: user.phone,
+        email: user.email || null,
         identity: { type: 'community_individual', level: row.level ?? undefined },
       }
     }
@@ -687,6 +692,7 @@ export class AppDemandsService {
         name: user.realName || user.nickname,
         enterprise: row.enterpriseName || '',
         phone: user.phone,
+        email: user.email || null,
         identity: { type: 'external_enterprise', organizationName: row.enterpriseName ?? undefined, title: '合作企业' },
       }
     }
@@ -695,6 +701,7 @@ export class AppDemandsService {
       name: user.realName || user.nickname,
       enterprise: '',
       phone: user.phone,
+      email: user.email || null,
       identity: { type: 'individual', title: '个人用户' },
     }
   }

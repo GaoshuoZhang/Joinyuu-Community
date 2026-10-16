@@ -1,9 +1,8 @@
 <script setup lang="ts">
-import { focusFirstInvalid, useDialogFormProtection } from '@/utils/form'
-import { computed, nextTick, onMounted, reactive, ref } from 'vue'
+import { computed, onMounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useQueryTab, backOrFallback } from '@/utils/navigation'
-import { MessagePlugin, type FormProps } from 'tdesign-vue-next'
+import { MessagePlugin } from 'tdesign-vue-next'
 import { ArrowLeftIcon } from 'tdesign-icons-vue-next'
 import StatusTag from '@/components/StatusTag.vue'
 import DemandPublishDialog from '@/components/DemandPublishDialog.vue'
@@ -12,7 +11,7 @@ import DemandScheduleDialog from '@/components/DemandScheduleDialog.vue'
 import ContentTakedownDialog from '@/components/ContentTakedownDialog.vue'
 import ProjectFormDialog from '@/components/ProjectFormDialog.vue'
 import { identityLabelOf, identityTypeMap, userLevelMap } from '@/constants/identity'
-import { cancelDemandSchedule, closeDemand, fetchDemand, publishDemandNow, reviewDemandRespondent } from '@/api/demands'
+import { cancelDemandSchedule, closeDemand, fetchDemand, publishDemandNow } from '@/api/demands'
 import { isNotFound } from '@/api/http'
 import ListErrorState from '@/components/ListErrorState.vue'
 import type { Demand, DemandRespondent } from '@/types'
@@ -31,8 +30,7 @@ const respondentColumns = [
   { colKey: 'enterprise', title: '所属', width: 160, ellipsis: true },
   { colKey: 'message', title: '留言' },
   { colKey: 'at', title: '时间', width: 170 , ellipsis: true},
-  { colKey: 'status', title: '状态', cell: 'status', width: 140 },
-  { colKey: 'op', title: '操作', cell: 'op', width: 120 },
+  { colKey: 'status', title: '状态', cell: 'status', width: 200 },
 ]
 
 /* 响应记录以 id 作为稳定行键 */
@@ -47,6 +45,20 @@ function respondentMeta(row: DemandRespondent): string {
   if (row.timeline) parts.push(`工期 ${row.timeline}`)
   if (row.phone) parts.push(`手机 ${row.phone}`)
   return parts.join(' · ')
+}
+
+/* 对需求方隐藏的字段键 → 中文标签（响应审核「向需求方显示」未勾选的项） */
+const HIDDEN_FIELD_LABELS: Record<string, string> = {
+  message: '响应说明',
+  quote: '报价',
+  timeline: '可投入时间 / 工期',
+  cases: '相关经验与案例',
+  phone: '联系手机',
+  email: '联系邮箱',
+}
+
+function hiddenFieldLabels(row: DemandRespondent): string {
+  return (row.hiddenFields ?? []).map((field) => HIDDEN_FIELD_LABELS[field] ?? field).join('、')
 }
 
 async function load() {
@@ -67,61 +79,18 @@ async function load() {
   }
 }
 
-/* 响应审核：仅「待审核」行可操作；通过 = 回待处理，驳回需填理由（必填 ≤200）。
- * 行级互斥：reviewing 记录 `${row.id}:${status}`，同一行同时只允许一个动作在途 */
-const reviewing = ref('')
-
-function isReviewing(row: DemandRespondent, status: 'approved' | 'rejected') {
-  return reviewing.value === `${row.id}:${status}`
-}
-
-async function onApproveRespondent(row: DemandRespondent) {
+/* 响应审核统一收敛到「业务运营 → 响应审核」页：本页响应记录不再提供通过/驳回操作，
+ * 待审核行点击（或状态列「去审核」按钮）跳转响应审核页并自动按该需求筛选。 */
+function goRespondentReview() {
   if (!demand.value) return
-  reviewing.value = `${row.id}:approved`
-  try {
-    await reviewDemandRespondent(demand.value.id, row.id, { status: 'approved' })
-    MessagePlugin.success('已通过该响应')
-    await load()
-  } catch (e) {
-    MessagePlugin.error(e instanceof Error ? e.message : '操作失败')
-  } finally {
-    reviewing.value = ''
-  }
+  void router.push({ path: '/demands/responses', query: { demandId: demand.value.id } })
 }
 
-const rejectVisible = ref(false)
-const rejectRow = ref<DemandRespondent | null>(null)
-const rejectFormRef = ref()
-const rejectForm = reactive({ reason: '' })
-const rejectSubmitting = ref(false)
-const rejectRules: FormProps['rules'] = {
-  reason: [{ required: true, message: '请填写驳回理由', trigger: 'submit' }],
-}
-
-function openRejectRespondent(row: DemandRespondent) {
-  rejectRow.value = row
-  rejectForm.reason = ''
-  rejectVisible.value = true
-  nextTick(() => rejectFormRef.value?.clearValidate())
-}
-
-async function onConfirmRejectRespondent() {
-  const row = rejectRow.value
-  if (!row || !demand.value) return
-  const valid = await rejectFormRef.value.validate()
-  if (valid !== true) return focusFirstInvalid(rejectFormRef.value)
-  rejectSubmitting.value = true
-  try {
-    await reviewDemandRespondent(demand.value.id, row.id, { status: 'rejected', reason: rejectForm.reason })
-    MessagePlugin.success('已驳回该响应')
-    rejectVisible.value = false
-    await load()
-  } catch (e) {
-    MessagePlugin.error(e instanceof Error ? e.message : '操作失败')
-  } finally {
-    rejectSubmitting.value = false
-  }
-}
+/* 仅「待审核」行可点击：行属性提供指针与无障碍提示，状态列另有键盘可达入口 */
+const respondentRowAttributes = ({ row }: { row: DemandRespondent }) =>
+  row.status === 'pending_review'
+    ? { class: 'row-clickable', onclick: goRespondentReview }
+    : {}
 
 /* 编辑（待发布/已发布） */
 const publishVisible = ref(false)
@@ -235,7 +204,6 @@ function goProject() {
 }
 
 onMounted(load)
-const { close: closeRejectDialog } = useDialogFormProtection(rejectForm, rejectVisible, rejectSubmitting)
 </script>
 
 <template>
@@ -429,12 +397,13 @@ const { close: closeRejectDialog } = useDialogFormProtection(rejectForm, rejectV
                 v-if="demand.pendingResponseCount > 0"
                 class="block-gap"
                 theme="info"
-                message="待审核响应需管理员审核通过后才对发布者可见"
+                message="待审核响应需在「响应审核」页集中处理：点击下方待审核条目或「去审核」即可前往"
               />
               <t-table
                 row-key="rowKey"
                 :data="respondentRows"
                 :columns="respondentColumns"
+                :row-attributes="respondentRowAttributes"
                 empty="暂无响应记录，需求发布后成员可在此报名响应"
               >
                 <template #message="{ row }">
@@ -442,11 +411,26 @@ const { close: closeRejectDialog } = useDialogFormProtection(rejectForm, rejectV
                     <div class="resp-message-text" :title="row.message">{{ row.message }}</div>
                     <div v-if="respondentMeta(row)" class="resp-meta-text">{{ respondentMeta(row) }}</div>
                     <div v-if="row.cases" class="resp-cases-text" :title="row.cases">案例：{{ row.cases }}</div>
+                    <!-- 响应审核通过时对需求方隐藏的字段：后台可见真实值，此处标注以免误判 -->
+                    <div v-if="row.hiddenFields?.length" class="resp-hidden-text">
+                      已对需求方隐藏：{{ hiddenFieldLabels(row) }}
+                    </div>
                   </div>
                 </template>
                 <template #status="{ row }">
                   <div class="resp-status-cell">
                     <StatusTag entity="demandRespondent" :value="row.status" />
+                    <!-- 待审核：键盘可达的集中审核入口（行点击为鼠标用户提供同一路径） -->
+                    <t-button
+                      v-if="row.status === 'pending_review'"
+                      variant="text"
+                      size="small"
+                      theme="primary"
+                      :aria-label="`去审核 ${row.name} 的响应`"
+                      @click.stop="goRespondentReview"
+                    >
+                      去审核
+                    </t-button>
                     <span
                       v-if="row.status === 'rejected' && row.rejectReason"
                       class="resp-reject-reason"
@@ -454,18 +438,6 @@ const { close: closeRejectDialog } = useDialogFormProtection(rejectForm, rejectV
                     >
                       {{ row.rejectReason }}
                     </span>
-                  </div>
-                </template>
-                <template #op="{ row }">
-                  <div v-if="!isArchived && row.status === 'pending_review'" class="op-cell" @click.stop>
-                    <t-popconfirm
-                      :content="`确认通过 ${row.name} 的响应？通过后发布者可看到并选定该响应`"
-                      confirm-btn="通过"
-                      @confirm="onApproveRespondent(row)"
-                    >
-                      <t-button variant="text" size="small" theme="primary" :loading="isReviewing(row, 'approved')">通过</t-button>
-                    </t-popconfirm>
-                    <t-button variant="text" size="small" theme="danger" :disabled="isReviewing(row, 'approved')" @click="openRejectRespondent(row)">驳回</t-button>
                   </div>
                 </template>
               </t-table>
@@ -487,32 +459,6 @@ const { close: closeRejectDialog } = useDialogFormProtection(rejectForm, rejectV
 
     <!-- 立项弹窗 -->
     <ProjectFormDialog v-model:visible="projectVisible" mode="create" :demand="demand" :project="null" @success="load" />
-
-    <!-- 驳回响应：理由必填（≤200），驳回后该记录失效、响应者可重新响应 -->
-    <t-dialog
-      :visible="rejectVisible" @close="closeRejectDialog"
-      header="驳回响应"
-      width="480px"
-      :close-on-overlay-click="!rejectSubmitting"
-      :confirm-btn="{ content: '确认驳回', theme: 'danger', loading: rejectSubmitting }"
-      cancel-btn="取消"
-      @confirm="onConfirmRejectRespondent"
-    >
-      <p class="reject-tip">
-        {{ rejectRow ? `驳回 ${rejectRow.name} 的响应` : '' }}理由将记录在该响应上，驳回后该记录失效、响应者可重新响应。
-      </p>
-      <t-form ref="rejectFormRef" :data="rejectForm" :rules="rejectRules">
-        <t-form-item label="驳回原因" name="reason">
-          <t-textarea
-            v-accessible-field
-            v-model="rejectForm.reason"
-            :maxlength="200"
-            :autosize="{ minRows: 3, maxRows: 5 }"
-            placeholder="请填写驳回理由（必填，最多 200 字）…"
-          />
-        </t-form-item>
-      </t-form>
-    </t-dialog>
   </div>
 </template>
 
@@ -647,6 +593,18 @@ const { close: closeRejectDialog } = useDialogFormProtection(rejectForm, rejectV
   font-size: 12px;
   line-height: 18px;
   color: var(--td-text-color-secondary);
+}
+
+/* 对需求方隐藏字段的标注：与留言/案例同层级，弱化配色避免与正文混淆 */
+.resp-hidden-text {
+  font-size: 12px;
+  line-height: 18px;
+  color: var(--td-text-color-placeholder);
+}
+
+/* 仅「待审核」行可点击进入「响应审核」 */
+.row-clickable {
+  cursor: pointer;
 }
 
 /* 响应记录状态单元格：标签 + 驳回理由（小字，超长省略，悬停看全文） */

@@ -328,6 +328,12 @@ const router = createRouter({
           component: () => import('@/views/system/AgreementPolicyView.vue'),
           meta: { title: '协议与政策', group: '系统管理', perm: '/system/policies' },
         },
+        /* 关于：站点信息 + 开发者联系方式（信息页，无需权限码，口径同「工作台」） */
+        {
+          path: 'system/about',
+          component: () => import('@/views/system/AboutView.vue'),
+          meta: { title: '关于', group: '系统管理' },
+        },
         { path: 'system/messages', redirect: (to) => legacySettingsRedirect('messages', to.query) },
         {
           path: '403',

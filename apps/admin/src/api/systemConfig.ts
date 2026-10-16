@@ -6,9 +6,22 @@ export async function fetchSystemConfig(): Promise<SystemConfig> {
   return httpGet<SystemConfig>('/system/config')
 }
 
+/** GET /api/admin/branding — 后台壳品牌（站点名称 + 站点标语 + 站点 logo）：仅需登录，不挂权限码 */
+export interface AdminBranding {
+  siteName: string
+  siteSlogan: string
+  siteLogo: string
+}
+
+export async function fetchBranding(): Promise<AdminBranding> {
+  return httpGet<AdminBranding>('/branding')
+}
+
 export interface SystemConfigPayload {
   siteName: string
   siteSlogan: string
+  /** 站点 logo（素材 URL）：后台左上角图标与浏览器标签页图标；空串 = 清除并回退默认字标 */
+  siteLogo: string
   mobileUrl: string
   registrationOpen: boolean
   mallOpen: boolean
