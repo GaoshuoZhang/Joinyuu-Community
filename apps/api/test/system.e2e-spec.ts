@@ -157,7 +157,7 @@ describe('M1-E system 系统管理域', () => {
     expect(afterGoodsDel.body.data.map((e: { sort: number }) => e.sort)).toEqual([1, 2])
   })
 
-  it('工作台聚合：stats 计数 + 六域待办 + 待办审核前 5 + 近期活动前 4', async () => {
+  it('工作台聚合：stats 计数 + 七域待办 + 待办审核前 5 + 近期活动前 4', async () => {
     const [dashboard, todos, users, enterprises, projects] = await Promise.all([
       get('/api/admin/dashboard'),
       get('/api/admin/todos'),
@@ -186,10 +186,10 @@ describe('M1-E system 系统管理域', () => {
       expect(Array.isArray(data.upcomingEvents[0].enrollments)).toBe(true)
     }
 
-    /* 六域待办（dashboard 内嵌与 /todos 一致） */
+    /* 七域待办（dashboard 内嵌与 /todos 一致）：响应审核排在需求审核之后 */
     expect(todos.status).toBe(200)
     const keys = (todos.body.data as Array<{ key: string }>).map((t) => t.key)
-    expect(keys).toEqual(['settle', 'demand', 'reservation', 'article', 'eventEnrollment', 'lease'])
+    expect(keys).toEqual(['settle', 'demand', 'demandResponse', 'reservation', 'article', 'eventEnrollment', 'lease'])
     expect(data.todos.map((t: { key: string }) => t.key)).toEqual(keys)
     expect(data.todos.every((t: { count: number }) => typeof t.count === 'number')).toBe(true)
 
@@ -546,5 +546,53 @@ describe('M1-E system 系统管理域', () => {
     expect((await put('/api/admin/system/config').send({ ...before, mobileUrl: 'localhost:7759' })).status).toBe(200)
   })
 
+  it('日志设置：默认 180 天、0 = 永久保存、越界与非整数 400、审计留痕', async () => {
+    /* 默认值：两日志均 180 天 */
+    const initial = await get('/api/admin/audit-logs/retention')
+    expect(initial.status).toBe(200)
+    expect(initial.body.data).toEqual({ auditLogRetentionDays: 180, loginLogRetentionDays: 180 })
+
+    /* 0 = 永久保存 */
+    const saved = await put('/api/admin/audit-logs/retention').send({
+      auditLogRetentionDays: 0,
+      loginLogRetentionDays: 90,
+    })
+    expect(saved.status).toBe(200)
+    expect((await get('/api/admin/audit-logs/retention')).body.data).toEqual({
+      auditLogRetentionDays: 0,
+      loginLogRetentionDays: 90,
+    })
+
+    /* 系统配置旧表单载荷（不带日志保留期字段）不得把已保存的设置重置回 180 */
+    const cfg = (await get('/api/admin/system/config')).body.data
+    const { auditLogRetentionDays: _auditDays, loginLogRetentionDays: _loginDays, ...legacy } = cfg
+    expect((await put('/api/admin/system/config').send(legacy)).status).toBe(200)
+    expect((await get('/api/admin/audit-logs/retention')).body.data).toEqual({
+      auditLogRetentionDays: 0,
+      loginLogRetentionDays: 90,
+    })
+
+    /* 越界 / 非整数一律 400 */
+    for (const bad of [-1, 3651, 1.5]) {
+      const res = await put('/api/admin/audit-logs/retention').send({
+        auditLogRetentionDays: bad,
+        loginLogRetentionDays: 180,
+      })
+      expect(res.status).toBe(400)
+    }
+
+    /* 审计留痕：动作「保存日志设置」，含前后值 */
+    const logs = await get('/api/admin/audit-logs').query({ page: 1, pageSize: 10, keyword: '保存日志设置' })
+    expect(logs.body.data.total).toBeGreaterThan(0)
+    expect(logs.body.data.list[0].detail).toBe('操作日志保留 永久 · 登录日志保留 90 天')
+
+    /* 复位为默认值，避免影响后续断言 */
+    expect(
+      (await put('/api/admin/audit-logs/retention').send({
+        auditLogRetentionDays: 180,
+        loginLogRetentionDays: 180,
+      })).status,
+    ).toBe(200)
+  })
 
 })
