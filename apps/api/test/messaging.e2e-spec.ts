@@ -52,6 +52,18 @@ describe('P0 消息中心 · 渠道配置', () => {
     remark: '主通道',
   }
 
+  /** 腾讯云短信载荷：配置与凭据字段均与阿里云不同，用于「同一通知类型切换驱动」 */
+  const tencentPayload = {
+    kind: 'sms',
+    provider: 'tencent_sms',
+    name: '腾讯云短信',
+    enabled: true,
+    config: { sdkAppId: '1400000001', signName: '聚屿社区', templateMapping: { verify_code: '1234567' } },
+    credentialEnv: { secretId: 'TENCENT_SMS_SECRET_ID', secretKey: 'TENCENT_SMS_SECRET_KEY' },
+    dailyLimit: 1000,
+    remark: '备用通道',
+  }
+
   it('驱动目录：返回消息类型与阿里云/腾讯云/SMTP 驱动', async () => {
     const res = await get('/api/admin/message-channels/catalog')
     expect(res.status).toBe(200)
@@ -64,52 +76,76 @@ describe('P0 消息中心 · 渠道配置', () => {
     )
   })
 
-  it('新增渠道：凭据只登记环境变量名，凭据未注入时标记未齐备且不回传值', async () => {
-    const created = await put('/api/admin/message-channels').send(basePayload)
-    expect(created.status).toBe(200)
-    const id = created.body.data.id as string
-    expect(id).toMatch(/^MC\d+$/)
+  it('禁止隐式新增：同驱动已配置 → 409；同类型不同驱动 → 409', async () => {
+    /* 每种通知类型仅一条固定配置：种子已含 sms/aliyun_sms，新增同 kind+provider 直接 409 */
+    const sameDriver = await post('/api/admin/message-channels').send(basePayload)
+    expect(sameDriver.status).toBe(409)
+    expect(sameDriver.body.message).toContain('已配置')
 
-    const list = await get('/api/admin/message-channels')
-    expect(list.status).toBe(200)
-    const channel = (list.body.data as Array<Record<string, unknown>>).find((c) => c.id === id)!
-    expect(channel.kind).toBe('sms')
-    expect(channel.providerLabel).toBe('阿里云短信')
-    expect(channel.enabled).toBe(true)
-    expect(channel.dailyLimit).toBe(1000)
-    /* 凭据值不回传：只有变量名映射与齐备状态 */
-    expect(channel.credentialEnv).toEqual({
-      accessKeyId: 'ALIYUN_SMS_ACCESS_KEY_ID',
-      accessKeySecret: 'ALIYUN_SMS_ACCESS_KEY_SECRET',
-    })
-    expect(channel.credentialConfigured).toBe(false)
-    expect(channel.missingCredentials).toEqual(
-      expect.arrayContaining(['ALIYUN_SMS_ACCESS_KEY_ID', 'ALIYUN_SMS_ACCESS_KEY_SECRET']),
-    )
-    expect(JSON.stringify(channel)).not.toContain('ALIYUN_SMS_ACCESS_KEY_SECRET=')
+    const sameKind = await post('/api/admin/message-channels').send(tencentPayload)
+    expect(sameKind.status).toBe(409)
+    expect(sameKind.body.message).toContain('已有固定配置')
   })
 
-  it('编辑同名(同 kind+provider)渠道为更新而非新增，并可切换启停', async () => {
-    const before = await get('/api/admin/message-channels')
-    const count = (before.body.data as unknown[]).length
+  it('固定配置：PUT /fixed/:kind 切换短信驱动（腾讯云 ⇄ 阿里云），数量不变且凭据不回传', async () => {
+    const before = (await get('/api/admin/message-channels')).body.data as Array<Record<string, unknown>>
+    const smsRows = before.filter((c) => c.kind === 'sms')
+    expect(smsRows).toHaveLength(1)
+    const id = smsRows[0].id as string
 
-    const updated = await put('/api/admin/message-channels').send({
+    const switched = await put('/api/admin/message-channels/fixed/sms').send(tencentPayload)
+    expect(switched.status).toBe(200)
+    expect(switched.body.data.id).toBe(id)
+
+    const after = (await get('/api/admin/message-channels')).body.data as Array<Record<string, unknown>>
+    expect(after.filter((c) => c.kind === 'sms')).toHaveLength(1)
+    const row = after.find((c) => c.id === id)!
+    expect(row.kind).toBe('sms')
+    expect(row.providerLabel).toBe('腾讯云短信')
+    expect(row.enabled).toBe(true)
+    /* 凭据值不回传：只有变量名映射与齐备状态（未注入环境变量 → 未齐备） */
+    expect(row.credentialEnv).toEqual({
+      secretId: 'TENCENT_SMS_SECRET_ID',
+      secretKey: 'TENCENT_SMS_SECRET_KEY',
+    })
+    expect(row.credentialConfigured).toBe(false)
+    expect(row.missingCredentials).toEqual(
+      expect.arrayContaining(['TENCENT_SMS_SECRET_ID', 'TENCENT_SMS_SECRET_KEY']),
+    )
+    expect(JSON.stringify(row)).not.toContain('TENCENT_SMS_SECRET_KEY=')
+
+    /* 切回种子口径（阿里云），保证后续用例与种子一致 */
+    const restored = await put('/api/admin/message-channels/fixed/sms').send(basePayload)
+    expect(restored.status).toBe(200)
+    const finalRow = (
+      (await get('/api/admin/message-channels')).body.data as Array<Record<string, unknown>>
+    ).find((c) => c.id === id)!
+    expect(finalRow.provider).toBe('aliyun_sms')
+    expect(finalRow.name).toBe('阿里云短信')
+    expect(finalRow.enabled).toBe(true)
+  })
+
+  it('编辑已有渠道：PUT /:id 为更新而非新增（种子 MC1），并可切换启停', async () => {
+    const before = (await get('/api/admin/message-channels')).body.data as Array<{ id: string; provider: string }>
+    const count = before.length
+    const target = before.find((c) => c.provider === 'aliyun_sms')!
+
+    const updated = await put(`/api/admin/message-channels/${target.id}`).send({
       ...basePayload,
       name: '阿里云短信（备）',
       enabled: false,
       dailyLimit: 0,
     })
     expect(updated.status).toBe(200)
+    expect(updated.body.data.id).toBe(target.id)
 
-    const after = await get('/api/admin/message-channels')
-    expect((after.body.data as unknown[]).length).toBe(count)
-    const channel = (after.body.data as Array<Record<string, unknown>>).find(
-      (c) => c.id === updated.body.data.id,
-    )!
+    const after = (await get('/api/admin/message-channels')).body.data as Array<Record<string, unknown>>
+    expect(after).toHaveLength(count)
+    const channel = after.find((c) => c.id === target.id)!
     expect(channel.name).toBe('阿里云短信（备）')
     expect(channel.enabled).toBe(false)
 
-    const toggled = await patch(`/api/admin/message-channels/${updated.body.data.id}/enabled`).send({
+    const toggled = await patch(`/api/admin/message-channels/${target.id}/enabled`).send({
       enabled: true,
     })
     expect(toggled.status).toBe(200)
@@ -169,14 +205,17 @@ describe('P0 消息中心 · 渠道配置', () => {
   })
 
   it('渠道凭据 inline：直接填写入参只写不泄露，留空保持原值，审计不含密钥原文', async () => {
+    /* 编辑已有渠道走 PUT /:id：凭空新增同 kind+provider 已被服务端禁止（409） */
+    const channels = (await get('/api/admin/message-channels')).body.data as Array<{ id: string; provider: string }>
+    const id = channels.find((c) => c.provider === 'aliyun_sms')!.id
+
     const inline = {
       ...basePayload,
       credentialMode: 'inline',
       credentialEnv: { accessKeyId: 'AKID-INLINE-TEST-0001', accessKeySecret: 'secret-inline-value-xyz' },
     }
-    const created = await put('/api/admin/message-channels').send(inline)
+    const created = await put(`/api/admin/message-channels/${id}`).send(inline)
     expect(created.status).toBe(200)
-    const id = created.body.data.id as string
 
     const dirty = await get('/api/admin/message-channels')
     const channel = (dirty.body.data as Array<Record<string, unknown>>).find((c) => c.id === id)!
@@ -190,7 +229,7 @@ describe('P0 消息中心 · 渠道配置', () => {
     expect(serialized).not.toContain('secret-inline-value-xyz')
 
     /* 留空 = 保持原值（仅改名） */
-    const keep = await put('/api/admin/message-channels').send({
+    const keep = await put(`/api/admin/message-channels/${id}`).send({
       ...basePayload,
       credentialMode: 'inline',
       name: '阿里云短信（inline）',
@@ -201,7 +240,7 @@ describe('P0 消息中心 · 渠道配置', () => {
     expect(afterKeep.find((c) => c.id === id)!.credentialConfigured).toBe(true)
 
     /* 仅轮换其中一项，另一项继续保持 */
-    const rotate = await put('/api/admin/message-channels').send({
+    const rotate = await put(`/api/admin/message-channels/${id}`).send({
       ...basePayload,
       credentialMode: 'inline',
       credentialEnv: { accessKeySecret: 'rotated-secret-002' },

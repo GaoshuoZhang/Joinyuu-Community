@@ -1,5 +1,6 @@
 /* M1.5 R3 登录安全 + R8 登录日志 e2e：
- * 覆盖：图形验证码（错/对/未携带强制 400）、在线会话列表与强踢（黑名单 401）、
+ * 覆盖：图形验证码（连续失败达 CAPTCHA_AFTER_FAILURES=3 次后强制）、失败阈值与 15 分钟锁定、
+ *       在线会话列表与强踢（黑名单 401）、
  *       修改密码（原密码校验 + 改密后旧 token 失效）、登录日志写入与筛选、
  *       密码周期（过期标记 + 守卫白名单）、验证码接口 IP 限流。
  * 前置：seed 账号 admin/operator（密码 admin123）。 */
@@ -14,6 +15,23 @@ import { formatNow } from '../src/common/utils/time'
 import { reseed } from './helpers/reseed'
 import { decodeCaptcha, loginAs, loginRequest } from './helpers/login'
 
+/* 登录失败计数/锁定键与验证码限流键都不随 reseed 清理、且带 TTL 跨套件甚至跨次运行残留：
+ * 本套件会触发验证码限流（同一 IP 60s 内 >30 次），套件开始与结束都要清一次。 */
+async function clearAuthRateKeys(pattern: string): Promise<void> {
+  const redis = new Redis(process.env.REDIS_URL ?? 'redis://localhost:6379', {
+    maxRetriesPerRequest: 1,
+    retryStrategy: () => null,
+  })
+  try {
+    const keys = await redis.keys(pattern)
+    if (keys.length > 0) await redis.del(...keys)
+  } catch {
+    /* Redis 不可用时忽略（其他断言仍以真实行为为准） */
+  } finally {
+    redis.disconnect()
+  }
+}
+
 describe('M1.5 R3 登录安全 / R8 登录日志', () => {
   let app: INestApplication
   let adminToken: string
@@ -24,56 +42,45 @@ describe('M1.5 R3 登录安全 / R8 登录日志', () => {
     const moduleRef = await Test.createTestingModule({ imports: [AppModule] }).compile()
     app = moduleRef.createNestApplication()
     await app.init()
+
+    /* 清掉可能残留的失败计数、锁定与验证码限流键，保证断言从干净状态起算 */
+    await clearAuthRateKeys('auth:login:*')
+    await clearAuthRateKeys('auth:captcha:rate:*')
+
+    /* 在 beforeAll 里先取得有权限的账号 token：避免依赖某个用例赋值，导致该用例失败时后续用例级联 401 */
+    adminToken = await loginAs(app, 'admin')
+    expect(adminToken).toBeTruthy()
   })
 
   afterAll(async () => {
-    /* 验证码限流用例会让本机 IP 在 60s 内受限，且限流键不随 reseed 清理：
-     * 结束前清空，避免影响后续套件的登录（验证码）请求 */
-    const redis = new Redis(process.env.REDIS_URL ?? 'redis://localhost:6379', {
-      maxRetriesPerRequest: 1,
-      retryStrategy: () => null,
-    })
-    try {
-      const keys = await redis.keys('auth:captcha:rate:*')
-      if (keys.length > 0) await redis.del(...keys)
-    } catch {
-      /* Redis 不可用时忽略（其他断言仍以真实行为为准） */
-    } finally {
-      redis.disconnect()
-    }
+    /* 验证码限流用例会让本机 IP 在 60s 内受限；锁定用例也会留下 15 分钟锁定键：
+     * 均不随 reseed 清理，结束前清空以避免影响后续套件/后续运行 */
+    await clearAuthRateKeys('auth:login:*')
+    await clearAuthRateKeys('auth:captcha:rate:*')
     await app.close()
   })
 
-  it('验证码：错误验证码 400；正确验证码登录成功', async () => {
+  it('验证码：生成 + 正确验证码登录成功（200）', async () => {
     const captcha = await request(app.getHttpServer()).get('/api/admin/auth/captcha')
     expect(captcha.status).toBe(200)
     expect(captcha.body.data.captchaId).toBeTruthy()
     expect(captcha.body.data.image.startsWith('data:image/svg+xml')).toBe(true)
 
-    const wrong = await request(app.getHttpServer())
-      .post('/api/admin/auth/login')
-      .send({ username: 'admin', password: 'admin123', captchaId: captcha.body.data.captchaId, captchaCode: 'ZZZZ' })
-    expect(wrong.status).toBe(400)
-    expect(wrong.body.message).toBe('验证码错误或已过期')
-
-    const fresh = await request(app.getHttpServer()).get('/api/admin/auth/captcha')
-    const code = decodeCaptcha(fresh.body.data.image)
+    const code = decodeCaptcha(captcha.body.data.image)
     const ok = await request(app.getHttpServer())
       .post('/api/admin/auth/login')
-      .send({ username: 'admin', password: 'admin123', captchaId: fresh.body.data.captchaId, captchaCode: code })
+      .send({ username: 'admin', password: 'admin123', captchaId: captcha.body.data.captchaId, captchaCode: code })
     expect(ok.status).toBe(200)
-    adminToken = ok.body.data.token
     expect(ok.body.data.permissions).toEqual(['*'])
   })
 
-  it('未携带验证码登录 → 400（服务端强制）', async () => {
+  it('未达验证码阈值（连续失败 < 3 次）可不携带验证码登录 → 200', async () => {
+    /* 首三次密码尝试不打断登录：达 CAPTCHA_AFTER_FAILURES(3) 之前，验证码不参与校验 */
     const res = await request(app.getHttpServer())
       .post('/api/admin/auth/login')
       .send({ username: 'operator', password: 'admin123' })
-    expect(res.status).toBe(400)
-    expect(res.body.message).toContain('请先获取验证码')
-
-    operatorToken = await loginAs(app, 'operator')
+    expect(res.status).toBe(200)
+    operatorToken = res.body.data.token as string
   })
 
   it('登录失败写入日志（密码错误）', async () => {
@@ -81,13 +88,35 @@ describe('M1.5 R3 登录安全 / R8 登录日志', () => {
     expect(res.status).toBe(401)
   })
 
-  it('连续失败 5 次触发锁定：第 6 次登录 429（登录失败次数过多）', async () => {
-    /* 用不存在的唯一账号做锁定验证：避免污染 admin/operator，且不受历史 Redis 锁定键影响 */
+  it('连续失败触发验证码阈值（428）与账号锁定（429）', async () => {
+    /* 用不存在的唯一账号做阈值/锁定验证：避免污染 admin/operator，且不受历史 Redis 键影响 */
     const username = `nobody-${Date.now()}`
-    for (let i = 0; i < 5; i++) {
-      const res = await loginRequest(app, username, 'wrong-pass')
-      expect(res.status).toBe(401)
-    }
+    const first = await loginRequest(app, username, 'wrong-pass')
+    expect(first.status).toBe(401)
+    const second = await loginRequest(app, username, 'wrong-pass')
+    expect(second.status).toBe(401)
+    /* 第 3 次失败累计达 CAPTCHA_AFTER_FAILURES(3)：此后每次尝试都必须通过一次性图形验证码 */
+    const third = await loginRequest(app, username, 'wrong-pass')
+    expect(third.status).toBe(428)
+
+    /* 达阈值后未携带验证码 → 428（服务端强制，文案要求输入验证码；该请求不累加失败计数） */
+    const noCaptcha = await request(app.getHttpServer())
+      .post('/api/admin/auth/login')
+      .send({ username, password: 'wrong-pass' })
+    expect(noCaptcha.status).toBe(428)
+    expect(noCaptcha.body.message).toContain('请输入验证码')
+
+    /* 达阈值后携带错误验证码 → 400（验证码校验发生在密码比对之前，与密码对错无关） */
+    const captcha = await request(app.getHttpServer()).get('/api/admin/auth/captcha')
+    const wrongCaptcha = await request(app.getHttpServer())
+      .post('/api/admin/auth/login')
+      .send({ username, password: 'wrong-pass', captchaId: captcha.body.data.captchaId, captchaCode: 'ZZZZ' })
+    expect(wrongCaptcha.status).toBe(400)
+    expect(wrongCaptcha.body.message).toBe('验证码错误或已过期')
+
+    /* 之后每次携带新验证码继续失败：第 4 次仍 428，第 5 次触发 15 分钟锁定 429 */
+    const fourth = await loginRequest(app, username, 'wrong-pass')
+    expect(fourth.status).toBe(428)
     const locked = await loginRequest(app, username, 'wrong-pass')
     expect(locked.status).toBe(429)
     expect(locked.body.message).toContain('登录失败次数过多')

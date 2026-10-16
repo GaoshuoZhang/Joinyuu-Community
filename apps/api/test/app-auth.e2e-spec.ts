@@ -2,6 +2,7 @@
  * 前置：docker compose up + prisma migrate + seed（用户统一密码 user123） */
 import { INestApplication } from '@nestjs/common'
 import { Test } from '@nestjs/testing'
+import Redis from 'ioredis'
 import request from 'supertest'
 import { AppModule } from '../src/app.module'
 import { reseed } from './helpers/reseed'
@@ -30,6 +31,24 @@ async function sendEmailCode(app: INestApplication, email: string, purpose: stri
   return res.body.data.devCode as string
 }
 
+/* 登录失败计数/锁定键与验证码限流键都不随 reseed 清理、且带 TTL 跨套件甚至跨次运行残留：
+ * 本套件的锁定用例会让固定号码在 15 分钟内保持锁定，套件开始与结束都要清一次，
+ * 否则紧随其后的运行会直接拿到 429（首两次尝试就不是 401 了）。 */
+async function clearAuthRateKeys(pattern: string): Promise<void> {
+  const client = new Redis(process.env.REDIS_URL ?? 'redis://localhost:6379', {
+    maxRetriesPerRequest: 1,
+    retryStrategy: () => null,
+  })
+  try {
+    const keys = await client.keys(pattern)
+    if (keys.length > 0) await client.del(...keys)
+  } catch {
+    /* Redis 不可用时忽略（断言仍以真实行为为准） */
+  } finally {
+    client.disconnect()
+  }
+}
+
 describe('M2-R R1 app 鉴权', () => {
   let app: INestApplication
   let prisma: PrismaService
@@ -42,9 +61,14 @@ describe('M2-R R1 app 鉴权', () => {
     await app.init()
     prisma = moduleRef.get(PrismaService)
     redis = moduleRef.get(RedisService)
+    /* 清掉可能由上一条套件/上一次运行残留的失败计数、锁定与验证码限流键，保证断言从干净状态起算 */
+    await clearAuthRateKeys('auth:app:login:*')
+    await clearAuthRateKeys('auth:app:captcha:rate:*')
   })
 
   afterAll(async () => {
+    /* 本套件的锁定用例会留下 15 分钟锁定键，不清会污染紧随其后的运行 */
+    await clearAuthRateKeys('auth:app:login:*')
     await app.close()
   })
 
@@ -80,11 +104,13 @@ describe('M2-R R1 app 鉴权', () => {
     expect(res.body).toEqual({ code: 401, message: '账号或密码错误' })
   })
 
-  it('缺验证码登录返回 400', async () => {
+  it('未达验证码阈值（连续失败 < 3 次）可不携带验证码登录 → 200', async () => {
+    /* 上一用例已累计 1 次失败（< CAPTCHA_AFTER_FAILURES=3），此时验证码尚未参与校验 */
     const res = await request(app.getHttpServer())
       .post('/api/app/auth/login')
       .send({ identifier: '13801210001', password: 'user123' })
-    expect(res.status).toBe(400)
+    expect(res.status).toBe(200)
+    expect(res.body.code).toBe(0)
   })
 
   it('成功登录返回 token（含身份摘要）', async () => {
@@ -370,15 +396,33 @@ describe('M2-R R1 app 鉴权', () => {
     expect(rows).toHaveLength(1)
   })
 
-  it('登录失败锁定：同一账号连续失败 5 次后（含正确密码）一律 429', async () => {
-    /* 用未注册号码，避免锁定任何种子账号（Redis 锁定键不随 reseed 清理，会跨套件残留） */
+  it('登录失败：达验证码阈值 428、连续失败 5 次锁定 429（此后密码正确也 429）', async () => {
+    /* 用未注册号码，避免锁定任何种子账号（Redis 失败/锁定键不随 reseed 清理，会跨套件残留） */
     const phone = '13900007777'
-    for (let i = 0; i < 5; i += 1) {
-      const fail = await appLoginRequest(app, phone, 'wrong-password')
-      expect(fail.status).toBe(401)
-    }
-    const locked = await appLoginRequest(app, phone, 'user123')
+    const first = await appLoginRequest(app, phone, 'wrong-password')
+    const second = await appLoginRequest(app, phone, 'wrong-password')
+    expect([first.status, second.status]).toEqual([401, 401])
+
+    /* 第 3 次失败累计达 CAPTCHA_AFTER_FAILURES(3) → 428，此后每次尝试都必须携带图形验证码 */
+    const third = await appLoginRequest(app, phone, 'wrong-password')
+    expect(third.status).toBe(428)
+
+    /* 达阈值后未携带验证码 → 428（服务端强制，提示要求输入验证码；该请求不累加失败计数） */
+    const noCaptcha = await request(app.getHttpServer())
+      .post('/api/app/auth/login')
+      .send({ identifier: phone, password: 'user123' })
+    expect(noCaptcha.status).toBe(428)
+    expect(noCaptcha.body.message).toContain('请输入验证码')
+
+    /* 每次携带新验证码继续失败：第 4 次仍 428，第 5 次触发 15 分钟锁定 429 */
+    const fourth = await appLoginRequest(app, phone, 'wrong-password')
+    expect(fourth.status).toBe(428)
+    const locked = await appLoginRequest(app, phone, 'wrong-password')
     expect(locked.status).toBe(429)
     expect(locked.body.message).toContain('登录失败次数过多')
+
+    /* 锁定期间即使密码正确也一律 429 */
+    const stillLocked = await appLoginRequest(app, phone, 'user123')
+    expect(stillLocked.status).toBe(429)
   })
 })
