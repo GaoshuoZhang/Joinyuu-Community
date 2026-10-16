@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed } from 'vue'
-import { statusMap, type StatusEntity } from '@/constants/status'
+import { statusMap, type StatusConf, type StatusEntity } from '@/constants/status'
 
 /* 统一状态标签：所有列表/详情页必须用它渲染状态，禁止自造文案配色
  * scheduled 状态额外展示定时发布时间（替代"定时发布中"文案） */
@@ -25,9 +25,9 @@ const isScheduled = computed(
     !!props.scheduledAt,
 )
 
-const conf = computed(() => {
-  const entityMap = statusMap[props.entity] as Record<string, { label: string; theme: 'default' | 'primary' | 'success' | 'warning' | 'danger' }>
-  const base = entityMap[props.value] ?? { label: UNKNOWN_LABEL, theme: 'default' as const }
+const conf = computed<StatusConf>(() => {
+  const entityMap = statusMap[props.entity] as Record<string, StatusConf>
+  const base: StatusConf = entityMap[props.value] ?? { label: UNKNOWN_LABEL, theme: 'default' }
   if (props.entity === 'event' && props.value === 'published') {
     return { ...base, label: `已发布（${props.enrollmentOpen ? '报名中' : '暂停报名'}）` }
   }
@@ -36,8 +36,26 @@ const conf = computed(() => {
 </script>
 
 <template>
+  <!-- 定时发布：仅「定时发布」四字用标签，定时发布时间以纯文本置于第二行（标签不支持多行内容） -->
   <t-tooltip v-if="isScheduled" :content="`到点自动发布：${scheduledAt}`">
-    <t-tag :theme="conf.theme" variant="light" :size="size">定时发布 {{ scheduledAt }}</t-tag>
+    <span class="st-scheduled">
+      <t-tag :theme="conf.theme" :variant="conf.variant ?? 'light'" :size="size">定时发布</t-tag>
+      <span class="st-scheduled-time">{{ scheduledAt }}</span>
+    </span>
   </t-tooltip>
-  <t-tag v-else :theme="conf.theme" variant="light" :size="size">{{ conf.label }}</t-tag>
+  <t-tag v-else :theme="conf.theme" :variant="conf.variant ?? 'light'" :size="size">{{ conf.label }}</t-tag>
 </template>
+
+<style scoped>
+.st-scheduled {
+  display: inline-flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+}
+
+.st-scheduled-time {
+  color: var(--td-text-color-placeholder);
+  font-variant-numeric: tabular-nums;
+}
+</style>

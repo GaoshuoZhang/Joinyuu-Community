@@ -12,6 +12,7 @@ import ColumnController from '@/components/ColumnController.vue'
 import { fetchIndividuals } from '@/api/individuals'
 import ListErrorState from '@/components/ListErrorState.vue'
 import { statusLabel } from '@/utils/exportCsv'
+import { userSubjectLabel } from '@/utils/subjectLabel'
 import type { User, UserIdentity } from '@/types'
 
 const router = useRouter()
@@ -118,12 +119,13 @@ function goDetail(row: User) {
 }
 
 /* 导出配置：联系电话统一脱敏输出，避免绕过脱敏 */
-const exportHeaders = ['编号', '昵称', '联系电话', '个体等级', '积分', '状态', '注册时间']
+const exportHeaders = ['编号', '昵称（身份 · 用户ID）', '联系电话', '个体等级', '积分', '状态', '注册时间']
 
 function mapRow(u: User): (string | number)[] {
   return [
     u.uid,
-    `${u.nickname} [${u.uid}]`,
+    /* 统一口径：真实姓名（社区个体 · 昵称 · 用户ID），避免同名/同昵称用户混淆 */
+    userSubjectLabel({ realName: u.realName, nickname: u.nickname, uid: u.uid, identity: '社区个体' }),
     maskPhone(u.phone),
     individualLevel(u),
     u.points,

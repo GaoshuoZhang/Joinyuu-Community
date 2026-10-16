@@ -323,7 +323,7 @@ TZ=Asia/Shanghai
 
 | 方法 | 路径 | 说明 |
 |---|---|---|
-| GET | /api/admin/enterprises | query：page/pageSize/keyword(名称/ID)/industry/status（active/pending/exited/disabled）；默认过滤已归档；列表行附 `level/levelName`（社区企业等级梯度按经验值推导） |
+| GET | /api/admin/enterprises | query：page/pageSize/keyword(名称/ID)/industry/status（active/pending/exited/disabled；**支持重复参数多值取并集，单值兼容，空串视为未过滤**）；默认过滤已归档；列表行附 `level/levelName`（社区企业等级梯度按经验值推导） |
 | GET | /api/admin/enterprises/options | 仅登录：`[{ label: "名称（ID）", value }]` |
 | POST | /api/admin/enterprises | 权限 `perm:enterprise:create`：body name/industry/size/leaseType/**contactUserId（必填）** + contactTitle?/foundedAt?/settledAt?/description?/tags?；联系人姓名/电话/邮箱由 contactUserId 解析；联系人同时写入 community_enterprise 身份；返回 `{ id }`（E 前缀、创建即正常态） |
 | GET | /api/admin/enterprises/:id | 详情含成员列表（identities type=community_enterprise 派生，含 stats） |
@@ -363,8 +363,8 @@ TZ=Asia/Shanghai
 
 | 方法 | 路径 | 说明 |
 |---|---|---|
-| GET | /api/admin/demands | query：page/pageSize/keyword(标题/ID)/category/status/publisherId/enterprise(社区企业按 enterpriseId、合作企业按档案名)/sortBy(createdAt 默认、publishedAt 空值排最后、id)/sortOrder；默认过滤已归档 |
-| GET | /api/admin/demands/:id | 详情含 respondents |
+| GET | /api/admin/demands | query：page/pageSize/keyword(标题/ID)/category/**status（支持重复参数多值，取并集；单值兼容；空串视为未过滤）**/publisherId/enterprise(社区企业按 enterpriseId、合作企业按档案名)/sortBy(createdAt 默认、publishedAt 空值排最后、id)/sortOrder；默认过滤已归档 |
+| GET | /api/admin/demands/:id | 详情含 respondents（**只含「有效响应」：已撤回/审核驳回失效记录不下发，与列表「N 人响应」口径一致**）与 `projectStatus`（关联项目状态；已归档项目记为 `archived`，供「重新立项」入口显隐判断） |
 | POST | /api/admin/demands | DemandCreatePayload（表单字段，含 `contactPublic` 公开联系人开关、`respondNeedReview` 响应需审核开关默认 true）；**创建即 pending_release**；**提交人由服务端取当前登录工作人员（publisherId=账号名、publisherName=姓名、publisherIdentity=`{type:'official',title:角色名}`），不接受前端传入**；预算未填自动"面议" |
 | PUT | /api/admin/demands/:id | 编辑（pending_release/published 可用，不改状态）；可改 `contactPublic`、`respondNeedReview` |
 | POST | /api/admin/demands/:id/approve | pending → pending_release |
@@ -378,16 +378,23 @@ TZ=Asia/Shanghai
 | PATCH | /api/admin/demands/:id/status | `{ status: "closed" }`（pending_release/published 可关闭；写 archivableAt） |
 | POST | /api/admin/demands/:id/archive | 仅 rejected/closed/projected 可归档（软删） |
 | POST | /api/admin/demands/:id/proxy-respond | `{ userName, enterprise, phone, email?, quote?, message? }`（仅 published/projected；message 空记"管理员代报名"；联系电话必填） |
-| POST | /api/admin/demands/:id/initiate-project | ProjectInitPayload；published/selected 可立项；创建项目 + 双向关联（demand.projectId ↔ project.sourceDemandId）→ projected + archivableAt；**项目需求方/创建人/联系方式/合同价格由服务端照搬需求快照（客户端传值不生效）**；发布者与被选中承接方补发 `demand_undertaken` 积分、承接方按身份补发 `project_undertaken` 经验并通知双方（发布者为后台代发的企业 ID 时站内信落到企业联系人） |
-| GET | /api/admin/demands/undertaker-options | 承接方候选（社区企业/合作企业/社区个体/个人用户，value=`enterprise:E*`/`enterprise:XE*`/`individual:U*`） |
-| GET | /api/admin/demand-responses | 独立 controller：跨需求查询**待审核响应**（`status=pending_review` 且 `withdrawnAt=null`），query page/pageSize/keyword（响应者/企业/留言/需求编号，均 insensitive 模糊）/`demandId`（精确匹配，供需求详情「响应记录」跳转筛选）+ `at` 倒序；返回 `{ list, total }`，每行含需求快照（id/title/status/publisherName）与响应内容（identity/quote/timeline/cases/message/phone/email/hiddenFields）；权限 `/demands/responses`、`/demands/review`、`/demands` 任一 |
+| POST | /api/admin/demands/:id/initiate-project | ProjectInitPayload（可选举填 `respondentIds?: number[]`）；**published/selected 可立项**；**已立项（projected）且关联项目为 `closed` 或已归档时可「重新立项」**（新建项目并把 `demand.projectId` 切到新项目，原项目保留为历史；关联项目仍在进行时 409「关联项目仍在进行，暂不可重新立项」）；创建项目 + 双向关联（demand.projectId ↔ project.sourceDemandId）→ projected + archivableAt；**项目需求方/创建人/联系方式/合同价格由服务端照搬需求快照（客户端传值不生效）**；**社区自建需求（`publisherIdentity.type='official'`）在客户端无对应账号，项目需求方/创建人统一标记为「社区官方」（`demanderId`/`creatorId` 清空，`demanderIdentity` 取 official 快照）**。响应收敛（同事务）：`respondentIds` 勾选项先条件落 `accepted`（有冲突 409 整体回滚）→ 与立项承接方**同主体**的响应置 `undertaken`（已承接，响应终态）→ **其余全部有效响应**（已选定 / 本次勾选 / 未入选的待选定）置 `closed`（已结束）+ 站内信；未响应的承接方**不创建**响应记录。**立项前校验：承接方对应响应仍为 `pending_review` 时拒绝立项（409「承接方「X」的响应仍在「待审核」…」），避免绕过响应审核导致该响应永不被审核、积分与通知也不发**。发布者与被选中承接方补发 `demand_undertaken` 积分、承接方按身份补发 `project_undertaken` 经验并通知双方（发布者为后台代发的企业 ID 时站内信落到企业联系人） |
+| GET | /api/admin/demands/undertaker-options | 承接方候选（社区企业/合作企业/社区个体/个人用户，value=`enterprise:E*`/`enterprise:XE*`/`individual:U*`）；用户项 label 统一口径 `真实姓名（身份 · 昵称 · 用户ID）`（如 `顾北辰（社区个体 · 顾北辰 · U1005）`），真实姓名为空回落昵称，用于区分同名/同昵称用户 |
+| GET | /api/admin/demands/:id/selected-respondents | 需求立项承接方预填：缺省取发布者已选定的承接方（`DemandRespondent.status=accepted` 且未撤回，可多个）；传 `?respondentIds=1,2` 时改为按指定响应记录（「立项前置选定承接方」勾选项，未撤回）取选项。均可转承接方选项（同 undertaker-options 形状与 label 口径；社区企业按 `responderIdentity.enterpriseId`、合作企业按组织名回查企业档案、个人/社区个体按 `userId`；合作企业无档案时回落 `custom:<组织名>`）；无对应响应返回 `[]`，需求不存在 404；权限（`/demands`、`/projects` 任一） |
+| GET | /api/admin/demand-responses | 独立 controller：跨需求查询**待审核响应**（`status=pending_review` 且 `withdrawnAt=null`），query page/pageSize/keyword（响应者/企业/留言/需求编号，均 insensitive 模糊）/`demandId`（精确匹配，供需求详情「响应记录」跳转筛选）+ `at` 倒序；返回 `{ list, total }`，每行含需求快照（id/title/status/publisherName）、响应内容（identity/quote/timeline/cases/message/phone/email/hiddenFields）与响应者账号口径（`userId`/`realName`/`nickname`，供「响应者」列展示统一口径） |
 | GET | /api/admin/publisher-options | 独立 controller：`{ users: [...], enterprises: [...] }` 含联系电话（自动填充用）；权限（`/demands`、`/enterprises`、`/contents/publish` 任一） |
 
-### 7.7 项目 projects（8）
+**主体展示口径（全站统一，服务端只补字段、不拼字符串）**：用户类主体 `真实姓名（身份 · 昵称 · 用户ID）`（真实姓名为空回落昵称）；企业类主体 `企业名（身份 · 企业ID）`；自定义主体 `名称（自定义）`。据此，需求详情 `respondents[]`（`RespondentDto`）与响应审核 `PendingRespondentDto` 均下发 `userId?`/`realName?`/`nickname?`（来自 `include: { user: { select: { uid, nickname, realName } } }`）与 `responderIdentity?`（身份快照，缺省时前端省略身份段）；`renter-options`（承租方）、企业成员（`/api/app/me/enterprises/:id`）、`member-governance` 注销列表、文章评论治理列表同步补 `realName`。**客户端一律不展示用户 ID**（仅「我的」页面展示本人 UID），客户端口径为 `真实姓名（身份 · 昵称）`。
+
+**响应状态机**：`pending_review`（待审核）→`pending`（待选定）→`accepted`（已选定）→**`undertaken`（已承接，立项后被选为承接方，终态）**；`rejected`/`closed`（已结束）为失效终态。立项收敛后，项目可见性与里程碑积分/结项经验按「响应已承接」判定（`respondentUids` 取 `accepted` + `undertaken`）。立项后该需求下**不再存在悬挂的「待选定 / 已选定」**响应（全部收敛为 `undertaken` 或 `closed`）。
+
+**结项经验分配口径（I）**：经验值仅按承接占比分配给**社区企业（E 前缀）与结项时持社区个体身份的用户**；合作企业（XE 前缀）/ 仅个人用户身份 / 自定义承接方不参与，其份额丢弃。立项/编辑项目表单在承接方选择下方明确提示「以下承接方不参与项目结项经验值分配」，避免静默丢弃造成预期差。
+
+### 7.7 项目 projects（11）
 
 | 方法 | 路径 | 说明 |
 |---|---|---|
-| GET | /api/admin/projects | query：page/pageSize/keyword(名称/code)/status/participant(个人承接或其社区企业承接)/enterprise(社区企业按承接方 ID；合作企业按成员个人承接)/sortBy(initiatedAt 默认、id)/sortOrder；默认过滤已归档 |
+| GET | /api/admin/projects | query：page/pageSize/keyword(名称/code)/status（**支持重复参数多值取并集；单值兼容；空串视为未过滤**）/participant(个人承接或其社区企业承接)/enterprise(社区企业按承接方 ID；合作企业按成员个人承接)/sortBy(initiatedAt 默认、id)/sortOrder；默认过滤已归档 |
 | GET | /api/admin/projects/:id | 详情含 undertakers/milestones |
 | POST | /api/admin/projects | ProjectInitPayload（承接方≥1、share 合计 100、custom 需 name/contactName/phone）；创建即 running、progress=0、code=`JY-YYYY-NN` 按年原子递增；可选需求方/创建人/联系方式/合同价格（社区自建录入，`creatorName` 缺省取当前操作人） |
 | PUT | /api/admin/projects/:id | 编辑（finished 强制 409；其余状态可编辑；不改状态/编号/进度；承接方与里程碑整体重建，里程碑重置为 todo；需求方/创建人/联系方式/合同价格仅在显式传入时更新） |
@@ -395,18 +402,23 @@ TZ=Asia/Shanghai
 | POST | /api/admin/projects/:id/resume | paused → running |
 | POST | /api/admin/projects/:id/close | `{ reason }` 必填；paused → closed + archivableAt |
 | POST | /api/admin/projects/:id/archive | 仅 finished/closed 可归档（软删） |
+| POST | /api/admin/projects/:id/milestones/:milestoneId/accept | 「进度节点」通过验收：仅**进行中/已暂停**项目且节点为 `submitted` 可操作（否则 409；已归档项目 404）；状态迁移 + 进度重算 + 全节点通过自动结项（写 finishedAt/archivableAt）+ 里程碑积分/结项经验，由 `ProjectMilestoneReviewService` 与客户端共用同一套口径；条件更新做并发幂等守卫（重复/并发 409「里程碑状态已变更，请刷新后重试」）；写审计（action=里程碑验收通过） |
+| POST | /api/admin/projects/:id/milestones/:milestoneId/return | 「进度节点」驳回：`{ reason }` 必填（空白串 400，≤255 字）；`submitted → returned` + `returnReason`/`returnedAt` + 通知承接方重新提交；写审计（action=里程碑驳回，detail=原因） |
+| GET | /api/admin/projects/:id/contracts | 线下签约合同照片/PDF 扫描件列表（素材库 `sourceType=project` + `sourceId=项目编号`，最新在前；已归档项目仍可查看） |
+| POST | /api/admin/projects/:id/contracts | 上传合同（multipart `file`）：图片 PNG/JPEG/GIF/WebP 或 PDF，魔数嗅探 + 系统配置 `uploadMaxSizeMb` 限制；已归档项目 404；落 `MallAsset` 并写审计（来源：project 项目编号） |
+| DELETE | /api/admin/projects/:id/contracts/:assetId | 删除合同（校验归属本项目，跨项目 404；已归档项目 404；存储对象同步删除） |
 
-> 注：pause/resume/close 在 M0 stub 中无 TODO 注释但为冻结状态机契约（wiki-admin-web.md §项目状态机）；结项 finished 由里程碑全部达成驱动（M1 实现：全部 milestone=done 时置 finished 并按 8.5 分配经验值）。
+> 注：pause/resume/close 在 M0 stub 中无 TODO 注释但为冻结状态机契约（wiki-admin-web.md §项目状态机）；结项 finished 由**里程碑全部验收通过**驱动（`ProjectMilestoneReviewService.acceptMilestone` 在末节点通过时于同一事务内置 finished 并按 8.5 分配经验值；项目状态的条件更新保证并发下经验只发一次）。`GET /api/admin/projects/:id` 下发的 `milestones[]` 含 `id`（前端按 id 定位节点做验收/驳回）；`PUT` 编辑会整体重建里程碑，id 随之变化，操作前应重新拉取详情。
 
 ### 7.8 活动 events（13）
 
 | 方法 | 路径 | 说明 |
 |---|---|---|
-| GET | /api/admin/events | query：page/pageSize/keyword(标题/ID)/type/status/participant(报名记录含该用户)/sortBy(id 默认倒序、startTime、createdAt)/sortOrder；默认过滤已归档 |
+| GET | /api/admin/events | query：page/pageSize/keyword(标题/ID)/type/**status（支持重复参数多值，取并集；单值兼容；空串视为未过滤）**/participant(报名记录含该用户)/sortBy(id 默认倒序、startTime、createdAt)/sortOrder；默认过滤已归档 |
 | GET | /api/admin/events/enrollments | 活动报名审核列表（跨活动）：query page/pageSize/keyword(报名人/企业/电话/活动标题与编号)/status(pending/approved/rejected/waitlisted/cancelled)/eventId；按报名时间倒序 |
 | GET | /api/admin/events/:id | 详情含 enrollments（到点状态流转先行派生） |
-| POST | /api/admin/events | 创建即 pending_release、enrollmentOpen=false；表单无定时发布选项 |
-| PUT | /api/admin/events/:id | 编辑（pending_release/published 可编辑，published 不动状态/已有报名；scheduled/ended/cancelled 不可） |
+| POST | /api/admin/events | 创建即 pending_release、enrollmentOpen=false；表单无定时发布选项；**签到配置**：可选 `checkinLocationRequired`（默认 false，客户端签到地理围栏开关）、`checkinCodeRequired`（默认 true）与 `checkinCode`（6 位数字；required=true 且留空时服务端自动生成随机 6 位；required=false 时置空不再要求输码；非 6 位数字 400） |
+| PUT | /api/admin/events/:id | 编辑（pending_release/published 可编辑，published 不动状态/已有报名；scheduled/ended/cancelled 不可）；签到配置口径同创建（清空签到码 = 轮换新码） |
 | POST | /api/admin/events/:id/publish-now | pending_release → published + enrollmentOpen=true |
 | POST | /api/admin/events/:id/schedule | `{ scheduledAt }`：pending_release → scheduled |
 | POST | /api/admin/events/:id/cancel-schedule | scheduled → pending_release |
@@ -430,12 +442,12 @@ TZ=Asia/Shanghai
 
 | 方法 | 路径 | 说明 |
 |---|---|---|
-| GET | /api/admin/mall/goods | query：page/pageSize/keyword(名称/ID)/category/status/sortBy(id 默认倒序、points、createdAt)/sortOrder；默认过滤已归档；权限 `/mall/goods` |
+| GET | /api/admin/mall/goods | query：page/pageSize/keyword(名称/ID)/category/status（**支持重复参数多值取并集，单值兼容，空串视为未过滤**）/sortBy(id 默认倒序、points、createdAt)/sortOrder；默认过滤已归档；权限 `/mall/goods` |
 | POST | /api/admin/mall/goods | 创建（stock=0 即 restock，否则 off）；统一券码兑换，商品含积分/库存/券码有效期（validDays 天）/可见与可下单范围；描述 sanitize |
 | PUT | /api/admin/mall/goods/:id | 编辑（不影响已有订单）；库存归零 → restock，补货后由 restock 回落为 off |
 | POST | /api/admin/mall/goods/:id/toggle-status | 上架↔下架（下架写 archivableAt，重新上架清除） |
 | POST | /api/admin/mall/goods/:id/archive | 仅已下架（off）可归档（软删） |
-| GET | /api/admin/mall/redemption-orders | query：page/pageSize/keyword(用户名/商品名/订单ID/券码)/status/sortBy(id 默认、createdAt)/sortOrder；默认过滤已归档；权限 `/mall/orders` |
+| GET | /api/admin/mall/redemption-orders | query：page/pageSize/keyword(用户名/商品名/订单ID/券码)/status（**支持重复参数多值取并集，单值兼容，空串视为未过滤**）/sortBy(id 默认、createdAt)/sortOrder；默认过滤已归档；权限 `/mall/orders` |
 | POST | /api/admin/mall/redemption-orders/:id/verify | 券码核销：pending_use → finished + archivableAt（现场兑换由工作人员执行，写审计+站内信） |
 | POST | /api/admin/mall/redemption-orders/:id/archive | 仅 finished/cancelled 可归档（软删） |
 | POST | /api/admin/mall/redemption-orders/:id/cancel | 仅 pending_use；**事务**：退回积分（写 source=redemption 流水）+ 库存回补 + redeemedCount-1 + 记 cancelReason（固定文案） |
@@ -503,7 +515,7 @@ TZ=Asia/Shanghai
 
 | 方法 | 路径 | 说明 |
 |---|---|---|
-| GET | /api/admin/contents/articles | query：page/pageSize/keyword(标题/作者/ID)/columnId/channel(official/submitted)/status/sortBy(id 默认、views、createdAt)/sortOrder；默认过滤已归档；权限（`/contents/publish`、`/contents/submissions` 任一） |
+| GET | /api/admin/contents/articles | query：page/pageSize/keyword(标题/作者/ID)/columnId/channel(official/submitted)/status（**支持重复参数多值取并集，单值兼容，空串视为未过滤**）/sortBy(id 默认、views、createdAt)/sortOrder；默认过滤已归档；权限（`/contents/publish`、`/contents/submissions` 任一） |
 | POST | /api/admin/contents/articles | 权限 `/contents/publish`：ArticlePayload（title/columnIds（单选取首个）/authorId?/summary/content/tags）；**official 创建即 pending_release、submitted 创建即 pending**；投稿 ID 走 `SU` 前缀、官方走 `A`；authorIdentity 取社区个体优先否则 individual；正文 sanitize 并反查绑定素材来源 |
 | PUT | /api/admin/contents/articles/:id | 权限 `/contents/publish`：仅 pending_release/scheduled/rejected 可编辑；rejected 修改后回 pending（重新入投稿审核队列） |
 | POST | /api/admin/contents/articles/:id/review | 权限 `/contents/submissions`：`{ status: approved/rejected, comment? }`；仅 pending 可审核；approved → pending_release，rejected 必填原因；均写 archivableAt |
@@ -525,7 +537,7 @@ TZ=Asia/Shanghai
 | PUT | /api/admin/contents/banners/:id | 编辑轮播图（审计 before/after） |
 | POST | /api/admin/contents/banners/:id/toggle-enabled | 单条启用/停用 |
 | DELETE | /api/admin/contents/banners/:id | 删除轮播图 |
-| GET | /api/admin/announcements | 置顶优先，其余发布时间倒序；默认过滤已归档；权限 `/contents/announcements` |
+| GET | /api/admin/announcements | 置顶优先，其余发布时间倒序；query 含 status（published/withdrawn；**支持重复参数多值取并集，单值兼容，空串视为未过滤**）；默认过滤已归档；权限 `/contents/announcements` |
 | POST | /api/admin/announcements | 创建即发布（写 publishedAt，正文 sanitize） |
 | PUT | /api/admin/announcements/:id | 编辑（不改状态/发布时间） |
 | POST | /api/admin/announcements/:id/withdraw | published → withdrawn + archivableAt |
@@ -563,7 +575,7 @@ TZ=Asia/Shanghai
 | PUT | /api/admin/admins/:id | `{ name, roleCodes }`；保留至少一名启用超管；编辑后权限缓存失效 + 强制下线 |
 | PATCH | /api/admin/admins/:id/status | `{ status: active/disabled }`；停用强制下线 |
 | POST | /api/admin/admins/:id/reset-password | `{ password }`（≥8 位含字母数字）；重置后强制下线 |
-| GET | /api/admin/login-logs | query：page/pageSize/status(success/failed/locked)/keyword/startDate/endDate；权限 `/logs/login` |
+| GET | /api/admin/login-logs | query：page/pageSize/status(success/failed/locked；**支持重复参数多值取并集，单值兼容，空串视为未过滤**)/keyword/startDate/endDate；权限 `/logs/login` |
 | GET | /api/admin/monitor/overview | 服务/DB/Redis 健康指标 + 定时任务最近执行状态；权限 `/system/monitor` |
 | GET | /api/admin/monitor/cron-logs | 定时任务执行日志（jobName 可选，最新 100 条） |
 | POST | /api/admin/monitor/jobs/:name/run | 手动触发任务执行（写 SchedulerLog，失败透出 500「任务执行失败：...」） |

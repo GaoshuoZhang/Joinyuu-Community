@@ -86,7 +86,7 @@ export interface LeaseDto {
 }
 
 export interface RenterOptionsDto {
-  users: Array<{ uid: string; nickname: string; phone: string }>
+  users: Array<{ uid: string; nickname: string; realName: string; phone: string }>
   enterprises: Array<{ id: string; name: string; contactName: string; contactPhone: string }>
 }
 
@@ -329,7 +329,7 @@ export class WorkstationsService {
       this.prisma.enterprise.findMany({ where: { deletedAt: null }, orderBy: { id: 'asc' } }),
     ])
     return {
-      users: users.map((u) => ({ uid: u.uid, nickname: u.nickname, phone: u.phone ?? '' })),
+      users: users.map((u) => ({ uid: u.uid, nickname: u.nickname, realName: u.realName ?? '', phone: u.phone ?? '' })),
       enterprises: enterprises.map((e) => ({
         id: e.id,
         name: e.name,

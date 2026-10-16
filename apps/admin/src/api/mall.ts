@@ -15,7 +15,9 @@ export interface GoodsQuery {
   pageSize: number
   keyword?: string
   category?: GoodsCategory | ''
-  status?: string
+  /** 状态筛选：支持单值（旧调用）与多值（勾选式筛选）。
+   *  多选值中的空串占位表示「不按状态过滤」（保证该字段在 URL 中可往返），落库请求会被服务端忽略 */
+  status?: string | string[]
   /** 排序字段：id | points | createdAt */
   sortBy?: 'id' | 'points' | 'createdAt'
   /** 排序方向：descend 默认 | ascend */
@@ -29,7 +31,8 @@ export async function fetchGoods(query: GoodsQuery): Promise<PageResult<MallGood
   qs.set('pageSize', String(query.pageSize))
   if (query.keyword) qs.set('keyword', query.keyword)
   if (query.category) qs.set('category', query.category)
-  if (query.status) qs.set('status', query.status)
+  if (Array.isArray(query.status)) query.status.forEach((s) => qs.append('status', s))
+  else if (query.status) qs.set('status', query.status)
   if (query.sortBy) qs.set('sortBy', query.sortBy)
   if (query.sortOrder) qs.set('sortOrder', query.sortOrder)
   return httpGet<PageResult<MallGoods>>(`/mall/goods?${qs}`)
@@ -80,7 +83,9 @@ export interface RedemptionOrderQuery {
   page: number
   pageSize: number
   keyword?: string
-  status?: string
+  /** 状态筛选：支持单值（旧调用）与多值（勾选式筛选）。
+   *  多选值中的空串占位表示「不按状态过滤」（保证该字段在 URL 中可往返），落库请求会被服务端忽略 */
+  status?: string | string[]
   /** 排序字段：id | createdAt */
   sortBy?: 'id' | 'createdAt'
   /** 排序方向：descend 默认 | ascend */
@@ -95,7 +100,8 @@ export async function fetchRedemptionOrders(
   qs.set('page', String(query.page))
   qs.set('pageSize', String(query.pageSize))
   if (query.keyword) qs.set('keyword', query.keyword)
-  if (query.status) qs.set('status', query.status)
+  if (Array.isArray(query.status)) query.status.forEach((s) => qs.append('status', s))
+  else if (query.status) qs.set('status', query.status)
   if (query.sortBy) qs.set('sortBy', query.sortBy)
   if (query.sortOrder) qs.set('sortOrder', query.sortOrder)
   return httpGet<PageResult<RedemptionOrder>>(`/mall/redemption-orders?${qs}`)

@@ -77,35 +77,37 @@
 | 方法 | 路径 | 说明 |
 |---|---|---|
 | GET | /api/app/demands | 浏览列表：仅 `published`；按可见范围过滤（§9）；分页/类别/关键词；可选 `kind=task\|investment\|cooperation` 按需求类型筛选（分页与 total 统计前执行，省略时不限；历史无 kind 数据按 task）；返回 `kind`（task 找服务 / investment 找投资 / cooperation 找合作）与类型专属字段（task 含 `deliverBy` 预期交付日期）；**联系人 `contactName/contactPhone/contactEmail` 仅在需求 `contactPublic=true` 时下发（含未登录游客），否则一律不下发**；社区自建需求（后台创建）返回 `publisherIdentity='official'` + `publisherIdentityLabel`（创建工作人员角色名）；返回只读 `respondNeedReview`（响应需审核开关）；`responseCount`（「N 人响应」）只统计未撤回的已通过/待处理响应，**不含 `pending_review` 待审核** |
-| GET | /api/app/demands/:id | 详情（不可见 → 404，不暴露存在性；发布者可查看本人任意状态需求，其余人仅 `published` 且可见范围命中）；含响应数、`kind` 与类型专属字段（task: deliverable/budget/deliverBy；investment: cooperationNeed/returnOffer；cooperation: bottleneck/partnershipMode/returnOffer）与联系人信息（**同样按 `contactPublic` 下发**）；本人已响应时附 `myResponse: { message, at, status }`（`withdrawnAt` 非空即视为未响应，客户端据此隐藏响应入口并展示响应说明；响应需审核下 `status` 可能为 `pending_review`）；返回只读 `respondNeedReview` |
+| GET | /api/app/demands/:id | 详情（不可见 → 404，不暴露存在性；发布者可查看本人任意状态需求，其余人仅 `published` 且可见范围命中）；含响应数、`kind` 与类型专属字段（task: deliverable/budget/deliverBy；investment: cooperationNeed/returnOffer；cooperation: bottleneck/partnershipMode/returnOffer）与联系人信息（**同样按 `contactPublic` 下发**）；本人已响应时附 `myResponse: { message, at, status }`（`withdrawnAt` 非空即视为未响应，客户端据此隐藏响应入口并展示响应说明；响应需审核下 `status` 可能为 `pending_review`）；返回只读 `respondNeedReview`；立项后附 `projectId` 与 **`projectStatus`**（客户端据此派生「协作项目已生成 / 协作项目已结项，该需求已完成」并为发布者提供协作项目入口） |
 | POST | /api/app/demands | 提交需求：`demandOpen` 开关校验；`kind` 必填（task/investment/cooperation）；`categoryDict` 指定类目字典（task/cooperation→demand_category，investment→industry）；task 必填 `deliverable`（可选 `budget`）与 `deliverBy`（预期交付日期，希望在该日期前完成），investment 必填 `cooperationNeed`（可选 `returnOffer`），cooperation 必填 `bottleneck`（可选 `partnershipMode`/`returnOffer`）；`contactName`/`contactPhone` 必填、`contactEmail` 选填（校验格式）；`deadline` 不再收集（历史字段保留展示）；`asIdentity` 四类身份均可发布（含合作企业，类型不限），持有社区个体身份时不再单列个人用户选项；发布方身份快照按 wiki §8.7，`publisherName` 按主体取企业名/组织名（个人取昵称）；成员代企业发布时传 `asEnterpriseId`（服务端校验成员 `publish_demand` 权限，无权限 403）；创建即 `pending` → 管理端审核 |
 | GET | /api/app/me/demands | 我发布的需求（全状态，含 `kind`） |
 | POST | /api/app/demands/:id/respond | 响应需求入参 `{ note(必填≤500), quote?≤64, timeline?≤128, cases?≤300, phone?(11 位，留空沿用身份手机号、填写则覆盖), email?(留空沿用账号邮箱、填写则覆盖), asIdentity?, asEnterpriseId? }`：`published` 校验、不可响应自己的需求、防重复；需求 `respondNeedReview=true` 时提交落 `pending_review`（发布者暂不可见、提交时不发积分不通知），管理员审核通过后才回 `pending` 并发放 `demand_responded` 积分、通知发布者；`respondNeedReview=false` 时提交即 `pending` 并即时发放积分（与现状一致） |
-| GET | /api/app/me/responses | 我的需求响应记录（含 `pending_review` 待审核与 `rejected` 已驳回；含 `note/quote/timeline/cases/phone/email` 与驳回理由 `rejectReason`；驳回记录带 `withdrawnAt` 失效时间，可重新响应；本人记录不受「向需求方隐藏」影响） |
+| GET | /api/app/me/responses | 我的需求响应记录（含 `pending_review` 待审核与 `rejected` 已驳回；含 `note/quote/timeline/cases/phone/email` 与驳回理由 `rejectReason`；驳回记录带 `withdrawnAt` 失效时间，可重新响应；本人记录不受「向需求方隐藏」影响）。`status` 原样下发，含立项收敛后的 **`undertaken`（已承接，客户端显示「已承接」并提供「查看我的项目」入口）** 与 `closed`（已结束）；另下发需求当前状态 `demandStatus` 与立项后项目 ID `projectId?`（未立项时省略） |
 | POST | /api/app/me/responses/:id/withdraw | 响应者撤回待处理响应（`pending`/`pending_review` 可撤回，撤回落 `closed` + `withdrawnAt`，可重新响应）；已处理 409 |
-| GET | /api/app/me/demands/:id/responses | 需求发布者查看响应列表（**不含 `pending_review` 待审核响应，也不含已撤回/已驳回（已置失效）记录**；响应方快照 + `note/phone/email/quote/timeline/cases` + `status=pending/accepted` + 审核时间/驳回原因）；**响应审核通过时管理员可勾选「向需求方显示」的字段，未勾选的字段（`hiddenFields`）逐项省略（键整体不下发）；响应者本人的「我的响应」不受影响**；非发布者 403 |
-| POST | /api/app/me/demands/:id/select | 发布者选择意向承接方（`responseIds[]` 多选，去重且非空，全部须为本人需求下未撤回的待处理响应）；需求转 `selected`（`matchedRespondent` 记录被选人），被选响应转 `accepted` 并通知本人，未选中响应保持待处理（不可驳回）；不生成项目，由管理员在后台完成立项 |
+| GET | /api/app/me/demands/:id/responses | 需求发布者查看响应列表（**不含 `pending_review` 待审核响应，也不含已撤回/已驳回（已置失效）记录**；响应方快照 + `responderRealName?/responderNickname?`（账号口径，供展示 `真实姓名（身份 · 昵称）`，**不下发用户 ID**）+ `note/phone/email/quote/timeline/cases` + `status=pending/contacted/accepted/undertaken/rejected/closed` + 审核时间/驳回原因）；**响应审核通过时管理员可勾选「向需求方显示」的字段，未勾选的字段（`hiddenFields`）逐项省略（键整体不下发）；响应者本人的「我的响应」不受影响**；非发布者 403 |
+| POST | /api/app/me/demands/:id/select | 发布者选择意向承接方（`responseIds[]` 多选，去重且非空，全部须为本人需求下未撤回的待处理响应）；需求转 `selected`（`matchedRespondent` 记录被选人），被选响应转 `accepted` 并通知本人，未选中响应保持待处理（不可驳回）；不生成项目，由管理员在后台完成立项。**`selected` 态再次调用 = 重新选定**：先把上一次的 `accepted` 回退 `pending` 再落本次选定（覆盖语义），仅对本次新入选者发通知 |
+| POST | /api/app/me/demands/:id/deselect | 发布者**撤销选定**：`selected → published`，本次已选定（`accepted`）的响应一并回退 `pending`，让选错/反悔后有纠正路径；仅 `selected` 可撤销（其余 409），非发布者 403 |
 
 ## 7. 活动中心
 
 | 方法 | 路径 | 说明 |
 |---|---|---|
 | GET | /api/app/events | 浏览列表：`published` 且未结束；按可见范围过滤（§9）；分页/类型/关键词 |
-| GET | /api/app/events/:id | 详情：报名进度（已通过/容量）、我是否已报名 |
+| GET | /api/app/events/:id | 详情：报名进度（已通过/容量）、我是否已报名；随活动下发 `checkinLocationRequired / checkinCodeRequired / checkinCodeEnabled`（=required 且已配置 6 位码）——**不下发签到码明文**，扫码预填走二维码 URL 的 `?code=` 参数 |
 | POST | /api/app/events/:id/enroll | 报名：`enrollmentOpen` + 报名截止 + 容量 + 可报名范围（§9）校验；`requireReview` 时进入 pending |
 | POST | /api/app/events/:id/enroll/cancel | 取消报名：pending/approved 可取消，approved 释放名额 |
+| POST | /api/app/events/:id/check-in | 电子签到：入参 `{ lat?, lng?, code?, captchaId?, captchaCode? }`（位置校验开启时必传经纬度；码启用时 code 必传 6 位）。校验顺序：报名通过/未签到 → 时间窗校验（开放时限通用） → **签到码**：连续错误 ≥4 次（第 4 次起）必须先过一次性图形验证码（复用 `GET /api/app/auth/captcha`，428 提示），码错 400「签到码错误」 → **位置校验**：仅 `checkinLocationRequired` 开启且已配置场地坐标时做 haversine 围栏（不满足 400「您不在活动签到范围内」，未带定位 400）。成功：置 `checkedIn/checkInAt/checkinLat/checkinLng`（checkinMethod=self）、发放 `activity_checkin` 积分（checkinPoints ?? 规则值）、电子票即刻核销；返回 `{ pointsAwarded, position（第 N 位签到，按已签到总数计）, title, startTime, endTime }`（成功反馈页展示活动信息与「第 N 位/积分到账」） |
 | GET | /api/app/me/enrollments | 我的报名（含活动信息与状态） |
 
-> 签到维持管理端代签（M0 口径）；客户端电子签到（签到码）列为 M2 可选项，需先补契约。
+> 签到码防爆破与登录同一策略：单用户单活动输错计数存 Redis（TTL 15 分钟），第 4 次起强制验证码；签到成功清除计数。验证码沿用 app 登录体系（`captcha:app:` 前缀，消费即删、防同 ID 反复爆破）。
 
 ## 8. 项目履约 / 积分商城 / 空间 / 内容
 
 | 方法 | 路径 | 说明 |
 |---|---|---|
-| GET | /api/app/me/projects | 我承接的项目（需求发起方 / 本人或其社区企业身份所在企业承接；进度与里程碑状态）。需求发起方按项目 `demanderId` 判定：主体为企业 ID 时解析到该企业联系人（后台代企业发需求立项后，联系人同样可见） |
+| GET | /api/app/me/projects | 我承接的项目（需求发起方 / 本人或其社区企业身份所在企业承接；进度与里程碑状态）。需求发起方按项目 `demanderId` 判定：主体为企业 ID 时解析到该企业联系人（后台代企业发需求立项后，联系人同样可见）。每项下发 `isInitiator`（我发起）与 `isUndertaker`（我承接），供客户端「我承接的 / 我发起的」分标签页；二者可同时为真 |
 | GET | /api/app/me/projects/:id | 项目详情（需求方与承接方可看）：参与人、来源需求、进度与里程碑交付验收状态 |
 | POST | /api/app/me/projects/:id/milestones/:milestoneId/submit | 承接方提交里程碑完成（可附说明）→ 待发起方验收；发起方调用 403 |
-| POST | /api/app/me/projects/:id/milestones/:milestoneId/accept | 发起方验收里程碑；全部验收通过自动结项并按 wiki-backend §8.6 发放 `project_completed` 经验 |
+| POST | /api/app/me/projects/:id/milestones/:milestoneId/accept | 发起方验收里程碑；全部验收通过自动结项并按 wiki-backend §8.6 发放 `project_completed` 经验（仅「进行中/已暂停」项目且节点为「待验收」时可操作，409/404 与后台「进度节点」同口径；实现由 `ProjectMilestoneReviewService` 与后台共用） |
 | GET | /api/app/mall/goods | 商品列表：`on` 且有库存优先（`restock` 库存为 0 不展示）；`mallOpen` 关闭 → 400；**按需方身份过滤可见范围**（商品自身 + 所属商品类别的可见范围都需通过；游客/未登录按无身份，仅「不限」商品可见） |
 | GET | /api/app/mall/goods/:id | 商品详情（可见范围外一律 404，不暴露存在性；口径同列表） |
 | POST | /api/app/mall/orders | 兑换下单（统一券码）：**范围门槛**（商品 + 类别的可见/可下单范围都需通过，可见外 404、可下单外 403「当前身份暂不可兑换该商品」）+ **等级折扣实扣**（实扣 = round(商品积分 × 折扣 ÷ 10)，折扣取本人社区个体等级，无等级按原价；订单 `points` 存实扣额，退款按实扣退）+ 积分充足 + 库存充足（事务：扣积分+写流水+扣库存+建订单 `pending_use` 并签发 `voucherCode`/`voucherExpiresAt`） |
@@ -135,7 +137,7 @@
 | POST | /api/app/me/responses/:id/withdraw | 响应者撤回待处理响应（`pending`/`pending_review` 可撤回，撤回后可重新响应） |
 | GET | /api/app/me/projects/:id | 项目详情（参与双方、来源需求、进度与里程碑交付验收状态） |
 | POST | /api/app/me/projects/:id/milestones/:milestoneId/submit | 承接方提交里程碑完成（可附说明）→ 待发起方验收；发起方调用 403 |
-| POST | /api/app/me/projects/:id/milestones/:milestoneId/accept | 发起方验收里程碑；全部验收通过自动结项并按 wiki-backend §8.6 发放 `project_completed` 经验 |
+| POST | /api/app/me/projects/:id/milestones/:milestoneId/accept | 发起方验收里程碑；全部验收通过自动结项并按 wiki-backend §8.6 发放 `project_completed` 经验（仅「进行中/已暂停」项目且节点为「待验收」时可操作，409/404 与后台「进度节点」同口径；实现由 `ProjectMilestoneReviewService` 与后台共用） |
 | POST | /api/app/me/demands/:id/withdraw · /resubmit · /appeal | 需求撤回（pending→withdrawn）、驳回/撤回后重提（保留编号）、驳回后一次性申诉 |
 | POST | /api/app/me/articles/:id/withdraw · /resubmit · /appeal；GET /api/app/me/articles/:id/payload | 投稿撤回 / 重提（回填原始内容）/ 申诉 |
 | POST | /api/app/me/applications/:id/withdraw · /resubmit；GET /api/app/me/applications/:id/payload | 申请撤回 / 修改重提（可补充材料；附件需重新上传） |
@@ -150,7 +152,7 @@
 | POST | /api/app/me/deletion-request · /me/data-export | v38 注销申请（运营复核）与个人数据导出（异步打包 + 站内信） |
 | GET/POST | /api/app/events/:id/feedback | v38 活动反馈（结束后 + 参与过，一人一条） |
 | GET/PUT | /api/app/me/notices/prefs | v38 通知偏好（启用的类型集合，至少一种；同时约束推送） |
-| POST | /api/app/me/projects/:id/milestones/:mid/return | v38 发起方退回里程碑（记录原因，承接方可重新提交；提交支持 `attachments[]`） |
+| POST | /api/app/me/projects/:id/milestones/:mid/return | v38 发起方退回里程碑（记录原因，承接方可重新提交；提交支持 `attachments[]`；与后台「进度节点」驳回同口径，仅「进行中/已暂停」项目且节点为「待验收」时可操作） |
 | GET | /api/app/me/reports | v38 我的举报（状态 pending/resolved/rejected 由 admin 处置回写） |
 | GET/POST | /api/app/me/blocklist(/:uid/remove) | v38 屏蔽名单（评论与内容列表过滤被屏蔽用户） |
 | POST/GET | /api/app/articles/:id/likes/toggle · /articles/:id/comments | v38 文章点赞与评论（评论 2-200 字，过滤屏蔽用户） |

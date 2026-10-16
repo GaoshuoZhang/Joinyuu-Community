@@ -1,12 +1,26 @@
-import { IsNotEmpty, IsNumber } from 'class-validator'
+import { IsNumber, IsOptional, IsString } from 'class-validator'
 
-/* 客户端电子签到入参（M2-R R2）：经纬度由客户端定位上报，服务端做地理围栏校验 */
+/* 客户端电子签到入参：
+ * 位置开关开启时上报经纬度（服务端做地理围栏校验）；
+ * 签到码启用时必传 6 位 code（连续错误 4 次起需附图形验证码 captchaId/captchaCode） */
 export class CheckInDto {
+  @IsOptional()
   @IsNumber()
-  @IsNotEmpty()
-  lat!: number
+  lat?: number
 
+  @IsOptional()
   @IsNumber()
-  @IsNotEmpty()
-  lng!: number
+  lng?: number
+
+  @IsOptional()
+  @IsString()
+  code?: string
+
+  @IsOptional()
+  @IsString()
+  captchaId?: string
+
+  @IsOptional()
+  @IsString()
+  captchaCode?: string
 }

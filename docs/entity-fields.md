@@ -13,7 +13,7 @@
 - **AdminRolePermission** — 角色-权限点关联（roleId+permissionCode 联合唯一）
 - **LoginLog** — 登录日志（id LL；loginAt 秒级；username/ip/device；status success/fail/locked；failReason?；索引 loginAt/status）
 - **SchedulerLog** — 定时任务执行日志（id SL；jobName/startedAt/finishedAt/durationMs；status ok/error；detail?；rowsAffected）
-- **MallAsset** — 素材库（id AST；fileName/mime/size/url/storeKey；bizType? 业务分类；sourceType? article=资讯发布/submission=投稿内容/lease=租赁合同；sourceId? 来源编号如 A1010/SU1006/租约号 LS1001；createdBy/createdAt）
+- **MallAsset** — 素材库（id AST；fileName/mime/size/url/storeKey；bizType? 业务分类；sourceType? article=资讯发布/submission=投稿内容/lease=租赁合同/project=项目合同；sourceId? 来源编号如 A1010/SU1006/租约号 LS1001；createdBy/createdAt）
 - **IdSequence** — 前缀 ID 发号器（entityType PK；nextNumber 原子自增）
 
 ## 2. 社区成员域（7）
@@ -121,7 +121,7 @@
 |---|---|---|
 | R1 | User | avatar?；phone 唯一约束；activationDismissed Bool 默认 false（新手任务永久隐藏，按账号持久化）；usernameChangedAt?（用户名每 90 天限改一次） |
 | R1 | PointsRecord | dedupeKey? 唯一，用于积分发放幂等 |
-| R2 | CommunityEvent | venueLat/venueLng/checkinRadiusM/checkinOpenMin/checkinCloseMin（签到几何与时间窗）；cancelDeadlineHours（取消时限，默认 24）；rescheduledTo?（postponed 改期目标；状态机增 postponed） |
+| R2 | CommunityEvent | venueLat/venueLng/checkinRadiusM/checkinOpenMin/checkinCloseMin（签到几何与时间窗）；cancelDeadlineHours（取消时限，默认 24）；rescheduledTo?（postponed 改期目标；状态机增 postponed）；**checkinLocationRequired（默认 false，签到校验位置开关；存量按经纬度已配置回填 true）/ checkinCodeRequired（默认 true）/ checkinCode?（VarChar(6)；required=true 且留空由服务端自动生成，required=false 置空）** |
 | R2 | EventEnrollment | waitlisted Bool + waitlistOrder Int?（候补与递补顺序）；checkinLat/checkinLng/checkinMethod（自助/补签） |
 | R2 | Demand | demandType task/investment/cooperation；task 专属 deliverable?/budget?/deliverBy?（预期交付日期）；investment 专属 cooperationNeed?/returnOffer?；cooperation 专属 bottleneck?/partnershipMode?；三类型通用 contactName/contactPhone/contactEmail？；projectId?（立项回填）；deadline 停用保留展示；respondNeedReview Bool 默认 true（响应需审核开关） |
 | R2 | DemandRespondent | **userId 关联（必加）**；status 扩展 pending/contacted/closed → +accepted/rejected；reviewAt?/rejectReason?/withdrawnAt?；+pending_review（响应需审核：待管理员审核，审核通过回 pending、驳回转 rejected 并置 withdrawnAt 失效） |
@@ -140,6 +140,7 @@
 | 扩展 | Space | feePerHour Int 默认 0（预约费用：积分/小时，0=免费；后台空间表单维护，客户端空间列表与预约页展示）；**visibilityIdentities/visibilityLevels String[] 默认 []（自定义可见范围：身份/等级，空数组 = 不限；需求可见范围同口径，等级仅对持有经验值的社区个体/社区企业生效）**；**reservationIdentities/reservationLevels String[] 默认 []（自定义可预约范围：身份/等级，空数组 = 不限；客户端提交预约时按本次实际身份 + 该身份等级校验，不命中 403）**；四数组仅在 `needReservation=true` 时有意义，关闭「需预约」时后台服务端统一清空 |
 | 扩展 | SpaceReservation | feePoints Int 默认 0（该单实际消耗积分；审核驳回与用户/后台取消均全额退回，写 source=space 流水） |
 | 扩展 | DemandRespondent | **hiddenFields String[] 默认 []**（响应审核通过时勾选「向需求方隐藏」的响应字段键：message/quote/timeline/cases/phone/email；空 = 全部向需求方显示；客户端发布者视图逐项省略，后台与响应者本人仍见真实值）；email 随响应提交落库（客户端响应表单新增「联系邮箱」选填，留空沿用账号邮箱） |
+| 扩展 | DemandRespondent | **status 增 `undertaken`（已承接，响应终态）**：立项时被选为承接方且存在响应记录 → `undertaken`；发布者已选定或本次勾选但未入选的响应 → `closed`（已结束）+ 站内信；字符串列，无迁移。另：立项事务内可写入 `accepted`（`InitiateProjectDto.respondentIds` 勾选项，随后收敛为 `undertaken`）。字段读取口径见 wiki-backend §7.6 |
 | 扩展 | LevelTier | pointsDiscount Float 默认 10（积分消费折扣：1 = 1 折 … 10 = 原价，支持一位小数如 8.5 = 85 折；商城兑换与空间预约按等级折扣扣分，折扣口径见 wiki-backend §8.8） |
 
 **卡片字段配置**：个人名片（`User`/UserIdentity 派生字段）与社区企业名片（`Enterprise` 字段）均**免审核保存即公开**；admin 后台在**用户详情 / 企业详情**的「名片」标签页查看与编辑个人/企业名片（「编辑名片」弹窗），用户可编辑字段白名单在**系统配置 > 名片可编辑字段**维护（原「名片管理」页已下线），由 `GET /api/app/card-schema/:type` 下发。个人名片 `visibility.isPublic=false` 时从人才库隐藏（§8.2）。

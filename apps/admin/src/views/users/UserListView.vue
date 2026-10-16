@@ -12,6 +12,7 @@ import ColumnController from '@/components/ColumnController.vue'
 import { userCategoryOptions, identityTypeMap } from '@/constants/identity'
 import { fetchUsers } from '@/api/users'
 import { statusLabel } from '@/utils/exportCsv'
+import { userIdentitySummary, userSubjectLabel } from '@/utils/subjectLabel'
 import ListErrorState from '@/components/ListErrorState.vue'
 import UserFormDialog from '@/components/UserFormDialog.vue'
 import type { User } from '@/types'
@@ -124,7 +125,7 @@ function onReset() {
 }
 
 /* 导出配置：与列表「联系电话与邮箱」同口径——手机号 + 邮箱，未点「显示联系电话与邮箱」时导出遮罩值 */
-const exportHeaders = ['编号', '用户名', '昵称', '联系电话与邮箱', '关联身份', '实名状态', '积分', '状态', '注册时间']
+const exportHeaders = ['编号', '用户名', '昵称（身份 · 用户ID）', '联系电话与邮箱', '关联身份', '实名状态', '积分', '状态', '注册时间']
 
 /* 联系电话与邮箱列：手机号与邮箱以 “ / ” 合并为一格（CSV 单列无法承载双行），任一为空只导出另一项 */
 function contactText(u: User): string {
@@ -137,7 +138,8 @@ function mapRow(u: User): (string | number)[] {
   return [
     u.uid,
     u.username,
-    `${u.nickname} [${u.uid}]`,
+    /* 统一口径：真实姓名（关联身份 · 昵称 · 用户ID），避免同名/同昵称用户混淆 */
+    userSubjectLabel({ realName: u.realName, nickname: u.nickname, uid: u.uid, identity: userIdentitySummary(u) }),
     contactText(u),
     u.identities
       .filter((i) => i.type !== 'individual')

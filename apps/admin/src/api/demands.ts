@@ -7,7 +7,9 @@ export interface DemandQuery {
   keyword?: string
   category?: string
   demandType?: string
-  status?: string
+  /** 状态筛选：支持单值（旧调用）与多值（勾选式筛选）。
+   *  多选值中的空串占位表示「不按状态过滤」（保证该字段在 URL 中可往返），落库请求会被服务端忽略 */
+  status?: string | string[]
   /** 按提交人筛选（用户详情数据概览跳转） */
   publisherId?: string
   /** 按发布企业筛选（企业详情数据概览跳转；值为社区企业 ID 或合作企业 ID） */
@@ -25,7 +27,8 @@ export async function fetchDemands(query: DemandQuery): Promise<PageResult<Deman
   if (query.keyword) qs.set('keyword', query.keyword)
   if (query.category) qs.set('category', query.category)
   if (query.demandType) qs.set('demandType', query.demandType)
-  if (query.status) qs.set('status', query.status)
+  if (Array.isArray(query.status)) query.status.forEach((s) => qs.append('status', s))
+  else if (query.status) qs.set('status', query.status)
   if (query.publisherId) qs.set('publisherId', query.publisherId)
   if (query.enterprise) qs.set('enterprise', query.enterprise)
   if (query.sortBy) qs.set('sortBy', query.sortBy)
@@ -132,6 +135,10 @@ export interface PendingRespondent {
   demandTitle: string
   demandStatus: string
   publisherName: string
+  /** 响应者用户 ID / 真实姓名 / 昵称（来自账号；代报名等无账号的响应不落这些字段） */
+  userId?: string
+  realName?: string
+  nickname?: string
   name: string
   enterprise: string
   responderIdentity?: { type?: string; title?: string | null; enterpriseName?: string } | null
@@ -215,6 +222,14 @@ export interface UndertakerOption {
 /* GET /api/admin/demands/undertaker-options — 立项承接方候选（社区企业 + 社区个体） */
 export async function fetchUndertakerOptions(): Promise<UndertakerOption[]> {
   return httpGet<UndertakerOption[]>('/demands/undertaker-options')
+}
+
+/* GET /api/admin/demands/:id/selected-respondents — 转为承接方选项，用于「需求立项」表单自动填充；
+ * 缺省取需求方已选定的承接方（可多个）；传入 respondentIds 时取「立项前置选定承接方」勾选的响应，
+ * 需求无对应响应时返回空数组 */
+export async function fetchDemandSelectedRespondents(id: string, respondentIds?: number[]): Promise<UndertakerOption[]> {
+  const qs = respondentIds?.length ? `?respondentIds=${respondentIds.join(',')}` : ''
+  return httpGet<UndertakerOption[]>(`/demands/${id}/selected-respondents${qs}`)
 }
 
 /* POST /api/admin/demands/:id/initiate-project — 需求立项（可多承接方）

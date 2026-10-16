@@ -246,6 +246,19 @@ describe('M2-R R2 app 需求撮合', () => {
     })
     expect(expGained?.delta).toBe(30)
 
+    /* ⑧′响应收敛（item 4）：入选响应 → undertaken，不再停在「已选定」；
+     * 「我的响应」下发新状态与项目 ID（客户端据此显示「已承接」并跳转协作项目） */
+    const undertakenRow = await prisma.demandRespondent.findFirst({ where: { id: responseId } })
+    expect(undertakenRow?.status).toBe('undertaken')
+    const mineAfterInit = await appGet(app, tokenB, '/api/app/me/responses')
+    const mineRowsAfterInit = Array.isArray(mineAfterInit.body.data) ? mineAfterInit.body.data : mineAfterInit.body.data.list
+    const mineUnder = mineRowsAfterInit.find((r: { id: number }) => r.id === responseId)
+    expect(mineUnder?.status).toBe('undertaken')
+    expect(mineUnder?.projectId).toBe(projectId)
+    /* 发布者视角响应列表同步透传新状态（此前仅透传 pending/accepted/rejected，会回落「待选定」） */
+    const ownerList = await appGet(app, tokenA, `/api/app/me/demands/${demandId}/responses`)
+    expect(ownerList.body.data.find((r: { id: number }) => r.id === responseId)?.status).toBe('undertaken')
+
     // ⑨双方项目可见
     const projListA = await appGet(app, tokenA, '/api/app/me/projects')
     const projRowsA = Array.isArray(projListA.body.data) ? projListA.body.data : projListA.body.data.list
@@ -586,6 +599,69 @@ describe('M2-R R2 app 需求撮合', () => {
       })
       expect(finishExp?.delta).toBe(50)
     }
+  })
+
+  it('选定后可纠正：重新选定覆盖上一次，撤销选定回到已发布', async () => {
+    const adminToken = await loginAs(app)
+    const tokenC = await appLoginAs(app, '13801210006', 'user123') // U1006 沈嘉禾
+
+    /* ① 发布者 U1001 建单并置 published */
+    const created = await appPost(app, tokenA, '/api/app/demands', {
+      title: 'R2 选定纠正路径测试',
+      description: '验证重新选定与撤销选定',
+      categoryCode: 'DC004',
+      categoryDict: 'demand_category',
+      kind: 'task',
+      asIdentity: 'individual',
+      deliverable: '交付说明',
+      deliverBy: '2026-12-31',
+      budget: '面议',
+      period: '两周',
+      contactName: '陈屿',
+      contactPhone: '13801210001',
+    })
+    expect(created.status).toBe(200)
+    const demandId: string = created.body.data.id
+    await prisma.demand.update({ where: { id: demandId }, data: { status: 'published' } })
+
+    /* ② 两位响应者响应并通过审核 */
+    for (const t of [tokenB, tokenC]) {
+      const r = await appPost(app, t, `/api/app/demands/${demandId}/respond`, { note: '可承接' })
+      expect(r.status).toBe(200)
+    }
+    const rows = await prisma.demandRespondent.findMany({ where: { demandId }, orderBy: { id: 'asc' } })
+    expect(rows).toHaveLength(2)
+    for (const row of rows) {
+      const reviewed = await request(app.getHttpServer())
+        .post(`/api/admin/demands/${demandId}/respondents/${row.id}/review`)
+        .set('Authorization', `Bearer ${adminToken}`)
+        .send({ status: 'approved' })
+      expect(reviewed.status).toBe(200)
+    }
+
+    /* ③ 首次选定第 1 位 → selected */
+    const first = await appPost(app, tokenA, `/api/app/me/demands/${demandId}/select`, { responseIds: [rows[0].id] })
+    expect(first.status).toBe(200)
+    expect((await prisma.demand.findUnique({ where: { id: demandId } }))?.status).toBe('selected')
+
+    /* ④ 重新选定第 2 位：覆盖上一次，原「已选定」回退「待选定」 */
+    const reselect = await appPost(app, tokenA, `/api/app/me/demands/${demandId}/select`, { responseIds: [rows[1].id] })
+    expect(reselect.status).toBe(200)
+    expect((await prisma.demandRespondent.findUnique({ where: { id: rows[0].id } }))?.status).toBe('pending')
+    expect((await prisma.demandRespondent.findUnique({ where: { id: rows[1].id } }))?.status).toBe('accepted')
+    expect((await prisma.demand.findUnique({ where: { id: demandId } }))?.status).toBe('selected')
+
+    /* ⑤ 撤销选定：回到 published，已选定响应回退待选定 */
+    const deselect = await appPost(app, tokenA, `/api/app/me/demands/${demandId}/deselect`, {})
+    expect(deselect.status).toBe(200)
+    expect((await prisma.demand.findUnique({ where: { id: demandId } }))?.status).toBe('published')
+    expect((await prisma.demandRespondent.findUnique({ where: { id: rows[1].id } }))?.status).toBe('pending')
+
+    /* ⑥ 非发布者不可撤销（403）；已发布态不可撤销（409） */
+    const byOther = await appPost(app, tokenB, `/api/app/me/demands/${demandId}/deselect`, {})
+    expect(byOther.status).toBe(403)
+    const again = await appPost(app, tokenA, `/api/app/me/demands/${demandId}/deselect`, {})
+    expect(again.status).toBe(409)
   })
 
   it('响应字段级可见性：联系邮箱随响应提交并下发给发布者；审核勾选隐藏的字段不下发（后台保留真实值）', async () => {

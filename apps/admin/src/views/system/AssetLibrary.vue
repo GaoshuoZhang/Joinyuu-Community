@@ -26,14 +26,16 @@ const sourceOptions = [
   { label: '资讯发布', value: 'article' },
   { label: '投稿内容', value: 'submission' },
   { label: '租赁合同', value: 'lease' },
+  { label: '项目合同', value: 'project' },
   { label: '未关联', value: 'none' },
 ]
 
-/** 来源标签：资讯发布-A1010 / 投稿内容-SU1006 / 租赁合同-LS1001 / 未关联 */
+/** 来源标签：资讯发布-A1010 / 投稿内容-SU1006 / 租赁合同-LS1001 / 项目合同-JY-2026-01 / 未关联 */
 function sourceText(a: MallAsset): string {
   if (a.sourceId && a.sourceType === 'article') return `资讯发布-${a.sourceId}`
   if (a.sourceId && a.sourceType === 'submission') return `投稿内容-${a.sourceId}`
   if (a.sourceId && a.sourceType === 'lease') return `租赁合同-${a.sourceId}`
+  if (a.sourceId && a.sourceType === 'project') return `项目合同-${a.sourceId}`
   return '未关联'
 }
 

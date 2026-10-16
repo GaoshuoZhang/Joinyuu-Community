@@ -404,7 +404,7 @@ export class UsersService {
       this.prisma.accountDeletionRequest.count({ where }),
       this.prisma.accountDeletionRequest.findMany({
         where,
-        include: { user: { select: { uid: true, nickname: true, phone: true, status: true } } },
+        include: { user: { select: { uid: true, nickname: true, realName: true, phone: true, status: true } } },
         orderBy: [{ requestedAt: 'desc' }, { id: 'desc' }],
         skip: (page - 1) * pageSize,
         take: pageSize,

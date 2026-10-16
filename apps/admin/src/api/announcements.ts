@@ -5,7 +5,9 @@ export interface AnnouncementQuery {
   page: number
   pageSize: number
   keyword?: string
-  status?: string
+  /** 状态筛选：支持单值（旧调用）与多值（勾选式筛选）。
+   *  多选值中的空串占位表示「不按状态过滤」（保证该字段在 URL 中可往返），落库请求会被服务端忽略 */
+  status?: string | string[]
 }
 
 /* GET /api/admin/announcements?page&pageSize&keyword&status — 公告列表（置顶优先，其余按发布时间倒序） */
@@ -14,7 +16,10 @@ export async function fetchAnnouncements(query: AnnouncementQuery): Promise<Page
   qs.set('page', String(query.page))
   qs.set('pageSize', String(query.pageSize))
   if (query.keyword) qs.set('keyword', query.keyword)
-  if (query.status) qs.set('status', query.status)
+  if (query.status) {
+    if (Array.isArray(query.status)) query.status.forEach((s) => qs.append('status', s))
+    else qs.set('status', query.status)
+  }
   return httpGet<PageResult<Announcement>>(`/announcements?${qs}`)
 }
 

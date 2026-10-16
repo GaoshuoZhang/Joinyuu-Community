@@ -1,5 +1,5 @@
 import { Type } from 'class-transformer'
-import { IsArray, IsBoolean, IsInt, IsLatitude, IsLongitude, IsNotEmpty, IsOptional, IsString, MaxLength, Min } from 'class-validator'
+import { IsArray, IsBoolean, IsInt, IsLatitude, IsLongitude, IsNotEmpty, IsOptional, IsString, Matches, MaxLength, Min } from 'class-validator'
 
 /* 活动新增/编辑载荷（对照 apps/admin/src/api/events.ts EventPayload） */
 export class EventPayloadDto {
@@ -112,4 +112,19 @@ export class EventPayloadDto {
   @IsInt()
   @Min(0)
   cancelDeadlineHours?: number
+
+  /* 签到校验位置开关：开启后客户端签到才做地理围栏校验（默认关） */
+  @IsOptional()
+  @IsBoolean()
+  checkinLocationRequired?: boolean
+
+  /* 签到校验码开关（默认开）：关闭后不再要求输入签到码 */
+  @IsOptional()
+  @IsBoolean()
+  checkinCodeRequired?: boolean
+
+  /* 6 位数字签到码：required=true 且留空时由服务端自动生成；required=false 时服务端置空 */
+  @IsOptional()
+  @Matches(/^\d{6}$/, { message: '签到码须为 6 位数字' })
+  checkinCode?: string
 }

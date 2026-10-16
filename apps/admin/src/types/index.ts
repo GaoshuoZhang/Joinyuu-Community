@@ -158,6 +158,13 @@ export type DemandStatus =
 
 export interface DemandRespondent {
   id: number
+  /** 响应者用户 ID（社区成员自行响应时落该字段；代报名等无账号的响应为空） */
+  userId?: string
+  /** 响应者真实姓名 / 昵称（来自账号；与用户 ID 一起用于区分同名用户） */
+  realName?: string
+  nickname?: string
+  /** 响应者身份快照（type/enterpriseName 等），响应人列用于展示身份段 */
+  responderIdentity?: { type?: string; title?: string | null; enterpriseName?: string } | null
   name: string
   enterprise: string
   /** 联系电话（代报名必填；成员自行响应可能缺省） */
@@ -172,7 +179,8 @@ export interface DemandRespondent {
   cases?: string
   message: string
   at: string
-  status: 'pending' | 'contacted' | 'accepted' | 'rejected' | 'closed' | 'pending_review'
+  /** undertaken = 立项后被选为承接方（已承接）；closed = 已结束（立项未选用） */
+  status: 'pending' | 'contacted' | 'accepted' | 'rejected' | 'closed' | 'pending_review' | 'undertaken'
   /** 审核时间（管理员通过/驳回后写入） */
   reviewedAt?: string
   /** 驳回理由（status = rejected 时存在） */
@@ -243,6 +251,8 @@ export interface Demand {
   /** 未撤回且待审核响应数 */
   pendingResponseCount: number
   respondents: DemandRespondent[]
+  /** 关联项目状态（closed/archived 时已立项需求可「重新立项」；已归档项目记为 archived） */
+  projectStatus?: string
   /** 归档时间（非空表示已归档，详情页写操作隐藏） */
   deletedAt?: string | null
 }
@@ -269,6 +279,8 @@ export interface ProjectUndertaker {
  * 其份额丢弃不转移 */
 
 export interface Milestone {
+  /** 里程碑主键（进度节点按 id 定位具体节点做验收/驳回） */
+  id: string
   name: string
   status: 'todo' | 'submitted' | 'accepted' | 'returned'
   date: string
@@ -391,6 +403,12 @@ export interface CommunityEvent {
   checkinRadiusM?: number
   checkinOpenMin?: number
   checkinCloseMin?: number
+  /** 签到校验位置开关（默认关）：开启后客户端签到做地理围栏校验 */
+  checkinLocationRequired?: boolean
+  /** 签到校验码开关（默认开） */
+  checkinCodeRequired?: boolean
+  /** 6 位数字签到码（required=true 且留空时由服务端自动生成；required=false 时为空） */
+  checkinCode?: string
   cancelDeadlineHours?: number
   rescheduledTo?: string
   feedbackSummary?: {
@@ -448,6 +466,8 @@ export interface ProjectInitPayload {
   contactPhone?: string
   contactEmail?: string
   contractPrice?: string
+  /* 立项前置「选定承接方」勾选的响应记录 ID：立项事务内落「已承接」（未入选的已选定响应收敛为「已结束」） */
+  respondentIds?: number[]
 }
 
 /* API 返回形状 */

@@ -56,10 +56,12 @@ export class LoginLogService {
 
   async list(query: QueryLoginLogsDto): Promise<{ list: LoginLogDto[]; total: number }> {
     const conditions: Prisma.LoginLogWhereInput[] = []
-    if (query.status) {
-      if (query.status === 'success') conditions.push({ status: 'success' })
-      else if (query.status === 'locked') conditions.push({ status: 'locked' })
-      else conditions.push({ status: 'fail' })
+    if (query.status?.length) {
+      /* 勾选式多值状态：展示枚举 failed 落库为 'fail'，多选归一去重后按 in 过滤 */
+      const mapped = [
+        ...new Set(query.status.map((s) => (s === 'success' ? 'success' : s === 'locked' ? 'locked' : 'fail'))),
+      ]
+      conditions.push({ status: { in: mapped } })
     }
     if (query.keyword) {
       const kw = query.keyword.trim()

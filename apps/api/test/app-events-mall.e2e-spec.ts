@@ -5,6 +5,7 @@ import { Test } from '@nestjs/testing'
 import request from 'supertest'
 import { AppModule } from '../src/app.module'
 import { PrismaService } from '../src/common/prisma/prisma.service'
+import { RedisService } from '../src/common/redis/redis.service'
 import { reseed } from './helpers/reseed'
 import { appGet, appLoginAs, appPost } from './helpers/app-login'
 
@@ -197,6 +198,92 @@ describe('M2-R R2 app 活动与商城', () => {
     // 重复签到（已签到 409 或已核销 400 均可接受）
     const again = await appPost(app, token, `/api/app/events/${event.id}/check-in`, { lat: 31.23, lng: 121.47 })
     expect([400, 409]).toContain(again.status)
+  })
+
+  it('签到码：无需定位即可签到；错误码 400、第 4 次起 428 + 图形验证码后成功（返回第 N 位/活动信息）', async () => {
+    const redis = app.get(RedisService)
+    const token6 = await appLoginAs(app, '13801210006', 'user123')
+    const fmt = (d: Date): string =>
+      `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')} ${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`
+    const start = new Date(Date.now() + 5 * 60 * 1000)
+    const end = new Date(Date.now() + 65 * 60 * 1000)
+
+    /* 专项活动：无位置校验、启用 6 位签到码 */
+    const event = await prisma.communityEvent.create({
+      data: {
+        id: 'EV9101',
+        createdAt: fmt(new Date()),
+        title: '签到码防爆破专项',
+        type: '培训',
+        startTime: fmt(start),
+        endTime: fmt(end),
+        location: '测试场地',
+        capacity: 10,
+        speaker: '—',
+        host: '聚屿社区',
+        status: 'published',
+        enrollmentOpen: true,
+        visibilityIdentities: [],
+        visibilityLevels: [],
+        enrollmentIdentities: [],
+        enrollmentLevels: [],
+        requireReview: false,
+        description: '',
+        tags: [],
+        checkinLocationRequired: false,
+        checkinCodeRequired: true,
+        checkinCode: '123456',
+      },
+    })
+    await prisma.eventEnrollment.create({
+      data: {
+        eventId: event.id,
+        userId: 'U1006',
+        name: '沈嘉禾',
+        enterprise: '',
+        phone: '13801210006',
+        appliedAt: fmt(new Date()),
+        status: 'approved',
+      },
+    })
+
+    /* 标志下发：只发 enabled 布尔，不下发签到码明文 */
+    const detail = await appGet(app, token6, `/api/app/events/${event.id}`)
+    expect(detail.body.data.checkinCodeEnabled).toBe(true)
+    expect(detail.body.data.checkinLocationRequired).toBe(false)
+    expect(detail.body.data.checkinCode).toBeUndefined()
+
+    /* 无位置校验：不带经纬度直接提交，但码错误 → 400 */
+    const wrong = await appPost(app, token6, `/api/app/events/${event.id}/check-in`, { code: '000000' })
+    expect(wrong.status).toBe(400)
+    expect(wrong.body.message).toBe('签到码错误')
+    await appPost(app, token6, `/api/app/events/${event.id}/check-in`, { code: '000000' })
+    await appPost(app, token6, `/api/app/events/${event.id}/check-in`, { code: '000000' })
+
+    /* 第 4 次起需图形验证码（未带 → 428） */
+    const locked = await appPost(app, token6, `/api/app/events/${event.id}/check-in`, { code: '000000' })
+    expect(locked.status).toBe(428)
+
+    /* 验证码 + 正确签到码 → 200 且返回第 N 位与活动信息 */
+    const captcha = await request(app.getHttpServer()).get('/api/app/auth/captcha')
+    const captchaId: string = captcha.body.data.captchaId
+    const captchaCode = await redis.getCache<string>(`captcha:app:${captchaId}`)
+    expect(captchaCode).toBeTruthy()
+    const ok = await appPost(app, token6, `/api/app/events/${event.id}/check-in`, {
+      code: '123456',
+      captchaId,
+      captchaCode,
+    })
+    expect(ok.status).toBe(200)
+    expect(ok.body.data).toEqual(
+      expect.objectContaining({
+        pointsAwarded: expect.any(Number),
+        position: 1,
+        title: '签到码防爆破专项',
+      }),
+    )
+    expect(ok.body.data.startTime).toBeTruthy()
+    expect(ok.body.data.endTime).toBeTruthy()
   })
 
   it('商城：统一券码下单即签发券码，可退款（退积分+回库存）', async () => {

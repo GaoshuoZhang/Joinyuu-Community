@@ -93,6 +93,55 @@ describe('M1-C events 活动（发布/编辑/审核/签到/定时任务）', () 
     expect(edit.status).toBe(409)
   })
 
+  it('签到码：创建留空自动生成 6 位 → 关闭开关保存置空 → 非法码 400', async () => {
+    const base = {
+      title: '签到码专项活动',
+      type: '培训',
+      startTime: '2026-12-20 10:00',
+      endTime: '2026-12-20 12:00',
+      location: '共享会议室 A',
+      capacity: 30,
+      speaker: '—',
+      host: '聚屿社区',
+      description: '签到码口径验证',
+      tags: [],
+      visibilityIdentities: [],
+      visibilityLevels: [],
+      enrollmentIdentities: [],
+      enrollmentLevels: [],
+      requireReview: false,
+    }
+
+    /* 未填签到码（required 默认开）→ 服务端自动生成 6 位数字，后台 DTO 直发明文 */
+    const created = await request(app.getHttpServer())
+      .post('/api/admin/events')
+      .set('Authorization', `Bearer ${token}`)
+      .send({ ...base, checkinCodeRequired: true })
+    expect(created.status).toBe(200)
+    const id: string = created.body.data.id
+    expect(created.body.data.checkinCodeRequired).toBe(true)
+    expect(created.body.data.checkinCode).toMatch(/^\d{6}$/)
+
+    /* 关闭码开关保存 → checkinCode 置空（不再要求输码） */
+    const off = await request(app.getHttpServer())
+      .put(`/api/admin/events/${id}`)
+      .set('Authorization', `Bearer ${token}`)
+      .send({ ...base, checkinCodeRequired: false })
+    expect(off.status).toBe(200)
+    const detail = await request(app.getHttpServer())
+      .get(`/api/admin/events/${id}`)
+      .set('Authorization', `Bearer ${token}`)
+    expect(detail.body.data.checkinCodeRequired).toBe(false)
+    expect(detail.body.data.checkinCode).toBeFalsy()
+
+    /* 非法签到码（非 6 位数字）→ 400 */
+    const bad = await request(app.getHttpServer())
+      .put(`/api/admin/events/${id}`)
+      .set('Authorization', `Bearer ${token}`)
+      .send({ ...base, checkinCodeRequired: true, checkinCode: '12ab' })
+    expect(bad.status).toBe(400)
+  })
+
   it('报名审核通过 → 发放报名积分（enrollPoints 自定义值）', async () => {
     const before = await request(app.getHttpServer())
       .get('/api/admin/points-records')

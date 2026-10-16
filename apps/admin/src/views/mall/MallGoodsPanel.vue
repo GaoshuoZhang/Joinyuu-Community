@@ -1,9 +1,9 @@
 <script setup lang="ts">
-import { computed, onMounted, reactive, ref } from 'vue'
+import { computed, onBeforeUnmount, onMounted, reactive, ref } from 'vue'
 import ListErrorState from '@/components/ListErrorState.vue'
 import { useListQueryState } from '@/utils/listQuery'
 import { MessagePlugin } from 'tdesign-vue-next'
-import { AddIcon, SearchIcon, ViewListIcon } from 'tdesign-icons-vue-next'
+import { AddIcon, ChevronDownIcon, SearchIcon, ViewListIcon } from 'tdesign-icons-vue-next'
 import PageHeader from '@/components/PageHeader.vue'
 import StatusTag from '@/components/StatusTag.vue'
 import GoodsFormDialog from '@/components/GoodsFormDialog.vue'
@@ -24,13 +24,51 @@ const list = ref<MallGoods[]>([])
 const total = ref(0)
 const acting = ref('')
 
+/* 状态勾选式筛选（与活动/需求管理同一形态）：3 个可选状态（不含「全部」项）；
+ * 默认勾选「已上架 / 待补货」，即列表默认不展示「已下架」；
+ * 全部取消勾选 = 不按状态过滤（显示全部） */
+const statusCheckOptions = [
+  { label: '已上架', value: 'on' },
+  { label: '已下架', value: 'off' },
+  { label: '待补货', value: 'restock' },
+]
+const DEFAULT_STATUSES = ['on', 'restock']
+
 const query = reactive({
   page: 1,
   pageSize: 10,
   keyword: '',
   category: '',
-  status: '',
+  /* 勾选式状态筛选：数组（useListQueryState 以重复 query 参数同步）；空串占位 = 不按状态过滤 */
+  status: [...DEFAULT_STATUSES] as string[],
 })
+
+/* 状态勾选面板（与活动/需求管理同一形态）：勾选即查询；ESC 关闭（t-popup 仅 trigger=focus 内置 ESC 处理） */
+const statusPanelVisible = ref(false)
+const checkedStatusCount = computed(() => query.status.filter(Boolean).length)
+
+function onStatusPanelKeydown(e: KeyboardEvent) {
+  if (e.key === 'Escape' && statusPanelVisible.value) statusPanelVisible.value = false
+}
+onMounted(() => window.addEventListener('keydown', onStatusPanelKeydown))
+onBeforeUnmount(() => window.removeEventListener('keydown', onStatusPanelKeydown))
+
+/* 空选 = 不按状态过滤：用单元素空串占位 —— 空数组会被 vue-router 从 URL 中丢弃 */
+function onStatusChange(value: (string | number)[]) {
+  const picked = value.map(String).filter(Boolean)
+  query.status = picked.length ? picked : ['']
+  onSearch()
+}
+
+function selectAllStatuses() {
+  query.status = statusCheckOptions.map((o) => o.value)
+  onSearch()
+}
+
+function clearAllStatuses() {
+  query.status = ['']
+  onSearch()
+}
 
 /* 只取 GC 前缀的字典码：goodsCategoryMap 中的 physical/voucher 为历史值，保留会产生重复选项 */
 const categoryOptions = ref([
@@ -39,13 +77,6 @@ const categoryOptions = ref([
     .filter(([value]) => value.startsWith('GC'))
     .map(([value, label]) => ({ label, value })),
 ])
-
-const statusOptions = [
-  { label: '全部', value: '' },
-  { label: '已上架', value: 'on' },
-  { label: '已下架', value: 'off' },
-  { label: '待补货', value: 'restock' },
-]
 
 /* 商品类别维护弹窗（原「数据字典 > 商品类型」入口，含类别级可见/可下单范围） */
 const categoryDialogVisible = ref(false)
@@ -104,7 +135,7 @@ function onSearch() {
 function onReset() {
   query.keyword = ''
   query.category = ''
-  query.status = ''
+  query.status = [...DEFAULT_STATUSES]
   query.page = 1
   load()
 }
@@ -249,13 +280,41 @@ async function loadCategories() {
         clearable
         @change="onSearch"
       />
-      <t-select v-accessible-field="'状态'" class="ctl-w-sm"
-        v-model="query.status"
-        label="状态"
-        :options="statusOptions"
-        clearable
-        @change="onSearch"
-      />
+      <!-- 状态：勾选式多选（默认勾选 2 项，全部取消 = 不按状态过滤）；勾选即查询 -->
+      <t-popup
+        v-model:visible="statusPanelVisible"
+        trigger="click"
+        placement="bottom-left"
+        :show-arrow="false"
+        overlay-class-name="status-filter-popup"
+        overlay-inner-class-name="status-filter-popup-inner"
+      >
+        <t-button variant="outline" :aria-label="`状态筛选，已勾选 ${checkedStatusCount} 项`">
+          状态<template v-if="checkedStatusCount">（{{ checkedStatusCount }}）</template>
+          <template #suffix><ChevronDownIcon /></template>
+        </t-button>
+        <template #content>
+          <div class="status-panel">
+            <div class="status-panel-head">
+              <span class="status-panel-title">状态</span>
+              <div class="status-panel-tools">
+                <t-button
+                  variant="text"
+                  size="small"
+                  :disabled="checkedStatusCount === statusCheckOptions.length"
+                  @click="selectAllStatuses"
+                >
+                  全选
+                </t-button>
+                <t-button variant="text" size="small" :disabled="checkedStatusCount === 0" @click="clearAllStatuses">
+                  清空
+                </t-button>
+              </div>
+            </div>
+            <t-checkbox-group :value="query.status" :options="statusCheckOptions" @change="onStatusChange" />
+          </div>
+        </template>
+      </t-popup>
       <t-button theme="primary" @click="onSearch">
         <template #icon><SearchIcon /></template>
         查询
@@ -344,3 +403,51 @@ async function loadCategories() {
     <GoodsFormDialog v-model:visible="formVisible" :mode="formMode" :goods="currentGoods" @success="load" />
   </div>
 </template>
+
+<style scoped>
+/* ---------- 状态勾选面板（浮层挂载到 body，scoped 选择器无法命中，故用 :global 收窄到本页唯一类名） ---------- */
+:global(.status-filter-popup) {
+  padding: 0;
+}
+
+:global(.status-filter-popup-inner) {
+  padding: 0;
+  background: transparent;
+  border-radius: 0;
+  box-shadow: none;
+}
+
+.status-panel {
+  width: 180px;
+  padding: 8px 12px 12px;
+  background: var(--td-bg-color-container);
+  border: 1px solid var(--td-component-border);
+  border-radius: var(--td-radius-medium);
+  box-shadow: var(--td-shadow-2);
+}
+
+.status-panel-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 8px;
+}
+
+.status-panel-title {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--td-text-color-primary);
+}
+
+.status-panel-tools {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.status-panel :deep(.t-checkbox-group) {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+</style>

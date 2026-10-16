@@ -29,8 +29,9 @@ const loadError = ref('')
 const leases = ref<Lease[]>([])
 const workstations = ref<Workstation[]>([])
 const acting = ref('')
-/* 快速筛选：状态卡片与状态下拉共用；'' = 全部 */
-const statusFilter = ref<LeaseViewStatus | ''>('')
+/* 勾选式状态筛选：默认仅勾选生效中/即将到期（已到期/已终止需手动勾选查看）；空勾选=显示全部 */
+const DEFAULT_STATUS_FILTER: LeaseViewStatus[] = ['active', 'expiring']
+const statusFilter = ref<LeaseViewStatus[]>([...DEFAULT_STATUS_FILTER])
 /* 关键词搜索：租约编号 / 办公位编号 / 租赁方 / 联系人 / 联系电话 */
 const keyword = ref('')
 
@@ -60,7 +61,7 @@ const scopedLeases = computed(() => {
 const filteredLeases = computed(() => {
   const kw = keyword.value.trim().toLowerCase()
   return scopedLeases.value.filter((l) => {
-    if (statusFilter.value && deriveLeaseStatus(l) !== statusFilter.value) return false
+    if (statusFilter.value.length > 0 && !statusFilter.value.includes(deriveLeaseStatus(l))) return false
     if (!kw) return true
     return [l.id, ...l.workstationLabels, l.enterpriseName, l.contactName, l.contactPhone].some((v) =>
       (v ?? '').toLowerCase().includes(kw),
@@ -68,9 +69,11 @@ const filteredLeases = computed(() => {
   })
 })
 
-/* 状态卡片快速筛选：点击选中，再点同一卡片取消（与状态下拉双向同步） */
+/* 状态卡片快速筛选：点击勾选/取消该状态（与勾选式筛选器双向同步） */
 function setStatFilter(status: LeaseViewStatus) {
-  statusFilter.value = statusFilter.value === status ? '' : status
+  statusFilter.value = statusFilter.value.includes(status)
+    ? statusFilter.value.filter((s) => s !== status)
+    : [...statusFilter.value, status]
 }
 
 function clearFilter() {
@@ -78,17 +81,21 @@ function clearFilter() {
   renterType.value = ''
 }
 
-/* 空态筛选判定：状态/关键词/主体筛选任一非空即视为筛选无结果 */
+/* 空态筛选判定：状态取默认勾选集时不算筛选（顺序无关比较）；关键词/主体筛选/非默认状态集任一即视为筛选无结果 */
+const statusIsFiltered = computed(() => {
+  const sort = (a: LeaseViewStatus[]) => [...a].sort()
+  return JSON.stringify(sort(statusFilter.value)) !== JSON.stringify(sort(DEFAULT_STATUS_FILTER))
+})
 const filterState = computed(() => ({
-  status: statusFilter.value,
+  status: statusIsFiltered.value ? statusFilter.value : '',
   keyword: keyword.value,
   renterId: renterId.value,
   renterType: renterType.value,
 }))
 
-/* 清除全部筛选并重新加载 */
+/* 清除全部筛选并重新加载（状态筛选恢复默认勾选集） */
 function onReset() {
-  statusFilter.value = ''
+  statusFilter.value = [...DEFAULT_STATUS_FILTER]
   keyword.value = ''
   renterId.value = ''
   renterType.value = ''
@@ -119,7 +126,6 @@ const statusCount = (s: LeaseViewStatus) =>
   scopedLeases.value.filter((l) => deriveLeaseStatus(l) === s).length
 
 const statusOptions = [
-  { label: '全部状态', value: '' },
   { label: '生效中', value: 'active' },
   { label: '即将到期', value: 'expiring' },
   { label: '已到期', value: 'expired' },
@@ -296,7 +302,9 @@ async function fetchAllForExport(page: number, pageSize: number) {
   return { list: ls.slice((page - 1) * pageSize, page * pageSize), total: ls.length }
 }
 
-useListQueryState({}, undefined, { refs: { status: statusFilter, keyword, renterId, renterType }, live: true })
+/* 状态勾选不写入 URL：空数组会被 vue-router 丢弃、恢复时弹回默认集，导致「取消全部勾选」无法生效。
+ * 状态筛选仅存组件内：刷新页面恢复默认勾选集（生效中/即将到期），关键词与主体筛选保持 URL 同步 */
+useListQueryState({}, undefined, { refs: { keyword, renterId, renterType }, live: true })
 
 onMounted(async () => {
   await load()
@@ -339,28 +347,28 @@ onMounted(async () => {
         class="stat-clickable"
         label="生效中"
         :value="statusCount('active')"
-        :active="statusFilter === 'active'"
+        :active="statusFilter.includes('active')"
         @click="setStatFilter('active')"
       />
       <StatCard
         class="stat-clickable"
         label="即将到期"
         :value="statusCount('expiring')"
-        :active="statusFilter === 'expiring'"
+        :active="statusFilter.includes('expiring')"
         @click="setStatFilter('expiring')"
       />
       <StatCard
         class="stat-clickable"
         label="已到期"
         :value="statusCount('expired')"
-        :active="statusFilter === 'expired'"
+        :active="statusFilter.includes('expired')"
         @click="setStatFilter('expired')"
       />
       <StatCard
         class="stat-clickable"
         label="已终止"
         :value="statusCount('terminated')"
-        :active="statusFilter === 'terminated'"
+        :active="statusFilter.includes('terminated')"
         @click="setStatFilter('terminated')"
       />
     </div>
@@ -371,7 +379,10 @@ onMounted(async () => {
         placeholder="搜索租约编号/办公位编号/租赁方/联系人/联系电话…"
         clearable
       />
-      <t-select v-accessible-field="'状态'" class="ctl-w-lg" v-model="statusFilter" label="状态" :options="statusOptions" clearable />
+      <div class="lease-status-filter" role="group" aria-label="状态筛选">
+        <span class="lease-status-label">状态</span>
+        <t-checkbox-group v-model="statusFilter" :options="statusOptions" />
+      </div>
       <template v-if="renterId">
         <t-tag closable variant="light" theme="primary" @close="clearFilter">
           仅显示「{{ renterName }}」的租约
@@ -507,6 +518,17 @@ onMounted(async () => {
 .terminated-at {
   margin-top: 2px;
   font-size: 12px;
+  color: var(--td-text-color-secondary);
+}
+
+/* 勾选式状态筛选：可见标签 + 复选组，与输入/下拉控件同排对齐 */
+.lease-status-filter {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.lease-status-label {
   color: var(--td-text-color-secondary);
 }
 </style>

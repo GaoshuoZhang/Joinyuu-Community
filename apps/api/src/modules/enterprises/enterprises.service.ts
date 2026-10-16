@@ -258,7 +258,7 @@ export class EnterprisesService {
       })
     }
     if (query.industry) conditions.push({ industry: query.industry })
-    if (query.status) conditions.push({ status: query.status })
+    if (query.status) conditions.push({ status: { in: query.status } })
 
     const where: Prisma.EnterpriseWhereInput = conditions.length ? { AND: conditions } : {}
 

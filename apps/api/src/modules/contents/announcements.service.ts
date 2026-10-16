@@ -53,7 +53,7 @@ export class AnnouncementsService {
         { id: { contains: kw, mode: 'insensitive' } },
       ]
     }
-    if (query.status) where.status = query.status
+    if (query.status) where.status = { in: query.status }
 
     const [rows, total] = await Promise.all([
       this.prisma.announcement.findMany({

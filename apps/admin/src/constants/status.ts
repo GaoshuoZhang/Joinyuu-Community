@@ -3,6 +3,8 @@
 export interface StatusConf {
   label: string
   theme: 'default' | 'primary' | 'success' | 'warning' | 'danger'
+  /** 标签形态：缺省 light。TDesign 仅 4 个语义色相，同色系状态靠形态区分（实底/描边/浅描边） */
+  variant?: 'light' | 'outline' | 'light-outline' | 'dark'
 }
 
 export const statusMap = {
@@ -56,22 +58,26 @@ export const statusMap = {
     rejected: { label: '已驳回', theme: 'danger' },
     withdrawn: { label: '已撤回', theme: 'default' },
   },
+  /* 需求状态：任一两个状态的 (theme, variant) 组合唯一，避免列表内撞色——
+   * 待发布/定时发布中/已选定同为蓝系但形态不同（实底/描边/浅描边），已发布/已立项同为绿系（实底/描边） */
   demand: {
-    pending: { label: '待审核', theme: 'warning' },
-    pending_release: { label: '待发布', theme: 'primary' },
-    scheduled: { label: '定时发布中', theme: 'primary' },
-    published: { label: '已发布', theme: 'success' },
-    selected: { label: '已选定', theme: 'primary' },
-    rejected: { label: '已驳回', theme: 'danger' },
-    projected: { label: '已立项', theme: 'success' },
-    withdrawn: { label: '已撤回', theme: 'default' },
-    closed: { label: '已关闭', theme: 'default' },
+    pending: { label: '待审核', theme: 'warning', variant: 'light' },
+    pending_release: { label: '待发布', theme: 'primary', variant: 'light' },
+    scheduled: { label: '定时发布中', theme: 'primary', variant: 'outline' },
+    published: { label: '已发布', theme: 'success', variant: 'light' },
+    selected: { label: '已选定', theme: 'primary', variant: 'light-outline' },
+    rejected: { label: '已驳回', theme: 'danger', variant: 'light' },
+    projected: { label: '已立项', theme: 'success', variant: 'outline' },
+    withdrawn: { label: '已撤回', theme: 'default', variant: 'light' },
+    closed: { label: '已关闭', theme: 'default', variant: 'outline' },
   },
   /* 需求响应状态（响应需审核开启时，成员提交后进入待审核） */
   demandRespondent: {
     pending: { label: '待选定', theme: 'warning' },
     contacted: { label: '已对接', theme: 'success' },
     accepted: { label: '已接受', theme: 'success' },
+    /** 立项后被选为承接方（响应终态） */
+    undertaken: { label: '已承接', theme: 'success' },
     rejected: { label: '已拒绝', theme: 'default' },
     closed: { label: '已结束', theme: 'default' },
     pending_review: { label: '待审核', theme: 'warning' },

@@ -1,36 +1,62 @@
 <script setup lang="ts">
-import { ref, watch } from 'vue'
+import { computed, ref, watch } from 'vue'
 import { Button, DialogPlugin, Toast } from 'tdesign-mobile-vue'
 import EmptyBlock from '@/components/shared/EmptyBlock.vue'
 import ListSkeleton from '@/components/ListSkeleton.vue'
 import StateTag from '@/components/shared/StateTag.vue'
 import type { MyResponseItem } from '@/types'
 import { formatLocalDateTime, formatZhNumber } from '@/utils/format'
+import { identityLabels, userSubjectLabel } from '@/utils/subjectLabel'
 
-/* 发布者视角：响应列表 + 意向承接方多选 + 提交立项。 */
-const props = defineProps<{
+/* 发布者视角：响应列表 + 意向承接方多选 + 提交立项；`selected` 态支持重新选定 / 撤销选定。 */
+const props = withDefaults(defineProps<{
   responses: MyResponseItem[]
   loading: boolean
   error: boolean
   canSelect: boolean
+  /** `selected` 态：允许重新选定（覆盖上一次）或撤销选定 */
+  reselect?: boolean
+  /** `reselect` 时上一次已选定（accepted）的响应 ID，用于预勾选 */
+  chosenIds?: string[]
   selecting: boolean
   emptyNotice: string
   demandStatus: string
-}>()
+}>(), { reselect: false, chosenIds: () => [] })
 
 const emit = defineEmits<{
   retry: []
   submit: [ids: string[]]
+  deselect: []
 }>()
 
 const selection = ref<string[]>([])
 
-/* 列表刷新后清空多选（提交成功会触发父级重新拉取） */
+/* 列表刷新或进入重新选定态时重置多选：初次选定清空，重新选定回填上一次的选定结果 */
 watch(
-  () => props.responses,
+  [() => props.responses, () => props.reselect, () => props.chosenIds],
   () => {
-    selection.value = []
+    selection.value = props.reselect ? [...props.chosenIds] : []
   },
+  { immediate: true },
+)
+
+/* 可选行：初次选定仅「待选定」；重新选定时「待选定」与「已选定」均可切换（可改选/取消） */
+function selectable(r: MyResponseItem): boolean {
+  const status = r.status ?? 'pending'
+  if (props.canSelect) return status === 'pending'
+  if (props.reselect) return status === 'pending' || status === 'accepted'
+  return false
+}
+
+const submitLabel = computed(() => {
+  const count = selection.value.length ? `（已选 ${formatZhNumber(selection.value.length)} 项）` : ''
+  return props.canSelect ? `提交立项${count}` : `保存新的承接方${count}`
+})
+
+const tipText = computed(() =>
+  props.canSelect
+    ? '可多选意向承接方；提交后需求转为「已选定」，由社区管理员确认后立项'
+    : '可重新选定承接方：保存后覆盖上一次的选定结果；也可直接撤销选定，需求回到「已发布」',
 )
 
 function toggleSelection(responseId: string) {
@@ -39,15 +65,28 @@ function toggleSelection(responseId: string) {
   else selection.value.push(responseId)
 }
 
+/* 响应人展示口径：真实姓名（身份 · 昵称），避免同名/同昵称响应者混淆（客户端不展示用户 ID） */
+function responderLabel(r: MyResponseItem): string {
+  const identity = r.responderIdentity ? identityLabels[r.responderIdentity] ?? '' : ''
+  return userSubjectLabel({
+    realName: r.responderRealName ?? r.responderName,
+    nickname: r.responderNickname,
+    identity,
+  }) || '响应方'
+}
+
 function onSubmit() {
   if (!selection.value.length) {
     Toast('请至少选择一位意向承接方')
     return
   }
+  const confirmWord = props.canSelect
+    ? { title: '提交立项', content: `已选择 ${formatZhNumber(selection.value.length)} 位意向承接方。提交后将确定承接方并进入立项流程，不可更改。` }
+    : { title: '保存新的承接方', content: `已选择 ${formatZhNumber(selection.value.length)} 位意向承接方。保存后将覆盖上一次的选定结果。` }
   /* v48：提交立项不可逆（需求转已选定、由社区管理员立项），二次确认时复述后果 */
   DialogPlugin.confirm({
-    title: '提交立项',
-    content: `已选择 ${formatZhNumber(selection.value.length)} 位意向承接方。提交后将确定承接方并进入立项流程，不可更改。`,
+    title: confirmWord.title,
+    content: confirmWord.content,
     cancelBtn: '再想想',
     confirmBtn: '确认提交',
     onConfirm: () => emit('submit', [...selection.value]),
@@ -67,7 +106,7 @@ function onSubmit() {
       :class="{ 'is-chosen': r.status === 'accepted' }"
     >
       <div class="owner-response-head">
-        <strong>{{ r.responderName ?? '响应方' }}</strong>
+        <strong>{{ responderLabel(r) }}</strong>
         <StateTag kind="response" :value="r.status ?? 'pending'" />
       </div>
       <p v-if="r.note" class="owner-response-note">{{ r.note }}</p>
@@ -80,34 +119,47 @@ function onSubmit() {
       <p v-if="r.email" class="owner-response-detail">邮箱：{{ r.email }}</p>
       <p class="owner-response-meta">{{ formatLocalDateTime(r.at) }}</p>
       <Button
-        v-if="canSelect && (r.status ?? 'pending') === 'pending'"
+        v-if="selectable(r)"
         size="small"
         variant="outline"
         :theme="selection.includes(r.id) ? 'primary' : 'default'"
+        :aria-pressed="selection.includes(r.id)"
         @click="toggleSelection(r.id)"
       >
         {{ selection.includes(r.id) ? '已选择' : '选择为意向承接方' }}
       </Button>
     </div>
-    <p v-if="canSelect" class="selection-tip">可多选意向承接方；提交后需求转为「已选定」，由社区管理员确认后立项</p>
+    <p v-if="canSelect || reselect" class="selection-tip">{{ tipText }}</p>
     <Button
-      v-if="canSelect"
+      v-if="canSelect || reselect"
       theme="primary"
       block
       class="submit-btn"
       :loading="selecting"
       @click="onSubmit"
     >
-        提交立项{{ selection.length ? `（已选 ${formatZhNumber(selection.length)} 项）` : '' }}
+      {{ submitLabel }}
     </Button>
-    <p v-else-if="demandStatus === 'selected'" class="notice done">等待社区管理员确认立项</p>
+    <!-- 撤销选定：回到「已发布」，重新开放响应与选定（仅 selected 态） -->
+    <Button
+      v-if="reselect"
+      variant="outline"
+      block
+      class="deselect-btn"
+      :loading="selecting"
+      @click="emit('deselect')"
+    >
+      撤销选定
+    </Button>
+    <p v-if="demandStatus === 'selected'" class="notice done">等待社区管理员确认立项</p>
   </template>
 </template>
 
 <style scoped>
 /* 空态/错误态用 EmptyBlock 承载，仅保留「已选定等待立项」这一条状态提示 */
 .notice {
-  margin: 0;
+  /* 与上方响应卡片保持同档间距（item 6：修复「等待社区管理员确认立项」与卡片粘连） */
+  margin: var(--app-space-5) 0 0;
   font: var(--app-type-body-sm);
   color: var(--td-text-color-secondary);
   background: var(--td-bg-color-page);
@@ -175,5 +227,9 @@ function onSubmit() {
 
 .submit-btn {
   margin-top: var(--app-space-5);
+}
+
+.deselect-btn {
+  margin-top: var(--app-space-4);
 }
 </style>

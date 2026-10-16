@@ -101,6 +101,9 @@ export interface MyIdentitySummaryDto {
 export interface EnterpriseMemberDto {
   uid: string
   name: string
+  /** 真实姓名（账号口径，未登记实名时为空）；客户端成员行按「真实姓名（职位 · 昵称）」展示 */
+  realName?: string
+  nickname?: string
   role?: string
   phone?: string
   permissions?: string[]
@@ -458,7 +461,7 @@ export class AppEnterprisesService {
 
     const identityRows = await this.prisma.userIdentity.findMany({
       where: { type: 'community_enterprise', enterpriseId: ent.id },
-      include: { user: { select: { nickname: true } } },
+      include: { user: { select: { nickname: true, realName: true } } },
       orderBy: { id: 'asc' },
     })
     const invitationRows = await this.prisma.enterpriseInvitation.findMany({
@@ -503,6 +506,9 @@ export class AppEnterprisesService {
       members: identityRows.map((row) => ({
         uid: row.userId,
         name: row.user.nickname,
+        /* 真实姓名 / 昵称账号口径：企业成员里同名成员可区分（客户端不展示用户 ID） */
+        ...(row.user.realName != null ? { realName: row.user.realName } : {}),
+        nickname: row.user.nickname,
         role: row.title,
         ...(canManageMembers && row.memberPhone ? { phone: row.memberPhone } : {}),
         permissions: row.userId === ent.contactUserId ? [...ENTERPRISE_PERMISSIONS] : row.permissions,
@@ -953,7 +959,7 @@ export class AppEnterprisesService {
 
     const identityRows = await this.prisma.userIdentity.findMany({
       where: { type: 'community_enterprise', enterpriseId: ent.id },
-      include: { user: { select: { nickname: true } } },
+      include: { user: { select: { nickname: true, realName: true } } },
       orderBy: { id: 'asc' },
     })
     const servicesText = this.toText(ent.services)

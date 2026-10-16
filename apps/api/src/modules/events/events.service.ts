@@ -29,7 +29,7 @@ interface EventQuery {
   pageSize: number
   keyword?: string
   type?: string
-  status?: string
+  status?: string[]
   participant?: string
   sortBy?: 'id' | 'startTime' | 'createdAt'
   sortOrder?: 'ascend' | 'descend'
@@ -54,7 +54,7 @@ export class EventsService {
       ]
     }
     if (query.type) where.type = query.type
-    if (query.status) where.status = query.status
+    if (query.status) where.status = { in: query.status }
     if (query.participant) {
       where.enrollments = { some: { userId: query.participant } }
     }
@@ -209,6 +209,9 @@ export class EventsService {
         checkinRadiusM: payload.checkinRadiusM ?? 200,
         checkinOpenMin: payload.checkinOpenMin ?? 30,
         checkinCloseMin: payload.checkinCloseMin ?? 30,
+        checkinLocationRequired: payload.checkinLocationRequired ?? false,
+        checkinCodeRequired: payload.checkinCodeRequired ?? true,
+        checkinCode: this.resolveCheckinCode(payload),
         cancelDeadlineHours: payload.cancelDeadlineHours ?? 24,
         description: sanitizeHtml(payload.description),
         tags: payload.tags,
@@ -261,6 +264,9 @@ export class EventsService {
         checkinRadiusM: payload.checkinRadiusM ?? 200,
         checkinOpenMin: payload.checkinOpenMin ?? 30,
         checkinCloseMin: payload.checkinCloseMin ?? 30,
+        checkinLocationRequired: payload.checkinLocationRequired ?? false,
+        checkinCodeRequired: payload.checkinCodeRequired ?? true,
+        checkinCode: this.resolveCheckinCode(payload),
         cancelDeadlineHours: payload.cancelDeadlineHours ?? 24,
         visibilityIdentities: payload.visibilityIdentities,
         visibilityLevels: payload.visibilityLevels,
@@ -624,6 +630,15 @@ export class EventsService {
     await this.prisma.$transaction(async (tx) => {
       await this.issuePointsByValueInTransaction(tx, userId, value, reason)
     })
+  }
+
+  /* 签到码落库口径：required=false → 置空（不再要求输码）；
+   * required=true（或未传，默认开）→ 有合法 6 位码沿用，否则生成 6 位随机数（留空保存/清空轮换） */
+  private resolveCheckinCode(payload: EventPayloadDto): string | null {
+    if (payload.checkinCodeRequired === false) return null
+    const code = payload.checkinCode ?? ''
+    if (/^\d{6}$/.test(code)) return code
+    return String(Math.floor(100000 + Math.random() * 900000))
   }
 
   /* 自定义积分值发放 —— 在调用方事务内原子自增余额并写流水（与 PointsEngineService 同口径，

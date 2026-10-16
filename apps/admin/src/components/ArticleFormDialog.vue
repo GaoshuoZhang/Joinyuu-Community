@@ -5,6 +5,7 @@ import type { FormProps } from 'tdesign-vue-next'
 import { focusFirstInvalid, useDialogDirtyGuard, usePageDirtyGuard } from '@/utils/form'
 import { createArticle, fetchArticleColumns, updateArticle, updateSubmissionArticle } from '@/api/contents'
 import { fetchPublisherOptions } from '@/api/demands'
+import { enterpriseSubjectLabel, userSubjectLabel } from '@/utils/subjectLabel'
 import type { Article, ArticleChannel } from '@/types'
 
 const RichEditor = defineAsyncComponent(() => import('@/components/RichEditor.vue'))
@@ -55,8 +56,8 @@ async function loadAuthorOptions() {
     publisherUsers.value = opts.users
     publisherEnterprises.value = opts.enterprises
     authorOptions.value = [
-      ...opts.enterprises.map((e) => ({ label: `${e.name}（${e.tag} · ${e.id}）`, value: `E:${e.id}` })),
-      ...opts.users.map((u) => ({ label: `${u.nickname}（${u.tag} · ${u.uid}）`, value: `U:${u.uid}` })),
+      ...opts.enterprises.map((e) => ({ label: enterpriseSubjectLabel({ name: e.name, identity: e.tag, enterpriseId: e.id }), value: `E:${e.id}` })),
+      ...opts.users.map((u) => ({ label: userSubjectLabel({ realName: u.realName, nickname: u.nickname, uid: u.uid, identity: u.tag }), value: `U:${u.uid}` })),
     ]
     publisherLoadError.value = ''
   } catch (e) {

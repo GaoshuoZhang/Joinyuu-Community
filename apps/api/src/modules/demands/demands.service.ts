@@ -27,13 +27,28 @@ import type { ReviewRespondentDto } from './dto/review-respondent.dto'
 import type { UpdateRespondentDto } from './dto/update-respondent.dto'
 import type { InitiateProjectDto } from './dto/initiate-project.dto'
 
-type DemandWithRespondents = Demand & { respondents: DemandRespondent[] }
+/** 响应行 + 响应者账号（列表展示真实姓名 / 昵称 / 用户 ID，用于区分同名用户；代报名无账号时为空） */
+type RespondentWithUser = DemandRespondent & {
+  user?: { uid: string; nickname: string; realName: string | null } | null
+}
+type DemandWithRespondents = Demand & { respondents: RespondentWithUser[] }
+
+/** 响应者账号查询字段（真实姓名/昵称/用户 ID）：响应列表与响应审核列表共用 */
+const RESPONDENT_USER_SELECT = { uid: true, nickname: true, realName: true } as const
 
 type DemandRow = Omit<DemandWithRespondents, 'respondents'>
 
 export interface RespondentDto {
   /** 响应记录编号（响应审核定位、列表稳定行键） */
   id: number
+  /** 响应者用户 ID（代报名等无账号的响应不落此字段） */
+  userId?: string
+  /** 响应者真实姓名（来自账号，非响应快照；与昵称、用户 ID 一起用于区分同名用户） */
+  realName?: string
+  /** 响应者昵称 */
+  nickname?: string
+  /** 响应者身份快照（type/enterpriseName 等），列表用于身份标签 */
+  responderIdentity?: Prisma.JsonValue
   name: string
   enterprise: string
   phone?: string
@@ -106,6 +121,8 @@ export interface DemandDto {
   responseCount: number
   /** 待审核响应数（未撤回且 status = pending_review） */
   pendingResponseCount: number
+  /** 关联项目状态（closed/archived 时允许「重新立项」；已归档项目记为 archived） */
+  projectStatus?: string
   deletedAt?: string
   respondents: RespondentDto[]
 }
@@ -117,6 +134,11 @@ export interface PendingRespondentDto {
   demandTitle: string
   demandStatus: string
   publisherName: string
+  /** 响应者用户 ID（代报名等无账号的响应不落此字段） */
+  userId?: string
+  /** 响应者真实姓名 / 昵称（来自账号；与用户 ID 一起用于区分同名用户） */
+  realName?: string
+  nickname?: string
   name: string
   enterprise: string
   /** 响应者身份快照（type/enterpriseName 等），列表用于身份标签 */
@@ -158,7 +180,7 @@ export interface PublisherOptionsDto {
   }>
 }
 
-function toRespondentDto(r: DemandRespondent): RespondentDto {
+function toRespondentDto(r: RespondentWithUser): RespondentDto {
   const dto: RespondentDto = {
     id: r.id,
     name: r.name,
@@ -167,6 +189,12 @@ function toRespondentDto(r: DemandRespondent): RespondentDto {
     at: r.at,
     status: r.status,
   }
+  /* 响应者账号口径（真实姓名/昵称/用户 ID）：后台与发布者列表据此区分同名用户；代报名无账号则不下发 */
+  if (r.userId != null) dto.userId = r.userId
+  if (r.user?.realName != null) dto.realName = r.user.realName
+  if (r.user?.nickname != null) dto.nickname = r.user.nickname
+  /* 身份快照：响应人列据此展示「真实姓名（身份 · 昵称 · 用户ID）」中的身份段 */
+  if (r.responderIdentity != null) dto.responderIdentity = r.responderIdentity
   if (r.phone != null) dto.phone = r.phone
   if (r.email != null) dto.email = r.email
   if (r.quote != null) dto.quote = r.quote
@@ -204,7 +232,8 @@ function toDemandDto(d: DemandWithRespondents): DemandDto {
     createdAt: d.createdAt,
     description: d.description,
     tags: d.tags,
-    respondents: d.respondents.map(toRespondentDto),
+    /* 只映射「有效响应」（未撤回）：已撤回/审核驳回失效的记录不进「响应记录」，与列表「N 人响应」口径一致 */
+    respondents: active.map(toRespondentDto),
     responseCount: active.length,
     pendingResponseCount: active.filter((r) => r.status === 'pending_review').length,
   }
@@ -262,7 +291,7 @@ export class DemandsService {
       where.category = entry ? { in: [entry.code, entry.label] } : query.category
     }
     if (query.demandType) where.demandType = query.demandType
-    if (query.status) where.status = query.status
+    if (query.status) where.status = { in: query.status }
     if (query.publisherId) where.publisherId = query.publisherId
 
     /* 企业筛选下沉数据库：社区企业按身份快照 enterpriseId；合作企业按档案名匹配快照 enterpriseName（档案不存在则空集） */
@@ -320,14 +349,15 @@ export class DemandsService {
       total = count
     }
 
-    /* 仅当页批量补取响应记录（替代全量 include，随分页收缩载入量） */
+    /* 仅当页批量补取响应记录（替代全量 include，随分页收缩载入量）；连带响应者账号字段供列表显示姓名口径 */
     const respondents = rows.length
       ? await this.prisma.demandRespondent.findMany({
           where: { demandId: { in: rows.map((d) => d.id) } },
           orderBy: { id: 'asc' },
+          include: { user: { select: RESPONDENT_USER_SELECT } },
         })
       : []
-    const byDemand = new Map<string, DemandRespondent[]>()
+    const byDemand = new Map<string, RespondentWithUser[]>()
     for (const r of respondents) {
       const arr = byDemand.get(r.demandId) ?? []
       arr.push(r)
@@ -335,16 +365,31 @@ export class DemandsService {
     }
 
     const demandDtos = rows.map((d) => toDemandDto({ ...d, respondents: byDemand.get(d.id) ?? [] }))
-    return { list: await this.withCategoryLabels(demandDtos), total }
+    return { list: await this.attachProjectStatus(await this.withCategoryLabels(demandDtos)), total }
   }
 
   async findOne(id: string): Promise<DemandDto> {
     const demand = await this.prisma.demand.findUnique({
       where: { id },
-      include: { respondents: { orderBy: { id: 'asc' } } },
+      include: {
+        respondents: { orderBy: { id: 'asc' }, include: { user: { select: RESPONDENT_USER_SELECT } } },
+      },
     })
     if (!demand) throw new NotFoundException('需求不存在')
-    return (await this.withCategoryLabels([toDemandDto(demand)]))[0]
+    const [dto] = await this.withCategoryLabels([toDemandDto(demand)])
+    return (await this.attachProjectStatus([dto]))[0]
+  }
+
+  /** 补关联项目状态（已归档项目记为 `archived`）：立项后「重新立项」入口据此判断关联项目是否已关闭/归档（D） */
+  private async attachProjectStatus(dtos: DemandDto[]): Promise<DemandDto[]> {
+    const ids = [...new Set(dtos.map((d) => d.projectId).filter((v): v is string => !!v))]
+    if (ids.length === 0) return dtos
+    const projects = await this.prisma.project.findMany({
+      where: { id: { in: ids } },
+      select: { id: true, status: true, deletedAt: true },
+    })
+    const byId = new Map(projects.map((p) => [p.id, p.deletedAt != null ? 'archived' : p.status]))
+    return dtos.map((d) => (d.projectId && byId.has(d.projectId) ? { ...d, projectStatus: byId.get(d.projectId) } : d))
   }
 
   async create(dto: CreateDemandDto, operator: DemandOperator): Promise<DemandDto> {
@@ -631,7 +676,10 @@ export class DemandsService {
         orderBy: { at: 'desc' },
         skip: (query.page - 1) * query.pageSize,
         take: query.pageSize,
-        include: { demand: { select: { id: true, title: true, status: true, publisherName: true } } },
+        include: {
+          demand: { select: { id: true, title: true, status: true, publisherName: true } },
+          user: { select: RESPONDENT_USER_SELECT },
+        },
       }),
       this.prisma.demandRespondent.count({ where }),
     ])
@@ -649,6 +697,10 @@ export class DemandsService {
           at: r.at,
           status: r.status,
         }
+        /* 响应者账号口径：真实姓名 / 昵称 / 用户 ID（区分同名用户） */
+        if (r.userId != null) dto.userId = r.userId
+        if (r.user?.realName != null) dto.realName = r.user.realName
+        if (r.user?.nickname != null) dto.nickname = r.user.nickname
         if (r.responderIdentity != null) dto.responderIdentity = r.responderIdentity
         if (r.quote != null) dto.quote = r.quote
         if (r.timeline != null) dto.timeline = r.timeline
@@ -800,39 +852,109 @@ export class DemandsService {
     return { code: 0 }
   }
 
-  /* 立项：published|selected → projected；项目新增与双向关联（demand.projectId ↔ project.sourceDemandId）置于同一事务；
-   * 发布者已选定承接方（selected）时，向被选中的响应者补发立项积分/经验并通知。 */
+  /* 立项：published|selected → projected；项目新增与双向关联（demand.projectId ↔ project.sourceDemandId）置于同一事务。
+   * 承接方与响应的收敛：与立项承接方同主体的响应 → undertaken（已承接）；已选定（或本次勾选）但未入选的响应 → closed（已结束）并站内信告知。
+   * 立项积分/经验与「承接成功」通知只发给**实际承接**的响应者。 */
   async initiateProject(id: string, dto: InitiateProjectDto, operator: string) {
     const demand = await this.prisma.demand.findUnique({ where: { id } })
     if (!demand) throw new NotFoundException('需求不存在')
-    if (demand.status !== 'published' && demand.status !== 'selected') {
+    /* 已立项需求：关联项目已关闭/归档时允许「重新立项」（新建项目并切换到新项目，原项目保留为历史）（D） */
+    const isReinitiate = demand.status === 'projected'
+    if (isReinitiate) {
+      const current = demand.projectId
+        ? await this.prisma.project.findUnique({
+            where: { id: demand.projectId },
+            select: { status: true, deletedAt: true },
+          })
+        : null
+      if (!current || (current.status !== 'closed' && current.deletedAt == null)) {
+        throw new ConflictException('关联项目仍在进行，暂不可重新立项')
+      }
+    } else if (demand.status !== 'published' && demand.status !== 'selected') {
       throw new ConflictException('仅已发布或已选定承接方的需求可立项')
     }
 
-    const selected = demand.status === 'selected'
-      ? await this.prisma.demandRespondent.findMany({
-          where: { demandId: demand.id, status: 'accepted', withdrawnAt: null },
-        })
-      : []
+    /* 立项采用的承接方与响应记录的对应关系（事务外先算好，事务内用条件更新落地）：
+     * - accepted：发布者已选定的承接方
+     * - pending：本次「选定承接方」由管理员代需求方勾选的响应（dto.respondentIds）
+     * - 全部未撤回响应：管理员在立项表单里手工补选的承接方若曾响应，也要落到「已承接」 */
+    const requestedIds = [...new Set(dto.respondentIds ?? [])]
+    const [accepted, pendingRows, reviewRows] = await Promise.all([
+      this.prisma.demandRespondent.findMany({ where: { demandId: demand.id, status: 'accepted', withdrawnAt: null } }),
+      this.prisma.demandRespondent.findMany({ where: { demandId: demand.id, status: 'pending', withdrawnAt: null } }),
+      /* 待审核响应：立项不得以「未过审」的响应者承接，否则该响应永不被审核、积分与通知也不发 */
+      this.prisma.demandRespondent.findMany({ where: { demandId: demand.id, status: 'pending_review', withdrawnAt: null } }),
+    ])
+    const requested = pendingRows.filter((r) => requestedIds.includes(r.id))
+    if (requested.length !== requestedIds.length) {
+      throw new BadRequestException('存在不可选定的响应（仅待处理的响应可选定，请刷新后重试）')
+    }
+
+    const candidates = [...accepted, ...pendingRows.filter((r) => !accepted.some((a) => a.id === r.id))]
+    const externalIds = await this.resolveExternalEnterpriseIds([...candidates, ...reviewRows])
+    const undertakerKeys = new Set(dto.undertakers.map((u) => `${u.type}:${u.id}`))
+    const subjectKeyOf = (r: DemandRespondent): string | null => {
+      const ri = r.responderIdentity as Record<string, unknown> | null
+      if (ri?.type === 'community_enterprise' && ri.enterpriseId) return `enterprise:${ri.enterpriseId}`
+      if (ri?.type === 'external_enterprise') {
+        const matched = externalIds.get(this.rowKey(r))
+        return matched ? `enterprise:${matched}` : null
+      }
+      return r.userId ? `individual:${r.userId}` : null
+    }
+    /* 承接方对应响应仍在待审核：拒绝立项，避免绕过响应审核（该响应也无法被收敛为终态） */
+    const blockedByReview = reviewRows.find((r) => {
+      const key = subjectKeyOf(r)
+      return key != null && undertakerKeys.has(key)
+    })
+    if (blockedByReview) {
+      throw new ConflictException(
+        `承接方「${blockedByReview.name}」的响应仍在「待审核」，请先在「响应审核」中处理后再立项`,
+      )
+    }
+    /* 入选（承接方与响应同主体）→ 已承接；其余**全部有效响应**（已选定 / 本次勾选 / 未入选的待选定）
+     * → 已结束，避免立项后仍悬挂「待选定 / 已选定」并可点击必然 409 的撤回 */
+    const undertaken = candidates.filter((r) => {
+      const key = subjectKeyOf(r)
+      return key != null && undertakerKeys.has(key)
+    })
+    const undertakenIds = new Set(undertaken.map((r) => r.id))
+    const dropped = candidates.filter((r) => !undertakenIds.has(r.id))
 
     const project = await this.prisma.$transaction(async (tx) => {
-      /* 条件抢占：仅当需求仍为 published/selected 且未立项时才准予立项，避免并发重复立项 */
+      /* 条件抢占：仅当需求仍为 published/selected 且未立项（或已立项但关联项目未变）时才准予立项，
+       * 避免并发重复立项；重新立项时锁定原 projectId 不变，防止并发期间项目被替换 */
       const claim = await tx.demand.updateMany({
-        where: { id: demand.id, deletedAt: null, status: { in: ['published', 'selected'] }, projectId: null },
+        where: isReinitiate
+          ? { id: demand.id, deletedAt: null, status: 'projected', projectId: demand.projectId }
+          : { id: demand.id, deletedAt: null, status: { in: ['published', 'selected'] }, projectId: null },
         data: { status: 'projected', archivableAt: formatNow() },
       })
       if (claim.count !== 1) throw new ConflictException('该需求已立项或被处理')
 
+      /* 本次勾选的响应先落「已选定」：抢占失败即说明状态已变化，整体回滚 */
+      if (requestedIds.length) {
+        const claimed = await tx.demandRespondent.updateMany({
+          where: { demandId: demand.id, id: { in: requestedIds }, status: 'pending', withdrawnAt: null },
+          data: { status: 'accepted' },
+        })
+        if (claimed.count !== requestedIds.length) throw new ConflictException('响应状态已变化，请刷新后重试')
+      }
+
       /* 需求立项：项目需求方/创建人/联系方式/合同价格一律照搬需求快照（客户端传值不生效），
        * 保证项目详情可追溯需求方，且需求发布方（含企业联系人）可访问项目。
-       * 需求已无独立「创建人」字段，项目的创建人取需求提交人（发布方）。 */
+       * 社区自建需求（后台代发，publisherIdentity.type='official'）在客户端无对应账号，
+       * 统一标记为「社区官方」，避免把后台账号当作一个用户展示（H）。 */
+      const isOfficialPublisher = (demand.publisherIdentity as { type?: string } | null)?.type === 'official'
       const created = await this.projects.createProjectInHostTx(tx, {
         ...dto,
-        demanderId: demand.publisherId,
-        demanderName: demand.publisherName,
-        demanderIdentity: (demand.publisherIdentity ?? null) as Prisma.InputJsonValue | null,
-        creatorName: demand.publisherName,
-        creatorId: demand.publisherId,
+        demanderId: isOfficialPublisher ? '' : demand.publisherId,
+        demanderName: isOfficialPublisher ? '社区官方' : demand.publisherName,
+        demanderIdentity: isOfficialPublisher
+          ? { type: 'official', title: demand.publisherName }
+          : ((demand.publisherIdentity ?? null) as Prisma.InputJsonValue | null),
+        creatorName: isOfficialPublisher ? '社区官方' : demand.publisherName,
+        creatorId: isOfficialPublisher ? '' : demand.publisherId,
         contactName: demand.contactName ?? undefined,
         contactPhone: demand.contactPhone ?? undefined,
         contactEmail: demand.contactEmail ?? undefined,
@@ -841,7 +963,22 @@ export class DemandsService {
       await tx.project.update({ where: { id: created.id }, data: { sourceDemandId: demand.id } })
       await tx.demand.update({ where: { id: demand.id }, data: { projectId: created.id } })
 
-      /* 立项奖励：发起方 + 被选中的承接方（与需求承接规则一致，幂等键按需求维度去重） */
+      /* 响应状态收敛：入选 → undertaken（客户端「我的响应」显示「已承接」）；
+       * 已选定/已勾选但未入选 → closed（已结束），不再有「待选定/已选定」悬挂态 */
+      if (undertakenIds.size) {
+        await tx.demandRespondent.updateMany({
+          where: { demandId: demand.id, id: { in: [...undertakenIds] } },
+          data: { status: 'undertaken' },
+        })
+      }
+      if (dropped.length) {
+        await tx.demandRespondent.updateMany({
+          where: { demandId: demand.id, id: { in: dropped.map((r) => r.id) } },
+          data: { status: 'closed' },
+        })
+      }
+
+      /* 立项奖励：发起方 + 实际承接的响应者（与需求承接规则一致，幂等键按需求维度去重） */
       await this.points.issuePointsInTransaction(tx, demand.publisherId, 'demand_undertaken', '需求立项获得积分', `demand_undertaken:${demand.publisherId}:${demand.id}`)
       /* 后台代发需求的发布者可能是企业 ID，站内信仅发给真实用户 */
       const publisherUserId = await this.resolveNotifiableUser(tx, demand.publisherId)
@@ -853,7 +990,7 @@ export class DemandsService {
           link: `/me/projects/${created.id}`,
         })
       }
-      for (const response of selected) {
+      for (const response of undertaken) {
         if (response.userId) {
           await this.points.issuePointsInTransaction(tx, response.userId, 'demand_undertaken', '承接需求立项获得积分', `demand_undertaken:${response.userId}:${demand.id}`)
           await this.notify.pushNoticeInTransaction(tx, response.userId, {
@@ -866,6 +1003,16 @@ export class DemandsService {
         const exp = this.respondentExperience(response)
         if (exp) await this.points.issueExperienceInTransaction(tx, exp.targetType, exp.targetId, 'project_undertaken', '承接需求立项获得项目经验')
       }
+      /* 未入选的响应者：明确告知本次未被采用，避免长期停留在「已选定」却毫无后续 */
+      for (const response of dropped) {
+        if (!response.userId) continue
+        await this.notify.pushNoticeInTransaction(tx, response.userId, {
+          type: 'demand',
+          title: '需求立项结果',
+          content: `您对需求「${demand.title}」的响应本次未被采用，该响应已结束。`,
+          link: '/me/responses',
+        })
+      }
       return created
     })
 
@@ -873,9 +1020,9 @@ export class DemandsService {
       module: '需求管理',
       action: '需求立项',
       target: `${demand.id} · ${demand.title}`,
-      detail: `生成项目 ${project.code}`,
+      detail: `生成项目 ${project.code}；承接响应 ${undertakenIds.size} 条，未入选收敛 ${dropped.length} 条`,
       before: { status: demand.status },
-      after: { status: 'projected', projectId: project.id },
+      after: { status: 'projected', projectId: project.id, undertakenRespondents: undertakenIds.size, droppedRespondents: dropped.length },
       operator,
     })
 
@@ -922,9 +1069,90 @@ export class DemandsService {
       })),
       ...users.map((u) => {
         const tag = u.identities.some((i) => i.type === 'community_individual') ? '社区个体' : '个人用户'
-        return { group: tag, label: `${u.nickname}（${tag} · ${u.uid}）`, value: `individual:${u.uid}` }
+        /* 用户类承接方：真实姓名（身份 · 昵称 · 用户 ID）——多个同名/同昵称用户可区分 */
+        return { group: tag, label: `${u.realName || u.nickname}（${tag} · ${u.nickname} · ${u.uid}）`, value: `individual:${u.uid}` }
       }),
     ]
+  }
+
+  /* 需求立项承接方预填：需求方已选定的承接方（status=accepted 且未撤回）转为承接方选项，
+   * 与 undertakerOptions() 同形（value=enterprise:<企业ID> / individual:<用户ID> / custom:<组织名>），
+   * 供「需求立项」表单自动带入（可多承接方）；需求未选定承接方时返回空数组。
+   * 传入 respondentIds 时改为按指定响应记录（「立项前置选定承接方」勾选项，未撤回）取选项。 */
+  async selectedRespondentOptions(demandId: string, respondentIds?: number[]): Promise<UndertakerOptionDto[]> {
+    const demand = await this.prisma.demand.findUnique({ where: { id: demandId }, select: { id: true } })
+    if (!demand) throw new NotFoundException('需求不存在')
+
+    const requested = respondentIds?.filter((id) => Number.isInteger(id) && id > 0)
+    const where: Prisma.DemandRespondentWhereInput = requested?.length
+      ? { demandId, id: { in: requested }, withdrawnAt: null }
+      : { demandId, status: 'accepted', withdrawnAt: null }
+    const rows = await this.prisma.demandRespondent.findMany({ where, orderBy: { id: 'asc' } })
+    if (rows.length === 0) return []
+
+    const externalIds = await this.resolveExternalEnterpriseIds(rows)
+    /* 个人/社区个体承接方：批量回查账号真实姓名与昵称，label 与 undertakerOptions() 同口径 */
+    const userUids = [...new Set(rows.filter((r) => r.userId && !r.enterprise).map((r) => r.userId as string))]
+    const users = userUids.length
+      ? await this.prisma.user.findMany({ where: { uid: { in: userUids } }, include: { identities: true } })
+      : []
+    const userByUid = new Map(users.map((u) => [u.uid, u]))
+    const seen = new Set<string>()
+    const options: UndertakerOptionDto[] = []
+    for (const row of rows) {
+      const ri = row.responderIdentity as Record<string, unknown> | null
+      const matchedEnterpriseId = ri?.type === 'community_enterprise'
+        ? (ri.enterpriseId as string | undefined)
+        : externalIds.get(this.rowKey(row))
+
+      let option: UndertakerOptionDto
+      if (matchedEnterpriseId) {
+        option = {
+          group: ri?.type === 'external_enterprise' ? '合作企业' : '社区企业',
+          label: `${row.enterprise || row.name}（${ri?.type === 'external_enterprise' ? '合作企业' : '社区企业'} · ${matchedEnterpriseId}）`,
+          value: `enterprise:${matchedEnterpriseId}`,
+        }
+      } else if (row.enterprise) {
+        /* 合作企业未匹配到档案（或历史数据缺企业 ID）：按自定义承接方带入组织名，避免误标为个人 */
+        option = {
+          group: '自定义',
+          label: `${row.enterprise}（合作企业 · 自定义）`,
+          value: `custom:${encodeURIComponent(row.enterprise)}`,
+        }
+      } else if (row.userId) {
+        const user = userByUid.get(row.userId)
+        const tag = user?.identities.some((i) => i.type === 'community_individual') ? '社区个体' : '个人用户'
+        const nickname = user?.nickname ?? row.name
+        const realName = user?.realName || nickname
+        option = { group: tag, label: `${realName}（${tag} · ${nickname} · ${row.userId}）`, value: `individual:${row.userId}` }
+      } else {
+        continue
+      }
+      if (seen.has(option.value)) continue
+      seen.add(option.value)
+      options.push(option)
+    }
+    return options
+  }
+
+  /** 合作企业响应按组织名回查企业档案 ID（同名多条取首条），供立项预填企业承接方 */
+  private async resolveExternalEnterpriseIds(rows: DemandRespondent[]): Promise<Map<string, string>> {
+    const names = rows
+      .filter((r) => ((r.responderIdentity as Record<string, unknown> | null)?.type === 'external_enterprise') && !!r.enterprise)
+      .map((r) => r.enterprise)
+    if (names.length === 0) return new Map()
+    const profiles = await this.prisma.externalEnterpriseProfile.findMany({ where: { name: { in: names } } })
+    const byName = new Map(profiles.map((p) => [p.name, p.id]))
+    const result = new Map<string, string>()
+    for (const row of rows) {
+      const id = byName.get(row.enterprise)
+      if (id) result.set(this.rowKey(row), id)
+    }
+    return result
+  }
+
+  private rowKey(row: DemandRespondent): string {
+    return `${row.demandId}:${row.id}`
   }
 
   async publisherOptions(): Promise<PublisherOptionsDto> {

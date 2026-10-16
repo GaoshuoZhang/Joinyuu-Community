@@ -143,11 +143,11 @@ export interface LeasePayload {
 
 /* GET /api/admin/renter-options — 租赁方选项（全部个人用户 + 全部企业，含联系电话用于自动填充） */
 export async function fetchRenterOptions(): Promise<{
-  users: { uid: string; nickname: string; phone: string }[]
+  users: { uid: string; nickname: string; realName: string; phone: string }[]
   enterprises: { id: string; name: string; contactName: string; contactPhone: string }[]
 }> {
   return httpGet<{
-    users: { uid: string; nickname: string; phone: string }[]
+    users: { uid: string; nickname: string; realName: string; phone: string }[]
     enterprises: { id: string; name: string; contactName: string; contactPhone: string }[]
   }>('/renter-options')
 }

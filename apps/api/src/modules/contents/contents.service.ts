@@ -115,7 +115,7 @@ export class ContentsService {
       ]
     }
     if (query.columnId) where.columnId = query.columnId
-    if (query.status) where.status = query.status
+    if (query.status) where.status = { in: query.status }
     if (query.channel) where.channel = query.channel
 
     /* 列表查询 omit 正文（content 体积大，列表不依赖；编辑/详情按 id 单独拉取），
@@ -155,7 +155,7 @@ export class ContentsService {
     if (!article) throw new NotFoundException('文章不存在')
     const rows = await this.prisma.articleComment.findMany({
       where: { articleId },
-      include: { user: { select: { nickname: true, avatar: true } } },
+      include: { user: { select: { nickname: true, realName: true, avatar: true } } },
       orderBy: [{ at: 'asc' }, { id: 'asc' }],
     })
     return {
@@ -169,6 +169,7 @@ export class ContentsService {
           uid: row.userId,
           userName: row.userName,
           nickname: row.user.nickname,
+          realName: row.user.realName ?? undefined,
           avatar: row.user.avatar ?? undefined,
           content: row.content,
           at: row.at,

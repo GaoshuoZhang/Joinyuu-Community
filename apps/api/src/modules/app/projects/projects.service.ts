@@ -9,11 +9,11 @@ import type { Milestone, Project, ProjectUndertaker } from '@prisma/client'
 import { PrismaService } from '../../../common/prisma/prisma.service'
 import { IdGeneratorService } from '../../../common/id-generator/id-generator.service'
 import { NotificationService } from '../../../common/notify/notification.service'
-import { PointsEngineService } from '../../../common/engine/points-engine/points-engine.service'
 import { formatNow } from '../../../common/utils/time'
 import type { SubmitMilestoneDto } from './dto/submit-milestone.dto'
 import type { ReturnMilestoneDto } from './dto/return-milestone.dto'
 import { StorageService } from '../../../common/storage/storage.service'
+import { ProjectMilestoneReviewService } from '../../projects/project-milestone-review.service'
 
 interface LoadedProject {
   project: Project & { undertakers: ProjectUndertaker[]; milestones: Milestone[] }
@@ -32,8 +32,8 @@ export class AppProjectsService {
     private readonly prisma: PrismaService,
     private readonly ids: IdGeneratorService,
     private readonly notify: NotificationService,
-    private readonly points: PointsEngineService,
     private readonly storage: StorageService,
+    private readonly reviews: ProjectMilestoneReviewService,
   ) {}
 
   /** 我发起或参与的承接项目列表 */
@@ -161,96 +161,22 @@ export class AppProjectsService {
     return { code: 0 }
   }
 
-  /** 发起方验收里程碑；全部验收通过自动结项并发经验 */
+  /** 发起方验收里程碑；全部验收通过自动结项并发经验。
+   * 状态迁移/积分/结项与后台「进度节点」共用 ProjectMilestoneReviewService，避免双端漂移。 */
   async acceptMilestone(uid: string, projectId: string, milestoneId: string) {
-    const { project, isInit, initiatorUid } = await this.loadProject(uid, projectId)
+    const { isInit, initiatorUid } = await this.loadProject(uid, projectId)
     if (!isInit) throw new ForbiddenException('仅发起方可以验收里程碑')
-    const mil = project.milestones.find((m) => String(m.id) === milestoneId)
-    if (!mil) throw new NotFoundException('里程碑不存在')
-    if (mil.status !== 'submitted') throw new ConflictException('该里程碑未提交，无法验收')
-
-    const now = formatNow()
-    const respondentUids = await this.respondentUids(project.sourceDemandId)
-    let finished = false
-
-    /* 状态迁移 + 里程碑通过积分 + 重算进度/结项 + 结项经验同事务，
-     * 避免并发覆盖与「已退回但仍发经验 / progress 与真实通过数不符」 */
-    await this.prisma.$transaction(async (tx) => {
-      /* 条件更新做幂等守卫：并发/重复验收只会命中一次状态迁移 */
-      const updated = await tx.milestone.updateMany({
-        where: { id: mil.id, status: 'submitted' },
-        data: { status: 'accepted', acceptAt: now },
-      })
-      if (updated.count !== 1) throw new ConflictException('里程碑状态已变更，请刷新后重试')
-
-      /* 多选承接方时逐个发放（幂等键按里程碑+承接方去重） */
-      for (const uid of respondentUids) {
-        await this.points.issuePointsInTransaction(tx, uid, 'project_milestone', '项目里程碑通过验收', `project_milestone:${mil.id}:${uid}`)
-      }
-
-      const all = await tx.milestone.findMany({ where: { projectId: project.id } })
-      const acceptedCount = all.filter((m) => m.status === 'accepted').length
-      if (all.length > 0 && acceptedCount === all.length) {
-        await tx.project.update({
-          where: { id: project.id },
-          data: { status: 'finished', progress: 100, archivableAt: now, finishedAt: now },
-        })
-        finished = true
-        /* 结项经验（wiki §8.5）：按承接占比分配，总额 = 项目 expReward ?? project_completed 规则值 */
-        await this.points.issueProjectFinishExperienceInTransaction(tx, project.name, project.expReward, project.undertakers)
-      } else {
-        await tx.project.update({
-          where: { id: project.id },
-          data: { progress: Math.round((acceptedCount / all.length) * 100) },
-        })
-      }
-    })
-
-    for (const uid of respondentUids) {
-      await this.notify.pushNotice(uid, {
-        type: 'project',
-        title: '里程碑已验收',
-        content: `「${mil.name}」已通过验收。`,
-        link: `/me/projects/${project.id}`,
-      })
-    }
-
-    if (finished) {
-      const title = '项目已结项'
-      if (initiatorUid) {
-        await this.notify.pushNotice(initiatorUid, { type: 'project', title, content: '「' + project.name + '」已完成全部里程碑，顺利结项。', link: `/me/projects/${project.id}` })
-      }
-      for (const uid of respondentUids) {
-        await this.notify.pushNotice(uid, { type: 'project', title, content: '「' + project.name + '」已完成全部里程碑，顺利结项。', link: `/me/projects/${project.id}` })
-      }
-    }
+    await this.reviews.acceptMilestone(projectId, milestoneId, initiatorUid)
     return { code: 0 }
   }
 
   /** 发起方退回里程碑（承接方可重新提交） */
   async returnMilestone(uid: string, projectId: string, milestoneId: string, dto: ReturnMilestoneDto) {
-    const { project, isInit } = await this.loadProject(uid, projectId)
+    const { isInit } = await this.loadProject(uid, projectId)
     if (!isInit) throw new ForbiddenException('仅发起方可以退回里程碑')
-    const mil = project.milestones.find((m) => String(m.id) === milestoneId)
-    if (!mil) throw new NotFoundException('里程碑不存在')
-    if (mil.status !== 'submitted') throw new ConflictException('该里程碑未提交，无法退回')
     const reason = (dto.reason ?? '').trim()
     if (!reason) throw new BadRequestException('请填写退回原因')
-
-    const returned = await this.prisma.milestone.updateMany({
-      where: { id: mil.id, status: 'submitted' },
-      data: { status: 'returned', returnReason: reason, returnedAt: formatNow() },
-    })
-    if (returned.count !== 1) throw new ConflictException('里程碑状态已变更，请刷新后重试')
-    const respondentUids = await this.respondentUids(project.sourceDemandId)
-    for (const uid of respondentUids) {
-      await this.notify.pushNotice(uid, {
-        type: 'project',
-        title: '里程碑被退回',
-        content: `「${mil.name}」未通过验收，原因：${reason}，请修改后重新提交。`,
-        link: `/me/projects/${project.id}`,
-      })
-    }
+    await this.reviews.returnMilestone(projectId, milestoneId, reason)
     return { code: 0 }
   }
 
@@ -282,7 +208,7 @@ export class AppProjectsService {
     /* 需求方主体：优先项目快照（demanderId），历史项目回退来源需求的发布方；
      * 企业代发需求时主体为企业 ID，解析到该企业联系人（即收到「需求已达成合作」的用户）后放行 */
     const demanderSubject = project.demanderId ?? demand?.publisherId ?? null
-    initiatorUid = await this.subjectUserId(demanderSubject)
+    initiatorUid = await this.reviews.resolveSubjectUserId(demanderSubject)
     isInit = (!!initiatorUid && initiatorUid === uid) || demand?.publisherId === uid
     const myEntIds = await this.myEnterpriseIds(uid)
     const isDemander = isInit || demanderSubject === uid || myEntIds.includes(demanderSubject ?? '')
@@ -301,19 +227,6 @@ export class AppProjectsService {
       select: { enterpriseId: true },
     })
     return rows.map((r) => r.enterpriseId as string)
-  }
-
-  /** 需求方主体 ID（用户 uid / 企业 ID）→ 对应可访问的用户 uid；无法解析返回 null。
-   * 企业主体落到企业联系人：后台代企业发需求时，站内信发给联系人，项目访问也按联系人口径放行。 */
-  private async subjectUserId(subjectId: string | null): Promise<string | null> {
-    if (!subjectId) return null
-    const user = await this.prisma.user.findUnique({ where: { uid: subjectId }, select: { uid: true } })
-    if (user) return user.uid
-    const enterprise = await this.prisma.enterprise.findUnique({
-      where: { id: subjectId },
-      select: { contactUserId: true },
-    })
-    return enterprise?.contactUserId ?? null
   }
 
   /** 项目在「我的项目」列表中的承接角色 */
@@ -348,15 +261,32 @@ export class AppProjectsService {
       (u.type === 'custom' && u.refId === uid) ||
       (u.type === 'enterprise' && myEntIds.includes(u.refId))
     const partner = project.undertakers.find((u) => !matchesMe(u))
+    /* 归属标记：客户端「我的项目」按「我承接的 / 我发起的」分标签页；
+     * 两者可同时为真（既发起又承接），故不用互斥的 role 代替 */
+    const isUndertaker = project.undertakers.some(matchesMe)
+    /* 对方承接方姓名口径：企业 → 企业名；个人 → 真实姓名（昵称）——同名承接方在项目里可区分（不下发用户 ID） */
+    let partnerName: string | undefined
+    if (partner) {
+      partnerName = partner.name
+      if (partner.type === 'individual' && partner.refId) {
+        const pu = await this.prisma.user.findUnique({
+          where: { uid: partner.refId },
+          select: { realName: true, nickname: true },
+        })
+        if (pu) partnerName = `${pu.realName || pu.nickname}（${pu.nickname}）`
+      }
+    }
 
     return {
       id: project.id,
       name: project.name,
       role: roleInfo.role,
+      isInitiator,
+      isUndertaker,
       ...(roleInfo.enterpriseName ? { enterpriseName: roleInfo.enterpriseName } : {}),
       ...(roleInfo.enterpriseId ? { enterpriseId: roleInfo.enterpriseId } : {}),
       ...(project.sourceDemandId ? { sourceDemandId: project.sourceDemandId } : {}),
-      ...(partner ? { partnerName: partner.name } : {}),
+      ...(partnerName ? { partnerName } : {}),
       progress: project.progress,
       milestones: project.milestones.map((m) => this.toMilestone(m, project.id)),
       /* 结项时间优先取真实结项时间；历史数据回退到归档计时（D-109） */
@@ -391,16 +321,5 @@ export class AppProjectsService {
       }))
     }
     return result
-  }
-
-  /** 承接方 uid 列表（由需求已接受的响应反查；支持多选承接方，去重且剔除空 uid） */
-  private async respondentUids(sourceDemandId: string | null): Promise<string[]> {
-    if (!sourceDemandId) return []
-    const rows = await this.prisma.demandRespondent.findMany({
-      where: { demandId: sourceDemandId, status: 'accepted', withdrawnAt: null },
-      select: { userId: true },
-      orderBy: { id: 'asc' },
-    })
-    return [...new Set(rows.map((r) => r.userId).filter((u): u is string => !!u))]
   }
 }

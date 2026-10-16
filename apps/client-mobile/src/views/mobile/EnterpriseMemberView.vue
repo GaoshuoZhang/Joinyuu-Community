@@ -7,6 +7,7 @@ import { useAsyncList } from '@/composables/useAsyncList'
 import { useUnsavedGuard } from '@/composables/useUnsavedGuard'
 import { ApiError } from '@/api/http'
 import { ENTERPRISE_PERMISSIONS } from '@/constants/enterprise'
+import { userSubjectLabel } from '@/utils/subjectLabel'
 import EmptyBlock from '@/components/shared/EmptyBlock.vue'
 import ListSkeleton from '@/components/ListSkeleton.vue'
 import type { EnterpriseMemberPermission } from '@/types'
@@ -33,6 +34,13 @@ const member = computed(() =>
 const targetIsContact = computed(() => member.value?.isContact === true)
 const canEnter = computed(() => can('manage_members') || can('assign_permission'))
 const canSave = computed(() => can('manage_members') || (can('assign_permission') && !targetIsContact.value))
+
+/* 成员展示口径：真实姓名（社区企业 · 昵称），避免同名/同昵称成员混淆（客户端不展示用户 ID） */
+const memberLabel = computed(() => {
+  const m = member.value
+  if (!m) return ''
+  return userSubjectLabel({ realName: m.realName, nickname: m.nickname, fallbackName: m.name, identity: '社区企业' }) || m.name
+})
 
 const permissionOptions = ENTERPRISE_PERMISSIONS.map((p) => ({ label: p.label, value: p.value, content: p.desc }))
 function permissionLabels(perms?: EnterpriseMemberPermission[]): string {
@@ -143,7 +151,7 @@ async function doRemove() {
       <section class="m-card head">
         <Avatar shape="round" size="56px" class="avatar">{{ member.name.slice(0, 1) }}</Avatar>
         <div class="info">
-          <h2 class="name">{{ member.name }}</h2>
+          <h2 class="name">{{ memberLabel }}</h2>
           <p class="meta">{{ [member.role, member.phone].filter(Boolean).join(' · ') || '暂无职位信息' }}</p>
         </div>
         <Tag v-if="member.isContact" size="small" variant="light" theme="primary">负责人</Tag>

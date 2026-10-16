@@ -64,9 +64,15 @@ export async function fetchDemandResponses(id: string): Promise<MyResponseItem[]
   return httpGet<MyResponseItem[]>(`/me/demands/${id}/responses`)
 }
 
-/** POST /api/app/me/demands/:id/select — 发布者多选意向承接方并提交立项（转 selected，管理员确认后立项） */
+/** POST /api/app/me/demands/:id/select — 发布者多选意向承接方并提交立项（转 selected，管理员确认后立项）；
+ * `selected` 态再次调用 = 重新选定（覆盖上一次的选定） */
 export async function selectDemandResponders(id: string, responseIds: string[]): Promise<void> {
   await httpPost(`/me/demands/${id}/select`, { responseIds })
+}
+
+/** POST /api/app/me/demands/:id/deselect — 撤销选定（selected → published，已选定响应回退待选定） */
+export async function deselectDemandResponders(id: string): Promise<void> {
+  await httpPost(`/me/demands/${id}/deselect`, {})
 }
 
 export type { PageQuery }

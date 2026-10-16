@@ -3,6 +3,7 @@ import { computed } from 'vue'
 import { Button, Cell, Tag } from 'tdesign-mobile-vue'
 import type { EnterpriseMemberInfo, EnterpriseInvitation } from '@/types'
 import { formatZhNumber } from '@/utils/format'
+import { userSubjectLabel } from '@/utils/subjectLabel'
 import StateTag from '@/components/shared/StateTag.vue'
 
 /* 企业成员区：待接受邀请 + 成员列表（权限提示）。 */
@@ -36,6 +37,11 @@ function maskPhone(value?: string): string {
 
 function memberNote(m: EnterpriseMemberInfo): string {
   return [m.role, m.phone ? (props.canManage ? m.phone : maskPhone(m.phone)) : ''].filter(Boolean).join(' · ')
+}
+
+/* 成员展示口径：真实姓名（社区企业 · 昵称），避免同名/同昵称成员混淆（客户端不展示用户 ID） */
+function memberLabel(m: EnterpriseMemberInfo): string {
+  return userSubjectLabel({ realName: m.realName, nickname: m.nickname, fallbackName: m.name, identity: '社区企业' }) || m.name
 }
 </script>
 
@@ -76,7 +82,7 @@ function memberNote(m: EnterpriseMemberInfo): string {
         v-pressable="canManage && !m.isContact"
         v-for="m in members"
         :key="m.phone ?? m.name"
-        :title="m.name"
+        :title="memberLabel(m)"
         :note="memberNote(m)"
         :bordered="false"
         :arrow="canManage && !m.isContact"

@@ -1,5 +1,5 @@
 import { DEFAULT_LIST_PAGE_SIZE, httpGet, httpPost } from './http'
-import type { CheckinPayload, CommunityEvent, EventEnrollmentResult, EventFeedbackPayload, EventTicket, MyEnrollmentItem, MyEventFeedback, PageResult } from '@/types'
+import type { CheckinPayload, CheckinResult, CommunityEvent, EventEnrollmentResult, EventFeedbackPayload, EventTicket, MyEnrollmentItem, MyEventFeedback, PageResult } from '@/types'
 
 /** GET /api/app/events — 活动中心；HTTP 模式由服务端执行状态和可见范围过滤。 */
 export async function fetchEvents(query: { type?: string; keyword?: string; page?: number; pageSize?: number } = {}): Promise<PageResult<CommunityEvent>> {
@@ -49,7 +49,7 @@ export async function fetchMyEnrollments(query: { page?: number; pageSize?: numb
   return httpGet<PageResult<MyEnrollmentItem>>(`/me/enrollments?${qs}`)
 }
 
-/** POST /api/app/events/:id/check-in — 签到；服务端校验围栏、时间窗、防重并发放积分。 */
-export async function checkInEvent(id: string, payload: CheckinPayload): Promise<{ pointsAwarded: number }> {
-  return httpPost<{ pointsAwarded: number }>(`/events/${id}/check-in`, payload)
+/** POST /api/app/events/:id/check-in — 签到；服务端校验围栏/签到码、时间窗、防重并发放积分。 */
+export async function checkInEvent(id: string, payload: CheckinPayload): Promise<CheckinResult> {
+  return httpPost<CheckinResult>(`/events/${id}/check-in`, payload)
 }

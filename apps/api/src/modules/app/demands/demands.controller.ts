@@ -84,6 +84,13 @@ export class AppDemandsController {
     return this.demands.selectResponders(this.uid(req), id, dto)
   }
 
+  /* 撤销选定：selected → published，已选定响应回退待选定（发布者选错后的纠正路径） */
+  @HttpCode(200)
+  @Post('me/demands/:id/deselect')
+  deselectRespondents(@Req() req: AppAuthenticatedRequest, @Param('id') id: string) {
+    return this.demands.deselectRespondents(this.uid(req), id)
+  }
+
   @HttpCode(200)
   @Post('me/demands/:id/withdraw')
   withdrawDemand(@Req() req: AppAuthenticatedRequest, @Param('id') id: string) {

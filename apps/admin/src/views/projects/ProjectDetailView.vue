@@ -8,8 +8,9 @@ import type { FormProps } from 'tdesign-vue-next'
 import { ArrowLeftIcon } from 'tdesign-icons-vue-next'
 import StatusTag from '@/components/StatusTag.vue'
 import ProjectFormDialog from '@/components/ProjectFormDialog.vue'
+import ContractAttachments from '@/components/ContractAttachments.vue'
 import ListErrorState from '@/components/ListErrorState.vue'
-import { fetchProject, pauseProject, resumeProject, closeProject, archiveProject } from '@/api/projects'
+import { fetchProject, pauseProject, resumeProject, closeProject, archiveProject, acceptProjectMilestone, returnProjectMilestone } from '@/api/projects'
 import { isNotFound } from '@/api/http'
 import type { Milestone, Project, ProjectUndertaker } from '@/types'
 
@@ -18,7 +19,7 @@ const router = useRouter()
 const loading = ref(true)
 const loadError = ref('')
 const project = ref<Project | null>(null)
-const tab = useQueryTab('info', ['info', 'milestones'] as const)
+const tab = useQueryTab('info', ['info', 'milestones', 'contracts'] as const)
 /* 已归档条目：隐藏全部写操作，仅保留只读内容 */
 const isArchived = computed(() => !!project.value?.deletedAt)
 
@@ -192,8 +193,64 @@ async function onArchive() {
   }
 }
 
+/* 「进度节点」验收 / 驳回：仅「待验收」节点、且项目进行中或已暂停时可操作（与客户端同一套服务端口径） */
+const canReviewMilestone = computed(
+  () => !isArchived.value && !!project.value && ['running', 'paused'].includes(project.value.status),
+)
+function isMilestoneActing(m: Milestone, action: 'accept' | 'return') {
+  return acting.value === `${m.id}:${action}`
+}
+
+const returnVisible = ref(false)
+const returnSaving = ref(false)
+const returnFormRef = ref()
+const returnForm = reactive({ reason: '' })
+const returnMilestoneTarget = ref<Milestone | null>(null)
+const returnRules: FormProps['rules'] = {
+  reason: [{ required: true, message: '请填写驳回原因', trigger: 'submit' }],
+}
+
+function openMilestoneReturn(m: Milestone) {
+  returnMilestoneTarget.value = m
+  returnForm.reason = ''
+  returnVisible.value = true
+  nextTick(() => returnFormRef.value?.clearValidate())
+}
+
+async function onAcceptMilestone(m: Milestone) {
+  if (!project.value || acting.value) return
+  acting.value = `${m.id}:accept`
+  try {
+    await acceptProjectMilestone(project.value.id, m.id)
+    MessagePlugin.success('里程碑已通过验收')
+    await load()
+  } catch (e) {
+    MessagePlugin.error(e instanceof Error ? e.message : '验收失败')
+  } finally {
+    acting.value = ''
+  }
+}
+
+async function onConfirmMilestoneReturn() {
+  if (!project.value || !returnMilestoneTarget.value || returnSaving.value) return
+  const valid = await returnFormRef.value.validate()
+  if (valid !== true) return focusFirstInvalid(returnFormRef.value)
+  returnSaving.value = true
+  try {
+    await returnProjectMilestone(project.value.id, returnMilestoneTarget.value.id, returnForm.reason)
+    MessagePlugin.success('里程碑已驳回，等待承接方重新提交')
+    returnVisible.value = false
+    await load()
+  } catch (e) {
+    MessagePlugin.error(e instanceof Error ? e.message : '驳回失败')
+  } finally {
+    returnSaving.value = false
+  }
+}
+
 onMounted(load)
 const { close: closeProjectDialog } = useDialogFormProtection(closeForm, closeVisible, closeSaving)
+const { close: closeMilestoneReturnDialog } = useDialogFormProtection(returnForm, returnVisible, returnSaving)
 </script>
 
 <template>
@@ -332,13 +389,13 @@ const { close: closeProjectDialog } = useDialogFormProtection(closeForm, closeVi
               <t-steps :current="milestoneCurrent">
                 <t-step-item
                   v-for="m in project.milestones"
-                  :key="m.name"
+                  :key="m.id"
                   :title="m.name"
                   :content="m.date"
                 />
               </t-steps>
               <div class="milestone-list">
-                <div v-for="m in project.milestones" :key="m.name" class="milestone-item">
+                <div v-for="m in project.milestones" :key="m.id" class="milestone-item">
                   <div class="ms-main">
                     <span class="ms-name">{{ m.name }}</span>
                     <t-tag variant="light" :theme="milestoneTagMap[m.status].theme">
@@ -359,10 +416,32 @@ const { close: closeProjectDialog } = useDialogFormProtection(closeForm, closeVi
                     </div>
                     <span v-else class="ms-none">负责方待定</span>
                     <span class="ms-date">{{ m.date }}</span>
+                    <!-- 待验收节点：后台可直接通过验收 / 驳回（与客户端「我发起的」验收同一套服务端口径） -->
+                    <div v-if="m.status === 'submitted' && canReviewMilestone" class="ms-actions">
+                      <t-popconfirm content="确认通过该节点的验收？通过后不可撤销" @confirm="onAcceptMilestone(m)">
+                        <t-button size="small" theme="primary" :loading="isMilestoneActing(m, 'accept')">
+                          通过验收
+                        </t-button>
+                      </t-popconfirm>
+                      <t-button
+                        size="small"
+                        variant="outline"
+                        theme="danger"
+                        :disabled="!!acting"
+                        @click="openMilestoneReturn(m)"
+                      >
+                        驳回
+                      </t-button>
+                    </div>
                   </div>
                 </div>
               </div>
             </div>
+          </t-tab-panel>
+
+          <!-- 项目合同：线下签约合同的照片/PDF 扫描件（复用素材库存储，与租赁详情合同选项卡同款面板） -->
+          <t-tab-panel value="contracts" label="项目合同">
+            <ContractAttachments :entity-id="project.id" resource="project" :archived="isArchived" />
           </t-tab-panel>
         </t-tabs>
       </div>
@@ -394,6 +473,31 @@ const { close: closeProjectDialog } = useDialogFormProtection(closeForm, closeVi
               v-model="closeForm.reason"
               :autosize="{ minRows: 3, maxRows: 5 }"
               placeholder="请填写关闭原因（必填），将记录在项目信息中…"
+            />
+          </t-form-item>
+        </t-form>
+      </t-dialog>
+
+      <!-- 进度节点驳回：原因必填（记录在里程碑上，承接方据此重新提交） -->
+      <t-dialog
+        :visible="returnVisible"
+        :header="returnMilestoneTarget ? `驳回节点 · ${returnMilestoneTarget.name}` : '驳回节点'"
+        width="460px"
+        @close="closeMilestoneReturnDialog"
+      >
+        <template #footer>
+          <div class="dialog-footer">
+            <t-button variant="text" theme="default" @click="closeMilestoneReturnDialog">取消</t-button>
+            <t-button theme="danger" :loading="returnSaving" @click="onConfirmMilestoneReturn">确认驳回</t-button>
+          </div>
+        </template>
+        <t-form ref="returnFormRef" :data="returnForm" :rules="returnRules" label-align="top">
+          <t-form-item label="驳回原因" name="reason">
+            <t-textarea
+              v-accessible-field
+              v-model="returnForm.reason"
+              :autosize="{ minRows: 3, maxRows: 5 }"
+              placeholder="请填写驳回原因（必填），承接方可据此重新提交…"
             />
           </t-form-item>
         </t-form>
@@ -590,6 +694,13 @@ const { close: closeProjectDialog } = useDialogFormProtection(closeForm, closeVi
 .ms-date {
   font-size: 12px;
   color: var(--td-text-color-secondary);
+}
+
+/* 待验收节点的行内操作：与右侧信息同组，避免挤占左侧名称 */
+.ms-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
 }
 
 /* 窄屏：头部信息与操作区纵向堆叠、操作按钮换行，避免按钮被挤压溢出 */

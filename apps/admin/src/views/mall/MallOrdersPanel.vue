@@ -1,17 +1,17 @@
 <script setup lang="ts">
 import { collectAllPages, executeBulk } from '@/utils/bulkOperation'
-import { computed, onMounted, reactive, ref } from 'vue'
+import { computed, onBeforeUnmount, onMounted, reactive, ref } from 'vue'
 import ListErrorState from '@/components/ListErrorState.vue'
 import { useListQueryState } from '@/utils/listQuery'
 import { MessagePlugin } from 'tdesign-vue-next'
-import { SearchIcon } from 'tdesign-icons-vue-next'
+import { ChevronDownIcon, SearchIcon } from 'tdesign-icons-vue-next'
 import PageHeader from '@/components/PageHeader.vue'
 import StatusTag from '@/components/StatusTag.vue'
 import BulkArchiveDialog from '@/components/BulkArchiveDialog.vue'
 import ColumnController from '@/components/ColumnController.vue'
 import ExportButton from '@/components/ExportButton.vue'
 import ListEmptyState from '@/components/ListEmptyState.vue'
-import { archiveOrder, cancelRedemptionOrder, fetchRedemptionOrders, verifyRedemptionOrder } from '@/api/mall'
+import { archiveOrder, cancelRedemptionOrder, fetchRedemptionOrders, verifyRedemptionOrder, type RedemptionOrderQuery } from '@/api/mall'
 import { statusLabel } from '@/utils/exportCsv'
 import type { RedemptionOrder } from '@/types'
 
@@ -24,19 +24,50 @@ const list = ref<RedemptionOrder[]>([])
 const total = ref(0)
 const acting = ref('')
 
-const query = reactive({
-  page: 1,
-  pageSize: 10,
-  keyword: '',
-  status: '',
-})
-
-const statusOptions = [
-  { label: '全部', value: '' },
+/* 状态勾选式筛选（与活动/需求管理同一形态）：3 个可选状态（不含「全部」项）；
+ * 默认勾选「待使用」，即列表默认不展示「已完成 / 已取消」；
+ * 全部取消勾选 = 不按状态过滤（显示全部） */
+const statusCheckOptions = [
   { label: '待使用', value: 'pending_use' },
   { label: '已完成', value: 'finished' },
   { label: '已取消', value: 'cancelled' },
 ]
+const DEFAULT_STATUSES = ['pending_use']
+
+const query = reactive({
+  page: 1,
+  pageSize: 10,
+  keyword: '',
+  /* 勾选式状态筛选：数组（useListQueryState 以重复 query 参数同步）；空串占位 = 不按状态过滤 */
+  status: [...DEFAULT_STATUSES] as string[],
+})
+
+/* 状态勾选面板（与活动/需求管理同一形态）：勾选即查询；ESC 关闭（t-popup 仅 trigger=focus 内置 ESC 处理） */
+const statusPanelVisible = ref(false)
+const checkedStatusCount = computed(() => query.status.filter(Boolean).length)
+
+function onStatusPanelKeydown(e: KeyboardEvent) {
+  if (e.key === 'Escape' && statusPanelVisible.value) statusPanelVisible.value = false
+}
+onMounted(() => window.addEventListener('keydown', onStatusPanelKeydown))
+onBeforeUnmount(() => window.removeEventListener('keydown', onStatusPanelKeydown))
+
+/* 空选 = 不按状态过滤：用单元素空串占位 —— 空数组会被 vue-router 从 URL 中丢弃 */
+function onStatusChange(value: (string | number)[]) {
+  const picked = value.map(String).filter(Boolean)
+  query.status = picked.length ? picked : ['']
+  onSearch()
+}
+
+function selectAllStatuses() {
+  query.status = statusCheckOptions.map((o) => o.value)
+  onSearch()
+}
+
+function clearAllStatuses() {
+  query.status = ['']
+  onSearch()
+}
 
 const dataColumns = [
   { colKey: 'id', title: '订单编号', width: 110 , ellipsis: true},
@@ -92,7 +123,7 @@ function onSearch() {
 
 function onReset() {
   query.keyword = ''
-  query.status = ''
+  query.status = [...DEFAULT_STATUSES]
   query.page = 1
   load()
 }
@@ -148,7 +179,8 @@ async function onArchive(row: RedemptionOrder) {
 /* 一键归档：按当前筛选全量拉取，归档所选状态的订单（已完成 / 已取消） */
 const archivingAll = ref(false)
 const bulkVisible = ref(false)
-let bulkScope = { ...query }
+/* 一键归档范围快照（状态被排除，见 onBulkArchive） */
+let bulkScope: RedemptionOrderQuery = { ...query }
 const bulkProgress = ref<{ done: number; total: number; failed: number } | null>(null)
 let bulkCancelled = false
 const bulkStatuses = [
@@ -183,14 +215,19 @@ async function doBulkArchive(values: string[]) {
   }
 }
 
-/* 确认前预估影响条数：按所选状态取 total（pageSize=1 仅取 total） */
+/* 确认前预估影响条数：按所选状态取 total（pageSize=1 仅取 total）；
+ * 当前列表状态筛选（勾选式数组；全不选为空串占位=不筛选）不含该状态时预估为 0 */
 function countByStatus(status: string) {
-  if (bulkScope.status && bulkScope.status !== status) return Promise.resolve(0)
+  const scopeStatus = bulkScope.status
+  const activeStatuses = (Array.isArray(scopeStatus) ? scopeStatus : [scopeStatus]).filter(Boolean)
+  if (activeStatuses.length > 0 && !activeStatuses.includes(status)) return Promise.resolve(0)
   return fetchRedemptionOrders({ ...bulkScope, status, page: 1, pageSize: 1 }).then((result) => result.total)
 }
 
 function onBulkArchive() {
-  bulkScope = { ...query }
+  /* 一键归档范围不含状态筛选（同活动/需求列表口径）：默认状态集已隐藏「已完成/已取消」，
+   * 若把状态带入范围，两个可归档状态恒为 0 条，归档入口失效 */
+  bulkScope = { ...query, status: '' }
   bulkVisible.value = true
 }
 
@@ -276,13 +313,41 @@ onMounted(load)
         clearable
         @enter="onSearch"
       />
-      <t-select v-accessible-field="'状态'" class="ctl-w-sm"
-        v-model="query.status"
-        label="状态"
-        :options="statusOptions"
-        clearable
-        @change="onSearch"
-      />
+      <!-- 状态：勾选式多选（默认勾选 1 项，全部取消 = 不按状态过滤）；勾选即查询 -->
+      <t-popup
+        v-model:visible="statusPanelVisible"
+        trigger="click"
+        placement="bottom-left"
+        :show-arrow="false"
+        overlay-class-name="status-filter-popup"
+        overlay-inner-class-name="status-filter-popup-inner"
+      >
+        <t-button variant="outline" :aria-label="`状态筛选，已勾选 ${checkedStatusCount} 项`">
+          状态<template v-if="checkedStatusCount">（{{ checkedStatusCount }}）</template>
+          <template #suffix><ChevronDownIcon /></template>
+        </t-button>
+        <template #content>
+          <div class="status-panel">
+            <div class="status-panel-head">
+              <span class="status-panel-title">状态</span>
+              <div class="status-panel-tools">
+                <t-button
+                  variant="text"
+                  size="small"
+                  :disabled="checkedStatusCount === statusCheckOptions.length"
+                  @click="selectAllStatuses"
+                >
+                  全选
+                </t-button>
+                <t-button variant="text" size="small" :disabled="checkedStatusCount === 0" @click="clearAllStatuses">
+                  清空
+                </t-button>
+              </div>
+            </div>
+            <t-checkbox-group :value="query.status" :options="statusCheckOptions" @change="onStatusChange" />
+          </div>
+        </template>
+      </t-popup>
       <t-button theme="primary" @click="onSearch">
         <template #icon><SearchIcon /></template>
         查询
@@ -441,5 +506,51 @@ onMounted(load)
   margin: 16px 0 0;
   font-size: 12px;
   color: var(--td-text-color-secondary);
+}
+
+/* ---------- 状态勾选面板（浮层挂载到 body，scoped 选择器无法命中，故用 :global 收窄到本页唯一类名） ---------- */
+:global(.status-filter-popup) {
+  padding: 0;
+}
+
+:global(.status-filter-popup-inner) {
+  padding: 0;
+  background: transparent;
+  border-radius: 0;
+  box-shadow: none;
+}
+
+.status-panel {
+  width: 180px;
+  padding: 8px 12px 12px;
+  background: var(--td-bg-color-container);
+  border: 1px solid var(--td-component-border);
+  border-radius: var(--td-radius-medium);
+  box-shadow: var(--td-shadow-2);
+}
+
+.status-panel-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 8px;
+}
+
+.status-panel-title {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--td-text-color-primary);
+}
+
+.status-panel-tools {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.status-panel :deep(.t-checkbox-group) {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
 }
 </style>

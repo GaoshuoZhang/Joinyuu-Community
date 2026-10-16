@@ -2,13 +2,13 @@
 import { collectAllPages, executeBulk } from '@/utils/bulkOperation'
 import RowMoreActions from '@/components/RowMoreActions.vue'
 import { focusFirstInvalid, useDialogFormProtection } from '@/utils/form'
-import { computed, onMounted, reactive, ref, watch } from 'vue'
+import { computed, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
 import ListErrorState from '@/components/ListErrorState.vue'
 import { useListQueryState } from '@/utils/listQuery'
 import { useRouter } from 'vue-router'
 import { MessagePlugin } from 'tdesign-vue-next'
 import type { FormProps } from 'tdesign-vue-next'
-import { AddIcon, SearchIcon, ViewListIcon } from 'tdesign-icons-vue-next'
+import { AddIcon, ChevronDownIcon, SearchIcon, ViewListIcon } from 'tdesign-icons-vue-next'
 import PageHeader from '@/components/PageHeader.vue'
 import StatusTag from '@/components/StatusTag.vue'
 import ColumnController from '@/components/ColumnController.vue'
@@ -21,14 +21,16 @@ import DemandReviewDialog from '@/components/DemandReviewDialog.vue'
 import DemandScheduleDialog from '@/components/DemandScheduleDialog.vue'
 import ContentTakedownDialog from '@/components/ContentTakedownDialog.vue'
 import ProjectFormDialog from '@/components/ProjectFormDialog.vue'
+import DemandSelectRespondentsDialog from '@/components/DemandSelectRespondentsDialog.vue'
 import { archiveDemand, cancelDemandSchedule, closeDemand, fetchDemands, publishDemandNow, proxyRespondDemand, fetchPublisherOptions } from '@/api/demands'
 import { dictFallback, fetchDictEntries } from '@/api/dicts'
 import { statusLabel } from '@/utils/exportCsv'
+import { enterpriseSubjectLabel, userIdentitySummary, userSubjectLabel } from '@/utils/subjectLabel'
 import { fetchPointsRules } from '@/api/mall'
 import { fetchEnterprise } from '@/api/enterprises'
 import { fetchExternalEnterprise } from '@/api/external-enterprises'
 import { fetchUser } from '@/api/users'
-import type { Demand, UserIdentity } from '@/types'
+import type { Demand, DemandRespondent, UserIdentity } from '@/types'
 
 /* 需求类别维护弹窗（原「数据字典 > 需求类别」入口，label 即业务存储值故仅支持新增/启停/删除） */
 const categoryDialogVisible = ref(false)
@@ -124,11 +126,11 @@ async function loadProxyOptions() {
   try {
     const opts = await (publisherOptionsCache ? Promise.resolve(publisherOptionsCache) : fetchPublisherOptions().then((o) => (publisherOptionsCache = o)))
     userProxyOptions.value = opts.users.map((u) => ({
-      label: u.nickname + '\uff08' + u.tag + ' · ' + u.uid + '\uff09',
+      label: userSubjectLabel({ realName: u.realName, nickname: u.nickname, uid: u.uid, identity: u.tag }),
       value: 'U:' + u.uid,
     }))
     enterpriseProxyOptions.value = opts.enterprises.map((e) => ({
-      label: e.name + '\uff08' + e.tag + ' · ' + e.id + '\uff09',
+      label: enterpriseSubjectLabel({ name: e.name, identity: e.tag, enterpriseId: e.id }),
       value: 'E:' + e.id,
     }))
   } catch {
@@ -142,7 +144,7 @@ watch(
     if (v.startsWith('U:')) {
       const u = fetchPublisherOptionsUsers().find((x) => x.uid === v.slice(2))
       proxyContact.value = u
-        ? { userName: u.nickname, enterprise: '个人', phone: u.phone, email: u.email }
+        ? { userName: u.realName || u.nickname, enterprise: '个人', phone: u.phone, email: u.email }
         : null
     } else if (v.startsWith('E:')) {
       const e = fetchPublisherOptionsEnterprises().find((x) => x.id === v.slice(2))
@@ -216,13 +218,29 @@ const publisherName = ref('')
 /* 企业详情「数据概览」跳转带入的企业筛选（值为社区企业 ID 或合作企业 ID，标签显示名称） */
 const enterpriseName = ref('')
 
+/* 状态勾选式筛选：8 个可选状态（不再有「全部」项）；
+ * 默认勾选除「已驳回 / 已立项 / 已关闭」外的 5 项（即列表默认不展示这三类）；
+ * 全部取消勾选 = 不按状态过滤（显示全部） */
+const statusCheckOptions = [
+  { label: '待审核', value: 'pending' },
+  { label: '待发布', value: 'pending_release' },
+  { label: '定时发布中', value: 'scheduled' },
+  { label: '已发布', value: 'published' },
+  { label: '已选定', value: 'selected' },
+  { label: '已驳回', value: 'rejected' },
+  { label: '已立项', value: 'projected' },
+  { label: '已关闭', value: 'closed' },
+]
+const DEFAULT_STATUSES = ['pending', 'pending_release', 'scheduled', 'published', 'selected']
+
 const query = reactive({
   page: 1,
   pageSize: 10,
   keyword: '',
   category: '',
   demandType: '',
-  status: '',
+  /* 勾选式状态筛选：数组（useListQueryState 以重复 query 参数同步）；空串占位 = 不按状态过滤 */
+  status: [...DEFAULT_STATUSES] as string[],
   publisherId: '',
   enterprise: '',
 })
@@ -238,17 +256,34 @@ const categoryOptions = ref([
 ])
 const categoryText = (demand: Demand) => demand.categoryLabel ?? demand.category
 
-const statusOptions = [
-  { label: '全部', value: '' },
-  { label: '待审核', value: 'pending' },
-  { label: '待发布', value: 'pending_release' },
-  { label: '定时发布中', value: 'scheduled' },
-  { label: '已发布', value: 'published' },
-  { label: '已选定', value: 'selected' },
-  { label: '已驳回', value: 'rejected' },
-  { label: '已立项', value: 'projected' },
-  { label: '已关闭', value: 'closed' },
-]
+/* 状态勾选面板：勾选即查询（与筛选栏其它控件一致，不额外加「确定」）；
+ * ESC 关闭 —— t-popup 仅 trigger=focus 时内置 ESC 处理，click 触发需自行监听 */
+const statusPanelVisible = ref(false)
+const checkedStatusCount = computed(() => query.status.filter(Boolean).length)
+
+function onStatusPanelKeydown(e: KeyboardEvent) {
+  if (e.key === 'Escape' && statusPanelVisible.value) statusPanelVisible.value = false
+}
+onMounted(() => window.addEventListener('keydown', onStatusPanelKeydown))
+onBeforeUnmount(() => window.removeEventListener('keydown', onStatusPanelKeydown))
+
+/* 空选 = 不按状态过滤：用单元素空串占位 —— 空数组会被 vue-router 从 URL 中丢弃，
+ * 回写时又会被判定为「等于默认值」而回退成默认 5 项 */
+function onStatusChange(value: (string | number)[]) {
+  const picked = value.map(String).filter(Boolean)
+  query.status = picked.length ? picked : ['']
+  onSearch()
+}
+
+function selectAllStatuses() {
+  query.status = statusCheckOptions.map((o) => o.value)
+  onSearch()
+}
+
+function clearAllStatuses() {
+  query.status = ['']
+  onSearch()
+}
 const demandTypeOptions = [
   { label: '全部类型', value: '' },
   { label: '找服务', value: 'task' },
@@ -256,11 +291,18 @@ const demandTypeOptions = [
   { label: '找合作', value: 'cooperation' },
 ]
 const demandTypeLabel: Record<string, string> = { task: '找服务', investment: '找投资', cooperation: '找合作' }
+/* 需求类型标签分色（TDesign 语义色，三种类型互不相同；未命中回落 default） */
+const DEMAND_TYPE_THEME: Record<string, 'primary' | 'warning' | 'success' | 'danger' | 'default'> = {
+  task: 'primary',
+  investment: 'warning',
+  cooperation: 'success',
+}
+function demandTypeTheme(type: string): 'primary' | 'warning' | 'success' | 'danger' | 'default' {
+  return DEMAND_TYPE_THEME[type] ?? 'default'
+}
 
 const columns = [
-  { colKey: 'title', fixed: 'left' as const, title: '需求', cell: 'title', width: 210, resizable: true , ellipsis: true},
-  { colKey: 'category', title: '类别', cell: 'category', width: 95, resizable: true , ellipsis: true},
-  { colKey: 'demandType', title: '需求类型', cell: 'demandType', width: 100, resizable: true, ellipsis: true },
+  { colKey: 'title', fixed: 'left' as const, title: '需求', cell: 'title', width: 240, resizable: true , ellipsis: true},
   { colKey: 'publisher', title: '提交人', cell: 'publisher', width: 200, resizable: true , ellipsis: true},
   { colKey: 'budget', title: '预算', cell: 'budget', width: 125, resizable: true , ellipsis: true},
   { colKey: 'respondents', title: '总响应/待审核', cell: 'respondents', width: 170, resizable: true , ellipsis: true},
@@ -270,8 +312,6 @@ const columns = [
     cell: 'createdAt',
     width: 170,
     resizable: true,
-    sorter: true,
-    sortType: 'all',
   ellipsis: true,
   },
   { colKey: 'status', title: '状态', cell: 'status', width: 150, resizable: true , ellipsis: true},
@@ -337,20 +377,8 @@ function fetchAllForExport(page: number, pageSize: number) {
   return fetchDemands({ ...query, page, pageSize, sortBy: sortBy.value, sortOrder: sortOrder.value })
 }
 
-/* 远程排序：表头点击 → 更新排序状态 → 重新加载（受控 :sort 保证表头指示器正确） */
-function onSortChange(sort: { sortBy: string; descending: boolean }) {
-  if (sort.sortBy !== 'createdAt' && sort.sortBy !== 'publishedAt') return
-  sortBy.value = sort.sortBy
-  sortOrder.value = sort.descending ? 'descend' : 'ascend'
-  query.page = 1
-  load()
-}
-
-const tableSort = computed(() => ({
-  sortBy: sortBy.value,
-  descending: sortOrder.value === 'descend',
-}))
-
+/* 「创建/发布时间」列已取消排序：sortBy/sortOrder 保持常量（创建时间倒序），
+ * 仅随 listQuery 状态往返，不再有任何表头排序交互 */
 function onSearch() {
   query.page = 1
   load()
@@ -360,7 +388,7 @@ function onReset() {
   query.keyword = ''
   query.category = ''
   query.demandType = ''
-  query.status = ''
+  query.status = [...DEFAULT_STATUSES]
   query.publisherId = ''
   query.enterprise = ''
   publisherName.value = ''
@@ -474,7 +502,20 @@ async function onArchiveDemand(row: Demand) {
 /* 一键归档：按当前筛选全量拉取，归档所选状态的已驳回 / 已关闭 / 已立项需求 */
 const archivingAll = ref(false)
 const bulkVisible = ref(false)
-let bulkScope = { ...query }
+/* 一键归档范围：沿用关键词/类别/类型/提交人/企业等筛选，显式排除状态 ——
+ * 状态多选默认隐藏 已驳回/已立项/已关闭，若沿用状态范围会让三个归档目标恒为 0 */
+function bulkScopeOf() {
+  return {
+    page: query.page,
+    pageSize: query.pageSize,
+    keyword: query.keyword,
+    category: query.category,
+    demandType: query.demandType,
+    publisherId: query.publisherId,
+    enterprise: query.enterprise,
+  }
+}
+let bulkScope = bulkScopeOf()
 const bulkProgress = ref<{ done: number; total: number; failed: number } | null>(null)
 let bulkCancelled = false
 const bulkStatuses = [
@@ -510,13 +551,13 @@ async function doBulkArchive(values: string[]) {
   }
 }
 
+/* 归档对话框内各状态的命中数：范围本身不含状态，故直接按该状态计数 */
 function countByStatus(status: string) {
-  if (bulkScope.status && bulkScope.status !== status) return Promise.resolve(0)
   return fetchDemands({ ...bulkScope, status, page: 1, pageSize: 1 }).then((result) => result.total)
 }
 
 function onBulkArchive() {
-  bulkScope = { ...query }
+  bulkScope = bulkScopeOf()
   bulkVisible.value = true
 }
 
@@ -532,11 +573,35 @@ async function onBulkConfirm(values: string[]) {
   }
 }
 
-/* 立项 */
+/* 立项：社区人员创建（后台代发）且存在待选定响应时，先弹「选定承接方」再进入立项表单 */
 const projectVisible = ref(false)
+const selectVisible = ref(false)
+const respondentIds = ref<number[]>([])
+
+/* 可选定响应：已通过审核的「待选定」条目（已撤回记录服务端已过滤） */
+function pendingRespondents(row: Demand): DemandRespondent[] {
+  return (row.respondents ?? []).filter((r) => r.status === 'pending')
+}
+
+/* 重新立项（D）：已立项且关联项目已关闭/归档时，允许基于该需求新建项目并切换到新项目 */
+function canReinitiate(row: Demand): boolean {
+  return row.status === 'projected' && ['closed', 'archived'].includes(row.projectStatus ?? '')
+}
 
 function openProject(row: Demand) {
   current.value = row
+  respondentIds.value = []
+  if (publisherIdentityOf(row)?.type === 'official' && pendingRespondents(row).length > 0) {
+    selectVisible.value = true
+    return
+  }
+  projectVisible.value = true
+}
+
+/* 「选定承接方」结果（可空 = 跳过选定）→ 带入立项表单作为预填与提交项 */
+function onRespondentsConfirm(ids: number[]) {
+  respondentIds.value = ids
+  selectVisible.value = false
   projectVisible.value = true
 }
 
@@ -558,7 +623,7 @@ async function applyRouteFilter() {
   if (query.publisherId) {
     try {
       const u = await fetchUser(query.publisherId)
-      publisherName.value = u.nickname
+      publisherName.value = userSubjectLabel({ realName: u.realName, nickname: u.nickname, uid: u.uid, identity: userIdentitySummary(u) })
     } catch {
       /* 用户不存在时标签回退显示 ID */
     }
@@ -665,20 +730,48 @@ const { close: closeProxyDialog } = useDialogFormProtection(proxyForm, proxyVisi
         clearable
         @change="onSearch"
       />
-      <t-select v-accessible-field="'需求类型'" class="ctl-w-sm"
+      <t-select v-accessible-field="'需求类型'" class="ctl-w-lg"
         v-model="query.demandType"
         label="需求类型"
         :options="demandTypeOptions"
         clearable
         @change="onSearch"
       />
-      <t-select v-accessible-field="'状态'" class="ctl-w-md"
-        v-model="query.status"
-        label="状态"
-        :options="statusOptions"
-        clearable
-        @change="onSearch"
-      />
+      <!-- 状态：勾选式多选（默认勾选 5 项，全部取消 = 不按状态过滤）；勾选即查询 -->
+      <t-popup
+        v-model:visible="statusPanelVisible"
+        trigger="click"
+        placement="bottom-left"
+        :show-arrow="false"
+        overlay-class-name="status-filter-popup"
+        overlay-inner-class-name="status-filter-popup-inner"
+      >
+        <t-button variant="outline" :aria-label="`状态筛选，已勾选 ${checkedStatusCount} 项`">
+          状态<template v-if="checkedStatusCount">（{{ checkedStatusCount }}）</template>
+          <template #suffix><ChevronDownIcon /></template>
+        </t-button>
+        <template #content>
+          <div class="status-panel">
+            <div class="status-panel-head">
+              <span class="status-panel-title">状态</span>
+              <div class="status-panel-tools">
+                <t-button
+                  variant="text"
+                  size="small"
+                  :disabled="checkedStatusCount === statusCheckOptions.length"
+                  @click="selectAllStatuses"
+                >
+                  全选
+                </t-button>
+                <t-button variant="text" size="small" :disabled="checkedStatusCount === 0" @click="clearAllStatuses">
+                  清空
+                </t-button>
+              </div>
+            </div>
+            <t-checkbox-group :value="query.status" :options="statusCheckOptions" @change="onStatusChange" />
+          </div>
+        </template>
+      </t-popup>
       <t-button @click="onSearch">
         <template #icon><SearchIcon /></template>
         查询
@@ -714,26 +807,24 @@ const { close: closeProxyDialog } = useDialogFormProtection(proxyForm, proxyVisi
         resizable
         :data="list"
         :columns="visibleColumns"
-        :sort="tableSort"
         :loading="loading"
         :pagination="pagination"
         :row-attributes="{ style: { cursor: 'pointer' } }"
         @page-change="onPageChange"
-        @sort-change="onSortChange"
         @row-click="({ row }: { row: Demand }) => goDetail(row)"
       >
         <template #title="{ row }">
           <div class="demand-cell">
             <span class="demand-title" :title="row.title">{{ row.title }}</span>
-            <span class="demand-id">{{ row.id }}</span>
+            <!-- 类别与需求类型标签合并进标题区，位于需求编号左边；类型按三种分色 -->
+            <div class="demand-sub">
+              <t-tag size="small" variant="light" :theme="demandTypeTheme(row.demandType)">
+                {{ demandTypeLabel[row.demandType] ?? row.demandType }}
+              </t-tag>
+              <t-tag size="small" variant="light">{{ categoryText(row) }}</t-tag>
+              <span class="demand-id">{{ row.id }}</span>
+            </div>
           </div>
-        </template>
-
-        <template #category="{ row }">
-          <t-tag variant="light">{{ categoryText(row) }}</t-tag>
-        </template>
-        <template #demandType="{ row }">
-          <t-tag variant="light" theme="primary">{{ demandTypeLabel[row.demandType] ?? row.demandType }}</t-tag>
         </template>
 
         <template #publisher="{ row }">
@@ -775,10 +866,10 @@ const { close: closeProxyDialog } = useDialogFormProtection(proxyForm, proxyVisi
 
         <template #budget="{ row }">{{ row.budget || '—' }}</template>
 
-        <!-- 创建 / 发布时间合并列：首行创建时间，次行发布时间（未发布显示「—」） -->
+        <!-- 创建 / 发布时间合并列：两行均为时间戳，字号保持一致（次行用次级色区分层次） -->
         <template #createdAt="{ row }">
           <div>{{ row.createdAt }}</div>
-          <div class="cell-sub">{{ row.publishedAt ?? '—' }}</div>
+          <div class="time-sub">{{ row.publishedAt ?? '—' }}</div>
         </template>
 
         <template #status="{ row }">
@@ -866,9 +957,19 @@ const { close: closeProxyDialog } = useDialogFormProtection(proxyForm, proxyVisi
                 取消定时发布
               </t-button>
             </t-popconfirm>
-            <!-- 已立项：查看关联项目 -->
+            <!-- 已立项：查看关联项目；关联项目已关闭/归档时提供「重新立项」（D） -->
             <t-button v-if="row.status === 'projected'" variant="text" size="small" theme="primary" @click="goProject(row)">
               查看关联项目
+            </t-button>
+            <t-button
+              v-if="canReinitiate(row)"
+              variant="text"
+              size="small"
+              theme="primary"
+              title="关联项目已关闭/归档，可基于该需求重新立项"
+              @click="openProject(row)"
+            >
+              重新立项
             </t-button>
             <t-popconfirm
               v-if="row.status === 'pending_release'"
@@ -916,8 +1017,14 @@ const { close: closeProxyDialog } = useDialogFormProtection(proxyForm, proxyVisi
     <DemandScheduleDialog v-model:visible="scheduleVisible" :demand="current" @success="load" />
     <ContentTakedownDialog ref="takedownDialog" @success="load" />
 
+    <!-- 立项前置「选定承接方」（社区人员创建的需求） -->
+    <DemandSelectRespondentsDialog
+      v-model:visible="selectVisible"
+      :demand="current"
+      @confirm="onRespondentsConfirm"
+    />
     <!-- 立项弹窗 -->
-    <ProjectFormDialog v-model:visible="projectVisible" mode="create" :demand="current" :project="null" @success="load" />
+    <ProjectFormDialog v-model:visible="projectVisible" mode="create" :demand="current" :project="null" :respondent-ids="respondentIds" @success="load" />
     <!-- 代报名弹窗：代成员响应需求（含表单输入，禁用点遮罩关闭防误触丢输入） -->
     <t-dialog
       :visible="proxyVisible"
@@ -993,6 +1100,15 @@ const { close: closeProxyDialog } = useDialogFormProtection(proxyForm, proxyVisi
   min-width: 0;
 }
 
+/* 标题区第二行：需求类型/类别标签在需求编号左边（列 ellipsis 由标题行承载） */
+.demand-sub {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin-top: 2px;
+  min-width: 0;
+}
+
 .demand-title {
   font-size: 14px;
   line-height: 22px;
@@ -1003,6 +1119,10 @@ const { close: closeProxyDialog } = useDialogFormProtection(proxyForm, proxyVisi
 }
 
 .demand-id {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-width: 0;
   font-size: 12px;
   line-height: 18px;
   color: var(--td-text-color-secondary);
@@ -1040,6 +1160,12 @@ const { close: closeProxyDialog } = useDialogFormProtection(proxyForm, proxyVisi
   font-size: 12px;
 }
 
+/* 成对时间次行（创建/发布时间等）：与首行同字号（继承表格 14px），仅用次级色区分层次 */
+.time-sub {
+  margin-top: 2px;
+  color: var(--td-text-color-secondary);
+}
+
 .respond-count {
   font-size: 14px;
   line-height: 22px;
@@ -1056,5 +1182,51 @@ const { close: closeProxyDialog } = useDialogFormProtection(proxyForm, proxyVisi
   display: grid;
   grid-template-columns: 1fr 1fr;
   gap: 0 16px;
+}
+
+/* ---------- 状态勾选面板（浮层挂载到 body，scoped 选择器无法命中，故用 :global 收窄到本页唯一类名） ---------- */
+:global(.status-filter-popup) {
+  padding: 0;
+}
+
+:global(.status-filter-popup-inner) {
+  padding: 0;
+  background: transparent;
+  border-radius: 0;
+  box-shadow: none;
+}
+
+.status-panel {
+  width: 180px;
+  padding: 8px 12px 12px;
+  background: var(--td-bg-color-container);
+  border: 1px solid var(--td-component-border);
+  border-radius: var(--td-radius-medium);
+  box-shadow: var(--td-shadow-2);
+}
+
+.status-panel-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 8px;
+}
+
+.status-panel-title {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--td-text-color-primary);
+}
+
+.status-panel-tools {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.status-panel :deep(.t-checkbox-group) {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
 }
 </style>

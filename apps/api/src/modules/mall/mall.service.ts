@@ -80,7 +80,7 @@ export class MallService {
       ]
     }
     if (query.category) where.category = this.resolveCategory(query.category)
-    if (query.status) where.status = query.status
+    if (query.status) where.status = { in: query.status }
 
     /* 排序与计数、分页下发数据库 */
     const field = query.sortBy ?? 'id'
@@ -277,7 +277,7 @@ export class MallService {
         { voucherCode: { equals: kw, mode: 'insensitive' } },
       ]
     }
-    if (query.status) where.status = query.status
+    if (query.status) where.status = { in: query.status }
 
     /* 排序与计数、分页下发数据库 */
     const field = query.sortBy ?? 'id'

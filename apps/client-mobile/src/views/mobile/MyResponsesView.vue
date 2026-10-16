@@ -28,17 +28,23 @@ function onListScroll(bottomDistance: number) {
   if (bottomDistance < 60) loadMore()
 }
 
-/* status 优先：rejected 即便记录已带撤回/失效时间仍显示「已驳回」；
+/* 需求终态派生（F）：需求已关闭/已驳回/已撤回时，响应即便仍是「待选定」也按「已结束」展示，
+ * 避免需求已结束却提示仍在等待推进。
+ * status 优先：rejected 即便记录已带撤回/失效时间仍显示「已驳回」；
  * 仅当 status 为 closed（撤回写入）或无 status 时才按 withdrawnAt 显示「已撤回」。 */
 function statusOf(item: MyResponseItem): string {
+  const pendingish = item.status === 'pending' || item.status === 'contacted'
+  if (pendingish && ['closed', 'rejected', 'withdrawn'].includes(item.demandStatus ?? '')) return 'closed'
   if (item.status && item.status !== 'closed') return item.status
   return item.withdrawnAt ? 'withdrawn' : item.status ?? 'pending'
 }
 
-/* 待处理 / 待审核可撤回，其余（已选定/已驳回/已结束等）不可 */
+/* 待处理 / 待审核可撤回，其余（已选定/已终止）不可；
+ * 需求已进入立项流程（非 published）时服务端拒绝撤回，客户端同口径隐藏入口避免必然失败 */
 function canWithdraw(item: MyResponseItem): boolean {
   const status = item.status ?? 'pending'
-  return !item.withdrawnAt && (status === 'pending' || status === 'pending_review')
+  const demandOpen = (item.demandStatus ?? 'published') === 'published'
+  return demandOpen && !item.withdrawnAt && (status === 'pending' || status === 'pending_review')
 }
 
 function onWithdraw(item: MyResponseItem) {
@@ -88,6 +94,10 @@ function onWithdraw(item: MyResponseItem) {
         </div>
         <div v-else-if="canWithdraw(r)" class="row-ops">
           <Button size="small" variant="outline" theme="danger" :loading="withdrawing === r.id" @click="onWithdraw(r)">撤回响应</Button>
+        </div>
+        <!-- 立项后被选为承接方：直接进入协作项目跟进进度 -->
+        <div v-else-if="r.status === 'undertaken' && r.projectId" class="row-ops">
+          <Button size="small" variant="outline" theme="primary" @click="router.push(`/me/projects/${r.projectId}`)">查看我的项目</Button>
         </div>
       </article>
     </List>

@@ -581,6 +581,11 @@ model CommunityEvent {
   checkinRadiusM       Int?              @default(200)
   checkinOpenMin       Int?              @default(30)
   checkinCloseMin      Int?              @default(30)
+  // 签到校验位置开关：开启时客户端签到才做地理围栏校验（默认关；存量按经纬度是否已配置回填）
+  checkinLocationRequired Boolean        @default(false)
+  // 签到校验码开关（默认开）与 6 位签到码；仅 required=true 且 code 非空时客户端强制输码
+  checkinCodeRequired  Boolean           @default(true)
+  checkinCode          String?           @db.VarChar(6)
   // M2-R R2：报名取消时限（小时，默认 24）与改期目标时间
   cancelDeadlineHours  Int?              @default(24)
   rescheduledTo        String?           @db.VarChar(16)

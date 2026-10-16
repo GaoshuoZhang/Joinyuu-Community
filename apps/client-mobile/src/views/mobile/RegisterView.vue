@@ -58,7 +58,10 @@ const rules: FormRules<typeof form> = {
     { required: true, message: PASSWORD_MSG },
     { validator: (val: string) => !val.trim() || isPasswordStrong(val), message: PASSWORD_MSG },
   ],
-  confirmPassword: [{ validator: (val: string) => val === form.password, message: '两次输入的密码不一致' }],
+  confirmPassword: [
+    { required: true, message: '请再次输入密码' },
+    { validator: (val: string) => val === form.password, message: '两次输入的密码不一致' },
+  ],
   agreed: [{ validator: (val: unknown) => Boolean(val), message: '请阅读并同意《用户协议》与《隐私政策》' }],
 }
 
@@ -77,6 +80,9 @@ onMounted(async () => {
 })
 
 const currentChannelAvailable = computed(() => (channel.value === 'email' ? emailAvailable.value : smsAvailable.value))
+/* 「注册方式」区块：仅双渠道都可用时才给单选；单渠道可用时降级为一行说明文案（去掉单选圆点） */
+const bothChannels = computed(() => emailAvailable.value && smsAvailable.value)
+const singleChannelLabel = computed(() => (emailAvailable.value ? '邮箱' : '手机号'))
 
 let timer: number | undefined
 function stopCountdown() {
@@ -165,13 +171,15 @@ function onRegisterSubmit({ validateResult }: { validateResult: unknown }) {
       scroll-to-first-error="smooth"
       @submit="onRegisterSubmit"
     >
-      <div class="field">
+      <div v-if="bothChannels" class="field">
         <span class="field-label">注册方式</span>
         <RadioGroup v-model="channel" class="channels">
-          <Radio value="email" label="邮箱注册" :disabled="closed || !emailAvailable" />
-          <Radio v-if="smsAvailable" value="phone" label="手机号注册" :disabled="closed" />
+          <Radio value="email" label="邮箱注册" :disabled="closed" />
+          <Radio value="phone" label="手机号注册" :disabled="closed" />
         </RadioGroup>
       </div>
+      <!-- 单渠道可用：不给单选圆点，仅一行说明文案；两渠道都不可用则交给 NoticeBar -->
+      <p v-else-if="emailAvailable || smsAvailable" class="channel-note">注册方式 · {{ singleChannelLabel }}</p>
       <FormItem v-if="channel === 'email'" label="邮箱" name="email">
         <Input v-model="form.email" type="text" inputmode="email" autocomplete="email" placeholder="请输入邮箱…" :disabled="closed" />
       </FormItem>
@@ -198,7 +206,8 @@ function onRegisterSubmit({ validateResult }: { validateResult: unknown }) {
           />
           <Button
             class="code-button"
-            theme="light"
+            variant="outline"
+            theme="primary"
             :disabled="closed || sending || countdown > 0 || !currentChannelAvailable"
             @click="onSendCode"
           >
@@ -206,13 +215,13 @@ function onRegisterSubmit({ validateResult }: { validateResult: unknown }) {
           </Button>
         </div>
       </FormItem>
-      <FormItem label="密码" name="password">
+      <FormItem label="密码" name="password" help="至少 8 位，需包含字母与数字">
         <PasswordInput
           class="password-field"
           v-model="form.password"
 
           autocomplete="new-password"
-          placeholder="密码（至少 8 位，含字母与数字）…"
+          placeholder="请输入密码…"
           :disabled="closed"
         />
       </FormItem>
@@ -227,10 +236,16 @@ function onRegisterSubmit({ validateResult }: { validateResult: unknown }) {
         />
       </FormItem>
       <FormItem name="agreed" class="agreement-item">
-        <Checkbox :checked="form.agreed" :borderless="true" @change="(value: unknown) => (form.agreed = Boolean(value))">
-          <template #label>我已阅读并同意</template>
-        </Checkbox>
-        <Button variant="text" class="agreement-link" @click="policyVisible = true">阅读《用户协议》与《隐私政策》</Button>
+        <div class="agreement-row">
+          <Checkbox
+            :checked="form.agreed"
+            :borderless="true"
+            aria-label="我已阅读并同意用户协议与隐私政策"
+            @change="(value: unknown) => (form.agreed = Boolean(value))"
+          />
+          <span class="agreement-text">我已阅读并同意</span>
+          <Button variant="text" class="agreement-link" @click="policyVisible = true">《用户协议》与《隐私政策》</Button>
+        </div>
       </FormItem>
       <Button theme="primary" size="large" block type="submit" :loading="submitting" :disabled="submitting || closed">
         {{ closed ? '注册暂未开放' : submitting ? '注册中…' : '注 册' }}
@@ -277,6 +292,13 @@ function onRegisterSubmit({ validateResult }: { validateResult: unknown }) {
   margin-bottom:var(--app-space-7);
 }
 
+/* 单渠道可用时的「注册方式」说明行：与 .field 同下间距，去掉单选圆点 */
+.channel-note {
+  margin:0 0 var(--app-space-7);
+  font: var(--app-type-body-sm);
+  color: var(--td-text-color-secondary);
+}
+
 .field label,
 .field .field-label {
   display: block;
@@ -304,6 +326,13 @@ function onRegisterSubmit({ validateResult }: { validateResult: unknown }) {
   margin: 0;
 }
 
+/* 字段帮助文案（如密码规则）：caption 档 + 次级文字色，与既有字段间距一致 */
+.form :deep(.t-form__item-help) {
+  margin-top: var(--app-space-3);
+  font: var(--app-type-caption);
+  color: var(--td-text-color-secondary);
+}
+
 /* 协议勾选：无表单标签（隐藏占位 label），沿用原 .agreement 的间距与字号 */
 .form :deep(.agreement-item) {
   margin: var(--app-space-2) 0 var(--app-space-7);
@@ -314,6 +343,15 @@ function onRegisterSubmit({ validateResult }: { validateResult: unknown }) {
 .form :deep(.agreement-item .t-form__label) {
   display: none;
 }
+
+.agreement-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--app-space-2);
+}
+
+.agreement-text { white-space: nowrap; }
 
 .agreement-link { min-height: 44px; justify-content: flex-start; padding: 0; }
 .policy-popup { width: 100%; }

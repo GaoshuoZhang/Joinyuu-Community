@@ -16,6 +16,7 @@ import {
   type PendingRespondent,
 } from '@/api/demands'
 import { identityLabelOf } from '@/constants/identity'
+import { userSubjectLabel, identityLabelOrEmpty } from '@/utils/subjectLabel'
 import { focusFirstInvalid, useDialogFormProtection } from '@/utils/form'
 import { useListQueryState } from '@/utils/listQuery'
 
@@ -104,6 +105,21 @@ function onPageChange(p: { current: number; pageSize: number }) {
 /* 响应者身份快照 → 标签文案（社区官方显示工作人员角色名；企业身份只显示 社区企业/合作企业） */
 function responderIdentityLabel(row: PendingRespondent | null): string {
   return identityLabelOf(row?.responderIdentity)
+}
+
+/* 响应者展示口径：真实姓名（身份 · 昵称 · 用户ID），避免同名/同昵称用户混淆；
+ * 代报名等无账号的响应无账号字段，回落快照姓名 */
+function responderNameLabel(row: PendingRespondent | null): string {
+  if (!row) return ''
+  return row.userId
+    ? userSubjectLabel({ realName: row.realName, nickname: row.nickname, uid: row.userId, identity: identityLabelOrEmpty(row.responderIdentity) })
+    : row.name
+}
+
+/* 详情抽屉：已有独立「身份」字段，响应者姓名不重复身份段 */
+function responderPlainName(row: PendingRespondent | null): string {
+  if (!row) return '—'
+  return row.userId ? userSubjectLabel({ realName: row.realName, nickname: row.nickname, uid: row.userId }) : row.name
 }
 
 const { syncQuery } = useListQueryState(query, load)
@@ -341,11 +357,9 @@ onMounted(load)
 
         <template #respondent="{ row }">
           <div class="stack-cell">
-            <span class="stack-title">{{ row.name }}</span>
-            <div class="tag-row">
-              <t-tag size="small" variant="light">{{ responderIdentityLabel(row) }}</t-tag>
-              <span v-if="row.enterprise" class="stack-sub">{{ row.enterprise }}</span>
-            </div>
+            <!-- 统一口径：真实姓名（身份 · 昵称 · 用户ID），身份段已并入标签，不再单列身份标签 -->
+            <span class="stack-title" :title="responderNameLabel(row)">{{ responderNameLabel(row) }}</span>
+            <span v-if="row.enterprise" class="stack-sub">{{ row.enterprise }}</span>
           </div>
         </template>
 
@@ -390,12 +404,15 @@ onMounted(load)
           </t-descriptions-item>
           <t-descriptions-item label="发布者">{{ current.publisherName }}</t-descriptions-item>
           <t-descriptions-item label="提交时间">{{ current.at }}</t-descriptions-item>
-          <t-descriptions-item label="响应者">{{ current.name }}</t-descriptions-item>
+          <t-descriptions-item label="响应者">{{ responderPlainName(current) }}</t-descriptions-item>
           <t-descriptions-item label="身份">{{ responderIdentityLabel(current) }}</t-descriptions-item>
           <t-descriptions-item label="所属">{{ current.enterprise || '—' }}</t-descriptions-item>
           <t-descriptions-item label="报价">{{ current.quote || '—' }}</t-descriptions-item>
           <t-descriptions-item label="可投入时间 / 工期">{{ current.timeline || '—' }}</t-descriptions-item>
-          <t-descriptions-item label="联系方式">{{ [current.phone, current.email].filter(Boolean).join(' · ') || '—' }}</t-descriptions-item>
+          <!-- 联系方式（手机 · 邮箱）单独占满一行：长邮箱在窄抽屉内按字符换行，不再溢出被裁切 -->
+          <t-descriptions-item label="联系方式" :span="2">
+            <span class="contact-text">{{ [current.phone, current.email].filter(Boolean).join(' · ') || '—' }}</span>
+          </t-descriptions-item>
           <t-descriptions-item label="相关经验与案例" :span="2">{{ current.cases || '—' }}</t-descriptions-item>
           <t-descriptions-item label="响应说明" :span="2">{{ current.message }}</t-descriptions-item>
         </t-descriptions>
@@ -422,7 +439,7 @@ onMounted(load)
         </div>
       </template>
       <p class="dialog-target">
-        通过「{{ approveRow?.name }}」对需求「{{ approveRow?.demandTitle }}」的响应？通过后发布者可查看并选定该响应。
+        通过「{{ responderNameLabel(approveRow) }}」对需求「{{ approveRow?.demandTitle }}」的响应？通过后发布者可查看并选定该响应。
       </p>
       <div class="approve-block">
         <span class="approve-label">向需求方显示</span>
@@ -446,7 +463,7 @@ onMounted(load)
         </div>
       </template>
       <p class="dialog-target">
-        响应方：{{ editRow?.name }}（{{ responderIdentityLabel(editRow) }}{{ editRow?.enterprise ? ` · ${editRow.enterprise}` : '' }}）
+        响应方：{{ responderPlainName(editRow) }}{{ editRow?.enterprise ? ` · ${editRow.enterprise}` : '' }}
         —— 响应方基本信息不可编辑。
       </p>
       <t-form ref="editFormRef" :data="editForm" :rules="editRules" label-align="top">
@@ -463,10 +480,10 @@ onMounted(load)
           <t-textarea v-accessible-field v-model="editForm.cases" :maxlength="300" :autosize="{ minRows: 2, maxRows: 5 }" placeholder="选填，可填写同类项目经验、案例或资源…" />
         </t-form-item>
         <t-form-item label="联系手机" name="phone">
-          <t-input v-accessible-field v-model="editForm.phone" :maxlength="11" placeholder="选填；留空表示清除该字段" />
+          <t-input v-accessible-field v-model="editForm.phone" :maxlength="11" placeholder="选填；留空表示清除该字段…" />
         </t-form-item>
         <t-form-item label="联系邮箱" name="email">
-          <t-input v-accessible-field v-model="editForm.email" :maxlength="128" placeholder="选填；留空表示清除该字段" />
+          <t-input v-accessible-field v-model="editForm.email" :maxlength="128" placeholder="选填；留空表示清除该字段…" />
         </t-form-item>
       </t-form>
     </t-dialog>
@@ -485,7 +502,7 @@ onMounted(load)
         </div>
       </template>
       <p class="reject-target">
-        驳回「{{ rejectRow?.name }}」对需求「{{ rejectRow?.demandTitle }}」的响应？驳回后该响应失效，响应者可重新响应。
+        驳回「{{ responderNameLabel(rejectRow) }}」对需求「{{ rejectRow?.demandTitle }}」的响应？驳回后该响应失效，响应者可重新响应。
       </p>
       <t-form ref="rejectFormRef" :data="rejectForm" :rules="rejectRules" label-align="top">
         <t-form-item label="驳回原因" name="reason">
@@ -519,13 +536,6 @@ onMounted(load)
   font-size: 12px;
   line-height: 18px;
   color: var(--td-text-color-secondary);
-}
-
-.tag-row {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-  flex-wrap: wrap;
 }
 
 .drawer-head {
@@ -583,5 +593,10 @@ onMounted(load)
   font-size: 12px;
   line-height: 20px;
   color: var(--td-text-color-placeholder);
+}
+
+/* 联系方式：邮箱等长串按字符断行（TDesign t-descriptions 无换行配置，只能作用于展示内容本身） */
+.contact-text {
+  word-break: break-all;
 }
 </style>

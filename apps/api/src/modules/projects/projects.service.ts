@@ -6,7 +6,8 @@ import { IdGeneratorService } from '../../common/id-generator/id-generator.servi
 import { AuditService } from '../../common/audit/audit.service'
 import { formatNow, formatToday } from '../../common/utils/time'
 import { sanitizeHtml } from '../../common/utils/sanitize-html'
-import { PointsEngineService } from '../../common/engine/points-engine/points-engine.service'
+import { AssetsService, type AssetSource, type MallAssetDto, type UploadedFileLike } from '../assets/assets.service'
+import { ProjectMilestoneReviewService } from './project-milestone-review.service'
 import type { QueryProjectsDto } from './dto/query-projects.dto'
 
 /* 承接方输入（ProjectInitPayload.undertakers，锁定签名）：enterprise=社区企业 / individual=用户 / custom=自定义 */
@@ -62,6 +63,8 @@ export interface ProjectUndertakerDto {
 }
 
 export interface MilestoneDto {
+  /** 里程碑主键（前端按 id 定位具体节点做验收/驳回） */
+  id: string
   name: string
   status: 'todo' | 'submitted' | 'accepted' | 'returned'
   date: string
@@ -110,16 +113,20 @@ interface ResolvedUndertaker {
   phone?: string | null
 }
 
+/* 项目合同附件的素材来源标记：sourceType=project / sourceId=项目编号 */
+const projectContractSource = (projectId: string): AssetSource => ({ type: 'project', id: projectId })
+
 /* 项目域（wiki-backend.md §7.7/§8.5）：
  * 列表筛选/排序/分页、详情、新增（含锁定 createProject 供 demands 复用）、编辑、暂停/恢复/关闭状态机、
- * 结项 finishProject（里程碑全 done → finished 并按承接占比分配经验值） */
+ * 里程碑验收/驳回（复用 ProjectMilestoneReviewService：全通过自动结项并按承接占比分配经验值） */
 @Injectable()
 export class ProjectsService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly ids: IdGeneratorService,
     private readonly audit: AuditService,
-    private readonly points: PointsEngineService,
+    private readonly assets: AssetsService,
+    private readonly reviews: ProjectMilestoneReviewService,
   ) {}
 
   async findAll(query: QueryProjectsDto): Promise<{ list: ProjectDto[]; total: number }> {
@@ -131,7 +138,7 @@ export class ProjectsService {
         { code: { contains: kw, mode: 'insensitive' } },
       ]
     }
-    if (query.status) where.status = query.status
+    if (query.status) where.status = { in: query.status }
 
     /* 参与人/企业筛选下沉数据库（承接方关联 some）；两者并存时按 AND 叠加，保持原「依次过滤」语义 */
     const and: Prisma.ProjectWhereInput[] = []
@@ -354,10 +361,14 @@ export class ProjectsService {
         },
       })
     }
+    /* 返回真实落库行（含主键 id）：新增/立项响应的 milestones 需要可直接定位节点做验收/驳回 */
+    const createdMilestones: Milestone[] = []
     for (const m of milestones) {
-      await tx.milestone.create({
-        data: { projectId: id, name: m.name, status: m.status, date: m.date, owners: m.owners },
-      })
+      createdMilestones.push(
+        await tx.milestone.create({
+          data: { projectId: id, name: m.name, status: m.status, date: m.date, owners: m.owners },
+        }),
+      )
     }
 
     return {
@@ -370,26 +381,32 @@ export class ProjectsService {
         contactName: u.contactName ?? null,
         phone: u.phone ?? null,
       })) as ProjectUndertaker[],
-      milestones: milestones.map((m) => ({
-        name: m.name,
-        status: m.status,
-        date: m.date,
-        owners: m.owners,
-      })) as Milestone[],
+      milestones: createdMilestones,
     }
   }
 
   /* 编辑（wiki-backend.md §7.7）：已结项项目只读；其余状态可编辑（前端禁用 finished 入口，后端同样强制）；
    * 不改状态/编号；里程碑整体重置为 todo；重算 memberCount */
   async update(id: string, payload: ProjectCreatePayload, operator: string): Promise<{ code: number }> {
-    const project = await this.prisma.project.findUnique({ where: { id } })
+    const project = await this.prisma.project.findUnique({
+      where: { id },
+      include: { undertakers: { orderBy: { id: 'asc' } } },
+    })
     if (!project) throw new NotFoundException('项目不存在')
     if (project.status === 'finished') throw new ConflictException('已结项的项目不可编辑')
 
     const undertakers = await this.resolveUndertakers(this.prisma, payload.undertakers)
+    /* 里程碑「责任方」存的是承接方展示名（历史口径）：承接方改名后编辑保存时按 refId 同步为当前展示名，
+     * 避免旧里程碑停留在失配的历史名称（G） */
+    const nameByRefId = new Map(undertakers.map((u) => [`${u.type}:${u.refId}`, u.name]))
     const milestones = payload.milestones
       .filter((m) => m.name.trim())
-      .map((m) => ({ name: m.name.trim(), status: 'todo' as const, date: m.date, owners: m.owners ?? [] }))
+      .map((m) => ({
+        name: m.name.trim(),
+        status: 'todo' as const,
+        date: m.date,
+        owners: remapOwnerNames(m.owners ?? [], project.undertakers, nameByRefId),
+      }))
 
     await this.prisma.$transaction(async (tx) => {
       await tx.project.update({
@@ -504,26 +521,46 @@ export class ProjectsService {
     return { code: 0 }
   }
 
-  /* 项目结项（wiki-backend.md §8.5）——非端点，供后续触发接线：
-   * 里程碑全 accepted → finished；结项经验按承接占比分配（总额 = expReward ?? project_completed 规则值，
-   * 仅社区企业与持社区个体身份的用户参与，规则与实现统一见 PointsEngine.issueProjectFinishExperienceInTransaction） */
-  async finishProject(id: string, operator: string): Promise<void> {
-    const project = await this.prisma.project.findUnique({
-      where: { id },
-      include: { undertakers: { orderBy: { id: 'asc' } }, milestones: true },
-    })
-    if (!project) throw new NotFoundException('项目不存在')
-    if (project.status === 'finished') return
-    if (project.milestones.length === 0 || !project.milestones.every((m) => m.status === 'accepted')) return
+  /* ---------- 里程碑验收 / 驳回（后台「项目详情 > 进度节点」）----------
+   * 状态迁移、进度重算、自动结项与里程碑积分/结项经验统一由 ProjectMilestoneReviewService 承担
+   * （与客户端「我的项目」共用同一套口径），此处只做入参校验与审计落库 */
 
-    await this.prisma.$transaction(async (tx) => {
-      await tx.project.update({
-        where: { id },
-        data: { status: 'finished', progress: 100, archivableAt: formatNow(), finishedAt: formatNow() },
-      })
-      await this.points.issueProjectFinishExperienceInTransaction(tx, project.name, project.expReward, project.undertakers)
+  /** 通过验收（待验收 → 已验收；全部通过自动结项并按承接占比发经验） */
+  async acceptMilestone(id: string, milestoneId: string, operator: string): Promise<{ code: number }> {
+    const result = await this.reviews.acceptMilestone(id, milestoneId)
+
+    await this.audit.record({
+      module: '项目管理',
+      action: '里程碑验收通过',
+      target: `${id} · ${result.projectName} · ${result.milestoneName}`,
+      before: { status: 'submitted' },
+      after: { status: 'accepted', progress: result.progress, finished: result.finished },
+      operator,
     })
-    void operator
+    return { code: 0 }
+  }
+
+  /** 驳回（待验收 → 已退回，承接方可重新提交；驳回原因必填，用于审计） */
+  async returnMilestone(
+    id: string,
+    milestoneId: string,
+    reason: string | undefined,
+    operator: string,
+  ): Promise<{ code: number }> {
+    const trimmed = (reason ?? '').trim()
+    if (!trimmed) throw new BadRequestException('请填写驳回原因')
+    const result = await this.reviews.returnMilestone(id, milestoneId, trimmed)
+
+    await this.audit.record({
+      module: '项目管理',
+      action: '里程碑驳回',
+      target: `${id} · ${result.projectName} · ${result.milestoneName}`,
+      detail: trimmed,
+      before: { status: 'submitted' },
+      after: { status: 'returned', returnReason: trimmed },
+      operator,
+    })
+    return { code: 0 }
   }
 
   async archive(id: string, operator: string): Promise<{ code: number }> {
@@ -547,6 +584,42 @@ export class ProjectsService {
       operator,
     })
     return { code: 0 }
+  }
+
+  /* ---------- 项目合同附件（线下签约合同照片/PDF 扫描件，复用素材库存储管道） ---------- */
+
+  /** 列表：某项目的全部合同附件（最新在前）；已归档项目仍可查看历史合同 */
+  async projectContracts(id: string): Promise<MallAssetDto[]> {
+    await this.assertProjectVisible(id)
+    return this.assets.listBySource(projectContractSource(id))
+  }
+
+  /** 上传：图片（PNG/JPEG/GIF/WebP）或 PDF，大小上限取系统配置 uploadMaxSizeMb */
+  async uploadProjectContract(
+    id: string,
+    file: UploadedFileLike | undefined,
+    operator: string,
+  ): Promise<MallAssetDto> {
+    await this.assertProjectWritable(id)
+    return this.assets.upload(file, undefined, operator, projectContractSource(id))
+  }
+
+  /** 删除：仅允许删除该项目名下的合同附件 */
+  async removeProjectContract(id: string, assetId: string, operator: string): Promise<{ code: number }> {
+    await this.assertProjectWritable(id)
+    return this.assets.removeBySource(assetId, projectContractSource(id), operator)
+  }
+
+  /** 合同读取前提：项目存在（已归档项目的合同仍可查看） */
+  private async assertProjectVisible(id: string): Promise<void> {
+    const project = await this.prisma.project.findUnique({ where: { id } })
+    if (!project) throw new NotFoundException('项目不存在')
+  }
+
+  /** 合同增删写操作前提：项目存在且未归档（已归档条目只读） */
+  private async assertProjectWritable(id: string): Promise<void> {
+    const project = await this.prisma.project.findFirst({ where: { id, deletedAt: null } })
+    if (!project) throw new NotFoundException('项目不存在')
   }
 
   /* 承接方展示名：企业→企业名；个人→昵称；自定义→name||id
@@ -580,6 +653,19 @@ export class ProjectsService {
   }
 }
 
+/** 里程碑「责任方」（存承接方展示名，历史口径）按旧承接方 refId → 当前展示名重映射：
+ * 旧名能对上旧承接方时改写为当前名（承接方改名场景）；对不上则保留原名（自定义/历史名称） */
+function remapOwnerNames(
+  owners: string[],
+  previous: Array<{ type: string; refId: string; name: string }>,
+  nameByRefId: Map<string, string>,
+): string[] {
+  return owners.map((owner) => {
+    const row = previous.find((u) => u.name === owner)
+    return row ? nameByRefId.get(`${row.type}:${row.refId}`) ?? owner : owner
+  })
+}
+
 /* Prisma 行 → Project 形状（refId → id；可选字段缺失省略） */
 function toProjectDto(project: ProjectWithRelations): ProjectDto {
   const dto: ProjectDto = {
@@ -599,6 +685,7 @@ function toProjectDto(project: ProjectWithRelations): ProjectDto {
     initiatedAt: project.initiatedAt,
     description: project.description,
     milestones: project.milestones.map((m) => ({
+      id: String(m.id),
       name: m.name,
       status: m.status as MilestoneDto['status'],
       date: m.date,

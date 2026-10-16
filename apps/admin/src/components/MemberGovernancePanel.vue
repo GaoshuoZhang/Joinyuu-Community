@@ -8,6 +8,7 @@ import ListEmptyState from '@/components/ListEmptyState.vue'
 import StatusTag from '@/components/StatusTag.vue'
 import { useListQueryState } from '@/utils/listQuery'
 import { fetchDeletions, reviewDeletion, type DeletionRow } from '@/api/memberGovernance'
+import { userSubjectLabel } from '@/utils/subjectLabel'
 
 const status = ref('')
 const page = ref(1)
@@ -55,7 +56,7 @@ const filterState = computed(() => ({ status: status.value }))
 function onClearFilter() { status.value = ''; page.value = 1; load() }
 function open(row: DeletionRow, action: 'approve' | 'reject') {
   selectedId.value = row.id
-  selectedName.value = row.user.nickname
+  selectedName.value = userSubjectLabel({ realName: row.user.realName, nickname: row.user.nickname, uid: row.user.uid })
   Object.assign(form, { action, note: '' }); visible.value = true
 }
 async function submit() {
@@ -81,7 +82,7 @@ const { close: closeReviewDialog } = useDialogFormProtection(form, visible, subm
   <div class="page-card">
     <ListErrorState v-if="loadError" :message="loadError" :loading="loading" @retry="load" />
     <t-table row-key="id" :data="rows" :columns="columns" :loading="loading" table-layout="fixed" hover resizable :pagination="{ current: page, pageSize: 20, total, showPageSize: false }" @page-change="(value: { current: number }) => { page = value.current; load() }">
-      <template #user="{ row }"><span>{{ row.user.nickname }}</span><t-tag class="id-tag-block" size="small" variant="light">{{ row.userId }}</t-tag></template>
+      <template #user="{ row }"><span :title="userSubjectLabel({ realName: row.user.realName, nickname: row.user.nickname, uid: row.user.uid })">{{ userSubjectLabel({ realName: row.user.realName, nickname: row.user.nickname, uid: row.user.uid }) }}</span></template>
       <template #id="{ row }"><t-tag class="id-tag" size="small" variant="light">{{ row.id }}</t-tag></template>
       <template #effectiveAt="{ row }">{{ row.effectiveAt || '—' }}<p v-if="row.status === 'cooling'" class="field-help">{{ remaining(row) }}</p></template>
       <template #status="{ row }"><StatusTag entity="accountDeletion" :value="row.status" /></template>

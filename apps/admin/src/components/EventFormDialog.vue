@@ -8,6 +8,7 @@ import { fetchPointsRules } from '@/api/mall'
 import { fetchSpaces } from '@/api/spaces'
 import { dictFallback, fetchDictEntries } from '@/api/dicts'
 import { userLevelOptions, visibilityIdentityOptions } from '@/constants/identity'
+import ImageUploadField from '@/components/ImageUploadField.vue'
 import type { CommunityEvent } from '@/types'
 
 const RichEditor = defineAsyncComponent(() => import('@/components/RichEditor.vue'))
@@ -61,6 +62,11 @@ const form = reactive({
   checkinRadiusM: 200,
   checkinOpenMin: 30,
   checkinCloseMin: 30,
+  /* 签到校验位置（默认关）：开启后客户端签到做地理围栏校验 */
+  checkinLocationRequired: false,
+  /* 签到校验码（默认开）：留空保存由服务端自动生成 6 位数字 */
+  checkinCodeRequired: true,
+  checkinCode: '',
   cancelDeadlineHours: 24,
 })
 
@@ -152,6 +158,9 @@ watch(
       form.checkinRadiusM = props.event.checkinRadiusM ?? 200
       form.checkinOpenMin = props.event.checkinOpenMin ?? 30
       form.checkinCloseMin = props.event.checkinCloseMin ?? 30
+      form.checkinLocationRequired = props.event.checkinLocationRequired ?? false
+      form.checkinCodeRequired = props.event.checkinCodeRequired ?? true
+      form.checkinCode = props.event.checkinCode ?? ''
       form.cancelDeadlineHours = props.event.cancelDeadlineHours ?? 24
       customVisibility.value = props.event.visibilityIdentities.length > 0 || props.event.visibilityLevels.length > 0
       customEnrollment.value = props.event.enrollmentIdentities.length > 0 || props.event.enrollmentLevels.length > 0
@@ -180,6 +189,9 @@ watch(
       form.checkinRadiusM = 200
       form.checkinOpenMin = 30
       form.checkinCloseMin = 30
+      form.checkinLocationRequired = false
+      form.checkinCodeRequired = true
+      form.checkinCode = ''
       form.cancelDeadlineHours = 24
       customVisibility.value = false
       customEnrollment.value = false
@@ -214,6 +226,9 @@ const rules: FormProps['rules'] = {
   ...Object.fromEntries(['capacity', 'enrollPoints', 'checkinPoints', 'checkinRadiusM', 'checkinOpenMin', 'checkinCloseMin', 'cancelDeadlineHours']
     .map((key) => [key, [{ validator: (value: number) => Number.isInteger(value) && value >= (['capacity', 'checkinRadiusM'].includes(key) ? 1 : 0),
       message: ['capacity', 'checkinRadiusM'].includes(key) ? '请输入大于 0 的整数' : '请输入不小于 0 的整数', trigger: 'submit' as const }]])),
+  /* 签到码：留空保存 = 服务端自动生成；填写须为 6 位数字 */
+  checkinCode: [{ validator: (value: string) => !value || /^\d{6}$/.test(value),
+    message: '签到码须为 6 位数字，留空保存时自动生成', trigger: 'submit' }],
   location: [{ required: true, message: '请输入地点', trigger: 'submit' }],
 }
 
@@ -247,6 +262,9 @@ async function onConfirm() {
       checkinRadiusM: form.checkinRadiusM,
       checkinOpenMin: form.checkinOpenMin,
       checkinCloseMin: form.checkinCloseMin,
+      checkinLocationRequired: form.checkinLocationRequired,
+      checkinCodeRequired: form.checkinCodeRequired,
+      checkinCode: form.checkinCode.trim() || undefined,
       cancelDeadlineHours: form.cancelDeadlineHours,
     }
     if (props.mode === 'create') {
@@ -299,9 +317,8 @@ usePageDirtyGuard(computed(() => props.visible && isDirty.value))
       <t-form-item label="活动标题" name="title">
         <t-input v-accessible-field clearable v-model="form.title" placeholder="请输入活动标题…" />
       </t-form-item>
-      <t-form-item label="活动封面" name="coverUrl" help="可粘贴素材库文件地址或 HTTPS 图片地址；留空时移动端显示品牌占位图">
-        <t-input v-accessible-field clearable v-model="form.coverUrl" placeholder="请输入封面图片地址…" />
-        <t-image v-if="form.coverUrl" class="cover-preview" :src="form.coverUrl" fit="cover" />
+      <t-form-item label="活动封面" name="coverUrl" help="上传图片直传素材库；留空时移动端显示品牌占位图">
+        <ImageUploadField v-model="form.coverUrl" biz-type="event-cover" tip="建议 16:9 横图，图片将存入素材库" />
       </t-form-item>
       <div class="form-row">
         <t-form-item label="活动类型" name="type">
@@ -467,26 +484,46 @@ usePageDirtyGuard(computed(() => props.visible && isDirty.value))
         </div>
       </div>
 
+      <!-- 签到校验位置：开关默认关；开启后才显示 场地经度/场地纬度/签到半径（经度在纬度左边） -->
       <div class="form-row">
-        <t-form-item label="场地纬度" name="venueLat">
-          <t-input v-accessible-field clearable v-model="form.venueLat" placeholder="如 30.2741；留空不校验位置…" />
-        </t-form-item>
-        <t-form-item label="场地经度" name="venueLng">
-          <t-input v-accessible-field clearable v-model="form.venueLng" placeholder="如 120.1551；留空不校验位置…" />
-        </t-form-item>
+        <div class="scope-col">
+          <div class="scope-head">
+            <span class="scope-title scope-popup-trigger">签到校验位置</span>
+            <span class="scope-switch-trigger"><t-switch v-accessible-field="'签到校验位置'" v-model="form.checkinLocationRequired" aria-label="签到校验位置" /></span>
+          </div>
+          <template v-if="form.checkinLocationRequired">
+            <t-form-item label="场地经度" name="venueLng">
+              <t-input v-accessible-field clearable v-model="form.venueLng" placeholder="如 120.1551；留空不校验位置…" />
+            </t-form-item>
+            <t-form-item label="场地纬度" name="venueLat">
+              <t-input v-accessible-field clearable v-model="form.venueLat" placeholder="如 30.2741；留空不校验位置…" />
+            </t-form-item>
+            <t-form-item label="签到半径（米）" name="checkinRadiusM">
+              <t-input-number v-accessible-field v-model="form.checkinRadiusM" :min="1" theme="column" class="ctl-w-full" :decimal-places="0" :step="1" />
+            </t-form-item>
+          </template>
+        </div>
+        <!-- 签到校验码：开关默认开；6 位数字留空保存由服务端自动生成 -->
+        <div class="scope-col">
+          <div class="scope-head">
+            <span class="scope-title scope-popup-trigger">签到校验码</span>
+            <span class="scope-switch-trigger"><t-switch v-accessible-field="'签到校验码'" v-model="form.checkinCodeRequired" aria-label="签到校验码" /></span>
+          </div>
+          <t-form-item v-if="form.checkinCodeRequired" label="签到码" name="checkinCode" help="参与者现场签到需输入 6 位签到码；留空保存由系统自动生成">
+            <t-input v-accessible-field clearable v-model="form.checkinCode" maxlength="6" placeholder="留空保存自动生成…" />
+          </t-form-item>
+        </div>
       </div>
+
       <div class="form-row">
-        <t-form-item label="签到半径（米）" name="checkinRadiusM">
-          <t-input-number v-accessible-field v-model="form.checkinRadiusM" :min="1" theme="column" class="ctl-w-full" :decimal-places="0" :step="1" />
-        </t-form-item>
         <t-form-item label="取消报名时限（开场前小时）" name="cancelDeadlineHours">
           <t-input-number v-accessible-field v-model="form.cancelDeadlineHours" :min="0" theme="column" class="ctl-w-full" :decimal-places="0" :step="1" />
         </t-form-item>
-      </div>
-      <div class="form-row">
         <t-form-item label="签到提前开放（分钟）" name="checkinOpenMin">
           <t-input-number v-accessible-field v-model="form.checkinOpenMin" :min="0" theme="column" class="ctl-w-full" :decimal-places="0" :step="1" />
         </t-form-item>
+      </div>
+      <div class="form-row">
         <t-form-item label="签到延后关闭（分钟）" name="checkinCloseMin">
           <t-input-number v-accessible-field v-model="form.checkinCloseMin" :min="0" theme="column" class="ctl-w-full" :decimal-places="0" :step="1" />
         </t-form-item>
@@ -514,13 +551,6 @@ usePageDirtyGuard(computed(() => props.visible && isDirty.value))
   .form-row {
     grid-template-columns: 1fr;
   }
-}
-
-.cover-preview {
-  width: 200px;
-  height: 112px;
-  margin-top: 8px;
-  border-radius: var(--td-radius-medium);
 }
 
 .scope-head {

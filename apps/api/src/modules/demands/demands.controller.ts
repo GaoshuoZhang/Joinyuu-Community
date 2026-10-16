@@ -13,6 +13,7 @@ import { ProxyRespondDemandDto } from './dto/proxy-respond-demand.dto'
 import { ReviewRespondentDto } from './dto/review-respondent.dto'
 import { UpdateRespondentDto } from './dto/update-respondent.dto'
 import { InitiateProjectDto } from './dto/initiate-project.dto'
+import { QuerySelectedRespondentsDto } from './dto/query-selected-respondents.dto'
 
 @Controller('api/admin/demands')
 export class DemandsController {
@@ -36,6 +37,20 @@ export class DemandsController {
   @Get(':id')
   findOne(@Param('id') id: string): Promise<DemandDto> {
     return this.demands.findOne(id)
+  }
+
+  /* 需求立项预填：缺省取需求方已选定的承接方（可多个）转为承接方选项；传入 respondentIds
+   * 时取「立项前置选定承接方」勾选的响应；无对应响应返回空数组 */
+  @RequirePermission(['/demands', '/projects'])
+  @Get(':id/selected-respondents')
+  selectedRespondents(
+    @Param('id') id: string,
+    @Query() query: QuerySelectedRespondentsDto,
+  ): Promise<UndertakerOptionDto[]> {
+    const ids = query.respondentIds
+      ? query.respondentIds.split(',').map((v) => Number(v)).filter((n) => Number.isInteger(n) && n > 0)
+      : undefined
+    return this.demands.selectedRespondentOptions(id, ids)
   }
 
   @RequirePermission('/demands')

@@ -1,8 +1,8 @@
 <script setup lang="ts">
 import RowMoreActions from '@/components/RowMoreActions.vue'
-import { computed, onMounted, reactive, ref } from 'vue'
+import { computed, onBeforeUnmount, onMounted, reactive, ref } from 'vue'
 import { MessagePlugin } from 'tdesign-vue-next'
-import { AddIcon, EditIcon, SearchIcon } from 'tdesign-icons-vue-next'
+import { AddIcon, ChevronDownIcon, EditIcon, SearchIcon } from 'tdesign-icons-vue-next'
 import PageHeader from '@/components/PageHeader.vue'
 import ColumnController from '@/components/ColumnController.vue'
 import ListEmptyState from '@/components/ListEmptyState.vue'
@@ -18,7 +18,7 @@ import {
   toggleAnnouncementPin,
   withdrawAnnouncement,
 } from '@/api/announcements'
-import type { Announcement, AnnouncementStatus } from '@/types'
+import type { Announcement } from '@/types'
 
 /* 首页公告：多条公告管理。「启用」即置顶（沿用 pinned，不加列）——
  * 启用互锁保证全局至多一条开启、允许全关；启用的一条展示在客户端首页搜索栏下方。 */
@@ -28,18 +28,48 @@ const list = ref<Announcement[]>([])
 const total = ref(0)
 const acting = ref('')
 
+/* 状态勾选式筛选（与活动/需求列表同一形态）：2 个可选状态（不含「全部」项）；
+ * 默认勾选「已发布」，即列表默认不展示「已下架」；
+ * 全部取消勾选 = 不按状态过滤（显示全部） */
+const statusCheckOptions = [
+  { label: '已发布', value: 'published' },
+  { label: '已下架', value: 'withdrawn' },
+]
+const DEFAULT_STATUSES = ['published']
 const query = reactive({
   page: 1,
   pageSize: 10,
   keyword: '',
-  status: '' as AnnouncementStatus | '',
+  /* 勾选式状态筛选：数组（useListQueryState 以重复 query 参数同步）；空串占位 = 不按状态过滤 */
+  status: [...DEFAULT_STATUSES] as string[],
 })
 
-const statusOptions = [
-  { label: '全部', value: '' },
-  { label: '已发布', value: 'published' },
-  { label: '已下架', value: 'withdrawn' },
-]
+/* 状态勾选面板：勾选即查询；ESC 关闭（t-popup 仅 trigger=focus 内置 ESC 处理） */
+const statusPanelVisible = ref(false)
+const checkedStatusCount = computed(() => query.status.filter(Boolean).length)
+
+function onStatusPanelKeydown(e: KeyboardEvent) {
+  if (e.key === 'Escape' && statusPanelVisible.value) statusPanelVisible.value = false
+}
+onMounted(() => window.addEventListener('keydown', onStatusPanelKeydown))
+onBeforeUnmount(() => window.removeEventListener('keydown', onStatusPanelKeydown))
+
+/* 空选 = 不按状态过滤：用单元素空串占位 —— 空数组会被 vue-router 从 URL 中丢弃 */
+function onStatusChange(value: (string | number)[]) {
+  const picked = value.map(String).filter(Boolean)
+  query.status = picked.length ? picked : ['']
+  onSearch()
+}
+
+function selectAllStatuses() {
+  query.status = statusCheckOptions.map((o) => o.value)
+  onSearch()
+}
+
+function clearAllStatuses() {
+  query.status = ['']
+  onSearch()
+}
 
 const columns = [
   { colKey: 'title', title: '公告标题', cell: 'title', width: 240, resizable: true, ellipsis: true },
@@ -77,7 +107,7 @@ async function load() {
       page: query.page,
       pageSize: query.pageSize,
       keyword: query.keyword.trim() || undefined,
-      status: query.status || undefined,
+      status: query.status,
     })
     if (requestId !== loadRequest) return
     list.value = res.list
@@ -97,7 +127,7 @@ function onSearch() {
 
 function onReset() {
   query.keyword = ''
-  query.status = ''
+  query.status = [...DEFAULT_STATUSES]
   query.page = 1
   load()
 }
@@ -229,7 +259,41 @@ onMounted(load)
 
     <div class="page-filter-bar">
       <t-input v-accessible-field="'搜索标题/编号'" class="ctl-w-xl" v-model="query.keyword" clearable placeholder="搜索标题/编号…" @enter="onSearch" />
-      <t-select v-accessible-field="'状态'" class="ctl-w-md" v-model="query.status" label="状态" :options="statusOptions" @change="onSearch" />
+      <!-- 状态：勾选式多选（默认勾选「已发布」，全部取消 = 不按状态过滤）；勾选即查询 -->
+      <t-popup
+        v-model:visible="statusPanelVisible"
+        trigger="click"
+        placement="bottom-left"
+        :show-arrow="false"
+        overlay-class-name="status-filter-popup"
+        overlay-inner-class-name="status-filter-popup-inner"
+      >
+        <t-button variant="outline" :aria-label="`状态筛选，已勾选 ${checkedStatusCount} 项`">
+          状态<template v-if="checkedStatusCount">（{{ checkedStatusCount }}）</template>
+          <template #suffix><ChevronDownIcon /></template>
+        </t-button>
+        <template #content>
+          <div class="status-panel">
+            <div class="status-panel-head">
+              <span class="status-panel-title">状态</span>
+              <div class="status-panel-tools">
+                <t-button
+                  variant="text"
+                  size="small"
+                  :disabled="checkedStatusCount === statusCheckOptions.length"
+                  @click="selectAllStatuses"
+                >
+                  全选
+                </t-button>
+                <t-button variant="text" size="small" :disabled="checkedStatusCount === 0" @click="clearAllStatuses">
+                  清空
+                </t-button>
+              </div>
+            </div>
+            <t-checkbox-group :value="query.status" :options="statusCheckOptions" @change="onStatusChange" />
+          </div>
+        </template>
+      </t-popup>
       <t-button theme="primary" @click="onSearch">
         <template #icon><SearchIcon /></template>
         查询
@@ -396,5 +460,51 @@ onMounted(load)
   gap: 2px;
   flex-wrap: nowrap;
   white-space: nowrap;
+}
+
+/* ---------- 状态勾选面板（浮层挂载到 body，scoped 选择器无法命中，故用 :global 收窄到本页唯一类名） ---------- */
+:global(.status-filter-popup) {
+  padding: 0;
+}
+
+:global(.status-filter-popup-inner) {
+  padding: 0;
+  background: transparent;
+  border-radius: 0;
+  box-shadow: none;
+}
+
+.status-panel {
+  width: 180px;
+  padding: 8px 12px 12px;
+  background: var(--td-bg-color-container);
+  border: 1px solid var(--td-component-border);
+  border-radius: var(--td-radius-medium);
+  box-shadow: var(--td-shadow-2);
+}
+
+.status-panel-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 8px;
+}
+
+.status-panel-title {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--td-text-color-primary);
+}
+
+.status-panel-tools {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.status-panel :deep(.t-checkbox-group) {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
 }
 </style>

@@ -5,6 +5,7 @@ import type { FormProps } from 'tdesign-vue-next'
 import { focusFirstInvalid, useDialogDirtyGuard, usePageDirtyGuard } from '@/utils/form'
 import { createLease, fetchRenterOptions, updateLease } from '@/api/workstations'
 import { workstationTypeMap } from '@/constants/status'
+import { userSubjectLabel } from '@/utils/subjectLabel'
 import type { Lease, LeaseRenterType, RentPeriod, Workstation } from '@/types'
 
 /* 租约新增/编辑弹窗（办公位分配入口）：
@@ -29,7 +30,7 @@ const emit = defineEmits<{
 const submitting = ref(false)
 const formRef = ref()
 /* 租赁方原始数据（用于选项渲染与联系电话自动填充） */
-const renterUsers = ref<{ uid: string; nickname: string; phone: string }[]>([])
+const renterUsers = ref<{ uid: string; nickname: string; realName: string; phone: string }[]>([])
 const renterEnterprises = ref<{ id: string; name: string; contactName: string; contactPhone: string }[]>([])
 /* 租赁方选项加载失败：内联提示 + 重试（替代仅 toast，与 WorkstationFormDialog/AreaPlanDialog 同构） */
 const optionLoadError = ref('')
@@ -98,7 +99,7 @@ const workstationTree = computed(() => {
 /* 租赁方选项：全部企业 + 全部个人用户；配合 creatable 支持直接输入未注册租赁方 */
 const renterOptions = computed(() => [
   ...renterEnterprises.value.map((e) => ({ label: `${e.name}（企业 · ${e.id}）`, value: `E:${e.id}` })),
-  ...renterUsers.value.map((u) => ({ label: `${u.nickname}（个人用户 · ${u.uid}）`, value: `U:${u.uid}` })),
+  ...renterUsers.value.map((u) => ({ label: userSubjectLabel({ realName: u.realName, nickname: u.nickname, uid: u.uid, identity: '个人用户' }), value: `U:${u.uid}` })),
 ])
 
 /* 选择值变化 → 解析租赁方并自动填充联系电话（未注册条目不填充，联系人手动输入）；

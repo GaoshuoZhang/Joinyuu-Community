@@ -1,12 +1,12 @@
 <script setup lang="ts">
 import { collectAllPages, executeBulk } from '@/utils/bulkOperation'
 import RowMoreActions from '@/components/RowMoreActions.vue'
-import { computed, onMounted, reactive, ref, watch } from 'vue'
+import { computed, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
 import ListErrorState from '@/components/ListErrorState.vue'
 import { useListQueryState } from '@/utils/listQuery'
 import { useRouter } from 'vue-router'
 import { MessagePlugin } from 'tdesign-vue-next'
-import { AddIcon, SearchIcon, ViewListIcon } from 'tdesign-icons-vue-next'
+import { AddIcon, ChevronDownIcon, SearchIcon, ViewListIcon } from 'tdesign-icons-vue-next'
 import PageHeader from '@/components/PageHeader.vue'
 import StatusTag from '@/components/StatusTag.vue'
 import ColumnController from '@/components/ColumnController.vue'
@@ -19,8 +19,9 @@ import { dictFallback, fetchDictEntries } from '@/api/dicts'
 import { fetchPointsRules } from '@/api/mall'
 import { statusLabel } from '@/utils/exportCsv'
 import EventScheduleDialog from '@/components/EventScheduleDialog.vue'
-import { archiveEvent, cancelEvent, cancelEventSchedule, fetchEvents, publishEventNow, setEventEnrollment, restoreCancelledEvent } from '@/api/events'
+import { archiveEvent, cancelEvent, cancelEventSchedule, fetchEvents, publishEventNow, setEventEnrollment, restoreCancelledEvent, type EventQuery } from '@/api/events'
 import { fetchUser } from '@/api/users'
+import { userIdentitySummary, userSubjectLabel } from '@/utils/subjectLabel'
 import type { CommunityEvent } from '@/types'
 
 const router = useRouter()
@@ -33,56 +34,87 @@ const acting = ref('')
 /* 用户详情「数据概览」跳转带入的报名人筛选 */
 const participantName = ref('')
 
-const query = reactive({
-  page: 1,
-  pageSize: 10,
-  keyword: '',
-  type: '',
-  status: '',
-  participant: '',
-})
-
 /* 活动类型维护弹窗（原「数据字典 > 活动类型」入口；label 即业务存储值，故仅支持新增/启停/删除） */
 const typeDialogVisible = ref(false)
 
 /* 活动类型选项来自数据字典，加载失败回退默认词表 */
 const typeOptions = ref([{ label: '全部', value: '' }, ...dictFallback.event_type.map((t) => ({ label: t, value: t }))])
 
-const statusOptions = [
-  { label: '全部', value: '' },
+/* 状态勾选式筛选（与需求管理同一形态）：5 个可选状态（不含「全部」项）；
+ * 默认勾选「待发布 / 定时发布中 / 已发布」，即列表默认不展示「已结束 / 已取消」；
+ * 全部取消勾选 = 不按状态过滤（显示全部） */
+const statusCheckOptions = [
   { label: '待发布', value: 'pending_release' },
   { label: '定时发布中', value: 'scheduled' },
   { label: '已发布', value: 'published' },
   { label: '已结束', value: 'ended' },
   { label: '已取消', value: 'cancelled' },
 ]
+const DEFAULT_STATUSES = ['pending_release', 'scheduled', 'published']
+const query = reactive({
+  page: 1,
+  pageSize: 10,
+  keyword: '',
+  type: '',
+  /* 勾选式状态筛选：数组（useListQueryState 以重复 query 参数同步）；空串占位 = 不按状态过滤 */
+  status: [...DEFAULT_STATUSES] as string[],
+  participant: '',
+})
 
-/* 排序：默认 ID 倒序（最新在前），支持开始时间/创建时间正/倒序 */
+/* 状态勾选面板（同需求管理）：勾选即查询；ESC 关闭（t-popup 仅 trigger=focus 内置 ESC 处理） */
+const statusPanelVisible = ref(false)
+const checkedStatusCount = computed(() => query.status.filter(Boolean).length)
+
+function onStatusPanelKeydown(e: KeyboardEvent) {
+  if (e.key === 'Escape' && statusPanelVisible.value) statusPanelVisible.value = false
+}
+onMounted(() => window.addEventListener('keydown', onStatusPanelKeydown))
+onBeforeUnmount(() => window.removeEventListener('keydown', onStatusPanelKeydown))
+
+/* 空选 = 不按状态过滤：用单元素空串占位 —— 空数组会被 vue-router 从 URL 中丢弃 */
+function onStatusChange(value: (string | number)[]) {
+  const picked = value.map(String).filter(Boolean)
+  query.status = picked.length ? picked : ['']
+  onSearch()
+}
+
+function selectAllStatuses() {
+  query.status = statusCheckOptions.map((o) => o.value)
+  onSearch()
+}
+
+function clearAllStatuses() {
+  query.status = ['']
+  onSearch()
+}
+
+/* 排序：默认 ID 倒序（最新在前），支持计划开始时间正/倒序 */
 const sortBy = ref<'id' | 'startTime' | 'createdAt'>('id')
 const sortOrder = ref<'ascend' | 'descend'>('descend')
 
+/* 活动类型标签分色（TDesign 语义色，五种类型互不相同；未命中回落 default） */
+const EVENT_TYPE_THEME: Record<string, 'primary' | 'warning' | 'success' | 'danger' | 'default'> = {
+  沙龙: 'primary',
+  培训: 'warning',
+  路演: 'success',
+  社交: 'danger',
+  赛事: 'default',
+}
+function eventTypeTheme(type: string): 'primary' | 'warning' | 'success' | 'danger' | 'default' {
+  return EVENT_TYPE_THEME[type] ?? 'default'
+}
+
 const columns = [
   { colKey: 'title', fixed: 'left' as const, title: '活动', cell: 'title', width: 220, resizable: true , ellipsis: true},
-  { colKey: 'type', title: '类型', cell: 'type', width: 84, resizable: true , ellipsis: true},
   {
     colKey: 'startTime',
-    title: '活动开始时间',
+    title: '计划开始/结束时间',
     cell: 'startTime',
     ellipsis: true,
     width: 170,
     resizable: true,
     sorter: true,
     sortType: 'all',
-  },
-  {
-    colKey: 'createdAt',
-    title: '创建时间',
-    cell: 'createdAt',
-    width: 170,
-    resizable: true,
-    sorter: true,
-    sortType: 'all',
-  ellipsis: true,
   },
   { colKey: 'location', title: '地点', ellipsis: true, width: 130, resizable: true },
   { colKey: 'enrolled', title: '报名', cell: 'enrolled', width: 150, resizable: true , ellipsis: true},
@@ -132,10 +164,10 @@ async function reloadAfterRemove() {
   await load()
 }
 
-/* 远程排序：表头点击 → 更新排序状态 → 重新加载（受控 :sort 保证表头指示器正确） */
+/* 远程排序：表头点击 → 更新排序状态 → 重新加载（仅「计划开始/结束时间」列可排） */
 function onSortChange(sort: { sortBy: string; descending: boolean }) {
-  if (sort.sortBy !== 'startTime' && sort.sortBy !== 'createdAt') return
-  sortBy.value = sort.sortBy as 'startTime' | 'createdAt'
+  if (sort.sortBy !== 'startTime') return
+  sortBy.value = 'startTime'
   sortOrder.value = sort.descending ? 'descend' : 'ascend'
   query.page = 1
   load()
@@ -154,7 +186,7 @@ function onSearch() {
 function onReset() {
   query.keyword = ''
   query.type = ''
-  query.status = ''
+  query.status = [...DEFAULT_STATUSES]
   query.participant = ''
   participantName.value = ''
   query.page = 1
@@ -220,7 +252,8 @@ async function onArchive(row: CommunityEvent) {
 /* 一键归档：按当前筛选全量拉取，归档所选状态的已结束 / 已取消活动 */
 const archivingAll = ref(false)
 const bulkVisible = ref(false)
-let bulkScope = { ...query }
+/* 一键归档范围快照（状态被排除，见 onBulkArchive） */
+let bulkScope: EventQuery = { ...query }
 const bulkProgress = ref<{ done: number; total: number; failed: number } | null>(null)
 let bulkCancelled = false
 const bulkStatuses = [
@@ -255,14 +288,19 @@ async function doBulkArchive(values: string[]) {
   }
 }
 
-/* 确认前预估影响条数：按所选状态取 total 求和（pageSize=1 仅取 total） */
+/* 确认前预估影响条数：按所选状态取 total 求和（pageSize=1 仅取 total）；
+ * 当前列表状态筛选（勾选式数组；全不选为空串占位=不筛选）不含该状态时预估为 0 */
 function countByStatus(status: string) {
-  if (bulkScope.status && bulkScope.status !== status) return Promise.resolve(0)
+  const scopeStatus = bulkScope.status
+  const activeStatuses = (Array.isArray(scopeStatus) ? scopeStatus : [scopeStatus]).filter(Boolean)
+  if (activeStatuses.length > 0 && !activeStatuses.includes(status)) return Promise.resolve(0)
   return fetchEvents({ ...bulkScope, status, page: 1, pageSize: 1 }).then((result) => result.total)
 }
 
 function onBulkArchive() {
-  bulkScope = { ...query }
+  /* 一键归档范围不含状态筛选（同需求列表口径）：默认状态集已隐藏「已结束/已取消」，
+   * 若把状态带入范围，两个可归档状态恒为 0 条，归档入口失效 */
+  bulkScope = { ...query, status: '' }
   bulkVisible.value = true
 }
 
@@ -381,7 +419,7 @@ async function applyRouteFilter() {
   if (query.participant) {
     try {
       const u = await fetchUser(query.participant)
-      participantName.value = u.nickname
+      participantName.value = userSubjectLabel({ realName: u.realName, nickname: u.nickname, uid: u.uid, identity: userIdentitySummary(u) })
     } catch {
       /* 用户不存在时标签回退显示 ID */
     }
@@ -496,13 +534,41 @@ function fetchAllForExport(page: number, pageSize: number) {
         clearable
         @change="onSearch"
       />
-      <t-select v-accessible-field="'状态'" class="ctl-w-md"
-        v-model="query.status"
-        label="状态"
-        :options="statusOptions"
-        clearable
-        @change="onSearch"
-      />
+      <!-- 状态：勾选式多选（默认勾选 3 项，全部取消 = 不按状态过滤）；勾选即查询 -->
+      <t-popup
+        v-model:visible="statusPanelVisible"
+        trigger="click"
+        placement="bottom-left"
+        :show-arrow="false"
+        overlay-class-name="status-filter-popup"
+        overlay-inner-class-name="status-filter-popup-inner"
+      >
+        <t-button variant="outline" :aria-label="`状态筛选，已勾选 ${checkedStatusCount} 项`">
+          状态<template v-if="checkedStatusCount">（{{ checkedStatusCount }}）</template>
+          <template #suffix><ChevronDownIcon /></template>
+        </t-button>
+        <template #content>
+          <div class="status-panel">
+            <div class="status-panel-head">
+              <span class="status-panel-title">状态</span>
+              <div class="status-panel-tools">
+                <t-button
+                  variant="text"
+                  size="small"
+                  :disabled="checkedStatusCount === statusCheckOptions.length"
+                  @click="selectAllStatuses"
+                >
+                  全选
+                </t-button>
+                <t-button variant="text" size="small" :disabled="checkedStatusCount === 0" @click="clearAllStatuses">
+                  清空
+                </t-button>
+              </div>
+            </div>
+            <t-checkbox-group :value="query.status" :options="statusCheckOptions" @change="onStatusChange" />
+          </div>
+        </template>
+      </t-popup>
       <t-button @click="onSearch">
         <template #icon><SearchIcon /></template>
         查询
@@ -539,13 +605,17 @@ function fetchAllForExport(page: number, pageSize: number) {
       >
         <template #title="{ row }">
           <div class="cell-title">{{ row.title }}</div>
-          <div class="cell-sub">{{ row.id }}</div>
+          <div class="cell-sub">
+            <t-tag variant="light" size="small" :theme="eventTypeTheme(row.type)">{{ row.type }}</t-tag>
+            <span class="cell-id">{{ row.id }}</span>
+          </div>
         </template>
-        <template #type="{ row }">
-          <t-tag variant="light">{{ row.type }}</t-tag>
+        <template #startTime="{ row }">
+          <div class="stack-cell">
+            <span>{{ row.startTime || '—' }}</span>
+            <span class="cell-end">{{ row.endTime || '—' }}</span>
+          </div>
         </template>
-        <template #startTime="{ row }">{{ row.startTime || '—' }}</template>
-        <template #createdAt="{ row }">{{ row.createdAt ?? '—' }}</template>
         <template #enrolled="{ row }">
           <div class="stack-cell">
             <span>{{ approvedCount(row) }}/{{ row.capacity }}</span>
@@ -673,10 +743,83 @@ function fetchAllForExport(page: number, pageSize: number) {
 </template>
 
 <style scoped>
+.cell-title {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* 标题区第二行：类型标签在活动编号左边（列 ellipsis 由标题行承载） */
+.cell-sub {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 2px;
+  min-width: 0;
+}
+
+.cell-id {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-width: 0;
+}
+
+/* 计划开始/结束时间：两行同为 14px 时间戳，次行用次级色区分层次（与需求/项目列表口径一致） */
+.cell-end {
+  color: var(--td-text-color-secondary);
+}
+
 .stack-cell {
   display: flex;
   flex-direction: column;
   align-items: center;
   gap: 3px;
+}
+
+/* ---------- 状态勾选面板（浮层挂载到 body，scoped 选择器无法命中，故用 :global 收窄到本页唯一类名） ---------- */
+:global(.status-filter-popup) {
+  padding: 0;
+}
+
+:global(.status-filter-popup-inner) {
+  padding: 0;
+  background: transparent;
+  border-radius: 0;
+  box-shadow: none;
+}
+
+.status-panel {
+  width: 180px;
+  padding: 8px 12px 12px;
+  background: var(--td-bg-color-container);
+  border: 1px solid var(--td-component-border);
+  border-radius: var(--td-radius-medium);
+  box-shadow: var(--td-shadow-2);
+}
+
+.status-panel-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 8px;
+}
+
+.status-panel-title {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--td-text-color-primary);
+}
+
+.status-panel-tools {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.status-panel :deep(.t-checkbox-group) {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
 }
 </style>

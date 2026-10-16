@@ -2,6 +2,8 @@ import {
   BadRequestException,
   ConflictException,
   ForbiddenException,
+  HttpException,
+  HttpStatus,
   Injectable,
   InternalServerErrorException,
   NotFoundException,
@@ -25,6 +27,11 @@ import { SubmitFeedbackDto } from './dto/submit-feedback.dto'
 /* 积分/经验触发 reason 文案（与 admin events 流水风格一致） */
 const ENROLL_APPROVED_REASON = '活动报名奖励'
 const CHECKIN_REASON = '活动签到'
+
+/* 签到码防爆破：单用户单活动连续输错计数字段（15 分钟窗口）；验证码复用 app 登录存储前缀 */
+const CHECKIN_FAIL_PREFIX = 'checkin:fail:'
+const CHECKIN_FAIL_TTL = 15 * 60
+const APP_CAPTCHA_PREFIX = 'captcha:app:'
 
 /* 电子票核销码 HMAC 密钥：复用 JWT 密钥；未配置时降级开发默认值（与 JwtModule 兜底一致） */
 const TICKET_SECRET = process.env.JWT_SECRET ?? 'dev-only-change-me'
@@ -235,7 +242,11 @@ export class AppEventsService {
 
   /* ---------- 电子签到 ---------- */
 
-  async checkIn(uid: string, eventId: string, dto: CheckInDto): Promise<{ pointsAwarded: number }> {
+  async checkIn(
+    uid: string,
+    eventId: string,
+    dto: CheckInDto,
+  ): Promise<{ pointsAwarded: number; position: number; title: string; startTime: string; endTime: string }> {
     const event = await this.prisma.communityEvent.findUnique({
       where: { id: eventId },
       include: { enrollments: { where: { userId: uid } } },
@@ -254,8 +265,32 @@ export class AppEventsService {
       throw new BadRequestException('当前不在签到时间范围内')
     }
 
-    // 地理围栏：配置了签到地点时校验距离 <= checkinRadiusM
-    if (event.venueLat != null && event.venueLng != null) {
+    /* 签到码防爆破：码启用时连续错误 ≥4 次（第 5 次起）强制图形验证码（428），
+     * 复用 app 登录验证码体系（GET /api/app/auth/captcha 签发，Redis 消费即删） */
+    const codeEnabled = event.checkinCodeRequired && event.checkinCode != null
+    if (codeEnabled) {
+      const fails = (await this.redis.getCache<number>(CHECKIN_FAIL_PREFIX + `${uid}:${eventId}`)) ?? 0
+      if (fails >= 4) {
+        const captchaOk = await this.redis.consumeAndCompare(
+          APP_CAPTCHA_PREFIX + (dto.captchaId ?? ''),
+          (dto.captchaCode ?? '').toUpperCase(),
+        )
+        if (!captchaOk) {
+          throw new HttpException('签到码连续错误 5 次，请输入验证码后继续', HttpStatus.PRECONDITION_REQUIRED)
+        }
+      }
+      if ((dto.code ?? '').trim() !== event.checkinCode) {
+        const failsNow = await this.redis.incrWithTtlStrict(CHECKIN_FAIL_PREFIX + `${uid}:${eventId}`, CHECKIN_FAIL_TTL)
+        if (failsNow >= 4) {
+          throw new HttpException('签到码连续错误 5 次，请输入验证码后继续', HttpStatus.PRECONDITION_REQUIRED)
+        }
+        throw new BadRequestException('签到码错误')
+      }
+    }
+
+    /* 地理围栏：仅「签到校验位置」开启且配置了场地坐标时校验距离 */
+    if (event.checkinLocationRequired && event.venueLat != null && event.venueLng != null) {
+      if (dto.lat == null || dto.lng == null) throw new BadRequestException('请先获取定位后再签到')
       const radius = event.checkinRadiusM ?? 200
       const dist = haversineMeters(
         Number(event.venueLng),
@@ -273,18 +308,21 @@ export class AppEventsService {
     })
     const awarded = event.checkinPoints ?? rule?.points ?? 0
     const now = formatNow()
+    let position = 0
     await this.prisma.$transaction(async (tx) => {
       const updated = await tx.eventEnrollment.updateMany({
         where: { id: enrollment.id, checkedIn: false },
         data: {
           checkedIn: true,
           checkInAt: now,
-          checkinLat: String(dto.lat),
-          checkinLng: String(dto.lng),
+          checkinLat: dto.lat != null ? String(dto.lat) : null,
+          checkinLng: dto.lng != null ? String(dto.lng) : null,
           checkinMethod: 'self',
         },
       })
       if (updated.count !== 1) throw new ConflictException('您已签到')
+      /* 「第 N 位签到」：同事务按已签到总数计序（updateMany 已置本人为 true，count 天然含己） */
+      position = await tx.eventEnrollment.count({ where: { eventId, checkedIn: true } })
       if (awarded > 0) {
         await this.engine.issueFixedPointsInTransaction(tx, uid, awarded, CHECKIN_REASON, `checkin:${uid}:${eventId}`)
       }
@@ -295,7 +333,14 @@ export class AppEventsService {
       })
     })
 
-    return { pointsAwarded: awarded }
+    await this.redis.delCache(CHECKIN_FAIL_PREFIX + `${uid}:${eventId}`)
+    return {
+      pointsAwarded: awarded,
+      position,
+      title: event.title,
+      startTime: event.startTime,
+      endTime: event.endTime,
+    }
   }
 
   /* ---------- 我的报名 / 电子票 ---------- */
@@ -531,6 +576,10 @@ export class AppEventsService {
       checkinRadiusM: e.checkinRadiusM ?? 200,
       checkinOpenMin: e.checkinOpenMin ?? 30,
       checkinCloseMin: e.checkinCloseMin ?? 30,
+      /* 签到开关（不下发签到码明文，扫码预填走二维码 URL 参数） */
+      checkinLocationRequired: e.checkinLocationRequired,
+      checkinCodeRequired: e.checkinCodeRequired,
+      checkinCodeEnabled: e.checkinCodeRequired && e.checkinCode != null,
       cancelDeadlineHours: e.cancelDeadlineHours ?? 24,
       rescheduledTo: e.rescheduledTo ?? undefined,
       myEnrollmentStatus: mine?.status,

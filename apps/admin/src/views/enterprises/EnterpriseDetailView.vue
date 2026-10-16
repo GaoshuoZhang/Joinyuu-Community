@@ -10,6 +10,7 @@ import EnterpriseFormDialog from '@/components/EnterpriseFormDialog.vue'
 import EnterpriseCardDialog from '@/components/EnterpriseCardDialog.vue'
 import ListErrorState from '@/components/ListErrorState.vue'
 import { roleLabelMap } from '@/constants/identity'
+import { userSubjectLabel } from '@/utils/subjectLabel'
 import {
   deleteEnterprise,
   disableEnterprise,
@@ -449,8 +450,8 @@ onMounted(() => {
                 </template>
                 <template #member="{ row }">
                   <div class="member-cell">
-                    <span class="member-name">{{ row.realName || row.nickname }}</span>
-                    <t-tag class="id-tag-block" size="small" variant="light">{{ row.uid }}</t-tag>
+                    <!-- 统一口径：真实姓名（社区企业 · 昵称 · 用户ID），避免同名/同昵称用户混淆 -->
+                    <span class="member-name">{{ userSubjectLabel({ realName: row.realName, nickname: row.nickname, uid: row.uid, identity: '社区企业' }) }}</span>
                   </div>
                 </template>
                 <template #title="{ row }">{{ memberTitle(row) }}</template>

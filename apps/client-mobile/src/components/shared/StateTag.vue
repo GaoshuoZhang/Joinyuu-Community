@@ -46,6 +46,8 @@ const map: Record<string, Record<string, { label: string; tone: Tone }>> = {
     pending_review: { label: '待审核', tone: 'warning' },
     contacted: { label: '已联系', tone: 'primary' },
     accepted: { label: '已选定', tone: 'success' },
+    /* 立项后被选为承接方（响应终态） */
+    undertaken: { label: '已承接', tone: 'success' },
     rejected: { label: '已驳回', tone: 'danger' },
     closed: { label: '已结束', tone: 'default' },
     withdrawn: { label: '已撤回', tone: 'default' },

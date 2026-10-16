@@ -22,6 +22,8 @@ import {
   reviewEventEnrollment,
   setEventEnrollment,
 } from '@/api/events'
+import { fetchSystemConfig } from '@/api/systemConfig'
+import QRCode from 'qrcode'
 import type { EventTicketRow } from '@/api/events'
 import type { CommunityEvent, EventEnrollment } from '@/types'
 import { exportCsv } from '@/utils/exportCsv'
@@ -355,6 +357,30 @@ function checkInTime(row: EventEnrollment) {
   return row.checkInAt.split(' ')[1] ?? row.checkInAt
 }
 
+/* 签到二维码：扫一扫直达客户端签到页（未登录会先要求登录）；
+ * 签到码启用时 URL 带上 ?code= 自动预填，签到只需点「签到」或「获取定位并签到」 */
+const qrGenerating = ref(false)
+async function onDownloadCheckInQr() {
+  if (!event.value || qrGenerating.value) return
+  qrGenerating.value = true
+  try {
+    const config = await fetchSystemConfig()
+    const base = config.mobileUrl.includes('://') ? config.mobileUrl : `http://${config.mobileUrl}`
+    const codeEnabled = event.value.checkinCodeRequired && !!event.value.checkinCode
+    const url = `${base}/events/${event.value.id}/check-in${codeEnabled ? `?code=${event.value.checkinCode}` : ''}`
+    const dataUrl = await QRCode.toDataURL(url, { width: 512, margin: 2 })
+    const link = document.createElement('a')
+    link.href = dataUrl
+    link.download = `活动${event.value.id}-签到二维码.png`
+    link.click()
+    MessagePlugin.success('签到二维码已生成并下载')
+  } catch (e) {
+    MessagePlugin.error(e instanceof Error ? e.message : '二维码生成失败')
+  } finally {
+    qrGenerating.value = false
+  }
+}
+
 onMounted(() => load())
 const { close: closeRescheduleDialog } = useDialogFormProtection(rescheduleForm, rescheduleVisible, computed(() => !!acting.value))
 const { close: closeRejectDialog } = useDialogFormProtection(rejectForm, rejectVisible, rejectSubmitting)
@@ -426,6 +452,9 @@ const { close: closeRejectDialog } = useDialogFormProtection(rejectForm, rejectV
             </div>
           </div>
           <div class="head-actions">
+            <t-button v-if="!isArchived" variant="outline" :loading="qrGenerating" @click="onDownloadCheckInQr">
+              签到二维码
+            </t-button>
             <template v-if="!isArchived && canAct">
               <template v-if="event.status === 'pending_release'">
                 <t-button theme="primary" :loading="acting === 'publish-now'" @click="onPublishNow">立即发布</t-button>
@@ -487,9 +516,13 @@ const { close: closeRejectDialog } = useDialogFormProtection(rejectForm, rejectV
         </div>
 
         <t-descriptions :column="2" bordered>
-          <t-descriptions-item label="时间" :span="2">
-            {{ event.startTime }} ~ {{ event.endTime }}
+          <t-descriptions-item label="创建时间">{{ event.createdAt ?? '—' }}</t-descriptions-item>
+          <t-descriptions-item label="签到码">
+            <template v-if="event.checkinCodeRequired && event.checkinCode">{{ event.checkinCode }}</template>
+            <span v-else>未启用</span>
           </t-descriptions-item>
+          <t-descriptions-item label="计划开始时间">{{ event.startTime }}</t-descriptions-item>
+          <t-descriptions-item label="计划结束时间">{{ event.endTime }}</t-descriptions-item>
           <t-descriptions-item label="地点">{{ event.location }}</t-descriptions-item>
           <t-descriptions-item label="主讲嘉宾">{{ event.speaker }}</t-descriptions-item>
           <t-descriptions-item label="主办方">{{ event.host }}</t-descriptions-item>

@@ -353,7 +353,7 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onLayoutKeydown))
       <div class="dashboard-grid">
       <!-- 六域待办卡片 -->
       <section v-show="isCardOn('todos')" class="dash-block todos-block" :style="cardStyle('todos')">
-        <div class="stat-grid stagger">
+        <div class="stat-grid stagger" :style="{ gridTemplateColumns: `repeat(${Math.max(visibleTodos.length, 1)}, minmax(0, 1fr))` }">
           <StatCard
             v-for="todo in visibleTodos"
             :key="todo.key"
@@ -554,9 +554,10 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onLayoutKeydown))
   grid-column: 1 / -1;
 }
 
+/* 待办卡片固定单行：列数按可见待办数量在模板上动态绑定（行内样式优先于样式表），
+ * 不再写死 6 列、也不在断点降列，避免第 7 张卡片换行到第二行 */
 .stat-grid {
   display: grid;
-  grid-template-columns: repeat(6, minmax(0, 1fr));
   gap: 16px;
   margin-bottom: 0;
 }
@@ -871,9 +872,6 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onLayoutKeydown))
 }
 
 @media (max-width: 1199px) {
-  .stat-grid {
-    grid-template-columns: repeat(3, minmax(0, 1fr));
-  }
   .quick-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
@@ -884,9 +882,6 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onLayoutKeydown))
   .panel-grid,
   .half-grid {
     grid-template-columns: minmax(0, 1fr);
-  }
-  .stat-grid {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }
 </style>

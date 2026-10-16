@@ -1,8 +1,8 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { Button, Toast } from 'tdesign-mobile-vue'
-import { fetchDemand, fetchDemandResponses, respondDemand, selectDemandResponders } from '@/api/demands'
+import { Button, DialogPlugin, Toast } from 'tdesign-mobile-vue'
+import { fetchDemand, fetchDemandResponses, respondDemand, selectDemandResponders, deselectDemandResponders } from '@/api/demands'
 import { fetchMyIdentities } from '@/api/enterprises'
 import { listFavorites, toggleFavorite } from '@/api/favorites'
 import { shareContent } from '@/utils/share'
@@ -29,11 +29,16 @@ const { data: demand, loading, error, errorCode, run } = useAsyncList(() => fetc
 const notFound = computed(() => errorCode.value === 404)
 
 onMounted(async () => {
+  await reloadAll()
+  void loadRespondIdentities()
+})
+
+/* 刷新需求与发布者响应列表：撤销选定后状态与响应集合都会变化，需整页数据一致 */
+async function reloadAll() {
   await run()
   /* v48：收藏与发布者响应列表互相独立，并行拉取，避免串行 await 形成加载瀑布 */
   await Promise.all([loadFavorite(), loadOwnerResponses()])
-  void loadRespondIdentities()
-})
+}
 
 /* v37 收藏 */
 const favorited = ref(false)
@@ -91,6 +96,12 @@ const flowResult = ref<'responded' | 'selected' | null>(null)
 /* 响应表单展开态：默认只展示提示 + 「响应需求」按钮，点击后在卡片内展开表单 */
 const respondFormOpen = ref(false)
 const canSelect = computed(() => demand.value?.status === 'published')
+/* 已选定态：允许重新选定（覆盖上一次）或撤销选定，避免选错后无纠正路径 */
+const canReselect = computed(() => demand.value?.status === 'selected')
+/* 上一次已选定（accepted）的响应 ID：重新选定时预勾选 */
+const chosenResponseIds = computed(() =>
+  ownerResponses.value.filter((r) => r.status === 'accepted').map((r) => r.id),
+)
 const canViewResponses = computed(() => ['published', 'selected', 'projected'].includes(demand.value?.status ?? ''))
 /* v44：响应身份选项（自有全部身份 + 被授权「响应需求」的代企业身份），单选 */
 const delegatedRespondIdentities = ref<UserIdentity[]>([])
@@ -122,10 +133,20 @@ const STATUS_NOTICES: Record<string, { owner: string; viewer: string; done?: boo
   projected: { owner: '协作项目已生成', viewer: '协作项目已生成', done: true },
 }
 /* 发布者侧空态文案（DemandOwnerResponses 复用同一份口径） */
-const ownerEmptyNotice = computed(() => STATUS_NOTICES[demand.value?.status ?? '']?.owner ?? '暂无响应')
-/* 浏览者侧状态提示：无映射（已发布）时返回 null，交给响应表单 */
+const ownerEmptyNotice = computed(() => {
+  if (demand.value?.status === 'projected') return projectNoticeText.value
+  return STATUS_NOTICES[demand.value?.status ?? '']?.owner ?? '暂无响应'
+})
+/* 立项后的项目派生文案（E）：项目结项 = 需求已完成 */
+const projectNoticeText = computed(() =>
+  demand.value?.projectStatus === 'finished' ? '协作项目已结项，该需求已完成' : '协作项目已生成',
+)
+/* 浏览者侧状态提示：无映射（已发布）时返回 null，交给响应表单。
+ * 已立项（projected）派生展示：项目已结项时按「已完成」口径呈现，避免长期停在旧态。 */
 const viewerNotice = computed(() => {
-  const meta = STATUS_NOTICES[demand.value?.status ?? '']
+  const status = demand.value?.status ?? ''
+  if (status === 'projected') return { text: projectNoticeText.value, done: true }
+  const meta = STATUS_NOTICES[status]
   if (!meta) return null
   return { text: isMine.value ? meta.owner : meta.viewer, done: meta.done === true }
 })
@@ -155,11 +176,34 @@ async function onSubmitSelection(ids: string[]) {
   try {
     await selectDemandResponders(id, ids)
     flowResult.value = 'selected'
+    await loadOwnerResponses()
   } catch (e) {
     Toast(e instanceof ApiError ? e.message : '提交失败，请稍后重试')
   } finally {
     selecting.value = false
   }
+}
+
+/* 撤销选定：二次确认后回到「已发布」，重新开放响应与选定 */
+function onDeselectSelection() {
+  DialogPlugin.confirm({
+    title: '撤销选定',
+    content: '撤销后需求回到「已发布」，本次已选定的承接方一并回退为「待选定」，可重新挑选或接受新的响应。',
+    cancelBtn: '再想想',
+    confirmBtn: '确认撤销',
+    onConfirm: async () => {
+      selecting.value = true
+      try {
+        await deselectDemandResponders(id)
+        Toast('已撤销选定')
+        await reloadAll()
+      } catch (e) {
+        Toast(e instanceof ApiError ? e.message : '撤销失败，请稍后重试')
+      } finally {
+        selecting.value = false
+      }
+    },
+  })
 }
 
 async function onRespond(payload: DemandRespondPayload) {
@@ -263,11 +307,14 @@ async function onShare() {
           :loading="ownerResponsesLoading"
           :error="ownerResponsesError"
           :can-select="canSelect"
+          :reselect="canReselect"
+          :chosen-ids="chosenResponseIds"
           :selecting="selecting"
           :empty-notice="ownerEmptyNotice"
           :demand-status="demand.status"
           @retry="loadOwnerResponses"
           @submit="onSubmitSelection"
+          @deselect="onDeselectSelection"
         />
         <div v-else-if="responded" class="responded">
           <p class="responded-head">
@@ -291,6 +338,20 @@ async function onShare() {
             :submitting="submitting"
             @respond="onRespond"
           />
+        </template>
+        <!-- 需求立项后的派生展示（E）：项目已生成/已结项，并为发布者提供协作项目入口 -->
+        <template v-if="isMine && demand.status === 'projected'">
+          <p class="notice done">{{ projectNoticeText }}</p>
+          <Button
+            v-if="demand.projectId"
+            variant="outline"
+            theme="primary"
+            block
+            class="project-link-btn"
+            @click="router.push(`/me/projects/${demand.projectId}`)"
+          >
+            查看协作项目
+          </Button>
         </template>
       </div>
     </template>
@@ -325,7 +386,8 @@ async function onShare() {
 }
 
 .notice {
-  margin: 0;
+  /* 与上方内容（响应卡片列表 / 卡片头）保持同档间距，避免立项后提示与卡片粘连 */
+  margin: var(--app-space-5) 0 0;
   font: var(--app-type-caption);
   color: var(--td-text-color-secondary);
   background: var(--td-bg-color-page);
@@ -337,6 +399,11 @@ async function onShare() {
 .notice.done {
   color: var(--td-success-color);
   border-style: solid;
+}
+
+/* 立项后协作项目入口：与上方状态提示保持同档间距 */
+.project-link-btn {
+  margin-top: var(--app-space-4);
 }
 
 .responded {

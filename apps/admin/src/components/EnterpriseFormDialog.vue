@@ -6,6 +6,7 @@ import { focusFirstInvalid, useDialogDirtyGuard, usePageDirtyGuard } from '@/uti
 import { createEnterprise, updateEnterprise, type EnterprisePayload } from '@/api/enterprises'
 import { fetchPublisherOptions } from '@/api/demands'
 import { dictFallback, fetchDictEntries } from '@/api/dicts'
+import { userSubjectLabel } from '@/utils/subjectLabel'
 import type { Enterprise } from '@/types'
 
 /* 社区企业新增/编辑弹窗：
@@ -100,7 +101,7 @@ async function loadContactOptions() {
   try {
     const opts = await fetchPublisherOptions()
     contactUsers.value = opts.users
-    contactOptions.value = opts.users.map((u) => ({ label: `${u.nickname}（${u.tag} · ${u.uid}）`, value: u.uid }))
+    contactOptions.value = opts.users.map((u) => ({ label: userSubjectLabel({ realName: u.realName, nickname: u.nickname, uid: u.uid, identity: u.tag }), value: u.uid }))
     contactLoadError.value = ''
   } catch {
     contactLoadError.value = '关联用户选项加载失败，请重试后选择联系人。'

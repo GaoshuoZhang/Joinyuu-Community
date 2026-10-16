@@ -14,7 +14,20 @@ function fixture() {
     milestone: { updateMany: jest.fn() },
   }
   const storage = { read: jest.fn().mockResolvedValue(Buffer.from('image')) }
-  const service = new AppProjectsService(prisma as never, {} as never, {} as never, {} as never, storage as never)
+  /* 里程碑验收已抽出为共享服务（ProjectMilestoneReviewService）：此处只需提供鉴权用到的
+   * resolveSubjectUserId（与旧实现同口径）与两个操作桩，验收/退回本身由共享服务单测覆盖 */
+  const reviews = {
+    resolveSubjectUserId: async (subjectId: string | null) => {
+      if (!subjectId) return null
+      const user = await prisma.user.findUnique({ where: { uid: subjectId }, select: { uid: true } })
+      if (user) return (user as { uid: string }).uid
+      const enterprise = await prisma.enterprise.findUnique({ where: { id: subjectId }, select: { contactUserId: true } })
+      return (enterprise as { contactUserId: string | null } | null)?.contactUserId ?? null
+    },
+    acceptMilestone: jest.fn(),
+    returnMilestone: jest.fn(),
+  }
+  const service = new AppProjectsService(prisma as never, {} as never, {} as never, storage as never, reviews as never)
   return { service, prisma, storage }
 }
 

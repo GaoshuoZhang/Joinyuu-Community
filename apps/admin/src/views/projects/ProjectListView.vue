@@ -2,12 +2,12 @@
 import { collectAllPages, executeBulk } from '@/utils/bulkOperation'
 import RowMoreActions from '@/components/RowMoreActions.vue'
 import { focusFirstInvalid, useDialogFormProtection } from '@/utils/form'
-import { computed, nextTick, onMounted, reactive, ref, watch } from 'vue'
+import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
 import { useListQueryState } from '@/utils/listQuery'
 import { useRouter } from 'vue-router'
 import { MessagePlugin } from 'tdesign-vue-next'
 import type { FormProps } from 'tdesign-vue-next'
-import { AddIcon, SearchIcon } from 'tdesign-icons-vue-next'
+import { AddIcon, ChevronDownIcon, SearchIcon } from 'tdesign-icons-vue-next'
 import PageHeader from '@/components/PageHeader.vue'
 import StatusTag from '@/components/StatusTag.vue'
 import ColumnController from '@/components/ColumnController.vue'
@@ -15,12 +15,13 @@ import BulkArchiveDialog from '@/components/BulkArchiveDialog.vue'
 import ExportButton from '@/components/ExportButton.vue'
 import ListEmptyState from '@/components/ListEmptyState.vue'
 import ProjectFormDialog from '@/components/ProjectFormDialog.vue'
-import { fetchProjects, pauseProject, resumeProject, closeProject, archiveProject } from '@/api/projects'
+import { fetchProjects, pauseProject, resumeProject, closeProject, archiveProject, type ProjectQuery } from '@/api/projects'
 import ListErrorState from '@/components/ListErrorState.vue'
 import { fetchEnterprise } from '@/api/enterprises'
 import { fetchExternalEnterprise } from '@/api/external-enterprises'
 import { fetchUser } from '@/api/users'
 import { statusLabel } from '@/utils/exportCsv'
+import { userIdentitySummary, userSubjectLabel } from '@/utils/subjectLabel'
 import type { Project } from '@/types'
 
 const router = useRouter()
@@ -35,11 +36,23 @@ const participantName = ref('')
 /* 企业详情「数据概览」跳转带入的企业筛选（值为社区企业 ID 或合作企业 ID，标签显示名称） */
 const enterpriseName = ref('')
 
+/* 状态勾选式筛选（与活动/需求管理同一形态）：4 个可选状态（不含「全部」项）；
+ * 默认勾选「进行中 / 已暂停」，即列表默认不展示「已关闭 / 已结项」；
+ * 全部取消勾选 = 不按状态过滤（显示全部） */
+const statusCheckOptions = [
+  { label: '进行中', value: 'running' },
+  { label: '已暂停', value: 'paused' },
+  { label: '已关闭', value: 'closed' },
+  { label: '已结项', value: 'finished' },
+]
+const DEFAULT_STATUSES = ['running', 'paused']
+
 const query = reactive({
   page: 1,
   pageSize: 10,
   keyword: '',
-  status: '',
+  /* 勾选式状态筛选：数组（useListQueryState 以重复 query 参数同步）；空串占位 = 不按状态过滤 */
+  status: [...DEFAULT_STATUSES] as string[],
   participant: '',
   enterprise: '',
 })
@@ -48,13 +61,33 @@ const query = reactive({
 const sortBy = ref<'initiatedAt' | 'id'>('initiatedAt')
 const sortOrder = ref<'ascend' | 'descend'>('descend')
 
-const statusOptions = [
-  { label: '全部', value: '' },
-  { label: '进行中', value: 'running' },
-  { label: '已暂停', value: 'paused' },
-  { label: '已关闭', value: 'closed' },
-  { label: '已结项', value: 'finished' },
-]
+/* 状态勾选面板（与活动/需求管理同一形态）：勾选即查询；ESC 关闭（t-popup 仅 trigger=focus 内置 ESC 处理）。
+ * 行操作已占用 onStatusChange（暂停/恢复），故此处命名为 onStatusFilterChange */
+const statusPanelVisible = ref(false)
+const checkedStatusCount = computed(() => query.status.filter(Boolean).length)
+
+function onStatusPanelKeydown(e: KeyboardEvent) {
+  if (e.key === 'Escape' && statusPanelVisible.value) statusPanelVisible.value = false
+}
+onMounted(() => window.addEventListener('keydown', onStatusPanelKeydown))
+onBeforeUnmount(() => window.removeEventListener('keydown', onStatusPanelKeydown))
+
+/* 空选 = 不按状态过滤：用单元素空串占位 —— 空数组会被 vue-router 从 URL 中丢弃 */
+function onStatusFilterChange(value: (string | number)[]) {
+  const picked = value.map(String).filter(Boolean)
+  query.status = picked.length ? picked : ['']
+  onSearch()
+}
+
+function selectAllStatuses() {
+  query.status = statusCheckOptions.map((o) => o.value)
+  onSearch()
+}
+
+function clearAllStatuses() {
+  query.status = ['']
+  onSearch()
+}
 
 const columns = [
   { colKey: 'name', fixed: 'left' as const, title: '项目', cell: 'name', width: 140, ellipsis: true, resizable: true },
@@ -130,7 +163,7 @@ function onSearch() {
 
 function onReset() {
   query.keyword = ''
-  query.status = ''
+  query.status = [...DEFAULT_STATUSES]
   query.participant = ''
   query.enterprise = ''
   participantName.value = ''
@@ -239,7 +272,8 @@ async function onArchive(row: Project) {
 /* 一键归档：按当前筛选全量拉取，归档所选状态的已结项 / 已关闭项目 */
 const archivingAll = ref(false)
 const bulkVisible = ref(false)
-let bulkScope = { ...query }
+/* 一键归档范围快照（状态被排除，见 onBulkArchive） */
+let bulkScope: ProjectQuery = { ...query }
 const bulkProgress = ref<{ done: number; total: number; failed: number } | null>(null)
 let bulkCancelled = false
 const bulkStatuses = [
@@ -274,14 +308,19 @@ async function doBulkArchive(values: string[]) {
   }
 }
 
-/* 确认前预估影响条数：按所选状态取 total 求和（pageSize=1 仅取 total） */
+/* 确认前预估影响条数：按所选状态取 total（pageSize=1 仅取 total）；
+ * 当前列表状态筛选（勾选式数组；全不选为空串占位=不筛选）不含该状态时预估为 0 */
 function countByStatus(status: string) {
-  if (bulkScope.status && bulkScope.status !== status) return Promise.resolve(0)
+  const scopeStatus = bulkScope.status
+  const activeStatuses = (Array.isArray(scopeStatus) ? scopeStatus : [scopeStatus]).filter(Boolean)
+  if (activeStatuses.length > 0 && !activeStatuses.includes(status)) return Promise.resolve(0)
   return fetchProjects({ ...bulkScope, status, page: 1, pageSize: 1 }).then((result) => result.total)
 }
 
 function onBulkArchive() {
-  bulkScope = { ...query }
+  /* 一键归档范围不含状态筛选（同活动/需求列表口径）：默认状态集已隐藏「已结项/已关闭」，
+   * 若把状态带入范围，两个可归档状态恒为 0 条，归档入口失效 */
+  bulkScope = { ...query, status: '' }
   bulkVisible.value = true
 }
 
@@ -301,11 +340,18 @@ function goDetail(row: Project) {
   router.push(`/projects/${row.id}`)
 }
 
-/* 起止时间展示：字段为空时回退到固定里程碑「项目立项/预期交付」日期（与详情页口径一致） */
+/* 起止时间展示：字段为空时回退到固定里程碑「项目立项/预期交付」日期（与详情页口径一致）。
+ * 列表拆为上下两行（首行开始、次行结束），导出仍用单行拼接 */
+function durationStart(row: Project): string {
+  return row.startDate || row.milestones.find((m) => m.name === '项目立项')?.date || ''
+}
+
+function durationEnd(row: Project): string {
+  return row.endDate || [...row.milestones].reverse().find((m) => m.name === '预期交付')?.date || ''
+}
+
 function durationOf(row: Project): string {
-  const start = row.startDate || row.milestones.find((m) => m.name === '项目立项')?.date || ''
-  const end = row.endDate || [...row.milestones].reverse().find((m) => m.name === '预期交付')?.date || ''
-  return `${start || '—'} ~ ${end || '—'}`
+  return `${durationStart(row) || '—'} ~ ${durationEnd(row) || '—'}`
 }
 
 /* 导出：当前页 / 全部结果（沿用列表筛选） */
@@ -343,7 +389,7 @@ async function applyRouteFilter() {
   if (query.participant) {
     try {
       const u = await fetchUser(query.participant)
-      participantName.value = u.nickname
+      participantName.value = userSubjectLabel({ realName: u.realName, nickname: u.nickname, uid: u.uid, identity: userIdentitySummary(u) })
     } catch {
       /* 用户不存在时标签回退显示 ID */
     }
@@ -424,13 +470,41 @@ const { close: closeProjectDialog } = useDialogFormProtection(closeForm, closeVi
         clearable
         @enter="onSearch"
       />
-      <t-select v-accessible-field="'状态'" class="ctl-w-md"
-        v-model="query.status"
-        label="状态"
-        :options="statusOptions"
-        clearable
-        @change="onSearch"
-      />
+      <!-- 状态：勾选式多选（默认勾选 2 项，全部取消 = 不按状态过滤）；勾选即查询 -->
+      <t-popup
+        v-model:visible="statusPanelVisible"
+        trigger="click"
+        placement="bottom-left"
+        :show-arrow="false"
+        overlay-class-name="status-filter-popup"
+        overlay-inner-class-name="status-filter-popup-inner"
+      >
+        <t-button variant="outline" :aria-label="`状态筛选，已勾选 ${checkedStatusCount} 项`">
+          状态<template v-if="checkedStatusCount">（{{ checkedStatusCount }}）</template>
+          <template #suffix><ChevronDownIcon /></template>
+        </t-button>
+        <template #content>
+          <div class="status-panel">
+            <div class="status-panel-head">
+              <span class="status-panel-title">状态</span>
+              <div class="status-panel-tools">
+                <t-button
+                  variant="text"
+                  size="small"
+                  :disabled="checkedStatusCount === statusCheckOptions.length"
+                  @click="selectAllStatuses"
+                >
+                  全选
+                </t-button>
+                <t-button variant="text" size="small" :disabled="checkedStatusCount === 0" @click="clearAllStatuses">
+                  清空
+                </t-button>
+              </div>
+            </div>
+            <t-checkbox-group :value="query.status" :options="statusCheckOptions" @change="onStatusFilterChange" />
+          </div>
+        </template>
+      </t-popup>
       <t-button theme="primary" @click="onSearch">
         <template #icon><SearchIcon /></template>
         查询
@@ -505,7 +579,13 @@ const { close: closeProjectDialog } = useDialogFormProtection(closeForm, closeVi
           </t-tooltip>
           <StatusTag v-else entity="project" :value="row.status" />
         </template>
-        <template #duration="{ row }">{{ durationOf(row) }}</template>
+        <!-- 起止时间：上下两行（首行开始、次行结束），两行同为 14px 时间戳，次行次级色 -->
+        <template #duration="{ row }">
+          <div class="stack-cell">
+            <span>{{ durationStart(row) || '—' }}</span>
+            <span class="time-sub">{{ durationEnd(row) || '—' }}</span>
+          </div>
+        </template>
         <template #op="{ row }">
           <div class="op-cell" @click.stop>
             <!-- 详情：形态与行点击一致，为键盘用户提供显式入口 -->
@@ -632,5 +712,63 @@ const { close: closeProjectDialog } = useDialogFormProtection(closeForm, closeVi
 .ent-more {
   font-size: 12px;
   color: var(--td-text-color-secondary);
+}
+
+/* 起止时间两行：上下两行、字号一致；左对齐（时间列不与表头错位，也不做居中对齐） */
+.stack-cell {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 3px;
+}
+
+.time-sub {
+  color: var(--td-text-color-secondary);
+}
+
+/* ---------- 状态勾选面板（浮层挂载到 body，scoped 选择器无法命中，故用 :global 收窄到本页唯一类名） ---------- */
+:global(.status-filter-popup) {
+  padding: 0;
+}
+
+:global(.status-filter-popup-inner) {
+  padding: 0;
+  background: transparent;
+  border-radius: 0;
+  box-shadow: none;
+}
+
+.status-panel {
+  width: 180px;
+  padding: 8px 12px 12px;
+  background: var(--td-bg-color-container);
+  border: 1px solid var(--td-component-border);
+  border-radius: var(--td-radius-medium);
+  box-shadow: var(--td-shadow-2);
+}
+
+.status-panel-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 8px;
+}
+
+.status-panel-title {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--td-text-color-primary);
+}
+
+.status-panel-tools {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.status-panel :deep(.t-checkbox-group) {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
 }
 </style>

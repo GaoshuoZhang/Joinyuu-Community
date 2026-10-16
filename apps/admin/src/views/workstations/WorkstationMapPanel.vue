@@ -15,7 +15,7 @@ import { workstationTypeMap } from '@/constants/status'
 import type { Lease, Workstation, WorkstationArea, WorkstationStatus } from '@/types'
 
 /* 办公位管理页（独立路由页）：开放办公位/半开放办公位的平面图总览；
- * 状态卡片点击筛选（点击「办公位总数」取消）、区域下拉筛选，两者可叠加；
+ * 状态勾选式筛选（与状态卡片快速勾选双向同步，点击「办公位总数」清空=显示全部）、区域下拉筛选，两者可叠加；
  * 区域规划/新增办公位在页头操作区；卡片提供「编辑」（含维护中开关）与「关联租赁」（跳转租赁管理并预选）操作；
  * 独立办公室（type=office）在「办公室管理」页维护，租约在「租赁管理」页管理 */
 const loading = ref(false)
@@ -23,8 +23,9 @@ const loadError = ref('')
 const list = ref<Workstation[]>([])
 const leases = ref<Lease[]>([])
 const areas = ref<WorkstationArea[]>([])
-/* 状态筛选：'' = 全部（由「办公位总数」卡片设置）；区域筛选：'' = 全部 */
-const statusFilter = ref<WorkstationStatus | ''>('')
+/* 勾选式状态筛选：默认仅勾选空闲/已分配（维护中需手动勾选查看）；空勾选=显示全部；区域筛选：'' = 全部 */
+const DEFAULT_STATUS_FILTER: WorkstationStatus[] = ['idle', 'assigned']
+const statusFilter = ref<WorkstationStatus[]>([...DEFAULT_STATUS_FILTER])
 const areaFilter = ref('')
 
 /* 全量开放/半开放办公位（独立办公室见办公室管理页）——汇总卡片始终统计全量 */
@@ -34,11 +35,11 @@ const idleCount = computed(() => desks.value.filter((w) => w.status === 'idle').
 const assignedCount = computed(() => desks.value.filter((w) => w.status === 'assigned').length)
 const maintenanceCount = computed(() => desks.value.filter((w) => w.status === 'maintenance').length)
 
-/* 筛选后的办公位：状态卡片 + 区域下拉组合过滤 */
+/* 筛选后的办公位：状态勾选 + 区域下拉组合过滤（空勾选=不按状态过滤） */
 const filteredDesks = computed(() =>
   desks.value.filter(
     (w) =>
-      (!statusFilter.value || w.status === statusFilter.value) &&
+      (statusFilter.value.length === 0 || statusFilter.value.includes(w.status)) &&
       (!areaFilter.value || w.area === areaFilter.value),
   ),
 )
@@ -64,23 +65,35 @@ const areaOptions = computed(() => [
 ])
 
 const statusOptions = [
-  { label: '全部状态', value: '' },
   { label: '空闲', value: 'idle' },
   { label: '已分配', value: 'assigned' },
   { label: '维护中', value: 'maintenance' },
 ]
 
-/* 状态卡片筛选：点击对应状态卡片筛选，点击「办公位总数」卡片取消（与状态下拉双向同步） */
+/* 状态卡片快速筛选：点击勾选/取消该状态（与勾选式筛选器双向同步）；「办公位总数」卡片（''）清空状态筛选=显示全部 */
 function setStatFilter(status: WorkstationStatus | '') {
-  statusFilter.value = statusFilter.value === status ? '' : status
+  if (!status) {
+    statusFilter.value = []
+    return
+  }
+  statusFilter.value = statusFilter.value.includes(status)
+    ? statusFilter.value.filter((s) => s !== status)
+    : [...statusFilter.value, status]
 }
 
-/* 空态筛选判定：状态/区域任一非空即视为筛选无结果 */
-const filterState = computed(() => ({ status: statusFilter.value, area: areaFilter.value }))
+/* 空态筛选判定：状态取默认勾选集时不算筛选（顺序无关比较）；区域非空即视为筛选无结果 */
+const statusIsFiltered = computed(() => {
+  const sort = (a: WorkstationStatus[]) => [...a].sort()
+  return JSON.stringify(sort(statusFilter.value)) !== JSON.stringify(sort(DEFAULT_STATUS_FILTER))
+})
+const filterState = computed(() => ({
+  status: statusIsFiltered.value ? statusFilter.value : '',
+  area: areaFilter.value,
+}))
 
-/* 清除筛选：仅重置筛选条件（列表为客户端派生，无需重新请求） */
+/* 清除筛选：仅重置筛选条件（列表为客户端派生，无需重新请求）；状态筛选恢复默认勾选集 */
 function onReset() {
-  statusFilter.value = ''
+  statusFilter.value = [...DEFAULT_STATUS_FILTER]
   areaFilter.value = ''
 }
 
@@ -115,7 +128,9 @@ function leaseEndText(lease: Lease): string {
   return `${lease.endDate} ~ ${suffix}`
 }
 
-useListQueryState({}, undefined, { refs: { status: statusFilter, area: areaFilter }, live: true })
+/* 状态勾选不写入 URL：空数组会被 vue-router 丢弃、恢复时弹回默认集，导致「取消全部勾选」无法生效。
+ * 状态筛选仅存组件内：刷新页面恢复默认勾选集（空闲/已分配），区域筛选保持 URL 同步 */
+useListQueryState({}, undefined, { refs: { area: areaFilter }, live: true })
 
 onMounted(load)
 
@@ -191,7 +206,7 @@ function enterpriseHref(w: Workstation): string | undefined {
         label="已分配"
         :value="assignedCount"
         :icon="BuildingIcon"
-        :active="statusFilter === 'assigned'"
+        :active="statusFilter.includes('assigned')"
         @click="setStatFilter('assigned')"
       />
       <StatCard
@@ -199,7 +214,7 @@ function enterpriseHref(w: Workstation): string | undefined {
         label="空闲中"
         :value="idleCount"
         :icon="CheckCircleIcon"
-        :active="statusFilter === 'idle'"
+        :active="statusFilter.includes('idle')"
         @click="setStatFilter('idle')"
       />
       <StatCard
@@ -207,14 +222,17 @@ function enterpriseHref(w: Workstation): string | undefined {
         label="维护中"
         :value="maintenanceCount"
         :icon="SettingIcon"
-        :active="statusFilter === 'maintenance'"
+        :active="statusFilter.includes('maintenance')"
         @click="setStatFilter('maintenance')"
       />
     </div>
 
     <div class="page-filter-bar">
       <t-select v-accessible-field="'区域'" class="ctl-w-xl" clearable v-model="areaFilter" label="区域" :options="areaOptions" />
-      <t-select v-accessible-field="'状态'" class="ctl-w-lg" clearable v-model="statusFilter" label="状态" :options="statusOptions" />
+      <div class="ws-status-filter" role="group" aria-label="状态筛选">
+        <span class="ws-status-label">状态</span>
+        <t-checkbox-group v-model="statusFilter" :options="statusOptions" />
+      </div>
     </div>
 
     <div class="legend-row">
@@ -479,5 +497,16 @@ function enterpriseHref(w: Workstation): string | undefined {
   margin-top: auto;
   padding-top: 8px;
   border-top: 1px dashed var(--td-component-border);
+}
+
+/* 勾选式状态筛选：可见标签 + 复选组，与输入/下拉控件同排对齐 */
+.ws-status-filter {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.ws-status-label {
+  color: var(--td-text-color-secondary);
 }
 </style>

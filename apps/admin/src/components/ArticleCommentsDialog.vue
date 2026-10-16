@@ -5,6 +5,7 @@ import ListEmptyState from '@/components/ListEmptyState.vue'
 import ListErrorState from '@/components/ListErrorState.vue'
 import StatusTag from '@/components/StatusTag.vue'
 import { fetchArticleComments, removeArticleComment, type ArticleCommentItem } from '@/api/contents'
+import { userSubjectLabel } from '@/utils/subjectLabel'
 
 const emit = defineEmits<{ (e: 'success'): void }>()
 const visible = ref(false)
@@ -42,11 +43,16 @@ async function load() {
   }
 }
 
+/* 评论作者展示口径：真实姓名（昵称 · 用户ID），避免同名/同昵称用户混淆；身份由右侧标签单独展示 */
+function commentAuthorLabel(item: ArticleCommentItem): string {
+  return userSubjectLabel({ realName: item.realName || item.userName, nickname: item.nickname, uid: item.uid })
+}
+
 function onRemove(item: ArticleCommentItem) {
   const hint = reason.value.trim() ? '删除后将通过站内信通知作者。' : '未填写原因则不通知作者。'
   const dialog = DialogPlugin.confirm({
     header: '删除评论',
-    body: `确认删除 ${item.userName} 的评论「${item.content.slice(0, 40)}${item.content.length > 40 ? '…' : ''}」？${hint}`,
+    body: `确认删除 ${commentAuthorLabel(item)} 的评论「${item.content.slice(0, 40)}${item.content.length > 40 ? '…' : ''}」？${hint}`,
     theme: 'danger',
     confirmBtn: '确认删除',
     cancelBtn: '取消',
@@ -83,7 +89,7 @@ defineExpose({ open })
       <ul v-else class="comments-list">
         <li v-for="item in list" :key="item.id" class="comment-row">
           <div class="comment-head">
-            <span class="comment-author">{{ item.userName }}</span>
+            <span class="comment-author" :title="commentAuthorLabel(item)">{{ commentAuthorLabel(item) }}</span>
             <t-tag size="small" variant="light">{{ item.identityName || item.identityType }}</t-tag>
             <span class="comment-at">{{ item.at }}</span>
           </div>

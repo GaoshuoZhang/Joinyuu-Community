@@ -1,8 +1,8 @@
 <script setup lang="ts">
-import { computed, onMounted, reactive, ref } from 'vue'
+import { computed, onBeforeUnmount, onMounted, reactive, ref } from 'vue'
 import { useListQueryState } from '@/utils/listQuery'
 import { useRouter } from 'vue-router'
-import { AddIcon, SearchIcon, ViewListIcon } from 'tdesign-icons-vue-next'
+import { AddIcon, ChevronDownIcon, SearchIcon, ViewListIcon } from 'tdesign-icons-vue-next'
 import PageHeader from '@/components/PageHeader.vue'
 import ExportButton from '@/components/ExportButton.vue'
 import ListEmptyState from '@/components/ListEmptyState.vue'
@@ -22,13 +22,49 @@ const loadError = ref('')
 const list = ref<Enterprise[]>([])
 const total = ref(0)
 
+/* 状态勾选式筛选（同活动管理）：3 个可选状态（不含「全部」项）；
+ * 默认仅勾选「正常」，即列表默认不展示「已退出 / 已停用」；
+ * 全部取消勾选 = 不按状态过滤（显示全部） */
+const statusCheckOptions = [
+  { label: '正常', value: 'active' },
+  { label: '已退出', value: 'exited' },
+  { label: '已停用', value: 'disabled' },
+]
+const DEFAULT_STATUSES = ['active']
+
 const query = reactive({
   page: 1,
   pageSize: 10,
   keyword: '',
   industry: '',
-  status: '',
+  /* 勾选式状态筛选：数组（useListQueryState 以重复 query 参数同步）；空串占位 = 不按状态过滤 */
+  status: [...DEFAULT_STATUSES] as string[],
 })
+
+/* 状态勾选面板（同活动管理）：勾选即查询；ESC 关闭（t-popup 仅 trigger=focus 内置 ESC 处理） */
+const statusPanelVisible = ref(false)
+const checkedStatusCount = computed(() => query.status.filter(Boolean).length)
+
+function onStatusPanelKeydown(e: KeyboardEvent) {
+  if (e.key === 'Escape' && statusPanelVisible.value) statusPanelVisible.value = false
+}
+
+/* 空选 = 不按状态过滤：用单元素空串占位 —— 空数组会被 vue-router 从 URL 中丢弃 */
+function onStatusChange(value: (string | number)[]) {
+  const picked = value.map(String).filter(Boolean)
+  query.status = picked.length ? picked : ['']
+  onSearch()
+}
+
+function selectAllStatuses() {
+  query.status = statusCheckOptions.map((o) => o.value)
+  onSearch()
+}
+
+function clearAllStatuses() {
+  query.status = ['']
+  onSearch()
+}
 
 /* 行业维护弹窗（原「数据字典 > 行业」入口；label 即业务存储值，故仅支持新增/启停/删除） */
 const industryDialogVisible = ref(false)
@@ -38,13 +74,6 @@ const industryOptions = ref([
   { label: '全部', value: '' },
   ...dictFallback.industry.map((label) => ({ label, value: label })),
 ])
-
-const statusOptions = [
-  { label: '全部', value: '' },
-  { label: '正常', value: 'active' },
-  { label: '已退出', value: 'exited' },
-  { label: '已停用', value: 'disabled' },
-]
 
 const columns = [
   { colKey: 'name', fixed: 'left' as const, title: '企业', cell: 'name', width: 230 , ellipsis: true},
@@ -100,7 +129,7 @@ function onSearch() {
 function onReset() {
   query.keyword = ''
   query.industry = ''
-  query.status = ''
+  query.status = [...DEFAULT_STATUSES]
   onSearch()
 }
 
@@ -148,9 +177,11 @@ function fetchAllForExport(page: number, pageSize: number) {
 const { syncQuery } = useListQueryState(query, load)
 
 onMounted(() => {
+  window.addEventListener('keydown', onStatusPanelKeydown)
   load()
   void loadIndustries()
 })
+onBeforeUnmount(() => window.removeEventListener('keydown', onStatusPanelKeydown))
 
 /* 行业下拉（含「行业管理」弹窗保存后的刷新；原「数据字典 > 行业」入口迁移至此）：
  * 该页行业的 value 与存储值一致（均为 label），故 value 取 label */
@@ -210,13 +241,41 @@ async function loadIndustries() {
         clearable
         @change="onSearch"
       />
-      <t-select v-accessible-field="'状态'" class="ctl-w-md"
-        v-model="query.status"
-        label="状态"
-        :options="statusOptions"
-        clearable
-        @change="onSearch"
-      />
+      <!-- 状态：勾选式多选（默认勾选「正常」，全部取消 = 不按状态过滤）；勾选即查询 -->
+      <t-popup
+        v-model:visible="statusPanelVisible"
+        trigger="click"
+        placement="bottom-left"
+        :show-arrow="false"
+        overlay-class-name="status-filter-popup"
+        overlay-inner-class-name="status-filter-popup-inner"
+      >
+        <t-button variant="outline" :aria-label="`状态筛选，已勾选 ${checkedStatusCount} 项`">
+          状态<template v-if="checkedStatusCount">（{{ checkedStatusCount }}）</template>
+          <template #suffix><ChevronDownIcon /></template>
+        </t-button>
+        <template #content>
+          <div class="status-panel">
+            <div class="status-panel-head">
+              <span class="status-panel-title">状态</span>
+              <div class="status-panel-tools">
+                <t-button
+                  variant="text"
+                  size="small"
+                  :disabled="checkedStatusCount === statusCheckOptions.length"
+                  @click="selectAllStatuses"
+                >
+                  全选
+                </t-button>
+                <t-button variant="text" size="small" :disabled="checkedStatusCount === 0" @click="clearAllStatuses">
+                  清空
+                </t-button>
+              </div>
+            </div>
+            <t-checkbox-group :value="query.status" :options="statusCheckOptions" @change="onStatusChange" />
+          </div>
+        </template>
+      </t-popup>
       <t-button @click="onSearch">
         <template #icon><SearchIcon /></template>
         查询
@@ -307,6 +366,52 @@ async function loadIndustries() {
 .op-cell {
   display: inline-flex;
   align-items: center;
+  gap: 8px;
+}
+
+/* ---------- 状态勾选面板（浮层挂载到 body，scoped 选择器无法命中，故用 :global 收窄到本页唯一类名） ---------- */
+:global(.status-filter-popup) {
+  padding: 0;
+}
+
+:global(.status-filter-popup-inner) {
+  padding: 0;
+  background: transparent;
+  border-radius: 0;
+  box-shadow: none;
+}
+
+.status-panel {
+  width: 180px;
+  padding: 8px 12px 12px;
+  background: var(--td-bg-color-container);
+  border: 1px solid var(--td-component-border);
+  border-radius: var(--td-radius-medium);
+  box-shadow: var(--td-shadow-2);
+}
+
+.status-panel-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 8px;
+}
+
+.status-panel-title {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--td-text-color-primary);
+}
+
+.status-panel-tools {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.status-panel :deep(.t-checkbox-group) {
+  display: flex;
+  flex-direction: column;
   gap: 8px;
 }
 </style>

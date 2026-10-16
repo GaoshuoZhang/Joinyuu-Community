@@ -6,7 +6,9 @@ export interface EventQuery {
   pageSize: number
   keyword?: string
   type?: string
-  status?: string
+  /** 状态筛选：支持单值（旧调用）与多值（勾选式筛选）。
+   *  多选值中的空串占位表示「不按状态过滤」（保证该字段在 URL 中可往返），落库请求会被服务端忽略 */
+  status?: string | string[]
   /** 按报名人筛选（用户详情数据概览跳转） */
   participant?: string
   /** 排序字段：id | startTime | createdAt */
@@ -22,7 +24,8 @@ export async function fetchEvents(query: EventQuery): Promise<PageResult<Communi
   qs.set('pageSize', String(query.pageSize))
   if (query.keyword) qs.set('keyword', query.keyword)
   if (query.type) qs.set('type', query.type)
-  if (query.status) qs.set('status', query.status)
+  if (Array.isArray(query.status)) query.status.forEach((s) => qs.append('status', s))
+  else if (query.status) qs.set('status', query.status)
   if (query.participant) qs.set('participant', query.participant)
   if (query.sortBy) qs.set('sortBy', query.sortBy)
   if (query.sortOrder) qs.set('sortOrder', query.sortOrder)
@@ -161,6 +164,12 @@ export interface EventPayload {
   checkinRadiusM?: number
   checkinOpenMin?: number
   checkinCloseMin?: number
+  /** 签到校验位置开关：开启后客户端签到做地理围栏校验（默认关） */
+  checkinLocationRequired?: boolean
+  /** 签到校验码开关（默认开）：关闭后不再要求输入签到码 */
+  checkinCodeRequired?: boolean
+  /** 6 位数字签到码（留空保存由服务端自动生成；required=false 时服务端置空） */
+  checkinCode?: string
   cancelDeadlineHours?: number
 }
 

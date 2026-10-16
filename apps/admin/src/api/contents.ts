@@ -2,7 +2,6 @@ import type {
   PageResult,
   Article,
   ArticleChannel,
-  ArticleStatus,
   ArticleColumn,
 } from '@/types'
 import { httpDelete, httpGet, httpPost, httpPut } from './http'
@@ -30,7 +29,9 @@ export interface ArticleQuery {
   keyword?: string
   channel?: ArticleChannel
   columnId?: string
-  status?: ArticleStatus
+  /** 状态筛选：支持单值（旧调用）与多值（勾选式筛选）。
+   *  多选值中的空串占位表示「不按状态过滤」（保证该字段在 URL 中可往返），落库请求会被服务端忽略 */
+  status?: string | string[]
   /** 排序字段：id | views | createdAt */
   sortBy?: 'id' | 'views' | 'createdAt'
   /** 排序方向：descend 默认 | ascend */
@@ -60,7 +61,10 @@ export async function fetchArticles(query: ArticleQuery): Promise<PageResult<Art
   if (query.keyword) qs.set('keyword', query.keyword)
   if (query.channel) qs.set('channel', query.channel)
   if (query.columnId) qs.set('columnId', query.columnId)
-  if (query.status) qs.set('status', query.status)
+  if (query.status) {
+    if (Array.isArray(query.status)) query.status.forEach((s) => qs.append('status', s))
+    else qs.set('status', query.status)
+  }
   if (query.sortBy) qs.set('sortBy', query.sortBy)
   if (query.sortOrder) qs.set('sortOrder', query.sortOrder)
   return httpGet<PageResult<Article>>(`/contents/articles?${qs}`)
@@ -140,6 +144,8 @@ export interface ArticleCommentItem {
   uid: string
   userName: string
   nickname: string
+  /** 评论作者真实姓名（来自账号；与昵称、UID 一起用于区分同名用户） */
+  realName?: string
   avatar?: string
   content: string
   at: string

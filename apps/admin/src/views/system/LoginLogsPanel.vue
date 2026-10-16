@@ -1,10 +1,10 @@
 <script setup lang="ts">
-import { computed, onMounted, reactive, ref } from 'vue'
+import { computed, onBeforeUnmount, onMounted, reactive, ref } from 'vue'
 import ListErrorState from '@/components/ListErrorState.vue'
 import ListEmptyState from '@/components/ListEmptyState.vue'
 import StatusTag from '@/components/StatusTag.vue'
 import { useListQueryState } from '@/utils/listQuery'
-import { SearchIcon } from 'tdesign-icons-vue-next'
+import { ChevronDownIcon, SearchIcon } from 'tdesign-icons-vue-next'
 import { fetchLoginLogs, type LoginLog } from '@/api/login-logs'
 import type { TdDateRangePickerProps } from 'tdesign-vue-next'
 
@@ -14,20 +14,49 @@ const loadError = ref('')
 const list = ref<LoginLog[]>([])
 const total = ref(0)
 
-const query = reactive({
-  page: 1,
-  pageSize: 10,
-  status: '',
-  keyword: '',
-  range: ['', ''],
-})
-
-const statusOptions = [
-  { label: '全部', value: '' },
+/* 状态勾选式筛选（同活动管理）：3 个可选状态（不含「全部」项）；
+ * 默认勾选全部三项（默认仍展示全部记录，但可单独勾选分析）；
+ * 全部取消勾选 = 不按状态过滤（显示全部） */
+const statusCheckOptions = [
   { label: '成功', value: 'success' },
   { label: '失败', value: 'failed' },
   { label: '锁定', value: 'locked' },
 ]
+const DEFAULT_STATUSES = ['success', 'failed', 'locked']
+
+const query = reactive({
+  page: 1,
+  pageSize: 10,
+  /* 勾选式状态筛选：数组（useListQueryState 以重复 query 参数同步）；空串占位 = 不按状态过滤 */
+  status: [...DEFAULT_STATUSES] as string[],
+  keyword: '',
+  range: ['', ''],
+})
+
+/* 状态勾选面板（同活动管理）：勾选即查询；ESC 关闭（t-popup 仅 trigger=focus 内置 ESC 处理） */
+const statusPanelVisible = ref(false)
+const checkedStatusCount = computed(() => query.status.filter(Boolean).length)
+
+function onStatusPanelKeydown(e: KeyboardEvent) {
+  if (e.key === 'Escape' && statusPanelVisible.value) statusPanelVisible.value = false
+}
+
+/* 空选 = 不按状态过滤：用单元素空串占位 —— 空数组会被 vue-router 从 URL 中丢弃 */
+function onStatusChange(value: (string | number)[]) {
+  const picked = value.map(String).filter(Boolean)
+  query.status = picked.length ? picked : ['']
+  onSearch()
+}
+
+function selectAllStatuses() {
+  query.status = statusCheckOptions.map((o) => o.value)
+  onSearch()
+}
+
+function clearAllStatuses() {
+  query.status = ['']
+  onSearch()
+}
 
 const columns = [
   { colKey: 'createdAt', title: '登录时间', width: 170, resizable: true , ellipsis: true},
@@ -82,7 +111,7 @@ function onSearch() {
 }
 
 function onReset() {
-  query.status = ''
+  query.status = [...DEFAULT_STATUSES]
   query.keyword = ''
   query.range = ['', '']
   query.page = 1
@@ -100,16 +129,26 @@ function onRangeChange(v: TdDateRangePickerProps['value']) {
   onSearch()
 }
 
-/* 空态筛选判定：range 为空串占位（['', '']）时视为未筛选（组件按数组长度判断） */
+/* 空态筛选判定：勾选集等于默认集（顺序无关比较）时视为未筛选，避免默认态显示「没有符合筛选条件的结果」；
+ * range 为空串占位（['', '']）时同样视为未筛选（组件按数组长度判断） */
+const statusIsFiltered = computed(() => {
+  const picked = query.status.filter(Boolean)
+  const sort = (a: string[]) => [...a].sort()
+  return picked.length > 0 && JSON.stringify(sort(picked)) !== JSON.stringify(sort(DEFAULT_STATUSES))
+})
 const filterState = computed(() => ({
-  status: query.status,
+  status: statusIsFiltered.value ? query.status : '',
   keyword: query.keyword,
   range: query.range.filter((v) => v),
 }))
 
 const { syncQuery } = useListQueryState(query, load, { prefix: 'login.' })
 
-onMounted(load)
+onMounted(() => {
+  window.addEventListener('keydown', onStatusPanelKeydown)
+  load()
+})
+onBeforeUnmount(() => window.removeEventListener('keydown', onStatusPanelKeydown))
 </script>
 
 <template>
@@ -124,7 +163,41 @@ onMounted(load)
         placeholder="搜索账号/姓名/IP…"
         @enter="onSearch"
       />
-      <t-select v-accessible-field="'状态'" class="ctl-w-sm" v-model="query.status" label="状态" :options="statusOptions" @change="onSearch" />
+      <!-- 状态：勾选式多选（默认勾选全部三项，全部取消 = 不按状态过滤）；勾选即查询 -->
+      <t-popup
+        v-model:visible="statusPanelVisible"
+        trigger="click"
+        placement="bottom-left"
+        :show-arrow="false"
+        overlay-class-name="status-filter-popup"
+        overlay-inner-class-name="status-filter-popup-inner"
+      >
+        <t-button variant="outline" :aria-label="`状态筛选，已勾选 ${checkedStatusCount} 项`">
+          状态<template v-if="checkedStatusCount">（{{ checkedStatusCount }}）</template>
+          <template #suffix><ChevronDownIcon /></template>
+        </t-button>
+        <template #content>
+          <div class="status-panel">
+            <div class="status-panel-head">
+              <span class="status-panel-title">状态</span>
+              <div class="status-panel-tools">
+                <t-button
+                  variant="text"
+                  size="small"
+                  :disabled="checkedStatusCount === statusCheckOptions.length"
+                  @click="selectAllStatuses"
+                >
+                  全选
+                </t-button>
+                <t-button variant="text" size="small" :disabled="checkedStatusCount === 0" @click="clearAllStatuses">
+                  清空
+                </t-button>
+              </div>
+            </div>
+            <t-checkbox-group :value="query.status" :options="statusCheckOptions" @change="onStatusChange" />
+          </div>
+        </template>
+      </t-popup>
       <t-date-range-picker
         v-accessible-field="'登录日期范围'"
         v-model="query.range"
@@ -199,5 +272,51 @@ onMounted(load)
 
 .muted {
   color: var(--td-text-color-placeholder);
+}
+
+/* ---------- 状态勾选面板（浮层挂载到 body，scoped 选择器无法命中，故用 :global 收窄到本页唯一类名） ---------- */
+:global(.status-filter-popup) {
+  padding: 0;
+}
+
+:global(.status-filter-popup-inner) {
+  padding: 0;
+  background: transparent;
+  border-radius: 0;
+  box-shadow: none;
+}
+
+.status-panel {
+  width: 180px;
+  padding: 8px 12px 12px;
+  background: var(--td-bg-color-container);
+  border: 1px solid var(--td-component-border);
+  border-radius: var(--td-radius-medium);
+  box-shadow: var(--td-shadow-2);
+}
+
+.status-panel-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 8px;
+}
+
+.status-panel-title {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--td-text-color-primary);
+}
+
+.status-panel-tools {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.status-panel :deep(.t-checkbox-group) {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
 }
 </style>

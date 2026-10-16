@@ -1,11 +1,13 @@
 import type { PageResult, Project, ProjectInitPayload } from '@/types'
-import { httpGet, httpPost, httpPut } from './http'
+import { httpDelete, httpGet, httpPost, httpPut, httpUpload } from './http'
 
 export interface ProjectQuery {
   page: number
   pageSize: number
   keyword?: string
-  status?: string
+  /** 状态筛选：支持单值（旧调用）与多值（勾选式筛选）。
+   *  多选值中的空串占位表示「不按状态过滤」（保证该字段在 URL 中可往返），落库请求会被服务端忽略 */
+  status?: string | string[]
   /** 按参与人筛选：本人承接或其社区企业身份所在企业承接（用户详情数据概览跳转） */
   participant?: string
   /** 按承接企业筛选（企业详情数据概览跳转；值为社区企业 ID 或合作企业 ID） */
@@ -21,7 +23,8 @@ export async function fetchProjects(query: ProjectQuery): Promise<PageResult<Pro
   qs.set('page', String(query.page))
   qs.set('pageSize', String(query.pageSize))
   if (query.keyword) qs.set('keyword', query.keyword)
-  if (query.status) qs.set('status', query.status)
+  if (Array.isArray(query.status)) query.status.forEach((s) => qs.append('status', s))
+  else if (query.status) qs.set('status', query.status)
   if (query.participant) qs.set('participant', query.participant)
   if (query.enterprise) qs.set('enterprise', query.enterprise)
   if (query.sortBy) qs.set('sortBy', query.sortBy)
@@ -60,9 +63,52 @@ export async function archiveProject(id: string): Promise<{ code: number }> {
   return httpPost<{ code: number }>(`/projects/${id}/archive`)
 }
 
+/* POST /api/admin/projects/:id/milestones/:milestoneId/accept — 「进度节点」通过验收
+ * （待验收 → 已验收；全部通过自动结项并按承接占比发放经验值） */
+export async function acceptProjectMilestone(id: string, milestoneId: string): Promise<{ code: number }> {
+  return httpPost<{ code: number }>(`/projects/${id}/milestones/${milestoneId}/accept`)
+}
+
+/* POST /api/admin/projects/:id/milestones/:milestoneId/return — 「进度节点」驳回（原因必填）
+ * （待验收 → 已退回，承接方可重新提交） */
+export async function returnProjectMilestone(id: string, milestoneId: string, reason: string): Promise<{ code: number }> {
+  return httpPost<{ code: number }>(`/projects/${id}/milestones/${milestoneId}/return`, { reason })
+}
+
 /* POST /api/admin/projects — 直接新增项目（无来源需求）
  * 承接方可多个，占比整数百分比合计 100；里程碑可多选负责承接方
  */
 export async function createProject(payload: ProjectInitPayload): Promise<Project> {
   return httpPost<Project>('/projects', payload)
+}
+
+/* ---------- 项目合同附件（线下签约合同，图片/PDF 扫描件，复用素材库存储） ---------- */
+
+export interface ProjectContract {
+  id: string
+  url: string
+  fileName: string
+  mime: string
+  size: number
+  sourceType?: string
+  sourceId?: string
+  createdAt: string
+}
+
+/* GET /api/admin/projects/:id/contracts — 该项目的合同附件（最新在前） */
+export async function fetchProjectContracts(id: string): Promise<ProjectContract[]> {
+  return httpGet<ProjectContract[]>(`/projects/${id}/contracts`)
+}
+
+/* POST /api/admin/projects/:id/contracts — 上传合同附件（图片/PDF）；
+ * 单文件大小上限取系统配置 uploadMaxSizeMb */
+export async function uploadProjectContract(id: string, file: File): Promise<ProjectContract> {
+  const form = new FormData()
+  form.append('file', file)
+  return httpUpload<ProjectContract>(`/projects/${id}/contracts`, form)
+}
+
+/* DELETE /api/admin/projects/:id/contracts/:assetId — 删除合同附件（仅限该项目名下附件） */
+export async function deleteProjectContract(id: string, assetId: string): Promise<{ code: number }> {
+  return httpDelete<{ code: number }>(`/projects/${id}/contracts/${assetId}`)
 }

@@ -4,7 +4,7 @@ import { MessagePlugin } from 'tdesign-vue-next'
 import type { FormProps } from 'tdesign-vue-next'
 import { focusFirstInvalid, useDialogDirtyGuard, usePageDirtyGuard } from '@/utils/form'
 import { AddIcon, DeleteIcon } from 'tdesign-icons-vue-next'
-import { fetchPublisherOptions, fetchUndertakerOptions, initiateProject, type UndertakerOption } from '@/api/demands'
+import { fetchDemandSelectedRespondents, fetchPublisherOptions, fetchUndertakerOptions, initiateProject, type UndertakerOption } from '@/api/demands'
 import { createProject, updateProject } from '@/api/projects'
 import { fetchExperienceRules } from '@/api/rules'
 import { useAuthStore } from '@/stores/auth'
@@ -23,6 +23,8 @@ const props = defineProps<{
   mode: 'create' | 'edit'
   demand: Demand | null
   project: Project | null
+  /* 立项前置「选定承接方」勾选的响应记录 ID：用于预填承接方并随立项一并提交 */
+  respondentIds?: number[]
 }>()
 
 const emit = defineEmits<{
@@ -114,7 +116,10 @@ const ruleExp = ref(100)
 
 /* 自定义新增承接方的联系人信息（key = 表单值） */
 const customContacts = reactive<Record<string, { contactName: string; phone: string }>>({})
+/* 需求立项预填：需求方已选定的承接方选项（可多个；未选定为空） */
+const selectedUndertakerOptions = ref<UndertakerOption[]>([])
 const selectionOptions = computed(() => [
+  ...selectedUndertakerOptions.value,
   ...undertakerOptions.value,
   ...(props.project?.undertakers ?? [])
     .filter((row) => !undertakerOptions.value.some((option) => option.value === undertakerValue(row)))
@@ -212,6 +217,8 @@ watch(
       form.description = props.project.description
       shares.value = props.project.undertakers.map((t) => t.share)
       milestones.value = normalizeMilestones(props.project.milestones)
+      /* 承接方改名后里程碑责任方（存展示名）需按 refId 同步为当前展示名：等承接方选项加载后再映射（G） */
+      void ensureOptions().then(() => remapMilestoneOwners())
       form.expReward = props.project.expReward ?? ruleExp.value
       applyProjectDemander(props.project)
       form.creatorName = props.project.creatorName ?? ''
@@ -335,11 +342,28 @@ const rules: FormProps['rules'] = {
 const optionLoadError = ref('')
 const optionLoading = ref(false)
 const optionsLoaded = ref(false)
+/* 已加载的选项键（需求立项按需求 ID 隔离）：弹窗复用时不带入上一条需求选定的承接方 */
+const loadedOptionsKey = ref('')
 let optionsPromise: Promise<void> | null = null
+
+function currentOptionsKey(): string {
+  /* 需求立项按需求 ID + 选定响应 ID 隔离：换需求或换选定承接方时重新加载，避免带入上一条的预填 */
+  if (props.mode !== 'create' || !props.demand) return 'base'
+  return `demand:${props.demand.id}:${(props.respondentIds ?? []).join(',')}`
+}
+
 function ensureOptions(): Promise<void> {
-  if (optionsLoaded.value) return Promise.resolve()
+  const key = currentOptionsKey()
+  if (optionsLoaded.value && loadedOptionsKey.value === key) {
+    /* 选项已缓存：重置表单后仍需按选定承接方预填（延后到本次打开的表单重置之后执行） */
+    void Promise.resolve().then(() => applySelectedUndertakers())
+    return Promise.resolve()
+  }
   if (!optionsPromise) {
     optionLoading.value = true
+    if (loadedOptionsKey.value !== key) selectedUndertakerOptions.value = []
+    /* 需求立项：并行加载需求方已选定的承接方（可多个）用于自动填充 */
+    const demand = props.mode === 'create' ? props.demand : null
     optionsPromise = Promise.allSettled([
       fetchUndertakerOptions()
         .then((rows) => {
@@ -358,11 +382,23 @@ function ensureOptions(): Promise<void> {
             markBaseline()
           }
         }),
+      demand
+        ? fetchDemandSelectedRespondents(demand.id, props.respondentIds)
+            .then((rows) => {
+              selectedUndertakerOptions.value = rows
+            })
+            .catch(() => {
+              /* 需求未选定承接方或接口异常：不预填，不影响其余选项加载 */
+              selectedUndertakerOptions.value = []
+            })
+        : Promise.resolve(),
     ])
       .then((results) => {
         const failures = results.filter((result) => result.status === 'rejected')
         optionsLoaded.value = failures.length === 0
+        loadedOptionsKey.value = key
         optionLoadError.value = failures.length ? '部分选项或奖励规则加载失败，请重试后核对。' : ''
+        applySelectedUndertakers()
       })
       .finally(() => {
         optionsPromise = null
@@ -371,6 +407,42 @@ function ensureOptions(): Promise<void> {
   }
   return optionsPromise
 }
+
+/* 需求立项自动带入需求方已选定的承接方（可多个），占比默认均分；
+ * 已手工选择过承接方时不覆盖，避免误改用户当前输入 */
+function applySelectedUndertakers() {
+  if (props.mode !== 'create' || !props.demand) return
+  if (selectedUndertakerOptions.value.length === 0 || form.undertakers.length > 0) return
+  form.undertakers = selectedUndertakerOptions.value.map((option) => option.value)
+  shares.value = evenShares(form.undertakers.length)
+  markBaseline()
+}
+
+/* 里程碑责任方存的是承接方展示名（历史口径）：编辑时按 refId 映射为当前展示名，
+ * 避免承接方改名后下拉出现失配的历史名称（G）。服务端保存时会再按同一规则重写一次。 */
+function remapMilestoneOwners() {
+  const project = props.project
+  if (props.mode !== 'edit' || !project) return
+  const labelByValue = new Map(selectionOptions.value.map((option) => [option.value, option.label]))
+  for (const milestone of milestones.value) {
+    milestone.owners = milestone.owners.map((owner) => {
+      const row = project.undertakers.find((t) => t.name === owner)
+      return row ? labelByValue.get(undertakerValue(row)) ?? owner : owner
+    })
+  }
+}
+
+/* 不参与结项经验分配的承接方（I）：合作企业 / 仅个人用户身份 / 自定义主体（仅社区企业与社区个体参与分配） */
+const noExperienceUndertakers = computed(() => {
+  const excludedGroups = ['个人用户', '合作企业', '自定义']
+  return form.undertakers
+    .map((value) => {
+      const option = selectionOptions.value.find((o) => o.value === value)
+      const group = option?.group ?? (value.startsWith('custom:') ? '自定义' : '')
+      return { label: option?.label ?? undertakerNameOf(value), group }
+    })
+    .filter((row) => excludedGroups.includes(row.group))
+})
 
 function addMilestone() {
   /* 新增节点插入到两个固定节点之间（固定「预期交付」之前） */
@@ -461,7 +533,11 @@ async function onConfirm() {
       await updateProject(props.project.id, payload)
       MessagePlugin.success('项目修改已保存')
     } else if (props.demand) {
-      project = await initiateProject(props.demand.id, payload)
+      /* 立项前置「选定承接方」勾选项：随立项一并提交，服务端在事务内落「已承接」 */
+      project = await initiateProject(props.demand.id, {
+        ...payload,
+        ...(props.respondentIds?.length ? { respondentIds: props.respondentIds } : {}),
+      })
       MessagePlugin.success(`立项成功，项目编号 ${project.code}`)
     } else {
       project = await createProject(payload)
@@ -556,7 +632,11 @@ usePageDirtyGuard(computed(() => props.visible && isDirty.value))
           <t-input v-accessible-field clearable v-model="form.contactEmail" placeholder="联系邮箱…" />
         </t-form-item>
       </template>
-      <p v-else class="demand-context">需求方信息将照搬需求「{{ demand.publisherName }}」及其联系电话与预算口径</p>
+      <p v-else class="demand-context">
+        需求方信息将照搬需求「{{ demand.publisherName }}」及其联系电话与预算口径<template v-if="selectedUndertakerOptions.length"
+          >；已带入需求方选定的 {{ selectedUndertakerOptions.length }} 个承接方，承接占比默认均分，可按需调整</template
+        >
+      </p>
       <t-form-item label="承接方（可多选/自定义）" name="undertakers">
         <t-select
           v-accessible-field="'搜索或选择承接方（社区企业/合作企业/用户），可输入名称自定义新增'"
@@ -569,6 +649,10 @@ usePageDirtyGuard(computed(() => props.visible && isDirty.value))
           placeholder="搜索或选择承接方（社区企业/合作企业/用户），可输入名称自定义新增…"
         />
       </t-form-item>
+      <!-- 结项经验只按社区企业/社区个体分配：非社区身份承接方明确提示，避免结项时静默丢弃（I） -->
+      <p v-if="noExperienceUndertakers.length" class="field-help">
+        以下承接方不参与项目结项经验值分配（仅社区企业与持有社区个体身份的用户参与）：{{ noExperienceUndertakers.map((row) => row.label).join('、') }}
+      </p>
 
       <!-- 自定义新增承接方的联系人信息 -->
       <div v-if="customRows.length" class="scope-head">

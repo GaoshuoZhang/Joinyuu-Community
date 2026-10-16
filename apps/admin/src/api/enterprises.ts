@@ -6,7 +6,9 @@ export interface EnterpriseQuery {
   pageSize: number
   keyword?: string
   industry?: string
-  status?: string
+  /** 状态筛选：支持单值（旧调用）与多值（勾选式筛选）。
+   *  多选值中的空串占位表示「不按状态过滤」（保证该字段在 URL 中可往返），落库请求会被服务端忽略 */
+  status?: string | string[]
 }
 
 export interface EnterprisePayload {
@@ -34,7 +36,8 @@ export async function fetchEnterprises(query: EnterpriseQuery): Promise<PageResu
   qs.set('pageSize', String(query.pageSize))
   if (query.keyword) qs.set('keyword', query.keyword)
   if (query.industry) qs.set('industry', query.industry)
-  if (query.status) qs.set('status', query.status)
+  if (Array.isArray(query.status)) query.status.forEach((s) => qs.append('status', s))
+  else if (query.status) qs.set('status', query.status)
   return httpGet<PageResult<Enterprise>>(`/enterprises?${qs}`)
 }
 

@@ -10,7 +10,9 @@ import DemandReviewDialog from '@/components/DemandReviewDialog.vue'
 import DemandScheduleDialog from '@/components/DemandScheduleDialog.vue'
 import ContentTakedownDialog from '@/components/ContentTakedownDialog.vue'
 import ProjectFormDialog from '@/components/ProjectFormDialog.vue'
+import DemandSelectRespondentsDialog from '@/components/DemandSelectRespondentsDialog.vue'
 import { identityLabelOf, identityTypeMap, userLevelMap } from '@/constants/identity'
+import { userSubjectLabel, identityLabelOrEmpty } from '@/utils/subjectLabel'
 import { cancelDemandSchedule, closeDemand, fetchDemand, publishDemandNow } from '@/api/demands'
 import { isNotFound } from '@/api/http'
 import ListErrorState from '@/components/ListErrorState.vue'
@@ -26,12 +28,21 @@ const tab = useQueryTab('info', ['info', 'respondents'] as const)
 const isArchived = computed(() => !!demand.value?.deletedAt)
 
 const respondentColumns = [
-  { colKey: 'name', title: '响应人', width: 120 , ellipsis: true},
+  /* 响应人不截断：口径为「真实姓名（身份 · 昵称 · 用户ID）」，宽度按 ~17 字预留并允许换行完整展示 */
+  { colKey: 'name', title: '响应人', cell: 'respondent', width: 260 },
   { colKey: 'enterprise', title: '所属', width: 160, ellipsis: true },
   { colKey: 'message', title: '留言' },
   { colKey: 'at', title: '时间', width: 170 , ellipsis: true},
   { colKey: 'status', title: '状态', cell: 'status', width: 200 },
 ]
+
+/* 响应人展示口径：真实姓名（身份 · 昵称 · 用户ID），避免同名/同昵称用户混淆；
+ * 代报名等无账号的响应无账号字段，回落快照姓名 */
+function respondentLabel(row: DemandRespondent): string {
+  return row.userId
+    ? userSubjectLabel({ realName: row.realName, nickname: row.nickname, uid: row.userId, identity: identityLabelOrEmpty(row.responderIdentity) })
+    : row.name
+}
 
 /* 响应记录以 id 作为稳定行键 */
 const respondentRows = computed(() =>
@@ -172,8 +183,38 @@ async function onCloseDemand() {
   }
 }
 
-/* 立项 */
+/* 立项：社区人员创建（后台代发）且存在待选定响应时，先弹「选定承接方」再进入立项表单 */
 const projectVisible = ref(false)
+const selectVisible = ref(false)
+const respondentIds = ref<number[]>([])
+
+/* 可选定响应：已通过审核的「待选定」条目（已撤回记录服务端已过滤） */
+function pendingRespondents(d: Demand): DemandRespondent[] {
+  return (d.respondents ?? []).filter((r) => r.status === 'pending')
+}
+
+function openProject() {
+  const d = demand.value
+  if (!d) return
+  respondentIds.value = []
+  if (d.publisherIdentity?.type === 'official' && pendingRespondents(d).length > 0) {
+    selectVisible.value = true
+    return
+  }
+  projectVisible.value = true
+}
+
+/* 重新立项（D）：已立项且关联项目已关闭/归档时，允许基于该需求新建项目并切换到新项目 */
+const canReinitiate = computed(
+  () => demand.value?.status === 'projected' && ['closed', 'archived'].includes(demand.value?.projectStatus ?? ''),
+)
+
+/* 「选定承接方」结果（可空 = 跳过选定）→ 带入立项表单作为预填与提交项 */
+function onRespondentsConfirm(ids: number[]) {
+  respondentIds.value = ids
+  selectVisible.value = false
+  projectVisible.value = true
+}
 
 /* 提交人跳转：个人/社区个体 → 用户详情；社区企业 → 社区企业详情；合作企业 → 合作企业详情；自定义不跳 */
 function publisherLinkTarget(d: Demand): string | null {
@@ -302,10 +343,10 @@ onMounted(load)
                 </t-popconfirm>
               </template>
               <template v-else-if="demand.status === 'selected'">
-                <t-button theme="primary" title="将基于该需求创建项目并建立关联，可在项目管理中跟进" @click="projectVisible = true">立项</t-button>
+                <t-button theme="primary" title="将基于该需求创建项目并建立关联，可在项目管理中跟进" @click="openProject">立项</t-button>
               </template>
               <template v-else-if="demand.status === 'published'">
-                <t-button theme="primary" title="将基于该需求创建项目并建立关联，可在项目管理中跟进" @click="projectVisible = true">立项</t-button>
+                <t-button theme="primary" title="将基于该需求创建项目并建立关联，可在项目管理中跟进" @click="openProject">立项</t-button>
                 <t-button variant="outline" theme="warning" @click="onRetract">撤回发布</t-button>
                 <t-popconfirm
                   :content="`确认关闭该需求「${demand.title}」？`"
@@ -318,6 +359,15 @@ onMounted(load)
             </template>
             <t-button v-if="demand.status === 'projected'" variant="outline" @click="goProject">
               查看关联项目
+            </t-button>
+            <t-button
+              v-if="canReinitiate"
+              variant="outline"
+              theme="primary"
+              title="关联项目已关闭/归档，可基于该需求重新立项"
+              @click="openProject"
+            >
+              重新立项
             </t-button>
           </div>
         </div>
@@ -406,6 +456,9 @@ onMounted(load)
                 :row-attributes="respondentRowAttributes"
                 empty="暂无响应记录，需求发布后成员可在此报名响应"
               >
+                <template #respondent="{ row }">
+                  <span :title="respondentLabel(row)">{{ respondentLabel(row) }}</span>
+                </template>
                 <template #message="{ row }">
                   <div class="resp-message-cell">
                     <div class="resp-message-text" :title="row.message">{{ row.message }}</div>
@@ -426,7 +479,7 @@ onMounted(load)
                       variant="text"
                       size="small"
                       theme="primary"
-                      :aria-label="`去审核 ${row.name} 的响应`"
+                      :aria-label="`去审核 ${respondentLabel(row)} 的响应`"
                       @click.stop="goRespondentReview"
                     >
                       去审核
@@ -457,8 +510,14 @@ onMounted(load)
     <DemandScheduleDialog v-model:visible="scheduleVisible" :demand="demand" @success="load" />
     <ContentTakedownDialog ref="takedownDialog" @success="load" />
 
+    <!-- 立项前置「选定承接方」（社区人员创建的需求） -->
+    <DemandSelectRespondentsDialog
+      v-model:visible="selectVisible"
+      :demand="demand"
+      @confirm="onRespondentsConfirm"
+    />
     <!-- 立项弹窗 -->
-    <ProjectFormDialog v-model:visible="projectVisible" mode="create" :demand="demand" :project="null" @success="load" />
+    <ProjectFormDialog v-model:visible="projectVisible" mode="create" :demand="demand" :project="null" :respondent-ids="respondentIds" @success="load" />
   </div>
 </template>
 

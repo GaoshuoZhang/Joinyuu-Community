@@ -527,6 +527,8 @@ export interface Demand {
   createdAt: string
   rejectReason?: string
   projectId?: string
+  /** 关联项目状态（需求立项后下发；`finished` 表示协作项目已结项，据此派生「已完成」展示） */
+  projectStatus?: string
   /** 我是否已响应（详情页用） */
   /** 本人响应快照（撤回后不返回，可重新响应） */
   myResponse?: { message: string; at: string; status: string }
@@ -589,6 +591,10 @@ export interface MyResponseItem {
   id: string
   demandId: string
   demandTitle: string
+  /** 需求当前状态（供「我的响应」反映需求已结束等待办口径） */
+  demandStatus?: DemandStatus
+  /** 响应被立项采用后的项目 ID：提供「查看我的项目」入口（未立项时为空） */
+  projectId?: string
   note: string
   /** 报价 / 预算（响应时选填，发布者视角下发） */
   quote?: string
@@ -603,9 +609,12 @@ export interface MyResponseItem {
   at: string
   responderUid?: string
   responderName?: string
+  /** 响应者账号口径：真实姓名 / 昵称（发布者在多个同名响应者之间选择时用于区分；不下发用户 ID） */
+  responderRealName?: string
+  responderNickname?: string
   responderIdentity?: IdentityType
   responderEnterpriseId?: string
-  status?: 'pending' | 'pending_review' | 'contacted' | 'accepted' | 'rejected' | 'closed'
+  status?: 'pending' | 'pending_review' | 'contacted' | 'accepted' | 'undertaken' | 'rejected' | 'closed'
   reviewedAt?: string
   rejectReason?: string
   /** 已撤回时间（撤回后视为未响应，可重新响应） */
@@ -655,6 +664,12 @@ export interface CommunityEvent {
   checkinRadiusM: number
   checkinOpenMin: number
   checkinCloseMin: number
+  /** 签到校验位置开关：开启时签到需定位并做地理围栏校验 */
+  checkinLocationRequired?: boolean
+  /** 签到校验码开关（默认开） */
+  checkinCodeRequired?: boolean
+  /** 签到码启用（required 且服务端已配置 6 位码）；开启时签到必须输码 */
+  checkinCodeEnabled?: boolean
   myEnrollmentStatus?: 'pending' | 'approved' | 'waitlisted' | 'rejected' | 'cancelled'
   myEnrollmentRejectReason?: string
   myCheckedIn?: boolean
@@ -685,8 +700,21 @@ export interface EventEnrollmentResult {
 }
 
 export interface CheckinPayload {
-  lat: number
-  lng: number
+  lat?: number
+  lng?: number
+  /** 6 位签到码（码启用时必填；连续错误 4 次起需附图形验证码） */
+  code?: string
+  captchaId?: string
+  captchaCode?: string
+}
+
+/** 签到结果：第 N 位 + 签到奖励积分 + 活动标题/起止时间（成功反馈页展示） */
+export interface CheckinResult {
+  pointsAwarded: number
+  position: number
+  title: string
+  startTime: string
+  endTime: string
 }
 
 /** 活动反馈（结束后提交，用于运营复盘） */
@@ -1030,6 +1058,9 @@ export interface MyIdentitySummary {
 export interface EnterpriseMemberInfo {
   uid?: string
   name: string
+  /** 真实姓名 / 昵称（账号口径，用于区分同名成员；客户端不展示用户 ID） */
+  realName?: string
+  nickname?: string
   role?: string
   phone?: string
   permissions?: EnterpriseMemberPermission[]
@@ -1205,6 +1236,10 @@ export interface MyProject {
   id: string
   name: string
   role: '需求发起方' | '本人承接' | '企业承接'
+  /** 我是本项目发起方（需求方 / 关联需求提交人）：用于「我的项目 > 我发起的」归属与验收权限 */
+  isInitiator?: boolean
+  /** 我是本项目承接方（含我负责的企业承接）：用于「我的项目 > 我承接的」归属 */
+  isUndertaker?: boolean
   enterpriseName?: string
   /** 企业承接时的企业 id（结项经验按企业维度发放） */
   enterpriseId?: string

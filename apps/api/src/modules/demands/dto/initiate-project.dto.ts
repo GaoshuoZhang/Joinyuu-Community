@@ -70,4 +70,13 @@ export class InitiateProjectDto {
   @IsInt()
   @Min(0)
   expReward?: number
+
+  /* 「选定承接方」前置步骤勾选的响应记录 ID（社区人员创建的需求由管理员代需求方选定）：
+   * 立项事务内把这些响应置为已选定并随后收敛为「已承接」；不传 = 仅按承接方名单立项 */
+  @IsOptional()
+  @IsArray()
+  @Type(() => Number)
+  @IsInt({ each: true })
+  @Min(1, { each: true })
+  respondentIds?: number[]
 }

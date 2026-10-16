@@ -88,6 +88,7 @@ function onLoginSubmit({ validateResult }: { validateResult: unknown }) {
 
 <template>
   <main id="main" class="page-fade-in m-login" tabindex="-1">
+    <router-link to="/" replace class="guest-link" aria-label="暂不登录，返回首页">暂不登录</router-link>
     <div class="hero">
       <CustomerBrandLogo v-if="customerTheme.theme?.brand?.logo" :brand="customerTheme.theme.brand" />
       <span v-else class="logo">聚</span>
@@ -108,7 +109,14 @@ function onLoginSubmit({ validateResult }: { validateResult: unknown }) {
       <FormItem label="手机号/邮箱/用户名" name="identifier">
         <Input v-model="form.identifier" type="text" autocomplete="username" placeholder="请输入手机号/邮箱/用户名…" clearable />
       </FormItem>
-      <FormItem label="密码" name="password">
+      <!-- v49：忘记密码移到「密码」字段标签行右侧，避开明文切换图标，同时省掉一整行 -->
+      <FormItem name="password" class="password-item">
+        <template #label>
+          <span class="password-label">
+            <span>密码</span>
+            <router-link to="/forgot-password" class="link">忘记密码？</router-link>
+          </span>
+        </template>
         <PasswordInput class="password-field" v-model="form.password" autocomplete="current-password" placeholder="请输入密码…" clearable />
       </FormItem>
       <FormItem v-if="captchaRequired" name="captchaCode" class="captcha-item">
@@ -121,9 +129,6 @@ function onLoginSubmit({ validateResult }: { validateResult: unknown }) {
       </FormItem>
 
       <Button theme="primary" block size="large" type="submit" :loading="submitting" :disabled="submitting">登录</Button>
-      <!-- v48：忘记密码从密码框右侧（与明文切换图标重叠）移到登录按钮下方、暂不登录上方 -->
-      <p class="forgot"><router-link to="/forgot-password" class="link">忘记密码？</router-link></p>
-      <p class="guest"><router-link to="/" replace class="guest-link">暂不登录</router-link></p>
       <p class="swap">还没有账号？<router-link :to="{ path: '/register', query: route.query.redirect ? { redirect: route.query.redirect } : {} }" class="link">立即注册</router-link></p>
     </Form>
   </main>
@@ -131,10 +136,24 @@ function onLoginSubmit({ validateResult }: { validateResult: unknown }) {
 
 <style scoped>
 .m-login {
+  position: relative;
   min-height: 100vh;
   min-height: 100dvh;
   background: var(--td-bg-color-container);
   padding: 0 var(--app-space-11) calc(var(--app-space-11) + env(safe-area-inset-bottom));
+}
+
+/* 暂不登录：移到页面右上角（绝对定位，保持 44px 命中区） */
+.guest-link {
+  position: absolute;
+  top: 0;
+  right: 0;
+  display: inline-flex;
+  align-items: center;
+  min-height: 44px;
+  padding:0 var(--app-space-8);
+  font: var(--app-type-body);
+  color: var(--td-text-color-secondary);
 }
 
 .hero {
@@ -191,22 +210,33 @@ function onLoginSubmit({ validateResult }: { validateResult: unknown }) {
   display: none;
 }
 
-.guest {
-  margin:var(--app-space-6) 0 0;
-  text-align: center;
-  font: var(--app-type-body);
+/* 密码字段标签行：左侧「密码」、右侧「忘记密码？」两端对齐。
+ * 必填红星是 `.t-form__label--required label::before`（inline-block），若标签行仍是块级布局、
+ * 而 .password-label 是块级 flex，红星就会被挤到单独一行；故把整行改为 flex 行，红星与内容同排。 */
+.password-item :deep(.t-form__label) {
+  width: 100%;
+  display: flex;
+  align-items: center;
 }
 
-.guest-link {
-  display: inline-flex;
+.password-item :deep(.t-form__label > label) {
+  display: flex;
   align-items: center;
-  min-height: 44px;
-  padding:0 var(--app-space-8);
-  color: var(--td-text-color-secondary);
+  flex: 1;
+  min-width: 0;
+}
+
+.password-label {
+  display: flex;
+  flex: 1;
+  min-width: 0;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--app-space-8);
 }
 
 .swap {
-  margin:var(--app-space-9) 0 0;
+  margin:var(--app-space-8) 0 0;
   text-align: center;
   font: var(--app-type-body);
   color: var(--td-text-color-secondary);
@@ -222,17 +252,5 @@ function onLoginSubmit({ validateResult }: { validateResult: unknown }) {
 
 .link:active {
   opacity: 0.72;
-}
-
-/* v48：忘记密码移到登录按钮下方（原先位于密码框右侧，与明文切换图标重叠），
- * 与「暂不登录 / 立即注册」同为居中文字链，保留 44px 命中区。 */
-.forgot {
-  margin:var(--app-space-6) 0 0;
-  text-align: center;
-  font: var(--app-type-body);
-}
-
-.password-field :deep(.t-input--password) {
-  letter-spacing: 0;
 }
 </style>

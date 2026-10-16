@@ -124,6 +124,10 @@ export class AppDemandsService {
     }
 
     const [item] = await this.toListItems([demand], new Map([[demand.id, count]]))
+    /* 关联项目状态：需求立项后长期停在 projected，客户端据项目是否结项派生「已完成」展示与项目入口 */
+    const project = demand.projectId
+      ? await this.prisma.project.findUnique({ where: { id: demand.projectId }, select: { status: true } })
+      : null
     return {
       ...item,
       description: demand.description,
@@ -133,6 +137,7 @@ export class AppDemandsService {
       createdAt: demand.createdAt,
       ...(demand.rejectedReason != null ? { rejectReason: demand.rejectedReason } : {}),
       ...(demand.projectId != null ? { projectId: demand.projectId } : {}),
+      ...(project ? { projectStatus: project.status } : {}),
       ...(myResponse ? { myResponse } : {}),
     }
   }
@@ -301,7 +306,7 @@ export class AppDemandsService {
     const ids = rows.map((r) => r.demandId)
     const demands = await this.prisma.demand.findMany({
       where: { id: { in: ids } },
-      select: { id: true, title: true, status: true },
+      select: { id: true, title: true, status: true, projectId: true },
     })
     const byId = new Map(demands.map((d) => [d.id, d]))
     return rows.map((r) => ({
@@ -309,6 +314,8 @@ export class AppDemandsService {
       demandId: r.demandId,
       demandTitle: byId.get(r.demandId)?.title ?? '',
       demandStatus: byId.get(r.demandId)?.status ?? '',
+      /* 响应被立项采用后项目 ID：客户端「我的响应」据此提供「查看我的项目」入口 */
+      ...(byId.get(r.demandId)?.projectId != null ? { projectId: byId.get(r.demandId)!.projectId as string } : {}),
       note: r.message,
       at: r.at,
       status: r.status,
@@ -352,6 +359,7 @@ export class AppDemandsService {
       /* 待审核响应不对发布者可见；已撤回与审核驳回（已置 withdrawnAt 失效）同样不展示 */
       where: { demandId: demand.id, withdrawnAt: null, status: { not: 'pending_review' } },
       orderBy: { id: 'asc' },
+      include: { user: { select: { uid: true, nickname: true, realName: true } } },
     })
     return rows.map((r) => ({
       id: r.id,
@@ -360,6 +368,9 @@ export class AppDemandsService {
       at: r.at,
       ...(r.userId != null ? { responderUid: r.userId } : {}),
       responderName: r.name,
+      /* 响应者账号口径：真实姓名 / 昵称（发布者在多个同名响应者之间做选择时用于区分；不下发用户 ID） */
+      ...(r.user?.realName != null ? { responderRealName: r.user.realName } : {}),
+      ...(r.user?.nickname != null ? { responderNickname: r.user.nickname } : {}),
       /* 响应补充信息：响应说明 / 联系手机 / 联系邮箱 / 报价 / 可投入时间 / 经验案例（供发布者评估）。
        * 响应审核通过时管理员可勾选「向需求方显示」：未勾选的字段（hiddenFields）在此逐项省略，发布者不可见。 */
       ...(respondentFieldVisible(r.hiddenFields, 'message') ? { note: r.message } : {}),
@@ -369,7 +380,11 @@ export class AppDemandsService {
       ...(r.timeline != null && respondentFieldVisible(r.hiddenFields, 'timeline') ? { timeline: r.timeline } : {}),
       ...(r.cases != null && respondentFieldVisible(r.hiddenFields, 'cases') ? { cases: r.cases } : {}),
       ...(r.responderIdentity != null ? { responderIdentity: this.identityType(r.responderIdentity) } : {}),
-      status: r.status === 'pending' || r.status === 'accepted' || r.status === 'rejected' ? (r.status as 'pending' | 'accepted' | 'rejected') : undefined,
+      /* 响应状态透传（发布者视角）：含立项收敛后的 undertaken（已承接）与 closed（已结束），
+       * 避免未入选/已承接的响应在客户端仍按「待选定」展示 */
+      status: (['pending', 'contacted', 'accepted', 'undertaken', 'rejected', 'closed'] as readonly string[]).includes(r.status)
+        ? (r.status as 'pending' | 'contacted' | 'accepted' | 'undertaken' | 'rejected' | 'closed')
+        : undefined,
       ...(r.reviewAt != null ? { reviewedAt: r.reviewAt } : {}),
       ...(r.rejectReason != null ? { rejectReason: r.rejectReason } : {}),
       ...(r.withdrawnAt != null ? { withdrawnAt: r.withdrawnAt } : {}),
@@ -378,11 +393,15 @@ export class AppDemandsService {
 
   /**
    * 发布者选择意向承接方（单选/多选）并提交立项申请：published → selected。
+   * `selected` 态再次提交 = 重新选定（覆盖上一次：原「已选定」回退「待选定」，仅通知本次新入选者）。
    * 不可驳回响应（未选中的响应保持待处理）；实际立项由社区管理员完成。
    */
   async selectResponders(uid: string, demandId: string, dto: SelectRespondersDto) {
     const demand = await this.requireOwnDemand(uid, demandId)
-    if (demand.status !== 'published') throw new ConflictException('仅已发布的需求可选择承接方')
+    const isReselect = demand.status === 'selected'
+    if (!isReselect && demand.status !== 'published') {
+      throw new ConflictException('仅已发布或已选定承接方的需求可选择承接方')
+    }
 
     const ids = [...new Set((dto.responseIds ?? []).filter((n) => Number.isInteger(n) && n > 0))]
     if (ids.length === 0) throw new BadRequestException('请至少选择一位意向承接方')
@@ -395,8 +414,23 @@ export class AppDemandsService {
     if (responses.some((r) => r.status === 'pending_review')) {
       throw new ConflictException('该响应待管理员审核，暂不可选择')
     }
+    /* 重新选定前记录上一次的「已选定」：这些响应回退后再入选，无需重复发通知 */
+    const previousAccepted = isReselect
+      ? await this.prisma.demandRespondent.findMany({
+          where: { demandId: demand.id, withdrawnAt: null, status: 'accepted' },
+          select: { id: true },
+        })
+      : []
+    const previousAcceptedIds = new Set(previousAccepted.map((r) => r.id))
 
     await this.prisma.$transaction(async (tx) => {
+      /* 重新选定：先把上一次的「已选定」回退为「待选定」，避免同时存在两批已选定 */
+      if (isReselect) {
+        await tx.demandRespondent.updateMany({
+          where: { demandId: demand.id, withdrawnAt: null, status: 'accepted' },
+          data: { status: 'pending' },
+        })
+      }
       const accepted = await tx.demandRespondent.updateMany({
         where: { id: { in: ids }, demandId: demand.id, withdrawnAt: null, status: 'pending' },
         data: { status: 'accepted', reviewAt: formatNow() },
@@ -405,13 +439,13 @@ export class AppDemandsService {
 
       /* 需求转 selected：客户端列表/详情不再展示，也不接受新响应；等待管理员立项 */
       const selected = await tx.demand.updateMany({
-        where: { id: demand.id, status: 'published', projectId: null },
+        where: { id: demand.id, status: demand.status, projectId: null },
         data: { status: 'selected', matchedRespondent: responses.map((r) => r.name).join('、') },
       })
       if (selected.count !== 1) throw new ConflictException('需求状态已变化，请刷新后重试')
 
       for (const response of responses) {
-        if (!response.userId) continue
+        if (!response.userId || previousAcceptedIds.has(response.id)) continue
         await this.notify.pushNoticeInTransaction(tx, response.userId, {
           type: 'demand',
           title: '已被选为意向承接方',
@@ -419,6 +453,27 @@ export class AppDemandsService {
           link: `/demands/${demand.id}`,
         })
       }
+    })
+    return { code: 0 }
+  }
+
+  /**
+   * 发布者撤销选定：selected → published，本次「已选定」的响应一并回退「待选定」，
+   * 让选错/反悔后有纠正路径（响应者无损失，可再次被选定）。
+   */
+  async deselectRespondents(uid: string, demandId: string) {
+    const demand = await this.requireOwnDemand(uid, demandId)
+    if (demand.status !== 'selected') throw new ConflictException('仅已选定承接方的需求可撤销选定')
+    await this.prisma.$transaction(async (tx) => {
+      await tx.demandRespondent.updateMany({
+        where: { demandId: demand.id, withdrawnAt: null, status: 'accepted' },
+        data: { status: 'pending' },
+      })
+      const reverted = await tx.demand.updateMany({
+        where: { id: demand.id, status: 'selected', projectId: null },
+        data: { status: 'published', matchedRespondent: null },
+      })
+      if (reverted.count !== 1) throw new ConflictException('需求状态已变化，请刷新后重试')
     })
     return { code: 0 }
   }
