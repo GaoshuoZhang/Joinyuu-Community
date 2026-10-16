@@ -26,6 +26,7 @@ const DEFAULT_VOUCHER_VALID_DAYS = 30
  * 兑换下单（单事务：校验库存→扣积分+流水→扣库存→建单并签发券码，按商品 validDays 计算有效期）、
  * 退款（仅待使用券，核销前可退：退积分+回补库存）、订单评价。
  * 可见/可下单范围门槛：商品自身范围 + 所属「商品类别」（字典 goods_category）范围都需通过（空数组 = 不限）；
+ * 类别被禁用（status !== enabled）或字典项已删除时，其下商品对客户端一律不可见（商品未配类别视为不限）。
  * 不可见一律 404（不暴露存在性），可下单范围外下单 403；游客按无身份处理（仅不限范围商品可见）。
  * 券码由后台工作人员现场核销（pending_use → finished），用户不可自主核销；
  * 过期未使用的券由定时任务自动退款（见 SchedulerService）。 */
@@ -290,14 +291,14 @@ export class AppMallService {
     return this.prisma.dictEntry.findUnique({ where: { type_code: { type: 'goods_category', code } } })
   }
 
-  /** 类别门槛不通过的类别 code 列表（可见用 category.visibility*，可下单用 category.order*） */
+  /** 类别门槛不通过的类别 code 列表（禁用/已停用类别一律 blocked；可见用 category.visibility*，可下单用 category.order*） */
   private async blockedCategories(
     identities: Array<{ type: string; level: number | null }>,
     field: 'visibility' | 'order',
   ): Promise<string[]> {
     const entries = await this.prisma.dictEntry.findMany({ where: { type: 'goods_category' } })
     return entries
-      .filter((entry) => !this.scopeMatches(
+      .filter((entry) => entry.status !== 'enabled' || !this.scopeMatches(
         field === 'visibility' ? entry.visibilityIdentities : entry.orderIdentities,
         field === 'visibility' ? entry.visibilityLevels : entry.orderLevels,
         identities,
@@ -305,10 +306,13 @@ export class AppMallService {
       .map((entry) => entry.code)
   }
 
-  /** 可见判定：类别可见范围 + 商品自身可见范围都通过 */
+  /** 可见判定：商品自身可见范围通过，且（未配类别 = 不限；配了类别则需字典项存在、status=enabled 且类别可见范围通过） */
   private canSee(goods: MallGoods, category: DictEntry | null, identities: Array<{ type: string; level: number | null }>): boolean {
-    return this.scopeMatches(goods.visibilityIdentities, goods.visibilityLevels, identities)
-      && this.scopeMatches(category?.visibilityIdentities ?? [], category?.visibilityLevels ?? [], identities)
+    if (!this.scopeMatches(goods.visibilityIdentities, goods.visibilityLevels, identities)) return false
+    const code = (goods.category ?? '').trim()
+    if (!code) return true
+    return category != null && category.status === 'enabled'
+      && this.scopeMatches(category.visibilityIdentities, category.visibilityLevels, identities)
   }
 
   /** 可下单判定：先需可见，且类别与商品自身的可下单范围都通过 */

@@ -176,22 +176,45 @@ export class DictsService {
     return { code: 0 }
   }
 
-  async remove(type: string, code: string, operator: string): Promise<{ code: number }> {
+  async remove(type: string, code: string, operator: string, replacementCode?: string): Promise<{ code: number }> {
     this.assertType(type)
     const entry = await this.prisma.dictEntry.findUnique({ where: { type_code: { type, code } } })
     if (!entry) throw new NotFoundException('字典项不存在')
 
-    /* 删除 + 同类型剩余项 sort 重排（保持 1..n 连续） */
-    await this.prisma.$transaction(async (tx) => {
+    /* 商品类别：仍被未删除商品引用时必须指定新的启用类别，并在同一事务内把商品迁移过去，
+     * 避免出现「商品引用了已删除的类别编码」的脏数据 */
+    let target: DictEntry | null = null
+    if (type === 'goods_category') {
+      const referenced = await this.prisma.mallGoods.count({ where: { category: code, deletedAt: null } })
+      if (referenced > 0) {
+        if (!replacementCode) throw new BadRequestException(`该类别下仍有 ${referenced} 件商品，请先指定新的商品类别`)
+        if (replacementCode === code) throw new BadRequestException('新商品类别不能与被删除的类别相同')
+        target = await this.prisma.dictEntry.findUnique({ where: { type_code: { type, code: replacementCode } } })
+        if (!target) throw new NotFoundException('目标商品类别不存在')
+        if (target.status !== 'enabled') throw new BadRequestException('目标商品类别已停用，请选择启用的类别')
+      }
+    }
+
+    const replaceCode = target?.code
+    /* 迁移商品 + 删除条目 + 同类型剩余项 sort 重排（保持 1..n 连续） */
+    const movedGoods = await this.prisma.$transaction(async (tx) => {
+      let moved = 0
+      if (replaceCode) {
+        /* 含软删商品一并迁移，避免残留指向已删类别的编码 */
+        const result = await tx.mallGoods.updateMany({ where: { category: code }, data: { category: replaceCode } })
+        moved = result.count
+      }
       await tx.dictEntry.delete({ where: { type_code: { type, code } } })
       await normalizeSort(tx, type)
+      return moved
     })
 
     await this.audit.record({
       module: '系统管理',
       action: '删除字典项',
       target: `${DICT_TYPE_LABELS[type]} · ${entry.label}`,
-      before: { code: entry.code, label: entry.label, status: entry.status },
+      before: { code: entry.code, label: entry.label, status: entry.status, movedGoods },
+      after: replaceCode ? { movedGoods, replacementCode: replaceCode, replacementLabel: target?.label } : { movedGoods },
       operator,
     })
 

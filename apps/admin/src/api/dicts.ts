@@ -54,7 +54,13 @@ export async function toggleDictEntry(type: DictType, code: string): Promise<{ c
   return httpPost<{ code: number }>(`/dicts/${type}/${code}/toggle-status`)
 }
 
-/* DELETE /api/admin/dicts/:type/:code — 删除字典项（历史数据已引用的值不受影响） */
-export async function deleteDictEntry(type: DictType, code: string): Promise<{ code: number }> {
-  return httpDelete<{ code: number }>(`/dicts/${type}/${code}`)
+/* DELETE /api/admin/dicts/:type/:code — 删除字典项（历史数据已引用的值不受影响）。
+ * 商品类别（goods_category）仍被商品引用时必须传 replacementCode：服务端在同一事务内把这些商品迁到新类别。 */
+export async function deleteDictEntry(
+  type: DictType,
+  code: string,
+  replacementCode?: string,
+): Promise<{ code: number }> {
+  const query = replacementCode ? `?replacementCode=${encodeURIComponent(replacementCode)}` : ''
+  return httpDelete<{ code: number }>(`/dicts/${type}/${code}${query}`)
 }

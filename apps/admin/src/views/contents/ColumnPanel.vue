@@ -51,6 +51,32 @@ async function load() {
   }
 }
 
+/* 客户端分页：全量数据切片展示 */
+const currentPage = ref(1)
+const pageSize = ref(10)
+const pageData = computed(() => {
+  const start = (currentPage.value - 1) * pageSize.value
+  return list.value.slice(start, start + pageSize.value)
+})
+
+const pagination = computed(() => ({
+  current: currentPage.value,
+  pageSize: pageSize.value,
+  total: list.value.length,
+  showJumper: true,
+}))
+
+function onPageChange(p: { current: number; pageSize: number }) {
+  currentPage.value = p.current
+  pageSize.value = p.pageSize
+}
+
+/* 数据变少导致当前页越界时夹到合法页码 */
+watch(list, () => {
+  const maxPage = Math.max(1, Math.ceil(list.value.length / pageSize.value))
+  if (currentPage.value > maxPage) currentPage.value = maxPage
+})
+
 /* 启用 / 停用 */
 async function onToggle(row: ArticleColumn) {
   acting.value = row.id
@@ -195,9 +221,11 @@ const { close: closeForm } = useDialogFormProtection(form, dialogVisible, submit
         table-layout="fixed"
         hover
         resizable
-        :data="list"
+        :data="pageData"
         :columns="visibleColumns"
         :loading="loading"
+        :pagination="pagination"
+        @page-change="onPageChange"
       >
         <template #name="{ row }">
           <div class="cell-title">{{ row.name }}</div>

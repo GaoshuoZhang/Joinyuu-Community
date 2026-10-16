@@ -564,7 +564,7 @@ TZ=Asia/Shanghai
 | POST | /api/admin/dicts/:type | `{ label, visibilityIdentities?, visibilityLevels?, orderIdentities?, orderLevels? }`；label 全类型唯一；创建即启用（code 按类型前缀 DC/IN/ET/GC 自增）；后四项仅 goods_category 使用（类别级可见/可下单范围，空数组 = 不限） |
 | PUT | /api/admin/dicts/:type/:code | `{ label?, visibilityIdentities?, visibilityLevels?, orderIdentities?, orderLevels? }`；未提交字段保持原值（前端编辑弹窗整表单提交）；label 改名同样走全类型唯一校验；权限 `/system/dicts` |
 | POST | /api/admin/dicts/:type/:code/toggle-status | 启用↔停用 |
-| DELETE | /api/admin/dicts/:type/:code | 删除并重排同类型 sort；历史引用值不受影响 |
+| DELETE | /api/admin/dicts/:type/:code | 删除并重排同类型 sort；历史引用值不受影响。**仅 `goods_category` 例外**：该类别仍被未删除商品引用时必传 `?replacementCode=`（目标须存在、启用且不等于自身），服务端在同一事务内把商品 `category` 迁移到新类别再删条目、重排 sort，审计记 `movedGoods`；未传时 400「该类别下仍有 N 件商品，请先指定新的商品类别」 |
 | — | 字典维护入口（前端） | 后台**无独立字典页**：按类型分置各业务页页头弹窗——需求管理「需求类别」/ 活动列表「活动类型」/ 社区企业「行业管理」/ 商品管理「商品类别」；上述接口与权限码 `/system/dicts` 不变，仅入口位置迁移 |
 | GET | /api/admin/roles | 角色列表（含权限码集合）；权限 `/system/roles` |
 | POST | /api/admin/roles | 新增自定义角色 `{ code, name, description? }`；code 小写字母开头仅含小写字母/数字/下划线（2-32）且唯一（409）、不可用内置 `super`（400）、名称唯一（409）；ID 走 R 前缀发号、sort 追加、初始无权限点；审计「RBAC · 新增角色」 |
@@ -771,7 +771,7 @@ TZ=Asia/Shanghai
 
 ### 8.12 积分商城可见/可下单范围门槛（商品 + 商品类别）
 
-- 两级门槛：商品自身 `visibilityIdentities/visibilityLevels`（可见）与 `orderIdentities/orderLevels`（可下单）+ 所属**商品类别**（字典 `goods_category`，在「商品管理 > 商品类别」弹窗维护的同类四项）**都需通过**；两组都为空 = 不限。
+- 两级门槛：商品自身 `visibilityIdentities/visibilityLevels`（可见）与 `orderIdentities/orderLevels`（可下单）+ 所属**商品类别**（字典 `goods_category`，在「商品管理 > 商品类别」弹窗维护的同类四项）**都需通过**；两组都为空 = 不限。**类别 `status='disabled'`（停用）或其字典项已不存在时，该类别下商品对客户端一律不可见**（列表剔除、详情/下单按不存在 404；类别被删除时由删除接口强制指定新类别迁移商品，避免出现孤儿编码）。App 端下发的字典 bundle 仅含 `status='enabled'` 的条目。
 - 命中口径与活动/需求一致：按「单个身份」联合判定（身份类型命中且等级命中），多身份取并集（`AppMallService.scopeMatches`）；等级仅社区个体/社区企业身份拥有。
 - 生效点：列表按可见范围过滤（商品自身用 SQL 条件，类别范围不通过的类别直接剔除，分页与 total 同源）、详情不可见一律 404（不暴露存在性）、下单先判可见（404）再判可下单（403「当前身份暂不可兑换该商品」）；游客/未登录按无身份处理，仅「不限」商品可见。
 - 类别维护：编码 GC 前缀自动分配，可新增/改名/启停/删除（`PUT /api/admin/dicts/goods_category/:code` 随整表单提交范围）；范围为空的类别等同不限（存量数据即为此态，行为与改造前一致）。

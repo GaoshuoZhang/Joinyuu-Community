@@ -108,7 +108,7 @@
 | GET | /api/app/me/projects/:id | 项目详情（需求方与承接方可看）：参与人、来源需求、进度与里程碑交付验收状态 |
 | POST | /api/app/me/projects/:id/milestones/:milestoneId/submit | 承接方提交里程碑完成（可附说明）→ 待发起方验收；发起方调用 403 |
 | POST | /api/app/me/projects/:id/milestones/:milestoneId/accept | 发起方验收里程碑；全部验收通过自动结项并按 wiki-backend §8.6 发放 `project_completed` 经验（仅「进行中/已暂停」项目且节点为「待验收」时可操作，409/404 与后台「进度节点」同口径；实现由 `ProjectMilestoneReviewService` 与后台共用） |
-| GET | /api/app/mall/goods | 商品列表：`on` 且有库存优先（`restock` 库存为 0 不展示）；`mallOpen` 关闭 → 400；**按需方身份过滤可见范围**（商品自身 + 所属商品类别的可见范围都需通过；游客/未登录按无身份，仅「不限」商品可见） |
+| GET | /api/app/mall/goods | 商品列表：`on` 且有库存优先（`restock` 库存为 0 不展示）；`mallOpen` 关闭 → 400；**按需方身份过滤可见范围**（商品自身 + 所属商品类别的可见范围都需通过；游客/未登录按无身份，仅「不限」商品可见）；**类别被停用或其字典项不存在时，该类别下商品一律不展示** |
 | GET | /api/app/mall/goods/:id | 商品详情（可见范围外一律 404，不暴露存在性；口径同列表） |
 | POST | /api/app/mall/orders | 兑换下单（统一券码）：**范围门槛**（商品 + 类别的可见/可下单范围都需通过，可见外 404、可下单外 403「当前身份暂不可兑换该商品」）+ **等级折扣实扣**（实扣 = round(商品积分 × 折扣 ÷ 10)，折扣取本人社区个体等级，无等级按原价；订单 `points` 存实扣额，退款按实扣退）+ 积分充足 + 库存充足（事务：扣积分+写流水+扣库存+建订单 `pending_use` 并签发 `voucherCode`/`voucherExpiresAt`） |
 | GET | /api/app/me/orders | 我的兑换订单 |

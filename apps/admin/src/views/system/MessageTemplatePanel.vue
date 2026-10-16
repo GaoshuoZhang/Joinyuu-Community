@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, reactive, ref } from 'vue'
+import { computed, onMounted, reactive, ref, watch } from 'vue'
 import { focusFirstInvalid, useDialogFormProtection } from '@/utils/form'
 import { MessagePlugin } from 'tdesign-vue-next'
 import { AddIcon } from 'tdesign-icons-vue-next'
@@ -44,6 +44,33 @@ async function load() {
     loading.value = false
   }
 }
+
+/* 客户端分页：全量数据切片展示 */
+const currentPage = ref(1)
+const pageSize = ref(10)
+
+const pageData = computed(() => {
+  const start = (currentPage.value - 1) * pageSize.value
+  return templates.value.slice(start, start + pageSize.value)
+})
+
+const pagination = computed(() => ({
+  current: currentPage.value,
+  pageSize: pageSize.value,
+  total: templates.value.length,
+  showJumper: true,
+}))
+
+function onPageChange(p: { current: number; pageSize: number }) {
+  currentPage.value = p.current
+  pageSize.value = p.pageSize
+}
+
+/* 数据变少导致当前页越界时夹到合法页码 */
+watch(templates, () => {
+  const maxPage = Math.max(1, Math.ceil(templates.value.length / pageSize.value))
+  if (currentPage.value > maxPage) currentPage.value = maxPage
+})
 
 onMounted(load)
 
@@ -332,7 +359,7 @@ const { close: closeTestDialog } = useDialogFormProtection(testForm, testVisible
     </div>
 
     <div class="page-card">
-      <t-table :horizontal-scroll-affixed-bottom="{ container: '.page-scroll', offsetBottom: 0 }" row-key="id" :data="templates" :columns="columns" :loading="loading" table-layout="fixed" hover resizable>
+      <t-table :horizontal-scroll-affixed-bottom="{ container: '.page-scroll', offsetBottom: 0 }" row-key="id" :data="pageData" :columns="columns" :loading="loading" :pagination="pagination" table-layout="fixed" hover resizable @page-change="onPageChange">
         <template #kind="{ row }">
           <t-tag variant="light-outline" size="small">{{ KIND_LABEL[row.kind] || row.kind }}</t-tag>
         </template>

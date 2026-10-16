@@ -7,6 +7,7 @@ import { createGoods, updateGoods } from '@/api/mall'
 import { fetchDictEntries } from '@/api/dicts'
 import { goodsCategoryMap } from '@/constants/status'
 import { userLevelOptions, visibilityIdentityOptions } from '@/constants/identity'
+import ImageUploadField from '@/components/ImageUploadField.vue'
 import type { MallGoods, GoodsCategory } from '@/types'
 
 const RichEditor = defineAsyncComponent(() => import('@/components/RichEditor.vue'))
@@ -193,9 +194,8 @@ function onClose() {
       <t-form-item label="商品名称" name="name">
         <t-input v-accessible-field clearable v-model="form.name" placeholder="请输入商品名称…" />
       </t-form-item>
-      <t-form-item label="商品封面" name="coverUrl" help="可粘贴素材库文件地址或 HTTPS 图片地址；留空时移动端显示品牌占位图">
-        <t-input v-accessible-field clearable v-model="form.coverUrl" placeholder="请输入封面图片地址…" />
-        <t-image v-if="form.coverUrl" class="cover-preview" :src="form.coverUrl" fit="cover" />
+      <t-form-item label="商品封面" name="coverUrl" help="上传图片直传素材库；留空时移动端显示品牌占位图">
+        <ImageUploadField v-model="form.coverUrl" biz-type="goods-cover" tip="建议 1:1 或 4:3 图片，图片将存入素材库" />
       </t-form-item>
       <div class="form-row">
         <t-form-item label="商品分类" name="category">
@@ -319,12 +319,5 @@ function onClose() {
   margin: -6px 0 12px;
   font-size: 12px;
   color: var(--td-text-color-secondary);
-}
-
-.cover-preview {
-  width: 200px;
-  height: 112px;
-  margin-top: 8px;
-  border-radius: var(--td-radius-medium);
 }
 </style>

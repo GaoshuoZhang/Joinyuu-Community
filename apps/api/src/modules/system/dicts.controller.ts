@@ -1,4 +1,4 @@
-import { Body, Controller, Delete, Get, HttpCode, Param, Post, Put, Req } from '@nestjs/common'
+import { Body, Controller, Delete, Get, HttpCode, Param, Post, Put, Query, Req } from '@nestjs/common'
 import type { AuthenticatedRequest } from '../../common/interfaces/authenticated-request'
 import { RequirePermission } from '../../common/decorators/require-permission.decorator'
 import { DictsService } from './dicts.service'
@@ -39,7 +39,13 @@ export class DictsController {
 
   @RequirePermission('/system/dicts')
   @Delete(':type/:code')
-  remove(@Param('type') type: string, @Param('code') code: string, @Req() req: AuthenticatedRequest) {
-    return this.dicts.remove(type, code, req.user?.name ?? '社区管理员')
+  remove(
+    @Param('type') type: string,
+    @Param('code') code: string,
+    @Req() req: AuthenticatedRequest,
+    /* 商品类别删除时的迁移目标：该类别仍被商品引用时必填 */
+    @Query('replacementCode') replacementCode?: string,
+  ) {
+    return this.dicts.remove(type, code, req.user?.name ?? '社区管理员', replacementCode)
   }
 }

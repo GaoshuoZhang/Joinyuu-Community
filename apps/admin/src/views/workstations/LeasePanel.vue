@@ -3,7 +3,7 @@ import { executeBulk } from '@/utils/bulkOperation'
 import RowMoreActions from '@/components/RowMoreActions.vue'
 import { useListQueryState } from '@/utils/listQuery'
 import ListErrorState from '@/components/ListErrorState.vue'
-import { computed, onMounted, ref } from 'vue'
+import { computed, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { MessagePlugin } from 'tdesign-vue-next'
 import { AddIcon } from 'tdesign-icons-vue-next'
@@ -69,6 +69,37 @@ const filteredLeases = computed(() => {
   })
 })
 
+/* 客户端分页：接口无分页参数，数据一次全量拉取后按筛选结果本地切片 */
+const currentPage = ref(1)
+const pageSize = ref(10)
+
+const pageData = computed(() =>
+  filteredLeases.value.slice((currentPage.value - 1) * pageSize.value, currentPage.value * pageSize.value),
+)
+
+const pagination = computed(() => ({
+  current: currentPage.value,
+  pageSize: pageSize.value,
+  total: filteredLeases.value.length,
+  showJumper: true,
+}))
+
+function onPageChange(p: { current: number; pageSize: number }) {
+  currentPage.value = p.current
+  pageSize.value = p.pageSize
+}
+
+/* 筛选变化回到第 1 页：状态勾选 / 关键词 / 主体筛选任一变化 */
+watch([statusFilter, keyword, renterId, renterType], () => {
+  currentPage.value = 1
+})
+
+/* 页码越界兜底：结果集或每页条数变化后把 currentPage 夹进合法范围，避免空白页 */
+watch([() => filteredLeases.value.length, pageSize], () => {
+  const maxPage = Math.max(1, Math.ceil(filteredLeases.value.length / pageSize.value))
+  if (currentPage.value > maxPage) currentPage.value = maxPage
+})
+
 /* 状态卡片快速筛选：点击勾选/取消该状态（与勾选式筛选器双向同步） */
 function setStatFilter(status: LeaseViewStatus) {
   statusFilter.value = statusFilter.value.includes(status)
@@ -99,6 +130,7 @@ function onReset() {
   keyword.value = ''
   renterId.value = ''
   renterType.value = ''
+  currentPage.value = 1
   load()
 }
 
@@ -396,10 +428,12 @@ onMounted(async () => {
         table-layout="fixed"
         hover
         resizable
-        :data="filteredLeases"
+        :data="pageData"
         :columns="visibleColumns"
         :loading="loading"
+        :pagination="pagination"
         :row-attributes="{ style: { cursor: 'pointer' } }"
+        @page-change="onPageChange"
         @row-click="onRowClick"
       >
         <template #enterprise="{ row }">

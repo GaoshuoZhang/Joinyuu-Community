@@ -2,7 +2,7 @@
 import RowMoreActions from '@/components/RowMoreActions.vue'
 import ListErrorState from '@/components/ListErrorState.vue'
 import ListEmptyState from '@/components/ListEmptyState.vue'
-import { computed, onMounted, ref } from 'vue'
+import { computed, onMounted, ref, watch } from 'vue'
 import { MessagePlugin } from 'tdesign-vue-next'
 import { useRouter } from 'vue-router'
 import { AddIcon } from 'tdesign-icons-vue-next'
@@ -41,6 +41,32 @@ const visibleColKeys = ref<string[]>(columns.map((c) => c.colKey))
 const visibleColumns = computed(() => {
   const byKey = new Map(columns.map((c) => [c.colKey, c]))
   return visibleColKeys.value.map((k) => byKey.get(k)).filter(Boolean)
+})
+
+/* 客户端分页：接口一次性返回全量空间，本地切片；本页无筛选条，仅需页码越界兜底 */
+const currentPage = ref(1)
+const pageSize = ref(10)
+
+const pageData = computed(() =>
+  list.value.slice((currentPage.value - 1) * pageSize.value, currentPage.value * pageSize.value),
+)
+
+const pagination = computed(() => ({
+  current: currentPage.value,
+  pageSize: pageSize.value,
+  total: list.value.length,
+  showJumper: true,
+}))
+
+function onPageChange(p: { current: number; pageSize: number }) {
+  currentPage.value = p.current
+  pageSize.value = p.pageSize
+}
+
+/* 页码越界兜底：数据量或每页条数变化后把 currentPage 夹进合法范围，避免空白页 */
+watch([() => list.value.length, pageSize], () => {
+  const maxPage = Math.max(1, Math.ceil(list.value.length / pageSize.value))
+  if (currentPage.value > maxPage) currentPage.value = maxPage
 })
 
 async function load() {
@@ -126,10 +152,12 @@ onMounted(load)
         table-layout="fixed"
         hover
         resizable
-        :data="list"
+        :data="pageData"
         :columns="visibleColumns"
         :loading="loading"
+        :pagination="pagination"
         :row-attributes="{ style: { cursor: 'pointer' } }"
+        @page-change="onPageChange"
         @row-click="({ row }: { row: Space }) => goDetail(row)"
       >
         <template #name="{ row }">

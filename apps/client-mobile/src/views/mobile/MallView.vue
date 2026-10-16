@@ -45,12 +45,6 @@ function categoryLabel(goods: Goods): string {
   return categories.value.find((item) => item.code === goods.category)?.label ?? goods.category
 }
 
-/* v45：无封面商品的占位字形——按商品分类区分（权益券 GC003 / 其他），
- * 取代此前 8 件商品共用同一张大块占位的做法；真实封面（coverUrl）仍然优先。 */
-function glyphFor(goods: Goods): string {
-  return goods.category === 'GC003' ? 'ticket' : 'gift'
-}
-
 function syncQuery() {
   const query: Record<string, string> = {}
   if (category.value) query.category = category.value
@@ -125,9 +119,6 @@ useRefreshOnActivate(() => {
       <p class="list-count">共 {{ formatZhNumber(goodsTotal) }} 件商品</p>
       <router-link v-for="g in goodsList" :key="g.id" class="goods-card m-card pressable" :to="`/mall/${g.id}`">
         <Image v-if="g.coverUrl" class="goods-cover content-img" :src="g.coverUrl" :alt="g.name" fit="cover" lazy @error="onImageError" />
-        <!-- v45：无封面时不再伪造与图片等高的占位块（8 件商品会长得一模一样、且像加载失败），
-             改为按履约类型给出的小字形，卡片更紧凑、一屏可比较更多商品 -->
-        <span v-else class="goods-glyph"><Icon aria-hidden="true" :name="glyphFor(g)" size="20px" /></span>
         <div class="row">
           <!-- 类别标签：中文名取字典 goods_category（任意类别都展示，含自定义新增类别） -->
           <CategoryTag v-if="categoryLabel(g)" :label="categoryLabel(g)" />
@@ -228,18 +219,6 @@ useRefreshOnActivate(() => {
   width: calc(100% + var(--app-space-5) * 2);
   height: 96px;
   margin: calc(var(--app-space-5) * -1) calc(var(--app-space-5) * -1) var(--app-space-5);
-}
-
-/* 无封面时的类别字形：小尺寸符号，不再占据整行高度 */
-.goods-glyph {
-  display: grid;
-  place-items: center;
-  width: 32px;
-  height: 32px;
-  margin-bottom: var(--app-space-5);
-  border-radius: var(--td-radius-large);
-  background: var(--td-brand-color-1);
-  color: var(--td-brand-color);
 }
 
 /* 窄卡片内名称与积分改为上下两行，避免同行互相挤压 */
