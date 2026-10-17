@@ -117,7 +117,16 @@ pnpm dev:api              # 启动后端（7757）
 pnpm dev:admin            # 启动管理后台（7758）
 pnpm dev:client-mobile    # 启动移动端（7759）
 pnpm dev:it               # 以隔离数据库/Redis 启动三端联调环境
-pnpm start                # 生产启动后端（等价于在 apps/api 目录执行 node dist/main.js，工作目录为 apps/api）
+```
+
+生产（1Panel 部署用；详见[部署手册](./docs/deploy-1panel.md)）：
+
+```bash
+pnpm start                # 启动后端（apps/api 下执行 node dist/main.js，读取 apps/api/.env）
+pnpm serve:admin          # 管理端静态服务（端口 7758，零依赖，服务 apps/admin/dist）
+pnpm serve:mobile         # 移动端静态服务（端口 7759，含 history 路由兜底，服务 apps/client-mobile/dist）
+pnpm start:admin          # 容器内构建后再服务（= build:admin + serve:admin）
+pnpm start:mobile         # 容器内构建后再服务（= build:client-mobile + serve:mobile）
 ```
 
 数据库：

@@ -8,6 +8,7 @@
 ### 变更
 
 - 仓库根 `package.json` 新增 `start` 脚本（`pnpm --filter @joinyuu/api start`）：1Panel「运行环境 → 启动命令」下拉可直接选 `start`，执行时 pnpm 自动把工作目录切到 `apps/api`，`.env` 可正常读取，无需在面板里额外配置环境变量。
+- 同步新增 `start:api` 别名（与 `start` 等价），便于「启动命令」下拉与 `serve:admin` / `serve:mobile` 三端命名统一。
 
 ## [1.5.0] - 2026-10-17
 

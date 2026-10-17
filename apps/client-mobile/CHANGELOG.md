@@ -5,6 +5,10 @@
 
 ## [Unreleased]
 
+### 新增
+
+- 新增零依赖静态服务脚本 [server.mjs](./server.mjs) 与 `serve` 脚本：供 1Panel「运行环境 → Node.js」容器直接托管移动端产物，其中**实现了 history 路由兜底**（任意未命中路径回落 `index.html`，等价 Nginx 的 `try_files $uri $uri/ /index.html;`），并包含正确 MIME、`index.html` 不缓存、带哈希资源长缓存、`/api/**` 返回 404、路径穿越防护。根脚本新增 `serve:mobile` 与 `start:mobile`（容器内构建后再服务）。
+
 ## [1.5.0] - 2026-10-17
 
 首个正式发布版本（后端 / 管理后台 / 移动端同为 v1.5.0）。纯移动端应用，5 Tab 结构，全部页面接入真实接口（`/api/app/**`）。
