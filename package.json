@@ -15,6 +15,7 @@
     "db:down": "docker compose -f apps/api/docker-compose.dev.yml down",
     "db:migrate": "pnpm --filter @joinyuu/api db:migrate",
     "db:seed": "pnpm --filter @joinyuu/api db:seed",
+    "db:init": "pnpm --filter @joinyuu/api db:init",
     "db:reset": "pnpm --filter @joinyuu/api db:reset",
     "test:e2e:it": "node scripts/integration.mjs test",
     "lint": "eslint . --max-warnings 0",

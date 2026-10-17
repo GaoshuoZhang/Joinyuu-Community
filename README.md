@@ -108,7 +108,8 @@ pnpm dev:it               # 以隔离数据库/Redis 启动三端联调环境
 ```bash
 pnpm db:up                # 启动 PostgreSQL + Redis（Docker Compose，等待健康检查）
 pnpm db:migrate           # 应用迁移（prisma migrate deploy）
-pnpm db:seed              # 写入种子数据
+pnpm db:init              # 生产初始化：仅基础配置（字典/权限/角色/超管/渠道与模板），不含演示数据
+pnpm db:seed              # 写入全量种子数据（含演示业务数据，仅本地开发与 e2e）
 pnpm db:reset             # 重建数据库（drop + migrate + 全量种子）
 ```
 

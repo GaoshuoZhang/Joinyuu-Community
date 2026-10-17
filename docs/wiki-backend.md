@@ -59,6 +59,7 @@ apps/api/
     schema.prisma        # 全量实体建模（69 模型，见 entity-fields.md）
     migrations/          # prisma migrate 产出（63 个迁移）
     seed.ts              # 演示种子（见第 11 节）
+    init.ts              # 生产初始化种子（仅基础配置，不含演示数据；见第 11 节）
     seed-data/           # 各域种子数据（seed 唯一数据源；api tsconfig exclude）
   src/
     main.ts              # CORS 白名单 + 0.0.0.0:7757
@@ -92,6 +93,7 @@ pnpm db:down        # 停止并删除容器（保留数据卷）
 pnpm dev:api        # 启动 NestJS dev（端口 7757）
 pnpm build:api      # Nest 生产构建
 pnpm db:migrate     # prisma migrate deploy（非交互应用已有迁移）
+pnpm db:init        # tsx prisma/init.ts（生产初始化：仅基础配置，冲突即跳过；未初始化库才可执行）
 pnpm db:seed        # tsx prisma/seed.ts（幂等：清空后全量重建）
 pnpm db:reset       # prisma migrate reset --force（drop + migrate + seed，一键验证）
 pnpm --filter @joinyuu/api db:migrate:dev  # 开发者创建新迁移时手动执行（交互式）
@@ -817,8 +819,9 @@ TZ=Asia/Shanghai
 - `db:seed` 重种子后清理 `APP_CACHE_KEYS`（配置/规则/工作台/字典）与动态鉴权键（`auth:admin:perms:*`、`captcha:*`、`auth:admin:sessions`），避免跨套件读到旧数据；Redis 不可用时静默跳过。
 - 监控页读取 Redis INFO（版本/内存/键数/命中率/连接数）与 `PING` 延迟；Redis 不可用时返回降级值（延迟 -1、INFO 空串）。
 
-## 11. 种子数据（prisma/seed.ts + prisma/seed-data/）
+## 11. 种子数据（prisma/init.ts / prisma/seed.ts + prisma/seed-data/）
 
+- **`db:init`（生产初始化，`prisma/init.ts`）**：只写基础配置——字典 / 权限点（补齐迁移未覆盖的目录项）/ 角色 / 超级管理员 / 系统配置 / 归档设置 / 等级与积分经验规则 / 发布限制（补齐迁移无法生成的等级维度）/ 名片字段 / 消息渠道与模板 / ID 序列（各前缀自 1000 起，首个编号为 4 位如 U1001；`CODE-<year>` 自 0 起，首个项目号 JY-YYYY-01）。全部写入按「冲突即跳过」执行：迁移已写入的权限点、名片字段、个人维度发布限制保持原值，不写任何演示业务数据。执行判据为「AdminUser / SystemConfig / DictEntry 三者皆空」（这三张表迁移不写入），已初始化即中止；仅建 `admin` 一个超管（角色 super），初始密码取 `INIT_ADMIN_PASSWORD`，未配置则随机生成并只打印一次。
 - **来源**：`prisma/seed-data/` 为唯一数据源（全量演示数据，编号与跨模块引用一致）。当前计数（`Seed` 日志口径）：
   - 社区成员：users 15 / UserIdentity（随 users）/ enterprises 9 / externalEnterpriseProfiles 3 / applications 13（四类）/ demands 13（含 respondents）/ projects 8 / events 9（含 enrollments）
   - 账本与商城：experienceRecords 39 / pointsRecords 21 / goods 9 / redemptionOrders 6 / pointsRules 9 / experienceRules 6 / levelTiers 5
