@@ -13,7 +13,14 @@ const emit = defineEmits<{
   (e: 'saved'): void
 }>()
 
-const visible = computed(() => props.visible)
+/* 关闭动作（取消 / 右上角 X / 未保存确认）统一走 useDialogFormProtection 的 close，
+ * 它内部会执行 `visible.value = false`，所以这里必须是**可写** computed（写时 emit 回父组件的
+ * v-model:visible）。原先写成只读的 computed(() => props.visible)，赋值会被 Vue 直接忽略
+ * （只读 computed 无 setter），导致「取消」「X」都关不掉弹窗。 */
+const visible = computed<boolean>({
+  get: () => props.visible,
+  set: (v) => emit('update:visible', v),
+})
 const loading = ref(false)
 const saving = ref(false)
 const form = reactive({ auditLogRetentionDays: 180, loginLogRetentionDays: 180 })

@@ -17,6 +17,7 @@
 - **渠道「测试发送」改为按模板自动带出变量输入框**：原先只有「模板变量（JSON）」文本框，容易漏填或写错键名（短信通道参数个数不符会被供应商拒绝）。现在选择模板后按其变量白名单逐个生成必填输入项，提交时自动组装变量对象；未选模板时仍可用「正文」做连通性验证。
 - **二次确认框可能被业务浮层遮盖**：TDesign 的 `DialogPlugin` 默认层级只有 2500，而 `Popup` 是 5500，因此在「先打开 Popup 系浮层（下拉选择、气泡卡片等）、再弹出确认框」的场景下确认框会被盖住。现统一改用 [src/utils/confirmDialog.ts](./src/utils/confirmDialog.ts) 的 `confirmDialog()`，显式把确认框层级抬到 5600（高于 Popup 5500，低于 Message 6000），并把全站 10 处 `DialogPlugin.confirm` 调用点（含表单未保存保护 `useDialogDirtyGuard` / `usePageDirtyGuard`）一并迁移，与客户端同一口径。
 - **反向代理（域名）访问时登录日志与审计记成 `172.18.0.1` 而非访客真实 IP**：[server.mjs](./server.mjs) 转发 `/api` 时会把「直接连接的对端地址」追加到 `X-Forwarded-For` 末尾，而容器端口经宿主机发布后该对端地址是 docker 网关，后端 `TRUST_PROXY=1` 取的又正是最后一跳。现改为**上游 `X-Real-IP` 优先、`X-Forwarded-For` 改写成单值**、不再追加对端地址：域名访问时记 Nginx 声明的 `$remote_addr`，IP 直连时记真实对端，且客户端伪造的 `X-Forwarded-For` 前缀会被丢弃。
+- **「日志与审计 → 日志设置」弹窗点「取消」或右上角「X」都关不掉**：[LogRetentionDialog.vue](./src/components/LogRetentionDialog.vue) 把 `computed(() => props.visible)`（**只读**）传给了 `useDialogFormProtection`，而该组合式的 `close()` 内部执行的是 `visible.value = false` —— 对只读 computed 赋值会被 Vue 直接忽略（仅开发环境打印告警），导致「取消」「X」以及未保存确认后的关闭全部失效。已改为**可写** computed（setter 里 `emit('update:visible')` 回父组件的 `v-model:visible`），三条关闭路径均恢复正常。
 
 ## [1.5.0] - 2026-10-17
 
