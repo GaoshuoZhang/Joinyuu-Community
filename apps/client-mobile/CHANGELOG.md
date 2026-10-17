@@ -13,6 +13,7 @@
 ### 修复
 
 - **二次确认框被业务弹层遮盖导致按钮点不到**：TDesign Mobile 的 `DialogPlugin` 默认层级只有 2500，而 `Popup` 是 11500、`Toast` 是 12001，所以在「先打开底部弹层、再弹出确认框」的场景下（典型场景：安全中心里「绑定/更换手机号」「更换邮箱」填写了内容后返回，弹出的「放弃当前填写？」确认框会被底部弹层整个盖住，无法点击「放弃填写」），确认框会沉到业务弹层下面。现统一改用 [src/utils/confirmDialog.ts](./src/utils/confirmDialog.ts) 的 `confirmDialog()`，显式把确认框层级抬到 11800（高于 Popup 11500，低于 Toast 12001/Message 15000），并把全站 35 处 `DialogPlugin.confirm` 调用点一并迁移，避免同类问题复发。
+- **反向代理（域名）访问时登录日志与审计记成 `172.18.0.1` 而非访客真实 IP**：[server.mjs](./server.mjs) 转发 `/api` 时会把「直接连接的对端地址」追加到 `X-Forwarded-For` 末尾，而容器端口经宿主机发布后该对端地址是 docker 网关，后端 `TRUST_PROXY=1` 取的又正是最后一跳。现改为**上游 `X-Real-IP` 优先、`X-Forwarded-For` 改写成单值**、不再追加对端地址：域名访问时记 Nginx 声明的 `$remote_addr`，IP 直连时记真实对端，且客户端伪造的 `X-Forwarded-For` 前缀会被丢弃。
 
 ## [1.5.0] - 2026-10-17
 

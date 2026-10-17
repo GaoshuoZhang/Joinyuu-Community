@@ -398,6 +398,10 @@ openssl rand -hex 32
 
 它会**把以 `/api` 开头的请求反向代理到后端**：默认目标 `http://joinyuu-api:7757`（容器网络内按容器名解析）；可在运行环境「环境变量」里设 `API_PROXY_TARGET` 改目标，**设为空字符串则关闭本代理**（此时必须靠 Nginx 反代，否则接口会落到静态服务上，登录会报「请求失败（405）」）。
 
+> **访客真实 IP 是怎么传下去的**（做审计与限流时必须正确）：本代理转发 `/api` 时，会把 `X-Forwarded-For` **改写为单个值**——优先取上游反代声明的 `X-Real-IP`，没有才用直接连接的对端地址；**不会**把对端地址追加到已有的 `X-Forwarded-For` 末尾。
+> 原因是：前端容器端口经宿主机发布后，「从宿主机/网关连进来」的对端地址会退化成 docker 网关（表现为 `172.18.0.1`），而后端 `TRUST_PROXY=1` 取的正是 `X-Forwarded-For` 的**最后一跳**，一旦把这个网关地址追加进去，登录日志与审计里记的就成了网关而不是访客。
+> 因此 Nginx 侧那两条规则里必须保留 `proxy_set_header X-Real-IP $remote_addr;`（1Panel 默认生成的反代规则已经带了）。
+
 **怎么确认它开着**：容器启动日志首行会打印一段类似下面的话——
 
 ```
@@ -767,6 +771,7 @@ scp -i "C:\Users\<你>\.ssh\<你的密钥>" -P 2002 -o IdentitiesOnly=yes -r \
 | 更新了源码，但页面还是旧版 | `dist/` 不在 Git 仓库里（`.gitignore` 已忽略），`git pull` 不会带来前端产物 | 更新前端**必须**同时上传 `apps/*/dist`，否则 `serve:*` 返回 503 或页面仍旧版 |
 | 两个前端容器启动报「找不到模块」，或后端报 Prisma 引擎错误 | 三个容器共享同一挂载目录里的 `node_modules`，依赖应由 `joinyuu-api` 容器负责安装 | 核对「安装 node_modules」只有 `joinyuu-api` 打开（包管理器选 `pnpm`），且「项目目录」是仓库根 `/opt/joinyuu`；然后按**先 `joinyuu-api`、再两个前端**的顺序重启 |
 | 日志里出现 `Ignored build scripts: @alicloud/openapi-core`；或出现 `Packages: -71` 这类行 | 前者是 pnpm 默认拦截第三方构建脚本的提示；后者是容器每次启动重新校准依赖 | **均属预期，不影响运行**，只影响重启速度，无需处理 |
+| 配好域名反向代理后，「日志与审计 → 登录日志」以及审计记录里的 IP 变成 `172.18.0.1`（不是访客真实 IP；而改用 `IP:7758` 直连时又是对的） | 两个原因叠加：① 前端容器端口经宿主机发布，「从宿主机/网关连进来」的对端地址退化成 docker 网关；② 早期版本的 `server.mjs` 会把该对端地址**追加**到 `X-Forwarded-For` 末尾，而后端 `TRUST_PROXY=1` 取的正是**最后一跳** | 把 `apps/admin/server.mjs`、`apps/client-mobile/server.mjs` 更新到新版（改为「上游 `X-Real-IP` 优先、改写成单值、不追加对端」），上传后重启两个前端容器；同时确认 Nginx 反代规则里保留 `proxy_set_header X-Real-IP $remote_addr;`。核对：域名登录一次后查 `SELECT "loginAt",username,ip FROM "LoginLog" ORDER BY "loginAt" DESC LIMIT 3;`，`ip` 应为访客公网地址 |
 
 ---
 

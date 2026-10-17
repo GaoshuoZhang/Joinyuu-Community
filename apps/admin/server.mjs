@@ -73,12 +73,18 @@ function proxyToApi(req, res) {
     send(res, 502, '')
     return
   }
-  const clientIp = req.socket.remoteAddress ?? ''
-  const forwardedFor = req.headers['x-forwarded-for']
+  /* 客户端 IP 取值：上游反代声明的 X-Real-IP 优先，其次直接连接的对端地址。
+   * 不能把对端地址追加到已有的 X-Forwarded-For 后面：容器端口经宿主机发布后，「从宿主机/网关
+   * 连进来」的对端地址会退化成 docker 网关（表现为 172.18.0.1），追加进去会让后端把网关当成
+   * 客户端（Express 的 trust proxy 取 X-Forwarded-For 的最后一跳），于是经反向代理（域名）访问时
+   * 登录日志记的就成了 172.18.0.1 而不是真实 IP。这里统一改写为单值，保证后端收到的就是直接
+   * 上游声明的客户端地址（域名访问=反代声明的 $remote_addr；IP 直连=真实对端地址）。 */
+  const declaredIp = String(req.headers['x-real-ip'] ?? '').trim()
+  const clientIp = declaredIp || req.socket.remoteAddress || ''
   const headers = {
     ...req.headers,
     host: target.host,
-    'x-forwarded-for': forwardedFor ? `${forwardedFor}, ${clientIp}` : clientIp,
+    'x-forwarded-for': clientIp,
     'x-forwarded-proto': (req.headers['x-forwarded-proto'] ?? 'http'),
   }
   const upstream = httpRequest(
