@@ -36,7 +36,7 @@ pnpm install
 
 ## 🚀 快速开始
 
-> 授权：系统已启用离线许可证校验。供应商公钥已内置，无需配置公钥文件；在「系统管理 → 系统配置 → 许可证管理」生成申请、导入许可证。未授权或到期时仅保留查询、导出及维护操作，业务不可写入。供应商使用独立工具双击签发，输入天数即可。签发、续期和部署步骤见 [许可证管理](./docs/license-management.md)。现有部署升级先运行 `pnpm db:migrate`。
+> 授权：系统已启用离线许可证校验。供应商公钥已内置，无需配置公钥文件；在「系统管理 → 系统配置 → 许可证管理」生成申请、导入许可证。未授权或到期时仅保留查询、导出及维护操作，业务不可写入。供应商使用独立工具双击签发，输入天数即可。签发、续期和部署步骤见 [许可证管理](./docs/license-management.md)。现有部署升级先运行 `pnpm db:migrate`（完整步骤见[后端升级手册](./docs/backend-upgrade.md)）；生产部署（1Panel）见[部署手册](./docs/deploy-1panel.md）。
 
 ```bash
 pnpm db:up                # 启动 PostgreSQL 17 + Redis 7.4 + MinIO（Docker Compose）
@@ -138,6 +138,8 @@ pnpm test:e2e:it          # 仅允许隔离数据库与非 0 Redis DB 的全量 
 | [docs/wiki-client-mobile.md](./docs/wiki-client-mobile.md) | 移动客户端开发 Wiki——**改移动客户端代码前必读** |
 | [docs/api-app-design.md](./docs/api-app-design.md) | 客户端 `/api/app/**` 正式契约 |
 | [docs/entity-fields.md](./docs/entity-fields.md) | 模型分域字段摘要（`schema.prisma` 为事实来源） |
+| [docs/deploy-1panel.md](./docs/deploy-1panel.md) | 部署手册（1Panel）：装面板 → 建库 → 部署后端与两个前端 → 反向代理与 HTTPS → 初始化与验收排错 |
+| [docs/backend-upgrade.md](./docs/backend-upgrade.md) | 后端升级手册：备份、迁移、构建、重启、缓存生效与回滚 |
 
 ## 🔧 关键工程约定（摘要，详见各 Wiki）
 
