@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, nextTick, onMounted, reactive, ref } from 'vue'
-import { DialogPlugin, MessagePlugin } from 'tdesign-vue-next'
+import { MessagePlugin } from 'tdesign-vue-next'
+import { confirmDialog } from '@/utils/confirmDialog'
 import { usePageDirtyGuard } from '@/utils/form'
 import PageHeader from '@/components/PageHeader.vue'
 import ListErrorState from '@/components/ListErrorState.vue'
@@ -176,7 +177,7 @@ function requestAdvancedMode(value: boolean) {
     advancedMode.value = false
     return
   }
-  const dialog = DialogPlugin.confirm({
+  const dialog = confirmDialog({
     header: '启用高级 JSON 编辑',
     body: '高级模式可能破坏客户端表单。保存前仍会执行完整校验；建议仅用于维护可视化编辑器尚未支持的扩展属性。',
     confirmBtn: '了解风险，继续',

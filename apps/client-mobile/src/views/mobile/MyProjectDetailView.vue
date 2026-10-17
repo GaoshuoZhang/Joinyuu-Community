@@ -1,7 +1,8 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
 import { useRoute } from 'vue-router'
-import { Button, DialogPlugin, Icon, Image, ImageViewer, Progress, Tag, Textarea, Toast, Upload } from 'tdesign-mobile-vue'
+import { Button, Icon, Image, ImageViewer, Progress, Tag, Textarea, Toast, Upload } from 'tdesign-mobile-vue'
+import { confirmDialog } from '@/utils/confirmDialog'
 import type { UploadFile } from 'tdesign-mobile-vue'
 import { acceptMilestone, fetchMyProject, returnMilestone, revokeProjectAttachmentUrls, submitMilestone } from '@/api/projects'
 import { uploadFile } from '@/api/uploads'
@@ -165,7 +166,7 @@ async function onReturnMilestone(m: Milestone) {
 }
 
 function askAccept(m: Milestone) {
-  DialogPlugin.confirm({
+  confirmDialog({
     title: '验收里程碑',
     content: `确认「${m.title}」已达成交付要求？验收通过后不可撤销。`,
     cancelBtn: '取消',

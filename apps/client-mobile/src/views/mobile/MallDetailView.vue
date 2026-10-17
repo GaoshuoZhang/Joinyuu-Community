@@ -1,7 +1,8 @@
 <script setup lang="ts">
 import { computed, h, onMounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { Button, DialogPlugin, Icon, Image, Toast } from 'tdesign-mobile-vue'
+import { Button, Icon, Image, Toast } from 'tdesign-mobile-vue'
+import { confirmDialog } from '@/utils/confirmDialog'
 import { createOrder, fetchGoodsDetail } from '@/api/mall'
 import { useAsyncList } from '@/composables/useAsyncList'
 import { useAuthStore } from '@/stores/auth'
@@ -56,7 +57,7 @@ function onRedeem() {
     return
   }
   const remaining = auth.points - chargedPoints.value
-  DialogPlugin.confirm({
+  confirmDialog({
     title: '确认兑换',
     content: () =>
       h('div', { class: 'order-confirm' }, [

@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
-import { DialogPlugin, MessagePlugin } from 'tdesign-vue-next'
+import { MessagePlugin } from 'tdesign-vue-next'
+import { confirmDialog } from '@/utils/confirmDialog'
 import type { UploadFile } from 'tdesign-vue-next'
 import PageHeader from '@/components/PageHeader.vue'
 import ListErrorState from '@/components/ListErrorState.vue'
@@ -54,7 +55,7 @@ async function upload() {
   finally { busy.value = false }
 }
 function confirmChange(title: string, action: () => Promise<unknown>) {
-  const dialog = DialogPlugin.confirm({ header: title, body: '切换后，移动端用户重新打开或刷新页面即可使用新主题。', confirmBtn: '确认切换', onConfirm: async () => {
+  const dialog = confirmDialog({ header: title, body: '切换后，移动端用户重新打开或刷新页面即可使用新主题。', confirmBtn: '确认切换', onConfirm: async () => {
     dialog.hide()
     actionError.value = ''
     busy.value = true
@@ -84,7 +85,7 @@ async function preview(id: string) {
   finally { busy.value = false }
 }
 function confirmDelete(id: string, name: string, version: string) {
-  const dialog = DialogPlugin.confirm({ header: `删除「${name} · ${version}」`, body: '主题包及其预览链接将被删除。需要再次使用时可重新上传原 ZIP。', theme: 'danger', confirmBtn: '删除主题', onConfirm: async () => {
+  const dialog = confirmDialog({ header: `删除「${name} · ${version}」`, body: '主题包及其预览链接将被删除。需要再次使用时可重新上传原 ZIP。', theme: 'danger', confirmBtn: '删除主题', onConfirm: async () => {
     dialog.hide()
     actionError.value = ''
     busy.value = true

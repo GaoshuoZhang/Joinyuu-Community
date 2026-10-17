@@ -1,7 +1,8 @@
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { Button, DialogPlugin, Icon, Image, Toast } from 'tdesign-mobile-vue'
+import { Button, Icon, Image, Toast } from 'tdesign-mobile-vue'
+import { confirmDialog } from '@/utils/confirmDialog'
 import CategoryTag from '@/components/shared/CategoryTag.vue'
 import { useAsyncList } from '@/composables/useAsyncList'
 import { createArticleComment, deleteArticleComment, fetchArticle, fetchArticleComments, toggleArticleLike } from '@/api/contents'
@@ -129,7 +130,7 @@ async function onComment(identity: UserIdentity | null) {
 
 /* 删除自己的评论（二次确认） */
 function onDeleteComment(item: ArticleComment) {
-  const dialog = DialogPlugin.confirm({
+  const dialog = confirmDialog({
     title: '删除评论',
     content: '确认删除这条评论？删除后无法恢复。',
     cancelBtn: '取消',

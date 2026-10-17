@@ -1,7 +1,8 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { Button, DialogPlugin, Icon, Popup, QRCode, Rate, Textarea, Toast } from 'tdesign-mobile-vue'
+import { Button, Icon, Popup, QRCode, Rate, Textarea, Toast } from 'tdesign-mobile-vue'
+import { confirmDialog } from '@/utils/confirmDialog'
 import { cancelOrder, fetchMyOrder, reviewOrder } from '@/api/mall'
 import { ApiError } from '@/api/http'
 import { useAsyncList } from '@/composables/useAsyncList'
@@ -57,7 +58,7 @@ const acting = ref(false)
 function onCancelOrder() {
   const item = order.value
   if (!item) return
-  DialogPlugin.confirm({
+  confirmDialog({
     title: '申请退款',
     content: `退款后 ${formatZhNumber(item.pointsCost)} 积分将原路退回，库存恢复。确认退款？`,
     cancelBtn: '再想想',

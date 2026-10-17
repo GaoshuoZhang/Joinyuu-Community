@@ -1,7 +1,8 @@
 <script setup lang="ts">
 import { computed, onMounted, reactive, ref } from 'vue'
 import { useRouter } from 'vue-router'
-import { Avatar, Button, DialogPlugin, Icon, Input, Switch, Tag, Textarea, Toast } from 'tdesign-mobile-vue'
+import { Avatar, Button, Icon, Input, Switch, Tag, Textarea, Toast } from 'tdesign-mobile-vue'
+import { confirmDialog } from '@/utils/confirmDialog'
 import { fetchCardSchema, fetchMyCards, updateIndividualCard } from '@/api/enterprises'
 import { useAsyncList } from '@/composables/useAsyncList'
 import { useUnsavedGuard } from '@/composables/useUnsavedGuard'
@@ -91,7 +92,7 @@ function addEntry(key: (typeof INDIVIDUAL_LIST_SECTIONS)[number]['key']) {
 
 function removeEntry(key: (typeof INDIVIDUAL_LIST_SECTIONS)[number]['key'], index: number) {
   const section = INDIVIDUAL_LIST_SECTIONS.find((item) => item.key === key)
-  DialogPlugin.confirm({
+  confirmDialog({
     title: '删除这条经历？',
     content: `确认删除${section?.title ?? '这条记录'}吗？保存后将从公开名片中移除。`,
     cancelBtn: '保留',

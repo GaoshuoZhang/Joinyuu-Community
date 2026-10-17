@@ -10,6 +10,10 @@
 - 新增零依赖静态服务脚本 [server.mjs](./server.mjs) 与 `serve` 脚本：供 1Panel「运行环境 → Node.js」容器直接托管移动端产物，其中**实现了 history 路由兜底**（任意未命中路径回落 `index.html`，等价 Nginx 的 `try_files $uri $uri/ /index.html;`），并包含正确 MIME、`index.html` 不缓存、带哈希资源长缓存、路径穿越防护。根脚本新增 `serve:mobile` 与 `start:mobile`（容器内构建后再服务）。
 - 内置 `/api` 反向代理：默认转发到容器网络内的 `http://joinyuu-api:7757`（`API_PROXY_TARGET` 可改目标、设为空则关闭），并透传客户端真实 IP——这样「IP + 端口直连前端容器」时接口也能正常调用；已由 Nginx 反代 `/api` 的部署不受影响。
 
+### 修复
+
+- **二次确认框被业务弹层遮盖导致按钮点不到**：TDesign Mobile 的 `DialogPlugin` 默认层级只有 2500，而 `Popup` 是 11500、`Toast` 是 12001，所以在「先打开底部弹层、再弹出确认框」的场景下（典型场景：安全中心里「绑定/更换手机号」「更换邮箱」填写了内容后返回，弹出的「放弃当前填写？」确认框会被底部弹层整个盖住，无法点击「放弃填写」），确认框会沉到业务弹层下面。现统一改用 [src/utils/confirmDialog.ts](./src/utils/confirmDialog.ts) 的 `confirmDialog()`，显式把确认框层级抬到 11800（高于 Popup 11500，低于 Toast 12001/Message 15000），并把全站 35 处 `DialogPlugin.confirm` 调用点一并迁移，避免同类问题复发。
+
 ## [1.5.0] - 2026-10-17
 
 首个正式发布版本（后端 / 管理后台 / 移动端同为 v1.5.0）。纯移动端应用，5 Tab 结构，全部页面接入真实接口（`/api/app/**`）。

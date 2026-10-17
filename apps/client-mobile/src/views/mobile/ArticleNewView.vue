@@ -1,7 +1,8 @@
 <script setup lang="ts">
 import { computed, onMounted, reactive, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { Button, CheckTag, DialogPlugin, Icon, Image, Input, Textarea, Toast, Upload } from 'tdesign-mobile-vue'
+import { Button, CheckTag, Icon, Image, Input, Textarea, Toast, Upload } from 'tdesign-mobile-vue'
+import { confirmDialog } from '@/utils/confirmDialog'
 import type { UploadFile } from 'tdesign-mobile-vue'
 import { useAsyncList } from '@/composables/useAsyncList'
 import { useUnsavedGuard } from '@/composables/useUnsavedGuard'
@@ -224,7 +225,7 @@ async function onBodyImageChange(event: Event) {
 
 /* 删除内容块不可恢复（可能含数百字正文/已上传配图），与页内其它破坏性操作一致需二次确认 */
 function removeBlock(id: number) {
-  const dialog = DialogPlugin.confirm({
+  const dialog = confirmDialog({
     title: '删除该内容块？',
     content: '删除后不可恢复。',
     cancelBtn: '取消',

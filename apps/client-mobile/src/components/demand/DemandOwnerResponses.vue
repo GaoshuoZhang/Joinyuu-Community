@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
-import { Button, DialogPlugin, Toast } from 'tdesign-mobile-vue'
+import { Button, Toast } from 'tdesign-mobile-vue'
+import { confirmDialog } from '@/utils/confirmDialog'
 import EmptyBlock from '@/components/shared/EmptyBlock.vue'
 import ListSkeleton from '@/components/ListSkeleton.vue'
 import StateTag from '@/components/shared/StateTag.vue'
@@ -84,7 +85,7 @@ function onSubmit() {
     ? { title: '提交立项', content: `已选择 ${formatZhNumber(selection.value.length)} 位意向承接方。提交后将确定承接方并进入立项流程，不可更改。` }
     : { title: '保存新的承接方', content: `已选择 ${formatZhNumber(selection.value.length)} 位意向承接方。保存后将覆盖上一次的选定结果。` }
   /* v48：提交立项不可逆（需求转已选定、由社区管理员立项），二次确认时复述后果 */
-  DialogPlugin.confirm({
+  confirmDialog({
     title: confirmWord.title,
     content: confirmWord.content,
     cancelBtn: '再想想',

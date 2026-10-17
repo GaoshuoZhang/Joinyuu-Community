@@ -3,7 +3,8 @@ import { computed, onMounted, reactive, ref } from 'vue'
 import ListErrorState from '@/components/ListErrorState.vue'
 import ListEmptyState from '@/components/ListEmptyState.vue'
 import { useListQueryState } from '@/utils/listQuery'
-import { DialogPlugin, MessagePlugin } from 'tdesign-vue-next'
+import { MessagePlugin } from 'tdesign-vue-next'
+import { confirmDialog } from '@/utils/confirmDialog'
 import { DeleteIcon, RollbackIcon, SearchIcon, SettingIcon } from 'tdesign-icons-vue-next'
 import PageHeader from '@/components/PageHeader.vue'
 import StatusTag from '@/components/StatusTag.vue'
@@ -357,7 +358,7 @@ function confirmArchiveStep(header: string, body: string): Promise<boolean> {
       dialog.destroy()
       resolve(value)
     }
-    const dialog = DialogPlugin.confirm({
+    const dialog = confirmDialog({
       header,
       body,
       /* 前两步同为不可逆删除的前置确认，与第三步（强确认）保持一致用危险色 */

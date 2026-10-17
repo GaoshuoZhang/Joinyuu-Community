@@ -1,7 +1,8 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
 import { useRouter } from 'vue-router'
-import { Button, DialogPlugin, Icon, List, Toast } from 'tdesign-mobile-vue'
+import { Button, Icon, List, Toast } from 'tdesign-mobile-vue'
+import { confirmDialog } from '@/utils/confirmDialog'
 import { cancelEnrollment, fetchMyEnrollments } from '@/api/events'
 import { canCancelEnrollment } from '@/utils/enrollment'
 import { usePagedList } from '@/composables/usePagedList'
@@ -39,7 +40,7 @@ function canCancel(item: MyEnrollmentItem) {
 }
 
 function onCancelTap(item: MyEnrollmentItem) {
-  DialogPlugin.confirm({
+  confirmDialog({
     title: item.status === 'waitlisted' ? '退出候补' : '取消报名',
     content: `确认取消「${item.eventTitle}」的报名吗？${item.status === 'approved' ? '名额将释放给其他成员。' : ''}`,
     cancelBtn: '再想想',

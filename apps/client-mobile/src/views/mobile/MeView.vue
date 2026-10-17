@@ -1,7 +1,8 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
-import { ActionSheet, Avatar, Button, Cell, CellGroup, DialogPlugin, Icon, PullDownRefresh } from 'tdesign-mobile-vue'
+import { ActionSheet, Avatar, Button, Cell, CellGroup, Icon, PullDownRefresh } from 'tdesign-mobile-vue'
+import { confirmDialog } from '@/utils/confirmDialog'
 import { useAuthStore } from '@/stores/auth'
 import { useConfigStore } from '@/stores/config'
 import { useNoticesStore } from '@/stores/notices'
@@ -152,7 +153,7 @@ function onThemeSelected(_item: unknown, index: number) {
 }
 
 function onLogout() {
-  DialogPlugin.confirm({
+  confirmDialog({
     title: '退出登录',
     content: '确认退出当前账号？未保存的编辑内容将丢失。',
     cancelBtn: '取消',

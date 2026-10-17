@@ -1,7 +1,8 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { ActionSheet, Avatar, Button, Cell, DialogPlugin, NoticeBar, Tag, Toast } from 'tdesign-mobile-vue'
+import { ActionSheet, Avatar, Button, Cell, NoticeBar, Tag, Toast } from 'tdesign-mobile-vue'
+import { confirmDialog } from '@/utils/confirmDialog'
 import {
   applyEnterpriseExit,
   cancelEnterpriseTransfer,
@@ -99,7 +100,7 @@ function onTransferSelected(_selected: unknown, index: number) {
   transferVisible.value = false
   const member = transferCandidates.value[index]
   if (!member) return
-  DialogPlugin.confirm({
+  confirmDialog({
     title: '转移企业负责人',
     content: `将向 ${member.name} 发送「${data.value?.enterpriseName}」负责人转移请求，对方接受后生效。`,
     cancelBtn: '取消',
@@ -124,7 +125,7 @@ async function doTransfer(member: EnterpriseMemberInfo) {
 function onCancelTransfer() {
   const request = data.value?.transferRequest
   if (!request) return
-  DialogPlugin.confirm({
+  confirmDialog({
     title: '撤销转移请求',
     content: `撤销后「${request.toName}」将无法接受该负责人转移请求。`,
     cancelBtn: '取消',
@@ -145,7 +146,7 @@ function onCancelTransfer() {
 function onRevokeInvitation(invitation: EnterpriseInvitation) {
   const invitationId = invitation.id
   const memberName = invitation.memberName
-  DialogPlugin.confirm({
+  confirmDialog({
     title: '撤销邀请',
     content: `确认撤销对 ${memberName} 的成员邀请？`,
     cancelBtn: '取消',
@@ -207,7 +208,7 @@ function goMemberManage(m: EnterpriseMemberInfo) {
 /* ---- 申请退驻 / 注销（负责人） ---- */
 function onExitApply() {
   if (!isContact.value) return
-  DialogPlugin.confirm({
+  confirmDialog({
     title: '申请退驻 / 注销',
     content: '提交后社区运营将在 3 个工作日内与你联系确认。确认提交申请吗？',
     cancelBtn: '再想想',

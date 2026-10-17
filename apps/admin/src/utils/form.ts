@@ -1,6 +1,6 @@
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch, type Ref } from 'vue'
 import { onBeforeRouteLeave } from 'vue-router'
-import { DialogPlugin } from 'tdesign-vue-next'
+import { confirmDialog } from '@/utils/confirmDialog'
 import { formSnapshot } from './formSnapshot'
 
 type FormInstanceLike = { $el?: HTMLElement } | null | undefined
@@ -21,7 +21,7 @@ export async function focusFirstInvalid(form?: FormInstanceLike): Promise<void> 
 
 /**
  * 表单对话框未保存保护：打开时 markBaseline() 记录基线快照，
- * guardClose() 在关闭前检测改动，有改动时弹出确认（TDesign DialogPlugin）。
+ * guardClose() 在关闭前检测改动，有改动时弹出确认（confirmDialog，已抬高层级避开业务浮层遮盖）。
  */
 export function useDialogDirtyGuard(form: object | (() => unknown)) {
   const baseline = ref('')
@@ -35,7 +35,7 @@ export function useDialogDirtyGuard(form: object | (() => unknown)) {
       onClose()
       return
     }
-    const dialog = DialogPlugin.confirm({
+    const dialog = confirmDialog({
       header: '放弃未保存的修改？',
       body: `当前内容尚未保存，${action}后将丢失这些修改。`,
       confirmBtn: `放弃修改并${action}`,
@@ -71,7 +71,7 @@ export function usePageDirtyGuard(isDirty: Readonly<Ref<boolean>>) {
         dialog.destroy()
         resolve(leave)
       }
-      const dialog = DialogPlugin.confirm({
+      const dialog = confirmDialog({
         header: '放弃未保存的修改？',
         body: '当前内容尚未保存，离开后将丢失这些修改。',
         confirmBtn: '放弃修改并离开',

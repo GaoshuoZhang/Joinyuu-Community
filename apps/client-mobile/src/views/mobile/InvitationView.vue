@@ -1,7 +1,8 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { Avatar, Button, Cell, DialogPlugin, NoticeBar, Toast } from 'tdesign-mobile-vue'
+import { Avatar, Button, Cell, NoticeBar, Toast } from 'tdesign-mobile-vue'
+import { confirmDialog } from '@/utils/confirmDialog'
 import { fetchInvitation, respondInvitation } from '@/api/enterprises'
 import { ApiError } from '@/api/http'
 import { useAsyncList } from '@/composables/useAsyncList'
@@ -43,7 +44,7 @@ const responding = ref(false)
 function onRespond(action: InvitationAction) {
   if (responding.value) return
   if (action === 'reject') {
-    DialogPlugin.confirm({
+    confirmDialog({
       title: '拒绝邀请',
       content: `确认拒绝加入「${data.value?.enterpriseName ?? '该企业'}」？如为误操作需企业负责人重新邀请。`,
       cancelBtn: '再想想',
@@ -55,7 +56,7 @@ function onRespond(action: InvitationAction) {
     return
   }
   /* 确认加入会写入企业成员（不可逆，退出需联系负责人），与「拒绝」同样需要二次确认 */
-  DialogPlugin.confirm({
+  confirmDialog({
     title: '确认加入',
     content: `确认以「${data.value?.role ?? '成员'}」身份加入「${data.value?.enterpriseName ?? '该企业'}」？加入后你的成员信息将出现在企业名片中。`,
     cancelBtn: '再想想',

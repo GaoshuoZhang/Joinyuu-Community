@@ -1,6 +1,6 @@
 import { onBeforeUnmount } from 'vue'
 import { onBeforeRouteLeave } from 'vue-router'
-import { DialogPlugin } from 'tdesign-mobile-vue'
+import { confirmDialog } from '@/utils/confirmDialog'
 
 /** 表单离开保护：保留原始路由语义，并覆盖刷新、关闭标签页。 */
 export function useUnsavedGuard(isDirty: () => boolean) {
@@ -35,7 +35,7 @@ export function useUnsavedGuard(isDirty: () => boolean) {
     if (pending) return false
     pending = true
     return new Promise<boolean>((resolve) => {
-      const dialog = DialogPlugin.confirm({
+      const dialog = confirmDialog({
         title: '离开当前页面？',
         content: '当前修改尚未保存，离开后需要重新填写。',
         cancelBtn: '继续编辑',

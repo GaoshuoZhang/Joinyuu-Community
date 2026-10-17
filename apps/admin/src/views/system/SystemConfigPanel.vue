@@ -1,7 +1,8 @@
 <script setup lang="ts">
 import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref } from 'vue'
 import { onBeforeRouteLeave, useRoute, useRouter } from 'vue-router'
-import { DialogPlugin, MessagePlugin } from 'tdesign-vue-next'
+import { MessagePlugin } from 'tdesign-vue-next'
+import { confirmDialog } from '@/utils/confirmDialog'
 import PageHeader from '@/components/PageHeader.vue'
 import ImageUploadField from '@/components/ImageUploadField.vue'
 import LicensePanel from './LicensePanel.vue'
@@ -304,7 +305,7 @@ onBeforeRouteLeave(async () => {
       dialog.destroy()
       resolve(value)
     }
-    const dialog = DialogPlugin.confirm({
+    const dialog = confirmDialog({
       header: '离开确认',
       body: '系统配置尚未保存，确认离开并放弃修改吗？',
       confirmBtn: '放弃修改并离开',

@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { onMounted, reactive, ref, computed } from 'vue'
-import { DialogPlugin, MessagePlugin } from 'tdesign-vue-next'
+import { MessagePlugin } from 'tdesign-vue-next'
+import { confirmDialog } from '@/utils/confirmDialog'
 import { AddIcon, DeleteIcon } from 'tdesign-icons-vue-next'
 import ListErrorState from '@/components/ListErrorState.vue'
 import { usePageDirtyGuard } from '@/utils/form'
@@ -78,7 +79,7 @@ function confirmDiscardChanges(): Promise<boolean> {
       dialog.destroy()
       resolve(value)
     }
-    const dialog = DialogPlugin.confirm({
+    const dialog = confirmDialog({
       header: '切换前确认',
       body: `${scopeLabels[activeScope.value]}等级梯度有未保存的修改，切换身份后将丢失。`,
       confirmBtn: '放弃修改并切换',

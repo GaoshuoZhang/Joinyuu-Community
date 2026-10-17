@@ -1,7 +1,8 @@
 <script setup lang="ts">
 import { ref } from 'vue'
 import { useRouter } from 'vue-router'
-import { Button, DialogPlugin, Toast } from 'tdesign-mobile-vue'
+import { Button, Toast } from 'tdesign-mobile-vue'
+import { confirmDialog } from '@/utils/confirmDialog'
 import EmptyBlock from '@/components/shared/EmptyBlock.vue'
 import { clearReadingHistory, listReadingHistory, removeReadingHistoryItem } from '@/utils/readingHistory'
 import { formatLocalDateTime } from '@/utils/format'
@@ -17,7 +18,7 @@ function refresh() {
 
 function onRemove(id: string) {
   /* v51：与同页「清空」口径一致——移除属破坏性操作，补二次确认，避免误触丢失该条记录 */
-  DialogPlugin.confirm({
+  confirmDialog({
     title: '移除该条记录',
     content: '确认从本机浏览历史中移除这条记录？',
     cancelBtn: '取消',
@@ -31,7 +32,7 @@ function onRemove(id: string) {
 }
 
 function onClear() {
-  DialogPlugin.confirm({
+  confirmDialog({
     title: '清空浏览历史',
     content: '确认清空本机浏览历史？',
     cancelBtn: '取消',

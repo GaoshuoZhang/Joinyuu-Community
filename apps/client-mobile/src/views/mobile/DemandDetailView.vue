@@ -1,7 +1,8 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { Button, DialogPlugin, Toast } from 'tdesign-mobile-vue'
+import { Button, Toast } from 'tdesign-mobile-vue'
+import { confirmDialog } from '@/utils/confirmDialog'
 import { fetchDemand, fetchDemandResponses, respondDemand, selectDemandResponders, deselectDemandResponders } from '@/api/demands'
 import { fetchMyIdentities } from '@/api/enterprises'
 import { listFavorites, toggleFavorite } from '@/api/favorites'
@@ -186,7 +187,7 @@ async function onSubmitSelection(ids: string[]) {
 
 /* 撤销选定：二次确认后回到「已发布」，重新开放响应与选定 */
 function onDeselectSelection() {
-  DialogPlugin.confirm({
+  confirmDialog({
     title: '撤销选定',
     content: '撤销后需求回到「已发布」，本次已选定的承接方一并回退为「待选定」，可重新挑选或接受新的响应。',
     cancelBtn: '再想想',

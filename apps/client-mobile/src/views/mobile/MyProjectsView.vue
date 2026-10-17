@@ -1,7 +1,8 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
-import { Button, DialogPlugin, List, Popup, Progress, Tabs, Tag, Textarea, Toast } from 'tdesign-mobile-vue'
+import { Button, List, Popup, Progress, Tabs, Tag, Textarea, Toast } from 'tdesign-mobile-vue'
+import { confirmDialog } from '@/utils/confirmDialog'
 import { useAsyncList } from '@/composables/useAsyncList'
 import { useIncrementalList } from '@/composables/useIncrementalList'
 import { acceptMilestone, fetchMyProjects, returnMilestone } from '@/api/projects'
@@ -83,7 +84,7 @@ function closeAccept() {
   if (actingOn.value) return
   /* 已填写的退回原因不静默丢弃 */
   if (returnFor.value && returnReason.value.trim()) {
-    DialogPlugin.confirm({
+    confirmDialog({
       title: '放弃退回原因？',
       content: '已填写的退回原因不会保存。',
       cancelBtn: '继续填写',
@@ -100,7 +101,7 @@ function closeAccept() {
 }
 
 function askAccept(m: Milestone) {
-  DialogPlugin.confirm({
+  confirmDialog({
     title: '验收里程碑',
     content: `确认「${m.title}」已达成交付要求？验收通过后不可撤销。`,
     cancelBtn: '取消',

@@ -1,7 +1,8 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
-import { Button, DialogPlugin, List, Toast } from 'tdesign-mobile-vue'
+import { Button, List, Toast } from 'tdesign-mobile-vue'
+import { confirmDialog } from '@/utils/confirmDialog'
 import { fetchMyResponses, withdrawResponse } from '@/api/demands'
 import { useAsyncList } from '@/composables/useAsyncList'
 import EmptyBlock from '@/components/shared/EmptyBlock.vue'
@@ -48,7 +49,7 @@ function canWithdraw(item: MyResponseItem): boolean {
 }
 
 function onWithdraw(item: MyResponseItem) {
-  const dialog = DialogPlugin.confirm({
+  const dialog = confirmDialog({
     title: '撤回响应',
     content: '撤回后该响应不再计入发布者选择；如需求仍在进行中，可重新响应。',
     cancelBtn: '再想想',

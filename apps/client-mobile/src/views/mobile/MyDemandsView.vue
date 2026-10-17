@@ -1,7 +1,8 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
-import { Button, DialogPlugin, Icon, List, TabPanel, Tabs, Tag, Toast } from 'tdesign-mobile-vue'
+import { Button, Icon, List, TabPanel, Tabs, Tag, Toast } from 'tdesign-mobile-vue'
+import { confirmDialog } from '@/utils/confirmDialog'
 import { fetchMyDemands, withdrawDemand } from '@/api/demands'
 import CategoryTag from '@/components/shared/CategoryTag.vue'
 import { useAsyncList } from '@/composables/useAsyncList'
@@ -66,7 +67,7 @@ const withdrawingId = ref('')
 
 function onWithdrawDemand(d: MyDemandItem) {
   if (withdrawingId.value) return
-  DialogPlugin.confirm({
+  confirmDialog({
     title: '撤回需求',
     content: `撤回后「${d.title}」将不再进入审核，可在列表中修改重提。`,
     cancelBtn: '取消',

@@ -2,7 +2,8 @@
 import PasswordInput from '@/components/shared/PasswordInput.vue'
 import { computed, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
-import { Button, Cell, CellGroup, DialogPlugin, Input, Popup, Textarea, Toast } from 'tdesign-mobile-vue'
+import { Button, Cell, CellGroup, Input, Popup, Textarea, Toast } from 'tdesign-mobile-vue'
+import { confirmDialog } from '@/utils/confirmDialog'
 import { changeEmail, changePhone, sendEmailCode, sendSmsCode } from '@/api/auth'
 import { cancelAccountDeletion, changePassword, downloadPersonalData, fetchAccountRequests, fetchMe, fetchRealName, requestAccountDeletion, requestDataExport } from '@/api/me'
 import { ApiError } from '@/api/http'
@@ -352,7 +353,7 @@ function requestSheetClose(kind: 'password' | 'phone' | 'email' | 'deletion', vi
     }
   }
   if (!dirty) return close()
-  DialogPlugin.confirm({
+  confirmDialog({
     title: '放弃当前填写？',
     content: '关闭后，尚未提交的内容将不会保留。',
     cancelBtn: '继续填写',
@@ -362,7 +363,7 @@ function requestSheetClose(kind: 'password' | 'phone' | 'email' | 'deletion', vi
 }
 
 function onDeletionApply() {
-  DialogPlugin.confirm({
+  confirmDialog({
     title: '申请注销账号',
     content: '注销后账号与个人数据将按合规要求处理，处理期间可继续使用。确认提交申请？',
     cancelBtn: '再想想',
@@ -384,7 +385,7 @@ function onDeletionApply() {
 /* v41：冷静期内撤回注销 */
 const cancelDeleting = ref(false)
 function onCancelDeletion() {
-  DialogPlugin.confirm({
+  confirmDialog({
     title: '撤回注销申请',
     content: '撤回后账号将恢复正常使用，确认撤回？',
     cancelBtn: '再想想',

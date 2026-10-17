@@ -1,7 +1,8 @@
 <script setup lang="ts">
 import { computed, h, onMounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { Button, DialogPlugin, Icon, Image, Toast } from 'tdesign-mobile-vue'
+import { Button, Icon, Image, Toast } from 'tdesign-mobile-vue'
+import { confirmDialog } from '@/utils/confirmDialog'
 import { cancelEnrollment, enrollEvent, fetchEvent, fetchMyEventFeedback, submitEventFeedback } from '@/api/events'
 import CategoryTag from '@/components/shared/CategoryTag.vue'
 import { canCancelEnrollment } from '@/utils/enrollment'
@@ -161,7 +162,7 @@ async function onEnroll() {
   }
   const ev = event.value
   if (!ev || acting.value || disableReason.value) return
-  DialogPlugin.confirm({
+  confirmDialog({
     title: '确认活动报名',
     content: () => h('div', { style: 'text-align: left' }, [
       h('p', { style: 'margin: 0 0 var(--app-space-3)' }, `活动：${ev.title}`),
@@ -189,7 +190,7 @@ async function submitEnrollment() {
 }
 
 function onCancelEnrollment() {
-  DialogPlugin.confirm({
+  confirmDialog({
     title: '取消报名',
     content: '确认取消本次报名？名额将释放给其他成员。',
     cancelBtn: '再想想',

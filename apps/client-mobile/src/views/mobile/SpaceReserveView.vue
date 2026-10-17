@@ -1,7 +1,8 @@
 <script setup lang="ts">
 import { computed, h, nextTick, onMounted, reactive, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { Loading, Button, Cell, CheckTag, DateTimePicker, DialogPlugin, Form, FormItem, Input, NoticeBar, Popup, Stepper, Tag, Toast } from 'tdesign-mobile-vue'
+import { Loading, Button, Cell, CheckTag, DateTimePicker, Form, FormItem, Input, NoticeBar, Popup, Stepper, Tag, Toast } from 'tdesign-mobile-vue'
+import { confirmDialog } from '@/utils/confirmDialog'
 import type { FormInstanceFunctions, FormRules } from 'tdesign-mobile-vue'
 import { fetchAvailability, fetchSpaceDetail, createReservation } from '@/api/spaces'
 import IdentityPicker from '@/components/forms/IdentityPicker.vue'
@@ -312,7 +313,7 @@ function confirmSubmit() {
   const item = space.value
   if (!item) return
   const identity = identityOptions.value.find(isIdentityPicked)
-  DialogPlugin.confirm({
+  confirmDialog({
     title: '提交预约',
     content: () =>
       h('div', { style: 'text-align: left' }, [

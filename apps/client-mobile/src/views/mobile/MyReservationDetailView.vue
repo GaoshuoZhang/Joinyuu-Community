@@ -1,7 +1,8 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { Button, DialogPlugin, Toast } from 'tdesign-mobile-vue'
+import { Button, Toast } from 'tdesign-mobile-vue'
+import { confirmDialog } from '@/utils/confirmDialog'
 import { cancelReservation, fetchMyReservation } from '@/api/spaces'
 import { useAsyncList } from '@/composables/useAsyncList'
 import EmptyBlock from '@/components/shared/EmptyBlock.vue'
@@ -43,7 +44,7 @@ function onCancelTap() {
   const item = reservation.value
   if (!item) return
   const refundTip = item.feePoints > 0 ? `已扣 ${item.feePoints} 积分将全额退回。` : ''
-  DialogPlugin.confirm({
+  confirmDialog({
     title: '取消预约',
     content: `确认取消「${item.spaceName}」${formatLocalDate(item.date)} ${item.start}-${item.end} 的预约？${refundTip}`,
     cancelBtn: '保留预约',

@@ -1,7 +1,8 @@
 <script setup lang="ts">
 import { computed, onMounted, reactive, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { Avatar, Button, CheckboxGroup, DialogPlugin, Input, Tag, Toast } from 'tdesign-mobile-vue'
+import { Avatar, Button, CheckboxGroup, Input, Tag, Toast } from 'tdesign-mobile-vue'
+import { confirmDialog } from '@/utils/confirmDialog'
 import { fetchEnterpriseDetail, removeEnterpriseMember, updateEnterpriseMember } from '@/api/enterprises'
 import { useAsyncList } from '@/composables/useAsyncList'
 import { useUnsavedGuard } from '@/composables/useUnsavedGuard'
@@ -116,7 +117,7 @@ async function onSave() {
 
 function onRemove() {
   if (!member.value) return
-  DialogPlugin.confirm({
+  confirmDialog({
     title: '移除企业成员',
     content: `确认将 ${member.value.name} 移出「${data.value?.enterpriseName}」？`,
     cancelBtn: '再想想',

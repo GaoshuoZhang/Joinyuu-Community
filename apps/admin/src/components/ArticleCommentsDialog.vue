@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { ref } from 'vue'
-import { DialogPlugin, MessagePlugin } from 'tdesign-vue-next'
+import { MessagePlugin } from 'tdesign-vue-next'
+import { confirmDialog } from '@/utils/confirmDialog'
 import ListEmptyState from '@/components/ListEmptyState.vue'
 import ListErrorState from '@/components/ListErrorState.vue'
 import StatusTag from '@/components/StatusTag.vue'
@@ -50,7 +51,7 @@ function commentAuthorLabel(item: ArticleCommentItem): string {
 
 function onRemove(item: ArticleCommentItem) {
   const hint = reason.value.trim() ? '删除后将通过站内信通知作者。' : '未填写原因则不通知作者。'
-  const dialog = DialogPlugin.confirm({
+  const dialog = confirmDialog({
     header: '删除评论',
     body: `确认删除 ${commentAuthorLabel(item)} 的评论「${item.content.slice(0, 40)}${item.content.length > 40 ? '…' : ''}」？${hint}`,
     theme: 'danger',

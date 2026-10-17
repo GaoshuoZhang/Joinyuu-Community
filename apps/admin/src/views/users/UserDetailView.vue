@@ -2,7 +2,8 @@
 import { computed, nextTick, onMounted, reactive, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useQueryTab, backOrFallback } from '@/utils/navigation'
-import { DialogPlugin, MessagePlugin } from 'tdesign-vue-next'
+import { MessagePlugin } from 'tdesign-vue-next'
+import { confirmDialog } from '@/utils/confirmDialog'
 import type { CustomValidateResolveType, FormProps } from 'tdesign-vue-next'
 import { ArrowLeftIcon, BrowseIcon, BrowseOffIcon } from 'tdesign-icons-vue-next'
 import StatusTag from '@/components/StatusTag.vue'
@@ -348,13 +349,13 @@ async function onConfirmResetPwd() {
   const valid = await resetPwdFormRef.value.validate()
   if (valid !== true) { focusFirstInvalid(resetPwdFormRef.value); return }
   /* 二次确认：确认后才真正覆盖密码（确认弹窗关闭后由外层弹窗展示提交态） */
-  const confirmDialog = DialogPlugin.confirm({
+  const dialog = confirmDialog({
     header: '确认重置密码',
     body: `将强制覆盖用户「${current.nickname}」的当前登录密码，此操作不可撤销。确认继续？`,
     theme: 'warning',
     confirmBtn: { content: '确认重置', theme: 'danger' },
     onConfirm: () => {
-      confirmDialog.destroy()
+      dialog.destroy()
       void submitResetPassword(current.uid)
     },
   })

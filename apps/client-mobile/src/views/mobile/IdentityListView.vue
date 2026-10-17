@@ -1,7 +1,8 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { Button, DialogPlugin, Icon, Tag, Toast } from 'tdesign-mobile-vue'
+import { Button, Icon, Tag, Toast } from 'tdesign-mobile-vue'
+import { confirmDialog } from '@/utils/confirmDialog'
 import { fetchMyIdentities, fetchMyTransferRequests, respondEnterpriseTransfer } from '@/api/enterprises'
 import { ApiError } from '@/api/http'
 import { useAsyncList } from '@/composables/useAsyncList'
@@ -46,7 +47,7 @@ async function loadTransfers() {
 }
 
 function onRespond(item: EnterpriseTransferRequest, action: 'accept' | 'reject') {
-  DialogPlugin.confirm({
+  confirmDialog({
     title: action === 'accept' ? '接受负责人转移' : '拒绝负责人转移',
     content:
       action === 'accept'

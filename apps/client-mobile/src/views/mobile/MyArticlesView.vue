@@ -1,7 +1,8 @@
 <script setup lang="ts">
 import { computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
-import { Button, DialogPlugin, List, Toast } from 'tdesign-mobile-vue'
+import { Button, List, Toast } from 'tdesign-mobile-vue'
+import { confirmDialog } from '@/utils/confirmDialog'
 import { useAsyncList } from '@/composables/useAsyncList'
 import { useIncrementalList } from '@/composables/useIncrementalList'
 import { fetchMyArticles, withdrawArticle } from '@/api/contents'
@@ -32,7 +33,7 @@ function onRevise(a: MySubmittedArticle) {
 }
 
 function onWithdraw(a: MySubmittedArticle) {
-  DialogPlugin.confirm({
+  confirmDialog({
     title: '撤回投稿',
     content: `撤回后「${a.title}」将不再进入审核，可在列表中修改重提。`,
     cancelBtn: '取消',
