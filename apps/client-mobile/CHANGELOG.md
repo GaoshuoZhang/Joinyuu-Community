@@ -7,7 +7,8 @@
 
 ### 新增
 
-- 新增零依赖静态服务脚本 [server.mjs](./server.mjs) 与 `serve` 脚本：供 1Panel「运行环境 → Node.js」容器直接托管移动端产物，其中**实现了 history 路由兜底**（任意未命中路径回落 `index.html`，等价 Nginx 的 `try_files $uri $uri/ /index.html;`），并包含正确 MIME、`index.html` 不缓存、带哈希资源长缓存、`/api/**` 返回 404、路径穿越防护。根脚本新增 `serve:mobile` 与 `start:mobile`（容器内构建后再服务）。
+- 新增零依赖静态服务脚本 [server.mjs](./server.mjs) 与 `serve` 脚本：供 1Panel「运行环境 → Node.js」容器直接托管移动端产物，其中**实现了 history 路由兜底**（任意未命中路径回落 `index.html`，等价 Nginx 的 `try_files $uri $uri/ /index.html;`），并包含正确 MIME、`index.html` 不缓存、带哈希资源长缓存、路径穿越防护。根脚本新增 `serve:mobile` 与 `start:mobile`（容器内构建后再服务）。
+- 内置 `/api` 反向代理：默认转发到容器网络内的 `http://joinyuu-api:7757`（`API_PROXY_TARGET` 可改目标、设为空则关闭），并透传客户端真实 IP——这样「IP + 端口直连前端容器」时接口也能正常调用；已由 Nginx 反代 `/api` 的部署不受影响。
 
 ## [1.5.0] - 2026-10-17
 

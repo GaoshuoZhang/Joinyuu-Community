@@ -7,7 +7,8 @@
 
 ### 新增
 
-- 新增零依赖静态服务脚本 [server.mjs](./server.mjs) 与 `serve` 脚本：供 1Panel「运行环境 → Node.js」容器直接托管管理端产物（等价 Nginx 静态托管——正确 MIME、`index.html` 不缓存、带哈希资源长缓存、`/api/**` 返回 404、路径穿越防护）。根脚本新增 `serve:admin`（只服务已构建产物）与 `start:admin`（容器内构建后再服务），更新时「替换 `dist` + 重启容器」即可生效。
+- 新增零依赖静态服务脚本 [server.mjs](./server.mjs) 与 `serve` 脚本：供 1Panel「运行环境 → Node.js」容器直接托管管理端产物（等价 Nginx 静态托管——正确 MIME、`index.html` 不缓存、带哈希资源长缓存、路径穿越防护）。根脚本新增 `serve:admin`（只服务已构建产物）与 `start:admin`（容器内构建后再服务），更新时「替换 `dist` + 重启容器」即可生效。
+- 内置 `/api` 反向代理：默认转发到容器网络内的 `http://joinyuu-api:7757`（`API_PROXY_TARGET` 可改目标、设为空则关闭），并透传客户端真实 IP——这样「IP + 端口直连前端容器」时接口也能正常调用（此前写操作会返回 405）；已由 Nginx 反代 `/api` 的部署不受影响。
 
 ## [1.5.0] - 2026-10-17
 
