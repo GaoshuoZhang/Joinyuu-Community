@@ -392,7 +392,6 @@ const { close: closeTestDialog } = useDialogFormProtection(testForm, testVisible
       :visible="createVisible"
       header="新增模板"
       width="640px"
-      :footer="false"
      @close="closeCreate">
       <t-form ref="createRef" :data="createForm" label-align="top">
         <div class="form-grid">
@@ -472,7 +471,9 @@ const { close: closeTestDialog } = useDialogFormProtection(testForm, testVisible
           </t-form>
 
           <!-- 编辑弹窗为表单级动作（保存并发布 / 预览 / 下架）并附带说明文案，footer 空间不足以承载，
-               故此处保留 :footer="false" + 正文按钮区；创建与测试发送等确认型弹窗统一用 #footer 插槽 -->
+               故此处用 :footer="false" + 正文按钮区。
+               ⚠️ TDesign 的 footer=false 会隐藏整个底部区域，#footer 插槽也会被一并隐藏，
+               所以「用 #footer 插槽的弹窗」绝不能同时写 :footer="false"（否则按钮不可见） -->
           <t-space class="action-bar">
             <t-button theme="primary" :loading="detailActing" @click="onSavePublish">保存并发布</t-button>
             <t-button theme="default" @click="onPreview">预览</t-button>
@@ -531,7 +532,6 @@ const { close: closeTestDialog } = useDialogFormProtection(testForm, testVisible
       :visible="testVisible" @close="closeTestDialog"
       header="测试发送"
       width="560px"
-      :footer="false"
     >
       <t-alert theme="info" message="测试发送使用已保存的发布版本；编辑中的内容请先预览，保存并发布后再发送。" style="margin-bottom: 16px" />
       <t-form ref="testRef" :data="testForm" label-align="top">

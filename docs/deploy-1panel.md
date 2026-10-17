@@ -618,11 +618,12 @@ SMTP_PASSWORD="邮箱授权码"
 
 1. `.env` 注入凭据（变量名与渠道登记保持一致）：`TENCENT_SMS_SECRET_ID` / `TENCENT_SMS_SECRET_KEY`。
 2. 在「通知渠道配置」里把该通知类型的供应商切换为「腾讯云短信」，并照**腾讯云控制台已审批**的内容填写：`SmsSdkAppId`（应用管理里的 SdkAppId）、签名内容（填**签名文字本身，不是签名 ID**）、模板映射（我方模板 code → 腾讯模板 ID）；必要时填 `templateParamOrder`——腾讯模板变量是**位置参数**（`{1}`、`{2}`…），顺序与腾讯模板不一致会报参数不匹配。
-3. 三条最容易踩的接口约束（摘自腾讯云 SendSms 文档）：
-   - 模板参数**个数**必须与已审批模板完全一致，否则报 `FailedOperation.TemplateParamSetNotMatchApprovedTemplate`；
+3. 四条最容易踩的接口约束（摘自腾讯云 SendSms 文档 + 实测）：
+   - **本地模板正文必须用双花括号占位符 `{{code}}`**：系统只识别 `{{name}}`，写成 `{code}` 既不会被替换，参数个数还会变成 0，直接报「参数与模板不匹配」；
+   - **参数个数 = 正文里实际出现的变量个数**（系统只传正文用到的变量，不再固定全量），因此必须与腾讯云已审批模板的变量个数一致，否则报 `FailedOperation.TemplateParamSetNotMatchApprovedTemplate`；腾讯模板变量是**位置参数**（`{1}`/`{2}`），缺省按正文出现顺序，多变量且顺序不同时在渠道「高级设置」里配「模板参数顺序」；
    - 2024-01-25 之后开通的新账号，单个模板变量默认**最长 6 个字符**，且**验证码类模板的变量只能是 0–6 位纯数字**（「几分钟内有效」这类文案建议直接写死在腾讯模板里）；
    - 国内短信的签名是必填项，必须填已审批通过的**签名内容**。
-4. 发送失败时，错误文案里会带上**腾讯云错误码与 RequestId**（如 `FailedOperation.SignatureIncorrectOrUnapproved（RequestId：…）`），可直接把 RequestId 提供给腾讯云提工单。
+4. 测试发送：在渠道配置里点「测试发送」，**选择模板后会自动列出该模板的变量输入框**（逐个填写即可，验证码模板填 6 位数字）。失败时错误文案会带**腾讯云错误码与 RequestId**（如 `FailedOperation.SignatureIncorrectOrUnapproved（RequestId：…）`），可直接把 RequestId 提供给腾讯云提工单。
 
 > 重试口径：限流类（`LimitExceeded.*`）与系统类（`InternalError.*`）失败会进入自动重试；参数 / 权限 / 模板 / 号码类失败（`InvalidParameterValue.*`、`UnauthorizedOperation.*`、`UnsupportedOperation.*`、`FailedOperation.*` 等）判为**不可重试**——看到这类失败请按错误码先修配置，等重试无用（详见消息发送记录里的失败原因）。
 

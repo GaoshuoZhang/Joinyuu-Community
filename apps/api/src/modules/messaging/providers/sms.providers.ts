@@ -83,7 +83,8 @@ export class TencentSmsProvider implements MessageProvider {
       profile: { httpProfile: { endpoint: TENCENT_ENDPOINT } },
     })
 
-    /* 腾讯模板变量为位置参数（{1}/{2}…）：按配置的顺序取值，缺省按变量名升序稳定排列 */
+    /* 腾讯模板变量为位置参数（{1}/{2}…）：按配置的顺序取值，缺省沿用调用方传入顺序
+     * （调用方按模板正文里变量的出现顺序传入，见 MessageRenderService.pickUsed） */
     const order = templateParamOrder(input.config, input.templateCode, input.variables)
     const params = {
       PhoneNumberSet: [normalizeCnPhone(input.recipient)],
@@ -119,8 +120,11 @@ export class TencentSmsProvider implements MessageProvider {
   }
 }
 
-/** 模板变量顺序：优先取 config.templateParamOrder[模板code]，缺省按变量名升序（保证幂等可复现） */
-function templateParamOrder(
+/** 模板变量顺序：优先取 config.templateParamOrder[模板code]（多变量且与腾讯模板顺序不一致时配置），
+ * 缺省保持传入顺序 —— 调用方按模板正文里变量的出现顺序传入，正对腾讯 {1}/{2} 的位置语义。
+ * 注意：参数**个数**取决于调用方传入的变量个数，必须与腾讯云已审批模板的变量个数一致，
+ * 因此调用方只应传入模板正文实际引用的变量（MessageRenderService.pickUsed）。导出仅供单测。 */
+export function templateParamOrder(
   config: Record<string, unknown>,
   templateCode: string,
   variables: Record<string, string>,
@@ -130,7 +134,7 @@ function templateParamOrder(
     const value = (raw as Record<string, unknown>)[templateCode]
     if (Array.isArray(value)) return value.map((item) => String(item))
   }
-  return Object.keys(variables).sort()
+  return Object.keys(variables)
 }
 
 /** 腾讯云要求 +86 前缀（中国大陆）；已带国家码的原样透传 */

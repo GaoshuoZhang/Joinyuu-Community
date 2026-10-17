@@ -36,6 +36,18 @@ export class MessageRenderService {
     }
   }
 
+  /** 仅保留文本中**实际引用**的变量，键顺序 = 正文（其次主题）中出现顺序。
+   * 短信通道是按位置传参（腾讯 {1}/{2}、阿里模板参数），参数个数必须与供应商已审批模板的变量个数一致，
+   * 传多了会报「参数与模板不匹配」；因此短信通道只应传模板真正用到的变量。 */
+  pickUsed(subject: string | undefined, body: string, variables: Record<string, string>): Record<string, string> {
+    const used = new Set([...this.placeholders(body), ...this.placeholders(subject)])
+    const picked: Record<string, string> = {}
+    for (const name of used) {
+      if (name in variables) picked[name] = variables[name]
+    }
+    return picked
+  }
+
   /** 渲染占位符；未提供值的占位符原样保留（由 assertRenderable 拦截） */
   render(text: string | undefined, variables: Record<string, string>): string {
     if (!text) return ''

@@ -11,10 +11,12 @@ import {
   saveFixedMessageChannel,
   testSendMessageChannel,
 } from '@/api/messageChannels'
+import { fetchMessageTemplates } from '@/api/messageTemplates'
 import type {
   MessageChannel,
   MessageChannelKind,
   MessageProviderMeta,
+  MessageTemplate,
 } from '@/types'
 
 /* 通知渠道配置：短信、邮箱、站内信各一个固定设置；
@@ -297,36 +299,59 @@ async function onSave() {
 const testVisible = ref(false)
 const testRef = ref()
 const testTarget = ref<MessageChannel | null>(null)
-const testForm = reactive({ recipient: '', subject: '', body: '', templateCode: '', variables: '' })
+const testForm = reactive({ recipient: '', subject: '', body: '', templateCode: '' })
+/* 模板变量：选中模板后按其变量白名单动态生成输入项，避免手写 JSON 漏填/填错——
+ * 短信通道的变量个数必须与供应商已审批模板的模板一致，参数个数不符会被供应商直接拒绝 */
+const testVarNames = ref<string[]>([])
+const testVarValues = reactive<Record<string, string>>({})
+const testTemplates = ref<MessageTemplate[]>([])
+const templatesLoading = ref(false)
+/* 表单数据需含变量值，TDesign 校验按 name 在 data 中取值 */
+const testFormData = computed(() => ({ ...testForm, ...testVarValues }))
+const testTemplateOptions = computed(() =>
+  testTemplates.value.map((item) => ({ label: `${item.name}（${item.code}）`, value: item.code })),
+)
+
+async function loadTestTemplates(kind: MessageChannelKind) {
+  templatesLoading.value = true
+  try {
+    const all = await fetchMessageTemplates()
+    testTemplates.value = all.filter((item) => item.kind === kind)
+  } catch {
+    /* 模板列表拉取失败不阻塞测试发送：仍可用「正文」做连通性验证 */
+    testTemplates.value = []
+  } finally {
+    templatesLoading.value = false
+  }
+}
+
+function clearTestVariables() {
+  testVarNames.value = []
+  for (const key of Object.keys(testVarValues)) delete testVarValues[key]
+  testForm.templateCode = ''
+}
+
+function applyTemplateVariables() {
+  const picked = testTemplates.value.find((item) => item.code === testForm.templateCode)
+  testVarNames.value = picked ? [...picked.variables] : []
+  for (const key of Object.keys(testVarValues)) delete testVarValues[key]
+}
+
+function collectTestVariables(): Record<string, string> {
+  const out: Record<string, string> = {}
+  for (const name of testVarNames.value) out[name] = (testVarValues[name] ?? '').trim()
+  return out
+}
 
 function openTest(row: MessageChannel) {
   testTarget.value = row
   testForm.recipient = ''
   testForm.subject = ''
   testForm.body = ''
-  testForm.templateCode = ''
-  testForm.variables = '{}'
+  clearTestVariables()
   testVisible.value = true
+  void loadTestTemplates(row.kind)
   void testRef.value?.clearValidate?.()
-}
-
-function parseVariables(): Record<string, string> {
-  const raw = testForm.variables.trim()
-  if (!raw) return {}
-  let parsed: unknown
-  try {
-    parsed = JSON.parse(raw)
-  } catch {
-    throw new Error('模板变量须为 JSON 对象')
-  }
-  if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
-    throw new Error('模板变量须为 JSON 对象')
-  }
-  const out: Record<string, string> = {}
-  for (const [key, value] of Object.entries(parsed as Record<string, unknown>)) {
-    out[key] = value == null ? '' : String(value)
-  }
-  return out
 }
 
 const testing = ref(false)
@@ -341,8 +366,8 @@ async function onTestSend() {
       recipient: testForm.recipient.trim(),
       subject: testForm.subject.trim() || undefined,
       body: testForm.body.trim() || undefined,
-      templateCode: testForm.templateCode.trim() || undefined,
-      variables: parseVariables(),
+      templateCode: testForm.templateCode || undefined,
+      variables: collectTestVariables(),
     })
     testVisible.value = false
     const suffix = result.dryRun ? '（凭据未注入，已干跑）' : ''
@@ -519,15 +544,32 @@ const { close: closeTestDialog } = useDialogFormProtection(testForm, testVisible
       :confirm-btn="{ content: '发送', theme: 'primary', loading: testing }"
       @confirm="onTestSend"
     >
-      <t-form ref="testRef" :data="testForm" label-align="top">
+      <t-form ref="testRef" :data="testFormData" label-align="top">
         <t-form-item label="收件人" name="recipient" :rules="[{ required: true, message: '请输入测试收件人' }]">
           <t-input v-accessible-field v-model="testForm.recipient" clearable :placeholder="testTarget?.kind === 'email' ? '邮箱…' : '手机号…'" />
         </t-form-item>
-        <t-form-item label="模板编码" name="templateCode">
-          <t-input v-accessible-field v-model="testForm.templateCode" clearable placeholder="如 verify_code（与正文二选一）…" />
+        <t-form-item label="模板" name="templateCode">
+          <t-select
+            v-accessible-field
+            v-model="testForm.templateCode"
+            :options="testTemplateOptions"
+            :loading="templatesLoading"
+            clearable
+            filterable
+            placeholder="选择模板后自动列出变量（与正文二选一）…"
+            @change="applyTemplateVariables"
+          />
         </t-form-item>
-        <t-form-item label="模板变量（JSON）" name="variables">
-          <t-input v-accessible-field v-model="testForm.variables" clearable placeholder='如 {"code":"1234"}…' />
+        <!-- 变量输入项按所选模板的变量白名单动态生成：短信通道的参数个数必须与供应商已审批模板一致，
+             传错个数会被供应商拒绝（如腾讯云 TemplateParamSetNotMatchApprovedTemplate） -->
+        <t-form-item
+          v-for="name in testVarNames"
+          :key="name"
+          :label="`变量 ${name}`"
+          :name="name"
+          :rules="[{ required: true, message: `请输入变量 ${name} 的值` }]"
+        >
+          <t-input v-accessible-field v-model="testVarValues[name]" clearable :placeholder="`变量 ${name} 的值…`" />
         </t-form-item>
         <t-form-item label="正文（直接指定时优先）" name="body">
           <t-textarea v-accessible-field v-model="testForm.body" :autosize="{ minRows: 2, maxRows: 4 }" placeholder="留空则按模板编码渲染…" />

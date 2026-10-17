@@ -296,7 +296,7 @@ export class MessageChannelService {
         subject: dto.subject,
         body: this.render.render(dto.body, variables),
         templateCode: dto.templateCode?.trim() || 'test',
-        variables,
+        variables: this.smsParamVariables(runtime.channel.kind as ChannelKind, dto.subject, dto.body, variables),
       }
     }
     const code = dto.templateCode?.trim()
@@ -313,8 +313,19 @@ export class MessageChannelService {
       subject: this.render.render(version.subject ?? undefined, variables) || undefined,
       body: this.render.render(version.body, variables),
       templateCode: code,
-      variables,
+      variables: this.smsParamVariables(runtime.channel.kind as ChannelKind, version.subject ?? undefined, version.body, variables),
     }
+  }
+
+  /** 短信通道按位置传参：只传模板正文实际引用的变量（顺序即正文出现顺序），
+   * 使参数个数与供应商已审批模板的变量个数一致；其余渠道保持全量变量。 */
+  private smsParamVariables(
+    kind: ChannelKind,
+    subject: string | undefined,
+    body: string,
+    variables: Record<string, string>,
+  ): Record<string, string> {
+    return kind === 'sms' ? this.render.pickUsed(subject, body, variables) : variables
   }
 }
 

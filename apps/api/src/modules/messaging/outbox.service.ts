@@ -341,6 +341,10 @@ export class OutboxService {
     }
 
     const provider = runtime.dryRun ? this.registry.dryRun() : this.registry.resolve(runtime.provider)
+    /* 短信通道按位置传参（腾讯 {1}/{2}、阿里模板参数），参数个数必须与供应商已审批模板一致：
+     * 只传模板正文实际引用的变量（顺序即正文出现顺序）；其余渠道仍用全量变量（站内信按变量取标题/链接）。 */
+    const providerVariables =
+      kind === 'sms' ? this.render.pickUsed(version.subject ?? undefined, version.body, variables) : variables
     const startedAt = Date.now()
     try {
       const result = await provider.send({
@@ -348,7 +352,7 @@ export class OutboxService {
         subject,
         body,
         templateCode: row.templateCode,
-        variables,
+        variables: providerVariables,
         config: runtime.config,
         credentials: runtime.credentials,
       })

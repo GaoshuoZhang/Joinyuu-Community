@@ -1,4 +1,4 @@
-import { tencentErrorInfo, tencentRetriable, withRequestId } from './sms.providers'
+import { templateParamOrder, tencentErrorInfo, tencentRetriable, withRequestId } from './sms.providers'
 
 /* 腾讯云短信错误处理（纯函数，无网络）：
  * 错误码取自腾讯云 SendSms 文档的错误码表，按命名空间决定是否重试，并把 RequestId 带进错误文案。 */
@@ -58,5 +58,23 @@ describe('withRequestId', () => {
     expect(withRequestId('r-123')).toBe('（RequestId：r-123）')
     expect(withRequestId('')).toBe('')
     expect(withRequestId(undefined)).toBe('')
+  })
+})
+
+/* 参数个数 = 调用方传入的变量个数（须与腾讯云已审批模板一致）；顺序缺省沿用传入顺序
+ * （调用方按模板正文出现顺序传入，见 MessageRenderService.pickUsed），可被渠道配置覆盖。 */
+describe('templateParamOrder', () => {
+  it('缺省保持传入顺序', () => {
+    expect(templateParamOrder({}, 'verify_code', { minutes: '5', code: '123456' })).toEqual(['minutes', 'code'])
+  })
+
+  it('配置 templateParamOrder 时按配置顺序（多变量与腾讯模板顺序不一致时使用）', () => {
+    const config = { templateParamOrder: { verify_code: ['code', 'minutes'] } }
+    expect(templateParamOrder(config, 'verify_code', { minutes: '5', code: '123456' })).toEqual(['code', 'minutes'])
+  })
+
+  it('配置里没有当前模板 code 时回退为传入顺序', () => {
+    const config = { templateParamOrder: { other: ['code'] } }
+    expect(templateParamOrder(config, 'verify_code', { code: '123456' })).toEqual(['code'])
   })
 })

@@ -204,6 +204,7 @@ async function openLogs(row: OutboxMessage) {
         :options="[{ label: '全部类型', value: '' }, { label: '短信', value: 'sms' }, { label: '邮件', value: 'email' }, { label: '站内信', value: 'inapp' }]"
         class="ctl-w-sm"
         clearable
+        @change="onSearch"
       />
       <t-input v-accessible-field="'收件人、模板或幂等键搜索'" class="ctl-w-xl"
         v-model="query.keyword"

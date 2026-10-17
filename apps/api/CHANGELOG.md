@@ -12,6 +12,7 @@
 
 ### 修复
 
+- **短信参数集改为「只传模板正文实际引用的变量」**：此前验证码通知固定携带 `code` + `minutes` 两个变量，腾讯/阿里模板按**位置**传参、变量个数由已审批模板决定，多传即报 `FailedOperation.TemplateParamSetNotMatchApprovedTemplate`（腾讯云）等「参数与模板不匹配」错误。现在发送端与渠道「测试发送」都会按模板正文（其次主题）里 `{{变量}}` 的出现顺序取子集（新增 `MessageRenderService.pickUsed`），正文写几个变量就发几个参数；参数顺序缺省沿用正文出现顺序，需要时仍可用渠道「模板参数顺序」覆盖（`templateParamOrder` 的缺省由「按变量名排序」改为「保持传入顺序」）。⚠️ 模板正文必须用双花括号 `{{code}}`。
 - **腾讯云短信失败重试口径修正**（对齐腾讯云 SendSms 官方错误码表）：改为按错误码命名空间前缀判定——`LimitExceeded.*`（限流）、`InternalError.*`（系统侧）、`FailedOperation.SendAndRecvFail` 可重试；参数 / 权限 / 模板 / 号码类（`InvalidParameterValue.*`、`UnauthorizedOperation.*`、`UnsupportedOperation.*`、`FailedOperation.*`）不可重试。此前 SDK 层异常一律标记为可重试、单号失败又因等值比较（旧写法比较不带命名空间的 `LimitExceeded`）永远判为不可重试，两个方向都不对；无法识别错误码（多为网络/超时）仍按可重试处理。
 - **短信失败文案带上腾讯云错误码与 RequestId**：便于运维凭 RequestId 向腾讯云提工单（官方文档要求提供）；新增 `sms.providers.spec.ts` 覆盖错误码提取、重试判定与 RequestId 拼接。
 
