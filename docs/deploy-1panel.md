@@ -941,11 +941,18 @@ systemctl restart joinyuu-api     # 或面板运行环境的「重启」按钮
 
 | 运行环境 | 项目目录 | 启动命令（下拉选） | 应用端口 | 端口外部访问 | 安装 node_modules |
 | --- | --- | --- | --- | --- | --- |
-| `joinyuu-api` | `/opt/joinyuu` | `start:api`（等价于 `start`） | 7757 | **关闭** | **打开**（包管理器选 `pnpm`） |
+| `joinyuu-api` | `/opt/joinyuu` | `start:api`（= 构建后端 + 启动，见下方说明） | 7757 | **关闭** | **打开**（包管理器选 `pnpm`） |
 | `joinyuu-admin` | `/opt/joinyuu` | `serve:admin`（只服务已构建产物） | 7758 | **关闭** | 关闭 |
 | `joinyuu-mobile` | `/opt/joinyuu` | `serve:mobile` | 7759 | **关闭** | 关闭 |
 
 - 三个运行环境**共享同一份挂载目录**（项目目录），因此 `node_modules` 只需要一份：由 `joinyuu-api` 那个容器负责安装（选 pnpm 时容器内会执行 `pnpm install`，顺带为容器平台生成 Prisma 客户端）。**因此升级顺序是：先重启 `joinyuu-api` 让依赖到位，再重启两个前端容器**。
+- `start:api` = `pnpm build:api && pnpm --filter @joinyuu/api db:migrate && pnpm --filter @joinyuu/api start`：**容器内先构建、再应用数据库迁移、最后启动**，所以宿主机不需要 Node，也不用手工上传 `apps/api/dist` 或手动跑迁移。两条常见报错对应关系：
+  - `Cannot find module '/app/apps/api/dist/main.js'` → `dist` 尚未生成（启动命令写成了 `start`，改用 `start:api`）；
+  - `The table \`public.AdminPermission\` does not exist` → 数据库还没建表：迁移已由 `start:api` 自动应用，若仍报此项说明迁移未执行成功（检查容器日志里 `db:migrate` 段）；
+  - `权限码目录校验失败，发现未登记权限码: /system/config @ ...`（启动自检拒绝启动）→ 表已建好但**基础数据还没写入**：在容器终端执行一次 `pnpm --filter @joinyuu/api db:init`（写入权限点/角色/超管/字典等，并打印超管初始密码，只打印一次），随后重启容器。
+    ⚠️ 不要把 `db:init` 并进启动命令（`start:api`）——它「已初始化即拒绝并退出 1」，长期挂着会导致容器重启失败。
+- ⚠️ 含**破坏性迁移**（删列/改名）的版本，请在重启容器前先按[升级手册](./backend-upgrade.md)做好数据库备份——迁移是自动应用的。
+- 代价提醒：由于容器每次启动都会执行「安装依赖 + 构建」，**重启会比静态网站方案慢一些**（通常几十秒到一两分钟），属正常现象；日志里出现 `Ignored build scripts: @alicloud/openapi-core` 是 pnpm 默认拦截第三方构建脚本的提示，不影响本系统运行。
 - 两个前端容器用的是仓库自带的**零依赖静态服务脚本**（[apps/admin/server.mjs](./../apps/admin/server.mjs)、[apps/client-mobile/server.mjs](./../apps/client-mobile/server.mjs)）：等价于 Nginx 静态托管——正确 MIME、`index.html` 不缓存、带哈希资源长缓存、**移动端 history 路由兜底**、`/api/**` 返回 404、路径穿越防护。
 - 若你希望**容器自己构建**前端（宿主完全不需要 Node），把启动命令改成 `start:admin` / `start:mobile`（= 构建 + 服务，需要该容器能访问 npm 源，镜像源选淘宝更稳）。
 
@@ -971,7 +978,8 @@ systemctl restart joinyuu-api     # 或面板运行环境的「重启」按钮
 
 ```text
 1) 替换项目目录文件：git pull（后端/源码） + 上传新的 apps/*/dist（前端产物）
-2) 若本次含数据库迁移：在 joinyuu-api 容器的终端里执行 pnpm --filter @joinyuu/api db:migrate
+2) 数据库迁移无需手动执行：joinyuu-api 容器启动命令 start:api 内部会自动跑 prisma migrate deploy
+   （仅**首次部署**需要手动执行一次 db:init 写入基础配置）
 3) 1Panel「网站 → 运行环境 → Node.js」：先重启 joinyuu-api，再重启 joinyuu-admin / joinyuu-mobile
 4) 浏览器强制刷新（Ctrl+F5）后核对：后台「关于」页、移动端「关于」页、/api/health 三处版本号一致
 ```

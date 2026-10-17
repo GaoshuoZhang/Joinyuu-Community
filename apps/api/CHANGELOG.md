@@ -8,7 +8,7 @@
 ### 变更
 
 - 仓库根 `package.json` 新增 `start` 脚本（`pnpm --filter @joinyuu/api start`）：1Panel「运行环境 → 启动命令」下拉可直接选 `start`，执行时 pnpm 自动把工作目录切到 `apps/api`，`.env` 可正常读取，无需在面板里额外配置环境变量。
-- 同步新增 `start:api` 别名（与 `start` 等价），便于「启动命令」下拉与 `serve:admin` / `serve:mobile` 三端命名统一。
+- 新增 `start:api`（= `pnpm build:api && pnpm --filter @joinyuu/api db:migrate && pnpm --filter @joinyuu/api start`）：供 1Panel 运行环境容器使用，容器内**先构建、再自动应用数据库迁移、最后启动**，宿主机无需安装 Node、也不用手工上传 `apps/api/dist` 或手动跑迁移；`start` 保持「只启动不构建」语义（systemd / 已构建产物的场景继续用它）。首次部署的空库仍需手动执行一次 `db:init`（写入基础配置并打印超管初始密码）。
 
 ## [1.5.0] - 2026-10-17
 

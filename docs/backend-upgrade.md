@@ -560,10 +560,10 @@ curl http://127.0.0.1:7757/api/health
 | 2 | 记录当前版本号 | 与第 1 步相同 |
 | 3 | **替换项目目录文件** | `git fetch --tags && git checkout <版本>`；前端若本次有改动，**必须同时上传新的 `apps/admin/dist`、`apps/client-mobile/dist`**（`dist` 不在 Git 里）；懒得上传就让前端容器改用 `start:admin` / `start:mobile` 自建 |
 | 4 | 补新增环境变量 | 改 `/opt/joinyuu/apps/api/.env`（对照 `.env.example` 的 diff） |
-| 5 | 应用数据库迁移（若有） | 在 `joinyuu-api` 容器的终端里执行 `pnpm --filter @joinyuu/api db:migrate`；宿主装了 Node 时也可在项目目录执行同一命令 |
+| 5 | 应用数据库迁移 | **无需手动执行**：`joinyuu-api` 容器启动命令 `start:api` 内部已包含 `prisma migrate deploy`（含破坏性迁移的版本请先做好数据库备份再重启） |
 | 6 | **重启容器** | 顺序：先 `joinyuu-api`（它负责容器内安装依赖、生成 Prisma 客户端），再 `joinyuu-admin`、`joinyuu-mobile` |
 | 7 | 核对 | `/api/health`、后台「关于」页、移动端「关于」页三处版本号一致（见[版本与更新日志规范](./versioning.md)） |
 | 8 | 回滚 | 把项目目录文件换回旧版本（或恢复升级前的目录备份）→ 重启对应容器；数据库回滚仍需恢复备份 |
 
-**不需要**：`pnpm install`、`pnpm build:api`（由容器负责），也不需要替换 Nginx 站点目录（网站是反向代理到容器）。
+**不需要**：`pnpm install`、`pnpm build:api`（由容器负责，`joinyuu-api` 容器的启动命令 `start:api` 内部就是「构建 + 启动」），也不需要替换 Nginx 站点目录（网站是反向代理到容器）。
 **别忘了**：若本次改了前端而只 `git pull` 不传 `dist`，前端容器会继续服务旧产物（`serve:*` 找不到新产物时返回 503，旧产物则表现为「页面还是旧版」）。

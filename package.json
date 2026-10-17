@@ -12,7 +12,7 @@
     "dev:api": "pnpm --filter @joinyuu/api dev",
     "build:api": "pnpm --filter @joinyuu/api build",
     "start": "pnpm --filter @joinyuu/api start",
-    "start:api": "pnpm --filter @joinyuu/api start",
+    "start:api": "pnpm build:api && pnpm --filter @joinyuu/api db:migrate && pnpm --filter @joinyuu/api start",
     "serve:admin": "pnpm --filter @joinyuu/admin serve",
     "serve:mobile": "pnpm --filter @joinyuu/client-mobile serve",
     "start:admin": "pnpm --filter @joinyuu/admin build && pnpm --filter @joinyuu/admin serve",
