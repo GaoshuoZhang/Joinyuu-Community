@@ -298,14 +298,24 @@ UPLOAD_DIR="/data/joinyuu/uploads"
 openssl rand -hex 32
 ```
 
-**四个容易写错的地方（务必自查）**：
+**五个容易写错的地方（务必自查）**：
 
 | 容易错 | 正确写法 |
 | --- | --- |
 | **沿用模板里的 `@127.0.0.1`** | 后端在容器里，`127.0.0.1` 指的是容器自己。必须改成容器名 `@postgresql` / `@redis` |
 | Redis 密码前漏掉冒号 | `redis://:<Redis密码>@redis:6379` |
+| **`DATABASE_URL` 漏写库名**（只写到端口） | 必须写到库名：`…:5432/joinyuu?schema=public`。**漏写库名时 Prisma 不会报错，而是连到 PostgreSQL 的默认库 `postgres`**——表现为"1Panel 里能看到的 `joinyuu` 库是空的、表全在别处"，后续备份/恢复极易搞错库 |
 | 密码里有 `@` `:` `/` 等符号没转义 | 密码只使用字母 + 数字，最省事 |
 | `NODE_ENV` 写成 `development` 或没写 | 必须 `production`（否则验证码会被直接回显给接口，存在安全风险） |
+
+> 自查库名是否写对（在 `joinyuu-api` 容器终端里执行，会打印后端**实际**连接的库与用户）：
+>
+> ```bash
+> cd /app/apps/api && node -e "require('dotenv').config();const{PrismaClient}=require('@prisma/client');const p=new PrismaClient();p.\$queryRawUnsafe('select current_database() db, current_user usr').then(r=>console.log(r)).finally(()=>p.\$disconnect())"
+> ```
+>
+> 输出的 `db` 应当就是你 `.env` 里写的库名（例如 `joinyuu`），而不是 `postgres`。
+
 
 **关于 CORS**：**不需要配置**。因为管理端、移动端和后端在同一个域（Nginx 把 `/api` 前缀转给后端，或前端容器自带代理），浏览器同源，跨域规则不生效。`CORS_ORIGINS` 保持注释即可。
 
@@ -750,6 +760,7 @@ scp -i "C:\Users\<你>\.ssh\<你的密钥>" -P 2002 -o IdentitiesOnly=yes -r \
 | 外网访问 `http://<服务器IP>:7758` / `:7759` 提示「无法访问此网站」或返回 503 | 前端产物 `dist` 缺失（静态服务找不到 `index.html` 就返回 503） | 上传 dist（scp 或 1Panel 文件管理），或把启动命令改成 `start:admin` / `start:mobile`。查证：`docker logs --tail 20 joinyuu-admin`（日志会打印服务目录），再看 `ls -l /opt/joinyuu/apps/admin/dist/index.html` |
 | 后端容器报 `Cannot find module '/app/apps/api/dist/main.js'` | 启动命令选了 `start`（只启动、**不构建**），dist 还没生成 | 把 `joinyuu-api` 的启动命令改成 `start:api`（构建 + 迁移 + 启动），重启容器 |
 | 后端报 `The table public.AdminPermission does not exist in the current database` | 数据库迁移没成功执行 | 迁移已由 `start:api` 自动应用；仍报此项说明迁移段失败，检查容器日志里 `db:migrate` 那一段的报错（多半是 `.env` 的 `DATABASE_URL` 连不上或密码错） |
+| 1Panel 里能看到 `joinyuu` 库，但**里面一张表都没有**；应用却跑得好好的 | `DATABASE_URL` 漏写了库名，Prisma 连到了默认库 `postgres` | 把 `DATABASE_URL` 补成 `…:5432/joinyuu?schema=public`，重启 `joinyuu-api` 让迁移在正确库里建表（全新部署可在补库名后执行一次 `db:init`）；用上一节的一行命令确认后端实际连接的库 |
 | 后端报 `权限码目录校验失败，发现未登记权限码: /system/config @ ...`（自检拒绝启动） | 表已建好，但**基础数据没写入** | 进 `joinyuu-api` 容器终端跑一次 `cd /app && pnpm --filter @joinyuu/api db:init`，记下超管密码，然后重启容器。⚠️ **不要**把 `db:init` 并进启动命令——已初始化即拒绝并退出 1，会导致容器反复重启失败 |
 | 用 IP 访问时登录报「请求失败（405）」 | 以 `/api` 开头的请求落到了前端**静态服务**（既没配 Nginx 反代，容器内代理又被 `API_PROXY_TARGET` 置空） | 检查容器日志首行是否打印「`/api` 代理 http://joinyuu-api:7757」；没有就说明 `API_PROXY_TARGET` 被设成了空值——删掉该环境变量并重启容器，或改用方式 B（域名 + Nginx 反代） |
 | 更新了源码，但页面还是旧版 | `dist/` 不在 Git 仓库里（`.gitignore` 已忽略），`git pull` 不会带来前端产物 | 更新前端**必须**同时上传 `apps/*/dist`，否则 `serve:*` 返回 503 或页面仍旧版 |
