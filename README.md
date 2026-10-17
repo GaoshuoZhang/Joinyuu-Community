@@ -122,12 +122,16 @@ pnpm dev:it               # 以隔离数据库/Redis 启动三端联调环境
 生产（1Panel 部署用；详见[部署手册](./docs/deploy-1panel.md)）：
 
 ```bash
-pnpm start                # 启动后端（apps/api 下执行 node dist/main.js，读取 apps/api/.env）
-pnpm serve:admin          # 管理端静态服务（端口 7758，零依赖，服务 apps/admin/dist）
-pnpm serve:mobile         # 移动端静态服务（端口 7759，含 history 路由兜底，服务 apps/client-mobile/dist）
-pnpm start:admin          # 容器内构建后再服务（= build:admin + serve:admin）
-pnpm start:mobile         # 容器内构建后再服务（= build:client-mobile + serve:mobile）
+pnpm start:api            # 后端容器启动命令：构建 + 自动应用数据库迁移 + 启动
+pnpm serve:admin          # 管理端容器启动命令：零依赖静态服务（7758，内置 /api 反向代理）
+pnpm serve:mobile         # 移动端容器启动命令：零依赖静态服务（7759，含 history 路由兜底）
+pnpm db:init              # 首次部署在容器内执行一次：写基础数据并打印超管初始密码
+pnpm start                # 等价于「只启动」后端（已构建产物 / systemd 场景）
+pnpm start:admin          # 管理端容器内构建后再服务（= build:admin + serve:admin）
+pnpm start:mobile         # 移动端容器内构建后再服务（= build:client-mobile + serve:mobile）
 ```
+
+> 前端容器默认把 `/api` 前缀反向代理到 `http://joinyuu-api:7757`（可用环境变量 `API_PROXY_TARGET` 改目标或置空关闭，启动日志首行会打印代理目标），因此「IP + 端口直连」也能正常登录。
 
 数据库：
 
@@ -158,8 +162,8 @@ pnpm test:e2e:it          # 隔离数据库全量 e2e（48 套件 / 371 用例�
 | 主题 | 说明 | 文档 |
 | --- | --- | --- |
 | 环境变量 | 后端全部配置集中在 `apps/api/.env`，模板见 [apps/api/.env.example](./apps/api/.env.example)（含服务器首次上线步骤） | — |
-| 生产部署（1Panel） | 装面板 → 建库 → 部署后端与两个前端 → 反向代理与 HTTPS → 初始化与验收 | [部署手册](./docs/deploy-1panel.md) |
-| 版本升级 | 备份 → 拉代码 → 补环境变量 → 迁移 → 构建 → 重启 → 回滚 | [后端升级手册](./docs/backend-upgrade.md) |
+| 生产部署（1Panel） | 三端均由「运行环境 → Node.js」容器托管：后端 `start:api`（构建 + 自动迁移 + 启动）、前端 `serve:admin` / `serve:mobile`；两种访问方式（IP 直连 或 域名 + Nginx 反代）；首次部署在容器内执行一次 `db:init` | [部署手册](./docs/deploy-1panel.md) |
+| 版本升级 | 替换项目目录文件（前端须含 `dist`）→ 先重启 `joinyuu-api`（自动构建 + 迁移）→ 再重启两个前端容器 → 核对三端版本号 | [后端升级手册](./docs/backend-upgrade.md) |
 | 授权 | 生成申请、签发、导入、到期只读边界 | [许可证管理](./docs/license-management.md) |
 | 版本与更新日志 | 版本号规则、单源、展示位置、发布流程 | [版本与更新日志规范](./docs/versioning.md) |
 
