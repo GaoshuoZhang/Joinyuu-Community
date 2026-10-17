@@ -117,6 +117,7 @@ pnpm dev:api              # 启动后端（7757）
 pnpm dev:admin            # 启动管理后台（7758）
 pnpm dev:client-mobile    # 启动移动端（7759）
 pnpm dev:it               # 以隔离数据库/Redis 启动三端联调环境
+pnpm start                # 生产启动后端（等价于在 apps/api 目录执行 node dist/main.js，工作目录为 apps/api）
 ```
 
 数据库：

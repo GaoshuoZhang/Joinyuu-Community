@@ -425,7 +425,7 @@ pnpm db:init
 | **名称** * | `joinyuu-api` | 面板里显示的名字，随意但不重名 |
 | **应用** * | 左边选 `Node.js`；右边选 **20 或 22**（如 `22.22.2`、`20.20.2`） | 实测版本列表含 12/14/16/18/20/21/22/24/25；本项目要求 Node ≥ 20，**优先选 22 或 20 的 LTS**（默认高亮的是 25.9.0，属于最新非 LTS，能用但不必冒险） |
 | **项目目录** * | `/opt/joinyuu`（**填仓库根，不要填 `/opt/joinyuu/apps/api`**） | pnpm 的 `node_modules` 是靠符号链接指向仓库根的 `node_modules/.pnpm` 的；只挂子目录会导致链接断掉，启动时报「找不到模块」。可用右侧文件夹按钮选目录，也可直接输入 |
-| **启动命令** * | 打开右侧「**自定义启动命令**」开关，填 `pnpm --filter @joinyuu/api start` | 面板会在「项目目录」里执行这条命令，pnpm 会自己切到 `apps/api` 目录去跑 `node dist/main.js`，工作目录正确、能读到 `apps/api/.env`（详见下面第 4 点的三种写法）。**不打开这个开关**时，下拉是从项目目录的 `package.json` 解析脚本，而仓库根没有 `start` 脚本，所以必须自定义 |
+| **启动命令** * | **最省事**：不打开右侧开关，直接在下拉里选 **`start`**（仓库根 `package.json` 已提供该脚本）；也可打开「自定义启动命令」手填 `pnpm --filter @joinyuu/api start` | 面板会在「项目目录」里执行它，pnpm 自动切到 `apps/api` 跑 `node dist/main.js`：工作目录正确、能读到 `apps/api/.env`（详见下面第 4 点的三种写法） |
 | **容器名称** * | `joinyuu-api` | 后端容器的名字（1Panel「容器」列表里能看到） |
 | **备注** | `聚屿社区后端 API` | 选填 |
 | **包管理器** * | `npm`（保持默认） | 实测可选 `npm` / `yarn` / `pnpm`。既然下面关掉了自动安装，这一项不会被用到；若你决定让面板管依赖，则应选 `pnpm` 并打开「安装 node_modules」（见该行说明） |
@@ -449,9 +449,11 @@ pnpm db:init
 
 | 写法 | 怎么填 | 后果 |
 | --- | --- | --- |
-| **① 推荐** | 打开「自定义启动命令」，填 `pnpm --filter @joinyuu/api start` | 面板在项目目录（仓库根）执行它，pnpm 自己切到 `apps/api` 运行 `node dist/main.js` → 工作目录正确，`.env` 能读到，不需要在「环境变量」里额外配置 |
-| ② 绝对路径直启 | 打开「自定义启动命令」，填 `node /opt/joinyuu/apps/api/dist/main.js` | 工作目录是仓库根 → **读不到 `apps/api/.env`**，必须在「环境变量」标签页用「导入环境变量」把 `.env` 内容粘进去 |
-| ③ 用表单自带的下拉 | 不打开「自定义启动命令」，从下拉里选 | 下拉是从「项目目录」的 `package.json` 解析脚本；仓库根没有 `start` 脚本，所以本仓库用不了这项 |
+| **① 最省事（下拉选 `start`）** | **不打开**「自定义启动命令」，直接在「启动命令」下拉里选 **`start`** | 仓库根 `package.json` 已提供 `start` 脚本（内容就是 `pnpm --filter @joinyuu/api start`），面板在项目目录（仓库根）执行它 → pnpm 自动切到 `apps/api` 运行 `node dist/main.js`：工作目录正确、`.env` 能读到，不需要在「环境变量」里额外配置 |
+| ② 自定义（与①等价） | 打开「自定义启动命令」，手填 `pnpm --filter @joinyuu/api start` | 与①完全等价；适合下拉里没有出现 `start`（例如代码版本较旧）时手填 |
+| ③ 绝对路径直启 | 打开「自定义启动命令」，填 `node /opt/joinyuu/apps/api/dist/main.js` | 工作目录是仓库根 → **读不到 `apps/api/.env`**，必须在「环境变量」标签页用「导入环境变量」把 `.env` 内容粘进去 |
+
+> 下拉里除了 `start` 还会列出 `build:api`、`db:migrate`、`db:init`、`dev:api` 等脚本，**别误选**——只有 `start` 是用来常驻运行后端的。
 
 > 面板自带的提示（打开「自定义启动命令」后可见）：「请填写完整的启动命令，例如：`npm run start`，**pm2 启动命令请换为 `pm2-runtime`**，否则会启动失败。」——如果你坚持用 pm2，请按这个提示改写命令。
 

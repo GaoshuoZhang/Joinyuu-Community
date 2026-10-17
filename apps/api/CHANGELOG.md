@@ -5,6 +5,10 @@
 
 ## [Unreleased]
 
+### 变更
+
+- 仓库根 `package.json` 新增 `start` 脚本（`pnpm --filter @joinyuu/api start`）：1Panel「运行环境 → 启动命令」下拉可直接选 `start`，执行时 pnpm 自动把工作目录切到 `apps/api`，`.env` 可正常读取，无需在面板里额外配置环境变量。
+
 ## [1.5.0] - 2026-10-17
 
 首个正式发布版本（后端 / 管理后台 / 移动端同为 v1.5.0），覆盖平台从 M1 到 M2-R 的完整能力。
