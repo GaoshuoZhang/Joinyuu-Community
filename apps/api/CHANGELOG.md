@@ -10,6 +10,11 @@
 - 仓库根 `package.json` 新增 `start` 脚本（`pnpm --filter @joinyuu/api start`）：1Panel「运行环境 → 启动命令」下拉可直接选 `start`，执行时 pnpm 自动把工作目录切到 `apps/api`，`.env` 可正常读取，无需在面板里额外配置环境变量。
 - 新增 `start:api`（= `pnpm build:api && pnpm --filter @joinyuu/api db:migrate && pnpm --filter @joinyuu/api start`）：供 1Panel 运行环境容器使用，容器内**先构建、再自动应用数据库迁移、最后启动**，宿主机无需安装 Node、也不用手工上传 `apps/api/dist` 或手动跑迁移；`start` 保持「只启动不构建」语义（systemd / 已构建产物的场景继续用它）。首次部署的空库仍需手动执行一次 `db:init`（写入基础配置并打印超管初始密码）。
 
+### 修复
+
+- **腾讯云短信失败重试口径修正**（对齐腾讯云 SendSms 官方错误码表）：改为按错误码命名空间前缀判定——`LimitExceeded.*`（限流）、`InternalError.*`（系统侧）、`FailedOperation.SendAndRecvFail` 可重试；参数 / 权限 / 模板 / 号码类（`InvalidParameterValue.*`、`UnauthorizedOperation.*`、`UnsupportedOperation.*`、`FailedOperation.*`）不可重试。此前 SDK 层异常一律标记为可重试、单号失败又因等值比较（旧写法比较不带命名空间的 `LimitExceeded`）永远判为不可重试，两个方向都不对；无法识别错误码（多为网络/超时）仍按可重试处理。
+- **短信失败文案带上腾讯云错误码与 RequestId**：便于运维凭 RequestId 向腾讯云提工单（官方文档要求提供）；新增 `sms.providers.spec.ts` 覆盖错误码提取、重试判定与 RequestId 拼接。
+
 ## [1.5.0] - 2026-10-17
 
 首个正式发布版本（后端 / 管理后台 / 移动端同为 v1.5.0），覆盖平台从 M1 到 M2-R 的完整能力。

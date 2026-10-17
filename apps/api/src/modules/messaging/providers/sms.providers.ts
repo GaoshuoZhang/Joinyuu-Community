@@ -97,14 +97,23 @@ export class TencentSmsProvider implements MessageProvider {
     try {
       response = await client.SendSms(params)
     } catch (error) {
-      throw new MessageSendError(`腾讯云短信请求异常：${errorText(error)}`, true)
+      /* SDK 异常：错误码在 message 文本里（异常对象只带 requestId/traceId）；无法识别错误码时按「可重试」处理（多为网络/超时） */
+      const info = tencentErrorInfo(error)
+      throw new MessageSendError(
+        `腾讯云短信请求异常：${info.text}${withRequestId(info.requestId)}`,
+        info.code ? tencentRetriable(info.code) : true,
+      )
     }
 
     const status = response.SendStatusSet?.[0]
     if (!status || status.Code !== 'Ok') {
+      const code = status?.Code ?? ''
       const message = status?.Message ?? '未知错误'
-      const retriable = status?.Code === 'LimitExceeded' || status?.Code === 'InternalError'
-      throw new MessageSendError(`腾讯云短信发送失败：${message}`, retriable)
+      /* 单号失败同样按错误码命名空间判定可重试性；附上错误码与 RequestId 便于运维提工单 */
+      throw new MessageSendError(
+        `腾讯云短信发送失败：${message}${code ? `（错误码 ${code}）` : ''}${withRequestId(response.RequestId)}`,
+        tencentRetriable(code),
+      )
     }
     return { providerMessageId: status.SerialNo }
   }
@@ -128,6 +137,31 @@ function templateParamOrder(
 function normalizeCnPhone(phone: string): string {
   const trimmed = phone.trim()
   return trimmed.startsWith('+') ? trimmed : `+86${trimmed}`
+}
+
+/* 腾讯云 SendSms 错误码按命名空间判定可重试性（见腾讯云「发送短信」错误码表）：
+ * LimitExceeded.*（限流）与 InternalError.*（系统侧）可重试；FailedOperation.* / InvalidParameterValue.* /
+ * UnauthorizedOperation.* / UnsupportedOperation.* 属配置或业务错误，重试不会成功，只会浪费配额并刷日志。 */
+const TENCENT_RETRIABLE_PREFIXES = ['LimitExceeded.', 'InternalError.'] as const
+
+/** 是否可重试（空错误码按不可重试处理，避免对未知业务错误反复重投）——导出仅供单测 */
+export function tencentRetriable(code: string): boolean {
+  if (!code) return false
+  if (code === 'FailedOperation.SendAndRecvFail') return true
+  return TENCENT_RETRIABLE_PREFIXES.some((prefix) => code.startsWith(prefix))
+}
+
+/** 腾讯云 SDK 异常解析：错误码藏在 message 文本里（`Code=xxx` 或 JSON 的 `"code":"xxx"`），异常对象另带 requestId —— 导出仅供单测 */
+export function tencentErrorInfo(error: unknown): { code: string; text: string; requestId: string } {
+  const text = errorText(error)
+  const match = /Code=([A-Za-z][A-Za-z0-9.]*)/.exec(text) ?? /"code"\s*:\s*"([A-Za-z][A-Za-z0-9.]*)"/.exec(text)
+  const meta = error as { requestId?: string } | null
+  return { code: match?.[1] ?? '', text, requestId: typeof meta?.requestId === 'string' ? meta.requestId : '' }
+}
+
+/** 错误文案后缀：带 RequestId，便于运维凭它向腾讯云提工单（文档明确要求提供 RequestId）—— 导出仅供单测 */
+export function withRequestId(requestId?: string): string {
+  return requestId ? `（RequestId：${requestId}）` : ''
 }
 
 function errorText(error: unknown): string {

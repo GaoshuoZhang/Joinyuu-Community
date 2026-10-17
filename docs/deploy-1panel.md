@@ -596,11 +596,25 @@ curl -s http://127.0.0.1:7757/api/health
 ```ini
 ALIYUN_SMS_ACCESS_KEY_ID="你的 AccessKeyId"
 ALIYUN_SMS_ACCESS_KEY_SECRET="你的 AccessKeySecret"
+TENCENT_SMS_SECRET_ID="你的 SecretId"
+TENCENT_SMS_SECRET_KEY="你的 SecretKey"
 SMTP_USER="你的邮箱账号"
 SMTP_PASSWORD="邮箱授权码"
 ```
 
 > `.env` 里的变量名要与后台渠道里登记的变量名一致（种子渠道默认已登记阿里云短信与 SMTP 的这几个名字）。改完 `.env` **必须重启 `joinyuu-api`** 才生效。
+
+**腾讯云短信渠道的配置要点**（改用腾讯云发短信时）：
+
+1. `.env` 注入凭据（变量名与渠道登记保持一致）：`TENCENT_SMS_SECRET_ID` / `TENCENT_SMS_SECRET_KEY`。
+2. 在「通知渠道配置」里把该通知类型的供应商切换为「腾讯云短信」，并照**腾讯云控制台已审批**的内容填写：`SmsSdkAppId`（应用管理里的 SdkAppId）、签名内容（填**签名文字本身，不是签名 ID**）、模板映射（我方模板 code → 腾讯模板 ID）；必要时填 `templateParamOrder`——腾讯模板变量是**位置参数**（`{1}`、`{2}`…），顺序与腾讯模板不一致会报参数不匹配。
+3. 三条最容易踩的接口约束（摘自腾讯云 SendSms 文档）：
+   - 模板参数**个数**必须与已审批模板完全一致，否则报 `FailedOperation.TemplateParamSetNotMatchApprovedTemplate`；
+   - 2024-01-25 之后开通的新账号，单个模板变量默认**最长 6 个字符**，且**验证码类模板的变量只能是 0–6 位纯数字**（「几分钟内有效」这类文案建议直接写死在腾讯模板里）；
+   - 国内短信的签名是必填项，必须填已审批通过的**签名内容**。
+4. 发送失败时，错误文案里会带上**腾讯云错误码与 RequestId**（如 `FailedOperation.SignatureIncorrectOrUnapproved（RequestId：…）`），可直接把 RequestId 提供给腾讯云提工单。
+
+> 重试口径：限流类（`LimitExceeded.*`）与系统类（`InternalError.*`）失败会进入自动重试；参数 / 权限 / 模板 / 号码类失败（`InvalidParameterValue.*`、`UnauthorizedOperation.*`、`UnsupportedOperation.*`、`FailedOperation.*` 等）判为**不可重试**——看到这类失败请按错误码先修配置，等重试无用（详见消息发送记录里的失败原因）。
 
 ---
 
