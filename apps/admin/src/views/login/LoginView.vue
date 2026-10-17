@@ -7,6 +7,7 @@ import { useAuthStore } from '@/stores/auth'
 import { firstAccessiblePath } from '@/router'
 import { fetchCaptcha, HttpError, type CaptchaResult } from '@/api/auth'
 import type { FormProps } from 'tdesign-vue-next'
+import { APP_VERSION } from '@/version'
 
 const router = useRouter()
 const auth = useAuthStore()
@@ -113,6 +114,8 @@ const highlights = ['企业与需求双向连接', '活动运营与签到管理'
             <span>{{ item }}</span>
           </li>
         </ul>
+
+        <p class="brand-version">v{{ APP_VERSION }}</p>
       </div>
     </section>
 
@@ -303,4 +306,13 @@ const highlights = ['企业与需求双向连接', '活动运营与签到管理'
 .island-1 { width: 120px; height: 120px; right: 18%; top: 12%; }
 .island-2 { width: 56px; height: 56px; right: 8%; top: 40%; background: rgba(255, 255, 255, 0.14); }
 .island-3 { width: 200px; height: 200px; left: -60px; bottom: 10%; background: rgba(123, 216, 245, 0.12); }
+
+/* 品牌区中的版本号：继承品牌区文字色、仅降低对比度（渐变面板上的次级文案，
+ * 不套用 TDesign 语义色，与同区 brand-title/brand-sub 同口径） */
+.brand-version {
+  margin: 20px 0 0;
+  font-size: 12px;
+  line-height: 20px;
+  opacity: 0.6;
+}
 </style>

@@ -1,16 +1,29 @@
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, onMounted, ref } from 'vue'
 import { LogoGithubIcon, MailIcon } from 'tdesign-icons-vue-next'
 import PageHeader from '@/components/PageHeader.vue'
 import { useBrandingStore } from '@/stores/branding'
+import { fetchServiceHealth } from '@/api/health'
+import { APP_VERSION } from '@/version'
 
-/* 关于（系统管理 → 关于）：站点信息（系统配置 > 站点信息，空 logo 回退内置字标）+ 开发者联系方式。
- * 与客户端「关于」页信息结构对齐，但去掉客户端专有的「定制UI版本号」（后台无主题概念）。
+/* 关于（系统管理 → 关于）：站点信息（系统配置 > 站点信息，空 logo 回退内置字标）+ 版本信息 +
+ * 开发者联系方式。与客户端「关于」页信息结构对齐，但去掉客户端专有的「定制UI版本号」（后台无主题概念）。
  * 开发者链接与邮箱为常量，非用户输入，因此无需过 safeHttpUrl 白名单。 */
 const branding = useBrandingStore()
 
 const siteName = computed(() => branding.siteName)
 const slogan = computed(() => branding.siteSlogan)
+
+/* 服务端版本取自公开探活接口 /api/health（见 docs/versioning.md）。
+ * null = 读取中，'' = 读取失败（只影响这一行展示，不影响页面其它内容） */
+const serverVersion = ref<string | null>(null)
+onMounted(async () => {
+  try {
+    serverVersion.value = (await fetchServiceHealth()).version
+  } catch {
+    serverVersion.value = ''
+  }
+})
 
 const DEVELOPER_GITHUB = 'https://github.com/GaoshuoZhang'
 const DEVELOPER_GITHUB_LABEL = 'github.com/GaoshuoZhang'
@@ -26,6 +39,20 @@ const CONTACT_EMAIL = 'gaoshuo.zhang@qq.com'
       <span v-else class="logo-glyph" aria-hidden="true">聚</span>
       <h3 class="brand-name">{{ siteName }}</h3>
       <p v-if="slogan" class="slogan">{{ slogan }}</p>
+    </section>
+
+    <section class="page-card">
+      <h3 class="sec-title">版本信息</h3>
+      <div class="versions">
+        <div class="ver-row">
+          <span class="ver-label">管理后台</span>
+          <span class="ver-value">v{{ APP_VERSION }}</span>
+        </div>
+        <div class="ver-row">
+          <span class="ver-label">服务端</span>
+          <span class="ver-value">{{ serverVersion === null ? '读取中…' : serverVersion ? `v${serverVersion}` : '暂不可用' }}</span>
+        </div>
+      </div>
     </section>
 
     <section class="page-card">
@@ -100,6 +127,31 @@ const CONTACT_EMAIL = 'gaoshuo.zhang@qq.com'
   font-size: 16px;
   line-height: 24px;
   color: var(--td-text-color-primary);
+}
+
+/* 版本信息：标签在左、版本号在右；版本号用等宽数字保证上下对齐 */
+.versions {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.ver-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  font-size: 14px;
+  line-height: 22px;
+}
+
+.ver-label {
+  color: var(--td-text-color-secondary);
+}
+
+.ver-value {
+  color: var(--td-text-color-primary);
+  font-variant-numeric: tabular-nums;
 }
 
 .contacts {

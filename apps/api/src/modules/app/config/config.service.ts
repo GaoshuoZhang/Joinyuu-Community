@@ -5,6 +5,7 @@ import { RedisService } from '../../../common/redis/redis.service'
 import { CACHE_KEYS, CACHE_TTL, dictCacheKey } from '../../../common/redis/cache-keys'
 import { minioConfigView } from '../../../common/storage/minio-config'
 import { realnameVerificationView } from '../../../common/realname/realname-config'
+import { APP_VERSION } from '../../../common/version'
 
 /** App 端下发允许的字典类型（与 admin DICT_TYPE_LABELS 对齐） */
 const APP_DICT_TYPES: readonly string[] = [
@@ -26,6 +27,8 @@ export interface SiteConfigDto {
   homeCarouselOpen: boolean
   /** P1 实名核验：verified=「实名认证」（后端已启用并测试联通）；registration=「身份信息登记」 */
   realnameMode: 'verified' | 'registration'
+  /** 服务端版本号：与三端锁步发布，供移动端「关于」页展示（见 docs/versioning.md） */
+  version: string
 }
 
 export interface DictItemDto {
@@ -65,6 +68,7 @@ export class ConfigService {
       reservationOpen: Boolean(full.reservationOpen),
       homeCarouselOpen: Boolean(full.homeCarouselOpen),
       realnameMode: full.realnameMode === 'verified' ? 'verified' : 'registration',
+      version: APP_VERSION,
     }
   }
 

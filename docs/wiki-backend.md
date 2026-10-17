@@ -26,6 +26,7 @@
 - 文件上传与素材库（MinIO/本地磁盘双驱动；上传魔数嗅探禁 SVG；大小上限由系统配置，1-100MB 默认 10）
 - 积分/经验发放引擎（按规则 code 触发，事务写流水）
 - 种子数据：`prisma/seed-data/` 为唯一来源，保持全部编号与跨模块引用一致（见第 11 节）
+- 版本号：服务端版本取自 `apps/api/package.json`（经 `src/common/version.ts` 导出），由 `/api/health`（`data.version`）与 `/api/app/config`（`data.version`）对外回传；三端锁步发布与更新日志规范见 [docs/versioning.md](./versioning.md)
 - 客户端接口按 `docs/api-app-design.md` 实现
 
 **规模**：68 模型 / 59 迁移 / 385 HTTP 路由装饰器；后端测试文件 46 个（e2e + unit），验证命令与环境准备见 [README](../README.md)。桌面客户端、微信小程序、微信登录、支付、CI/CD、分布式部署不在范围内。

@@ -6,6 +6,7 @@ import { createMemoryHistory, createRouter, RouterLink } from 'vue-router'
 import AboutView from './AboutView.vue'
 import { useConfigStore } from '@/stores/config'
 import { useCustomerThemeStore } from '@/stores/customerTheme'
+import { APP_VERSION } from '@/version'
 import type { CustomerTheme } from '@/utils/customerTheme'
 
 /* 用内存路由渲染真实的 router-link（断言协议入口的目标地址） */
@@ -49,13 +50,16 @@ describe('关于页', () => {
 
   it('无主题时回退站点名与字标，并给出联系方式与协议入口', async () => {
     const { wrapper, config } = await setup()
-    config.config = { ...config.config, siteName: '测试社区', siteSlogan: '测试口号' }
+    config.config = { ...config.config, siteName: '测试社区', siteSlogan: '测试口号', version: '1.5.0' }
     await nextTick()
 
     expect(wrapper.get('.logo-glyph').text()).toBe('聚')
     expect(wrapper.get('.brand-name').text()).toBe('测试社区')
     expect(wrapper.get('.slogan').text()).toBe('测试口号')
     expect(wrapper.find('.theme-version').exists()).toBe(false)
+    /* 版本信息：软件版本取构建期常量，服务端版本取站点配置下发值 */
+    expect(wrapper.get('.app-version').text()).toBe(`软件版本 v${APP_VERSION}`)
+    expect(wrapper.get('.server-version').text()).toBe('服务端版本 v1.5.0')
 
     expect(wrapper.findAll('.ext').map((link) => link.attributes('href'))).toEqual([
       'https://github.com/GaoshuoZhang',

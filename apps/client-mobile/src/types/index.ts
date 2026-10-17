@@ -28,6 +28,8 @@ export interface AppConfig {
   homeCarouselOpen: boolean
   /** P1 实名核验：verified=「实名认证」（后台已启用并测试联通）；registration=「身份信息登记」 */
   realnameMode?: 'verified' | 'registration'
+  /** 服务端版本号（与三端锁步发布，见 docs/versioning.md）；老版本后端不下发时为空 */
+  version?: string
 }
 
 /* ---------- 字典项（GET /api/app/dicts/:type） ---------- */

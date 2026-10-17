@@ -3,10 +3,16 @@ import vue from '@vitejs/plugin-vue'
 import Components from 'unplugin-vue-components/vite'
 import { TDesignResolver } from '@tdesign-vue-next/auto-import-resolver'
 import { fileURLToPath, URL } from 'node:url'
+import { readFileSync } from 'node:fs'
+
+/* 后台版本号唯一来源：apps/admin/package.json 的 version，构建期注入为编译期常量 __APP_VERSION__
+ * （三端锁步发布，版本规则与发布流程见 docs/versioning.md） */
+const { version } = JSON.parse(readFileSync(new URL('./package.json', import.meta.url), 'utf8')) as { version: string }
 
 // 相对 base：dist 产物可直接静态托管或本地打开
 export default defineConfig({
   base: './',
+  define: { __APP_VERSION__: JSON.stringify(version) },
   plugins: [
     vue(),
     Components({

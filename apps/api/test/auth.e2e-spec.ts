@@ -25,7 +25,10 @@ describe('M1-A 冒烟（auth + health）', () => {
   it('健康检查无需登录，返回包络 { code: 0, data }', async () => {
     const res = await request(app.getHttpServer()).get('/api/health')
     expect(res.status).toBe(200)
-    expect(res.body).toEqual({ code: 0, data: { status: 'ok' } })
+    expect(res.body.code).toBe(0)
+    expect(res.body.data.status).toBe('ok')
+    /* 版本号与三端锁步发布（见 docs/versioning.md），随 package.json 的 version 变化 */
+    expect(res.body.data.version).toMatch(/^\d+\.\d+\.\d+$/)
   })
 
   it('未携带 token 访问受保护端点返回 401', async () => {

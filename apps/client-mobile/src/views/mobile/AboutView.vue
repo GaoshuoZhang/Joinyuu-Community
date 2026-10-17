@@ -4,8 +4,9 @@ import { Cell, CellGroup, Icon } from 'tdesign-mobile-vue'
 import CustomerBrandLogo from '@/components/CustomerBrandLogo.vue'
 import { useConfigStore } from '@/stores/config'
 import { useCustomerThemeStore } from '@/stores/customerTheme'
+import { APP_VERSION } from '@/version'
 
-/* 关于：客户品牌信息（取自当前启用的移动端主题）+ 开发者联系方式 + 用户协议与隐私政策入口。
+/* 关于：客户品牌信息（取自当前启用的移动端主题）+ 版本信息 + 开发者联系方式 + 用户协议与隐私政策入口。
  * 开发者链接与邮箱为常量，非用户输入，因此无需过 safeHttpUrl 白名单。 */
 const config = useConfigStore()
 const customerTheme = useCustomerThemeStore()
@@ -14,6 +15,8 @@ const brand = computed(() => customerTheme.theme?.brand)
 const siteName = computed(() => brand.value?.name || config.config.siteName || '聚屿社区')
 const slogan = computed(() => (brand.value?.slogan || config.config.siteSlogan || '').trim())
 const themeVersion = computed(() => customerTheme.theme?.version || '')
+/* 服务端版本随站点配置下发（见 docs/versioning.md）；老版本后端不下发时该行不展示 */
+const serverVersion = computed(() => config.config.version || '')
 
 const DEVELOPER_GITHUB = 'https://github.com/GaoshuoZhang'
 const DEVELOPER_GITHUB_LABEL = 'github.com/GaoshuoZhang'
@@ -28,6 +31,8 @@ const CONTACT_EMAIL = 'gaoshuo.zhang@qq.com'
       <span v-else class="logo-glyph" aria-hidden="true">聚</span>
       <h2 class="brand-name">{{ siteName }}</h2>
       <p v-if="slogan" class="slogan">{{ slogan }}</p>
+      <p class="app-version">软件版本 v{{ APP_VERSION }}</p>
+      <p v-if="serverVersion" class="server-version">服务端版本 v{{ serverVersion }}</p>
       <p v-if="themeVersion" class="theme-version">定制UI版本号 v{{ themeVersion }}</p>
     </section>
 
@@ -106,6 +111,9 @@ const CONTACT_EMAIL = 'gaoshuo.zhang@qq.com'
   overflow-wrap: anywhere;
 }
 
+/* 版本信息三行（软件版本 / 服务端版本 / 定制UI版本号）统一走次级小字口径 */
+.app-version,
+.server-version,
 .theme-version {
   margin: 0;
   font: var(--app-type-caption);
