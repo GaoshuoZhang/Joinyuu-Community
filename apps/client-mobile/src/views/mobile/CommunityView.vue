@@ -251,7 +251,7 @@ watch(policies, () => {
 </script>
 
 <template>
-  <PullDownRefresh :value="refreshing" :disabled="!atTop" :loading-props="REFRESH_LOADING_PROPS" @refresh="onRefresh">
+  <PullDownRefresh class="community-refresh" :value="refreshing" :disabled="!atTop" :loading-props="REFRESH_LOADING_PROPS" @refresh="onRefresh">
   <div
     class="m-community page-fade-in"
     @touchstart="startSwipe"
@@ -349,6 +349,19 @@ watch(policies, () => {
 </template>
 
 <style scoped>
+/* 整页下拉刷新：组件根默认 height:100% + overflow:hidden，而下拉时内容整体被 translateY 下移、
+ * 容器高度并不会跟着变长——内容底部会被容器边界裁掉（列表为空时最明显，底部控件点不到）。
+ * 改为内容驱动高度并允许溢出（与首页/「我的」「我的消息」同口径）。 */
+.community-refresh {
+  height: auto;
+  min-height: 100%;
+  overflow: visible;
+}
+
+.community-refresh :deep(.t-pull-down-refresh__track) {
+  height: auto;
+}
+
 .m-community {
   padding:var(--app-space-8);
   display: flex;

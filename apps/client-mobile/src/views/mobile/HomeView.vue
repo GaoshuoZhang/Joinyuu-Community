@@ -225,7 +225,7 @@ const quickEntries = computed(() => {
 </script>
 
 <template>
-  <PullDownRefresh :value="refreshing" :disabled="!atTop" :loading-props="REFRESH_LOADING_PROPS" @refresh="onRefresh">
+  <PullDownRefresh class="home-refresh" :value="refreshing" :disabled="!atTop" :loading-props="REFRESH_LOADING_PROPS" @refresh="onRefresh">
     <div class="home page-fade-in">
       <Search
         v-model="searchKeyword"
@@ -305,6 +305,20 @@ const quickEntries = computed(() => {
 </template>
 
 <style scoped>
+/* 整页下拉刷新：组件根默认 height:100% + overflow:hidden，而下拉时内容整体被 translateY 下移、
+ * 容器高度并不会跟着变长——内容底部（首页即「登录后发布需求」按钮）会被容器边界裁掉，
+ * 表现为「一个无形的框把按钮盖住、点不到」，页面越短越明显。
+ * 改为内容驱动高度并允许溢出，保证整页可下拉且底部操作完整可见（与「我的」「我的消息」同口径）。 */
+.home-refresh {
+  height: auto;
+  min-height: 100%;
+  overflow: visible;
+}
+
+.home-refresh :deep(.t-pull-down-refresh__track) {
+  height: auto;
+}
+
 .home {
   display: flex;
   flex-direction: column;
