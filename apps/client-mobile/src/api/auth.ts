@@ -2,6 +2,7 @@ import { httpGet, httpPost } from './http'
 import type {
   AuthResult,
   EmailPurpose,
+  LoginByCodePayload,
   LoginPayload,
   RecoveryChannels,
   RegisterPayload,
@@ -18,6 +19,12 @@ export async function login(payload: LoginPayload): Promise<AuthResult> {
 /** POST /api/app/auth/register — 注册（受 registrationOpen 开关控制；默认授予 individual 身份） */
 export async function register(payload: RegisterPayload): Promise<AuthResult> {
   return httpPost<AuthResult>('/auth/register', payload)
+}
+
+/** POST /api/app/auth/login-by-code — 验证码登录或注册：服务端在验证码校验通过后判定
+ * 「登录」还是「建号」（isNewUser=true 表示本次自动建号，无密码，需后续在账号安全中设置）。 */
+export async function loginByCode(payload: LoginByCodePayload): Promise<AuthResult & { isNewUser?: boolean }> {
+  return httpPost<AuthResult & { isNewUser?: boolean }>('/auth/login-by-code', payload)
 }
 
 /** POST /api/app/auth/logout — 登出（黑名单复用 auth:blacklist:{jti}） */

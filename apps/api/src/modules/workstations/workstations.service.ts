@@ -15,6 +15,7 @@ import type { WorkstationPayloadDto } from './dto/workstation-payload.dto'
 import type { LeasePayloadDto } from './dto/lease-payload.dto'
 import type { LeaseUpdateDto } from './dto/lease-update.dto'
 import type { LeaseRenewDto } from './dto/lease-renew.dto'
+import type { UpdateLeasePrintLayoutDto } from './dto/update-lease-print-layout.dto'
 import { AssetsService, type MallAssetDto, type UploadedFileLike } from '../assets/assets.service'
 
 /* 办公位与租约模块（wiki-backend.md §7.12/§8.1/§8.3）：
@@ -32,6 +33,51 @@ const leaseContractSource = (leaseId: string): { type: string; id: string } => (
 type WorkstationWithArea = Workstation & { area: WorkstationArea }
 type LeaseWithWorkstations = Lease & {
   workstations: Array<LeaseWorkstation & { workstation: Workstation }>
+}
+
+/* ---------- 租约打印版式（全局单例，Prisma 模型 LeasePrintLayout） ---------- */
+
+/** 单例主键：固定值，由服务端 upsert 维护 */
+const LEASE_PRINT_LAYOUT_ID = 'default'
+
+/** 打印单默认标题（未配置或配置为空时使用） */
+export const LEASE_PRINT_DEFAULT_TITLE = '聚屿社区 · 办公位租约确认单'
+
+/** 「租赁信息」栏目键集（顺序即打印顺序）：与 apps/admin/src/constants/leasePrintLayout.ts 一一对应，
+ * 两端新增字段必须同步；由 dto/lease-print-layout.spec.ts 的单测锁定，避免前后端键集漂移。 */
+export const LEASE_PRINT_FIELD_KEYS = [
+  'renterName',
+  'renterType',
+  'contactName',
+  'contactPhone',
+  'workstation',
+  'leaseTerm',
+  'rentPeriod',
+  'rent',
+  'status',
+  'terminatedAt',
+] as const
+
+/** 内置条款：未配置「条款说明」时回落使用（与改造前打印单内容一致） */
+const LEASE_PRINT_BUILTIN_CLAUSES = [
+  '本确认单为租赁双方就办公位使用权达成的书面约定，自办公位交付之日起生效。',
+  '租金按租赁周期支付，逾期未缴将按社区《办公位管理办法》处理。',
+  '如需终止租约，请与空间运营联系办理交接手续，终止后办公位即时释放。',
+]
+
+/** 打印版式存储行的只读形状（避免依赖生成类型的深层结构） */
+interface LeasePrintLayoutRow {
+  title: string
+  fields: Prisma.JsonValue | null
+  clausesText: string | null
+}
+
+export interface LeasePrintLayoutDto {
+  title: string
+  /** 全量键的可见性：缺键已由服务端补齐为 true，前端按 fields[key] !== false 渲染 */
+  fields: Record<string, boolean>
+  /** 自定义条款说明纯文本（空串 = 回落内置条款） */
+  clausesText: string
 }
 
 export interface WorkstationDto {
@@ -88,6 +134,33 @@ export interface LeaseDto {
 export interface RenterOptionsDto {
   users: Array<{ uid: string; nickname: string; realName: string; phone: string }>
   enterprises: Array<{ id: string; name: string; contactName: string; contactPhone: string }>
+}
+
+/** 打印版式存储行 → DTO：缺键补 true（默认全部显示），标题与条款回落默认值（导出供单测） */
+export function toLeasePrintLayoutDto(row: LeasePrintLayoutRow | null): LeasePrintLayoutDto {
+  const fields: Record<string, boolean> = {}
+  for (const key of LEASE_PRINT_FIELD_KEYS) fields[key] = true
+  const saved = row?.fields
+  if (saved && typeof saved === 'object' && !Array.isArray(saved)) {
+    for (const key of LEASE_PRINT_FIELD_KEYS) {
+      const value = (saved as Record<string, unknown>)[key]
+      if (typeof value === 'boolean') fields[key] = value
+    }
+  }
+  return {
+    title: row?.title?.trim() || LEASE_PRINT_DEFAULT_TITLE,
+    fields,
+    clausesText: row?.clausesText ?? '',
+  }
+}
+
+/** 自定义条款说明按换行分段（忽略空行）；留空时回落内置三条条款（导出供单测） */
+export function splitLeasePrintClauses(text: string): string[] {
+  const lines = text
+    .split('\n')
+    .map((line) => line.trim())
+    .filter(Boolean)
+  return lines.length ? lines : [...LEASE_PRINT_BUILTIN_CLAUSES]
 }
 
 function toWorkstationDto(w: WorkstationWithArea): WorkstationDto {
@@ -304,22 +377,88 @@ export class WorkstationsService {
     return toLeaseDto(row)
   }
 
-  /** 租约打印单（复用租约详情数据，无新表） */
+  /** 租约打印单：租约数据 + 当前打印版式（标题/栏目可见性/条款一次返回，避免前端先渲染默认再跳变） */
   async leasePrint(id: string): Promise<Record<string, unknown>> {
     const row = await this.prisma.lease.findFirst({
       where: { id, deletedAt: null },
       include: { workstations: { include: { workstation: true } } },
     })
     if (!row) throw new NotFoundException('租约不存在')
+    const layout = await this.getLeasePrintLayout()
     return {
-      title: '聚屿社区 · 办公位租约确认单',
+      title: layout.title,
       generatedAt: formatNow(),
       lease: toLeaseDto(row),
-      clauses: [
-        '本确认单为租赁双方就办公位使用权达成的书面约定，自办公位交付之日起生效。',
-        '租金按租赁周期支付，逾期未缴将按社区《办公位管理办法》处理。',
-        '如需终止租约，请与空间运营联系办理交接手续，终止后办公位即时释放。',
-      ],
+      fields: layout.fields,
+      clauses: splitLeasePrintClauses(layout.clausesText),
+    }
+  }
+
+  /* ---------- 打印版式（全局单例） ---------- */
+
+  /** 读取打印版式：无记录或表尚未迁移（P2021）时回落默认值，保证打印始终可用 */
+  async getLeasePrintLayout(): Promise<LeasePrintLayoutDto> {
+    return toLeasePrintLayoutDto(await this.readLeasePrintLayoutRow())
+  }
+
+  /** 更新打印版式：未传的字段保持原值（局部更新），写库后回写审计 */
+  async updateLeasePrintLayout(
+    payload: UpdateLeasePrintLayoutDto,
+    operator: string,
+  ): Promise<LeasePrintLayoutDto> {
+    const current = toLeasePrintLayoutDto(await this.readLeasePrintLayoutRow())
+    /* 只取字符串：@IsOptional 会放行 null，若直接 .trim() 会抛 TypeError（500） */
+    const next: LeasePrintLayoutDto = {
+      title: typeof payload.title === 'string'
+        ? payload.title.trim() || LEASE_PRINT_DEFAULT_TITLE
+        : current.title,
+      fields: { ...current.fields },
+      clausesText: typeof payload.clausesText === 'string' ? payload.clausesText : current.clausesText,
+    }
+    if (payload.fields) {
+      /* 只接受已知键的布尔值：未知键忽略，避免脏数据进入存储 */
+      for (const key of LEASE_PRINT_FIELD_KEYS) {
+        const value = payload.fields[key]
+        if (typeof value === 'boolean') next.fields[key] = value
+      }
+    }
+    /* 全空白视同未配置（回落内置条款）：落库存 null，响应与 GET 一样回空串，避免 PUT/GET 口径不一致 */
+    const clausesText = next.clausesText.trim() ? next.clausesText : ''
+    const data = {
+      title: next.title,
+      fields: next.fields,
+      clausesText: clausesText || null,
+      updatedBy: operator,
+    }
+    await this.prisma.leasePrintLayout.upsert({
+      where: { id: LEASE_PRINT_LAYOUT_ID },
+      create: { id: LEASE_PRINT_LAYOUT_ID, ...data },
+      update: data,
+    })
+    await this.audit.record({
+      module: '空间管理',
+      action: '更新租约打印版式',
+      target: '租约打印单',
+      detail: `标题：${next.title} · 条款说明：${data.clausesText ? '自定义' : '内置三条'} · 隐藏栏目：${
+        LEASE_PRINT_FIELD_KEYS.filter((key) => next.fields[key] === false).length
+      } 项`,
+      before: { title: current.title, fields: current.fields, clausesText: current.clausesText },
+      after: { title: next.title, fields: next.fields, clausesText },
+      operator,
+    })
+    return { ...next, clausesText }
+  }
+
+  private async readLeasePrintLayoutRow(): Promise<LeasePrintLayoutRow | null> {
+    try {
+      return await this.prisma.leasePrintLayout.findUnique({
+        where: { id: LEASE_PRINT_LAYOUT_ID },
+        select: { title: true, fields: true, clausesText: true },
+      })
+    } catch (error) {
+      /* P2021 = 目标表不存在（迁移尚未应用）：降级为默认版式，不让打印单整体报错 */
+      if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2021') return null
+      throw error
     }
   }
 

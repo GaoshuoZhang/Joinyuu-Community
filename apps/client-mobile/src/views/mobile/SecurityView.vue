@@ -89,9 +89,14 @@ const emailNote = computed(() => {
   return `${maskEmail(email)}${profile.value?.emailVerified ? '' : '（未验证）'}`
 })
 
-/* ---- 修改密码：成功后服务端强制全端登出，客户端清理会话并回登录页 ---- */
+/* ---- 设置/修改密码：成功后服务端强制全端登出，客户端清理会话并回登录页 ----
+ * 「未设置密码」账号（hasPassword=false，如验证码登录时自动建号）：入口与弹窗按「设置」口径呈现，
+ * 隐藏原密码字段且不做原密码校验（服务端同口径放行）。 */
 const pwdVisible = ref(false)
 const pwdForm = reactive({ oldPassword: '', password: '', confirm: '' })
+/* 资料未加载完成时按「已有密码」处理（保守默认：宁可多要一次原密码，也不要误判为首次设置） */
+const hasPassword = computed(() => profile.value?.hasPassword !== false)
+const pwdTitle = computed(() => (hasPassword.value ? '修改登录密码' : '设置登录密码'))
 /* v40：行内校验错误 */
 const pwdErrors = reactive({ oldPassword: '', password: '', confirm: '' })
 watch(() => pwdForm.oldPassword, () => (pwdErrors.oldPassword = ''))
@@ -100,10 +105,11 @@ watch(() => pwdForm.confirm, () => (pwdErrors.confirm = ''))
 const pwdSaving = ref(false)
 
 function onPwdSave() {
+  const isFirstSetup = !hasPassword.value
   pwdErrors.oldPassword = ''
   pwdErrors.password = ''
   pwdErrors.confirm = ''
-  if (!pwdForm.oldPassword) {
+  if (!isFirstSetup && !pwdForm.oldPassword) {
     pwdErrors.oldPassword = '请输入原密码'
     return void Toast(pwdErrors.oldPassword)
   }
@@ -116,9 +122,10 @@ function onPwdSave() {
     return void Toast(pwdErrors.confirm)
   }
   pwdSaving.value = true
-  changePassword({ oldPassword: pwdForm.oldPassword, password: pwdForm.password })
+  /* 首次设置不传原密码（服务端对「未设置密码」账号跳过原密码校验） */
+  changePassword({ ...(isFirstSetup ? {} : { oldPassword: pwdForm.oldPassword }), password: pwdForm.password })
     .then(() => {
-      Toast('密码已修改，请重新登录')
+      Toast(isFirstSetup ? '密码已设置，请使用新密码重新登录' : '密码已修改，请重新登录')
       pwdVisible.value = false
       pwdForm.oldPassword = ''
       pwdForm.password = ''
@@ -426,7 +433,7 @@ async function onExport() {
   <div class="page-fade-in m-security">
     <p class="group-title">账号安全</p>
     <CellGroup theme="card">
-      <Cell v-pressable title="修改登录密码" arrow @click="pwdVisible = true" />
+      <Cell v-pressable :title="pwdTitle" arrow @click="pwdVisible = true" />
       <Cell v-pressable="!profileLoading && !profileError" :title="phoneTitle" :note="phoneNote" :arrow="!profileLoading && !profileError" @click="!profileLoading && !profileError ? (phoneVisible = true) : undefined" />
       <Cell v-pressable="!profileLoading && !profileError" :title="emailTitle" :note="emailNote" :arrow="!profileLoading && !profileError" @click="!profileLoading && !profileError ? (emailVisible = true) : undefined" />
       <Cell v-pressable :title="configStore.realnameLabel" :note="realNameNote" arrow @click="router.push('/me/realname')" />
@@ -460,11 +467,11 @@ async function onExport() {
       <!-- 密码框必须位于 form 内：否则浏览器报「Password field is not contained in a form」，
            且密码管理器无法识别该表单；回车提交也由此获得 -->
       <form class="sheet" @submit.prevent="onPwdSave">
-        <h2 class="sheet-title">修改登录密码</h2>
-        <div class="field"><label>原密码</label><PasswordInput v-model="pwdForm.oldPassword" autocomplete="current-password" placeholder="请输入原密码…" clearable /><p v-if="pwdErrors.oldPassword" class="field-error">{{ pwdErrors.oldPassword }}</p></div>
+        <h2 class="sheet-title">{{ pwdTitle }}</h2>
+        <div v-if="hasPassword" class="field"><label>原密码</label><PasswordInput v-model="pwdForm.oldPassword" autocomplete="current-password" placeholder="请输入原密码…" clearable /><p v-if="pwdErrors.oldPassword" class="field-error">{{ pwdErrors.oldPassword }}</p></div>
         <div class="field"><label>新密码</label><PasswordInput v-model="pwdForm.password" autocomplete="new-password" placeholder="至少 8 位，含字母与数字…" clearable /><p v-if="pwdErrors.password" class="field-error">{{ pwdErrors.password }}</p></div>
         <div class="field"><label>确认新密码</label><PasswordInput v-model="pwdForm.confirm" autocomplete="new-password" placeholder="再次输入新密码…" clearable /><p v-if="pwdErrors.confirm" class="field-error">{{ pwdErrors.confirm }}</p></div>
-        <p class="sheet-tip">修改成功后需使用新密码重新登录。</p>
+        <p class="sheet-tip">{{ hasPassword ? '修改成功后需使用新密码重新登录。' : '设置后可使用用户名/手机号/邮箱 + 密码登录；保存后需使用新密码重新登录。' }}</p>
         <Button theme="primary" size="large" block type="submit" :loading="pwdSaving">保存</Button>
       </form>
     </Popup>

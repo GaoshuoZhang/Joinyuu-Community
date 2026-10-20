@@ -122,7 +122,8 @@ watch(
       form.enterpriseId = u.uid
       form.enterpriseName = u.nickname
       form.renterType = 'individual'
-      form.contactName = u.nickname
+      /* 联系人取真实姓名（无真实姓名时回落昵称）：详情页与打印单都直读该字段 */
+      form.contactName = u.realName || u.nickname
       form.contactPhone = u.phone
     } else if (v) {
       /* creatable 自建条目：值即名称 */

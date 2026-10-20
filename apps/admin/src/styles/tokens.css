@@ -592,6 +592,12 @@ html[data-route-loading='true']::after {
   padding: 24px 0;
 }
 
+/* 表格空态：上下留白，避免占位图贴住表头下边缘（列表页无数据/筛选无结果时；
+ * TDesign 的 .t-table__empty-row > td 没有内边距，占位图会紧贴表头） */
+.t-table__empty .t-empty {
+  padding: 40px 0;
+}
+
 /* 窄屏取消表格两侧固定列，避免名称列与操作列叠在一起；全部字段仍可横向滚动查看。 */
 @media (max-width: 767px) {
   .t-table .t-table__cell--fixed-left,

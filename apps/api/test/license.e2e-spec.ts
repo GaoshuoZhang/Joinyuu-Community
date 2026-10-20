@@ -84,6 +84,15 @@ describe('离线许可证与只读模式', () => {
     expect((await post('/api/admin/notifications/read-all')).status).toBe(403)
     expect((await request(app.getHttpServer()).delete('/api/admin/system/mobile-themes/nonexistent').set('Authorization', `Bearer ${token}`)).status).toBe(403)
     expect((await post('/api/app/auth/register')).status).toBe(403)
+    /* 客户端登录属维护例外：验证码发码与验证码登录仍放行 … */
+    const sendCode = await request(app.getHttpServer()).post('/api/app/auth/sms/send').send({ phone: '13900004444', purpose: 'login' })
+    expect(sendCode.status).toBe(200)
+    /* … 但「注册受限」仍然成立：未注册标识在维护期只允许登录、不允许建号 */
+    const maintenanceCreate = await request(app.getHttpServer())
+      .post('/api/app/auth/login-by-code')
+      .send({ channel: 'phone', account: '13900004444', code: sendCode.body.data.devCode as string, agreed: true })
+    expect(maintenanceCreate.status).toBe(400)
+    expect(maintenanceCreate.body.message).toContain('注册暂未开放')
     expect((await get('/api/admin/export/users')).status).toBe(200)
     const jobs = app.get(SchedulerService)
     const scan = jest.spyOn(jobs, 'scanScheduledPublish')

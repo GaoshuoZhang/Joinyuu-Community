@@ -1,6 +1,7 @@
 import { legacySettingsRedirect } from '@/utils/settingsNavigation'
 import { createRouter, createWebHashHistory, type RouteRecordNormalized } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
+import { setPageTitle } from '@/utils/siteBranding'
 import { getAllPermissionCodes } from '@/constants/permissions'
 import { scopeAllowsGroup } from '@/constants/scopes'
 
@@ -379,10 +380,10 @@ function finishRouteLoading() {
 router.afterEach(finishRouteLoading)
 router.onError(finishRouteLoading)
 
-/* 路由切换后同步浏览器标签页标题：多标签/历史记录/读屏用户借此区分页面（meta.title 已冻结于路由表） */
+/* 路由切换后同步浏览器标签页标题：多标签/历史记录/读屏用户借此区分页面（meta.title 已冻结于路由表）。
+ * 站点名称取自「系统配置 → 站点信息」（公开读取，未登录时用上次缓存值 —— 见 utils/siteBranding.ts）。 */
 router.afterEach((to) => {
-  const title = to.meta.title as string | undefined
-  document.title = title ? `${title} · 聚屿社区管理后台` : '聚屿社区管理后台'
+  setPageTitle(to.meta.title as string | undefined)
 })
 
 export default router

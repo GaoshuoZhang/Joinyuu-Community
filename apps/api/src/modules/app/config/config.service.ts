@@ -19,6 +19,8 @@ const APP_DICT_TYPES: readonly string[] = [
 export interface SiteConfigDto {
   siteName: string
   siteSlogan: string
+  /** 站点 logo（素材 URL）：客户端浏览器标签页图标（客户主题 logo 只用于页面内品牌位）；空 = 内置默认字标 */
+  siteLogo: string
   mobileUrl: string
   registrationOpen: boolean
   mallOpen: boolean
@@ -61,6 +63,7 @@ export class ConfigService {
     return {
       siteName: String(full.siteName ?? ''),
       siteSlogan: String(full.siteSlogan ?? ''),
+      siteLogo: String(full.siteLogo ?? ''),
       mobileUrl: String(full.mobileUrl ?? 'localhost:7759'),
       registrationOpen: Boolean(full.registrationOpen),
       mallOpen: Boolean(full.mallOpen),
@@ -115,6 +118,8 @@ function toFullSystemConfig(config: SystemConfig): Record<string, unknown> {
   return {
     siteName: config.siteName,
     siteSlogan: config.siteSlogan,
+    /* 客户端标签页图标用：SiteConfigDto 下发该字段，回源结构必须同 admin 的 toSystemConfigDto 逐字段一致 */
+    siteLogo: config.siteLogo,
     mobileUrl: config.mobileUrl,
     registrationOpen: config.registrationOpen,
     mallOpen: config.mallOpen,

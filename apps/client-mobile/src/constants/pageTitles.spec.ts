@@ -22,7 +22,7 @@ describe('pageTitleFor', () => {
     expect(pageTitleFor(route('me-leases'))).toBe('工位租约')
     expect(pageTitleFor(route('my-article-detail'))).toBe('投稿详情')
     expect(pageTitleFor(route('my-application-detail'))).toBe('申请详情')
-    expect(pageTitleFor(route('login'))).toBe('登录')
+    expect(pageTitleFor(route('login'))).toBe('登录或注册')
     expect(pageTitleFor(route('register'))).toBe('注册')
     expect(pageTitleFor(route('forgot-password'))).toBe('找回密码')
   })

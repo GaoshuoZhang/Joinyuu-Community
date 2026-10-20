@@ -18,7 +18,7 @@
 
 ## 2. 社区成员域（7）
 
-- **User** — 用户（uid PK U；**username 登录标识/全站唯一**；nickname 展示昵称/全站唯一；**phone?/email? 可空且非空时全站唯一**；**phoneVerifiedAt?/emailVerifiedAt? 可信通知渠道标记**（非空=该渠道已验证，可用于找回密码与接收通知）；gender；avatar?；status active/frozen；realName?/citizenId?/verifiedAt?；微信字段 M3 预留；frozenUntil?/frozenReason?；points 积分余额；registeredAt/lastActiveAt；bio；activities Json；**activationDismissed Bool 默认 false（永久隐藏新手任务，按账号持久化，跨浏览器一致）**；**usernameChangedAt?（最近一次用户名修改时间，每 90 天仅可修改一次）**）
+- **User** — 用户（uid PK U；**username 登录标识/全站唯一**；nickname 展示昵称/全站唯一；**phone?/email? 可空且非空时全站唯一**；**phoneVerifiedAt?/emailVerifiedAt? 可信通知渠道标记**（非空=该渠道已验证，可用于找回密码与接收通知）；**passwordHash? 可空 / passwordUpdatedAt?**（`passwordHash` 为空 = **「未设置密码」**：由验证码登录在建号时产生，该账号只能用验证码登录，或到「账号安全」设置密码——首次设置免原密码、免验证码，管理员注销审核通过时也会置空；`GET /api/app/me` 以 `hasPassword` 下发该状态）；gender；avatar?；status active/frozen；realName?/citizenId?/verifiedAt?；微信字段 M3 预留；frozenUntil?/frozenReason?；points 积分余额；registeredAt/lastActiveAt；bio；activities Json；**activationDismissed Bool 默认 false（永久隐藏新手任务，按账号持久化，跨浏览器一致）**；**usernameChangedAt?（最近一次用户名修改时间，每 90 天仅可修改一次）**）
 - **UserIdentity** — 一人多身份（userId 级联；type individual/community_individual/community_enterprise/external_enterprise；enterpriseId?/enterpriseName?/role?/title；level?/experience? 仅社区两类持有；唯一 userId+type+enterpriseId）
 - **Enterprise** — 社区企业（id E；name/industry/size/foundedAt/settledAt?/leaseType；status pending 默认/active/exited/disabled；experience 企业经验；contactUserId? 关联个人用户 + contactTitle 职位 + contactName/contactPhone/contactEmail?；description/tags；deletedAt?/deletedBy?；**stage 已删**）
 - **ExternalEnterpriseProfile** — 合作企业档案（id XE；name/industry；status active/disabled；size/foundedAt；description；registeredAt（登记日期=填表通过审核当天）；deletedAt?/deletedBy?；聚合视图 = 档案 + external_enterprise 身份派生成员，不建独立实体表）
@@ -71,7 +71,8 @@
   - 密钥安全（P0）：`minioSecretKey` 只写不读——管理端 GET 只回 `minioSecretKeyConfigured`/`minioSecretKeyMasked`/`minioCredentialSource`，审计快照不含密钥原文；凭据可经 `MINIO_SECRET_KEY`/`MINIO_ACCESS_KEY` 环境变量优先注入。
   - 实名核验（P1）：`realnameVerifyCredentialMode=inline` 时凭据为**后台直接填写的密钥**（只写、GET 只回掩码 `realnameVerifyCredentialMasked`、审计快照凭据字段恒为空）；`env` 时仅登记环境变量名。启用 + `realnameVerifyTestOk=true` 时客户端 `realnameMode=verified`（「实名认证」），否则 `registration`（「身份信息登记」）；任一核验配置变更会把 `realnameVerifyTestOk` 重置为 false 并要求重新测试联通。
   - 日志保留期：`auditLogRetentionDays` / `loginLogRetentionDays` Int 默认 180（0 = 永久保存，取值 0-3650）；由「日志与审计 > 日志设置」维护（`PUT /api/admin/audit-logs/retention`），超期日志由定时任务 `log-retention-purge` 每日 03:00 清理。
-  - 站点 logo：`siteLogo` String 默认 ''（素材 URL，≤512）；后台左上角图标与浏览器标签页图标（`GET /api/admin/branding` 下发），空串回退内置字标；**客户端不读取**，客户端品牌跟随定制主题。
+  - 站点 logo：`siteLogo` String 默认 ''（素材 URL，≤512）；后台左上角图标 + 浏览器标签页图标（后台经 `GET /api/admin/branding` 下发，客户端经 `GET /api/app/config` 下发，两端共用同一图标），空串回退内置字标；客户端**页面内**品牌位仍跟随定制主题。
+  - 站点名称：`siteName` 进入**后台标签页标题**（`{页面} · {站点名称}管理后台`）、登录页品牌区、独立打印页落款与新建活动的「主办方」默认值；客户端标签页标题早已使用该字段。
 - **DictEntry** — 数据字典（type+code 联合 PK；type demand_category/industry/event_type/goods_category；label 全类型唯一；sort/status；**商品类别另有类别级 visibilityIdentities/visibilityLevels/orderIdentities/orderLevels**，空数组 = 不限，其余类型恒为空）
 - **ArchiveSetting** — 归档设置（domain PK；autoArchive/archiveDelayDays 自动归档延时；autoPurge/purgeDelayDays 自动删除延时；archiveStatuses Json? 按状态开关）
 

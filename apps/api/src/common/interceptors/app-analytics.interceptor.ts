@@ -11,7 +11,7 @@ export class AppAnalyticsInterceptor implements NestInterceptor {
     const req = context.switchToHttp().getRequest()
     const path = (req.path ?? '').replace(/^\/api\/app/, '')
     const routes: [RegExp, string][] = [
-      [/^\/auth\/login$/, 'login'], [/^\/auth\/register$/, 'register'], [/^\/demands$/, 'demand_publish'],
+      [/^\/auth\/login$/, 'login'], [/^\/auth\/login-by-code$/, 'login'], [/^\/auth\/register$/, 'register'], [/^\/demands$/, 'demand_publish'],
       [/^\/demands\/[^/]+\/respond$/, 'demand_respond'], [/^\/events\/[^/]+\/enroll$/, 'event_enroll'],
       [/^\/events\/[^/]+\/check-in$/, 'checkin'], [/^\/mall\/orders$/, 'mall_order'],
       [/^\/articles$/, 'article_submit'], [/^\/spaces\/reservations$/, 'space_reserve'],

@@ -47,9 +47,13 @@ export async function fetchPointsRecords(query: PageQuery = {}): Promise<PageRes
 
 /* ---------- 账号安全与治理 ---------- */
 
-/** 修改登录密码（校验原密码，并使其他 app 会话失效）。 */
-export async function changePassword(payload: { oldPassword: string; password: string }): Promise<void> {
-  await httpPost('/me/change-password', { oldPassword: payload.oldPassword, newPassword: payload.password })
+/** 设置/修改登录密码：已有密码须校验原密码；「未设置密码」账号首次设置时 oldPassword 留空即可。
+ * 成功后服务端强制全端登出，需用新密码重新登录。 */
+export async function changePassword(payload: { oldPassword?: string; password: string }): Promise<void> {
+  await httpPost('/me/change-password', {
+    ...(payload.oldPassword ? { oldPassword: payload.oldPassword } : {}),
+    newPassword: payload.password,
+  })
 }
 
 /** 提交账号注销申请。 */

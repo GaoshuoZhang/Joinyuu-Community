@@ -87,13 +87,23 @@ async function adminLogin(page) {
 
 async function mobileLogin(page) {
   await page.goto(mobileBase + '/login')
-  await page.locator('img[alt="图形验证码"]').waitFor()
-  const code = captchaCode(await page.locator('img[alt="图形验证码"]').getAttribute('src'))
-  const identifier = page.locator('input[autocomplete="username"]')
-  await identifier.fill(process.env.MOBILE_E2E_IDENTIFIER || '13801210001')
+  /* 统一入口两屏：第一屏只输标识，第二屏才出现密码框；
+   * 图形验证码只在密码连续失败 3 次后（428）出现，因此不能预先等待它 */
+  await page.locator('input[autocomplete="username"]').fill(process.env.MOBILE_E2E_IDENTIFIER || '13801210001')
+  await page.getByRole('button', { name: '下一步', exact: true }).click()
   await page.locator('input[autocomplete="current-password"]').fill(process.env.MOBILE_E2E_PASSWORD || 'user123')
-  await page.getByPlaceholder('请输入验证码…', { exact: true }).fill(code)
   await page.getByRole('button', { name: '登录', exact: true }).click()
+  const captcha = page.locator('img[alt="图形验证码"]')
+  try {
+    await captcha.waitFor({ timeout: 1500 })
+  } catch {
+    /* 正常路径（失败次数未达阈值）不需要验证码 */
+  }
+  if (await captcha.count()) {
+    const code = captchaCode(await captcha.getAttribute('src'))
+    await page.getByPlaceholder('请输入验证码…', { exact: true }).fill(code)
+    await page.getByRole('button', { name: '登录', exact: true }).click()
+  }
   await page.waitForURL(mobileBase + '/')
   await waitForApp(page)
 }

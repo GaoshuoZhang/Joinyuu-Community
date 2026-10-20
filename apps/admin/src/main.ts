@@ -7,6 +7,7 @@ import { accessibleField } from './directives/accessibleField'
 import { permission } from './directives/permission'
 import { installTDesignAccessibility } from './utils/tdesignAccessibility'
 import { useThemeStore } from './stores/theme'
+import { useBrandingStore } from './stores/branding'
 /* 顺序敏感：TDesign 基础样式先加载，本应用样式后加载。
  * 两者存在同特异性的同名规则（如 .t-select__wrap 与工具类 .ctl-w-* 都只声明 width），
  * 顺序决定胜负 —— 应用样式放前面会被组件库的 width:100% 覆盖，筛选控件全部撑满整行 */
@@ -19,6 +20,9 @@ app.use(pinia)
 /* 暗色模式：启动即应用持久化主题（localStorage） */
 useThemeStore(pinia).init()
 app.use(router)
+/* 站点品牌（站点名称/标语/logo）：接口为公开读取，启动即拉取一次——
+ * 登录页、独立打印页与浏览器标签页（图标 + 标题）都要显示「系统配置 → 站点信息」里的真实品牌 */
+void useBrandingStore(pinia).load()
 /* RBAC：按钮/元素级权限指令 */
 app.directive('permission', permission)
 app.directive('accessible-field', accessibleField)

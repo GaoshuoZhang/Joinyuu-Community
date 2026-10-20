@@ -6,7 +6,7 @@ export interface PageTitleRoute {
 }
 
 const ROUTE_TITLES: Record<string, string> = {
-  login: '登录',
+  login: '登录或注册',
   register: '注册',
   'forgot-password': '找回密码',
   home: '首页',

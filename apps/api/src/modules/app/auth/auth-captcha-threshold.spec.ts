@@ -21,6 +21,7 @@ describe('app login captcha threshold', () => {
       {} as never,
       {} as never,
       {} as never,
+      {} as never,
     )
     const attempt = () => service.login({ identifier: 'user@example.com', password: 'wrong' }, '127.0.0.1')
 

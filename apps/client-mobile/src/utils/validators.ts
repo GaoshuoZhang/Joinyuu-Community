@@ -15,6 +15,34 @@ export function isPhone(value: string): boolean {
   return /^1\d{10}$/.test(value)
 }
 
+/* ---------- 登录标识解析（手机号/邮箱/用户名） ---------- */
+
+export type IdentifierKind = 'phone' | 'email' | 'username'
+
+export interface ParsedIdentifier {
+  kind: IdentifierKind
+  /** 归一化后的值：手机号 11 位数字、邮箱小写、用户名 trim 后小写 */
+  value: string
+}
+
+/** 手机号规整：去空格/分隔符 + 去 +86 前缀 */
+function normalizePhoneInput(input: string): string {
+  return input.replace(/[\s-]/g, '').replace(/^\+?86/, '')
+}
+
+/** 解析登录标识（顺序即优先级：手机号 → 邮箱 → 用户名）；空串返回 null。
+ * **必须与后端 apps/api/src/modules/app/auth/identifier.util.ts 逐条一致**（两端口径漂移会导致
+ * 「客户端认为是邮箱、服务端按用户名查询」的静默失败）。 */
+export function parseIdentifier(raw: string | null | undefined): ParsedIdentifier | null {
+  const trimmed = (raw ?? '').trim()
+  if (!trimmed) return null
+  const phone = normalizePhoneInput(trimmed)
+  if (isPhone(phone)) return { kind: 'phone', value: phone }
+  const email = trimmed.toLowerCase()
+  if (isEmail(email)) return { kind: 'email', value: email }
+  return { kind: 'username', value: trimmed.toLowerCase() }
+}
+
 /** 邮箱格式：与后端 class-validator 的 IsEmail 大致同口径（本地仅做基础拦截） */
 export function isEmail(value: string): boolean {
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value.trim())

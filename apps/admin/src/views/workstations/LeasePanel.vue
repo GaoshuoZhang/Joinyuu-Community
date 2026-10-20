@@ -11,6 +11,7 @@ import PageHeader from '@/components/PageHeader.vue'
 import StatusTag from '@/components/StatusTag.vue'
 import StatCard from '@/components/StatCard.vue'
 import BulkArchiveDialog from '@/components/BulkArchiveDialog.vue'
+import LeasePrintLayoutDialog from '@/components/LeasePrintLayoutDialog.vue'
 import LeaseFormDialog from '@/components/LeaseFormDialog.vue'
 import LeaseRenewDialog from '@/components/LeaseRenewDialog.vue'
 import ColumnController from '@/components/ColumnController.vue'
@@ -275,6 +276,8 @@ async function onBulkConfirm(values: string[]) {
 
 /* 新增 / 编辑租约 */
 const formVisible = ref(false)
+/* 打印版式配置（全局单例）：入口在页头「一键归档」左侧 */
+const printLayoutVisible = ref(false)
 const formMode = ref<'create' | 'edit'>('create')
 const currentLease = ref<Lease | null>(null)
 /* 续期弹窗（与编辑共用 currentLease：同一次只会打开一个） */
@@ -357,6 +360,9 @@ onMounted(async () => {
           storage-key="leases"
           :columns="columns.map((c) => ({ key: c.colKey, title: c.title }))"
         />
+        <t-button variant="outline" @click="printLayoutVisible = true">
+          打印版式
+        </t-button>
         <t-button variant="outline" :disabled="archivingAll" @click="onBulkArchive">
           一键归档
         </t-button>
@@ -529,6 +535,9 @@ onMounted(async () => {
 
     <!-- 续期弹窗：延长到期日并追加续期记录 -->
     <LeaseRenewDialog v-model:visible="renewVisible" :lease="currentLease" @success="load" />
+
+    <!-- 打印版式：租约打印单的标题 / 租赁信息栏目 / 条款说明（全局单例） -->
+    <LeasePrintLayoutDialog v-model:visible="printLayoutVisible" />
 
     <!-- 一键归档：状态选择二次确认对话框 -->
     <BulkArchiveDialog

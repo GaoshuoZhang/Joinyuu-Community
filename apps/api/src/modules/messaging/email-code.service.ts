@@ -5,9 +5,9 @@ import { RedisService } from '../../common/redis/redis.service'
 import { MessageChannelService } from './message-channel.service'
 import { OutboxService } from './outbox.service'
 
-export type EmailPurpose = 'register' | 'reset_password' | 'change_email'
+export type EmailPurpose = 'register' | 'reset_password' | 'change_email' | 'login'
 
-export const EMAIL_PURPOSES: readonly EmailPurpose[] = ['register', 'reset_password', 'change_email']
+export const EMAIL_PURPOSES: readonly EmailPurpose[] = ['register', 'reset_password', 'change_email', 'login']
 
 /** 验证码有效期（秒） */
 const CODE_TTL_SEC = 5 * 60

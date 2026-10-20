@@ -26,6 +26,7 @@ import StatusTag from '@/components/StatusTag.vue'
 import TrendChart from '@/components/TrendChart.vue'
 import { applicationTypeMap } from '@/constants/status'
 import { useAuthStore } from '@/stores/auth'
+import { useBrandingStore } from '@/stores/branding'
 import { fetchDashboard, fetchTrend, type DashboardData, type TrendPoint } from '@/api/dashboard'
 import { fetchAnnouncements } from '@/api/announcements'
 import type { Announcement } from '@/types'
@@ -38,6 +39,7 @@ import { fetchArticles } from '@/api/contents'
 
 const router = useRouter()
 const auth = useAuthStore()
+const branding = useBrandingStore()
 const loading = ref(true)
 const loadError = ref('')
 const data = ref<DashboardData | null>(null)
@@ -308,7 +310,7 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onLayoutKeydown))
 
 <template>
   <div class="dashboard page-fade-in">
-    <PageHeader title="工作台" description="聚屿社区运营概览与今日待办">
+    <PageHeader title="工作台" :description="`${branding.siteName}运营概览与今日待办`">
       <template #actions>
         <t-popup
           v-model:visible="layoutVisible"

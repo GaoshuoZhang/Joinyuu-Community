@@ -65,7 +65,7 @@ async function login(p = page, username = 'admin', password = process.env.ADMIN_
 }
 async function visit(path) {
   await page.goto(base + '/?e2eFollowup=' + ++nav + '#' + path)
-  await page.waitForFunction(() => document.title.includes('· 聚屿社区管理后台') && !document.documentElement.dataset.routeLoading && document.querySelector('#app')?.textContent?.length > 10)
+  await page.waitForFunction(() => document.title.includes('管理后台') && !document.documentElement.dataset.routeLoading && document.querySelector('#app')?.textContent?.length > 10)
   await page.waitForLoadState('networkidle')
 }
 async function api(path, options = {}) {
@@ -250,10 +250,12 @@ try {
     })
   }
   if (group === 'routes') {
+    /* 标签页标题后缀取「系统配置 → 站点信息」的站点名称（manifest 按内置默认名书写，运行时替换） */
+    const siteName = (await api('/branding')).siteName
     for (const route of manifest) await test('登录态路由 ' + route.path, async () => {
       const before = runtimeErrors.length
       await visit(route.path)
-      assert.equal(await page.title(), route.title)
+      assert.equal(await page.title(), route.title.replace('聚屿社区', siteName))
       assert.equal(runtimeErrors.length, before)
       assert.equal(await page.locator('.page-scroll [role=alert]').filter({ hasText: '数据加载失败' }).count(), 0)
       return { path: route.path, title: await page.title() }

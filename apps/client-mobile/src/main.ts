@@ -3,6 +3,7 @@ import { createPinia } from 'pinia'
 import App from './App.vue'
 import { router } from './router'
 import { useAuthStore } from './stores/auth'
+import { useConfigStore } from './stores/config'
 import { patchTabRelationships } from './utils/tabAccessibility'
 import { pressable } from './directives/pressable'
 import { announce } from './utils/a11y'
@@ -16,6 +17,10 @@ app.use(createPinia())
 app.use(router)
 app.directive('pressable', pressable)
 app.mount('#app')
+
+/* 站点品牌：浏览器标签页图标取「系统配置 → 站点信息」的站点 logo（随 /api/app/config 下发）。
+ * 不阻塞首屏：失败保持 index.html 的内置图标。 */
+void useConfigStore().ensureLoaded().catch(() => {})
 
 /* 401 统一处理（api/http.ts 派发）：清会话并由路由层跳登录（history 模式 + redirect 回跳） */
 window.addEventListener('joinyuu:unauthorized', (event) => {

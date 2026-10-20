@@ -6,7 +6,7 @@ import { fetchMe } from '@/api/me'
 import { FULL_PRICE_DISCOUNT, normalizeDiscount } from '@/utils/points'
 import { clearAccountLocalData } from '@/utils/accountLocalData'
 import { useNoticesStore } from './notices'
-import type { AuthResult, IdentityType, LoginPayload, RegisterPayload, UserIdentity } from '@/types'
+import type { AuthResult, IdentityType, LoginByCodePayload, LoginPayload, RegisterPayload, UserIdentity } from '@/types'
 
 const TOKEN_KEY = 'joinyuu_client_token'
 const IDENTITY_KEY = 'joinyuu_client_identity'
@@ -134,6 +134,13 @@ export const useAuthStore = defineStore('auth', () => {
     apply(await authApi.register(payload))
   }
 
+  /** 验证码登录或注册：返回是否本次自动建号（无密码账号），供页面区分欢迎文案 */
+  async function loginByCode(payload: LoginByCodePayload): Promise<boolean> {
+    const result = await authApi.loginByCode(payload)
+    apply(result)
+    return Boolean(result.isNewUser)
+  }
+
   /** 统一清理会话（登出 / 改密 / 重置密码 / 401 拦截 / 恢复失败）：清 auth 状态 + 站内信缓存 + 本地会话键 +
    * 账号相关本机缓存（阅读历史/最近搜索），避免换账号登录时残留上一账号数据。 */
   function resetSession() {
@@ -180,6 +187,6 @@ export const useAuthStore = defineStore('auth', () => {
   return {
     token, uid, username, name, avatar, identities, points, pointsDiscount,
     isLogged, primaryIdentity, hasCommunityIndividual, profileIdentities,
-    ensureRestored, login, register, logout, resetSession, refreshProfile,
+    ensureRestored, login, register, loginByCode, logout, resetSession, refreshProfile,
   }
 })

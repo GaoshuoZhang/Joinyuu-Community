@@ -1,5 +1,5 @@
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch, type Ref } from 'vue'
-import { onBeforeRouteLeave } from 'vue-router'
+import { onBeforeRouteLeave, useRouter } from 'vue-router'
 import { confirmDialog } from '@/utils/confirmDialog'
 import { formSnapshot } from './formSnapshot'
 
@@ -54,20 +54,31 @@ export function useDialogDirtyGuard(form: object | (() => unknown)) {
 
 /** 页面导航、刷新及关闭窗口均保护未保存内容。 */
 export function usePageDirtyGuard(isDirty: Readonly<Ref<boolean>>) {
+  const router = useRouter()
+  /** 已在本条导航链路上确认过离开：vue-router 对重定向后的新目标会再跑一次本守卫，
+   * 不能因此重复弹窗（例如未保存时离开后目标页被重定向）。一次导航结束即复位。 */
+  let approvedLeave = false
+  const stopAfterEach = router.afterEach(() => {
+    approvedLeave = false
+  })
   const beforeUnload = (event: BeforeUnloadEvent) => {
-    if (!isDirty.value) return
+    if (approvedLeave || !isDirty.value) return
     event.preventDefault()
     event.returnValue = ''
   }
   onMounted(() => window.addEventListener('beforeunload', beforeUnload))
-  onBeforeUnmount(() => window.removeEventListener('beforeunload', beforeUnload))
+  onBeforeUnmount(() => {
+    window.removeEventListener('beforeunload', beforeUnload)
+    stopAfterEach()
+  })
   onBeforeRouteLeave(() => {
-    if (!isDirty.value) return true
+    if (approvedLeave || !isDirty.value) return true
     return new Promise<boolean>((resolve) => {
       let settled = false
       const settle = (leave: boolean) => {
         if (settled) return
         settled = true
+        if (leave) approvedLeave = true
         dialog.destroy()
         resolve(leave)
       }

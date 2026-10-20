@@ -1,19 +1,25 @@
 <script setup lang="ts">
 import { backOrFallback } from '@/utils/navigation'
-import { onBeforeUnmount, onMounted, ref } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import ListErrorState from '@/components/ListErrorState.vue'
 import { deriveLeaseStatus, fetchLeasePrint } from '@/api/workstations'
 import { isNotFound } from '@/api/http'
+import { useBrandingStore } from '@/stores/branding'
+import { LEASE_PRINT_FIELDS, isLeasePrintFieldEnabled } from '@/constants/leasePrintLayout'
 import type { Lease } from '@/types'
 
 /* 租约打印页：独立于 AdminLayout 的裸页，window.print + 打印样式；可从租约列表操作列进入。
  * 单据数据取自 GET /api/admin/leases/:id/print（标题 + 租约 + 条款），不再拉取整表。 */
 const route = useRoute()
 const router = useRouter()
+const branding = useBrandingStore()
 
 const lease = ref<Lease | null>(null)
 const clauses = ref<string[]>([])
+/* 打印版式（服务端下发）：标题与「租赁信息」栏目可见性 */
+const docTitle = ref('')
+const fields = ref<Record<string, boolean>>({})
 const loading = ref(true)
 const notFound = ref(false)
 /* 非 404 的加载失败：展示错误与重试入口（403/500/断网不再伪装成「未找到」） */
@@ -38,6 +44,73 @@ const statusLabel: Record<string, string> = {
   expired: '已到期',
   terminated: '已终止',
 }
+
+/* ---------- 「租赁信息」按打印版式成行 ----------
+ * 规则：非独占栏目按目录顺序两两成行，独占栏目（办公位 / 终止日期）各占整行；
+ * 无值的栏目（如未终止时的「终止日期」）整条跳过；未知键忽略（两端键集不一致时不渲染空栏目）。
+ * 全部勾选时输出与改造前一致的 6 行版式。 */
+interface PrintCell {
+  label: string
+  value: string
+}
+
+const rentUnitLabel = computed(
+  () => ({ day: '日', week: '周', month: '月', year: '年' })[lease.value?.rentPeriod ?? 'month'],
+)
+
+function printCellOf(key: string): PrintCell | null {
+  const l = lease.value
+  if (!l) return null
+  switch (key) {
+    case 'renterName':
+      return { label: '租赁方', value: l.enterpriseId ? `${l.enterpriseName} [${l.enterpriseId}]` : l.enterpriseName }
+    case 'renterType':
+      return { label: '租赁方类型', value: renterTypeLabel[l.renterType ?? 'custom'] ?? l.renterType ?? '' }
+    case 'contactName':
+      return { label: '联系人', value: l.contactName }
+    case 'contactPhone':
+      return { label: '联系电话', value: l.contactPhone }
+    case 'workstation':
+      return { label: '办公位', value: l.workstationLabels.join('、') }
+    case 'leaseTerm':
+      return { label: '租期', value: `${l.startDate} 至 ${l.longTerm ? '长期' : l.endDate}` }
+    case 'rentPeriod':
+      return { label: '租赁周期', value: rentPeriodLabel[l.rentPeriod ?? 'month'] ?? l.rentPeriod ?? '' }
+    case 'rent':
+      return { label: `${rentUnitLabel.value}租金`, value: `¥${l.monthlyRent.toLocaleString('zh-CN')}` }
+    case 'status':
+      return { label: '状态', value: statusLabel[deriveLeaseStatus(l)] ?? l.status }
+    case 'terminatedAt':
+      return l.terminatedAt ? { label: '终止日期', value: l.terminatedAt } : null
+    default:
+      return null
+  }
+}
+
+const printRows = computed<PrintCell[][]>(() => {
+  const rows: PrintCell[][] = []
+  let pending: PrintCell[] = []
+  const flush = () => {
+    if (pending.length) {
+      rows.push(pending)
+      pending = []
+    }
+  }
+  for (const field of LEASE_PRINT_FIELDS) {
+    if (!isLeasePrintFieldEnabled(fields.value, field.key)) continue
+    const cell = printCellOf(field.key)
+    if (!cell) continue
+    if (field.wide) {
+      flush()
+      rows.push([cell])
+      continue
+    }
+    pending.push(cell)
+    if (pending.length === 2) flush()
+  }
+  flush()
+  return rows
+})
 
 /* 打印回落浅色：本页颜色一律取 TDesign token，暗色主题下这些 token 会解析成深色值
  * （--td-bg-color-container = 深灰），直接打印就是黑底白字。因此在「打印」这一瞬间
@@ -76,6 +149,8 @@ async function load() {
     const payload = await fetchLeasePrint(String(route.params.id))
     lease.value = payload.lease
     clauses.value = payload.clauses ?? []
+    docTitle.value = payload.title
+    fields.value = payload.fields ?? {}
     notFound.value = !lease.value
   } catch (e) {
     /* 404 = 记录不存在；其余错误保留具体原因并给出重试入口 */
@@ -118,43 +193,23 @@ onBeforeUnmount(() => {
 
       <template v-else-if="!loadError && lease">
         <div class="doc-head">
-          <h1 class="doc-title">聚屿社区 · 办公位租约确认单</h1>
+          <h1 class="doc-title">{{ docTitle }}</h1>
           <p class="doc-no">租约编号：{{ lease.id }}</p>
         </div>
 
         <h3 class="doc-section">租赁信息</h3>
         <table class="doc-table">
-          <tr>
-            <td class="label">租赁方</td>
-            <td>{{ lease.enterpriseName }}<template v-if="lease.enterpriseId"> [{{ lease.enterpriseId }}]</template></td>
-            <td class="label">租赁方类型</td>
-            <td>{{ renterTypeLabel[lease.renterType ?? 'custom'] ?? lease.renterType }}</td>
-          </tr>
-          <tr>
-            <td class="label">联系人</td>
-            <td>{{ lease.contactName }}</td>
-            <td class="label">联系电话</td>
-            <td>{{ lease.contactPhone }}</td>
-          </tr>
-          <tr>
-            <td class="label">办公位</td>
-            <td :colspan="3">{{ lease.workstationLabels.join('、') }}</td>
-          </tr>
-          <tr>
-            <td class="label">租期</td>
-            <td>{{ lease.startDate }} 至 {{ lease.longTerm ? '长期' : lease.endDate }}</td>
-            <td class="label">租赁周期</td>
-            <td>{{ rentPeriodLabel[lease.rentPeriod ?? 'month'] ?? lease.rentPeriod }}</td>
-          </tr>
-          <tr>
-            <td class="label">{{ ({ day: '日', week: '周', month: '月', year: '年' }[lease.rentPeriod ?? 'month']) }}租金</td>
-            <td>¥{{ lease.monthlyRent.toLocaleString('zh-CN') }}</td>
-            <td class="label">状态</td>
-            <td>{{ statusLabel[deriveLeaseStatus(lease)] ?? lease.status }}</td>
-          </tr>
-          <tr v-if="lease.terminatedAt">
-            <td class="label">终止日期</td>
-            <td :colspan="3">{{ lease.terminatedAt }}</td>
+          <tr v-for="(row, index) in printRows" :key="index">
+            <template v-if="row.length === 2">
+              <td class="label">{{ row[0].label }}</td>
+              <td>{{ row[0].value }}</td>
+              <td class="label">{{ row[1].label }}</td>
+              <td>{{ row[1].value }}</td>
+            </template>
+            <template v-else>
+              <td class="label">{{ row[0].label }}</td>
+              <td :colspan="3">{{ row[0].value }}</td>
+            </template>
           </tr>
         </table>
 
@@ -176,7 +231,7 @@ onBeforeUnmount(() => {
           </div>
         </div>
 
-        <p class="doc-foot">本单据由聚屿社区管理后台生成，仅供存档。</p>
+        <p class="doc-foot">本单据由{{ branding.siteName }}管理后台生成，仅供存档。</p>
       </template>
     </t-loading>
   </div>

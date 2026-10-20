@@ -7,6 +7,7 @@ import { SmsCodeService, type SmsPurpose } from '../../messaging/sms-code.servic
 import { EmailCodeService, type EmailPurpose } from '../../messaging/email-code.service'
 import { RegisterDto } from './dto/register.dto'
 import { AppLoginDto } from './dto/login.dto'
+import { LoginByCodeDto } from './dto/login-by-code.dto'
 import { ResetPasswordDto, SendResetCodeDto } from './dto/reset-password.dto'
 import { SendSmsCodeDto } from './dto/send-sms-code.dto'
 import { SendEmailCodeDto } from './dto/send-email-code.dto'
@@ -42,10 +43,12 @@ export class AuthController {
     return { available: await this.emailCodes.isAvailable() }
   }
 
-  /** 发送短信验证码（P0）：手机号/ IP / 设备三维频控；安全类消息强制送达 */
+  /** 发送短信验证码（P0）：手机号/ IP / 设备三维频控；安全类消息强制送达。
+   * 维护期例外：验证码登录链路须可发码（注册本身仍受许可证限制）。 */
   @Public()
   @HttpCode(200)
   @Post('sms/send')
+  @LicenseMaintenance()
   sendSmsCode(
     @Req() req: AppAuthenticatedRequest,
     @Body() dto: SendSmsCodeDto,
@@ -56,10 +59,12 @@ export class AuthController {
     })
   }
 
-  /** 发送邮箱验证码：邮箱/ IP / 设备三维频控；安全类消息强制送达 */
+  /** 发送邮箱验证码：邮箱/ IP / 设备三维频控；安全类消息强制送达。
+   * 维护期例外：验证码登录链路须可发码（注册本身仍受许可证限制）。 */
   @Public()
   @HttpCode(200)
   @Post('email/send')
+  @LicenseMaintenance()
   sendEmailCode(
     @Req() req: AppAuthenticatedRequest,
     @Body() dto: SendEmailCodeDto,
@@ -105,6 +110,16 @@ export class AuthController {
   @LicenseMaintenance()
   login(@Req() req: AppAuthenticatedRequest, @Body() dto: AppLoginDto): Promise<AppLoginResult> {
     return this.auth.login(dto, req.ip ?? req.socket.remoteAddress ?? '')
+  }
+
+  /** 验证码登录或注册（统一入口第二屏）：手机号/邮箱验证码通过后由服务端判定登录或建号。
+   * 维护期例外：客户端登录属例外能力；建号分支在维护期由服务层单独拒绝（注册仍受限）。 */
+  @Public()
+  @HttpCode(200)
+  @Post('login-by-code')
+  @LicenseMaintenance()
+  loginByCode(@Body() dto: LoginByCodeDto): Promise<AppLoginResult & { isNewUser: boolean }> {
+    return this.auth.loginByCode(dto)
   }
 
   @HttpCode(200)

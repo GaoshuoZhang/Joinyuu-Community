@@ -5,13 +5,28 @@
 
 ## [Unreleased]
 
+### 新增
+
+- **租约打印版式（全局单例）**：新增 `LeasePrintLayout` 表与 `GET/PUT /api/admin/leases/print-layout` 两个接口（权限沿用 `/workstations/leases`，写入带审计）。可配置打印单标题（纯文本）、「租赁信息」各栏目的显示/隐藏（键集 `LEASE_PRINT_FIELD_KEYS`，与 `apps/admin/src/constants/leasePrintLayout.ts` 一一对应、有单测锁定）、以及「条款说明」纯文本（按换行分段，留空回落内置三条）。`GET /api/admin/leases/:id/print` 的响应相应改为由服务端合并版式后下发（新增 `fields`，`title`/`clauses` 取自配置），打印视图无需二次请求。迁移未应用时 `print-layout` 读取按 `P2021` 降级为默认版式，不影响打印。
+- **客户端「登录 / 注册」统一入口（验证码登录与注册合一）**：新增 `POST /api/app/auth/login-by-code`，body `{channel: phone|email, account, code, agreed}`。手机号/邮箱验证码（purpose `login`）校验通过后**由服务端判定「登录」还是「建号」**，客户端无需先知账号是否存在；未注册标识直接建号，账号为「**未设置密码**」状态（`User.passwordHash` 为空，**不生成任何隐藏随机密码**），该渠道同时写为已验证可信渠道；响应额外带 `isNewUser`。并发建号唯一冲突**回落为登录**（不 500）。协议勾选对所有情况统一要求（`agreed=true`），且服务端**不先查账号是否存在**再决定校验，避免「该手机号/邮箱是否已注册」的账号枚举。
+- 邮箱验证码新增 `login` 用途（`EmailPurpose`/`EMAIL_PURPOSES`；短信侧 `login` 用途同步启用）。`login` 与两个发码端点在许可证维护期属显式例外，见变更节。
+- `GET /api/app/me` 新增 `hasPassword`（`false` = 未设置密码），客户端据此把账号安全入口显示为「设置登录密码」并隐藏原密码字段。
+- app 注册新增 `channel='username'`（**用户名 + 密码兜底注册**）：仅在短信与邮箱通道都不可用时使用，无验证码、不产生可信通知渠道（因此无法自助找回密码）；`username` 必填，格式/保留词/唯一性由服务端判定。`code` 相应改为可选（非 `username` 渠道仍显式要求验证码）。
+- `GET /api/app/config` 新增 `siteLogo`：客户端据此设置**浏览器标签页图标**（`SiteConfigDto` 与共享回源结构 `toFullSystemConfig` 同步补齐，保持与 admin 的 `toSystemConfigDto` 逐字段对齐）。
+
 ### 变更
 
+- **登录标识解析统一口径**：抽出 `modules/app/auth/identifier.util.ts` 的 `parseIdentifier`（手机号先去空格/连字符与 `+86` 前缀再按 11 位判定、邮箱小写、用户名小写），`AuthService.findByIdentifier` 改用它；客户端 `apps/client-mobile/src/utils/validators.ts` 镜像同一规则（两处注释互相指向、各有单测）。副作用：`+8613801210001`、`138 0121 0001` 这类写法现在按手机号处理（一并放宽了 `recovery-channels` / `reset-code/send` / `reset-password` 三条链路）。
+- **登录收尾逻辑抽为 `AuthService.finalizeLogin`**（状态守卫/`lastActiveAt`/身份快照/签发 token/`daily_login` 积分），密码登录与验证码登录共用——避免冻结账号经验证码登录绕过状态守卫，也让积分与活跃时间口径不漂移。
+- `POST /api/app/me/change-password` 的 `oldPassword` 改为可选：`passwordHash` 为空的账号（「未设置密码」）首次设置**免原密码、免验证码**；已有密码的账号仍必须校验原密码（缺失给 400 而不再是 500）。成功后仍强制全端登出，站内信与文案区分「密码已设置 / 已修改」。
+- **`GET /api/admin/branding` 由「仅需登录」改为公开读取**（`@Public`，仍不挂权限码）：未登录的登录页与浏览器标签页也要显示正确的站点名称/标语/logo（与客户端 `/api/app/config` 同口径，出参仅三个非敏感字段，logo 走本就公开的 `/api/public/files/*`）。
+- **`SystemConfig.siteLogo` 的客户端语义变更**（原注释为「客户端不读取」）：现随 `/api/app/config` 下发给客户端作**浏览器标签页图标**；客户主题包 logo 仍用于客户端页面内品牌位。仅注释变更，无迁移。
 - 仓库根 `package.json` 新增 `start` 脚本（`pnpm --filter @joinyuu/api start`）：1Panel「运行环境 → 启动命令」下拉可直接选 `start`，执行时 pnpm 自动把工作目录切到 `apps/api`，`.env` 可正常读取，无需在面板里额外配置环境变量。
 - 新增 `start:api`（= `pnpm build:api && pnpm --filter @joinyuu/api db:migrate && pnpm --filter @joinyuu/api start`）：供 1Panel 运行环境容器使用，容器内**先构建、再自动应用数据库迁移、最后启动**，宿主机无需安装 Node、也不用手工上传 `apps/api/dist` 或手动跑迁移；`start` 保持「只启动不构建」语义（systemd / 已构建产物的场景继续用它）。首次部署的空库仍需手动执行一次 `db:init`（写入基础配置并打印超管初始密码）。
 
 ### 修复
 
+- **维护期发码被 403 导致验证码登录名存实亡**：`POST /api/app/auth/sms/send`、`POST /api/app/auth/email/send` 补 `@LicenseMaintenance()` 例外（此前文档把「客户端登录登出」列为维护例外，但发码端点没有例外，链路实际整条不可用）；新端点 `login-by-code` 亦为例外，但**未注册标识在维护期不建号**（服务层按 `LicenseService.canWrite()` 拒绝），以维持「注册受限」。[docs/license-management.md](../../docs/license-management.md) 例外清单同步更新。
 - **短信参数集改为「只传模板正文实际引用的变量」**：此前验证码通知固定携带 `code` + `minutes` 两个变量，腾讯/阿里模板按**位置**传参、变量个数由已审批模板决定，多传即报 `FailedOperation.TemplateParamSetNotMatchApprovedTemplate`（腾讯云）等「参数与模板不匹配」错误。现在发送端与渠道「测试发送」都会按模板正文（其次主题）里 `{{变量}}` 的出现顺序取子集（新增 `MessageRenderService.pickUsed`），正文写几个变量就发几个参数；参数顺序缺省沿用正文出现顺序，需要时仍可用渠道「模板参数顺序」覆盖（`templateParamOrder` 的缺省由「按变量名排序」改为「保持传入顺序」）。⚠️ 模板正文必须用双花括号 `{{code}}`。
 - **腾讯云短信失败重试口径修正**（对齐腾讯云 SendSms 官方错误码表）：改为按错误码命名空间前缀判定——`LimitExceeded.*`（限流）、`InternalError.*`（系统侧）、`FailedOperation.SendAndRecvFail` 可重试；参数 / 权限 / 模板 / 号码类（`InvalidParameterValue.*`、`UnauthorizedOperation.*`、`UnsupportedOperation.*`、`FailedOperation.*`）不可重试。此前 SDK 层异常一律标记为可重试、单号失败又因等值比较（旧写法比较不带命名空间的 `LimitExceeded`）永远判为不可重试，两个方向都不对；无法识别错误码（多为网络/超时）仍按可重试处理。
 - **短信失败文案带上腾讯云错误码与 RequestId**：便于运维凭 RequestId 向腾讯云提工单（官方文档要求提供）；新增 `sms.providers.spec.ts` 覆盖错误码提取、重试判定与 RequestId 拼接。

@@ -77,6 +77,8 @@ describe('M2-R R1 app 鉴权', () => {
     expect(config.status).toBe(200)
     expect(config.body.code).toBe(0)
     expect(config.body.data.siteName).toBeTruthy()
+    /* 客户端标签页图标取该字段（客户主题 logo 只用于页面内品牌位） */
+    expect(config.body.data).toHaveProperty('siteLogo')
     expect(config.body.data.updatedAt).toBeUndefined() // 不含管理字段
 
     const dicts = await request(app.getHttpServer()).get('/api/app/dicts')
@@ -87,6 +89,15 @@ describe('M2-R R1 app 鉴权', () => {
     })
     const one = await request(app.getHttpServer()).get('/api/app/dicts/demand_category')
     expect(Array.isArray(one.body.data.items)).toBe(true)
+  })
+
+  it('后台壳品牌公开读取：未登录也能拿到站点名称/标语/logo', async () => {
+    const res = await request(app.getHttpServer()).get('/api/admin/branding')
+    expect(res.status).toBe(200)
+    expect(res.body.code).toBe(0)
+    expect(typeof res.body.data.siteName).toBe('string')
+    expect(typeof res.body.data.siteSlogan).toBe('string')
+    expect(typeof res.body.data.siteLogo).toBe('string')
   })
 
   it('注册渠道可用性下发：邮件渠道可用、短信渠道可用', async () => {
@@ -243,6 +254,203 @@ describe('M2-R R1 app 鉴权', () => {
     })
     expect(invalid.status).toBe(400)
     expect(invalid.body.message).toContain('验证码')
+  })
+
+  it('统一入口：注册渠道 channel=username 兜底注册（仅双通道不可用时开放）', async () => {
+    /* 通道可用时该渠道关闭：无验证码的注册路径不能常开（否则可零成本批量建号） */
+    const denied = await request(app.getHttpServer())
+      .post('/api/app/auth/register')
+      .send({ channel: 'username', username: 'fallback_user', password: 'user12345', agreed: true })
+    expect(denied.status).toBe(400)
+    expect(denied.body.message).toContain('均不可用')
+
+    /* 停用短信与邮箱渠道，模拟「双通道不可用」 */
+    const channels = await prisma.messageChannel.findMany({
+      where: { kind: { in: ['sms', 'email'] } },
+      select: { id: true, enabled: true },
+    })
+    expect(channels.length).toBeGreaterThan(0)
+    await prisma.messageChannel.updateMany({ where: { kind: { in: ['sms', 'email'] } }, data: { enabled: false } })
+
+    try {
+      const reg = await request(app.getHttpServer())
+        .post('/api/app/auth/register')
+        .send({ channel: 'username', username: 'fallback_user', password: 'user12345', agreed: true })
+      expect(reg.status).toBe(200)
+      const uid = reg.body.data.uid as string
+      expect(reg.body.data.username).toBe('fallback_user')
+      expect(String(reg.body.data.name)).toMatch(/^岛民\d{6}$/)
+
+      const row = await prisma.user.findUniqueOrThrow({ where: { uid } })
+      expect(row.phone).toBeNull()
+      expect(row.email).toBeNull()
+      /* 无验证码渠道 → 不产生可信通知渠道（后果：无法自助找回密码） */
+      expect(row.phoneVerifiedAt).toBeNull()
+      expect(row.emailVerifiedAt).toBeNull()
+      expect(row.passwordHash).toBeTruthy()
+
+      const consents = await prisma.agreementConsent.findMany({ where: { userId: uid } })
+      expect(consents.map((item) => item.agreementType).sort()).toEqual(['privacy_policy', 'user_agreement'])
+
+      const login = await appLoginRequest(app, 'fallback_user', 'user12345')
+      expect(login.status).toBe(200)
+      expect(login.body.data.uid).toBe(uid)
+
+      /* 保留名 400；同名冲突 409（用户名占用走 assertUsernameAvailable） */
+      const reserved = await request(app.getHttpServer())
+        .post('/api/app/auth/register')
+        .send({ channel: 'username', username: 'admin', password: 'user12345', agreed: true })
+      expect(reserved.status).toBe(400)
+      const dup = await request(app.getHttpServer())
+        .post('/api/app/auth/register')
+        .send({ channel: 'username', username: 'fallback_user', password: 'user12345', agreed: true })
+      expect(dup.status).toBe(409)
+    } finally {
+      for (const channel of channels) {
+        await prisma.messageChannel.update({ where: { id: channel.id }, data: { enabled: channel.enabled } })
+      }
+    }
+  })
+
+  it('验证码登录：邮箱渠道可登录已注册账号（不建号）', async () => {
+    const code = await sendEmailCode(app, 'chenyu@starlan.ai', 'login')
+    const res = await request(app.getHttpServer())
+      .post('/api/app/auth/login-by-code')
+      .send({ channel: 'email', account: 'chenyu@starlan.ai', code, agreed: true })
+    expect(res.status).toBe(200)
+    expect(res.body.data.uid).toBe('U1001')
+    expect(res.body.data.isNewUser).toBe(false)
+  })
+
+  it('验证码登录：邮箱渠道为未注册邮箱建号（未设置密码、邮箱即可信渠道）', async () => {
+    const email = 'emaillogin2026@example.com'
+    const code = await sendEmailCode(app, email, 'login')
+    const res = await request(app.getHttpServer())
+      .post('/api/app/auth/login-by-code')
+      .send({ channel: 'email', account: email, code, agreed: true })
+    expect(res.status).toBe(200)
+    expect(res.body.data.isNewUser).toBe(true)
+
+    const row = await prisma.user.findUniqueOrThrow({ where: { uid: res.body.data.uid as string } })
+    expect(row.email).toBe(email)
+    expect(row.emailVerifiedAt).toBeTruthy()
+    expect(row.passwordHash).toBeNull()
+  })
+
+  it('验证码登录：已注册手机号直接登录（不建号）', async () => {
+    const code = await sendSmsCode(app, '13801210001', 'login')
+    const res = await request(app.getHttpServer())
+      .post('/api/app/auth/login-by-code')
+      .send({ channel: 'phone', account: '13801210001', code, agreed: true })
+    expect(res.status).toBe(200)
+    expect(res.body.data.uid).toBe('U1001')
+    expect(res.body.data.isNewUser).toBe(false)
+    expect(typeof res.body.data.token).toBe('string')
+  })
+
+  it('验证码登录：未注册手机号自动建号（未设置密码）并写入协议留痕', async () => {
+    /* 号码与「登录失败锁定」用例保留的 13900007777 错开：那边要求号码未注册且失败计数从 0 起算，
+     * 本用例会建号并制造一次失败（未设置密码账号的密码登录必然 401），共用号码会互相污染 */
+    const phone = '13900008881'
+    const code = await sendSmsCode(app, phone, 'login')
+    const res = await request(app.getHttpServer())
+      .post('/api/app/auth/login-by-code')
+      .send({ channel: 'phone', account: phone, code, agreed: true })
+    expect(res.status).toBe(200)
+    expect(res.body.data.isNewUser).toBe(true)
+    const uid = res.body.data.uid as string
+
+    const row = await prisma.user.findUniqueOrThrow({ where: { uid } })
+    expect(row.phone).toBe(phone)
+    expect(row.phoneVerifiedAt).toBeTruthy()
+    /* 「未设置密码」：不生成任何隐藏随机密码，由用户在账号安全中设置 */
+    expect(row.passwordHash).toBeNull()
+
+    const consents = await prisma.agreementConsent.findMany({ where: { userId: uid } })
+    expect(consents.map((item) => item.agreementType).sort()).toEqual(['privacy_policy', 'user_agreement'])
+
+    /* 未设置密码账号：密码登录一律同一句「账号或密码错误」；/me 下发 hasPassword=false */
+    const pwdLogin = await appLoginRequest(app, phone, 'whatever123')
+    expect(pwdLogin.status).toBe(401)
+    expect(pwdLogin.body.message).toBe('账号或密码错误')
+
+    const me = await request(app.getHttpServer())
+      .get('/api/app/me')
+      .set('Authorization', `Bearer ${res.body.data.token as string}`)
+    expect(me.status).toBe(200)
+    expect(me.body.data.hasPassword).toBe(false)
+  })
+
+  it('验证码登录：始终要求勾选协议（服务端不先查账号是否存在）', async () => {
+    const code = await sendSmsCode(app, '13801210002', 'login')
+    const res = await request(app.getHttpServer())
+      .post('/api/app/auth/login-by-code')
+      .send({ channel: 'phone', account: '13801210002', code, agreed: false })
+    expect(res.status).toBe(400)
+    expect(res.body.message).toContain('请先阅读并同意')
+  })
+
+  it('验证码登录：验证码错误 400 且不消费，验证通过后一次性（重放 400）', async () => {
+    const phone = '13801210003'
+    const code = await sendSmsCode(app, phone, 'login')
+    const wrong = await request(app.getHttpServer())
+      .post('/api/app/auth/login-by-code')
+      .send({ channel: 'phone', account: phone, code: '000000', agreed: true })
+    expect(wrong.status).toBe(400)
+    expect(wrong.body.message).toContain('验证码')
+
+    const ok = await request(app.getHttpServer())
+      .post('/api/app/auth/login-by-code')
+      .send({ channel: 'phone', account: phone, code, agreed: true })
+    expect(ok.status).toBe(200)
+    const replay = await request(app.getHttpServer())
+      .post('/api/app/auth/login-by-code')
+      .send({ channel: 'phone', account: phone, code, agreed: true })
+    expect(replay.status).toBe(400)
+
+    /* 标识形态必须与渠道一致，否则 400（避免把用户名当成邮箱去校验） */
+    const mismatch = await request(app.getHttpServer())
+      .post('/api/app/auth/login-by-code')
+      .send({ channel: 'email', account: 'user_u1001', code: '123456', agreed: true })
+    expect(mismatch.status).toBe(400)
+    expect(mismatch.body.message).toContain('不匹配')
+  })
+
+  it('验证码登录：冻结账号被拒 401（与密码登录共用收尾守卫）', async () => {
+    const code = await sendSmsCode(app, '13801210014', 'login')
+    const res = await request(app.getHttpServer())
+      .post('/api/app/auth/login-by-code')
+      .send({ channel: 'phone', account: '13801210014', code, agreed: true })
+    expect(res.status).toBe(401)
+  })
+
+  it('注册关闭：用户名注册 400；验证码登录未注册标识不建号，已注册仍可登录', async () => {
+    await prisma.systemConfig.update({ where: { id: 1 }, data: { registrationOpen: false } })
+    try {
+      const reg = await request(app.getHttpServer())
+        .post('/api/app/auth/register')
+        .send({ channel: 'username', username: 'closed_reg', password: 'user12345', agreed: true })
+      expect(reg.status).toBe(400)
+      expect(reg.body.message).toContain('注册暂未开放')
+
+      const newPhone = '13900006666'
+      const createCode = await sendSmsCode(app, newPhone, 'login')
+      const create = await request(app.getHttpServer())
+        .post('/api/app/auth/login-by-code')
+        .send({ channel: 'phone', account: newPhone, code: createCode, agreed: true })
+      expect(create.status).toBe(400)
+      expect(create.body.message).toContain('注册暂未开放')
+
+      /* 老用户不受注册开关影响：仍可用验证码登录（图形验证码入口不因此关闭） */
+      const loginCode = await sendSmsCode(app, '13801210005', 'login')
+      const login = await request(app.getHttpServer())
+        .post('/api/app/auth/login-by-code')
+        .send({ channel: 'phone', account: '13801210005', code: loginCode, agreed: true })
+      expect(login.status).toBe(200)
+      expect(login.body.data.isNewUser).toBe(false)
+    } finally {
+      await prisma.systemConfig.update({ where: { id: 1 }, data: { registrationOpen: true } })
+    }
   })
 
   it('找回密码前置：返回账号已验证的可信渠道（脱敏）', async () => {

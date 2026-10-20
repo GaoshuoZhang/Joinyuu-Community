@@ -344,9 +344,9 @@ onBeforeRouteLeave(async () => {
             <t-form-item label="站点标语" name="siteSlogan">
               <t-input v-accessible-field v-model="form.siteSlogan" clearable placeholder="客户端登录页展示…" />
             </t-form-item>
-            <!-- 站点 logo：后台左上角图标 + 浏览器标签页图标（客户端不读取，客户端仍跟随移动端主题） -->
-            <t-form-item label="站点 logo" name="siteLogo" help="用于后台左上角图标与浏览器标签页图标；建议方形图，未上传时使用内置默认字标。客户端不受影响（跟随定制主题）。">
-              <ImageUploadField v-model="form.siteLogo" biz-type="site-logo" tip="支持 PNG/JPG/WebP，上传后立即作为后台图标与标签页图标" />
+            <!-- 站点 logo：后台左上角图标 + 浏览器标签页图标（后台与客户端共用同一图标） -->
+            <t-form-item label="站点 logo" name="siteLogo" help="后台左上角图标 + 浏览器标签页图标（后台与客户端共用同一图标）；建议方形图，未上传或清空时回退内置默认字标。客户端页面内的品牌位仍跟随定制主题。">
+              <ImageUploadField v-model="form.siteLogo" biz-type="site-logo" tip="支持 PNG/JPG/WebP，上传后立即作为后台与客户端的标签页图标" />
             </t-form-item>
           </div>
 

@@ -1,9 +1,10 @@
 <script setup lang="ts">
-import { computed, reactive, ref, watch } from 'vue'
+import { computed, onMounted, reactive, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { MessagePlugin } from 'tdesign-vue-next'
 import { CheckCircleIcon } from 'tdesign-icons-vue-next'
 import { useAuthStore } from '@/stores/auth'
+import { useBrandingStore } from '@/stores/branding'
 import { firstAccessiblePath } from '@/router'
 import { fetchCaptcha, HttpError, type CaptchaResult } from '@/api/auth'
 import type { FormProps } from 'tdesign-vue-next'
@@ -11,6 +12,12 @@ import { APP_VERSION } from '@/version'
 
 const router = useRouter()
 const auth = useAuthStore()
+const branding = useBrandingStore()
+
+/* 登录页品牌区取自「系统配置 → 站点信息」（站点名称/标语/logo）。
+ * 品牌接口为公开读取，故未登录也能拿到真实站点品牌；失败时保留上次缓存/内置默认。 */
+onMounted(() => { void branding.load() })
+const SLOGAN_FALLBACK = '让每一座创业孤岛，在这里连成群岛。'
 
 const form = reactive({
   username: '',
@@ -97,16 +104,17 @@ const highlights = ['企业与需求双向连接', '活动运营与签到管理'
 
       <div class="brand-content">
         <div class="brand-logo">
-          <svg viewBox="0 0 32 32" width="40" height="40" aria-hidden="true">
+          <img v-if="branding.siteLogo" class="brand-logo-img" :src="branding.siteLogo" alt="" />
+          <svg v-else viewBox="0 0 32 32" width="40" height="40" aria-hidden="true">
             <rect width="32" height="32" rx="7" fill="#FFFFFF" fill-opacity="0.16" />
             <circle cx="12.5" cy="14" r="5" fill="#7BD8F5" />
             <circle cx="20.5" cy="10.5" r="3.2" fill="#FFFFFF" />
             <path d="M5 23c2.5-2.4 5-2.4 7.5 0s5 2.4 7.5 0 5-2.4 7.5 0" stroke="#FFFFFF" stroke-width="2" fill="none" stroke-linecap="round" />
           </svg>
         </div>
-        <h1 class="brand-title">聚屿社区</h1>
-        <p class="brand-sub">Joinyuu Community · 数字化运营平台</p>
-        <p class="brand-slogan">让每一座创业孤岛，在这里连成群岛。</p>
+        <h1 class="brand-title">{{ branding.siteName }}</h1>
+        <p class="brand-sub">{{ branding.siteName }} · 数字化运营平台</p>
+        <p class="brand-slogan">{{ branding.siteSlogan || SLOGAN_FALLBACK }}</p>
 
         <ul class="brand-highlights">
           <li v-for="item in highlights" :key="item">
@@ -123,7 +131,7 @@ const highlights = ['企业与需求双向连接', '活动运营与签到管理'
     <section class="login-form-side">
       <div class="login-form-card">
         <h2 class="form-title">欢迎回来</h2>
-        <p class="form-desc">登录聚屿社区管理后台</p>
+        <p class="form-desc">登录{{ branding.siteName }}管理后台</p>
 
         <t-form :data="form" :rules="rules" label-width="0" @submit="onSubmit">
           <t-form-item name="username">
@@ -204,6 +212,16 @@ const highlights = ['企业与需求双向连接', '活动运营与签到管理'
 
 .brand-logo {
   margin-bottom: 24px;
+}
+
+/* 站点 logo（「系统配置 → 站点信息」）：与内置 SVG 字标同尺寸、同圆角口径 */
+.brand-logo-img {
+  display: block;
+  width: 40px;
+  height: 40px;
+  border-radius: 8px;
+  object-fit: contain;
+  background: rgba(255, 255, 255, 0.16);
 }
 
 .brand-title {

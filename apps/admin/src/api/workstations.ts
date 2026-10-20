@@ -111,9 +111,28 @@ export async function fetchLeases(): Promise<Lease[]> {
   return httpGet<Lease[]>('/workstation-leases')
 }
 
-/** GET /api/admin/leases/:id/print — 租约打印单数据（标题/生成时间/租约 + 条款） */
-export async function fetchLeasePrint(id: string): Promise<{ title: string; generatedAt: string; lease: Lease; clauses: string[] }> {
-  return httpGet<{ title: string; generatedAt: string; lease: Lease; clauses: string[] }>(`/leases/${id}/print`)
+/** 租约打印版式（全局单例）：标题 + 「租赁信息」栏目可见性 + 「条款说明」纯文本 */
+export interface LeasePrintLayout {
+  title: string
+  /** 栏目可见性：键集见 constants/leasePrintLayout.ts 的 LEASE_PRINT_FIELDS */
+  fields: Record<string, boolean>
+  /** 自定义条款说明（空串 = 打印单回落内置三条条款） */
+  clausesText: string
+}
+
+/* GET /api/admin/leases/print-layout — 租约打印版式（无配置时服务端返回默认值） */
+export async function fetchLeasePrintLayout(): Promise<LeasePrintLayout> {
+  return httpGet<LeasePrintLayout>('/leases/print-layout')
+}
+
+/* PUT /api/admin/leases/print-layout — 更新打印版式（未传的字段保持原值） */
+export async function updateLeasePrintLayout(payload: Partial<LeasePrintLayout>): Promise<LeasePrintLayout> {
+  return httpPut<LeasePrintLayout>('/leases/print-layout', payload)
+}
+
+/** GET /api/admin/leases/:id/print — 租约打印单数据（标题 + 生成时间 + 租约 + 栏目可见性 + 条款） */
+export async function fetchLeasePrint(id: string): Promise<{ title: string; generatedAt: string; lease: Lease; fields: Record<string, boolean>; clauses: string[] }> {
+  return httpGet<{ title: string; generatedAt: string; lease: Lease; fields: Record<string, boolean>; clauses: string[] }>(`/leases/${id}/print`)
 }
 
 /* GET /api/admin/workstation-leases/:id — 租约详情（错误外抛，由页面区分 404 与其它失败） */

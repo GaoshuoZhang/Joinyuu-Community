@@ -3,6 +3,7 @@ import { computed, defineAsyncComponent, nextTick, reactive, ref, watch } from '
 import { MessagePlugin } from 'tdesign-vue-next'
 import type { FormProps } from 'tdesign-vue-next'
 import { focusFirstInvalid, useDialogDirtyGuard, usePageDirtyGuard } from '@/utils/form'
+import { useBrandingStore } from '@/stores/branding'
 import { createEvent, updateEvent, type EventPayload } from '@/api/events'
 import { fetchPointsRules } from '@/api/mall'
 import { fetchSpaces } from '@/api/spaces'
@@ -26,6 +27,9 @@ const emit = defineEmits<{
   (e: 'update:visible', v: boolean): void
   (e: 'success'): void
 }>()
+
+/* 站点品牌：新建活动时「主办方」默认填站点名称（取自「系统配置 → 站点信息」） */
+const branding = useBrandingStore()
 
 /* 活动类型选项来自数据字典，加载失败回退默认词表 */
 const typeOptions = ref(dictFallback.event_type.map((t) => ({ label: t, value: t })))
@@ -174,7 +178,7 @@ watch(
       form.location = ''
       form.capacity = 30
       form.speaker = ''
-      form.host = '聚屿社区'
+      form.host = branding.siteName
       form.description = ''
       form.enrollmentDeadline = ''
       form.visibilityIdentities = []

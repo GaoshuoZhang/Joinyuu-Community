@@ -1128,7 +1128,8 @@ model SystemConfig {
   id                    Int     @id @default(1)
   siteName              String  @db.VarChar(64)
   siteSlogan            String  @db.VarChar(128)
-  /** 站点 logo（素材 URL）：后台左上角图标与浏览器标签页图标；空 = 使用内置默认字标。客户端不读取（跟随主题） */
+  /** 站点 logo（素材 URL）：后台左上角图标与浏览器标签页图标；空 = 使用内置默认字标。
+   * 客户端亦随 /api/app/config 下发该字段，用作客户端标签页图标（页面内品牌位仍跟随定制主题）。 */
   siteLogo              String  @default("") @db.VarChar(512)
   mobileUrl             String  @default("localhost:7759") @db.VarChar(2048)
   registrationOpen      Boolean @default(true)
@@ -1215,6 +1216,18 @@ model ArchiveSetting {
   autoPurge        Boolean @default(false)
   purgeDelayDays   Int     @default(30)
   archiveStatuses  Json?
+}
+
+// 租约打印版式（全局单例）：打印单标题 + 「租赁信息」栏目可见性 + 「条款说明」纯文本
+// fields 为空/缺键视为「显示」（键集见 workstations.service.ts 的 LEASE_PRINT_FIELD_KEYS）；
+// clausesText 为空表示回落内置三条条款。
+model LeasePrintLayout {
+  id          String   @id @default("default") @db.VarChar(16)
+  title       String   @default("聚屿社区 · 办公位租约确认单") @db.VarChar(64)
+  fields      Json?
+  clausesText String?
+  updatedAt   DateTime @updatedAt
+  updatedBy   String   @default("") @db.VarChar(32)
 }
 
 // ---------- M2-R R1 批：移动端基础设施（2026-09-16，/ api/app/**） ----------

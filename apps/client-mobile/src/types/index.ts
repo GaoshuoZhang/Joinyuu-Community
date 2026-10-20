@@ -19,6 +19,8 @@ export interface PageQuery {
 export interface AppConfig {
   siteName: string
   siteSlogan: string
+  /** 站点 logo（素材 URL）：客户端浏览器标签页图标；空 = 内置默认字标（客户主题 logo 只用于页面内品牌位） */
+  siteLogo?: string
   mobileUrl?: string
   registrationOpen: boolean
   mallOpen: boolean
@@ -72,6 +74,8 @@ export interface UserProfile {
   phoneVerified?: boolean
   /** 邮箱是否为已验证可信渠道 */
   emailVerified?: boolean
+  /** 是否已设置登录密码：false=「未设置密码」（如验证码登录时自动建号），账号安全页按「设置密码」口径呈现 */
+  hasPassword?: boolean
   realName?: string
   /** 是否已完成实名认证 */
   realNameVerified?: boolean
@@ -404,12 +408,14 @@ export interface LoginPayload {
 }
 
 export interface RegisterPayload {
-  /** 注册渠道：email（默认）| phone */
-  channel: 'email' | 'phone'
+  /** 注册渠道：email（默认）| phone | username（短信与邮箱通道都不可用时的兜底） */
+  channel: 'email' | 'phone' | 'username'
   email?: string
   phone?: string
-  /** 6 位验证码（邮箱注册为邮箱验证码，手机号注册为短信验证码） */
-  code: string
+  /** username 渠道必填：用户名（格式/保留词/唯一性由服务端判定） */
+  username?: string
+  /** 6 位验证码（邮箱注册为邮箱验证码，手机号注册为短信验证码；username 渠道不需要） */
+  code?: string
   password: string
   /** 仅客户端本地校验一致性，不随请求下发 */
   confirmPassword?: string
@@ -418,11 +424,23 @@ export interface RegisterPayload {
   gender?: string
 }
 
+/** 验证码登录或注册（POST /api/app/auth/login-by-code）：服务端在验证码通过后判定登录或建号 */
+export interface LoginByCodePayload {
+  /** 验证渠道：phone（短信）| email（邮箱） */
+  channel: 'phone' | 'email'
+  /** 账号标识：channel=phone 时为手机号，channel=email 时为邮箱 */
+  account: string
+  /** 6 位验证码 */
+  code: string
+  /** 须勾选同意用户协议与隐私政策（无法区分登录/建号，服务端统一要求） */
+  agreed: boolean
+}
+
 /** 短信验证码用途 */
 export type SmsPurpose = 'register' | 'reset_password' | 'change_phone' | 'login'
 
 /** 邮箱验证码用途 */
-export type EmailPurpose = 'register' | 'reset_password' | 'change_email'
+export type EmailPurpose = 'register' | 'reset_password' | 'change_email' | 'login'
 
 /** 发送验证码响应：devCode 仅开发/未接入通道时下发 */
 export interface SendCodeResult {

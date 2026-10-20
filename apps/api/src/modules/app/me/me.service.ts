@@ -68,6 +68,9 @@ export class MeService {
       /* 可信通知渠道标记：true=已验证（可用于找回密码/接收通知） */
       emailVerified: Boolean(user.email && user.emailVerifiedAt),
       phoneVerified: Boolean(user.phone && user.phoneVerifiedAt),
+      /* passwordHash 为空 = 「未设置密码」（如验证码登录时自动建号的账号）：
+       * 客户端据此把入口显示为「设置登录密码」并隐藏原密码字段（首次设置免原密码、免验证码） */
+      hasPassword: Boolean(user.passwordHash),
       bio: user.bio,
       points: user.points,
       pointsDiscount,
@@ -231,15 +234,21 @@ export class MeService {
     }
   }
 
-  /** 登录态修改密码：校验原密码 → 更新 → 强制退出全部会话（客户端需重新登录）。 */
+  /** 登录态设置/修改密码：已有密码时校验原密码 → 更新 → 强制退出全部会话（客户端需重新登录）。
+   * 「未设置密码」账号（passwordHash 为空，如验证码登录时自动建号）首次设置免原密码、免验证码。 */
   async changePassword(uid: string, dto: ChangePasswordDto): Promise<{ code: number }> {
     const user = await this.prisma.user.findUnique({ where: { uid } })
     if (!user) throw new UnauthorizedException('未登录或登录已过期')
-    if (!user.passwordHash || !(await compare(dto.oldPassword, user.passwordHash))) {
-      throw new BadRequestException('原密码不正确')
-    }
-    if (dto.oldPassword === dto.newPassword) {
-      throw new BadRequestException('新密码不能与原密码相同')
+    /* passwordHash 为空 = 未设置密码：首次设置，免原密码校验 */
+    const isFirstSetup = !user.passwordHash
+    if (!isFirstSetup) {
+      if (!dto.oldPassword) throw new BadRequestException('请输入原密码')
+      if (!(await compare(dto.oldPassword, user.passwordHash!))) {
+        throw new BadRequestException('原密码不正确')
+      }
+      if (dto.oldPassword === dto.newPassword) {
+        throw new BadRequestException('新密码不能与原密码相同')
+      }
     }
     await this.prisma.user.update({
       where: { uid },
@@ -249,8 +258,10 @@ export class MeService {
     await this.sessions.kickAll(uid)
     await this.notify.pushNotice(uid, {
       type: 'system',
-      title: '登录密码已修改',
-      content: '您的登录密码已修改成功，请使用新密码重新登录。',
+      title: isFirstSetup ? '登录密码已设置' : '登录密码已修改',
+      content: isFirstSetup
+        ? '您的登录密码已设置成功，请使用新密码重新登录。'
+        : '您的登录密码已修改成功，请使用新密码重新登录。',
     })
     return { code: 0 }
   }

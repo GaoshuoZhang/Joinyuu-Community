@@ -174,6 +174,15 @@ export default tseslint.config(
     rules: sharedRules,
   },
   {
+    name: 'joinyuu/shared-web',
+    files: ['packages/shared-web/src/**/*.ts'],
+    extends: [...tseslint.configs.recommended],
+    languageOptions: {
+      globals: browserGlobals,
+    },
+    rules: sharedRules,
+  },
+  {
     name: 'joinyuu/admin',
     files: ['apps/admin/src/**/*.{ts,vue}'],
     extends: [...tseslint.configs.recommended],

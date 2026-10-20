@@ -5,6 +5,7 @@ import { useRoute, useRouter } from 'vue-router'
 import ListErrorState from '@/components/ListErrorState.vue'
 import { fetchApplicationPrint } from '@/api/applications'
 import { isNotFound } from '@/api/http'
+import { useBrandingStore } from '@/stores/branding'
 import { applicationTypeMap, statusMap } from '@/constants/status'
 import type { Application } from '@/types'
 
@@ -13,6 +14,7 @@ const applicationStatusMap = statusMap.application as Record<string, { label: st
 /* 审核单打印页：独立于 AdminLayout 的裸页，window.print + 打印样式 */
 const route = useRoute()
 const router = useRouter()
+const branding = useBrandingStore()
 
 const application = ref<Application | null>(null)
 const loading = ref(true)
@@ -103,7 +105,7 @@ onBeforeUnmount(() => {
 
       <template v-else-if="application">
         <div class="doc-head">
-          <h1 class="doc-title">聚屿社区 · 申请审核单</h1>
+          <h1 class="doc-title">{{ branding.siteName }} · 申请审核单</h1>
           <p class="doc-no">申请编号：{{ application.id }}</p>
         </div>
 
@@ -166,7 +168,7 @@ onBeforeUnmount(() => {
           </tbody>
         </table>
 
-        <p class="doc-foot">本单据由聚屿社区管理后台生成，仅供存档。</p>
+        <p class="doc-foot">本单据由{{ branding.siteName }}管理后台生成，仅供存档。</p>
       </template>
     </t-loading>
   </div>

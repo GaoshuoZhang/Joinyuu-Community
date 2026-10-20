@@ -17,17 +17,18 @@
 
 | 项 | 设计 |
 |---|---|
-| 注册 | `POST /api/app/auth/register`；body `{channel: email\|phone, email?, phone?, code, password, agreed, gender?}`。默认邮箱注册；后台已配置可用短信渠道时可选手机号注册；**无论何种渠道都必须验证码验证**（邮箱渠道用邮箱验证码，手机渠道用短信验证码）；验证通过的邮箱/手机号即成为该用户「可信通知渠道」。注册不填昵称与用户名：服务端自动分配（用户名 `user_` + 随机码全站唯一；昵称 `岛民` + 随机数字全站唯一）。邮箱/手机号库内唯一且可空；受 `registrationOpen` 控制；默认授予 `individual`；同时记录用户协议与隐私政策版本 |
+| 注册 | `POST /api/app/auth/register`；body `{channel: email\|phone\|username, email?, phone?, username?, code?, password, agreed, gender?}`。默认邮箱注册；后台已配置可用短信渠道时可选手机号注册；**email/phone 渠道无论何时都必须验证码验证**（邮箱渠道用邮箱验证码，手机渠道用短信验证码），验证通过的邮箱/手机号即成为该用户「可信通知渠道」。`channel=username` 是**兜底**路径（短信与邮箱通道都不可用时）：用户名 + 密码注册，无验证码、无可信通知渠道（因此无法自助找回密码），`username` 必填且格式/保留词/唯一性由服务端判定。注册不填昵称，服务端自动分配（`岛民` + 随机数字全站唯一）；`email/phone` 渠道的用户名亦由服务端自动分配（`user_` + 随机码全站唯一），`username` 渠道由用户指定。邮箱/手机号库内唯一且可空；受 `registrationOpen` 控制；默认授予 `individual`；同时记录用户协议与隐私政策版本 |
 | 登录 | `POST /api/app/auth/login`；body `{identifier, password, captchaId, captchaCode}`，`identifier` 支持**手机号 / 邮箱 / 用户名**；签发多身份 JWT：`{ sub: uid, scope: 'app', identities: [...], jti }` |
+| 验证码登录或注册 | `POST /api/app/auth/login-by-code`；body `{channel: phone\|email, account, code, agreed}`，`account` 的形态必须与 `channel` 一致（否则 400）。`agreed` **必填**：服务端**不先查账号是否存在**再决定是否校验协议（否则构成账号枚举），无法区分「登录」与「建号」，故对所有情况统一要求勾选。验证码（purpose `login`）校验通过后：命中账号 → 登录（该渠道 `*VerifiedAt` 为空时补写）；未命中 → 建号（`passwordHash` 为空，即「未设置密码」状态，不生成隐藏随机密码），响应额外带 `isNewUser: true`。并发建号唯一冲突回落为登录（不 500）。`registrationOpen=false` 或许可证维护期（只读）下未命中标识**不建号**（400）。**不参与**密码失败锁定与图形验证码体系（验证码服务自带 60 秒冷却、日限 10 次、校验失败 5 次即失效） |
 | 令牌校验 | 复用 JWT Guard（按 `scope` 区分 admin/app 两套守卫）；登出黑名单复用 `auth:blacklist:{jti}` |
 | 登出 | `POST /api/app/auth/logout` |
 | 图形验证码 | `GET /api/app/auth/captcha` → `{captchaId,image}`；登录一次性消费 |
 | 通道可用性探测 | `GET /api/app/auth/sms/available`、`GET /api/app/auth/email/available` → `{available}`（已启用对应渠道且验证码模板已发布）；客户端据此决定注册入口与验证方式是否开放 |
-| 验证码发送 | `POST /api/app/auth/sms/send`（body `{phone, purpose, deviceId?}`）与 `POST /api/app/auth/email/send`（body `{email, purpose, deviceId?}`）→ `{expiresInSec, devCode?}`（`devCode` 仅非生产环境干跑时返回）；`purpose`：短信 `register\|reset_password\|change_phone\|login`、邮箱 `register\|reset_password\|change_email`；频控：同号/同邮箱+用途 60 秒冷却、日限 10 次、同 IP 10 分钟 20 次、同设备 1 小时 10 次；校验失败 5 次即失效；下发经发送队列（安全类强制送达） |
+| 验证码发送 | `POST /api/app/auth/sms/send`（body `{phone, purpose, deviceId?}`）与 `POST /api/app/auth/email/send`（body `{email, purpose, deviceId?}`）→ `{expiresInSec, devCode?}`（`devCode` 仅非生产环境干跑时返回）；`purpose`：短信 `register\|reset_password\|change_phone\|login`、邮箱 `register\|reset_password\|change_email\|login`；频控：同号/同邮箱+用途 60 秒冷却、日限 10 次、同 IP 10 分钟 20 次、同设备 1 小时 10 次；校验失败 5 次即失效；下发经发送队列（安全类强制送达）。`login` 用途供「验证码登录或注册」使用（该链路与两个发码端点在许可证维护期属显式例外，见 `docs/license-management.md`） |
 | 找回密码 | `GET /api/app/auth/recovery-channels?identifier=` → 该账号**已验证可信渠道**（脱敏 `{email, phone}`）；`POST /api/app/auth/reset-code/send` body `{identifier, channel}` 由服务端解析可信渠道并投递验证码（客户端不接触真实地址）；`POST /api/app/auth/reset-password` body `{identifier, channel, code, newPassword}` → 校验通过后更新密码并全端登出 |
 | 账号绑定 | `POST /api/app/auth/change-phone`（body `{newPhone, smsCode}`）、`POST /api/app/auth/change-email`（body `{newEmail, code}`）：绑定或更换均须验证**新**手机号/邮箱，验证后标记为可信渠道；占用冲突 409 |
 | 用户名/昵称 | 全站唯一，各有保留名单（`admin`/`管理员` 等，占用报 400）；用户名登录标识（字母开头 4-20 位，仅字母/数字/下划线，登录时忽略大小写），昵称仅作展示（≤20 字符，支持中文）。经 `PUT /api/app/me` 修改 |
-| 修改密码 | `POST /api/app/me/change-password` body `{oldPassword, newPassword}`：校验原密码后更新，并**强制退出全部会话（含当前会话）**，客户端需重新登录 |
+| 修改密码 | `POST /api/app/me/change-password` body `{oldPassword?, newPassword}`：**已有密码**的账号必须校验 `oldPassword`；`passwordHash` 为空的账号（验证码建号，即「未设置密码」）首次设置免原密码、免验证码。成功后**强制退出全部会话（含当前会话）**，客户端需重新登录 |
 | 每日登录积分 | 登录成功触发 `daily_login` 规则（PointsRule 固定触发项，种子默认停用；引擎按规则启停发放，自然日去重随 M2 客户端接入落地） |
 
 ## 3. 通用约定（沿用 wiki-backend §4）
@@ -41,14 +42,14 @@
 
 | 方法 | 路径 | 说明 |
 |---|---|---|
-| GET | /api/app/config | 站点信息 + 功能开关 + 站点标语（登录页/首页用；不含 updatedBy 等管理字段） |
+| GET | /api/app/config | 站点信息 + 功能开关 + 站点标语 + `siteLogo`（登录页/首页用，客户端浏览器标签页图标取该 logo；不含 updatedBy 等管理字段） |
 | GET | /api/app/dicts/:type | 仅 `status=enabled` 字典项（复用 `dicts:{type}` 缓存，管理页缓存键一致） |
 
 ## 5. 个人中心
 
 | 方法 | 路径 | 说明 |
 |---|---|---|
-| GET | /api/app/me | 资料 + 身份列表（含各身份经验/等级）+ 积分余额 + `pointsDiscount`（积分消费折扣：1 = 1 折 … 10 = 原价，按本人社区个体等级）；`usernameChangeableAt` 下发用户名下次可修改时间（90 天限改一次，null=当前可改） |
+| GET | /api/app/me | 资料 + 身份列表（含各身份经验/等级）+ 积分余额 + `pointsDiscount`（积分消费折扣：1 = 1 折 … 10 = 原价，按本人社区个体等级）；`usernameChangeableAt` 下发用户名下次可修改时间（90 天限改一次，null=当前可改）；`hasPassword` 下发是否已设置登录密码（false = 未设置密码：只能验证码登录，或到「账号安全」设置密码） |
 | PUT | /api/app/me | 更新昵称/头像/性别/简介等可编辑字段（头像为 `POST /uploads` 返回的 url）；用户名仅在与当前值不同时校验，90 天冷却内 400，成功后记录 `usernameChangedAt` |
 | GET | /api/app/me/points-records | 我的积分流水（分页，含 balance）；积分按身份隔离：仅社区个体/个人用户可查看 |
 | GET | /api/app/me/realname | 实名认证状态：`{ verified, realName? 脱敏（首字）, citizenIdMasked? 前 4 后 4, verifiedAt? }` |
@@ -157,6 +158,7 @@
 | GET/POST | /api/app/me/blocklist(/:uid/remove) | v38 屏蔽名单（评论与内容列表过滤被屏蔽用户） |
 | POST/GET | /api/app/articles/:id/likes/toggle · /articles/:id/comments | v38 文章点赞与评论（评论 2-200 字，过滤屏蔽用户） |
 | POST | /api/app/auth/register（`agreed` 必填） | v38 注册须同意用户协议与隐私政策并留痕 |
+| POST | /api/app/auth/login-by-code（`agreed` 必填） | 登录/注册统一入口：手机号/邮箱验证码校验通过后由服务端判定登录或建号（`isNewUser`），建号账号为「未设置密码」。单条端点承担两种语义，故协议勾选统一必填；`GET /api/app/me` 的 `hasPassword` 与 `POST /api/app/me/change-password` 的 `oldPassword` 可选共同支撑「未设置密码 → 设置密码」链路 |
 
 ### 8.2 撤回/重提/申诉与回填端点
 

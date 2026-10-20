@@ -5,7 +5,7 @@ import { Test } from '@nestjs/testing'
 import request from 'supertest'
 import { AppModule } from '../src/app.module'
 import { reseed } from './helpers/reseed'
-import { appGet, appLoginAs, appLoginRequest, appPost } from './helpers/app-login'
+import { appGet, appLoginAs, appLoginRequest, appPost, sendAppSmsCode } from './helpers/app-login'
 import { PrismaService } from '../src/common/prisma/prisma.service'
 import { addDays, formatToday } from '../src/common/utils/time'
 
@@ -193,6 +193,35 @@ describe('M2-R R1 app 个人中心', () => {
 
     /* 用新密码重新登录，供后续用例继续使用 */
     token = newPass.body.data.token
+  })
+
+  it('未设置密码账号（验证码建号）：首次设置免原密码，置为已设置后必须校验原密码', async () => {
+    const phone = '13900005555'
+    const code = await sendAppSmsCode(app, phone, 'login')
+    const created = await request(app.getHttpServer())
+      .post('/api/app/auth/login-by-code')
+      .send({ channel: 'phone', account: phone, code, agreed: true })
+    expect(created.status).toBe(200)
+    expect(created.body.data.isNewUser).toBe(true)
+    const freshToken = created.body.data.token as string
+
+    /* 未设置密码（passwordHash 为空）：不传 oldPassword 直接设置 */
+    const set = await appPost(app, freshToken, '/api/app/me/change-password', { newPassword: 'brandnew123' })
+    expect(set.status).toBe(200)
+    expect(set.body.code).toBe(0)
+
+    /* 成功后台全端登出（与改密同口径） */
+    expect((await appGet(app, freshToken, '/api/app/me')).status).toBe(401)
+
+    const relogin = await appLoginRequest(app, phone, 'brandnew123')
+    expect(relogin.status).toBe(200)
+    const reloginToken = relogin.body.data.token as string
+    expect((await appGet(app, reloginToken, '/api/app/me')).body.data.hasPassword).toBe(true)
+
+    /* 已有密码后，改密必须带原密码（缺失 400，而不是 500） */
+    const noOld = await appPost(app, reloginToken, '/api/app/me/change-password', { newPassword: 'another123' })
+    expect(noOld.status).toBe(400)
+    expect(noOld.body.message).toContain('请输入原密码')
   })
 
   it('地址簿已随统一券码兑换改造移除（/me/addresses 返回 404）', async () => {

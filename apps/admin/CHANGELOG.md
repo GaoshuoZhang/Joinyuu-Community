@@ -7,17 +7,24 @@
 
 ### 新增
 
+- **站点名称进入浏览器标签页**：标签页标题改为「{页面} · {站点名称}管理后台」，站点名称取自「系统配置 → 站点信息」。`GET /api/admin/branding` 改为公开读取，因此**未登录的登录页**也能显示真实站点名称/标语/logo（此前登录页写死「聚屿社区」）；登录页品牌区（标题、副标题、标语、logo）与工作台描述、独立打印页（申请审核单/租约确认单）落款、新建活动「主办方」默认值一并改读该配置。
+- **「租赁管理 → 打印版式」配置**（新按钮位于页头 `ColumnController` 与「一键归档」之间）：可自定义租约打印单的标题（纯文本）、「租赁信息」各栏目的显示/隐藏（勾选式，共 10 个栏目：租赁方 / 租赁方类型 / 联系人 / 联系电话 / 办公位 / 租期 / 租赁周期 / 租金 / 状态 / 终止日期）、以及「条款说明」纯文本（一行一条，支持换行；留空则回落内置三条条款）。配置为**全局单例、存服务端**（`GET/PUT /api/admin/leases/print-layout`，写入带审计），打印页改由服务端下发的版式动态渲染；栏目目录集中在 [src/constants/leasePrintLayout.ts](./src/constants/leasePrintLayout.ts)，与后端键集一一对应。
 - 新增零依赖静态服务脚本 [server.mjs](./server.mjs) 与 `serve` 脚本：供 1Panel「运行环境 → Node.js」容器直接托管管理端产物（等价 Nginx 静态托管——正确 MIME、`index.html` 不缓存、带哈希资源长缓存、路径穿越防护）。根脚本新增 `serve:admin`（只服务已构建产物）与 `start:admin`（容器内构建后再服务），更新时「替换 `dist` + 重启容器」即可生效。
 - 内置 `/api` 反向代理：默认转发到容器网络内的 `http://joinyuu-api:7757`（`API_PROXY_TARGET` 可改目标、设为空则关闭），并透传客户端真实 IP——这样「IP + 端口直连前端容器」时接口也能正常调用（此前写操作会返回 405）；已由 Nginx 反代 `/api` 的部署不受影响。
 
 ### 修复
 
+- **上传的站点 logo 对浏览器标签页图标无效**：根因是 `index.html` 的内置 `favicon.svg`（`image/svg+xml`）与运行时追加的位图 logo **并存**，浏览器在多个候选图标间会优先选择矢量图标。现改为**接管唯一那个 `link[rel=icon]`**（多余候选一律移除、按扩展名写 `type`），清空 logo 时回退内置 `favicon.svg`；同时缓存最近一次品牌值，使刷新/未登录首帧也能显示正确的图标与站点名称。见 [src/utils/siteBranding.ts](./src/utils/siteBranding.ts) 与 [src/stores/branding.ts](./src/stores/branding.ts)（新增 `test/siteBranding.test.mjs` 锁定该约束）。
+- **未保存离开确认在重定向导航上可能重复弹窗**：与客户端同源——`usePageDirtyGuard` 的 `beforeRouteLeave` 会在路由守卫把导航重定向到新目标时再跑一次，导致二次询问。已增加「本次离开已确认」状态，一次导航结束即复位。
+- 「租约打印版式」弹窗的标题占位符缺少省略号，与全站占位符约定不一致（会触发 `uiContracts` 契约测试失败）。
 - **「模板中心 → 测试发送」弹窗底部按钮不可见**（新增模板弹窗同样受影响）：TDesign Dialog 的 `footer=false` 会隐藏整个底部区域，`#footer` 插槽也被一并隐藏，而这两个弹窗同时写了 `:footer="false"` + `#footer`。已移除该属性（默认显示底部，由插槽提供「取消 / 发送」按钮），并在代码里注明该约束避免复发。
 - **「发送记录」列表的「类型」筛选器点选后不生效**：下拉只绑定了 `v-model`、缺少 `@change`，选择后不会重新查询。已补 `@change="onSearch"`（与票据统计「状态」芯片的口径一致：改动即查询）。
 - **渠道「测试发送」改为按模板自动带出变量输入框**：原先只有「模板变量（JSON）」文本框，容易漏填或写错键名（短信通道参数个数不符会被供应商拒绝）。现在选择模板后按其变量白名单逐个生成必填输入项，提交时自动组装变量对象；未选模板时仍可用「正文」做连通性验证。
 - **二次确认框可能被业务浮层遮盖**：TDesign 的 `DialogPlugin` 默认层级只有 2500，而 `Popup` 是 5500，因此在「先打开 Popup 系浮层（下拉选择、气泡卡片等）、再弹出确认框」的场景下确认框会被盖住。现统一改用 [src/utils/confirmDialog.ts](./src/utils/confirmDialog.ts) 的 `confirmDialog()`，显式把确认框层级抬到 5600（高于 Popup 5500，低于 Message 6000），并把全站 10 处 `DialogPlugin.confirm` 调用点（含表单未保存保护 `useDialogDirtyGuard` / `usePageDirtyGuard`）一并迁移，与客户端同一口径。
 - **反向代理（域名）访问时登录日志与审计记成 `172.18.0.1` 而非访客真实 IP**：[server.mjs](./server.mjs) 转发 `/api` 时会把「直接连接的对端地址」追加到 `X-Forwarded-For` 末尾，而容器端口经宿主机发布后该对端地址是 docker 网关，后端 `TRUST_PROXY=1` 取的又正是最后一跳。现改为**上游 `X-Real-IP` 优先、`X-Forwarded-For` 改写成单值**、不再追加对端地址：域名访问时记 Nginx 声明的 `$remote_addr`，IP 直连时记真实对端，且客户端伪造的 `X-Forwarded-For` 前缀会被丢弃。
 - **「日志与审计 → 日志设置」弹窗点「取消」或右上角「X」都关不掉**：[LogRetentionDialog.vue](./src/components/LogRetentionDialog.vue) 把 `computed(() => props.visible)`（**只读**）传给了 `useDialogFormProtection`，而该组合式的 `close()` 内部执行的是 `visible.value = false` —— 对只读 computed 赋值会被 Vue 直接忽略（仅开发环境打印告警），导致「取消」「X」以及未保存确认后的关闭全部失效。已改为**可写** computed（setter 里 `emit('update:visible')` 回父组件的 `v-model:visible`），三条关闭路径均恢复正常。
+- **新增/编辑租约选择个人用户租赁方时，「联系人」填成了昵称**：改为**真实姓名优先、无真实姓名回落昵称**（`u.realName || u.nickname`），租赁详情页与租约打印单直读该字段，因此三处一并显示真实姓名。企业租赁方沿用企业登记的联系人，历史租约记录保持原样（不做读时解析、不回填）。
+- **列表无数据时，空态占位图贴住表头**（例：社区企业）：TDesign 的 `.t-table__empty-row > td` 没有内边距，`.t-empty` 自身也是 `margin/padding: 0`，占位图会紧贴表头下边缘。此前仓库只为「选项卡内空态」写过留白（`.t-tabs__content .t-empty`），现补充同口径的表格版规则（`.t-table__empty .t-empty { padding: 40px 0 }`），一处覆盖全部使用 `ListEmptyState` 的表格列表。
 
 ## [1.5.0] - 2026-10-17
 
