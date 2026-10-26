@@ -1,9 +1,10 @@
 <script setup lang="ts">
 import { computed, h, onMounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { Button, Icon, Image, Toast } from 'tdesign-mobile-vue'
+import { Button, Icon, Image, Tag, Textarea, Toast } from 'tdesign-mobile-vue'
 import { confirmDialog } from '@/utils/confirmDialog'
 import { cancelEnrollment, enrollEvent, fetchEvent, fetchMyEventFeedback, submitEventFeedback } from '@/api/events'
+import { fetchMe } from '@/api/me'
 import CategoryTag from '@/components/shared/CategoryTag.vue'
 import { canCancelEnrollment } from '@/utils/enrollment'
 import { listFavorites, toggleFavorite } from '@/api/favorites'
@@ -114,6 +115,13 @@ const enrollmentDeadlineLabel = computed(() => {
 const descIsPlainText = computed(() => !/<\/?[a-z][^>]*>/i.test(event.value?.description ?? ''))
 const myStatus = computed(() => event.value?.myEnrollmentStatus)
 const myCheckedIn = computed(() => event.value?.myCheckedIn ?? false)
+/* 主讲嘉宾/标签：后台可留空（嘉宾留空时保存为「—」占位，不展示该行） */
+const speakerLabel = computed(() => {
+  const value = (event.value?.speaker ?? '').trim()
+  return value && value !== '—' ? value : ''
+})
+const hostLabel = computed(() => (event.value?.host ?? '').trim())
+const visibleTags = computed(() => (event.value?.tags ?? []).filter((tag) => tag.trim()))
 /* 未结束/未取消时，报名操作区固定在底部，为内容区预留空间 */
 const showEnrollmentBar = computed(() => !isEnded.value && !isCancelled.value)
 const enrollmentResultTitle = computed(() =>
@@ -155,20 +163,71 @@ const disableReason = computed(() => {
   return ''
 })
 
+/* 报名留言（选填）：仅在确认框内填写，随报名请求提交，后台审核可见 */
+const enrollMessage = ref('')
+/** 报名前绑定核验中（活动要求手机号/邮箱时先查一次当前用户资料，避免白填确认框） */
+const bindingChecking = ref(false)
+
+/** 该活动要求但当前账号未绑定的渠道（文案数组）；接口失败时返回空数组，交由服务端权威拦截 */
+async function missingRequiredBindings(): Promise<string[]> {
+  const ev = event.value
+  if (!ev || (!ev.enrollRequirePhone && !ev.enrollRequireEmail)) return []
+  bindingChecking.value = true
+  try {
+    const me = await fetchMe()
+    const missing: string[] = []
+    if (ev.enrollRequirePhone && !(me.phone ?? '').trim()) missing.push('手机号')
+    if (ev.enrollRequireEmail && !(me.email ?? '').trim()) missing.push('邮箱')
+    return missing
+  } catch {
+    return []
+  } finally {
+    bindingChecking.value = false
+  }
+}
+
 async function onEnroll() {
   if (!auth.isLogged) {
     await router.push({ path: '/login', query: { redirect: route.fullPath } })
     return
   }
   const ev = event.value
-  if (!ev || acting.value || disableReason.value) return
+  if (!ev || acting.value || bindingChecking.value || disableReason.value) return
+  /* 报名要求绑定手机号/邮箱：未绑定时先提示并引导去「账号与安全」（服务端仍会二次校验） */
+  const missing = await missingRequiredBindings()
+  if (missing.length) {
+    confirmDialog({
+      title: '报名需先完成绑定',
+      content: `该活动报名需${missing.join('和')}，请先在「账号与安全」中完成绑定后再回来报名。`,
+      cancelBtn: '稍后再说',
+      confirmBtn: '去绑定',
+      onConfirm: () => { void router.push('/me/security') },
+    })
+    return
+  }
+  enrollMessage.value = ''
   confirmDialog({
     title: '确认活动报名',
-    content: () => h('div', { style: 'text-align: left' }, [
-      h('p', { style: 'margin: 0 0 var(--app-space-3)' }, `活动：${ev.title}`),
-      h('p', { style: 'margin: 0 0 var(--app-space-3)' }, `时间：${formatLocalDateTime(ev.startTime)}`),
-      h('p', { style: 'margin: 0 0 var(--app-space-3)' }, `地点：${ev.location}`),
-      h('p', { style: 'margin: 0' }, ev.requireReview ? '提交后需等待审核；满员时将按顺序候补。' : '确认后完成报名；满员时将按顺序候补。'),
+    content: () => h('div', { class: 'enroll-confirm', ref: onDialogContentRef }, [
+      h('dl', { class: 'enroll-confirm-list' }, [
+        infoRow('活动', ev.title),
+        infoRow('开始', formatLocalDateTime(ev.startTime)),
+        infoRow('结束', formatLocalDateTime(ev.endTime)),
+        infoRow('地点', ev.location),
+      ]),
+      /* 留言（选填）：不用 TDesign 内建 label（弹窗窄宽度下会被截断），改由独立文案行承载 */
+      h('div', { class: 'enroll-confirm-field' }, [
+        h('span', { class: 'enroll-confirm-field-label' }, '留言（选填）'),
+        h(Textarea, {
+          modelValue: enrollMessage.value,
+          'onUpdate:modelValue': (value: string) => { enrollMessage.value = value },
+          /* 与站内其他文本域同一形态（浅灰填充、无边框），高度至少 3 行 */
+          indicator: true,
+          maxlength: 200,
+          autosize: { minRows: 3, maxRows: 5 },
+          placeholder: '有什么想提前告诉主办方的？',
+        }),
+      ]),
     ]),
     cancelBtn: '返回查看',
     confirmBtn: '确认报名',
@@ -176,11 +235,35 @@ async function onEnroll() {
   })
 }
 
+/** 确认框信息行（键值对）：键固定宽度、值自动换行，样式见文件末尾非 scoped 样式块 */
+function infoRow(key: string, value: string) {
+  return h('div', { class: 'enroll-confirm-row' }, [
+    h('dt', { class: 'enroll-confirm-key' }, key),
+    h('dd', { class: 'enroll-confirm-value' }, value),
+  ])
+}
+
+/** 弹窗内容挂载回调：把初始焦点从留言框移到对话框容器本身。
+ * 应用层的 focusDialog 会聚焦弹层内首个可交互元素（即留言文本域），移动端会因此直接弹出软键盘；
+ * 这里在首帧聚焦落地后再把焦点交给 `.t-dialog`（仍在弹层内，Tab 圈闭与关闭回焦行为不变）。 */
+function onDialogContentRef(el: unknown) {
+  const dialog = (el as HTMLElement | null)?.closest<HTMLElement>('.t-dialog') ?? null
+  if (!dialog) return
+  window.requestAnimationFrame(() => window.requestAnimationFrame(() => {
+    const active = document.activeElement
+    if (active instanceof HTMLElement && active.tagName === 'TEXTAREA' && dialog.contains(active)) {
+      dialog.setAttribute('tabindex', '-1')
+      dialog.focus({ preventScroll: true })
+    }
+  }))
+}
+
 async function submitEnrollment() {
   if (acting.value) return
   acting.value = true
   try {
-    const res = await enrollEvent(eventId)
+    const message = enrollMessage.value.trim()
+    const res = await enrollEvent(eventId, message ? { message } : {})
     enrollmentResult.value = res
   } catch (e) {
     Toast(e instanceof Error ? e.message : '报名失败，请稍后重试')
@@ -278,8 +361,14 @@ async function onShare() {
         <h2 class="title">{{ event.title }}</h2>
         <p class="meta"><Icon aria-hidden="true" name="time" size="14px" />{{ formatLocalDateTime(event.startTime) }} ~ {{ formatLocalDateTime(event.endTime) }}</p>
         <p class="meta"><Icon aria-hidden="true" name="location" size="14px" />{{ event.location }}</p>
-        <p class="meta"><Icon aria-hidden="true" name="alarm" size="14px" />报名截止：{{ enrollmentDeadlineLabel }}<span v-if="event.requireReview"> · 报名需审核</span></p>
+        <p v-if="speakerLabel" class="meta"><Icon aria-hidden="true" name="user" size="14px" />主讲嘉宾：{{ speakerLabel }}</p>
+        <p v-if="hostLabel" class="meta"><Icon aria-hidden="true" name="building" size="14px" />主办方：{{ hostLabel }}</p>
+        <p class="meta"><Icon aria-hidden="true" name="alarm" size="14px" />报名截止：{{ enrollmentDeadlineLabel }}</p>
         <p class="meta"><Icon aria-hidden="true" name="usergroup" size="14px" />限 {{ formatZhNumber(event.capacity) }} 人参加</p>
+        <!-- 活动标签（报名要求标签由底部报名操作区在按钮上方呈现） -->
+        <div v-if="visibleTags.length" class="tags-row">
+          <Tag v-for="tag in visibleTags" :key="tag" size="small" variant="light" theme="primary">{{ tag }}</Tag>
+        </div>
         <div class="fav-row">
           <Button size="small" variant="outline" @click="onToggleFavorite">
             <template #icon><span class="icon-swap"><Icon aria-hidden="true" name="star-filled" size="16px" :class="{ 'is-on': favorited }" /><Icon aria-hidden="true" name="star" size="16px" :class="{ 'is-on': !favorited }" /></span></template>
@@ -412,6 +501,14 @@ async function onShare() {
   font: var(--app-type-section);
 }
 
+/* 活动标签行：位于基础信息之后，与 meta 行保持同一纵向节奏 */
+.tags-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--app-space-4);
+  margin-top: var(--app-space-5);
+}
+
 .desc {
   margin:0;
   font: var(--app-type-body-relaxed);
@@ -428,4 +525,66 @@ async function onShare() {
   color: var(--td-brand-color);
 }
 
+</style>
+
+<!-- 「确认活动报名」弹窗内容由 DialogPlugin 渲染在组件子树之外（h() 创建，不带 scoped 的 data-v 属性），
+     故这些样式必须是非 scoped；类名前缀 enroll-confirm 仅本页使用，不会外溢到其他页面。 -->
+<style>
+.enroll-confirm {
+  text-align: left;
+}
+
+.enroll-confirm-list {
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--app-space-4);
+}
+
+.enroll-confirm-row {
+  display: flex;
+  gap: var(--app-space-5);
+  font: var(--app-type-body);
+}
+
+.enroll-confirm-key {
+  flex: none;
+  width: 40px;
+  margin: 0;
+  color: var(--td-text-color-placeholder);
+}
+
+.enroll-confirm-value {
+  flex: 1;
+  min-width: 0;
+  margin: 0;
+  color: var(--td-text-color-primary);
+  overflow-wrap: break-word;
+}
+
+.enroll-confirm-field {
+  display: flex;
+  flex-direction: column;
+  gap: var(--app-space-3);
+  margin-top: var(--app-space-6);
+}
+
+.enroll-confirm-field-label {
+  font: var(--app-type-body-sm);
+  color: var(--td-text-color-secondary);
+}
+
+/* 留言输入区：白底弹窗里用「浅灰填充」款（比库内默认白底文本域更有输入框辨识度），
+ * 底色与圆角取站内既有 token，与搜索框/卡片底一致。 */
+.enroll-confirm-field .t-textarea {
+  --td-textarea-background-color: var(--td-bg-color-page);
+  --td-textarea-padding: var(--app-space-5) var(--app-space-5) 0;
+}
+
+/* 不做焦点线框：浅灰填充本身已表明这是输入区，全局 :focus-visible 焦点环
+ * （2px 描边 + 2px 偏移）在灰底上会形成一圈深色圆角框，视觉噪点明显（用户反馈要求移除）。
+ * 文本域仍可正常 Tab 聚焦与输入（键盘可用性不受影响），仅不绘制额外的环。 */
+.enroll-confirm-field .t-textarea__wrapper-inner:focus-visible {
+  outline: none;
+}
 </style>

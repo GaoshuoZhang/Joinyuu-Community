@@ -1,10 +1,11 @@
 <script setup lang="ts">
-import { Button, Icon } from 'tdesign-mobile-vue'
+import { computed } from 'vue'
+import { Button, Icon, Tag } from 'tdesign-mobile-vue'
 import type { CommunityEvent } from '@/types'
 
 /* 报名操作区：按报名态分流（待审核/已通过/候补/被驳回/未报名），
  * 统一悬浮固定在详情页底部，避免主操作脱离拇指区；页面内容区需为其预留底部空间。 */
-defineProps<{
+const props = defineProps<{
   event: CommunityEvent
   myStatus?: string
   myCheckedIn: boolean
@@ -14,6 +15,16 @@ defineProps<{
   disableReason: string
   enrollForbidden: boolean
 }>()
+
+/* 报名要求标签（后台活动开关）：报名需审核 / 需绑定手机号 / 需绑定邮箱，
+ * 展示在报名按钮上方，取代原先的整句提示文案 */
+const requirementTags = computed(() => {
+  const list: string[] = []
+  if (props.event.requireReview) list.push('报名需审核')
+  if (props.event.enrollRequirePhone) list.push('需绑定手机号')
+  if (props.event.enrollRequireEmail) list.push('需绑定邮箱')
+  return list
+})
 
 const emit = defineEmits<{
   enroll: []
@@ -61,8 +72,10 @@ const emit = defineEmits<{
 
       <template v-else>
         <p v-if="loggedIn && disableReason && !enrollForbidden" class="bar-reason">{{ disableReason }}</p>
-        <p v-else-if="event.requireReview" class="bar-hint">该活动报名需审核，提交后待管理员通过；满员时将进入候补。</p>
-        <p v-else class="bar-hint">满员时将自动进入候补队列。</p>
+        <!-- 报名要求以标签呈现（替代原提示文字），置于报名按钮上方 -->
+        <div v-if="requirementTags.length" class="bar-tags">
+          <Tag v-for="tag in requirementTags" :key="tag" size="small" variant="light" theme="default">{{ tag }}</Tag>
+        </div>
         <Button v-if="event.enrollmentOpen === false" theme="primary" block disabled>报名未开放</Button>
         <Button v-else-if="!loggedIn" theme="primary" block @click="emit('enroll')">登录后报名</Button>
         <Button v-else theme="primary" block :disabled="acting || !!disableReason" @click="emit('enroll')">
@@ -97,6 +110,13 @@ const emit = defineEmits<{
   margin: 0;
   font: var(--app-type-body-sm);
   color: var(--td-text-color-placeholder);
+}
+
+/* 报名要求标签行：与按钮左对齐、可换行 */
+.bar-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--app-space-4);
 }
 
 /* 留言入口：文字链形态，内联在提示文案中 */

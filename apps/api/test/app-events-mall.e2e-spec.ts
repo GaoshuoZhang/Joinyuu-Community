@@ -27,6 +27,36 @@ describe('M2-R R2 app 活动与商城', () => {
     await app.close()
   })
 
+  /* 报名规则校验专用活动：需审核（报名落 pending，不触发报名积分）+ 不限可见/可报名范围，
+   * 用后即删 —— 不从种子活动池取用，避免占用其他用例依赖的「未报名活动」。 */
+  const PROBE_EVENT_ID = 'EV9099'
+  async function createProbeEvent(overrides: Record<string, unknown> = {}) {
+    return prisma.communityEvent.create({
+      data: {
+        id: PROBE_EVENT_ID,
+        createdAt: '2026-10-01 09:00',
+        title: 'e2e 报名规则校验活动',
+        type: '沙龙',
+        startTime: '2026-12-01 14:00',
+        endTime: '2026-12-01 17:00',
+        location: 'e2e 场地',
+        capacity: 30,
+        speaker: '',
+        host: '聚屿社区',
+        status: 'published',
+        enrollmentOpen: true,
+        visibilityIdentities: [],
+        visibilityLevels: [],
+        enrollmentIdentities: [],
+        enrollmentLevels: [],
+        requireReview: true,
+        description: 'e2e 报名规则校验',
+        tags: [],
+        ...overrides,
+      },
+    })
+  }
+
   it('活动列表 published 且返回（无签名也可浏览）', async () => {
     const res = await request(app.getHttpServer()).get('/api/app/events?pageSize=5')
     expect(res.status).toBe(200)
@@ -61,6 +91,39 @@ describe('M2-R R2 app 活动与商城', () => {
 
     const cancel = await appPost(app, token, `/api/app/events/${eventId}/enroll/cancel`, {})
     expect([200, 409]).toContain(cancel.status)
+  })
+
+  it('报名留言：随报名记录留存（首尾空白剔除）', async () => {
+    const ev = await createProbeEvent()
+    try {
+      const enroll = await appPost(app, token, `/api/app/events/${ev.id}/enroll`, { message: '  希望安排前排座位  ' })
+      expect(enroll.status).toBe(200)
+
+      const row = await prisma.eventEnrollment.findUniqueOrThrow({
+        where: { eventId_userId: { eventId: ev.id, userId: 'U1001' } },
+      })
+      expect(row.message).toBe('希望安排前排座位')
+    } finally {
+      await prisma.communityEvent.delete({ where: { id: ev.id } })
+    }
+  })
+
+  it('报名需绑定手机号/邮箱：未绑定时拒绝并提示，绑定后放行', async () => {
+    const user = await prisma.user.findUniqueOrThrow({ where: { uid: 'U1001' } })
+    const ev = await createProbeEvent({ enrollRequireEmail: true })
+    try {
+      await prisma.user.update({ where: { uid: 'U1001' }, data: { email: null } })
+      const blocked = await appPost(app, token, `/api/app/events/${ev.id}/enroll`, {})
+      expect(blocked.status).toBe(400)
+      expect(blocked.body.message).toContain('需先绑定邮箱')
+
+      await prisma.user.update({ where: { uid: 'U1001' }, data: { email: 'u1001-channel@example.invalid' } })
+      const passed = await appPost(app, token, `/api/app/events/${ev.id}/enroll`, {})
+      expect(passed.status).toBe(200)
+    } finally {
+      await prisma.communityEvent.delete({ where: { id: ev.id } })
+      await prisma.user.update({ where: { uid: 'U1001' }, data: { email: user.email } })
+    }
   })
 
   it('暂停报名活动下发 enrollmentOpen=false 并拒绝报名', async () => {

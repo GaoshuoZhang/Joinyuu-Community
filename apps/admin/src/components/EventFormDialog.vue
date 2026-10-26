@@ -59,6 +59,9 @@ const form = reactive({
   enrollmentIdentities: [] as string[],
   enrollmentLevels: [] as string[],
   requireReview: true,
+  /* 报名要求绑定手机号/邮箱（默认关）：开启后未绑定用户报名时客户端提示并引导去绑定 */
+  enrollRequirePhone: false,
+  enrollRequireEmail: false,
   enrollPoints: 5,
   checkinPoints: 10,
   venueLat: '',
@@ -155,6 +158,8 @@ watch(
       form.enrollmentIdentities = [...props.event.enrollmentIdentities]
       form.enrollmentLevels = [...props.event.enrollmentLevels]
       form.requireReview = props.event.requireReview
+      form.enrollRequirePhone = props.event.enrollRequirePhone ?? false
+      form.enrollRequireEmail = props.event.enrollRequireEmail ?? false
       form.enrollPoints = props.event.enrollPoints ?? rulePoints.enroll
       form.checkinPoints = props.event.checkinPoints ?? rulePoints.checkin
       form.venueLat = props.event.venueLat ?? ''
@@ -186,6 +191,8 @@ watch(
       form.enrollmentIdentities = []
       form.enrollmentLevels = []
       form.requireReview = true
+      form.enrollRequirePhone = false
+      form.enrollRequireEmail = false
       form.enrollPoints = rulePoints.enroll
       form.checkinPoints = rulePoints.checkin
       form.venueLat = ''
@@ -258,6 +265,8 @@ async function onConfirm() {
       enrollmentIdentities: customEnrollment.value ? form.enrollmentIdentities : [],
       enrollmentLevels: customEnrollment.value ? form.enrollmentLevels : [],
       requireReview: form.requireReview,
+      enrollRequirePhone: form.enrollRequirePhone,
+      enrollRequireEmail: form.enrollRequireEmail,
       enrollmentDeadline: form.enrollmentDeadline || undefined,
       enrollPoints: form.enrollPoints,
       checkinPoints: form.checkinPoints,
@@ -377,6 +386,28 @@ usePageDirtyGuard(computed(() => props.visible && isDirty.value))
           </template>
           <t-popup content="开启后，用户报名需经管理员审核；关闭后报名自动通过" show-arrow>
             <span class="scope-switch-trigger"><t-switch v-accessible-field="'报名需审核'" v-model="form.requireReview" aria-label="报名需审核" /></span>
+          </t-popup>
+        </t-form-item>
+      </div>
+      <div class="form-row">
+        <t-form-item name="enrollRequirePhone">
+          <template #label>
+            <t-popup content="开启后，用户报名时须已绑定手机号；未绑定时客户端会提示并引导去「账号与安全」完成绑定" show-arrow>
+              <span class="scope-popup-trigger">报名需手机号</span>
+            </t-popup>
+          </template>
+          <t-popup content="开启后，用户报名时须已绑定手机号；未绑定时客户端会提示并引导去「账号与安全」完成绑定" show-arrow>
+            <span class="scope-switch-trigger"><t-switch v-accessible-field="'报名需手机号'" v-model="form.enrollRequirePhone" aria-label="报名需手机号" /></span>
+          </t-popup>
+        </t-form-item>
+        <t-form-item name="enrollRequireEmail">
+          <template #label>
+            <t-popup content="开启后，用户报名时须已绑定邮箱；未绑定时客户端会提示并引导去「账号与安全」完成绑定" show-arrow>
+              <span class="scope-popup-trigger">报名需邮箱</span>
+            </t-popup>
+          </template>
+          <t-popup content="开启后，用户报名时须已绑定邮箱；未绑定时客户端会提示并引导去「账号与安全」完成绑定" show-arrow>
+            <span class="scope-switch-trigger"><t-switch v-accessible-field="'报名需邮箱'" v-model="form.enrollRequireEmail" aria-label="报名需邮箱" /></span>
           </t-popup>
         </t-form-item>
       </div>

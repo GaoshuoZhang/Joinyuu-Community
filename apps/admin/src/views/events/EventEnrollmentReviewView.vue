@@ -45,6 +45,7 @@ const columns = [
   { colKey: 'name', title: '报名人', cell: 'name', width: 150, resizable: true, ellipsis: true },
   { colKey: 'identities', title: '关联身份', cell: 'identities', width: 240, resizable: true, ellipsis: true },
   { colKey: 'phone', title: '联系电话', cell: 'phone', width: 130, resizable: true, ellipsis: true },
+  { colKey: 'message', title: '留言', cell: 'message', width: 200, resizable: true, ellipsis: true },
   { colKey: 'appliedAt', title: '报名时间', width: 170, resizable: true, ellipsis: true },
   { colKey: 'status', title: '状态', cell: 'status', width: 100, resizable: true, ellipsis: true },
   { colKey: 'waitlistOrder', title: '候补顺序', cell: 'waitlistOrder', width: 100, resizable: true, ellipsis: true },
@@ -188,7 +189,7 @@ async function onConfirmReject() {
 
 /* 导出：当前页 / 全部结果（沿用列表筛选） */
 const exportHeaders = [
-  '活动编号', '活动标题', '报名人', '用户ID', '关联身份', '联系电话', '报名时间', '状态', '候补顺序', '签到',
+  '活动编号', '活动标题', '报名人', '用户ID', '关联身份', '联系电话', '留言', '报名时间', '状态', '候补顺序', '签到',
 ]
 
 function mapRow(e: EventEnrollmentRecord): (string | number)[] {
@@ -199,6 +200,7 @@ function mapRow(e: EventEnrollmentRecord): (string | number)[] {
     e.userId,
     relatedIdentities(e).map(identityText).join('、') || '—',
     e.phone || '—',
+    e.message || '—',
     e.appliedAt,
     statusLabel('enrollment', e.status),
     e.waitlistOrder ?? '—',
@@ -289,6 +291,13 @@ const { close: closeRejectDialog } = useDialogFormProtection(rejectForm, rejectV
           <span v-else class="muted-dash">—</span>
         </template>
         <template #phone="{ row }">{{ row.phone || '—' }}</template>
+        <!-- 留言（报名时选填）：单行截断 + hover 全文，避免拉高行高 -->
+        <template #message="{ row }">
+          <t-tooltip v-if="row.message" :content="row.message" placement="top-left">
+            <span class="message-cell">{{ row.message }}</span>
+          </t-tooltip>
+          <span v-else class="muted-dash">—</span>
+        </template>
         <template #status="{ row }">
           <StatusTag entity="enrollment" :value="row.status" />
         </template>
@@ -355,5 +364,13 @@ const { close: closeRejectDialog } = useDialogFormProtection(rejectForm, rejectV
 
 .muted-dash {
   color: var(--td-text-color-placeholder);
+}
+
+/* 留言单元格：单行截断（列已 ellipsis，此处保证 tooltip 触发的截断样式一致） */
+.message-cell {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 </style>

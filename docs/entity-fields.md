@@ -143,5 +143,8 @@
 | 扩展 | DemandRespondent | **hiddenFields String[] 默认 []**（响应审核通过时勾选「向需求方隐藏」的响应字段键：message/quote/timeline/cases/phone/email；空 = 全部向需求方显示；客户端发布者视图逐项省略，后台与响应者本人仍见真实值）；email 随响应提交落库（客户端响应表单新增「联系邮箱」选填，留空沿用账号邮箱） |
 | 扩展 | DemandRespondent | **status 增 `undertaken`（已承接，响应终态）**：立项时被选为承接方且存在响应记录 → `undertaken`；发布者已选定或本次勾选但未入选的响应 → `closed`（已结束）+ 站内信；字符串列，无迁移。另：立项事务内可写入 `accepted`（`InitiateProjectDto.respondentIds` 勾选项，随后收敛为 `undertaken`）。字段读取口径见 wiki-backend §7.6 |
 | 扩展 | LevelTier | pointsDiscount Float 默认 10（积分消费折扣：1 = 1 折 … 10 = 原价，支持一位小数如 8.5 = 85 折；商城兑换与空间预约按等级折扣扣分，折扣口径见 wiki-backend §8.8） |
+| 扩展 | SystemConfig | **phoneRegisterOpen/emailRegisterOpen Bool 默认 true（手机号/邮箱注册渠道开关）**：仅 `registrationOpen=true` 时生效，关闭后不允许该渠道注册新账号（已有账号仍可用该渠道验证码登录，写端点服务端二次校验）；**仅约束注册建号，与绑定能力解耦——关闭邮箱注册后，手机号注册成功的用户仍可绑定/换绑邮箱（反之亦然）**；两个渠道均关闭时保存侧同步关闭 `registrationOpen`，重新开启「客户端注册」而两渠道仍关闭时两渠道一并打开（`/api/app/config` 随 `registrationOpen` 一并下发） |
+| 扩展 | CommunityEvent | **enrollRequirePhone/enrollRequireEmail Bool 默认 false（报名需手机号/邮箱）**：开启后客户端报名前核验是否已绑定，未绑定则提示并引导去「账号与安全」，服务端报名时二次校验（未绑定 400） |
+| 扩展 | EventEnrollment | message? VarChar(200)（报名留言：客户端报名二次确认框选填，后台「活动报名」审核列表与活动详情报名管理可见，重新报名覆盖） |
 
 **卡片字段配置**：个人名片（`User`/UserIdentity 派生字段）与社区企业名片（`Enterprise` 字段）均**免审核保存即公开**；admin 后台在**用户详情 / 企业详情**的「名片」标签页查看与编辑个人/企业名片（「编辑名片」弹窗），用户可编辑字段白名单在**系统配置 > 名片可编辑字段**维护（原「名片管理」页已下线），由 `GET /api/app/card-schema/:type` 下发。个人名片 `visibility.isPublic=false` 时从人才库隐藏（§8.2）。

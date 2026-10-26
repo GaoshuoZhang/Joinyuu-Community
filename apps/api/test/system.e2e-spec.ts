@@ -267,7 +267,67 @@ describe('M1-E system 系统管理域', () => {
     /* 保存留痕（系统管理，含 MinIO 状态） */
     const logs = await get('/api/admin/audit-logs').query({ page: 1, pageSize: 50, keyword: '保存系统配置' })
     expect(logs.body.data.total).toBe(1)
-    expect(logs.body.data.list[0].detail).toBe('临期提醒 20 天 · 上传上限 30 MB · MinIO 已停用 · 密码过期强制改密 已启用（120 天）')
+    expect(logs.body.data.list[0].detail).toBe('临期提醒 20 天 · 上传上限 30 MB · MinIO 已停用 · 密码过期强制改密 已启用（120 天） · 注册 已开启（手机号开/邮箱开）')
+
+    /* 注册渠道开关联动（需求口径）：
+     * - 后台关掉最后一个渠道时「客户端注册」同步关闭（提交 registrationOpen=false + 两渠道 false）；
+     * - 重新打开「客户端注册」而两渠道仍关闭 → 两个渠道一并打开；
+     * - 只关闭一个渠道时客户端注册保持开启。 */
+    const basePayload = {
+      siteName: '聚屿社区（测试）',
+      siteSlogan: '让每一座创业孤岛，在这里连成群岛。',
+      mallOpen: false,
+      demandOpen: true,
+      reservationOpen: true,
+      realnameRequired: false,
+      homeCarouselOpen: true,
+      leaseExpireRemindDays: 20,
+      uploadMaxSizeMb: 30,
+      passwordExpireEnabled: true,
+      passwordExpireDays: 120,
+      minioEnabled: false,
+      minioEndpoint: 'minio.local',
+      minioPort: 9001,
+      minioUseSsl: true,
+      minioAccessKey: 'joinyuu',
+      minioBucket: 'joinyuu-media',
+    }
+    const closeChannels = await put('/api/admin/system/config').send({
+      ...basePayload,
+      registrationOpen: false,
+      phoneRegisterOpen: false,
+      emailRegisterOpen: false,
+    })
+    expect(closeChannels.status).toBe(200)
+    const closed = await get('/api/admin/system/config')
+    expect(closed.body.data.registrationOpen).toBe(false)
+    expect(closed.body.data.phoneRegisterOpen).toBe(false)
+    expect(closed.body.data.emailRegisterOpen).toBe(false)
+
+    const reopen = await put('/api/admin/system/config').send({
+      ...basePayload,
+      registrationOpen: true,
+      phoneRegisterOpen: false,
+      emailRegisterOpen: false,
+    })
+    expect(reopen.status).toBe(200)
+    const reopened = await get('/api/admin/system/config')
+    expect(reopened.body.data.registrationOpen).toBe(true)
+    expect(reopened.body.data.phoneRegisterOpen).toBe(true)
+    expect(reopened.body.data.emailRegisterOpen).toBe(true)
+
+    /* 只关闭一个渠道：客户端注册保持开启 */
+    const oneChannel = await put('/api/admin/system/config').send({
+      ...basePayload,
+      registrationOpen: true,
+      phoneRegisterOpen: false,
+      emailRegisterOpen: true,
+    })
+    expect(oneChannel.status).toBe(200)
+    const single = await get('/api/admin/system/config')
+    expect(single.body.data.registrationOpen).toBe(true)
+    expect(single.body.data.phoneRegisterOpen).toBe(false)
+    expect(single.body.data.emailRegisterOpen).toBe(true)
 
     const emptyName = await put('/api/admin/system/config').send({
       siteName: '   ',

@@ -4,6 +4,7 @@ import { PageQueryDto } from '../../../common/dto/page-query.dto'
 import type { AppAuthenticatedRequest } from '../../../common/interfaces/app-authenticated-request'
 import { AppEventsService } from './events.service'
 import { CheckInDto } from './dto/check-in.dto'
+import { EnrollEventDto } from './dto/enroll-event.dto'
 import { SubmitFeedbackDto } from './dto/submit-feedback.dto'
 
 /* 活动中心（M2-R R2）：浏览/详情公开（游客可看），报名/取消/签到/反馈需登录 */
@@ -30,8 +31,8 @@ export class AppEventsController {
 
   @HttpCode(200)
   @Post(':id/enroll')
-  enroll(@Req() req: AppAuthenticatedRequest, @Param('id') id: string) {
-    return this.events.enroll(this.uid(req), id)
+  enroll(@Req() req: AppAuthenticatedRequest, @Param('id') id: string, @Body() dto: EnrollEventDto) {
+    return this.events.enroll(this.uid(req), id, dto)
   }
 
   @HttpCode(200)

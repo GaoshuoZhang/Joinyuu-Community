@@ -153,6 +153,10 @@ export interface EventPayload {
   enrollmentIdentities: string[]
   enrollmentLevels: string[]
   requireReview: boolean
+  /** 报名需绑定手机号（默认关）：未绑定用户报名时客户端引导去「账号与安全」绑定 */
+  enrollRequirePhone?: boolean
+  /** 报名需绑定邮箱（默认关） */
+  enrollRequireEmail?: boolean
   /** 报名截止时间（空 = 不限，活动开始前均可报名） */
   enrollmentDeadline?: string
   /** 报名奖励积分（历史缺省值按积分规则发放） */

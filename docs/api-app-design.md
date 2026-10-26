@@ -36,7 +36,7 @@
 - 响应包络 `{ code: 0, data }`；错误 `{ code, message }`，中文文案风格与 M0 一致。
 - 分页 `page`/`pageSize` → `{ list, total }`。
 - 时间字段 `YYYY-MM-DD HH:mm` 字符串（M1 既有口径）。
-- 功能开关：`registrationOpen / mallOpen / demandOpen / reservationOpen` 由配置端点下发，写端点服务端二次校验。
+- 功能开关：`registrationOpen / phoneRegisterOpen / emailRegisterOpen / mallOpen / demandOpen / reservationOpen` 由配置端点下发，写端点服务端二次校验（渠道开关仅拦截「未注册 → 建号」，已有账号仍可用该渠道验证码登录）。
 
 ## 4. 配置与字典下发
 

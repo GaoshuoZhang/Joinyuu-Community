@@ -23,6 +23,9 @@ export interface SiteConfigDto {
   siteLogo: string
   mobileUrl: string
   registrationOpen: boolean
+  /** 手机号/邮箱注册渠道开关（仅 registrationOpen=true 时生效）：关闭后不允许该渠道注册新账号，已有账号仍可验证码登录 */
+  phoneRegisterOpen: boolean
+  emailRegisterOpen: boolean
   mallOpen: boolean
   demandOpen: boolean
   reservationOpen: boolean
@@ -66,6 +69,8 @@ export class ConfigService {
       siteLogo: String(full.siteLogo ?? ''),
       mobileUrl: String(full.mobileUrl ?? 'localhost:7759'),
       registrationOpen: Boolean(full.registrationOpen),
+      phoneRegisterOpen: full.phoneRegisterOpen !== false,
+      emailRegisterOpen: full.emailRegisterOpen !== false,
       mallOpen: Boolean(full.mallOpen),
       demandOpen: Boolean(full.demandOpen),
       reservationOpen: Boolean(full.reservationOpen),
@@ -122,6 +127,8 @@ function toFullSystemConfig(config: SystemConfig): Record<string, unknown> {
     siteLogo: config.siteLogo,
     mobileUrl: config.mobileUrl,
     registrationOpen: config.registrationOpen,
+    phoneRegisterOpen: config.phoneRegisterOpen,
+    emailRegisterOpen: config.emailRegisterOpen,
     mallOpen: config.mallOpen,
     demandOpen: config.demandOpen,
     reservationOpen: config.reservationOpen,

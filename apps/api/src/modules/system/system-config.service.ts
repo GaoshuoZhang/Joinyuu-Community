@@ -33,6 +33,9 @@ type SystemConfigAuditSource = {
   siteLogo: string
   mobileUrl: string
   registrationOpen: boolean
+  /** 手机号/邮箱注册渠道开关（仅 registrationOpen=true 时生效） */
+  phoneRegisterOpen: boolean
+  emailRegisterOpen: boolean
   mallOpen: boolean
   demandOpen: boolean
   reservationOpen: boolean
@@ -187,13 +190,32 @@ export class SystemConfigService {
     const secretKeyChanged =
       providedSecretKey !== '' && providedSecretKey !== (previous?.minioSecretKey ?? '')
 
+    /* 注册渠道开关联动（需求口径）：
+     * - 缺省保持原值（旧前端表单不传该字段时不重置），首次保存按默认开启处理；
+     * - 两个渠道都关闭 → 客户端注册整体关闭（registrationOpen 同步置 false）；
+     * - 重新打开「客户端注册」而两渠道仍关闭 → 两个渠道一并打开，避免「主开关开但无任何可用渠道」的死锁。 */
+    let registrationOpen = payload.registrationOpen
+    let phoneRegisterOpen = payload.phoneRegisterOpen === undefined
+      ? previous?.phoneRegisterOpen ?? true
+      : payload.phoneRegisterOpen
+    let emailRegisterOpen = payload.emailRegisterOpen === undefined
+      ? previous?.emailRegisterOpen ?? true
+      : payload.emailRegisterOpen
+    if (registrationOpen && !phoneRegisterOpen && !emailRegisterOpen) {
+      phoneRegisterOpen = true
+      emailRegisterOpen = true
+    }
+    if (!phoneRegisterOpen && !emailRegisterOpen) registrationOpen = false
+
     const next = {
       siteName,
       mobileUrl: payload.mobileUrl === undefined ? previous?.mobileUrl ?? 'localhost:7759' : normalizeMobileUrl(payload.mobileUrl),
       siteSlogan: (payload.siteSlogan ?? '').trim(),
       /* 站点 logo：缺省保持原值（旧前端表单不传该字段时不重置），空串 = 清除并回退默认字标 */
       siteLogo: payload.siteLogo === undefined ? previous?.siteLogo ?? '' : payload.siteLogo.trim(),
-      registrationOpen: payload.registrationOpen,
+      registrationOpen,
+      phoneRegisterOpen,
+      emailRegisterOpen,
       mallOpen: payload.mallOpen,
       demandOpen: payload.demandOpen,
       reservationOpen: payload.reservationOpen,
@@ -237,7 +259,7 @@ export class SystemConfigService {
       module: '系统管理',
       action: '保存系统配置',
       target: '系统配置',
-      detail: `临期提醒 ${days} 天 · 上传上限 ${uploadMaxSizeMb} MB · MinIO ${payload.minioEnabled ? '已启用' : '已停用'} · 密码过期强制改密 ${passwordExpireEnabled ? `已启用（${passwordExpireDays} 天）` : '已停用'}`,
+      detail: `临期提醒 ${days} 天 · 上传上限 ${uploadMaxSizeMb} MB · MinIO ${payload.minioEnabled ? '已启用' : '已停用'} · 密码过期强制改密 ${passwordExpireEnabled ? `已启用（${passwordExpireDays} 天）` : '已停用'} · 注册 ${registrationOpen ? `已开启（手机号${phoneRegisterOpen ? '开' : '关'}/邮箱${emailRegisterOpen ? '开' : '关'}）` : '已关闭'}`,
       before: previous ? toConfigAuditSnapshot(previous) : undefined,
       after: { ...toConfigAuditSnapshot(next), minioSecretKeyChanged: secretKeyChanged, realnameVerifyChanged: realnameChanged },
       operator,
@@ -316,6 +338,8 @@ function toSystemConfigDto(config: SystemConfig): Record<string, unknown> {
     siteLogo: config.siteLogo,
     mobileUrl: config.mobileUrl,
     registrationOpen: config.registrationOpen,
+    phoneRegisterOpen: config.phoneRegisterOpen,
+    emailRegisterOpen: config.emailRegisterOpen,
     mallOpen: config.mallOpen,
     demandOpen: config.demandOpen,
     reservationOpen: config.reservationOpen,
@@ -342,6 +366,8 @@ function toConfigAuditSnapshot(config: SystemConfigAuditSource): SystemConfigAud
     siteLogo: config.siteLogo,
     mobileUrl: config.mobileUrl,
     registrationOpen: config.registrationOpen,
+    phoneRegisterOpen: config.phoneRegisterOpen,
+    emailRegisterOpen: config.emailRegisterOpen,
     mallOpen: config.mallOpen,
     demandOpen: config.demandOpen,
     reservationOpen: config.reservationOpen,

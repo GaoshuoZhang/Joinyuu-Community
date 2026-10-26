@@ -453,6 +453,88 @@ describe('M2-R R1 app 鉴权', () => {
     }
   })
 
+  it('渠道注册开关：关闭渠道后该渠道建号被拒，已注册账号仍可验证码登录', async () => {
+    await prisma.systemConfig.update({
+      where: { id: 1 },
+      data: { emailRegisterOpen: false, phoneRegisterOpen: false },
+    })
+    try {
+      /* 邮箱注册端点：开关在验证码校验之前拦截 */
+      const email = 'channel-closed@example.invalid'
+      const code = await sendEmailCode(app, email, 'register')
+      const reg = await request(app.getHttpServer())
+        .post('/api/app/auth/register')
+        .send({ channel: 'email', email, code, password: 'user12345', agreed: true })
+      expect(reg.status).toBe(400)
+      expect(reg.body.message).toContain('邮箱注册暂未开放')
+
+      /* 验证码登录的「未注册 → 建号」分支同口径拒绝 */
+      const createCode = await sendEmailCode(app, email, 'login')
+      const create = await request(app.getHttpServer())
+        .post('/api/app/auth/login-by-code')
+        .send({ channel: 'email', account: email, code: createCode, agreed: true })
+      expect(create.status).toBe(400)
+      expect(create.body.message).toContain('邮箱注册暂未开放')
+
+      /* 手机号渠道同样生效（保持 registrationOpen=true，仅渠道关闭） */
+      const newPhone = '13900007777'
+      const smsCode = await sendSmsCode(app, newPhone, 'login')
+      const phoneCreate = await request(app.getHttpServer())
+        .post('/api/app/auth/login-by-code')
+        .send({ channel: 'phone', account: newPhone, code: smsCode, agreed: true })
+      expect(phoneCreate.status).toBe(400)
+      expect(phoneCreate.body.message).toContain('手机号注册暂未开放')
+
+      /* 已注册账号不受渠道开关影响：仍可用邮箱验证码登录 */
+      const existing = 'linwanzhou@starlan.ai'
+      const existingCode = await sendEmailCode(app, existing, 'login')
+      const login = await request(app.getHttpServer())
+        .post('/api/app/auth/login-by-code')
+        .send({ channel: 'email', account: existing, code: existingCode, agreed: true })
+      expect(login.status).toBe(200)
+      expect(login.body.data.isNewUser).toBe(false)
+    } finally {
+      await prisma.systemConfig.update({
+        where: { id: 1 },
+        data: { emailRegisterOpen: true, phoneRegisterOpen: true },
+      })
+    }
+  })
+
+  it('渠道注册开关只约束注册建号，不影响绑定/换绑联系方式', async () => {
+    await prisma.systemConfig.update({
+      where: { id: 1 },
+      data: { emailRegisterOpen: false, phoneRegisterOpen: false },
+    })
+    const original = await prisma.user.findUniqueOrThrow({ where: { uid: 'U1002' }, select: { email: true } })
+    try {
+      /* 手机号注册被关闭不影响已注册用户登录 */
+      const login = await request(app.getHttpServer())
+        .post('/api/app/auth/login')
+        .send({ identifier: '13801210002', password: 'user123' })
+      expect(login.status).toBe(200)
+
+      /* 邮箱注册被关闭，仍可绑定/换绑邮箱（渠道开关与绑定能力解耦） */
+      const target = 'bind-after-switch@example.invalid'
+      const code = await sendEmailCode(app, target, 'change_email')
+      const res = await request(app.getHttpServer())
+        .post('/api/app/auth/change-email')
+        .set('Authorization', `Bearer ${login.body.data.token}`)
+        .send({ newEmail: target, code })
+      expect(res.status).toBe(200)
+
+      const row = await prisma.user.findUniqueOrThrow({ where: { uid: 'U1002' } })
+      expect(row.email).toBe(target)
+      expect(row.emailVerifiedAt).toBeTruthy()
+    } finally {
+      await prisma.user.update({ where: { uid: 'U1002' }, data: { email: original.email } })
+      await prisma.systemConfig.update({
+        where: { id: 1 },
+        data: { emailRegisterOpen: true, phoneRegisterOpen: true },
+      })
+    }
+  })
+
   it('找回密码前置：返回账号已验证的可信渠道（脱敏）', async () => {
     const res = await request(app.getHttpServer())
       .get('/api/app/auth/recovery-channels')

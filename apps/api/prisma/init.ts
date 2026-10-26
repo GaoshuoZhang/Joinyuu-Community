@@ -156,6 +156,8 @@ async function main(): Promise<void> {
       siteName: systemConfig.siteName,
       siteSlogan: systemConfig.siteSlogan,
       registrationOpen: systemConfig.registrationOpen,
+      phoneRegisterOpen: systemConfig.phoneRegisterOpen,
+      emailRegisterOpen: systemConfig.emailRegisterOpen,
       mallOpen: systemConfig.mallOpen,
       demandOpen: systemConfig.demandOpen,
       reservationOpen: systemConfig.reservationOpen,

@@ -12,6 +12,8 @@ export const useConfigStore = defineStore('config', () => {
     siteLogo: '',
     mobileUrl: 'localhost:7759',
     registrationOpen: true,
+    phoneRegisterOpen: true,
+    emailRegisterOpen: true,
     mallOpen: true,
     demandOpen: true,
     reservationOpen: true,

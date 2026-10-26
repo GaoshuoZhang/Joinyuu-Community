@@ -40,6 +40,17 @@ const step = ref<1 | 2>(1)
 const mode = ref<'password' | 'code'>('password')
 /** 标识类型（第二屏据此刻画可用方式）：用户名仅密码 */
 const kind = ref<IdentifierKind>('username')
+/** 渠道级注册开关提示（默认开启）：仅影响「未注册 → 建号」，已有账号仍可用该渠道验证码登录 */
+const registerNotice = computed(() => {
+  if (!registrationOpen.value) return '注册暂未开放；已有账号仍可使用验证码登录。'
+  if (kind.value === 'phone' && configStore.config.phoneRegisterOpen === false) {
+    return '手机号注册暂未开放；已有账号仍可使用短信验证码登录。'
+  }
+  if (kind.value === 'email' && configStore.config.emailRegisterOpen === false) {
+    return '邮箱注册暂未开放；已有账号仍可使用邮箱验证码登录。'
+  }
+  return ''
+})
 /** 归一化后的登录标识（手机号 11 位 / 邮箱小写 / 用户名小写），第二屏展示与提交都用它 */
 const account = ref('')
 const smsAvailable = ref(false)
@@ -290,10 +301,10 @@ function onStep2Submit({ validateResult }: { validateResult: unknown }) {
     <!-- 第二屏：按标识类型给出密码 / 验证码 -->
     <template v-else>
       <NoticeBar
-        v-if="mode === 'code' && !registrationOpen"
+        v-if="mode === 'code' && registerNotice"
         visible
         theme="warning"
-        content="注册暂未开放；已有账号仍可使用验证码登录。"
+        :content="registerNotice"
         class="notice-tip"
       />
       <Form

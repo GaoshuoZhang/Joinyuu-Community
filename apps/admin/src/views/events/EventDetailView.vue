@@ -193,6 +193,7 @@ const enrollmentColumns = [
   { colKey: 'name', title: '报名人', width: 100 , ellipsis: true},
   { colKey: 'enterprise', title: '所属企业', width: 150, ellipsis: true },
   { colKey: 'phone', title: '联系电话', width: 130 , ellipsis: true},
+  { colKey: 'message', title: '留言', cell: 'message', width: 200, ellipsis: true },
   { colKey: 'appliedAt', title: '报名时间', width: 170 , ellipsis: true},
   { colKey: 'status', title: '状态', cell: 'status', width: 96 , ellipsis: true},
   { colKey: 'waitlistOrder', title: '候补顺序', cell: 'waitlistOrder', width: 96, ellipsis: true },
@@ -594,6 +595,13 @@ const { close: closeRejectDialog } = useDialogFormProtection(rejectForm, rejectV
                 <template #name="{ row }">
                   {{ row.name }}<t-tag class="id-tag" size="small" variant="light">{{ row.userId }}</t-tag>
                 </template>
+                <!-- 留言（报名时选填）：单行截断 + hover 全文 -->
+                <template #message="{ row }">
+                  <t-tooltip v-if="row.message" :content="row.message" placement="top-left">
+                    <span class="message-cell">{{ row.message }}</span>
+                  </t-tooltip>
+                  <span v-else class="muted-dash">—</span>
+                </template>
                 <template #status="{ row }">
                   <StatusTag entity="enrollment" :value="row.status" />
                 </template>
@@ -914,5 +922,17 @@ const { close: closeRejectDialog } = useDialogFormProtection(rejectForm, rejectV
   .head-actions {
     flex-wrap: wrap;
   }
+}
+
+/* 报名留言单元格：单行截断（列已 ellipsis，此处保证 tooltip 触发的截断样式一致） */
+.message-cell {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.muted-dash {
+  color: var(--td-text-color-placeholder);
 }
 </style>

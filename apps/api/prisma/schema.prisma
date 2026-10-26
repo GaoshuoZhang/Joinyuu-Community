@@ -571,6 +571,9 @@ model CommunityEvent {
   enrollmentIdentities String[]
   enrollmentLevels     String[]
   requireReview        Boolean           @default(false)
+  // 报名需绑定手机号 / 邮箱（默认关）：未绑定时客户端提示并引导去「账号与安全」绑定，服务端报名时二次校验
+  enrollRequirePhone   Boolean           @default(false)
+  enrollRequireEmail   Boolean           @default(false)
   enrollmentDeadline   String?           @db.VarChar(16)
   scheduledAt          String?           @db.VarChar(16)
   enrollPoints         Int?
@@ -610,6 +613,8 @@ model EventEnrollment {
   name          String         @db.VarChar(64)
   enterprise    String         @db.VarChar(128)
   phone         String         @db.VarChar(32)
+  // 报名留言（客户端报名二次确认框选填，后台报名审核可见）
+  message       String?        @db.VarChar(200)
   appliedAt     String         @db.VarChar(16)
   status        String         @default("pending") @db.VarChar(16) // pending | approved | rejected | cancelled + waitlisted（R2 候补）
   checkedIn     Boolean        @default(false)
@@ -1133,6 +1138,13 @@ model SystemConfig {
   siteLogo              String  @default("") @db.VarChar(512)
   mobileUrl             String  @default("localhost:7759") @db.VarChar(2048)
   registrationOpen      Boolean @default(true)
+  /**
+   * 手机号/邮箱注册渠道开关（仅 registrationOpen=true 时生效；缺行视为开启，与既有口径一致）：
+   * 关闭后不允许使用该渠道注册新账号（已有账号仍可用该渠道验证码登录）；
+   * 两个渠道均关闭时保存侧同步关闭 registrationOpen（客户端注册整体暂停）。
+   */
+  phoneRegisterOpen     Boolean @default(true)
+  emailRegisterOpen     Boolean @default(true)
   mallOpen              Boolean @default(true)
   demandOpen            Boolean @default(true)
   reservationOpen       Boolean @default(true)

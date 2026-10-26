@@ -65,6 +65,15 @@ export class EventPayloadDto {
   @IsBoolean()
   requireReview!: boolean
 
+  /* 报名要求绑定手机号 / 邮箱（默认关）：开启后未绑定用户报名时服务端拒绝并引导去绑定 */
+  @IsOptional()
+  @IsBoolean()
+  enrollRequirePhone?: boolean
+
+  @IsOptional()
+  @IsBoolean()
+  enrollRequireEmail?: boolean
+
   @IsOptional()
   @IsString()
   enrollmentDeadline?: string

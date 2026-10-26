@@ -36,6 +36,16 @@ export class SystemConfigPayloadDto {
   @IsBoolean()
   registrationOpen!: boolean
 
+  /** 手机号注册渠道开关：缺省保持原值（旧前端表单不传该字段时不得被重置）；关闭后不允许手机号注册新账号 */
+  @IsOptional()
+  @IsBoolean()
+  phoneRegisterOpen?: boolean
+
+  /** 邮箱注册渠道开关：缺省保持原值；关闭后不允许邮箱注册新账号 */
+  @IsOptional()
+  @IsBoolean()
+  emailRegisterOpen?: boolean
+
   @IsBoolean()
   mallOpen!: boolean
 

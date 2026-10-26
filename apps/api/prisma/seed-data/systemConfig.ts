@@ -6,6 +6,9 @@ export const systemConfig: SystemConfig = {
   siteName: '聚屿社区',
   siteSlogan: '让每一座创业孤岛，在这里连成群岛。',
   registrationOpen: true,
+  /** 手机号/邮箱注册渠道开关（仅 registrationOpen=true 时生效）：关闭后不允许该渠道注册新账号 */
+  phoneRegisterOpen: true,
+  emailRegisterOpen: true,
   mallOpen: true,
   demandOpen: true,
   reservationOpen: true,

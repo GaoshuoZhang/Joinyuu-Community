@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref } from 'vue'
+import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
 import { onBeforeRouteLeave, useRoute, useRouter } from 'vue-router'
 import { MessagePlugin } from 'tdesign-vue-next'
 import { confirmDialog } from '@/utils/confirmDialog'
@@ -90,6 +90,8 @@ const form = reactive<SystemConfigForm>({
   siteLogo: '',
   mobileUrl: 'localhost:7759',
   registrationOpen: true,
+  phoneRegisterOpen: true,
+  emailRegisterOpen: true,
   mallOpen: true,
   demandOpen: true,
   reservationOpen: true,
@@ -115,6 +117,25 @@ const form = reactive<SystemConfigForm>({
   updatedAt: '',
   updatedBy: '',
 })
+
+/* 注册渠道联动（需求口径）：
+ * - 关掉最后一个注册渠道 → 「客户端注册」同步关闭；
+ * - 重新打开「客户端注册」而两个渠道仍关闭 → 两个渠道一并打开（避免主开关开但无可用渠道）。 */
+watch(
+  () => [form.phoneRegisterOpen, form.emailRegisterOpen] as const,
+  ([phone, email]) => {
+    if (!phone && !email) form.registrationOpen = false
+  },
+)
+watch(
+  () => form.registrationOpen,
+  (open) => {
+    if (open && !form.phoneRegisterOpen && !form.emailRegisterOpen) {
+      form.phoneRegisterOpen = true
+      form.emailRegisterOpen = true
+    }
+  },
+)
 
 /** 用服务端配置刷新表单，并清空只写密钥输入（避免把「已配置」误当成待提交的新值） */
 function applyConfig(conf: SystemConfig) {
@@ -362,6 +383,21 @@ onBeforeRouteLeave(async () => {
                 <div class="switch-tip">关闭后客户端暂停新用户注册</div>
               </div>
               <t-switch v-accessible-field="'客户端注册'" v-model="form.registrationOpen" aria-label="客户端注册" />
+            </div>
+            <!-- 渠道开关：仅「客户端注册」开启时展示（关闭注册时渠道设置无意义） -->
+            <div v-if="form.registrationOpen" class="switch-row switch-row-sub">
+              <div class="switch-text">
+                <div class="switch-label">手机号注册</div>
+                <div class="switch-tip">关闭后不允许使用手机号注册；已有账号仍可用短信验证码登录，绑定/换绑手机号不受影响</div>
+              </div>
+              <t-switch v-accessible-field="'手机号注册'" v-model="form.phoneRegisterOpen" aria-label="手机号注册" />
+            </div>
+            <div v-if="form.registrationOpen" class="switch-row switch-row-sub">
+              <div class="switch-text">
+                <div class="switch-label">邮箱注册</div>
+                <div class="switch-tip">关闭后不允许使用邮箱注册；已有账号仍可用邮箱验证码登录，绑定/换绑邮箱不受影响。两个渠道都关闭时将同时关闭「客户端注册」</div>
+              </div>
+              <t-switch v-accessible-field="'邮箱注册'" v-model="form.emailRegisterOpen" aria-label="邮箱注册" />
             </div>
             <div class="switch-row">
               <div class="switch-text">
@@ -714,6 +750,11 @@ onBeforeRouteLeave(async () => {
   justify-content: space-between;
   gap: 16px;
   min-height: 32px;
+}
+
+/* 渠道开关（手机号注册/邮箱注册）：从属于「客户端注册」，左侧缩进 + 弱化层级 */
+.switch-row-sub .switch-label {
+  font-weight: 400;
 }
 
 @media (max-width: 900px) {

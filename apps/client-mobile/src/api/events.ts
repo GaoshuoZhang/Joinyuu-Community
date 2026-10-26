@@ -16,9 +16,10 @@ export async function fetchEvent(id: string): Promise<CommunityEvent> {
   return httpGet<CommunityEvent>(`/events/${id}`)
 }
 
-/** POST /api/app/events/:id/enroll — 报名（截止/容量/范围校验；满员进入候补） */
-export async function enrollEvent(id: string): Promise<EventEnrollmentResult> {
-  return httpPost<EventEnrollmentResult>(`/events/${id}/enroll`)
+/** POST /api/app/events/:id/enroll — 报名（截止/容量/范围校验；满员进入候补）；message 为选填留言 */
+export async function enrollEvent(id: string, payload: { message?: string } = {}): Promise<EventEnrollmentResult> {
+  const message = payload.message?.trim()
+  return httpPost<EventEnrollmentResult>(`/events/${id}/enroll`, message ? { message } : {})
 }
 
 /** POST /api/app/events/:id/enroll/cancel — 取消报名（开始前 24 小时截止；释放名额自动递补候补） */

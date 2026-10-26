@@ -131,7 +131,8 @@ export class AuthService {
    * 验证码渠道通过验证即成为该用户的可信通知渠道；昵称由服务端自动分配（全站唯一，可后续修改），
    * 用户名默认自动分配，username 渠道则由用户指定。 */
   async register(dto: RegisterDto): Promise<AppLoginResult> {
-    if (!(await this.registrationOpen())) {
+    const switches = await this.registerSwitches()
+    if (!switches.open) {
       throw new BadRequestException('注册暂未开放')
     }
     if (dto.agreed !== true) {
@@ -159,6 +160,10 @@ export class AuthService {
     } else if (channel === 'email') {
       if (!dto.email?.trim()) throw new BadRequestException('请输入邮箱')
       if (!email) throw new BadRequestException('邮箱格式不正确')
+      /* 渠道级注册开关（后台「功能开关」）：关闭后不允许邮箱注册新账号 */
+      if (!switches.email) {
+        throw new BadRequestException('邮箱注册暂未开放；已有账号仍可使用邮箱验证码登录')
+      }
       if (!(await this.emailCodes.isAvailable())) {
         throw new BadRequestException('邮箱注册暂未开放，请稍后再试或选择手机号注册')
       }
@@ -171,6 +176,10 @@ export class AuthService {
     } else {
       if (!phone) throw new BadRequestException('请输入手机号')
       if (!/^1\d{10}$/.test(phone)) throw new BadRequestException('手机号格式不正确')
+      /* 渠道级注册开关（后台「功能开关」）：关闭后不允许手机号注册新账号 */
+      if (!switches.phone) {
+        throw new BadRequestException('手机号注册暂未开放；已有账号仍可使用短信验证码登录')
+      }
       if (!(await this.sms.isAvailable())) {
         throw new BadRequestException('手机号注册暂未开放，请稍后再试')
       }
@@ -292,8 +301,20 @@ export class AuthService {
 
     /* 未注册 → 建号。维护期（许可证只读）与注册关闭时只允许登录、不允许建号。
      * 该分支位于验证码校验之后，探针必须持有该手机号/邮箱，故不构成有效账号枚举。 */
-    if (!(await this.registrationOpen()) || !(await this.license.canWrite())) {
+    if (!(await this.license.canWrite())) {
       throw new BadRequestException('注册暂未开放，请使用密码登录')
+    }
+    const switches = await this.registerSwitches()
+    if (!switches.open) {
+      throw new BadRequestException('注册暂未开放，请使用密码登录')
+    }
+    /* 渠道级注册开关：仅拦截「未注册 → 建号」，已有账号的验证码登录不受影响 */
+    if (dto.channel === 'email' ? !switches.email : !switches.phone) {
+      throw new BadRequestException(
+        dto.channel === 'email'
+          ? '邮箱注册暂未开放；已有账号仍可使用邮箱验证码登录'
+          : '手机号注册暂未开放；已有账号仍可使用短信验证码登录',
+      )
     }
 
     try {
@@ -562,13 +583,17 @@ export class AuthService {
     return { uid, username, nickname }
   }
 
-  /** 注册开关（SystemConfig 单例行；缺行视为开放，与既有口径一致） */
-  private async registrationOpen(): Promise<boolean> {
+  /** 注册总开关与渠道开关（SystemConfig 单例行；缺行/缺字段视为开启，与既有口径一致） */
+  private async registerSwitches(): Promise<{ open: boolean; phone: boolean; email: boolean }> {
     const config = await this.prisma.systemConfig.findUnique({
       where: { id: 1 },
-      select: { registrationOpen: true },
+      select: { registrationOpen: true, phoneRegisterOpen: true, emailRegisterOpen: true },
     })
-    return config?.registrationOpen !== false
+    return {
+      open: config?.registrationOpen !== false,
+      phone: config?.phoneRegisterOpen !== false,
+      email: config?.emailRegisterOpen !== false,
+    }
   }
 
   /** 验证码校验通过即证明该渠道归本人所有：未标记可信时补写（幂等，已有值不动） */

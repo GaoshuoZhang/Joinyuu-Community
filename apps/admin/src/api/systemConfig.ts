@@ -24,6 +24,9 @@ export interface SystemConfigPayload {
   siteLogo: string
   mobileUrl: string
   registrationOpen: boolean
+  /** 手机号/邮箱注册渠道开关（仅 registrationOpen=true 时生效）：关闭后不允许该渠道注册新账号 */
+  phoneRegisterOpen: boolean
+  emailRegisterOpen: boolean
   mallOpen: boolean
   demandOpen: boolean
   reservationOpen: boolean

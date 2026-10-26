@@ -32,7 +32,7 @@ export const lease = {
 }
 const config = {
   siteName: '聚屿社区 · 隔离验证', siteSlogan: '仅用于界面验证', mobileUrl: 'localhost:7759',
-  registrationOpen: true, mallOpen: true, demandOpen: true, reservationOpen: true, realnameRequired: false,
+  registrationOpen: true, phoneRegisterOpen: true, emailRegisterOpen: true, mallOpen: true, demandOpen: true, reservationOpen: true, realnameRequired: false,
   homeCarouselOpen: true, leaseExpireRemindDays: 15, uploadMaxSizeMb: 10, passwordExpireEnabled: false,
   passwordExpireDays: 90, realnameVerifyEnabled: false, realnameVerifyProvider: '', realnameVerifyCredentialMode: 'inline',
   realnameVerifyConfig: {}, realnameVerifyCredentialEnv: {}, realnameVerifyProviderLabel: '',

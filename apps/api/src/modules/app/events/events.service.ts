@@ -22,6 +22,7 @@ import { resolveOptionalAppUid, type OptionalAppAuthDeps } from '../../../common
 import { assertRealnameAllowed } from '../realname/realname.service'
 import { consumePublishingLimit } from '../../../common/enterprise/publishing-limits'
 import { CheckInDto } from './dto/check-in.dto'
+import { EnrollEventDto } from './dto/enroll-event.dto'
 import { SubmitFeedbackDto } from './dto/submit-feedback.dto'
 
 /* 积分/经验触发 reason 文案（与 admin events 流水风格一致） */
@@ -119,7 +120,11 @@ export class AppEventsService {
 
   /* ---------- 报名 / 取消 ---------- */
 
-  async enroll(uid: string, eventId: string): Promise<{ status: 'approved' | 'pending' | 'waitlisted'; waitlistOrder?: number }> {
+  async enroll(
+    uid: string,
+    eventId: string,
+    dto: EnrollEventDto = {},
+  ): Promise<{ status: 'approved' | 'pending' | 'waitlisted'; waitlistOrder?: number }> {
     const user = await this.prisma.user.findUnique({ where: { uid }, include: { identities: true } })
     if (!user) throw new NotFoundException('用户不存在')
     const event = await this.requireEnrollableEvent(eventId, uid)
@@ -129,6 +134,15 @@ export class AppEventsService {
 
     // 实名强制校验（M2-R R3 分级权益）：开关开启且未实名时禁止报名
     await assertRealnameAllowed(this.prisma, uid, 'enroll')
+
+    /* 报名要求绑定手机号/邮箱（后台活动表单开关；客户端已提前引导绑定，此处为服务端权威校验）。
+     * 判定以「是否已绑定」为准（绑定链路均经验证码校验）。 */
+    if (event.enrollRequirePhone && !(user.phone ?? '').trim()) {
+      throw new BadRequestException('该活动报名需先绑定手机号，请在「账号与安全」中完成绑定')
+    }
+    if (event.enrollRequireEmail && !(user.email ?? '').trim()) {
+      throw new BadRequestException('该活动报名需先绑定邮箱，请在「账号与安全」中完成绑定')
+    }
 
     // 可报名范围过滤
     if (!this.scopeMatches(event.enrollmentIdentities, event.enrollmentLevels, user.identities)) {
@@ -147,6 +161,8 @@ export class AppEventsService {
       name,
       enterprise,
       phone: user.phone ?? '',
+      /* 报名留言（选填）：重新报名时覆盖为最新一次留言 */
+      message: (dto.message ?? '').trim() || null,
       appliedAt: now,
     }
 
@@ -561,7 +577,12 @@ export class AppEventsService {
       endTime: e.endTime,
       location: e.location,
       capacity: e.capacity,
+      /* 详情页展示用（空串表示未填写，客户端不渲染该行） */
+      speaker: e.speaker,
+      host: e.host,
       requireReview: e.requireReview,
+      enrollRequirePhone: e.enrollRequirePhone,
+      enrollRequireEmail: e.enrollRequireEmail,
       enrollmentOpen: e.enrollmentOpen,
       enrollmentDeadline: e.enrollmentDeadline ?? '',
       status: e.status,

@@ -48,6 +48,27 @@ describe('M1-C events 活动（发布/编辑/审核/签到/定时任务）', () 
     )
   })
 
+  it('报名审核列表下发报名留言（客户端报名时选填）', async () => {
+    const prisma = app.get(PrismaService)
+    const target = await prisma.eventEnrollment.findFirst({ where: { status: 'pending' }, orderBy: { id: 'asc' } })
+    expect(target).toBeTruthy()
+    if (!target) return
+
+    await prisma.eventEnrollment.update({ where: { id: target.id }, data: { message: 'e2e 报名留言' } })
+    try {
+      const res = await request(app.getHttpServer())
+        .get('/api/admin/events/enrollments?page=1&pageSize=50&status=pending')
+        .set('Authorization', `Bearer ${token}`)
+      expect(res.status).toBe(200)
+      const row = (res.body.data.list as Array<{ eventId: string; userId: string; message?: string }>).find(
+        (item) => item.eventId === target.eventId && item.userId === target.userId,
+      )
+      expect(row?.message).toBe('e2e 报名留言')
+    } finally {
+      await prisma.eventEnrollment.update({ where: { id: target.id }, data: { message: null } })
+    }
+  })
+
   it('待发布活动立即发布 → 200，重复/非法流转 → 409', async () => {
     // EV6006 pending_release → published + enrollmentOpen
     const pub = await request(app.getHttpServer())

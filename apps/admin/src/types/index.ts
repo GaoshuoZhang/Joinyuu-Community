@@ -335,6 +335,8 @@ export interface EventEnrollment {
   name: string
   enterprise: string
   phone: string
+  /** 报名留言（客户端报名时选填，后台审核可见） */
+  message?: string
   appliedAt: string
   status: 'pending' | 'approved' | 'rejected' | 'waitlisted' | 'cancelled'
   checkedIn: boolean
@@ -356,6 +358,8 @@ export interface EventEnrollmentRecord {
   enterprise: string
   identities: UserIdentity[]
   phone: string
+  /** 报名留言（客户端报名时选填，后台审核可见） */
+  message?: string
   appliedAt: string
   status: EventEnrollment['status']
   waitlisted: boolean
@@ -390,6 +394,10 @@ export interface CommunityEvent {
   enrollmentLevels: string[]
   /** 报名是否需审核 */
   requireReview: boolean
+  /** 报名需绑定手机号（默认关）：未绑定用户报名时客户端引导去「账号与安全」绑定，服务端二次校验 */
+  enrollRequirePhone: boolean
+  /** 报名需绑定邮箱（默认关） */
+  enrollRequireEmail: boolean
   /** 报名截止时间（空 = 不限，活动开始前均可报名） */
   enrollmentDeadline?: string
   /** 定时发布时间（设置后进入定时发布中状态，到点自动发布） */
@@ -953,6 +961,10 @@ export interface SystemConfig {
   mobileUrl: string
   /** 客户端注册开关 */
   registrationOpen: boolean
+  /** 手机号注册渠道开关（仅 registrationOpen=true 时生效）：关闭后不允许手机号注册新账号 */
+  phoneRegisterOpen: boolean
+  /** 邮箱注册渠道开关（仅 registrationOpen=true 时生效）：关闭后不允许邮箱注册新账号 */
+  emailRegisterOpen: boolean
   /** 积分商城开放开关 */
   mallOpen: boolean
   /** 需求广场开放开关 */

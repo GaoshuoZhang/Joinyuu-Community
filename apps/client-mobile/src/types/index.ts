@@ -23,6 +23,9 @@ export interface AppConfig {
   siteLogo?: string
   mobileUrl?: string
   registrationOpen: boolean
+  /** 手机号/邮箱注册渠道开关（仅 registrationOpen=true 时生效）：关闭后不允许该渠道注册新账号，已有账号仍可验证码登录 */
+  phoneRegisterOpen?: boolean
+  emailRegisterOpen?: boolean
   mallOpen: boolean
   demandOpen: boolean
   reservationOpen: boolean
@@ -669,7 +672,17 @@ export interface CommunityEvent {
   endTime: string
   location: string
   capacity: number
+  /** 主讲嘉宾（后台可留空；空串/「—」不展示） */
+  speaker?: string
+  /** 主办方 */
+  host?: string
+  /** 活动标签（空数组不展示） */
+  tags?: string[]
   requireReview: boolean
+  /** 报名需绑定手机号（默认关）：未绑定时报名前提示并引导去「账号与安全」绑定 */
+  enrollRequirePhone?: boolean
+  /** 报名需绑定邮箱（默认关） */
+  enrollRequireEmail?: boolean
   enrollmentOpen: boolean
   enrollmentDeadline: string
   status: EventStatus
