@@ -5,6 +5,12 @@
 
 ## [Unreleased]
 
+## [1.5.1] - 2026-10-26
+
+### 本次更新
+
+- 登录页新增注册渠道关闭提示；活动报名支持绑定引导和选填留言，详情展示主讲嘉宾、主办方及标签。
+
 ### 新增
 
 - 新增零依赖静态服务脚本 [server.mjs](./server.mjs) 与 `serve` 脚本：供 1Panel「运行环境 → Node.js」容器直接托管移动端产物，其中**实现了 history 路由兜底**（任意未命中路径回落 `index.html`，等价 Nginx 的 `try_files $uri $uri/ /index.html;`），并包含正确 MIME、`index.html` 不缓存、带哈希资源长缓存、路径穿越防护。根脚本新增 `serve:mobile` 与 `start:mobile`（容器内构建后再服务）。

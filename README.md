@@ -2,7 +2,7 @@
 
 > 社区数字化运营平台：管理后台（运营方）+ 客户端移动端（社区个体 / 社区企业 / 个人用户）双端闭环，覆盖需求发布、项目协作、活动报名、商城积分与空间预约全业务流程。
 
-[![Version](https://img.shields.io/badge/version-1.5.0-blue)](./docs/versioning.md)
+[![Version](https://img.shields.io/badge/version-1.5.1-blue)](./docs/versioning.md)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.x-3178C6?logo=typescript&logoColor=white)](https://www.typescriptlang.org/)
 [![Vue](https://img.shields.io/badge/Vue-3.5-4FC08D?logo=vuedotjs&logoColor=white)](https://vuejs.org/)
 [![NestJS](https://img.shields.io/badge/NestJS-11-E0234E?logo=nestjs&logoColor=white)](https://nestjs.com/)
@@ -24,9 +24,9 @@
 
 | 端 | 目录 | 版本 | 版本号展示位置 | 更新日志 |
 | --- | --- | --- | --- | --- |
-| 后端服务 | [apps/api](./apps/api) | v1.5.0 | `GET /api/health`、`GET /api/app/config`、系统监控概览 | [CHANGELOG](./apps/api/CHANGELOG.md) |
-| 管理后台 | [apps/admin](./apps/admin) | v1.5.0 | 登录页品牌区、系统管理 → 关于 → 版本信息 | [CHANGELOG](./apps/admin/CHANGELOG.md) |
-| 移动端 Web | [apps/client-mobile](./apps/client-mobile) | v1.5.0 | 我的 → 关于（软件版本 / 服务端版本 / 定制UI版本号） | [CHANGELOG](./apps/client-mobile/CHANGELOG.md) |
+| 后端服务 | [apps/api](./apps/api) | v1.5.1 | `GET /api/health`、`GET /api/app/config`、系统监控概览 | [CHANGELOG](./apps/api/CHANGELOG.md) |
+| 管理后台 | [apps/admin](./apps/admin) | v1.5.1 | 登录页品牌区、系统管理 → 关于 → 版本信息 | [CHANGELOG](./apps/admin/CHANGELOG.md) |
+| 移动端 Web | [apps/client-mobile](./apps/client-mobile) | v1.5.1 | 我的 → 关于（软件版本 / 服务端版本 / 定制UI版本号） | [CHANGELOG](./apps/client-mobile/CHANGELOG.md) |
 
 - **版本号唯一来源**：各端 `package.json` 的 `version`（后端运行时读取、前端构建期注入），禁止在代码里硬编码。
 - **规则与发布流程**：[docs/versioning.md](./docs/versioning.md)（语义化版本 + Keep a Changelog）。
@@ -169,7 +169,7 @@ pnpm test:e2e:it          # 隔离数据库全量 e2e（48 套件 / 371 用例�
 
 ## 🗓 版本与更新日志
 
-当前版本：**v1.5.0**（后端 / 管理后台 / 移动端锁步发布）。
+当前版本：**v1.5.1**（后端 / 管理后台 / 移动端锁步发布）。
 
 - 版本号规则：[语义化版本](https://semver.org/lang/zh-CN/)；三端同号；版本号唯一来源是各端 `package.json` 的 `version`。
 - 更新日志：[后端](./apps/api/CHANGELOG.md) · [管理后台](./apps/admin/CHANGELOG.md) · [移动端](./apps/client-mobile/CHANGELOG.md)，格式遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)。

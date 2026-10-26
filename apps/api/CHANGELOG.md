@@ -5,6 +5,13 @@
 
 ## [Unreleased]
 
+## [1.5.1] - 2026-10-26
+
+### 本次更新
+
+- 注册支持手机号与邮箱独立开关；关闭渠道不影响已有账号验证码登录或绑定联系方式。
+- 活动支持报名需绑定手机号/邮箱及最长 200 字报名留言；新增迁移仅添加字段，保留已有业务数据。
+
 ### 新增
 
 - **租约打印版式（全局单例）**：新增 `LeasePrintLayout` 表与 `GET/PUT /api/admin/leases/print-layout` 两个接口（权限沿用 `/workstations/leases`，写入带审计）。可配置打印单标题（纯文本）、「租赁信息」各栏目的显示/隐藏（键集 `LEASE_PRINT_FIELD_KEYS`，与 `apps/admin/src/constants/leasePrintLayout.ts` 一一对应、有单测锁定）、以及「条款说明」纯文本（按换行分段，留空回落内置三条）。`GET /api/admin/leases/:id/print` 的响应相应改为由服务端合并版式后下发（新增 `fields`，`title`/`clauses` 取自配置），打印视图无需二次请求。迁移未应用时 `print-layout` 读取按 `P2021` 降级为默认版式，不影响打印。

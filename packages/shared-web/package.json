@@ -1,7 +1,7 @@
 {
   "name": "@joinyuu/shared-web",
   "private": true,
-  "version": "1.5.0",
+  "version": "1.5.1",
   "type": "module",
   "description": "后台与客户端共用的浏览器端小工具（TS 源直接消费，无构建步骤）",
   "exports": {
