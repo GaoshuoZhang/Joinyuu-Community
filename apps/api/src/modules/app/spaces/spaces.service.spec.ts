@@ -49,7 +49,7 @@ describe('AppSpacesService availability', () => {
       where: {
         spaceId: 'S1001',
         date: '2026-10-10',
-        status: { in: ['pending', 'approved'] },
+        status: { in: ['pending', 'pending_payment', 'approved'] },
         deletedAt: null,
       },
     })

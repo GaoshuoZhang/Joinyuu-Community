@@ -6,10 +6,12 @@ import {
   NotFoundException,
 } from '@nestjs/common'
 import type { DictEntry, MallGoods, Prisma, RedemptionOrder } from '@prisma/client'
+import { JwtService } from '@nestjs/jwt'
 import { PrismaService } from '../../../common/prisma/prisma.service'
 import { IdGeneratorService } from '../../../common/id-generator/id-generator.service'
 import { RedisService } from '../../../common/redis/redis.service'
 import { NotificationService } from '../../../common/notify/notification.service'
+import { resolveOptionalAppUid } from '../../../common/auth/optional-app-uid'
 import { formatNow } from '../../../common/utils/time'
 import { discountLabel, discountedPoints, resolveUserPointsDiscount } from '../../../common/points/points-discount'
 import { CreateOrderDto } from './dto/create-order.dto'
@@ -37,7 +39,13 @@ export class AppMallService {
     private readonly ids: IdGeneratorService,
     private readonly redis: RedisService,
     private readonly notify: NotificationService,
+    private readonly jwt: JwtService,
   ) {}
+
+  /** 公开列表/详情的可选登录态：已登出/冻结账号按游客处理。 */
+  optionalUid(authorization?: string) {
+    return resolveOptionalAppUid({ jwt: this.jwt, redis: this.redis, prisma: this.prisma }, authorization)
+  }
 
   /* ---------- 商品 ---------- */
 
@@ -97,7 +105,7 @@ export class AppMallService {
     if (!this.canSee(goods, category, identities)) throw new NotFoundException('商品不存在')
     if (!this.canOrder(goods, category, identities)) throw new ForbiddenException('当前身份暂不可兑换该商品')
 
-    if (goods.chargeAmountFen > 0) throw new BadRequestException('该商品按现金售价购买，暂请联系运营人员；不支持积分和现金混合支付')
+    if (goods.chargeAmountFen > 0) throw new BadRequestException('该商品为现金商品，请使用「立即购买」在线支付；不支持积分和现金混合支付')
     const user = await this.prisma.user.findUnique({ where: { uid } })
     if (!user) throw new BadRequestException('用户不存在')
     /* 等级折扣（个人消费取本人社区个体等级折扣）：实扣 = round(商品积分 × 折扣 ÷ 10)（口径见 common/points/points-discount） */
@@ -202,6 +210,7 @@ export class AppMallService {
     const order = await this.prisma.redemptionOrder.findUnique({ where: { id } })
     if (!order) throw new NotFoundException('订单不存在')
     if (order.userId !== uid) throw new ForbiddenException('无权操作该订单')
+    if (order.amountFen > 0) throw new BadRequestException('该订单为现金购买，请在「现金交易」中申请退款')
     const now = formatNow()
     await this.prisma.$transaction(async (tx) => {
       /* 先以状态条件抢占取消权；并发请求只有一个能进入退款逻辑。 */
@@ -394,6 +403,7 @@ export class AppMallService {
     stock: number
     validDays: number | null
     chargeAmountFen?: number
+    chargeRefundPolicy?: string
     description: string
   }) {
     return {
@@ -404,6 +414,7 @@ export class AppMallService {
       points: g.points,
       pointsCost: g.points,
       chargeAmountFen: g.chargeAmountFen ?? 0,
+      chargeRefundPolicy: g.chargeRefundPolicy ?? '',
       stock: g.stock,
       validDays: g.validDays ?? DEFAULT_VOUCHER_VALID_DAYS,
       description: g.description,
@@ -416,6 +427,9 @@ export class AppMallService {
       goodsId: o.goodsId,
       goodsName: o.goodsName,
       pointsCost: o.points,
+      amountFen: o.amountFen,
+      commerceOrderId: o.commerceOrderId ?? undefined,
+      afterSalesFrozen: o.afterSalesFrozen,
       status: o.status === 'finished' ? 'completed' : o.status,
       createdAt: o.createdAt,
       voucherCode: o.voucherCode,

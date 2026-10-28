@@ -1,12 +1,13 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
-import { ActionSheet, Avatar, Button, Cell, CellGroup, Icon, PullDownRefresh } from 'tdesign-mobile-vue'
+import { ActionSheet, Avatar, Badge, Button, Cell, CellGroup, Icon, PullDownRefresh } from 'tdesign-mobile-vue'
 import { confirmDialog } from '@/utils/confirmDialog'
 import { useAuthStore } from '@/stores/auth'
 import { useConfigStore } from '@/stores/config'
 import { useNoticesStore } from '@/stores/notices'
 import { fetchExperience } from '@/api/experience'
+import { fetchTransactionSummary } from '@/api/commerce'
 import IdentityTag from '@/components/shared/IdentityTag.vue'
 import { useAnimSuppress } from '@/composables/useAnimSuppress'
 import { useRefreshOnActivate } from '@/composables/useRefreshOnActivate'
@@ -14,6 +15,7 @@ import { formatZhNumber } from '@/utils/format'
 import { buildProfileMenuLayout, type ProfileMenuEntry, type ProfileStat } from '@/utils/profileMenu'
 import { getThemeMode, setThemeMode, themeModeLabel, type ThemeMode } from '@/utils/theme'
 import { REFRESH_LOADING_PROPS } from '@/constants/refresh'
+import type { CommerceTransactionSummary } from '@/types'
 
 useAnimSuppress()
 
@@ -36,6 +38,18 @@ function onAvatarError() {
   failedAvatar.value = auth.avatar
 }
 
+/* 现金交易待办角标：待付款 / 退款处理中 / 待缴账单；接口失败保持 0，不阻断个人中心 */
+const transactionSummary = ref<CommerceTransactionSummary>({ pendingPayment: 0, refunding: 0, unpaidBills: 0 })
+
+async function loadTransactionSummary() {
+  if (!auth.isLogged) return
+  try {
+    transactionSummary.value = await fetchTransactionSummary()
+  } catch {
+    /* 角标失败静默降级；页面仍有现金交易入口 */
+  }
+}
+
 const menu = computed(() =>
   buildProfileMenuLayout({
     hasCommunityIndividual: auth.hasCommunityIndividual,
@@ -44,6 +58,9 @@ const menu = computed(() =>
     levelFailed: levelFailed.value,
     /* 空间预约入口随运营开关隐藏（工位租约无开关，常显） */
     reservationOpen: config.config.reservationOpen,
+    pendingPayment: transactionSummary.value.pendingPayment,
+    refunding: transactionSummary.value.refunding,
+    unpaidBills: transactionSummary.value.unpaidBills,
   }),
 )
 
@@ -98,7 +115,7 @@ async function onRefresh() {
   try {
     await auth.refreshProfile()
     await loadLevel()
-    if (auth.isLogged) await notices.refreshUnread()
+    if (auth.isLogged) await Promise.all([notices.refreshUnread(), loadTransactionSummary()])
   } finally {
     if (refreshTimer) clearTimeout(refreshTimer)
     refreshTimer = setTimeout(() => {
@@ -115,7 +132,7 @@ onBeforeUnmount(() => {
 
 async function refreshMe() {
   await auth.refreshProfile()
-  await Promise.all([loadLevel(), notices.refreshUnread()])
+  await Promise.all([loadLevel(), notices.refreshUnread(), loadTransactionSummary()])
 }
 
 onMounted(() => void refreshMe())
@@ -228,10 +245,12 @@ async function doLogout() {
             :key="entry.path"
             class="grid-item"
             v-pressable
-            :aria-label="entry.label"
+            :aria-label="entry.badge ? `${entry.label}，${entry.badge} 项待处理` : entry.label"
             @click="onMenuTap(entry)"
           >
-            <span class="grid-icon" :style="entryIconStyle(entry)"><Icon aria-hidden="true" :name="entry.icon" size="24px" /></span>
+            <Badge :count="entry.badge ?? 0" :max-count="99" class="grid-badge">
+              <span class="grid-icon" :style="entryIconStyle(entry)"><Icon aria-hidden="true" :name="entry.icon" size="24px" /></span>
+            </Badge>
             <p class="grid-label">{{ entry.label }}</p>
           </div>
         </section>
@@ -374,6 +393,10 @@ async function doLogout() {
 
 /* 宫格图标底板：底色与图标色由 entryIconStyle 内联注入（沿用首页快捷卡片色系）；
  * 此处的强调色底板 + 反色图标是主题未定义入口色时的兜底。 */
+.grid-badge {
+  display: inline-flex;
+}
+
 .grid-icon {
   display: grid;
   place-items: center;

@@ -39,6 +39,15 @@ export function formatLocalDate(value: Date | number | string): string {
   return formatLocalDateTime(value).slice(0, 10)
 }
 
+/** 接口 ISO 8601 时间（带 Z/时区）→ 本地 YYYY-MM-DD HH:mm；解析失败回退业务时间格式。 */
+export function formatServerDateTime(value?: string | null): string {
+  if (!value) return '—'
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) return formatLocalDateTime(value)
+  const pad = (part: number) => String(part).padStart(2, '0')
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())} ${pad(date.getHours())}:${pad(date.getMinutes())}`
+}
+
 /** 商品描述等富文本在纯文本场景（列表卡片摘要）下的降级展示：
  * 剥离 HTML 标签并压缩空白，避免出现「<p>权益券：…」字面标签。
  * 详情/正文富文本请走 RichTextBlock（DOMPurify 清洗后渲染），不要用本函数。 */

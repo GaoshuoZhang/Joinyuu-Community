@@ -30,6 +30,11 @@ export interface SystemConfigPayload {
   mallOpen: boolean
   demandOpen: boolean
   reservationOpen: boolean
+  /** 客户端在线收款模块开关 */
+  cashMallOpen: boolean
+  cashSpaceOpen: boolean
+  cashEventOpen: boolean
+  cashLeaseOpen: boolean
   realnameRequired: boolean
   homeCarouselOpen: boolean
   leaseExpireRemindDays: number

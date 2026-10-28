@@ -2,6 +2,7 @@
 import { computed } from 'vue'
 import { Button, Icon, Tag } from 'tdesign-mobile-vue'
 import type { CommunityEvent } from '@/types'
+import { formatFen } from '@/utils/money'
 
 /* 报名操作区：按报名态分流（待审核/已通过/候补/被驳回/未报名），
  * 统一悬浮固定在详情页底部，避免主操作脱离拇指区；页面内容区需为其预留底部空间。 */
@@ -16,10 +17,13 @@ const props = defineProps<{
   enrollForbidden: boolean
 }>()
 
+const cashAmountFen = computed(() => props.event.chargeAmountFen ?? 0)
+
 /* 报名要求标签（后台活动开关）：报名需审核 / 需绑定手机号 / 需绑定邮箱，
  * 展示在报名按钮上方，取代原先的整句提示文案 */
 const requirementTags = computed(() => {
   const list: string[] = []
+  if (cashAmountFen.value > 0) list.push(`收费 ${formatFen(cashAmountFen.value)}/人次`)
   if (props.event.requireReview) list.push('报名需审核')
   if (props.event.enrollRequirePhone) list.push('需绑定手机号')
   if (props.event.enrollRequireEmail) list.push('需绑定邮箱')
@@ -30,6 +34,7 @@ const emit = defineEmits<{
   enroll: []
   cancel: []
   checkIn: []
+  pay: []
 }>()
 </script>
 
@@ -45,11 +50,18 @@ const emit = defineEmits<{
         </p>
       </template>
 
+      <template v-else-if="myStatus === 'pending_payment'">
+        <p class="bar-line">已提交报名，待完成付款</p>
+        <Button theme="primary" block :disabled="acting" @click="emit('pay')">继续支付</Button>
+        <p class="bar-hint">付款成功后报名与电子票才会生效；如需取消请在「现金交易」中操作。</p>
+      </template>
+
       <template v-else-if="myStatus === 'approved'">
         <p v-if="myCheckedIn" class="bar-line ok"><Icon aria-hidden="true" name="check-circle" size="16px" />已签到</p>
         <p v-else class="bar-line">记得准时参加</p>
         <Button v-if="!myCheckedIn" theme="primary" block :disabled="acting" @click="emit('checkIn')">签到</Button>
-        <Button v-if="!cancelBlocked" theme="default" variant="outline" block :disabled="acting" @click="emit('cancel')">取消报名</Button>
+        <Button v-if="!cancelBlocked && cashAmountFen <= 0" theme="default" variant="outline" block :disabled="acting" @click="emit('cancel')">取消报名</Button>
+        <p v-else-if="cashAmountFen > 0" class="bar-hint">现金报名如需退款，请在<router-link class="bar-link" to="/me/transactions">现金交易</router-link>中申请。</p>
         <p v-else class="bar-hint">
           已到活动开始前 {{ event.cancelDeadlineHours ?? 24 }} 小时的取消截止时间，如需协助<template v-if="loggedIn">可<router-link class="bar-link" to="/me/messages">给社区留言</router-link></template>
           <template v-else>请联系社区运营</template>
@@ -79,7 +91,7 @@ const emit = defineEmits<{
         <Button v-if="event.enrollmentOpen === false" theme="primary" block disabled>报名未开放</Button>
         <Button v-else-if="!loggedIn" theme="primary" block @click="emit('enroll')">登录后报名</Button>
         <Button v-else theme="primary" block :disabled="acting || !!disableReason" @click="emit('enroll')">
-          {{ acting ? '报名中…' : enrollForbidden ? '当前身份无报名权限' : '立即报名' }}
+          {{ acting ? '报名中…' : enrollForbidden ? '当前身份无报名权限' : cashAmountFen > 0 ? '立即报名并支付' : '立即报名' }}
         </Button>
       </template>
     </div>

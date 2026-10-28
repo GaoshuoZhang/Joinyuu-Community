@@ -128,6 +128,8 @@ export class AppEventsService {
     const user = await this.prisma.user.findUnique({ where: { uid }, include: { identities: true } })
     if (!user) throw new NotFoundException('用户不存在')
     const event = await this.requireEnrollableEvent(eventId, uid)
+    /* 收费活动必须走现金报价/支付链路；直接调用原报名接口不能变成免费报名或绕过付款资格。 */
+    if (event.chargeAmountFen > 0) throw new BadRequestException('该活动为收费活动，请在活动详情页在线报名并支付')
     if (event.enrollmentOpen === false) throw new BadRequestException('报名暂未开放')
     const now = formatNow()
     if (event.enrollmentDeadline && now > event.enrollmentDeadline) throw new BadRequestException('报名已截止')
@@ -227,6 +229,9 @@ export class AppEventsService {
         include: { event: true },
       })
       if (!enrollment) throw new NotFoundException('报名记录不存在')
+      if (enrollment.status === 'pending_payment') throw new ConflictException('待付款报名请在「现金交易」中取消')
+      if (enrollment.commerceOrderId) throw new ConflictException('该报名为现金报名，请在「现金交易」中申请退款')
+      if (enrollment.afterSalesFrozen) throw new ConflictException('退款处理中，暂不能取消报名')
       if (enrollment.status === 'cancelled') throw new ConflictException('该报名已取消')
       if (enrollment.status !== 'pending' && enrollment.status !== 'approved' && enrollment.status !== 'waitlisted') {
         throw new ConflictException('该状态不可取消报名')
@@ -270,6 +275,7 @@ export class AppEventsService {
     if (!event || event.deletedAt || event.status === 'cancelled') throw new NotFoundException('活动不存在')
     const enrollment = event.enrollments[0]
     if (!enrollment || enrollment.status !== 'approved') throw new BadRequestException('您未报名或报名未通过')
+    if (enrollment.afterSalesFrozen) throw new ConflictException('退款处理中，暂不能签到')
     if (enrollment.checkedIn) throw new ConflictException('您已签到')
 
     // 时间窗：checkinOpenMin/checkinCloseMin ± startTime
@@ -347,6 +353,13 @@ export class AppEventsService {
         where: { enrollmentId: enrollment.id, redeemedAt: null },
         data: { redeemedAt: now },
       })
+      /* 现金报名：同步现金交易状态为已完成 */
+      if (enrollment.commerceOrderId) {
+        await tx.commerceOrder.updateMany({
+          where: { id: enrollment.commerceOrderId, sourceType: 'event' },
+          data: { fulfillmentStatus: 'used' },
+        })
+      }
     })
 
     await this.redis.delCache(CHECKIN_FAIL_PREFIX + `${uid}:${eventId}`)
@@ -386,6 +399,9 @@ export class AppEventsService {
         waitlistOrder: r.waitlistOrder ?? undefined,
         eventStatus: r.event.status,
         rescheduledTo: r.event.rescheduledTo ?? undefined,
+        chargeAmountFen: r.event.chargeAmountFen,
+        commerceOrderId: r.commerceOrderId ?? undefined,
+        afterSalesFrozen: r.afterSalesFrozen,
       })),
       total,
     }
@@ -398,6 +414,7 @@ export class AppEventsService {
     })
     if (!enrollment) throw new NotFoundException('报名记录不存在')
     if (enrollment.userId !== uid) throw new ForbiddenException('无权查看该电子票')
+    if (enrollment.afterSalesFrozen) throw new BadRequestException('退款处理中，电子票暂不可用')
     if (enrollment.status !== 'approved') throw new BadRequestException('报名未通过，无法获取电子票')
     let ticket = await this.prisma.eventTicket.findUnique({
       where: { enrollmentId: enrollment.id },
@@ -572,6 +589,8 @@ export class AppEventsService {
       title: e.title,
       coverUrl: e.coverUrl ?? undefined,
       type: e.type,
+      chargeAmountFen: e.chargeAmountFen,
+      chargeRefundPolicy: e.chargeRefundPolicy,
       typeLabel: e.type,
       startTime: e.startTime,
       endTime: e.endTime,
@@ -606,6 +625,7 @@ export class AppEventsService {
       myEnrollmentStatus: mine?.status,
       myCheckedIn: mine?.checkedIn ?? false,
       myWaitlistOrder: mine?.waitlistOrder ?? undefined,
+      myCommerceOrderId: mine?.commerceOrderId ?? undefined,
     }
   }
 

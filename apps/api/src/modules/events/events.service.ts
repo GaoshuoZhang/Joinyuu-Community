@@ -522,6 +522,10 @@ export class EventsService {
     if (enrollment.status !== 'pending') {
       throw new ConflictException('该报名已审核，请勿重复操作')
     }
+    /* 已改为收费的活动不能通过未付款的历史待审核报名，避免免费放行。 */
+    if (status === 'approved' && event.chargeAmountFen > 0 && !enrollment.commerceOrderId) {
+      throw new ConflictException('该活动已设置现金收费，未完成支付的报名不能通过审核')
+    }
 
     /* 与报名审核串行化：同一活动的并发通过请求不会越过容量上限；
      * 状态迁移 + 容量校验 + 积分发放同事务，任一失败整体回滚。 */
@@ -578,14 +582,18 @@ export class EventsService {
       where: { eventId_userId: { eventId, userId } },
     })
     if (!enrollment) throw new NotFoundException('报名记录不存在')
+    if (enrollment.afterSalesFrozen) throw new ConflictException('该报名退款处理中，暂不能签到')
 
     if (!enrollment.checkedIn) {
       /* 条件更新防并发重复签到与重复发奖 */
       const updated = await this.prisma.eventEnrollment.updateMany({
-        where: { eventId, userId, checkedIn: false },
+        where: { eventId, userId, checkedIn: false, afterSalesFrozen: false },
         data: { checkedIn: true, checkInAt: formatNow(), checkinMethod: 'admin' },
       })
       if (updated.count === 0) throw new ConflictException('该报名已签到，请勿重复操作')
+      if (enrollment.commerceOrderId) {
+        await this.prisma.commerceOrder.updateMany({ where: { id: enrollment.commerceOrderId, sourceType: 'event' }, data: { fulfillmentStatus: 'used' } })
+      }
 
       /* 签到积分 = checkinPoints ?? 规则值 */
       if (event.checkinPoints != null) {
@@ -624,6 +632,7 @@ export class EventsService {
     if (ticket.redeemedAt) throw new ConflictException('该电子票已核销')
     const enrollment = await this.prisma.eventEnrollment.findUnique({ where: { id: ticket.enrollmentId } })
     if (!enrollment || enrollment.status !== 'approved') throw new ConflictException('该电子票对应报名不可核销')
+    if (enrollment.afterSalesFrozen) throw new ConflictException('该报名退款处理中，电子票暂不可核销')
     if (!enrollment.checkedIn) await this.checkin(eventId, enrollment.userId)
     const updated = await this.prisma.eventTicket.updateMany({
       where: { id: ticket.id, redeemedAt: null },

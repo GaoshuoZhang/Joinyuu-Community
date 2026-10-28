@@ -16,6 +16,7 @@ import ListSkeleton from '@/components/ListSkeleton.vue'
 import type { Goods } from '@/types'
 import { onImageError } from '@/utils/imageFallback'
 import { formatZhNumber, plainTextSummary } from '@/utils/format'
+import { formatFen } from '@/utils/money'
 import { discountedPoints } from '@/utils/points'
 
 useAnimSuppress()
@@ -111,7 +112,7 @@ useRefreshOnActivate(() => {
     <EmptyBlock v-else-if="error" :text="error" action-text="重试" @action="refresh" />
     <EmptyBlock
       v-else-if="goodsList.length === 0"
-      text="暂无可兑换商品"
+      text="暂无商品"
       :action-text="category ? '清除筛选' : undefined"
       @action="pickCategory('')"
     />
@@ -123,7 +124,7 @@ useRefreshOnActivate(() => {
           <!-- 类别标签：中文名取字典 goods_category（任意类别都展示，含自定义新增类别） -->
           <CategoryTag v-if="categoryLabel(g)" :label="categoryLabel(g)" />
           <h2 class="name">{{ g.name }}</h2>
-          <span v-if="(g.chargeAmountFen ?? 0) > 0" class="cost">¥{{ ((g.chargeAmountFen ?? 0) / 100).toFixed(2) }}</span>
+          <span v-if="(g.chargeAmountFen ?? 0) > 0" class="cost">{{ formatFen(g.chargeAmountFen ?? 0) }}</span>
           <span v-else class="cost">
             <!-- v49：等级折扣价 = round(原价 × 折扣 ÷ 10)；有折扣时折后价在前、原价删除线在后 -->
             {{ formatZhNumber(discountedPoints(g.pointsCost, auth.pointsDiscount)) }} 积分

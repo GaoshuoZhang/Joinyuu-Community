@@ -114,6 +114,7 @@ export const statusMap = {
   },
   enrollment: {
     pending: { label: '待审核', theme: 'warning' },
+    pending_payment: { label: '待付款', theme: 'warning' },
     approved: { label: '已通过', theme: 'success' },
     rejected: { label: '已驳回', theme: 'danger' },
     waitlisted: { label: '候补中', theme: 'primary' },
@@ -151,6 +152,7 @@ export const statusMap = {
   },
   reservation: {
     pending: { label: '待审核', theme: 'warning' },
+    pending_payment: { label: '待付款', theme: 'warning' },
     approved: { label: '待使用', theme: 'success' },
     using: { label: '使用中', theme: 'primary' },
     ended: { label: '已结束', theme: 'default' },

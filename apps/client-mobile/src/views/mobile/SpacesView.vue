@@ -10,7 +10,9 @@ import { fetchSpaces } from '@/api/spaces'
 import EmptyBlock from '@/components/shared/EmptyBlock.vue'
 import StateTag from '@/components/shared/StateTag.vue'
 import ListSkeleton from '@/components/ListSkeleton.vue'
+import type { Space } from '@/types'
 import { formatZhNumber } from '@/utils/format'
+import { formatFen } from '@/utils/money'
 
 useAnimSuppress()
 
@@ -24,6 +26,14 @@ onMounted(run)
 
 /* v38：返回时刷新空间列表 */
 useRefreshOnActivate(run)
+
+/** 入口不可用原因：收费且需审核的空间分支尚未开放（审核通过后再付款的政策未确认）。 */
+function unavailableReason(space: Space): string {
+  if (!reservationOpen.value) return '预约暂未开放'
+  if (space.status === 'maintenance') return '维护中，暂不可预约'
+  if ((space.chargeAmountFen ?? 0) > 0 && space.needApproval) return '收费预约需审核，暂未开放'
+  return ''
+}
 </script>
 
 <template>
@@ -45,7 +55,7 @@ useRefreshOnActivate(run)
         <div class="equip">
           <!-- v51：收费是中性信息（此前用 warning 语义色，暗示异常）；改为中性品牌色，「免费」保留正向语义 -->
           <Tag size="small" variant="light" :theme="s.feePerHour > 0 || (s.chargeAmountFen ?? 0) > 0 ? 'primary' : 'success'">
-            {{ (s.chargeAmountFen ?? 0) > 0 ? '¥' + ((s.chargeAmountFen ?? 0) / 100).toFixed(2) + '/小时' : s.feePerHour > 0 ? `${s.feePerHour} 积分/小时` : '免费' }}
+            {{ (s.chargeAmountFen ?? 0) > 0 ? formatFen(s.chargeAmountFen ?? 0) + '/小时' : s.feePerHour > 0 ? `${s.feePerHour} 积分/小时` : '免费' }}
           </Tag>
           <Tag v-for="e in s.equipment" :key="e" size="small" variant="light" theme="default">{{ e }}</Tag>
           <Tag size="small" variant="light" theme="primary">{{ s.needApproval ? '需审核' : '免审核' }}</Tag>
@@ -55,10 +65,10 @@ useRefreshOnActivate(run)
           theme="primary"
           variant="outline"
           block
-          :disabled="s.status === 'maintenance' || !reservationOpen"
+          :disabled="!!unavailableReason(s)"
           @click="router.push(`/spaces/${s.id}/reserve`)"
         >
-          {{ !reservationOpen ? '预约暂未开放' : s.status === 'maintenance' ? '维护中，暂不可预约' : '查看可约时段' }}
+          {{ unavailableReason(s) || '查看可约时段' }}
         </Button>
       </article>
     </div>

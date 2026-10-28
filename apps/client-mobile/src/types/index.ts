@@ -664,6 +664,9 @@ export type EventStatus = 'pending_release' | 'scheduled' | 'published' | 'ended
 export interface CommunityEvent {
   cancelDeadlineHours?: number
   rescheduledTo?: string
+  /** 每人次现金费用（分）；0 = 免费活动 */
+  chargeAmountFen?: number
+  chargeRefundPolicy?: string
   id: string
   title: string
   coverUrl?: string
@@ -703,9 +706,11 @@ export interface CommunityEvent {
   checkinCodeRequired?: boolean
   /** 签到码启用（required 且服务端已配置 6 位码）；开启时签到必须输码 */
   checkinCodeEnabled?: boolean
-  myEnrollmentStatus?: 'pending' | 'approved' | 'waitlisted' | 'rejected' | 'cancelled'
+  myEnrollmentStatus?: 'pending' | 'pending_payment' | 'approved' | 'waitlisted' | 'rejected' | 'cancelled'
   myEnrollmentRejectReason?: string
   myCheckedIn?: boolean
+  /** 现金报名待付款/已付款对应的交易订单 */
+  myCommerceOrderId?: string
 }
 
 export interface MyEnrollmentItem {
@@ -716,8 +721,13 @@ export interface MyEnrollmentItem {
   endTime?: string
   cancelDeadlineHours?: number
   location: string
-  status: 'pending' | 'approved' | 'waitlisted' | 'rejected' | 'cancelled'
+  status: 'pending' | 'pending_payment' | 'approved' | 'waitlisted' | 'rejected' | 'cancelled'
   checkedIn: boolean
+  /** 活动每人次现金费用（分） */
+  chargeAmountFen?: number
+  /** 关联现金交易订单（现金报名付款/退款入口） */
+  commerceOrderId?: string
+  afterSalesFrozen?: boolean
   rejectReason?: string
   /** 候补顺序（1 为最先递补） */
   waitlistOrder?: number
@@ -767,6 +777,8 @@ export interface MyEventFeedback {
 
 export interface Goods {
   chargeAmountFen?: number
+  /** 现金商品退款约定（空 = 默认整单审核退款） */
+  chargeRefundPolicy?: string
   id: string
   name: string
   coverUrl?: string
@@ -786,6 +798,12 @@ export interface MyOrder {
   goodsId: string
   goodsName: string
   pointsCost: number
+  /** 现金购买实付（分）：0 = 积分兑换 */
+  amountFen?: number
+  /** 关联的现金交易订单（现金购买券码） */
+  commerceOrderId?: string
+  /** 退款申请处理中：券码冻结，不能核销/重复申请 */
+  afterSalesFrozen?: boolean
   status: OrderStatus
   /** 券码：下单即签发，现场由工作人员核销 */
   voucherCode: string
@@ -812,8 +830,11 @@ export interface Space {
   capacity: number
   equipment: string[]
   needApproval: boolean
-  /** 预约费用（积分/小时）；0 = 免费使用 */
+  /** 现金费用（分/小时）；0 = 非现金空间 */
   chargeAmountFen?: number
+  /** 现金预约退款约定 */
+  chargeRefundPolicy?: string
+  /** 预约费用（积分/小时）；0 = 免费使用 */
   feePerHour: number
   openTime: string
   closeTime: string
@@ -838,8 +859,14 @@ export interface SpaceReservation {
   date: string
   start: string
   end: string
-  /** `ended` 为服务端按预约结束时间派生的「已完成」（存储态仍为 approved），不可再取消 */
-  status: 'pending' | 'approved' | 'ended' | 'rejected' | 'cancelled'
+  /** `ended` 为服务端按预约结束时间派生的「已完成」（存储态仍为 approved），不可再取消；
+   * `pending_payment` 为现金预约待付款（占用时段，付款后转 approved） */
+  status: 'pending' | 'pending_payment' | 'approved' | 'ended' | 'rejected' | 'cancelled'
+  /** 现金预约实付（分）：0 = 免费/积分预约 */
+  amountFen?: number
+  /** 关联现金交易订单（现金预约付款/退款入口） */
+  commerceOrderId?: string
+  afterSalesFrozen?: boolean
   createdAt: string
   /** 预约主体身份（快照；企业/组织预约时记录负责人或成员以何身份提交） */
   identityType?: IdentityType
@@ -865,6 +892,8 @@ export interface SpaceReservationDetail extends SpaceReservation {
   attendees: number
   /** 本单实际消耗的积分（0 = 免费空间；驳回/取消已全额退回） */
   feePoints: number
+  /** 现金预约实付（分） */
+  amountFen: number
   records: ReviewTimelineItem[]
 }
 
@@ -1361,4 +1390,212 @@ export interface ApplicationCreatePayload {
   /** schema 驱动字段值（key → string | number | 附件数组） */
   fields?: Record<string, string | number | UploadedFileInfo[]>
   note?: string
+}
+
+/* ---------- 客户端现金交易（/api/app/commerce + /me/transactions|bills） ---------- */
+
+export type CommerceSourceType = 'mall' | 'space' | 'event' | 'lease_bill'
+export type CommercePayMethod = 'jsapi' | 'h5' | 'native'
+/** 展示状态：付款、履约与售后分层后组合出的单一可读状态 */
+export type CommerceDisplayStatus =
+  | 'unpaid'
+  | 'paid_pending'
+  | 'active'
+  | 'completed'
+  | 'expired'
+  | 'refunding'
+  | 'refunded'
+  | 'cancelled'
+  | 'closed'
+  | 'attention'
+  | 'exception'
+
+export interface CommerceSnapshot {
+  title: string
+  subtitle: string
+  lines: Array<{ label: string; value: string }>
+  refundPolicy: string
+  notes: string[]
+  sourceLink: string
+  validDays?: number
+  eventStartTime?: string
+  spaceDate?: string
+  spaceStart?: string
+  spaceEnd?: string
+}
+
+export interface CommerceQuote {
+  id: string
+  sourceType: CommerceSourceType
+  sourceId: string
+  sourceName: string
+  buyerType: 'user' | 'enterprise'
+  buyerName: string
+  quantity: number
+  unitPriceFen: number
+  amountFen: number
+  status: 'open' | 'consumed' | 'expired'
+  expiresAt: string
+  orderId?: string | null
+  snapshot: CommerceSnapshot
+  createdAt: string
+  serverTime: string
+}
+
+export interface CommerceQuotePayload {
+  sourceType: CommerceSourceType
+  sourceId: string
+  date?: string
+  start?: string
+  end?: string
+  attendees?: number
+  topic?: string
+  asIdentity?: string
+  asEnterpriseId?: string
+  message?: string
+}
+
+export interface CommerceBenefit {
+  type: 'voucher' | 'reservation' | 'ticket' | 'bill'
+  id: string
+  title: string
+  status: string
+  link: string
+  completed: boolean
+  voucherCode?: string
+  voucherExpiresAt?: string
+  date?: string
+  startTime?: string
+  endTime?: string
+  checkedIn?: boolean
+  eventStartTime?: string
+  eventStatus?: string
+}
+
+export interface CommerceOrder {
+  id: string
+  sourceType: CommerceSourceType
+  sourceId: string
+  sourceName: string
+  title: string
+  buyerType: 'user' | 'enterprise'
+  buyerId: string
+  buyerName: string
+  quantity: number
+  unitPriceFen: number
+  amountFen: number
+  paidFen: number
+  refundedFen: number
+  paymentStatus: 'unpaid' | 'paid' | 'closed' | 'attention'
+  approvalStatus: 'not_required' | 'pending' | 'approved' | 'rejected'
+  fulfillmentStatus: 'pending' | 'ready' | 'used' | 'cancelled' | 'exception'
+  afterSalesStatus: 'none' | 'requested' | 'rejected' | 'processing' | 'refunded' | 'exception'
+  status: CommerceDisplayStatus
+  statusText: string
+  createdAt: string
+  paidAt?: string | null
+  expiresAt: string
+  closedAt?: string | null
+  fulfilledAt?: string | null
+  serverTime: string
+  snapshot: CommerceSnapshot
+  refundPolicy: string
+  latestPayment: { id: string; method: string; status: string; expiresAt: string } | null
+  latestRefund: { id: string; status: string; amountFen: number; reason: string; createdAt: string } | null
+  benefit: CommerceBenefit | null
+  allowedActions: Array<'pay' | 'sync' | 'cancel' | 'refund' | 'viewBenefit' | 'contact'>
+  refundEligible: boolean
+  refundBlockedReason: string | null
+}
+
+export interface CommerceCapabilities {
+  serverTime: string
+  environment: 'wechat' | 'mobile' | 'desktop'
+  quoteTtlMinutes: number
+  payTtlMinutes: number
+  wechat: {
+    ready: boolean
+    enabled: boolean
+    methods: CommercePayMethod[]
+    unavailableReason: string | null
+    jsapiAuthorized: boolean
+    webOAuthReady: boolean
+    merchantName: string
+  }
+  modules: Record<'mall' | 'space' | 'event' | 'lease', { enabled: boolean; reason: string | null }>
+}
+
+export interface CommerceJsapiParams {
+  appId: string
+  timeStamp: string
+  nonceStr: string
+  package: string
+  signType: string
+  paySign: string
+}
+
+export interface CommercePaymentLaunch {
+  orderId: string
+  paymentId?: string
+  method: CommercePayMethod
+  expiresAt?: string
+  jsapi?: CommerceJsapiParams
+  h5Url?: string
+  codeUrl?: string
+  requiresAuthorization?: boolean
+}
+
+export interface CommerceTransactionSummary {
+  pendingPayment: number
+  refunding: number
+  unpaidBills: number
+}
+
+export interface CommerceBill {
+  id: string
+  title: string
+  sourceId: string
+  sourceName: string
+  module: string
+  period: string
+  amountFen: number
+  paidFen: number
+  dueFen: number
+  dueDate: string
+  overdue: boolean
+  buyerType: 'user' | 'enterprise'
+  buyerName: string
+}
+
+export interface CommerceBillList {
+  list: CommerceBill[]
+  total: number
+  totalDueFen: number
+  serverTime: string
+}
+
+export interface CommerceRefundTimelineItem {
+  at?: string | null
+  title: string
+  text?: string
+}
+
+export interface CommerceRefundRequest {
+  id: string
+  orderId: string
+  amountFen: number
+  reason: string
+  status: string
+  statusText: string
+  createdAt: string
+  completedAt?: string | null
+  timeline: CommerceRefundTimelineItem[]
+  serverTime: string
+}
+
+export interface CommerceTransactionQuery {
+  status?: 'all' | 'unpaid' | 'active' | 'completed' | 'refund' | 'closed'
+  sourceType?: CommerceSourceType
+  page?: number
+  pageSize?: number
 }

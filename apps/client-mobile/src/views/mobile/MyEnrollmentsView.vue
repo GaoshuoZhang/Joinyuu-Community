@@ -36,7 +36,13 @@ function isEventEnded(item: MyEnrollmentItem) {
 }
 
 function canCancel(item: MyEnrollmentItem) {
+  if (item.commerceOrderId) return false
   return canCancelEnrollment(item, businessNowMs.value)
+}
+
+function goPay(item: MyEnrollmentItem) {
+  if (item.commerceOrderId) router.push(`/checkout/${item.commerceOrderId}`)
+  else router.push('/me/transactions')
 }
 
 function onCancelTap(item: MyEnrollmentItem) {
@@ -82,8 +88,16 @@ async function doCancel(item: MyEnrollmentItem) {
             <StateTag kind="enroll" :value="item.status" />
           </div>
           <p class="meta"><Icon aria-hidden="true" name="time" size="14px" />{{ formatLocalDateTime(item.startTime) }} · <Icon aria-hidden="true" name="location" size="14px" />{{ item.location }}</p>
-          <p v-if="item.status === 'waitlisted'" class="waitlist-note">
+          <p v-if="item.status === 'pending_payment'" class="waitlist-note">
+            已提交报名，完成付款后报名与电子票才会生效
+          </p>
+          <p v-else-if="item.status === 'waitlisted'" class="waitlist-note">
             {{ item.waitlistOrder ? `当前第 ${formatZhNumber(item.waitlistOrder)} 位，` : '' }}有空位将自动递补并通知你
+          </p>
+          <p v-if="item.commerceOrderId && item.status === 'approved'" class="waitlist-note">
+            现金报名如需退款，请在
+            <router-link class="inline-link" to="/me/transactions">现金交易</router-link>
+            中申请。
           </p>
           <p v-if="item.eventStatus === 'cancelled'" class="cancel-note">活动已取消，报名已同步取消</p>
           <p v-else-if="item.rescheduledTo" class="waitlist-note">活动改期至 {{ formatLocalDateTime(item.rescheduledTo) }}</p>
@@ -96,7 +110,13 @@ async function doCancel(item: MyEnrollmentItem) {
             {{ item.checkedIn ? '查看签到' : '查看签到凭证' }}<Icon aria-hidden="true" name="chevron-right" size="12px" />
           </router-link>
           <Button
-            v-if="canCancel(item)"
+            v-if="item.status === 'pending_payment'"
+            theme="primary"
+            size="small"
+            @click.stop="goPay(item)"
+          >去支付</Button>
+          <Button
+            v-else-if="canCancel(item)"
             theme="danger"
             variant="outline"
             size="small"
@@ -208,5 +228,9 @@ async function doCancel(item: MyEnrollmentItem) {
   color: var(--td-brand-color);
   text-decoration: none;
   cursor: pointer;
+}
+
+.inline-link {
+  color: var(--td-brand-color);
 }
 </style>

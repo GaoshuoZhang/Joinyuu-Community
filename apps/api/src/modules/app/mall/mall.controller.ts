@@ -15,20 +15,22 @@ export class AppMallController {
 
   @Public()
   @Get('goods')
-  listGoods(
+  async listGoods(
     @Req() req: AppAuthenticatedRequest,
     @Query() query: PageQueryDto,
     @Query('category') category?: string,
     @Query('keyword') keyword?: string,
   ) {
-    /* 可见范围按需方身份过滤：已登录取用户身份，游客按无身份（仅不限范围商品可见） */
-    return this.mall.listGoods(query.page, query.pageSize, category, keyword, this.uid(req))
+    /* 公开端点不经过 AppJwtGuard，需自行解析可选登录态（否则已登录用户也按游客过滤可见范围） */
+    const uid = await this.mall.optionalUid(req.headers.authorization)
+    return this.mall.listGoods(query.page, query.pageSize, category, keyword, uid)
   }
 
   @Public()
   @Get('goods/:id')
-  goodsDetail(@Req() req: AppAuthenticatedRequest, @Param('id') id: string) {
-    return this.mall.goodsDetail(id, this.uid(req))
+  async goodsDetail(@Req() req: AppAuthenticatedRequest, @Param('id') id: string) {
+    const uid = await this.mall.optionalUid(req.headers.authorization)
+    return this.mall.goodsDetail(id, uid)
   }
 
   @HttpCode(200)

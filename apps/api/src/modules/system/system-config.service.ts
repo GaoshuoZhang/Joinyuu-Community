@@ -39,6 +39,11 @@ type SystemConfigAuditSource = {
   mallOpen: boolean
   demandOpen: boolean
   reservationOpen: boolean
+  /** 客户端在线收款模块开关（与微信收款启用状态同时满足才允许新建支付） */
+  cashMallOpen: boolean
+  cashSpaceOpen: boolean
+  cashEventOpen: boolean
+  cashLeaseOpen: boolean
   realnameRequired: boolean
   homeCarouselOpen: boolean
   leaseExpireRemindDays: number
@@ -219,6 +224,11 @@ export class SystemConfigService {
       mallOpen: payload.mallOpen,
       demandOpen: payload.demandOpen,
       reservationOpen: payload.reservationOpen,
+      /* 缺省保持原值：旧版后台表单不传新字段时不得把已开放的收款模块重置为关闭 */
+      cashMallOpen: payload.cashMallOpen === undefined ? previous?.cashMallOpen ?? false : payload.cashMallOpen,
+      cashSpaceOpen: payload.cashSpaceOpen === undefined ? previous?.cashSpaceOpen ?? false : payload.cashSpaceOpen,
+      cashEventOpen: payload.cashEventOpen === undefined ? previous?.cashEventOpen ?? false : payload.cashEventOpen,
+      cashLeaseOpen: payload.cashLeaseOpen === undefined ? previous?.cashLeaseOpen ?? false : payload.cashLeaseOpen,
       realnameRequired: payload.realnameRequired,
       homeCarouselOpen: payload.homeCarouselOpen,
       leaseExpireRemindDays: days,
@@ -343,6 +353,10 @@ function toSystemConfigDto(config: SystemConfig): Record<string, unknown> {
     mallOpen: config.mallOpen,
     demandOpen: config.demandOpen,
     reservationOpen: config.reservationOpen,
+    cashMallOpen: config.cashMallOpen,
+    cashSpaceOpen: config.cashSpaceOpen,
+    cashEventOpen: config.cashEventOpen,
+    cashLeaseOpen: config.cashLeaseOpen,
     realnameRequired: config.realnameRequired,
     homeCarouselOpen: config.homeCarouselOpen,
     leaseExpireRemindDays: config.leaseExpireRemindDays,
@@ -371,6 +385,10 @@ function toConfigAuditSnapshot(config: SystemConfigAuditSource): SystemConfigAud
     mallOpen: config.mallOpen,
     demandOpen: config.demandOpen,
     reservationOpen: config.reservationOpen,
+    cashMallOpen: config.cashMallOpen,
+    cashSpaceOpen: config.cashSpaceOpen,
+    cashEventOpen: config.cashEventOpen,
+    cashLeaseOpen: config.cashLeaseOpen,
     realnameRequired: config.realnameRequired,
     homeCarouselOpen: config.homeCarouselOpen,
     leaseExpireRemindDays: config.leaseExpireRemindDays,

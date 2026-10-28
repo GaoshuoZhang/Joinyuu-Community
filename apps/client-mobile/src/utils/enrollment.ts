@@ -11,6 +11,8 @@ export function canCancelEnrollment(item: {
   cancelDeadlineHours?: number
 }, now: number): boolean {
   if (item.checkedIn || item.eventStatus === 'cancelled' || item.eventStatus === 'ended') return false
+  /* 待付款/现金报名需走现金交易取消或退款，不能调用原免费报名取消接口 */
+  if (item.status === 'pending_payment') return false
   const end = parseLocalDateTime(item.endTime ?? '')
   if (end && now >= end.getTime()) return false
   if (item.status === 'pending' || item.status === 'waitlisted') return true

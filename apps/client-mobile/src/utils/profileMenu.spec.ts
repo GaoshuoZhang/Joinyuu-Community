@@ -21,6 +21,7 @@ describe('profile menu layout', () => {
       '/me/identities',
       '/intros/talent',
       '/me/orders',
+      '/me/transactions',
       '/me/leases',
     ])
 
@@ -45,7 +46,7 @@ describe('profile menu layout', () => {
     expect(stats[1]).toMatchObject({ path: '/me/experience', value: 'Lv.3 共创者', failed: false })
 
     const identity = sections[0].entries.map((entry) => entry.path)
-    expect(identity).toEqual(['/me/identities', '/me/cards/individual', '/me/orders', '/me/leases'])
+    expect(identity).toEqual(['/me/identities', '/me/cards/individual', '/me/orders', '/me/transactions', '/me/leases'])
   })
 
   it('entry inventory: 项目与需求 / 申请与预约 / 内容与足迹', () => {
@@ -74,8 +75,22 @@ describe('profile menu layout', () => {
       '/me/identities',
       '/me/cards/individual',
       '/me/orders',
+      '/me/transactions',
       '/me/leases',
     ])
+  })
+
+  it('cash transaction and lease entries expose pending badges', () => {
+    const { sections } = buildProfileMenuLayout({
+      ...base,
+      hasCommunityIndividual: false,
+      pendingPayment: 2,
+      refunding: 1,
+      unpaidBills: 3,
+    })
+    const entries = sections[0].entries
+    expect(entries.find((entry) => entry.path === '/me/transactions')?.badge).toBe(3)
+    expect(entries.find((entry) => entry.path === '/me/leases')?.badge).toBe(3)
   })
 
   it('failed level stat is flagged for retry', () => {

@@ -6,7 +6,7 @@ import { Prisma } from '@prisma/client'
 import { PrismaService } from '../../common/prisma/prisma.service'
 import { IdGeneratorService } from '../../common/id-generator/id-generator.service'
 import { formatNow } from '../../common/utils/time'
-import { environmentWechatSettings, inspectWechatSettings, WechatSettings } from './wechat-config'
+import { environmentWechatSettings, inspectWechatSettings, normalizeWechatSettings, WechatSettings } from './wechat-config'
 import { SavePaymentConfigDto } from './payment-config.dto'
 
 /** Secrets are encrypted outside public asset storage; the master key never enters the DB. */
@@ -39,7 +39,7 @@ export class PaymentConfigService {
   private unseal(ciphertext: string): WechatSettings {
     const data = Buffer.from(ciphertext, 'base64'), decipher = createDecipheriv('aes-256-gcm', this.encryptionKey(false), data.subarray(0, 12))
     decipher.setAAD(Buffer.from('joinyuu/wechat-config/v1')); decipher.setAuthTag(data.subarray(12, 28))
-    try { return JSON.parse(Buffer.concat([decipher.update(data.subarray(28)), decipher.final()]).toString('utf8')) as WechatSettings }
+    try { return normalizeWechatSettings(JSON.parse(Buffer.concat([decipher.update(data.subarray(28)), decipher.final()]).toString('utf8')) as Partial<WechatSettings>) }
     catch { throw new ServiceUnavailableException('支付配置无法解密，请恢复原加密主密钥；不要直接覆盖原配置') }
   }
 
@@ -51,8 +51,8 @@ export class PaymentConfigService {
     const row = await this.db.paymentMerchantConfig.findUnique({ where: { id: 'wechat' } })
     const value = row ? this.unseal(row.ciphertext) : environmentWechatSettings()
     return { ...inspectWechatSettings(value), version: row?.version ?? 0, source: row ? 'database' : 'environment',
-      values: { mchid: value.mchid, appid: value.appid, serial: value.serial, publicKeyId: value.publicKeyId, base: value.base },
-      secrets: { privateKey: !!value.privateKey, publicKey: !!value.publicKey, key: !!value.key, certificate: !!value.certificate }, updatedBy: row?.updatedBy, updatedAt: row?.updatedAt }
+      values: { mchid: value.mchid, appid: value.appid, serial: value.serial, publicKeyId: value.publicKeyId, base: value.base, clientBase: value.clientBase },
+      secrets: { privateKey: !!value.privateKey, publicKey: !!value.publicKey, key: !!value.key, certificate: !!value.certificate, appSecret: !!value.appSecret }, updatedBy: row?.updatedBy, updatedAt: row?.updatedAt }
   }
 
   async save(dto: SavePaymentConfigDto, actor: string) {
@@ -63,13 +63,19 @@ export class PaymentConfigService {
         if ((row?.version ?? 0) !== dto.version) throw new ConflictException('收款配置已被其他管理员修改，请重新加载后核对')
         const before = row ? this.unseal(row.ciphertext) : environmentWechatSettings()
         const value: WechatSettings = { enabled: dto.enabled, mchid: dto.mchid.trim(), appid: dto.appid.trim(), serial: dto.serial.trim(), publicKeyId: dto.publicKeyId.trim(), base: dto.base.trim().replace(/\/$/, ''),
-          key: dto.key?.trim() || before.key, privateKey: dto.privateKey?.trim() || before.privateKey, publicKey: dto.publicKey?.trim() || before.publicKey, certificate: dto.certificate?.trim() || before.certificate }
+          key: dto.key?.trim() || before.key, privateKey: dto.privateKey?.trim() || before.privateKey, publicKey: dto.publicKey?.trim() || before.publicKey, certificate: dto.certificate?.trim() || before.certificate,
+          appSecret: dto.appSecret?.trim() || before.appSecret, clientBase: (dto.clientBase?.trim() || before.clientBase).replace(/\/$/, '') }
         if (dto.certificate?.trim() && !value.serial) { try { value.serial = new X509Certificate(value.certificate).serialNumber } catch { throw new BadRequestException('商户 API 证书无效') } }
+        if (value.clientBase && !/^https:\/\/[^/?#\s]+$/i.test(value.clientBase)) throw new BadRequestException('客户端站点地址须为 HTTPS 源站（不带路径或参数）')
         const check = inspectWechatSettings(value)
         if (check.certificateError) throw new BadRequestException(check.certificateError)
         if (check.fields.some(f => f.state === 'invalid')) throw new BadRequestException('配置格式或 PEM 文件无效，请按字段提示修正')
+        if (value.appSecret && !/^[A-Za-z0-9]{16,64}$/.test(value.appSecret)) throw new BadRequestException('公众号 AppSecret 格式无效')
         if (value.enabled && !check.ready) throw new BadRequestException('启用微信收款前须填写全部必需参数')
-        const changed = JSON.stringify({ ...before, enabled: false }) !== JSON.stringify({ ...value, enabled: false })
+        /* 逐字段比较（忽略顺序）：新增 JSAPI 字段后 JSON.stringify 的键序会因规范化而变化，
+         * 不能再用字符串比较判断“仅关闭开关”。 */
+        const changed = (Object.keys(value) as Array<keyof WechatSettings>)
+          .some((key) => key !== 'enabled' && before[key] !== value[key])
         if (changed) {
           const pending = await tx.commercePayment.count({ where: { status: { in: ['pending', 'attention'] } } })
           const refunds = await tx.commerceRefund.count({ where: { status: { in: ['pending', 'processing', 'abnormal', 'attention'] } } })

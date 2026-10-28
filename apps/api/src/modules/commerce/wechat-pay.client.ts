@@ -32,12 +32,18 @@ export class WechatPayClient {
   async inspectConfig() { return inspectWechatSettings(await this.runtime()) }
   async config() {
     const result = await this.inspectConfig()
-    return { ready: result.ready, enabled: result.enabled, missing: result.fields.filter(f => f.state === 'missing').map(f => f.key), invalid: result.fields.filter(f => f.state === 'invalid').map(f => f.key), products: ['native', 'jsapi', 'h5'], role: 'merchant', apiVersion: 'v3', verification: 'public_key' }
+    return { ready: result.ready, enabled: result.enabled, missing: result.fields.filter(f => f.state === 'missing').map(f => f.key), invalid: result.fields.filter(f => f.state === 'invalid').map(f => f.key), products: ['native', 'jsapi', 'h5'], role: 'merchant', apiVersion: 'v3', verification: 'public_key', webOAuth: result.webOAuth, jsapiReady: result.ready && result.enabled && result.webOAuth.ready }
   }
   async credentials() {
     const c = await this.runtime()
     if (!inspectWechatSettings(c).ready) throw new ServiceUnavailableException('微信支付配置未完成或格式无效')
     return c
+  }
+  /** 网页授权所需的 AppID/AppSecret 与回跳源站；仅服务端使用，禁止下发客户端。 */
+  async webOAuthSettings() {
+    const c = await this.runtime()
+    const inspected = inspectWechatSettings(c)
+    return { ...inspected.webOAuth, appid: c.appid, appSecret: c.appSecret, base: c.base, clientBase: c.clientBase }
   }
   async assertCanCreate(tx?: Prisma.TransactionClient) {
     const c = await this.runtime(tx)

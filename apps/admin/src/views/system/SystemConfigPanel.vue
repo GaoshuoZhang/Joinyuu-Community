@@ -95,6 +95,10 @@ const form = reactive<SystemConfigForm>({
   mallOpen: true,
   demandOpen: true,
   reservationOpen: true,
+  cashMallOpen: false,
+  cashSpaceOpen: false,
+  cashEventOpen: false,
+  cashLeaseOpen: false,
   realnameRequired: false,
   homeCarouselOpen: true,
   leaseExpireRemindDays: 15,
@@ -419,6 +423,35 @@ onBeforeRouteLeave(async () => {
                 <div class="switch-tip">关闭后客户端暂停提交新的空间预约</div>
               </div>
               <t-switch v-accessible-field="'空间预约'" v-model="form.reservationOpen" aria-label="空间预约" />
+            </div>
+            <!-- 客户端在线收款：与「收款配置 → 微信」启用状态同时满足才允许新建支付；关闭后仅停止新付款，存量查询/退款不受影响 -->
+            <div class="switch-row">
+              <div class="switch-text">
+                <div class="switch-label">现金收款 · 商城</div>
+                <div class="switch-tip">开启后现金商品可在客户端直接购买；需先完成微信收款配置并启用</div>
+              </div>
+              <t-switch v-accessible-field="'现金收款商城'" v-model="form.cashMallOpen" aria-label="现金收款商城" />
+            </div>
+            <div class="switch-row">
+              <div class="switch-text">
+                <div class="switch-label">现金收款 · 空间</div>
+                <div class="switch-tip">仅对已设置现金单价且免审核的空间开放；关闭后停止新的现金预约</div>
+              </div>
+              <t-switch v-accessible-field="'现金收款空间'" v-model="form.cashSpaceOpen" aria-label="现金收款空间" />
+            </div>
+            <div class="switch-row">
+              <div class="switch-text">
+                <div class="switch-label">现金收款 · 活动</div>
+                <div class="switch-tip">仅对免审核的收费活动开放；需审核的收费活动仍请联系运营</div>
+              </div>
+              <t-switch v-accessible-field="'现金收款活动'" v-model="form.cashEventOpen" aria-label="现金收款活动" />
+            </div>
+            <div class="switch-row">
+              <div class="switch-text">
+                <div class="switch-label">现金收款 · 租约账单</div>
+                <div class="switch-tip">开启后本人或企业负责人可在客户端缴纳已出账单；关闭后停止新缴费</div>
+              </div>
+              <t-switch v-accessible-field="'现金收款租约账单'" v-model="form.cashLeaseOpen" aria-label="现金收款租约账单" />
             </div>
             <div class="switch-row">
               <div class="switch-text">

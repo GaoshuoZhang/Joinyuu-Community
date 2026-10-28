@@ -304,6 +304,7 @@ export class SpacesService {
       where: { id, deletedAt: null },
     })
     if (!reservation) throw new NotFoundException('空间预约不存在')
+    if (reservation.amountFen > 0) throw new ConflictException('现金预约需在交易经营中退款处理，不能直接取消')
     if (reservation.status !== 'pending' && reservation.status !== 'approved') {
       throw new ConflictException('仅待审核或已通过的预约可取消')
     }
@@ -422,13 +423,13 @@ export class SpacesService {
         id: { not: reservation.id },
         spaceId: reservation.spaceId,
         date: reservation.date,
-        status: 'approved',
+        status: { in: ['approved', 'pending_payment'] },
         deletedAt: null,
         startTime: { lt: reservation.endTime },
         endTime: { gt: reservation.startTime },
       },
     })
-    if (clash) throw new ConflictException('该时段已有已通过的预约，无法重复占用')
+    if (clash) throw new ConflictException(clash.status === 'pending_payment' ? '该时段已有待付款预约，无法重复占用' : '该时段已有已通过的预约，无法重复占用')
 
     const space = await db.space.findUnique({ where: { id: reservation.spaceId } })
     if (!space) return

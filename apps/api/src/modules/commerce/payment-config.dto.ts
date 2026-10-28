@@ -12,4 +12,8 @@ export class SavePaymentConfigDto {
   @IsOptional() @IsString() @MaxLength(32768) privateKey?: string
   @IsOptional() @IsString() @MaxLength(32768) publicKey?: string
   @IsOptional() @IsString() @MaxLength(32768) certificate?: string
+  /** 公众号 AppSecret（只写，用于 JSAPI 网页授权换取 OpenID） */
+  @IsOptional() @IsString() @MaxLength(128) appSecret?: string
+  /** 客户端站点 HTTPS 源站（网页授权/H5 支付完成后回跳） */
+  @IsOptional() @IsString() @MaxLength(255) clientBase?: string
 }

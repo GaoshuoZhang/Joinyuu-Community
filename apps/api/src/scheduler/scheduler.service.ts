@@ -374,8 +374,10 @@ export class SchedulerService {
    * 逐单独立事务：单单失败不影响其余；状态条件抢占保证与人工核销/退款互斥。 */
   async scanVoucherExpiry(): Promise<number> {
     const now = formatNow()
+    /* 仅处理积分券：现金券（amountFen>0）过期不能复用本任务退 0 积分并回补库存，
+     * 是否自动申请原路退款由运营政策单独确定。 */
     const expired = await this.prisma.redemptionOrder.findMany({
-      where: { status: 'pending_use', deletedAt: null, voucherExpiresAt: { not: '', lte: now } },
+      where: { status: 'pending_use', deletedAt: null, amountFen: 0, voucherExpiresAt: { not: '', lte: now } },
       select: { id: true, userId: true, userName: true, goodsId: true, goodsName: true, points: true },
     })
     if (expired.length === 0) return 0

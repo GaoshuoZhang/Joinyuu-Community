@@ -55,6 +55,23 @@ export class SystemConfigPayloadDto {
   @IsBoolean()
   reservationOpen!: boolean
 
+  /** 客户端在线收款模块开关：缺省保持原值（旧版表单不传则不被重置） */
+  @IsOptional()
+  @IsBoolean()
+  cashMallOpen?: boolean
+
+  @IsOptional()
+  @IsBoolean()
+  cashSpaceOpen?: boolean
+
+  @IsOptional()
+  @IsBoolean()
+  cashEventOpen?: boolean
+
+  @IsOptional()
+  @IsBoolean()
+  cashLeaseOpen?: boolean
+
   /** 开启后，未实名用户不能发布需求或报名活动。 */
   @IsBoolean()
   realnameRequired!: boolean

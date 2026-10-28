@@ -1,17 +1,28 @@
 import { BadRequestException, ConflictException, Injectable, Logger, NotFoundException, ServiceUnavailableException } from '@nestjs/common'
 import { Cron, CronExpression } from '@nestjs/schedule'
-import { CommercePayment } from '@prisma/client'
+import { CommercePayment, Prisma } from '@prisma/client'
 import { randomBytes } from 'node:crypto'
 import { formatNow } from '../../common/utils/time'
 import { IdGeneratorService } from '../../common/id-generator/id-generator.service'
 import { PrismaService } from '../../common/prisma/prisma.service'
 import { WechatApiError, WechatPayClient, WechatTransaction } from './wechat-pay.client'
 import { RefundCommerceDto } from './commerce.dto'
+import { CommerceFulfillmentService } from './commerce-fulfillment.service'
+
+export type AppPayMethod = 'jsapi' | 'h5' | 'native'
+
+/** 客户端收银台发起支付的结果；调起凭据只保存在当前交互中，不写入订单快照。 */
+export interface AppPaymentLaunch {
+  paymentId: string; method: AppPayMethod; expiresAt: Date; used?: boolean
+  jsapi?: { appId: string; timeStamp: string; nonceStr: string; package: string; signType: string; paySign: string }
+  h5Url?: string
+  codeUrl?: string
+}
 
 @Injectable()
 export class CommercePaymentService {
   private readonly logger = new Logger(CommercePaymentService.name)
-  constructor(private readonly db: PrismaService, private readonly wx: WechatPayClient, private readonly ids: IdGeneratorService) {}
+  constructor(private readonly db: PrismaService, private readonly wx: WechatPayClient, private readonly ids: IdGeneratorService, private readonly fulfillment: CommerceFulfillmentService) {}
 
   async nativePayment(billId: string) {
     const payment = await this.db.$transaction(async tx => {
@@ -67,6 +78,8 @@ export class CommercePaymentService {
       if (!updated.count) throw new ConflictException('已收到付款但账单状态冲突，请人工核对')
       await tx.commercePayment.update({ where: { id: payment.id }, data: { status: 'success', transactionId: data.transaction_id, paidAt: data.success_time ? new Date(data.success_time) : new Date(), checkedAt: new Date(), lastError: null } })
       await tx.auditLog.create({ data: { id: await this.ids.next('AL', tx), module: '交易经营', action: '确认微信收款', target: payment.billId, detail: `${payment.id}；${payment.amountFen} 分`, operator: '系统', at: formatNow() } })
+      /* 资金确认与履约登记同一事务：仅客户端订单会触发，后台手工账单保持原样。 */
+      await this.fulfillment.onPaid(tx, payment.billId)
     })
   }
 
@@ -114,6 +127,7 @@ export class CommercePaymentService {
       if (dto.amountFen + (reserved._sum.amountFen ?? 0) > payment.amountFen) throw new ConflictException('退款金额超过可退额度（含处理中退款）')
       const refund = await tx.commerceRefund.create({ data: { id: `RF${randomBytes(14).toString('hex')}`, paymentId: id, amountFen: dto.amountFen, reason: dto.reason.trim(), createdBy: actor } })
       await tx.auditLog.create({ data: { id: await this.ids.next('AL', tx), module: '交易经营', action: '申请微信退款', target: refund.id, detail: `${dto.amountFen} 分`, operator: actor, at: formatNow() } })
+      await this.fulfillment.onRefundRequested(tx, payment.billId)
       return refund
     })
   }
@@ -134,12 +148,13 @@ export class CommercePaymentService {
 
   async rejectRefund(id: string, actor: string) {
     return this.db.$transaction(async tx => {
-      const refund = await tx.commerceRefund.findUnique({ where: { id } })
+      const refund = await tx.commerceRefund.findUnique({ where: { id }, include: { payment: { select: { billId: true } } } })
       if (!refund) throw new NotFoundException('退款单不存在')
       if (refund.createdBy === actor) throw new ConflictException('请由另一位审批人处理申请')
       const changed = await tx.commerceRefund.updateMany({ where: { id, status: 'pending' }, data: { status: 'rejected', approvedBy: actor } })
       if (!changed.count) throw new ConflictException('仅待审批退款可驳回')
       await tx.auditLog.create({ data: { id: await this.ids.next('AL', tx), module: '交易经营', action: '驳回微信退款', target: id, operator: actor, at: formatNow() } })
+      await this.fulfillment.onRefundRejected(tx, refund.payment.billId)
       return { code: 0 }
     })
   }
@@ -172,12 +187,140 @@ export class CommercePaymentService {
           await tx.commerceBill.update({ where: { id: bill.id }, data: { refundedFen, ...(refundedFen === bill.paidFen ? { status: 'refunded' } : {}) } })
           await tx.auditLog.create({ data: { id: await this.ids.next('AL', tx), module: '交易经营', action: '确认微信退款', target: id, detail: `${refund.amountFen} 分`, operator: '系统', at: formatNow() } })
         }
+        await this.fulfillment.onRefundResult(tx, refund.payment.billId, status, refund.amountFen)
       })
     } catch (e) {
       await this.db.commerceRefund.updateMany({ where: { id, status: { in: ['processing', 'abnormal', 'attention'] } }, data: { ...(refund.attempts >= 119 ? { status: 'attention' } : {}), lastError: '退款结果待确认，请核实渠道状态', nextCheckAt: new Date(Date.now() + Math.min(3600000, 60000 * (refund.attempts + 1))), attempts: { increment: 1 } } })
       throw e
     }
     return this.db.commerceRefund.findUniqueOrThrow({ where: { id } })
+  }
+
+  /* ---------------- 客户端收银台 ---------------- */
+
+  /** 发起或复用一次微信支付尝试。渠道仅作请求提示；旧尝试必须查单/关单后才能换方式。 */
+  async appPayment(input: { billId: string; method: AppPayMethod; openid?: string; ip?: string; title: string; returnUrl?: string }): Promise<AppPaymentLaunch> {
+    await this.wx.assertCanCreate()
+    const now = Date.now()
+    let payment = await this.db.commercePayment.findFirst({
+      where: { billId: input.billId, status: { in: ['pending', 'attention'] } },
+      orderBy: { createdAt: 'desc' },
+    })
+    if (payment) {
+      if (payment.status === 'attention') throw new ConflictException('原支付结果待人工复核，禁止重复付款')
+      if (payment.method !== input.method || payment.expiresAt.getTime() <= now) {
+        const synced = await this.syncPayment(payment.id)
+        if (synced.status === 'success') throw new ConflictException('订单已支付，请刷新支付结果')
+        if (synced.status === 'attention') throw new ConflictException('原支付结果待人工复核，禁止重复付款')
+        if (synced.status !== 'closed') {
+          try { await this.wx.close(payment.id) }
+          catch (e) {
+            if (e instanceof WechatApiError && e.code === 'ORDERPAID') {
+              await this.syncPayment(payment.id)
+              throw new ConflictException('订单已支付，请刷新支付结果')
+            }
+            if (!(e instanceof WechatApiError && e.code === 'ORDER_CLOSED')) throw e
+          }
+          await this.db.commercePayment.updateMany({ where: { id: payment.id, status: { in: ['pending', 'attention'] } }, data: { status: 'closed', checkedAt: new Date() } })
+        }
+        payment = null
+      }
+    }
+    if (!payment) {
+      payment = await this.db.$transaction(async tx => {
+        await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext('wechatpay-config'))`
+        const config = await this.wx.assertCanCreate(tx)
+        await tx.$queryRaw`SELECT id FROM "CommerceBill" WHERE id = ${input.billId} FOR UPDATE`
+        const bill = await tx.commerceBill.findUnique({ where: { id: input.billId }, include: { receipts: true, payments: { orderBy: { createdAt: 'desc' } } } })
+        if (!bill) throw new NotFoundException('账单不存在')
+        if (bill.status !== 'unpaid' || bill.paidFen || bill.receipts.some(x => x.status === 'pending')) throw new ConflictException('账单已收款、已作废或存在待复核收款')
+        if (bill.payments.some(x => x.status === 'success')) throw new ConflictException('订单已支付')
+        const pending = bill.payments.find(x => ['pending', 'attention'].includes(x.status))
+        if (pending) {
+          if (pending.status === 'attention') throw new ConflictException('原支付结果待人工复核，禁止重复付款')
+          return pending
+        }
+        return tx.commercePayment.create({
+          data: {
+            id: `CP${randomBytes(14).toString('hex')}`, billId: bill.id, amountFen: bill.amountFen, appid: config.appid, mchid: config.mchid,
+            method: input.method, expiresAt: new Date(Date.now() + 15 * 60000),
+            prepay: { title: bill.title, notifyUrl: `${config.base}/api/payment-notifications/wechat/payment` },
+          },
+        })
+      }).catch((e: unknown) => {
+        if (e instanceof Prisma.PrismaClientKnownRequestError && e.code === 'P2002') throw new ConflictException('支付尝试正在创建，请勿重复提交')
+        throw e
+      })
+    }
+    return this.launchPayment(payment, input)
+  }
+
+  private async launchPayment(payment: CommercePayment, input: { method: AppPayMethod; openid?: string; ip?: string; title: string; returnUrl?: string }): Promise<AppPaymentLaunch> {
+    if (payment.expiresAt.getTime() <= Date.now()) throw new ConflictException('支付尝试已到期，请重新发起')
+    /* 并发切换环境/方式时不能把旧尝试按新方式重新下单（out_trade_no 已绑定原产品）。 */
+    if (payment.method !== input.method) throw new ConflictException('支付方式已变化，请刷新收银台后重试')
+    const snapshot = (payment.prepay ?? {}) as { title?: string; notifyUrl?: string; prepay_id?: string; h5_url?: string; code_url?: string }
+    const title = snapshot.title ?? input.title
+    try {
+      if (input.method === 'jsapi') {
+        if (!input.openid) throw new ServiceUnavailableException('尚未完成微信网页授权')
+        let prepayId = snapshot.prepay_id
+        if (!prepayId) {
+          const result = await this.wx.prepay({ id: payment.id, amountFen: payment.amountFen, title, notifyUrl: snapshot.notifyUrl, expiresAt: payment.expiresAt, method: 'jsapi', openid: input.openid })
+          if (!result.prepay_id) throw new ServiceUnavailableException('微信支付调起参数无效')
+          prepayId = result.prepay_id
+          await this.db.commercePayment.update({ where: { id: payment.id }, data: { prepay: { ...snapshot, prepay_id: prepayId } } })
+        }
+        return { paymentId: payment.id, method: 'jsapi', expiresAt: payment.expiresAt, jsapi: await this.wx.jsapiParameters(prepayId) }
+      }
+      if (input.method === 'h5') {
+        if (!input.ip) throw new BadRequestException('无法获取支付终端 IP，请更换网络后重试')
+        let h5Url = snapshot.h5_url
+        if (!h5Url) {
+          const result = await this.wx.prepay({ id: payment.id, amountFen: payment.amountFen, title, notifyUrl: snapshot.notifyUrl, expiresAt: payment.expiresAt, method: 'h5', ip: input.ip })
+          if (!result.h5_url || new URL(result.h5_url).protocol !== 'https:') throw new ServiceUnavailableException('H5 支付链接无效')
+          h5Url = result.h5_url
+          await this.db.commercePayment.update({ where: { id: payment.id }, data: { prepay: { ...snapshot, h5_url: h5Url } } })
+        }
+        if (input.returnUrl) {
+          const url = new URL(h5Url)
+          url.searchParams.set('redirect_url', input.returnUrl)
+          h5Url = url.toString()
+        }
+        return { paymentId: payment.id, method: 'h5', expiresAt: payment.expiresAt, h5Url }
+      }
+      let codeUrl = snapshot.code_url
+      if (!codeUrl) {
+        const result = await this.wx.prepay({ id: payment.id, amountFen: payment.amountFen, title, notifyUrl: snapshot.notifyUrl, expiresAt: payment.expiresAt, method: 'native' })
+        if (!result.code_url?.startsWith('weixin://')) throw new ServiceUnavailableException('支付二维码结果无效')
+        codeUrl = result.code_url
+        await this.db.commercePayment.update({ where: { id: payment.id }, data: { prepay: { ...snapshot, code_url: codeUrl } } })
+      }
+      return { paymentId: payment.id, method: 'native', expiresAt: payment.expiresAt, codeUrl }
+    } catch (e) {
+      await this.db.commercePayment.update({ where: { id: payment.id }, data: { lastError: '下单结果待确认，请通过原支付单查询', nextCheckAt: new Date() } }).catch(() => undefined)
+      throw e
+    }
+  }
+
+  /** 取消未付款订单前安全关闭支付尝试：成功付款会转为冲突，未知结果禁止继续释放资源。 */
+  async closePendingForBill(billId: string) {
+    const pending = await this.db.commercePayment.findFirst({ where: { billId, status: { in: ['pending', 'attention'] } }, orderBy: { createdAt: 'desc' } })
+    if (!pending) return
+    if (pending.status === 'attention') throw new ConflictException('原支付结果待人工复核，暂不能取消订单')
+    const synced = await this.syncPayment(pending.id)
+    if (synced.status === 'success') throw new ConflictException('订单已支付，不能取消')
+    if (synced.status === 'attention') throw new ConflictException('原支付结果待人工复核，暂不能取消订单')
+    if (synced.status !== 'pending') return
+    try { await this.wx.close(pending.id) }
+    catch (e) {
+      if (e instanceof WechatApiError && e.code === 'ORDERPAID') {
+        await this.syncPayment(pending.id)
+        throw new ConflictException('订单已支付，不能取消')
+      }
+      if (!(e instanceof WechatApiError && e.code === 'ORDER_CLOSED')) throw e
+    }
+    await this.db.commercePayment.updateMany({ where: { id: pending.id, status: { in: ['pending', 'attention'] } }, data: { status: 'closed', checkedAt: new Date() } })
   }
 
   // Intentionally independent of the business scheduler's license write gate.

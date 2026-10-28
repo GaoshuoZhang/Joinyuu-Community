@@ -983,6 +983,11 @@ export interface SystemConfig {
   demandOpen: boolean
   /** 空间预约开关 */
   reservationOpen: boolean
+  /** 客户端在线收款模块开关（与微信收款启用状态同时满足才允许新建支付） */
+  cashMallOpen: boolean
+  cashSpaceOpen: boolean
+  cashEventOpen: boolean
+  cashLeaseOpen: boolean
   /** 开启后未实名用户不能发布需求或报名活动 */
   realnameRequired: boolean
   /** 首页轮播图总开关：关闭后客户端首页不展示轮播区域 */

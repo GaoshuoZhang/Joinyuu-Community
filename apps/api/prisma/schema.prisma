@@ -104,6 +104,7 @@ model CommerceBill {
   createdAt       DateTime @default(now())
   receipts        CommerceReceipt[]
   payments        CommercePayment[]
+  order           CommerceOrder?
   @@index([module, status, dueDate])
   @@index([buyerType, buyerId])
 }
@@ -160,6 +161,83 @@ model CommerceRefund {
   completedAt  DateTime?
   payment      CommercePayment @relation(fields: [paymentId], references: [id], onDelete: Restrict)
   @@index([status, nextCheckAt])
+}
+
+/** 客户端报价：冻结来源业务的价格/政策快照，单次消费；过期或价格变化必须重新报价。 */
+model CommerceQuote {
+  id           String   @id @db.VarChar(32)
+  createdBy    String   @db.VarChar(16)
+  sourceType   String   @db.VarChar(24) // mall | space | event | lease_bill
+  sourceId     String   @db.VarChar(16)
+  sourceName   String   @db.VarChar(128)
+  buyerType    String   @db.VarChar(16) // user | enterprise
+  buyerId      String   @db.VarChar(16)
+  buyerName    String   @db.VarChar(128)
+  quantity     Int      @default(1)
+  unitPriceFen Int
+  amountFen    Int
+  payload      Json // 客户端选择的日期/时段/人数/身份等，创建订单时重新校验
+  snapshot     Json // 展示摘要、退款约定、有效期说明等
+  status       String   @default("open") @db.VarChar(16) // open | consumed | expired
+  expiresAt    DateTime
+  orderId      String?  @unique @db.VarChar(32)
+  createdAt    DateTime @default(now())
+
+  @@index([createdBy, status])
+  @@index([status, expiresAt])
+}
+
+/** 客户端现金业务订单：与应收账单/支付/退款记录一一关联，不另建账本。 */
+model CommerceOrder {
+  id                String        @id @db.VarChar(32)
+  billId            String?       @unique @db.VarChar(16)
+  quoteId           String?       @unique @db.VarChar(32)
+  sourceType        String        @db.VarChar(24) // mall | space | event | lease_bill
+  sourceId          String        @db.VarChar(16)
+  sourceName        String        @db.VarChar(128)
+  buyerType         String        @db.VarChar(16) // user | enterprise
+  buyerId           String        @db.VarChar(16)
+  buyerName         String        @db.VarChar(128)
+  createdBy         String        @db.VarChar(16) // 发起支付的 App 用户 uid（归属校验）
+  quantity          Int           @default(1)
+  unitPriceFen      Int
+  amountFen         Int
+  paidFen           Int           @default(0)
+  refundedFen       Int           @default(0)
+  paymentStatus     String        @default("unpaid") @db.VarChar(16) // unpaid | confirming | paid | closed | attention
+  approvalStatus    String        @default("not_required") @db.VarChar(16) // not_required | pending | approved | rejected
+  fulfillmentStatus String        @default("pending") @db.VarChar(16) // pending | ready | used | cancelled | exception
+  afterSalesStatus  String        @default("none") @db.VarChar(16) // none | requested | rejected | processing | refunded | exception
+  snapshot          Json
+  reservationId     String?       @db.VarChar(16)
+  enrollmentId      Int?
+  redemptionOrderId String?       @db.VarChar(16)
+  expiresAt         DateTime
+  paidAt            DateTime?
+  closedAt          DateTime?
+  fulfilledAt       DateTime?
+  lastError         String?       @db.VarChar(255)
+  createdAt         DateTime      @default(now())
+  updatedAt         DateTime      @updatedAt
+  bill              CommerceBill? @relation(fields: [billId], references: [id], onDelete: Restrict)
+
+  @@index([createdBy, createdAt])
+  @@index([paymentStatus, expiresAt])
+  @@index([sourceType, sourceId])
+}
+
+/** 微信网页授权得到的 OpenID：按 AppID 保存，客户端不得自行提交。 */
+model WechatUserBinding {
+  id        String   @id @db.VarChar(16)
+  userId    String   @db.VarChar(16)
+  appid     String   @db.VarChar(64)
+  openid    String   @db.VarChar(64)
+  unionid   String?  @db.VarChar(64)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([appid, openid])
+  @@unique([userId, appid])
 }
 
 datasource db {
@@ -715,7 +793,10 @@ model EventEnrollment {
   // 报名留言（客户端报名二次确认框选填，后台报名审核可见）
   message       String?        @db.VarChar(200)
   appliedAt     String         @db.VarChar(16)
-  status        String         @default("pending") @db.VarChar(16) // pending | approved | rejected | cancelled + waitlisted（R2 候补）
+  status        String         @default("pending") @db.VarChar(16) // pending | pending_payment | approved | rejected | cancelled + waitlisted（R2 候补）
+  // 收费活动：待付款报名占用名额，付款成功后转 approved；退款中冻结签到/取票
+  commerceOrderId String?      @unique @db.VarChar(32)
+  afterSalesFrozen Boolean     @default(false)
   checkedIn     Boolean        @default(false)
   checkInAt     String?        @db.VarChar(16)
   // M2-R R2：候补与递补顺序、签到位置与方式
@@ -833,6 +914,11 @@ model RedemptionOrder {
   goodsId          String  @db.VarChar(16)
   goodsName        String  @db.VarChar(128)
   points           Int
+  // 现金购买实付（分）：0 = 积分兑换；现金券退款走原路退款，不复用积分过期退款任务
+  amountFen        Int     @default(0)
+  commerceOrderId  String? @unique @db.VarChar(32)
+  // 退款申请处理中冻结核销（后台核销须校验）
+  afterSalesFrozen Boolean @default(false)
   status           String  @db.VarChar(24) // pending_use | finished | cancelled
   createdAt        String  @db.VarChar(16)
   finishedAt       String? @db.VarChar(16)
@@ -1009,7 +1095,11 @@ model SpaceReservation {
   attendees      Int
   // 该预约实际消耗的积分（提交时按 计费小时 × 空间 feePerHour 扣除；驳回/取消按此退回）
   feePoints      Int     @default(0)
-  status         String  @db.VarChar(16) // pending | approved | rejected | cancelled
+  // 现金预约实付（分）：0 = 免费/积分预约；现金支付成功后预约才生效
+  amountFen      Int     @default(0)
+  commerceOrderId String? @unique @db.VarChar(32)
+  afterSalesFrozen Boolean @default(false)
+  status         String  @db.VarChar(16) // pending | pending_payment | approved | rejected | cancelled
   submittedAt    String  @db.VarChar(16)
   records        Json    @default("[]")
   rejectReason   String? @db.VarChar(255)
@@ -1251,6 +1341,11 @@ model SystemConfig {
   mallOpen              Boolean @default(true)
   demandOpen            Boolean @default(true)
   reservationOpen       Boolean @default(true)
+  /** 客户端在线收款模块开关（与微信商户启用状态同时满足才允许新建支付） */
+  cashMallOpen          Boolean @default(false)
+  cashSpaceOpen         Boolean @default(false)
+  cashEventOpen         Boolean @default(false)
+  cashLeaseOpen         Boolean @default(false)
   leaseExpireRemindDays Int     @default(15)
   /**
    * 上传文件大小限制（MB），素材库与富文本图片上传共用

@@ -11,6 +11,7 @@ import ListSkeleton from '@/components/ListSkeleton.vue'
 import StateTag from '@/components/shared/StateTag.vue'
 import type { SpaceReservationDetail } from '@/types'
 import { formatLocalDate, formatLocalDateTime } from '@/utils/format'
+import { formatFen } from '@/utils/money'
 
 const route = useRoute()
 const router = useRouter()
@@ -19,12 +20,23 @@ const { data: reservation, loading, error, run } = useAsyncList<SpaceReservation
 onMounted(run)
 
 const acting = ref(false)
-/* 与「我的预约」列表口径一致：待审核/已通过可取消；已结束（服务端派生的 ended=已完成）不可取消 */
-const canCancel = computed(() => reservation.value?.status === 'pending' || reservation.value?.status === 'approved')
-/* 费用：本单实际消耗的积分（0 = 免费空间）；驳回/取消已全额退回，此处标注退回结果 */
+const cash = computed(() => (reservation.value?.amountFen ?? 0) > 0)
+/* 与「我的预约」列表口径一致：待审核/已通过可取消；现金预约和待付款预约走现金交易，不能调积分取消接口 */
+const canCancel = computed(() => {
+  const item = reservation.value
+  if (!item || cash.value || item.status === 'pending_payment') return false
+  return item.status === 'pending' || item.status === 'approved'
+})
+const canPay = computed(() => reservation.value?.status === 'pending_payment' && !!reservation.value?.commerceOrderId)
+const canAfterSales = computed(() => cash.value && reservation.value?.status === 'approved' && !!reservation.value?.commerceOrderId)
+/* 费用：现金实付优先；积分预约展示实扣积分（驳回/取消已全额退回） */
 const feeText = computed(() => {
   const item = reservation.value
   if (!item) return ''
+  if ((item.amountFen ?? 0) > 0) {
+    const suffix = item.status === 'cancelled' ? '（预约已取消）' : item.status === 'pending_payment' ? '（待付款）' : ''
+    return `现金 ${formatFen(item.amountFen ?? 0)}${suffix}`
+  }
   if (item.feePoints <= 0) return '免费'
   const refunded = item.status === 'rejected' || item.status === 'cancelled'
   return refunded ? `${item.feePoints} 积分（已退回）` : `${item.feePoints} 积分`
@@ -98,9 +110,15 @@ async function doCancel() {
           </li>
         </ol>
       </section>
+      <section v-if="canPay" class="m-card section">
+        <h3>待完成付款</h3>
+        <p class="notice">付款成功后预约才会生效；未付款订单超时关闭后时段将释放。</p>
+        <Button theme="primary" block @click="router.push(`/checkout/${reservation.commerceOrderId}`)">去支付</Button>
+      </section>
       <Button v-if="canCancel" theme="danger" variant="outline" block :disabled="acting" @click="onCancelTap">
         {{ acting ? '处理中…' : '取消预约' }}
       </Button>
+      <Button v-if="canAfterSales" theme="danger" variant="outline" block @click="router.push(`/me/transactions/${reservation.commerceOrderId}`)">退款/售后</Button>
       <Button block variant="text" @click="router.push('/me/reservations')">返回我的预约</Button>
     </template>
   </div>
@@ -118,6 +136,7 @@ h3 { font: var(--app-type-card-title); }
 .fields dt { color: var(--td-text-color-placeholder); }
 .fields dd { margin: 0; min-width: 0; overflow-wrap: anywhere; }
 .identity { display: flex; align-items: center; flex-wrap: wrap; gap: var(--app-space-2); }
+.notice { font: var(--app-type-body-sm); color: var(--td-text-color-secondary); }
 .reject { border-color: var(--td-error-color-3); }
 .reject p { font: var(--app-type-body); color: var(--td-error-color); }
 .timeline { margin: 0; padding: 0; list-style: none; }

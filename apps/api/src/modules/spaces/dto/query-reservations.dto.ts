@@ -13,7 +13,7 @@ export class QueryReservationsDto extends PageQueryDto {
   spaceId?: string
 
   @IsOptional()
-  @IsIn(['pending', 'approved', 'using', 'ended', 'rejected', 'cancelled'])
+  @IsIn(['pending', 'pending_payment', 'approved', 'using', 'ended', 'rejected', 'cancelled'])
   status?: string
 
   @IsOptional()

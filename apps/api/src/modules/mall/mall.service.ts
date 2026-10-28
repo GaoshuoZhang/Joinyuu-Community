@@ -329,16 +329,20 @@ export class MallService {
     if (!order) throw new NotFoundException('兑换订单不存在')
     const now = formatNow()
     if (order.status !== 'pending_use') throw new ConflictException('仅待使用的订单可核销')
+    if (order.afterSalesFrozen) throw new ConflictException('该订单退款处理中，暂不能核销')
     if (order.voucherExpiresAt && order.voucherExpiresAt <= now) {
       throw new ConflictException('券码已过期，无法核销（将由系统自动退款）')
     }
 
     /* 并发安全：以状态条件抢占，避免重复核销 */
     const claimed = await this.prisma.redemptionOrder.updateMany({
-      where: { id, status: 'pending_use' },
+      where: { id, status: 'pending_use', afterSalesFrozen: false },
       data: { status: 'finished', usedAt: now, finishedAt: now, archivableAt: now },
     })
     if (claimed.count !== 1) throw new ConflictException('仅待使用的订单可核销')
+    if (order.commerceOrderId) {
+      await this.prisma.commerceOrder.updateMany({ where: { id: order.commerceOrderId }, data: { fulfillmentStatus: 'used' } })
+    }
 
     await this.audit.record({
       module: '积分商城',
@@ -386,6 +390,8 @@ export class MallService {
     const result = await this.prisma.$transaction(async (tx) => {
       const order = await tx.redemptionOrder.findUnique({ where: { id } })
       if (!order) throw new NotFoundException('兑换订单不存在')
+      /* 现金券不能按积分退款：退 0 积分 + 回补库存会形成未退款却释放权益的账实不一致。 */
+      if (order.amountFen > 0) throw new ConflictException('现金订单请在「交易经营」中处理退款')
 
       /* 并发安全：先以状态条件抢占取消权，只有抢占成功者才进入退款/补库存，
        * 避免并发取消造成重复退积分与重复回补库存 */

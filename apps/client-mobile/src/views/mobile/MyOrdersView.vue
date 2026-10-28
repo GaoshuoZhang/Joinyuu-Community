@@ -10,6 +10,7 @@ import ListSkeleton from '@/components/ListSkeleton.vue'
 import type { MyOrder } from '@/types'
 import StateTag from '@/components/shared/StateTag.vue'
 import { formatLocalDateTime, formatZhNumber } from '@/utils/format'
+import { formatFen } from '@/utils/money'
 
 /* 我的订单（统一券码兑换）：整页左右滑动切换「全部 / 未完成 / 已过期 / 已完成」（默认未完成）；
  * 未完成 = 待使用券（核销前可在详情中申请退款）。
@@ -74,7 +75,7 @@ const { startSwipe, moveSwipe, cancelSwipe } = useTabSwipe(
                 <h2 class="name">{{ order.goodsName }}</h2>
                 <StateTag kind="order" :value="order.status" />
               </div>
-              <p class="cost">{{ formatZhNumber(order.pointsCost) }} 积分</p>
+              <p class="cost">{{ (order.amountFen ?? 0) > 0 ? `现金 ${formatFen(order.amountFen ?? 0)}` : `${formatZhNumber(order.pointsCost)} 积分` }}</p>
               <p class="voucher">
                 兑换码：<code translate="no">{{ order.voucherCode }}</code>
               </p>

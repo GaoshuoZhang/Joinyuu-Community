@@ -4,7 +4,11 @@ import { useRoute, useRouter } from 'vue-router'
 import { Button, Icon, Image, Tag, Textarea, Toast } from 'tdesign-mobile-vue'
 import { confirmDialog } from '@/utils/confirmDialog'
 import { cancelEnrollment, enrollEvent, fetchEvent, fetchMyEventFeedback, submitEventFeedback } from '@/api/events'
+import { createQuote } from '@/api/commerce'
+import { ApiError } from '@/api/http'
 import { fetchMe } from '@/api/me'
+import PolicySummary from '@/components/commerce/PolicySummary.vue'
+import { formatFen } from '@/utils/money'
 import CategoryTag from '@/components/shared/CategoryTag.vue'
 import { canCancelEnrollment } from '@/utils/enrollment'
 import { listFavorites, toggleFavorite } from '@/api/favorites'
@@ -115,6 +119,8 @@ const enrollmentDeadlineLabel = computed(() => {
 const descIsPlainText = computed(() => !/<\/?[a-z][^>]*>/i.test(event.value?.description ?? ''))
 const myStatus = computed(() => event.value?.myEnrollmentStatus)
 const myCheckedIn = computed(() => event.value?.myCheckedIn ?? false)
+const cashEvent = computed(() => (event.value?.chargeAmountFen ?? 0) > 0)
+const cashPriceText = computed(() => formatFen(event.value?.chargeAmountFen ?? 0))
 /* 主讲嘉宾/标签：后台可留空（嘉宾留空时保存为「—」占位，不展示该行） */
 const speakerLabel = computed(() => {
   const value = (event.value?.speaker ?? '').trim()
@@ -157,6 +163,7 @@ const disableReason = computed(() => {
   const ev = event.value
   if (!ev) return ''
   if (!canEnrollSelf.value) return '当前身份不在该活动的可报名范围内'
+  if ((ev.chargeAmountFen ?? 0) > 0 && ev.requireReview) return '收费活动需先审核，暂未开放在线支付，请联系运营'
   const deadline = parseLocalDateTime(ev.enrollmentDeadline)
   if (deadline && deadline.getTime() < businessNowMs.value) return '报名已截止'
   /* v38：满员不再禁止报名（改为加入候补） */
@@ -193,6 +200,11 @@ async function onEnroll() {
   }
   const ev = event.value
   if (!ev || acting.value || bindingChecking.value || disableReason.value) return
+  /* 收费活动：先报价（后端校验资格/名额/价格），再进入确认订单页；不调用免费报名接口。 */
+  if (cashEvent.value) {
+    await buyCashEvent()
+    return
+  }
   /* 报名要求绑定手机号/邮箱：未绑定时先提示并引导去「账号与安全」（服务端仍会二次校验） */
   const missing = await missingRequiredBindings()
   if (missing.length) {
@@ -256,6 +268,25 @@ function onDialogContentRef(el: unknown) {
       dialog.focus({ preventScroll: true })
     }
   }))
+}
+
+async function buyCashEvent() {
+  if (acting.value) return
+  acting.value = true
+  try {
+    const quote = await createQuote({ sourceType: 'event', sourceId: eventId })
+    await router.push({ name: 'checkout-confirm', query: { quoteId: quote.id } })
+  } catch (e) {
+    Toast(e instanceof ApiError || e instanceof Error ? e.message : '暂时无法报名，请稍后重试')
+  } finally {
+    acting.value = false
+  }
+}
+
+function goPendingPayment() {
+  const orderId = event.value?.myCommerceOrderId
+  if (orderId) router.push(`/checkout/${orderId}`)
+  else router.push('/me/transactions')
 }
 
 async function submitEnrollment() {
@@ -354,6 +385,7 @@ async function onShare() {
         <div class="head">
           <CategoryTag class="type-tag" :label="event.typeLabel" />
           <StateTag v-if="myStatus === 'pending'" kind="enroll" value="pending" />
+          <StateTag v-else-if="myStatus === 'pending_payment'" kind="enroll" value="pending_payment" />
           <StateTag v-else-if="myStatus === 'approved'" kind="enroll" value="approved" />
           <StateTag v-else-if="myStatus === 'waitlisted'" kind="enroll" value="waitlisted" />
           <StateTag v-else-if="myStatus === 'rejected'" kind="enroll" value="rejected" />
@@ -365,6 +397,7 @@ async function onShare() {
         <p v-if="hostLabel" class="meta"><Icon aria-hidden="true" name="building" size="14px" />主办方：{{ hostLabel }}</p>
         <p class="meta"><Icon aria-hidden="true" name="alarm" size="14px" />报名截止：{{ enrollmentDeadlineLabel }}</p>
         <p class="meta"><Icon aria-hidden="true" name="usergroup" size="14px" />限 {{ formatZhNumber(event.capacity) }} 人参加</p>
+        <p v-if="cashEvent" class="meta"><Icon aria-hidden="true" name="money" size="14px" />费用：{{ cashPriceText }}/人次</p>
         <!-- 活动标签（报名要求标签由底部报名操作区在按钮上方呈现） -->
         <div v-if="visibleTags.length" class="tags-row">
           <Tag v-for="tag in visibleTags" :key="tag" size="small" variant="light" theme="primary">{{ tag }}</Tag>
@@ -389,6 +422,12 @@ async function onShare() {
         <h3 class="sec-title">活动介绍</h3>
         <RichTextBlock class="desc" :class="{ 'desc-plain': descIsPlainText }" :html="event.description" />
       </section>
+
+      <PolicySummary
+        v-if="cashEvent"
+        :policy="event.chargeRefundPolicy || '活动开始前可申请整单退款，需运营审核；已签到或已开始不可退款。'"
+        :notes="['付款成功后报名与电子票才生效。', '不支持积分与现金混合支付。']"
+      />
 
       <section v-if="isCancelled" class="m-card actions">
         <!-- 留言入口需登录（/me/messages 为登录页），游客保留原文案 -->
@@ -417,6 +456,7 @@ async function onShare() {
         @enroll="onEnroll"
         @cancel="onCancelEnrollment"
         @check-in="goCheckIn"
+        @pay="goPendingPayment"
       />
     </template>
   </div>

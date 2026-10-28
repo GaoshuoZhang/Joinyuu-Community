@@ -9,12 +9,13 @@ type FileKey = 'privateKey' | 'publicKey' | 'certificate'
 interface PaymentConfig {
   ready: boolean; enabled: boolean; requested: boolean; checkedAt: string; notifyUrl: string | null
   version: number; source: string; certificateError: string
-  values: { mchid: string; appid: string; serial: string; publicKeyId: string; base: string }
-  secrets: { privateKey: boolean; publicKey: boolean; key: boolean; certificate: boolean }
+  webOAuth: { ready: boolean; reason: string; callbackUrl: string | null; clientBase: string | null }
+  values: { mchid: string; appid: string; serial: string; publicKeyId: string; base: string; clientBase: string }
+  secrets: { privateKey: boolean; publicKey: boolean; key: boolean; certificate: boolean; appSecret: boolean }
   fields: Array<{ key: string; state: 'configured' | 'missing' | 'invalid' }>
 }
 const loading = ref(false), saving = ref(false), loadError = ref(''), saveError = ref(''), config = ref<PaymentConfig | null>(null)
-const form = reactive({ enabled: false, mchid: '', appid: '', serial: '', publicKeyId: '', base: '', key: '', privateKey: '', publicKey: '', certificate: '' })
+const form = reactive({ enabled: false, mchid: '', appid: '', serial: '', publicKeyId: '', base: '', key: '', privateKey: '', publicKey: '', certificate: '', appSecret: '', clientBase: '' })
 const filenames = reactive({ privateKey: '', publicKey: '', certificate: '' })
 const baseline = ref('')
 const uploading = ref(0)
@@ -27,6 +28,7 @@ const fields = [
   { key: 'serial', code: 'WXPAY_CERT_SERIAL', label: '商户 API 证书序列号', tip: '填写商户 API 证书的十六进制序列号。也可上传商户证书并留空，由系统提取。' },
   { key: 'publicKeyId', code: 'WXPAY_PUBLIC_KEY_ID', label: '微信支付公钥 ID', tip: '商户平台 → 账户中心 → API 安全 → 管理公钥，填写 PUB_KEY_ID_ 开头的完整 ID，与下方微信支付公钥配套。' },
   { key: 'base', code: 'WXPAY_NOTIFY_BASE_URL', label: '支付通知域名', tip: '填写外网可访问的 HTTPS 后端源站，如 https://api.example.com；不加 /api 路径、后台页面或 /#/ 路由。' },
+  { key: 'clientBase', code: 'WXPAY_CLIENT_BASE_URL', label: '客户端站点地址', tip: '填写客户端 HTTPS 源站，如 https://app.example.com；仅用于微信网页授权与 H5 支付完成后回跳收银台，须与通知域名分别配置。' },
 ] as const
 const fileFields: Array<{ key: FileKey; label: string; tip: string }> = [
   { key: 'certificate', label: '商户 API 证书（可选）', tip: '上传 apiclient_cert.pem；用于提取序列号、检查证书期限及与私钥的配套关系。' },
@@ -37,7 +39,7 @@ const stateLabels = { configured: '本地检查通过', missing: '未配置', in
 function state(code: string) { return config.value?.fields.find(f => f.key === code)?.state }
 function apply(value: PaymentConfig) {
   config.value = value
-  Object.assign(form, value.values, { enabled: value.requested, key: '', privateKey: '', publicKey: '', certificate: '' })
+  Object.assign(form, value.values, { enabled: value.requested, key: '', appSecret: '', privateKey: '', publicKey: '', certificate: '' })
   Object.assign(filenames, { privateKey: '', publicKey: '', certificate: '' })
   baseline.value = JSON.stringify(form)
 }
@@ -99,6 +101,9 @@ onMounted(load)
             <t-form-item label="APIv3 密钥（必需）" name="key" help="商户平台 → API 安全 → 设置 APIv3 密钥。32 位数字及大小写字母组合，用于通知解密；已配置时留空保留。">
               <div class="field-control"><t-input v-accessible-field v-model="form.key" :disabled="saving || uploading > 0" type="password" autocomplete="new-password" :maxlength="32" :placeholder="config.secrets.key ? '已配置，填写以替换…' : '请输入 32 位 APIv3 密钥…'" /><span class="state">{{ config.secrets.key ? '已配置' : '未配置' }}</span></div>
             </t-form-item>
+            <t-form-item label="公众号 AppSecret（JSAPI 网页授权）" name="appSecret" help="公众平台 → 开发设置 → AppSecret。仅用于微信网页授权换取 OpenID，不参与支付签名；留空保留原值。未配置时微信内网页无法发起 JSAPI 支付。">
+              <div class="field-control"><t-input v-accessible-field v-model="form.appSecret" :disabled="saving || uploading > 0" type="password" autocomplete="new-password" :maxlength="64" :placeholder="config.secrets.appSecret ? '已配置，填写以替换…' : '请输入公众号 AppSecret…'" /><span class="state">{{ config.secrets.appSecret ? '已配置' : '未配置' }}</span></div>
+            </t-form-item>
           </div>
           <div class="upload-grid">
             <section v-for="file in fileFields" :key="file.key" class="upload-field">
@@ -114,6 +119,9 @@ onMounted(load)
           <t-alert v-if="saveError" role="alert" theme="error" :message="saveError" />
           <div class="save-bar"><span>{{ isDirty ? '有未保存的修改' : '配置已与服务器同步' }}</span><t-button :loading="saving" :disabled="loading || uploading > 0 || !isDirty" @click="save">保存微信配置</t-button></div>
         </t-form>
+        <t-alert class="notice" :theme="config.webOAuth.ready ? 'success' : 'warning'" title="微信内网页支付（JSAPI）">
+          <template #message><p>{{ config.webOAuth.ready ? '网页授权参数已齐备，客户端在微信内可发起 JSAPI 支付。' : config.webOAuth.reason || '补齐公众号 AppSecret 与客户端站点地址后，微信内网页才能发起支付。' }}</p><p>授权回跳地址：{{ config.webOAuth.callbackUrl ?? '待配置' }}；微信外手机浏览器使用 H5 支付，PC 使用扫码支付，均不受此开关影响。</p></template>
+        </t-alert>
         <t-alert class="notice" theme="info" title="完整支付通知地址"><template #message><p>{{ config.notifyUrl ?? '保存有效通知域名后显示。' }}</p><p>通知需直达后端，网关保留原始请求体与微信签名请求头。有待确认支付或退款时暂不能替换参数，可单独关闭收款开关。</p></template></t-alert>
       </template>
     </t-card>

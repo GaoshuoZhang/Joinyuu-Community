@@ -12,6 +12,7 @@ import ListSkeleton from '@/components/ListSkeleton.vue'
 import type { SpaceReservation } from '@/types'
 import { useIncrementalList } from '@/composables/useIncrementalList'
 import { formatLocalDate, formatLocalDateTime, formatZhNumber } from '@/utils/format'
+import { formatFen } from '@/utils/money'
 
 /* 移动我的预约：预约卡片；pending/approved 可取消（Dialog 二次确认）+ Toast + 列表刷新。
  * 已过结束时间的 approved 由服务端派生为 ended（已完成），因此不会出现在可取消分支里。 */
@@ -32,7 +33,19 @@ onMounted(run)
 const actingId = ref('')
 
 function canCancel(r: SpaceReservation) {
+  /* 现金预约需走现金交易退款；待付款预约需先完成或关闭支付，不能直接调积分取消接口 */
+  if ((r.amountFen ?? 0) > 0 || r.status === 'pending_payment') return false
   return r.status === 'pending' || r.status === 'approved'
+}
+
+function goPay(r: SpaceReservation) {
+  if (r.commerceOrderId) router.push(`/checkout/${r.commerceOrderId}`)
+  else router.push('/me/transactions')
+}
+
+function goTransaction(r: SpaceReservation) {
+  if (r.commerceOrderId) router.push(`/me/transactions/${r.commerceOrderId}`)
+  else router.push('/me/transactions')
 }
 
 function onCancelTap(r: SpaceReservation) {
@@ -85,13 +98,16 @@ async function doCancel(r: SpaceReservation) {
             <span class="subject-name">{{ r.subjectName }}</span>
           </p>
           <p class="meta"><Icon aria-hidden="true" name="calendar" size="14px" />{{ formatLocalDate(r.date) }} · {{ r.start }} - {{ r.end }}</p>
+          <p v-if="(r.amountFen ?? 0) > 0" class="fee">现金预约：{{ formatFen(r.amountFen ?? 0) }}{{ r.status === 'pending_payment' ? '（待付款）' : '' }}</p>
           <p class="submitted-at">提交于 {{ formatLocalDateTime(r.createdAt) }}</p>
           <p v-if="r.rejectReason" class="reject-reason">驳回原因：{{ r.rejectReason }}</p>
         </router-link>
-        <div v-if="canCancel(r)" class="ops">
-          <Button theme="danger" variant="outline" size="small" :disabled="actingId === r.id" @click.stop="onCancelTap(r)">
+        <div v-if="r.status === 'pending_payment' || canCancel(r) || ((r.amountFen ?? 0) > 0 && r.status === 'approved')" class="ops">
+          <Button v-if="r.status === 'pending_payment'" theme="primary" size="small" @click.stop="goPay(r)">去支付</Button>
+          <Button v-else-if="canCancel(r)" theme="danger" variant="outline" size="small" :disabled="actingId === r.id" @click.stop="onCancelTap(r)">
             {{ actingId === r.id ? '处理中…' : '取消预约' }}
           </Button>
+          <Button v-else theme="default" variant="outline" size="small" @click.stop="goTransaction(r)">退款/售后</Button>
         </div>
       </article>
     </List>
@@ -136,6 +152,13 @@ async function doCancel(r: SpaceReservation) {
   margin:var(--app-space-3) 0 0;
   font: var(--app-type-caption);
   color: var(--td-text-color-secondary);
+}
+
+.fee {
+  margin: var(--app-space-3) 0 0;
+  color: var(--td-brand-color);
+  font: var(--app-type-emphasis-xs);
+  font-variant-numeric: tabular-nums;
 }
 
 .submitted-at {

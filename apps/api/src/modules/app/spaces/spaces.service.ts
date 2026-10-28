@@ -37,8 +37,9 @@ export interface SpaceDto {
   openTime: string
   closeTime: string
   needApproval: boolean
-  /** 预约费用（积分/小时）；0 = 免费 */
+  /** 现金费用（分/小时）；0 = 非现金空间 */
   chargeAmountFen?: number
+  chargeRefundPolicy?: string
   feePerHour: number
   equipment: string[]
   status: 'open' | 'maintenance'
@@ -56,6 +57,10 @@ export interface MyReservationDto {
   end: string
   status: string
   createdAt: string
+  /** 现金预约实付（分）：0 = 免费/积分预约 */
+  amountFen?: number
+  commerceOrderId?: string
+  afterSalesFrozen?: boolean
   identityType?: string
   subjectName?: string
   rejectReason?: string
@@ -74,6 +79,8 @@ export interface MyReservationDetailDto extends MyReservationDto {
   attendees: number
   /** 本单实际消耗的积分（0 = 免费空间；驳回/取消已全额退回） */
   feePoints: number
+  /** 现金预约实付（分） */
+  amountFen: number
   records: ReservationTimelineDto[]
 }
 
@@ -136,7 +143,7 @@ export class AppSpacesService {
     if (!this.visibly(identities, space)) throw new NotFoundException('空间不存在')
     const [reserved, events] = await Promise.all([
       this.prisma.spaceReservation.findMany({
-        where: { spaceId: space.id, date, status: { in: ['pending', 'approved'] }, deletedAt: null },
+        where: { spaceId: space.id, date, status: { in: ['pending', 'pending_payment', 'approved'] }, deletedAt: null },
       }),
       this.publishedEventsOn(date),
     ])
@@ -170,7 +177,7 @@ export class AppSpacesService {
     const phone = account?.phone ?? ''
     const name = account?.nickname || user.name
     const space = await this.findSpaceOr404(dto.spaceId)
-    if (space.chargeAmountFen > 0) throw new BadRequestException('该空间按现金费用预约，暂请联系运营人员；不支持积分和现金混合支付')
+    if (space.chargeAmountFen > 0) throw new BadRequestException('该空间为现金预约，请在空间详情页确认时段后在线支付；不支持积分和现金混合支付')
     if (!space.needReservation) throw new BadRequestException('该空间未开放预约')
     if (space.status === 'maintenance') throw new BadRequestException('该空间维护中暂不可预约')
     if (space.status !== 'available') throw new BadRequestException('该空间当前不可预约')
@@ -213,7 +220,7 @@ export class AppSpacesService {
     /* 提交前冲突预检：待审核/已通过预约或已发布活动占用时间重叠 → 409 */
     const [reserved, events] = await Promise.all([
       this.prisma.spaceReservation.findMany({
-        where: { spaceId: space.id, date, status: { in: ['pending', 'approved'] }, deletedAt: null },
+        where: { spaceId: space.id, date, status: { in: ['pending', 'pending_payment', 'approved'] }, deletedAt: null },
       }),
       this.publishedEventsOn(date),
     ])
@@ -229,7 +236,7 @@ export class AppSpacesService {
 
     /* 本人重复预约预检（pending/approved 重叠） */
     const mine = await this.prisma.spaceReservation.findFirst({
-      where: { userId: user.uid, spaceId: space.id, date, status: { in: ['pending', 'approved'] }, deletedAt: null },
+      where: { userId: user.uid, spaceId: space.id, date, status: { in: ['pending', 'pending_payment', 'approved'] }, deletedAt: null },
     })
     if (mine && overlaps(mine.startTime, mine.endTime, start, end)) {
       throw new ConflictException('你已预约该时段，请勿重复提交')
@@ -269,7 +276,7 @@ export class AppSpacesService {
         where: {
           spaceId: space.id,
           date,
-          status: { in: ['pending', 'approved'] },
+          status: { in: ['pending', 'pending_payment', 'approved'] },
           deletedAt: null,
           startTime: { lt: end },
           endTime: { gt: start },
@@ -342,6 +349,7 @@ export class AppSpacesService {
       purpose: reservation.purpose,
       attendees: reservation.attendees,
       feePoints: reservation.feePoints,
+      amountFen: reservation.amountFen,
       records: toReservationTimeline(reservation.records),
     }
   }
@@ -352,6 +360,8 @@ export class AppSpacesService {
     const reservation = await this.prisma.spaceReservation.findUnique({ where: { id } })
     if (!reservation || reservation.deletedAt) throw new NotFoundException('预约不存在')
     if (reservation.userId !== uid) throw new ForbiddenException('无权操作该预约')
+    if (reservation.amountFen > 0) throw new BadRequestException('该预约为现金预约，请在「现金交易」中申请退款')
+    if (reservation.afterSalesFrozen) throw new ConflictException('该预约退款处理中，暂不能取消')
     const now = formatNow()
     if (isReservationEnded(reservation, now)) throw new ConflictException('预约已结束，无法取消')
     if (reservation.status !== 'pending' && reservation.status !== 'approved') {
@@ -501,6 +511,7 @@ function toSpaceDto(s: Space): SpaceDto {
     needApproval: s.needApproval,
     feePerHour: s.feePerHour,
     chargeAmountFen: s.chargeAmountFen,
+    chargeRefundPolicy: s.chargeRefundPolicy,
     equipment: s.equipment,
     status: s.status === 'maintenance' ? 'maintenance' : 'open',
     description: s.description,
@@ -524,7 +535,10 @@ function toMyReservationDto(r: SpaceReservation, now: string): MyReservationDto 
     end: r.endTime,
     status: isReservationEnded(r, now) ? 'ended' : r.status,
     createdAt: r.submittedAt,
+    amountFen: r.amountFen,
+    afterSalesFrozen: r.afterSalesFrozen,
   }
+  if (r.commerceOrderId) dto.commerceOrderId = r.commerceOrderId
   if (r.identityType) dto.identityType = r.identityType
   if (r.subjectName) dto.subjectName = r.subjectName
   if (r.rejectReason) dto.rejectReason = r.rejectReason

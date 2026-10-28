@@ -24,6 +24,10 @@ const props = defineProps<{
     | 'realname'
     | 'flag'
     | 'userMessage'
+    | 'payment'
+    | 'transaction'
+    | 'refund'
+    | 'bill'
   value: string
 }>()
 
@@ -54,6 +58,7 @@ const map: Record<string, Record<string, { label: string; tone: Tone }>> = {
   },
   enroll: {
     pending: { label: '待审核', tone: 'warning' },
+    pending_payment: { label: '待付款', tone: 'warning' },
     approved: { label: '已通过', tone: 'success' },
     waitlisted: { label: '候补中', tone: 'primary' },
     rejected: { label: '已驳回', tone: 'danger' },
@@ -67,6 +72,7 @@ const map: Record<string, Record<string, { label: string; tone: Tone }>> = {
   },
   reservation: {
     pending: { label: '待审核', tone: 'warning' },
+    pending_payment: { label: '待付款', tone: 'warning' },
     approved: { label: '已通过', tone: 'success' },
     /* 服务端派生：已通过且已过预约结束时间 */
     ended: { label: '已完成', tone: 'success' },
@@ -143,6 +149,46 @@ const map: Record<string, Record<string, { label: string; tone: Tone }>> = {
   userMessage: {
     pending: { label: '待回复', tone: 'warning' },
     replied: { label: '已回复', tone: 'success' },
+  },
+  /* 现金交易展示状态（付款/履约/售后组合后的单一状态） */
+  transaction: {
+    unpaid: { label: '待付款', tone: 'warning' },
+    paid_pending: { label: '已付款，准备中', tone: 'primary' },
+    active: { label: '待使用', tone: 'primary' },
+    completed: { label: '已完成', tone: 'success' },
+    expired: { label: '已过期', tone: 'danger' },
+    refunding: { label: '退款处理中', tone: 'warning' },
+    refunded: { label: '已退款', tone: 'default' },
+    cancelled: { label: '活动已取消', tone: 'danger' },
+    closed: { label: '已关闭', tone: 'default' },
+    attention: { label: '待核对', tone: 'warning' },
+    exception: { label: '需人工处理', tone: 'danger' },
+  },
+  /* 支付尝试状态（后台/详情辅助展示） */
+  payment: {
+    pending: { label: '待支付', tone: 'warning' },
+    success: { label: '支付成功', tone: 'success' },
+    closed: { label: '已关闭', tone: 'default' },
+    attention: { label: '待核对', tone: 'danger' },
+  },
+  /* 退款申请状态 */
+  refund: {
+    pending: { label: '待审核', tone: 'warning' },
+    processing: { label: '退款处理中', tone: 'primary' },
+    success: { label: '退款成功', tone: 'success' },
+    rejected: { label: '已驳回', tone: 'default' },
+    closed: { label: '退款关闭', tone: 'default' },
+    abnormal: { label: '退款异常', tone: 'danger' },
+    attention: { label: '需人工处理', tone: 'danger' },
+    exception: { label: '需人工处理', tone: 'danger' },
+    refunded: { label: '已退款', tone: 'success' },
+  },
+  /* 租约账单缴费状态 */
+  bill: {
+    unpaid: { label: '待缴', tone: 'warning' },
+    paid: { label: '已缴', tone: 'success' },
+    void: { label: '已作废', tone: 'default' },
+    refunded: { label: '已退款', tone: 'default' },
   },
 }
 

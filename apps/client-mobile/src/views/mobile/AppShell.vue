@@ -158,6 +158,7 @@ const BACK_FALLBACK: Record<string, string> = {
   notices: '/me',
   applications: '/me',
   intros: '/community',
+  checkout: '/me/transactions',
 }
 
 function goBack() {

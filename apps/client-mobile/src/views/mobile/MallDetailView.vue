@@ -4,6 +4,8 @@ import { useRoute, useRouter } from 'vue-router'
 import { Button, Icon, Image, Toast } from 'tdesign-mobile-vue'
 import { confirmDialog } from '@/utils/confirmDialog'
 import { createOrder, fetchGoodsDetail } from '@/api/mall'
+import { createQuote } from '@/api/commerce'
+import { ApiError } from '@/api/http'
 import { useAsyncList } from '@/composables/useAsyncList'
 import { useAuthStore } from '@/stores/auth'
 import EmptyBlock from '@/components/shared/EmptyBlock.vue'
@@ -11,8 +13,10 @@ import { onImageError } from '@/utils/imageFallback'
 import RichTextBlock from '@/components/shared/RichTextBlock.vue'
 import ListSkeleton from '@/components/ListSkeleton.vue'
 import FlowResult from '@/components/FlowResult.vue'
+import PolicySummary from '@/components/commerce/PolicySummary.vue'
 import type { Goods } from '@/types'
 import { formatZhNumber } from '@/utils/format'
+import { formatFen } from '@/utils/money'
 import { discountLabel, discountedPoints } from '@/utils/points'
 
 /* 移动商品详情（统一券码兑换）：信息展示 + 立即兑换（确认弹层含扣减后余额预览）；
@@ -30,6 +34,7 @@ onMounted(async () => {
 })
 
 const submitting = ref(false)
+const buying = ref(false)
 const orderedId = ref('')
 const remainingPoints = ref<number | null>(null)
 
@@ -38,9 +43,13 @@ const soldOut = computed(() => (goods.value?.stock ?? 0) <= 0)
 /* 等级折扣价：实扣 = round(商品积分 × 折扣 ÷ 10)（与后端同一算法，实扣以后端为准） */
 const chargedPoints = computed(() => discountedPoints(goods.value?.pointsCost ?? 0, auth.pointsDiscount))
 const discounted = computed(() => chargedPoints.value < (goods.value?.pointsCost ?? 0))
-const validDaysText = computed(() =>
-  goods.value?.validDays === 0 ? '长期有效' : goods.value?.validDays ? `兑换后 ${goods.value.validDays} 天内有效，过期未使用自动退回积分` : '兑换后 30 天内有效，过期未使用自动退回积分',
-)
+const validDaysText = computed(() => {
+  const days = goods.value?.validDays
+  if (cashSale.value) {
+    return days === 0 ? '长期有效' : `支付成功后 ${days ?? 30} 天内有效，请尽快到店核销`
+  }
+  return days === 0 ? '长期有效' : days ? `兑换后 ${days} 天内有效，过期未使用自动退回积分` : '兑换后 30 天内有效，过期未使用自动退回积分'
+})
 /* v52：商品说明走后端富编辑器（RichTextBlock 输出 HTML），富文本分支不能开 pre-wrap——
  * 源码缩进/换行会被原样渲染成可见空白；仅纯文本分支保留换行（判定口径与 EventDetailView、
  * RichTextBlock 的富文本识别一致，界面审查 MEDIUM-4）。 */
@@ -53,7 +62,10 @@ function onRedeem() {
   }
   const item = goods.value
   if (!item) return
-  if (cashSale.value) { Toast('该商品使用现金购买，暂请联系运营人员'); return }
+  if (cashSale.value) {
+    void buyCash(item)
+    return
+  }
   if (auth.points < chargedPoints.value) {
     Toast(`积分不足，还差 ${formatZhNumber(chargedPoints.value - auth.points)} 积分`)
     return
@@ -76,6 +88,20 @@ function onRedeem() {
       void submitOrder(item)
     },
   })
+}
+
+/** 现金商品：先向后端报价（校验上架/库存/资格/当前价格），再进入确认订单页。 */
+async function buyCash(item: Goods) {
+  if (buying.value || soldOut.value) return
+  buying.value = true
+  try {
+    const quote = await createQuote({ sourceType: 'mall', sourceId: item.id })
+    await router.push({ name: 'checkout-confirm', query: { quoteId: quote.id } })
+  } catch (e) {
+    Toast(e instanceof ApiError || e instanceof Error ? e.message : '暂时无法购买，请稍后重试')
+  } finally {
+    buying.value = false
+  }
 }
 
 async function submitOrder(item: Goods) {
@@ -118,7 +144,7 @@ function goOrders() {
       <section class="m-card main">
         <Image v-if="goods.coverUrl" class="detail-cover content-img" :src="goods.coverUrl" :alt="goods.name" fit="cover" @error="onImageError" />
         <h2 class="name">{{ goods.name }}</h2>
-        <p v-if="cashSale" class="cost">¥{{ ((goods.chargeAmountFen ?? 0) / 100).toFixed(2) }}</p>
+        <p v-if="cashSale" class="cost">{{ formatFen(goods.chargeAmountFen ?? 0) }}</p>
         <p v-else class="cost">
           <span class="tabular-nums">{{ formatZhNumber(chargedPoints) }}</span> <span>积分</span>
           <!-- 等级折扣：展示折后价 + 原价删除线（无折扣时不显示原价） -->
@@ -135,19 +161,22 @@ function goOrders() {
         </div>
       </section>
 
+      <PolicySummary v-if="cashSale" :policy="goods.chargeRefundPolicy || '券码未使用且未过期前可申请整单退款，需运营审核。'" />
+
       <!-- 统一券码兑换说明 -->
       <section class="m-card voucher-notice">
         <p class="voucher-notice__title"><Icon aria-hidden="true" name="qrcode" size="16px" />券码现场兑换</p>
-        <p class="voucher-notice__line">兑换成功后生成专属券码，请前往订单详情查看。</p>
+        <p class="voucher-notice__line">{{ cashSale ? '支付成功后生成专属券码，请前往我的订单或现金交易查看。' : '兑换成功后生成专属券码，请前往订单详情查看。' }}</p>
         <p class="voucher-notice__line">到店出示券码，由社区工作人员现场核销。</p>
-        <p class="voucher-notice__line">核销前可在订单中申请退款，积分原路退回。</p>
+        <p class="voucher-notice__line">{{ cashSale ? '券码未使用时可从现金交易申请全额退款，原路退回。' : '核销前可在订单中申请退款，积分原路退回。' }}</p>
       </section>
 
       <Teleport to="body">
         <section class="mobile-fixed-action-bar goods-actions">
-          <p v-if="auth.isLogged" class="own-points">当前积分：<span class="tabular-nums">{{ formatZhNumber(auth.points) }}</span></p>
-          <Button theme="primary" block :disabled="submitting || soldOut" @click="onRedeem">
-            {{ soldOut ? '已售罄' : cashSale ? '联系运营购买' : submitting ? '兑换中…' : '立即兑换' }}
+          <p v-if="auth.isLogged && !cashSale" class="own-points">当前积分：<span class="tabular-nums">{{ formatZhNumber(auth.points) }}</span></p>
+          <p v-else-if="cashSale" class="own-points">微信支付 · 每单限购一件</p>
+          <Button theme="primary" block :disabled="submitting || buying || soldOut" @click="onRedeem">
+            {{ soldOut ? '已售罄' : cashSale ? (buying ? '正在创建订单…' : '立即购买') : submitting ? '兑换中…' : '立即兑换' }}
           </Button>
           <p v-if="soldOut" class="hint">商品暂时缺货，请稍后再来看看。</p>
         </section>

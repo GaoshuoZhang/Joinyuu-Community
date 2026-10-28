@@ -12,6 +12,8 @@ export interface ProfileMenuEntry {
   themeKey?: ProfileMenuColorKey
   /** 特殊动作（不发路由）：如等级加载失败后点击重试 */
   action?: 'retry-level'
+  /** 待办角标（如现金交易待付款/退款处理中、租约待缴账单） */
+  badge?: number
 }
 
 /** 顶部账户数据卡的两格（积分 / 等级） */
@@ -45,6 +47,12 @@ interface ProfileMenuContext {
   levelFailed: boolean
   /** 空间预约开关关闭时隐藏「空间预约」入口（工位租约无开关，常显） */
   reservationOpen: boolean
+  /** 现金交易待付款数量 */
+  pendingPayment?: number
+  /** 退款处理中数量 */
+  refunding?: number
+  /** 待缴账单数量 */
+  unpaidBills?: number
 }
 
 /** 「我的」页布局（参考支付宝分组）：账户数据卡 + 按用途分区的服务宫格。
@@ -75,7 +83,14 @@ export function buildProfileMenuLayout(context: ProfileMenuContext): ProfileMenu
           ? { path: '/me/cards/individual', label: '我的名片', icon: 'user', themeKey: 'talent' }
           : { path: '/intros/talent', label: '人才登记', icon: 'user', themeKey: 'talent' },
         { path: '/me/orders', label: '我的订单', icon: 'order', themeKey: 'mall' },
-        { path: '/me/leases', label: '工位租约', icon: 'building', themeKey: 'spaces' },
+        {
+          path: '/me/transactions',
+          label: '现金交易',
+          icon: 'bill',
+          themeKey: 'events',
+          badge: (context.pendingPayment ?? 0) + (context.refunding ?? 0) || undefined,
+        },
+        { path: '/me/leases', label: '工位租约', icon: 'building', themeKey: 'spaces', badge: context.unpaidBills || undefined },
       ],
     },
     {

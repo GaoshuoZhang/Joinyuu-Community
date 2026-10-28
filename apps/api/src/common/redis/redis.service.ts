@@ -117,6 +117,18 @@ export class RedisService implements OnModuleDestroy {
     }
   }
 
+  /** 原子读取并删除一次性凭据（如 OAuth ticket/state）；未命中或异常返回 null。 */
+  async takeCache<T>(key: string): Promise<T | null> {
+    try {
+      const raw = await this.client.getdel(key)
+      if (raw == null) return null
+      return JSON.parse(raw) as T
+    } catch (e) {
+      console.error('[redis] 一次性凭据读取失败，按失效处理:', e instanceof Error ? e.message : e)
+      return null
+    }
+  }
+
   /** 写入 JSON 缓存（TTL 秒）；失败仅告警 */
   async setCache(key: string, value: unknown, ttlSeconds: number): Promise<void> {
     try {

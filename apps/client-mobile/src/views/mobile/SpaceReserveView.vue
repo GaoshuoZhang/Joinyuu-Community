@@ -5,10 +5,12 @@ import { Loading, Button, Cell, CheckTag, DateTimePicker, Form, FormItem, Input,
 import { confirmDialog } from '@/utils/confirmDialog'
 import type { FormInstanceFunctions, FormRules } from 'tdesign-mobile-vue'
 import { fetchAvailability, fetchSpaceDetail, createReservation } from '@/api/spaces'
+import { createQuote } from '@/api/commerce'
 import IdentityPicker from '@/components/forms/IdentityPicker.vue'
 import { fetchMyIdentities } from '@/api/enterprises'
 import { ApiError } from '@/api/http'
 import FlowResult from '@/components/FlowResult.vue'
+import PolicySummary from '@/components/commerce/PolicySummary.vue'
 import { authorizedActionIdentities, useAuthStore, identityOptionLabel } from '@/stores/auth'
 import EmptyBlock from '@/components/shared/EmptyBlock.vue'
 import ListSkeleton from '@/components/ListSkeleton.vue'
@@ -16,6 +18,7 @@ import type { IdentityType, Space, SpaceSlot, UserIdentity } from '@/types'
 import { useUnsavedGuard } from '@/composables/useUnsavedGuard'
 import { useBusinessNow } from '@/composables/useBusinessNow'
 import { formatLocalDate } from '@/utils/format'
+import { formatFen } from '@/utils/money'
 import { discountLabel, discountedPoints } from '@/utils/points'
 import { availabilityEndpoints, billableHours, canStartAt, formatSpaceDuration, spaceFeePoints, timeToMinutes, validateSpaceRange } from '@/utils/spaceRange'
 
@@ -174,13 +177,18 @@ const feePoints = computed(() => discountedPoints(baseFeePoints.value, feeDiscou
 const feeInsufficient = computed(() => feePoints.value > 0 && auth.isLogged && auth.points < feePoints.value)
 /* 时长含不足 1 小时的部分时标注计费小时；有折扣时补折扣标注（如全天开放 23:59 结束 = N 小时 59 分） */
 const feeHint = computed(() => {
-  if (feePoints.value <= 0 || !form.start || !form.end) return ''
-  const hours = (timeToMinutes(form.end) - timeToMinutes(form.start)) % 60 === 0 ? '' : ` · 按 ${billableHours(form.start, form.end)} 小时计费`
+  if (!form.start || !form.end) return ''
+  const hours = billableHours(form.start, form.end)
+  const hoursHint = (timeToMinutes(form.end) - timeToMinutes(form.start)) % 60 === 0 ? '' : ` · 按 ${hours} 小时计费`
+  if (cashFee.value) {
+    return `${hoursHint} · 预计 ${formatFen((space.value?.chargeAmountFen ?? 0) * hours)}`
+  }
+  if (feePoints.value <= 0) return ''
   const discount = feePoints.value < baseFeePoints.value ? ` · ${discountLabel(feeDiscount.value)}` : ''
-  return `${hours}${discount}`
+  return `${hoursHint}${discount}`
 })
 const submitLabel = computed(() => {
-  if (cashFee.value) return '现金预约请联系运营'
+  if (cashFee.value) return submitting.value ? '正在创建订单…' : '确认并支付'
   if (submitting.value) return '提交中…'
   if (feeInsufficient.value) return `积分不足（需 ${feePoints.value} 积分）`
   return feePoints.value > 0 ? `提交预约（消耗 ${feePoints.value} 积分）` : '提交预约'
@@ -265,6 +273,34 @@ function clearRange() {
   void nextTick(() => formRef.value?.clearValidate())
 }
 
+/** 现金预约：先请求报价（后端校验时段/冲突/资格/价格），再进入确认订单页；不扣积分。 */
+async function submitCashReservation() {
+  if (submitting.value || resultStatus.value) return
+  if (!selectedRange.value?.valid) {
+    Toast('请选择完整的预约时段')
+    return
+  }
+  submitting.value = true
+  try {
+    const quote = await createQuote({
+      sourceType: 'space',
+      sourceId: spaceId,
+      date: date.value,
+      start: form.start,
+      end: form.end,
+      topic: form.topic || undefined,
+      attendees: form.attendees,
+      asIdentity: form.asIdentity || undefined,
+      ...(form.asIdentity === 'community_enterprise' && form.asEnterpriseId ? { asEnterpriseId: form.asEnterpriseId } : {}),
+    })
+    await router.push({ name: 'checkout-confirm', query: { quoteId: quote.id } })
+  } catch (e) {
+    Toast(e instanceof ApiError || e instanceof Error ? e.message : '暂时无法预约，请稍后重试')
+  } finally {
+    submitting.value = false
+  }
+}
+
 async function submitReservation() {
   if (submitting.value || resultStatus.value) return
   if (form.start && isPastStart(form.start)) {
@@ -343,8 +379,12 @@ function confirmSubmit() {
 
 function onSubmit({ validateResult }: { validateResult: unknown }) {
   /* 校验失败：字段级错误已内联展示，scroll-to-first-error 负责滚动定位 */
-  if (cashFee.value) { Toast('该空间按现金费用预约，请联系运营人员'); return }
-  if (validateResult === true) confirmSubmit()
+  if (validateResult !== true) return
+  if (cashFee.value) {
+    void submitCashReservation()
+    return
+  }
+  confirmSubmit()
 }
 
 function goMine() {
@@ -381,7 +421,7 @@ function goMine() {
         <!-- v51：收费是中性信息（此前用 warning 语义色，暗示异常）；改为中性品牌色，「免费」保留正向语义 -->
         <!-- v52：flex:none 防止被长标题一并压缩（界面审查 LOW） -->
         <Tag class="head-fee" size="small" variant="light" :theme="cashFee || (space?.feePerHour ?? 0) > 0 ? 'primary' : 'success'">
-          {{ cashFee ? '¥' + ((space?.chargeAmountFen ?? 0) / 100).toFixed(2) + '/小时' : (space?.feePerHour ?? 0) > 0 ? `${space?.feePerHour} 积分/小时` : '免费' }}
+          {{ cashFee ? formatFen(space?.chargeAmountFen ?? 0) + '/小时' : (space?.feePerHour ?? 0) > 0 ? `${space?.feePerHour} 积分/小时` : '免费' }}
         </Tag>
       </div>
       <p class="page-desc">{{ space?.location }} · {{ space?.needApproval ? '需审核' : '免审核' }} · {{ space?.openTime }}-{{ space?.closeTime }}</p>
@@ -469,6 +509,12 @@ function goMine() {
           <IdentityPicker :identities="identityOptions" :selected="form.asIdentity" :selected-enterprise-id="form.asEnterpriseId" :user-name="auth.name" @select="pickIdentity" />
         </FormItem>
       </div>
+
+      <PolicySummary
+        v-if="cashFee"
+        :policy="space?.chargeRefundPolicy || '预约开始前可申请整单退款，需运营审核；已开始或已结束不可退款。'"
+        :notes="['付款成功后预约才生效。', '不支持积分与现金混合支付。']"
+      />
 
       <Button
         class="mobile-sticky-action"

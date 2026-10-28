@@ -12,6 +12,7 @@ import type { MyOrder } from '@/types'
 import StateTag from '@/components/shared/StateTag.vue'
 import { useBusinessNow } from '@/composables/useBusinessNow'
 import { formatLocalDateTime, formatZhNumber, parseLocalDateTime } from '@/utils/format'
+import { formatFen } from '@/utils/money'
 
 /* 订单详情（统一券码兑换三态）：待使用展示券码与二维码供现场核销，核销前可申请退款；
  * 已完成可评价；已取消/已过期仅展示状态（过期未使用由系统自动退回积分）。 */
@@ -39,10 +40,16 @@ function isExpired(item: MyOrder): boolean {
   return expiresAt ? expiresAt.getTime() < businessNowMs.value : false
 }
 
-/** 券码可用（展示二维码、可核销）：待使用且未过期 */
-const canUse = computed(() => !!order.value && String(order.value.status) === 'pending_use' && !isExpired(order.value))
-/** 可退款：待使用且未过期（过期券由定时任务自动退款，无需手动操作） */
-const canRefund = computed(() => canUse.value)
+/** 券码可用（展示二维码、可核销）：待使用、未过期且没有退款申请冻结 */
+const canUse = computed(() => !!order.value && String(order.value.status) === 'pending_use' && !isExpired(order.value) && !order.value.afterSalesFrozen)
+/** 积分券可退款：待使用且未过期；现金券必须走现金交易售后，不能调积分退款接口 */
+const canRefund = computed(() => canUse.value && (order.value?.amountFen ?? 0) === 0)
+const isCashOrder = computed(() => (order.value?.amountFen ?? 0) > 0)
+
+function goCashTransaction() {
+  if (order.value?.commerceOrderId) void router.push(`/me/transactions/${order.value.commerceOrderId}`)
+  else void router.push('/me/transactions')
+}
 
 async function copyCode(code: string) {
   try {
@@ -119,7 +126,7 @@ async function onReviewSubmit() {
           <h2 class="name">{{ order.goodsName }}</h2>
           <StateTag kind="order" :value="order.status" />
         </div>
-        <p class="cost">{{ formatZhNumber(order.pointsCost) }} 积分</p>
+        <p class="cost">{{ isCashOrder ? formatFen(order.amountFen ?? 0) : `${formatZhNumber(order.pointsCost)} 积分` }}</p>
 
         <div v-if="canUse" class="qr-wrap">
           <QRCode :value="order.voucherCode" :size="140" level="M" aria-label="券码核销二维码" />
@@ -128,8 +135,9 @@ async function onReviewSubmit() {
         <p class="expiry">
           {{ !order.voucherExpiresAt ? '长期有效' : isExpired(order) ? `已于 ${formatLocalDateTime(order.voucherExpiresAt)} 过期` : `有效期至 ${formatLocalDateTime(order.voucherExpiresAt)}` }}
         </p>
-        <p v-if="!canUse" class="hint">
-          {{ String(order.status) === 'completed' ? '该券码已核销' : String(order.status) === 'cancelled' ? '该订单已取消' : '该券码已过期，积分将由系统自动退回' }}
+        <p v-if="order.afterSalesFrozen" class="hint">该订单退款处理中，券码暂不可核销；审核未通过后将恢复可用。</p>
+        <p v-else-if="!canUse" class="hint">
+          {{ String(order.status) === 'completed' ? '该券码已核销' : String(order.status) === 'cancelled' ? '该订单已取消' : isCashOrder ? '该券码已过期，请联系运营处理' : '该券码已过期，积分将由系统自动退回' }}
         </p>
 
         <div class="times">
@@ -145,6 +153,7 @@ async function onReviewSubmit() {
           复制兑换码
         </Button>
         <Button v-if="canRefund" theme="danger" variant="outline" block :loading="acting" @click="onCancelOrder">申请退款</Button>
+        <Button v-if="isCashOrder && order.commerceOrderId" variant="outline" block @click="goCashTransaction">退款/售后（现金交易）</Button>
         <template v-if="order.status === 'completed'">
           <Button v-if="!order.rating" theme="primary" block @click="openReview">评价本次兑换</Button>
           <p v-else class="reviewed">
