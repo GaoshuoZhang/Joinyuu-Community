@@ -172,7 +172,8 @@ onMounted(load)
         </template>
         <template #fee="{ row }">
           <!-- 费用：积分/小时，0 = 免费（与客户端空间列表同一展示口径） -->
-          <t-tag v-if="row.feePerHour > 0" variant="light" theme="warning" size="small">
+          <t-tag v-if="(row?.chargeAmountFen ?? 0) > 0" variant="light" theme="primary" size="small">¥{{ ((row?.chargeAmountFen ?? 0) / 100).toFixed(2) }} / 小时</t-tag>
+            <t-tag v-else-if="row.feePerHour > 0" variant="light" theme="warning" size="small">
             {{ row.feePerHour }} 积分/小时
           </t-tag>
           <t-tag v-else variant="light" theme="success" size="small">免费</t-tag>

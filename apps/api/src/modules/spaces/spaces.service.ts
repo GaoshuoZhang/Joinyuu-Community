@@ -1,3 +1,4 @@
+import { exclusivePriceData } from '../../common/dto/business-charge.dto'
 import {
   ConflictException,
   Injectable,
@@ -41,6 +42,8 @@ export interface SpaceDto {
   feePerHour: number
   equipment: string[]
   status: string
+  chargeAmountFen?: number
+  chargeRefundPolicy?: string
   description: string
   /** 自定义可见范围（空数组 = 不限）：身份 + 等级；仅需预约空间有意义 */
   visibilityIdentities: string[]
@@ -104,6 +107,8 @@ function toSpaceDto(s: Space): SpaceDto {
     feePerHour: s.feePerHour,
     equipment: s.equipment,
     status: s.status,
+    chargeAmountFen: s.chargeAmountFen ?? 0,
+    chargeRefundPolicy: s.chargeRefundPolicy ?? '',
     description: s.description,
     visibilityIdentities: s.visibilityIdentities,
     visibilityLevels: s.visibilityLevels,
@@ -172,7 +177,7 @@ export class SpacesService {
     const space = await this.prisma.space.findFirst({ where: { id, deletedAt: null } })
     if (!space) throw new NotFoundException('空间不存在')
 
-    await this.prisma.space.update({ where: { id }, data: this.spaceData(payload) })
+    await this.prisma.space.update({ where: { id }, data: this.spaceData(payload, space) })
     return { code: 0 }
   }
 
@@ -438,7 +443,7 @@ export class SpacesService {
 
   /* 新增/编辑共用字段（allDay 存 00:00/23:59；needApproval 联动 needReservation；feePerHour 0=免费）
    * 可见/可预约范围：关闭「需预约」时统一清空（客户端过滤与预约校验只作用于需预约空间） */
-  private spaceData(payload: SpacePayloadDto) {
+  private spaceData(payload: SpacePayloadDto, previous?: { chargeAmountFen: number; chargeRefundPolicy: string }) {
     const allDay = payload.allDay
     const reservable = payload.needReservation
     return {
@@ -454,6 +459,7 @@ export class SpacesService {
       feePerHour: payload.feePerHour ?? 0,
       equipment: payload.equipment,
       description: payload.description,
+      ...exclusivePriceData(payload, payload.feePerHour ?? 0, previous),
       visibilityIdentities: reservable ? payload.visibilityIdentities ?? [] : [],
       visibilityLevels: reservable ? payload.visibilityLevels ?? [] : [],
       reservationIdentities: reservable ? payload.reservationIdentities ?? [] : [],

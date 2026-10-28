@@ -97,6 +97,7 @@ export class AppMallService {
     if (!this.canSee(goods, category, identities)) throw new NotFoundException('商品不存在')
     if (!this.canOrder(goods, category, identities)) throw new ForbiddenException('当前身份暂不可兑换该商品')
 
+    if (goods.chargeAmountFen > 0) throw new BadRequestException('该商品按现金售价购买，暂请联系运营人员；不支持积分和现金混合支付')
     const user = await this.prisma.user.findUnique({ where: { uid } })
     if (!user) throw new BadRequestException('用户不存在')
     /* 等级折扣（个人消费取本人社区个体等级折扣）：实扣 = round(商品积分 × 折扣 ÷ 10)（口径见 common/points/points-discount） */
@@ -116,7 +117,7 @@ export class AppMallService {
       await this.prisma.$transaction(async (tx) => {
         /* 条件扣库存（并发安全）：库存不足则不扣并报错 */
         const stockUpd = await tx.mallGoods.updateMany({
-          where: { id: dto.goodsId, status: { in: ['on', 'restock'] }, deletedAt: null, stock: { gt: 0 } },
+          where: { id: dto.goodsId, status: { in: ['on', 'restock'] }, deletedAt: null, stock: { gt: 0 }, chargeAmountFen: 0, points: goods.points },
           data: { stock: { decrement: 1 }, redeemedCount: { increment: 1 } },
         })
         if (stockUpd.count === 0) throw new BadRequestException('库存不足')
@@ -368,7 +369,7 @@ export class AppMallService {
     voucherCode: string,
   ): Prisma.RedemptionOrderCreateInput {
     const now = formatNow()
-    const validDays = goods.validDays && goods.validDays > 0 ? goods.validDays : DEFAULT_VOUCHER_VALID_DAYS
+    const validDays = goods.validDays ?? DEFAULT_VOUCHER_VALID_DAYS
     return {
       id,
       user: { connect: { uid: userId } },
@@ -380,7 +381,7 @@ export class AppMallService {
       createdAt: now,
       note: dto.remark?.trim() || null,
       voucherCode,
-      voucherExpiresAt: this.addDaysTime(now, validDays),
+      voucherExpiresAt: validDays === 0 ? '' : this.addDaysTime(now, validDays),
     }
   }
 
@@ -392,6 +393,7 @@ export class AppMallService {
     points: number
     stock: number
     validDays: number | null
+    chargeAmountFen?: number
     description: string
   }) {
     return {
@@ -401,6 +403,7 @@ export class AppMallService {
       category: g.category,
       points: g.points,
       pointsCost: g.points,
+      chargeAmountFen: g.chargeAmountFen ?? 0,
       stock: g.stock,
       validDays: g.validDays ?? DEFAULT_VOUCHER_VALID_DAYS,
       description: g.description,

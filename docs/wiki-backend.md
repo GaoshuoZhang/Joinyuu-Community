@@ -854,3 +854,28 @@ TZ=Asia/Shanghai
 - **提交规范**：沿用 `<type>: <描述>`；后端模块建议 `feat(api): xxx` 前缀区分 admin 改动。
 - **Windows 协作**：脚本改动避免 heredoc/内联模板串；批量脚本走临时 .mjs 文件 + fs 写入；改完必须读盘校验（历史教训见 `.workbuddy/memory`）。
 - **文档同步**：每完成后端模块，在 `docs/` 沉淀实体字段列表（page as documentation）。
+
+
+## 交易经营第一批（1.6.1）
+
+启动前迁移：`apps/api` 的 `dev`、`start` 均先执行 `prisma migrate deploy`，失败则停止启动。本地批处理复用该命令，避免新控制器已加载而权限目录/新表未迁移。权限目录缺失应通过增量迁移修复，不得通过关闭校验或重置种子清库修复。
+
+新增 CommerceModule，普通商户 APIv3 + 微信支付公钥验签。已实现原业务表单现金定价、五模块关联应收、Native后台收款、线下全额收款与异人复核、全额退款申请/异人审批/查询及持久补偿。JSAPI/H5只有渠道适配方法，无用户授权及客户端发起入口。完整 API、字段、金额与幂等约束见 [交易经营实现说明](./commerce-implementation.md)。
+
+新增 commerce 数据范围及8个有效财务权限；迁移登记权限，不自动授予普通角色。资金审计与账单/退款状态在同一事务写入。回调保留rawBody、验签解密和核对后入账，成功返回空204。存量查单/退款采用handler级许可证维护例外，独立每分钟补偿任务不受原业务调度器到期停跑影响。无真实商户凭据时不发起请求。
+
+本批尚无渠道逐笔对账、现金订单自动票券/预约/库存履约、客户端收银台；不得据此宣称五模块自动售卖上线。默认关闭真实收款。原文“支付不在范围内”仅描述1.5.x；1.6.0以本节和实现说明的增量边界为准。
+
+1.6.1：五类业务新增 chargeAmountFen / chargeRefundPolicy，原 DTO 继承 BusinessChargeDto，业务 Service 使用 businessChargeData 校验/保存；旧载荷不传则保留价格。GET commerce/sources/:id 返回当前报价，POST bills 按源价格×quantity校验并保存 pricing 快照，业务改价不改历史账单。新增迁移 `20261028010000_business_charge`，不改已应用的基础迁移、不删除旧 CommerceService 数据。独立价目表接口及2个权限退役。
+
+GET `/api/admin/system/payment-config` 仅 `/system/config` 权限及 system 域可读；返回逐项本地格式/文件检查与通知 URL，不回传标识值、密钥、路径。配置检查不调用微信，不能验证商户权限、绑定、证书有效期和公网可达性。
+
+### 1.6.2 收款配置与互斥计价（覆盖以上旧约定）
+
+新增 PaymentMerchantConfig 加密配置表（密文/版本/修改人/时间），PaymentConfigService 处理保存、加解密和无缓存即时读取。主密钥默认在进程私有 `.private/wechatpay-config.key` 自动创建，与数据库分离；备份/多实例需保留/共享原主密钥，可配置 PAYMENT_CONFIG_KEY_FILE 或 PAYMENT_CONFIG_ENCRYPTION_KEY。微信客户端改为异步读取统一配置；没有后台记录时才回退 WXPAY 环境变量。
+
+GET `/api/admin/system/payment-config` 回填非密钥字段及状态、版本、secrets布尔标记；PUT `/api/admin/system/payment-config/wechat` 保存参数与只写PEM/key，空值保留；均使用 `/system/config` 权限。保存与新建支付共用事务锁，未决资金阻止凭据替换，已有交易不能更换商户/AppID。加密载荷和真实密钥均不进入审计。详见实现说明。
+
+需求/项目新增/编辑 DTO 移除收费字段，新出账请求明确拒绝，历史金额保持不变。商城/空间 API 和 CHECK 拒绝同时正积分与正现金价。现金记录不能进入积分兑换/预约路径；积分交易内再次核对价格，避免改价并发绕过。MallGoods.validDays=0 保留为不过期，新券 voucherExpiresAt=''，扫描过期时显式排除空串；null仍兼容30天。客户端和后台显示长期有效。
+
+增量迁移 `20261028020000_payment_configuration` 新增配置表并为已有现金商品/空间清零积分价，保留现金价；其他历史数据与已签发券码不变。

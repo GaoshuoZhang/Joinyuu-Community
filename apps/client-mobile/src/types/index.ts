@@ -766,6 +766,7 @@ export interface MyEventFeedback {
 /* ---------- 积分商城（统一券码兑换） ---------- */
 
 export interface Goods {
+  chargeAmountFen?: number
   id: string
   name: string
   coverUrl?: string
@@ -812,6 +813,7 @@ export interface Space {
   equipment: string[]
   needApproval: boolean
   /** 预约费用（积分/小时）；0 = 免费使用 */
+  chargeAmountFen?: number
   feePerHour: number
   openTime: string
   closeTime: string

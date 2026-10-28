@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import ExclusivePriceFields from '@/components/ExclusivePriceFields.vue'
+import { chargeFields, chargeRules } from '@/utils/businessCharge'
 import { computed, defineAsyncComponent, nextTick, reactive, ref, watch } from 'vue'
 import { MessagePlugin } from 'tdesign-vue-next'
 import type { FormProps } from 'tdesign-vue-next'
@@ -59,6 +61,8 @@ const customOrdering = ref(false)
 const baseStock = ref<number | null>(null)
 
 const form = reactive({
+  ...chargeFields(),
+  priceMode: 'points' as 'points' | 'cash',
   name: '',
   coverUrl: '',
   category: 'GC001' as GoodsCategory,
@@ -79,6 +83,9 @@ watch(
   () => props.visible,
   (v) => {
     if (!v) return
+    Object.assign(form, chargeFields(props.mode === 'edit' ? props.goods : null))
+    form.priceMode = form.chargeAmountFen > 0 ? 'cash' : 'points'
+    if (form.priceMode === 'cash') form.points = 0
     void ensureCategories()
     if (props.mode === 'edit' && props.goods) {
       form.name = props.goods.name
@@ -111,6 +118,7 @@ watch(
       customVisibility.value = false
       customOrdering.value = false
     }
+    if (form.priceMode === 'cash') form.points = 0
     markBaseline()
     /* 清除上次会话残留的校验红框（仅清状态，不动表单值） */
     nextTick(() => formRef.value?.clearValidate())
@@ -125,6 +133,10 @@ function syncOrdering() {
 
 /* 规则 trigger 一律 submit：确认时 formRef.validate() 才触发红框提示 */
 const rules: FormProps['rules'] = {
+  ...chargeRules(form),
+  chargeAmountFen: [{ validator: () => form.priceMode !== 'cash' || (Number.isSafeInteger(form.chargeAmountFen) && form.chargeAmountFen > 0 && form.chargeAmountFen <= 100000000), message: '请输入 0.01 至 1,000,000.00 元的现金金额', trigger: 'submit' }],
+  points: [{ validator: () => form.priceMode === 'cash' || (Number.isInteger(form.points) && form.points > 0), message: '积分售价须大于 0', trigger: 'submit' }],
+  validDays: [{ validator: () => Number.isInteger(form.validDays) && form.validDays >= 0 && form.validDays <= 3650, message: '有效期须为 0 至 3650 天，0 表示不过期', trigger: 'submit' }],
   name: [{ required: true, message: '请输入商品名称', trigger: 'submit' }],
   category: [{ required: true, message: '请选择商品类型', trigger: 'submit' }],
   description: [{ required: true, message: '请输入商品说明', trigger: 'submit' }],
@@ -143,6 +155,7 @@ async function onConfirm() {
       stock: form.stock,
       ...(props.mode === 'edit' && baseStock.value !== null ? { baseStock: baseStock.value } : {}),
       validDays: form.validDays,
+      ...chargeFields(form),
       description: form.description,
       visibilityIdentities: customVisibility.value ? form.visibilityIdentities : [],
       visibilityLevels: customVisibility.value ? form.visibilityLevels : [],
@@ -201,17 +214,15 @@ function onClose() {
         <t-form-item label="商品分类" name="category">
           <t-select v-accessible-field clearable v-model="form.category" :options="categoryOptions" />
         </t-form-item>
-        <t-form-item label="兑换积分" name="points">
-          <t-input-number v-accessible-field v-model="form.points" :min="1" :decimal-places="0" theme="column" class="ctl-w-full" />
-        </t-form-item>
       </div>
+      <ExclusivePriceFields v-model:mode="form.priceMode" v-model:points="form.points" v-model:amount-fen="form.chargeAmountFen" v-model:refund-policy="form.chargeRefundPolicy" point-name="points" point-label="积分售价" cash-label="现金售价" :minimum-points="1" />
       <div class="form-row">
         <t-form-item label="库存" name="stock">
           <t-input-number v-accessible-field v-model="form.stock" :min="0" :decimal-places="0" theme="column" class="ctl-w-full" />
         </t-form-item>
         <!-- 统一券码兑换：券码有效期（天下单时写入券码到期时间），过期未使用自动退款 -->
-        <t-form-item label="有效期（天）" name="validDays" help="兑换后券码有效期，到期未使用将自动退回积分；留空按 30 天处理">
-          <t-input-number v-accessible-field v-model="form.validDays" :min="1" :max="3650" :decimal-places="0" theme="column" class="ctl-w-full" />
+        <t-form-item label="有效期（天）" name="validDays" help="0 表示不过期；大于 0 时按购买/兑换后的天数计算有效期，已生成券码的有效期不随商品改动。">
+          <t-input-number v-accessible-field v-model="form.validDays" :min="0" :max="3650" :decimal-places="0" theme="column" class="ctl-w-full" />
         </t-form-item>
       </div>
 

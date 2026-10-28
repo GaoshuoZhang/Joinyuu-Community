@@ -39,6 +39,8 @@ export async function fetchGoods(query: GoodsQuery): Promise<PageResult<MallGood
 }
 
 export interface GoodsPayload {
+  chargeAmountFen?: number
+  chargeRefundPolicy?: string
   name: string
   coverUrl?: string
   category: GoodsCategory

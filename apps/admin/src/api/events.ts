@@ -137,6 +137,8 @@ export async function archiveEvent(id: string): Promise<{ code: number }> {
 /* ---------- 新增 / 编辑 ---------- */
 
 export interface EventPayload {
+  chargeAmountFen?: number
+  chargeRefundPolicy?: string
   title: string
   coverUrl?: string
   type: string

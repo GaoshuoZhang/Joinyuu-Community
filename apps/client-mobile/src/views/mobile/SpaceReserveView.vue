@@ -145,6 +145,7 @@ async function loadSlots() {
 }
 
 /* 仅在后端请求/维护态时禁用；字段校验在提交时给出明确反馈（不禁用按钮） */
+const cashFee = computed(() => (space.value?.chargeAmountFen ?? 0) > 0)
 const submitBlocked = computed(
   () => submitting.value || !!resultStatus.value || slotsLoading.value || space.value?.status === 'maintenance',
 )
@@ -179,6 +180,7 @@ const feeHint = computed(() => {
   return `${hours}${discount}`
 })
 const submitLabel = computed(() => {
+  if (cashFee.value) return '现金预约请联系运营'
   if (submitting.value) return '提交中…'
   if (feeInsufficient.value) return `积分不足（需 ${feePoints.value} 积分）`
   return feePoints.value > 0 ? `提交预约（消耗 ${feePoints.value} 积分）` : '提交预约'
@@ -341,6 +343,7 @@ function confirmSubmit() {
 
 function onSubmit({ validateResult }: { validateResult: unknown }) {
   /* 校验失败：字段级错误已内联展示，scroll-to-first-error 负责滚动定位 */
+  if (cashFee.value) { Toast('该空间按现金费用预约，请联系运营人员'); return }
   if (validateResult === true) confirmSubmit()
 }
 
@@ -377,8 +380,8 @@ function goMine() {
         <!-- 费用：0 表示免费（后台「费用」栏维护） -->
         <!-- v51：收费是中性信息（此前用 warning 语义色，暗示异常）；改为中性品牌色，「免费」保留正向语义 -->
         <!-- v52：flex:none 防止被长标题一并压缩（界面审查 LOW） -->
-        <Tag class="head-fee" size="small" variant="light" :theme="(space?.feePerHour ?? 0) > 0 ? 'primary' : 'success'">
-          {{ (space?.feePerHour ?? 0) > 0 ? `${space?.feePerHour} 积分/小时` : '免费' }}
+        <Tag class="head-fee" size="small" variant="light" :theme="cashFee || (space?.feePerHour ?? 0) > 0 ? 'primary' : 'success'">
+          {{ cashFee ? '¥' + ((space?.chargeAmountFen ?? 0) / 100).toFixed(2) + '/小时' : (space?.feePerHour ?? 0) > 0 ? `${space?.feePerHour} 积分/小时` : '免费' }}
         </Tag>
       </div>
       <p class="page-desc">{{ space?.location }} · {{ space?.needApproval ? '需审核' : '免审核' }} · {{ space?.openTime }}-{{ space?.closeTime }}</p>

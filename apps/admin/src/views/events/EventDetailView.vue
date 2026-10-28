@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import CommerceBusinessLink from '@/components/CommerceBusinessLink.vue'
 import { computed, nextTick, onMounted, reactive, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useQueryTab, backOrFallback } from '@/utils/navigation'
@@ -389,6 +390,7 @@ const { close: closeRejectDialog } = useDialogFormProtection(rejectForm, rejectV
 
 <template>
   <div class="event-detail page-fade-in">
+    <CommerceBusinessLink module="event" />
     <t-button variant="text" theme="default" class="back-btn" @click="backOrFallback(router, '/events')">
       <template #icon><ArrowLeftIcon /></template>
       返回

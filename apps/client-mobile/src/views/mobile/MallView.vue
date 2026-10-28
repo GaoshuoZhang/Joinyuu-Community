@@ -123,7 +123,8 @@ useRefreshOnActivate(() => {
           <!-- 类别标签：中文名取字典 goods_category（任意类别都展示，含自定义新增类别） -->
           <CategoryTag v-if="categoryLabel(g)" :label="categoryLabel(g)" />
           <h2 class="name">{{ g.name }}</h2>
-          <span class="cost">
+          <span v-if="(g.chargeAmountFen ?? 0) > 0" class="cost">¥{{ ((g.chargeAmountFen ?? 0) / 100).toFixed(2) }}</span>
+          <span v-else class="cost">
             <!-- v49：等级折扣价 = round(原价 × 折扣 ÷ 10)；有折扣时折后价在前、原价删除线在后 -->
             {{ formatZhNumber(discountedPoints(g.pointsCost, auth.pointsDiscount)) }} 积分
             <s v-if="isDiscounted(g)" class="cost-origin tabular-nums">{{ formatZhNumber(g.pointsCost) }} 积分</s>

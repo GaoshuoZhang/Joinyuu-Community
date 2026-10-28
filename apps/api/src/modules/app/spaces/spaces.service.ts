@@ -38,6 +38,7 @@ export interface SpaceDto {
   closeTime: string
   needApproval: boolean
   /** 预约费用（积分/小时）；0 = 免费 */
+  chargeAmountFen?: number
   feePerHour: number
   equipment: string[]
   status: 'open' | 'maintenance'
@@ -169,6 +170,7 @@ export class AppSpacesService {
     const phone = account?.phone ?? ''
     const name = account?.nickname || user.name
     const space = await this.findSpaceOr404(dto.spaceId)
+    if (space.chargeAmountFen > 0) throw new BadRequestException('该空间按现金费用预约，暂请联系运营人员；不支持积分和现金混合支付')
     if (!space.needReservation) throw new BadRequestException('该空间未开放预约')
     if (space.status === 'maintenance') throw new BadRequestException('该空间维护中暂不可预约')
     if (space.status !== 'available') throw new BadRequestException('该空间当前不可预约')
@@ -257,6 +259,9 @@ export class AppSpacesService {
     const now = formatNow()
     const reservationId = await this.ids.next('SR')
     await this.prisma.$transaction(async (tx) => {
+      await tx.$queryRaw`SELECT id FROM "Space" WHERE id = ${space.id} FOR UPDATE`
+      const currentPrice = await tx.space.findUniqueOrThrow({ where: { id: space.id } })
+      if (currentPrice.chargeAmountFen > 0 || currentPrice.feePerHour !== space.feePerHour) throw new ConflictException('空间费用已变更，请重新确认')
       await consumePublishingLimit(tx, user.uid, 'space_reserve', { identityType, enterpriseId: dto.asEnterpriseId })
       /* 同一空间同一天串行化冲突检查，防止两个并发请求同时通过预检。 */
       await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${`${space.id}:${date}`}))`
@@ -495,6 +500,7 @@ function toSpaceDto(s: Space): SpaceDto {
     closeTime: s.closeTime,
     needApproval: s.needApproval,
     feePerHour: s.feePerHour,
+    chargeAmountFen: s.chargeAmountFen,
     equipment: s.equipment,
     status: s.status === 'maintenance' ? 'maintenance' : 'open',
     description: s.description,

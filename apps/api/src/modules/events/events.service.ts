@@ -1,3 +1,4 @@
+import { businessChargeData } from '../../common/dto/business-charge.dto'
 import { BadRequestException, ConflictException, Injectable, NotFoundException } from '@nestjs/common'
 import type { Prisma } from '@prisma/client'
 import { PrismaService } from '../../common/prisma/prisma.service'
@@ -217,6 +218,7 @@ export class EventsService {
         checkinCode: this.resolveCheckinCode(payload),
         cancelDeadlineHours: payload.cancelDeadlineHours ?? 24,
         description: sanitizeHtml(payload.description),
+        ...businessChargeData(payload),
         tags: payload.tags,
       },
     })
@@ -259,6 +261,7 @@ export class EventsService {
         speaker: payload.speaker,
         host: payload.host,
         description: sanitizeHtml(payload.description),
+        ...businessChargeData(payload),
         tags: payload.tags,
         enrollPoints: payload.enrollPoints ?? null,
         checkinPoints: payload.checkinPoints ?? null,

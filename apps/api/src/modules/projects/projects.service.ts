@@ -34,6 +34,8 @@ export interface ProjectCreatePayload {
   undertakers: UndertakerInput[]
   startDate?: string
   endDate?: string
+  chargeAmountFen?: number
+  chargeRefundPolicy?: string
   description: string
   milestones: MilestoneInput[]
   expReward?: number
@@ -81,6 +83,8 @@ export interface ProjectDto {
   startDate: string
   endDate: string
   initiatedAt: string
+  chargeAmountFen?: number
+  chargeRefundPolicy?: string
   description: string
   milestones: MilestoneDto[]
   memberCount: number
@@ -683,6 +687,8 @@ function toProjectDto(project: ProjectWithRelations): ProjectDto {
     startDate: project.startDate,
     endDate: project.endDate,
     initiatedAt: project.initiatedAt,
+    chargeAmountFen: project.chargeAmountFen ?? 0,
+    chargeRefundPolicy: project.chargeRefundPolicy ?? '',
     description: project.description,
     milestones: project.milestones.map((m) => ({
       id: String(m.id),

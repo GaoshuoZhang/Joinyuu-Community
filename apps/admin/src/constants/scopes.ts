@@ -7,6 +7,7 @@ export interface ScopeOption {
 }
 
 export const scopeOptions: ScopeOption[] = [
+  { label: '交易经营', value: 'commerce' },
   { label: '社区成员', value: 'members' },
   { label: '业务运营', value: 'biz' },
   { label: '空间管理', value: 'space' },
@@ -24,6 +25,7 @@ export function scopeLabel(code: string): string {
 
 /** 菜单 meta.group（中文分组名）→ 数据范围域键 */
 export const GROUP_DOMAIN: Record<string, string> = {
+  交易经营: 'commerce',
   社区成员: 'members',
   业务运营: 'biz',
   空间管理: 'space',

@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import CommerceBusinessLink from '@/components/CommerceBusinessLink.vue'
 import { backOrFallback } from '@/utils/navigation'
 import { computed, onMounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
@@ -246,6 +247,7 @@ onMounted(load)
 
 <template>
   <div class="space-detail page-fade-in">
+    <CommerceBusinessLink module="space" />
     <t-button variant="text" theme="default" class="back-btn" @click="backOrFallback(router, '/spaces')">
       <template #icon><ArrowLeftIcon /></template>
       返回
@@ -301,7 +303,8 @@ onMounted(load)
           </t-descriptions-item>
           <!-- 费用：积分/小时，0 = 免费使用；预约提交时按计费小时扣除（不足 1 小时按 1 小时计） -->
           <t-descriptions-item label="费用" :span="2">
-            <t-tag v-if="(space?.feePerHour ?? 0) > 0" variant="light" theme="warning" size="small">
+            <t-tag v-if="(space?.chargeAmountFen ?? 0) > 0" variant="light" theme="primary" size="small">¥{{ ((space?.chargeAmountFen ?? 0) / 100).toFixed(2) }} / 小时</t-tag>
+            <t-tag v-else-if="(space?.feePerHour ?? 0) > 0" variant="light" theme="warning" size="small">
               {{ space?.feePerHour }} 积分/小时
             </t-tag>
             <t-tag v-else variant="light" theme="success" size="small">免费</t-tag>

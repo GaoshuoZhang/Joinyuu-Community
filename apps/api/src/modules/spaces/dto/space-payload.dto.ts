@@ -1,3 +1,4 @@
+import { BusinessChargeDto } from '../../../common/dto/business-charge.dto'
 import { Type } from 'class-transformer'
 import { ArrayMaxSize, IsArray, IsBoolean, IsIn, IsInt, IsNotEmpty, IsOptional, IsString, Min } from 'class-validator'
 
@@ -7,7 +8,7 @@ const SCOPE_IDENTITIES = ['individual', 'community_individual', 'community_enter
 const SCOPE_LEVELS = Array.from({ length: 10 }, (_, i) => String(i + 1))
 
 /* 空间新增/编辑载荷（对照 apps/admin/src/api/spaces.ts SpacePayload） */
-export class SpacePayloadDto {
+export class SpacePayloadDto extends BusinessChargeDto {
   @IsString()
   @IsNotEmpty()
   name!: string

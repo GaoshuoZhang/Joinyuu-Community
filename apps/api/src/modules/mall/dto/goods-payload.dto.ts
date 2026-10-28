@@ -1,3 +1,4 @@
+import { BusinessChargeDto } from '../../../common/dto/business-charge.dto'
 import { Type } from 'class-transformer'
 import {
   IsArray,
@@ -13,7 +14,7 @@ import {
 /* POST/PUT /api/admin/mall/goods 入参（GoodsPayload，apps/admin/src/api/mall.ts）
  * 统一券码兑换：商品仅保留名称/分类/积分/库存/有效期（天）/描述与可见范围；
  * 不再支持履约类型、发货方式、自提地址与运费 */
-export class GoodsPayloadDto {
+export class GoodsPayloadDto extends BusinessChargeDto {
   @IsString()
   @IsNotEmpty()
   name!: string
@@ -29,7 +30,7 @@ export class GoodsPayloadDto {
 
   @Type(() => Number)
   @IsInt()
-  @Min(1)
+  @Min(0)
   points!: number
 
   @Type(() => Number)
@@ -45,11 +46,11 @@ export class GoodsPayloadDto {
   @Min(0)
   baseStock?: number
 
-  /** 券码有效期（天）：空值按 30 天兜底 */
+  /** 券码有效期（天）：0=不过期，空值按30天兜底 */
   @IsOptional()
   @Type(() => Number)
   @IsInt()
-  @Min(1)
+  @Min(0)
   @Max(3650)
   validDays?: number
 

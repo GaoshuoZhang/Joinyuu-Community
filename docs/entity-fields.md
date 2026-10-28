@@ -148,3 +148,18 @@
 | 扩展 | EventEnrollment | message? VarChar(200)（报名留言：客户端报名二次确认框选填，后台「活动报名」审核列表与活动详情报名管理可见，重新报名覆盖） |
 
 **卡片字段配置**：个人名片（`User`/UserIdentity 派生字段）与社区企业名片（`Enterprise` 字段）均**免审核保存即公开**；admin 后台在**用户详情 / 企业详情**的「名片」标签页查看与编辑个人/企业名片（「编辑名片」弹窗），用户可编辑字段白名单在**系统配置 > 名片可编辑字段**维护（原「名片管理」页已下线），由 `GET /api/app/card-schema/:type` 下发。个人名片 `visibility.isPublic=false` 时从人才库隐藏（§8.2）。
+
+
+## 交易经营新增模型（1.6.0）
+
+- CommerceService：1.6.1 起只保留历史，独立维护接口和页面已退役，不再用于新账单定价。
+- CommerceBill：唯一业务键、业务来源与购买主体快照、费用/账期、金额/已收/已退、到期日、收费依据与 pricing（unitAmountFen/quantity/unit/refundPolicy）快照、unpaid/paid/void/refunded。
+- CommerceReceipt：线下全额收款凭证、待复核/已确认/驳回、登记与复核账号及时间。
+- CommercePayment：商户单号、账单、商户/AppID、固定下单参数与预支付结果、渠道交易号、截止时间、查单次数与待处理状态。
+- CommerceRefund：原支付、全额退款、申请与审批账号、处理中/成功/异常等状态及补偿时间。
+
+财务记录不随源业务归档或删除级联清理；不将历史积分金额转换为现金。精确约束和实际API范围见 [实现说明](./commerce-implementation.md)。
+
+1.6.1 业务定价：Demand、Project、Space、CommunityEvent、MallGoods 增加 chargeAmountFen Int 默认0（0–100000000分）、chargeRefundPolicy VarChar(2000) 默认空；数据库 CHECK 要求收费时条款非空。需求服务费、项目收费、空间小时费、活动人次费、商品单件售价在各自表单维护；Lease 使用原 monthlyRent（元）×100及 rentPeriod，整份租约每周期计价。旧数据默认不设置现金价，不自动转换积分/预算/合同文字。
+
+1.6.2 覆盖：需求/项目 charge 字段仅保留历史，表单/DTO不再编辑且暂不新收费。MallGoods.points 与 chargeAmountFen 必须恰有一项大于0；Space.feePerHour 与 chargeAmountFen 不得同时大于0（两者0为免费）。MallGoods.validDays=0 为不过期，null为历史30天默认；RedemptionOrder.voucherExpiresAt='' 表示长期有效，已签发券保持原值。PaymentMerchantConfig 为单例 id=wechat，ciphertext Text（AES-256-GCM）、version Int、updatedBy、updatedAt；主密钥位于DB之外的服务器私有存储。

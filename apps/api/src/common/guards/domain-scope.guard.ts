@@ -4,6 +4,7 @@ import type { AuthenticatedRequest } from '../interfaces/authenticated-request'
 
 /* 管理端路径首段 → 数据范围域映射（/api/admin/<segment> 前缀匹配） */
 const DOMAIN_BY_SEGMENT: Record<string, string> = {
+  commerce: 'commerce',
   users: 'members',
   'member-governance': 'members',
   cards: 'members',

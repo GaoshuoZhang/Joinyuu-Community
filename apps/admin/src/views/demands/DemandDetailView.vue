@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import CommerceBusinessLink from '@/components/CommerceBusinessLink.vue'
 import { computed, onMounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useQueryTab, backOrFallback } from '@/utils/navigation'
@@ -249,6 +250,7 @@ onMounted(load)
 
 <template>
   <div class="demand-detail page-fade-in">
+    <CommerceBusinessLink module="demand" />
     <t-button variant="text" theme="default" class="back-btn" @click="backOrFallback(router, '/demands')">
       <template #icon><ArrowLeftIcon /></template>
       返回

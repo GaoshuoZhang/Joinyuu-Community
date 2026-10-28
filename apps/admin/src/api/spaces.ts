@@ -20,6 +20,8 @@ export async function fetchSpace(id: string): Promise<Space> {
 }
 
 export interface SpacePayload {
+  chargeAmountFen?: number
+  chargeRefundPolicy?: string
   name: string
   type: SpaceType
   capacity: number

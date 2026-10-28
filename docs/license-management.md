@@ -70,3 +70,8 @@ DeploymentLicense 表保存单例部署标识、签名文件和导入时间；�
 `pnpm --filter @joinyuu/api test:unit` 包含签名、篡改、过期边界、永久授权、未知公钥及字段格式测试。`test/license.e2e-spec.ts` 在隔离测试库检查无授权登录/查询/导出、权限保护、导入、审计、只读任务和续期恢复。
 
 现有 e2e 的 `reseed()` 在检查数据库后缀 `_it`/`_test`、NODE_ENV=test 和独立 Redis DB 后，生成短期真实签名测试许可证及临时公钥。测试私钥不落盘；仅 Jest setup 将信任表替换为临时测试公钥（E2E_LICENSE_PUBLIC_KEYS_FILE），生产应用完全不读取此变量，也不添加免授权逻辑。独立工具可在其目录执行 `runtime/node.exe --test issuer.test.cjs`，测试使用临时密钥文件并在结束时清理。
+
+
+## 交易经营收尾例外（1.6.0）
+
+许可证无效/到期时继续阻止服务配置、出账和新支付；已有微信支付查询、退款申请/审批/查询及渠道回调使用显式handler级维护例外。管理员操作仍受登录、财务权限和commerce数据范围约束；渠道通知使用签名认证。独立commerce-payment-recovery补偿任务继续处理存量，不通过原SchedulerService的许可证停跑入口。未新增其他业务写入豁免。

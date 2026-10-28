@@ -449,7 +449,7 @@ onMounted(load)
             <span class="voucher-code">{{ current.voucherCode }}</span>
             <StatusTag v-if="current.usedAt" entity="redeem" value="redeemed" class="id-tag" size="small" />
           </t-descriptions-item>
-          <t-descriptions-item label="券码有效期至">{{ current.voucherExpiresAt }}</t-descriptions-item>
+          <t-descriptions-item label="券码有效期至">{{ current.voucherExpiresAt || '长期有效' }}</t-descriptions-item>
           <t-descriptions-item v-if="current.usedAt" label="核销时间">{{ current.usedAt }}</t-descriptions-item>
         </t-descriptions>
         <p v-if="current.status === 'cancelled'" class="drawer-tip">

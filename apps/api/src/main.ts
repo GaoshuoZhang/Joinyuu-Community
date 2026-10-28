@@ -43,7 +43,7 @@ function assertTimezone(): void {
 
 async function bootstrap(): Promise<void> {
   assertTimezone()
-  const app = await NestFactory.create(AppModule)
+  const app = await NestFactory.create(AppModule, { rawBody: true })
   /* Express 实例设置信任代理（INestApplication 未暴露 set，经 http adapter 获取底层实例） */
   ;(app.getHttpAdapter().getInstance() as { set: (k: string, v: unknown) => void }).set(
     'trust proxy',

@@ -42,6 +42,8 @@ export async function fetchDemand(id: string): Promise<Demand> {
 }
 
 export interface DemandPublishPayload {
+  chargeAmountFen?: number
+  chargeRefundPolicy?: string
   title: string
   category: string
   demandType?: 'task' | 'investment' | 'cooperation'

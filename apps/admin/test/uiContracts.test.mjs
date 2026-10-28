@@ -40,7 +40,7 @@ test('persistent error renders actual TDesign alert and disables retry while loa
 })
 
 test('every standalone list load has a persistent error branch and an in-template retry action', () => {
-  assert.equal(lists.length, 46, 'update the inventory deliberately when adding or removing a list')
+  assert.equal(lists.length, 49, 'update the inventory deliberately when adding or removing a list')
   for (const path of lists) {
     const source = readFileSync(path, 'utf8')
     const { descriptor, errors } = parse(source)
@@ -69,7 +69,19 @@ test('all query-object lists install URL state during setup, not inside onMounte
     assert.match(load.getText(script), /syncQuery\(\)/, path + ': commit the actual applied query')
     checked++
   }
-  assert.equal(checked, 21)
+  assert.equal(checked, 22)
+})
+
+test('commerce routes and linked business pages retain a single transition-compatible root', () => {
+  const affected = ['system/SystemConfigView.vue', 'system/PaymentConfigView.vue', 'commerce/CommerceOverviewView.vue', 'commerce/CommerceBillsView.vue',
+    'demands/DemandDetailView.vue', 'projects/ProjectDetailView.vue', 'workstations/LeaseDetailView.vue',
+    'spaces/SpaceDetailView.vue', 'events/EventDetailView.vue', 'mall/MallGoodsPanel.vue']
+  for (const path of affected) {
+    const { descriptor } = parse(readFileSync(join(sourceRoot, 'views', path), 'utf8'))
+    const roots = descriptor.template.ast.children.filter(node => node.type === 1)
+    assert.equal(roots.length, 1, path + ': multiple roots break AdminLayout transition')
+    assert.equal(roots[0].tag, 'div', path + ': page transition requires a native root')
+  }
 })
 
 test('static placeholders, sensitive settings and simulated navigation stay consistent', () => {

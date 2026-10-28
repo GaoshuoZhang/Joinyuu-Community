@@ -369,7 +369,7 @@ usePageDirtyGuard(computed(() => props.visible && isDirty.value))
             class="rent-period-group"
           />
         </t-form-item>
-        <t-form-item :label="`租金（元）/ ${rentPeriodLabel}`" name="monthlyRent">
+        <t-form-item :label="`租金（元）/ ${rentPeriodLabel}`" name="monthlyRent" help="此处租金为整份租约每个付款周期的现金收费单价；新账单按租金 × 周期数计算，修改租金不改变已出账金额。">
           <t-input-number v-accessible-field v-model="form.monthlyRent" :min="0" theme="column" class="ctl-w-full" placeholder="月租周期选办公位后可自动累加…" />
         </t-form-item>
       </div>

@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import CommerceBusinessLink from '@/components/CommerceBusinessLink.vue'
 import { focusFirstInvalid, useDialogFormProtection } from '@/utils/form'
 import { computed, nextTick, onMounted, reactive, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
@@ -255,6 +256,7 @@ const { close: closeMilestoneReturnDialog } = useDialogFormProtection(returnForm
 
 <template>
   <div class="project-detail page-fade-in">
+    <CommerceBusinessLink module="project" />
     <t-button variant="text" theme="default" class="back-btn" @click="backOrFallback(router, '/projects')">
       <template #icon><ArrowLeftIcon /></template>
       返回

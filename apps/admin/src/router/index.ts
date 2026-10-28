@@ -72,6 +72,9 @@ const router = createRouter({
       component: () => import('@/layouts/AdminLayout.vue'),
       redirect: () => firstAccessiblePath(),
       children: [
+        { path: 'commerce/overview', component: () => import('@/views/commerce/CommerceOverviewView.vue'), meta: { title: '经营概览', group: '交易经营' } },
+        { path: 'commerce/receivables', component: () => import('@/views/commerce/CommerceBillsView.vue'), meta: { title: '应收与交易', group: '交易经营' } },
+        { path: 'commerce/services', redirect: '/commerce/receivables' },
         {
           path: 'dashboard',
           component: () => import('@/views/dashboard/DashboardView.vue'),

@@ -69,6 +69,99 @@ generator client {
   binaryTargets = ["native", "windows", "debian-openssl-3.0.x"]
 }
 
+// 商业化第一阶段：独立账单不改变原积分/报名/预约语义。财务记录不级联删除源业务。
+model CommerceService {
+  id            String @id @db.VarChar(16)
+  name          String @db.VarChar(128)
+  module        String @db.VarChar(16)
+  amountFen     Int
+  description   String @db.VarChar(2000)
+  refundPolicy  String @db.VarChar(2000)
+  status        String @default("draft") @db.VarChar(16)
+  version       Int @default(1)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+}
+
+model CommerceBill {
+  id              String @id @db.VarChar(16)
+  businessKey     String @unique @db.VarChar(128)
+  module          String @db.VarChar(16)
+  sourceId        String @db.VarChar(16)
+  sourceName      String @db.VarChar(128)
+  buyerType       String @db.VarChar(16)
+  buyerId         String @db.VarChar(16)
+  buyerName       String @db.VarChar(128)
+  title           String @db.VarChar(128)
+  period          String @db.VarChar(64)
+  amountFen       Int
+  paidFen         Int @default(0)
+  refundedFen     Int @default(0)
+  dueDate         String @db.VarChar(10)
+  status          String @default("unpaid") @db.VarChar(16)
+  snapshot        Json
+  createdBy       String @db.VarChar(64)
+  createdAt       DateTime @default(now())
+  receipts        CommerceReceipt[]
+  payments        CommercePayment[]
+  @@index([module, status, dueDate])
+  @@index([buyerType, buyerId])
+}
+
+model CommerceReceipt {
+  id          String @id @db.VarChar(16)
+  billId      String @db.VarChar(16)
+  reference   String @unique @db.VarChar(128)
+  amountFen   Int
+  note        String @db.VarChar(500)
+  status      String @default("pending") @db.VarChar(16)
+  createdBy   String @db.VarChar(64)
+  reviewedBy  String? @db.VarChar(64)
+  createdAt   DateTime @default(now())
+  reviewedAt  DateTime?
+  bill        CommerceBill @relation(fields: [billId], references: [id], onDelete: Restrict)
+  @@index([billId])
+}
+
+model CommercePayment {
+  id             String @id @db.VarChar(32)
+  billId         String @db.VarChar(16)
+  amountFen      Int
+  appid          String @db.VarChar(64)
+  mchid          String @db.VarChar(64)
+  method         String @db.VarChar(16)
+  status         String @default("pending") @db.VarChar(16)
+  transactionId  String? @unique @db.VarChar(64)
+  prepay         Json?
+  expiresAt      DateTime
+  paidAt         DateTime?
+  checkedAt      DateTime?
+  nextCheckAt    DateTime @default(now())
+  attempts       Int @default(0)
+  lastError      String? @db.VarChar(255)
+  createdAt      DateTime @default(now())
+  bill           CommerceBill @relation(fields: [billId], references: [id], onDelete: Restrict)
+  refunds        CommerceRefund[]
+  @@index([status, nextCheckAt])
+}
+
+model CommerceRefund {
+  id           String @id @db.VarChar(32)
+  paymentId    String @db.VarChar(32)
+  amountFen    Int
+  reason       String @db.VarChar(80)
+  status       String @default("pending") @db.VarChar(16)
+  createdBy    String @db.VarChar(64)
+  approvedBy   String? @db.VarChar(64)
+  lastError    String? @db.VarChar(255)
+  nextCheckAt  DateTime @default(now())
+  attempts     Int @default(0)
+  createdAt    DateTime @default(now())
+  completedAt  DateTime?
+  payment      CommercePayment @relation(fields: [paymentId], references: [id], onDelete: Restrict)
+  @@index([status, nextCheckAt])
+}
+
 datasource db {
   provider = "postgresql"
   url      = env("DATABASE_URL")
@@ -394,6 +487,8 @@ model ApplicationFormConfig {
 // ---------- 业务运营域 ----------
 
 model Demand {
+  chargeAmountFen Int @default(0) // cash unit price in fen; 0 = unconfigured
+  chargeRefundPolicy String @default("") @db.VarChar(2000)
   id                   String             @id @db.VarChar(16)
   title                String             @db.VarChar(128)
   // 需求类别：存 demand_category 字典的**中文 label**（如 '供应链'、'技术开发'），非字典 code
@@ -483,6 +578,8 @@ model DemandRespondent {
 }
 
 model Project {
+  chargeAmountFen Int @default(0) // cash unit price in fen; 0 = unconfigured
+  chargeRefundPolicy String @default("") @db.VarChar(2000)
   id             String              @id @db.VarChar(16)
   name           String              @db.VarChar(128)
   code           String              @unique @db.VarChar(32)
@@ -553,6 +650,8 @@ model Milestone {
 }
 
 model CommunityEvent {
+  chargeAmountFen Int @default(0) // cash unit price in fen; 0 = unconfigured
+  chargeRefundPolicy String @default("") @db.VarChar(2000)
   id                   String            @id @db.VarChar(16)
   createdAt            String            @db.VarChar(16)
   title                String            @db.VarChar(128)
@@ -696,6 +795,8 @@ model PointsRecord {
 // ---------- 积分商城与规则 ----------
 
 model MallGoods {
+  chargeAmountFen Int @default(0) // cash unit price in fen; 0 = unconfigured
+  chargeRefundPolicy String @default("") @db.VarChar(2000)
   id                   String   @id @db.VarChar(16)
   name                 String   @db.VarChar(128)
   coverUrl             String?  @db.VarChar(512)
@@ -862,6 +963,8 @@ model LeaseWorkstation {
 }
 
 model Space {
+  chargeAmountFen Int @default(0) // cash unit price in fen; 0 = unconfigured
+  chargeRefundPolicy String @default("") @db.VarChar(2000)
   id              String   @id @db.VarChar(16)
   name            String   @db.VarChar(64)
   type            String   @db.VarChar(16) // meeting | roadshow | meeting_room | multi | study
@@ -1530,4 +1633,13 @@ model CardFieldConfig {
   editableFields String[] @default([])
   updatedAt      String   @db.VarChar(16)
   updatedBy      String   @db.VarChar(64)
+}
+
+// Encrypted merchant settings; master key is kept outside database/public assets.
+model PaymentMerchantConfig {
+  id String @id @db.VarChar(16)
+  ciphertext String @db.Text
+  version Int @default(1)
+  updatedBy String @db.VarChar(64)
+  updatedAt DateTime @updatedAt
 }

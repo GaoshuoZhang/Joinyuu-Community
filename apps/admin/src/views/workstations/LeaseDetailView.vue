@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import CommerceBusinessLink from '@/components/CommerceBusinessLink.vue'
 import { backOrFallback } from '@/utils/navigation'
 import { computed, onMounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
@@ -139,6 +140,7 @@ onMounted(async () => {
 
 <template>
   <div class="lease-detail page-fade-in">
+    <CommerceBusinessLink module="lease" />
     <t-button variant="text" theme="default" class="back-btn" @click="goBack">
       <template #icon><ArrowLeftIcon /></template>
       返回

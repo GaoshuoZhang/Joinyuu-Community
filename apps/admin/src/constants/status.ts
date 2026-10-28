@@ -8,6 +8,23 @@ export interface StatusConf {
 }
 
 export const statusMap = {
+  commerceService: {
+    draft: { label: '草稿', theme: 'default' }, active: { label: '已启用', theme: 'success' }, disabled: { label: '已停用', theme: 'default' },
+  },
+  commerceBill: {
+    unpaid: { label: '未缴', theme: 'warning' }, paid: { label: '已缴', theme: 'success' }, void: { label: '已作废', theme: 'default' }, refunded: { label: '已退款', theme: 'default' }, overdue: { label: '逾期未缴', theme: 'danger' },
+  },
+  commercePayment: {
+    attention: { label: '待人工复核', theme: 'danger' },
+    pending: { label: '待确认', theme: 'warning' }, success: { label: '支付成功', theme: 'success' }, closed: { label: '已关闭', theme: 'default' },
+  },
+  commerceReceipt: {
+    pending: { label: '待复核', theme: 'warning' }, approved: { label: '已确认', theme: 'success' }, rejected: { label: '已驳回', theme: 'danger' },
+  },
+  commerceRefund: {
+    attention: { label: '待人工复核', theme: 'danger' },
+    pending: { label: '待审批', theme: 'warning' }, processing: { label: '退款处理中', theme: 'primary' }, success: { label: '退款成功', theme: 'success' }, closed: { label: '退款关闭', theme: 'default' }, abnormal: { label: '退款异常', theme: 'danger' }, rejected: { label: '已驳回', theme: 'danger' },
+  },
   license: {
     valid: { label: '正常', theme: 'success' },
     expired: { label: '已到期', theme: 'warning' },

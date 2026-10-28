@@ -111,6 +111,8 @@ export interface DemandDto {
   status: string
   createdAt: string
   publishedAt?: string
+  chargeAmountFen?: number
+  chargeRefundPolicy?: string
   description: string
   tags: string[]
   rejectedReason?: string
@@ -230,6 +232,8 @@ function toDemandDto(d: DemandWithRespondents): DemandDto {
     enrollmentLevels: d.enrollmentLevels,
     status: d.status,
     createdAt: d.createdAt,
+    chargeAmountFen: d.chargeAmountFen ?? 0,
+    chargeRefundPolicy: d.chargeRefundPolicy ?? '',
     description: d.description,
     tags: d.tags,
     /* 只映射「有效响应」（未撤回）：已撤回/审核驳回失效的记录不进「响应记录」，与列表「N 人响应」口径一致 */

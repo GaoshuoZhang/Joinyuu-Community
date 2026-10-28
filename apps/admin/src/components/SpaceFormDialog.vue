@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import ExclusivePriceFields from '@/components/ExclusivePriceFields.vue'
+import { chargeFields, chargeRules } from '@/utils/businessCharge'
 import { computed, nextTick, reactive, ref, watch } from 'vue'
 import { MessagePlugin } from 'tdesign-vue-next'
 import type { FormProps } from 'tdesign-vue-next'
@@ -29,6 +31,8 @@ const formRef = ref()
 const equipmentTags = ref<string[]>([])
 
 const form = reactive({
+  ...chargeFields(),
+  priceMode: 'points' as 'points' | 'cash',
   name: '',
   type: 'meeting' as SpaceType,
   capacity: 8,
@@ -85,6 +89,9 @@ watch(
   () => props.visible,
   (v) => {
     if (!v) return
+    Object.assign(form, chargeFields(props.mode === 'edit' ? props.space : null))
+    form.priceMode = form.chargeAmountFen > 0 ? 'cash' : 'points'
+    if (form.priceMode === 'cash') form.feePerHour = 0
     if (props.mode === 'edit' && props.space) {
       form.name = props.space.name
       form.type = props.space.type
@@ -126,6 +133,7 @@ watch(
       customReservation.value = false
     }
     /* 记录基线 + 清除上次会话残留的校验红框（仅清状态，不动表单值） */
+    if (form.priceMode === 'cash') form.feePerHour = 0
     markBaseline()
     nextTick(() => formRef.value?.clearValidate())
   },
@@ -133,6 +141,8 @@ watch(
 
 /* 规则 trigger 一律 submit：确认时 formRef.validate() 才触发红框提示 */
 const rules: FormProps['rules'] = {
+  ...chargeRules(form),
+  chargeAmountFen: [{ validator: () => form.priceMode !== 'cash' || (Number.isSafeInteger(form.chargeAmountFen) && form.chargeAmountFen > 0 && form.chargeAmountFen <= 100000000), message: '请输入 0.01 至 1,000,000.00 元的现金金额', trigger: 'submit' }],
   name: [{ required: true, message: '请输入空间名称', trigger: 'submit' }],
   type: [{ required: true, message: '请选择空间类型', trigger: 'submit' }],
   location: [{ required: true, message: '请输入位置', trigger: 'submit' }],
@@ -161,6 +171,7 @@ async function onConfirm() {
       needApproval: form.needReservation ? form.needApproval : false,
       feePerHour: form.feePerHour,
       equipment: [...equipmentTags.value],
+      ...chargeFields(form),
       description: form.description,
       /* 开关关闭 = 不限：不提交任何范围值（后端对未开启预约的空间也会统一清空） */
       visibilityIdentities: customVisibility.value ? [...form.visibilityIdentities] : [],
@@ -259,9 +270,7 @@ usePageDirtyGuard(computed(() => props.visible && isDirty.value))
         </t-form-item>
       </div>
       <div class="form-row form-row-single">
-        <t-form-item label="费用" name="feePerHour" help="0 表示免费使用；按「积分/小时」计费，不足 1 小时按 1 小时计">
-          <t-input-number v-accessible-field v-model="form.feePerHour" :min="0" theme="normal" suffix="积分/小时" class="ctl-w-full" />
-        </t-form-item>
+        <ExclusivePriceFields v-model:mode="form.priceMode" v-model:points="form.feePerHour" v-model:amount-fen="form.chargeAmountFen" v-model:refund-policy="form.chargeRefundPolicy" point-name="feePerHour" point-label="积分费用（每小时）" cash-label="现金费用（每小时）" :minimum-points="0" />
       </div>
       <!-- 可见 / 可预约范围（口径与「新增/编辑需求」表单一致）：仅在需预约时生效 -->
       <div v-if="form.needReservation" class="form-row">

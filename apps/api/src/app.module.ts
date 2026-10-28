@@ -63,6 +63,7 @@ import { UserMessagesModule } from './modules/user-messages/user-messages.module
 import { MessagingModule } from './modules/messaging/messaging.module'
 import { SchedulerModule } from './scheduler/scheduler.module'
 import { HealthController } from './health/health.controller'
+import { CommerceModule } from './modules/commerce/commerce.module'
 import { LicenseModule } from './common/license/license.module'
 import { LicenseGuard } from './common/license/license.guard'
 import { JwtAuthGuard } from './common/guards/jwt-auth.guard'
@@ -75,6 +76,7 @@ import { HttpExceptionFilter } from './common/filters/http-exception.filter'
 
 @Module({
   imports: [
+    CommerceModule,
     // Tests invoke scheduler methods explicitly; wall-clock jobs race suite teardown/reseeding.
     ScheduleModule.forRoot({ cronJobs: process.env.NODE_ENV !== 'test' }),
     PrismaModule,

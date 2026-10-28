@@ -44,8 +44,8 @@ useRefreshOnActivate(run)
         </p>
         <div class="equip">
           <!-- v51：收费是中性信息（此前用 warning 语义色，暗示异常）；改为中性品牌色，「免费」保留正向语义 -->
-          <Tag size="small" variant="light" :theme="s.feePerHour > 0 ? 'primary' : 'success'">
-            {{ s.feePerHour > 0 ? `${s.feePerHour} 积分/小时` : '免费' }}
+          <Tag size="small" variant="light" :theme="s.feePerHour > 0 || (s.chargeAmountFen ?? 0) > 0 ? 'primary' : 'success'">
+            {{ (s.chargeAmountFen ?? 0) > 0 ? '¥' + ((s.chargeAmountFen ?? 0) / 100).toFixed(2) + '/小时' : s.feePerHour > 0 ? `${s.feePerHour} 积分/小时` : '免费' }}
           </Tag>
           <Tag v-for="e in s.equipment" :key="e" size="small" variant="light" theme="default">{{ e }}</Tag>
           <Tag size="small" variant="light" theme="primary">{{ s.needApproval ? '需审核' : '免审核' }}</Tag>

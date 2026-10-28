@@ -33,12 +33,13 @@ const submitting = ref(false)
 const orderedId = ref('')
 const remainingPoints = ref<number | null>(null)
 
+const cashSale = computed(() => (goods.value?.chargeAmountFen ?? 0) > 0)
 const soldOut = computed(() => (goods.value?.stock ?? 0) <= 0)
 /* 等级折扣价：实扣 = round(商品积分 × 折扣 ÷ 10)（与后端同一算法，实扣以后端为准） */
 const chargedPoints = computed(() => discountedPoints(goods.value?.pointsCost ?? 0, auth.pointsDiscount))
 const discounted = computed(() => chargedPoints.value < (goods.value?.pointsCost ?? 0))
 const validDaysText = computed(() =>
-  goods.value?.validDays ? `兑换后 ${goods.value.validDays} 天内有效，过期未使用自动退回积分` : '兑换后 30 天内有效，过期未使用自动退回积分',
+  goods.value?.validDays === 0 ? '长期有效' : goods.value?.validDays ? `兑换后 ${goods.value.validDays} 天内有效，过期未使用自动退回积分` : '兑换后 30 天内有效，过期未使用自动退回积分',
 )
 /* v52：商品说明走后端富编辑器（RichTextBlock 输出 HTML），富文本分支不能开 pre-wrap——
  * 源码缩进/换行会被原样渲染成可见空白；仅纯文本分支保留换行（判定口径与 EventDetailView、
@@ -52,6 +53,7 @@ function onRedeem() {
   }
   const item = goods.value
   if (!item) return
+  if (cashSale.value) { Toast('该商品使用现金购买，暂请联系运营人员'); return }
   if (auth.points < chargedPoints.value) {
     Toast(`积分不足，还差 ${formatZhNumber(chargedPoints.value - auth.points)} 积分`)
     return
@@ -116,7 +118,8 @@ function goOrders() {
       <section class="m-card main">
         <Image v-if="goods.coverUrl" class="detail-cover content-img" :src="goods.coverUrl" :alt="goods.name" fit="cover" @error="onImageError" />
         <h2 class="name">{{ goods.name }}</h2>
-        <p class="cost">
+        <p v-if="cashSale" class="cost">¥{{ ((goods.chargeAmountFen ?? 0) / 100).toFixed(2) }}</p>
+        <p v-else class="cost">
           <span class="tabular-nums">{{ formatZhNumber(chargedPoints) }}</span> <span>积分</span>
           <!-- 等级折扣：展示折后价 + 原价删除线（无折扣时不显示原价） -->
           <s v-if="discounted" class="cost-origin tabular-nums">{{ formatZhNumber(goods.pointsCost) }} 积分</s>
@@ -144,7 +147,7 @@ function goOrders() {
         <section class="mobile-fixed-action-bar goods-actions">
           <p v-if="auth.isLogged" class="own-points">当前积分：<span class="tabular-nums">{{ formatZhNumber(auth.points) }}</span></p>
           <Button theme="primary" block :disabled="submitting || soldOut" @click="onRedeem">
-            {{ soldOut ? '已售罄' : submitting ? '兑换中…' : '立即兑换' }}
+            {{ soldOut ? '已售罄' : cashSale ? '联系运营购买' : submitting ? '兑换中…' : '立即兑换' }}
           </Button>
           <p v-if="soldOut" class="hint">商品暂时缺货，请稍后再来看看。</p>
         </section>

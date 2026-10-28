@@ -1,3 +1,4 @@
+import { exclusivePriceData } from '../../common/dto/business-charge.dto'
 import {
   BadRequestException,
   ConflictException,
@@ -134,8 +135,9 @@ export class MallService {
         stock: dto.stock,
         status: dto.stock === 0 ? 'restock' : 'off',
         description: sanitizeHtml(dto.description),
+        ...exclusivePriceData(dto, dto.points, undefined, true),
         redeemedCount: 0,
-        validDays: dto.validDays && dto.validDays > 0 ? dto.validDays : null,
+        validDays: dto.validDays ?? null,
         visibilityIdentities: dto.visibilityIdentities ?? [],
         visibilityLevels: dto.visibilityLevels ?? [],
         orderIdentities: dto.orderIdentities ?? [],
@@ -176,7 +178,8 @@ export class MallService {
         ...(stockUnchanged ? {} : { stock: dto.stock }),
         status,
         description: sanitizeHtml(dto.description),
-        validDays: dto.validDays && dto.validDays > 0 ? dto.validDays : null,
+        ...exclusivePriceData(dto, dto.points, goods, true),
+        validDays: dto.validDays ?? null,
         visibilityIdentities: dto.visibilityIdentities ?? [],
         visibilityLevels: dto.visibilityLevels ?? [],
         orderIdentities: dto.orderIdentities ?? [],

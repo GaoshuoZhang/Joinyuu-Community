@@ -1,15 +1,15 @@
 {
   "name": "@joinyuu/api",
-  "version": "1.5.1",
+  "version": "1.6.2",
   "private": true,
   "description": "聚屿社区后端服务（M1：NestJS + Prisma + PostgreSQL + Redis）",
   "scripts": {
-    "dev": "nest start --watch",
+    "dev": "prisma migrate deploy && nest start --watch",
     "build": "nest build",
     "typecheck": "tsc --noEmit -p tsconfig.json",
     "lint": "eslint src test --max-warnings 0",
     "lint:fix": "eslint src test --fix",
-    "start": "node dist/main.js",
+    "start": "prisma migrate deploy && node dist/main.js",
     "test:e2e": "jest --config test/jest-e2e.json --runInBand",
     "test:unit": "jest --config test/jest-unit.json",
     "db:migrate": "prisma migrate deploy",

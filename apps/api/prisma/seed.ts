@@ -155,6 +155,11 @@ const policySeeds: Array<Record<string, unknown>> = [
 
 async function main() {
   // ---------- 清空（FK 逆序） ----------
+  await prisma.commerceRefund.deleteMany()
+  await prisma.commercePayment.deleteMany()
+  await prisma.commerceReceipt.deleteMany()
+  await prisma.commerceBill.deleteMany()
+  await prisma.commerceService.deleteMany()
   await prisma.applicationFormConfig.deleteMany()
   await prisma.analyticsEvent.deleteMany()
   await prisma.publishingLimitUsage.deleteMany()

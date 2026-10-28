@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import BusinessChargeFields from '@/components/BusinessChargeFields.vue'
+import { chargeFields, chargeRules } from '@/utils/businessCharge'
 import { computed, defineAsyncComponent, nextTick, reactive, ref, watch } from 'vue'
 import { MessagePlugin } from 'tdesign-vue-next'
 import type { FormProps } from 'tdesign-vue-next'
@@ -43,6 +45,7 @@ const formRef = ref()
 const tags = ref<string[]>([])
 
 const form = reactive({
+  ...chargeFields(),
   title: '',
   coverUrl: '',
   type: '沙龙',
@@ -140,6 +143,7 @@ watch(
   () => props.visible,
   (v) => {
     if (!v) return
+    Object.assign(form, chargeFields(props.mode === 'edit' ? props.event : null))
     void ensureOptions()
     if (props.mode === 'edit' && props.event) {
       form.title = props.event.title
@@ -224,6 +228,7 @@ function syncEnrollment() {
  * DatePicker 时间面板交互会引发失焦导致提前红框；确认时 formRef.validate()
  * 默认 trigger='all' 会命中全部规则，此时才红框提示 */
 const rules: FormProps['rules'] = {
+  ...chargeRules(form),
   title: [{ required: true, message: '请输入活动标题', trigger: 'submit' }],
   type: [{ required: true, message: '请选择活动类型', trigger: 'submit' }],
   startTime: [{ required: true, message: '请选择开始时间', trigger: 'submit' }],
@@ -258,6 +263,7 @@ async function onConfirm() {
       capacity: form.capacity,
       speaker: form.speaker || '—',
       host: form.host,
+      ...chargeFields(form),
       description: form.description,
       tags: [...tags.value],
       visibilityIdentities: customVisibility.value ? form.visibilityIdentities : [],
@@ -567,6 +573,7 @@ usePageDirtyGuard(computed(() => props.visible && isDirty.value))
       <t-form-item label="活动简介" name="description">
         <RichEditor v-accessible-field v-model="form.description" placeholder="活动详细说明，支持图文排版…" :min-height="320" />
       </t-form-item>
+      <BusinessChargeFields v-model:amount-fen="form.chargeAmountFen" v-model:refund-policy="form.chargeRefundPolicy" label="活动费用（元 / 人次）" help="按一人参加一次活动设置现金单价；报名与签到奖励积分独立维护。" />
     </t-form>
   </t-dialog>
 </template>

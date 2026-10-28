@@ -38,6 +38,8 @@ export function toEventDto(event: CommunityEvent, enrollments: EventEnrollment[]
     checkinCode: event.checkinCode ?? undefined,
     cancelDeadlineHours: event.cancelDeadlineHours ?? undefined,
     rescheduledTo: event.rescheduledTo ?? undefined,
+    chargeAmountFen: event.chargeAmountFen ?? 0,
+    chargeRefundPolicy: event.chargeRefundPolicy ?? '',
     description: event.description,
     tags: event.tags,
     deletedAt: event.deletedAt ?? undefined,

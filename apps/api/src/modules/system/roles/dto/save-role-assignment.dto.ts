@@ -7,6 +7,6 @@ export class SaveRoleAssignmentDto {
   permCodes!: string[]
 
   @IsArray()
-  @IsIn(['members', 'biz', 'space', 'contents', 'mall', 'rules', 'system'], { each: true })
+  @IsIn(['members', 'biz', 'space', 'contents', 'mall', 'rules', 'commerce', 'system'], { each: true })
   dataScope!: string[]
 }

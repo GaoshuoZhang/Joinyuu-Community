@@ -73,7 +73,7 @@ onBeforeUnmount(() => {
 })
 
 /* ---------- 菜单分组展开/折叠（受控）：低频组（积分管理/规则管理/系统管理）默认折叠 ---------- */
-const ALL_GROUP_KEYS = ['group-members', 'group-biz', 'group-points', 'group-rules', 'group-space', 'group-contents', 'group-system', 'group-messaging']
+const ALL_GROUP_KEYS = ['group-commerce', 'group-members', 'group-biz', 'group-points', 'group-rules', 'group-space', 'group-contents', 'group-system', 'group-messaging']
 const DEFAULT_COLLAPSED_GROUPS = ['group-points', 'group-rules', 'group-system']
 const expandedMenus = ref<string[]>(ALL_GROUP_KEYS.filter((k) => !DEFAULT_COLLAPSED_GROUPS.includes(k)))
 const isAllExpanded = computed(() => expandedMenus.value.length >= ALL_GROUP_KEYS.length)
@@ -85,6 +85,7 @@ function toggleAllGroups() {
 /* 跳转到某页面时自动展开其所属一级菜单（meta.group 中文名 → 分组 key）；
  * 仅在该组折叠时追加展开，不收起其他组；immediate 覆盖刷新直达场景 */
 const GROUP_KEY_BY_META: Record<string, string> = {
+  交易经营: 'group-commerce',
   社区成员: 'group-members',
   业务运营: 'group-biz',
   空间管理: 'group-space',
@@ -400,6 +401,11 @@ async function handleDropdown(item: { value?: string | number }) {
             </t-menu-item>
           </t-submenu>
 
+          <t-submenu v-if="canSee(['/commerce/overview', '/commerce/receivables'], '交易经营')" value="group-commerce" title="交易经营">
+            <template #icon><ViewListIcon /></template>
+            <t-menu-item v-if="auth.hasPerm('/commerce/overview')" value="/commerce/overview" to="/commerce/overview" router-link>经营概览</t-menu-item>
+            <t-menu-item v-if="auth.hasPerm('/commerce/receivables')" value="/commerce/receivables" to="/commerce/receivables" router-link>应收与交易</t-menu-item>
+          </t-submenu>
           <t-submenu v-if="canSee(['/mall/goods', '/mall/orders'], '积分管理')" value="group-points" title="积分商城">
             <template #icon><CartIcon /></template>
             <t-menu-item v-if="auth.hasPerm('/mall/goods')" value="/mall/goods" to="/mall/goods" router-link>

@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import CommerceBusinessLink from '@/components/CommerceBusinessLink.vue'
 import { computed, onBeforeUnmount, onMounted, reactive, ref } from 'vue'
 import ListErrorState from '@/components/ListErrorState.vue'
 import { useListQueryState } from '@/utils/listQuery'
@@ -84,7 +85,7 @@ const categoryDialogVisible = ref(false)
 const dataColumns = [
   { colKey: 'name', title: '商品', cell: 'name', width: 220, resizable: true , ellipsis: true},
   { colKey: 'category', title: '类型', cell: 'category', width: 100, resizable: true , ellipsis: true},
-  { colKey: 'points', title: '兑换积分', width: 100, resizable: true , ellipsis: true},
+  { colKey: 'points', title: '售价', width: 100, resizable: true , ellipsis: true},
   { colKey: 'stock', title: '库存', cell: 'stock', width: 90, resizable: true , ellipsis: true},
   { colKey: 'redeemedCount', title: '累计兑换', width: 100, resizable: true , ellipsis: true},
   { colKey: 'status', title: '状态', cell: 'status', width: 100, resizable: true , ellipsis: true},
@@ -194,14 +195,14 @@ function openEdit(row: MallGoods) {
 }
 
 /* 导出配置 */
-const exportHeaders = ['编号', '商品名称', '类型', '所需积分', '库存', '累计兑换', '状态', '创建时间']
+const exportHeaders = ['编号', '商品名称', '类型', '售价', '库存', '累计兑换', '状态', '创建时间']
 
 function mapRow(g: MallGoods): (string | number)[] {
   return [
     g.id,
     g.name,
     g.categoryLabel ?? goodsCategoryMap[g.category] ?? g.category,
-    g.points,
+    g.chargeAmountFen ? '¥' + (g.chargeAmountFen / 100).toFixed(2) : g.points + ' 积分',
     g.stock,
     g.redeemedCount,
     statusLabel('goods', g.status),
@@ -238,8 +239,9 @@ async function loadCategories() {
 
 <template>
   <div class="goods-panel page-fade-in">
+    <CommerceBusinessLink module="mall" />
     <ListErrorState v-if="loadError" :message="loadError" :loading="loading" @retry="load" />
-    <PageHeader title="商品管理" description="积分商品的新增、上下架与库存维护">
+    <PageHeader title="商品管理" description="商品的积分或现金售价、上下架与库存维护">
       <template #actions>
         <ColumnController
           v-model="visibleColKeys"
@@ -344,6 +346,7 @@ async function loadCategories() {
           <!-- 类型名称由后端按字典回填 categoryLabel，硬编码词表仅作兜底（历史 physical/voucher 值） -->
           <t-tag variant="light">{{ row.categoryLabel ?? goodsCategoryMap[row.category] ?? row.category }}</t-tag>
         </template>
+        <template #points="{ row }">{{ row.chargeAmountFen ? '¥' + (row.chargeAmountFen / 100).toFixed(2) : row.points + ' 积分' }}</template>
         <template #stock="{ row }">
           <!-- 0 库存：语义化「售罄」标签，比纯红字数字更易读（H-03） -->
           <t-tag v-if="row.stock === 0" theme="danger" variant="light">售罄</t-tag>

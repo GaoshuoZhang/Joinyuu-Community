@@ -190,6 +190,8 @@ export interface DemandRespondent {
 }
 
 export interface Demand {
+  chargeAmountFen?: number
+  chargeRefundPolicy?: string
   id: string
   title: string
   /** 字典类别的显示名称；category 保存筛选和持久化使用的 code。 */
@@ -289,6 +291,8 @@ export interface Milestone {
 }
 
 export interface Project {
+  chargeAmountFen?: number
+  chargeRefundPolicy?: string
   id: string
   name: string
   code: string
@@ -369,6 +373,8 @@ export interface EventEnrollmentRecord {
 }
 
 export interface CommunityEvent {
+  chargeAmountFen?: number
+  chargeRefundPolicy?: string
   id: string
   /** 创建时间（后台新增活动时写入，列表可按创建时间排序） */
   createdAt?: string
@@ -455,6 +461,8 @@ export interface MilestoneInput {
 }
 
 export interface ProjectInitPayload {
+  chargeAmountFen?: number
+  chargeRefundPolicy?: string
   undertakers: UndertakerInput[]
   projectName: string
   /** 起止日期（表单已删除填写项：编辑保留原值，新增为空串） */
@@ -554,6 +562,8 @@ export type GoodsCategory = string
 export type GoodsStatus = 'on' | 'off' | 'restock'
 
 export interface MallGoods {
+  chargeAmountFen?: number
+  chargeRefundPolicy?: string
   id: string
   name: string
   coverUrl?: string
@@ -778,6 +788,8 @@ export type SpaceType = 'meeting' | 'roadshow' | 'meeting_room' | 'multi' | 'stu
 export type SpaceStatus = 'available' | 'maintenance' | 'disabled'
 
 export interface Space {
+  chargeAmountFen?: number
+  chargeRefundPolicy?: string
   id: string
   name: string
   type: SpaceType

@@ -13,6 +13,16 @@ export interface PermissionGroup {
 }
 
 export const permissionGroups: PermissionGroup[] = [
+  { name: '交易经营', perms: [
+    { code: '/commerce/overview', name: '经营概览' },
+    { code: '/commerce/receivables', name: '应收与交易' },
+    { code: 'perm:commerce:bill:create', name: '出账与作废' },
+    { code: 'perm:commerce:receipt:create', name: '登记线下收款' },
+    { code: 'perm:commerce:receipt:review', name: '复核线下收款' },
+    { code: 'perm:commerce:payment:create', name: '生成微信收款码' },
+    { code: 'perm:commerce:refund:create', name: '申请退款' },
+    { code: 'perm:commerce:refund:approve', name: '审批并提交退款' },
+  ] },
   { name: '工作台', perms: [
     { code: '/dashboard', name: '工作台' },
     { code: '/user-messages', name: '用户留言' },

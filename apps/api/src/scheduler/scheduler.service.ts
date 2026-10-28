@@ -375,7 +375,7 @@ export class SchedulerService {
   async scanVoucherExpiry(): Promise<number> {
     const now = formatNow()
     const expired = await this.prisma.redemptionOrder.findMany({
-      where: { status: 'pending_use', deletedAt: null, voucherExpiresAt: { lte: now } },
+      where: { status: 'pending_use', deletedAt: null, voucherExpiresAt: { not: '', lte: now } },
       select: { id: true, userId: true, userName: true, goodsId: true, goodsName: true, points: true },
     })
     if (expired.length === 0) return 0

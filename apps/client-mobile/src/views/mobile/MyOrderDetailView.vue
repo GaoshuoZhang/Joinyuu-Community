@@ -126,7 +126,7 @@ async function onReviewSubmit() {
         </div>
         <p class="code">兑换码：<code translate="no">{{ order.voucherCode }}</code></p>
         <p class="expiry">
-          {{ isExpired(order) ? `已于 ${formatLocalDateTime(order.voucherExpiresAt)} 过期` : `有效期至 ${formatLocalDateTime(order.voucherExpiresAt)}` }}
+          {{ !order.voucherExpiresAt ? '长期有效' : isExpired(order) ? `已于 ${formatLocalDateTime(order.voucherExpiresAt)} 过期` : `有效期至 ${formatLocalDateTime(order.voucherExpiresAt)}` }}
         </p>
         <p v-if="!canUse" class="hint">
           {{ String(order.status) === 'completed' ? '该券码已核销' : String(order.status) === 'cancelled' ? '该订单已取消' : '该券码已过期，积分将由系统自动退回' }}

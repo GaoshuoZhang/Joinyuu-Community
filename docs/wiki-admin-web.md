@@ -313,3 +313,16 @@
 - 管理端全部域已 HTTP 化（含 roles / admins / assets / login-logs / monitor / trash）；种子数据唯一来源为 `apps/api/prisma/seed-data/`
 - 契约细节（端点清单/入参/返回形状/状态机/错误文案）见 [wiki-backend.md](./wiki-backend.md) §6~§9。
 
+
+
+## 交易经营增量契约（1.6.2）
+
+在原菜单之间新增“交易经营”分组，保留其他菜单相对顺序与唯一App Shell。路由 `/commerce/overview`、`/commerce/receivables` 对应经营概览、应收与交易。原 `/commerce/services` 仅保留重定向，不再显示菜单或提供价目表维护。该分组对应独立 commerce 数据范围及权限目录，不自动授予普通运营角色。具体操作和API见 [交易经营实现说明](./commerce-implementation.md)。
+
+沿用PageHeader、StatusTag、ColumnController、ListErrorState、ListEmptyState、URL列表状态及表单离开保护；新增commerceBill/commercePayment/commerceReceipt/commerceRefund共享状态映射。金额输入以整数分转换，展示明确人民币两位小数。列表无刷新按钮和批量资金操作。
+
+需求、项目、租约、空间、活动详情和商品管理增加收费账单入口，按财务权限和数据范围隐藏。详情展示支付与退款历史；线下收款先登记后异人复核，退款先申请后异人审批。渠道未启用时明确提示，不生成假二维码或成功结果。经营指标为累计实收/退款/待收，不代表利润。客户端与原积分/报名/预约操作保持原语义。
+
+费用入口：需求/项目暂移收费控件。GoodsFormDialog 使用 ExclusivePriceFields 互斥选择“积分售价”与“现金售价”，有效期0为不过期；SpaceFormDialog 互斥选择“积分费用”与“现金费用”（每小时）。EventFormDialog 沿用 BusinessChargeFields，租约使用原租金与周期。积分与现金不会叠加。
+
+系统配置一级选项卡顺序：基础设置、移动端主题、通知渠道配置、归档管理、收款配置。PaymentConfigView 二级为微信、支付宝（暂未开通）；微信 PaymentConfigPanel 可填写商户参数、选择私钥/公钥/可选证书并保存启停。URL `?tab=payment&provider=wechat`，旧 `?section=payment` 会归一。密钥只写，空输入保留旧密钥，文件随保存一并提交、保存后清空原文，页面支持脏表单保护与错误保留；权限 `/system/config`。

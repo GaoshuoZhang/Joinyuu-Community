@@ -1,8 +1,9 @@
+import { BusinessChargeDto } from '../../../common/dto/business-charge.dto'
 import { Type } from 'class-transformer'
 import { IsArray, IsBoolean, IsInt, IsLatitude, IsLongitude, IsNotEmpty, IsOptional, IsString, Matches, MaxLength, Min } from 'class-validator'
 
 /* 活动新增/编辑载荷（对照 apps/admin/src/api/events.ts EventPayload） */
-export class EventPayloadDto {
+export class EventPayloadDto extends BusinessChargeDto {
   @IsString()
   @IsNotEmpty()
   title!: string

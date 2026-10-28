@@ -30,6 +30,14 @@ export interface SeedAdminAccount {
 
 /* 权限点目录（按模块分组，sort 顺序即前端渲染顺序） */
 export const permissionCatalog: SeedPermission[] = [
+  { code: '/commerce/overview', name: '经营概览', module: '交易经营', authType: 'menu', sort: 100 },
+  { code: '/commerce/receivables', name: '应收与交易', module: '交易经营', authType: 'menu', sort: 101 },
+  { code: 'perm:commerce:bill:create', name: '出账与作废', module: '交易经营', authType: 'button', sort: 104 },
+  { code: 'perm:commerce:receipt:create', name: '登记线下收款', module: '交易经营', authType: 'button', sort: 105 },
+  { code: 'perm:commerce:receipt:review', name: '复核线下收款', module: '交易经营', authType: 'button', sort: 106 },
+  { code: 'perm:commerce:payment:create', name: '生成微信收款码', module: '交易经营', authType: 'button', sort: 107 },
+  { code: 'perm:commerce:refund:create', name: '申请退款', module: '交易经营', authType: 'button', sort: 108 },
+  { code: 'perm:commerce:refund:approve', name: '审批并提交退款', module: '交易经营', authType: 'button', sort: 109 },
   { code: '/dashboard', name: '工作台', module: '工作台', authType: 'menu', sort: 1 },
   { code: '/user-messages', name: '用户留言', module: '工作台', authType: 'menu', sort: 2 },
 
