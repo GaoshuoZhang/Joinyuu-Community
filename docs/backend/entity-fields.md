@@ -1591,6 +1591,10 @@ model SystemConfig {
   wxLoginOpen           Boolean @default(false)
   wxMiniAppId           String  @default("") @db.VarChar(64)
   wxMiniAppSecret       String  @default("") @db.VarChar(128)
+  /* 微信网站应用（扫码）一键登录：AppID（可回显）+ AppSecret（只写）+ OAuth 回跳地址（须与开放平台「授权回调域」一致） */
+  wxWebAppId            String  @default("") @db.VarChar(64)
+  wxWebAppSecret        String  @default("") @db.VarChar(128)
+  wxWebRedirectUri      String  @default("") @db.VarChar(255)
 
   minioEnabled          Boolean @default(false)
   minioEndpoint         String  @default("") @db.VarChar(255)

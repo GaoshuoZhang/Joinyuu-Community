@@ -8,6 +8,7 @@
 
 ### 新增
 
+- 新增微信网站应用（扫码）一键登录：`GET /api/app/auth/wechat-web/start` 下发 OAuth 授权地址、`POST /api/app/auth/wechat-web/login` 以授权码登录；未绑定签发一次性票据复用 `wechat-mini/bind` 完成绑定（票据按 appid 区分来源，unionid 跨渠道并号）。后台系统配置新增网站应用 AppID/AppSecret（只写）/授权回调地址，`/api/app/config` 新增 `wxWebLoginOpen`。
 - 新增企业代办（企业注册）独立业务域：`EnterpriseAgencyRequest` / `EnterpriseAgencyFile` 模型、客户端提交/记录/详情/撤回/重提、管理端列表/详情/受理/请求补充/完成/驳回/内部备注，以及私有附件上传与鉴权读取。审核通过只改代办状态，不授予社区身份、不发积分。
 - 新增 4 个「企业代办」菜单权限码并授予运营角色；私有附件不生成公开 URL，管理端读取与状态变更写审计日志。
 

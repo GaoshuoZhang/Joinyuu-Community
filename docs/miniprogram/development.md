@@ -11,6 +11,16 @@
 
 ## 1. 技术栈与目录
 
+- **分包结构**：主包只保留 5 个 Tab 页、登录注册、全局搜索与 webview；其余页面按域拆入分包——
+  `pkg-me`（我的子页）、`pkg-content`（文章 + 人才/企业名片）、`pages/trade|checkout|mall`、
+  `pages/demand|application|intro`、`pages/space|event`（后五组以现有目录为分包根，页面路径不变）。
+  新增页面时先判断归属域再决定放主包还是分包；主包阈值 1.5M。
+- `packOptions.ignore` 已剔除未使用的 TDesign 组件目录与模板遗留 static——执行「构建 npm」会重新生成
+  这些目录，上传时由 ignore 规则剔除；若某个组件首次被使用，需从 ignore 列表移除对应条目。
+- 图片地址：后端下发的头像/logo/封面/正文图片均为相对路径，必须经 `utils/url.js` 的 `absoluteUrl`
+  补全后再交给 `image`/`rich-text`；富文本走 `sanitizeHtml`（内部已统一处理）。
+
+
 - 原生小程序：WXML + WXSS(Less) + JS(ES Module)，业务页面使用 JavaScript 与本地组件；npm 依赖仍按 package-lock.json 安装。
 - 每个页面 4 个文件：`index.js` / `index.json` / `index.wxml` / `index.less`，放在 `pages/<area>/<name>/` 下。
 - **相对导入按文件真实位置计算**：目录式页面（`pages/<area>/<name>/index.js`）引用根目录模块用 `../../../utils/...`；

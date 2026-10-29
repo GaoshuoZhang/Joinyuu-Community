@@ -254,3 +254,15 @@
 | POST | `.../:id/notes` | 内部备注（`visibility=admin`，用户端不可见） |
 
 状态：`pending / processing / needs_info / completed / rejected / withdrawn`。同一用户同一时间只允许一单进行中。字段、校验与隐私边界见 [企业代办](../features/enterprise-agency.md)。
+
+## 微信网站应用（扫码）一键登录
+
+移动 Web 的微信扫码登录基于微信开放平台「网站应用」OAuth2（[官方文档](https://developers.weixin.qq.com/doc/oplatform/Website_App/WeChat_Login/Wechat_Login.html)）。AppID/AppSecret/授权回调地址在后台「系统配置 → 微信一键登录」配置（AppSecret 只写、不回传原文）；环境变量 `WXWEB_APPID / WXWEB_APP_SECRET / WXWEB_REDIRECT_URI` 仅作回退。开关复用「微信一键登录」总开关 `wxLoginOpen`；`GET /api/app/config` 的 `wxWebLoginOpen` 表示总开关开启且网站应用配置齐全。
+
+| 方法 | 路径 | 说明 |
+|---|---|---|
+| GET | `/api/app/auth/wechat-web/start?redirect=` | 下发微信 OAuth 授权页地址（`open.weixin.qq.com/connect/qrconnect`，scope=snsapi_login）；redirect 仅接受站内路径，作为 `state` 原样带回 |
+| POST | `/api/app/auth/wechat-web/login` | `{ code }` 授权码换身份：服务端 access_token → userinfo（access_token 不落库）。已绑定直接返回登录结果；未绑定签发一次性票据（10 分钟）与可用验证渠道，`wechatNickname` 为微信昵称兜底展示 |
+| POST | `/api/app/auth/wechat-mini/bind` | 绑定第二步（小程序与网站应用共用）：票据按 appid 区分来源；验证码方式可登录或注册，密码方式只绑定已有账号 |
+
+微信身份统一落 `WechatUserBinding`（appid+openid 唯一）；同开放平台 unionid 已在其他渠道绑定时自动并号到同一账号。回调域：微信授权完成后浏览器回到 `wxWebRedirectUri`（须与开放平台「授权回调域」一致），移动 Web 登录页检测 `code`+`state` 后调用登录接口并清理 URL。
