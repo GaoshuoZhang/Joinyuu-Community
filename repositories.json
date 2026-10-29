@@ -1,12 +1,12 @@
 {
   "schemaVersion": 1,
-  "description": "Four independent business repositories. Set remote URLs after creating your own repositories.",
+  "description": "Four independent business repositories. Keep remote URLs synchronized with each repository's origin.",
   "repositories": [
     {
       "id": "api",
       "name": "Joinyuu-API",
       "path": "apps/api",
-      "remote": null,
+      "remote": "https://github.com/GaoshuoZhang/Joinyuu-api.git",
       "defaultBranch": "main",
       "packageManager": "pnpm"
     },
@@ -14,7 +14,7 @@
       "id": "admin",
       "name": "Joinyuu-Admin",
       "path": "apps/admin",
-      "remote": null,
+      "remote": "https://github.com/GaoshuoZhang/Joinyuu-admin.git",
       "defaultBranch": "main",
       "packageManager": "pnpm"
     },
@@ -22,7 +22,7 @@
       "id": "client-mobile",
       "name": "Joinyuu-Client-Mobile",
       "path": "apps/client-mobile",
-      "remote": null,
+      "remote": "https://github.com/GaoshuoZhang/Joinyuu-client-mobile.git",
       "defaultBranch": "main",
       "packageManager": "pnpm"
     },
@@ -30,7 +30,7 @@
       "id": "wxminiprogram",
       "name": "Joinyuu-WXMiniProgram",
       "path": "apps/wxminiprogram",
-      "remote": null,
+      "remote": "https://github.com/GaoshuoZhang/Joinyuu-client-wxminiprogram.git",
       "defaultBranch": "main",
       "packageManager": "npm"
     }

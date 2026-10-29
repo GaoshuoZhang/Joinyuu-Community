@@ -49,6 +49,8 @@ test('bundle recovery verifies identity, preserves work on repeat initialization
   assert.equal(f.exec('git', ['add', '.'], source).status, 0)
   assert.equal(f.exec('git', ['commit', '-m', 'fixture'], source).status, 0)
   assert.equal(f.exec('git', ['bundle', 'create', join(bundles, 'api.bundle'), '--all'], source).status, 0)
+  // An explicit offline recovery must override a configured (unavailable) remote.
+  writeFileSync(join(f.root, 'repositories.json'), JSON.stringify({ repositories: [{ id: 'api', path: 'apps/api', remote: join(f.directory, 'missing-remote.git'), defaultBranch: 'main', packageManager: 'pnpm' }] }))
   const init = f.cli('init', '--bundles', bundles)
   assert.equal(init.status, 0, init.stderr)
   const repo = join(f.root, 'apps/api')

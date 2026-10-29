@@ -44,17 +44,46 @@ git -C apps/admin status
 
 类型检查与 Web/API 构建覆盖三个 Node 应用；小程序使用 `npm test` 静态结构检查和开发者工具编译。每仓独立提交，根仓 Git 状态不会显示业务仓内部的改动。
 
+### 提交和推送协作仓
+
+根仓继续使用 `https://github.com/GaoshuoZhang/Joinyuu-Community.git`，维护 README、AGENTS、docs、scripts、releases、repositories.json、根包配置与启动脚本。四个 `apps/` 子仓已被忽略，无需添加 submodule 或恢复 pnpm workspace。
+
+在根目录执行，按本次实际修改选择文件暂存：
+
+```powershell
+Set-Location D:\Projects\Joinyuu-Community
+git status --short
+git add -- .gitignore README.md repositories.json
+git diff --cached
+git commit -m "chore: update workspace collaboration configuration"
+git push -u origin main
+```
+
+之后日常提交仍是 `git add`、`git commit`、`git push`。推送根仓会包含尚未推送的拆仓提交，使远程最新目录变为协作仓；原有历史仍保留，无需强制推送。不要使用 `git add -f apps/`。根仓推送不会上传任何子仓提交。
+
+业务代码在对应子仓提交和推送，例如 API（将 `<实际修改的文件>` 替换为子仓内的文件路径）：
+
+```sh
+git -C apps/api status
+git -C apps/api add -- <实际修改的文件>
+git -C apps/api diff --cached
+git -C apps/api commit -m "feat: describe the API change"
+git -C apps/api push -u origin main
+```
+
+其他端替换 `apps/api` 为其目录。跨仓发布时先提交、推送涉及的子仓，再运行 `pnpm release:record <发布标识>`，将生成的 `releases/` 文件提交并推送到根仓，保证发布记录引用的提交可从远程获取。只改协作文档或忽略规则时，运行 `pnpm test:workspace` 即可验证协作脚本；业务改动按对应子仓规则检查。
+
 ## 在新电脑恢复工作区
 
-先克隆本协作仓，再把自己的四仓远程地址填入 repositories.json，执行 `pnpm workspace:init`、`pnpm install:all`。初始化会检查已有仓库身份并保留现有修改，遇到非空未知目录会停止。
+先克隆本协作仓，进入根目录执行 `pnpm workspace:init`、`pnpm install:all`。repositories.json 已记录四仓远程地址，初始化会分别克隆业务仓；需要相应远程的访问权限，且子仓代码必须已推送。初始化会检查已有仓库身份并保留现有修改，遇到非空未知目录会停止。
 
-当前迁移只初始化本地仓库，业务仓 `remote` 为 null。也可通过迁移备份的离线包恢复：
+也可通过迁移时的离线备份包恢复当时的基线（不包含之后的新提交）：
 
 ```sh
 node scripts/workspace.mjs init --bundles D:\Projects\Joinyuu-Community-migration-20261029\bundles
 ```
 
-本地备份包没有推送地址。创建自己的远程后，在对应子仓设置 origin，并同步 repositories.json。小程序 Git 已重新初始化，不关联模板仓库，应配置自己的远程地址。
+显式指定 `--bundles` 时优先使用离线包，即使 repositories.json 已配置远程地址也不会联网克隆。恢复的仓库不保留指向本地包的 origin；需要推送时，在对应子仓设置自己的 origin，并与 repositories.json 保持一致。小程序 Git 已重新初始化，不关联模板仓库。
 
 ## 发布与资料
 

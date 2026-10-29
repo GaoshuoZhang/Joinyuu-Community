@@ -82,13 +82,13 @@ if (command === 'init') {
       continue
     }
     if (existsSync(repo.directory) && readdirSync(repo.directory).length) throw new Error(`${repo.path} is non-empty; refusing to overwrite`)
-    const source = repo.remote || (bundles ? resolve(bundles, `${repo.id}.bundle`) : null)
+    const source = bundles ? resolve(bundles, `${repo.id}.bundle`) : repo.remote
     if (!source) throw new Error(`${repo.id}: set remote in repositories.json or pass --bundles <directory>`)
     mkdirSync(resolve(repo.directory, '..'), { recursive: true })
     run('git', ['clone', '--branch', repo.defaultBranch, '--', source, repo.directory])
     assertRepository(repo)
     // Local recovery bundles are not a push destination.
-    if (!repo.remote) git(repo, ['remote', 'remove', 'origin'])
+    if (bundles) git(repo, ['remote', 'remove', 'origin'])
   }
 } else if (command === 'status') {
   for (const repo of repos) {
