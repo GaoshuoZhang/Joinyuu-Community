@@ -1,0 +1,87 @@
+{
+  "name": "split-baseline-20261029",
+  "createdAt": "2026-10-29T06:20:56.406Z",
+  "status": "validated-local-migration-not-deployed",
+  "repositories": [
+    {
+      "id": "api",
+      "path": "apps/api",
+      "remote": null,
+      "version": "1.6.2",
+      "commit": "6916ed2cb275aa6feef8a42fbf4993e75ef2e337",
+      "tags": []
+    },
+    {
+      "id": "admin",
+      "path": "apps/admin",
+      "remote": null,
+      "version": "1.6.2",
+      "commit": "5b70b2c73d675e83f2cde450529bf1aacf1a48a5",
+      "tags": []
+    },
+    {
+      "id": "client-mobile",
+      "path": "apps/client-mobile",
+      "remote": null,
+      "version": "1.6.2",
+      "commit": "a4b55e4d3c196a62cc373a24c99209f16d2b42a2",
+      "tags": []
+    },
+    {
+      "id": "wxminiprogram",
+      "path": "apps/wxminiprogram",
+      "remote": null,
+      "version": "0.0.2",
+      "commit": "f79d7d10afb37cd598475d69c606c471fffeafad",
+      "tags": []
+    }
+  ],
+  "sourceWorkspace": {
+    "commit": "71e2b14e382ab7c28800b4e784f428c47a0ea49d",
+    "workingChangesPreserved": true
+  },
+  "apiContract": {
+    "repository": "api",
+    "commit": "6916ed2cb275aa6feef8a42fbf4993e75ef2e337",
+    "documents": [
+      "docs/wiki-backend.md",
+      "docs/api-app-design.md"
+    ]
+  },
+  "database": {
+    "addedBySplit": [],
+    "carriedFromWorkingTree": [
+      "20261029010000_wechat_mini_login"
+    ],
+    "validationDatabase": "joinyuu_split_20261029_test",
+    "validationRedisDb": 13,
+    "developmentOrProductionReset": false,
+    "composeProject": "api"
+  },
+  "validation": {
+    "independentInstall": true,
+    "typecheck": true,
+    "lint": true,
+    "build": true,
+    "apiUnitTests": 202,
+    "apiE2eTests": 406,
+    "adminTests": 35,
+    "mobileTests": 133,
+    "workspaceToolTests": 2,
+    "httpSmokeChecks": 9,
+    "miniProgramNpmBuild": true,
+    "miniProgramHomeWxmlCompile": true,
+    "remoteCiExecuted": false,
+    "realDeviceOrLivePaymentTested": false
+  },
+  "deploymentOrder": [
+    "api",
+    "admin",
+    "client-mobile",
+    "wxminiprogram"
+  ],
+  "rollback": {
+    "instructions": "docs/backend-upgrade.md",
+    "notes": "本次未更改日常开发/生产数据库。部署携带的在途迁移前须备份数据库、上传、客户主题和支付加密主密钥；代码回退不能替代数据库回退。"
+  }
+}

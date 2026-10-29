@@ -1,0 +1,38 @@
+{
+  "schemaVersion": 1,
+  "description": "Four independent business repositories. Set remote URLs after creating your own repositories.",
+  "repositories": [
+    {
+      "id": "api",
+      "name": "Joinyuu-API",
+      "path": "apps/api",
+      "remote": null,
+      "defaultBranch": "main",
+      "packageManager": "pnpm"
+    },
+    {
+      "id": "admin",
+      "name": "Joinyuu-Admin",
+      "path": "apps/admin",
+      "remote": null,
+      "defaultBranch": "main",
+      "packageManager": "pnpm"
+    },
+    {
+      "id": "client-mobile",
+      "name": "Joinyuu-Client-Mobile",
+      "path": "apps/client-mobile",
+      "remote": null,
+      "defaultBranch": "main",
+      "packageManager": "pnpm"
+    },
+    {
+      "id": "wxminiprogram",
+      "name": "Joinyuu-WXMiniProgram",
+      "path": "apps/wxminiprogram",
+      "remote": null,
+      "defaultBranch": "main",
+      "packageManager": "npm"
+    }
+  ]
+}

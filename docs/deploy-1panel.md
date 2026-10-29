@@ -1,3 +1,9 @@
+> **多仓部署入口（2026-10-29 起）**：父目录是协作仓库，四端分别检出在 apps/ 下。先配置 repositories.json 并运行 `pnpm workspace:init`、`pnpm install:all`。下面的旧版整套容器与反向代理说明仍可参考；其中「根目录 pnpm install」「整仓覆盖/拉取」改为逐仓安装、更新，根启动命令已委派给对应仓库。
+>
+> 后端容器的工作目录应为 API 仓根目录，启动前执行 `pnpm install --frozen-lockfile`，生产启动为 `pnpm build && pnpm start`；两个 Web 仓分别执行 `pnpm install --frozen-lockfile`、`pnpm build`、`pnpm serve`。保留端口、网关、API_PROXY_TARGET、环境变量和数据挂载。Compose 项目名保持 `api`，不要创建新的数据卷替代已有 api_* 数据卷。
+>
+> 更新按 releases/ 指定的四仓 commit 检出，不再要求各端版本同号。旧文中的 monorepo `pnpm --filter` 命令应在对应业务仓执行本地脚本。数据库迁移、许可证、上传、客户主题和支付加密主密钥须单独保留，禁止用演示数据重置生产库。
+
 # 部署手册 · 使用 1Panel 上线聚屿社区
 
 > 面向对象：**完全没有运维经验也能照着做完**的部署手册。按顺序照做即可，每一步都写清了「在哪里点、填什么、看到什么算成功」。

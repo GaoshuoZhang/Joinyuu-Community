@@ -8,9 +8,6 @@ dist/
 !.env.example
 .idea/
 .vscode/
-start-admin-web.bat
-start-backend.bat
-start-client-mobile.bat
 .workbuddy/
 .playwright-cli/
 .trae/
@@ -35,3 +32,9 @@ examples/
 
 # Server-owned encryption master keys (back up separately; never publish)
 .private/
+
+# Independent repositories: manage with git -C apps/<name>, never git add these paths.
+/apps/api/
+/apps/admin/
+/apps/client-mobile/
+/apps/wxminiprogram/

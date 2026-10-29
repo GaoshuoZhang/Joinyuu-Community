@@ -1,2 +1,0 @@
-ALTER TABLE "CommunityEvent" ADD COLUMN "coverUrl" VARCHAR(512);
-ALTER TABLE "MallGoods" ADD COLUMN "coverUrl" VARCHAR(512);
