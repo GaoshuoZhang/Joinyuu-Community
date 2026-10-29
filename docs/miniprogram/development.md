@@ -63,7 +63,7 @@
 > | 需求 | 写法 |
 > |---|---|
 > | 整宽 | `style="width:100%"`（不要用 `block`） |
-> | 按内容宽度 | `style="width:auto"`（避免 flex 行里被拉成等分） |
+> | 按内容宽度 | `style="width:auto;margin:0"`（清除原生按钮自动外边距，由父容器决定靠左/靠右/居中） |
 > | 主色 / 浅底 / 危险 | `theme="primary"` / `theme="light"` / `theme="danger" variant="text"` |
 > | 描边 | `theme="primary" variant="outline"` + `t-class="td-btn-outline"`（库内描边只有 0.5px，需要外部类补 2rpx） |
 > | 危险浅底 | 追加 `t-class="td-btn-danger"` |
