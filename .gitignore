@@ -15,17 +15,11 @@ dist/
 uploads/
 # Installed customer themes are deployment data. Keep the public app customer-neutral.
 /mobile-themes/
-/apps/api/mobile-themes/
-/apps/client-mobile/public/mobile-themes/
 mobile-theme.local.json
 mobile-theme.local.*.json
 .tmp/
-# Local visual QA artifacts for the commerce implementation.
-/.screenshots/commerce-20261028/
-apps/api/.tmp/
-!apps/api/src/modules/app/uploads/
-!apps/api/src/modules/app/uploads/**
-.trae
+# Local visual QA artifacts.
+/.screenshots/
 .opencode/
 .agents/
 examples/
