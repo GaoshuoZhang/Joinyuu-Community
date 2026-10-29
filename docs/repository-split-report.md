@@ -59,7 +59,7 @@ Node 验证版本：24.20.0；pnpm：12.3.4；npm：11.19.0。各仓保留当前
 
 ## 后续远程配置
 
-创建自己的四个空远程仓库，分别设置各子仓 origin，并把地址同步到 repositories.json。之后按各仓 main 分支推送；小程序 upstream 仅用于记录模板来源。
+创建自己的四个空远程仓库，分别设置各子仓 origin，并把地址同步到 repositories.json。之后按各仓 main 分支推送；小程序 Git 已重新初始化，不再关联模板仓库。
 
 日常从父目录运行 pnpm workspace:status / install:all / dev:all；每个子仓分别提交与发布。固定组合见 releases/，Git UI 与 worktree 的边界见 AGENTS.md。
 
@@ -76,3 +76,13 @@ Node 验证版本：24.20.0；pnpm：12.3.4；npm：11.19.0。各仓保留当前
 - 已生成 `releases/split-baseline-20261029.json`，记录四仓固定 commit、接口契约、验证范围和携带的在途迁移。它是本地迁移基线，尚未部署或推送。
 
 验证日志、SHA-256 清单、源历史映射与离线恢复资料保存在本地迁移目录，未纳入代码仓库。
+
+## 小程序 Git 重新初始化（2026-10-29）
+
+按用户要求，小程序当前工作目录已重新初始化 Git，移除全部模板历史、旧分支和 upstream。当前 main 只有一个初始提交：a5ee2e86e9edd6fc064cc6bc3b5bad6b665b7793。代码、资源和本地配置未改动；423 个非文档文件的 SHA-256 核对一致，第三方 LICENSE 保留。README、AGENTS 与 CHANGELOG 已同步当前 Git 状态。
+
+旧 Git 元数据归档在 D:\Projects\Joinyuu-Community-migration-20261029\wx-git-before-reset-20261029；重置前离线包另存为 wxminiprogram-before-git-reset.bundle。默认 bundles/wxminiprogram.bundle 已替换为仅含当前项目初始提交的新包，后续初始化不会恢复模板历史。
+
+本记录前面的提交表和 split-baseline-20261029.json 描述首次拆仓时的历史状态；当前工作区以 releases/mini-git-reset-20261029.json 为准。其它三个业务仓库未改动，业务远程仍未配置或推送。
+
+重置后 npm test 通过（130 个 JS、92 个 JSON、76 个页面）。从更新后的离线包重新克隆验证通过：全部引用可达历史只有 1 个提交，与当前工作区初始提交一致。
