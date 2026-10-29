@@ -1,0 +1,293 @@
+# 移动端主题开发规范（协议 v1）
+
+本文定义 Joinyuu Community 移动端主题包的结构、字段语义、校验、兼容和交付规则，是 `Joinyuu-Mobile-Theme` 多客户主题仓库的公共契约。`customers/<theme-id>/` 下每个目录代表一个独立主题，不代表一个公版分支或租户运行空间；`customers/opiece/` 只是客户案例之一。仓库 README 说明目录组织和新客户接入流程。
+
+客户服务器部署公版程序并执行数据库迁移后，从「系统管理 → 移动端主题」上传该客户的 ZIP，无需重新编译客户端。一个部署实例当前只有一个全局启用主题；不同客户应使用不同部署实例。上传到某实例的主题配置不会自动进入公版源码，也不会让该实例的用户下载其它客户的主题。
+
+本契约中的“必须”表示包或服务端校验要求；“建议”表示主题作者需要遵循的兼容或体验要求。JSON Schema 用于提前发现结构错误，服务端上传校验和实际客户端效果是最终准入与行为依据。
+
+## 1. 能力与边界
+
+- 可定制：浅色/深色品牌配色与独立强调色、浅底色、页面与卡片背景、主要/次要文字色、圆角、品牌名称、明暗 Logo、首页模块顺序。
+- 内置模板：`default` 保持公版首页；`brand` 将发布需求按钮呈现为实心主操作。首页直接从搜索框开始，品牌配色用于卡片、文字、按钮等现有元素，不增加占据首屏的宣传展示区。两者均复用同一套业务组件和接口。
+- 未上传、未启用或恢复公版时，不注入客户样式，保持公版。
+- 主题包不包含 JavaScript、Vue、HTML、任意 CSS、字体、SVG、远程图片或业务权限配置。新组件、模板和交互应先在公版实现，再通过主题协议开放。
+- 修改品牌名称只影响移动端标题、导航和品牌展示，不修改后台系统配置、法律协议及业务主体名称。
+- 主题按部署实例生效；当前不是一套后台按登录账号分配多个租户主题的系统。
+- 同一实例的普通用户共享当前启用主题；预览通过独立临时令牌隔离，不切换线上状态。
+
+## 2. 包结构
+
+```text
+customer-a-1.0.0.zip
+  manifest.json
+  assets/
+    logo.png
+    home-background.webp
+```
+
+`manifest.json` 必须在 ZIP 根目录，不可再套一层客户目录。没有图片时允许只有 manifest。文件名区分大小写，使用 UTF-8 JSON（无 BOM）。配置格式见同目录 `mobile-theme.schema.json`。可直接复制 `apps/api/examples/mobile-theme/manifest.json` 作为不依赖图片的起点。
+
+源码仓库应按客户拆分主题目录：
+
+```text
+Joinyuu-Mobile-Theme/
+  customers/
+    example/                 # 通用样例，不作为客户包默认来源
+    customer-a/
+      manifest.json
+      assets/
+    customer-b/
+      manifest.json
+      assets/
+  docs/                      # 本公共契约、Schema 和客户案例说明
+  design/                    # 可选，按客户隔离的设计源稿
+  scripts/pack-mobile-theme.ps1
+  dist/                      # 本地 ZIP 交付产物，不提交
+```
+
+目录名建议与 manifest `id` 相同。客户主题只引用自己目录中的资源；打包器只接收一个来源目录，因此一次 ZIP 只能交付一个主题。`example` 用于开发、上传和 E2E 验证，不是生产客户主题。客户案例说明（如 OPiece 的配色与验收记录）应明确标为单客户资料，不得替代本文或改变其它客户的默认值。
+
+## 3. 完整配置示例
+
+```json
+{
+  "schemaVersion": 1,
+  "id": "customer-a",
+  "name": "客户 A 品牌主题",
+  "version": "1.0.0",
+  "description": "品牌首页、蓝色配色与圆角卡片",
+  "brand": {
+    "name": "客户 A 社区",
+    "slogan": "在这里，连接新的可能",
+    "eyebrow": "COMMUNITY",
+    "headline": "连接创业者与好项目\n探索更多可能",
+    "highlight": "好项目",
+    "logo": "assets/logo.png",
+    "logoDark": "assets/logo-dark.png",
+    "logoShape": "wordmark",
+    "homeBackground": "assets/home-background.webp"
+  },
+  "tokens": {
+    "light": {
+      "primary": "#0052d9",
+      "accent": "#c45112",
+      "primaryLight": "#edf4f8",
+      "heroStart": "#f4f8fb",
+      "heroEnd": "#fff8e8",
+      "background": "#f3f5f8",
+      "surface": "#ffffff",
+      "text": "#181818",
+      "secondaryText": "#555555"
+    },
+    "dark": {
+      "primary": "#6b9eff",
+      "accent": "#ffb164",
+      "primaryLight": "#203451",
+      "heroStart": "#10213b",
+      "heroEnd": "#172642",
+      "background": "#181818",
+      "surface": "#242424",
+      "text": "#eeeeee",
+      "secondaryText": "#bbbbbb"
+    },
+    "radius": "large"
+  },
+  "layout": {
+    "template": "brand",
+    "homeModules": ["entries", "banner", "publish", "activation", "announcement", "events", "demands", "articles"]
+  }
+}
+```
+
+| 字段 | 约束与含义 |
+|---|---|
+| schemaVersion | 必填，当前仅支持数字 `1`，用于协议兼容检查 |
+| id | 必填，字母开头的小写字母、数字、连字符，1–64 位；建议保持客户主题 ID 稳定 |
+| name | 必填，非空，最多 60 字 |
+| version | 必填，`主版本.次版本.修订号`，各段 1–5 位数字，例如 `1.2.0` |
+| description | 可选，非空，最多 500 字 |
+| brand.name / slogan | 可选，非空，分别最多 60 / 160 字；登录页口号支持 JSON `\n` 换行，按纯文本显示 |
+| brand.logo / homeBackground | 可选，引用 ZIP 内 `assets/` 下图片；Logo 用于登录页；homeBackground 为兼容旧包保留，当前首页不显示 |
+| brand.logoDark | 可选，深色模式 Logo，与 logo 一同提供。随应用实际明暗模式切换，不只判断操作系统偏好 |
+| brand.logoShape | 可选，`square`（默认，64×64px）或 `wordmark`（132×44px）；横版字标请使用约 3:1 且透明留白较少的原图 |
+| brand.eyebrow | 可选，最多 60 字；为兼容旧包保留，当前首页不显示 |
+| brand.headline / highlight | 可选，标题最多 100 字，强调词最多 40 字且必须是标题中的子串。为兼容旧包保留，当前首页不显示 |
+| tokens.light / dark | 可选，各颜色必须是 `#RRGGBB`，未填写的字段保留公版变量 |
+| tokens.light.accent / dark.accent | 可选，独立强调色；提供时同时作为标签（Tag primary 主题与 CheckTag 选中态）的品牌配色，浅色文字自动压暗一档保证对比度；不替代主操作色或成功/警告/错误等业务状态色 |
+| tokens.light.primaryLight / dark.primaryLight | 可选，图标气泡等品牌浅底色，覆盖自动生成的浅底，避免深主色混白后发灰 |
+| tokens.light.heroStart / heroEnd（dark 同名） | 可选，为兼容旧包保留，当前首页不显示渐变品牌区 |
+| tokens.radius | 可选，`small` / `medium` / `large`，分别映射 4 / 8 / 16px 的主要卡片圆角；large 的控件圆角为 12px，保持卡片和控件层级 |
+| layout.template | 可选，`default` / `brand`，缺省 `default` |
+| layout.homeModules | 可选，已知模块的不重复数组，定义优先排列顺序，不用于禁用功能 |
+
+未知字段会拒绝上传，避免拼写错误造成静默不生效。浅色和深色独立配置；未指定 dark 时，主题 light 配色也用于深色模式，因此建议每个主题提供完整的 light 和 dark 配色。
+
+### 3.1 缺省值、作用范围与渲染规则
+
+- 所有 manifest 字段（除 `schemaVersion`、`id`、`name`、`version` 外）均可选。缺省表示沿用公版，不表示清空公版内容或禁用功能。
+- 颜色是按字段覆盖的 token。缺少某一字段时，客户端继续使用公版对应变量；`tokens`、`light`、`dark` 或局部颜色对象都可以只声明需要覆盖的值。
+- 存在 `tokens.dark` 时，深色模式按其中字段覆盖公版深色变量；未写的字段保留公版值。整个 `dark` 对象缺省时，客户端使用 `light` 对象作为深色配色输入，因此浅色背景也会被带入深色模式。需要明暗模式各自可读的主题应明确提供两组配色。
+- `primary` 用于 TDesign 品牌色阶和未被更具体 token 覆盖的主要操作；`buttonBackground` / `buttonText` 只控制实心主按钮。未提供 `buttonText` 时，客户端按背景亮度自动选择黑色或白色。描边按钮、链接和成功/警告/错误等业务状态色不由主按钮字段改写。
+- `entryCards` 通过固定业务键关联企业、人才、投稿、商城、空间和活动入口，不随入口排序或功能开关变化。只覆盖指定入口和指定属性；未指定属性沿用公版值。入口配色不能替代业务状态色或后端功能权限。
+- `navigation*`、`search*`、`sectionTitle`、`link`、`border` 分别作用于底部导航、首页搜索区域、首页分区标题、链接和通用边框；不会改变移动端访问地址、路由、字号、交互流程或后台配置。
+- `layout.homeModules` 只调整首页模块顺序。未列出的已知模块会按公版默认顺序追加；该字段不能隐藏、创建或授权模块。服务端功能开关、用户身份和权限始终优先。
+- `layout.template` 当前只在已实现的模板间选择：`default` 沿用公版，`brand` 使用品牌主题对应的发布入口样式。它不是任意页面布局或模板代码入口。
+- `brand.name` 与 `brand.slogan` 用于移动端品牌展示，不会修改后台站点名称、法律主体或业务数据。`slogan` 中 JSON 转义 `\n` 会在登录页显示为换行，仍作为纯文本处理。
+- `logo` 在登录页显示；提供 `logoDark` 时由客户端在暗色模式切换使用。`logoShape` 选择方形图标或横向字标展示容器，不会裁切或修改原文件。
+- `homeBackground`、`eyebrow`、`headline`、`highlight` 是为兼容已有包保留的字段，当前首页不显示。不要依赖它们在当前客户端产生视觉效果。
+
+JSON Schema 检查字段类型、枚举、格式及已声明的静态约束；它无法确认 ZIP 是否包含被引用资源、图片内容是否匹配扩展名、色彩对比度是否足够或目标公版是否实现该字段。服务端会校验未知字段、字段长度、路径、资源内容和压缩包大小；上传成功后仍须在实际目标公版中预览验收。
+
+2026-10-15 增加的增强字段均为可选，新公版继续兼容原 v1 主题；含新字段的主题应在部署支持这些字段的公版后上传。旧公版会按严格校验拒绝未知字段。标题不接受 HTML，不提供任意 CSS 或脚本注入能力。
+
+首页优先展示搜索和业务入口，不添加品牌大标题、口号或装饰背景区。品牌 Logo 和口号展示在登录页；不要把品牌口号塞进社区名称。入口卡片高度限制在 88–104px，内容及固定导航最大宽度为 640px，窄屏说明文字可以自然换行。
+
+主色会生成 TDesign 品牌色阶及按压、焦点、禁用等变量，深色模式使用深色的低阶底色。主按钮会按主色亮度选择黑字或白字，品牌渐变会压暗以适配反色文字。业务状态色、字号体系、权限和路由不由主题改变。主色与按钮文字、正文与卡片背景均应检查对比度，不能只验证首页效果。
+
+### 3.2 独立区域配色（2026-10-15 扩展）
+
+以下可选字段分别配置在 `tokens.light` 和 `tokens.dark`，颜色仍只接受 `#RRGGBB`。未填写时沿用主色、公版或已有颜色，不要求旧主题补齐。先更新公版后端及客户端，再上传使用扩展字段的 ZIP；旧后端会拒绝未知字段。
+
+| 字段 | 作用范围 |
+|---|---|
+| border | 卡片与通用组件边框 |
+| buttonBackground / buttonText | 实心主按钮底色与文字色；不改变链接、描边按钮、成功/警告/错误等业务状态色。按压和禁用底色由按钮底色生成；省略文字色时自动选择黑/白 |
+| navigationBackground / navigationText / navigationActive | 底部导航底色、未选中文字与图标、选中文字与图标 |
+| searchBackground / searchText / searchPlaceholder | 搜索框底色、输入文字、占位文字及搜索图标 |
+| sectionTitle / link | 首页内容分区标题与“更多”等链接 |
+| levelColors | 1–10 级等级配色（按级号升序的 10 个颜色）。等级标签用该色实底；「我的等级」与企业等级卡中，未达成级用该色描边、已达成级（含当前级）用该色实底。个体与企业等级共用同一套色 |
+| entryCards | 六类首页服务入口的独立颜色，见下表 |
+
+`entryCards` 的键固定为 `enterprise`（企业合作/管理）、`talent`（人才登记/个人名片）、`articles`（文章投稿）、`mall`（积分商城）、`spaces`（空间预约）、`events`（活动计划）。颜色绑定功能，不按第几个卡片分配；功能开关隐藏入口时，其它入口保持原配色。
+
+每个入口支持 `background`、`icon`、`iconBackground`、`text`、`secondaryText`、`border` 六个可选颜色。例如：
+
+```json
+{
+  "buttonBackground": "#e2630d",
+  "buttonText": "#101d3e",
+  "entryCards": {
+    "mall": {
+      "background": "#fff7dc",
+      "icon": "#795600",
+      "iconBackground": "#ffe69a",
+      "text": "#101d3e",
+      "border": "#eedfab"
+    }
+  }
+}
+```
+
+以上片段放入 `tokens.light`，深色模式在 `tokens.dark` 单独提供。浅色底搭配深色文字、深色底搭配浅色文字；不要将 Logo 中的亮黄、浅青直接作为白底上的正文颜色。检查正文和按钮文字至少 4.5:1、功能图标至少 3:1 的对比度。主题配置的维护位置是独立主题目录 `Joinyuu-Mobile-Theme/customers/<客户>/manifest.json`，运行时上传数据不提交到公版仓库。
+
+`levelColors` 必须恰好是 10 个颜色（1–10 级依次对应），少于或多于 10 个会被服务端拒绝；未提供时等级标签与等级卡沿用公版样式（品牌色标签、品牌渐变当前卡）。该色会同时用作实底与描边：作实底时客户端按颜色亮度自动选用黑色或白色文字，因此每个颜色都要满足「与自动选定的黑/白文字 ≥4.5:1」，并在卡片背景（浅色模式为白卡、深色模式为深色卡）上作描边时保持可辨识（≥3:1）。深色模式建议整体提亮，保证深色卡上描边可见。
+
+## 4. 首页模块与升级规则
+
+默认顺序为：
+
+| 标识 | 内容 |
+|---|---|
+| banner | 运营轮播图 |
+| entries | 业务功能入口宫格 |
+| publish | 发布需求按钮 |
+| activation | 新手任务 |
+| announcement | 运营公告 |
+| events | 近期活动 |
+| demands | 最新需求 |
+| articles | 最新资讯 |
+
+配置中列出的模块优先排列，遗漏的模块按公版默认顺序补在后面。例如 `["articles", "entries"]` 会把资讯和宫格前置，其他模块仍保留。未来公版增加模块时也遵循这个补全规则，避免旧主题永久丢失新增入口。
+
+是否展示内容仍遵守现有数据、登录身份、功能开关和服务端权限。主题不能打开后台已关闭的功能。模块按真实 DOM 顺序渲染，不通过 CSS order 制造阅读顺序差异。
+
+新业务页面默认继承主题变量；页面重构应继续使用公版 tokens。协议 v1 的已有字段含义和模板 ID 不应破坏性修改。不兼容的数据格式必须增加 `schemaVersion` 并提供迁移方案；已存在字段不能在 v1 内改名、换义或删除。公版和主题版本分别发布，验收时记录两者版本。
+
+**兼容规则：**旧主题只使用已支持字段时，应继续在新公版运行。新主题可以使用新增的可选字段，但必须先确认目标公版支持这些字段；旧版服务端采用严格未知字段校验，会拒绝它们。新增字段前要同时更新服务端校验类型、JSON Schema、客户端解析与 token 映射、测试和本规范，再发布支持该字段的公版。不能仅更新 Schema 或主题仓库后就交付。
+
+## 5. 图片与 ZIP 限制
+
+- ZIP 压缩文件不超过 10 MiB；最多 100 个条目（包含目录）；解压累计不超过 20 MiB。
+- manifest 不超过 64 KiB；每张图片不超过 2 MiB。
+- 图片仅允许 `.png`、`.jpg`、`.jpeg`、`.webp`，扩展名使用小写，服务端检查文件头与扩展名。
+- assets 路径只允许英文字母、数字、`_`、`-`、`/` 和图片扩展名；例如 `assets/home/background.webp`。
+- 拒绝路径穿越、绝对路径、符号链接、加密条目、重复路径以及不在白名单内的文件。
+- 品牌引用的图片必须存在。不要在包里放客户隐私、凭据或未使用的资源；图片通过公开 URL 提供。
+- 主题只包含静态数据，不上传业务密钥、数据库信息或授权文件。
+
+## 6. 打包与本地协作
+
+在协作仓根目录使用 PowerShell 打包工具，只打包主题源目录中的 manifest 和 assets：
+
+```powershell
+powershell -ExecutionPolicy Bypass -File scripts/pack-mobile-theme.ps1 -Source apps/api/examples/mobile-theme -Output .tmp/demo-theme.zip
+```
+
+在独立主题仓库可使用同名脚本：
+
+```powershell
+powershell -ExecutionPolicy Bypass -File scripts/pack-mobile-theme.ps1 -Source customers/customer-a -Output dist/customer-a-1.0.0.zip
+```
+
+脚本校验结构与 JSON 可解析性；服务端上传校验是最终准入标准。主题目录只放交付文件，设计源稿放到其他目录。脚本不会覆盖已存在的输出 ZIP。
+
+建议主题仓库结构：
+
+```text
+Joinyuu-Mobile-Theme/
+  docs/features/mobile-theme.md
+  docs/mobile-theme.schema.json
+  customers/example/manifest.json
+  scripts/pack-mobile-theme.ps1
+  dist/                         # 不提交版本库
+```
+
+主题修改通过短期分支审核；每次改动限制在对应客户目录及必要的公共文档/工具。客户主题发布用如 `customer-a/v1.2.0` 的标签记录，并保存 ZIP 的 SHA-256 和目标公版版本。不要为了发布某个客户主题复制公版代码或覆盖其它客户文件。公共核心更新不需要合并客户主题代码；如果公版保持契约兼容，原包可继续使用。若新增字段不受目标公版支持，应先升级公版，或为旧公版继续发布仅使用其已支持字段的包。
+
+## 7. 管理员操作
+
+1. 部署公版前后端，执行 `pnpm db:migrate`；保留数据库和上传存储的持久化。
+2. 使用具备「系统配置」权限和系统管理数据范围的账号登录。主题写操作遵守系统许可证只读限制。
+3. 在「系统管理 → 移动端主题」上传 ZIP；上传成功只加入列表，不自动启用。
+4. 在「系统管理 → 系统配置 → 站点信息」保存全局移动端访问地址（字段 `mobileUrl`，默认 `localhost:7759`）。支持主机:端口或完整 HTTP/HTTPS 地址与子路径；预览时自动补全缺省的 `http://`。移动端与后台必须连接同一后端实例。主题页只读取这一配置，不再单独编辑地址。
+5. 点击「预览」，再打开生成链接；链接有效 15 分钟。链接只授予主题预览，不授予管理员或业务数据权限。不要转发。
+6. 预览窗口顶部会提示预览状态；令牌会从地址栏移除，并在当前标签页会话内保留，切换路由和刷新后仍可预览；过期会提示错误，可退出预览或重新生成链接。
+7. 验收后点击「启用」。普通用户重新加载页面会获取新主题；页面切回前台时也会检查，检查间隔至少 60 秒。无实时广播，后台切换不会立即重绘所有已打开的客户端。
+8. 「恢复默认」取消当前主题并恢复公版样式。页面不提供「回退上一主题」按钮，历史主题可在列表中重新启用。
+9. 未启用的主题可点击「删除」并确认；会撤销预览授权、删除主题记录及资源、清理历史引用并记录审计。当前使用的主题必须先切换或恢复默认。需要再次使用已删除主题时，重新上传原 ZIP。
+
+正常用户不会下载其他主题包；只取得当前主题配置及页面引用的资源。预览不修改全局配置。主题请求失败时，首次访问使用公版，已有页面保留最近一次成功加载的主题，后续刷新或回到前台可重试。
+
+## 8. 存储、缓存与接口
+
+- `MobileThemePackage` 保存校验后的 manifest、资源映射、SHA-256 和上传信息。
+- `MobileThemeState` 单例保存当前主题及兼容旧接口的历史引用；启用、删除及生成预览均在事务内锁定同一状态行，防止并发删除造成悬空的当前主题或预览。
+- `MobileThemePreview` 保存预览令牌的 SHA-256 和过期时间，不保存令牌原文；生成新预览时清理已过期记录。
+- 资源使用既有 StorageService，支持本地上传目录或 MinIO。主题资源 URL 含不可复用的包 UUID，使用 immutable 缓存；配置响应 no-store。
+- 删除仅允许未启用主题。记录与预览授权在数据库事务中删除，资源随后由 StorageService 清理；存储清理失败会记录警告，残留文件不再能通过主题接口访问。备份同时覆盖数据库和上传存储；更换存储驱动前须迁移资源，不能只移动数据库。
+- 已加载主题的 manifest 存在数据库中，不写入客户端源码；上传目录已由 `uploads/` 忽略。额外排除根目录/API/客户端 public 下的运行时 `mobile-themes/` 和 `mobile-theme.local*.json` 本地导出文件。协议、示例及组件源码仍正常跟踪，客户主题源码在独立主题目录维护。
+- 主题属于部署配置，常规业务种子数据不应清除它。
+
+| 接口 | 权限 / 作用 |
+|---|---|
+| GET /api/admin/system/mobile-themes | 系统配置权限，查看当前、上一主题和已上传列表 |
+| POST /api/admin/system/mobile-themes/upload | multipart 字段 file，上传 ZIP |
+| POST /api/admin/system/mobile-themes/:id/preview | 创建临时预览令牌 |
+| POST /api/admin/system/mobile-themes/:id/activate | 启用指定主题 |
+| POST /api/admin/system/mobile-themes/reset | 恢复默认 |
+| DELETE /api/admin/system/mobile-themes/:id | 删除未启用主题；当前使用的主题返回 409 |
+| POST /api/admin/system/mobile-themes/rollback | 兼容旧调用的回退接口；管理页面已移除按钮 |
+| GET /api/app/mobile-theme | 公开，只返回当前主题；公版返回 null |
+| GET /api/app/mobile-theme?preview=TOKEN | 公开，通过有效临时令牌读取待预览主题 |
+| GET /api/public/mobile-themes/:packageId/assets/... | 公开，读取已验证图片 |
+
+JSON 接口沿用 `{ code: 0, data }` 包络。上传、启用、删除、恢复默认及旧回退接口均记录审计。预览 URL 参数为 `themePreview`，不是后台 Bearer token。
+
+## 9. 交付验收
+
+至少检查：320px 与常用手机宽度、浅色与深色、登录页、首页、二级业务页面、文字对比度、键盘访问、Logo 加载、首页模块顺序、已有功能开关、新主题启用、恢复默认、删除未启用主题及全局入口地址生成预览。主题中不得通过隐藏入口替代后端权限控制。
+
+修改协议时同步协作仓本规范、JSON Schema、API 校验与通用示例；独立主题仓若保存发布时副本需标注协议版本。协作仓 `docs/features/mobile-theme.md` 为公共协议维护入口；独立主题仓库中的副本供各客户主题开发使用。客户专属配色说明、Logo、截图和对比度报告放在对应客户目录或以客户 ID 命名的文档中，不混入公共契约。
+
+全局入口地址由 `GET/PUT /api/admin/system/config` 读写，并作为非敏感配置通过 `GET /api/app/config` 的 `mobileUrl` 下发，可供后续功能共用。包含新字段的部署须执行 `20261015133000_global_mobile_url` 增量迁移。旧保存载荷省略此字段时保留已存地址；不接受账号密码、查询参数、锚点、非 HTTP 协议。

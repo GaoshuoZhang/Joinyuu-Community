@@ -9,3 +9,4 @@ jobs:
         with:
           node-version: 24
       - run: node --test scripts/workspace.test.mjs
+      - run: node scripts/check-docs.mjs

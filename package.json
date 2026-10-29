@@ -36,7 +36,9 @@
     "check": "node scripts/workspace.mjs check",
     "release:record": "node scripts/workspace.mjs record-release",
     "test:mini": "npm --prefix apps/wxminiprogram test",
-    "test:workspace": "node --test scripts/workspace.test.mjs"
+    "test:workspace": "node --test scripts/workspace.test.mjs",
+    "docs:check": "node scripts/check-docs.mjs",
+    "docs:generate": "node scripts/generate-reference.mjs"
   },
   "packageManager": "pnpm@12.3.4",
   "engines": {
