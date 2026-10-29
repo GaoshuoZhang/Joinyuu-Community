@@ -54,10 +54,11 @@ git -C apps/admin status
 node scripts/workspace.mjs init --bundles D:\Projects\Joinyuu-Community-migration-20261029\bundles
 ```
 
-本地备份包没有推送地址。创建自己的远程后，在对应子仓设置 origin，并同步 repositories.json。小程序 upstream 保留模板来源，不能作为聚屿业务代码的推送目标。
+本地备份包没有推送地址。创建自己的远程后，在对应子仓设置 origin，并同步 repositories.json。小程序 Git 已重新初始化，不关联模板仓库，应配置自己的远程地址。
 
 ## 发布与资料
 
+- 当前 Git 基线见 [mini-git-reset-20261029](releases/mini-git-reset-20261029.json)，小程序历史已重新初始化。
 - [仓库拆分计划](docs/repository-split-plan.md)、[迁移记录](docs/repository-split-report.md)。
 - [版本规则](docs/versioning.md)、[整体部署](docs/deploy-1panel.md)、[升级说明](docs/backend-upgrade.md)。
 - 各端开发 Wiki、接口契约与服务端模型已迁至对应业务仓 `docs/`；原索引保留迁移指引。
