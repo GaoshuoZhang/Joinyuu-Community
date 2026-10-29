@@ -11,10 +11,10 @@
 
 ## 1. 技术栈与目录
 
-- **分包结构**：主包只保留 5 个 Tab 页、登录注册、全局搜索与 webview；其余页面按域拆入分包——
-  `pkg-me`（我的子页）、`pkg-content`（文章 + 人才/企业名片）、`pages/trade|checkout|mall`、
-  `pages/demand|application|intro`、`pages/space|event`（后五组以现有目录为分包根，页面路径不变）。
-  新增页面时先判断归属域再决定放主包还是分包；主包阈值 1.5M。
+- **分包结构**：主包只保留 5 个 Tab 页、登录注册、全局搜索与 webview；其余全部页面位于单一分包
+  `pkg/`（内部按域组织：`pkg/trade|checkout|mall|demand|application|intro|space|event|article…`，
+  我的子页与名片在 `pkg/pages/…`）。仅被分包页面使用的 services/utils 模块也放在 `pkg/services|utils`
+  （被主包与分包共同使用的模块留在主包根目录）。新增页面默认进 `pkg`，主包只增 Tab 级页面；主包阈值 1.5M。
 - `packOptions.ignore` 已剔除未使用的 TDesign 组件目录与模板遗留 static——执行「构建 npm」会重新生成
   这些目录，上传时由 ignore 规则剔除；若某个组件首次被使用，需从 ignore 列表移除对应条目。
 - 图片地址：后端下发的头像/logo/封面/正文图片均为相对路径，必须经 `utils/url.js` 的 `absoluteUrl`
@@ -25,7 +25,7 @@
 - 每个页面 4 个文件：`index.js` / `index.json` / `index.wxml` / `index.less`，放在 `pages/<area>/<name>/` 下。
 - **相对导入按文件真实位置计算**：目录式页面（`pages/<area>/<name>/index.js`）引用根目录模块用 `../../../utils/...`；
   扁平页面（`pages/<area>/<name>.js`）用 `../../utils/...`。层级写错会让页面整页空白（模块加载失败）。
-- 样式统一 `@import '/variable.less';`，尺寸用 `rpx`（1px = 2rpx）。
+- 样式统一 `@import '/variable.less';`，手机尺寸用 `rpx`（设计宽度 375px 时 1px = 2rpx）。`variable.less` 的布局、字号、间距和圆角通过 `--layout-*` 变量提供默认值；600px 以上用稳定 px 尺寸与 640px 内容宽度，避免平板整屏放大。
 - **颜色只用 CSS 变量**（`var(--brand)` / `var(--text-1)` / `var(--bg-card)` / `var(--border)` 等，
   见 `app.less` 的 `page` 兜底与 `utils/theme.js`）；禁止写死 `#fff`/`#000`/品牌蓝，否则深色主题下会破版。
   明暗两套由 `buildStyle()` 生成，新增颜色变量必须同时在 `app.less` 兜底块和 `buildStyle()` 里给出浅色值与暗色值：
@@ -113,7 +113,7 @@
    文字一律走 `content="{{...}}"` / `content="字面量"`。
 3. **组件内部可点击元素会与父级点击重复触发**。`t-switch` 放在 `t-cell` 里又绑 `bind:change` 时，
    点开关会同时触发开关事件和整行点击，开关动作被抵消；这类场景让组件只做展示，交互交给父级。
-4. **`tslib` 是 TDesign 编译产物的真实依赖**。`npm run build npm`（开发者工具「构建 npm」）后部分组件会 `import "tslib"`，
+4. **`tslib` 是 TDesign 编译产物的真实依赖**。每次开发者工具「构建 npm」后运行 `npm run prepare:npm`，再重新编译。工具可能复制组件但保留裸 `tslib` 导入；后处理只把生成目录内的导入改为当前文件相对 `miniprogram_npm/tslib/index.js` 的路径，幂等且不修改 node_modules。`npm test` 会检测遗漏。`npm run build npm`（开发者工具「构建 npm」）后部分组件会 `import "tslib"`，
    未声明该依赖时构建产物缺失、组件加载失败。`package.json` 已声明 `tslib`，重新构建 npm 前不要删。
 
 **有意保留、不走 TDesign 的部分**（改动收益低于风险，或本身就是平台能力）：
@@ -246,7 +246,7 @@ Page(withTheme({
 
 其他：`divider` `skeleton` `rich-text`（富文本容器）。
 
-> 交互反馈统一 `hover-class="press"`；可点区域要有但不要嵌套过深。
+> 交互反馈统一 `hover-class="press"`（120ms 透明度反馈，保持布局稳定）；可点区域要有但不要嵌套过深。
 
 ## 7. 请求与数据
 
@@ -311,3 +311,13 @@ Page(withTheme({
 4. 登录页/提交类动作有登录门禁与提交防重。
 5. 页面不引用不存在的 service 函数；字段名以 H5 端 `src/types/index.ts` 与对应视图为准。
 6. 修改共享基础设施后检查所有使用方，不能仅验证当前页面。
+
+
+## 14. UI/UX 验收补充
+
+- TDesign Input 必须设置 `label`（页面外部已显示标签时用 `t-class-label="sr-only"` 保留原生读屏名称）；密码用 `type="password"`，不能使用原生 `password` 属性。
+- 大卡片须同时带 `card card-lg`；`card-lg` 只补内距，不提供背景、纵向布局或元素间距。
+- 操作按钮与图标按钮最小命中区 44px；筛选 CheckTag 保持 32px 紧凑规格，使用 `filter-tag-host` / `td-filter-tag` 分别控制宿主收缩和内部样式。
+- 长表单通过 `withTheme` 的 `formGuard: { fields, handlers }` 明确声明编辑数据与编辑事件；服务端回填不启用保护，保存成功调用 `markFormSaved()`。自定义返回经 `goBack()` 调用 `confirmFormLeave()`；平台 API 不拦截侧滑退出，真机手势仍需验收。
+- 轮播默认静止，用户主动开启后可暂停，页面隐藏停止播放；骨架屏和自定义底栏也遵循减少动态效果。
+- 本轮详细问题、跨端对应与验证边界见 [2026-10-30 审查记录](ui-ux-audit-2026-10-30.md)。
