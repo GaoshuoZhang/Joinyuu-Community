@@ -83,6 +83,6 @@ Node 验证版本：24.20.0；pnpm：12.3.4；npm：11.19.0。各仓保留当前
 
 旧 Git 元数据归档在 D:\Projects\Joinyuu-Community-migration-20261029\wx-git-before-reset-20261029；重置前离线包另存为 wxminiprogram-before-git-reset.bundle。默认 bundles/wxminiprogram.bundle 已替换为仅含当前项目初始提交的新包，后续初始化不会恢复模板历史。
 
-本记录前面的提交表和 split-baseline-20261029.json 描述首次拆仓时的历史状态；当前工作区以 releases/mini-git-reset-20261029.json 为准。其它三个业务仓库未改动，业务远程仍未配置或推送。
+本记录前面的提交表和 split-baseline-20261029.json 描述首次拆仓时的历史状态；当前工作区以 releases/mini-git-reset-20261029.json 为准。其它三个业务仓库未由本次操作修改；小程序远程留空，本次未推送。
 
 重置后 npm test 通过（130 个 JS、92 个 JSON、76 个页面）。从更新后的离线包重新克隆验证通过：全部引用可达历史只有 1 个提交，与当前工作区初始提交一致。
