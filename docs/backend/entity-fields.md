@@ -2,7 +2,7 @@
 
 由 `node scripts/generate-reference.mjs` 从 `apps/api/prisma/schema.prisma` 生成；不手工修改。字段、关系和 Schema 索引如下；数据库 CHECK、触发器和部分索引还需查看 `apps/api/prisma/migrations/`。DTO 校验和权限约束不由本清单替代。
 
-共 82 个模型或枚举。
+共 84 个模型或枚举。
 
 ## MobileThemePackage
 
@@ -616,6 +616,57 @@ model ApplicationFormConfig {
   tips        Json   @default("[]")
   fields      Json   @default("[]")
   updatedAt   String @db.VarChar(16)
+}
+```
+
+## EnterpriseAgencyRequest
+
+```prisma
+model EnterpriseAgencyRequest {
+  id           String  @id @db.VarChar(16)
+  // registration | finance_tax | business_change | license
+  serviceType  String  @db.VarChar(24)
+  userId       String  @db.VarChar(16)
+  companyName  String  @db.VarChar(128)
+  contactName  String  @db.VarChar(64)
+  contactPhone String  @db.VarChar(32)
+  // pending | processing | needs_info | completed | rejected | withdrawn
+  status       String  @db.VarChar(16)
+  summary      String  @db.VarChar(255)
+  // 结构化表单载荷；附件字段存 { fileId, name, size, mime }，不存公开 URL
+  payload      Json
+  records      Json    @default("[]")
+  submittedAt  String  @db.VarChar(16)
+  updatedAt    String  @db.VarChar(16)
+  archivableAt String? @db.VarChar(16)
+  deletedAt    String? @db.VarChar(16)
+  deletedBy    String? @db.VarChar(64)
+
+  @@index([serviceType, status])
+  @@index([userId])
+  @@index([companyName])
+  @@index([submittedAt])
+  @@index([deletedAt])
+}
+```
+
+## EnterpriseAgencyFile
+
+```prisma
+model EnterpriseAgencyFile {
+  id         String  @id @db.VarChar(36)
+  userId     String  @db.VarChar(16)
+  requestId  String? @db.VarChar(16)
+  storageKey String  @db.VarChar(160)
+  name       String  @db.VarChar(255)
+  size       Int
+  mime       String  @db.VarChar(64)
+  createdAt  String  @db.VarChar(16)
+  deletedAt  String? @db.VarChar(16)
+
+  @@index([userId])
+  @@index([requestId])
+  @@index([deletedAt])
 }
 ```
 

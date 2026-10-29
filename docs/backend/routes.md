@@ -2,7 +2,7 @@
 
 由 `node scripts/generate-reference.mjs` 从 API 控制器生成；不手工修改。仅列实际声明的路径与处理函数，权限、请求字段和业务规则需查看对应装饰器、DTO 与 Service。
 
-共 461 个路由声明。
+共 478 个路由声明。
 
 | 方法 | 路径 | 处理函数 | 源码 |
 | --- | --- | --- | --- |
@@ -124,6 +124,14 @@
 | DELETE | `/api/admin/dicts/:type/:code` | `DictsController.remove` | [查看](https://github.com/GaoshuoZhang/Joinyuu-api/blob/main/src/modules/system/dicts.controller.ts#L40) |
 | PUT | `/api/admin/dicts/:type/:code` | `DictsController.update` | [查看](https://github.com/GaoshuoZhang/Joinyuu-api/blob/main/src/modules/system/dicts.controller.ts#L26) |
 | POST | `/api/admin/dicts/:type/:code/toggle-status` | `DictsController.toggle` | [查看](https://github.com/GaoshuoZhang/Joinyuu-api/blob/main/src/modules/system/dicts.controller.ts#L33) |
+| GET | `/api/admin/enterprise-agency/registrations` | `EnterpriseAgencyController.findAll` | [查看](https://github.com/GaoshuoZhang/Joinyuu-api/blob/main/src/modules/enterprise-agency/enterprise-agency.controller.ts#L30) |
+| GET | `/api/admin/enterprise-agency/registrations/:id` | `EnterpriseAgencyController.detail` | [查看](https://github.com/GaoshuoZhang/Joinyuu-api/blob/main/src/modules/enterprise-agency/enterprise-agency.controller.ts#L51) |
+| POST | `/api/admin/enterprise-agency/registrations/:id/accept` | `EnterpriseAgencyController.accept` | [查看](https://github.com/GaoshuoZhang/Joinyuu-api/blob/main/src/modules/enterprise-agency/enterprise-agency.controller.ts#L56) |
+| POST | `/api/admin/enterprise-agency/registrations/:id/complete` | `EnterpriseAgencyController.complete` | [查看](https://github.com/GaoshuoZhang/Joinyuu-api/blob/main/src/modules/enterprise-agency/enterprise-agency.controller.ts#L76) |
+| GET | `/api/admin/enterprise-agency/registrations/:id/files/:fileId` | `EnterpriseAgencyController.file` | [查看](https://github.com/GaoshuoZhang/Joinyuu-api/blob/main/src/modules/enterprise-agency/enterprise-agency.controller.ts#L36) |
+| POST | `/api/admin/enterprise-agency/registrations/:id/notes` | `EnterpriseAgencyController.addNote` | [查看](https://github.com/GaoshuoZhang/Joinyuu-api/blob/main/src/modules/enterprise-agency/enterprise-agency.controller.ts#L96) |
+| POST | `/api/admin/enterprise-agency/registrations/:id/reject` | `EnterpriseAgencyController.reject` | [查看](https://github.com/GaoshuoZhang/Joinyuu-api/blob/main/src/modules/enterprise-agency/enterprise-agency.controller.ts#L86) |
+| POST | `/api/admin/enterprise-agency/registrations/:id/request-info` | `EnterpriseAgencyController.requestInfo` | [查看](https://github.com/GaoshuoZhang/Joinyuu-api/blob/main/src/modules/enterprise-agency/enterprise-agency.controller.ts#L66) |
 | GET | `/api/admin/enterprises` | `EnterprisesController.list` | [查看](https://github.com/GaoshuoZhang/Joinyuu-api/blob/main/src/modules/enterprises/enterprises.controller.ts#L19) |
 | POST | `/api/admin/enterprises` | `EnterprisesController.create` | [查看](https://github.com/GaoshuoZhang/Joinyuu-api/blob/main/src/modules/enterprises/enterprises.controller.ts#L25) |
 | DELETE | `/api/admin/enterprises/:id` | `EnterprisesController.remove` | [查看](https://github.com/GaoshuoZhang/Joinyuu-api/blob/main/src/modules/enterprises/enterprises.controller.ts#L65) |
@@ -320,22 +328,24 @@
 | POST | `/api/app/articles/:id/comments` | `AppContentsController.createComment` | [查看](https://github.com/GaoshuoZhang/Joinyuu-api/blob/main/src/modules/app/contents/contents.controller.ts#L85) |
 | DELETE | `/api/app/articles/:id/comments/:commentId` | `AppContentsController.deleteComment` | [查看](https://github.com/GaoshuoZhang/Joinyuu-api/blob/main/src/modules/app/contents/contents.controller.ts#L96) |
 | POST | `/api/app/articles/:id/likes/toggle` | `AppContentsController.toggleLike` | [查看](https://github.com/GaoshuoZhang/Joinyuu-api/blob/main/src/modules/app/contents/contents.controller.ts#L73) |
-| GET | `/api/app/auth/captcha` | `AuthController.captcha` | [查看](https://github.com/GaoshuoZhang/Joinyuu-api/blob/main/src/modules/app/auth/auth.controller.ts#L27) |
-| POST | `/api/app/auth/change-email` | `AuthController.changeEmail` | [查看](https://github.com/GaoshuoZhang/Joinyuu-api/blob/main/src/modules/app/auth/auth.controller.ts#L174) |
-| POST | `/api/app/auth/change-phone` | `AuthController.changePhone` | [查看](https://github.com/GaoshuoZhang/Joinyuu-api/blob/main/src/modules/app/auth/auth.controller.ts#L162) |
-| GET | `/api/app/auth/email/available` | `AuthController.emailAvailable` | [查看](https://github.com/GaoshuoZhang/Joinyuu-api/blob/main/src/modules/app/auth/auth.controller.ts#L41) |
-| POST | `/api/app/auth/email/send` | `AuthController.sendEmailCode` | [查看](https://github.com/GaoshuoZhang/Joinyuu-api/blob/main/src/modules/app/auth/auth.controller.ts#L65) |
-| POST | `/api/app/auth/login` | `AuthController.login` | [查看](https://github.com/GaoshuoZhang/Joinyuu-api/blob/main/src/modules/app/auth/auth.controller.ts#L108) |
-| POST | `/api/app/auth/login-by-code` | `AuthController.loginByCode` | [查看](https://github.com/GaoshuoZhang/Joinyuu-api/blob/main/src/modules/app/auth/auth.controller.ts#L136) |
-| POST | `/api/app/auth/logout` | `AuthController.logout` | [查看](https://github.com/GaoshuoZhang/Joinyuu-api/blob/main/src/modules/app/auth/auth.controller.ts#L144) |
-| GET | `/api/app/auth/recovery-channels` | `AuthController.recoveryChannels` | [查看](https://github.com/GaoshuoZhang/Joinyuu-api/blob/main/src/modules/app/auth/auth.controller.ts#L80) |
-| POST | `/api/app/auth/register` | `AuthController.register` | [查看](https://github.com/GaoshuoZhang/Joinyuu-api/blob/main/src/modules/app/auth/auth.controller.ts#L101) |
-| POST | `/api/app/auth/reset-code/send` | `AuthController.sendResetCode` | [查看](https://github.com/GaoshuoZhang/Joinyuu-api/blob/main/src/modules/app/auth/auth.controller.ts#L87) |
-| POST | `/api/app/auth/reset-password` | `AuthController.resetPassword` | [查看](https://github.com/GaoshuoZhang/Joinyuu-api/blob/main/src/modules/app/auth/auth.controller.ts#L153) |
-| GET | `/api/app/auth/sms/available` | `AuthController.smsAvailable` | [查看](https://github.com/GaoshuoZhang/Joinyuu-api/blob/main/src/modules/app/auth/auth.controller.ts#L34) |
-| POST | `/api/app/auth/sms/send` | `AuthController.sendSmsCode` | [查看](https://github.com/GaoshuoZhang/Joinyuu-api/blob/main/src/modules/app/auth/auth.controller.ts#L49) |
-| POST | `/api/app/auth/wechat-mini/bind` | `AuthController.wechatMiniBind` | [查看](https://github.com/GaoshuoZhang/Joinyuu-api/blob/main/src/modules/app/auth/auth.controller.ts#L128) |
-| POST | `/api/app/auth/wechat-mini/login` | `AuthController.wechatMiniLogin` | [查看](https://github.com/GaoshuoZhang/Joinyuu-api/blob/main/src/modules/app/auth/auth.controller.ts#L119) |
+| GET | `/api/app/auth/captcha` | `AuthController.captcha` | [查看](https://github.com/GaoshuoZhang/Joinyuu-api/blob/main/src/modules/app/auth/auth.controller.ts#L32) |
+| POST | `/api/app/auth/change-email` | `AuthController.changeEmail` | [查看](https://github.com/GaoshuoZhang/Joinyuu-api/blob/main/src/modules/app/auth/auth.controller.ts#L192) |
+| POST | `/api/app/auth/change-phone` | `AuthController.changePhone` | [查看](https://github.com/GaoshuoZhang/Joinyuu-api/blob/main/src/modules/app/auth/auth.controller.ts#L180) |
+| GET | `/api/app/auth/email/available` | `AuthController.emailAvailable` | [查看](https://github.com/GaoshuoZhang/Joinyuu-api/blob/main/src/modules/app/auth/auth.controller.ts#L46) |
+| POST | `/api/app/auth/email/send` | `AuthController.sendEmailCode` | [查看](https://github.com/GaoshuoZhang/Joinyuu-api/blob/main/src/modules/app/auth/auth.controller.ts#L70) |
+| POST | `/api/app/auth/login` | `AuthController.login` | [查看](https://github.com/GaoshuoZhang/Joinyuu-api/blob/main/src/modules/app/auth/auth.controller.ts#L113) |
+| POST | `/api/app/auth/login-by-code` | `AuthController.loginByCode` | [查看](https://github.com/GaoshuoZhang/Joinyuu-api/blob/main/src/modules/app/auth/auth.controller.ts#L154) |
+| POST | `/api/app/auth/logout` | `AuthController.logout` | [查看](https://github.com/GaoshuoZhang/Joinyuu-api/blob/main/src/modules/app/auth/auth.controller.ts#L162) |
+| GET | `/api/app/auth/recovery-channels` | `AuthController.recoveryChannels` | [查看](https://github.com/GaoshuoZhang/Joinyuu-api/blob/main/src/modules/app/auth/auth.controller.ts#L85) |
+| POST | `/api/app/auth/register` | `AuthController.register` | [查看](https://github.com/GaoshuoZhang/Joinyuu-api/blob/main/src/modules/app/auth/auth.controller.ts#L106) |
+| POST | `/api/app/auth/reset-code/send` | `AuthController.sendResetCode` | [查看](https://github.com/GaoshuoZhang/Joinyuu-api/blob/main/src/modules/app/auth/auth.controller.ts#L92) |
+| POST | `/api/app/auth/reset-password` | `AuthController.resetPassword` | [查看](https://github.com/GaoshuoZhang/Joinyuu-api/blob/main/src/modules/app/auth/auth.controller.ts#L171) |
+| GET | `/api/app/auth/sms/available` | `AuthController.smsAvailable` | [查看](https://github.com/GaoshuoZhang/Joinyuu-api/blob/main/src/modules/app/auth/auth.controller.ts#L39) |
+| POST | `/api/app/auth/sms/send` | `AuthController.sendSmsCode` | [查看](https://github.com/GaoshuoZhang/Joinyuu-api/blob/main/src/modules/app/auth/auth.controller.ts#L54) |
+| POST | `/api/app/auth/wechat-mini/bind` | `AuthController.wechatMiniBind` | [查看](https://github.com/GaoshuoZhang/Joinyuu-api/blob/main/src/modules/app/auth/auth.controller.ts#L133) |
+| POST | `/api/app/auth/wechat-mini/login` | `AuthController.wechatMiniLogin` | [查看](https://github.com/GaoshuoZhang/Joinyuu-api/blob/main/src/modules/app/auth/auth.controller.ts#L124) |
+| POST | `/api/app/auth/wechat-mini/rebind` | `AuthController.wechatMiniRebind` | [查看](https://github.com/GaoshuoZhang/Joinyuu-api/blob/main/src/modules/app/auth/auth.controller.ts#L148) |
+| POST | `/api/app/auth/wechat-mini/rebind-ticket` | `AuthController.wechatMiniRebindTicket` | [查看](https://github.com/GaoshuoZhang/Joinyuu-api/blob/main/src/modules/app/auth/auth.controller.ts#L142) |
 | GET | `/api/app/card-schema/:type` | `AppEnterprisesController.cardSchema` | [查看](https://github.com/GaoshuoZhang/Joinyuu-api/blob/main/src/modules/app/enterprises/enterprises.controller.ts#L32) |
 | POST | `/api/app/commerce/bills/:id/orders` | `AppCommerceController.billOrder` | [查看](https://github.com/GaoshuoZhang/Joinyuu-api/blob/main/src/modules/commerce/app-commerce.controller.ts#L103) |
 | GET | `/api/app/commerce/capabilities` | `AppCommerceController.capabilities` | [查看](https://github.com/GaoshuoZhang/Joinyuu-api/blob/main/src/modules/commerce/app-commerce.controller.ts#L30) |
@@ -363,6 +373,13 @@
 | POST | `/api/app/demands/:id/respond` | `AppDemandsController.respond` | [查看](https://github.com/GaoshuoZhang/Joinyuu-api/blob/main/src/modules/app/demands/demands.controller.ts#L54) |
 | GET | `/api/app/dicts` | `ConfigController.getDictBundle` | [查看](https://github.com/GaoshuoZhang/Joinyuu-api/blob/main/src/modules/app/config/config.controller.ts#L25) |
 | GET | `/api/app/dicts/:type` | `ConfigController.getDict` | [查看](https://github.com/GaoshuoZhang/Joinyuu-api/blob/main/src/modules/app/config/config.controller.ts#L19) |
+| GET | `/api/app/enterprise-agency/registration/files/:fileId` | `AppEnterpriseAgencyController.file` | [查看](https://github.com/GaoshuoZhang/Joinyuu-api/blob/main/src/modules/app/enterprise-agency/enterprise-agency.controller.ts#L40) |
+| POST | `/api/app/enterprise-agency/registration/uploads` | `AppEnterpriseAgencyController.upload` | [查看](https://github.com/GaoshuoZhang/Joinyuu-api/blob/main/src/modules/app/enterprise-agency/enterprise-agency.controller.ts#L29) |
+| GET | `/api/app/enterprise-agency/registrations` | `AppEnterpriseAgencyController.list` | [查看](https://github.com/GaoshuoZhang/Joinyuu-api/blob/main/src/modules/app/enterprise-agency/enterprise-agency.controller.ts#L62) |
+| POST | `/api/app/enterprise-agency/registrations` | `AppEnterpriseAgencyController.create` | [查看](https://github.com/GaoshuoZhang/Joinyuu-api/blob/main/src/modules/app/enterprise-agency/enterprise-agency.controller.ts#L55) |
+| GET | `/api/app/enterprise-agency/registrations/:id` | `AppEnterpriseAgencyController.detail` | [查看](https://github.com/GaoshuoZhang/Joinyuu-api/blob/main/src/modules/app/enterprise-agency/enterprise-agency.controller.ts#L68) |
+| POST | `/api/app/enterprise-agency/registrations/:id/resubmit` | `AppEnterpriseAgencyController.resubmit` | [查看](https://github.com/GaoshuoZhang/Joinyuu-api/blob/main/src/modules/app/enterprise-agency/enterprise-agency.controller.ts#L81) |
+| POST | `/api/app/enterprise-agency/registrations/:id/withdraw` | `AppEnterpriseAgencyController.withdraw` | [查看](https://github.com/GaoshuoZhang/Joinyuu-api/blob/main/src/modules/app/enterprise-agency/enterprise-agency.controller.ts#L74) |
 | GET | `/api/app/enterprises/:id` | `AppEnterprisesController.enterpriseShowcase` | [查看](https://github.com/GaoshuoZhang/Joinyuu-api/blob/main/src/modules/app/enterprises/enterprises.controller.ts#L174) |
 | GET | `/api/app/events` | `AppEventsController.list` | [查看](https://github.com/GaoshuoZhang/Joinyuu-api/blob/main/src/modules/app/events/events.controller.ts#L15) |
 | GET | `/api/app/events/:id` | `AppEventsController.detail` | [查看](https://github.com/GaoshuoZhang/Joinyuu-api/blob/main/src/modules/app/events/events.controller.ts#L26) |

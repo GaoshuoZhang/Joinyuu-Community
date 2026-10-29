@@ -260,6 +260,16 @@
 | 租约打印 | /prints/lease/:id | 独立于 AdminLayout 的裸页（window.print 干净纸张）；单据数据取 `GET /admin/leases/:id/print`（标题 + 租约 + 条款，不再拉取整表） | 打印/返回；从租赁列表或详情进入 |
 | 审核单打印 | /prints/approval/:id | 独立裸页；专用打印接口直取详情（不受列表分页限制） | 打印/返回；从申请抽屉进入 |
 
+### 企业代办（企业注册）
+
+- 一级菜单「企业代办」位于「用户留言」之后；二级菜单为企业注册（可用）/ 财税服务 / 工商变更 / 资质许可（后三者为建设中占位页）。
+- 路由：`/enterprise-agency/registration`（列表）、`/enterprise-agency/registration/:id`（详情），占位页同前缀；权限码与路由一致。
+- 列表：状态页签（待处理/代办中/待补充/已完成/已驳回/已撤回）、关键词（申请编号/公司名/联系人/电话）、分页；手机号脱敏，身份证号不在列表展示。
+- 详情：公司、股东、法人/监事/财务、产权材料、私有附件与时间线；操作 = 受理 / 请求补充 / 完成 / 驳回 / 内部备注。
+- 请求补充与驳回必须填原因；内部备注仅后台可见；所有状态变更与附件下载写审计日志。
+- 附件通过带 Bearer 的 Blob 请求预览，禁止把 `/api/private` 或任何私有接口直接作为 `<img src>`；不使用公开 `/api/public/files`。
+- 审批通过只改代办状态，**不授予社区身份、不发积分、不自动创建社区企业**。业务与字段规范见 [企业代办](../features/enterprise-agency.md)。
+
 ## 6. 种子数据模式（唯一来源 `apps/api/prisma/seed-data/`）
 
 - 演示数据唯一来源 = 后端 Prisma 种子（`prisma/seed.ts` + `prisma/seed-data/`，仅在可销毁的隔离库生成演示数据）；实体覆盖 users / enterprises / externalEnterpriseProfiles / applications / demands / projects / events / goods / redemptionOrders / pointsRules(9) / experienceRules(6) / levelTiers / workstationAreas / workstations / leases / spaces / reservations / columns / articles / banners / announcements / adminUsers / adminRoles 等
@@ -309,6 +319,8 @@
 - **交互减法与可访问性**：无面包屑（详情页提供返回）、无列表刷新按钮、无表格批量选择（详见 §4）
 
 ## 10. 后端接入状态
+
+- 用户详情从实际微信绑定表读取当前小程序绑定状态、AppID 与更新时间，兼容早期仅写绑定表的记录；微信绑定不等同于微信实名认证。详情支持手动刷新、窗口重新获得焦点时刷新，以及可见时每 30 秒刷新资料；编辑弹窗打开时暂停后台刷新。
 
 - 后端 `apps/api`（NestJS 11，端口 7757）：路由见生成索引（含 `/api/admin/**`、`/api/app/**` 与 health/public）；admin dev（7758）经 vite proxy 转发 `/api` → `http://127.0.0.1:7757`
 - 本地启动：先准备 API 的环境配置和数据库，启动后端，再在后台仓 pnpm dev。使用当前环境的管理员凭据；无效/过期 token 触发 401 清理与重新登录。禁止把 db:reset 作为日常启动步骤。

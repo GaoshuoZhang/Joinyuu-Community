@@ -9,7 +9,7 @@
 | 管理后台 | [开发规范](admin/development.md) |
 | 移动 Web | [开发规范](mobile/development.md) |
 | 微信小程序 | [开发规范](miniprogram/development.md)、[运行与验证](miniprogram/runtime.md) |
-| 功能规范 | [交易与支付](features/commerce.md)、[客户主题](features/mobile-theme.md)、[主题 Schema](features/mobile-theme.schema.json)、[许可证](features/license.md) |
+| 功能规范 | [企业代办](features/enterprise-agency.md)、[交易与支付](features/commerce.md)、[客户主题](features/mobile-theme.md)、[主题 Schema](features/mobile-theme.schema.json)、[许可证](features/license.md) |
 | 运维 | [部署](operations/deployment.md)、[升级与回滚](operations/upgrade.md) |
 | 版本记录 | [API](releases/api.md)、[后台](releases/admin.md)、[移动 Web](releases/client-mobile.md)、[小程序](releases/wxminiprogram.md) |
 | 文档维护 | [本次核对与清理记录](workspace/documentation-audit.md) |

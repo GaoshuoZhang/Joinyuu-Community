@@ -33,6 +33,16 @@
 | 修改密码 | `POST /api/app/me/change-password` body `{oldPassword?, newPassword}`：**已有密码**的账号必须校验 `oldPassword`；`passwordHash` 为空的账号（验证码建号，即「未设置密码」）首次设置免原密码、免验证码。成功后**强制退出全部会话（含当前会话）**，客户端需重新登录 |
 | 每日登录积分 | 登录成功触发 `daily_login` 规则（PointsRule 固定触发项，种子默认停用；引擎按规则启停发放，自然日去重随 M2 客户端接入落地） |
 
+### 微信小程序身份绑定
+
+- `POST /api/app/auth/wechat-mini/login` 接收 `{ code }`。未绑定时返回 `needBind: true`、10 分钟有效的 `ticket` 和 `channels: { phone, email, password }`；`password: true` 表示支持绑定已有账号，不受注册渠道开关限制。
+- `POST /api/app/auth/wechat-mini/bind` 保留手机号/邮箱验证码请求 `{ ticket, channel: 'phone' | 'email', identifier, code, agreed: true }`，新增 `{ ticket, channel: 'password', identifier, password, captchaId?, captchaCode?, agreed: true }`。密码方式的 identifier 支持用户名、手机号、邮箱，只关联已有且正常的账号，不自动注册。
+- 密码绑定与普通密码登录共用按 IP + 规范化账号的失败计数：连续错误 3 次要求图形验证码（428），达到锁定条件返回 429。错误密码在绑定接口返回 400，避免客户端将其当作会话失效而退出绑定页面。冻结、注销、未设置密码、账号不存在均不能借此建号。
+- 校验失败不消费绑定票据，允许在有效期内重试；验证通过后原子消费，同一票据最多绑定一次。验证码方式需要新建账号时，用户、身份、协议记录和微信绑定在同一事务中提交；绑定失败全部回滚。已有微信关联冲突返回 409，不覆盖原关系。
+- 上线时先更新 API，再更新小程序；旧小程序的验证码请求继续兼容。小程序仅在服务端声明 `channels.password` 时显示账号密码方式。
+- 换绑从小程序「账号与安全」发起：已登录请求 `POST /api/app/auth/wechat-mini/rebind-ticket { code }`，返回绑定当前用户的 ticket、可用 channels 和该用户各方式对应的 identifiers。再向 `POST /api/app/auth/wechat-mini/rebind` 提交相同验证载荷，重新验证当前账号后替换当前小程序 AppID 下的绑定；两步均要求 App JWT 和有效许可证。换绑票据不能用于公开绑定接口，也不能由其他用户使用。当前微信已绑定他人时拒绝换绑，原关系保留；换绑绝不创建用户。
+- 绑定/换绑事务同步 `User.wechatOpenid/wechatUnionid`，不把微信登录认证当作微信实名认证。后台详情兼容旧绑定表记录，并返回 `wechatMiniAppId/wechatMiniBoundAt`；`GET /api/app/me` 下发 `wechatMiniBound/wechatMiniBoundAt/wechatMiniLoginEnabled`，供账号安全入口展示。时间字段 `wechatMiniBoundAt` 为绑定表 DateTime 的 ISO 字符串。
+
 ## 3. 通用约定（沿用 wiki-backend §4）
 
 - 响应包络 `{ code: 0, data }`；错误 `{ code, message }`，中文文案风格与 M0 一致。
@@ -214,3 +224,33 @@
 ## 现金交易
 
 /api/app/commerce 已包含报价、订单、支付、微信授权、小程序 openid 绑定、取消与退款申请；/api/app/me 包含现金交易和账单。流程、资源占用与验收边界见 [交易与支付](../features/commerce.md)。旧积分接口仍拒绝现金商品/空间，不能绕过收银台免费履约。
+
+
+## 企业代办
+
+企业代办是独立业务域，不复用身份类 `/api/app/applications`：提交通过只改代办状态，不授予社区身份、不发积分。本期只开放 `serviceType=registration`。
+
+| 方法 | 路径 | 说明 |
+|---|---|---|
+| POST | `/api/app/enterprise-agency/registration/uploads` | 私有附件上传（JPG/PNG/GIF/WebP/PDF，≤10MB），返回 `{ fileId,name,size,mime }`，不返回公开 URL |
+| GET | `/api/app/enterprise-agency/registration/files/:fileId` | 本人附件读取（鉴权 Blob） |
+| POST | `/api/app/enterprise-agency/registrations` | 提交企业注册申请；`payload` 含公司、股东数组、法人/监事/财务、产权材料、联系人、授权 |
+| GET | `/api/app/enterprise-agency/registrations` | 我的办理记录 |
+| GET | `/api/app/enterprise-agency/registrations/:id` | 我的申请详情（内部备注不返回） |
+| POST | `/api/app/enterprise-agency/registrations/:id/withdraw` | 撤回（仅 `pending`） |
+| POST | `/api/app/enterprise-agency/registrations/:id/resubmit` | 待补充/已驳回/已撤回 → 待处理 |
+
+管理端（`@RequirePermission('/enterprise-agency/registration')`）：
+
+| 方法 | 路径 | 说明 |
+|---|---|---|
+| GET | `/api/admin/enterprise-agency/registrations` | 列表：`status` + `keyword`（申请编号/公司名/联系人/电话）+ 分页 |
+| GET | `/api/admin/enterprise-agency/registrations/:id` | 详情（含申请人、完整资料、时间线；写审计） |
+| GET | `/api/admin/enterprise-agency/registrations/:id/files/:fileId` | 私有附件读取（写审计） |
+| POST | `.../:id/accept` | `pending → processing`；`comment` 可选 |
+| POST | `.../:id/request-info` | `pending/processing → needs_info`；`reason` 必填 |
+| POST | `.../:id/complete` | `processing/needs_info → completed`；`comment` 可选 |
+| POST | `.../:id/reject` | `pending/processing/needs_info → rejected`；`reason` 必填 |
+| POST | `.../:id/notes` | 内部备注（`visibility=admin`，用户端不可见） |
+
+状态：`pending / processing / needs_info / completed / rejected / withdrawn`。同一用户同一时间只允许一单进行中。字段、校验与隐私边界见 [企业代办](../features/enterprise-agency.md)。
