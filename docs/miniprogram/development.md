@@ -5,9 +5,9 @@
 > 本文是 `apps/client-mobile` → `apps/wxminiprogram` 全量移植的统一规范。
 > 新增页面前**先读**本文；公共基础设施变更需评估所有页面并运行验证。
 
-> **例外：企业代办**。本期「企业代办 / 企业注册」仅在移动 Web、管理后台与后端提供，
-> 按用户明确要求不移植小程序；小程序端不要新增对应入口或页面。恢复移植时需重新按本文契约实现，
-> 不能照搬 Vue 组件或私有附件上传链路。业务规范见 [企业代办](../features/enterprise-agency.md)。
+> **企业代办**：用户已明确要求从移动 Web 移植至小程序，入口、四步表单及详情位于
+> `pkg/pages/me/enterprise-agency`。按本端 TDesign API 实现，证件只使用代办专用私有上传与鉴权预览接口。
+> 业务规范见 [企业代办](../features/enterprise-agency.md)。
 
 ## 1. 技术栈与目录
 
@@ -19,6 +19,11 @@
   这些目录，上传时由 ignore 规则剔除；若某个组件首次被使用，需从 ignore 列表移除对应条目。
 - 图片地址：后端下发的头像/logo/封面/正文图片均为相对路径，必须经 `utils/url.js` 的 `absoluteUrl`
   补全后再交给 `image`/`rich-text`；富文本走 `sanitizeHtml`（内部已统一处理）。
+  请求和上传封装已统一补全嵌套数据中的 `/api/public/files/`、`/api/public/mobile-themes/` 资源地址；
+  Markdown 正文图片仍须在解析时调用 `absoluteUrl`，正文文本与私有文件地址不会被响应转换器改写。
+
+- `npm test`、`npm run lint` 均包含 `npm run check:styles`，实际编译项目全部 Less 文件，支持小程序根目录导入。
+  运行时 CSS 变量不能参与 Less 取负或乘除运算，使用 CSS `calc()`；纯 JS/JSON 检查不能替代样式编译。
 
 
 - 原生小程序：WXML + WXSS(Less) + JS(ES Module)，业务页面使用 JavaScript 与本地组件；npm 依赖仍按 package-lock.json 安装。
@@ -319,5 +324,8 @@ Page(withTheme({
 - 大卡片须同时带 `card card-lg`；`card-lg` 只补内距，不提供背景、纵向布局或元素间距。
 - 操作按钮与图标按钮最小命中区 44px；筛选 CheckTag 保持 32px 紧凑规格，使用 `filter-tag-host` / `td-filter-tag` 分别控制宿主收缩和内部样式。
 - 长表单通过 `withTheme` 的 `formGuard: { fields, handlers }` 明确声明编辑数据与编辑事件；服务端回填不启用保护，保存成功调用 `markFormSaved()`。自定义返回经 `goBack()` 调用 `confirmFormLeave()`；平台 API 不拦截侧滑退出，真机手势仍需验收。
+  schema 表单的值位于页面实例而非 data 时，使用 `snapshot: page => ({ values: page.values, files: page.files })` 提供实际业务快照，避免将字段错误、加载状态纳入脏值；卸载后迟到的响应不得重新启用保护。
+- 位于固定底部弹层中的 TDesign Textarea 必须声明 `fixed="{{true}}"`；提交中禁用编辑，防止异步提交成功后覆盖新的输入。
+- 多行支付/报名栏的正文留白使用 `@action-bar-clearance-large` 加一次底部安全区；宽屏令牌稳定为 170px，不随 rpx 放大。Web 的 `--app-action-bar-clearance-lg` 已含安全区，使用方不得重复叠加。
 - 轮播默认静止，用户主动开启后可暂停，页面隐藏停止播放；骨架屏和自定义底栏也遵循减少动态效果。
 - 本轮详细问题、跨端对应与验证边界见 [2026-10-30 审查记录](ui-ux-audit-2026-10-30.md)。
