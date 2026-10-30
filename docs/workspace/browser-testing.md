@@ -6,6 +6,8 @@
 
 小程序验收通过wechatide-skill连接开发者工具，运行时只将7757重定向到隔离17757，不改正式配置。编译后须等待实际运行时恢复再安装包装；先安全备份原会话，结束恢复接口、会话及主题。源码编译会清内存包装，不能把触发刷新当成编译已完成。
 
+企业代办开关专项可在fixture就绪且开发者工具运行稳定后执行 `pwsh -NoProfile -File scripts/browser/enterprise-agency-switches-mini.ps1`（根仓）。可传绝对 `-WorkspaceRoot` 与 `-EvidenceDirectory`；默认证据写API `.tmp/enterprise-visibility-mini`。脚本使用合成隔离账号，逐项保存配置并实际导航、滚动截图，结束恢复原配置与小程序会话/API包装。退出后刷新模拟器清除模块内账号缓存，再停止fixture。此脚本不启动fixture、不修改日常库，也不替代手机真机验证。
+
 dual-end-browser-e2e.mjs 验证后台与移动 Web 的既有整套业务流程，不属于单仓单元测试。先启动使用隔离数据的联调环境，并按脚本指定 PLAYWRIGHT_PACKAGE 指向已安装的 Playwright 包；默认保留原本本地 Codex runtime 路径。
 
 脚本包含业务写入，应只连接专用测试账号与隔离测试库，不能在生产或日常数据环境运行。独立仓库安装与构建无需 Playwright；日常迁移验收使用各仓测试及只读健康冒烟。

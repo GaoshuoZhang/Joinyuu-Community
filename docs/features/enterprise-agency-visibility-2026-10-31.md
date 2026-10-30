@@ -26,8 +26,14 @@ API typecheck/lint/build、30套205项unit、注册/扩展/monitor隔离e2e共62
 
 文件为`children-off.png`、`master-off-mobile.png`、`master-off-admin.png`。本地复现驱动为根目录`.tmp-visibility.cjs`，依赖隔离fixture私有文件及17757/17758/17759，不提交临时脚本或令牌。长期闭环脚本的暂停卡片断言已同步改为隐藏。
 
-微信工具已刷新，实际运行时`getApp().ensureConfig(true)`读到master/registration为true，console错误查询为空。**本次尚未在小程序真实模拟器逐项切换开关截图**；小程序已有自动化行为检查，切换后的真机截图留作进一步验收，不能拿Web截图替代。Prisma generate仍遇既有Windows DLL占用EPERM，类型/构建/测试通过；依赖升级前关闭占用后重生成。
+微信工具已刷新，实际运行时读到新开关，console错误查询为空。续作已通过微信开发者工具补齐小程序开关验收：财税、工商变更、资质许可逐项关闭隐藏/重新开启恢复；注册关闭后hub卡片及企业合作/人才介绍页引流卡隐藏，新注册直达页回到hub；总关闭后hub直达回到“我的”页且宫格没有企业代办，企业合作页也无引流卡；总开关重新开启保留子项设置，四服务恢复。已有注册办理记录全程保留。
+
+小程序证据绝对目录为 `D:\Projects\Joinyuu-Community\apps\api\.tmp\enterprise-visibility-mini-20261031\`，共33张截图（每页0/650/1300滚动位置）及`report.json`。重点文件：`off-finance_tax-0.jpg`、`off-business_change-0.jpg`、`off-license-0.jpg`、`registration-off-hub-0.jpg`、`registration-off-intro-enterprise-650.jpg`、`registration-off-intro-talent-650.jpg`、`master-off-me-650.jpg`、`master-off-intro-650.jpg`、`reopened-hub-0.jpg`。已目视核对服务卡过滤、介绍页无残留空卡和我的页宫格收拢，未发现新的产品缺陷。
+
+初次脚本直接等待onShow返回，但原页面onShow不返回异步load，因此读到了旧目录；改为等待目录load完成后复测通过。这是验收脚本时序问题，无业务源码修复。驱动已整理为根仓 `scripts/browser/enterprise-agency-switches-mini.ps1`（可传WorkspaceRoot/EvidenceDirectory，PowerShell语法检查通过），仅连接隔离17757，依赖fixture生成的私有文件；本轮实际执行源在API `.tmp/test-mini-switches.ps1`，两者检查主体一致。结果后恢复原会话、API包装与隔离配置，停止fixture并刷新模拟器清除内存账号缓存，不改日常配置。
+
+Prisma generate此前遇既有Windows DLL占用EPERM，类型/构建/测试通过；依赖升级前关闭占用并重新生成。此次仅补齐验收和脚本，没有改动业务源码或重跑无关检查；实体机验收仍未完成。
 
 ## 后续
 
-优先在隔离小程序运行时验证总关闭回跳与介绍卡隐藏，并覆盖开→关→开、旧单补件；保存截图。随后继续 [上一轮剩余验收](enterprise-services-acceptance-2026-10-31.md) 中真机/大字号/键盘、复杂条件与专项竞争测试。本轮没有实现收费系统，自动清理仍未启用。
+本次入口开关需求的模拟器验证已完成；旧单重提的接口回归仍以此前62项专项结果为准。本次没有重新提交旧单材料，不把“记录保留”扩大成所有补件组合验收。其他后续见 [上一轮剩余验收](enterprise-services-acceptance-2026-10-31.md) 中真机/大字号/键盘、复杂条件与专项竞争测试。本轮没有实现收费系统，自动清理仍未启用。
