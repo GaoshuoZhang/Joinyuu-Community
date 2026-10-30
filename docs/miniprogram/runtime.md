@@ -43,9 +43,9 @@ H5 与小程序两侧同一结构与同一套数据（`GET /api/app/me/stats`）
 
 ## 微信一键登录
 
-**配置在后台**：系统配置 → 功能开关 → 「微信一键登录」（开关 + 小程序 AppID + AppSecret）。
+**配置在后台**：系统配置 → 功能开关 → 「微信小程序一键登录」（独立开关 + 小程序 AppID + AppSecret；与移动 Web 的网站应用扫码登录配置互不影响）。
 服务端读取该配置（环境变量 `WXMINI_APPID/WXMINI_APP_SECRET` 仅作未配置时的回退），
-小程序登录页按 `/api/app/config` 的 `wxLoginOpen` 决定是否显示入口。
+小程序登录页按 `/api/app/config` 的 `wxLoginOpen`（仅小程序渠道开关）决定是否显示入口。
 
 登录流程（两次请求）：
 
@@ -66,7 +66,7 @@ H5 与小程序两侧同一结构与同一套数据（`GET /api/app/me/stats`）
 小程序支付与 JSAPI 共用下单接口，差别只有两处：`appid` 必须是**小程序 AppID**，`payer.openid` 必须是用户在该
 AppID 下的 openid；调起支付签名的 `appId` 必须与下单一致（微信会校验）。小程序调起支付不校验 JSAPI 授权目录。
 
-- 凭证：复用「系统配置 → 功能开关 → 微信一键登录」里的小程序 AppID / AppSecret；商户参数仍在「系统配置 → 收款配置」。
+- 凭证：复用「系统配置 → 功能开关 → 微信小程序一键登录」里的小程序 AppID / AppSecret；商户参数仍在「系统配置 → 收款配置」。
 - 前置（微信侧，后台只做提示）：商户平台已开通 JSAPI/小程序支付权限，并完成「小程序 AppID 授权绑定商户号」。
 - 绑定：收银台发起支付时，若当前账号还没绑定小程序 openid，后端返回 `requiresMiniBind`，小程序 `wx.login`
   取 code 调 `POST /api/app/commerce/wechat/mini/bind` 绑定后自动重试一次。

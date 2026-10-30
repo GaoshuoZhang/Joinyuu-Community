@@ -257,7 +257,7 @@
 
 ## 微信网站应用（扫码）一键登录
 
-移动 Web 的微信扫码登录基于微信开放平台「网站应用」OAuth2（[官方文档](https://developers.weixin.qq.com/doc/oplatform/Website_App/WeChat_Login/Wechat_Login.html)）。AppID/AppSecret/授权回调地址在后台「系统配置 → 微信一键登录」配置（AppSecret 只写、不回传原文）；环境变量 `WXWEB_APPID / WXWEB_APP_SECRET / WXWEB_REDIRECT_URI` 仅作回退。开关复用「微信一键登录」总开关 `wxLoginOpen`；`GET /api/app/config` 的 `wxWebLoginOpen` 表示总开关开启且网站应用配置齐全。
+移动 Web 的微信扫码登录基于微信开放平台「网站应用」OAuth2（[官方文档](https://developers.weixin.qq.com/doc/oplatform/Website_App/WeChat_Login/Wechat_Login.html)）。AppID/AppSecret/授权回调地址在后台「系统配置 → 功能开关 → 微信网站应用（扫码）登录 · 移动客户端」配置（AppSecret 只写、不回传原文）；环境变量 `WXWEB_APPID / WXWEB_APP_SECRET / WXWEB_REDIRECT_URI` 仅作回退。该渠道有独立开关 `wxWebLoginOpen`，与小程序一键登录的 `wxLoginOpen` 互不影响；`GET /api/app/config` 的 `wxWebLoginOpen` 表示网站应用开关开启且配置齐全。
 
 | 方法 | 路径 | 说明 |
 |---|---|---|

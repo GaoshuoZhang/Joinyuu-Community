@@ -8,12 +8,13 @@
 
 ### 新增
 
-- 新增微信网站应用（扫码）一键登录：`GET /api/app/auth/wechat-web/start` 下发 OAuth 授权地址、`POST /api/app/auth/wechat-web/login` 以授权码登录；未绑定签发一次性票据复用 `wechat-mini/bind` 完成绑定（票据按 appid 区分来源，unionid 跨渠道并号）。后台系统配置新增网站应用 AppID/AppSecret（只写）/授权回调地址，`/api/app/config` 新增 `wxWebLoginOpen`。
+- 新增微信网站应用（扫码）一键登录：`GET /api/app/auth/wechat-web/start` 下发 OAuth 授权地址、`POST /api/app/auth/wechat-web/login` 以授权码登录；未绑定签发一次性票据复用 `wechat-mini/bind` 完成绑定（票据按 appid 区分来源，unionid 跨渠道并号）。后台系统配置新增网站应用独立开关、AppID/AppSecret（只写）与授权回调地址，`/api/app/config` 新增 `wxWebLoginOpen`。
 - 新增企业代办（企业注册）独立业务域：`EnterpriseAgencyRequest` / `EnterpriseAgencyFile` 模型、客户端提交/记录/详情/撤回/重提、管理端列表/详情/受理/请求补充/完成/驳回/内部备注，以及私有附件上传与鉴权读取。审核通过只改代办状态，不授予社区身份、不发积分。
 - 新增 4 个「企业代办」菜单权限码并授予运营角色；私有附件不生成公开 URL，管理端读取与状态变更写审计日志。
 
 ### 变更
 
+- 微信小程序与微信网站应用（扫码）登录拆为独立开关：小程序沿用 `wxLoginOpen`，网站应用新增 `wxWebLoginOpen`；只启用其中一个时无需填写另一渠道参数，移动端 `wxWebLoginOpen` 仅由网站应用开关与配置完整度决定，不再受小程序开关影响。存量部署按原有效状态回填（原总开关开启且网站应用配置齐全时自动开启）。
 - 微信小程序绑定新增账号密码方式，复用登录风控，仅关联已有账号；校验失败可重试，验证码注册与微信绑定同事务提交，绑定失败不残留新用户，冲突不覆盖已有绑定。
 - 新增当前账号微信换绑票据与验证接口，原子替换本人绑定；同步后台用户展示字段，并为个人资料下发小程序绑定状态。
 - 拆分为独立 Git 仓库，保留历史与在途修改；安装、检查和构建不再依赖父工作区。
