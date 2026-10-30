@@ -9,6 +9,8 @@
 > `pkg/pages/me/enterprise-agency`。按本端 TDesign API 实现，证件只使用代办专用私有上传与鉴权预览接口。
 > 业务规范见 [企业代办](../features/enterprise-agency.md)。
 
+> 财税、工商变更、资质许可的表单为 `pkg/pages/me/enterprise-services/<service>/index`，详情为同目录 `detail/index`，不可省略末尾index。提交成功保存返回编号；重提回填原联系人，保存后回到前一同申请详情或替换当前页，避免十层页面栈溢出。枢纽接入目录开关、activeByService及游标追加；站内信Web路径经utils/link映射到分包页。未保存保护覆盖输入、动态选项及上传，成功后清除，敏感草稿不持久化。
+
 ## 1. 技术栈与目录
 
 - **分包结构**：主包只保留 5 个 Tab 页、登录注册、全局搜索与 webview；其余全部页面位于单一分包

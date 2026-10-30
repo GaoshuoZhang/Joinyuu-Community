@@ -1667,6 +1667,9 @@ model SystemConfig {
   mallOpen              Boolean @default(true)
   demandOpen            Boolean @default(true)
   reservationOpen       Boolean @default(true)
+  enterpriseTaxOpen Boolean @default(false)
+  enterpriseChangeOpen Boolean @default(false)
+  enterpriseLicenseOpen Boolean @default(false)
   /** 客户端在线收款模块开关（与微信商户启用状态同时满足才允许新建支付） */
   cashMallOpen          Boolean @default(false)
   cashSpaceOpen         Boolean @default(false)

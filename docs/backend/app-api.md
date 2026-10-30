@@ -266,8 +266,8 @@
 | 方法 | 路径 | 说明 |
 |---|---|---|
 | GET | `/api/app/enterprise-services/catalog` | 服务目录：`code/name/route/enabled/disabledReason` + 目录版本 |
-| GET | `/api/app/enterprise-services/mine` | 我的聚合记录：跨四服务按 `submittedAt+serviceType+id` 稳定倒序，`cursor/pageSize` 分页，返回 `list/nextCursor/hasMore`；不含 payload 与内部备注 |
-| POST | `.../enterprise-services/:service/uploads` | 分服务私有上传（JPG/PNG/GIF/WebP/PDF，≤10MB）；服务域取自路由，返回 `fileId/name/size/mime` |
+| GET | `/api/app/enterprise-services/mine` | 我的聚合记录：跨四服务稳定排序，`cursor/pageSize` 分页，返回 `list/nextCursor/hasMore/activeByService`；后者为各服务的进行中摘要（无则null），不受当前分页影响，不含payload与内部备注 |
+| POST | `.../enterprise-services/:service/uploads` | 分服务私有上传（JPG/PNG/GIF/WebP/PDF，≤10MB）；返回 `fileId/name/size/mime`。新单须服务启用；旧单补件带 `?requestId=<id>`，校验本人、服务与needs_info/rejected/withdrawn状态，暂停时仍可补件 |
 | GET | `.../enterprise-services/:service/files/:fileId` | 本人分服务附件读取（鉴权 Blob，private/no-store） |
 | POST | `.../enterprise-services/:service/applications` | 提交：`{ payload }`；可选 `x-idempotency-key`（语义同注册代办） |
 | GET | `.../enterprise-services/:service/applications` | 我的该服务记录 |
@@ -291,6 +291,10 @@
 | POST | `.../:id/notes` | 内部备注（用户端不可见，不发通知） |
 
 三个服务在注册表中为独立模型（`EnterpriseTaxEngagement` 前缀 TE、`BusinessChangeRequest` 前缀 BR、`LicenseApplication` 前缀 LA），附件经 `EnterpriseAgencyFile.domain + taxRequestId/changeRequestId/licenseRequestId` 类型化绑定（数据库 CHECK 保证恰一归属）。需部署迁移 `20261030140000_enterprise_services_expansion`。表单字段矩阵、条件卡版本与完成语义见 [企业代办](../features/enterprise-agency.md)。
+
+后台系统配置新增 `enterpriseTaxOpen/enterpriseChangeOpen/enterpriseLicenseOpen`（布尔值，默认false，旧载荷省略时保持原值）。目录与创建检查即时读库；新建在事务内对配置行加共享锁，与暂停写入串行化。关闭不影响旧申请的查询、合法重提/撤回及既有请求的幂等重放；新创建及无申请上下文上传返回403。跨服务/跨用户补件上下文返回404。
+
+扩展服务时间线写入锁定对应独立申请表；附件绑定同时检查domain与四类关联，未绑定材料也不可跨域复用。孤儿清理须四类关联均为空，数据库禁止绑定材料进入deleting。增量迁移为 `20261031010000_enterprise_service_switches`、`20261031011000_enterprise_service_cleanup_guard`，不使用seed重置存量数据。
 
 ## 微信网站应用（扫码）一键登录
 
