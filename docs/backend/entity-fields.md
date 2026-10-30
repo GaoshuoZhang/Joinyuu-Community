@@ -2,7 +2,7 @@
 
 由 `node scripts/generate-reference.mjs` 从 `apps/api/prisma/schema.prisma` 生成；不手工修改。字段、关系和 Schema 索引如下；数据库 CHECK、触发器和部分索引还需查看 `apps/api/prisma/migrations/`。DTO 校验和权限约束不由本清单替代。
 
-共 84 个模型或枚举。
+共 85 个模型或枚举。
 
 ## MobileThemePackage
 
@@ -664,9 +664,35 @@ model EnterpriseAgencyFile {
   createdAt  String  @db.VarChar(16)
   deletedAt  String? @db.VarChar(16)
 
+  // 未绑定文件清理认领；deleting 文件禁止读取与绑定，失败后可恢复重试。
+  cleanupState     String    @default("active") @db.VarChar(16)
+  cleanupClaimedAt DateTime?
+  cleanupAttempts  Int       @default(0)
+
   @@index([userId])
   @@index([requestId])
   @@index([deletedAt])
+  @@index([cleanupState, createdAt])
+}
+```
+
+## AppIdempotencyKey
+
+```prisma
+model AppIdempotencyKey {
+  id            String @id @db.VarChar(36)
+  userId        String @db.VarChar(16)
+  scope         String @db.VarChar(48)
+  action        String @db.VarChar(24)
+  key           String @db.VarChar(64)
+  payloadDigest String @db.VarChar(64)
+  status        String @default("completed") @db.VarChar(16)
+  response      Json
+  createdAt     String @db.VarChar(16)
+  expiresAt     String @db.VarChar(16)
+
+  @@unique([userId, scope, action, key])
+  @@index([expiresAt])
 }
 ```
 

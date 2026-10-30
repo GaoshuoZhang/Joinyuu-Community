@@ -232,13 +232,15 @@
 
 | 方法 | 路径 | 说明 |
 |---|---|---|
-| POST | `/api/app/enterprise-agency/registration/uploads` | 私有附件上传（JPG/PNG/GIF/WebP/PDF，≤10MB），返回 `{ fileId,name,size,mime }`，不返回公开 URL |
+| POST | `/api/app/enterprise-agency/registration/uploads` | 私有附件上传（JPG/PNG/GIF/WebP/PDF，上限取系统上传配置，默认10MB），返回 `{ fileId,name,size,mime }`，不返回公开 URL |
 | GET | `/api/app/enterprise-agency/registration/files/:fileId` | 本人附件读取（鉴权 Blob） |
-| POST | `/api/app/enterprise-agency/registrations` | 提交企业注册申请；`payload` 含公司、股东数组、法人/监事/财务、产权材料、联系人、授权 |
+| POST | `/api/app/enterprise-agency/registrations` | 提交企业注册申请；`payload` 含公司、股东数组、法人/监事/财务、产权材料、联系人、授权。可选请求头 `x-idempotency-key`（1–64 位可见 ASCII）：同键同载荷重放原响应（返回原申请 ID），同键不同载荷 409；键记录与业务写入同事务，过期时间 24 小时，过期后同键视为新请求 |
 | GET | `/api/app/enterprise-agency/registrations` | 我的办理记录 |
 | GET | `/api/app/enterprise-agency/registrations/:id` | 我的申请详情（内部备注不返回） |
 | POST | `/api/app/enterprise-agency/registrations/:id/withdraw` | 撤回（仅 `pending`） |
-| POST | `/api/app/enterprise-agency/registrations/:id/resubmit` | 待补充/已驳回/已撤回 → 待处理 |
+| POST | `/api/app/enterprise-agency/registrations/:id/resubmit` | 待补充/已驳回/已撤回 → 待处理；幂等键语义同提交，载荷摘要额外绑定申请 ID |
+
+客户端幂等键约定（P0-6/S3）：移动 Web 与小程序在表单内容变化后重新生成键，自上次内容变化以来的提交/重试共用同一键；键仅保存在内存，不写入本地存储。未携带键保持原语义（不重放），重复提交仍被「同用户同服务仅一单进行中」约束与材料绑定校验拦截。过期幂等记录由调度任务 `app-idempotency-cleanup` 每小时清理。
 
 管理端（`@RequirePermission('/enterprise-agency/registration')`）：
 
@@ -253,7 +255,7 @@
 | POST | `.../:id/reject` | `pending/processing/needs_info → rejected`；`reason` 必填 |
 | POST | `.../:id/notes` | 内部备注（`visibility=admin`，用户端不可见） |
 
-状态：`pending / processing / needs_info / completed / rejected / withdrawn`。同一用户同一时间只允许一单进行中。字段、校验与隐私边界见 [企业代办](../features/enterprise-agency.md)。
+状态：`pending / processing / needs_info / completed / rejected / withdrawn`。同一用户同服务只允许一单未归档的进行中申请（pending/processing/needs_info），新建及旧单重提均校验，冲突返回409。数据库部分唯一索引兜底，事务行锁保护时间线追加；申请、文件绑定、站内信与后台操作审计原子提交，失败全部回滚。重复状态动作返回409。字段、校验与隐私边界见 [企业代办](../features/enterprise-agency.md)。
 
 ## 微信网站应用（扫码）一键登录
 

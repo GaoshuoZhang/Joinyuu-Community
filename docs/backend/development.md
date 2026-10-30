@@ -85,7 +85,7 @@
       contents/          # 资讯/投稿/栏目/展示页申请/公告
       assets/            # 素材库（上传/替换/删除 + 公开读取 files.controller）
       system/            # 配置/字典/审计查询/通知/工作台 + roles/admins/login-logs/monitor/trash/export
-    scheduler/           # 10 个定时任务（发布/活动结束/冻结到期/租约临期/自动归档/自动删除/消息投递/券码过期退款/日志保留期清理）
+    scheduler/           # 任务注册以 scheduler.service.ts 为准；包含企业代办孤儿附件预检/清理
 ```
 
 **本仓命令**（本仓 `package.json` 定义）：
@@ -562,6 +562,8 @@ pnpm test:e2e        # e2e 全量（需 Docker 服务；每套件自行重种子
 - **实现方式**：每域 Service 内显式状态/前置校验，非法流转抛 409（文案="仅 XX 的 XX 可 XX"，与 M0 一致）；每个归档端点同样校验可归档状态，不做通用状态机框架。
 
 ### 8.2 定时任务（@nestjs/schedule，任务注册以 scheduler.service.ts 为准）
+
+企业代办新增 `enterprise-agency-orphan-cleanup`，每小时第10分钟执行，默认只预检。`ENTERPRISE_AGENCY_ORPHAN_CLEANUP_ENABLED=true` 才删除，`ENTERPRISE_AGENCY_ORPHAN_GRACE_HOURS` 默认72小时（允许24–720小时）。仅未绑定、超宽限期的上传可被认领，已绑定历史材料不参与。`cleanupState=deleting` 阻止读取与绑定；对象删除失败保留认领状态，15分钟后可重试，`cleanupAttempts` 记录次数；对象已不存在可正常完成。Redis任务锁外另有数据库条件认领兜底，多实例不会同时认领有效租约。启用前须核对预检日志及运营告知，未确定策略时保持默认预检。
 | 任务名 | 频率 | 逻辑 |
 |---|---|---|
 | demands-events-scheduled-publish | 每 30 秒 | `demands/events` 中 status=scheduled 且 scheduledAt≤now 且未归档 → published（活动同时 open 报名）+ 写 schedule 通知，事务内完成 |
