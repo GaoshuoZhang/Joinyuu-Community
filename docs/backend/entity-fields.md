@@ -1667,6 +1667,8 @@ model SystemConfig {
   mallOpen              Boolean @default(true)
   demandOpen            Boolean @default(true)
   reservationOpen       Boolean @default(true)
+  enterpriseAgencyOpen Boolean @default(true)
+  enterpriseRegistrationOpen Boolean @default(true)
   enterpriseTaxOpen Boolean @default(false)
   enterpriseChangeOpen Boolean @default(false)
   enterpriseLicenseOpen Boolean @default(false)

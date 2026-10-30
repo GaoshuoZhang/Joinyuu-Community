@@ -186,3 +186,10 @@ Web详情为表单路径加 `/:id`；小程序详情为对应服务目录下 `de
 系统配置enterpriseTaxOpen、enterpriseChangeOpen、enterpriseLicenseOpen默认为false。旧后台省略新字段时保留原值，显式非布尔值返回400；沿用 `/system/config` 权限及操作审计，目录和新建检查直接读库，关闭与提交竞争同一配置行。
 
 迁移包括 `20261030140000_enterprise_services_expansion`、`20261031010000_enterprise_service_switches` 与 `20261031011000_enterprise_service_cleanup_guard`。正常增量部署，不在日常/生产库执行seed或reset。验收脚本及隔离环境约定见 [浏览器联调](../workspace/browser-testing.md)。生产启用须由运营核对本社区可承接范围和用户告知，测试通过不自动打开线上开关。
+
+
+## 企业代办入口开关（2026-10-31补充）
+
+新增 `enterpriseAgencyOpen` 总开关及 `enterpriseRegistrationOpen` 注册业务开关（均默认true以保持已有注册能力），财税/工商变更/资质许可仍默认false。后台功能开关统一配置并留审计；旧载荷省略新字段保持原值。`/api/app/config`即时返回总开关及注册开关，后台壳读取同一公开配置，无需系统配置权限。
+
+关闭单项时两端隐藏该服务申请卡片、介绍页引流入口；已有办理记录仍保留，旧单合法重提继续可用。关闭总开关时两端隐藏企业代办入口、直达页回到我的页；后台隐藏整个企业代办菜单并拦截直达页，清理已打开代办标签。总开关不覆写各子项设置。API总开关覆盖扩展服务目录和新建检查，注册新建也检查总/子开关；保留旧单读取及办理API，避免隐藏菜单等同删除业务数据。

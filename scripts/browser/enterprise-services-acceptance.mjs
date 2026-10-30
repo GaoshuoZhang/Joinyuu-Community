@@ -134,9 +134,8 @@ try {
   } })
   try {
     await visit('/me/enterprise-agency')
-    await page.getByText('暂未开放新申请，已有申请可继续办理').first().waitFor()
-    const cards = page.locator('.service-cell')
-    for (let index = 0; index < 3; index++) assert.equal(await cards.nth(index).getByRole('button').isDisabled(), true)
+    await page.getByText('我的办理记录', { exact: true }).waitFor()
+    assert.equal(await page.locator('.service-cell').count(), 0)
     await screenshots('paused-hub')
     const adminPage = await context.newPage()
     await adminPage.goto(adminBase + '/#/login')
