@@ -6,7 +6,7 @@
 | --- | --- |
 | 工作区 | [开发与仓库协作](workspace/development.md)、[版本与发布](workspace/versioning.md)、[浏览器联调](workspace/browser-testing.md) |
 | 后端 | [开发规范](backend/development.md)、[客户端 API 约定](backend/app-api.md)、[HTTP 路由索引](backend/routes.md)、[数据模型](backend/entity-fields.md) |
-| 管理后台 | [开发规范](admin/development.md) |
+| 管理后台 | [开发规范](admin/development.md)、[系统管理整理与验收](admin/system-management-2026-10-31.md) |
 | 移动 Web | [开发规范](mobile/development.md) |
 | 微信小程序 | [开发规范](miniprogram/development.md)、[运行与验证](miniprogram/runtime.md)、[UI/UX 审查交接](miniprogram/ui-ux-handoff-2026-10-30.md) |
 | 功能规范 | [企业代办](features/enterprise-agency.md)、[交易与支付](features/commerce.md)、[客户主题](features/mobile-theme.md)、[主题 Schema](features/mobile-theme.schema.json)、[许可证](features/license.md) |

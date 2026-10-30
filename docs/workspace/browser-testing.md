@@ -1,5 +1,7 @@
 # 跨端浏览器联调
 
+系统管理整理专项使用同一隔离fixture17757与后台17758，执行 `node scripts/browser/system-management-acceptance.mjs`。先设置PLAYWRIGHT_PACKAGE（Playwright包package.json的绝对路径），可指定AGENCY_E2E_FIXTURE；覆盖菜单、旧地址、草稿保留、前端权限/数据域组合和浅暗色截图，证据写后台test/artifacts/system-management-20261031。该专项不保存真实配置、不发送通知，权限组合用前端缓存模拟，不代替后端角色鉴权测试。
+
 企业代办专项使用隔离API17757、后台17758与移动Web17759。先在API仓设置AGENCY_BROWSER_FIXTURE=1并执行 `pnpm test:e2e:it --runTestsByPath test/helpers/enterprise-agency-browser.e2e-spec.ts`；它仅重种隔离库，并显式开启测试服务。后台与移动Web构建后分别以PORT=17758/17759、API_PROXY_TARGET=http://127.0.0.1:17757启动 `node server.mjs`。
 
 `scripts/browser/enterprise-services-acceptance.mjs` 使用真实移动Web表单、上传与状态动作验收三类服务，并检查后台开关保存/刷新及服务暂停。设置PLAYWRIGHT_PACKAGE为已安装Playwright的package.json，AGENCY_E2E_FIXTURE为API生成的私有fixture文件，再从根仓运行该脚本；文件含临时令牌，禁止提交或打印。后台另有 `node test/authenticatedE2e.mjs enterprise-agency`，覆盖注册及三类扩展服务列表/详情、受理、补件重提、完成。证据写入后台test/artifacts，包含实际滚动截图及报告。
