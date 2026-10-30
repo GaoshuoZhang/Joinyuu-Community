@@ -2,7 +2,7 @@
 
 由 `node scripts/generate-reference.mjs` 从 `apps/api/prisma/schema.prisma` 生成；不手工修改。字段、关系和 Schema 索引如下；数据库 CHECK、触发器和部分索引还需查看 `apps/api/prisma/migrations/`。DTO 校验和权限约束不由本清单替代。
 
-共 85 个模型或枚举。
+共 88 个模型或枚举。
 
 ## MobileThemePackage
 
@@ -657,6 +657,8 @@ model EnterpriseAgencyFile {
   id         String  @id @db.VarChar(36)
   userId     String  @db.VarChar(16)
   requestId  String? @db.VarChar(16)
+  // 服务域：registration | finance_tax | business_change | license；与四列归属约束共同保证恰一绑定
+  domain     String  @default("registration") @db.VarChar(24)
   storageKey String  @db.VarChar(160)
   name       String  @db.VarChar(255)
   size       Int
@@ -669,10 +671,104 @@ model EnterpriseAgencyFile {
   cleanupClaimedAt DateTime?
   cleanupAttempts  Int       @default(0)
 
+  // 类型化归属：未提交文件四列全空；已绑定文件恰有一列且必须与 domain 匹配（数据库 CHECK + 服务端事务共同保证）
+  taxRequestId     String? @db.VarChar(16)
+  changeRequestId  String? @db.VarChar(16)
+  licenseRequestId String? @db.VarChar(16)
+
   @@index([userId])
   @@index([requestId])
+  @@index([taxRequestId])
+  @@index([changeRequestId])
+  @@index([licenseRequestId])
+  @@index([domain])
   @@index([deletedAt])
   @@index([cleanupState, createdAt])
+}
+```
+
+## EnterpriseTaxEngagement
+
+```prisma
+model EnterpriseTaxEngagement {
+  id           String  @id @db.VarChar(16)
+  userId       String  @db.VarChar(16)
+  companyName  String  @db.VarChar(128)
+  contactName  String  @db.VarChar(64)
+  contactPhone String  @db.VarChar(32)
+  // bookkeeping | historical_cleanup | annual_filing（查询列；其余类型化字段在 payload）
+  purpose      String  @db.VarChar(24)
+  status       String  @db.VarChar(16)
+  summary      String  @db.VarChar(255)
+  payload      Json
+  records      Json    @default("[]")
+  submittedAt  String  @db.VarChar(16)
+  updatedAt    String  @db.VarChar(16)
+  deletedAt    String? @db.VarChar(16)
+
+  @@index([status])
+  @@index([userId])
+  @@index([companyName])
+  @@index([purpose])
+  @@index([submittedAt])
+  @@index([deletedAt])
+}
+```
+
+## BusinessChangeRequest
+
+```prisma
+model BusinessChangeRequest {
+  id           String   @id @db.VarChar(16)
+  userId       String   @db.VarChar(16)
+  companyName  String   @db.VarChar(128)
+  contactName  String   @db.VarChar(64)
+  contactPhone String   @db.VarChar(32)
+  // name | legal_representative | address | business_scope | capital | equity | supervisors | other
+  changeTypes  String[]
+  status       String   @db.VarChar(16)
+  summary      String   @db.VarChar(255)
+  payload      Json
+  records      Json     @default("[]")
+  submittedAt  String   @db.VarChar(16)
+  updatedAt    String   @db.VarChar(16)
+  deletedAt    String?  @db.VarChar(16)
+
+  @@index([status])
+  @@index([userId])
+  @@index([companyName])
+  @@index([submittedAt])
+  @@index([deletedAt])
+}
+```
+
+## LicenseApplication
+
+```prisma
+model LicenseApplication {
+  id           String  @id @db.VarChar(16)
+  userId       String  @db.VarChar(16)
+  companyName  String  @db.VarChar(128)
+  contactName  String  @db.VarChar(64)
+  contactPhone String  @db.VarChar(32)
+  // food | food_record | hr | labor_dispatch | medical_device_2 | icp | trade | other
+  licenseType  String  @db.VarChar(24)
+  // 办理地区（省市区县文本，按 Q1 记录，不做系统枚举）
+  region       String  @db.VarChar(128)
+  status       String  @db.VarChar(16)
+  summary      String  @db.VarChar(255)
+  payload      Json
+  records      Json    @default("[]")
+  submittedAt  String  @db.VarChar(16)
+  updatedAt    String  @db.VarChar(16)
+  deletedAt    String? @db.VarChar(16)
+
+  @@index([status])
+  @@index([userId])
+  @@index([companyName])
+  @@index([licenseType])
+  @@index([submittedAt])
+  @@index([deletedAt])
 }
 ```
 

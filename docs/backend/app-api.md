@@ -257,6 +257,41 @@
 
 状态：`pending / processing / needs_info / completed / rejected / withdrawn`。同一用户同服务只允许一单未归档的进行中申请（pending/processing/needs_info），新建及旧单重提均校验，冲突返回409。数据库部分唯一索引兜底，事务行锁保护时间线追加；申请、文件绑定、站内信与后台操作审计原子提交，失败全部回滚。重复状态动作返回409。字段、校验与隐私边界见 [企业代办](../features/enterprise-agency.md)。
 
+## 企业代办扩展服务（财税 / 工商变更 / 资质许可）
+
+三个扩展服务为「社区代办前信息收集」入口：**任意登录用户可提交**（与企业注册口径一致），申请是服务请求记录、不代表系统内企业身份，与 UserIdentity/enterpriseId 完全解耦；企业成员代表授权不设系统字段，由工作人员受理时核实。六态状态机、进行中唯一约束、行锁时间线、附件鉴权、站内信、审计与幂等键均与注册代办同口径。
+
+公共接口（`/api/app` 前缀）：
+
+| 方法 | 路径 | 说明 |
+|---|---|---|
+| GET | `/api/app/enterprise-services/catalog` | 服务目录：`code/name/route/enabled/disabledReason` + 目录版本 |
+| GET | `/api/app/enterprise-services/mine` | 我的聚合记录：跨四服务按 `submittedAt+serviceType+id` 稳定倒序，`cursor/pageSize` 分页，返回 `list/nextCursor/hasMore`；不含 payload 与内部备注 |
+| POST | `.../enterprise-services/:service/uploads` | 分服务私有上传（JPG/PNG/GIF/WebP/PDF，≤10MB）；服务域取自路由，返回 `fileId/name/size/mime` |
+| GET | `.../enterprise-services/:service/files/:fileId` | 本人分服务附件读取（鉴权 Blob，private/no-store） |
+| POST | `.../enterprise-services/:service/applications` | 提交：`{ payload }`；可选 `x-idempotency-key`（语义同注册代办） |
+| GET | `.../enterprise-services/:service/applications` | 我的该服务记录 |
+| GET | `.../enterprise-services/:service/applications/:id` | 详情：类型化 payload + 用户可见 records + `canWithdraw/canResubmit`；跨用户统一 404 |
+| POST | `.../:id/withdraw` | 撤回（仅 `pending`） |
+| POST | `.../:id/resubmit` | 待补充/已驳回/已撤回 → 待处理；幂等键摘要绑定申请 ID |
+
+`:service` 取值 `finance-tax` / `business-change` / `license`。附件引用约定与注册一致：payload 内 `xxxFileId` 传 fileId 字符串，`name/size/mime` 由服务端按库重建，拒绝伪造元数据。未知字段一律 400（错误信息带字段路径）。
+
+管理端（`/api/admin/enterprise-services`，权限按服务映射既有菜单码 `/enterprise-agency/finance-tax|business-change|license`，无对应菜单码 403）：
+
+| 方法 | 路径 | 说明 |
+|---|---|---|
+| GET | `/:service/applications` | 列表：`status/keyword/purpose/licenseType` + 分页；手机号脱敏（前3后4） |
+| GET | `/:service/applications/:id` | 详情（完整 payload、时间线含内部备注；写审计） |
+| GET | `/:service/applications/:id/files/:fileId` | 附件读取（须与申请、服务域匹配；写审计） |
+| POST | `.../:id/accept` | `pending → processing`；`note` 可选 |
+| POST | `.../:id/request-info` | `pending/processing → needs_info`；`reason` 必填 |
+| POST | `.../:id/complete` | `processing/needs_info → completed`；完成摘要必填（交付范围/日期/可核验凭证编号） |
+| POST | `.../:id/reject` | `pending/processing/needs_info → rejected`；`reason` 必填 |
+| POST | `.../:id/notes` | 内部备注（用户端不可见，不发通知） |
+
+三个服务在注册表中为独立模型（`EnterpriseTaxEngagement` 前缀 TE、`BusinessChangeRequest` 前缀 BR、`LicenseApplication` 前缀 LA），附件经 `EnterpriseAgencyFile.domain + taxRequestId/changeRequestId/licenseRequestId` 类型化绑定（数据库 CHECK 保证恰一归属）。需部署迁移 `20261030140000_enterprise_services_expansion`。表单字段矩阵、条件卡版本与完成语义见 [企业代办](../features/enterprise-agency.md)。
+
 ## 微信网站应用（扫码）一键登录
 
 移动 Web 的微信扫码登录基于微信开放平台「网站应用」OAuth2（[官方文档](https://developers.weixin.qq.com/doc/oplatform/Website_App/WeChat_Login/Wechat_Login.html)）。AppID/AppSecret/授权回调地址在后台「系统配置 → 功能开关 → 微信网站应用（扫码）登录 · 移动客户端」配置（AppSecret 只写、不回传原文）；环境变量 `WXWEB_APPID / WXWEB_APP_SECRET / WXWEB_REDIRECT_URI` 仅作回退。该渠道有独立开关 `wxWebLoginOpen`，与小程序一键登录的 `wxLoginOpen` 互不影响；`GET /api/app/config` 的 `wxWebLoginOpen` 表示网站应用开关开启且配置齐全。
