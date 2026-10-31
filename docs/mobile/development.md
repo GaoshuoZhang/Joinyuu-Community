@@ -143,3 +143,7 @@ pnpm build
 ## 交易订单
 
 「我的 → 交易订单」（`/me/trade-orders`）统一承载现金交易与积分兑换订单：顶层页签「现金交易 / 兑换订单」，`?tab=` 同步页签；`/me/orders`、`/me/transactions` 重定向到对应页签，订单详情（`/me/orders/:id`）、交易详情（`/me/transactions/:orderId`）、退款与待缴账单等深链不变。现金部分包含确认订单、收银台、支付结果、交易列表与退款页面；API 对接 src/api/commerce.ts。支付方式由服务端 capabilities 与环境共同决定，成功以服务端查单/通知为准。状态与上线边界见 [交易与支付](../features/commerce.md)。
+
+## 企业代办准备清单与版本
+
+三扩展表单从服务目录读取版本化信息采集清单，动态展示所选事项及待上传/已上传附件；不是全国统一法定条件卡。提交/重提携带当前目录版本和表单版本；显式过期由服务端拒绝并提示重载。聚合摘要不含联系人/电话；详情含持久revision和稳定事件id，仍由API事务行锁保护写入。实测与截图路径见[验收补强](../features/enterprise-services-hardening-2026-10-31.md)。

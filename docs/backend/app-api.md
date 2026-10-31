@@ -265,15 +265,17 @@
 
 | 方法 | 路径 | 说明 |
 |---|---|---|
-| GET | `/api/app/enterprise-services/catalog` | 服务目录：`code/name/route/enabled/disabledReason` + 目录版本 |
-| GET | `/api/app/enterprise-services/mine` | 我的聚合记录：跨四服务稳定排序，`cursor/pageSize` 分页，返回 `list/nextCursor/hasMore/activeByService`；后者为各服务的进行中摘要（无则null），不受当前分页影响，不含payload与内部备注 |
+| GET | `/api/app/enterprise-services/catalog` | 服务目录：`code/name/route/enabled/disabledReason/guide` + `version/schemaVersion/consentVersion`；guide为带版本/核对日期/来源的采集准备清单，含事项说明及条件材料，不替代地区办事指南 |
+| GET | `/api/app/enterprise-services/mine` | 我的聚合记录：跨四服务稳定排序，`cursor/pageSize` 分页，返回 `list/nextCursor/hasMore/activeByService`；后者为各服务的最新进行中摘要（无则null），不受当前分页影响；两者均仅含id/serviceType/status/companyName/summary/submittedAt/updatedAt，不含联系人、电话、payload与内部备注。按submittedAt降序、serviceType升序、id降序键集分页；游标记录移动/软删除不会失效，后续翻页不包含新插入的头部记录，刷新可见新头部 |
 | POST | `.../enterprise-services/:service/uploads` | 分服务私有上传（JPG/PNG/GIF/WebP/PDF，≤10MB）；返回 `fileId/name/size/mime`。新单须服务启用；旧单补件带 `?requestId=<id>`，校验本人、服务与needs_info/rejected/withdrawn状态，暂停时仍可补件 |
 | GET | `.../enterprise-services/:service/files/:fileId` | 本人分服务附件读取（鉴权 Blob，private/no-store） |
 | POST | `.../enterprise-services/:service/applications` | 提交：`{ payload }`；可选 `x-idempotency-key`（语义同注册代办） |
 | GET | `.../enterprise-services/:service/applications` | 我的该服务记录 |
-| GET | `.../enterprise-services/:service/applications/:id` | 详情：类型化 payload + 用户可见 records + `canWithdraw/canResubmit`；跨用户统一 404 |
+| GET | `.../enterprise-services/:service/applications/:id` | 详情：`revision/schemaVersion/catalogVersion` + 类型化 payload + 用户可见 records（含稳定id）+ `canWithdraw/canResubmit`；跨用户统一 404 |
 | POST | `.../:id/withdraw` | 撤回（仅 `pending`） |
 | POST | `.../:id/resubmit` | 待补充/已驳回/已撤回 → 待处理；幂等键摘要绑定申请 ID |
+
+修订号由四张申请表的数据库触发器持久维护，状态/载荷/时间线/软删除实质更新递增，读取、失败事务、幂等重放不递增；仍以行锁控制写入，不接受expectedRevision条件写。旧时间线事件派生稳定兼容ID，下一次追加自然持久化；旧三类申请版本为legacy，新提交/重提记录当前schemaVersion=1、catalogVersion=2026-10-31。payload可携带两项版本，显式不匹配返回400并提示重载；安装中的旧客户端省略版本兼容接收。授权文案版本consent.version须为2026-10，确认时间consent.agreedAt由服务端生成。
 
 `:service` 取值 `finance-tax` / `business-change` / `license`。附件引用约定与注册一致：payload 内 `xxxFileId` 传 fileId 字符串，`name/size/mime` 由服务端按库重建，拒绝伪造元数据。未知字段一律 400（错误信息带字段路径）。
 

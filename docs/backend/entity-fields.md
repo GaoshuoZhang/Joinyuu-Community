@@ -636,6 +636,9 @@ model EnterpriseAgencyRequest {
   // 结构化表单载荷；附件字段存 { fileId, name, size, mime }，不存公开 URL
   payload      Json
   records      Json    @default("[]")
+  // 数据库触发器递增；分钟时间戳不承担版本职责。
+  revision       Int @default(1)
+
   submittedAt  String  @db.VarChar(16)
   updatedAt    String  @db.VarChar(16)
   archivableAt String? @db.VarChar(16)
@@ -646,6 +649,7 @@ model EnterpriseAgencyRequest {
   @@index([userId])
   @@index([companyName])
   @@index([submittedAt])
+  @@index([userId, submittedAt, id])
   @@index([deletedAt])
 }
 ```
@@ -702,6 +706,11 @@ model EnterpriseTaxEngagement {
   summary      String  @db.VarChar(255)
   payload      Json
   records      Json    @default("[]")
+  // 数据库触发器递增；分钟时间戳不承担版本职责。
+  revision       Int @default(1)
+  schemaVersion  String @default("1") @db.VarChar(32)
+  catalogVersion String @default("2026-10-31") @db.VarChar(32)
+
   submittedAt  String  @db.VarChar(16)
   updatedAt    String  @db.VarChar(16)
   deletedAt    String? @db.VarChar(16)
@@ -711,6 +720,7 @@ model EnterpriseTaxEngagement {
   @@index([companyName])
   @@index([purpose])
   @@index([submittedAt])
+  @@index([userId, submittedAt, id])
   @@index([deletedAt])
 }
 ```
@@ -730,6 +740,11 @@ model BusinessChangeRequest {
   summary      String   @db.VarChar(255)
   payload      Json
   records      Json     @default("[]")
+  // 数据库触发器递增；分钟时间戳不承担版本职责。
+  revision       Int @default(1)
+  schemaVersion  String @default("1") @db.VarChar(32)
+  catalogVersion String @default("2026-10-31") @db.VarChar(32)
+
   submittedAt  String   @db.VarChar(16)
   updatedAt    String   @db.VarChar(16)
   deletedAt    String?  @db.VarChar(16)
@@ -738,6 +753,7 @@ model BusinessChangeRequest {
   @@index([userId])
   @@index([companyName])
   @@index([submittedAt])
+  @@index([userId, submittedAt, id])
   @@index([deletedAt])
 }
 ```
@@ -759,6 +775,11 @@ model LicenseApplication {
   summary      String  @db.VarChar(255)
   payload      Json
   records      Json    @default("[]")
+  // 数据库触发器递增；分钟时间戳不承担版本职责。
+  revision       Int @default(1)
+  schemaVersion  String @default("1") @db.VarChar(32)
+  catalogVersion String @default("2026-10-31") @db.VarChar(32)
+
   submittedAt  String  @db.VarChar(16)
   updatedAt    String  @db.VarChar(16)
   deletedAt    String? @db.VarChar(16)
@@ -768,6 +789,7 @@ model LicenseApplication {
   @@index([companyName])
   @@index([licenseType])
   @@index([submittedAt])
+  @@index([userId, submittedAt, id])
   @@index([deletedAt])
 }
 ```
