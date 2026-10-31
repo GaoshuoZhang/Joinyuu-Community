@@ -268,6 +268,8 @@ decisionStatus 为 pending_acceptance/free/quoted；未受理不返回 mode=pend
 
 ## 11. 实施拆分与回滚
 
+> **实施进度（2026-10-31）**：阶段 1–4 代码已完成并通过隔离验证（五套定向回归 141 项、浏览器验收 18 项、小程序实页走查 12 详情页截图）；阶段 5（真机/真实商户资金验收）与发布仍待用户执行。默认全部免费、cashAgencyOpen=false，未开放真实收费。
+
 1. **契约与迁移**：来源注册、Decision/Change 模型、金额/版本/身份契约、nullable 期限、权限和开关；历史受理单免费回填。先结构迁移，不立刻开放收费。
 2. **受理与资金服务**：两个 accept、一次性出账、订单创建、报价事件与幂等；跨入口改价屏障、渠道关闭、持久补偿及到账/退款分支。屏障接入点须含三处既有关单路径：recover() 到期关单、closeExpiredOrders→closePendingForBill、用户取消；改价的批量关单不能直接复用 closePendingForBill（其仅处理最新一条），需循环全部未终结尝试；wechat-pay.client 预期无需改动。
 3. **退款能力**：agency 部分退款、占额/异人审批、累计与进度、其他来源全额约束及权益回归。
