@@ -267,7 +267,7 @@
 |---|---|---|
 | GET | `/api/app/enterprise-services/catalog` | 服务目录：`code/name/route/enabled/disabledReason/guide` + `version/schemaVersion/consentVersion`；guide为带版本/核对日期/来源的采集准备清单，含事项说明及条件材料，不替代地区办事指南 |
 | GET | `/api/app/enterprise-services/mine` | 我的聚合记录：跨四服务稳定排序，`cursor/pageSize` 分页，返回 `list/nextCursor/hasMore/activeByService`；后者为各服务的最新进行中摘要（无则null），不受当前分页影响；两者均仅含id/serviceType/status/companyName/summary/submittedAt/updatedAt，不含联系人、电话、payload与内部备注。按submittedAt降序、serviceType升序、id降序键集分页；游标记录移动/软删除不会失效，后续翻页不包含新插入的头部记录，刷新可见新头部 |
-| POST | `.../enterprise-services/:service/uploads` | 分服务私有上传（JPG/PNG/GIF/WebP/PDF，≤10MB）；返回 `fileId/name/size/mime`。新单须服务启用；旧单补件带 `?requestId=<id>`，校验本人、服务与needs_info/rejected/withdrawn状态，暂停时仍可补件 |
+| POST | `.../enterprise-services/:service/uploads` | 已停用（410，请随提交multipart上传）；原契约：分服务私有上传（JPG/PNG/GIF/WebP/PDF，≤10MB），返回 `fileId/name/size/mime`。新单须服务启用；旧单补件带 `?requestId=<id>`，校验本人、服务与needs_info/rejected/withdrawn状态，暂停时仍可补件 |
 | GET | `.../enterprise-services/:service/files/:fileId` | 本人分服务附件读取（鉴权 Blob，private/no-store） |
 | POST | `.../enterprise-services/:service/applications` | 提交：`{ payload }`；可选 `x-idempotency-key`（语义同注册代办） |
 | GET | `.../enterprise-services/:service/applications` | 我的该服务记录 |
@@ -316,3 +316,9 @@
 新增 `enterpriseAgencyOpen` 总开关及 `enterpriseRegistrationOpen` 注册业务开关（均默认true以保持已有注册能力），财税/工商变更/资质许可仍默认false。后台功能开关统一配置并留审计；旧载荷省略新字段保持原值。`/api/app/config`即时返回总开关及注册开关，后台壳读取同一公开配置，无需系统配置权限。
 
 关闭单项时两端隐藏该服务申请卡片、介绍页引流入口；已有办理记录仍保留，旧单合法重提继续可用。关闭总开关时两端隐藏企业代办入口、直达页回到我的页；后台隐藏整个企业代办菜单并拦截直达页，清理已打开代办标签。总开关不覆写各子项设置。API总开关覆盖扩展服务目录和新建检查，注册新建也检查总/子开关；保留旧单读取及办理API，避免隐藏菜单等同删除业务数据。
+
+## 企业代办附件与保留期更新（2026-10-31）
+
+四业务提交/重提沿用原POST路径，支持multipart/form-data：payload为JSON字符串、文件字段名为payload所引用的UUID v4；单文件10MB、总文件64MB、最多64份、payload最多1MB。JSON仍用于既有合法附件引用。x-idempotency-key保持原契约，同键重放不重复申请/绑定；同文件ID不同内容拒绝覆盖。独立registration/uploads及三服务uploads返回410（要求更新客户端），不保存未提交草稿。
+
+SystemConfig.enterpriseAgencyFileRetentionDays为后台整数配置，默认90，范围1–3650；省略保持原值，null和越界400，不下发App配置。四申请模型completedAt从完成状态起算；只有completed申请参加过期清理，其他状态保留。到期仅删除存储附件，保留payload、办理记录及时间线；删除后的附件读取404，无用户删除申请接口，不下发保存截止日期。详细操作、批次与失败恢复见[材料生命周期](../features/enterprise-material-lifecycle-2026-10-31.md)。

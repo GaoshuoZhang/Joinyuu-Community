@@ -9,7 +9,7 @@ assert.ok(process.env.AGENCY_E2E_FIXTURE, '请指定隔离fixture私有文件')
 const { chromium } = createRequire(process.env.PLAYWRIGHT_PACKAGE)('playwright')
 const fixture = JSON.parse(await readFile(process.env.AGENCY_E2E_FIXTURE, 'utf8'))
 const root = resolve(import.meta.dirname, '../..')
-const out = resolve(root, 'apps/admin/test/artifacts/enterprise-services-20261031')
+const out = process.env.AGENCY_E2E_OUT || resolve(root, 'apps/admin/test/artifacts/enterprise-services-20261031')
 await mkdir(out, { recursive: true })
 const apiBase = 'http://127.0.0.1:17757/api'
 const mobileBase = 'http://127.0.0.1:17759'
@@ -19,6 +19,8 @@ const context = await browser.newContext({ viewport: { width: 390, height: 844 }
 const page = await context.newPage()
 const errors = []
 const records = []
+const standaloneUploads = []
+page.on('request', request => { if (request.method() === 'POST' && request.url().includes('/uploads')) standaloneUploads.push(request.url()) })
 page.on('pageerror', error => errors.push(error.message))
 page.setDefaultTimeout(15000)
 await context.addInitScript(token => localStorage.setItem('joinyuu_client_token', token), fixture.owner)
@@ -56,6 +58,7 @@ async function submit(service, revise = false) {
   const sent = await response
   assert.equal(sent.status(), 200, await sent.text())
   assert.ok(sent.request().headers()['x-idempotency-key'], '新表单请求须带幂等键')
+  if (!revise) assert.match(sent.request().headers()['content-type'], /^multipart\/form-data;/)
   await page.getByText(revise ? '申请已重新提交' : '申请已提交', { exact: true }).waitFor()
   return (await sent.json()).data
 }
@@ -85,11 +88,10 @@ try {
     }
     await fill('contact.name', '合成联系人')
     await fill('contact.phone', '13800000001')
-    const uploaded = page.waitForResponse(r => r.url().includes(`/enterprise-services/${service}/uploads`) && r.request().method() === 'POST')
     await field('licenseCopy').locator('input[type=file]').setInputFiles({
       name: 'synthetic.pdf', mimeType: 'application/pdf', buffer: Buffer.from('%PDF-1.4\n% isolated form acceptance\n%%EOF'),
     })
-    assert.equal((await uploaded).status(), 200)
+    assert.equal(standaloneUploads.length, 0, '选文件阶段不能上传服务器')
     await field('consent').getByRole('checkbox').click()
     await screenshots(`${service}-form`)
     const { id } = await submit(service)
@@ -165,6 +167,7 @@ try {
     await adminPage.reload()
     const enabledToggle = adminPage.getByRole('switch', { name: '企业代办财税服务', exact: true })
     await enabledToggle.waitFor()
+    await adminPage.waitForFunction(() => document.querySelector('[role="switch"][aria-label="企业代办财税服务"]')?.getAttribute('aria-checked') === 'true')
     assert.equal(await enabledToggle.getAttribute('aria-checked'), 'true')
     assert.equal((await api('/app/enterprise-services/catalog')).services.find(item => item.route === 'finance-tax').enabled, true)
     await adminPage.screenshot({ path: resolve(out, 'admin-switches.png'), fullPage: true })

@@ -639,6 +639,8 @@ model EnterpriseAgencyRequest {
   // 数据库触发器递增；分钟时间戳不承担版本职责。
   revision       Int @default(1)
 
+  completedAt DateTime?
+
   submittedAt  String  @db.VarChar(16)
   updatedAt    String  @db.VarChar(16)
   archivableAt String? @db.VarChar(16)
@@ -651,6 +653,7 @@ model EnterpriseAgencyRequest {
   @@index([submittedAt])
   @@index([userId, submittedAt, id])
   @@index([deletedAt])
+  @@index([status, completedAt])
 }
 ```
 
@@ -688,6 +691,10 @@ model EnterpriseAgencyFile {
   @@index([domain])
   @@index([deletedAt])
   @@index([cleanupState, createdAt])
+  contentHash String? @db.VarChar(64)
+  submissionLeaseUntil DateTime?
+  retentionPurgeStartedAt DateTime?
+
 }
 ```
 
@@ -711,6 +718,8 @@ model EnterpriseTaxEngagement {
   schemaVersion  String @default("1") @db.VarChar(32)
   catalogVersion String @default("2026-10-31") @db.VarChar(32)
 
+  completedAt DateTime?
+
   submittedAt  String  @db.VarChar(16)
   updatedAt    String  @db.VarChar(16)
   deletedAt    String? @db.VarChar(16)
@@ -722,6 +731,7 @@ model EnterpriseTaxEngagement {
   @@index([submittedAt])
   @@index([userId, submittedAt, id])
   @@index([deletedAt])
+  @@index([status, completedAt])
 }
 ```
 
@@ -745,6 +755,8 @@ model BusinessChangeRequest {
   schemaVersion  String @default("1") @db.VarChar(32)
   catalogVersion String @default("2026-10-31") @db.VarChar(32)
 
+  completedAt DateTime?
+
   submittedAt  String   @db.VarChar(16)
   updatedAt    String   @db.VarChar(16)
   deletedAt    String?  @db.VarChar(16)
@@ -755,6 +767,7 @@ model BusinessChangeRequest {
   @@index([submittedAt])
   @@index([userId, submittedAt, id])
   @@index([deletedAt])
+  @@index([status, completedAt])
 }
 ```
 
@@ -780,6 +793,8 @@ model LicenseApplication {
   schemaVersion  String @default("1") @db.VarChar(32)
   catalogVersion String @default("2026-10-31") @db.VarChar(32)
 
+  completedAt DateTime?
+
   submittedAt  String  @db.VarChar(16)
   updatedAt    String  @db.VarChar(16)
   deletedAt    String? @db.VarChar(16)
@@ -791,6 +806,7 @@ model LicenseApplication {
   @@index([submittedAt])
   @@index([userId, submittedAt, id])
   @@index([deletedAt])
+  @@index([status, completedAt])
 }
 ```
 
@@ -1690,6 +1706,7 @@ model SystemConfig {
   demandOpen            Boolean @default(true)
   reservationOpen       Boolean @default(true)
   enterpriseAgencyOpen Boolean @default(true)
+  enterpriseAgencyFileRetentionDays Int @default(90)
   enterpriseRegistrationOpen Boolean @default(true)
   enterpriseTaxOpen Boolean @default(false)
   enterpriseChangeOpen Boolean @default(false)

@@ -563,7 +563,7 @@ pnpm test:e2e        # e2e 全量（需 Docker 服务；每套件自行重种子
 
 ### 8.2 定时任务（@nestjs/schedule，任务注册以 scheduler.service.ts 为准）
 
-企业代办新增 `enterprise-agency-orphan-cleanup`，每小时第10分钟执行，默认只预检。`ENTERPRISE_AGENCY_ORPHAN_CLEANUP_ENABLED=true` 才删除，`ENTERPRISE_AGENCY_ORPHAN_GRACE_HOURS` 默认72小时（允许24–720小时）。仅未绑定、超宽限期的上传可被认领，已绑定历史材料不参与。`cleanupState=deleting` 阻止读取与绑定；对象删除失败保留认领状态，15分钟后可重试，`cleanupAttempts` 记录次数；对象已不存在可正常完成。Redis任务锁外另有数据库条件认领兜底，多实例不会同时认领有效租约。启用前须核对预检日志及运营告知，未确定策略时保持默认预检。
+企业代办沿用任务标识`enterprise-agency-orphan-cleanup`，每小时第10分钟自动清理遗留未绑定材料及办结后到期附件。用户已确认未提交不保存、未办结保留、办结附件默认90天（后台SystemConfig.enterpriseAgencyFileRetentionDays，1–3650天）。旧ORPHAN_CLEANUP_ENABLED/ORPHAN_GRACE_HOURS不再生效。新客户端随表单multipart提交，处理意图/租约保障中断后可回收；到期仅删附件，保留表单及时间线；多实例条件认领、失败15分钟后重试。详见[材料生命周期](../features/enterprise-material-lifecycle-2026-10-31.md)。
 | 任务名 | 频率 | 逻辑 |
 |---|---|---|
 | demands-events-scheduled-publish | 每 30 秒 | `demands/events` 中 status=scheduled 且 scheduledAt≤now 且未归档 → published（活动同时 open 报名）+ 写 schedule 通知，事务内完成 |
