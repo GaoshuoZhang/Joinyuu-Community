@@ -300,7 +300,7 @@
 
 ## 企业代办收费（agency_service 资金链路）
 
-企业代办四类业务支持按服务配置收费：`free`（免费）/ `fixed`（固定费用）/ `manual`（人工报价），后台「系统设置 → 企业代办 → 收费设置」按服务配置模式、金额（分）、账单标题与退款政策；任一收费相关字段变化时配置版本自增。默认全部免费且 `cashAgencyOpen=false`（不开放支付发起），启用收费须运营显式配置并开启开关。
+企业代办四类业务支持按服务配置收费：`free`（免费）/ `fixed`（固定费用）/ `manual`（人工报价），各代办列表页“业务设置 → 收费设置”按服务配置模式、金额（分）、账单标题与退款政策；任一收费相关字段变化时配置版本自增。默认全部免费；2026-11-01起退役各模块独立收款开关，收费由业务定价/首次受理费用决定，支付仍须商户配置齐全并启用。
 
 费用在**受理动作**内确定并出账（同一事务）：`free` 持久免费决定（后续重提/配置变化不补收）；`fixed` 按配置金额生成账单；`manual` 由受理管理员填报价金额（1–100000000 分）与说明。账单 `businessKey = agency:<serviceType>:<applicationId>` 防重；订单 `sourceType='agency_service'`、归属申请人。办理状态与资金状态独立：未付款不阻塞补件/办结，付款/退款不改变办理状态。
 
@@ -350,3 +350,12 @@
 四业务提交/重提沿用原POST路径，支持multipart/form-data：payload为JSON字符串、文件字段名为payload所引用的UUID v4；单文件10MB、总文件64MB、最多64份、payload最多1MB。JSON仍用于既有合法附件引用。x-idempotency-key保持原契约，同键重放不重复申请/绑定；同文件ID不同内容拒绝覆盖。独立registration/uploads及三服务uploads返回410（要求更新客户端），不保存未提交草稿。
 
 SystemConfig.enterpriseAgencyFileRetentionDays为后台整数配置，默认90，范围1–3650；省略保持原值，null和越界400，不下发App配置。四申请模型completedAt从完成状态起算；只有completed申请参加过期清理，其他状态保留。到期仅删除存储附件，保留payload、办理记录及时间线；删除后的附件读取404，无用户删除申请接口，不下发保存截止日期。详细操作、批次与失败恢复见[材料生命周期](../features/enterprise-material-lifecycle-2026-10-31.md)。
+
+
+## 业务设置就近维护（2026-11-01）
+
+新增`GET/PUT /api/admin/business-settings/:scope`，按业务白名单返回/保存配置；PUT为`{values, expected}`，事务内比较原值，冲突409，未知字段/非法值400。需对应菜单权限、`perm:business-settings:<scope>`和数据域共同满足，不自动授予既有角色。
+
+名片`GET/PUT .../:scope/card`，表单`GET/PUT .../:scope/form`，行业`GET/POST .../enterprises/industry`、`POST .../enterprises/industry/:code/toggle-status`、`DELETE .../enterprises/industry/:code`。迁移`20261101000000_business_settings`增加四业务独立附件保留天数并继承原值。旧系统全量保存不再覆盖已迁出的业务字段；旧名片/表单写入口同样校验业务设置权限。scope与字段范围见[业务设置规范](../features/business-settings-2026-11-01.md)。
+
+退役cashMallOpen/cashSpaceOpen/cashEventOpen/cashLeaseOpen/cashAgencyOpen的运行时门禁：商户配置、渠道能力、收费金额、归属、版本与资金状态仍校验。兼容字段不再可写，公开布尔兼容值恒true，不代表商户已开放，实际能力仍读commerce/capabilities。积分计价不改变。

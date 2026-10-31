@@ -16,7 +16,7 @@
 
 独立上传HTTP接口返回410并提示更新客户端，防止旧客户端继续保存未提交材料；JSON提交仍兼容既有合法附件引用。API、移动Web和小程序应协调更新，旧小程序版本需要升级后才能选择新材料。服务层旧上传辅助方法仅供隔离fixture构造历史记录，不作为HTTP入口。
 
-四申请表新增completedAt，由数据库在状态首次转completed时写入UTC办结时间；旧完成记录从完成事件回填，没有可用时间时从迁移时刻起算，避免错误提前删除。SystemConfig新增enterpriseAgencyFileRetentionDays，默认90，允许1–3650整数。后台位于“系统设置 → 站点与功能 → 功能开关 → 企业代办”，保存后清理任务读库生效；省略字段保留旧值，非法值（含null）400，客户端公开配置不返回该字段。
+四申请表新增completedAt，由数据库在状态首次转completed时写入UTC办结时间；旧完成记录从完成事件回填，没有可用时间时从迁移时刻起算，避免错误提前删除。2026-11-01起，四类业务分别使用enterpriseRegistrationFileRetentionDays、enterpriseTaxFileRetentionDays、enterpriseChangeFileRetentionDays、enterpriseLicenseFileRetentionDays，迁移初值复制旧enterpriseAgencyFileRetentionDays，默认90，允许1–3650整数。各业务页“业务设置 → 材料管理”独立保存并即时供清理任务读取，非法值（含null）400；客户端公开配置不返回天数。旧公共字段保留兼容，不再作为清理依据。详见[业务设置](business-settings-2026-11-01.md)。
 
 原任务enterprise-agency-orphan-cleanup保留监控标识，每小时第10分钟自动执行遗留未绑定清理及办结到期附件清理；旧ORPHAN_CLEANUP_ENABLED/ORPHAN_GRACE_HOURS环境开关已停用，策略按本次用户决定执行。清理按批处理，默认每次最多100件，删除失败保留重试状态。企业代办总开关关闭时仍执行到期清理。
 

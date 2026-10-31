@@ -1,6 +1,8 @@
 # 聚屿社区 · 管理后台 Web — 开发 Wiki
 
-> 企业代办三类扩展服务已有列表和通用详情，分别沿用 `/enterprise-agency/finance-tax`、`/enterprise-agency/business-change`、`/enterprise-agency/license` 菜单权限。系统配置「功能开关」可分别开放新单，默认关闭；已有申请仍可办理。详情按服务展示资料、时间线及鉴权附件，完成摘要必填；内部备注不发给用户。规范见 [企业代办](../features/enterprise-agency.md)。
+> 2026-11-01：业务专属配置已迁回14个业务页的“业务设置”，取消模块在线收款开关，独立权限与局部保存契约见[业务设置规范](../features/business-settings-2026-11-01.md)。
+
+> 企业代办三类扩展服务已有列表和通用详情，分别沿用 `/enterprise-agency/finance-tax`、`/enterprise-agency/business-change`、`/enterprise-agency/license` 菜单权限。各业务页右上角“业务设置”可分别开放新单，默认关闭；已有申请仍可办理。详情按服务展示资料、时间线及鉴权附件，完成摘要必填；内部备注不发给用户。规范见 [企业代办](../features/enterprise-agency.md)。
 
 > 代码路径与开发命令默认相对 apps/admin 仓；文档链接指向协作仓 docs。当前路由、模型与依赖版本以源码和锁文件为准。
 
@@ -16,7 +18,7 @@
 
 ## 1. Style Tier & Aesthetic Direction
 
-> 社区成员组保留 `/member-governance` 注销治理，使用独立权限码和 members 数据范围。名片不再有独立页面（`/card-management` 已下线）：个人/企业名片的查看与编辑分别并入**用户详情**与**企业详情**的「名片」标签页（「编辑名片」→ `IndividualCardDialog` / `EnterpriseCardDialog`）；**企业名片的「企业 Logo」为直传图片**（ImageUploadField → 素材库 `bizType=enterprise-logo`，回填 URL 后保存，不再手填地址）；用户可编辑字段白名单迁至**系统配置 > 名片可编辑字段**（随该页「保存配置」一并提交）；注销冷静期内禁用确认执行，复核弹窗必填说明。
+> 社区成员组保留 `/member-governance` 注销治理，使用独立权限码和 members 数据范围。名片不再有独立页面（`/card-management` 已下线）：个人/企业名片的查看与编辑分别并入**用户详情**与**企业详情**的「名片」标签页（「编辑名片」→ `IndividualCardDialog` / `EnterpriseCardDialog`）；**企业名片的「企业 Logo」为直传图片**（ImageUploadField → 素材库 `bizType=enterprise-logo`，回填 URL 后保存，不再手填地址）；用户可编辑字段白名单分别位于**社区个体/社区企业 → 业务设置 → 名片字段**，独立保存；注销冷静期内禁用确认执行，复核弹窗必填说明。
 
 - style: **business-international**（管理后台 / SaaS / 高信息密度 / 整齐网格）
 - aesthetic: **industrial-utilitarian，冷静克制**——贴近 TDesign 默认规范，靠间距/层级/状态色取胜，不做花哨装饰

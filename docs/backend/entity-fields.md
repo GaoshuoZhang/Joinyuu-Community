@@ -1717,12 +1717,16 @@ model SystemConfig {
   demandOpen            Boolean @default(true)
   reservationOpen       Boolean @default(true)
   enterpriseAgencyOpen Boolean @default(true)
-  enterpriseAgencyFileRetentionDays Int @default(90)
+  enterpriseAgencyFileRetentionDays Int @default(90) // legacy
+  enterpriseRegistrationFileRetentionDays Int @default(90)
+  enterpriseTaxFileRetentionDays Int @default(90)
+  enterpriseChangeFileRetentionDays Int @default(90)
+  enterpriseLicenseFileRetentionDays Int @default(90)
   enterpriseRegistrationOpen Boolean @default(true)
   enterpriseTaxOpen Boolean @default(false)
   enterpriseChangeOpen Boolean @default(false)
   enterpriseLicenseOpen Boolean @default(false)
-  /** 企业代办收费：每服务 free/fixed/manual；fixed 必须金额>0。定价策略，不代替 cashAgencyOpen 支付发起开关 */
+  /** 企业代办收费：每服务 free/fixed/manual；fixed 必须金额>0。定价策略；支付能力由统一商户配置决定 */
   agencyFeeModeRegistration      String @default("free") @db.VarChar(16)
   agencyFeeModeFinanceTax        String @default("free") @db.VarChar(16)
   agencyFeeModeBusinessChange    String @default("free") @db.VarChar(16)
@@ -1744,9 +1748,9 @@ model SystemConfig {
   agencyFeeRefundPolicyLicense        String @default("") @db.VarChar(500)
   /** 配置版本：每次收费相关字段变化 +1；首次受理锁定/校验对应版本 */
   agencyFeeConfigVersion Int @default(1)
-  /** 企业代办在线收款发起开关：只控制新支付尝试；查询/回调/退款收尾不受其阻断 */
+  /** 已退役：仅保留旧配置兼容，新的支付流程不读取此字段 */
   cashAgencyOpen Boolean @default(false)
-  /** 客户端在线收款模块开关（与微信商户启用状态同时满足才允许新建支付） */
+  /** 已退役：保留旧列兼容，不再作为支付发起条件 */
   cashMallOpen          Boolean @default(false)
   cashSpaceOpen         Boolean @default(false)
   cashEventOpen         Boolean @default(false)
