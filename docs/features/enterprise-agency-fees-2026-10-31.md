@@ -1,0 +1,81 @@
+# 企业代办收费实施与验收记录（2026-10-31）
+
+依据：[收费设计 v3.1](../plans/enterprise-agency-fee-design.md)、[设计复审](../plans/enterprise-agency-fee-design-review-2026-10-31.md)。四仓通过 HTTP 协作，新增内容目前按 Unreleased 管理，未作生产部署或开放收费。
+
+## 已实现的业务边界
+
+- 企业注册、财税服务、工商变更、资质许可各有 free / fixed / manual 三种模式。首次受理与费用决定、账单、交易同事务；人工报价在受理时填写金额及用户可见的说明。收费配置带版本，过期确认拒绝；免费或历史免费决定不因重提、再受理或配置切换补收。
+- 四组配置位于后台“系统设置 → 站点与功能 → 功能开关 → 企业代办 → 代办收费设置”，用页内服务选项卡归类。默认四项免费，`cashAgencyOpen=false`；不自动启用新服务或真实收款。
+- 收费申请一对一关联 Decision / Bill / Order，订单归申请人。Bill / Order 均无固定期限；Payment 仍有自己的到期时间。取消支付只关闭支付尝试，保留应收及办理记录；办结后仍可缴费。
+- 未付改价先持久冻结，逐一核实、关闭旧支付，再在账单锁内同步 Bill / Order / 快照版本。未知或在途下单保持冻结，不因时间到期重派。后台恢复任务复用原操作；通知和审计随最终改价提交一次。旧版本支付返回409，客户端刷新金额并要求重新确认。
+- 下单通过账单行锁、持久 dispatchState / ownerToken / quoteVersion 形成跨请求屏障。资金回调继续按实际 Payment 确认；迟到旧价收款保留真实实收，转人工核实，禁止按新报价伪造实收或再次收款。
+- 仅代办支持部分及多次微信原路退款。持久幂等键、处理中占额、余额校验和异人审批保留；结果不明不释放额度。退款不取消申请、不回收表单/附件，不改变办理状态。用户联系社区处理退款，无自助申请按钮。其他交易来源保留原全额退款限制。
+- 两端四类详情共用服务费用卡，区分未受理、免费、待缴、已缴、部分/全额退款、更新及待核实；展示政策、实收、已退、处理中金额及改价记录。费用进入既有收银台与交易详情；业务进度与资金状态分开。
+- 后台每类业务使用“办理申请 / 费用账单”选项卡，详情使用“办理资料 / 费用与记录”。费用查询按服务菜单和财务数据范围取交集；改价需要独立 `perm:enterprise-agency:fee:reprice`，不自动授予普通运营角色。财务账单支持代办筛选及退款，但禁止手工新建、作废、线下收款旁路。
+- 关闭企业代办总入口仍保留本人历史详情、合法补件及交易入口的可达性；不把关闭引流入口等同于删除债权或封锁历史查询。
+
+## 迁移及兼容
+
+必须按序增量部署，不重置或重灌日常数据库：
+
+1. `20261031110000_enterprise_agency_fee`：P1 模型、四组配置、nullable 期限及首次历史免费回填。
+2. `20261031120000_agency_fee_reprice_permission`：登记改价权限目录。此已应用迁移还会自动授予R2，违反单独授权要求，由第5项修正。
+3. `20261031130000_agency_payment_dispatch_owner`：下单派发所有者标识。
+4. `20261031133000_agency_fee_integrity`：同账单单一活跃改价的数据库部分唯一索引；补齐首轮回填遗漏的驳回、撤回、归档及缺失/不可信历史，历史申请保守免费。以收费模型初次部署时间为界，不覆盖已有决定；可信的首次待受理申请保持待定。迁移实际执行与重复执行已有隔离测试。
+5. `20261031232000_agency_fee_explicit_reprice_grants`：仅撤销R2由第2项默认获得的改价权限，保留目录及其他角色显式授权；确需运营改价时由管理员重新明确授权。重复执行及其他授权保留已有隔离测试。本轮只部署到隔离库，日常库/生产库须执行该迁移后才生效。
+
+已应用的首轮迁移未改写。手写部分唯一索引必须保留，不使用 db push 或 migrate reset。P1 已提交；本轮后续实现分别在各业务仓提交，不通过根仓代交子仓源码。
+
+消费者须先兼容 `agency_service` / `agency` 和可空期限，再开放写入及收费。已有资金数据时不能回滚到不识别新来源的旧版本；回滚优先关闭新收款，保留回调、查询、退款和恢复任务，必要时前向修复。
+
+## 代码与隔离回归证据
+
+本机工作区 `D:\Projects\Joinyuu-Community`。API 使用 `joinyuu_it`、Redis DB15、独立上传与密钥目录，微信渠道替身；从未用这些测试调用真实扣款。
+
+| 检查 | 结果与边界 |
+| --- | --- |
+| API | 既有全仓审查：31套单元测试206项、build通过；本轮typecheck、lint通过，含授权修正的五套e2e143项全部通过（`.tmp/fee-resume-e2e.log`） |
+| 后台 | typecheck、lint、test:ui 38项、build通过 |
+| 移动 Web | typecheck、lint、57文件182项测试、build通过 |
+| 小程序 | 既有npm test 61项通过；开发者工具12详情页实页走查完成，免费/确认报价/待受理矩阵及逐屏截图经汇总脚本断言；另补固定报价页首暗色证据 |
+| 浏览器 | 已通过四业务×三模式详情、四类人工受理报价、后台改价、已打开收银台拒绝旧版本并要求重新确认、320px及暗色检查；实际滚动分段截图及全页图均保留 |
+
+e2e主要覆盖：四服务三模式、受理重放与回滚、历史免费、配置版本、改价同键并发、下单在途/未知屏障、查关单异常、Native及小程序AppID身份、旧报价拒绝、迟到旧价资金、部分/多次/全额退款及占额、异人审批、归属与权限、通用接口旁路、原交易共享回归、历史修正迁移。
+
+## 截图、日志与复现
+
+下列目录为本地证据，不提交私有令牌、上传材料或运行数据。转交其他机器时应另行复制截图和报告；无需复制测试令牌。
+
+| 证据 | 本机路径 |
+| --- | --- |
+| 浏览器报告、两端详情和滚动截图 | `D:\Projects\Joinyuu-Community\apps\api\.tmp\agency-fees-visual-20261031\browser-report.json`、同目录 `web-*-full.png` / `web-*-scroll-*.png` / `admin-*.png` |
+| 小程序实页、逐屏滚动与暗色 | `D:\Projects\Joinyuu-Community\apps\api\.tmp\agency-fees-mini-20261031\report.json`为汇总断言；`mini-report.json`为16:40的12页原始走查，`supplement-report.json`为本轮单页补验；failure/debug为历史排查证据 |
+| API最终检查 | `D:\Projects\Joinyuu-Community\apps\api\.tmp\fee-resume-{types,lint,e2e}.log`；既有单元/构建记录为同目录 `fee-final-{unit,build}.log` |
+| Web/后台检查 | 两仓根目录 `.tmp-fee-*.log`（本地未入Git） |
+| 小程序检查/自动化 | `apps/wxminiprogram/.tmp-fee-mini-tests.log`、`apps/api/.tmp/fee-mini-run.log` |
+
+API回归命令（在API仓执行）：
+
+```powershell
+node scripts/integration.mjs test --runTestsByPath test/enterprise-services.e2e-spec.ts test/enterprise-agency.e2e-spec.ts test/monitor.e2e-spec.ts test/commerce.e2e-spec.ts test/agency-fees.e2e-spec.ts
+```
+
+视觉复现：先通过安全检查后的 `.env.it` 启动 `AGENCY_FEE_BROWSER_FIXTURE=1` 的 `test/helpers/agency-fee-browser.e2e-spec.ts`，它会重新准备隔离数据并在127.0.0.1:17757提供20分钟的临时API；不能与其他e2e同时运行，因其他套件会重新准备同一隔离库。后台/Web分别构建后用 `API_PROXY_TARGET=http://127.0.0.1:17757` 在17758/17759启动静态服务；根仓执行 `scripts/browser/enterprise-agency-fees-acceptance.mjs`（设置本机 `PLAYWRIGHT_PACKAGE`）。每次浏览器用例须从新fixture开始，因其会受理/改价。
+
+小程序执行 `pwsh -NoProfile -File scripts/browser/enterprise-agency-fees-mini.ps1`。脚本临时切换开发API地址、使用合成用户令牌，逐页编译打开，最终恢复原配置与Storage；不调用wx.requestPayment。开发者工具运行时导航曾出现超时，改用 `simulator_open_page` 进入实页；原生selectComponent使用组件ID定位。自动化异常也必须核查配置已恢复，不能提交临时17757地址。
+
+本轮补验使用 `-Sample registration/fixed`，写入独立补充报告，不覆盖原12页矩阵。原暗色截图停留在长页下部，未覆盖费用卡；补验改为先滚动到页首再截图。汇总执行 `node scripts/browser/verify-enterprise-agency-fee-evidence.mjs`，核对矩阵唯一性、金额语义、全部滚动截图、浏览器关键检查和补充暗色证据。报告中的当前提交号仅为核对时版本，不冒充历史截图拍摄版本。
+
+汇总断言已通过：12个小程序详情、18项浏览器检查、51份对应截图；已人工复核固定费用、待受理及暗色费用卡。真实支付未调用。补验结束已恢复小程序开发API为7757及原Storage，停止17757隔离服务。
+
+本轮核对的提交：API `1be62ad`、后台 `7e6fe36`、移动Web `6714d63`、小程序 `66de342`。小程序“我的”页积分汇总的注释改动与本需求无关，保留工作区现状，不纳入本轮提交。原本报告称全仓clean，但根仓尚有本轮验收文档/脚本未入库；本轮仅整理这些相关文件，其他未跟踪文件保持原样。
+
+本轮新增API修正提交 `3fb40ee`（显式改价授权迁移与回归测试）；原四端实现提交保持不变。
+
+临时fixture可用创建 `apps/api/.tmp/fee-visual-stop` 停止，并清除本地令牌文件。日常7757/7758/7759服务保持原样。
+
+## 验收结论与发布前剩余项
+
+本轮为本地实现及隔离验证，不等于真实微信支付或生产上线验收。[设计§12](../plans/enterprise-agency-fee-design.md)要求的真实渠道验收尚未进行：微信内Web授权支付、外部移动H5、小程序真机授权及取消/返回恢复、真实收款、部分和全额退款、通知、商户平台异常核实。不能以模拟渠道/开发者工具截图替代。
+
+正式开放前需在实际商户与终端完成上述资金链，确认各服务金额/退款说明及运营授权，按兼容顺序部署全部迁移和四端代码。旧独立上传入口已返回410，必须与支持提交时上传的移动Web/小程序配套发布，不能只升级API。之后再由运营明确启用业务与收款开关。当前不自动启用、不发布生产，不声称收费模块已完成最终验收。
