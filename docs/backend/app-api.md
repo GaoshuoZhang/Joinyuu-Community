@@ -298,6 +298,34 @@
 
 扩展服务时间线写入锁定对应独立申请表；附件绑定同时检查domain与四类关联，未绑定材料也不可跨域复用。孤儿清理须四类关联均为空，数据库禁止绑定材料进入deleting。增量迁移为 `20261031010000_enterprise_service_switches`、`20261031011000_enterprise_service_cleanup_guard`，不使用seed重置存量数据。
 
+## 企业代办收费（agency_service 资金链路）
+
+企业代办四类业务支持按服务配置收费：`free`（免费）/ `fixed`（固定费用）/ `manual`（人工报价），后台「系统设置 → 企业代办 → 收费设置」按服务配置模式、金额（分）、账单标题与退款政策；任一收费相关字段变化时配置版本自增。默认全部免费且 `cashAgencyOpen=false`（不开放支付发起），启用收费须运营显式配置并开启开关。
+
+费用在**受理动作**内确定并出账（同一事务）：`free` 持久免费决定（后续重提/配置变化不补收）；`fixed` 按配置金额生成账单；`manual` 由受理管理员填报价金额（1–100000000 分）与说明。账单 `businessKey = agency:<serviceType>:<applicationId>` 防重；订单 `sourceType='agency_service'`、归属申请人。办理状态与资金状态独立：未付款不阻塞补件/办结，付款/退款不改变办理状态。
+
+### 用户端
+
+| 方法 | 路径 | 说明 |
+|---|---|---|
+| GET | `/api/app/enterprise-services/fee?service=<route>&id=<applicationId>` | 费用投影：`decisionStatus`（pending_acceptance/free/quoted）、`estimated`、`amountFen`（未决定为 null）、`paidFen/refundedFen/reservedRefundFen`、`canPay/blockedReasonCode`（NOT_ACCEPTED/FREE/REPRICING/ATTENTION/PAYMENT_UNAVAILABLE）、`activeChange`；须本人申请 |
+| POST | `/api/app/commerce/orders/:id/payments` | 发起支付（复用商城收银台编排：微信内 JSAPI/外部浏览器 H5/桌面 Native/小程序 wx.requestPayment）；代办必传 `quoteVersion`，版本变化返回 409 要求重新确认 |
+
+### 管理端
+
+| 方法 | 路径 | 说明 |
+|---|---|---|
+| POST | `/api/admin/enterprise-agency/registrations/:id/accept` 与 `/api/admin/enterprise-services/:service/applications/:id/accept` | 受理同事务出账；manual 模式必传 `quoteAmountFen`（1–100000000 分）与 `quoteNote`；已有费用决定不重新报价 |
+| PUT | `/api/admin/enterprise-services/fees/:billId` | 未付账单改价：`amountFen/reason/expectedQuoteVersion` + `Idempotency-Key`；两阶段（渠道查关全部未终结尝试 → 应用），返回 200（已应用）或 202（处理中）；已付款/版本冲突/同额拒绝 |
+| GET | `/api/admin/enterprise-services/fees`、`/fees/:billId` | 费用列表/详情：按管理员可访问服务过滤，含改价历史与退款进度 |
+| POST | `/api/admin/commerce/payments/:id/refunds` | 部分退款（agency 新增能力，其他来源仍全额）：`amountFen ≤ 实收−占额`、`operationKey` 幂等、异人审批；退款不改办理状态 |
+
+### 实施边界
+
+- 改价期间（`editState=repricing`）禁止新支付；在途下单持久登记，改价前必须查关全部旧尝试，结果不明转 `attention` 人工核对，迟到实收保留证据不覆盖。
+- 用户自助退款对代办返回业务拒绝；退款由运营发起、异人审批。已全退申请重提不再出账。
+- 迁移：`20261031130000_agency_payment_dispatch_owner`、`20261031133000_agency_fee_integrity`（含历史受理 legacy_free 保守回填，不追溯收费）。默认全部免费，暂不发布。
+
 ## 微信网站应用（扫码）一键登录
 
 移动 Web 的微信扫码登录基于微信开放平台「网站应用」OAuth2（[官方文档](https://developers.weixin.qq.com/doc/oplatform/Website_App/WeChat_Login/Wechat_Login.html)）。AppID/AppSecret/授权回调地址在后台「系统配置 → 功能开关 → 微信网站应用（扫码）登录 · 移动客户端」配置（AppSecret 只写、不回传原文）；环境变量 `WXWEB_APPID / WXWEB_APP_SECRET / WXWEB_REDIRECT_URI` 仅作回退。该渠道有独立开关 `wxWebLoginOpen`，与小程序一键登录的 `wxLoginOpen` 互不影响；`GET /api/app/config` 的 `wxWebLoginOpen` 表示网站应用开关开启且配置齐全。

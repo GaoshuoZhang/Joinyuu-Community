@@ -2,7 +2,7 @@
 
 由 `node scripts/generate-reference.mjs` 从 `apps/api/prisma/schema.prisma` 生成；不手工修改。字段、关系和 Schema 索引如下；数据库 CHECK、触发器和部分索引还需查看 `apps/api/prisma/migrations/`。DTO 校验和权限约束不由本清单替代。
 
-共 88 个模型或枚举。
+共 90 个模型或枚举。
 
 ## MobileThemePackage
 
@@ -87,7 +87,8 @@ model CommerceBill {
   amountFen       Int
   paidFen         Int @default(0)
   refundedFen     Int @default(0)
-  dueDate         String @db.VarChar(10)
+  /** 缴费截止日；agency 代办为 null（未约定缴费期限，不显示逾期）。逾期统计必须排除 null */
+  dueDate         String? @db.VarChar(10)
   status          String @default("unpaid") @db.VarChar(16)
   snapshot        Json
   createdBy       String @db.VarChar(64)
@@ -138,6 +139,13 @@ model CommercePayment {
   nextCheckAt    DateTime @default(now())
   attempts       Int @default(0)
   lastError      String? @db.VarChar(255)
+  // agency 下单屏障：queued → dispatching → launched；unknown/closed 为核实终态。null = 非 agency 来源
+  dispatchState        String?   @db.VarChar(16)
+  dispatchQuoteVersion Int?
+  dispatchOwnerToken   String?   @db.VarChar(36)
+  dispatchStartedAt    DateTime?
+  dispatchEndedAt      DateTime?
+  dispatchNote         String?   @db.VarChar(255)
   createdAt      DateTime @default(now())
   bill           CommerceBill @relation(fields: [billId], references: [id], onDelete: Restrict)
   refunds        CommerceRefund[]
@@ -153,6 +161,8 @@ model CommerceRefund {
   paymentId    String @db.VarChar(32)
   amountFen    Int
   reason       String @db.VarChar(80)
+  // 退款申请持久幂等键（agency 必填，摘要绑定 paymentId+金额+原因+操作者）；其他来源可空保持兼容
+  operationKey String? @unique @db.VarChar(64)
   status       String @default("pending") @db.VarChar(16)
   createdBy    String @db.VarChar(64)
   approvedBy   String? @db.VarChar(64)
@@ -220,7 +230,8 @@ model CommerceOrder {
   reservationId     String?       @db.VarChar(16)
   enrollmentId      Int?
   redemptionOrderId String?       @db.VarChar(16)
-  expiresAt         DateTime
+  /** 收银台订单有效期；agency 代办为 null（应收无自动失效，超时只关支付尝试）。其他来源仍非空并维持现有 TTL */
+  expiresAt         DateTime?
   paidAt            DateTime?
   closedAt          DateTime?
   fulfilledAt       DateTime?
@@ -1711,6 +1722,30 @@ model SystemConfig {
   enterpriseTaxOpen Boolean @default(false)
   enterpriseChangeOpen Boolean @default(false)
   enterpriseLicenseOpen Boolean @default(false)
+  /** 企业代办收费：每服务 free/fixed/manual；fixed 必须金额>0。定价策略，不代替 cashAgencyOpen 支付发起开关 */
+  agencyFeeModeRegistration      String @default("free") @db.VarChar(16)
+  agencyFeeModeFinanceTax        String @default("free") @db.VarChar(16)
+  agencyFeeModeBusinessChange    String @default("free") @db.VarChar(16)
+  agencyFeeModeLicense           String @default("free") @db.VarChar(16)
+  /** 固定费用金额（分），fixed 模式必须 1–100000000；其他模式忽略 */
+  agencyFeeAmountFenRegistration   Int @default(0)
+  agencyFeeAmountFenFinanceTax     Int @default(0)
+  agencyFeeAmountFenBusinessChange Int @default(0)
+  agencyFeeAmountFenLicense        Int @default(0)
+  /** 账单标题（1–64 字符），收费模式必填 */
+  agencyFeeTitleRegistration      String @default("") @db.VarChar(64)
+  agencyFeeTitleFinanceTax        String @default("财税服务代办费") @db.VarChar(64)
+  agencyFeeTitleBusinessChange    String @default("工商变更代办费") @db.VarChar(64)
+  agencyFeeTitleLicense           String @default("资质许可代办费") @db.VarChar(64)
+  /** 退款政策（≤500 字符），收费模式必填并写入账单快照 */
+  agencyFeeRefundPolicyRegistration   String @default("") @db.VarChar(500)
+  agencyFeeRefundPolicyFinanceTax     String @default("") @db.VarChar(500)
+  agencyFeeRefundPolicyBusinessChange String @default("") @db.VarChar(500)
+  agencyFeeRefundPolicyLicense        String @default("") @db.VarChar(500)
+  /** 配置版本：每次收费相关字段变化 +1；首次受理锁定/校验对应版本 */
+  agencyFeeConfigVersion Int @default(1)
+  /** 企业代办在线收款发起开关：只控制新支付尝试；查询/回调/退款收尾不受其阻断 */
+  cashAgencyOpen Boolean @default(false)
   /** 客户端在线收款模块开关（与微信商户启用状态同时满足才允许新建支付） */
   cashMallOpen          Boolean @default(false)
   cashSpaceOpen         Boolean @default(false)
@@ -2144,6 +2179,63 @@ model CardFieldConfig {
   editableFields String[] @default([])
   updatedAt      String   @db.VarChar(16)
   updatedBy      String   @db.VarChar(64)
+}
+```
+
+## EnterpriseAgencyFeeDecision
+
+```prisma
+model EnterpriseAgencyFeeDecision {
+  id             String  @id @db.VarChar(36)
+  serviceType    String  @db.VarChar(24) // registration | finance_tax | business_change | license
+  applicationId  String  @db.VarChar(16)
+  userId         String  @db.VarChar(16)
+  initialMode    String  @db.VarChar(16) // free | fixed | manual
+  configVersion  Int
+  decidedBy      String  @db.VarChar(64)
+  decidedAt      DateTime
+  // 首次政策/标题快照与 legacy 原因；创建后不覆盖
+  initialSnapshot Json
+  legacyReason    String? @db.VarChar(32) // legacy_free = 历史受理保守回填
+  billId          String? @unique @db.VarChar(16)
+  quoteVersion    Int     @default(1)
+  // stable | repricing | attention（改价中/待核实期间禁止新支付）
+  editState       String  @default("stable") @db.VarChar(16)
+  activeChangeId  String? @db.VarChar(36)
+  createdAt       DateTime @default(now())
+
+  @@unique([serviceType, applicationId])
+  @@index([userId])
+  @@index([billId])
+}
+```
+
+## EnterpriseAgencyFeeChange
+
+```prisma
+model EnterpriseAgencyFeeChange {
+  // 手写部分唯一索引 EnterpriseAgencyFeeChange_one_active_bill 在 20261031133000_agency_fee_integrity 维护，禁止 migrate dev/db push 删除。
+  id            String  @id @db.VarChar(36) // operationId，与 Idempotency-Key 一致
+  billId        String  @db.VarChar(16)
+  serviceType   String  @db.VarChar(24)
+  applicationId String  @db.VarChar(16)
+  requestedBy   String  @db.VarChar(64)
+  requestDigest String  @db.VarChar(64)
+  expectedQuoteVersion Int
+  originalAmountFen Int
+  newAmountFen  Int
+  reason        String  @db.VarChar(500)
+  // requested → closing → applied；另有 rejected（确认不可改）/ attention（结果不明）
+  status        String  @default("requested") @db.VarChar(16)
+  involvedPaymentIds String[] @default([])
+  attempts      Int     @default(0)
+  lastError     String? @db.VarChar(255)
+  createdAt     DateTime @default(now())
+  appliedAt     DateTime?
+  updatedAt     DateTime @updatedAt
+
+  @@index([billId, status])
+  @@index([status])
 }
 ```
 

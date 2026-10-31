@@ -2,7 +2,7 @@
 
 由 `node scripts/generate-reference.mjs` 从 API 控制器生成；不手工修改。仅列实际声明的路径与处理函数，权限、请求字段和业务规则需查看对应装饰器、DTO 与 Service。
 
-共 497 个路由声明。
+共 502 个路由声明。
 
 | 方法 | 路径 | 处理函数 | 源码 |
 | --- | --- | --- | --- |
@@ -140,6 +140,10 @@
 | POST | `/api/admin/enterprise-services/:service/applications/:id/notes` | `EnterpriseServicesAdminController.notes` | [查看](https://github.com/GaoshuoZhang/Joinyuu-api/blob/main/src/modules/enterprise-services/enterprise-services.controller.ts#L95) |
 | POST | `/api/admin/enterprise-services/:service/applications/:id/reject` | `EnterpriseServicesAdminController.reject` | [查看](https://github.com/GaoshuoZhang/Joinyuu-api/blob/main/src/modules/enterprise-services/enterprise-services.controller.ts#L84) |
 | POST | `/api/admin/enterprise-services/:service/applications/:id/request-info` | `EnterpriseServicesAdminController.requestInfo` | [查看](https://github.com/GaoshuoZhang/Joinyuu-api/blob/main/src/modules/enterprise-services/enterprise-services.controller.ts#L62) |
+| GET | `/api/admin/enterprise-services/fees` | `AgencyFeeAdminController.list` | [查看](https://github.com/GaoshuoZhang/Joinyuu-api/blob/main/src/modules/enterprise-services/agency-fee-admin.controller.ts#L17) |
+| GET | `/api/admin/enterprise-services/fees/:billId` | `AgencyFeeAdminController.detail` | [查看](https://github.com/GaoshuoZhang/Joinyuu-api/blob/main/src/modules/enterprise-services/agency-fee-admin.controller.ts#L27) |
+| PUT | `/api/admin/enterprise-services/fees/:billId` | `AgencyFeeAdminController.reprice` | [查看](https://github.com/GaoshuoZhang/Joinyuu-api/blob/main/src/modules/enterprise-services/agency-fee-admin.controller.ts#L32) |
+| GET | `/api/admin/enterprise-services/fees/settings` | `AgencyFeeAdminController.settings` | [查看](https://github.com/GaoshuoZhang/Joinyuu-api/blob/main/src/modules/enterprise-services/agency-fee-admin.controller.ts#L22) |
 | GET | `/api/admin/enterprises` | `EnterprisesController.list` | [查看](https://github.com/GaoshuoZhang/Joinyuu-api/blob/main/src/modules/enterprises/enterprises.controller.ts#L19) |
 | POST | `/api/admin/enterprises` | `EnterprisesController.create` | [查看](https://github.com/GaoshuoZhang/Joinyuu-api/blob/main/src/modules/enterprises/enterprises.controller.ts#L25) |
 | DELETE | `/api/admin/enterprises/:id` | `EnterprisesController.remove` | [查看](https://github.com/GaoshuoZhang/Joinyuu-api/blob/main/src/modules/enterprises/enterprises.controller.ts#L65) |
@@ -390,15 +394,16 @@
 | GET | `/api/app/enterprise-agency/registrations/:id` | `AppEnterpriseAgencyController.detail` | [查看](https://github.com/GaoshuoZhang/Joinyuu-api/blob/main/src/modules/app/enterprise-agency/enterprise-agency.controller.ts#L63) |
 | POST | `/api/app/enterprise-agency/registrations/:id/resubmit` | `AppEnterpriseAgencyController.resubmit` | [查看](https://github.com/GaoshuoZhang/Joinyuu-api/blob/main/src/modules/app/enterprise-agency/enterprise-agency.controller.ts#L76) |
 | POST | `/api/app/enterprise-agency/registrations/:id/withdraw` | `AppEnterpriseAgencyController.withdraw` | [查看](https://github.com/GaoshuoZhang/Joinyuu-api/blob/main/src/modules/app/enterprise-agency/enterprise-agency.controller.ts#L69) |
-| GET | `/api/app/enterprise-services/:service/applications` | `AppEnterpriseServicesController.list` | [查看](https://github.com/GaoshuoZhang/Joinyuu-api/blob/main/src/modules/app/enterprise-services/app-enterprise-services.controller.ts#L67) |
-| POST | `/api/app/enterprise-services/:service/applications` | `AppEnterpriseServicesController.create` | [查看](https://github.com/GaoshuoZhang/Joinyuu-api/blob/main/src/modules/app/enterprise-services/app-enterprise-services.controller.ts#L54) |
-| GET | `/api/app/enterprise-services/:service/applications/:id` | `AppEnterpriseServicesController.detail` | [查看](https://github.com/GaoshuoZhang/Joinyuu-api/blob/main/src/modules/app/enterprise-services/app-enterprise-services.controller.ts#L75) |
-| POST | `/api/app/enterprise-services/:service/applications/:id/resubmit` | `AppEnterpriseServicesController.resubmit` | [查看](https://github.com/GaoshuoZhang/Joinyuu-api/blob/main/src/modules/app/enterprise-services/app-enterprise-services.controller.ts#L94) |
-| POST | `/api/app/enterprise-services/:service/applications/:id/withdraw` | `AppEnterpriseServicesController.withdraw` | [查看](https://github.com/GaoshuoZhang/Joinyuu-api/blob/main/src/modules/app/enterprise-services/app-enterprise-services.controller.ts#L84) |
-| GET | `/api/app/enterprise-services/:service/files/:fileId` | `AppEnterpriseServicesController.file` | [查看](https://github.com/GaoshuoZhang/Joinyuu-api/blob/main/src/modules/app/enterprise-services/app-enterprise-services.controller.ts#L39) |
-| POST | `/api/app/enterprise-services/:service/uploads` | `AppEnterpriseServicesController.upload` | [查看](https://github.com/GaoshuoZhang/Joinyuu-api/blob/main/src/modules/app/enterprise-services/app-enterprise-services.controller.ts#L35) |
-| GET | `/api/app/enterprise-services/catalog` | `AppEnterpriseServicesController.catalog` | [查看](https://github.com/GaoshuoZhang/Joinyuu-api/blob/main/src/modules/app/enterprise-services/app-enterprise-services.controller.ts#L20) |
-| GET | `/api/app/enterprise-services/mine` | `AppEnterpriseServicesController.mine` | [查看](https://github.com/GaoshuoZhang/Joinyuu-api/blob/main/src/modules/app/enterprise-services/app-enterprise-services.controller.ts#L26) |
+| GET | `/api/app/enterprise-services/:service/applications` | `AppEnterpriseServicesController.list` | [查看](https://github.com/GaoshuoZhang/Joinyuu-api/blob/main/src/modules/app/enterprise-services/app-enterprise-services.controller.ts#L72) |
+| POST | `/api/app/enterprise-services/:service/applications` | `AppEnterpriseServicesController.create` | [查看](https://github.com/GaoshuoZhang/Joinyuu-api/blob/main/src/modules/app/enterprise-services/app-enterprise-services.controller.ts#L59) |
+| GET | `/api/app/enterprise-services/:service/applications/:id` | `AppEnterpriseServicesController.detail` | [查看](https://github.com/GaoshuoZhang/Joinyuu-api/blob/main/src/modules/app/enterprise-services/app-enterprise-services.controller.ts#L80) |
+| POST | `/api/app/enterprise-services/:service/applications/:id/resubmit` | `AppEnterpriseServicesController.resubmit` | [查看](https://github.com/GaoshuoZhang/Joinyuu-api/blob/main/src/modules/app/enterprise-services/app-enterprise-services.controller.ts#L99) |
+| POST | `/api/app/enterprise-services/:service/applications/:id/withdraw` | `AppEnterpriseServicesController.withdraw` | [查看](https://github.com/GaoshuoZhang/Joinyuu-api/blob/main/src/modules/app/enterprise-services/app-enterprise-services.controller.ts#L89) |
+| GET | `/api/app/enterprise-services/:service/files/:fileId` | `AppEnterpriseServicesController.file` | [查看](https://github.com/GaoshuoZhang/Joinyuu-api/blob/main/src/modules/app/enterprise-services/app-enterprise-services.controller.ts#L44) |
+| POST | `/api/app/enterprise-services/:service/uploads` | `AppEnterpriseServicesController.upload` | [查看](https://github.com/GaoshuoZhang/Joinyuu-api/blob/main/src/modules/app/enterprise-services/app-enterprise-services.controller.ts#L40) |
+| GET | `/api/app/enterprise-services/catalog` | `AppEnterpriseServicesController.catalog` | [查看](https://github.com/GaoshuoZhang/Joinyuu-api/blob/main/src/modules/app/enterprise-services/app-enterprise-services.controller.ts#L25) |
+| GET | `/api/app/enterprise-services/fee` | `AppEnterpriseServicesController.fee` | [查看](https://github.com/GaoshuoZhang/Joinyuu-api/blob/main/src/modules/app/enterprise-services/app-enterprise-services.controller.ts#L19) |
+| GET | `/api/app/enterprise-services/mine` | `AppEnterpriseServicesController.mine` | [查看](https://github.com/GaoshuoZhang/Joinyuu-api/blob/main/src/modules/app/enterprise-services/app-enterprise-services.controller.ts#L31) |
 | GET | `/api/app/enterprises/:id` | `AppEnterprisesController.enterpriseShowcase` | [查看](https://github.com/GaoshuoZhang/Joinyuu-api/blob/main/src/modules/app/enterprises/enterprises.controller.ts#L174) |
 | GET | `/api/app/events` | `AppEventsController.list` | [查看](https://github.com/GaoshuoZhang/Joinyuu-api/blob/main/src/modules/app/events/events.controller.ts#L15) |
 | GET | `/api/app/events/:id` | `AppEventsController.detail` | [查看](https://github.com/GaoshuoZhang/Joinyuu-api/blob/main/src/modules/app/events/events.controller.ts#L26) |
