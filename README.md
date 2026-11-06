@@ -1,11 +1,5 @@
 # 聚屿社区 · Joinyuu Community
 
-> 当前是香港公开演示环境的 worktree 工作区 `D:\Projects\Joinyuu-Community-Demo`。根仓与四个业务仓分别关联原项目的同名仓库，分支均为 `demo-deployment`。官网是独立仓库 `D:\Projects\Joinyuu-Community-Website`。目录关系、分支同步与备份见[Demo worktree 维护说明](docs/workspace/demo-worktrees-2026-11-07.md)；演示账号保护见[公开演示维护说明](docs/operations/public-demo-access-and-website-seo-2026-11-06.md)。
-
-> 小程序保留 `main` 和 `demo-deployment` 两套工作树：日常开发连接 localhost，演示分支连接在线 API，使用用户微信注册的小程序发布。
-
-> 2026-11-07：官网、两个前端、API 与证书已迁入 1Panel，原独立 Compose 部署已退役。后续发布与维护以[1Panel 迁移和操作说明](docs/operations/1panel-demo-migration-2026-11-07.md)为准。
-
 **面向共享办公空间、创业社区、产业园区与 OPC 社区的成员服务和运营管理系统。**
 
 聚屿社区连接社区中的成员、企业、空间与服务，把人才展示、需求合作、活动参与、空间预约、企业代办和日常运营整合到同一套产品中。运营人员通过管理后台开展业务，成员通过移动 Web 或微信小程序使用社区服务。
