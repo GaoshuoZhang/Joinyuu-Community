@@ -1,34 +1,7 @@
-node_modules/
-dist/
-*.local
-.DS_Store
-.env
-*.private.pem
-.env.*
-!.env.example
-.idea/
-.vscode/
-.workbuddy/
-.playwright-cli/
-.trae/
-.logs/
-uploads/
-# Installed customer themes are deployment data. Keep the public app customer-neutral.
-/mobile-themes/
-mobile-theme.local.json
-mobile-theme.local.*.json
-.tmp/
-# Local visual QA artifacts.
-/.screenshots/
-.opencode/
-.agents/
-examples/
-
-# Server-owned encryption master keys (back up separately; never publish)
-.private/
-
-# Independent repositories: manage with git -C apps/<name>, never git add these paths.
-/apps/api/
-/apps/admin/
-/apps/client-mobile/
-/apps/wxminiprogram/
+# 公开根仓仅发布项目介绍；内部文档、协作工具、配置、发布清单和产物保留在本地。
+# apps/* 各自拥有独立 Git 仓库，其源码提交规则不受本文件影响。
+/*
+!/.gitignore
+!/README.md
+!/LICENSE
+!/LICENSE.*
