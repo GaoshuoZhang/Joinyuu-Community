@@ -5,3 +5,6 @@
 !/README.md
 !/LICENSE
 !/LICENSE.*
+
+# 机密部署档案：服务器连接信息、实例状态和核验记录仅保留本地。
+/deployment/
